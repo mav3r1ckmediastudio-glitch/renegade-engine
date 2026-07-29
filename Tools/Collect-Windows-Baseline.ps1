@@ -22,6 +22,7 @@ function Get-OptionalCommandOutput {
         return $null
     }
 
+    $LASTEXITCODE = 0
     $output = (& $command.Source @ArgumentList 2>&1 | Out-String).Trim()
     if ($LASTEXITCODE -ne 0) {
         return "Command failed: $output"

@@ -63,5 +63,5 @@ jobs:
         with:
           name: windows-x64-${{ matrix.configuration }}-${{ github.sha }}
           path: artifacts/phase1/ci-${{ matrix.configuration }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14

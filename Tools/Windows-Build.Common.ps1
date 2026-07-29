@@ -28,8 +28,10 @@ Run: git submodule update --init --recursive
         throw "Git is required to verify the pinned Wicked Engine baseline."
     }
 
-    $actualCommit = (& git -C $wickedRoot rev-parse HEAD 2>$null | Select-Object -First 1)
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($actualCommit)) {
+    $actualCommitOutput = @(& git -C $wickedRoot rev-parse HEAD 2>$null)
+    $gitSucceeded = $?
+    $actualCommit = $actualCommitOutput | Select-Object -First 1
+    if (-not $gitSucceeded -or [string]::IsNullOrWhiteSpace($actualCommit)) {
         throw "Could not read the Wicked Engine submodule commit."
     }
 
@@ -42,8 +44,9 @@ git submodule update --init --recursive
 "@
     }
 
-    $trackedChanges = (& git -C $wickedRoot status --porcelain --untracked-files=no)
-    if ($LASTEXITCODE -ne 0) {
+    $trackedChanges = @(& git -C $wickedRoot status --porcelain --untracked-files=no)
+    $gitSucceeded = $?
+    if (-not $gitSucceeded) {
         throw "Could not verify the Wicked Engine working tree."
     }
     if ($trackedChanges) {
@@ -118,6 +121,7 @@ function Invoke-RenegadeLoggedCommand {
     $exitCode = -1
     Push-Location $WorkingDirectory
     try {
+        $LASTEXITCODE = 0
         & $FilePath @ArgumentList 2>&1 | Tee-Object -FilePath $LogPath -Append
         $exitCode = $LASTEXITCODE
     }
