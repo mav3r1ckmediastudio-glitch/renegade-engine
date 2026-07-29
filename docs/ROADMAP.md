@@ -4,8 +4,8 @@
 
 **Phase 2 — Architecture/UI proof**
 Target duration: 3–4 weeks
-Status: First increment in progress; Phase 1 visual and independent verification
-remain open
+Status: First increment builds green; second interaction increment prepared;
+visual and independent verification remain open
 
 ## Phase plan
 
@@ -46,10 +46,11 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 ### Week 3
 
 - [x] Create the first buildable `Studio` and `EngineBridge` targets.
-- [ ] Create the first buildable `Runtime` target.
+- [ ] Create the first buildable `Runtime` target. *(Prepared; CI pending.)*
 - [x] Load a known WISCENE in a blank custom application.
 - [x] Implement minimal scene and selection services.
-- [ ] Obtain a green Windows CI build and human-observed viewport screenshot.
+- [x] Obtain a green Windows CI build.
+- [ ] Capture a human-observed viewport screenshot.
 
 ### Week 4
 

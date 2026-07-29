@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Phase 2 interaction proof
+
+- Added the first standalone `RenegadeRuntime` target.
+- Added scene hierarchy projection and selection-bound transform inspection.
+- Added command-based translation editing with undo and redo.
+- Added automated bridge tests and Runtime packaging to Windows CI.
+- Restored the Wicked Tests project `SolutionDir` when invoked directly.
+
 All notable user-facing changes will be recorded here.
 
 ## Unreleased

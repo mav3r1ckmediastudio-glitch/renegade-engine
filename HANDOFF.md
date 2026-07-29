@@ -1,108 +1,79 @@
 # Current Handoff
 
-**Date:** 2026-07-29  
-**Project:** Renegade Engine (working title)  
-**Active phase:** 2 — architecture/UI proof, first increment  
-**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`  
-**Published branch:** `main` at `fa79bab88b1d61f607102b7b27bfed5d95ddbd20`  
-**Prepared branch:** `agent/phase2-studio-shell`  
-**Phase 1 test-target fix:** `55c1894`  
-**Phase 2 Studio-shell implementation:** `89ea08d`
+**Date:** 2026-07-29
+**Project:** Renegade Engine (working title)
+**Active phase:** 2 — architecture/UI proof
+**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
+**Published branch before this handoff:** `main` at `baf423647a48bf991929a5ffcf300aa324d78116`
+**Prepared implementation:** `16dc6cdcd9960e84e68dd8e275bc1044b077eeb5`
+**Prepared baseline-script fix:** `33b7eb22ad516654aecf2e352d61a96076f68d20`
 
-## Current state
+## Published evidence
 
-- Wicked remains pinned as `/WickedEngine` at
+- Wicked remains pinned at
   `3a800b7134aafe58461093c8abb2e274d4e64033`.
-- Phase 1 Windows CI run
-  [30471535806](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30471535806)
-  checked out the exact pin and captured the Windows/Visual Studio toolchain.
-- Both Debug and Release compiled Wicked Engine and Wicked Editor with zero
-  compiler errors.
-- Both jobs then failed because `/t:Tests` was passed to the solution. MSBuild
-  treated `Tests` as a target to invoke on every project instead of building the
-  Tests project.
-- Commit `55c1894` corrects the invocation by building
-  `Samples/Tests/Tests.vcxproj` directly.
-- Commit `89ea08d` starts Phase 2 with a Renegade-owned CMake graph,
-  `RenegadeEngineBridge`, and a branded Windows `RenegadeStudio` shell.
-- The Studio proof loads a packaged `cube.wiscene` through `SceneService` and
-  renders it through a real `RenderPath3D`.
-- ADR 0002 remains open. The `wiGUI` status label is diagnostic and is not the
-  production editor toolkit.
+- Phase 2 Studio workflow
+  [30480638574](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30480638574)
+  passed Windows x64 Debug and Release at `baf4236`.
+- Both jobs compiled, linked, packaged, and uploaded `RenegadeStudio`.
+- The package-path correction is commit `baf4236`.
+- Human visual checks and independent verification remain open.
 
-## Publication blocker
+## Baseline workflow diagnosis
 
-The connected GitHub integration can read the repository and Actions logs, but
-GitHub rejects contents writes with:
+Windows baseline run
+[30480638310](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30480638310)
+compiled Wicked Engine but Debug failed while compiling the standalone upstream
+Tests project. Building the `.vcxproj` directly leaves `$(SolutionDir)` empty,
+so its relative include path cannot find `WickedEngine.h`.
 
-```text
-403 Resource not accessible by integration
-```
+Prepared commit `33b7eb2` passes the pinned Wicked root as `SolutionDir`. This
+changes only Renegade's build script and does not modify the Wicked submodule.
 
-The two prepared commits therefore exist locally but are not yet on `main`.
-No CI result may be claimed for them until they are pushed.
+## Prepared Phase 2 interaction increment
 
-## Verification performed
+Commit `16dc6cd` adds:
 
-- Inspected both completed Phase 1 job logs.
-- Confirmed Debug and Release engine/editor compilation reached `0 Error(s)`.
-- Confirmed both jobs failed at the identical Tests target invocation.
-- Confirmed the failing jobs still uploaded toolchain and build evidence.
-- Checked all prepared diffs with `git diff --check`.
-- Parsed `.github/workflows/phase2-studio.yml` as YAML.
-- Checked every feature-matrix row retains the header field count.
-- Confirmed the pinned fixture exists at
-  `WickedEngine/Content/models/cube.wiscene`.
-- Confirmed the prepared branch is based on published `main`.
+- standalone `RenegadeRuntime`;
+- UI-independent hierarchy projection from `SceneService`;
+- diagnostic hierarchy selection through `SelectionService`;
+- translation inspection and editing;
+- `CommandService` and `SetTranslationCommand`;
+- one undo/redo proof;
+- `RenegadeBridgeTests`; and
+- Debug/Release Runtime packaging and CTest execution in Phase 2 CI.
 
-## Verification not yet performed
+The proof controls use `wiGUI` only to exercise the services. ADR 0002 remains
+open and no final editor design or UI toolkit is claimed.
 
-- The corrected Phase 1 workflow has not run because `55c1894` is unpublished.
-- The Phase 2 Windows Studio target has not run in CI because `89ea08d` is
-  unpublished.
-- Local CMake configuration was unavailable in the current Linux workspace
-  because the `cmake` executable and SDL2 development headers are absent.
-- DX12/Vulkan rendering, resize, DPI, and input remain human-observed checks on
-  a Windows machine with a display/GPU.
-- Independent review by another AI or human is still required.
+## Validation performed before publication
 
-## Decisions in force
+- `git diff --check` passed.
+- Both workflow YAML files parsed successfully.
+- Every feature-matrix row has the expected 16 fields.
+- The pinned Wicked submodule is exact and unmodified.
+- Source/API usage was checked against the pinned Wicked headers and reference
+  editor.
+- This Linux workspace does not contain CMake or PowerShell, so the prepared
+  Windows targets have not yet compiled. CI is the compile authority.
 
-- Windows x64 and DirectX 12 are the v1 release target.
-- Vulkan on Windows is checked during development.
-- Wicked remains the low-level foundation; Renegade code stays outside the
-  submodule.
-- WISCENE remains the native scene format for v1.
-- Lua remains the first gameplay scripting language.
-- EngineBridge services remain UI-independent.
-- The production UI toolkit remains undecided until the HDR/DPI/input proof.
-- Release-gate work requires verification by a different AI or human.
+## Publication and verification
 
-## Exact next steps
+1. Fast-forward published `main` from `baf4236` through the prepared commits.
+2. Watch `Phase 2 Studio shell` and `Windows baseline`.
+3. Fix compiler, test, or packaging failures before extending scope.
+4. Download both Debug and Release artifacts.
+5. Launch Studio and Runtime on a Windows GPU machine.
+6. Perform the human checks in:
+   - `docs/PHASE2_STUDIO_SHELL.md`
+   - `docs/PHASE2_EDITOR_INTERACTION.md`
+7. Give another ChatGPT conversation, Claude, or a human reviewer the exact
+   published commit, workflow URLs, artifacts, this handoff, and
+   `docs/VERIFICATION_CHECKLIST.md`.
 
-1. Publish commits `55c1894` and `89ea08d` to `main`.
-2. Watch both `Windows baseline` and `Phase 2 Studio shell` workflows.
-3. Fix any compiler or packaging error before extending editor functionality.
-4. On Windows, run:
+## Next bounded work after this increment is green
 
-   ```powershell
-   .\Tools\Build-Studio-Windows.ps1 -Clean
-   ```
-
-5. Launch each package and capture the human-observed acceptance evidence in
-   `docs/PHASE2_STUDIO_SHELL.md`.
-6. Give another ChatGPT conversation, Claude, or a human reviewer this file,
-   the exact published commit SHA, the two workflow URLs, and the artifacts.
-   Ask them to verify the acceptance list without changing scope.
-
-## Next bounded implementation
-
-After the Studio-shell build is green:
-
-- add the first buildable Runtime target;
-- list scene entities in a minimal hierarchy view;
-- bind selection through `SelectionService`;
-- edit one transform through a command object; and
-- prove one undo/redo operation.
-
-Save/reopen and the final UI-toolkit decision remain later Phase 2 gates.
+- add a viewport transform gizmo through the same command boundary;
+- save the edited WISCENE to a new path;
+- reopen it and prove the transform persists; and
+- continue the DPI, input, HDR, Vulkan, and UI-toolkit decision gates.
