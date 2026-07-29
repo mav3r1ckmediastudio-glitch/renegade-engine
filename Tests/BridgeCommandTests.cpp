@@ -6,9 +6,27 @@
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
+#include "wiJobSystem.h"
 
 namespace
 {
+    class JobSystemScope
+    {
+    public:
+        JobSystemScope()
+        {
+            wi::jobsystem::Initialize();
+        }
+
+        ~JobSystemScope()
+        {
+            wi::jobsystem::ShutDown();
+        }
+
+        JobSystemScope(const JobSystemScope&) = delete;
+        JobSystemScope& operator=(const JobSystemScope&) = delete;
+    };
+
     bool NearlyEqual(const float left, const float right)
     {
         return std::abs(left - right) < 0.0001f;
@@ -23,6 +41,7 @@ namespace
 
 int main()
 {
+    JobSystemScope jobs;
     renegade::bridge::SceneService scenes;
     renegade::bridge::SelectionService selection;
     renegade::bridge::CommandService commands;
@@ -82,12 +101,14 @@ int main()
         ("renegade-persistence-" + std::to_string(child) + ".wiscene");
     std::filesystem::remove(savePath);
 
+    std::cout << "CHECKPOINT: save scene\n" << std::flush;
     if (!scenes.SaveScene(savePath.string()))
     {
         return Fail("scene service did not save the edited scene");
     }
 
     renegade::bridge::SceneService reopened;
+    std::cout << "CHECKPOINT: reopen scene\n" << std::flush;
     if (!reopened.LoadScene(savePath.string()))
     {
         std::filesystem::remove(savePath);
