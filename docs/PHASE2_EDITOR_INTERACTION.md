@@ -10,9 +10,12 @@ production UI toolkit:
 - The diagnostic Studio UI lists the hierarchy and binds selection through
   `SelectionService`.
 - Translation edits execute through `SetTranslationCommand`.
+- The pinned Wicked translation gizmo is hosted by Studio, while completed
+  drags are committed through the same Renegade command boundary.
 - `CommandService` proves one undo and redo cycle.
 - `RenegadeBridgeTests` validates hierarchy order, selection, execute, undo,
-  and redo without depending on a visual assertion.
+  redo, save, and reopen without depending on a visual assertion.
+- `SceneService` owns WISCENE Save As and reopen operations.
 
 The temporary `wiGUI` controls remain proof UI. They do not close ADR 0002.
 
@@ -25,19 +28,20 @@ The temporary `wiGUI` controls remain proof UI. They do not close ADR 0002.
   and `Content/cube.wiscene`.
 - Studio owns no duplicate scene model.
 - Runtime links EngineBridge but no Studio source.
+- Saving and reopening preserves the edited transform in the automated fixture.
 
 ## Human-observed acceptance
 
 - Studio lists the fixture scene hierarchy.
 - Clicking a hierarchy entry updates the selected transform inspector.
 - Editing X, Y, or Z moves the selected entity.
+- Dragging the viewport translation gizmo moves the selected entity.
 - Undo restores the previous translation and Redo reapplies it.
+- Save As writes a WISCENE; Reopen reloads it with the edited transform.
 - Runtime opens and renders the fixture without editor controls.
 
 ## Deliberately deferred
 
-- Transform gizmo.
-- Save and reopen.
 - Production docking and visual design.
 - UI toolkit selection.
-- HDR, Vulkan, multi-monitor, and file-dialog gates.
+- HDR, Vulkan, and multi-monitor gates.

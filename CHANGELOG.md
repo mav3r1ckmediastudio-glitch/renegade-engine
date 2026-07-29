@@ -7,6 +7,9 @@
 - Added command-based translation editing with undo and redo.
 - Added automated bridge tests and Runtime packaging to Windows CI.
 - Restored the Wicked Tests project `SolutionDir` when invoked directly.
+- Added a command-backed viewport translation gizmo.
+- Added WISCENE Save As and reopen through `SceneService`.
+- Extended bridge tests to prove edited transforms survive save and reopen.
 
 All notable user-facing changes will be recorded here.
 

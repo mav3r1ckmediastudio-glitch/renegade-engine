@@ -54,9 +54,9 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ### Week 4
 
-- Prototype hierarchy, transform inspector, and gizmo.
-- Implement one undoable command.
-- Save and reopen the edited scene.
+- [ ] Prototype hierarchy, transform inspector, and gizmo. *(Prepared; CI and visual check pending.)*
+- [ ] Implement one undoable command. *(Prepared; CI pending.)*
+- [ ] Save and reopen the edited scene. *(Prepared; CI pending.)*
 - Run DPI, input, HDR, and Vulkan checks.
 - Record the UI-toolkit ADR.
 
