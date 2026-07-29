@@ -14,3 +14,11 @@ validation tools live here.
   helpers.
 
 See `docs/BUILD_WINDOWS.md` for the exact workflow.
+
+## Phase 2 Studio shell
+
+- `Build-Studio-Windows.ps1` configures the Renegade-owned CMake graph, builds
+  `RenegadeStudio` for x64 Debug and/or Release, packages the executable and
+  fixture content, and records hashes and logs.
+
+See `docs/PHASE2_STUDIO_SHELL.md` for scope and acceptance evidence.

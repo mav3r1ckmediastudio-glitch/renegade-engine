@@ -2,9 +2,10 @@
 
 ## Current milestone
 
-**Phase 1 — Reproducible Windows build**
-Target duration: 2–3 weeks
-Status: In progress
+**Phase 2 — Architecture/UI proof**
+Target duration: 3–4 weeks
+Status: First increment in progress; Phase 1 visual and independent verification
+remain open
 
 ## Phase plan
 
@@ -44,9 +45,11 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ### Week 3
 
-- Create the first buildable `Studio`, `EngineBridge`, and `Runtime` targets.
-- Load a known WISCENE in a blank custom application.
-- Implement minimal scene and selection services.
+- [x] Create the first buildable `Studio` and `EngineBridge` targets.
+- [ ] Create the first buildable `Runtime` target.
+- [x] Load a known WISCENE in a blank custom application.
+- [x] Implement minimal scene and selection services.
+- [ ] Obtain a green Windows CI build and human-observed viewport screenshot.
 
 ### Week 4
 

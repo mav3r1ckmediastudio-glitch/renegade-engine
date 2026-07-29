@@ -1,0 +1,74 @@
+name: Phase 2 Studio shell
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/phase2-studio.yml"
+      - "CMakeLists.txt"
+      - "EngineBridge/**"
+      - "Studio/**"
+      - "Tools/Build-Studio-Windows.ps1"
+      - "Tools/Windows-Build.Common.ps1"
+      - ".gitmodules"
+  pull_request:
+    paths:
+      - ".github/workflows/phase2-studio.yml"
+      - "CMakeLists.txt"
+      - "EngineBridge/**"
+      - "Studio/**"
+      - "Tools/Build-Studio-Windows.ps1"
+      - "Tools/Windows-Build.Common.ps1"
+      - ".gitmodules"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  studio:
+    name: Renegade Studio Windows x64 ${{ matrix.configuration }}
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration:
+          - Debug
+          - Release
+
+    steps:
+      - name: Check out Renegade and Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Capture toolchain
+        shell: pwsh
+        run: >-
+          ./Tools/Collect-Windows-Baseline.ps1
+          -OutputRoot "artifacts/phase2/ci-${{ matrix.configuration }}"
+
+      - name: Build Renegade Studio
+        shell: pwsh
+        run: >-
+          ./Tools/Build-Studio-Windows.ps1
+          -Configuration ${{ matrix.configuration }}
+          -Clean
+          -ArtifactRoot "artifacts/phase2/ci-${{ matrix.configuration }}"
+
+      - name: Upload build and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: >-
+            renegade-studio-windows-x64-${{ matrix.configuration }}-${{ github.sha }}
+          path: artifacts/phase2/ci-${{ matrix.configuration }}
+          if-no-files-found: warn
+          retention-days: 14
