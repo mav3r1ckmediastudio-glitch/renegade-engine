@@ -429,7 +429,10 @@ namespace renegade::studio
 
         infoDisplay.active = true;
         infoDisplay.watermark = false;
+        infoDisplay.device_name = true;
         infoDisplay.resolution = true;
+        infoDisplay.logical_size = true;
+        infoDisplay.colorspace = true;
         infoDisplay.fpsinfo = true;
 
         renderer_.BindSession(session_);

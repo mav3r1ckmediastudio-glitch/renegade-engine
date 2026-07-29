@@ -3,10 +3,22 @@
 #include <Windows.h>
 
 #include <cwchar>
+#include <cstring>
 
 namespace
 {
     renegade::runtime::RuntimeApplication application;
+
+    const wchar_t* GraphicsBackendTitle() noexcept
+    {
+        const auto* device = wi::graphics::GetDevice();
+        if (device != nullptr &&
+            std::strcmp(device->GetTag(), "[Vulkan]") == 0)
+        {
+            return L"Renegade Runtime - Phase 2 [Vulkan]";
+        }
+        return L"Renegade Runtime - Phase 2 [DX12]";
+    }
 
     LRESULT CALLBACK RenegadeRuntimeWindowProc(
         const HWND window,
@@ -17,12 +29,29 @@ namespace
         switch (message)
         {
         case WM_SIZE:
-        case WM_DPICHANGED:
             if (application.is_window_active)
             {
                 application.SetWindow(window);
             }
             return 0;
+
+        case WM_DPICHANGED:
+        {
+            const auto* suggested = reinterpret_cast<const RECT*>(lParam);
+            SetWindowPos(
+                window,
+                nullptr,
+                suggested->left,
+                suggested->top,
+                suggested->right - suggested->left,
+                suggested->bottom - suggested->top,
+                SWP_NOACTIVATE | SWP_NOZORDER);
+            if (application.is_window_active)
+            {
+                application.SetWindow(window);
+            }
+            return 0;
+        }
 
         case WM_INPUT:
             wi::input::rawinput::ParseMessage(reinterpret_cast<void*>(lParam));
@@ -53,6 +82,7 @@ int APIENTRY wWinMain(
     _In_ int showCommand)
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    wi::arguments::Parse(commandLine);
 
     wchar_t executablePath[MAX_PATH] = {};
     if (GetModuleFileNameW(nullptr, executablePath, MAX_PATH) > 0)
@@ -81,7 +111,7 @@ int APIENTRY wWinMain(
 
     const HWND window = CreateWindowW(
         windowClass.lpszClassName,
-        L"Renegade Runtime — Phase 2",
+        L"Renegade Runtime - Phase 2",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         0,
@@ -99,7 +129,7 @@ int APIENTRY wWinMain(
 
     ShowWindow(window, showCommand);
     application.SetWindow(window);
-    wi::arguments::Parse(commandLine);
+    SetWindowTextW(window, GraphicsBackendTitle());
 
     MSG message = {};
     while (message.message != WM_QUIT)

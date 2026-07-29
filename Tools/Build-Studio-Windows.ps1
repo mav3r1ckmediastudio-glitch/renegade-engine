@@ -111,6 +111,10 @@ try {
             -Destination (Join-Path $packageRoot "Content") `
             -Recurse `
             -Force
+        Copy-Item `
+            -Path (Join-Path $repositoryRoot "Studio\package\*") `
+            -Destination $packageRoot `
+            -Force
 
         $packageArchive = Join-Path $ArtifactRoot "RenegadeStudio-$currentConfiguration.zip"
         if (Test-Path $packageArchive -PathType Leaf) {
@@ -126,6 +130,10 @@ try {
             -Path (Join-Path $runtimeDirectory "Content") `
             -Destination (Join-Path $runtimePackageRoot "Content") `
             -Recurse `
+            -Force
+        Copy-Item `
+            -Path (Join-Path $repositoryRoot "Runtime\package\*") `
+            -Destination $runtimePackageRoot `
             -Force
 
         $runtimePackageArchive = Join-Path $ArtifactRoot "RenegadeRuntime-$currentConfiguration.zip"

@@ -15,6 +15,11 @@ target_compile_definitions(RenegadeRuntime
         _UNICODE
 )
 
+target_compile_options(RenegadeRuntime
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
 set_target_properties(RenegadeRuntime PROPERTIES
     FOLDER "Renegade"
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeRuntime>"
