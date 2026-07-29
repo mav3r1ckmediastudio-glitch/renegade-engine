@@ -45,12 +45,13 @@ The temporary `wiGUI` controls remain proof UI. They do not close ADR 0002.
 - Save As writes a WISCENE; Reopen reloads it with the edited transform.
 - Runtime opens and renders the fixture without editor controls.
 
-The published `8b9041f` artifact passed launch, hierarchy, selection, render,
-gizmo-drag, ten-edit, and ten-Undo inspection. Redo was blocked because the
-final Undo disabled its own `wiGUI` button during `Button::Update()` and left
-that widget focused. Correction
-`4b9d6a58340913698077a2b839535e1287fa4ff4` defers history actions until the
-GUI update completes and requires Windows CI plus a new GPU visual check.
+The published `b4da74a` artifact passed launch, hierarchy, selection, render,
+gizmo-drag, ten-edit, ten-Undo, and ten-Redo inspection. Save As crashed
+because Renegade explicitly closed its scene archive before the `Archive`
+destructor closed it again. Correction
+`be5167b087789109a2bb1f98305b8ffa18b454ed` removes the explicit close and
+matches the pinned Wicked Editor save lifecycle. It requires Windows CI plus a
+new GPU Save As and Reopen check.
 
 ## Deliberately deferred
 

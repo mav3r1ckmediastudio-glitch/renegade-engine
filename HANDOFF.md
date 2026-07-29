@@ -4,11 +4,12 @@
 **Project:** Renegade Engine (working title)
 **Active phase:** 2 — architecture/UI proof
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
-**Published branch before this handoff:** `main` at `8b9041faf945cd19607a63271eabe37a8efeac6c`
+**Published branch before this handoff:** `main` at `b4da74a294b41b3a70051a4122ba2e4125523c16`
 **Published test-harness attempt:** `a45f9ed86e481f3de46849726bbc540637d2997b`
 **Published proven-test restoration:** `11678cdfc75597fc34b47d11d2c1856bdb63f381`
 **Published repeated-history correction:** `9804e63ab390ef748e2097b97e10c84646353662`
-**Prepared GUI history-action correction:** `4b9d6a58340913698077a2b839535e1287fa4ff4`
+**Published GUI history-action correction:** `4b9d6a58340913698077a2b839535e1287fa4ff4`
+**Prepared scene-save correction:** `be5167b087789109a2bb1f98305b8ffa18b454ed`
 
 ## Published evidence
 
@@ -57,6 +58,17 @@
   disabled its own `wiGUI` button while `Button::Update()` was still handling
   the click. The disabled button remained focused and force-disabled the Redo
   widget. The ten Redo commands remained intact in `CommandService`.
+- Phase 2 workflow
+  [30494616840](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30494616840)
+  and Windows baseline run
+  [30494616805](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30494616805)
+  passed at `b4da74a`.
+- Human Windows GPU retesting at `b4da74a` confirmed repeated Undo and Redo
+  both work and the history controls remain responsive.
+- Save As then crashed Studio to the desktop. Source comparison with the pinned
+  Wicked Editor found that Renegade explicitly called `Archive::Close()`, while
+  `Archive` also calls `Close()` from its destructor. The second close tried to
+  write after the archive data buffer had already been cleared.
 
 ## Published increment
 
@@ -104,7 +116,7 @@ on the green published commit `11678cd` and:
 The correction changes only `Studio`, `EngineBridge`, and `Tests`. Wicked
 remains pinned and unmodified.
 
-## Prepared GUI history-action correction
+## Published GUI history-action correction
 
 Code commit `4b9d6a58340913698077a2b839535e1287fa4ff4` changes Undo and
 Redo button callbacks to queue a history action. Studio applies the queued
@@ -114,6 +126,17 @@ mid-update and blocking the other history control.
 
 The correction changes only `Studio/src/StudioApplication.cpp` and
 `Studio/src/StudioApplication.h`. Wicked remains pinned and unmodified.
+
+## Prepared scene-save correction
+
+Code commit `be5167b087789109a2bb1f98305b8ffa18b454ed` removes the
+explicit `Archive::Close()` from `SceneService::SaveScene()`. The archive now
+writes exactly once from its destructor, matching the pinned Wicked Editor.
+The save path also calls `Scene::Update(0)` before serialization, as the Wicked
+Editor does.
+
+The correction changes only `EngineBridge/src/SceneService.cpp`. Wicked
+remains pinned and unmodified.
 
 ## Validation performed before the rerun
 
@@ -127,13 +150,16 @@ The correction changes only `Studio/src/StudioApplication.cpp` and
 - Source inspection confirms `Button::Update()` continues processing after its
   `OnClick` callback and `GUI::Update()` force-disables later widgets when an
   earlier widget remains focused.
+- Source inspection confirms `Archive::~Archive()` calls `Close()` and clears
+  its data buffer. The pinned Wicked Editor relies on destructor-driven close
+  and does not explicitly close its scene archive.
 - This Linux workspace has no CMake or PowerShell. Windows CI remains the
   compile and command-test authority.
 
 ## Publication and verification
 
-1. Publish code commit `4b9d6a58340913698077a2b839535e1287fa4ff4`
-   and this handoff update on top of published `main` at `8b9041f`.
+1. Publish code commit `be5167b087789109a2bb1f98305b8ffa18b454ed`
+   and this handoff update on top of published `main` at `b4da74a`.
 2. Watch `Phase 2 Studio shell` and `Windows baseline`.
 3. Fix any compile, command-test, or packaging failure before adding scope.
 4. Download the new Release artifact.
