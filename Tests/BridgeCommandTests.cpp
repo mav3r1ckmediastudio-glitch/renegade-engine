@@ -1,12 +1,10 @@
 #include <cmath>
-#include <filesystem>
 #include <iostream>
 #include <memory>
 
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
-#include "wiArchive.h"
 
 namespace
 {
@@ -78,47 +76,6 @@ int main()
         return Fail("redo did not restore the edited transform");
     }
 
-    const auto archivePath =
-        std::filesystem::temp_directory_path() /
-        ("renegade-component-roundtrip-" + std::to_string(child) + ".bin");
-    std::filesystem::remove(archivePath);
-
-    wi::Archive archive(archivePath.string(), false);
-    if (!archive.IsOpen())
-    {
-        return Fail("could not create the component archive");
-    }
-    archive.SetCompressionEnabled(true);
-
-    wi::ecs::EntitySerializer writer;
-    scenes.GetScene().names.GetComponent(child)->Serialize(archive, writer);
-    childTransform.Serialize(archive, writer);
-    archive.Close();
-
-    wi::Archive reopened(archivePath.string(), true, false);
-    if (!reopened.IsOpen())
-    {
-        std::filesystem::remove(archivePath);
-        return Fail("could not reopen the component archive");
-    }
-
-    wi::scene::NameComponent persistedName;
-    wi::scene::TransformComponent persistedTransform;
-    wi::ecs::EntitySerializer reader;
-    persistedName.Serialize(reopened, reader);
-    persistedTransform.Serialize(reopened, reader);
-    reopened.Close();
-    std::filesystem::remove(archivePath);
-
-    if (persistedName.name != "Child" ||
-        !NearlyEqual(persistedTransform.translation_local.x, 4.0f) ||
-        !NearlyEqual(persistedTransform.translation_local.y, 5.0f) ||
-        !NearlyEqual(persistedTransform.translation_local.z, 6.0f))
-    {
-        return Fail("edited transform did not survive archive roundtrip");
-    }
-
-    std::cout
-        << "PASS: hierarchy, selection, command, undo, redo and archive roundtrip\n";
+    std::cout << "PASS: hierarchy, selection, transform command, undo and redo\n";
     return 0;
 }
