@@ -76,6 +76,74 @@ int main()
         return Fail("redo did not restore the edited transform");
     }
 
-    std::cout << "PASS: hierarchy, selection, transform command, undo and redo\n";
+    commands.Clear();
+    childTransform.translation_local = XMFLOAT3{};
+    childTransform.SetDirty();
+    childTransform.UpdateTransform();
+
+    for (int step = 1; step <= 10; ++step)
+    {
+        if (!commands.Execute(
+                std::make_unique<renegade::bridge::SetTranslationCommand>(
+                    scenes.GetScene(),
+                    child,
+                    XMFLOAT3(static_cast<float>(step), 0.0f, 0.0f))))
+        {
+            return Fail("repeated transform command did not execute");
+        }
+    }
+
+    if (commands.UndoCount() != 10 || commands.RedoCount() != 0)
+    {
+        return Fail("repeated transform history counts are incorrect");
+    }
+
+    for (int expected = 9; expected >= 0; --expected)
+    {
+        if (!commands.Undo() ||
+            !NearlyEqual(
+                childTransform.translation_local.x,
+                static_cast<float>(expected)))
+        {
+            return Fail("repeated undo did not restore the expected transform");
+        }
+    }
+
+    if (commands.CanUndo() || commands.UndoCount() != 0 ||
+        commands.RedoCount() != 10)
+    {
+        return Fail("repeated undo history counts are incorrect");
+    }
+
+    for (int expected = 1; expected <= 10; ++expected)
+    {
+        if (!commands.Redo() ||
+            !NearlyEqual(
+                childTransform.translation_local.x,
+                static_cast<float>(expected)))
+        {
+            return Fail("repeated redo did not restore the expected transform");
+        }
+    }
+
+    if (commands.UndoCount() != 10 || commands.CanRedo())
+    {
+        return Fail("repeated redo history counts are incorrect");
+    }
+
+    const auto undoCountBeforeNoOp = commands.UndoCount();
+    if (commands.Execute(
+            std::make_unique<renegade::bridge::SetTranslationCommand>(
+                scenes.GetScene(),
+                child,
+                XMFLOAT3(10.0f, 0.0f, 0.000001f))) ||
+        commands.UndoCount() != undoCountBeforeNoOp)
+    {
+        return Fail("microscopic transform polluted the undo history");
+    }
+
+    std::cout
+        << "PASS: hierarchy, selection, transform command, repeated undo/redo, "
+           "and no-op filtering\n";
     return 0;
 }

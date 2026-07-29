@@ -146,11 +146,26 @@ namespace renegade::studio
             return;
         }
 
+        // wiGUI processes button callbacks in RenderPath3D::Update(). Do not
+        // let the same mouse press also start a viewport translation behind a
+        // focused widget. An existing gizmo drag is allowed to finish if the
+        // pointer crosses a panel before release.
+        if (GetGUI().HasFocus() && !gizmoDragActive_)
+        {
+            return;
+        }
+
         const XMFLOAT4 pointer = wi::input::GetPointer();
         gizmo_.Update(*camera, pointer, *this);
 
+        if (gizmo_.IsDragStarted())
+        {
+            gizmoDragActive_ = true;
+        }
+
         if (gizmo_.IsDragEnded())
         {
+            gizmoDragActive_ = false;
             auto* transform =
                 session_->Scenes().GetScene().transforms.GetComponent(gizmoEntity_);
             if (transform == nullptr)
@@ -324,6 +339,7 @@ namespace renegade::studio
         gizmo_.selected.clear();
         gizmo_.selectedEntitiesNonRecursive.clear();
         gizmoEntity_ = wi::ecs::INVALID_ENTITY;
+        gizmoDragActive_ = false;
 
         if (session_ == nullptr || !session_->Selection().HasSelection())
         {

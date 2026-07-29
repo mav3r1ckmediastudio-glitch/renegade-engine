@@ -1,6 +1,21 @@
 #include "renegade/bridge/CommandService.h"
 
+#include <cmath>
 #include <utility>
+
+namespace
+{
+    constexpr float translationEpsilon = 0.00001f;
+
+    bool IsMeaningfulTranslation(
+        const XMFLOAT3& before,
+        const XMFLOAT3& after) noexcept
+    {
+        return std::abs(after.x - before.x) > translationEpsilon ||
+            std::abs(after.y - before.y) > translationEpsilon ||
+            std::abs(after.z - before.z) > translationEpsilon;
+    }
+}
 
 namespace renegade::bridge
 {
@@ -101,6 +116,10 @@ namespace renegade::bridge
 
     bool SetTranslationCommand::Execute()
     {
+        if (!IsMeaningfulTranslation(before_, after_))
+        {
+            return false;
+        }
         return Apply(after_);
     }
 

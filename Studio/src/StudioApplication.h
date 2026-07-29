@@ -42,6 +42,7 @@ namespace renegade::studio
         Translator gizmo_;
         wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;
         XMFLOAT3 gizmoTranslationBefore_ = {};
+        bool gizmoDragActive_ = false;
     };
 
     class StudioApplication final : public wi::Application
