@@ -22,6 +22,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Get-RenegadeRepositoryRoot
 $wickedRoot = Join-Path $repositoryRoot "WickedEngine"
 $solutionPath = Join-Path $wickedRoot "WickedEngine.sln"
+$testsProjectPath = Join-Path $wickedRoot "Samples\Tests\Tests.vcxproj"
 $wickedCommit = Assert-RenegadeWickedBaseline -RepositoryRoot $repositoryRoot
 $msbuildPath = Get-RenegadeMSBuildPath
 
@@ -120,8 +121,7 @@ try {
             Invoke-RenegadeLoggedCommand `
                 -FilePath $msbuildPath `
                 -ArgumentList @(
-                    $solutionPath,
-                    "/t:Tests",
+                    $testsProjectPath,
                     "/m",
                     "/p:Configuration=$currentConfiguration",
                     "/p:Platform=x64"
