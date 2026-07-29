@@ -41,6 +41,11 @@ namespace renegade::bridge
             wi::scene::Scene& scene,
             wi::ecs::Entity entity,
             const XMFLOAT3& translation);
+        SetTranslationCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity entity,
+            const XMFLOAT3& before,
+            const XMFLOAT3& after);
 
         bool Execute() override;
         void Undo() override;

@@ -87,6 +87,18 @@ namespace renegade::bridge
         before_ = transform == nullptr ? XMFLOAT3{} : transform->translation_local;
     }
 
+    SetTranslationCommand::SetTranslationCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const XMFLOAT3& before,
+        const XMFLOAT3& after)
+        : scene_(&scene)
+        , entity_(entity)
+        , before_(before)
+        , after_(after)
+    {
+    }
+
     bool SetTranslationCommand::Execute()
     {
         return Apply(after_);

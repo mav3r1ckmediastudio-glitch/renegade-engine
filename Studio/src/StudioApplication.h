@@ -3,6 +3,7 @@
 #include <string>
 
 #include <WickedEngine.h>
+#include <Translator.h>
 
 #include "renegade/bridge/StudioSession.h"
 
@@ -13,6 +14,8 @@ namespace renegade::studio
     public:
         void BindSession(bridge::StudioSession& session) noexcept;
         void Load() override;
+        void Update(float dt) override;
+        void Compose(wi::graphics::CommandList cmd) const override;
         void ResizeLayout() override;
         void RefreshStatus();
         void RefreshHierarchy();
@@ -20,6 +23,9 @@ namespace renegade::studio
 
     private:
         void ApplySelectedTranslation(int axis, float value);
+        void SyncGizmoSelection();
+        void SaveSceneAs();
+        void ReopenScene();
 
         bridge::StudioSession* session_ = nullptr;
         wi::gui::Label statusLabel_;
@@ -31,6 +37,11 @@ namespace renegade::studio
         wi::gui::TextInputField translationZ_;
         wi::gui::Button undoButton_;
         wi::gui::Button redoButton_;
+        wi::gui::Button saveAsButton_;
+        wi::gui::Button reopenButton_;
+        Translator gizmo_;
+        wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;
+        XMFLOAT3 gizmoTranslationBefore_ = {};
     };
 
     class StudioApplication final : public wi::Application

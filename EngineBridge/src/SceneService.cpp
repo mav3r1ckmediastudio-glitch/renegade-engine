@@ -38,6 +38,48 @@ namespace renegade::bridge
         return true;
     }
 
+    bool SceneService::SaveScene(const std::string& filePath)
+    {
+        if (filePath.empty())
+        {
+            lastError_ = "A scene path is required.";
+            return false;
+        }
+
+        wi::Archive archive(filePath, false);
+        if (!archive.IsOpen())
+        {
+            lastError_ = "Could not create scene file: " + filePath;
+            return false;
+        }
+
+        archive.SetCompressionEnabled(true);
+        scene_.Serialize(archive);
+        archive.Close();
+
+        if (!wi::helper::FileExists(filePath))
+        {
+            lastError_ = "Scene file was not written: " + filePath;
+            return false;
+        }
+
+        currentPath_ = filePath;
+        lastError_.clear();
+        return true;
+    }
+
+    bool SceneService::ReloadScene()
+    {
+        if (currentPath_.empty())
+        {
+            lastError_ = "There is no saved scene to reopen.";
+            return false;
+        }
+
+        const std::string path = currentPath_;
+        return LoadScene(path);
+    }
+
     wi::scene::Scene& SceneService::GetScene() noexcept
     {
         return scene_;

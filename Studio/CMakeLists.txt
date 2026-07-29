@@ -1,7 +1,13 @@
 add_executable(RenegadeStudio WIN32
+    "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/Translator.cpp"
     src/StudioApplication.cpp
     src/StudioApplication.h
     src/main_Windows.cpp
+)
+
+target_include_directories(RenegadeStudio
+    PRIVATE
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Editor"
 )
 
 target_link_libraries(RenegadeStudio

@@ -22,6 +22,8 @@ namespace renegade::bridge
     public:
         void NewScene();
         bool LoadScene(const std::string& filePath);
+        bool SaveScene(const std::string& filePath);
+        bool ReloadScene();
 
         [[nodiscard]] wi::scene::Scene& GetScene() noexcept;
         [[nodiscard]] const wi::scene::Scene& GetScene() const noexcept;

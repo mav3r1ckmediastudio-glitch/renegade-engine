@@ -43,6 +43,18 @@ namespace renegade::bridge
             return scenes_.LoadScene(filePath);
         }
 
+        bool SaveScene(const std::string& filePath)
+        {
+            return scenes_.SaveScene(filePath);
+        }
+
+        bool ReloadScene()
+        {
+            commands_.Clear();
+            selection_.Clear();
+            return scenes_.ReloadScene();
+        }
+
     private:
         SceneService scenes_;
         SelectionService selection_;

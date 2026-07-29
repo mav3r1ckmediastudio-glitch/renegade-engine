@@ -1,4 +1,5 @@
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 
@@ -76,6 +77,47 @@ int main()
         return Fail("redo did not restore the edited transform");
     }
 
-    std::cout << "PASS: hierarchy, selection, transform command, undo and redo\n";
+    const auto savePath =
+        std::filesystem::temp_directory_path() /
+        ("renegade-persistence-" + std::to_string(child) + ".wiscene");
+    std::filesystem::remove(savePath);
+
+    if (!scenes.SaveScene(savePath.string()))
+    {
+        return Fail("scene service did not save the edited scene");
+    }
+
+    renegade::bridge::SceneService reopened;
+    if (!reopened.LoadScene(savePath.string()))
+    {
+        std::filesystem::remove(savePath);
+        return Fail("scene service did not reopen the saved scene");
+    }
+
+    bool persisted = false;
+    for (const auto& entity : reopened.ListEntities())
+    {
+        if (entity.name != "Child")
+        {
+            continue;
+        }
+        const auto* transform =
+            reopened.GetScene().transforms.GetComponent(entity.entity);
+        persisted =
+            transform != nullptr &&
+            NearlyEqual(transform->translation_local.x, 4.0f) &&
+            NearlyEqual(transform->translation_local.y, 5.0f) &&
+            NearlyEqual(transform->translation_local.z, 6.0f);
+        break;
+    }
+    std::filesystem::remove(savePath);
+
+    if (!persisted)
+    {
+        return Fail("saved transform did not survive reopen");
+    }
+
+    std::cout
+        << "PASS: hierarchy, selection, transform command, undo, redo, save and reopen\n";
     return 0;
 }

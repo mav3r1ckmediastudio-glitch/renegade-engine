@@ -97,11 +97,91 @@ namespace renegade::studio
         });
         GetGUI().AddWidget(&redoButton_);
 
+        saveAsButton_.Create("Save Scene As");
+        saveAsButton_.SetText("Save As...");
+        saveAsButton_.SetSize(XMFLOAT2(100.0f, 24.0f));
+        saveAsButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            SaveSceneAs();
+        });
+        GetGUI().AddWidget(&saveAsButton_);
+
+        reopenButton_.Create("Reopen Scene");
+        reopenButton_.SetText("Reopen");
+        reopenButton_.SetSize(XMFLOAT2(90.0f, 24.0f));
+        reopenButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            ReopenScene();
+        });
+        GetGUI().AddWidget(&reopenButton_);
+
+        gizmo_.isTranslator = true;
+        gizmo_.isRotator = false;
+        gizmo_.isScalator = false;
+        gizmo_.translate_snap = 0.1f;
+
         RefreshHierarchy();
         RefreshInspector();
         RefreshStatus();
 
         RenderPath3D::Load();
+    }
+
+    void StudioRenderPath::Update(const float dt)
+    {
+        RenderPath3D::Update(dt);
+
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        if (gizmoEntity_ != session_->Selection().SelectedEntity())
+        {
+            SyncGizmoSelection();
+        }
+
+        if (gizmoEntity_ == wi::ecs::INVALID_ENTITY)
+        {
+            return;
+        }
+
+        const XMFLOAT4 pointer = wi::input::GetPointer();
+        gizmo_.Update(*camera, pointer, *this);
+
+        if (gizmo_.IsDragEnded())
+        {
+            auto* transform =
+                session_->Scenes().GetScene().transforms.GetComponent(gizmoEntity_);
+            if (transform == nullptr)
+            {
+                return;
+            }
+
+            const XMFLOAT3 translationAfter = transform->translation_local;
+            transform->translation_local = gizmoTranslationBefore_;
+            transform->SetDirty();
+            transform->UpdateTransform();
+
+            session_->Commands().Execute(
+                std::make_unique<bridge::SetTranslationCommand>(
+                    session_->Scenes().GetScene(),
+                    gizmoEntity_,
+                    gizmoTranslationBefore_,
+                    translationAfter));
+            gizmoTranslationBefore_ = translationAfter;
+            RefreshInspector();
+            RefreshStatus();
+        }
+    }
+
+    void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
+    {
+        RenderPath3D::Compose(cmd);
+        if (gizmoEntity_ != wi::ecs::INVALID_ENTITY)
+        {
+            gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
+        }
     }
 
     void StudioRenderPath::ResizeLayout()
@@ -119,6 +199,8 @@ namespace renegade::studio
         translationZ_.SetPos(XMFLOAT2(inspectorX + 200.0f, 48.0f));
         undoButton_.SetPos(XMFLOAT2(inspectorX, 82.0f));
         redoButton_.SetPos(XMFLOAT2(inspectorX + 100.0f, 82.0f));
+        saveAsButton_.SetPos(XMFLOAT2(inspectorX, 116.0f));
+        reopenButton_.SetPos(XMFLOAT2(inspectorX + 110.0f, 116.0f));
     }
 
     void StudioRenderPath::RefreshStatus()
@@ -182,6 +264,8 @@ namespace renegade::studio
         translationZ_.SetEnabled(hasTransform);
         undoButton_.SetEnabled(hasSession && session_->Commands().CanUndo());
         redoButton_.SetEnabled(hasSession && session_->Commands().CanRedo());
+        reopenButton_.SetEnabled(
+            hasSession && !session_->Scenes().CurrentPath().empty());
 
         if (!hasTransform)
         {
@@ -196,6 +280,7 @@ namespace renegade::studio
         translationX_.SetValue(transform->translation_local.x);
         translationY_.SetValue(transform->translation_local.y);
         translationZ_.SetValue(transform->translation_local.z);
+        SyncGizmoSelection();
     }
 
     void StudioRenderPath::ApplySelectedTranslation(const int axis, const float value)
@@ -230,6 +315,74 @@ namespace renegade::studio
             session_->Scenes().GetScene(),
             entity,
             translation));
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::SyncGizmoSelection()
+    {
+        gizmo_.selected.clear();
+        gizmo_.selectedEntitiesNonRecursive.clear();
+        gizmoEntity_ = wi::ecs::INVALID_ENTITY;
+
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        auto& scene = session_->Scenes().GetScene();
+        const auto* transform = scene.transforms.GetComponent(entity);
+        if (transform == nullptr)
+        {
+            return;
+        }
+
+        wi::scene::PickResult selected;
+        selected.entity = entity;
+        gizmo_.scene = &scene;
+        gizmo_.selected.push_back(selected);
+        gizmo_.selectedEntitiesNonRecursive.push_back(entity);
+        gizmo_.PreTranslate();
+        gizmoEntity_ = entity;
+        gizmoTranslationBefore_ = transform->translation_local;
+    }
+
+    void StudioRenderPath::SaveSceneAs()
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::SAVE;
+        params.description = "Renegade Scene (.wiscene)";
+        params.extensions.push_back("wiscene");
+        wi::helper::FileDialog(params, [this](const std::string& selectedPath)
+        {
+            const std::string scenePath =
+                wi::helper::ForceExtension(selectedPath, "wiscene");
+            wi::eventhandler::Subscribe_Once(
+                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, scenePath](uint64_t)
+                {
+                    session_->SaveScene(scenePath);
+                    RefreshStatus();
+                    RefreshInspector();
+                });
+        });
+    }
+
+    void StudioRenderPath::ReopenScene()
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        session_->ReloadScene();
+        RefreshHierarchy();
         RefreshInspector();
         RefreshStatus();
     }
