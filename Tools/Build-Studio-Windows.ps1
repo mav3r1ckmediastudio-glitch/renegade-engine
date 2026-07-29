@@ -21,6 +21,10 @@ $cmakeCommand = Get-Command cmake -ErrorAction SilentlyContinue
 if (-not $cmakeCommand) {
     throw "CMake 3.19 or newer is required to build Renegade Studio."
 }
+$ctestCommand = Get-Command ctest -ErrorAction SilentlyContinue
+if (-not $ctestCommand) {
+    throw "CTest is required to validate the Renegade bridge."
+}
 
 $buildRoot = Join-Path $repositoryRoot "BUILD\renegade"
 if ($Clean -and (Test-Path $buildRoot -PathType Container)) {
@@ -47,7 +51,7 @@ $result = [ordered]@{
     wickedCommit = $wickedCommit
     configurations = @($Configuration)
     platform = "x64"
-    target = "RenegadeStudio"
+    targets = @("RenegadeStudio", "RenegadeRuntime", "RenegadeBridgeTests")
     embeddedShaders = $true
     outputs = @()
     error = $null
@@ -73,16 +77,30 @@ try {
             -ArgumentList @(
                 "--build", $buildRoot,
                 "--config", $currentConfiguration,
-                "--target", "RenegadeStudio",
+                "--target", "RenegadeStudio", "RenegadeRuntime", "RenegadeBridgeTests",
                 "--parallel"
             ) `
             -WorkingDirectory $repositoryRoot `
             -LogPath (Join-Path $ArtifactRoot "logs\$currentConfiguration\02-build.log")
 
+        Invoke-RenegadeLoggedCommand `
+            -FilePath $ctestCommand.Source `
+            -ArgumentList @(
+                "--test-dir", $buildRoot,
+                "-C", $currentConfiguration,
+                "--output-on-failure"
+            ) `
+            -WorkingDirectory $repositoryRoot `
+            -LogPath (Join-Path $ArtifactRoot "logs\$currentConfiguration\03-tests.log")
+
         $studioDirectory = Join-Path $buildRoot "Studio\$currentConfiguration"
         $studioExecutable = Join-Path $studioDirectory "RenegadeStudio.exe"
         $dxCompiler = Join-Path $studioDirectory "dxcompiler.dll"
         $fixtureScene = Join-Path $studioDirectory "Content\cube.wiscene"
+        $runtimeDirectory = Join-Path $buildRoot "Runtime\$currentConfiguration"
+        $runtimeExecutable = Join-Path $runtimeDirectory "RenegadeRuntime.exe"
+        $runtimeDxCompiler = Join-Path $runtimeDirectory "dxcompiler.dll"
+        $runtimeFixtureScene = Join-Path $runtimeDirectory "Content\cube.wiscene"
 
         $packageRoot = Join-Path $ArtifactRoot "packages\RenegadeStudio-$currentConfiguration"
         New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
@@ -100,12 +118,35 @@ try {
         }
         Compress-Archive -Path (Join-Path $packageRoot "*") -DestinationPath $packageArchive
 
+        $runtimePackageRoot = Join-Path $ArtifactRoot "packages\RenegadeRuntime-$currentConfiguration"
+        New-Item -ItemType Directory -Path $runtimePackageRoot -Force | Out-Null
+        Copy-Item -Path $runtimeExecutable -Destination $runtimePackageRoot -Force
+        Copy-Item -Path $runtimeDxCompiler -Destination $runtimePackageRoot -Force
+        Copy-Item `
+            -Path (Join-Path $runtimeDirectory "Content") `
+            -Destination (Join-Path $runtimePackageRoot "Content") `
+            -Recurse `
+            -Force
+
+        $runtimePackageArchive = Join-Path $ArtifactRoot "RenegadeRuntime-$currentConfiguration.zip"
+        if (Test-Path $runtimePackageArchive -PathType Leaf) {
+            Remove-Item -Path $runtimePackageArchive -Force
+        }
+        Compress-Archive `
+            -Path (Join-Path $runtimePackageRoot "*") `
+            -DestinationPath $runtimePackageArchive
+
         $result.outputs += [ordered]@{
             configuration = $currentConfiguration
             studio = Get-RenegadeFileRecord -Path $studioExecutable
             dxcompiler = Get-RenegadeFileRecord -Path $dxCompiler
             fixtureScene = Get-RenegadeFileRecord -Path $fixtureScene
-            package = Get-RenegadeFileRecord -Path $packageArchive
+            studioPackage = Get-RenegadeFileRecord -Path $packageArchive
+            runtime = Get-RenegadeFileRecord -Path $runtimeExecutable
+            runtimeDxcompiler = Get-RenegadeFileRecord -Path $runtimeDxCompiler
+            runtimeFixtureScene = Get-RenegadeFileRecord -Path $runtimeFixtureScene
+            runtimePackage = Get-RenegadeFileRecord -Path $runtimePackageArchive
+            bridgeTests = "PASS"
         }
     }
 
@@ -116,7 +157,7 @@ try {
     $result | ConvertTo-Json -Depth 8 | Set-Content -Path $resultPath -Encoding UTF8
 
     Write-Host ""
-    Write-Host "Renegade Studio build completed successfully."
+    Write-Host "Renegade Phase 2 increment completed successfully."
     Write-Host "Evidence: $resultPath"
 }
 catch {
