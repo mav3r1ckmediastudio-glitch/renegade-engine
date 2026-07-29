@@ -124,7 +124,8 @@ try {
                     $testsProjectPath,
                     "/m",
                     "/p:Configuration=$currentConfiguration",
-                    "/p:Platform=x64"
+                    "/p:Platform=x64",
+                    "/p:SolutionDir=$wickedRoot\"
                 ) `
                 -WorkingDirectory $wickedRoot `
                 -LogPath (Join-Path $configurationLogRoot "05-tests.log")
