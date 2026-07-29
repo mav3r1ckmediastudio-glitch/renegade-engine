@@ -2,8 +2,8 @@
 
 ## Current milestone
 
-**Phase 0 — Charter and frozen baseline**
-Target duration: 1 week
+**Phase 1 — Reproducible Windows build**
+Target duration: 2–3 weeks
 Status: In progress
 
 ## Phase plan
@@ -29,17 +29,18 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ### Week 1
 
-- Establish repository and Wicked pin.
-- Commit charter, roadmap, AI workflow, handoff, and feature matrix.
-- Verify licence and notice obligations.
-- Record the Windows build-machine toolchain.
+- [x] Establish repository and Wicked pin.
+- [x] Commit charter, roadmap, AI workflow, handoff, and feature matrix.
+- [x] Verify licence and notice obligations.
+- [ ] Record the Windows build-machine toolchain.
 
 ### Week 2
 
-- Build Windows Debug and Release.
-- Run the original editor and reference scenes.
-- Validate DirectX 12 and check Windows Vulkan.
-- Capture screenshots, timings, logs, and initial automation.
+- [ ] Build Windows Debug and Release.
+- [ ] Run the original editor and reference scenes.
+- [ ] Validate DirectX 12 and check Windows Vulkan.
+- [x] Add repeatable scripts, evidence records, and Windows CI.
+- [ ] Capture Windows logs, timings, screenshots, and independent verification.
 
 ### Week 3
 

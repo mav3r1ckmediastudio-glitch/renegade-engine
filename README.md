@@ -6,7 +6,7 @@ Wicked provides the rendering and low-level engine foundation; Renegade will
 provide its own editor, project system, asset workflow, runtime, user experience,
 documentation, and release process.
 
-> **Status:** Phase 0 — charter and frozen baseline. This repository is not yet
+> **Status:** Phase 1 — reproducible Windows build. This repository is not yet
 > a usable game engine release.
 
 ## Baseline
@@ -31,6 +31,9 @@ For an existing clone:
 ```bash
 git submodule update --init --recursive
 ```
+
+The Windows reference build and evidence workflow is documented in
+[`docs/BUILD_WINDOWS.md`](docs/BUILD_WINDOWS.md).
 
 ## Product layers
 
