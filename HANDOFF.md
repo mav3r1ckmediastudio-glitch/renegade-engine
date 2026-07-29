@@ -4,9 +4,10 @@
 **Project:** Renegade Engine (working title)
 **Active phase:** 2 — architecture/UI proof
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
-**Published branch before this handoff:** `main` at `8d59b25fb28daf371f0d05487709a840984c0e8d`
+**Published branch before this handoff:** `main` at `11678cdfc75597fc34b47d11d2c1856bdb63f381`
 **Published test-harness attempt:** `a45f9ed86e481f3de46849726bbc540637d2997b`
-**Prepared headless-test correction:** `201c3a288069f088917df29a6381292d7294cb4a`
+**Published proven-test restoration:** `11678cdfc75597fc34b47d11d2c1856bdb63f381`
+**Prepared repeated-history correction:** `9804e63ab390ef748e2097b97e10c84646353662`
 
 ## Published evidence
 
@@ -30,7 +31,19 @@
   Debug and Release at `a45f9ed`. Its checkpoints proved the crash occurs
   inside full-scene save, which requires the renderer-backed application
   environment rather than only the Wicked job system.
-- Human visual checks and independent verification remain open.
+- Phase 2 workflow
+  [30489808616](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30489808616)
+  passed Windows x64 Debug and Release at `11678cd`; Windows baseline run
+  [30489808638](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30489808638)
+  also passed.
+- Human Windows GPU inspection proved that the Release artifact launches,
+  loads `Content/cube.wiscene`, renders the cube, selects the hierarchy entity,
+  displays the translation gizmo, and applies axis drags.
+- A single Undo and Redo initially worked. Repeated manipulation exposed a
+  behavioural failure: the status reached `Undo 10 / Redo 0`, while history
+  actions no longer produced an obvious scene change. The transform also
+  contained floating-point drift (`z = -2.15203e-07`), proving that
+  microscopic gizmo releases could enter history.
 
 ## Published increment
 
@@ -48,18 +61,35 @@ Studio shell, hierarchy, inspector, commands, persistence workflow, and UI
 remain Renegade-owned. The proof still does not select the production UI
 toolkit; ADR 0002 remains open.
 
-## Prepared headless-test correction
+## Published proven-test restoration
 
-The standalone bridge test no longer attempts full `Scene::Serialize` without
-the renderer-backed Wicked application lifecycle. It instead verifies the same
-edited name and transform survive a compressed, on-disk `wi::Archive`
-roundtrip. This keeps command and serialized component coverage deterministic
-in headless CI.
+The standalone bridge test was restored to the hierarchy, selection, execute,
+Undo, and Redo coverage that passed in Phase 2 workflow
+[30482144721](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30482144721).
+It performs no renderer-backed serialization.
 
 Full WISCENE Save As and Reopen remain implemented through `SceneService`, but
 their end-to-end acceptance is explicitly a Windows GPU Studio check. No
 Studio, Runtime, bridge, gizmo, or persistence production code changed in this
 correction.
+
+## Prepared repeated-history correction
+
+Code commit `9804e63ab390ef748e2097b97e10c84646353662` is based directly
+on the green published commit `11678cd` and:
+
+- prevents a focused `wiGUI` widget and the viewport gizmo from consuming the
+  same mouse operation;
+- allows a drag that began in the viewport to finish if the pointer crosses a
+  panel before release;
+- rejects transform commands whose total change is only floating-point noise;
+  and
+- expands `RenegadeBridgeTests` from one Undo/Redo cycle to ten ordered Undo
+  operations, ten ordered Redo operations, history-count checks, and
+  microscopic-change filtering.
+
+The correction changes only `Studio`, `EngineBridge`, and `Tests`. Wicked
+remains pinned and unmodified.
 
 ## Validation performed before the rerun
 
@@ -67,22 +97,28 @@ correction.
 - Both workflow YAML files parse.
 - Every feature-matrix row has the expected 16 fields.
 - The pinned Wicked submodule is exact and unmodified.
-- The test uses the pinned `wi::Archive`, `NameComponent::Serialize`, and
-  `TransformComponent::Serialize` APIs without requiring a graphics device.
+- The repeated-history correction passes `git diff --check`.
+- Source inspection confirms `wiGUI` callbacks run inside
+  `RenderPath3D::Update()` before the Renegade gizmo update.
 - This Linux workspace has no CMake or PowerShell. Windows CI remains the
-  compile and persistence-test authority.
+  compile and command-test authority.
 
 ## Publication and verification
 
-1. Fast-forward `main` from `a45f9ed` through the prepared headless-test
-   correction.
+1. Publish code commit `9804e63ab390ef748e2097b97e10c84646353662`
+   and this handoff update on top of published
+   `main` at `11678cd`.
 2. Watch `Phase 2 Studio shell` and `Windows baseline`.
-3. Fix any compile, persistence-test, or packaging failure before adding scope.
-4. Download Debug and Release artifacts.
+3. Fix any compile, command-test, or packaging failure before adding scope.
+4. Download the new Release artifact.
 5. On a Windows GPU machine:
    - select an entity in the hierarchy;
-   - drag each translation axis;
-   - verify Undo and Redo;
+   - make ten clearly different translation drags;
+   - click Undo ten times and confirm each status count and transform change;
+   - click Redo ten times and confirm each status count and transform change;
+   - click and release a gizmo without moving it and confirm the Undo count does
+     not increase;
+   - click Undo and Redo while the gizmo is visually near a panel;
    - use Save As;
    - make another edit;
    - use Reopen and confirm the saved transform returns;
