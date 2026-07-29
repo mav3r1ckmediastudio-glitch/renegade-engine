@@ -46,16 +46,22 @@ namespace renegade::bridge
             return false;
         }
 
-        wi::Archive archive(filePath, false);
-        if (!archive.IsOpen())
         {
-            lastError_ = "Could not create scene file: " + filePath;
-            return false;
-        }
+            wi::Archive archive(filePath, false);
+            if (!archive.IsOpen())
+            {
+                lastError_ = "Could not create scene file: " + filePath;
+                return false;
+            }
 
-        archive.SetCompressionEnabled(true);
-        scene_.Serialize(archive);
-        archive.Close();
+            archive.SetCompressionEnabled(true);
+            scene_.Update(0.0f);
+            scene_.Serialize(archive);
+
+            // Archive writes on destruction. Calling Close() here would make
+            // the destructor close the same archive a second time after its
+            // data buffer has already been cleared.
+        }
 
         if (!wi::helper::FileExists(filePath))
         {
