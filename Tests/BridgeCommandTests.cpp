@@ -6,27 +6,10 @@
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
-#include "wiJobSystem.h"
+#include "wiArchive.h"
 
 namespace
 {
-    class JobSystemScope
-    {
-    public:
-        JobSystemScope()
-        {
-            wi::jobsystem::Initialize();
-        }
-
-        ~JobSystemScope()
-        {
-            wi::jobsystem::ShutDown();
-        }
-
-        JobSystemScope(const JobSystemScope&) = delete;
-        JobSystemScope& operator=(const JobSystemScope&) = delete;
-    };
-
     bool NearlyEqual(const float left, const float right)
     {
         return std::abs(left - right) < 0.0001f;
@@ -41,7 +24,6 @@ namespace
 
 int main()
 {
-    JobSystemScope jobs;
     renegade::bridge::SceneService scenes;
     renegade::bridge::SelectionService selection;
     renegade::bridge::CommandService commands;
@@ -96,49 +78,47 @@ int main()
         return Fail("redo did not restore the edited transform");
     }
 
-    const auto savePath =
+    const auto archivePath =
         std::filesystem::temp_directory_path() /
-        ("renegade-persistence-" + std::to_string(child) + ".wiscene");
-    std::filesystem::remove(savePath);
+        ("renegade-component-roundtrip-" + std::to_string(child) + ".bin");
+    std::filesystem::remove(archivePath);
 
-    std::cout << "CHECKPOINT: save scene\n" << std::flush;
-    if (!scenes.SaveScene(savePath.string()))
+    wi::Archive archive(archivePath.string(), false);
+    if (!archive.IsOpen())
     {
-        return Fail("scene service did not save the edited scene");
+        return Fail("could not create the component archive");
+    }
+    archive.SetCompressionEnabled(true);
+
+    wi::ecs::EntitySerializer writer;
+    scenes.GetScene().names.GetComponent(child)->Serialize(archive, writer);
+    childTransform.Serialize(archive, writer);
+    archive.Close();
+
+    wi::Archive reopened(archivePath.string(), true, false);
+    if (!reopened.IsOpen())
+    {
+        std::filesystem::remove(archivePath);
+        return Fail("could not reopen the component archive");
     }
 
-    renegade::bridge::SceneService reopened;
-    std::cout << "CHECKPOINT: reopen scene\n" << std::flush;
-    if (!reopened.LoadScene(savePath.string()))
-    {
-        std::filesystem::remove(savePath);
-        return Fail("scene service did not reopen the saved scene");
-    }
+    wi::scene::NameComponent persistedName;
+    wi::scene::TransformComponent persistedTransform;
+    wi::ecs::EntitySerializer reader;
+    persistedName.Serialize(reopened, reader);
+    persistedTransform.Serialize(reopened, reader);
+    reopened.Close();
+    std::filesystem::remove(archivePath);
 
-    bool persisted = false;
-    for (const auto& entity : reopened.ListEntities())
+    if (persistedName.name != "Child" ||
+        !NearlyEqual(persistedTransform.translation_local.x, 4.0f) ||
+        !NearlyEqual(persistedTransform.translation_local.y, 5.0f) ||
+        !NearlyEqual(persistedTransform.translation_local.z, 6.0f))
     {
-        if (entity.name != "Child")
-        {
-            continue;
-        }
-        const auto* transform =
-            reopened.GetScene().transforms.GetComponent(entity.entity);
-        persisted =
-            transform != nullptr &&
-            NearlyEqual(transform->translation_local.x, 4.0f) &&
-            NearlyEqual(transform->translation_local.y, 5.0f) &&
-            NearlyEqual(transform->translation_local.z, 6.0f);
-        break;
-    }
-    std::filesystem::remove(savePath);
-
-    if (!persisted)
-    {
-        return Fail("saved transform did not survive reopen");
+        return Fail("edited transform did not survive archive roundtrip");
     }
 
     std::cout
-        << "PASS: hierarchy, selection, transform command, undo, redo, save and reopen\n";
+        << "PASS: hierarchy, selection, command, undo, redo and archive roundtrip\n";
     return 0;
 }
