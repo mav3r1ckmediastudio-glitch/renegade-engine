@@ -14,7 +14,7 @@ production UI toolkit:
   drags are committed through the same Renegade command boundary.
 - `CommandService` proves one undo and redo cycle.
 - `RenegadeBridgeTests` validates hierarchy order, selection, execute, undo,
-  redo, save, and reopen without depending on a visual assertion.
+  redo, and an on-disk component archive roundtrip without a graphics device.
 - `SceneService` owns WISCENE Save As and reopen operations.
 
 The temporary `wiGUI` controls remain proof UI. They do not close ADR 0002.
@@ -28,7 +28,8 @@ The temporary `wiGUI` controls remain proof UI. They do not close ADR 0002.
   and `Content/cube.wiscene`.
 - Studio owns no duplicate scene model.
 - Runtime links EngineBridge but no Studio source.
-- Saving and reopening preserves the edited transform in the automated fixture.
+- A compressed Wicked archive roundtrip preserves the edited name and
+  transform.
 
 ## Human-observed acceptance
 
