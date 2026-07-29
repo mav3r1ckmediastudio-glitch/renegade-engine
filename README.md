@@ -1,2 +1,66 @@
-# renegade-engine
-a wicked Engine based game engine
+# Renegade Engine
+
+Renegade is the working title for a Windows-first game engine and authoring
+environment built on [Wicked Engine](https://github.com/turanszkij/WickedEngine).
+Wicked provides the rendering and low-level engine foundation; Renegade will
+provide its own editor, project system, asset workflow, runtime, user experience,
+documentation, and release process.
+
+> **Status:** Phase 0 — charter and frozen baseline. This repository is not yet
+> a usable game engine release.
+
+## Baseline
+
+- Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
+- Pinned branch: `master`
+- Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
+- Snapshot date: `2026-07-29`
+- Initial release target: Windows x64 with DirectX 12
+- Development cross-check: Vulkan on Windows
+
+Wicked Engine is included as a pinned Git submodule at `/WickedEngine`. Clone
+with:
+
+```bash
+git clone --recurse-submodules \
+  https://github.com/mav3r1ckmediastudio-glitch/renegade-engine.git
+```
+
+For an existing clone:
+
+```bash
+git submodule update --init --recursive
+```
+
+## Product layers
+
+| Path | Responsibility |
+|---|---|
+| `/WickedEngine` | Pinned upstream engine foundation |
+| `/Studio` | Renegade editor application |
+| `/EngineBridge` | Stable services and adapters around Wicked APIs |
+| `/Runtime` | Standalone game/player executable |
+| `/Tools` | Import, shader, packaging, and validation tools |
+| `/Templates` | Starter projects and examples |
+| `/Tests` | Automated, integration, visual, and sample-project tests |
+| `/docs` | Canonical plan, architecture, roadmap, and verification records |
+| `/assets` | Renegade-owned editor assets |
+
+The original Wicked Editor remains available inside the submodule as a parity
+reference. It is not the planned Renegade editor.
+
+## Start here
+
+1. Read [`docs/PROJECT_CHARTER.md`](docs/PROJECT_CHARTER.md).
+2. Read [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md).
+3. Check [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`HANDOFF.md`](HANDOFF.md).
+4. Follow [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
+   Claude, or human handovers.
+5. Do not claim feature parity without updating
+   [`docs/FEATURE_MATRIX.csv`](docs/FEATURE_MATRIX.csv) and recording evidence.
+
+## Licensing
+
+Wicked Engine is MIT licensed and retains its original copyright and licence.
+Renegade's own project-wide licence has not yet been selected. See
+[`docs/LICENSING.md`](docs/LICENSING.md) before redistributing any build.
