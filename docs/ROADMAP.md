@@ -4,8 +4,9 @@
 
 **Phase 2 — Architecture/UI proof**
 Target duration: 3–4 weeks
-Status: First increment builds green; second interaction increment prepared;
-visual and independent verification remain open
+Status: Studio interaction, persistence, and standalone Runtime passed on a
+Windows GPU; `wiGUI` accepted; final Vulkan/DPI/HDR checks and independent
+verification remain open
 
 ## Phase plan
 
@@ -46,19 +47,27 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 ### Week 3
 
 - [x] Create the first buildable `Studio` and `EngineBridge` targets.
-- [ ] Create the first buildable `Runtime` target. *(Prepared; CI pending.)*
+- [x] Create the first buildable `Runtime` target.
 - [x] Load a known WISCENE in a blank custom application.
 - [x] Implement minimal scene and selection services.
 - [x] Obtain a green Windows CI build.
-- [ ] Capture a human-observed viewport screenshot.
+- [x] Capture human-observed Studio and Runtime viewport screenshots.
 
 ### Week 4
 
-- [ ] Prototype hierarchy, transform inspector, and gizmo. *(Prepared; CI and visual check pending.)*
-- [ ] Implement one undoable command. *(Prepared; CI pending.)*
-- [ ] Save and reopen the edited scene. *(Implemented; Windows GPU acceptance pending.)*
-- Run DPI, input, HDR, and Vulkan checks.
-- Record the UI-toolkit ADR.
+- [x] Prototype hierarchy, transform inspector, and gizmo.
+- [x] Implement and visually verify repeated undoable commands.
+- [x] Save and reopen the edited scene, including repeated Save As.
+- [ ] Complete mixed-DPI, HDR-availability, and Vulkan checks.
+- [x] Record the UI-toolkit ADR.
+
+## Immediate next gate
+
+- Build commit `1fc5b62` in Windows x64 Debug and Release.
+- Run the packaged DX12 and Vulkan launchers.
+- Record DPI, input, SDR/HDR availability, and Runtime separation.
+- Obtain independent verification of the exact published commit.
+- Close Phase 2 and begin the Renegade UI/UX design increment for Phase 3.
 
 ## Status rules
 

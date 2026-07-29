@@ -9,7 +9,14 @@
 - Restored the Wicked Tests project `SolutionDir` when invoked directly.
 - Added a command-backed viewport translation gizmo.
 - Added WISCENE Save As and reopen through `SceneService`.
-- Extended bridge tests to prove edited transforms survive save and reopen.
+- Added repeated ten-step Undo/Redo command coverage and no-op filtering.
+- Added DX12/Vulkan package launchers and visible display diagnostics.
+- Accepted `wiGUI` as the production integration foundation while retaining
+  Renegade ownership of UX, styling, docking, layout, and components.
+- Added per-monitor DPI resize handling to Studio and Runtime.
+- Fixed graphics-backend arguments being parsed after device creation.
+- Fixed the Windows title-bar encoding defect.
+- Fixed repeated scene-save cleanup crashing after a valid file was written.
 
 All notable user-facing changes will be recorded here.
 

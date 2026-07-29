@@ -50,11 +50,15 @@ gizmo-drag, ten-edit, ten-Undo, and ten-Redo inspection. Save As crashed
 because Renegade explicitly closed its scene archive before the `Archive`
 destructor closed it again. Correction
 `be5167b087789109a2bb1f98305b8ffa18b454ed` removes the explicit close and
-matches the pinned Wicked Editor save lifecycle. It requires Windows CI plus a
-new GPU Save As and Reopen check.
+matches the pinned Wicked Editor save lifecycle.
+
+The published `db6b6ca` artifact then passed Save As, repeated Save As, Reopen,
+and standalone Runtime inspection on the project owner's Windows GPU. The
+submitted WISCENE decompressed successfully and retained a valid scene payload.
+The interaction and persistence proof is accepted.
 
 ## Deliberately deferred
 
 - Production docking and visual design.
-- UI toolkit selection.
-- HDR, Vulkan, and multi-monitor gates.
+- Renegade UI/UX design and production panels.
+- Physical HDR, Vulkan, and mixed-DPI/multi-monitor gates.
