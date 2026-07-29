@@ -4,9 +4,10 @@
 **Project:** Renegade Engine (working title)
 **Phase:** 1 — reproducible Windows build
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
-**Branch:** `agent/phase-1-windows-baseline`
+**Branch:** `main`
 **Starting commit:** `1f887e9b60d76bf83668e94c88f03597837a6cab`
 **Implementation commit:** `ba6ff0b2b968c99e57429734b0ef2fab894d9ebd`
+**CI preflight fix commit:** `854d5893f71fbd4fcb4bc2dff3b1f3687290cb89`
 
 ## Current state
 
@@ -18,8 +19,12 @@
   logs.
 - Windows CI runs the same build for both configurations.
 - A guided smoke script records human-observed DX12 and Vulkan results.
-- No Windows build or graphics smoke result has yet been observed for this
-  implementation commit.
+- The first Windows CI run verified recursive checkout, the Wicked pin, Windows
+  Server 2025, Visual Studio 2026, and MSBuild setup. It then stopped before
+  compilation because strict-mode PowerShell read `$LASTEXITCODE` before its
+  first native command had initialised it.
+- The preflight fix removes that unsafe read and preserves log exit codes.
+- No graphics smoke result has yet been observed.
 
 ## Decisions in force
 
@@ -57,8 +62,9 @@
   `3a800b7134aafe58461093c8abb2e274d4e64033`.
 - Inspected the pinned solution and upstream Windows workflow: target names and
   shader sequence match the scripts.
-- Windows PowerShell/MSBuild execution: **NOT RUN** in the Linux implementation
-  environment.
+- Windows CI run `30471240031`: **FAIL** during toolchain preflight; Debug and
+  Release compilation were skipped. Root cause was the uninitialised automatic
+  PowerShell variable, not Wicked source or MSBuild.
 - DX12 and Vulkan visual smoke: **NOT RUN**; requires a Windows GPU/display.
 
 ## Verification status
@@ -71,7 +77,7 @@ and review by a different AI or human using
 
 ## Next bounded task
 
-Publish this branch, then:
+Publish the CI preflight fix, then:
 
 1. Confirm both Windows CI matrix jobs.
 2. On the Windows development machine, run
@@ -85,7 +91,8 @@ Publish this branch, then:
 
 - The supplied ZIP snapshot is no longer present in this workspace, so a
   file-by-file attachment comparison remains outstanding.
-- The Windows CI definition has not yet run on this implementation commit.
+- The first Windows CI attempt failed before compilation; the preflight fix has
+  not yet been exercised by GitHub Actions.
 - GitHub-hosted CI cannot prove interactive DX12/Vulkan rendering.
 - The pinned solution requires the `v145` toolset; availability must be
   confirmed on the selected Windows runner and development machine.
