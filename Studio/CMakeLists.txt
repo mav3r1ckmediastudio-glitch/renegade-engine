@@ -25,10 +25,10 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${WICKED_ROOT_DIR}/WickedEngine/dxcompiler.dll"
+        "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
         "$<TARGET_FILE_DIR:RenegadeStudio>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${WICKED_ROOT_DIR}/Content/models/cube.wiscene"
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/cube.wiscene"
     VERBATIM
 )
