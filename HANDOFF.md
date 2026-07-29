@@ -1,187 +1,133 @@
 # Current Handoff
 
-**Date:** 2026-07-29
+**Date:** 2026-07-30
+
 **Project:** Renegade Engine (working title)
-**Active phase:** 2 — architecture/UI proof
+
+**Active phase:** 2 — final Windows display gate
+
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
-**Published branch before this handoff:** `main` at `b4da74a294b41b3a70051a4122ba2e4125523c16`
-**Published test-harness attempt:** `a45f9ed86e481f3de46849726bbc540637d2997b`
-**Published proven-test restoration:** `11678cdfc75597fc34b47d11d2c1856bdb63f381`
-**Published repeated-history correction:** `9804e63ab390ef748e2097b97e10c84646353662`
-**Published GUI history-action correction:** `4b9d6a58340913698077a2b839535e1287fa4ff4`
-**Prepared scene-save correction:** `be5167b087789109a2bb1f98305b8ffa18b454ed`
 
-## Published evidence
+**Published branch:** `main` at
+`db6b6cac23ad37b7e01593da1a747ef82977fa5a`
 
-- Wicked remains pinned and unmodified at
-  `3a800b7134aafe58461093c8abb2e274d4e64033`.
-- Phase 2 workflow
-  [30482144721](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30482144721)
-  passed Windows x64 Debug and Release at `044b371`.
-- That run built and packaged Studio and Runtime and ran the bridge tests.
-- Windows baseline run
-  [30482144741](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30482144741)
-  passed Windows x64 Debug and Release.
-- Phase 2 workflow
-  [30484886814](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30484886814)
-  compiled and packaged the gizmo/persistence increment at `8d59b25`, but
-  `RenegadeBridgeTests` crashed while serializing the scene in its headless
-  process.
-- Phase 2 workflow
-  [30486528042](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30486528042)
-  again compiled Studio, Runtime, EngineBridge, the gizmo, and the test in
-  Debug and Release at `a45f9ed`. Its checkpoints proved the crash occurs
-  inside full-scene save, which requires the renderer-backed application
-  environment rather than only the Wicked job system.
-- Phase 2 workflow
-  [30489808616](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30489808616)
-  passed Windows x64 Debug and Release at `11678cd`; Windows baseline run
-  [30489808638](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30489808638)
-  also passed.
-- Human Windows GPU inspection proved that the Release artifact launches,
-  loads `Content/cube.wiscene`, renders the cube, selects the hierarchy entity,
-  displays the translation gizmo, and applies axis drags.
-- A single Undo and Redo initially worked. Repeated manipulation exposed a
-  behavioural failure: the status reached `Undo 10 / Redo 0`, while history
-  actions no longer produced an obvious scene change. The transform also
-  contained floating-point drift (`z = -2.15203e-07`), proving that
-  microscopic gizmo releases could enter history.
-- Phase 2 workflow
-  [30492632556](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30492632556)
-  and Windows baseline run
-  [30492632870](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30492632870)
-  passed at `8b9041f`.
-- Human Windows GPU retesting at `8b9041f` proved ten meaningful edits are
-  recorded and ten consecutive Undo operations return the transform to
-  `0, 0, 0` with `Undo 0 / Redo 10`.
-- Redo was then blocked in the UI. Source tracing found that the final Undo
-  disabled its own `wiGUI` button while `Button::Update()` was still handling
-  the click. The disabled button remained focused and force-disabled the Redo
-  widget. The ten Redo commands remained intact in `CommandService`.
+**Prepared display-gate code:**
+`1fc5b629a94ad3417fd8ad645ed3bc0cd49ce6b3`
+
+**Prepared UI decision and evidence:**
+`11e6944d9525e10999548b9a7c3ff65af287cbd1`
+
+**Pinned Wicked commit:**
+`3a800b7134aafe58461093c8abb2e274d4e64033`
+
+## Current outcome
+
+The Renegade-owned Phase 2 Studio and Runtime shells are functional on the
+project owner's Windows GPU.
+
+Human-observed Studio acceptance:
+
+- fixture scene loads and renders;
+- hierarchy selection and transform inspector work;
+- the viewport translation gizmo works;
+- ten edits undo and redo in order;
+- UI clicks do not also manipulate the viewport gizmo;
+- Save As and repeated Save As create valid WISCENE files;
+- Reopen restores the saved transform; and
+- Studio remains open after saving.
+
+Human-observed Runtime acceptance:
+
+- the fixture scene renders; and
+- hierarchy, inspector, gizmo, Save, Undo, and Redo controls are absent.
+
+The submitted `cube.wiscene` had a valid archive header and a complete
+Zstandard payload that decompressed from 986 bytes to 4,935 bytes.
+
+## Published CI evidence
+
+At published `b4da74a`:
+
 - Phase 2 workflow
   [30494616840](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30494616840)
-  and Windows baseline run
+  passed Windows x64 Debug and Release.
+- Windows baseline
   [30494616805](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30494616805)
-  passed at `b4da74a`.
-- Human Windows GPU retesting at `b4da74a` confirmed repeated Undo and Redo
-  both work and the history controls remain responsive.
-- Save As then crashed Studio to the desktop. Source comparison with the pinned
-  Wicked Editor found that Renegade explicitly called `Archive::Close()`, while
-  `Archive` also calls `Close()` from its destructor. The second close tried to
-  write after the archive data buffer had already been cleared.
+  passed Windows x64 Debug and Release.
 
-## Published increment
+The project owner then published `be5167b` and `db6b6ca`; the new SceneService
+archive lifecycle passed Save As, repeated Save As, and Reopen on Windows.
 
-Commit `16cf3f5` adds:
+## Accepted UI foundation
 
-- the pinned Wicked translation gizmo to the Renegade viewport proof;
-- adapter logic that converts each completed drag into a
-  `SetTranslationCommand`;
-- Undo/Redo support for both inspector and gizmo translation;
-- WISCENE Save As and Reopen through `SceneService`; and
-- a Save As and Reopen workflow that requires Windows GPU acceptance.
+ADR 0002 accepts `wiGUI` as the production integration and rendering
+foundation.
 
-The gizmo is the pinned Wicked translation utility, not the Wicked Editor. The
-Studio shell, hierarchy, inspector, commands, persistence workflow, and UI
-remain Renegade-owned. The proof still does not select the production UI
-toolkit; ADR 0002 remains open.
+This does not select Wicked's stock Editor or stock styling. Renegade owns its
+UI/UX, theme, docking, layouts, components, icons, project hub, panels, and
+workflows. `EngineBridge` remains UI-toolkit independent.
 
-## Published proven-test restoration
+The pinned ImGui Docking sample was rejected for Phase 3 because:
 
-The standalone bridge test was restored to the hierarchy, selection, execute,
-Undo, and Redo coverage that passed in Phase 2 workflow
-[30482144721](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30482144721).
-It performs no renderer-backed serialization.
+- it explicitly sets `allow_hdr = false` with the comment that ImGui does not
+  support HDR;
+- platform multi-viewports and keyboard navigation are disabled; and
+- its source warns that DPI font scaling does not produce good results.
 
-Full WISCENE Save As and Reopen remain implemented through `SceneService`, but
-their end-to-end acceptance is explicitly a Windows GPU Studio check. No
-Studio, Runtime, bridge, gizmo, or persistence production code changed in this
-correction.
+The decision can be revisited only if a future pinned ImGui backend passes all
+mandatory platform gates.
 
-## Published repeated-history correction
+## Prepared display-gate increment
 
-Code commit `9804e63ab390ef748e2097b97e10c84646353662` is based directly
-on the green published commit `11678cd` and:
+Code commit `1fc5b62`:
 
-- prevents a focused `wiGUI` widget and the viewport gizmo from consuming the
-  same mouse operation;
-- allows a drag that began in the viewport to finish if the pointer crosses a
-  panel before release;
-- rejects transform commands whose total change is only floating-point noise;
-  and
-- expands `RenegadeBridgeTests` from one Undo/Redo cycle to ten ordered Undo
-  operations, ten ordered Redo operations, history-count checks, and
-  microscopic-change filtering.
+- parses `dx12` or `vulkan` before graphics-device creation;
+- fixes the Windows title-bar encoding defect;
+- labels the actual graphics backend in Studio and Runtime titles;
+- displays adapter, physical resolution, logical size, colour space, and FPS;
+- applies the Windows-recommended rectangle on per-monitor DPI changes;
+- compiles Renegade application sources as UTF-8 on MSVC; and
+- packages double-click DX12/Vulkan launchers and checklists.
 
-The correction changes only `Studio`, `EngineBridge`, and `Tests`. Wicked
-remains pinned and unmodified.
+Documentation commit `11e6944`:
 
-## Published GUI history-action correction
+- accepts ADR 0002;
+- records completed interaction, persistence, and Runtime acceptance;
+- updates the feature-exposure matrix;
+- defines the final display/input gate; and
+- updates the roadmap and changelog.
 
-Code commit `4b9d6a58340913698077a2b839535e1287fa4ff4` changes Undo and
-Redo button callbacks to queue a history action. Studio applies the queued
-action only after the complete `wiGUI` update returns, then refreshes enabled
-states and the inspector. This prevents a button from disabling itself
-mid-update and blocking the other history control.
+Wicked remains exact and unmodified.
 
-The correction changes only `Studio/src/StudioApplication.cpp` and
-`Studio/src/StudioApplication.h`. Wicked remains pinned and unmodified.
-
-## Prepared scene-save correction
-
-Code commit `be5167b087789109a2bb1f98305b8ffa18b454ed` removes the
-explicit `Archive::Close()` from `SceneService::SaveScene()`. The archive now
-writes exactly once from its destructor, matching the pinned Wicked Editor.
-The save path also calls `Scene::Update(0)` before serialization, as the Wicked
-Editor does.
-
-The correction changes only `EngineBridge/src/SceneService.cpp`. Wicked
-remains pinned and unmodified.
-
-## Validation performed before the rerun
+## Validation completed in this workspace
 
 - `git diff --check` passed.
-- Both workflow YAML files parse.
-- Every feature-matrix row has the expected 16 fields.
-- The pinned Wicked submodule is exact and unmodified.
-- The repeated-history correction passes `git diff --check`.
-- Source inspection confirms `wiGUI` callbacks run inside
-  `RenderPath3D::Update()` before the Renegade gizmo update.
-- Source inspection confirms `Button::Update()` continues processing after its
-  `OnClick` callback and `GUI::Update()` force-disables later widgets when an
-  earlier widget remains focused.
-- Source inspection confirms `Archive::~Archive()` calls `Close()` and clears
-  its data buffer. The pinned Wicked Editor relies on destructor-driven close
-  and does not explicitly close its scene archive.
-- This Linux workspace has no CMake or PowerShell. Windows CI remains the
-  compile and command-test authority.
+- Every `docs/FEATURE_MATRIX.csv` row has 16 fields.
+- The submodule resolves exactly to the documented Wicked commit.
+- Source comparison confirms the ImGui HDR and platform limitations.
+- Source comparison confirms Wicked selects the backend during
+  `Application::SetWindow()`, so argument parsing must happen first.
+- The final Windows C++ compile cannot run in this Linux workspace because
+  CMake and the Windows SDK are unavailable.
 
-## Publication and verification
+## Publication and Windows verification
 
-1. Publish code commit `be5167b087789109a2bb1f98305b8ffa18b454ed`
-   and this handoff update on top of published `main` at `b4da74a`.
-2. Watch `Phase 2 Studio shell` and `Windows baseline`.
-3. Fix any compile, command-test, or packaging failure before adding scope.
-4. Download the new Release artifact.
-5. On a Windows GPU machine:
-   - select an entity in the hierarchy;
-   - make ten clearly different translation drags;
-   - click Undo ten times and confirm each status count and transform change;
-   - click Redo ten times and confirm each status count and transform change;
-   - click and release a gizmo without moving it and confirm the Undo count does
-     not increase;
-   - click Undo and Redo while the gizmo is visually near a panel;
-   - use Save As;
-   - make another edit;
-   - use Reopen and confirm the saved transform returns;
-   - launch Runtime and confirm the scene renders without editor controls.
-6. Give another ChatGPT conversation, Claude, or a human reviewer the exact
-   published commit, workflow URLs, artifacts, this file, and
+1. Publish `1fc5b62`, `11e6944`, and this handoff commit to `main`.
+2. Require both GitHub Actions workflows to pass Debug and Release.
+3. Download the new Release artifact.
+4. In the Studio package, follow `PHASE2-DISPLAY-GATE.txt`.
+5. In the Runtime package, follow its shorter display-gate checklist.
+6. Record:
+   `DX12 PASS / VULKAN PASS / DPI PASS / INPUT PASS /
+   HDR PASS OR NOT AVAILABLE`.
+7. Give a different AI or human the exact published commit and
    `docs/VERIFICATION_CHECKLIST.md`.
 
-## Next bounded work after green CI and visual acceptance
+## Next bounded work after the gate passes
 
-- perform DPI, keyboard/mouse, HDR, SDR, and Windows Vulkan checks;
-- record the ImGui Docking versus `wiGUI` evidence;
-- close or defer ADR 0002 from measured results; and
-- define the project metadata format before Phase 3 project-hub work.
+1. Close Phase 2.
+2. Run a Renegade UI/UX design increment before broad production panel code.
+3. Define the first proving-ground scene so the viewport no longer presents
+   only a cube.
+4. Accept the project-metadata ADR.
+5. Begin Phase 3 with the project hub and Renegade-owned dockable workspace.
