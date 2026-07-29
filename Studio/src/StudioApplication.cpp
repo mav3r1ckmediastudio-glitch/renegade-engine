@@ -76,11 +76,7 @@ namespace renegade::studio
         undoButton_.SetSize(XMFLOAT2(90.0f, 24.0f));
         undoButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            if (session_ != nullptr && session_->Commands().Undo())
-            {
-                RefreshInspector();
-                RefreshStatus();
-            }
+            pendingHistoryAction_ = HistoryAction::Undo;
         });
         GetGUI().AddWidget(&undoButton_);
 
@@ -89,11 +85,7 @@ namespace renegade::studio
         redoButton_.SetSize(XMFLOAT2(90.0f, 24.0f));
         redoButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            if (session_ != nullptr && session_->Commands().Redo())
-            {
-                RefreshInspector();
-                RefreshStatus();
-            }
+            pendingHistoryAction_ = HistoryAction::Redo;
         });
         GetGUI().AddWidget(&redoButton_);
 
@@ -133,6 +125,26 @@ namespace renegade::studio
 
         if (session_ == nullptr)
         {
+            return;
+        }
+
+        // wiGUI invokes OnClick while Button::Update is still active. If a
+        // callback disables its own button when a history stack becomes empty,
+        // the button can remain focused and force-disable widgets after it.
+        // Apply history only after the complete GUI update has returned.
+        if (pendingHistoryAction_ != HistoryAction::None)
+        {
+            const HistoryAction action = pendingHistoryAction_;
+            pendingHistoryAction_ = HistoryAction::None;
+
+            const bool changed = action == HistoryAction::Undo
+                ? session_->Commands().Undo()
+                : session_->Commands().Redo();
+            if (changed)
+            {
+                RefreshInspector();
+                RefreshStatus();
+            }
             return;
         }
 

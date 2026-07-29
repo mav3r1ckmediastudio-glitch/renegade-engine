@@ -22,6 +22,13 @@ namespace renegade::studio
         void RefreshInspector();
 
     private:
+        enum class HistoryAction
+        {
+            None,
+            Undo,
+            Redo,
+        };
+
         void ApplySelectedTranslation(int axis, float value);
         void SyncGizmoSelection();
         void SaveSceneAs();
@@ -43,6 +50,7 @@ namespace renegade::studio
         wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;
         XMFLOAT3 gizmoTranslationBefore_ = {};
         bool gizmoDragActive_ = false;
+        HistoryAction pendingHistoryAction_ = HistoryAction::None;
     };
 
     class StudioApplication final : public wi::Application
