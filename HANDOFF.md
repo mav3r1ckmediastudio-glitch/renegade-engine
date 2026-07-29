@@ -1,100 +1,108 @@
 # Current Handoff
 
-**Date:** 2026-07-29
-**Project:** Renegade Engine (working title)
-**Phase:** 1 — reproducible Windows build
-**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
-**Branch:** `main`
-**Starting commit:** `1f887e9b60d76bf83668e94c88f03597837a6cab`
-**Implementation commit:** `ba6ff0b2b968c99e57429734b0ef2fab894d9ebd`
-**CI preflight fix commit:** `854d5893f71fbd4fcb4bc2dff3b1f3687290cb89`
+**Date:** 2026-07-29  
+**Project:** Renegade Engine (working title)  
+**Active phase:** 2 — architecture/UI proof, first increment  
+**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`  
+**Published branch:** `main` at `fa79bab88b1d61f607102b7b27bfed5d95ddbd20`  
+**Prepared branch:** `agent/phase2-studio-shell`  
+**Phase 1 test-target fix:** `55c1894`  
+**Phase 2 Studio-shell implementation:** `89ea08d`
 
 ## Current state
 
-- Phase 0 is committed on `main`.
-- Wicked Engine remains pinned as the `/WickedEngine` submodule at
+- Wicked remains pinned as `/WickedEngine` at
   `3a800b7134aafe58461093c8abb2e274d4e64033`.
-- Phase 1 automation verifies the pin, records the Windows toolchain, builds
-  and packages x64 Debug/Release reference targets, hashes outputs, and captures
-  logs.
-- Windows CI runs the same build for both configurations.
-- A guided smoke script records human-observed DX12 and Vulkan results.
-- The first Windows CI run verified recursive checkout, the Wicked pin, Windows
-  Server 2025, Visual Studio 2026, and MSBuild setup. It then stopped before
-  compilation because strict-mode PowerShell read `$LASTEXITCODE` before its
-  first native command had initialised it.
-- The preflight fix removes that unsafe read and preserves log exit codes.
-- No graphics smoke result has yet been observed.
+- Phase 1 Windows CI run
+  [30471535806](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30471535806)
+  checked out the exact pin and captured the Windows/Visual Studio toolchain.
+- Both Debug and Release compiled Wicked Engine and Wicked Editor with zero
+  compiler errors.
+- Both jobs then failed because `/t:Tests` was passed to the solution. MSBuild
+  treated `Tests` as a target to invoke on every project instead of building the
+  Tests project.
+- Commit `55c1894` corrects the invocation by building
+  `Samples/Tests/Tests.vcxproj` directly.
+- Commit `89ea08d` starts Phase 2 with a Renegade-owned CMake graph,
+  `RenegadeEngineBridge`, and a branded Windows `RenegadeStudio` shell.
+- The Studio proof loads a packaged `cube.wiscene` through `SceneService` and
+  renders it through a real `RenderPath3D`.
+- ADR 0002 remains open. The `wiGUI` status label is diagnostic and is not the
+  production editor toolkit.
+
+## Publication blocker
+
+The connected GitHub integration can read the repository and Actions logs, but
+GitHub rejects contents writes with:
+
+```text
+403 Resource not accessible by integration
+```
+
+The two prepared commits therefore exist locally but are not yet on `main`.
+No CI result may be claimed for them until they are pushed.
+
+## Verification performed
+
+- Inspected both completed Phase 1 job logs.
+- Confirmed Debug and Release engine/editor compilation reached `0 Error(s)`.
+- Confirmed both jobs failed at the identical Tests target invocation.
+- Confirmed the failing jobs still uploaded toolchain and build evidence.
+- Checked all prepared diffs with `git diff --check`.
+- Parsed `.github/workflows/phase2-studio.yml` as YAML.
+- Checked every feature-matrix row retains the header field count.
+- Confirmed the pinned fixture exists at
+  `WickedEngine/Content/models/cube.wiscene`.
+- Confirmed the prepared branch is based on published `main`.
+
+## Verification not yet performed
+
+- The corrected Phase 1 workflow has not run because `55c1894` is unpublished.
+- The Phase 2 Windows Studio target has not run in CI because `89ea08d` is
+  unpublished.
+- Local CMake configuration was unavailable in the current Linux workspace
+  because the `cmake` executable and SDL2 development headers are absent.
+- DX12/Vulkan rendering, resize, DPI, and input remain human-observed checks on
+  a Windows machine with a display/GPU.
+- Independent review by another AI or human is still required.
 
 ## Decisions in force
 
 - Windows x64 and DirectX 12 are the v1 release target.
 - Vulkan on Windows is checked during development.
-- Wicked remains the low-level foundation.
-- Renegade owns `Studio`, `EngineBridge`, `Runtime`, project/asset workflows,
-  UI, branding, documentation, and release packaging.
+- Wicked remains the low-level foundation; Renegade code stays outside the
+  submodule.
 - WISCENE remains the native scene format for v1.
 - Lua remains the first gameplay scripting language.
+- EngineBridge services remain UI-independent.
 - The production UI toolkit remains undecided until the HDR/DPI/input proof.
 - Release-gate work requires verification by a different AI or human.
 
-## Changed files
+## Exact next steps
 
-- `.github/workflows/windows-baseline.yml`
-- `README.md`
-- `Tools/Build-Windows.ps1`
-- `Tools/Collect-Windows-Baseline.ps1`
-- `Tools/Run-Windows-Smoke.ps1`
-- `Tools/Windows-Build.Common.ps1`
-- `Tools/README.md`
-- `docs/BUILD_WINDOWS.md`
-- `docs/evidence/PHASE1_WINDOWS_BASELINE_TEMPLATE.md`
-- `docs/ROADMAP.md`
-- `docs/TOOLCHAIN.md`
-- `CHANGELOG.md`
-- `HANDOFF.md`
+1. Publish commits `55c1894` and `89ea08d` to `main`.
+2. Watch both `Windows baseline` and `Phase 2 Studio shell` workflows.
+3. Fix any compiler or packaging error before extending editor functionality.
+4. On Windows, run:
 
-## Commands and observed results
+   ```powershell
+   .\Tools\Build-Studio-Windows.ps1 -Clean
+   ```
 
-- `git status --short --branch`: clean before implementation; starting commit
-  matched `origin/main`.
-- `git submodule status`: Wicked resolved to
-  `3a800b7134aafe58461093c8abb2e274d4e64033`.
-- Inspected the pinned solution and upstream Windows workflow: target names and
-  shader sequence match the scripts.
-- Windows CI run `30471240031`: **FAIL** during toolchain preflight; Debug and
-  Release compilation were skipped. Root cause was the uninitialised automatic
-  PowerShell variable, not Wicked source or MSBuild.
-- DX12 and Vulkan visual smoke: **NOT RUN**; requires a Windows GPU/display.
+5. Launch each package and capture the human-observed acceptance evidence in
+   `docs/PHASE2_STUDIO_SHELL.md`.
+6. Give another ChatGPT conversation, Claude, or a human reviewer this file,
+   the exact published commit SHA, the two workflow URLs, and the artifacts.
+   Ask them to verify the acceptance list without changing scope.
 
-## Verification status
+## Next bounded implementation
 
-**NOT YET VERIFIED**
+After the Studio-shell build is green:
 
-The implementation requires a Windows CI result, local DX12/Vulkan evidence,
-and review by a different AI or human using
-`docs/evidence/PHASE1_WINDOWS_BASELINE_TEMPLATE.md`.
+- add the first buildable Runtime target;
+- list scene entities in a minimal hierarchy view;
+- bind selection through `SelectionService`;
+- edit one transform through a command object; and
+- prove one undo/redo operation.
 
-## Next bounded task
-
-Publish the CI preflight fix, then:
-
-1. Confirm both Windows CI matrix jobs.
-2. On the Windows development machine, run
-   `.\Tools\Collect-Windows-Baseline.ps1`.
-3. Run `.\Tools\Build-Windows.ps1 -Clean`.
-4. Run `.\Tools\Run-Windows-Smoke.ps1` and add DX12/Vulkan screenshots.
-5. Have a different AI or human verify the exact commit.
-6. Record the observed evidence here before marking Phase 1 complete.
-
-## Known risks
-
-- The supplied ZIP snapshot is no longer present in this workspace, so a
-  file-by-file attachment comparison remains outstanding.
-- The first Windows CI attempt failed before compilation; the preflight fix has
-  not yet been exercised by GitHub Actions.
-- GitHub-hosted CI cannot prove interactive DX12/Vulkan rendering.
-- The pinned solution requires the `v145` toolset; availability must be
-  confirmed on the selected Windows runner and development machine.
-- Renegade is a placeholder name.
-- A licence for Renegade-authored code has not yet been selected.
+Save/reopen and the final UI-toolkit decision remain later Phase 2 gates.
