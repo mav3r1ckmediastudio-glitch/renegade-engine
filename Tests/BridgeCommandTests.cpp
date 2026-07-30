@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
@@ -5,6 +6,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -289,8 +291,11 @@ int main()
     bool hasShadowCastingSun = false;
     bool hasVolumetricLight = false;
     int deckEdgeCount = 0;
+    std::vector<std::string> blueprintNames;
     for (const auto& prop : blueprint)
     {
+        blueprintNames.push_back(prop.name);
+
         if (prop.name.rfind("__renegade_internal_", 0) == 0)
         {
             return Fail(
@@ -334,7 +339,7 @@ int main()
             break;
         }
 
-        if (prop.name == "Deck Edge")
+        if (prop.name.rfind("Deck Edge", 0) == 0)
         {
             ++deckEdgeCount;
         }
@@ -370,6 +375,17 @@ int main()
     if (deckEdgeCount != 4)
     {
         return Fail("the generated deck is not fully edged");
+    }
+
+    // Every generated entity must be distinguishable in the hierarchy. Eight
+    // rows all reading "Perimeter Pylon" are not selectable by name and give
+    // the creator no way to tell which is which.
+    std::sort(blueprintNames.begin(), blueprintNames.end());
+    if (std::adjacent_find(blueprintNames.begin(), blueprintNames.end()) !=
+        blueprintNames.end())
+    {
+        return Fail(
+            "the Proving Ground blueprint generates duplicate entity names");
     }
 
     // Headless save and reload of a mesh-free scene. This covers the
@@ -505,10 +521,29 @@ int main()
         return Fail("project descriptor or recent-project state did not reopen");
     }
 
+    // Editor preferences. These describe how the creator likes Studio to
+    // behave, so they live beside the recent-project registry and must survive
+    // a restart without ever reaching a scene or the .renegade descriptor.
+    if (!reopenedProjects.GetEditorPreference("grid_visible", true) ||
+        reopenedProjects.GetEditorPreference("never_set_key", false))
+    {
+        return Fail("an unset editor preference did not fall back");
+    }
+
+    reopenedProjects.SetEditorPreference("grid_visible", false);
+
+    renegade::bridge::ProjectService restartedProjects;
+    restartedProjects.Initialize(stateFile.generic_string());
+    if (restartedProjects.GetEditorPreference("grid_visible", true))
+    {
+        return Fail("an editor preference did not survive a restart");
+    }
+
     std::cout
         << "PASS: hierarchy filtering, selection, full transform, "
            "duplicate/delete undo-redo, repeated history, no-op filtering, "
-           "Proving Ground blueprint structure, headless scene save/reload, "
-           "and project lifecycle\n";
+           "Proving Ground blueprint structure, unique generated names, "
+           "headless scene save/reload, project lifecycle, and persisted "
+           "editor preferences\n";
     return 0;
 }
