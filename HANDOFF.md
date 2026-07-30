@@ -53,9 +53,13 @@ SAVE REOPEN PASS / PERFORMANCE PASS
   magnitude of headroom in the editor viewport, and future rendering features
   should be judged on quality and authoring cost, not frame time.
 
-  Caveat worth keeping: this is a near-empty generated scene in the editor on
-  high-end hardware. It is not evidence about `RenegadeRuntime` running a real
-  game on a mid-range GPU. Quality settings still matter for shipped titles.
+  On runtime cost more generally, the project owner's position: Wicked's
+  weather and cloud systems ship in released games without complaint, so they
+  are production-proven rather than experimental. Renegade should use them as
+  they are and not pre-emptively engineer around a cost that upstream users do
+  not report. Scalability for lower-end hardware is a real concern but has a
+  known answer — see the sky mode note in the environment milestone — so it
+  does not need solving in advance.
 
 Still outstanding: the Vulkan launcher pass, and visual comparison against the
 approved reference imagery, which is still not in the repository.
@@ -529,11 +533,23 @@ unit and may need splitting; scope it properly before starting.
 
 **Inspector: Environment (WeatherComponent)**
 
-Shown when the `Environment` entity is selected. Sky type, sun and sky
-exposure, ambient, horizon and zenith, `fogStart`, `fogDensity`, height-fog
-toggle with `fogHeightStart`/`fogHeightEnd`, realistic-sky and aerial-perspective
-toggles. Already serialized, because this milestone moved weather onto a real
-entity.
+Shown when the `Environment` entity is selected. Sun and sky exposure, ambient,
+horizon and zenith, `fogStart`, `fogDensity`, height-fog toggle with
+`fogHeightStart`/`fogHeightEnd`, realistic-sky and aerial-perspective toggles.
+Already serialized, because this milestone moved weather onto a real entity.
+
+Sky mode is a single choice rather than a pile of independent switches:
+
+1. **Realistic sky** — `REALISTIC_SKY`, physically based atmosphere.
+2. **Realistic sky + volumetric clouds** — adds `VOLUMETRIC_CLOUDS`.
+3. **Skybox texture** — `skyMapName`, with `sky_rotation` for scrolling.
+
+Mode 3 is the scalability answer and it needs no new engine work: `skyMapName`
+is already a serialized texture resource on `WeatherComponent`, and
+`sky_rotation` is documented upstream as "horizontal rotation for skyMap
+texture (in radians)". Animating it gives scrolling cloud cover for a fraction
+of the cost. Expose all three modes in the same panel from the start; do not
+design a separate low-end path later.
 
 **Inspector: Light (LightComponent)**
 
