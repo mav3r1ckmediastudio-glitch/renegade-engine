@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased — Phase 2 interaction proof
+## Unreleased — Phase 3 Studio foundation
+
+- Added the first holographic Renegade Project Hub.
+- Added versioned `.renegade` project descriptors.
+- Added project create, open, validation, recent-project, and relaunch flows.
+- Added a persistent recent-project registry.
+- Added the first Renegade-owned smoked-black/cyan `wiGUI` theme.
+- Added permanent toolbar, hierarchy, inspector, viewport, and content regions.
+- Replaced the presentation cube with a generated live Proving Ground starter
+  scene using PBR materials, emissive geometry, lights, shadow, fog, and
+  environment colour.
+- Added automated project lifecycle and recent-project persistence coverage.
+- Renamed the continuing Windows Studio workflow and evidence paths so they no
+  longer describe all future builds as Phase 2.
+
+## Phase 2 — interaction and display proof
 
 - Added the first standalone `RenegadeRuntime` target.
 - Added scene hierarchy projection and selection-bound transform inspection.

@@ -1,23 +1,23 @@
 # Studio
 
-Renegade's custom editor application. Production implementation begins after the
-Phase 2 UI, HDR, DPI, input, and viewport proof.
+Renegade's custom Windows-first editor application.
 
-## Current proof
+## Current Phase 3 increment
 
 `RenegadeStudio` is a Windows-first shell that:
 
 - owns its window, branding, message loop, and per-monitor DPI setup;
 - renders through Wicked's `RenderPath3D`;
 - obtains scene state through `Renegade::EngineBridge`;
-- loads the packaged `Content/cube.wiscene` fixture; and
-- displays a temporary diagnostic status label.
+- starts in a Renegade-owned holographic Project Hub;
+- creates, validates, opens, and remembers `.renegade` projects;
+- renders a generated live Proving Ground instead of presenting only a cube;
+- exposes permanent hierarchy, inspector, content, toolbar, and viewport
+  regions; and
+- preserves the verified selection, gizmo, Undo/Redo, Save As, Reopen, DX12,
+  Vulkan, input, and DPI paths from Phase 2.
 
-The label uses `wiGUI` only as a low-cost diagnostic surface. It is not a
-production UI-toolkit decision. ADR 0002 remains open.
+ADR 0002 accepts `wiGUI` as the native foundation. The visual language,
+components, layout, and workflows belong to Renegade.
 
-The second Phase 2 increment adds a diagnostic hierarchy, selection-bound
-translation inspector, and Undo/Redo buttons. These controls exercise
-UI-independent EngineBridge services; they are not the final editor design.
-
-See `docs/PHASE2_EDITOR_INTERACTION.md` for its acceptance criteria.
+See `docs/PHASE3_PROJECT_HUB.md` for the current acceptance criteria.

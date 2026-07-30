@@ -48,6 +48,11 @@ Wicked operations. Initial service boundaries:
 Renegade's editor shell, panels, layout, project hub, content browser, hierarchy,
 inspectors, viewport tooling, preferences, and visual language.
 
+The Phase 3 shell uses the accepted native `wiGUI` integration with a
+Renegade-owned theme and layout. `ProjectService` owns `.renegade` descriptor
+validation and recent-project state. Studio calls that service rather than
+parsing project files in widgets.
+
 ### Runtime
 
 Standalone player without editor code. It loads project settings, startup scene,
@@ -67,13 +72,18 @@ Import, shader, packaging, migration, feature-inventory, and validation tools.
 5. Creator-facing state must survive save, close, reopen, and standalone play.
 6. Editor services must remain independent of the chosen UI toolkit.
 
-## UI decision gate
+## UI foundation
 
-The production UI toolkit is deliberately unresolved. Phase 2 compares:
+ADR 0002 accepts Wicked's native `wiGUI` as Renegade's production integration
+and rendering foundation after the Phase 2 HDR-source, DPI, input, persistence,
+DX12, and Vulkan gate.
 
-- Dear ImGui Docking plus ImGuizmo.
-- A custom editor built on Wicked's native `wiGUI`.
+This does not select Wicked's stock Editor or styling. Renegade owns its
+information architecture, visual language, components, docking/layout layer,
+project hub, and workflows. EngineBridge remains UI-toolkit independent.
 
-The decision requires evidence for HDR/SDR composition, DPI, input capture,
-multi-monitor behaviour, viewport render-state safety, docking/layout quality,
-and packaging. See `docs/adr/0002-ui-toolkit-decision-gate.md`.
+## Project metadata
+
+ADR 0003 defines the v1 `.renegade` descriptor. It is a versioned,
+project-relative identity above WISCENE. Project metadata does not replace or
+alter Wicked scene serialization.

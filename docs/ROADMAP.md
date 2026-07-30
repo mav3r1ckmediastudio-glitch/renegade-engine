@@ -2,11 +2,12 @@
 
 ## Current milestone
 
-**Phase 2 — Architecture/UI proof**
-Target duration: 3–4 weeks
-Status: Studio interaction, persistence, and standalone Runtime passed on a
-Windows GPU; `wiGUI` accepted; final Vulkan/DPI/HDR checks and independent
-verification remain open
+**Phase 3 — Studio foundation**
+Target duration: 6–8 weeks
+Status: Phase 2 closed after DX12, Vulkan, DPI, input, persistence, and
+Runtime separation passed on the project owner's Windows GPU; physical HDR was
+not available. The first Phase 3 Project Hub/workspace increment is prepared
+for Windows CI and visual verification.
 
 ## Phase plan
 
@@ -58,16 +59,19 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 - [x] Prototype hierarchy, transform inspector, and gizmo.
 - [x] Implement and visually verify repeated undoable commands.
 - [x] Save and reopen the edited scene, including repeated Save As.
-- [ ] Complete mixed-DPI, HDR-availability, and Vulkan checks.
+- [x] Complete mixed-DPI, HDR-availability, and Vulkan checks.
 - [x] Record the UI-toolkit ADR.
 
 ## Immediate next gate
 
-- Build commit `1fc5b62` in Windows x64 Debug and Release.
-- Run the packaged DX12 and Vulkan launchers.
-- Record DPI, input, SDR/HDR availability, and Runtime separation.
-- Obtain independent verification of the exact published commit.
-- Close Phase 2 and begin the Renegade UI/UX design increment for Phase 3.
+- Publish the Phase 3 Project Hub increment based on code commit `30c5d3c`.
+- Require Windows x64 Debug and Release CI plus `RenegadeBridgeTests`.
+- Run the packaged DX12 and Vulkan Hub checks.
+- Create a project, persist its recent-project card, restart Studio, and reopen
+  its startup scene.
+- Visually assess the live holographic shell and Proving Ground against the
+  approved direction.
+- Fix failures before beginning scene tabs or the Identity Handshake.
 
 ## Status rules
 

@@ -6,9 +6,10 @@ Wicked provides the rendering and low-level engine foundation; Renegade will
 provide its own editor, project system, asset workflow, runtime, user experience,
 documentation, and release process.
 
-> **Status:** Phase 2 — architecture/UI proof. The Renegade-owned Studio and
-> Runtime shells build and run; the final Windows display gate remains before
-> Phase 3. This repository is not yet a usable game engine release.
+> **Status:** Phase 3 — Studio foundation. Phase 2 passed on the project
+> owner's Windows GPU. The first project-aware holographic Hub, workspace, and
+> live Proving Ground increment is prepared for Windows verification. This
+> repository is not yet a usable game engine release.
 
 ## Baseline
 
