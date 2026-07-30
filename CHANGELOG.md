@@ -8,6 +8,11 @@
 - Added a persistent recent-project registry.
 - Added the first Renegade-owned smoked-black/cyan `wiGUI` theme.
 - Added permanent toolbar, hierarchy, inspector, viewport, and content regions.
+- Added direct viewport object selection synchronised with the hierarchy,
+  inspector, and transform gizmo.
+- Added a cyan editor-only silhouette around the selected scene object.
+- Added right-mouse freelook with WASD/QE movement, Shift acceleration, and
+  wheel-adjustable camera speed inside the 3D viewport.
 - Replaced the presentation cube with a generated live Proving Ground starter
   scene using PBR materials, emissive geometry, lights, shadow, fog, and
   environment colour.

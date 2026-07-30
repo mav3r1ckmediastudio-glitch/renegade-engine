@@ -8,8 +8,10 @@ documentation, and release process.
 
 > **Status:** Phase 3 — Studio foundation. Phase 2 passed on the project
 > owner's Windows GPU. The first project-aware holographic Hub, workspace, and
-> live Proving Ground increment is prepared for Windows verification. This
-> repository is not yet a usable game engine release.
+> live Proving Ground launched successfully on Windows at a VSync-limited
+> 75 FPS. Direct viewport selection, selected-object outlining, and fly-camera
+> navigation are prepared for Windows verification. This repository is not
+> yet a usable game engine release.
 
 ## Baseline
 

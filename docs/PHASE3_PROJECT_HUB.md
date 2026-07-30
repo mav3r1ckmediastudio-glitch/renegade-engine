@@ -14,6 +14,9 @@ It adds:
 - a Renegade-owned smoked-black/cyan `wiGUI` theme;
 - permanent toolbar, hierarchy, inspector, content-browser, and viewport
   regions;
+- direct viewport object selection synchronised through `SelectionService`;
+- an editor-only cyan selected-object silhouette;
+- right-mouse freelook and WASD/QE fly-camera navigation within the viewport;
 - a generated live Proving Ground starter scene with PBR primitives, emissive
   grid, lights, shadow, fog, and environment colour; and
 - automated project lifecycle and recent-project persistence coverage.
@@ -67,3 +70,6 @@ DX12 HUB PASS / CREATE PASS / RECENTS PASS / REOPEN PASS / VULKAN PASS
 ```
 
 Visual or behavioural failure overrides a green compile.
+
+The expanded viewport interaction acceptance test is recorded in
+`docs/PHASE3_VIEWPORT_INTERACTION.md`.

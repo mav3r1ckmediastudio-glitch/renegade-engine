@@ -6,8 +6,9 @@
 Target duration: 6–8 weeks
 Status: Phase 2 closed after DX12, Vulkan, DPI, input, persistence, and
 Runtime separation passed on the project owner's Windows GPU; physical HDR was
-not available. The first Phase 3 Project Hub/workspace increment is prepared
-for Windows CI and visual verification.
+not available. The first Phase 3 Project Hub/workspace launched on Windows at
+a VSync-limited 75 FPS. Its first viewport-selection, outline, and fly-camera
+interaction increment is prepared for Windows CI and visual verification.
 
 ## Phase plan
 
@@ -64,11 +65,18 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-- Publish the Phase 3 Project Hub increment based on code commit `30c5d3c`.
+- Publish the Phase 3 viewport interaction increment based on code commit
+  `dc32684`.
 - Require Windows x64 Debug and Release CI plus `RenegadeBridgeTests`.
-- Run the packaged DX12 and Vulkan Hub checks.
+- Run the packaged DX12 and Vulkan Hub and viewport-interaction checks.
 - Create a project, persist its recent-project card, restart Studio, and reopen
   its startup scene.
+- Select assets from both the viewport and hierarchy and confirm the outline,
+  inspector, and gizmo follow the shared selection.
+- Verify right-mouse freelook and WASD/QE fly navigation remain confined to the
+  3D viewport.
+- Save and reopen after selecting an object and confirm the editor-only
+  selection stencil is absent from serialized scene state.
 - Visually assess the live holographic shell and Proving Ground against the
   approved direction.
 - Fix failures before beginning scene tabs or the Identity Handshake.
