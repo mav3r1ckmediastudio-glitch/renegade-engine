@@ -62,6 +62,13 @@ int main()
     {
         return Fail("selection service did not retain the selected entity");
     }
+    selection.Clear();
+    if (selection.HasSelection() ||
+        selection.SelectedEntity() != wi::ecs::INVALID_ENTITY)
+    {
+        return Fail("selection service did not clear the selected entity");
+    }
+    selection.Select(child);
 
     if (!commands.Execute(std::make_unique<renegade::bridge::SetTranslationCommand>(
             scenes.GetScene(),

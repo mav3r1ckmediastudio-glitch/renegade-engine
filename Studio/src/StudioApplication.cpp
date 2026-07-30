@@ -6,6 +6,7 @@
 
 namespace
 {
+    constexpr std::uint8_t SelectionStencilReference = 0x0F;
     constexpr wi::Color HologramIdle = wi::Color(8, 30, 42, 224);
     constexpr wi::Color HologramFocus = wi::Color(0, 126, 164, 238);
     constexpr wi::Color HologramActive = wi::Color(92, 232, 255, 255);
@@ -32,15 +33,15 @@ namespace renegade::studio
         setFXAAEnabled(false);
         setBloomEnabled(true);
 
-        wi::scene::TransformComponent cameraTransform;
         const XMVECTOR eye = XMVectorSet(10.5f, 7.0f, -14.0f, 1.0f);
         const XMVECTOR at = XMVectorSet(0.0f, 1.6f, 2.0f, 1.0f);
         const XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
         const XMMATRIX view = XMMatrixLookAtLH(eye, at, up);
-        XMStoreFloat4x4(
-            &cameraTransform.world,
+        editorCameraTransform_.ClearTransform();
+        editorCameraTransform_.MatrixTransform(
             XMMatrixInverse(nullptr, view));
-        camera->TransformCamera(cameraTransform);
+        editorCameraTransform_.UpdateTransform();
+        camera->TransformCamera(editorCameraTransform_);
         camera->UpdateCamera();
 
         CreateWorkspaceShell();
@@ -59,6 +60,134 @@ namespace renegade::studio
         SetProjectHubVisible(true);
 
         RenderPath3D::Load();
+    }
+
+    void StudioRenderPath::DeleteGPUResources()
+    {
+        selectionOutlineMask_ = {};
+        selectionOutlineMaskMsaa_ = {};
+        RenderPath3D::DeleteGPUResources();
+    }
+
+    void StudioRenderPath::ResizeBuffers()
+    {
+        RenderPath3D::ResizeBuffers();
+
+        const auto* depthStencil = GetDepthStencil();
+        if (depthStencil == nullptr)
+        {
+            return;
+        }
+
+        auto* device = wi::graphics::GetDevice();
+        const XMUINT2 resolution = GetInternalResolution();
+        wi::graphics::TextureDesc description;
+        description.width = resolution.x;
+        description.height = resolution.y;
+        description.format = wi::graphics::Format::R8_UNORM;
+        description.bind_flags =
+            wi::graphics::BindFlag::RENDER_TARGET |
+            wi::graphics::BindFlag::SHADER_RESOURCE;
+
+        if (getMSAASampleCount() > 1)
+        {
+            description.sample_count = getMSAASampleCount();
+            description.bind_flags = wi::graphics::BindFlag::RENDER_TARGET;
+            if (device->CreateTexture(
+                    &description,
+                    nullptr,
+                    &selectionOutlineMaskMsaa_))
+            {
+                device->SetName(
+                    &selectionOutlineMaskMsaa_,
+                    "renegade.selectionOutlineMaskMsaa");
+            }
+            description.sample_count = 1;
+            description.bind_flags =
+                wi::graphics::BindFlag::RENDER_TARGET |
+                wi::graphics::BindFlag::SHADER_RESOURCE;
+        }
+
+        if (device->CreateTexture(
+                &description,
+                nullptr,
+                &selectionOutlineMask_))
+        {
+            device->SetName(
+                &selectionOutlineMask_,
+                "renegade.selectionOutlineMask");
+        }
+    }
+
+    void StudioRenderPath::Render() const
+    {
+        RenderPath3D::Render();
+
+        const auto* depthStencil = GetDepthStencil();
+        if (projectHubVisible_ ||
+            outlinedEntity_ == wi::ecs::INVALID_ENTITY ||
+            depthStencil == nullptr ||
+            !selectionOutlineMask_.IsValid())
+        {
+            return;
+        }
+
+        auto* device = wi::graphics::GetDevice();
+        const auto commandList = device->BeginCommandList();
+        device->EventBegin("Renegade Selection Outline Mask", commandList);
+
+        if (selectionOutlineMaskMsaa_.IsValid())
+        {
+            const wi::graphics::RenderPassImage renderPass[] = {
+                wi::graphics::RenderPassImage::RenderTarget(
+                    &selectionOutlineMaskMsaa_,
+                    wi::graphics::RenderPassImage::LoadOp::CLEAR,
+                    wi::graphics::RenderPassImage::StoreOp::DONTCARE),
+                wi::graphics::RenderPassImage::Resolve(
+                    &selectionOutlineMask_),
+                wi::graphics::RenderPassImage::DepthStencil(
+                    depthStencil,
+                    wi::graphics::RenderPassImage::LoadOp::LOAD,
+                    wi::graphics::RenderPassImage::StoreOp::STORE),
+            };
+            device->RenderPassBegin(
+                renderPass,
+                arraysize(renderPass),
+                commandList);
+        }
+        else
+        {
+            const wi::graphics::RenderPassImage renderPass[] = {
+                wi::graphics::RenderPassImage::RenderTarget(
+                    &selectionOutlineMask_,
+                    wi::graphics::RenderPassImage::LoadOp::CLEAR),
+                wi::graphics::RenderPassImage::DepthStencil(
+                    depthStencil,
+                    wi::graphics::RenderPassImage::LoadOp::LOAD,
+                    wi::graphics::RenderPassImage::StoreOp::STORE),
+            };
+            device->RenderPassBegin(
+                renderPass,
+                arraysize(renderPass),
+                commandList);
+        }
+
+        wi::graphics::Viewport viewport;
+        viewport.width =
+            static_cast<float>(selectionOutlineMask_.GetDesc().width);
+        viewport.height =
+            static_cast<float>(selectionOutlineMask_.GetDesc().height);
+        device->BindViewports(1, &viewport, commandList);
+
+        wi::image::Params mask;
+        mask.enableFullScreen();
+        mask.stencilComp = wi::image::STENCILMODE::STENCILMODE_EQUAL;
+        mask.stencilRefMode = wi::image::STENCILREFMODE_USER;
+        mask.stencilRef = SelectionStencilReference;
+        wi::image::Draw(nullptr, mask, commandList);
+
+        device->RenderPassEnd(commandList);
+        device->EventEnd(commandList);
     }
 
     void StudioRenderPath::CreateWorkspaceShell()
@@ -401,20 +530,33 @@ namespace renegade::studio
         if (gizmoEntity_ != session_->Selection().SelectedEntity())
         {
             SyncGizmoSelection();
+            SyncSelectionOutline();
         }
 
-        if (gizmoEntity_ == wi::ecs::INVALID_ENTITY)
-        {
-            return;
-        }
+        const XMFLOAT4 pointer = wi::input::GetPointer();
+        HandleViewportNavigation(dt, pointer);
 
         if (GetGUI().HasFocus() && !gizmoDragActive_)
         {
             return;
         }
 
-        const XMFLOAT4 pointer = wi::input::GetPointer();
-        gizmo_.Update(*camera, pointer, *this);
+        if (gizmoEntity_ != wi::ecs::INVALID_ENTITY &&
+            !flyCameraActive_)
+        {
+            gizmo_.Update(*camera, pointer, *this);
+        }
+
+        if (HandleViewportSelection(pointer))
+        {
+            return;
+        }
+
+        if (gizmoEntity_ == wi::ecs::INVALID_ENTITY ||
+            flyCameraActive_)
+        {
+            return;
+        }
 
         if (gizmo_.IsDragStarted())
         {
@@ -451,10 +593,45 @@ namespace renegade::studio
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
         RenderPath3D::Compose(cmd);
+
+        auto* device = wi::graphics::GetDevice();
+        const wi::graphics::Rect viewportScissor = {
+            static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.x)),
+            static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.y)),
+            static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.z)),
+            static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.w)),
+        };
+        device->BindScissorRects(1, &viewportScissor, cmd);
+
+        if (!projectHubVisible_ &&
+            outlinedEntity_ != wi::ecs::INVALID_ENTITY &&
+            selectionOutlineMask_.IsValid())
+        {
+            wi::renderer::BindCommonResources(cmd);
+            wi::renderer::Postprocess_Outline(
+                selectionOutlineMask_,
+                cmd,
+                0.1f,
+                2.0f,
+                XMFLOAT4(0.0f, 0.86f, 1.0f, 0.95f));
+        }
+
         if (!projectHubVisible_ && gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
             gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
         }
+
+        const wi::graphics::Rect fullScissor = {
+            0,
+            0,
+            static_cast<std::int32_t>(GetPhysicalWidth()),
+            static_cast<std::int32_t>(GetPhysicalHeight()),
+        };
+        device->BindScissorRects(1, &fullScissor, cmd);
     }
 
     void StudioRenderPath::ResizeLayout()
@@ -467,6 +644,12 @@ namespace renegade::studio
         const float leftWidth = std::clamp(width * 0.2f, 250.0f, 310.0f);
         const float rightWidth = std::clamp(width * 0.22f, 290.0f, 350.0f);
         const float bottomHeight = std::clamp(height * 0.22f, 160.0f, 220.0f);
+
+        viewportBounds_ = XMFLOAT4(
+            leftWidth + 16.0f,
+            toolbarHeight + 16.0f,
+            width - rightWidth - 16.0f,
+            height - bottomHeight - 16.0f);
 
         toolbarPanel_.SetPos(XMFLOAT2(8.0f, 8.0f));
         toolbarPanel_.SetSize(XMFLOAT2(width - 16.0f, toolbarHeight));
@@ -627,6 +810,7 @@ namespace renegade::studio
         auto* transform = hasSession
             ? session_->Scenes().GetScene().transforms.GetComponent(entity)
             : nullptr;
+        SyncSelectionOutline();
 
         const bool hasTransform = transform != nullptr;
         translationX_.SetEnabled(hasTransform);
@@ -651,6 +835,173 @@ namespace renegade::studio
         translationY_.SetValue(transform->translation_local.y);
         translationZ_.SetValue(transform->translation_local.z);
         SyncGizmoSelection();
+    }
+
+    bool StudioRenderPath::IsPointerOverViewport(
+        const XMFLOAT4& pointer) const noexcept
+    {
+        return pointer.x >= viewportBounds_.x &&
+            pointer.x < viewportBounds_.z &&
+            pointer.y >= viewportBounds_.y &&
+            pointer.y < viewportBounds_.w;
+    }
+
+    void StudioRenderPath::HandleViewportNavigation(
+        const float dt,
+        const XMFLOAT4& pointer)
+    {
+        const bool pointerOverViewport = IsPointerOverViewport(pointer);
+        if (!flyCameraActive_ &&
+            pointerOverViewport &&
+            !GetGUI().HasFocus() &&
+            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+        {
+            flyCameraActive_ = true;
+            cameraPointerAnchor_ = pointer;
+        }
+
+        if (flyCameraActive_ &&
+            !wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT))
+        {
+            flyCameraActive_ = false;
+            wi::input::HidePointer(false);
+            return;
+        }
+
+        if (pointerOverViewport && !GetGUI().HasFocus())
+        {
+            if (pointer.z > 0.1f)
+            {
+                cameraMoveSpeed_ = std::min(
+                    100.0f,
+                    cameraMoveSpeed_ * 1.25f);
+            }
+            else if (pointer.z < -0.1f)
+            {
+                cameraMoveSpeed_ = std::max(
+                    0.1f,
+                    cameraMoveSpeed_ / 1.25f);
+            }
+        }
+
+        if (!flyCameraActive_)
+        {
+            return;
+        }
+
+        const auto& mouse = wi::input::GetMouseState();
+        constexpr float lookSensitivity = 0.0017f;
+        const float yaw = mouse.delta_position.x * lookSensitivity;
+        const float pitch = mouse.delta_position.y * lookSensitivity;
+
+        XMVECTOR movement = XMVectorZero();
+        const auto key = [](const char value)
+        {
+            return static_cast<wi::input::BUTTON>(value);
+        };
+        if (wi::input::Down(key('W')))
+        {
+            movement += XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+        }
+        if (wi::input::Down(key('S')))
+        {
+            movement += XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f);
+        }
+        if (wi::input::Down(key('A')))
+        {
+            movement += XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f);
+        }
+        if (wi::input::Down(key('D')))
+        {
+            movement += XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+        }
+        if (wi::input::Down(key('Q')))
+        {
+            movement += XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f);
+        }
+        if (wi::input::Down(key('E')))
+        {
+            movement += XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+        }
+
+        const float movementLength =
+            XMVectorGetX(XMVector3LengthSq(movement));
+        if (movementLength > 0.0f)
+        {
+            movement = XMVector3Normalize(movement);
+            const float speedMultiplier =
+                wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT)
+                ? 4.0f
+                : 1.0f;
+            movement *=
+                cameraMoveSpeed_ *
+                speedMultiplier *
+                std::min(dt, 0.1f);
+            const XMMATRIX cameraRotation = XMMatrixRotationQuaternion(
+                XMLoadFloat4(&editorCameraTransform_.rotation_local));
+            editorCameraTransform_.Translate(
+                XMVector3TransformNormal(movement, cameraRotation));
+        }
+
+        if (yaw != 0.0f || pitch != 0.0f)
+        {
+            editorCameraTransform_.RotateRollPitchYaw(
+                XMFLOAT3(pitch, yaw, 0.0f));
+        }
+
+        if (movementLength > 0.0f || yaw != 0.0f || pitch != 0.0f)
+        {
+            editorCameraTransform_.UpdateTransform();
+            camera->TransformCamera(editorCameraTransform_);
+            camera->UpdateCamera();
+        }
+
+        wi::input::SetPointer(cameraPointerAnchor_);
+        wi::input::HidePointer(true);
+    }
+
+    bool StudioRenderPath::HandleViewportSelection(
+        const XMFLOAT4& pointer)
+    {
+        if (session_ == nullptr ||
+            flyCameraActive_ ||
+            GetGUI().HasFocus() ||
+            !IsPointerOverViewport(pointer) ||
+            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) ||
+            gizmo_.IsInteracting())
+        {
+            return false;
+        }
+
+        const auto pickRay = wi::renderer::GetPickRay(
+            static_cast<long>(pointer.x),
+            static_cast<long>(pointer.y),
+            *this,
+            *camera);
+        const auto picked = wi::scene::Pick(
+            pickRay,
+            wi::enums::FILTER_OBJECT_ALL,
+            ~0u,
+            session_->Scenes().GetScene());
+        const auto current = session_->Selection().SelectedEntity();
+        if (picked.entity == current)
+        {
+            return false;
+        }
+
+        if (picked.entity == wi::ecs::INVALID_ENTITY)
+        {
+            session_->Selection().Clear();
+        }
+        else
+        {
+            session_->Selection().Select(picked.entity);
+        }
+
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+        return true;
     }
 
     void StudioRenderPath::RefreshProjectHub()
@@ -783,6 +1134,7 @@ namespace renegade::studio
                     return;
                 }
 
+                ClearSelectionOutline();
                 if (!session_->LoadScene(session_->Projects().StartupScenePath()))
                 {
                     hubMessageLabel_.font.params.color = WarningAmber;
@@ -840,6 +1192,7 @@ namespace renegade::studio
                 session_->Projects().LastError());
             return;
         }
+        ClearSelectionOutline();
         if (!session_->LoadScene(session_->Projects().StartupScenePath()))
         {
             hubMessageLabel_.font.params.color = WarningAmber;
@@ -920,6 +1273,12 @@ namespace renegade::studio
 
     void StudioRenderPath::SetProjectHubVisible(const bool visible)
     {
+        if (visible && flyCameraActive_)
+        {
+            flyCameraActive_ = false;
+            wi::input::HidePointer(false);
+        }
+
         projectHubVisible_ = visible;
         projectHubPanel_.SetVisible(visible);
         toolbarPanel_.SetVisible(!visible);
@@ -965,6 +1324,55 @@ namespace renegade::studio
         gizmoTranslationBefore_ = transform->translation_local;
     }
 
+    void StudioRenderPath::ClearSelectionOutline() noexcept
+    {
+        if (session_ != nullptr &&
+            outlinedEntity_ != wi::ecs::INVALID_ENTITY)
+        {
+            auto* object = session_->Scenes()
+                .GetScene()
+                .objects
+                .GetComponent(outlinedEntity_);
+            if (object != nullptr)
+            {
+                object->SetUserStencilRef(
+                    outlinedEntityPreviousStencil_);
+            }
+        }
+
+        outlinedEntity_ = wi::ecs::INVALID_ENTITY;
+        outlinedEntityPreviousStencil_ = 0;
+    }
+
+    void StudioRenderPath::SyncSelectionOutline()
+    {
+        const auto selected = session_ != nullptr
+            ? session_->Selection().SelectedEntity()
+            : wi::ecs::INVALID_ENTITY;
+        if (selected == outlinedEntity_)
+        {
+            return;
+        }
+
+        ClearSelectionOutline();
+        if (session_ == nullptr ||
+            selected == wi::ecs::INVALID_ENTITY)
+        {
+            return;
+        }
+
+        auto* object =
+            session_->Scenes().GetScene().objects.GetComponent(selected);
+        if (object == nullptr)
+        {
+            return;
+        }
+
+        outlinedEntity_ = selected;
+        outlinedEntityPreviousStencil_ = object->userStencilRef;
+        object->SetUserStencilRef(SelectionStencilReference);
+    }
+
     void StudioRenderPath::SaveSceneAs()
     {
         if (session_ == nullptr)
@@ -986,7 +1394,9 @@ namespace renegade::studio
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, scenePath](uint64_t)
                     {
+                        ClearSelectionOutline();
                         session_->SaveScene(scenePath);
+                        SyncSelectionOutline();
                         RefreshStatus();
                         RefreshInspector();
                     });
@@ -1000,6 +1410,7 @@ namespace renegade::studio
             return;
         }
 
+        ClearSelectionOutline();
         session_->ReloadScene();
         RefreshHierarchy();
         RefreshInspector();

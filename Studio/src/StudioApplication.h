@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -15,7 +16,10 @@ namespace renegade::studio
     {
     public:
         void BindSession(bridge::StudioSession& session) noexcept;
+        void DeleteGPUResources() override;
         void Load() override;
+        void Render() const override;
+        void ResizeBuffers() override;
         void Update(float dt) override;
         void Compose(wi::graphics::CommandList cmd) const override;
         void ResizeLayout() override;
@@ -37,6 +41,11 @@ namespace renegade::studio
         void CreateProjectHub();
         void CreateWorkspaceShell();
         void CreateProject();
+        void ClearSelectionOutline() noexcept;
+        bool HandleViewportSelection(const XMFLOAT4& pointer);
+        void HandleViewportNavigation(float dt, const XMFLOAT4& pointer);
+        [[nodiscard]] bool IsPointerOverViewport(
+            const XMFLOAT4& pointer) const noexcept;
         void OpenProject();
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
@@ -44,6 +53,7 @@ namespace renegade::studio
         void SelectRecentProject(std::size_t index);
         void SetProjectHubVisible(bool visible);
         void SyncGizmoSelection();
+        void SyncSelectionOutline();
         void SaveSceneAs();
         void ReopenScene();
 
@@ -83,9 +93,18 @@ namespace renegade::studio
         wi::gui::Button continueProjectButton_;
         wi::gui::Label hubMessageLabel_;
         Translator gizmo_;
+        wi::graphics::Texture selectionOutlineMask_;
+        wi::graphics::Texture selectionOutlineMaskMsaa_;
+        wi::scene::TransformComponent editorCameraTransform_;
         wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity outlinedEntity_ = wi::ecs::INVALID_ENTITY;
+        std::uint8_t outlinedEntityPreviousStencil_ = 0;
         XMFLOAT3 gizmoTranslationBefore_ = {};
+        XMFLOAT4 viewportBounds_ = {};
+        XMFLOAT4 cameraPointerAnchor_ = {};
+        float cameraMoveSpeed_ = 5.0f;
         bool gizmoDragActive_ = false;
+        bool flyCameraActive_ = false;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         HistoryAction pendingHistoryAction_ = HistoryAction::None;
