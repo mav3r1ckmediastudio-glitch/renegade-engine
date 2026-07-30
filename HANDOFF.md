@@ -45,8 +45,17 @@ SAVE REOPEN PASS / PERFORMANCE PASS
   reappear in the saved scene.
 - Save, close and reopen preserve transforms, hierarchy shape and atmosphere.
   The `LoadScene` rewrite away from `wi::scene::LoadModel` is confirmed good.
-- 75 FPS is the display's refresh ceiling and does not move under editor load,
-  so the added MSAO, volumetrics and realistic sky show no measurable cost.
+- 75 FPS is the display's refresh ceiling and does not move under editor load.
+  With VSync disabled the project owner measured **roughly 800 FPS** on the
+  RTX 4070 Ti — about 1.25 ms per frame. The added MSAO, volumetric lights and
+  realistic sky are not close to a budget. Treat the earlier
+  "performance is a risk" framing as retired: there is roughly an order of
+  magnitude of headroom in the editor viewport, and future rendering features
+  should be judged on quality and authoring cost, not frame time.
+
+  Caveat worth keeping: this is a near-empty generated scene in the editor on
+  high-end hardware. It is not evidence about `RenegadeRuntime` running a real
+  game on a mid-range GPU. Quality settings still matter for shipped titles.
 
 Still outstanding: the Vulkan launcher pass, and visual comparison against the
 approved reference imagery, which is still not in the repository.
@@ -534,6 +543,34 @@ volumetrics toggle and `volumetric_boost`.
 **Inspector: Material (MaterialComponent)**
 
 Base colour, metalness, roughness, reflectance, emissive colour and strength.
+
+**Volumetric clouds and cloud shadows**
+
+Wicked supports both at the pin, driven entirely from `WeatherComponent`:
+
+- `SetVolumetricClouds()`. `RenderPath3D` allocates the cloud resources
+  automatically when the flag is set (`wiRenderPath3D.cpp:477`), so no Studio
+  render wiring is needed.
+- `SetVolumetricCloudsCastShadow()` — clouds shadow the world, via a dedicated
+  `volumetricCloud_shadow` compute shader.
+- `SetVolumetricCloudsReceiveShadow()` — clouds receive scene shadows.
+- `LightComponent::SetVolumetricCloudsEnabled()` — per-light cloud interaction.
+- Two full cloud layers, `layerFirst` and `layerSecond` (archive version 88).
+
+The problem is parameter volume, not cost. `VolumetricCloudParameters` has
+roughly 25 top-level fields plus two `VolumetricCloudLayer` structs of about 30
+each — 85+ floats including `beerPowderPower`, `anvilDeformationMedium` and
+`curlNoiseHeightFraction`. Exposing that raw would be unusable.
+
+Ship a curated set plus presets (Clear, Scattered, Overcast, Storm): coverage
+amount and minimum, cloud start height and thickness, type amount, rain amount,
+wind speed and angle, albedo, and `phaseG`. Put the full block behind an
+Advanced disclosure. The whole struct serializes either way, so nothing is lost.
+
+Unverified: the `volumetricCloudsWeatherMapFirst`/`Second` slots are optional
+texture resources and empty names are expected to fall back to procedural noise
+driven by `weatherScale`. That fallback path has not been traced end to end.
+Confirm it the first time clouds are enabled rather than assuming.
 
 **Viewport post-processing**
 
