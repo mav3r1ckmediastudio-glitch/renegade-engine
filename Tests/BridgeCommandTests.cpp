@@ -209,6 +209,159 @@ int main()
         return Fail("full transform redo did not restore the edited state");
     }
 
+    // Curated environment edits must be renderer-independent, preserve
+    // unsurfaced Wicked values, and participate in the same Undo/Redo history
+    // as transforms.
+    {
+        renegade::bridge::SceneService weatherScenes;
+        if (weatherScenes.WeatherEntity() != wi::ecs::INVALID_ENTITY)
+        {
+            return Fail("an empty scene reported a weather entity");
+        }
+
+        const auto environment = wi::ecs::CreateEntity();
+        weatherScenes.GetScene().names.Create(environment) = "Environment";
+        auto& weather =
+            weatherScenes.GetScene().weathers.Create(environment);
+        weather.SetRealisticSky(true);
+        weather.SetRealisticSkyAerialPerspective(true);
+        weather.SetVolumetricCloudsReceiveShadow(true);
+        weather.skyExposure = 0.8f;
+        weather.ambient = XMFLOAT3(0.02f, 0.04f, 0.08f);
+        weather.horizon = XMFLOAT3(0.11f, 0.12f, 0.13f);
+        weather.windSpeed = 3.5f;
+        weather.volumetricCloudParameters.layerFirst.coverageAmount = 0.2f;
+        weather.volumetricCloudParameters.layerSecond.coverageAmount = 0.73f;
+        weatherScenes.GetScene().weather = weather;
+
+        if (weatherScenes.WeatherEntity() != environment)
+        {
+            return Fail("scene service did not resolve the primary weather");
+        }
+
+        const auto before = renegade::bridge::CaptureWeather(weather);
+        auto after = before;
+        after.skyMode =
+            renegade::bridge::WeatherState::SkyMode::RealisticWithClouds;
+        after.skyExposure = 1.25f;
+        after.ambientIntensity = 0.16f;
+        after.fogStart = 24.0f;
+        after.fogDensity = 0.031f;
+        after.heightFog = true;
+        after.fogHeightStart = -1.0f;
+        after.fogHeightEnd = 5.0f;
+        after.cloudCoverage = 0.62f;
+        after.cloudStartHeight = 1800.0f;
+        after.cloudThickness = 4200.0f;
+        after.cloudsCastShadow = true;
+
+        renegade::bridge::CommandService weatherCommands;
+        if (!weatherCommands.Execute(
+                std::make_unique<renegade::bridge::SetWeatherCommand>(
+                    weatherScenes.GetScene(),
+                    environment,
+                    after)))
+        {
+            return Fail("weather command did not execute");
+        }
+
+        if (!weather.IsVolumetricClouds() ||
+            !weather.IsVolumetricCloudsCastShadow() ||
+            !NearlyEqual(weather.skyExposure, 1.25f) ||
+            !NearlyEqual(weather.ambient.z, 0.16f) ||
+            !NearlyEqual(weather.ambient.x, 0.04f) ||
+            !NearlyEqual(weather.fogDensity, 0.031f) ||
+            !NearlyEqual(
+                weather.volumetricCloudParameters.layerFirst.coverageAmount,
+                0.62f))
+        {
+            return Fail("weather command did not apply the curated state");
+        }
+
+        if (!NearlyEqual(weather.horizon.x, 0.11f) ||
+            !NearlyEqual(weather.windSpeed, 3.5f) ||
+            !NearlyEqual(
+                weather.volumetricCloudParameters.layerSecond.coverageAmount,
+                0.73f) ||
+            !weather.IsVolumetricCloudsReceiveShadow())
+        {
+            return Fail("weather command overwrote an unsurfaced value");
+        }
+
+        if (!NearlyEqual(
+                weatherScenes.GetScene().weather.skyExposure,
+                weather.skyExposure))
+        {
+            return Fail("weather command did not refresh the runtime weather");
+        }
+
+        if (!weatherCommands.Undo() ||
+            weather.IsVolumetricClouds() ||
+            !NearlyEqual(weather.skyExposure, 0.8f) ||
+            !NearlyEqual(weather.ambient.z, 0.08f) ||
+            !NearlyEqual(
+                weather.volumetricCloudParameters.layerFirst.coverageAmount,
+                0.2f))
+        {
+            return Fail("weather undo did not restore the authored state");
+        }
+
+        if (!weatherCommands.Redo() ||
+            !weather.IsVolumetricClouds() ||
+            !NearlyEqual(weather.skyExposure, 1.25f))
+        {
+            return Fail("weather redo did not restore the edited state");
+        }
+
+        const auto undoCountBeforeWeatherNoOp =
+            weatherCommands.UndoCount();
+        if (weatherCommands.Execute(
+                std::make_unique<renegade::bridge::SetWeatherCommand>(
+                    weatherScenes.GetScene(),
+                    environment,
+                    renegade::bridge::CaptureWeather(weather))) ||
+            weatherCommands.UndoCount() != undoCountBeforeWeatherNoOp)
+        {
+            return Fail("unchanged weather polluted the undo history");
+        }
+
+        if (weatherCommands.Execute(
+                std::make_unique<renegade::bridge::SetWeatherCommand>(
+                    weatherScenes.GetScene(),
+                    wi::ecs::INVALID_ENTITY,
+                    before,
+                    after)))
+        {
+            return Fail("weather command accepted a missing component");
+        }
+
+        const auto storm = renegade::bridge::MakeWeatherPreset(
+            before,
+            renegade::bridge::WeatherPreset::Storm);
+        if (storm.skyMode !=
+                renegade::bridge::WeatherState::SkyMode::
+                    RealisticWithClouds ||
+            !storm.cloudsCastShadow ||
+            !storm.heightFog ||
+            !NearlyEqual(storm.cloudCoverage, 0.95f) ||
+            !NearlyEqual(storm.cloudStartHeight, 750.0f))
+        {
+            return Fail("the Storm weather preset is incomplete");
+        }
+
+        const auto clear = renegade::bridge::MakeWeatherPreset(
+            storm,
+            renegade::bridge::WeatherPreset::Clear);
+        if (clear.skyMode !=
+                renegade::bridge::WeatherState::SkyMode::Realistic ||
+            clear.cloudsCastShadow ||
+            clear.heightFog ||
+            !NearlyEqual(clear.cloudCoverage, 0.05f))
+        {
+            return Fail("the Clear weather preset is incomplete");
+        }
+    }
+
     commands.Clear();
     auto duplicateCommand =
         std::make_unique<renegade::bridge::DuplicateEntityCommand>(
@@ -418,8 +571,17 @@ int main()
         authored.GetScene().names.Create(environment) = "Environment";
         auto& authoredWeather =
             authored.GetScene().weathers.Create(environment);
+        authoredWeather.SetRealisticSky(true);
+        authoredWeather.SetRealisticSkyAerialPerspective(true);
+        authoredWeather.SetVolumetricClouds(true);
+        authoredWeather.SetVolumetricCloudsCastShadow(true);
         authoredWeather.SetHeightFog(true);
+        authoredWeather.skyExposure = 1.15f;
         authoredWeather.fogDensity = 0.018f;
+        authoredWeather.volumetricCloudParameters.layerFirst.coverageAmount =
+            0.57f;
+        authoredWeather.volumetricCloudParameters.cloudStartHeight = 1650.0f;
+        authoredWeather.volumetricCloudParameters.cloudThickness = 3600.0f;
 
         if (!authored.SaveScene(scenePath.generic_string()) ||
             !std::filesystem::is_regular_file(scenePath) ||
@@ -437,8 +599,26 @@ int main()
         {
             return Fail("the reloaded scene lost or gained entities");
         }
+        const auto reopenedWeatherEntity = reopened.WeatherEntity();
+        const auto* reopenedWeather =
+            reopened.GetScene().weathers.GetComponent(reopenedWeatherEntity);
         if (reopened.GetScene().weathers.GetCount() != 1 ||
-            !reopened.GetScene().weathers[0].IsHeightFog())
+            reopenedWeatherEntity == wi::ecs::INVALID_ENTITY ||
+            reopenedWeather == nullptr ||
+            !reopenedWeather->IsHeightFog() ||
+            !reopenedWeather->IsVolumetricClouds() ||
+            !reopenedWeather->IsVolumetricCloudsCastShadow() ||
+            !NearlyEqual(reopenedWeather->skyExposure, 1.15f) ||
+            !NearlyEqual(
+                reopenedWeather->volumetricCloudParameters
+                    .layerFirst.coverageAmount,
+                0.57f) ||
+            !NearlyEqual(
+                reopenedWeather->volumetricCloudParameters.cloudStartHeight,
+                1650.0f) ||
+            !NearlyEqual(
+                reopenedWeather->volumetricCloudParameters.cloudThickness,
+                3600.0f))
         {
             return Fail("the reloaded scene lost its serialized weather");
         }
@@ -541,9 +721,9 @@ int main()
 
     std::cout
         << "PASS: hierarchy filtering, selection, full transform, "
-           "duplicate/delete undo-redo, repeated history, no-op filtering, "
-           "Proving Ground blueprint structure, unique generated names, "
-           "headless scene save/reload, project lifecycle, and persisted "
-           "editor preferences\n";
+           "weather and duplicate/delete undo-redo, repeated history, "
+           "no-op filtering, Proving Ground blueprint structure, unique "
+           "generated names, headless scene save/reload, project lifecycle, "
+           "and persisted editor preferences\n";
     return 0;
 }

@@ -636,6 +636,165 @@ namespace renegade::studio
             TransformTool::Scale,
             2);
 
+        createSectionLabel(
+            environmentSkyLabel_,
+            "Environment Sky Section",
+            "SKY // ATMOSPHERE");
+        environmentPreset_.Create("Environment Preset");
+        environmentPreset_.AddItem("CUSTOM", 0);
+        environmentPreset_.AddItem("CLEAR", 1);
+        environmentPreset_.AddItem("SCATTERED", 2);
+        environmentPreset_.AddItem("OVERCAST", 3);
+        environmentPreset_.AddItem("STORM", 4);
+        environmentPreset_.SetTooltip(
+            "Apply a curated starting point. Every preset is a single "
+            "Undo/Redo command.");
+        environmentPreset_.OnSelect(
+            [this](const wi::gui::EventArgs& args)
+        {
+            if (args.userdata != 0)
+            {
+                ApplyWeatherPreset(static_cast<int>(args.userdata));
+            }
+        });
+        inspectorPanel_.AddWidget(&environmentPreset_);
+
+        skyMode_.Create("Sky Mode");
+        skyMode_.AddItem(
+            "REALISTIC SKY",
+            static_cast<std::uint64_t>(
+                bridge::WeatherState::SkyMode::Realistic));
+        skyMode_.AddItem(
+            "REALISTIC + CLOUDS",
+            static_cast<std::uint64_t>(
+                bridge::WeatherState::SkyMode::RealisticWithClouds));
+        skyMode_.AddItem(
+            "SKYBOX TEXTURE",
+            static_cast<std::uint64_t>(
+                bridge::WeatherState::SkyMode::Skybox));
+        skyMode_.SetTooltip(
+            "Choose Wicked's physical atmosphere, volumetric clouds, or the "
+            "weather component's existing skybox texture.");
+        skyMode_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            ApplySelectedSkyMode(
+                static_cast<bridge::WeatherState::SkyMode>(args.userdata));
+        });
+        inspectorPanel_.AddWidget(&skyMode_);
+
+        const auto createWeatherToggle = [this](
+            wi::gui::CheckBox& input,
+            const char* name,
+            const char* tooltip,
+            const WeatherToggle toggle)
+        {
+            input.Create(name);
+            input.SetTooltip(tooltip);
+            input.OnClick([this, toggle](const wi::gui::EventArgs& args)
+            {
+                ApplySelectedWeatherToggle(toggle, args.bValue);
+            });
+            inspectorPanel_.AddWidget(&input);
+        };
+        createWeatherToggle(
+            aerialPerspective_,
+            "Aerial perspective: ",
+            "Apply atmospheric scattering to scene geometry.",
+            WeatherToggle::AerialPerspective);
+
+        const auto createWeatherInput = [this](
+            wi::gui::TextInputField& input,
+            const char* name,
+            const char* description,
+            const char* tooltip,
+            const WeatherField field)
+        {
+            input.Create(name);
+            input.SetDescription(description);
+            input.SetTooltip(tooltip);
+            input.SetValue(0.0f);
+            input.OnInputAccepted(
+                [this, field](const wi::gui::EventArgs& args)
+            {
+                ApplySelectedWeatherValue(field, args.fValue);
+            });
+            inspectorPanel_.AddWidget(&input);
+        };
+        createWeatherInput(
+            skyExposure_,
+            "Sky Exposure",
+            "Exposure: ",
+            "Brightness of the physical sky.",
+            WeatherField::SkyExposure);
+        createWeatherInput(
+            ambientIntensity_,
+            "Ambient Intensity",
+            "Ambient: ",
+            "Neutral intensity applied while preserving the authored hue.",
+            WeatherField::AmbientIntensity);
+
+        createSectionLabel(
+            environmentFogLabel_,
+            "Environment Fog Section",
+            "FOG // HEIGHT LAYER");
+        createWeatherInput(
+            fogStart_,
+            "Fog Start",
+            "Start: ",
+            "Distance from the camera before fog begins.",
+            WeatherField::FogStart);
+        createWeatherInput(
+            fogDensity_,
+            "Fog Density",
+            "Density: ",
+            "Overall atmospheric fog density.",
+            WeatherField::FogDensity);
+        createWeatherToggle(
+            heightFog_,
+            "Height fog: ",
+            "Restrict fog vertically between the authored heights.",
+            WeatherToggle::HeightFog);
+        createWeatherInput(
+            fogHeightStart_,
+            "Fog Height Start",
+            "Base: ",
+            "Lower height of the fog layer.",
+            WeatherField::FogHeightStart);
+        createWeatherInput(
+            fogHeightEnd_,
+            "Fog Height End",
+            "Top: ",
+            "Upper height of the fog layer.",
+            WeatherField::FogHeightEnd);
+
+        createSectionLabel(
+            environmentCloudLabel_,
+            "Environment Cloud Section",
+            "VOLUMETRIC CLOUDS");
+        createWeatherInput(
+            cloudCoverage_,
+            "Cloud Coverage",
+            "Coverage: ",
+            "Primary cloud-layer coverage amount.",
+            WeatherField::CloudCoverage);
+        createWeatherInput(
+            cloudStartHeight_,
+            "Cloud Start Height",
+            "Base: ",
+            "Altitude where the volumetric cloud volume begins.",
+            WeatherField::CloudStartHeight);
+        createWeatherInput(
+            cloudThickness_,
+            "Cloud Thickness",
+            "Depth: ",
+            "Vertical depth of the volumetric cloud volume.",
+            WeatherField::CloudThickness);
+        createWeatherToggle(
+            cloudsCastShadow_,
+            "Cloud shadows: ",
+            "Allow volumetric clouds to cast moving shadows on the world.",
+            WeatherToggle::CloudsCastShadow);
+
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
         focusButton_.SetTooltip("Frame the selected entity in the viewport");
@@ -1116,36 +1275,39 @@ namespace renegade::studio
         scaleLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
         positionInputRow(scaleX_, scaleY_, scaleZ_, 184.0f);
 
-        const float threeButtonWidth = (rightWidth - 40.0f) / 3.0f;
-        focusButton_.SetPos(XMFLOAT2(12.0f, 230.0f));
-        duplicateButton_.SetPos(XMFLOAT2(
-            12.0f + threeButtonWidth + fieldGap,
-            230.0f));
-        deleteButton_.SetPos(XMFLOAT2(
-            12.0f + (threeButtonWidth + fieldGap) * 2.0f,
-            230.0f));
-        focusButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        duplicateButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        deleteButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        const float environmentFieldWidth = rightWidth - 24.0f;
+        const auto positionEnvironmentWidget =
+            [environmentFieldWidth](
+                wi::gui::Widget& widget,
+                const float rowY,
+                const float height = 28.0f)
+        {
+            widget.SetPos(XMFLOAT2(12.0f, rowY));
+            widget.SetSize(XMFLOAT2(environmentFieldWidth, height));
+        };
+        positionEnvironmentWidget(environmentSkyLabel_, 44.0f, 20.0f);
+        positionEnvironmentWidget(environmentPreset_, 64.0f);
+        positionEnvironmentWidget(skyMode_, 98.0f);
+        positionEnvironmentWidget(aerialPerspective_, 132.0f);
+        positionEnvironmentWidget(skyExposure_, 164.0f);
+        positionEnvironmentWidget(ambientIntensity_, 198.0f);
+        positionEnvironmentWidget(environmentFogLabel_, 232.0f, 20.0f);
+        positionEnvironmentWidget(fogStart_, 252.0f);
+        positionEnvironmentWidget(fogDensity_, 286.0f);
+        positionEnvironmentWidget(heightFog_, 320.0f);
+        positionEnvironmentWidget(fogHeightStart_, 352.0f);
+        positionEnvironmentWidget(fogHeightEnd_, 386.0f);
+        positionEnvironmentWidget(environmentCloudLabel_, 420.0f, 20.0f);
+        positionEnvironmentWidget(cloudCoverage_, 440.0f);
+        positionEnvironmentWidget(cloudStartHeight_, 474.0f);
+        positionEnvironmentWidget(cloudThickness_, 508.0f);
+        positionEnvironmentWidget(cloudsCastShadow_, 542.0f);
 
-        const float twoButtonWidth = (rightWidth - 32.0f) / 2.0f;
-        undoButton_.SetPos(XMFLOAT2(12.0f, 270.0f));
-        redoButton_.SetPos(XMFLOAT2(
-            20.0f + twoButtonWidth,
-            270.0f));
-        undoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
-        redoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
-
-        saveButton_.SetPos(XMFLOAT2(12.0f, 310.0f));
-        saveAsButton_.SetPos(XMFLOAT2(
-            12.0f + threeButtonWidth + fieldGap,
-            310.0f));
-        reopenButton_.SetPos(XMFLOAT2(
-            12.0f + (threeButtonWidth + fieldGap) * 2.0f,
-            310.0f));
-        saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        const bool environmentSelected =
+            session_ != nullptr &&
+            session_->Scenes().GetScene().weathers.Contains(
+                session_->Selection().SelectedEntity());
+        LayoutInspectorActions(environmentSelected);
 
         contentPanel_.SetPos(XMFLOAT2(
             leftWidth + 16.0f,
@@ -1278,6 +1440,50 @@ namespace renegade::studio
         }
     }
 
+    void StudioRenderPath::LayoutInspectorActions(const bool environment)
+    {
+        const float width = inspectorPanel_.GetSize().x;
+        constexpr float gap = 8.0f;
+        const float threeButtonWidth = (width - 40.0f) / 3.0f;
+        const float twoButtonWidth = (width - 32.0f) / 2.0f;
+        const float actionStart = environment
+            ? std::max(578.0f, inspectorPanel_.GetSize().y - 82.0f)
+            : 230.0f;
+        const float historyRow = environment
+            ? actionStart
+            : actionStart + 40.0f;
+        const float saveRow = historyRow + 40.0f;
+
+        focusButton_.SetPos(XMFLOAT2(12.0f, actionStart));
+        duplicateButton_.SetPos(XMFLOAT2(
+            12.0f + threeButtonWidth + gap,
+            actionStart));
+        deleteButton_.SetPos(XMFLOAT2(
+            12.0f + (threeButtonWidth + gap) * 2.0f,
+            actionStart));
+        focusButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        duplicateButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        deleteButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+
+        undoButton_.SetPos(XMFLOAT2(12.0f, historyRow));
+        redoButton_.SetPos(XMFLOAT2(
+            20.0f + twoButtonWidth,
+            historyRow));
+        undoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
+        redoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
+
+        saveButton_.SetPos(XMFLOAT2(12.0f, saveRow));
+        saveAsButton_.SetPos(XMFLOAT2(
+            12.0f + threeButtonWidth + gap,
+            saveRow));
+        reopenButton_.SetPos(XMFLOAT2(
+            12.0f + (threeButtonWidth + gap) * 2.0f,
+            saveRow));
+        saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+    }
+
     void StudioRenderPath::RefreshInspector()
     {
         const bool hasSession = session_ != nullptr;
@@ -1287,9 +1493,54 @@ namespace renegade::studio
         auto* transform = hasSession
             ? session_->Scenes().GetScene().transforms.GetComponent(entity)
             : nullptr;
+        auto* weather = hasSession
+            ? session_->Scenes().GetScene().weathers.GetComponent(entity)
+            : nullptr;
         SyncSelectionOutline();
 
         const bool hasTransform = transform != nullptr;
+        const bool hasWeather = weather != nullptr;
+        LayoutInspectorActions(hasWeather);
+        const auto setTransformVisible = [hasWeather](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(!hasWeather);
+        };
+        setTransformVisible(positionLabel_);
+        setTransformVisible(rotationLabel_);
+        setTransformVisible(scaleLabel_);
+        setTransformVisible(translationX_);
+        setTransformVisible(translationY_);
+        setTransformVisible(translationZ_);
+        setTransformVisible(rotationX_);
+        setTransformVisible(rotationY_);
+        setTransformVisible(rotationZ_);
+        setTransformVisible(scaleX_);
+        setTransformVisible(scaleY_);
+        setTransformVisible(scaleZ_);
+
+        const auto setEnvironmentVisible =
+            [hasWeather](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(hasWeather);
+        };
+        setEnvironmentVisible(environmentSkyLabel_);
+        setEnvironmentVisible(environmentPreset_);
+        setEnvironmentVisible(skyMode_);
+        setEnvironmentVisible(aerialPerspective_);
+        setEnvironmentVisible(skyExposure_);
+        setEnvironmentVisible(ambientIntensity_);
+        setEnvironmentVisible(environmentFogLabel_);
+        setEnvironmentVisible(fogStart_);
+        setEnvironmentVisible(fogDensity_);
+        setEnvironmentVisible(heightFog_);
+        setEnvironmentVisible(fogHeightStart_);
+        setEnvironmentVisible(fogHeightEnd_);
+        setEnvironmentVisible(environmentCloudLabel_);
+        setEnvironmentVisible(cloudCoverage_);
+        setEnvironmentVisible(cloudStartHeight_);
+        setEnvironmentVisible(cloudThickness_);
+        setEnvironmentVisible(cloudsCastShadow_);
+
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
         translationZ_.SetEnabled(hasTransform);
@@ -1302,6 +1553,9 @@ namespace renegade::studio
         focusButton_.SetEnabled(hasTransform);
         duplicateButton_.SetEnabled(hasTransform);
         deleteButton_.SetEnabled(hasTransform);
+        focusButton_.SetVisible(!hasWeather);
+        duplicateButton_.SetVisible(!hasWeather);
+        deleteButton_.SetVisible(!hasWeather);
         undoButton_.SetEnabled(hasSession && session_->Commands().CanUndo());
         redoButton_.SetEnabled(hasSession && session_->Commands().CanRedo());
         saveButton_.SetEnabled(
@@ -1309,6 +1563,49 @@ namespace renegade::studio
         saveAsButton_.SetEnabled(hasSession);
         reopenButton_.SetEnabled(
             hasSession && !session_->Scenes().CurrentPath().empty());
+
+        if (hasWeather)
+        {
+            const auto* name =
+                session_->Scenes().GetScene().names.GetComponent(entity);
+            inspectorLabel_.SetText(
+                "ENVIRONMENT // " +
+                (name != nullptr && !name->name.empty()
+                    ? name->name
+                    : "ENTITY " + std::to_string(entity)));
+
+            const auto state = bridge::CaptureWeather(*weather);
+            environmentPreset_.SetSelectedWithoutCallback(0);
+            skyMode_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(state.skyMode));
+            aerialPerspective_.SetCheck(state.aerialPerspective);
+            skyExposure_.SetValue(state.skyExposure);
+            ambientIntensity_.SetValue(state.ambientIntensity);
+            fogStart_.SetValue(state.fogStart);
+            fogDensity_.SetValue(state.fogDensity);
+            heightFog_.SetCheck(state.heightFog);
+            fogHeightStart_.SetValue(state.fogHeightStart);
+            fogHeightEnd_.SetValue(state.fogHeightEnd);
+            cloudCoverage_.SetValue(state.cloudCoverage);
+            cloudStartHeight_.SetValue(state.cloudStartHeight);
+            cloudThickness_.SetValue(state.cloudThickness);
+            cloudsCastShadow_.SetCheck(state.cloudsCastShadow);
+
+            const bool physicalSky =
+                state.skyMode != bridge::WeatherState::SkyMode::Skybox;
+            const bool volumetricClouds =
+                state.skyMode ==
+                bridge::WeatherState::SkyMode::RealisticWithClouds;
+            aerialPerspective_.SetEnabled(physicalSky);
+            cloudCoverage_.SetEnabled(volumetricClouds);
+            cloudStartHeight_.SetEnabled(volumetricClouds);
+            cloudThickness_.SetEnabled(volumetricClouds);
+            cloudsCastShadow_.SetEnabled(volumetricClouds);
+            fogHeightStart_.SetEnabled(state.heightFog);
+            fogHeightEnd_.SetEnabled(state.heightFog);
+            SyncGizmoSelection();
+            return;
+        }
 
         if (!hasTransform)
         {
@@ -1911,6 +2208,172 @@ namespace renegade::studio
         SetTransformTool(tool);
         RefreshInspector();
         RefreshStatus();
+    }
+
+    bool StudioRenderPath::CommitSelectedWeather(
+        const bridge::WeatherState& weather)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return false;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetWeatherCommand>(
+                session_->Scenes().GetScene(),
+                entity,
+                weather));
+        RefreshInspector();
+        RefreshStatus();
+        return changed;
+    }
+
+    void StudioRenderPath::ApplySelectedWeatherValue(
+        const WeatherField field,
+        const float value)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+
+        auto next = bridge::CaptureWeather(*component);
+        switch (field)
+        {
+        case WeatherField::SkyExposure:
+            next.skyExposure = std::clamp(value, 0.0f, 8.0f);
+            break;
+        case WeatherField::AmbientIntensity:
+            next.ambientIntensity = std::clamp(value, 0.0f, 8.0f);
+            break;
+        case WeatherField::FogStart:
+            next.fogStart = std::clamp(value, 0.0f, 100000.0f);
+            break;
+        case WeatherField::FogDensity:
+            next.fogDensity = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case WeatherField::FogHeightStart:
+            next.fogHeightStart =
+                std::clamp(value, -100000.0f, 100000.0f);
+            break;
+        case WeatherField::FogHeightEnd:
+            next.fogHeightEnd =
+                std::clamp(value, -100000.0f, 100000.0f);
+            break;
+        case WeatherField::CloudCoverage:
+            next.cloudCoverage = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case WeatherField::CloudStartHeight:
+            next.cloudStartHeight =
+                std::clamp(value, 0.0f, 50000.0f);
+            break;
+        case WeatherField::CloudThickness:
+            next.cloudThickness =
+                std::clamp(value, 1.0f, 50000.0f);
+            break;
+        }
+        CommitSelectedWeather(next);
+    }
+
+    void StudioRenderPath::ApplySelectedWeatherToggle(
+        const WeatherToggle toggle,
+        const bool value)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+
+        auto next = bridge::CaptureWeather(*component);
+        switch (toggle)
+        {
+        case WeatherToggle::AerialPerspective:
+            next.aerialPerspective = value;
+            break;
+        case WeatherToggle::HeightFog:
+            next.heightFog = value;
+            break;
+        case WeatherToggle::CloudsCastShadow:
+            next.cloudsCastShadow = value;
+            break;
+        }
+        CommitSelectedWeather(next);
+    }
+
+    void StudioRenderPath::ApplySelectedSkyMode(
+        const bridge::WeatherState::SkyMode mode)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+
+        auto next = bridge::CaptureWeather(*component);
+        next.skyMode = mode;
+        CommitSelectedWeather(next);
+    }
+
+    void StudioRenderPath::ApplyWeatherPreset(const int preset)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+
+        const auto current = bridge::CaptureWeather(*component);
+        bridge::WeatherPreset selectedPreset;
+        switch (preset)
+        {
+        case 1:
+            selectedPreset = bridge::WeatherPreset::Clear;
+            break;
+        case 2:
+            selectedPreset = bridge::WeatherPreset::Scattered;
+            break;
+        case 3:
+            selectedPreset = bridge::WeatherPreset::Overcast;
+            break;
+        case 4:
+            selectedPreset = bridge::WeatherPreset::Storm;
+            break;
+        default:
+            return;
+        }
+        CommitSelectedWeather(
+            bridge::MakeWeatherPreset(current, selectedPreset));
     }
 
     void StudioRenderPath::CreateProject()

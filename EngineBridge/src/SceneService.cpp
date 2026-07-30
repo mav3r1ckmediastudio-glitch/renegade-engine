@@ -844,6 +844,13 @@ namespace renegade::bridge
         return entities.count(entity) != 0;
     }
 
+    wi::ecs::Entity SceneService::WeatherEntity() const
+    {
+        return scene_.weathers.GetCount() == 0
+            ? wi::ecs::INVALID_ENTITY
+            : scene_.weathers.GetEntity(0);
+    }
+
     bool SceneService::IsHierarchyVisible(
         const wi::ecs::Entity entity) const
     {

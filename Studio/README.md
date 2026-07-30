@@ -20,6 +20,13 @@ Renegade's custom Windows-first editor application.
 - supports right-mouse freelook and keyboard fly navigation within the
   viewport;
 - edits position, rotation, and scale through the Inspector;
+- replaces the Transform inspector with a curated Environment inspector when
+  the scene's weather entity is selected;
+- authors physical sky mode, aerial perspective, exposure, ambient light,
+  distance and height fog, volumetric-cloud coverage and volume, and cloud
+  shadows through undoable EngineBridge commands;
+- applies Clear, Scattered, Overcast, and Storm as single-step undoable
+  presets;
 - switches Move, Rotate, and Scale gizmos with W/E/R;
 - focuses, duplicates, and deletes selected entities;
 - provides undoable full-transform, duplicate, and delete commands;
@@ -32,4 +39,5 @@ components, layout, and workflows belong to Renegade.
 
 See `docs/PHASE3_PROJECT_HUB.md` and
 `docs/PHASE3_VIEWPORT_INTERACTION.md`, then
-`docs/PHASE3_EDITOR_USABILITY.md`, for the current acceptance criteria.
+`docs/PHASE3_EDITOR_USABILITY.md` and
+`docs/PHASE3_ENVIRONMENT_AUTHORING.md`, for the current acceptance criteria.

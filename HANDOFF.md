@@ -8,11 +8,11 @@
 
 **Canonical main commit:** `a80e180909ed9e0a62618bc4dee5916e19621d67`
 
-**Milestone branch under repair:** `phase3/editor-visual-polish`
+**Accepted dependency branch:** `phase3/editor-visual-polish`
 
-**Reviewed branch tip:** `90531fb`
+**Dependency branch tip:** `9039d13`
 
-**Repair branch:** `fix/editor-grid-render-pass`
+**Active implementation branch:** `phase3/environment-authoring`
 
 **Wicked Engine pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
@@ -38,6 +38,24 @@ Claude's Editor Visual Polish work is retained on
 
 The branch compiled successfully in GitHub Actions before this repair, but green
 CI was not sufficient to validate its live renderer integration.
+
+The repaired grid has since passed direct packaged DX12 observation: it renders
+across the viewport, is occluded by scene geometry, and holds the VSync-limited
+75 FPS baseline. Vulkan observation remains required.
+
+The active Environment Authoring slice is built on top of the repaired visual
+branch. It adds:
+
+- a completed `WeatherState` capture/apply backend;
+- primary weather-entity discovery through `SceneService`;
+- no-op-filtered weather commands with full Undo/Redo;
+- preservation of unsurfaced Wicked weather fields;
+- headless command, preset, and WISCENE round-trip tests;
+- a curated Environment inspector shown for weather entities;
+- Clear, Scattered, Overcast, and Storm presets; and
+- manual sky, exposure, ambient, fog, cloud-volume, and cloud-shadow controls.
+
+No Wicked source or submodule change is involved.
 
 ## Render-pass defect and repair
 
@@ -256,34 +274,29 @@ HIERARCHY PASS / REGRESSION PASS / PERFORMANCE PASS / VULKAN PASS
 
 ## Known limitations and deferred work
 
-- The visual-polish grid has not yet passed packaged DX12/Vulkan observation.
+- The visual-polish grid has passed packaged DX12 but not Vulkan observation.
 - Full generated-scene reload remains a packaged GPU test because Wicked's
   primitive render-data creation needs a graphics device.
 - Projects generated before the visual-foundation milestone may retain old
   hidden serialized grid helpers; no legacy migration exists yet.
-- Environment values are still hard-coded. The next bounded milestone is an
-  Environment Authoring panel with undoable, persistent controls.
+- Environment authoring needs packaged DX12/Vulkan cloud and cloud-shadow
+  observation before acceptance.
+- Sun/light, material, skybox-asset, advanced cloud-layer, wind/rain, and
+  viewport post-processing authoring are not part of this bounded slice.
 - Arbitrary local fog volumes are not implemented.
 - Camera speed and editor layout are still session-only.
 - Scene tabs, docking, dirty-state tracking, unsaved-change prompts, crash
   recovery, asset import, terrain authoring, and the Identity Handshake remain
   out of scope until scheduled.
 
-## Next milestone after acceptance
+## Current acceptance target
 
-Build the bounded Environment Authoring vertical slice. It should allow a
-creator to correct the known visual issues without rebuilding:
+Build `phase3/environment-authoring` through both Windows configurations, run
+`RenegadeBridgeTests`, then follow
+`docs/PHASE3_ENVIRONMENT_AUTHORING.md` on packaged DX12 and Vulkan.
 
-- sun direction, colour, intensity, and shadow toggle;
-- realistic-sky mode and curated atmosphere controls;
-- distance fog and height-fog controls;
-- light volumetric scattering;
-- material base colour, roughness, metalness, and emissive strength;
-- viewport exposure, bloom, and AO controls; and
-- full persistence plus Undo/Redo through `EngineBridge`.
-
-Do not expose Wicked's entire weather structure raw. Use curated controls and
-presets, with specialist parameters behind an Advanced disclosure.
+Do not broaden this validation branch into light, material, or post-processing
+authoring. Those are later component-inspector increments.
 
 ## Delivery model
 
@@ -292,5 +305,5 @@ into one coherent milestone, retain reviewable commits for major concerns,
 push one development branch, run CI once for the finished batch, and perform
 one meaningful Windows test session.
 
-Do not merge the visual-polish branch until both CI and the packaged DX12/Vulkan
-acceptance report pass.
+Do not merge the Environment Authoring work until CI and the packaged
+DX12/Vulkan acceptance report pass.
