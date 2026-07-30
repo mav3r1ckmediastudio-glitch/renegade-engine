@@ -383,6 +383,52 @@ namespace renegade::bridge
         }
     }
 
+    void ProjectService::SetEditorPreference(
+        const std::string& key,
+        const int value)
+    {
+        if (stateFilePath_.empty() || key.empty())
+        {
+            return;
+        }
+
+        try
+        {
+            fs::create_directories(fs::u8path(stateFilePath_).parent_path());
+            wi::config::File state;
+            state.Open(stateFilePath_);
+            state.GetSection("editor").Set(key.c_str(), value);
+            state.Commit();
+        }
+        catch (const std::exception&)
+        {
+            // A read-only settings location must not break the editor.
+        }
+    }
+
+    void ProjectService::SetEditorPreference(
+        const std::string& key,
+        const float value)
+    {
+        if (stateFilePath_.empty() || key.empty())
+        {
+            return;
+        }
+
+        try
+        {
+            fs::create_directories(fs::u8path(stateFilePath_).parent_path());
+            wi::config::File state;
+            state.Open(stateFilePath_);
+            state.GetSection("editor").Set(key.c_str(), value);
+            state.Commit();
+        }
+        catch (const std::exception&)
+        {
+            // A read-only settings location must not break the editor.
+        }
+    }
+
     bool ProjectService::GetEditorPreference(
         const std::string& key,
         const bool fallback) const
@@ -405,6 +451,48 @@ namespace renegade::bridge
         }
 
         return editor.GetBool(key.c_str());
+    }
+
+    int ProjectService::GetEditorPreference(
+        const std::string& key,
+        const int fallback) const
+    {
+        if (stateFilePath_.empty() || key.empty())
+        {
+            return fallback;
+        }
+
+        wi::config::File state;
+        if (!state.Open(stateFilePath_) || !state.HasSection("editor"))
+        {
+            return fallback;
+        }
+
+        const auto& editor = state.GetSection("editor");
+        return editor.Has(key.c_str())
+            ? editor.GetInt(key.c_str())
+            : fallback;
+    }
+
+    float ProjectService::GetEditorPreference(
+        const std::string& key,
+        const float fallback) const
+    {
+        if (stateFilePath_.empty() || key.empty())
+        {
+            return fallback;
+        }
+
+        wi::config::File state;
+        if (!state.Open(stateFilePath_) || !state.HasSection("editor"))
+        {
+            return fallback;
+        }
+
+        const auto& editor = state.GetSection("editor");
+        return editor.Has(key.c_str())
+            ? editor.GetFloat(key.c_str())
+            : fallback;
     }
 
     void ProjectService::PersistRecents()

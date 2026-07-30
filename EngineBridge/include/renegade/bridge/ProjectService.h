@@ -47,9 +47,17 @@ namespace renegade::bridge
         // behave, not what a project contains, so they must never reach a
         // WISCENE or the .renegade descriptor.
         void SetEditorPreference(const std::string& key, bool value);
+        void SetEditorPreference(const std::string& key, int value);
+        void SetEditorPreference(const std::string& key, float value);
         [[nodiscard]] bool GetEditorPreference(
             const std::string& key,
             bool fallback) const;
+        [[nodiscard]] int GetEditorPreference(
+            const std::string& key,
+            int fallback) const;
+        [[nodiscard]] float GetEditorPreference(
+            const std::string& key,
+            float fallback) const;
 
     private:
         bool ReadProject(

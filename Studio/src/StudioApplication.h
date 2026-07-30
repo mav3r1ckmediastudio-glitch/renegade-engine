@@ -46,6 +46,14 @@ namespace renegade::studio
             RotateTool,
             ScaleTool,
             ToggleGrid,
+            ToggleWorkspaceMenu,
+            ToggleHierarchy,
+            ToggleInspector,
+            ResetWorkspace,
+            ShowAssets,
+            ShowConsole,
+            ShowOutput,
+            ShowDiagnostics,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -68,6 +76,15 @@ namespace renegade::studio
             Translate,
             Rotate,
             Scale,
+        };
+
+        enum class BottomDrawerPage
+        {
+            None,
+            Assets,
+            Console,
+            Output,
+            Diagnostics,
         };
 
         enum class WeatherField
@@ -104,6 +121,10 @@ namespace renegade::studio
         void LayoutInspectorActions(bool environment);
         void DrawEditorGrid(wi::graphics::CommandList cmd) const;
         void SetGridVisible(bool visible);
+        void SetBottomDrawerPage(BottomDrawerPage page);
+        void RefreshWorkspaceControls();
+        void PersistWorkspaceLayout();
+        void ResetWorkspaceLayout();
         void CreateProjectHub();
         void CreateWorkspaceShell();
         void CreateProject();
@@ -138,6 +159,7 @@ namespace renegade::studio
         wi::gui::Button translateToolButton_;
         wi::gui::Button rotateToolButton_;
         wi::gui::Button scaleToolButton_;
+        wi::gui::Button windowMenuButton_;
         wi::gui::Button projectHubButton_;
         wi::gui::Window hierarchyPanel_;
         wi::gui::Label statusLabel_;
@@ -182,9 +204,19 @@ namespace renegade::studio
         wi::gui::Button saveButton_;
         wi::gui::Button saveAsButton_;
         wi::gui::Button reopenButton_;
+        wi::gui::Window bottomTabBar_;
+        wi::gui::Button assetsTabButton_;
+        wi::gui::Button consoleTabButton_;
+        wi::gui::Button outputTabButton_;
+        wi::gui::Button diagnosticsTabButton_;
         wi::gui::Window contentPanel_;
         wi::gui::Label contentLabel_;
         wi::gui::Label contentPlaceholder_;
+        wi::gui::Window workspaceMenuPanel_;
+        wi::gui::Label workspaceMenuLabel_;
+        wi::gui::Button hierarchyToggleButton_;
+        wi::gui::Button inspectorToggleButton_;
+        wi::gui::Button resetWorkspaceButton_;
         wi::gui::Window projectHubPanel_;
         wi::gui::Label hubBrandLabel_;
         wi::gui::Label hubTitleLabel_;
@@ -215,10 +247,17 @@ namespace renegade::studio
         XMFLOAT4 viewportBounds_ = {};
         XMFLOAT4 cameraPointerAnchor_ = {};
         float cameraMoveSpeed_ = 5.0f;
+        float hierarchyWidth_ = 286.0f;
+        float inspectorWidth_ = 330.0f;
+        float bottomDrawerHeight_ = 210.0f;
         bool gizmoDragActive_ = false;
         bool flyCameraActive_ = false;
         bool gridVisible_ = true;
+        bool hierarchyVisible_ = true;
+        bool inspectorVisible_ = true;
+        bool workspaceMenuOpen_ = false;
         bool projectHubVisible_ = true;
+        BottomDrawerPage bottomDrawerPage_ = BottomDrawerPage::None;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
     };

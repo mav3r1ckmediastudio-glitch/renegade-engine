@@ -8,15 +8,26 @@
 namespace
 {
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
-    constexpr wi::Color HologramIdle = wi::Color(8, 30, 42, 224);
-    constexpr wi::Color HologramFocus = wi::Color(0, 126, 164, 238);
-    constexpr wi::Color HologramActive = wi::Color(92, 232, 255, 255);
-    constexpr wi::Color HologramText = wi::Color(196, 244, 255, 255);
-    constexpr wi::Color HologramMuted = wi::Color(102, 166, 181, 255);
-    constexpr wi::Color HologramBorder = wi::Color(0, 183, 224, 150);
-    constexpr wi::Color HologramPanel = wi::Color(3, 12, 20, 236);
-    constexpr wi::Color HologramSelected = wi::Color(0, 102, 138, 245);
+    // Renegade Studio's shell is graphite and forged metal. Ember is
+    // reserved for focus, selection, and decisive actions; cool colour remains
+    // confined to viewport instruments such as the grid and transform gizmo.
+    constexpr wi::Color HologramIdle = wi::Color(27, 28, 31, 246);
+    constexpr wi::Color HologramFocus = wi::Color(118, 52, 20, 248);
+    constexpr wi::Color HologramActive = wi::Color(218, 91, 28, 255);
+    constexpr wi::Color HologramText = wi::Color(230, 224, 214, 255);
+    constexpr wi::Color HologramMuted = wi::Color(146, 139, 129, 255);
+    constexpr wi::Color HologramBorder = wi::Color(137, 62, 24, 178);
+    constexpr wi::Color HologramPanel = wi::Color(14, 15, 17, 248);
+    constexpr wi::Color HologramSelected = wi::Color(83, 37, 18, 252);
     constexpr wi::Color WarningAmber = wi::Color(255, 150, 40, 255);
+
+    constexpr float DefaultHierarchyWidth = 286.0f;
+    constexpr float DefaultInspectorWidth = 330.0f;
+    constexpr float DefaultBottomDrawerHeight = 210.0f;
+    constexpr float MinimumSidebarWidth = 180.0f;
+    constexpr float MaximumSidebarWidth = 520.0f;
+    constexpr float MinimumDrawerHeight = 120.0f;
+    constexpr float MaximumDrawerHeight = 420.0f;
 }
 
 namespace renegade::studio
@@ -95,15 +106,45 @@ namespace renegade::studio
 
         SetTransformTool(TransformTool::Translate);
 
-        // Restore the creator's saved grid preference. This is Renegade's
-        // first persisted editor preference; camera speed and layout should
-        // follow the same route rather than inventing a second one.
+        // Workspace state belongs to the editor profile, never to a project or
+        // scene. Restore it before the first visible layout pass so Studio
+        // opens exactly where the creator left it.
         if (session_ != nullptr)
         {
-            gridVisible_ =
-                session_->Projects().GetEditorPreference("grid_visible", true);
+            auto& projects = session_->Projects();
+            gridVisible_ = projects.GetEditorPreference("grid_visible", true);
+            hierarchyWidth_ = std::clamp(
+                projects.GetEditorPreference(
+                    "workspace_hierarchy_width",
+                    DefaultHierarchyWidth),
+                MinimumSidebarWidth,
+                MaximumSidebarWidth);
+            inspectorWidth_ = std::clamp(
+                projects.GetEditorPreference(
+                    "workspace_inspector_width",
+                    DefaultInspectorWidth),
+                MinimumSidebarWidth,
+                MaximumSidebarWidth);
+            bottomDrawerHeight_ = std::clamp(
+                projects.GetEditorPreference(
+                    "workspace_bottom_height",
+                    DefaultBottomDrawerHeight),
+                MinimumDrawerHeight,
+                MaximumDrawerHeight);
+            hierarchyVisible_ = projects.GetEditorPreference(
+                "workspace_hierarchy_visible",
+                true);
+            inspectorVisible_ = projects.GetEditorPreference(
+                "workspace_inspector_visible",
+                true);
+            const int storedPage = std::clamp(
+                projects.GetEditorPreference("workspace_bottom_page", 0),
+                static_cast<int>(BottomDrawerPage::None),
+                static_cast<int>(BottomDrawerPage::Diagnostics));
+            bottomDrawerPage_ = static_cast<BottomDrawerPage>(storedPage);
         }
         gridToggleButton_.SetText(gridVisible_ ? "GRID ON" : "GRID OFF");
+        RefreshWorkspaceControls();
 
         RefreshHierarchy();
         RefreshInspector();
@@ -289,6 +330,129 @@ namespace renegade::studio
         {
             session_->Projects().SetEditorPreference("grid_visible", visible);
         }
+    }
+
+    void StudioRenderPath::SetBottomDrawerPage(BottomDrawerPage page)
+    {
+        if (bottomDrawerPage_ == page)
+        {
+            page = BottomDrawerPage::None;
+        }
+
+        bottomDrawerPage_ = page;
+        RefreshWorkspaceControls();
+        PersistWorkspaceLayout();
+        ResizeLayout();
+    }
+
+    void StudioRenderPath::RefreshWorkspaceControls()
+    {
+        hierarchyToggleButton_.SetText(
+            hierarchyVisible_ ? "HIERARCHY // ON" : "HIERARCHY // OFF");
+        inspectorToggleButton_.SetText(
+            inspectorVisible_ ? "INSPECTOR // ON" : "INSPECTOR // OFF");
+
+        const auto styleTab = [this](
+            wi::gui::Button& button,
+            const BottomDrawerPage page)
+        {
+            button.SetColor(
+                bottomDrawerPage_ == page ? HologramSelected : HologramIdle,
+                wi::gui::IDLE);
+        };
+        styleTab(assetsTabButton_, BottomDrawerPage::Assets);
+        styleTab(consoleTabButton_, BottomDrawerPage::Console);
+        styleTab(outputTabButton_, BottomDrawerPage::Output);
+        styleTab(diagnosticsTabButton_, BottomDrawerPage::Diagnostics);
+
+        switch (bottomDrawerPage_)
+        {
+        case BottomDrawerPage::Assets:
+            contentLabel_.SetText("ASSET BROWSER // PROJECT CONTENT");
+            contentPlaceholder_.SetText(
+                "No assets imported yet.\n\n"
+                "The project-aware Asset Browser arrives with the Phase 4 "
+                "asset pipeline. Resize this drawer from its top edge, or "
+                "click ASSETS again to collapse it.");
+            break;
+        case BottomDrawerPage::Console:
+            contentLabel_.SetText("CONSOLE // ENGINE MESSAGES");
+            contentPlaceholder_.SetText(
+                "Console routing is not connected yet.\n\n"
+                "Errors, warnings, and editor messages will appear here "
+                "without permanently occupying viewport space.");
+            break;
+        case BottomDrawerPage::Output:
+            contentLabel_.SetText("OUTPUT // BUILD AND IMPORT TASKS");
+            contentPlaceholder_.SetText(
+                "No active tasks.\n\n"
+                "Build, shader compilation, and asset-import progress will "
+                "be surfaced in this drawer.");
+            break;
+        case BottomDrawerPage::Diagnostics:
+            contentLabel_.SetText("DIAGNOSTICS // RENDERER AND MEMORY");
+            contentPlaceholder_.SetText(
+                "The live frame-rate overlay remains in the viewport.\n\n"
+                "Detailed renderer, memory, and validation diagnostics will "
+                "be collected here.");
+            break;
+        case BottomDrawerPage::None:
+        default:
+            contentLabel_.SetText("ASSET BROWSER // PROJECT CONTENT");
+            contentPlaceholder_.SetText("");
+            break;
+        }
+
+        const bool workspaceVisible = !projectHubVisible_;
+        hierarchyPanel_.SetVisible(workspaceVisible && hierarchyVisible_);
+        inspectorPanel_.SetVisible(workspaceVisible && inspectorVisible_);
+        bottomTabBar_.SetVisible(workspaceVisible);
+        contentPanel_.SetVisible(
+            workspaceVisible && bottomDrawerPage_ != BottomDrawerPage::None);
+        workspaceMenuPanel_.SetVisible(
+            workspaceVisible && workspaceMenuOpen_);
+    }
+
+    void StudioRenderPath::PersistWorkspaceLayout()
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        auto& projects = session_->Projects();
+        projects.SetEditorPreference(
+            "workspace_hierarchy_width",
+            hierarchyWidth_);
+        projects.SetEditorPreference(
+            "workspace_inspector_width",
+            inspectorWidth_);
+        projects.SetEditorPreference(
+            "workspace_bottom_height",
+            bottomDrawerHeight_);
+        projects.SetEditorPreference(
+            "workspace_hierarchy_visible",
+            hierarchyVisible_);
+        projects.SetEditorPreference(
+            "workspace_inspector_visible",
+            inspectorVisible_);
+        projects.SetEditorPreference(
+            "workspace_bottom_page",
+            static_cast<int>(bottomDrawerPage_));
+    }
+
+    void StudioRenderPath::ResetWorkspaceLayout()
+    {
+        hierarchyWidth_ = DefaultHierarchyWidth;
+        inspectorWidth_ = DefaultInspectorWidth;
+        bottomDrawerHeight_ = DefaultBottomDrawerHeight;
+        hierarchyVisible_ = true;
+        inspectorVisible_ = true;
+        workspaceMenuOpen_ = false;
+        bottomDrawerPage_ = BottomDrawerPage::None;
+        RefreshWorkspaceControls();
+        PersistWorkspaceLayout();
+        ResizeLayout();
     }
 
     void StudioRenderPath::DeleteGPUResources()
@@ -494,6 +658,17 @@ namespace renegade::studio
         });
         toolbarPanel_.AddWidget(&projectHubButton_);
 
+        windowMenuButton_.Create("Workspace Windows");
+        windowMenuButton_.SetText("WINDOW");
+        windowMenuButton_.SetTooltip(
+            "Show, hide, or reset Renegade Studio workspace panels");
+        windowMenuButton_.SetAngularHighlightWidth(4.0f);
+        windowMenuButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::ToggleWorkspaceMenu;
+        });
+        toolbarPanel_.AddWidget(&windowMenuButton_);
+
         statusLabel_.Create("Renegade Studio Status");
         statusLabel_.SetSize(XMFLOAT2(720.0f, 22.0f));
         statusLabel_.font.params.size = 14;
@@ -502,8 +677,29 @@ namespace renegade::studio
 
         hierarchyPanel_.Create(
             "World Outliner",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+            wi::gui::Window::WindowControls::RESIZE_RIGHT |
+                wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
         hierarchyPanel_.SetShadowRadius(8.0f);
+        hierarchyPanel_.OnResize([this]()
+        {
+            const float resizedWidth = std::clamp(
+                hierarchyPanel_.GetSize().x,
+                MinimumSidebarWidth,
+                MaximumSidebarWidth);
+            if (std::abs(resizedWidth - hierarchyWidth_) < 0.5f)
+            {
+                return;
+            }
+
+            hierarchyWidth_ = resizedWidth;
+            if (session_ != nullptr)
+            {
+                session_->Projects().SetEditorPreference(
+                    "workspace_hierarchy_width",
+                    hierarchyWidth_);
+            }
+            ResizeLayout();
+        });
         GetGUI().AddWidget(&hierarchyPanel_);
 
         hierarchyLabel_.Create("Scene Hierarchy");
@@ -528,8 +724,29 @@ namespace renegade::studio
 
         inspectorPanel_.Create(
             "Inspector",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+            wi::gui::Window::WindowControls::RESIZE_LEFT |
+                wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
         inspectorPanel_.SetShadowRadius(8.0f);
+        inspectorPanel_.OnResize([this]()
+        {
+            const float resizedWidth = std::clamp(
+                inspectorPanel_.GetSize().x,
+                MinimumSidebarWidth,
+                MaximumSidebarWidth);
+            if (std::abs(resizedWidth - inspectorWidth_) < 0.5f)
+            {
+                return;
+            }
+
+            inspectorWidth_ = resizedWidth;
+            if (session_ != nullptr)
+            {
+                session_->Projects().SetEditorPreference(
+                    "workspace_inspector_width",
+                    inspectorWidth_);
+            }
+            ResizeLayout();
+        });
         GetGUI().AddWidget(&inspectorPanel_);
 
         inspectorLabel_.Create("Transform Inspector");
@@ -868,28 +1085,125 @@ namespace renegade::studio
         });
         inspectorPanel_.AddWidget(&reopenButton_);
 
-        contentPanel_.Create(
-            "Content Browser",
+        bottomTabBar_.Create(
+            "Renegade Bottom Drawer Tabs",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        bottomTabBar_.SetShadowRadius(4.0f);
+        GetGUI().AddWidget(&bottomTabBar_);
+
+        const auto createDrawerTab = [this](
+            wi::gui::Button& button,
+            const char* name,
+            const char* text,
+            const EditorAction action)
+        {
+            button.Create(name);
+            button.SetText(text);
+            button.SetAngularHighlightWidth(3.0f);
+            button.OnClick([this, action](const wi::gui::EventArgs&)
+            {
+                pendingAction_ = action;
+            });
+            bottomTabBar_.AddWidget(&button);
+        };
+        createDrawerTab(
+            assetsTabButton_,
+            "Assets Drawer Tab",
+            "ASSETS",
+            EditorAction::ShowAssets);
+        createDrawerTab(
+            consoleTabButton_,
+            "Console Drawer Tab",
+            "CONSOLE",
+            EditorAction::ShowConsole);
+        createDrawerTab(
+            outputTabButton_,
+            "Output Drawer Tab",
+            "OUTPUT",
+            EditorAction::ShowOutput);
+        createDrawerTab(
+            diagnosticsTabButton_,
+            "Diagnostics Drawer Tab",
+            "DIAGNOSTICS",
+            EditorAction::ShowDiagnostics);
+
+        contentPanel_.Create(
+            "Workspace Bottom Drawer",
+            wi::gui::Window::WindowControls::RESIZE_TOP |
+                wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
         contentPanel_.SetShadowRadius(8.0f);
+        contentPanel_.OnResize([this]()
+        {
+            const float resizedHeight = std::clamp(
+                contentPanel_.GetSize().y,
+                MinimumDrawerHeight,
+                MaximumDrawerHeight);
+            if (std::abs(resizedHeight - bottomDrawerHeight_) < 0.5f)
+            {
+                return;
+            }
+
+            bottomDrawerHeight_ = resizedHeight;
+            if (session_ != nullptr)
+            {
+                session_->Projects().SetEditorPreference(
+                    "workspace_bottom_height",
+                    bottomDrawerHeight_);
+            }
+            ResizeLayout();
+        });
         GetGUI().AddWidget(&contentPanel_);
 
-        contentLabel_.Create("Content Browser Title");
-        contentLabel_.SetText("CONTENT // PROJECT ASSETS");
+        contentLabel_.Create("Bottom Drawer Title");
+        contentLabel_.SetText("ASSET BROWSER // PROJECT CONTENT");
         contentLabel_.font.params.size = 16;
         contentLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         contentPanel_.AddWidget(&contentLabel_);
 
-        contentPlaceholder_.Create("Content Browser Placeholder");
-        contentPlaceholder_.SetText(
-            "No assets imported yet.\n\n"
-            "Asset import and the project-aware browser are not built. Until "
-            "they are, scenes are authored from the generated Proving Ground "
-            "and edited in the viewport.");
+        contentPlaceholder_.Create("Bottom Drawer Placeholder");
         contentPlaceholder_.SetFitTextEnabled(true);
         contentPlaceholder_.font.params.color = HologramMuted;
         contentPlaceholder_.font.params.size = 14;
         contentPanel_.AddWidget(&contentPlaceholder_);
+
+        workspaceMenuPanel_.Create(
+            "Workspace Window Menu",
+            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        workspaceMenuPanel_.SetShadowRadius(10.0f);
+        workspaceMenuPanel_.SetVisible(false);
+        GetGUI().AddWidget(&workspaceMenuPanel_);
+
+        workspaceMenuLabel_.Create("Workspace Window Menu Title");
+        workspaceMenuLabel_.SetText("WINDOW // WORKSPACE");
+        workspaceMenuLabel_.font.params.size = 15;
+        workspaceMenuLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        workspaceMenuPanel_.AddWidget(&workspaceMenuLabel_);
+
+        hierarchyToggleButton_.Create("Toggle Hierarchy Panel");
+        hierarchyToggleButton_.SetText("HIERARCHY // ON");
+        hierarchyToggleButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::ToggleHierarchy;
+        });
+        workspaceMenuPanel_.AddWidget(&hierarchyToggleButton_);
+
+        inspectorToggleButton_.Create("Toggle Inspector Panel");
+        inspectorToggleButton_.SetText("INSPECTOR // ON");
+        inspectorToggleButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::ToggleInspector;
+        });
+        workspaceMenuPanel_.AddWidget(&inspectorToggleButton_);
+
+        resetWorkspaceButton_.Create("Reset Workspace Layout");
+        resetWorkspaceButton_.SetText("RESET WORKSPACE");
+        resetWorkspaceButton_.SetTooltip(
+            "Restore the approved viewport-first Renegade layout");
+        resetWorkspaceButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::ResetWorkspace;
+        });
+        workspaceMenuPanel_.AddWidget(&resetWorkspaceButton_);
     }
 
     void StudioRenderPath::CreateProjectHub()
@@ -1011,15 +1325,15 @@ namespace renegade::studio
         theme.image.corner_rounding = true;
         for (auto& corner : theme.image.corners_rounding)
         {
-            corner.radius = 7.0f;
+            corner.radius = 3.0f;
         }
         theme.font.color = HologramText;
         theme.font.shadow_color = wi::Color(0, 0, 0, 220);
-        theme.shadow = 3.0f;
+        theme.shadow = 2.0f;
         theme.shadow_color = HologramBorder;
         theme.shadow_highlight = true;
-        theme.shadow_highlight_color = XMFLOAT3(0.0f, 0.72f, 1.0f);
-        theme.shadow_highlight_spread = 0.35f;
+        theme.shadow_highlight_color = XMFLOAT3(0.86f, 0.31f, 0.08f);
+        theme.shadow_highlight_spread = 0.24f;
         theme.tooltipImage = theme.image;
         theme.tooltipImage.color = HologramIdle;
         theme.tooltipFont = theme.font;
@@ -1033,7 +1347,7 @@ namespace renegade::studio
         gui.SetColor(HologramFocus, wi::gui::DEACTIVATING);
         gui.SetColor(HologramPanel, wi::gui::WIDGET_ID_WINDOW_BASE);
         gui.SetColor(
-            wi::Color(4, 18, 28, 245),
+            wi::Color(20, 21, 24, 250),
             wi::gui::WIDGET_ID_TEXTINPUTFIELD_IDLE);
         gui.SetColor(
             HologramFocus,
@@ -1042,7 +1356,7 @@ namespace renegade::studio
             HologramActive,
             wi::gui::WIDGET_ID_TEXTINPUTFIELD_ACTIVE);
         gui.SetColor(
-            wi::Color(2, 12, 20, 245),
+            wi::Color(10, 11, 13, 250),
             wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
         gui.SetColor(
             HologramFocus,
@@ -1052,7 +1366,7 @@ namespace renegade::studio
             wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
 
         projectHubPanel_.SetColor(
-            wi::Color(2, 9, 16, 232),
+            wi::Color(8, 9, 11, 240),
             wi::gui::WIDGET_ID_WINDOW_BASE);
     }
 
@@ -1195,16 +1509,56 @@ namespace renegade::studio
 
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
-        const float toolbarHeight = 54.0f;
-        const float leftWidth = std::clamp(width * 0.2f, 250.0f, 310.0f);
-        const float rightWidth = std::clamp(width * 0.22f, 290.0f, 350.0f);
-        const float bottomHeight = std::clamp(height * 0.22f, 160.0f, 220.0f);
+        constexpr float toolbarHeight = 54.0f;
+        constexpr float tabBarHeight = 34.0f;
+        constexpr float outerMargin = 8.0f;
+        constexpr float panelGap = 8.0f;
+
+        const float maximumSideWidth = std::min(
+            MaximumSidebarWidth,
+            std::max(
+                MinimumSidebarWidth,
+                (width - 480.0f) * 0.5f));
+        const float leftWidth = std::clamp(
+            hierarchyWidth_,
+            MinimumSidebarWidth,
+            maximumSideWidth);
+        const float rightWidth = std::clamp(
+            inspectorWidth_,
+            MinimumSidebarWidth,
+            maximumSideWidth);
+        hierarchyWidth_ = leftWidth;
+        inspectorWidth_ = rightWidth;
+
+        const bool drawerOpen =
+            bottomDrawerPage_ != BottomDrawerPage::None;
+        const float bottomHeight = drawerOpen
+            ? std::clamp(
+                bottomDrawerHeight_,
+                MinimumDrawerHeight,
+                std::min(MaximumDrawerHeight, height * 0.55f))
+            : 0.0f;
+        if (drawerOpen)
+        {
+            bottomDrawerHeight_ = bottomHeight;
+        }
+
+        const float centralLeft = hierarchyVisible_
+            ? leftWidth + outerMargin * 2.0f
+            : outerMargin;
+        const float centralRight = width - (
+            inspectorVisible_
+                ? rightWidth + outerMargin * 2.0f
+                : outerMargin);
+        const float contentTop = height - outerMargin - bottomHeight;
+        const float tabTop =
+            contentTop - panelGap - tabBarHeight;
 
         viewportBounds_ = XMFLOAT4(
-            leftWidth + 16.0f,
-            toolbarHeight + 16.0f,
-            width - rightWidth - 16.0f,
-            height - bottomHeight - 16.0f);
+            centralLeft,
+            toolbarHeight + outerMargin * 2.0f,
+            centralRight,
+            tabTop - panelGap);
 
         toolbarPanel_.SetPos(XMFLOAT2(8.0f, 8.0f));
         toolbarPanel_.SetSize(XMFLOAT2(width - 16.0f, toolbarHeight));
@@ -1218,11 +1572,13 @@ namespace renegade::studio
         scaleToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
         gridToggleButton_.SetPos(XMFLOAT2(630.0f, 9.0f));
         gridToggleButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
+        windowMenuButton_.SetPos(XMFLOAT2(width - 232.0f, 9.0f));
+        windowMenuButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
         projectHubButton_.SetPos(XMFLOAT2(width - 132.0f, 9.0f));
         projectHubButton_.SetSize(XMFLOAT2(108.0f, 30.0f));
         statusLabel_.SetPos(XMFLOAT2(736.0f, 14.0f));
         statusLabel_.SetSize(XMFLOAT2(
-            std::max(120.0f, width - 890.0f),
+            std::max(120.0f, width - 990.0f),
             24.0f));
 
         hierarchyPanel_.SetPos(XMFLOAT2(8.0f, toolbarHeight + 16.0f));
@@ -1309,20 +1665,54 @@ namespace renegade::studio
                 session_->Selection().SelectedEntity());
         LayoutInspectorActions(environmentSelected);
 
-        contentPanel_.SetPos(XMFLOAT2(
-            leftWidth + 16.0f,
-            height - bottomHeight - 8.0f));
-        contentPanel_.SetSize(XMFLOAT2(
-            width - leftWidth - rightWidth - 32.0f,
-            bottomHeight));
+        const float centralWidth =
+            std::max(240.0f, centralRight - centralLeft);
+        bottomTabBar_.SetPos(XMFLOAT2(centralLeft, tabTop));
+        bottomTabBar_.SetSize(XMFLOAT2(centralWidth, tabBarHeight));
+
+        constexpr float tabButtonGap = 6.0f;
+        constexpr float tabPadding = 6.0f;
+        const float tabWidth = std::max(1.0f,
+            (centralWidth - tabPadding * 2.0f - tabButtonGap * 3.0f) /
+                4.0f);
+        assetsTabButton_.SetPos(XMFLOAT2(tabPadding, 3.0f));
+        assetsTabButton_.SetSize(XMFLOAT2(tabWidth, 28.0f));
+        consoleTabButton_.SetPos(XMFLOAT2(
+            tabPadding + tabWidth + tabButtonGap,
+            3.0f));
+        consoleTabButton_.SetSize(XMFLOAT2(tabWidth, 28.0f));
+        outputTabButton_.SetPos(XMFLOAT2(
+            tabPadding + (tabWidth + tabButtonGap) * 2.0f,
+            3.0f));
+        outputTabButton_.SetSize(XMFLOAT2(tabWidth, 28.0f));
+        diagnosticsTabButton_.SetPos(XMFLOAT2(
+            tabPadding + (tabWidth + tabButtonGap) * 3.0f,
+            3.0f));
+        diagnosticsTabButton_.SetSize(XMFLOAT2(tabWidth, 28.0f));
+
+        contentPanel_.SetPos(XMFLOAT2(centralLeft, contentTop));
+        contentPanel_.SetSize(XMFLOAT2(centralWidth, bottomHeight));
         contentLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
         contentLabel_.SetSize(XMFLOAT2(
-            contentPanel_.GetSize().x - 24.0f,
+            centralWidth - 24.0f,
             28.0f));
         contentPlaceholder_.SetPos(XMFLOAT2(12.0f, 50.0f));
         contentPlaceholder_.SetSize(XMFLOAT2(
-            contentPanel_.GetSize().x - 24.0f,
-            bottomHeight - 62.0f));
+            centralWidth - 24.0f,
+            std::max(40.0f, bottomHeight - 62.0f)));
+
+        workspaceMenuPanel_.SetPos(XMFLOAT2(
+            width - 266.0f,
+            toolbarHeight + 16.0f));
+        workspaceMenuPanel_.SetSize(XMFLOAT2(250.0f, 154.0f));
+        workspaceMenuLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
+        workspaceMenuLabel_.SetSize(XMFLOAT2(226.0f, 24.0f));
+        hierarchyToggleButton_.SetPos(XMFLOAT2(12.0f, 42.0f));
+        hierarchyToggleButton_.SetSize(XMFLOAT2(226.0f, 28.0f));
+        inspectorToggleButton_.SetPos(XMFLOAT2(12.0f, 76.0f));
+        inspectorToggleButton_.SetSize(XMFLOAT2(226.0f, 28.0f));
+        resetWorkspaceButton_.SetPos(XMFLOAT2(12.0f, 112.0f));
+        resetWorkspaceButton_.SetSize(XMFLOAT2(226.0f, 30.0f));
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
         projectHubPanel_.SetSize(XMFLOAT2(width - 24.0f, height - 24.0f));
@@ -1778,6 +2168,37 @@ namespace renegade::studio
             break;
         case EditorAction::ToggleGrid:
             SetGridVisible(!gridVisible_);
+            break;
+        case EditorAction::ToggleWorkspaceMenu:
+            workspaceMenuOpen_ = !workspaceMenuOpen_;
+            RefreshWorkspaceControls();
+            break;
+        case EditorAction::ToggleHierarchy:
+            hierarchyVisible_ = !hierarchyVisible_;
+            RefreshWorkspaceControls();
+            PersistWorkspaceLayout();
+            ResizeLayout();
+            break;
+        case EditorAction::ToggleInspector:
+            inspectorVisible_ = !inspectorVisible_;
+            RefreshWorkspaceControls();
+            PersistWorkspaceLayout();
+            ResizeLayout();
+            break;
+        case EditorAction::ResetWorkspace:
+            ResetWorkspaceLayout();
+            break;
+        case EditorAction::ShowAssets:
+            SetBottomDrawerPage(BottomDrawerPage::Assets);
+            break;
+        case EditorAction::ShowConsole:
+            SetBottomDrawerPage(BottomDrawerPage::Console);
+            break;
+        case EditorAction::ShowOutput:
+            SetBottomDrawerPage(BottomDrawerPage::Output);
+            break;
+        case EditorAction::ShowDiagnostics:
+            SetBottomDrawerPage(BottomDrawerPage::Diagnostics);
             break;
         case EditorAction::None:
         default:
@@ -2555,9 +2976,11 @@ namespace renegade::studio
         projectHubVisible_ = visible;
         projectHubPanel_.SetVisible(visible);
         toolbarPanel_.SetVisible(!visible);
-        hierarchyPanel_.SetVisible(!visible);
-        inspectorPanel_.SetVisible(!visible);
-        contentPanel_.SetVisible(!visible);
+        if (visible)
+        {
+            workspaceMenuOpen_ = false;
+        }
+        RefreshWorkspaceControls();
 
         // The frame-rate readout belongs to the authoring viewport and must
         // not appear over the Project Hub. DrawEditorGrid checks
