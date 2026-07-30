@@ -59,9 +59,12 @@ recursive in-memory Wicked entity archives so Undo/Redo can restore the same
 entity IDs. Studio may preview a live gizmo transform, but it restores the
 before-state before committing the completed command.
 
-Generated Proving Ground helpers use a reserved `__renegade_internal_` name
-prefix. They remain serialized scene entities but `SceneService` excludes them
-from the creator-facing hierarchy and selection surface.
+The generated Proving Ground is described by a renderer-independent blueprint
+and instantiated as uniquely named, creator-facing scene entities. The reserved
+`__renegade_internal_` prefix remains available for legacy/internal scene
+helpers and `SceneService` excludes such entities from creator-facing lists.
+The editor grid is not a scene helper: Studio draws it in an explicit
+renderer-owned colour/depth pass, so it is never selectable or serialized.
 
 ### Runtime
 
@@ -83,6 +86,9 @@ Import, shader, packaging, migration, feature-inventory, and validation tools.
 6. Editor services must remain independent of the chosen UI toolkit.
 7. Headless bridge commands mutate scene data but do not advance the rendered
    scene. The render-capable application loop owns `Scene::Update()`.
+8. Studio-owned renderer extensions must begin and end their own valid render
+   passes unless they are invoked from inside a documented active Wicked pass.
+   Do not assume a Wicked virtual render hook returns with attachments bound.
 
 ## UI foundation
 
