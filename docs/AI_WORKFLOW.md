@@ -29,6 +29,22 @@ A normal work unit should fit approximately one to three focused days.
 6. Update `HANDOFF.md` with files, commands, results, risks, and next step.
 7. Identify anything not tested rather than implying success.
 
+## Verify claims about Wicked against the pin
+
+Every statement about how Wicked behaves must be read in `/WickedEngine` at the
+pinned SHA before it is relied on. Two Phase 3 build cycles were lost to this:
+
+- A third-party documentation site indexed an older commit and described an
+  implementation, symbols, and line numbers that do not exist in the pin. See
+  `docs/UPSTREAM_SYNC.md`.
+- An assumption about Wicked's frame structure — that a virtual render hook
+  returns with attachments still bound — was written into a code comment as
+  though it were established fact, and the feature silently rendered nowhere.
+
+An assumption recorded confidently is more dangerous than an open question. If
+a claim has not been read in the pinned source, mark it unverified in
+`HANDOFF.md` rather than stating it.
+
 ## Verifier workflow
 
 Release-gate work must be checked by a different AI or human:

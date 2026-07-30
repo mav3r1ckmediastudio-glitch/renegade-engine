@@ -31,7 +31,11 @@ Renegade's custom Windows-first editor application.
 - focuses, duplicates, and deletes selected entities;
 - provides undoable full-transform, duplicate, and delete commands;
 - supports Ctrl+S, Ctrl+Shift+S, Ctrl+D, Delete, F, Ctrl+Z, and Ctrl+Y;
-- hides generated grid internals from the creator hierarchy; and
+- draws Renegade's own infinite grid from `Studio/shaders`, in an explicit
+  colour/depth render pass it opens itself, so the grid is never a scene
+  entity, never selectable, and never serialized;
+- toggles grid visibility from the command bar or `G` and remembers the choice
+  across restarts through `ProjectService` editor preferences; and
 - preserves Save As, Reopen, DX12, Vulkan, input, and DPI paths.
 
 ADR 0002 accepts `wiGUI` as the native foundation. The visual language,

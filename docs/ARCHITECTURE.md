@@ -66,6 +66,38 @@ helpers and `SceneService` excludes such entities from creator-facing lists.
 The editor grid is not a scene helper: Studio draws it in an explicit
 renderer-owned colour/depth pass, so it is never selectable or serialized.
 
+Component authoring follows one shape, established by `SetTransformCommand` and
+extended by `SetWeatherCommand`. A toolkit-independent state struct captures the
+curated subset of a Wicked component that Renegade exposes; the command stores
+a before and an after state; applying a state writes only the fields the struct
+covers and leaves every other value on the component untouched. `WeatherState`
+therefore authors sky mode, exposure, ambient, fog, and the primary cloud layer
+while the second cloud layer, wind, rain, ocean, weather maps, and advanced
+scattering parameters survive an edit unmodified. Light and material authoring
+must follow the same pattern.
+
+### Renegade-owned shaders
+
+Renegade may own shaders without forking Wicked. `Studio/shaders` holds
+standalone HLSL with an inline `[RootSignature]` and its own constant buffer,
+deliberately free of `globals.hlsli` and `ShaderInterop` so that Wicked's shader
+source tree does not have to ship beside the executable. The build copies them
+to `Content/shaders/`, which the Windows packaging script already collects, and
+Studio compiles them at load by pointing `wi::renderer::SetShaderSourcePath` at
+that directory just long enough to resolve them. Wicked's own `Example_ImGui`
+sample uses the same approach. A shader that fails to load must degrade to a
+missing feature and a logged warning, never a failed startup.
+
+### Editor preferences
+
+`ProjectService` owns editor preferences, stored in an `editor` section of the
+same `wi::config` state file that holds the recent-project registry. Preferences
+describe how the creator likes Studio to behave rather than what a project
+contains, so they must never reach a WISCENE or a `.renegade` descriptor. A
+read-only settings location degrades to a session-only preference rather than
+an error. Grid visibility is the first; camera speed and editor layout are still
+session-only and should adopt this route rather than inventing a second one.
+
 ### Runtime
 
 Standalone player without editor code. It loads project settings, startup scene,

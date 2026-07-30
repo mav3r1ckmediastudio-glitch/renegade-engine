@@ -6,15 +6,16 @@
 Target duration: 6–8 weeks
 Status: Phase 2 closed after DX12, Vulkan, DPI, input, persistence, and
 Runtime separation passed on the project owner's Windows GPU; physical HDR was
-not available. The first Phase 3 Project Hub/workspace launched on Windows at
-a VSync-limited 75 FPS. Its first viewport-selection, outline, and fly-camera
-interaction increment passed on the project owner's GPU. The repaired editor
-usability milestone then passed packaged DX12 testing, including transforms,
-gizmos, duplicate/delete, save, and Ctrl+Z/Ctrl+Y. The Viewport and Proving
-Ground Visual Foundation is merged and functionally accepted. Editor Visual
-Polish is implemented on `phase3/editor-visual-polish`; its infinite grid,
-persisted preference, smaller gizmo, thinner outline, and presentation cleanup
-await packaged DX12 and Vulkan visual acceptance.
+not available. The Project Hub, workspace, viewport selection, fly camera, and
+the editor usability milestone all passed packaged DX12 testing. The Viewport
+and Proving Ground Visual Foundation, Editor Visual Polish, and Environment
+Authoring milestones are merged into `main` at `8787a4c` and accepted on
+packaged DX12 and Vulkan. Renegade draws its own infinite shader grid, persists
+editor preferences, and authors sky, fog, volumetric clouds, and cloud shadows
+through undoable commands. `main` is clean with no branch awaiting review.
+
+Remaining for the phase: light and material authoring, then the asset-facing
+work that Phase 4 depends on.
 
 ## Phase plan
 
@@ -42,15 +43,21 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 - [x] Establish repository and Wicked pin.
 - [x] Commit charter, roadmap, AI workflow, handoff, and feature matrix.
 - [x] Verify licence and notice obligations.
-- [ ] Record the Windows build-machine toolchain.
+- [x] Record the Windows build-machine toolchain.
 
 ### Week 2
 
-- [ ] Build Windows Debug and Release.
+- [x] Build Windows Debug and Release.
 - [ ] Run the original editor and reference scenes.
-- [ ] Validate DirectX 12 and check Windows Vulkan.
+      Superseded: `WICKED_EDITOR` is forced `OFF` so upstream sample and editor
+      targets stay out of the Renegade build graph. The Wicked Editor remains a
+      parity oracle to read, not a target to build.
+- [x] Validate DirectX 12 and check Windows Vulkan.
 - [x] Add repeatable scripts, evidence records, and Windows CI.
-- [ ] Capture Windows logs, timings, screenshots, and independent verification.
+- [x] Capture Windows logs, timings, and screenshots.
+- [ ] Obtain independent verification of a release gate by a second AI or
+      human. Still outstanding; every gate so far was verified by the project
+      owner alone.
 
 ### Week 3
 
@@ -71,17 +78,28 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-- Correct the custom grid integration so it opens an explicit main colour/depth
-  render pass after Wicked's transparent pass and resolves MSAA when enabled.
+**Light and Material Authoring.** The Environment inspector proved the pattern;
+extend it to the two component types that still block the creator from fixing
+the generated scene's look.
+
+- Add a Light inspector for `LightComponent`: type, colour, intensity, range,
+  cone angles, cast-shadow, volumetrics and `volumetric_boost`.
+- Add a Material inspector for `MaterialComponent`: base colour, metalness,
+  roughness, reflectance, emissive colour and strength.
+- Route every persistent edit through `CommandService` with Undo/Redo,
+  following `SetTransformCommand` and `SetWeatherCommand`. Apply only the
+  covered fields and leave everything else on the component untouched.
+- Filter no-op edits from history; preview live on drag but commit one command
+  on release.
+- Extend `RenegadeBridgeTests` with headless Undo/Redo coverage. Component
+  edits need no graphics device.
 - Require Windows x64 Debug and Release CI plus `RenegadeBridgeTests`.
-- Verify the shader grid on packaged DX12 and Vulkan: horizon coverage, stable
-  spacing, depth occlusion, correct axis colours, and no Project Hub overlay.
-- Verify grid visibility persists across restart and never reaches WISCENE.
-- Recheck gizmo size, selection outline, unique hierarchy names, title layout,
-  selection, navigation, Undo/Redo, Save, and reopen.
-- Fix visual or behavioural failures before merging the visual-polish branch.
-- After acceptance, begin the bounded Environment Authoring milestone. Do not
-  begin scene tabs, formal dirty-state handling, or the Identity Handshake.
+- Acceptance: from a freshly generated project and without rebuilding, darken
+  the terrain to smoked near-black, pull the hologram core back from clipped
+  white to readable cyan, and reopen with both intact.
+
+Do not begin scene tabs, formal dirty-state handling, asset import, or the
+Identity Handshake.
 
 ## Status rules
 

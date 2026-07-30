@@ -73,3 +73,42 @@ Sun and light-component authoring, material authoring, skybox asset selection,
 the advanced second cloud layer, cloud weather maps, rain and wind controls,
 viewport post-processing, arbitrary local fog volumes, and custom cloud
 shaders remain outside this bounded vertical slice.
+
+## Acceptance record
+
+Accepted by the project owner against `main` at
+`8787a4cb0d3287057fe2f61833084ad653b99ff6`, Wicked pinned at `3a800b71`.
+
+```text
+DX12 ENVIRONMENT PASS / CLOUDS PASS / CLOUD SHADOWS PASS /
+UNDO-REDO PASS / SAVE-REOPEN PASS / TRANSFORM REGRESSION PASS /
+VULKAN ENVIRONMENT PASS
+```
+
+Confirmed in the packaged Release through both launchers:
+
+- Selecting `Environment` replaces the Transform inspector with the Environment
+  inspector; selecting a normal object restores Transform and the gizmo.
+- Realistic sky with volumetric clouds renders, and the presets change the
+  viewport immediately.
+- Coverage, base height, and thickness respond live.
+- Cloud shadows reach the world.
+- Edits enter command history and Undo/Redo restores them.
+- Authored state survives save and reopen.
+
+### Findings
+
+**Volumetric clouds need no weather map.** There is no reference to
+`volumetricCloudsWeatherMapFirst` or `...Second` anywhere in `EngineBridge` or
+`Studio`. Clouds render procedurally from `weatherScale`. This was previously
+recorded as an unverified assumption and is now closed.
+
+**Field labelling is by tooltip.** The inspector identifies each numeric field
+on hover rather than with an inline label. This is deliberate for the current
+field count. It will scale poorly once the inspector also carries light and
+material sections, and should be revisited then rather than now.
+
+**Not set by this milestone.** `SetVolumetricCloudsReceiveShadow`, which lets
+clouds receive shadows from the scene, and the per-light
+`LightComponent::SetVolumetricCloudsEnabled`, which controls whether a given
+light interacts with clouds. Neither was required for the accepted result.

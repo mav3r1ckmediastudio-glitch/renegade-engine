@@ -1,6 +1,52 @@
 # Changelog
 
+All notable user-facing changes are recorded here. Newest first.
+
 ## Unreleased — Phase 3 Studio foundation
+
+### Environment authoring
+
+- Added a curated Environment inspector that replaces the Transform inspector
+  when the weather entity is selected.
+- Added Clear, Scattered, Overcast, and Storm sky presets.
+- Added realistic sky, realistic sky with volumetric clouds, and skybox texture
+  sky modes.
+- Added aerial perspective, sky exposure, and ambient intensity controls.
+- Added distance fog, height fog, and fog-layer bounds controls.
+- Added volumetric cloud coverage, base height, and thickness controls.
+- Added volumetric clouds casting shadows onto the world.
+- Added `SetWeatherCommand` so every field edit and preset is a single undoable
+  command that leaves unrepresented Wicked weather values untouched.
+
+### Editor grid and visual polish
+
+- Replaced Wicked's fixed 20x20 debug grid helper with a Renegade-owned
+  infinite shader grid: adaptive spacing, analytic anti-aliasing, distance
+  fade, depth occlusion, and Renegade-chosen colours including the axis lines.
+- Added a grid visibility toggle on the command bar and the `G` key.
+- Added persisted editor preferences through `ProjectService`, stored beside
+  the recent-project registry and never written to a scene or `.renegade`
+  descriptor.
+- Reduced the transform gizmo to a usable screen-space size and restyled it.
+- Thinned the selection outline from double Wicked's default to one pixel.
+- Gave every generated Proving Ground entity a unique name.
+- Fixed the workspace title clipping and replaced the Content Browser
+  placeholder with a real empty state.
+
+### Viewport and Proving Ground visual foundation
+
+- Removed the 22 serialized internal grid entities from generated projects.
+- Rebuilt the generated Proving Ground from a renderer-independent blueprint
+  with generated ground relief, a shared PBR vocabulary, enclosure, and
+  background masses.
+- Moved atmosphere onto a serialized weather entity so sky and fog survive save
+  and reopen; they were previously lost on reload.
+- Removed renderer-dependent `Scene::Update()` calls from every `EngineBridge`
+  path.
+- Changed scene loading from `wi::scene::LoadModel` to a direct
+  `Scene::Serialize` read, making it the exact inverse of saving.
+
+### Project hub and viewport interaction
 
 - Added the first holographic Renegade Project Hub.
 - Added versioned `.renegade` project descriptors.
@@ -38,9 +84,7 @@
 - Fixed the Windows title-bar encoding defect.
 - Fixed repeated scene-save cleanup crashing after a valid file was written.
 
-All notable user-facing changes will be recorded here.
-
-## Unreleased
+## Phases 0 and 1 — baseline, build, and repository foundation
 
 ### Added
 

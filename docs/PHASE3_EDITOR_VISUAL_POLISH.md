@@ -155,3 +155,49 @@ HIERARCHY PASS / REGRESSION PASS / PERFORMANCE PASS / VULKAN PASS
 
 If the shaders fail to compile the viewport will simply have no grid and the
 backlog will carry a warning. That is a shader bug to fix, not a crash.
+
+## Acceptance record
+
+Accepted by the project owner against `main` at
+`8787a4cb0d3287057fe2f61833084ad653b99ff6`, Wicked pinned at `3a800b71`.
+
+```text
+DX12 GRID PASS / GRID PERSISTENCE PASS / GIZMO PASS / OUTLINE PASS /
+HIERARCHY PASS / REGRESSION PASS / PERFORMANCE PASS / VULKAN PASS
+```
+
+The grid extends to the horizon with stable adaptive spacing, is correctly
+occluded by the deck and scene geometry, is ice-blue throughout including the
+axis lines, toggles from the command bar and `G`, persists across restart, and
+never appears over the Project Hub or in a saved scene.
+
+### Repair before acceptance
+
+The first implementation of this milestone shipped a grid that never appeared,
+and the cause is worth recording because the reasoning failure is repeatable.
+
+`DrawEditorGrid` was called from an override of
+`RenderPath3D::RenderTransparents` on the assumption that the base call leaves
+the main colour and depth attachments bound. It does not. **Wicked ends every
+render pass before `RenderTransparents()` returns**, so the draw was issued
+with no render pass open and rendered nowhere. The pipeline was created
+successfully and no warning was logged, which made the failure look like a
+depth or visibility problem rather than a missing render pass.
+
+The repair, in `eeb4c3b`, opens an explicit pass over `rtMain_render` and
+`depthBuffer_Main`, adds an MSAA resolve to `rtMain` when the sample count is
+greater than one, binds the viewport and the internal-resolution scissor, draws
+the grid, and ends the pass.
+
+Two lessons:
+
+1. An assumption about Wicked's frame structure is not a fact until it is read
+   in the pinned source. This one had even been written into a code comment as
+   though it were established.
+2. A successfully created pipeline proves the shader compiled and the state is
+   valid. It proves nothing about whether the draw reaches a render target.
+
+The 2 cm grid plane offset added in `90531fb` was a separate and still-correct
+change: the generated deck's top surface sits at exactly `y = 0`, so a grid
+drawn at `y = 0` would be coplanar with it and lose the `GREATER` depth test
+under reverse Z. It was not, however, the reason the grid was invisible.
