@@ -281,6 +281,12 @@ Recorded because they were called out before the build and are now settled:
 
 ## Open defects and limitations
 
+The project owner has accepted the current look as a working baseline. The
+visual items below are recorded as gaps against the approved direction, not as
+blockers, and they are to be closed through editor authoring rather than by
+hand-tuning constants. See "Visual tuning is deliberately NOT in this
+milestone" further down.
+
 Visual, ranked by distance from the approved direction:
 
 1. **The scene reads as a warm desert, not an industrial holographic
@@ -472,25 +478,27 @@ Agreed scope. Branch from `main` once PR #1 is merged, for example
 8. Restyle the gizmo to the approved holographic language.
 9. Thin the selection outline.
 
-**Visual corrections from open defects 1-4 and 6**
-
-10. Rebalance sun pitch, intensity, `skyExposure` and `ambient` so the terrain
-    and distant masses read as smoked near-black rather than warm tan.
-11. Reduce emissive strength and raise `bloomThreshold` so the hologram core
-    and pedestal read as cyan instead of clipping to white.
-12. Raise the terrain relief amplitude or shorten its wavelength so it is
-    visible from editor camera height.
-13. Retune `fogHeightStart`/`fogHeightEnd` so low-lying mist reads on the deck.
-14. Soften the hard terrain edge against the sky.
-
 **Presentation cleanup**
 
-15. Number duplicate generated entity names in `ProvingGroundBlueprint()`.
-16. Fix the clipping workspace title label in `ResizeLayout`.
-17. Replace the Content Browser placeholder text with a real empty state.
+10. Number duplicate generated entity names in `ProvingGroundBlueprint()`.
+11. Fix the clipping workspace title label in `ResizeLayout`.
+12. Replace the Content Browser placeholder text with a real empty state.
 
-Request the approved concept imagery from the project owner before starting
-items 10-14. Those are subjective and were guessed blind once already.
+### Visual tuning is deliberately NOT in this milestone
+
+The project owner has accepted the current look as a working baseline and
+decided that sky, lighting, exposure and material values should become
+**editable in the editor** rather than be hand-tuned in C++.
+
+This is the correct call and it supersedes the earlier plan. Tuning a
+subjective value by editing a constant, pushing, waiting roughly 30 minutes for
+CI and re-testing a packaged Release is the wrong loop. The same change through
+an Inspector field is immediate and the creator drives it.
+
+Open visual defects 1, 2, 3, 4 and 6 are therefore **not** fixed by rebalancing
+constants. They become the first real test of the environment authoring UI in
+the milestone below. Do not silently hand-tune them in the meantime; that would
+hide exactly the gap the UI needs to close.
 
 Noted for later, not this milestone. Wicked's Editor has two further patterns
 worth taking when the matching Renegade feature is scheduled:
@@ -500,6 +508,62 @@ worth taking when the matching Renegade feature is scheduled:
   Renegade presentation or playtest mode.
 - `wiRenderer_BindLua.cpp:167` exposes `SetGridHelperEnabled` to Lua. Relevant
   once Renegade scripting comes online under `REN-SCR-001`.
+
+## Milestone after that: Environment and Material Authoring
+
+The Inspector currently edits position, rotation and scale. This milestone
+grows it into a real component inspector so the creator can author the look of
+a scene without a rebuild. It is the direct consequence of the decision above.
+
+Suggested branch `phase3/environment-authoring`. This is larger than a normal
+unit and may need splitting; scope it properly before starting.
+
+**Inspector: Environment (WeatherComponent)**
+
+Shown when the `Environment` entity is selected. Sky type, sun and sky
+exposure, ambient, horizon and zenith, `fogStart`, `fogDensity`, height-fog
+toggle with `fogHeightStart`/`fogHeightEnd`, realistic-sky and aerial-perspective
+toggles. Already serialized, because this milestone moved weather onto a real
+entity.
+
+**Inspector: Light (LightComponent)**
+
+Type, colour, intensity, range, inner and outer cone angle, cast-shadow toggle,
+volumetrics toggle and `volumetric_boost`.
+
+**Inspector: Material (MaterialComponent)**
+
+Base colour, metalness, roughness, reflectance, emissive colour and strength.
+
+**Viewport post-processing**
+
+Exposure, bloom enable and threshold, AO mode and power. Decide deliberately
+where these live: they are Studio viewport state, not scene data, so they
+probably belong in project settings rather than the WISCENE. Record the
+decision in an ADR if it affects `.renegade`.
+
+**Architecture requirements, non-negotiable**
+
+- Every persistent edit goes through `CommandService` with full Undo/Redo,
+  following the existing `SetTransformCommand` pattern. Capture before and
+  after state; do not mutate components directly from widgets.
+- Filter no-op edits out of the undo history, as `SetTransformCommand` already
+  does for microscopic transforms.
+- Live preview while dragging a slider is allowed, but restore the before-state
+  and commit one command on release — the same discipline the gizmo uses.
+- Keep the widgets in Studio and the commands in `EngineBridge`. The Inspector
+  must not reach into Wicked components directly.
+- Extend `RenegadeBridgeTests` with headless Undo/Redo coverage for the new
+  commands. Component edits do not need a graphics device, so unlike scene
+  generation these are fully testable.
+
+**Acceptance**
+
+The real test is the open visual defects. From a freshly generated project the
+creator should be able to, without rebuilding: darken the terrain to smoked
+near-black, pull the hologram core back from clipped white to readable cyan,
+raise the low mist so it reads on the deck, and reopen the project with all of
+it intact.
 
 Still not started and explicitly out of scope until scheduled: scene tabs,
 docking, formal dirty-state tracking, unsaved-change prompts, crash recovery,
