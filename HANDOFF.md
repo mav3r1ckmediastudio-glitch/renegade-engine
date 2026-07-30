@@ -9,119 +9,121 @@
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Published branch before this increment:** `main` at
-`207d098a040f36fe0f19e4939a9b03d750615627`
+`b1ce1482a7c642017975ba115cd7b67fa474b932`
 
-**Prepared Phase 3 code:** `30c5d3c` — Build the Phase 3 project hub
+**Prepared viewport implementation:** `dc32684` — Add Phase 3 viewport
+interaction
 
-**Prepared Phase 3 architecture/docs:** `1f9c0ee` — Define the Phase 3 project
-foundation
+**Prepared viewport specification:** `46f382b` — Define Phase 3 viewport
+interaction gate
 
 **Pinned Wicked commit:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Phase 2 closure
+## Accepted baseline
 
-The project owner ran the exact `207d098` Release Studio package on an NVIDIA
-GeForce RTX 4070 Ti and confirmed both the DX12 and Vulkan launch paths appeared
-to work correctly. The Vulkan log identified `GraphicsDevice_Vulkan`.
-
-Together with the earlier human-observed persistence and Runtime checks, the
-accepted Phase 2 result is:
+Phase 2 remains closed with:
 
 ```text
 DX12 PASS / VULKAN PASS / DPI PASS / INPUT PASS / HDR NOT AVAILABLE
 ```
 
-Phase 2 is closed. `wiGUI` remains the accepted native UI integration and
-rendering foundation under ADR 0002.
+The project owner launched the exact Phase 3 Project Hub build on an NVIDIA
+GeForce RTX 4070 Ti. The Hub created a project and entered the workspace with
+33 scene entities. The live counter remained at 75 FPS, consistent with VSync
+limiting the renderer to the display's 75 Hz refresh rate. The apparent
+single-digit value inferred from an earlier screenshot was not the running
+frame rate.
 
-## Prepared Phase 3 outcome
+The Hub and Proving Ground are functional baselines. Their live visual
+presentation is not accepted as matching the approved holographic mockups yet.
 
-The first production-direction Studio increment now provides:
+## Prepared viewport outcome
 
-- `ProjectService` behind `EngineBridge`;
-- versioned `.renegade` project descriptors under ADR 0003;
-- create, open, validate, recent-project, select, launch, and return-to-Hub
-  workflows;
-- persistent recent-project ordering in `Saved/RenegadeStudio.ini`;
-- a generated live Proving Ground inherited by new projects;
-- a Renegade-owned smoked-black/cyan holographic theme;
-- permanent toolbar, hierarchy, inspector, viewport, and content regions;
-- preserved selection, translation gizmo, Undo/Redo, Save As, and Reopen
-  paths; and
-- project lifecycle and recent-project persistence test coverage.
+The next Studio increment adds:
 
-The Studio title now identifies Phase 3 and the real DX12/Vulkan backend.
+- direct left-click selection of rendered scene objects in the 3D viewport;
+- empty-space click deselection;
+- one shared `SelectionService` state for the viewport, hierarchy, inspector,
+  and transform gizmo;
+- a cyan editor-only silhouette around the selected object;
+- restoration of the object's previous stencil before Save As or scene reload;
+- right-mouse freelook initiated only inside the viewport;
+- W/A/S/D movement while freelooking;
+- Q/E vertical movement;
+- Shift acceleration;
+- mouse-wheel movement-speed adjustment over the viewport; and
+- explicit viewport bounds so panel input cannot select geometry or move the
+  camera behind the UI.
 
-Wicked remains exact and unmodified.
-
-## Project descriptor
-
-Each project starts with:
-
-```text
-<Project Name>/
-├── <Project Name>.renegade
-├── Content/
-│   └── Scenes/
-│       └── Main.wiscene
-└── Saved/
-```
-
-The descriptor stores only versioned project-relative metadata. It does not
-replace WISCENE.
+Wicked remains exact and unmodified. The change is confined to Renegade Studio
+and its existing bridge selection boundary.
 
 ## Validation completed in this workspace
 
-- `git diff --check` passed.
-- Every `docs/FEATURE_MATRIX.csv` row has 16 fields.
-- The pinned submodule still resolves to
-  `3a800b7134aafe58461093c8abb2e274d4e64033`.
-- GNU C++17 syntax checks passed for all changed EngineBridge sources,
-  `StudioApplication.cpp`, and `BridgeCommandTests.cpp` against the pinned
-  Wicked headers.
-- The syntax check used `-D__SCE__` only to bypass Wicked's unavailable Linux
-  SDL platform declarations; it does not represent a PlayStation build.
-- CMake, MSVC, the Windows SDK, and a render-capable Windows environment are
-  unavailable here. GitHub Actions and the project owner's GPU remain the
-  compile and visual authorities.
+The following commands passed:
+
+```text
+g++ -std=c++17 -D__SCE__ -I WickedEngine/WickedEngine \
+  -I WickedEngine/Editor -I EngineBridge/include \
+  -fsyntax-only Studio/src/StudioApplication.cpp
+
+g++ -std=c++17 -D__SCE__ -I WickedEngine/WickedEngine \
+  -I EngineBridge/include -fsyntax-only Tests/BridgeCommandTests.cpp
+
+git diff --check
+```
+
+Every `docs/FEATURE_MATRIX.csv` row still has 16 fields. The pinned Wicked
+submodule pointer is unchanged.
+
+The `-D__SCE__` syntax check only bypasses Wicked's unavailable Linux SDL
+platform declarations. It does not represent a PlayStation build.
+
+CMake, MSVC, the Windows SDK, and a render-capable Windows environment are
+unavailable here. GitHub Actions and the project owner's GPU remain the compile
+and visual authorities.
 
 ## Windows publication and verification
 
-1. Publish the prepared commits to `main`.
-2. Require the renamed **Renegade Studio** workflow and **Windows baseline**
-   workflow to pass Debug and Release.
+1. Publish all prepared commits to `main`.
+2. Require the Renegade Studio and Windows baseline workflows to pass Debug and
+   Release.
 3. Download the Release Studio artifact for the exact published commit.
 4. Extract `RenegadeStudio-Release.zip` into a fresh folder.
 5. Follow `README-FIRST.txt`.
 6. Report:
 
 ```text
-DX12 HUB PASS / CREATE PASS / RECENTS PASS / REOPEN PASS / VULKAN PASS
+DX12 VIEWPORT SELECT PASS / OUTLINE PASS / CAMERA PASS /
+SAVE ISOLATION PASS / VULKAN VIEWPORT PASS
 ```
 
-A visual or behavioural failure overrides green CI.
+Visual or behavioural failure overrides green CI.
 
-## Known limits
+## Known limits and risks
 
-- The live holographic UI and Proving Ground have not yet been visually
-  inspected on Windows.
-- Recent-project settings currently live beside the portable Studio package.
-  A later `SettingsService` increment will move user state to the final
-  per-user location.
-- The Project Hub has no thumbnails, search, sorting, or filters yet.
-- The Identity Handshake, iris scan, voice welcome, and split reveal are not
-  implemented in this increment.
-- The workspace regions are fixed. Renegade-owned docking and layout
-  persistence remain Phase 3 work.
-- Save As does not yet update the project's startup-scene setting; scene tabs,
-  dirty-state tracking, and explicit Save are the next scene-workflow unit.
-- The return-to-Hub warning uses command history as a conservative proxy for
-  unsaved state until formal dirty tracking exists.
+- The new selection silhouette has not yet been compiled or visually inspected
+  on Windows. DX12 and Vulkan must both pass.
+- The silhouette applies to rendered object geometry. A hierarchy-only entity
+  such as a light can still be selected and transformed but does not yet
+  receive a mesh silhouette.
+- Camera speed is session-only. Input rebinding, persisted camera preferences,
+  orbit navigation, focus-on-selection, and orthographic navigation remain
+  Phase 3 work.
+- The live holographic shell and Proving Ground still require substantial
+  visual refinement against the approved editor concept.
+- Recent-project settings still live beside the portable Studio package.
+- Scene tabs, formal dirty-state tracking, explicit Save, docking, and layout
+  persistence remain open.
+- This increment is editor-only. `RenegadeRuntime` is unchanged and does not
+  require a new gameplay verification run.
 
 ## Next bounded work after this increment passes
 
-1. Correct any CI, project-lifecycle, or live visual failures.
-2. Build the skippable Identity Handshake transition that reveals this real
-   Project Hub, including profile name and reduced-motion/disable controls.
-3. Begin the scene-tab, dirty-state, Save, and unsaved-change workflow.
+1. Correct any Windows compile, selection, outline, camera, or save-isolation
+   failure.
+2. Add focus-on-selection and complete transform-tool switching.
+3. Continue the scene-tab, dirty-state, Save, and unsaved-change workflow.
+4. Refine the live Proving Ground and holographic workspace against the
+   approved visual target.
