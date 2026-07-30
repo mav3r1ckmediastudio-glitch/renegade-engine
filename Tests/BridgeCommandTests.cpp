@@ -252,10 +252,13 @@ int main()
         return Fail("delete redo did not remove the entity again");
     }
 
-    renegade::bridge::SceneService provingGround;
-    provingGround.CreateProvingGround();
-    const auto creatorEntities = provingGround.ListEntities();
-    if (creatorEntities.size() >= provingGround.EntityCount())
+    const auto internalGridEntity = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(internalGridEntity) =
+        "__renegade_internal_grid_test";
+    scenes.GetScene().transforms.Create(internalGridEntity);
+
+    const auto creatorEntities = scenes.ListEntities();
+    if (creatorEntities.size() >= scenes.EntityCount())
     {
         return Fail("generated grid internals leaked into the hierarchy");
     }

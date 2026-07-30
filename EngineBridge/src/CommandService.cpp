@@ -275,7 +275,6 @@ namespace renegade::bridge
             wi::ecs::EntitySerializer serializer;
             scene_->Entity_Serialize(snapshot_, serializer, duplicate_);
             hasSnapshot_ = true;
-            scene_->Update(0.0f);
             return true;
         }
 
@@ -289,7 +288,6 @@ namespace renegade::bridge
         serializer.allow_remap = false;
         const auto restored =
             scene_->Entity_Serialize(snapshot_, serializer);
-        scene_->Update(0.0f);
         return restored == duplicate_;
     }
 
@@ -298,7 +296,6 @@ namespace renegade::bridge
         if (EntityExists(*scene_, duplicate_))
         {
             scene_->Entity_Remove(duplicate_);
-            scene_->Update(0.0f);
         }
     }
 
@@ -331,7 +328,6 @@ namespace renegade::bridge
         }
 
         scene_->Entity_Remove(entity_);
-        scene_->Update(0.0f);
         return true;
     }
 
@@ -346,6 +342,5 @@ namespace renegade::bridge
         wi::ecs::EntitySerializer serializer;
         serializer.allow_remap = false;
         scene_->Entity_Serialize(snapshot_, serializer);
-        scene_->Update(0.0f);
     }
 }
