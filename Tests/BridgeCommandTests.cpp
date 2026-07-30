@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <string>
 
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -270,6 +271,189 @@ int main()
         }
     }
 
+    // Generated Proving Ground structure.
+    //
+    // SceneService::CreateProvingGround() cannot run here: Wicked's primitive
+    // factories call MeshComponent::CreateRenderData(), which dereferences the
+    // global graphics device, and this test process has none. The composition
+    // is therefore asserted through its renderer-independent blueprint, which
+    // CreateProvingGround() instantiates verbatim.
+    const auto blueprint = renegade::bridge::ProvingGroundBlueprint();
+    if (blueprint.empty())
+    {
+        return Fail("the Proving Ground blueprint is empty");
+    }
+
+    bool hasTerrain = false;
+    bool hasEnvironment = false;
+    bool hasShadowCastingSun = false;
+    bool hasVolumetricLight = false;
+    int deckEdgeCount = 0;
+    for (const auto& prop : blueprint)
+    {
+        if (prop.name.rfind("__renegade_internal_", 0) == 0)
+        {
+            return Fail(
+                "the Proving Ground blueprint still serializes internal "
+                "helper entities");
+        }
+        if (prop.name.find("grid") != std::string::npos ||
+            prop.name.find("Grid") != std::string::npos)
+        {
+            return Fail(
+                "the Proving Ground blueprint still builds grid geometry; "
+                "the editor grid must come from the renderer-owned helper");
+        }
+
+        switch (prop.kind)
+        {
+        case renegade::bridge::ProvingGroundProp::Kind::Terrain:
+            hasTerrain = true;
+            if (prop.terrainResolution < 2 ||
+                prop.halfExtents.x <= renegade::bridge::GridHelperHalfExtent)
+            {
+                return Fail(
+                    "generated ground relief is smaller than the editor grid");
+            }
+            break;
+        case renegade::bridge::ProvingGroundProp::Kind::Environment:
+            hasEnvironment = true;
+            break;
+        case renegade::bridge::ProvingGroundProp::Kind::Light:
+            if (prop.lightType == wi::scene::LightComponent::DIRECTIONAL &&
+                prop.castShadow)
+            {
+                hasShadowCastingSun = true;
+            }
+            if (prop.volumetrics && prop.volumetricBoost > 0.0f)
+            {
+                hasVolumetricLight = true;
+            }
+            break;
+        default:
+            break;
+        }
+
+        if (prop.name == "Deck Edge")
+        {
+            ++deckEdgeCount;
+        }
+        if (prop.name == "Proving Ground Deck" &&
+            prop.halfExtents.x < renegade::bridge::GridHelperHalfExtent)
+        {
+            return Fail(
+                "the generated deck is narrower than the editor grid helper");
+        }
+    }
+
+    if (!hasTerrain)
+    {
+        return Fail("the Proving Ground blueprint has no ground relief");
+    }
+    if (!hasEnvironment)
+    {
+        return Fail(
+            "the Proving Ground blueprint has no weather entity, so sky and "
+            "fog would not survive save and reopen");
+    }
+    if (!hasShadowCastingSun)
+    {
+        return Fail(
+            "the Proving Ground blueprint has no shadow-casting sun");
+    }
+    if (!hasVolumetricLight)
+    {
+        return Fail(
+            "the Proving Ground blueprint has no volumetric light, so the "
+            "atmosphere would not react to lighting");
+    }
+    if (deckEdgeCount != 4)
+    {
+        return Fail("the generated deck is not fully edged");
+    }
+
+    // Headless save and reload of a mesh-free scene. This covers the
+    // SceneService archive round trip - which no longer routes through the
+    // renderer-dependent wi::scene::LoadModel - including the serialized
+    // weather that carries the Proving Ground's sky and fog.
+    {
+        TemporaryDirectory sceneFixture;
+        sceneFixture.path =
+            std::filesystem::temp_directory_path() /
+            (
+                "renegade-scene-roundtrip-" +
+                std::to_string(
+                    std::chrono::steady_clock::now()
+                        .time_since_epoch()
+                        .count()));
+        std::filesystem::create_directories(sceneFixture.path);
+        const auto scenePath = sceneFixture.path / "RoundTrip.wiscene";
+
+        renegade::bridge::SceneService authored;
+        const auto landmark = wi::ecs::CreateEntity();
+        authored.GetScene().names.Create(landmark) = "Landmark";
+        auto& landmarkTransform =
+            authored.GetScene().transforms.Create(landmark);
+        landmarkTransform.translation_local = XMFLOAT3(2.0f, 3.0f, 4.0f);
+        landmarkTransform.SetDirty();
+        landmarkTransform.UpdateTransform();
+
+        const auto environment = wi::ecs::CreateEntity();
+        authored.GetScene().names.Create(environment) = "Environment";
+        auto& authoredWeather =
+            authored.GetScene().weathers.Create(environment);
+        authoredWeather.SetHeightFog(true);
+        authoredWeather.fogDensity = 0.018f;
+
+        if (!authored.SaveScene(scenePath.generic_string()) ||
+            !std::filesystem::is_regular_file(scenePath) ||
+            authored.CurrentPath() != scenePath.generic_string())
+        {
+            return Fail("scene service did not write the scene archive");
+        }
+
+        renegade::bridge::SceneService reopened;
+        if (!reopened.LoadScene(scenePath.generic_string()))
+        {
+            return Fail("scene service did not reload the scene archive");
+        }
+        if (reopened.EntityCount() != authored.EntityCount())
+        {
+            return Fail("the reloaded scene lost or gained entities");
+        }
+        if (reopened.GetScene().weathers.GetCount() != 1 ||
+            !reopened.GetScene().weathers[0].IsHeightFog())
+        {
+            return Fail("the reloaded scene lost its serialized weather");
+        }
+
+        bool reloadedLandmark = false;
+        for (const auto& entity : reopened.ListEntities())
+        {
+            if (entity.name.rfind("__renegade_internal_", 0) == 0)
+            {
+                return Fail("the reloaded scene contains internal helpers");
+            }
+            if (entity.name != "Landmark")
+            {
+                continue;
+            }
+            const auto* transform =
+                reopened.GetScene().transforms.GetComponent(entity.entity);
+            if (transform == nullptr ||
+                !NearlyEqual(transform->translation_local.x, 2.0f) ||
+                !NearlyEqual(transform->translation_local.z, 4.0f))
+            {
+                return Fail("the reloaded scene lost a saved transform");
+            }
+            reloadedLandmark = true;
+        }
+        if (!reloadedLandmark)
+        {
+            return Fail("the reloaded scene lost a named entity");
+        }
+    }
+
     TemporaryDirectory projectFixture;
     projectFixture.path =
         std::filesystem::temp_directory_path() /
@@ -324,6 +508,7 @@ int main()
     std::cout
         << "PASS: hierarchy filtering, selection, full transform, "
            "duplicate/delete undo-redo, repeated history, no-op filtering, "
+           "Proving Ground blueprint structure, headless scene save/reload, "
            "and project lifecycle\n";
     return 0;
 }
