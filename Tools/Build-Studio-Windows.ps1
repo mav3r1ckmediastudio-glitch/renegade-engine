@@ -34,7 +34,7 @@ New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 
 if ([string]::IsNullOrWhiteSpace($ArtifactRoot)) {
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $ArtifactRoot = Join-Path $repositoryRoot "artifacts\phase2\studio-$timestamp"
+    $ArtifactRoot = Join-Path $repositoryRoot "artifacts\studio\studio-$timestamp"
 }
 $ArtifactRoot = [System.IO.Path]::GetFullPath($ArtifactRoot)
 New-Item -ItemType Directory -Path $ArtifactRoot -Force | Out-Null
@@ -165,7 +165,7 @@ try {
     $result | ConvertTo-Json -Depth 8 | Set-Content -Path $resultPath -Encoding UTF8
 
     Write-Host ""
-    Write-Host "Renegade Phase 2 increment completed successfully."
+    Write-Host "Renegade Studio increment completed successfully."
     Write-Host "Evidence: $resultPath"
 }
 catch {

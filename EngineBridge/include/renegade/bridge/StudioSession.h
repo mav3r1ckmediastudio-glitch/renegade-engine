@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 
@@ -27,6 +28,16 @@ namespace renegade::bridge
         [[nodiscard]] CommandService& Commands() noexcept
         {
             return commands_;
+        }
+
+        [[nodiscard]] ProjectService& Projects() noexcept
+        {
+            return projects_;
+        }
+
+        [[nodiscard]] const ProjectService& Projects() const noexcept
+        {
+            return projects_;
         }
 
         void NewScene()
@@ -56,6 +67,7 @@ namespace renegade::bridge
         }
 
     private:
+        ProjectService projects_;
         SceneService scenes_;
         SelectionService selection_;
         CommandService commands_;

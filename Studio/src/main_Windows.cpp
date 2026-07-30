@@ -15,9 +15,9 @@ namespace
         if (device != nullptr &&
             std::strcmp(device->GetTag(), "[Vulkan]") == 0)
         {
-            return L"Renegade Studio - Phase 2 [Vulkan]";
+            return L"Renegade Studio - Phase 3 [Vulkan]";
         }
-        return L"Renegade Studio - Phase 2 [DX12]";
+        return L"Renegade Studio - Phase 3 [DX12]";
     }
 
     LRESULT CALLBACK RenegadeWindowProc(
@@ -122,7 +122,7 @@ int APIENTRY wWinMain(
 
     const HWND window = CreateWindowW(
         windowClass.lpszClassName,
-        L"Renegade Studio - Phase 2",
+        L"Renegade Studio - Phase 3",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         0,

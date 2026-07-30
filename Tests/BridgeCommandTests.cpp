@@ -1,8 +1,12 @@
+#include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 
@@ -18,6 +22,17 @@ namespace
         std::cerr << "FAIL: " << message << '\n';
         return 1;
     }
+
+    struct TemporaryDirectory
+    {
+        std::filesystem::path path;
+
+        ~TemporaryDirectory()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(path, error);
+        }
+    };
 }
 
 int main()
@@ -142,8 +157,59 @@ int main()
         return Fail("microscopic transform polluted the undo history");
     }
 
+    TemporaryDirectory projectFixture;
+    projectFixture.path =
+        std::filesystem::temp_directory_path() /
+        (
+            "renegade-project-service-" +
+            std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+    const auto projectParent = projectFixture.path / "Projects";
+    const auto templateScene = projectFixture.path / "ProvingGround.wiscene";
+    std::filesystem::create_directories(projectParent);
+    {
+        std::ofstream templateFile(templateScene, std::ios::binary);
+        templateFile << "Renegade project service scene fixture";
+    }
+
+    renegade::bridge::ProjectService projects;
+    const auto stateFile = projectFixture.path / "State" / "Studio.ini";
+    projects.Initialize(stateFile.generic_string());
+    if (!projects.CreateProject(
+            projectParent.generic_string(),
+            "Test Project",
+            templateScene.generic_string()))
+    {
+        return Fail("project service did not create a project");
+    }
+
+    const auto descriptor =
+        projectParent / "Test Project" / "Test Project.renegade";
+    const auto startupScene =
+        projectParent / "Test Project" / "Content" / "Scenes" / "Main.wiscene";
+    if (!projects.HasProject() ||
+        projects.CurrentProject().name != "Test Project" ||
+        projects.RecentProjects().size() != 1 ||
+        !std::filesystem::is_regular_file(descriptor) ||
+        !std::filesystem::is_regular_file(startupScene))
+    {
+        return Fail("created project structure or metadata is incorrect");
+    }
+
+    renegade::bridge::ProjectService reopenedProjects;
+    reopenedProjects.Initialize(stateFile.generic_string());
+    if (reopenedProjects.RecentProjects().size() != 1 ||
+        !reopenedProjects.OpenProject(descriptor.generic_string()) ||
+        reopenedProjects.StartupScenePath() !=
+            std::filesystem::absolute(startupScene)
+                .lexically_normal()
+                .generic_string())
+    {
+        return Fail("project descriptor or recent-project state did not reopen");
+    }
+
     std::cout
         << "PASS: hierarchy, selection, transform command, repeated undo/redo, "
-           "and no-op filtering\n";
+           "no-op filtering, and project lifecycle\n";
     return 0;
 }

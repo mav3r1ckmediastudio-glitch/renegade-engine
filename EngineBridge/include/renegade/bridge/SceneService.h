@@ -21,6 +21,7 @@ namespace renegade::bridge
     {
     public:
         void NewScene();
+        void CreateProvingGround();
         bool LoadScene(const std::string& filePath);
         bool SaveScene(const std::string& filePath);
         bool ReloadScene();

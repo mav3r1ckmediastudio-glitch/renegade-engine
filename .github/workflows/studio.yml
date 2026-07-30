@@ -1,11 +1,11 @@
-name: Phase 2 Studio shell
+name: Renegade Studio
 
 on:
   push:
     branches:
       - main
     paths:
-      - ".github/workflows/phase2-studio.yml"
+      - ".github/workflows/studio.yml"
       - "CMakeLists.txt"
       - "EngineBridge/**"
       - "Studio/**"
@@ -16,7 +16,7 @@ on:
       - ".gitmodules"
   pull_request:
     paths:
-      - ".github/workflows/phase2-studio.yml"
+      - ".github/workflows/studio.yml"
       - "CMakeLists.txt"
       - "EngineBridge/**"
       - "Studio/**"
@@ -57,7 +57,7 @@ jobs:
         shell: pwsh
         run: >-
           ./Tools/Collect-Windows-Baseline.ps1
-          -OutputRoot "artifacts/phase2/ci-${{ matrix.configuration }}"
+          -OutputRoot "artifacts/studio/ci-${{ matrix.configuration }}"
 
       - name: Build Renegade Studio
         shell: pwsh
@@ -65,7 +65,7 @@ jobs:
           ./Tools/Build-Studio-Windows.ps1
           -Configuration ${{ matrix.configuration }}
           -Clean
-          -ArtifactRoot "artifacts/phase2/ci-${{ matrix.configuration }}"
+          -ArtifactRoot "artifacts/studio/ci-${{ matrix.configuration }}"
 
       - name: Upload build and evidence
         if: always()
@@ -73,6 +73,6 @@ jobs:
         with:
           name: >-
             renegade-studio-windows-x64-${{ matrix.configuration }}-${{ github.sha }}
-          path: artifacts/phase2/ci-${{ matrix.configuration }}
+          path: artifacts/studio/ci-${{ matrix.configuration }}
           if-no-files-found: warn
           retention-days: 14

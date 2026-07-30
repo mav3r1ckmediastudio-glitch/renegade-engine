@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <string>
+#include <vector>
 
 #include <WickedEngine.h>
 #include <Translator.h>
@@ -20,6 +22,7 @@ namespace renegade::studio
         void RefreshStatus();
         void RefreshHierarchy();
         void RefreshInspector();
+        void RefreshProjectHub();
 
     private:
         enum class HistoryAction
@@ -30,14 +33,29 @@ namespace renegade::studio
         };
 
         void ApplySelectedTranslation(int axis, float value);
+        void ApplyRenegadeTheme();
+        void CreateProjectHub();
+        void CreateWorkspaceShell();
+        void CreateProject();
+        void OpenProject();
+        void OpenProjectDescriptor(const std::string& descriptorPath);
+        void OpenSelectedRecentProject();
+        void ReturnToProjectHub();
+        void SelectRecentProject(std::size_t index);
+        void SetProjectHubVisible(bool visible);
         void SyncGizmoSelection();
         void SaveSceneAs();
         void ReopenScene();
 
         bridge::StudioSession* session_ = nullptr;
+        wi::gui::Window toolbarPanel_;
+        wi::gui::Label workspaceTitle_;
+        wi::gui::Button projectHubButton_;
+        wi::gui::Window hierarchyPanel_;
         wi::gui::Label statusLabel_;
         wi::gui::Label hierarchyLabel_;
         wi::gui::TreeList hierarchyTree_;
+        wi::gui::Window inspectorPanel_;
         wi::gui::Label inspectorLabel_;
         wi::gui::TextInputField translationX_;
         wi::gui::TextInputField translationY_;
@@ -46,10 +64,30 @@ namespace renegade::studio
         wi::gui::Button redoButton_;
         wi::gui::Button saveAsButton_;
         wi::gui::Button reopenButton_;
+        wi::gui::Window contentPanel_;
+        wi::gui::Label contentLabel_;
+        wi::gui::Label contentPlaceholder_;
+        wi::gui::Window projectHubPanel_;
+        wi::gui::Label hubBrandLabel_;
+        wi::gui::Label hubTitleLabel_;
+        wi::gui::Label hubSubtitleLabel_;
+        wi::gui::TextInputField projectNameInput_;
+        wi::gui::Button createProjectButton_;
+        wi::gui::Button openProjectButton_;
+        wi::gui::Label recentProjectsLabel_;
+        std::array<
+            wi::gui::Button,
+            bridge::ProjectService::MaximumRecentProjects> recentProjectButtons_;
+        wi::gui::Label selectedProjectLabel_;
+        wi::gui::Button launchProjectButton_;
+        wi::gui::Button continueProjectButton_;
+        wi::gui::Label hubMessageLabel_;
         Translator gizmo_;
         wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;
         XMFLOAT3 gizmoTranslationBefore_ = {};
         bool gizmoDragActive_ = false;
+        bool projectHubVisible_ = true;
+        int selectedRecentProject_ = -1;
         HistoryAction pendingHistoryAction_ = HistoryAction::None;
     };
 
@@ -60,8 +98,10 @@ namespace renegade::studio
         void Initialize() override;
 
     private:
+        void PrepareProvingGround();
+
         bridge::StudioSession session_;
         StudioRenderPath renderer_;
-        std::string startupScene_ = "Content/cube.wiscene";
+        std::string startupScene_ = "Content/ProvingGround.wiscene";
     };
 }
