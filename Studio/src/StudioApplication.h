@@ -70,12 +70,38 @@ namespace renegade::studio
             Scale,
         };
 
+        enum class WeatherField
+        {
+            SkyExposure,
+            AmbientIntensity,
+            FogStart,
+            FogDensity,
+            FogHeightStart,
+            FogHeightEnd,
+            CloudCoverage,
+            CloudStartHeight,
+            CloudThickness,
+        };
+
+        enum class WeatherToggle
+        {
+            AerialPerspective,
+            HeightFog,
+            CloudsCastShadow,
+        };
+
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
             float value);
+        void ApplySelectedWeatherValue(WeatherField field, float value);
+        void ApplySelectedWeatherToggle(WeatherToggle toggle, bool value);
+        void ApplySelectedSkyMode(bridge::WeatherState::SkyMode mode);
+        void ApplyWeatherPreset(int preset);
+        bool CommitSelectedWeather(const bridge::WeatherState& weather);
         void ApplyRenegadeTheme();
         void LoadGridResources();
+        void LayoutInspectorActions(bool environment);
         void DrawEditorGrid(wi::graphics::CommandList cmd) const;
         void SetGridVisible(bool visible);
         void CreateProjectHub();
@@ -131,6 +157,23 @@ namespace renegade::studio
         wi::gui::TextInputField scaleX_;
         wi::gui::TextInputField scaleY_;
         wi::gui::TextInputField scaleZ_;
+        wi::gui::Label environmentSkyLabel_;
+        wi::gui::ComboBox environmentPreset_;
+        wi::gui::ComboBox skyMode_;
+        wi::gui::CheckBox aerialPerspective_;
+        wi::gui::TextInputField skyExposure_;
+        wi::gui::TextInputField ambientIntensity_;
+        wi::gui::Label environmentFogLabel_;
+        wi::gui::TextInputField fogStart_;
+        wi::gui::TextInputField fogDensity_;
+        wi::gui::CheckBox heightFog_;
+        wi::gui::TextInputField fogHeightStart_;
+        wi::gui::TextInputField fogHeightEnd_;
+        wi::gui::Label environmentCloudLabel_;
+        wi::gui::TextInputField cloudCoverage_;
+        wi::gui::TextInputField cloudStartHeight_;
+        wi::gui::TextInputField cloudThickness_;
+        wi::gui::CheckBox cloudsCastShadow_;
         wi::gui::Button focusButton_;
         wi::gui::Button duplicateButton_;
         wi::gui::Button deleteButton_;

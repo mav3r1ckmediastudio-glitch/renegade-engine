@@ -184,6 +184,66 @@ namespace renegade::bridge
             state.cloudThickness;
     }
 
+    WeatherState MakeWeatherPreset(
+        const WeatherState& current,
+        const WeatherPreset preset) noexcept
+    {
+        WeatherState result = current;
+        switch (preset)
+        {
+        case WeatherPreset::Clear:
+            result.skyMode = WeatherState::SkyMode::Realistic;
+            result.skyExposure = 1.0f;
+            result.ambientIntensity = 0.10f;
+            result.fogStart = 100.0f;
+            result.fogDensity = 0.002f;
+            result.heightFog = false;
+            result.cloudCoverage = 0.05f;
+            result.cloudsCastShadow = false;
+            break;
+        case WeatherPreset::Scattered:
+            result.skyMode = WeatherState::SkyMode::RealisticWithClouds;
+            result.skyExposure = 0.95f;
+            result.ambientIntensity = 0.085f;
+            result.fogStart = 70.0f;
+            result.fogDensity = 0.004f;
+            result.cloudCoverage = 0.35f;
+            result.cloudStartHeight = 1800.0f;
+            result.cloudThickness = 3500.0f;
+            result.cloudsCastShadow = true;
+            break;
+        case WeatherPreset::Overcast:
+            result.skyMode = WeatherState::SkyMode::RealisticWithClouds;
+            result.skyExposure = 0.75f;
+            result.ambientIntensity = 0.065f;
+            result.fogStart = 35.0f;
+            result.fogDensity = 0.012f;
+            result.heightFog = true;
+            result.fogHeightStart = -1.0f;
+            result.fogHeightEnd = 8.0f;
+            result.cloudCoverage = 0.78f;
+            result.cloudStartHeight = 1200.0f;
+            result.cloudThickness = 5000.0f;
+            result.cloudsCastShadow = true;
+            break;
+        case WeatherPreset::Storm:
+            result.skyMode = WeatherState::SkyMode::RealisticWithClouds;
+            result.skyExposure = 0.55f;
+            result.ambientIntensity = 0.035f;
+            result.fogStart = 18.0f;
+            result.fogDensity = 0.025f;
+            result.heightFog = true;
+            result.fogHeightStart = -2.0f;
+            result.fogHeightEnd = 12.0f;
+            result.cloudCoverage = 0.95f;
+            result.cloudStartHeight = 750.0f;
+            result.cloudThickness = 6500.0f;
+            result.cloudsCastShadow = true;
+            break;
+        }
+        return result;
+    }
+
     SetWeatherCommand::SetWeatherCommand(
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity,

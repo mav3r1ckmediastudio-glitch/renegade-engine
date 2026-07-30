@@ -334,6 +334,32 @@ int main()
         {
             return Fail("weather command accepted a missing component");
         }
+
+        const auto storm = renegade::bridge::MakeWeatherPreset(
+            before,
+            renegade::bridge::WeatherPreset::Storm);
+        if (storm.skyMode !=
+                renegade::bridge::WeatherState::SkyMode::
+                    RealisticWithClouds ||
+            !storm.cloudsCastShadow ||
+            !storm.heightFog ||
+            !NearlyEqual(storm.cloudCoverage, 0.95f) ||
+            !NearlyEqual(storm.cloudStartHeight, 750.0f))
+        {
+            return Fail("the Storm weather preset is incomplete");
+        }
+
+        const auto clear = renegade::bridge::MakeWeatherPreset(
+            storm,
+            renegade::bridge::WeatherPreset::Clear);
+        if (clear.skyMode !=
+                renegade::bridge::WeatherState::SkyMode::Realistic ||
+            clear.cloudsCastShadow ||
+            clear.heightFog ||
+            !NearlyEqual(clear.cloudCoverage, 0.05f))
+        {
+            return Fail("the Clear weather preset is incomplete");
+        }
     }
 
     commands.Clear();

@@ -63,6 +63,18 @@ namespace renegade::bridge
         wi::scene::WeatherComponent& weather,
         const WeatherState& state) noexcept;
 
+    enum class WeatherPreset
+    {
+        Clear,
+        Scattered,
+        Overcast,
+        Storm,
+    };
+
+    [[nodiscard]] WeatherState MakeWeatherPreset(
+        const WeatherState& current,
+        WeatherPreset preset) noexcept;
+
     class ICommand
     {
     public:
