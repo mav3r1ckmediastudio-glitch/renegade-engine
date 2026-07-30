@@ -54,14 +54,12 @@ namespace renegade::studio
         setEyeAdaptionEnabled(false);
         setExposure(1.0f);
 
-        // Wicked's grid helper is renderer-owned: it generates temporary GPU
-        // line vertices each frame instead of scene entities. It is therefore
-        // editor-only, cannot be picked, never appears in the hierarchy and is
-        // never serialized into a WISCENE. The Project Hub turns it off again.
+        // Renegade draws its own grid. Wicked's stock helper is a fixed 20x20
+        // unit line list whose adaptive path is gated behind gridHelper2D -
+        // which rotates the grid into the vertical plane - and whose axis line
+        // colours are hardcoded. It stays off permanently.
         wi::renderer::SetToDrawGridHelper(false);
-        wi::renderer::SetGridHelper2D(false);
-        wi::renderer::SetGridHelperColor(
-            XMFLOAT4(0.36f, 0.84f, 1.0f, 0.38f));
+        LoadGridResources();
 
         // The generated Proving Ground is composed around the world origin so
         // that it shares the grid helper's footprint.
@@ -83,7 +81,29 @@ namespace renegade::studio
         gizmo_.translate_snap = 0.1f;
         gizmo_.rotate_snap = 15.0f / 180.0f * XM_PI;
         gizmo_.scale_snap = 0.1f;
+
+        // Translator sizes itself as distance-to-camera * 0.05 * tool_scale,
+        // so tool_scale is a direct screen-space multiplier. The default of
+        // 1.0 dominated the viewport. Thinner arms and slightly reduced
+        // opacity match the restrained-glow direction; negative axes are
+        // darkened hard so the gizmo reads as a projected instrument rather
+        // than a solid object.
+        gizmo_.tool_scale = 0.60f;
+        gizmo_.tool_thickness = 0.70f;
+        gizmo_.tool_opacity = 0.85f;
+        gizmo_.tool_darken_negative_axes = 0.35f;
+
         SetTransformTool(TransformTool::Translate);
+
+        // Restore the creator's saved grid preference. This is Renegade's
+        // first persisted editor preference; camera speed and layout should
+        // follow the same route rather than inventing a second one.
+        if (session_ != nullptr)
+        {
+            gridVisible_ =
+                session_->Projects().GetEditorPreference("grid_visible", true);
+        }
+        gridToggleButton_.SetText(gridVisible_ ? "GRID ON" : "GRID OFF");
 
         RefreshHierarchy();
         RefreshInspector();
@@ -92,6 +112,135 @@ namespace renegade::studio
         SetProjectHubVisible(true);
 
         RenderPath3D::Load();
+    }
+
+    void StudioRenderPath::LoadGridResources()
+    {
+        auto* device = wi::graphics::GetDevice();
+        if (device == nullptr)
+        {
+            return;
+        }
+
+        // Renegade owns these shaders, so they are not in Wicked's shader dump
+        // and must be compiled from source shipped beside the executable. This
+        // is the same approach Wicked's own Example_ImGui sample uses: point
+        // the shader source path at the working directory just long enough to
+        // resolve them, then restore it so Wicked's own shaders are unaffected.
+        const std::string previousSourcePath =
+            wi::renderer::GetShaderSourcePath();
+        wi::renderer::SetShaderSourcePath(
+            wi::helper::GetCurrentPath() + "/Content/shaders/");
+
+        const bool vertexLoaded = wi::renderer::LoadShader(
+            wi::graphics::ShaderStage::VS,
+            gridVertexShader_,
+            "RenegadeGridVS.cso");
+        const bool pixelLoaded = wi::renderer::LoadShader(
+            wi::graphics::ShaderStage::PS,
+            gridPixelShader_,
+            "RenegadeGridPS.cso");
+
+        wi::renderer::SetShaderSourcePath(previousSourcePath);
+
+        if (!vertexLoaded || !pixelLoaded ||
+            !gridVertexShader_.IsValid() || !gridPixelShader_.IsValid())
+        {
+            // A missing grid is a visual downgrade, not a failure worth
+            // taking the editor down for. Everything downstream checks
+            // gridPipeline_ before drawing.
+            wi::backlog::post(
+                "Renegade: the editor grid shaders could not be loaded. "
+                "The viewport will render without a grid.",
+                wi::backlog::LogLevel::Warning);
+            return;
+        }
+
+        wi::graphics::PipelineStateDesc description;
+        description.vs = &gridVertexShader_;
+        description.ps = &gridPixelShader_;
+        description.rs = wi::renderer::GetRasterizerState(
+            wi::enums::RSTYPE_DOUBLESIDED);
+        // Depth read with no write. The pixel shader writes SV_Depth from the
+        // ground intersection, so the hardware test occludes the grid behind
+        // scene geometry without this pass ever sampling the depth buffer.
+        description.dss = wi::renderer::GetDepthStencilState(
+            wi::enums::DSSTYPE_DEPTHREAD);
+        description.bs = wi::renderer::GetBlendState(
+            wi::enums::BSTYPE_PREMULTIPLIED);
+        description.pt = wi::graphics::PrimitiveTopology::TRIANGLELIST;
+
+        if (!device->CreatePipelineState(&description, &gridPipeline_))
+        {
+            wi::backlog::post(
+                "Renegade: the editor grid pipeline could not be created. "
+                "The viewport will render without a grid.",
+                wi::backlog::LogLevel::Warning);
+        }
+    }
+
+    void StudioRenderPath::DrawEditorGrid(
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!gridVisible_ || projectHubVisible_ ||
+            !gridPipeline_.IsValid() || camera == nullptr)
+        {
+            return;
+        }
+
+        auto* device = wi::graphics::GetDevice();
+        device->EventBegin("Renegade Editor Grid", cmd);
+
+        const XMMATRIX viewProjection = camera->GetViewProjection();
+
+        GridConstants constants = {};
+        XMStoreFloat4x4(&constants.viewProjection, viewProjection);
+        XMStoreFloat4x4(
+            &constants.inverseViewProjection,
+            XMMatrixInverse(nullptr, viewProjection));
+        constants.cameraPosition = XMFLOAT4(
+            camera->Eye.x,
+            camera->Eye.y,
+            camera->Eye.z,
+            0.0f);
+
+        // Ice-blue is the approved interaction colour. Unlike Wicked's helper,
+        // every line including the two axes is Renegade's to choose.
+        constants.minorColor = XMFLOAT4(0.36f, 0.84f, 1.0f, 0.16f);
+        constants.majorColor = XMFLOAT4(0.46f, 0.90f, 1.0f, 0.34f);
+        constants.axisColorX = XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
+        constants.axisColorZ = XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
+
+        // Fade start/end, base spacing, master opacity. The fade window keeps
+        // the horizon from turning into an aliased smear.
+        constants.params = XMFLOAT4(60.0f, 320.0f, 1.0f, 1.0f);
+
+        device->BindPipelineState(&gridPipeline_, cmd);
+        device->BindDynamicConstantBuffer(constants, 0, cmd);
+        device->Draw(3, 0, cmd);
+
+        device->EventEnd(cmd);
+    }
+
+    void StudioRenderPath::RenderTransparents(
+        const wi::graphics::CommandList cmd) const
+    {
+        // The base pass leaves the main render target and the scene depth
+        // buffer bound, which is exactly what the grid needs. Wicked draws its
+        // own grid helper from inside this same call.
+        RenderPath3D::RenderTransparents(cmd);
+        DrawEditorGrid(cmd);
+    }
+
+    void StudioRenderPath::SetGridVisible(const bool visible)
+    {
+        gridVisible_ = visible;
+        gridToggleButton_.SetText(visible ? "GRID ON" : "GRID OFF");
+
+        if (session_ != nullptr)
+        {
+            session_->Projects().SetEditorPreference("grid_visible", visible);
+        }
     }
 
     void StudioRenderPath::DeleteGPUResources()
@@ -232,7 +381,11 @@ namespace renegade::studio
 
         workspaceTitle_.Create("Renegade Workspace Title");
         workspaceTitle_.SetText("RENEGADE STUDIO // PROVING GROUND");
-        workspaceTitle_.font.params.size = 19;
+        // Size 19 overflowed the 300px slot and clipped mid-word. Fit-text
+        // also keeps long project names inside the label rather than running
+        // them under the tool buttons.
+        workspaceTitle_.font.params.size = 16;
+        workspaceTitle_.SetFitTextEnabled(true);
         workspaceTitle_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         toolbarPanel_.AddWidget(&workspaceTitle_);
 
@@ -273,6 +426,17 @@ namespace renegade::studio
             EditorAction::ScaleTool);
 
         projectHubButton_.Create("Open Project Hub");
+        gridToggleButton_.Create("Grid Toggle");
+        gridToggleButton_.SetText("GRID ON");
+        gridToggleButton_.SetTooltip(
+            "Show or hide the editor grid [G]. The grid is never saved into a "
+            "scene.");
+        gridToggleButton_.OnClick([this](wi::gui::EventArgs)
+        {
+            pendingAction_ = EditorAction::ToggleGrid;
+        });
+        toolbarPanel_.AddWidget(&gridToggleButton_);
+
         projectHubButton_.SetText("PROJECTS");
         projectHubButton_.SetTooltip("Return to the Renegade Project Hub");
         projectHubButton_.SetAngularHighlightWidth(4.0f);
@@ -511,8 +675,10 @@ namespace renegade::studio
 
         contentPlaceholder_.Create("Content Browser Placeholder");
         contentPlaceholder_.SetText(
-            "The project-aware content browser arrives in Phase 4. "
-            "This panel now owns its permanent workspace region.");
+            "No assets imported yet.\n\n"
+            "Asset import and the project-aware browser are not built. Until "
+            "they are, scenes are authored from the generated Proving Ground "
+            "and edited in the viewport.");
         contentPlaceholder_.SetFitTextEnabled(true);
         contentPlaceholder_.font.params.color = HologramMuted;
         contentPlaceholder_.font.params.size = 14;
@@ -792,12 +958,14 @@ namespace renegade::studio
             selectionOutlineMask_.IsValid())
         {
             wi::renderer::BindCommonResources(cmd);
+            // Thickness was 2.0, double Wicked's default, which read as a
+            // heavy halo rather than a projected edge. 1.0 is one pixel.
             wi::renderer::Postprocess_Outline(
                 selectionOutlineMask_,
                 cmd,
                 0.1f,
-                2.0f,
-                XMFLOAT4(0.0f, 0.86f, 1.0f, 0.95f));
+                1.0f,
+                XMFLOAT4(0.30f, 0.86f, 1.0f, 0.90f));
         }
 
         if (!projectHubVisible_ && gizmoEntity_ != wi::ecs::INVALID_ENTITY)
@@ -841,11 +1009,13 @@ namespace renegade::studio
         rotateToolButton_.SetSize(XMFLOAT2(100.0f, 30.0f));
         scaleToolButton_.SetPos(XMFLOAT2(522.0f, 9.0f));
         scaleToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
+        gridToggleButton_.SetPos(XMFLOAT2(630.0f, 9.0f));
+        gridToggleButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
         projectHubButton_.SetPos(XMFLOAT2(width - 132.0f, 9.0f));
         projectHubButton_.SetSize(XMFLOAT2(108.0f, 30.0f));
-        statusLabel_.SetPos(XMFLOAT2(628.0f, 14.0f));
+        statusLabel_.SetPos(XMFLOAT2(736.0f, 14.0f));
         statusLabel_.SetSize(XMFLOAT2(
-            std::max(120.0f, width - 782.0f),
+            std::max(120.0f, width - 890.0f),
             24.0f));
 
         hierarchyPanel_.SetPos(XMFLOAT2(8.0f, toolbarHeight + 16.0f));
@@ -1187,6 +1357,10 @@ namespace renegade::studio
         {
             pendingAction_ = EditorAction::ScaleTool;
         }
+        else if (wi::input::Press(key('G')))
+        {
+            pendingAction_ = EditorAction::ToggleGrid;
+        }
     }
 
     bool StudioRenderPath::IsSelectedEntityValid() const
@@ -1256,6 +1430,9 @@ namespace renegade::studio
             break;
         case EditorAction::ScaleTool:
             SetTransformTool(TransformTool::Scale);
+            break;
+        case EditorAction::ToggleGrid:
+            SetGridVisible(!gridVisible_);
             break;
         case EditorAction::None:
         default:
@@ -1871,9 +2048,9 @@ namespace renegade::studio
         inspectorPanel_.SetVisible(!visible);
         contentPanel_.SetVisible(!visible);
 
-        // The measurement grid and the frame-rate readout belong to the
-        // authoring viewport. Neither may appear over the Project Hub.
-        wi::renderer::SetToDrawGridHelper(!visible);
+        // The frame-rate readout belongs to the authoring viewport and must
+        // not appear over the Project Hub. DrawEditorGrid checks
+        // projectHubVisible_ for the same reason.
         if (diagnostics_ != nullptr)
         {
             diagnostics_->active = !visible;

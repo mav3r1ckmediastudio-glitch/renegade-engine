@@ -24,6 +24,7 @@ namespace renegade::studio
         void ResizeBuffers() override;
         void Update(float dt) override;
         void Compose(wi::graphics::CommandList cmd) const override;
+        void RenderTransparents(wi::graphics::CommandList cmd) const override;
         void ResizeLayout() override;
         void RefreshStatus();
         void RefreshHierarchy();
@@ -44,6 +45,22 @@ namespace renegade::studio
             TranslateTool,
             RotateTool,
             ScaleTool,
+            ToggleGrid,
+        };
+
+        // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
+        // Every member is 16-byte aligned, so HLSL constant buffer packing
+        // matches this layout member for member.
+        struct GridConstants
+        {
+            XMFLOAT4X4 viewProjection;
+            XMFLOAT4X4 inverseViewProjection;
+            XMFLOAT4 cameraPosition;
+            XMFLOAT4 minorColor;
+            XMFLOAT4 majorColor;
+            XMFLOAT4 axisColorX;
+            XMFLOAT4 axisColorZ;
+            XMFLOAT4 params;
         };
 
         enum class TransformTool
@@ -58,6 +75,9 @@ namespace renegade::studio
             int axis,
             float value);
         void ApplyRenegadeTheme();
+        void LoadGridResources();
+        void DrawEditorGrid(wi::graphics::CommandList cmd) const;
+        void SetGridVisible(bool visible);
         void CreateProjectHub();
         void CreateWorkspaceShell();
         void CreateProject();
@@ -137,7 +157,11 @@ namespace renegade::studio
         wi::gui::Button launchProjectButton_;
         wi::gui::Button continueProjectButton_;
         wi::gui::Label hubMessageLabel_;
+        wi::gui::Button gridToggleButton_;
         Translator gizmo_;
+        wi::graphics::Shader gridVertexShader_;
+        wi::graphics::Shader gridPixelShader_;
+        wi::graphics::PipelineState gridPipeline_;
         wi::graphics::Texture selectionOutlineMask_;
         wi::graphics::Texture selectionOutlineMaskMsaa_;
         wi::scene::TransformComponent editorCameraTransform_;
@@ -150,6 +174,7 @@ namespace renegade::studio
         float cameraMoveSpeed_ = 5.0f;
         bool gizmoDragActive_ = false;
         bool flyCameraActive_ = false;
+        bool gridVisible_ = true;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
