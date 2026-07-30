@@ -39,9 +39,34 @@ namespace renegade::studio
         setReflectionsEnabled(true);
         setFXAAEnabled(false);
         setBloomEnabled(true);
+        setBloomThreshold(1.35f);
 
-        const XMVECTOR eye = XMVectorSet(10.5f, 7.0f, -14.0f, 1.0f);
-        const XMVECTOR at = XMVectorSet(0.0f, 1.6f, 2.0f, 1.0f);
+        // Ambient occlusion grounds the deck props against the terrain, and
+        // volumetric lights are what make the scene's fog react to lighting
+        // instead of reading as a flat screen-space overlay.
+        setAO(AO::AO_MSAO);
+        setAOPower(1.4f);
+        setVolumeLightsEnabled(true);
+
+        // Fixed exposure. Eye adaption would make the viewport brightness
+        // depend on where the creator points the camera, which is not
+        // acceptable for a colour-accurate authoring viewport.
+        setEyeAdaptionEnabled(false);
+        setExposure(1.0f);
+
+        // Wicked's grid helper is renderer-owned: it generates temporary GPU
+        // line vertices each frame instead of scene entities. It is therefore
+        // editor-only, cannot be picked, never appears in the hierarchy and is
+        // never serialized into a WISCENE. The Project Hub turns it off again.
+        wi::renderer::SetToDrawGridHelper(false);
+        wi::renderer::SetGridHelper2D(false);
+        wi::renderer::SetGridHelperColor(
+            XMFLOAT4(0.36f, 0.84f, 1.0f, 0.38f));
+
+        // The generated Proving Ground is composed around the world origin so
+        // that it shares the grid helper's footprint.
+        const XMVECTOR eye = XMVectorSet(13.0f, 7.6f, -16.5f, 1.0f);
+        const XMVECTOR at = XMVectorSet(0.0f, 1.8f, 0.0f, 1.0f);
         const XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
         const XMMATRIX view = XMMatrixLookAtLH(eye, at, up);
         editorCameraTransform_.ClearTransform();
@@ -1845,6 +1870,14 @@ namespace renegade::studio
         hierarchyPanel_.SetVisible(!visible);
         inspectorPanel_.SetVisible(!visible);
         contentPanel_.SetVisible(!visible);
+
+        // The measurement grid and the frame-rate readout belong to the
+        // authoring viewport. Neither may appear over the Project Hub.
+        wi::renderer::SetToDrawGridHelper(!visible);
+        if (diagnostics_ != nullptr)
+        {
+            diagnostics_->active = !visible;
+        }
 
         if (!visible)
         {
