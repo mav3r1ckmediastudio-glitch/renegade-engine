@@ -23,6 +23,15 @@ namespace
         return 1;
     }
 
+    bool ContainsEntity(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        wi::unordered_set<wi::ecs::Entity> entities;
+        scene.FindAllEntities(entities);
+        return entities.count(entity) != 0;
+    }
+
     struct TemporaryDirectory
     {
         std::filesystem::path path;
@@ -164,6 +173,100 @@ int main()
         return Fail("microscopic transform polluted the undo history");
     }
 
+    commands.Clear();
+    const auto transformBefore =
+        renegade::bridge::CaptureTransform(childTransform);
+    auto transformAfter = transformBefore;
+    transformAfter.translation = XMFLOAT3(3.0f, 2.0f, 1.0f);
+    transformAfter.rotation =
+        XMFLOAT4(0.0f, 0.7071067f, 0.0f, 0.7071067f);
+    transformAfter.scale = XMFLOAT3(2.0f, 3.0f, 4.0f);
+    if (!commands.Execute(
+            std::make_unique<renegade::bridge::SetTransformCommand>(
+                scenes.GetScene(),
+                child,
+                transformAfter)) ||
+        !NearlyEqual(childTransform.scale_local.y, 3.0f) ||
+        !NearlyEqual(childTransform.rotation_local.y, 0.7071067f))
+    {
+        return Fail("full transform command did not execute");
+    }
+    if (!commands.Undo() ||
+        !NearlyEqual(childTransform.scale_local.y, transformBefore.scale.y) ||
+        !NearlyEqual(
+            childTransform.rotation_local.w,
+            transformBefore.rotation.w))
+    {
+        return Fail("full transform undo did not restore rotation and scale");
+    }
+    if (!commands.Redo() ||
+        !NearlyEqual(childTransform.translation_local.x, 3.0f) ||
+        !NearlyEqual(childTransform.scale_local.z, 4.0f))
+    {
+        return Fail("full transform redo did not restore the edited state");
+    }
+
+    commands.Clear();
+    auto duplicateCommand =
+        std::make_unique<renegade::bridge::DuplicateEntityCommand>(
+            scenes.GetScene(),
+            child);
+    auto* duplicateCommandView = duplicateCommand.get();
+    if (!commands.Execute(std::move(duplicateCommand)))
+    {
+        return Fail("duplicate entity command did not execute");
+    }
+    const auto duplicate = duplicateCommandView->DuplicatedEntity();
+    const auto* duplicateName =
+        scenes.GetScene().names.GetComponent(duplicate);
+    if (!ContainsEntity(scenes.GetScene(), duplicate) ||
+        duplicateName == nullptr ||
+        duplicateName->name != "Child Copy")
+    {
+        return Fail("duplicate entity was not created and named");
+    }
+    if (!commands.Undo() || ContainsEntity(scenes.GetScene(), duplicate))
+    {
+        return Fail("duplicate undo did not remove the duplicate");
+    }
+    if (!commands.Redo() || !ContainsEntity(scenes.GetScene(), duplicate))
+    {
+        return Fail("duplicate redo did not restore the same entity");
+    }
+
+    commands.Clear();
+    if (!commands.Execute(
+            std::make_unique<renegade::bridge::DeleteEntityCommand>(
+                scenes.GetScene(),
+                duplicate)) ||
+        ContainsEntity(scenes.GetScene(), duplicate))
+    {
+        return Fail("delete entity command did not remove the entity");
+    }
+    if (!commands.Undo() || !ContainsEntity(scenes.GetScene(), duplicate))
+    {
+        return Fail("delete undo did not restore the entity");
+    }
+    if (!commands.Redo() || ContainsEntity(scenes.GetScene(), duplicate))
+    {
+        return Fail("delete redo did not remove the entity again");
+    }
+
+    renegade::bridge::SceneService provingGround;
+    provingGround.CreateProvingGround();
+    const auto creatorEntities = provingGround.ListEntities();
+    if (creatorEntities.size() >= provingGround.EntityCount())
+    {
+        return Fail("generated grid internals leaked into the hierarchy");
+    }
+    for (const auto& entity : creatorEntities)
+    {
+        if (entity.name.rfind("__renegade_internal_", 0) == 0)
+        {
+            return Fail("internal entity name leaked into the hierarchy");
+        }
+    }
+
     TemporaryDirectory projectFixture;
     projectFixture.path =
         std::filesystem::temp_directory_path() /
@@ -216,7 +319,8 @@ int main()
     }
 
     std::cout
-        << "PASS: hierarchy, selection, transform command, repeated undo/redo, "
-           "no-op filtering, and project lifecycle\n";
+        << "PASS: hierarchy filtering, selection, full transform, "
+           "duplicate/delete undo-redo, repeated history, no-op filtering, "
+           "and project lifecycle\n";
     return 0;
 }

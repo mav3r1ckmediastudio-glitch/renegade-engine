@@ -30,6 +30,9 @@ namespace renegade::bridge
         [[nodiscard]] const wi::scene::Scene& GetScene() const noexcept;
         [[nodiscard]] std::size_t EntityCount() const;
         [[nodiscard]] std::vector<SceneEntity> ListEntities() const;
+        [[nodiscard]] bool ContainsEntity(wi::ecs::Entity entity) const;
+        [[nodiscard]] bool IsHierarchyVisible(
+            wi::ecs::Entity entity) const;
         [[nodiscard]] const std::string& CurrentPath() const noexcept;
         [[nodiscard]] const std::string& LastError() const noexcept;
 

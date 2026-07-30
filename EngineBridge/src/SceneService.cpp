@@ -5,6 +5,17 @@
 
 namespace
 {
+    constexpr const char* InternalEntityPrefix = "__renegade_internal_";
+
+    bool IsHierarchyEntryVisible(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        const auto* name = scene.names.GetComponent(entity);
+        return name == nullptr ||
+            name->name.rfind(InternalEntityPrefix, 0) != 0;
+    }
+
     void SetTransform(
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity,
@@ -86,7 +97,8 @@ namespace renegade::bridge
         for (int offset = -10; offset <= 10; offset += 2)
         {
             const float coordinate = static_cast<float>(offset);
-            const auto lineZ = scene_.Entity_CreateCube("Grid Z");
+            const auto lineZ = scene_.Entity_CreateCube(
+                "__renegade_internal_grid_z");
             SetTransform(
                 scene_,
                 lineZ,
@@ -101,7 +113,8 @@ namespace renegade::bridge
                 0.35f,
                 0.2f);
 
-            const auto lineX = scene_.Entity_CreateCube("Grid X");
+            const auto lineX = scene_.Entity_CreateCube(
+                "__renegade_internal_grid_x");
             SetTransform(
                 scene_,
                 lineX,
@@ -343,10 +356,18 @@ namespace renegade::bridge
     {
         wi::unordered_set<wi::ecs::Entity> entitySet;
         scene_.FindAllEntities(entitySet);
+        wi::unordered_set<wi::ecs::Entity> visibleEntitySet;
+        for (const auto entity : entitySet)
+        {
+            if (IsHierarchyEntryVisible(scene_, entity))
+            {
+                visibleEntitySet.insert(entity);
+            }
+        }
 
         std::vector<SceneEntity> entities;
-        entities.reserve(entitySet.size());
-        for (const auto entity : entitySet)
+        entities.reserve(visibleEntitySet.size());
+        for (const auto entity : visibleEntitySet)
         {
             SceneEntity item;
             item.entity = entity;
@@ -387,7 +408,8 @@ namespace renegade::bridge
         for (std::size_t index = 0; index < entities.size(); ++index)
         {
             const auto parent = entities[index].parent;
-            if (parent == wi::ecs::INVALID_ENTITY || entitySet.count(parent) == 0)
+            if (parent == wi::ecs::INVALID_ENTITY ||
+                visibleEntitySet.count(parent) == 0)
             {
                 roots.push_back(index);
             }
@@ -421,6 +443,25 @@ namespace renegade::bridge
             append(append, root, 0);
         }
         return ordered;
+    }
+
+    bool SceneService::ContainsEntity(const wi::ecs::Entity entity) const
+    {
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
+
+        wi::unordered_set<wi::ecs::Entity> entities;
+        scene_.FindAllEntities(entities);
+        return entities.count(entity) != 0;
+    }
+
+    bool SceneService::IsHierarchyVisible(
+        const wi::ecs::Entity entity) const
+    {
+        return ContainsEntity(entity) &&
+            IsHierarchyEntryVisible(scene_, entity);
     }
 
     const std::string& SceneService::CurrentPath() const noexcept
