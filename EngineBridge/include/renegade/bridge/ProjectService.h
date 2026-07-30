@@ -42,6 +42,15 @@ namespace renegade::bridge
         [[nodiscard]] const std::vector<RecentProject>& RecentProjects() const noexcept;
         [[nodiscard]] const std::string& LastError() const noexcept;
 
+        // Editor preferences persist beside the recent-project registry rather
+        // than in a scene. They describe how the creator likes Studio to
+        // behave, not what a project contains, so they must never reach a
+        // WISCENE or the .renegade descriptor.
+        void SetEditorPreference(const std::string& key, bool value);
+        [[nodiscard]] bool GetEditorPreference(
+            const std::string& key,
+            bool fallback) const;
+
     private:
         bool ReadProject(
             const std::string& descriptorPath,

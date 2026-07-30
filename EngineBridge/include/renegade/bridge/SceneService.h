@@ -93,6 +93,10 @@ namespace renegade::bridge
         [[nodiscard]] std::size_t EntityCount() const;
         [[nodiscard]] std::vector<SceneEntity> ListEntities() const;
         [[nodiscard]] bool ContainsEntity(wi::ecs::Entity entity) const;
+        // The entity carrying the scene's WeatherComponent, or INVALID_ENTITY.
+        // Wicked resolves scene.weather from weathers[0], so that is the one
+        // the editor authors.
+        [[nodiscard]] wi::ecs::Entity WeatherEntity() const;
         [[nodiscard]] bool IsHierarchyVisible(
             wi::ecs::Entity entity) const;
         [[nodiscard]] const std::string& CurrentPath() const noexcept;

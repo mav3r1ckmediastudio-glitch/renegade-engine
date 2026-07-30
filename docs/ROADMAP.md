@@ -8,11 +8,13 @@ Status: Phase 2 closed after DX12, Vulkan, DPI, input, persistence, and
 Runtime separation passed on the project owner's Windows GPU; physical HDR was
 not available. The first Phase 3 Project Hub/workspace launched on Windows at
 a VSync-limited 75 FPS. Its first viewport-selection, outline, and fly-camera
-interaction increment passed on the project owner's GPU, with later outline
-thickness refinement noted. The larger editor-usability milestone compiled in
-Windows Debug and Release, but `RenegadeBridgeTests` crashed because bridge
-commands advanced a rendered scene without a graphics device. A focused
-headless-test repair is prepared on top of that milestone.
+interaction increment passed on the project owner's GPU. The repaired editor
+usability milestone then passed packaged DX12 testing, including transforms,
+gizmos, duplicate/delete, save, and Ctrl+Z/Ctrl+Y. The Viewport and Proving
+Ground Visual Foundation is merged and functionally accepted. Editor Visual
+Polish is implemented on `phase3/editor-visual-polish`; its infinite grid,
+persisted preference, smaller gizmo, thinner outline, and presentation cleanup
+await packaged DX12 and Vulkan visual acceptance.
 
 ## Phase plan
 
@@ -69,22 +71,17 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-- Publish the focused headless-test repair on top of exact milestone
-  `c4eb43d`.
+- Correct the custom grid integration so it opens an explicit main colour/depth
+  render pass after Wicked's transparent pass and resolves MSAA when enabled.
 - Require Windows x64 Debug and Release CI plus `RenegadeBridgeTests`.
-- Confirm `RenegadeBridgeTests` completes rather than crashing in both
-  configurations.
-- Verify the hierarchy hides generated grid internals and the command bar is
-  unobstructed.
-- Verify position, rotation, and scale fields remain synchronised with the
-  Move, Rotate, and Scale gizmos.
-- Verify focus, duplicate, delete, Undo/Redo, Save, and all documented
-  shortcuts on DX12.
-- Close and reopen the project to confirm saved transform state persists.
-- Repeat viewport selection, transforms, focus, duplicate/delete, and history
-  on Vulkan.
-- Fix failures before beginning scene tabs, formal dirty-state handling, or
-  the Identity Handshake.
+- Verify the shader grid on packaged DX12 and Vulkan: horizon coverage, stable
+  spacing, depth occlusion, correct axis colours, and no Project Hub overlay.
+- Verify grid visibility persists across restart and never reaches WISCENE.
+- Recheck gizmo size, selection outline, unique hierarchy names, title layout,
+  selection, navigation, Undo/Redo, Save, and reopen.
+- Fix visual or behavioural failures before merging the visual-polish branch.
+- After acceptance, begin the bounded Environment Authoring milestone. Do not
+  begin scene tabs, formal dirty-state handling, or the Identity Handshake.
 
 ## Status rules
 

@@ -238,11 +238,19 @@ namespace renegade::bridge
             XMFLOAT3(DeckHalfWidth, 0.0f, 0.0f),
             XMFLOAT3(-DeckHalfWidth, 0.0f, 0.0f),
         };
+        // Named rather than numbered: the hierarchy is a creator surface, and
+        // four identical "Deck Edge" rows cannot be told apart.
+        const char* const deckEdgeNames[4] = {
+            "Deck Edge North",
+            "Deck Edge South",
+            "Deck Edge East",
+            "Deck Edge West",
+        };
         for (int index = 0; index < 4; ++index)
         {
             const bool alongX = index < 2;
             props.push_back(MakeBlock(
-                "Deck Edge",
+                deckEdgeNames[index],
                 deckEdges[index],
                 alongX
                     ? XMFLOAT3(DeckHalfWidth + 0.3f, 0.10f, 0.3f)
@@ -313,7 +321,7 @@ namespace renegade::bridge
         for (const float side : {-1.0f, 1.0f})
         {
             props.push_back(MakeBlock(
-                "Range Marker",
+                side < 0.0f ? "Range Marker West" : "Range Marker East",
                 XMFLOAT3(side * 7.2f, 1.15f, 0.0f),
                 XMFLOAT3(0.55f, 1.15f, 0.55f),
                 XMFLOAT4(0.110f, 0.045f, 0.018f, 1.0f),
@@ -342,7 +350,7 @@ namespace renegade::bridge
         {
             const float height = (index % 2 == 0) ? 5.4f : 4.1f;
             props.push_back(MakeBlock(
-                "Perimeter Pylon",
+                "Perimeter Pylon " + std::to_string(index + 1),
                 XMFLOAT3(pylonGround[index].x, height, pylonGround[index].y),
                 XMFLOAT3(0.26f, height, 0.26f),
                 XMFLOAT4(0.018f, 0.024f, 0.030f, 1.0f),
@@ -358,7 +366,7 @@ namespace renegade::bridge
             const float depth = 19.0f + static_cast<float>(step) * 2.6f;
             const float height = 1.1f + static_cast<float>(step) * 0.9f;
             props.push_back(MakeBlock(
-                "Retaining Terrace",
+                "Retaining Terrace " + std::to_string(step + 1),
                 XMFLOAT3(0.0f, height - 0.4f, -depth),
                 XMFLOAT3(24.0f - static_cast<float>(step) * 1.5f, height, 1.3f),
                 XMFLOAT4(0.026f, 0.028f, 0.031f, 1.0f),
@@ -373,10 +381,11 @@ namespace renegade::bridge
             XMFLOAT4(6.2f, 0.45f, -8.1f, 0.45f),
             XMFLOAT4(7.6f, 2.15f, -6.6f, 0.45f),
         };
-        for (const auto& crate : crates)
+        for (int index = 0; index < 4; ++index)
         {
+            const auto& crate = crates[index];
             props.push_back(MakeBlock(
-                "Equipment Crate",
+                "Equipment Crate " + std::to_string(index + 1),
                 XMFLOAT3(crate.x, crate.y, crate.z),
                 XMFLOAT3(crate.w, crate.w, crate.w),
                 XMFLOAT4(0.035f, 0.038f, 0.042f, 1.0f),
@@ -394,10 +403,11 @@ namespace renegade::bridge
             XMFLOAT4(70.0f, 6.0f, -18.0f, 8.0f),
             XMFLOAT4(-62.0f, 8.0f, -34.0f, 10.0f),
         };
-        for (const auto& mass : distantMasses)
+        for (int index = 0; index < 5; ++index)
         {
+            const auto& mass = distantMasses[index];
             props.push_back(MakeBlock(
-                "Distant Structure",
+                "Distant Structure " + std::to_string(index + 1),
                 XMFLOAT3(mass.x, mass.y, mass.z),
                 XMFLOAT3(mass.w, mass.y, mass.w * 0.7f),
                 XMFLOAT4(0.024f, 0.027f, 0.032f, 1.0f),
@@ -467,7 +477,9 @@ namespace renegade::bridge
         for (const float side : {-1.0f, 1.0f})
         {
             ProvingGroundProp marker;
-            marker.name = "Marker Light";
+            marker.name = side < 0.0f
+                ? "Marker Light West"
+                : "Marker Light East";
             marker.kind = ProvingGroundProp::Kind::Light;
             marker.lightType = wi::scene::LightComponent::POINT;
             marker.translation = XMFLOAT3(side * 7.2f, 2.1f, 0.0f);
@@ -830,6 +842,13 @@ namespace renegade::bridge
         wi::unordered_set<wi::ecs::Entity> entities;
         scene_.FindAllEntities(entities);
         return entities.count(entity) != 0;
+    }
+
+    wi::ecs::Entity SceneService::WeatherEntity() const
+    {
+        return scene_.weathers.GetCount() == 0
+            ? wi::ecs::INVALID_ENTITY
+            : scene_.weathers.GetEntity(0);
     }
 
     bool SceneService::IsHierarchyVisible(

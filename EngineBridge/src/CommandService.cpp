@@ -1,5 +1,6 @@
 #include "renegade/bridge/CommandService.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -37,6 +38,25 @@ namespace
             !NearlyEqual(before.scale.z, after.scale.z);
     }
 
+    bool IsMeaningfulWeather(
+        const renegade::bridge::WeatherState& before,
+        const renegade::bridge::WeatherState& after) noexcept
+    {
+        return before.skyMode != after.skyMode ||
+            before.aerialPerspective != after.aerialPerspective ||
+            !NearlyEqual(before.skyExposure, after.skyExposure) ||
+            !NearlyEqual(before.ambientIntensity, after.ambientIntensity) ||
+            !NearlyEqual(before.fogStart, after.fogStart) ||
+            !NearlyEqual(before.fogDensity, after.fogDensity) ||
+            before.heightFog != after.heightFog ||
+            !NearlyEqual(before.fogHeightStart, after.fogHeightStart) ||
+            !NearlyEqual(before.fogHeightEnd, after.fogHeightEnd) ||
+            !NearlyEqual(before.cloudCoverage, after.cloudCoverage) ||
+            !NearlyEqual(before.cloudStartHeight, after.cloudStartHeight) ||
+            !NearlyEqual(before.cloudThickness, after.cloudThickness) ||
+            before.cloudsCastShadow != after.cloudsCastShadow;
+    }
+
     bool EntityExists(
         const wi::scene::Scene& scene,
         const wi::ecs::Entity entity)
@@ -62,6 +82,233 @@ namespace renegade::bridge
         state.rotation = transform.rotation_local;
         state.scale = transform.scale_local;
         return state;
+    }
+
+    WeatherState CaptureWeather(
+        const wi::scene::WeatherComponent& weather) noexcept
+    {
+        WeatherState state;
+
+        if (weather.IsVolumetricClouds())
+        {
+            state.skyMode = WeatherState::SkyMode::RealisticWithClouds;
+        }
+        else if (weather.IsRealisticSky())
+        {
+            state.skyMode = WeatherState::SkyMode::Realistic;
+        }
+        else
+        {
+            state.skyMode = WeatherState::SkyMode::Skybox;
+        }
+
+        state.aerialPerspective = weather.IsRealisticSkyAerialPerspective();
+        state.skyExposure = weather.skyExposure;
+
+        // Ambient is authored as a neutral scalar. Renegade keeps the cool
+        // tint it generates and scales it, rather than making the creator
+        // balance three channels by hand.
+        state.ambientIntensity = std::max(
+            weather.ambient.x,
+            std::max(weather.ambient.y, weather.ambient.z));
+
+        state.fogStart = weather.fogStart;
+        state.fogDensity = weather.fogDensity;
+        state.heightFog = weather.IsHeightFog();
+        state.fogHeightStart = weather.fogHeightStart;
+        state.fogHeightEnd = weather.fogHeightEnd;
+
+        state.cloudCoverage =
+            weather.volumetricCloudParameters.layerFirst.coverageAmount;
+        state.cloudStartHeight =
+            weather.volumetricCloudParameters.cloudStartHeight;
+        state.cloudThickness =
+            weather.volumetricCloudParameters.cloudThickness;
+        state.cloudsCastShadow = weather.IsVolumetricCloudsCastShadow();
+
+        return state;
+    }
+
+    void ApplyWeather(
+        wi::scene::WeatherComponent& weather,
+        const WeatherState& state) noexcept
+    {
+        const bool realisticSky =
+            state.skyMode != WeatherState::SkyMode::Skybox;
+        const bool clouds =
+            state.skyMode == WeatherState::SkyMode::RealisticWithClouds;
+
+        weather.SetRealisticSky(realisticSky);
+        weather.SetRealisticSkyAerialPerspective(
+            realisticSky && state.aerialPerspective);
+        weather.SetVolumetricClouds(clouds);
+        weather.SetVolumetricCloudsCastShadow(clouds && state.cloudsCastShadow);
+
+        weather.skyExposure = state.skyExposure;
+
+        // Preserve the authored ambient hue, rescaled to the requested
+        // intensity. Falling back to a neutral grey keeps a fully black
+        // ambient recoverable.
+        const float previousPeak = std::max(
+            weather.ambient.x,
+            std::max(weather.ambient.y, weather.ambient.z));
+        if (previousPeak > 1e-6f)
+        {
+            const float scale = state.ambientIntensity / previousPeak;
+            weather.ambient.x *= scale;
+            weather.ambient.y *= scale;
+            weather.ambient.z *= scale;
+        }
+        else
+        {
+            weather.ambient = XMFLOAT3(
+                state.ambientIntensity,
+                state.ambientIntensity,
+                state.ambientIntensity);
+        }
+
+        weather.fogStart = state.fogStart;
+        weather.fogDensity = state.fogDensity;
+        weather.SetHeightFog(state.heightFog);
+        weather.fogHeightStart = state.fogHeightStart;
+        weather.fogHeightEnd = state.fogHeightEnd;
+
+        // The curated coverage control authors the primary layer only. The
+        // advanced second layer is deliberately left untouched until Renegade
+        // exposes it, matching the preservation contract of WeatherState.
+        weather.volumetricCloudParameters.layerFirst.coverageAmount =
+            state.cloudCoverage;
+        weather.volumetricCloudParameters.cloudStartHeight =
+            state.cloudStartHeight;
+        weather.volumetricCloudParameters.cloudThickness =
+            state.cloudThickness;
+    }
+
+    WeatherState MakeWeatherPreset(
+        const WeatherState& current,
+        const WeatherPreset preset) noexcept
+    {
+        WeatherState result = current;
+        switch (preset)
+        {
+        case WeatherPreset::Clear:
+            result.skyMode = WeatherState::SkyMode::Realistic;
+            result.skyExposure = 1.0f;
+            result.ambientIntensity = 0.10f;
+            result.fogStart = 100.0f;
+            result.fogDensity = 0.002f;
+            result.heightFog = false;
+            result.cloudCoverage = 0.05f;
+            result.cloudsCastShadow = false;
+            break;
+        case WeatherPreset::Scattered:
+            result.skyMode = WeatherState::SkyMode::RealisticWithClouds;
+            result.skyExposure = 0.95f;
+            result.ambientIntensity = 0.085f;
+            result.fogStart = 70.0f;
+            result.fogDensity = 0.004f;
+            result.cloudCoverage = 0.35f;
+            result.cloudStartHeight = 1800.0f;
+            result.cloudThickness = 3500.0f;
+            result.cloudsCastShadow = true;
+            break;
+        case WeatherPreset::Overcast:
+            result.skyMode = WeatherState::SkyMode::RealisticWithClouds;
+            result.skyExposure = 0.75f;
+            result.ambientIntensity = 0.065f;
+            result.fogStart = 35.0f;
+            result.fogDensity = 0.012f;
+            result.heightFog = true;
+            result.fogHeightStart = -1.0f;
+            result.fogHeightEnd = 8.0f;
+            result.cloudCoverage = 0.78f;
+            result.cloudStartHeight = 1200.0f;
+            result.cloudThickness = 5000.0f;
+            result.cloudsCastShadow = true;
+            break;
+        case WeatherPreset::Storm:
+            result.skyMode = WeatherState::SkyMode::RealisticWithClouds;
+            result.skyExposure = 0.55f;
+            result.ambientIntensity = 0.035f;
+            result.fogStart = 18.0f;
+            result.fogDensity = 0.025f;
+            result.heightFog = true;
+            result.fogHeightStart = -2.0f;
+            result.fogHeightEnd = 12.0f;
+            result.cloudCoverage = 0.95f;
+            result.cloudStartHeight = 750.0f;
+            result.cloudThickness = 6500.0f;
+            result.cloudsCastShadow = true;
+            break;
+        }
+        return result;
+    }
+
+    SetWeatherCommand::SetWeatherCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const WeatherState& weather)
+        : scene_(&scene)
+        , entity_(entity)
+        , after_(weather)
+    {
+        const auto* existing = scene.weathers.GetComponent(entity);
+        before_ = existing == nullptr
+            ? WeatherState{}
+            : CaptureWeather(*existing);
+    }
+
+    SetWeatherCommand::SetWeatherCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const WeatherState& before,
+        const WeatherState& after)
+        : scene_(&scene)
+        , entity_(entity)
+        , before_(before)
+        , after_(after)
+    {
+    }
+
+    bool SetWeatherCommand::Execute()
+    {
+        if (!IsMeaningfulWeather(before_, after_))
+        {
+            return false;
+        }
+        return Apply(after_);
+    }
+
+    void SetWeatherCommand::Undo()
+    {
+        Apply(before_);
+    }
+
+    bool SetWeatherCommand::Apply(const WeatherState& state)
+    {
+        if (scene_ == nullptr)
+        {
+            return false;
+        }
+
+        auto* weather = scene_->weathers.GetComponent(entity_);
+        if (weather == nullptr)
+        {
+            return false;
+        }
+
+        ApplyWeather(*weather, state);
+
+        // Scene::weather is a resolved runtime copy that RunWeatherUpdateSystem
+        // refreshes from weathers[0] each frame. Updating it here means the
+        // change is visible on the very next frame rather than one late.
+        if (scene_->weathers.GetCount() > 0 &&
+            scene_->weathers.GetEntity(0) == entity_)
+        {
+            scene_->weather = *weather;
+        }
+
+        return true;
     }
 
     bool CommandService::Execute(std::unique_ptr<ICommand> command)

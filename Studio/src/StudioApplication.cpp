@@ -54,14 +54,12 @@ namespace renegade::studio
         setEyeAdaptionEnabled(false);
         setExposure(1.0f);
 
-        // Wicked's grid helper is renderer-owned: it generates temporary GPU
-        // line vertices each frame instead of scene entities. It is therefore
-        // editor-only, cannot be picked, never appears in the hierarchy and is
-        // never serialized into a WISCENE. The Project Hub turns it off again.
+        // Renegade draws its own grid. Wicked's stock helper is a fixed 20x20
+        // unit line list whose adaptive path is gated behind gridHelper2D -
+        // which rotates the grid into the vertical plane - and whose axis line
+        // colours are hardcoded. It stays off permanently.
         wi::renderer::SetToDrawGridHelper(false);
-        wi::renderer::SetGridHelper2D(false);
-        wi::renderer::SetGridHelperColor(
-            XMFLOAT4(0.36f, 0.84f, 1.0f, 0.38f));
+        LoadGridResources();
 
         // The generated Proving Ground is composed around the world origin so
         // that it shares the grid helper's footprint.
@@ -83,7 +81,29 @@ namespace renegade::studio
         gizmo_.translate_snap = 0.1f;
         gizmo_.rotate_snap = 15.0f / 180.0f * XM_PI;
         gizmo_.scale_snap = 0.1f;
+
+        // Translator sizes itself as distance-to-camera * 0.05 * tool_scale,
+        // so tool_scale is a direct screen-space multiplier. The default of
+        // 1.0 dominated the viewport. Thinner arms and slightly reduced
+        // opacity match the restrained-glow direction; negative axes are
+        // darkened hard so the gizmo reads as a projected instrument rather
+        // than a solid object.
+        gizmo_.tool_scale = 0.60f;
+        gizmo_.tool_thickness = 0.70f;
+        gizmo_.tool_opacity = 0.85f;
+        gizmo_.tool_darken_negative_axes = 0.35f;
+
         SetTransformTool(TransformTool::Translate);
+
+        // Restore the creator's saved grid preference. This is Renegade's
+        // first persisted editor preference; camera speed and layout should
+        // follow the same route rather than inventing a second one.
+        if (session_ != nullptr)
+        {
+            gridVisible_ =
+                session_->Projects().GetEditorPreference("grid_visible", true);
+        }
+        gridToggleButton_.SetText(gridVisible_ ? "GRID ON" : "GRID OFF");
 
         RefreshHierarchy();
         RefreshInspector();
@@ -92,6 +112,183 @@ namespace renegade::studio
         SetProjectHubVisible(true);
 
         RenderPath3D::Load();
+    }
+
+    void StudioRenderPath::LoadGridResources()
+    {
+        auto* device = wi::graphics::GetDevice();
+        if (device == nullptr)
+        {
+            return;
+        }
+
+        // Renegade owns these shaders, so they are not in Wicked's shader dump
+        // and must be compiled from source shipped beside the executable. This
+        // is the same approach Wicked's own Example_ImGui sample uses: point
+        // the shader source path at the working directory just long enough to
+        // resolve them, then restore it so Wicked's own shaders are unaffected.
+        const std::string previousSourcePath =
+            wi::renderer::GetShaderSourcePath();
+        wi::renderer::SetShaderSourcePath(
+            wi::helper::GetCurrentPath() + "/Content/shaders/");
+
+        const bool vertexLoaded = wi::renderer::LoadShader(
+            wi::graphics::ShaderStage::VS,
+            gridVertexShader_,
+            "RenegadeGridVS.cso");
+        const bool pixelLoaded = wi::renderer::LoadShader(
+            wi::graphics::ShaderStage::PS,
+            gridPixelShader_,
+            "RenegadeGridPS.cso");
+
+        wi::renderer::SetShaderSourcePath(previousSourcePath);
+
+        if (!vertexLoaded || !pixelLoaded ||
+            !gridVertexShader_.IsValid() || !gridPixelShader_.IsValid())
+        {
+            // A missing grid is a visual downgrade, not a failure worth
+            // taking the editor down for. Everything downstream checks
+            // gridPipeline_ before drawing.
+            wi::backlog::post(
+                "Renegade: the editor grid shaders could not be loaded. "
+                "The viewport will render without a grid.",
+                wi::backlog::LogLevel::Warning);
+            return;
+        }
+
+        wi::graphics::PipelineStateDesc description;
+        description.vs = &gridVertexShader_;
+        description.ps = &gridPixelShader_;
+        description.rs = wi::renderer::GetRasterizerState(
+            wi::enums::RSTYPE_DOUBLESIDED);
+        // Depth read with no write. The pixel shader writes SV_Depth from the
+        // ground intersection, so the hardware test occludes the grid behind
+        // scene geometry without this pass ever sampling the depth buffer.
+        description.dss = wi::renderer::GetDepthStencilState(
+            wi::enums::DSSTYPE_DEPTHREAD);
+        description.bs = wi::renderer::GetBlendState(
+            wi::enums::BSTYPE_PREMULTIPLIED);
+        description.pt = wi::graphics::PrimitiveTopology::TRIANGLELIST;
+
+        if (!device->CreatePipelineState(&description, &gridPipeline_))
+        {
+            wi::backlog::post(
+                "Renegade: the editor grid pipeline could not be created. "
+                "The viewport will render without a grid.",
+                wi::backlog::LogLevel::Warning);
+        }
+    }
+
+    void StudioRenderPath::DrawEditorGrid(
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!gridVisible_ || projectHubVisible_ ||
+            !gridPipeline_.IsValid() || camera == nullptr)
+        {
+            return;
+        }
+
+        auto* device = wi::graphics::GetDevice();
+        device->EventBegin("Renegade Editor Grid", cmd);
+
+        const XMMATRIX viewProjection = camera->GetViewProjection();
+
+        GridConstants constants = {};
+        XMStoreFloat4x4(&constants.viewProjection, viewProjection);
+        XMStoreFloat4x4(
+            &constants.inverseViewProjection,
+            XMMatrixInverse(nullptr, viewProjection));
+        // w is the grid plane height. The generated deck's top surface is at
+        // exactly y = 0, so a grid drawn at y = 0 is coplanar with it and
+        // loses the GREATER depth test. 2 cm is invisible at any working
+        // camera distance and is the same trick Wicked's own helper uses.
+        constants.cameraPosition = XMFLOAT4(
+            camera->Eye.x,
+            camera->Eye.y,
+            camera->Eye.z,
+            0.02f);
+
+        // Ice-blue is the approved interaction colour. Unlike Wicked's helper,
+        // every line including the two axes is Renegade's to choose.
+        constants.minorColor = XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
+        constants.majorColor = XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
+        constants.axisColorX = XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
+        constants.axisColorZ = XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
+
+        // Fade start/end, base spacing, master opacity. The fade window keeps
+        // the horizon from turning into an aliased smear.
+        constants.params = XMFLOAT4(60.0f, 320.0f, 1.0f, 1.0f);
+
+        device->BindPipelineState(&gridPipeline_, cmd);
+        device->BindDynamicConstantBuffer(constants, 0, cmd);
+        device->Draw(3, 0, cmd);
+
+        device->EventEnd(cmd);
+    }
+
+    void StudioRenderPath::RenderTransparents(
+        const wi::graphics::CommandList cmd) const
+    {
+        RenderPath3D::RenderTransparents(cmd);
+
+        if (!gridVisible_ || projectHubVisible_ ||
+            !gridPipeline_.IsValid() || camera == nullptr)
+        {
+            return;
+        }
+
+        // Wicked ends every render pass before RenderTransparents() returns.
+        // Open an explicit pass over the main colour and depth attachments so
+        // the grid is valid on both DX12 and Vulkan. Match Wicked's own
+        // transparent-pass attachment setup, including an MSAA resolve.
+        auto* device = wi::graphics::GetDevice();
+        wi::graphics::RenderPassImage attachments[3] = {};
+        std::uint32_t attachmentCount = 0;
+        attachments[attachmentCount++] =
+            wi::graphics::RenderPassImage::RenderTarget(
+                &rtMain_render,
+                wi::graphics::RenderPassImage::LoadOp::LOAD);
+        if (getMSAASampleCount() > 1)
+        {
+            attachments[attachmentCount++] =
+                wi::graphics::RenderPassImage::Resolve(&rtMain);
+        }
+        attachments[attachmentCount++] =
+            wi::graphics::RenderPassImage::DepthStencil(
+                &depthBuffer_Main,
+                wi::graphics::RenderPassImage::LoadOp::LOAD,
+                wi::graphics::RenderPassImage::StoreOp::STORE,
+                wi::graphics::ResourceState::DEPTHSTENCIL,
+                wi::graphics::ResourceState::DEPTHSTENCIL,
+                wi::graphics::ResourceState::DEPTHSTENCIL);
+
+        device->RenderPassBegin(attachments, attachmentCount, cmd);
+
+        wi::graphics::Viewport viewport;
+        viewport.width =
+            static_cast<float>(depthBuffer_Main.GetDesc().width);
+        viewport.height =
+            static_cast<float>(depthBuffer_Main.GetDesc().height);
+        viewport.min_depth = 0.0f;
+        viewport.max_depth = 1.0f;
+        device->BindViewports(1, &viewport, cmd);
+
+        const wi::graphics::Rect scissor = GetScissorInternalResolution();
+        device->BindScissorRects(1, &scissor, cmd);
+
+        DrawEditorGrid(cmd);
+        device->RenderPassEnd(cmd);
+    }
+
+    void StudioRenderPath::SetGridVisible(const bool visible)
+    {
+        gridVisible_ = visible;
+        gridToggleButton_.SetText(visible ? "GRID ON" : "GRID OFF");
+
+        if (session_ != nullptr)
+        {
+            session_->Projects().SetEditorPreference("grid_visible", visible);
+        }
     }
 
     void StudioRenderPath::DeleteGPUResources()
@@ -232,7 +429,11 @@ namespace renegade::studio
 
         workspaceTitle_.Create("Renegade Workspace Title");
         workspaceTitle_.SetText("RENEGADE STUDIO // PROVING GROUND");
-        workspaceTitle_.font.params.size = 19;
+        // Size 19 overflowed the 300px slot and clipped mid-word. Fit-text
+        // also keeps long project names inside the label rather than running
+        // them under the tool buttons.
+        workspaceTitle_.font.params.size = 16;
+        workspaceTitle_.SetFitTextEnabled(true);
         workspaceTitle_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         toolbarPanel_.AddWidget(&workspaceTitle_);
 
@@ -273,6 +474,17 @@ namespace renegade::studio
             EditorAction::ScaleTool);
 
         projectHubButton_.Create("Open Project Hub");
+        gridToggleButton_.Create("Grid Toggle");
+        gridToggleButton_.SetText("GRID ON");
+        gridToggleButton_.SetTooltip(
+            "Show or hide the editor grid [G]. The grid is never saved into a "
+            "scene.");
+        gridToggleButton_.OnClick([this](wi::gui::EventArgs)
+        {
+            pendingAction_ = EditorAction::ToggleGrid;
+        });
+        toolbarPanel_.AddWidget(&gridToggleButton_);
+
         projectHubButton_.SetText("PROJECTS");
         projectHubButton_.SetTooltip("Return to the Renegade Project Hub");
         projectHubButton_.SetAngularHighlightWidth(4.0f);
@@ -424,6 +636,165 @@ namespace renegade::studio
             TransformTool::Scale,
             2);
 
+        createSectionLabel(
+            environmentSkyLabel_,
+            "Environment Sky Section",
+            "SKY // ATMOSPHERE");
+        environmentPreset_.Create("Environment Preset");
+        environmentPreset_.AddItem("CUSTOM", 0);
+        environmentPreset_.AddItem("CLEAR", 1);
+        environmentPreset_.AddItem("SCATTERED", 2);
+        environmentPreset_.AddItem("OVERCAST", 3);
+        environmentPreset_.AddItem("STORM", 4);
+        environmentPreset_.SetTooltip(
+            "Apply a curated starting point. Every preset is a single "
+            "Undo/Redo command.");
+        environmentPreset_.OnSelect(
+            [this](const wi::gui::EventArgs& args)
+        {
+            if (args.userdata != 0)
+            {
+                ApplyWeatherPreset(static_cast<int>(args.userdata));
+            }
+        });
+        inspectorPanel_.AddWidget(&environmentPreset_);
+
+        skyMode_.Create("Sky Mode");
+        skyMode_.AddItem(
+            "REALISTIC SKY",
+            static_cast<std::uint64_t>(
+                bridge::WeatherState::SkyMode::Realistic));
+        skyMode_.AddItem(
+            "REALISTIC + CLOUDS",
+            static_cast<std::uint64_t>(
+                bridge::WeatherState::SkyMode::RealisticWithClouds));
+        skyMode_.AddItem(
+            "SKYBOX TEXTURE",
+            static_cast<std::uint64_t>(
+                bridge::WeatherState::SkyMode::Skybox));
+        skyMode_.SetTooltip(
+            "Choose Wicked's physical atmosphere, volumetric clouds, or the "
+            "weather component's existing skybox texture.");
+        skyMode_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            ApplySelectedSkyMode(
+                static_cast<bridge::WeatherState::SkyMode>(args.userdata));
+        });
+        inspectorPanel_.AddWidget(&skyMode_);
+
+        const auto createWeatherToggle = [this](
+            wi::gui::CheckBox& input,
+            const char* name,
+            const char* tooltip,
+            const WeatherToggle toggle)
+        {
+            input.Create(name);
+            input.SetTooltip(tooltip);
+            input.OnClick([this, toggle](const wi::gui::EventArgs& args)
+            {
+                ApplySelectedWeatherToggle(toggle, args.bValue);
+            });
+            inspectorPanel_.AddWidget(&input);
+        };
+        createWeatherToggle(
+            aerialPerspective_,
+            "Aerial perspective: ",
+            "Apply atmospheric scattering to scene geometry.",
+            WeatherToggle::AerialPerspective);
+
+        const auto createWeatherInput = [this](
+            wi::gui::TextInputField& input,
+            const char* name,
+            const char* description,
+            const char* tooltip,
+            const WeatherField field)
+        {
+            input.Create(name);
+            input.SetDescription(description);
+            input.SetTooltip(tooltip);
+            input.SetValue(0.0f);
+            input.OnInputAccepted(
+                [this, field](const wi::gui::EventArgs& args)
+            {
+                ApplySelectedWeatherValue(field, args.fValue);
+            });
+            inspectorPanel_.AddWidget(&input);
+        };
+        createWeatherInput(
+            skyExposure_,
+            "Sky Exposure",
+            "Exposure: ",
+            "Brightness of the physical sky.",
+            WeatherField::SkyExposure);
+        createWeatherInput(
+            ambientIntensity_,
+            "Ambient Intensity",
+            "Ambient: ",
+            "Neutral intensity applied while preserving the authored hue.",
+            WeatherField::AmbientIntensity);
+
+        createSectionLabel(
+            environmentFogLabel_,
+            "Environment Fog Section",
+            "FOG // HEIGHT LAYER");
+        createWeatherInput(
+            fogStart_,
+            "Fog Start",
+            "Start: ",
+            "Distance from the camera before fog begins.",
+            WeatherField::FogStart);
+        createWeatherInput(
+            fogDensity_,
+            "Fog Density",
+            "Density: ",
+            "Overall atmospheric fog density.",
+            WeatherField::FogDensity);
+        createWeatherToggle(
+            heightFog_,
+            "Height fog: ",
+            "Restrict fog vertically between the authored heights.",
+            WeatherToggle::HeightFog);
+        createWeatherInput(
+            fogHeightStart_,
+            "Fog Height Start",
+            "Base: ",
+            "Lower height of the fog layer.",
+            WeatherField::FogHeightStart);
+        createWeatherInput(
+            fogHeightEnd_,
+            "Fog Height End",
+            "Top: ",
+            "Upper height of the fog layer.",
+            WeatherField::FogHeightEnd);
+
+        createSectionLabel(
+            environmentCloudLabel_,
+            "Environment Cloud Section",
+            "VOLUMETRIC CLOUDS");
+        createWeatherInput(
+            cloudCoverage_,
+            "Cloud Coverage",
+            "Coverage: ",
+            "Primary cloud-layer coverage amount.",
+            WeatherField::CloudCoverage);
+        createWeatherInput(
+            cloudStartHeight_,
+            "Cloud Start Height",
+            "Base: ",
+            "Altitude where the volumetric cloud volume begins.",
+            WeatherField::CloudStartHeight);
+        createWeatherInput(
+            cloudThickness_,
+            "Cloud Thickness",
+            "Depth: ",
+            "Vertical depth of the volumetric cloud volume.",
+            WeatherField::CloudThickness);
+        createWeatherToggle(
+            cloudsCastShadow_,
+            "Cloud shadows: ",
+            "Allow volumetric clouds to cast moving shadows on the world.",
+            WeatherToggle::CloudsCastShadow);
+
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
         focusButton_.SetTooltip("Frame the selected entity in the viewport");
@@ -511,8 +882,10 @@ namespace renegade::studio
 
         contentPlaceholder_.Create("Content Browser Placeholder");
         contentPlaceholder_.SetText(
-            "The project-aware content browser arrives in Phase 4. "
-            "This panel now owns its permanent workspace region.");
+            "No assets imported yet.\n\n"
+            "Asset import and the project-aware browser are not built. Until "
+            "they are, scenes are authored from the generated Proving Ground "
+            "and edited in the viewport.");
         contentPlaceholder_.SetFitTextEnabled(true);
         contentPlaceholder_.font.params.color = HologramMuted;
         contentPlaceholder_.font.params.size = 14;
@@ -792,12 +1165,14 @@ namespace renegade::studio
             selectionOutlineMask_.IsValid())
         {
             wi::renderer::BindCommonResources(cmd);
+            // Thickness was 2.0, double Wicked's default, which read as a
+            // heavy halo rather than a projected edge. 1.0 is one pixel.
             wi::renderer::Postprocess_Outline(
                 selectionOutlineMask_,
                 cmd,
                 0.1f,
-                2.0f,
-                XMFLOAT4(0.0f, 0.86f, 1.0f, 0.95f));
+                1.0f,
+                XMFLOAT4(0.30f, 0.86f, 1.0f, 0.90f));
         }
 
         if (!projectHubVisible_ && gizmoEntity_ != wi::ecs::INVALID_ENTITY)
@@ -841,11 +1216,13 @@ namespace renegade::studio
         rotateToolButton_.SetSize(XMFLOAT2(100.0f, 30.0f));
         scaleToolButton_.SetPos(XMFLOAT2(522.0f, 9.0f));
         scaleToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
+        gridToggleButton_.SetPos(XMFLOAT2(630.0f, 9.0f));
+        gridToggleButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
         projectHubButton_.SetPos(XMFLOAT2(width - 132.0f, 9.0f));
         projectHubButton_.SetSize(XMFLOAT2(108.0f, 30.0f));
-        statusLabel_.SetPos(XMFLOAT2(628.0f, 14.0f));
+        statusLabel_.SetPos(XMFLOAT2(736.0f, 14.0f));
         statusLabel_.SetSize(XMFLOAT2(
-            std::max(120.0f, width - 782.0f),
+            std::max(120.0f, width - 890.0f),
             24.0f));
 
         hierarchyPanel_.SetPos(XMFLOAT2(8.0f, toolbarHeight + 16.0f));
@@ -898,36 +1275,39 @@ namespace renegade::studio
         scaleLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
         positionInputRow(scaleX_, scaleY_, scaleZ_, 184.0f);
 
-        const float threeButtonWidth = (rightWidth - 40.0f) / 3.0f;
-        focusButton_.SetPos(XMFLOAT2(12.0f, 230.0f));
-        duplicateButton_.SetPos(XMFLOAT2(
-            12.0f + threeButtonWidth + fieldGap,
-            230.0f));
-        deleteButton_.SetPos(XMFLOAT2(
-            12.0f + (threeButtonWidth + fieldGap) * 2.0f,
-            230.0f));
-        focusButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        duplicateButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        deleteButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        const float environmentFieldWidth = rightWidth - 24.0f;
+        const auto positionEnvironmentWidget =
+            [environmentFieldWidth](
+                wi::gui::Widget& widget,
+                const float rowY,
+                const float height = 28.0f)
+        {
+            widget.SetPos(XMFLOAT2(12.0f, rowY));
+            widget.SetSize(XMFLOAT2(environmentFieldWidth, height));
+        };
+        positionEnvironmentWidget(environmentSkyLabel_, 44.0f, 20.0f);
+        positionEnvironmentWidget(environmentPreset_, 64.0f);
+        positionEnvironmentWidget(skyMode_, 98.0f);
+        positionEnvironmentWidget(aerialPerspective_, 132.0f);
+        positionEnvironmentWidget(skyExposure_, 164.0f);
+        positionEnvironmentWidget(ambientIntensity_, 198.0f);
+        positionEnvironmentWidget(environmentFogLabel_, 232.0f, 20.0f);
+        positionEnvironmentWidget(fogStart_, 252.0f);
+        positionEnvironmentWidget(fogDensity_, 286.0f);
+        positionEnvironmentWidget(heightFog_, 320.0f);
+        positionEnvironmentWidget(fogHeightStart_, 352.0f);
+        positionEnvironmentWidget(fogHeightEnd_, 386.0f);
+        positionEnvironmentWidget(environmentCloudLabel_, 420.0f, 20.0f);
+        positionEnvironmentWidget(cloudCoverage_, 440.0f);
+        positionEnvironmentWidget(cloudStartHeight_, 474.0f);
+        positionEnvironmentWidget(cloudThickness_, 508.0f);
+        positionEnvironmentWidget(cloudsCastShadow_, 542.0f);
 
-        const float twoButtonWidth = (rightWidth - 32.0f) / 2.0f;
-        undoButton_.SetPos(XMFLOAT2(12.0f, 270.0f));
-        redoButton_.SetPos(XMFLOAT2(
-            20.0f + twoButtonWidth,
-            270.0f));
-        undoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
-        redoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
-
-        saveButton_.SetPos(XMFLOAT2(12.0f, 310.0f));
-        saveAsButton_.SetPos(XMFLOAT2(
-            12.0f + threeButtonWidth + fieldGap,
-            310.0f));
-        reopenButton_.SetPos(XMFLOAT2(
-            12.0f + (threeButtonWidth + fieldGap) * 2.0f,
-            310.0f));
-        saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        const bool environmentSelected =
+            session_ != nullptr &&
+            session_->Scenes().GetScene().weathers.Contains(
+                session_->Selection().SelectedEntity());
+        LayoutInspectorActions(environmentSelected);
 
         contentPanel_.SetPos(XMFLOAT2(
             leftWidth + 16.0f,
@@ -1060,6 +1440,50 @@ namespace renegade::studio
         }
     }
 
+    void StudioRenderPath::LayoutInspectorActions(const bool environment)
+    {
+        const float width = inspectorPanel_.GetSize().x;
+        constexpr float gap = 8.0f;
+        const float threeButtonWidth = (width - 40.0f) / 3.0f;
+        const float twoButtonWidth = (width - 32.0f) / 2.0f;
+        const float actionStart = environment
+            ? std::max(578.0f, inspectorPanel_.GetSize().y - 82.0f)
+            : 230.0f;
+        const float historyRow = environment
+            ? actionStart
+            : actionStart + 40.0f;
+        const float saveRow = historyRow + 40.0f;
+
+        focusButton_.SetPos(XMFLOAT2(12.0f, actionStart));
+        duplicateButton_.SetPos(XMFLOAT2(
+            12.0f + threeButtonWidth + gap,
+            actionStart));
+        deleteButton_.SetPos(XMFLOAT2(
+            12.0f + (threeButtonWidth + gap) * 2.0f,
+            actionStart));
+        focusButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        duplicateButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        deleteButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+
+        undoButton_.SetPos(XMFLOAT2(12.0f, historyRow));
+        redoButton_.SetPos(XMFLOAT2(
+            20.0f + twoButtonWidth,
+            historyRow));
+        undoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
+        redoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
+
+        saveButton_.SetPos(XMFLOAT2(12.0f, saveRow));
+        saveAsButton_.SetPos(XMFLOAT2(
+            12.0f + threeButtonWidth + gap,
+            saveRow));
+        reopenButton_.SetPos(XMFLOAT2(
+            12.0f + (threeButtonWidth + gap) * 2.0f,
+            saveRow));
+        saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+    }
+
     void StudioRenderPath::RefreshInspector()
     {
         const bool hasSession = session_ != nullptr;
@@ -1069,9 +1493,54 @@ namespace renegade::studio
         auto* transform = hasSession
             ? session_->Scenes().GetScene().transforms.GetComponent(entity)
             : nullptr;
+        auto* weather = hasSession
+            ? session_->Scenes().GetScene().weathers.GetComponent(entity)
+            : nullptr;
         SyncSelectionOutline();
 
         const bool hasTransform = transform != nullptr;
+        const bool hasWeather = weather != nullptr;
+        LayoutInspectorActions(hasWeather);
+        const auto setTransformVisible = [hasWeather](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(!hasWeather);
+        };
+        setTransformVisible(positionLabel_);
+        setTransformVisible(rotationLabel_);
+        setTransformVisible(scaleLabel_);
+        setTransformVisible(translationX_);
+        setTransformVisible(translationY_);
+        setTransformVisible(translationZ_);
+        setTransformVisible(rotationX_);
+        setTransformVisible(rotationY_);
+        setTransformVisible(rotationZ_);
+        setTransformVisible(scaleX_);
+        setTransformVisible(scaleY_);
+        setTransformVisible(scaleZ_);
+
+        const auto setEnvironmentVisible =
+            [hasWeather](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(hasWeather);
+        };
+        setEnvironmentVisible(environmentSkyLabel_);
+        setEnvironmentVisible(environmentPreset_);
+        setEnvironmentVisible(skyMode_);
+        setEnvironmentVisible(aerialPerspective_);
+        setEnvironmentVisible(skyExposure_);
+        setEnvironmentVisible(ambientIntensity_);
+        setEnvironmentVisible(environmentFogLabel_);
+        setEnvironmentVisible(fogStart_);
+        setEnvironmentVisible(fogDensity_);
+        setEnvironmentVisible(heightFog_);
+        setEnvironmentVisible(fogHeightStart_);
+        setEnvironmentVisible(fogHeightEnd_);
+        setEnvironmentVisible(environmentCloudLabel_);
+        setEnvironmentVisible(cloudCoverage_);
+        setEnvironmentVisible(cloudStartHeight_);
+        setEnvironmentVisible(cloudThickness_);
+        setEnvironmentVisible(cloudsCastShadow_);
+
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
         translationZ_.SetEnabled(hasTransform);
@@ -1084,6 +1553,9 @@ namespace renegade::studio
         focusButton_.SetEnabled(hasTransform);
         duplicateButton_.SetEnabled(hasTransform);
         deleteButton_.SetEnabled(hasTransform);
+        focusButton_.SetVisible(!hasWeather);
+        duplicateButton_.SetVisible(!hasWeather);
+        deleteButton_.SetVisible(!hasWeather);
         undoButton_.SetEnabled(hasSession && session_->Commands().CanUndo());
         redoButton_.SetEnabled(hasSession && session_->Commands().CanRedo());
         saveButton_.SetEnabled(
@@ -1091,6 +1563,49 @@ namespace renegade::studio
         saveAsButton_.SetEnabled(hasSession);
         reopenButton_.SetEnabled(
             hasSession && !session_->Scenes().CurrentPath().empty());
+
+        if (hasWeather)
+        {
+            const auto* name =
+                session_->Scenes().GetScene().names.GetComponent(entity);
+            inspectorLabel_.SetText(
+                "ENVIRONMENT // " +
+                (name != nullptr && !name->name.empty()
+                    ? name->name
+                    : "ENTITY " + std::to_string(entity)));
+
+            const auto state = bridge::CaptureWeather(*weather);
+            environmentPreset_.SetSelectedWithoutCallback(0);
+            skyMode_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(state.skyMode));
+            aerialPerspective_.SetCheck(state.aerialPerspective);
+            skyExposure_.SetValue(state.skyExposure);
+            ambientIntensity_.SetValue(state.ambientIntensity);
+            fogStart_.SetValue(state.fogStart);
+            fogDensity_.SetValue(state.fogDensity);
+            heightFog_.SetCheck(state.heightFog);
+            fogHeightStart_.SetValue(state.fogHeightStart);
+            fogHeightEnd_.SetValue(state.fogHeightEnd);
+            cloudCoverage_.SetValue(state.cloudCoverage);
+            cloudStartHeight_.SetValue(state.cloudStartHeight);
+            cloudThickness_.SetValue(state.cloudThickness);
+            cloudsCastShadow_.SetCheck(state.cloudsCastShadow);
+
+            const bool physicalSky =
+                state.skyMode != bridge::WeatherState::SkyMode::Skybox;
+            const bool volumetricClouds =
+                state.skyMode ==
+                bridge::WeatherState::SkyMode::RealisticWithClouds;
+            aerialPerspective_.SetEnabled(physicalSky);
+            cloudCoverage_.SetEnabled(volumetricClouds);
+            cloudStartHeight_.SetEnabled(volumetricClouds);
+            cloudThickness_.SetEnabled(volumetricClouds);
+            cloudsCastShadow_.SetEnabled(volumetricClouds);
+            fogHeightStart_.SetEnabled(state.heightFog);
+            fogHeightEnd_.SetEnabled(state.heightFog);
+            SyncGizmoSelection();
+            return;
+        }
 
         if (!hasTransform)
         {
@@ -1187,6 +1702,10 @@ namespace renegade::studio
         {
             pendingAction_ = EditorAction::ScaleTool;
         }
+        else if (wi::input::Press(key('G')))
+        {
+            pendingAction_ = EditorAction::ToggleGrid;
+        }
     }
 
     bool StudioRenderPath::IsSelectedEntityValid() const
@@ -1256,6 +1775,9 @@ namespace renegade::studio
             break;
         case EditorAction::ScaleTool:
             SetTransformTool(TransformTool::Scale);
+            break;
+        case EditorAction::ToggleGrid:
+            SetGridVisible(!gridVisible_);
             break;
         case EditorAction::None:
         default:
@@ -1688,6 +2210,172 @@ namespace renegade::studio
         RefreshStatus();
     }
 
+    bool StudioRenderPath::CommitSelectedWeather(
+        const bridge::WeatherState& weather)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return false;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetWeatherCommand>(
+                session_->Scenes().GetScene(),
+                entity,
+                weather));
+        RefreshInspector();
+        RefreshStatus();
+        return changed;
+    }
+
+    void StudioRenderPath::ApplySelectedWeatherValue(
+        const WeatherField field,
+        const float value)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+
+        auto next = bridge::CaptureWeather(*component);
+        switch (field)
+        {
+        case WeatherField::SkyExposure:
+            next.skyExposure = std::clamp(value, 0.0f, 8.0f);
+            break;
+        case WeatherField::AmbientIntensity:
+            next.ambientIntensity = std::clamp(value, 0.0f, 8.0f);
+            break;
+        case WeatherField::FogStart:
+            next.fogStart = std::clamp(value, 0.0f, 100000.0f);
+            break;
+        case WeatherField::FogDensity:
+            next.fogDensity = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case WeatherField::FogHeightStart:
+            next.fogHeightStart =
+                std::clamp(value, -100000.0f, 100000.0f);
+            break;
+        case WeatherField::FogHeightEnd:
+            next.fogHeightEnd =
+                std::clamp(value, -100000.0f, 100000.0f);
+            break;
+        case WeatherField::CloudCoverage:
+            next.cloudCoverage = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case WeatherField::CloudStartHeight:
+            next.cloudStartHeight =
+                std::clamp(value, 0.0f, 50000.0f);
+            break;
+        case WeatherField::CloudThickness:
+            next.cloudThickness =
+                std::clamp(value, 1.0f, 50000.0f);
+            break;
+        }
+        CommitSelectedWeather(next);
+    }
+
+    void StudioRenderPath::ApplySelectedWeatherToggle(
+        const WeatherToggle toggle,
+        const bool value)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+
+        auto next = bridge::CaptureWeather(*component);
+        switch (toggle)
+        {
+        case WeatherToggle::AerialPerspective:
+            next.aerialPerspective = value;
+            break;
+        case WeatherToggle::HeightFog:
+            next.heightFog = value;
+            break;
+        case WeatherToggle::CloudsCastShadow:
+            next.cloudsCastShadow = value;
+            break;
+        }
+        CommitSelectedWeather(next);
+    }
+
+    void StudioRenderPath::ApplySelectedSkyMode(
+        const bridge::WeatherState::SkyMode mode)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+
+        auto next = bridge::CaptureWeather(*component);
+        next.skyMode = mode;
+        CommitSelectedWeather(next);
+    }
+
+    void StudioRenderPath::ApplyWeatherPreset(const int preset)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+
+        const auto current = bridge::CaptureWeather(*component);
+        bridge::WeatherPreset selectedPreset;
+        switch (preset)
+        {
+        case 1:
+            selectedPreset = bridge::WeatherPreset::Clear;
+            break;
+        case 2:
+            selectedPreset = bridge::WeatherPreset::Scattered;
+            break;
+        case 3:
+            selectedPreset = bridge::WeatherPreset::Overcast;
+            break;
+        case 4:
+            selectedPreset = bridge::WeatherPreset::Storm;
+            break;
+        default:
+            return;
+        }
+        CommitSelectedWeather(
+            bridge::MakeWeatherPreset(current, selectedPreset));
+    }
+
     void StudioRenderPath::CreateProject()
     {
         if (session_ == nullptr)
@@ -1871,9 +2559,9 @@ namespace renegade::studio
         inspectorPanel_.SetVisible(!visible);
         contentPanel_.SetVisible(!visible);
 
-        // The measurement grid and the frame-rate readout belong to the
-        // authoring viewport. Neither may appear over the Project Hub.
-        wi::renderer::SetToDrawGridHelper(!visible);
+        // The frame-rate readout belongs to the authoring viewport and must
+        // not appear over the Project Hub. DrawEditorGrid checks
+        // projectHubVisible_ for the same reason.
         if (diagnostics_ != nullptr)
         {
             diagnostics_->active = !visible;

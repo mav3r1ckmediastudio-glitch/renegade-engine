@@ -29,18 +29,25 @@ Identity Handshake animation or finished editor.
    command bar is no longer covered by diagnostic text.
 10. Edit Position, Rotation, and Scale in the Inspector. Use W/E/R to switch
     Move/Rotate/Scale gizmos and confirm the selected entity follows each edit.
-11. Press F to frame several differently sized objects.
-12. Duplicate with Ctrl+D and the button. Delete the copy with Delete and the
+11. Select Environment in the hierarchy. Confirm the Inspector changes to SKY,
+    FOG, and VOLUMETRIC CLOUDS controls.
+12. Apply SCATTERED, OVERCAST, and STORM. Confirm the viewport changes
+    immediately, including cloud shadows where visible. Undo and redo each
+    preset.
+13. Edit cloud coverage, base height, thickness, fog density, and sky exposure.
+    Press Ctrl+S, reopen the scene, and confirm the values persist.
+14. Press F to frame several differently sized objects.
+15. Duplicate with Ctrl+D and the button. Delete the copy with Delete and the
     button. Undo and redo both operations.
-13. Undo and redo position, rotation, and scale edits.
-14. Press Ctrl+S, close Studio, reopen the project, and confirm the saved
+16. Undo and redo position, rotation, and scale edits.
+17. Press Ctrl+S, close Studio, reopen the project, and confirm the saved
     transform persists. Ctrl+Shift+S must still open Save As.
-15. Confirm shortcuts do not trigger while typing in a text field.
-16. Click PROJECTS. Confirm the new project appears as a recent-project card.
-17. Select the card, click LAUNCH PROJECT, and confirm its scene reopens.
-18. Close Studio, reopen DX12, and confirm the recent-project card persists.
-19. Close Studio, run Run-RenegadeStudio-Vulkan.cmd, and repeat steps 6-15 and
-    17.
+18. Confirm shortcuts do not trigger while typing in a text field.
+19. Click PROJECTS. Confirm the new project appears as a recent-project card.
+20. Select the card, click LAUNCH PROJECT, and confirm its scene reopens.
+21. Close Studio, reopen DX12, and confirm the recent-project card persists.
+22. Close Studio, run Run-RenegadeStudio-Vulkan.cmd, and repeat steps 6-18 and
+    20.
 
 The generated project must contain:
 
@@ -50,6 +57,7 @@ The generated project must contain:
 
 Report the first failed numbered step, or report:
 
-DX12 EDITING PASS / HIERARCHY PASS / TRANSFORM PASS / FOCUS PASS /
-DUPLICATE-DELETE PASS / HISTORY PASS / SAVE PASS / SHORTCUTS PASS /
-RECENTS PASS / VULKAN EDITING PASS
+DX12 EDITING PASS / HIERARCHY PASS / TRANSFORM PASS / ENVIRONMENT PASS /
+CLOUDS PASS / CLOUD SHADOWS PASS / FOCUS PASS / DUPLICATE-DELETE PASS /
+HISTORY PASS / SAVE PASS / SHORTCUTS PASS / RECENTS PASS /
+VULKAN EDITING PASS
