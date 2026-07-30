@@ -16,17 +16,40 @@ agent
 **Active phase:** Phase 3 — Studio foundation
 
 **Current milestone:** Viewport and Proving Ground Visual Foundation —
-implemented, **not yet built, not yet visually accepted**
+**functionally accepted on Windows; visual direction not yet accepted**
 
 ## Status in one paragraph
 
 The Viewport and Proving Ground Visual Foundation milestone is implemented on
-`phase3/viewport-visual-foundation` in four commits. It has **not** been
-compiled: the machine it was authored on has no CMake and no Visual Studio
-toolchain. GitHub Actions has not run, and no packaged Release has been tested.
-Treat every visual and behavioural claim below as an intention, not a result,
-until `.github/workflows/studio.yml` is green and the packaged Release has been
-run on Windows through both launchers.
+`phase3/viewport-visual-foundation` and is open as PR #1. All four CI jobs
+passed and the project owner has tested it on Windows: the grid, the generated
+scene, save/close/reopen and every prior editing workflow behave correctly, and
+the frame rate sits at the display's 75 Hz VSync ceiling with no measurable
+change under editor load. What is **not** accepted is the look. The viewport
+reads as a warm desert rather than the approved industrial holographic
+direction, the emissives are blown out, and the grid is the stock finite 20x20
+helper rather than an expanding one. Those corrections are the next milestone.
+
+## Windows acceptance result
+
+Reported by the project owner against the packaged DX12 Release:
+
+```text
+DX12 GRID PASS / GENERATED SCENE PASS / EDITING REGRESSION PASS /
+SAVE REOPEN PASS / PERFORMANCE PASS
+```
+
+- CI: all four jobs green (Studio Debug/Release, baseline Debug/Release).
+- Hierarchy shows 41 creator-facing items and no grid entities.
+- The grid draws on the deck, is not selectable, is not listed, and does not
+  reappear in the saved scene.
+- Save, close and reopen preserve transforms, hierarchy shape and atmosphere.
+  The `LoadScene` rewrite away from `wi::scene::LoadModel` is confirmed good.
+- 75 FPS is the display's refresh ceiling and does not move under editor load,
+  so the added MSAO, volumetrics and realistic sky show no measurable cost.
+
+Still outstanding: the Vulkan launcher pass, and visual comparison against the
+approved reference imagery, which is still not in the repository.
 
 ## Start here
 
@@ -245,37 +268,116 @@ GitHub Actions studio.yml
 packaged Release smoke test
 ```
 
-## Unverified claims and risks
+## Resolved risks
 
-Nothing in this milestone has been compiled or seen. Ranked by risk:
+Recorded because they were called out before the build and are now settled:
 
-1. **Compilation.** `SceneService.cpp` was substantially rewritten and
-   `SceneService.h` gained a new public type. Expect the first CI run to be the
-   real syntax check. The most likely failure points are `ProvingGroundProp`
-   member initialisation and the `Entity_CreateLight` overload arity.
-2. **`LoadScene` behaviour change.** Reopen no longer goes through
-   `wi::scene::LoadModel`. This is architecturally correct and symmetric with
-   `SaveScene`, but it changes an accepted, working workflow. Re-verify Save,
-   Save As, close and reopen carefully, including saved transform persistence.
-3. **Terrain winding.** The generated relief mesh winds triangles to match
-   `Entity_CreatePlane`'s `+Y` quad. If the ground renders inside-out or black,
-   swap the two triangle index orders in `CreateGroundRelief`.
-4. **Performance.** MSAO, realistic sky with aerial perspective, height fog,
-   five volumetric lights and two shadow casters are all new cost. The prior
-   result was VSync-limited at 75 FPS on an RTX 4070 Ti, so there should be
-   headroom, but a regression here is plausible and would be explainable.
-   Dropping `setAO(AO_MSAO)` to `AO_HBAO` or `AO_DISABLED` is the first lever.
-5. **Sun angle and exposure.** The sun pitch, intensity and `skyExposure` were
-   chosen without seeing a frame. The scene may read too dark or too warm.
-6. **Headless test coverage is partial.** The save/reload round trip runs
+1. **Compilation** — resolved. All four CI jobs green.
+2. **`LoadScene` behaviour change** — resolved. Save, close and reopen verified
+   on Windows by the project owner.
+3. **Terrain winding** — resolved. The ground renders correctly.
+4. **Performance** — resolved. 75 FPS is the display's VSync ceiling and does
+   not move under editor load.
+
+## Open defects and limitations
+
+Visual, ranked by distance from the approved direction:
+
+1. **The scene reads as a warm desert, not an industrial holographic
+   workstation.** The terrain and distant masses are authored at roughly 3%
+   albedo but render mid-tan: the realistic sky's sun and ambient overwhelm the
+   materials. Sun pitch, intensity, `skyExposure` and `ambient` were all chosen
+   without seeing a frame.
+2. **Blown-out emissives.** The hologram core and alignment pedestal clip to
+   white through bloom, losing the cyan that is the approved interaction
+   colour. Emissive strength 4.0 plus `bloomThreshold` 1.35 is too hot.
+3. **Terrain relief is invisible.** Roughly +/-1.5 units over a 180-unit span
+   is too gentle to read from editor camera height. The amplitude needs raising
+   or the wavelength shortening.
+4. **Low-lying mist is not reading.** Aerial haze appears at the horizon but
+   nothing sits on the deck. `fogHeightStart`/`fogHeightEnd` need retuning.
+5. **The grid is finite and not fully Renegade-coloured.** See the grid finding
+   below.
+6. **Hard terrain edge** where the 180-unit ground mesh ends against the sky.
+
+Non-visual:
+
+7. **Duplicate hierarchy names.** Eight `Perimeter Pylon`, five
+   `Distant Structure`, four `Deck Edge` and four `Equipment Crate` rows are
+   unnumbered, so they cannot be told apart in the hierarchy.
+8. **The workspace title label clips.** `RENEGADE STUDIO // PROVING GROUND`
+   overflows its box in `ResizeLayout`.
+9. **Headless test coverage is partial.** The save/reload round trip runs
    against a mesh-free scene only, because `MeshComponent::CreateRenderData()`
    needs a graphics device. Full generated-scene reload remains a packaged
    Release acceptance step, not an automated one.
-7. **Legacy projects are not migrated.** Projects generated before this
-   milestone still contain the old serialized grid entities in their saved
-   WISCENE. They remain hidden from the hierarchy by the
-   `__renegade_internal_` filter, but they are still in the file. Only newly
-   created projects are clean.
+10. **Legacy projects are not migrated.** Projects generated before this
+    milestone still contain the old serialized grid entities in their saved
+    WISCENE. They remain hidden from the hierarchy by the
+    `__renegade_internal_` filter, but they are still in the file. Only newly
+    created projects are clean.
+
+## Grid finding: the stock helper cannot expand
+
+Verified against the pinned Wicked source, not against documentation.
+
+There is **no grid shader**. `PSO_debug[DEBUGRENDERING_GRID]` is built from
+`VSTYPE_VERTEXCOLOR` / `PSTYPE_VERTEXCOLOR` with `PrimitiveTopology::LINELIST`,
+`DSSTYPE_DEPTHREAD` and `BSTYPE_TRANSPARENT`. There is no infinite-plane
+raymarch, no distance fade and no screen-space line width to enable.
+
+The adaptive behaviour *does* exist in `DrawDebugWorld`: it projects the frustum
+corners through the inverse view-projection onto the ground plane, selects
+`gridStep = xdif > 200.0f ? 10.0f : 1.0f`, and fades minor lines against major
+ones. All of it is inside `if (gridHelper2D)`. That same branch also applies:
+
+```cpp
+viewProj = XMMatrixRotationX(XM_PIDIV2) * viewProj;
+```
+
+which rotates the grid 90 degrees about X for a 2D editor view. Enabling
+`SetGridHelper2D(true)` in a 3D perspective viewport would stand the grid up as
+a wall. The 3D branch is a hardcoded `gridRes3D = 20` with its minor-alpha lines
+commented out.
+
+Renegade also cannot fully own the stock grid's colour. `gridHelperColor` tints
+only the non-centre lines; the two centre lines are hardcoded red and blue axis
+indicators and `channel_min = 0.2f` is baked in.
+
+Conclusion: the stock helper is the correct choice for *removing serialized grid
+entities*, which it did, but it can never be the expanding holographic grid the
+approved direction wants. That requires a Renegade-owned grid.
+
+### Approved approach for the Renegade grid
+
+A shader-based infinite grid, owned by Renegade, with no Wicked source or pin
+change. Feasibility was checked against the pinned source:
+
+- `RenderPath3D::RenderTransparents` is `virtual`, and it is where
+  `DrawDebugWorld` — and therefore the current grid — is already called from.
+  Overriding it, calling the base, then appending a Renegade grid pass puts the
+  grid in exactly the same slot: depth buffer bound so scene geometry occludes
+  it, and still upstream of bloom and tonemapping.
+- Shader delivery: `wi::renderer::LoadShader` falls through to
+  `wi::shadercompiler` when the shader dump misses, and `dxcompiler.dll` already
+  ships beside the executable. Preferred route is to precompile
+  `RenegadeGrid.hlsl` to an embedded header at build time and call
+  `device->CreateShader` directly, which avoids both the dump-miss error log and
+  deploying HLSL next to the Release.
+- Technique: full-screen triangle, reconstruct the view ray per pixel, intersect
+  the `y = 0` plane, derive line coverage analytically from screen-space
+  derivatives for stable anti-aliasing at any distance, fade with distance, and
+  reject against the scene depth buffer so it is occluded correctly.
+
+Rejected alternatives, recorded so they are not revisited:
+
+- **Enable `SetGridHelper2D(true)`** — rotates the grid into the vertical plane.
+- **Patch Wicked to decouple the adaptive extent from 2D mode** — smallest code
+  change, but it forks pinned upstream source and would require an ADR plus a
+  core-patch ledger entry. Not approved.
+- **Replicate the adaptive line generation on the CPU in Studio** — viable and
+  cheaper, but hairline lines with no analytic anti-aliasing. Held as the
+  fallback if the shader build plumbing proves troublesome.
 
 ## Required verification before this milestone can pass
 
@@ -308,28 +410,56 @@ VULKAN PASS
 Visual comparison must use the project owner's approved reference imagery.
 Green CI alone cannot pass this milestone.
 
-## Next bounded task
+## Next bounded milestone: Editor Visual Polish
 
-**If CI or Windows acceptance fails:** repair only what failed, on the same
-branch, and record the repair here. Do not fold new scope into a fix cycle.
+Agreed scope. Branch from `main` once PR #1 is merged, for example
+`phase3/editor-visual-polish`. One PR, one CI cycle, one Windows test session.
 
-**If this milestone passes:** the next bounded milestone is **Editor Visual
-Polish**, which finally clears the deferred defects and the remaining prototype
-presentation:
+**Renegade-owned infinite grid**
 
-1. Reduce the transform gizmo to a sane screen-space size.
-2. Restyle the gizmo to the approved holographic language.
-3. Thin the selection outline.
-4. Replace the Content Browser placeholder text with a real empty state.
-5. Apply the approved reference imagery to the Project Hub and workspace shell.
+1. Add `RenegadeGrid.hlsl` and a build step that precompiles it to an embedded
+   header. Do not add it to Wicked's shader dump.
+2. Override `StudioRenderPath::RenderTransparents`, call the base, then draw
+   the grid: full-screen triangle, per-pixel view-ray reconstruction, `y = 0`
+   plane intersection, analytic anti-aliased lines from screen-space
+   derivatives, distance fade, depth rejection against the scene depth buffer.
+3. Adaptive spacing with major and minor lines, and Renegade-owned colour
+   throughout, including the axis lines.
+4. Disable `wi::renderer::SetToDrawGridHelper` once the Renegade grid replaces
+   it, and keep the grid off on the Project Hub.
+5. Update `docs/FEATURE_MATRIX.csv` row `REN-REN-004`.
+
+**Deferred defects from the editor usability milestone**
+
+6. Reduce the transform gizmo to a sane screen-space size.
+7. Restyle the gizmo to the approved holographic language.
+8. Thin the selection outline.
+
+**Visual corrections from open defects 1-4 and 6**
+
+9. Rebalance sun pitch, intensity, `skyExposure` and `ambient` so the terrain
+   and distant masses read as smoked near-black rather than warm tan.
+10. Reduce emissive strength and raise `bloomThreshold` so the hologram core
+    and pedestal read as cyan instead of clipping to white.
+11. Raise the terrain relief amplitude or shorten its wavelength so it is
+    visible from editor camera height.
+12. Retune `fogHeightStart`/`fogHeightEnd` so low-lying mist reads on the deck.
+13. Soften the hard terrain edge against the sky.
+
+**Presentation cleanup**
+
+14. Number duplicate generated entity names in `ProvingGroundBlueprint()`.
+15. Fix the clipping workspace title label in `ResizeLayout`.
+16. Replace the Content Browser placeholder text with a real empty state.
 
 Request the approved concept imagery from the project owner before starting
-item 5.
+items 9-13. Those are subjective and were guessed blind once already.
 
 Still not started and explicitly out of scope until scheduled: scene tabs,
 docking, formal dirty-state tracking, unsaved-change prompts, crash recovery,
 asset import, terrain authoring, arbitrary local fog volumes, persisted camera
-speed and editor layout, and the Identity Handshake.
+speed and editor layout, legacy-project grid migration, and the Identity
+Handshake.
 
 ## Working and delivery model
 
