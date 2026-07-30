@@ -1,174 +1,357 @@
-# Current Handoff
+# Renegade Engine — Development Handoff
 
-**Date:** 2026-07-30
+**Handoff date:** 2026-07-30
 
-**Project:** Renegade Engine (working title)
+**Intended recipient:** the project owner, then Claude Code or another coding
+agent
 
-**Active phase:** 3 — Studio foundation
+**Repository:** `https://github.com/mav3r1ckmediastudio-glitch/renegade-engine.git`
 
-**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
+**Canonical branch:** `main`
 
-**Published failing milestone:** `c4eb43d` — Record the Phase 3 editor
-usability handoff
+**Branch awaiting review:** `phase3/viewport-visual-foundation`
 
-**Prepared command implementation:** `cb04cf4` — Add undoable scene editing
-commands
+**Branch base:** `main` at `d04e346b0b9ee4a1f30f8d649ffc705d9bfde212`
 
-**Prepared Studio implementation:** `547906a` — Build the Phase 3 editor
-usability milestone
+**Active phase:** Phase 3 — Studio foundation
 
-**Prepared CI repair:** `08c8f12` — Fix headless editor command tests
+**Current milestone:** Viewport and Proving Ground Visual Foundation —
+implemented, **not yet built, not yet visually accepted**
 
-**Pinned Wicked commit:**
-`3a800b7134aafe58461093c8abb2e274d4e64033`
+## Status in one paragraph
 
-## Accepted baseline
+The Viewport and Proving Ground Visual Foundation milestone is implemented on
+`phase3/viewport-visual-foundation` in four commits. It has **not** been
+compiled: the machine it was authored on has no CMake and no Visual Studio
+toolchain. GitHub Actions has not run, and no packaged Release has been tested.
+Treat every visual and behavioural claim below as an intention, not a result,
+until `.github/workflows/studio.yml` is green and the packaged Release has been
+run on Windows through both launchers.
 
-Phase 2 remains closed with:
+## Start here
+
+```bash
+git clone --recurse-submodules \
+  https://github.com/mav3r1ckmediastudio-glitch/renegade-engine.git
+cd renegade-engine
+git switch phase3/viewport-visual-foundation
+git submodule update --init --recursive
+```
+
+Verify before changing anything:
+
+```bash
+git status --short
+git rev-parse HEAD
+git submodule status
+```
+
+Expected Wicked Engine pin, unchanged by this milestone:
+
+```text
+3a800b7134aafe58461093c8abb2e274d4e64033
+```
+
+Read these files in order:
+
+1. `AGENTS.md`
+2. `README.md`
+3. `docs/PROJECT_CHARTER.md`
+4. `docs/ARCHITECTURE.md`
+5. `docs/ROADMAP.md`
+6. `docs/AI_WORKFLOW.md`
+7. `docs/PHASE3_PROJECT_HUB.md`
+8. `docs/PHASE3_VIEWPORT_INTERACTION.md`
+9. `docs/PHASE3_EDITOR_USABILITY.md`
+10. `docs/PHASE3_VIEWPORT_VISUAL_FOUNDATION.md`
+11. Relevant rows in `docs/FEATURE_MATRIX.csv`
+
+`CLAUDE.md` deliberately points back to these canonical repository documents.
+Do not create a second, competing project plan in a tool-specific instruction
+file.
+
+## Non-negotiable project rules
+
+- Wicked Engine is a pinned upstream submodule. Do not edit its source or move
+  its submodule pointer unless the project owner explicitly approves a
+  documented upstream-sync or core-patch task.
+- Prefer implementation in `Studio`, `EngineBridge`, `Runtime`, `Tools`, and
+  `Tests`.
+- Studio owns presentation and input routing. Persistent scene mutations belong
+  in UI-independent `EngineBridge` commands and must support Undo/Redo.
+- Bridge code must not call renderer-dependent `Scene::Update()`. The
+  render-capable Studio frame loop owns scene advancement.
+- Keep `.renegade` project metadata above Wicked's native WISCENE format. Do not
+  alter WISCENE semantics without an ADR and migration tests.
+- Windows x64/DX12 is the initial target. Vulkan on Windows is the required
+  development cross-check. Do not silently broaden platform scope.
+- Automated compilation is not visual acceptance. GitHub Actions plus a
+  human-tested downloadable Studio Release are required before claiming a
+  milestone has passed.
+- A visible or behavioural failure overrides green CI.
+- Never commit credentials, tokens, personal data, machine-specific absolute
+  paths, build output, or hidden reasoning.
+
+## Product and visual direction
+
+Renegade is a Windows-first game engine and authoring environment built on
+Wicked Engine. Wicked supplies rendering and low-level engine systems;
+Renegade owns its editor, project system, asset workflow, runtime, terminology,
+visual identity, documentation, and release process.
+
+The approved editor direction is an industrial holographic workstation:
+
+- smoked near-black panels;
+- ice-blue/cyan projected edges and interaction states;
+- amber reserved for warnings;
+- restrained glow with clear typography;
+- a colour-accurate 3D viewport; and
+- Renegade-owned layout and workflows rather than a reskinned Wicked Editor.
+
+The approved concept imagery is still not stored in this repository. Ask the
+project owner for the reference images before making subjective redesign
+decisions. Do not invent a different visual direction.
+
+## Completed and accepted baseline
+
+### Phase 2
+
+Closed. Project owner's Windows GPU result:
 
 ```text
 DX12 PASS / VULKAN PASS / DPI PASS / INPUT PASS / HDR NOT AVAILABLE
 ```
 
-The project owner launched the first Phase 3 Project Hub build on an NVIDIA
-GeForce RTX 4070 Ti. Project creation, scene loading, hierarchy population,
-the live Proving Ground, and a VSync-limited 75 FPS passed.
+### Phase 3 Project Hub
 
-Viewport click selection and fly-camera navigation at `8fc89ba` passed on the
-project owner's Windows system. Selected-object outlining also works, but its
-current silhouette is too thick; that is recorded for a later visual-polish
-milestone and does not block this functional repair.
+Implemented at `30c5d3c`, documented through `b1ce148`. Confirmed on Windows:
+project creation, reopen and recents, generated WISCENE load, hierarchy
+population, Proving Ground render, stable VSync-limited 75 FPS on an RTX
+4070 Ti.
 
-The Hub and Proving Ground remain functional visual baselines, not acceptance
-of the final approved holographic mockups.
+### Viewport interaction
 
-## Prepared editor-usability outcome
+Implemented at `dc32684`, documented through `8fc89ba`. Confirmed on Windows:
+click selection, empty-space deselect, shared selection state across viewport,
+hierarchy, Inspector, gizmo and outline, right-mouse freelook, WASD/QE
+movement, Shift acceleration, wheel speed control, and no interference with
+editor panels.
 
-The next substantial Studio milestone adds:
+### Editor usability milestone
 
-- generated grid helpers hidden from the creator-facing hierarchy;
-- a compact FPS readout confined to the viewport;
-- an unobstructed command bar;
-- Position, Rotation in degrees, and Scale Inspector fields;
-- Move, Rotate, and Scale gizmo modes;
-- W/E/R tool shortcuts;
-- focus-on-selection with F;
-- duplicate with Ctrl+D;
-- delete with Delete;
-- direct Save with Ctrl+S;
-- Save As with Ctrl+Shift+S;
-- Undo and Redo with Ctrl+Z/Ctrl+Y;
-- undoable complete-transform edits;
-- undoable recursive entity duplication; and
-- undoable recursive entity deletion.
+Implemented in `cb04cf4`, `547906a`, `399b415`, `c4eb43d`, repaired in
+`08c8f12` and recorded in `d04e346`. Confirmed on Windows: filtered hierarchy,
+viewport-only FPS display, unobstructed command bar, Inspector transform
+editing, Move/Rotate/Scale gizmos, W/E/R shortcuts, F focus, Ctrl+D duplicate,
+Delete, Ctrl+Z Undo, Ctrl+Y Redo, Ctrl+S Save, Ctrl+Shift+S Save As, and saved
+transform persistence.
 
-The selection service remains shared between the viewport, hierarchy,
-Inspector, outline, and gizmo. Wicked source and the pinned submodule pointer
-remain unchanged.
+Known visual defects still deferred to a dedicated editor visual-polish
+milestone:
 
-## Windows CI failure and focused repair
+- the transform gizmo is far too large;
+- the gizmo styling is temporary and visually poor; and
+- the selection outline is too thick.
 
-GitHub Actions compiled the exact `c4eb43d` Studio milestone successfully in
-Windows x64 Debug and Release. `RenegadeBridgeTests.exe` then crashed in both
-configurations.
+## This milestone: Viewport and Proving Ground Visual Foundation
 
-The new duplicate/delete commands called `Scene::Update()` after ECS
-mutations. Wicked's scene update requires an initialized graphics device, but
-the bridge test is intentionally headless. The hierarchy-filter test would
-have reached the same renderer dependency by constructing the full Proving
-Ground.
+### Commits on `phase3/viewport-visual-foundation`
 
-Repair `08c8f12`:
+| Commit | Subject |
+|---|---|
+| `92414f4` | Rebuild the generated Proving Ground from a renderer-independent blueprint |
+| `e0c4d3b` | Draw the editor grid with Wicked's renderer-owned grid helper |
+| `60aefdc` | Cover generated-scene structure and the headless scene round trip |
+| see `git log` | Record the Phase 3 viewport visual foundation |
 
-- removes renderer-dependent scene updates from duplicate/delete commands;
-- leaves scene advancement with Studio's normal `RenderPath3D` frame loop; and
-- replaces the rendered Proving Ground hierarchy fixture with lightweight
-  named ECS entities.
-
-The editor features, Wicked source, submodule pin, WISCENE format, and Runtime
-remain unchanged.
-
-## Validation completed in this workspace
-
-The following commands passed after implementation:
+### Changed files
 
 ```text
-g++ -std=c++17 -D__SCE__ -I WickedEngine/WickedEngine \
-  -I WickedEngine/Editor -I EngineBridge/include \
-  -fsyntax-only Studio/src/StudioApplication.cpp
-
-g++ -std=c++17 -D__SCE__ -I WickedEngine/WickedEngine \
-  -I EngineBridge/include -fsyntax-only \
-  EngineBridge/src/CommandService.cpp EngineBridge/src/SceneService.cpp
-
-g++ -std=c++17 -D__SCE__ -I WickedEngine/WickedEngine \
-  -I EngineBridge/include -fsyntax-only Tests/BridgeCommandTests.cpp
-
-git diff --check
+EngineBridge/include/renegade/bridge/SceneService.h
+EngineBridge/src/SceneService.cpp
+Studio/src/StudioApplication.cpp
+Tests/BridgeCommandTests.cpp
+docs/PHASE3_VIEWPORT_VISUAL_FOUNDATION.md   (new)
+docs/FEATURE_MATRIX.csv
+HANDOFF.md
 ```
 
-The same gates passed after repair `08c8f12`. `RenegadeBridgeTests` still
-covers complete transform state, duplicate and delete Undo/Redo, generated
-hierarchy filtering, prior repeated history, no-op filtering, selection,
-hierarchy, and project lifecycle behaviour without constructing a rendered
-scene.
+No Wicked Engine source was touched and the submodule pointer is unchanged.
 
-Every `docs/FEATURE_MATRIX.csv` row has 16 fields. The pinned Wicked submodule
-pointer is unchanged.
+### What changed and why
 
-The `-D__SCE__` syntax check only bypasses Wicked's unavailable Linux SDL
-platform declarations. It does not represent a PlayStation build.
+**Editor grid.** The 22 serialized `__renegade_internal_grid_*` cube and line
+entities are gone. Studio calls `wi::renderer::SetToDrawGridHelper(true)`,
+which generates temporary GPU line vertices inside `DrawDebugWorld` instead of
+scene entities. The grid is therefore editor-only, unpickable, absent from the
+hierarchy and never serialized, by construction rather than by filtering. It is
+tinted ice-blue via `SetGridHelperColor` and switched off together with the
+frame-rate readout whenever the Project Hub is visible. `RenegadeRuntime` never
+enables it.
 
-CMake, MSVC, the Windows SDK, and a render-capable Windows environment are
-unavailable here. GitHub Actions and the project owner's GPU remain the compile
-and visual authorities.
+**Generated scene as data.** `ProvingGroundBlueprint()` returns the complete
+composition as plain structs; `CreateProvingGround()` instantiates that list
+verbatim. This exists for a concrete reason: Wicked's primitive factories call
+`MeshComponent::CreateRenderData()`, which dereferences the global graphics
+device, so `CreateProvingGround()` can never run in the headless test process.
+Splitting description from instantiation is what makes the generated structure
+testable at all. This is also the most likely explanation for the earlier
+`RenegadeBridgeTests.exe` crash when the test called `CreateProvingGround()`
+directly.
 
-## Publication order
+**Composition.** Everything is now centred on the world origin so the grid
+helper reads as the deck's own measurement grid: generated ground relief mesh,
+smoked-composite deck with ice-blue projected edges, centre pedestal and
+hologram core, gateway, amber range markers, eight perimeter pylons, a stepped
+retaining terrace, an equipment crate cluster, five distant background masses
+and an environment probe. The ground relief is a generated treatment with a
+deterministic height function — not a terrain-authoring system.
 
-1. Merge and publish the focused CI-repair bundle on top of exact
-   `c4eb43d`.
-2. Require the Renegade Studio and Windows baseline workflows to pass Debug and
-   Release, including `RenegadeBridgeTests`.
-3. Download the Release Studio artifact for the exact repaired commit.
-4. Extract `RenegadeStudio-Release.zip` into a fresh folder.
-5. Follow `README-FIRST.txt`.
-6. Report:
+**Atmosphere.** Weather now lives on a real entity named `Environment`. This
+fixes a latent defect: `Scene::weather` is only a runtime copy that
+`RunWeatherUpdateSystem` overwrites from `weathers[0]` each frame, and it is not
+serialized on its own, so the previous fog settings were silently lost on
+reload. The scene now carries realistic sky with aerial perspective, distance
+fog, height-based low-lying mist, and per-light volumetric scattering on the
+sun, hologram core, gateway beam and both range markers. Studio enables MSAO,
+volumetric lights, a raised bloom threshold, and fixed exposure with eye
+adaption off so viewport brightness does not drift with camera aim.
+
+**Renderer-dependent calls removed from the bridge.** `Scene::Update()` no
+longer appears anywhere in `EngineBridge`. `SaveScene()` dropped it because
+serialization writes local transforms only and `TransformComponent` recomputes
+its world matrix on read. `LoadScene()` now deserializes the archive directly
+with `Scene::Serialize` rather than `wi::scene::LoadModel`, which is an import
+path that reparents every unparented transform under a temporary root, calls
+`Scene::Update()`, then detaches. The new read is the exact inverse of the write
+and matches what `LoadModel2` does internally minus the reparenting.
+
+### Commands run
 
 ```text
-DX12 EDITING PASS / HIERARCHY PASS / TRANSFORM PASS / FOCUS PASS /
-DUPLICATE-DELETE PASS / HISTORY PASS / SAVE PASS / SHORTCUTS PASS /
-RECENTS PASS / VULKAN EDITING PASS
+git switch -c phase3/viewport-visual-foundation
+git submodule update --init --recursive --depth 1
+git diff --check          -> clean
+git submodule status      -> 3a800b71... WickedEngine (unchanged)
 ```
 
-Visual or behavioural failure overrides green CI.
+### Commands NOT run
 
-## Known limits and risks
+```text
+cmake / MSBuild            -> no toolchain on the authoring machine
+Tools/Build-Studio-Windows.ps1
+RenegadeBridgeTests.exe
+GitHub Actions studio.yml
+packaged Release smoke test
+```
 
-- The Studio milestone compiled in MSVC Debug and Release at `c4eb43d`, but the
-  repaired bridge test has not yet rerun in GitHub Actions.
-- Recursive duplicate/delete restoration relies on Wicked's in-memory entity
-  serialization with entity remapping disabled; automated coverage is prepared
-  but the Windows test executable remains authoritative.
-- Euler rotation fields have the same conversion limitations as Wicked's
-  reference Transform window.
-- The hierarchy convention hides generated entities whose names start with
-  `__renegade_internal_`; creator naming and reserved-name validation are not
-  yet exposed.
-- Delete has no confirmation because it is undoable. Unsaved-change and
-  dirty-state presentation remain open Phase 3 work.
-- Camera speed and editor layout remain session-only.
-- The live holographic shell and Proving Ground still require substantial
-  visual refinement against the approved concept.
-- Scene tabs, docking, formal dirty state, crash recovery, asset import, and
-  the Identity Handshake remain open.
-- This milestone is editor-only. `RenegadeRuntime` is unchanged.
+## Unverified claims and risks
 
-## Next work after this milestone passes
+Nothing in this milestone has been compiled or seen. Ranked by risk:
 
-1. Correct any Windows compile or behavioural failure.
-2. Add scene tabs, formal dirty-state tracking, unsaved-change prompts, and
-   crash-safe recovery.
-3. Refine the live Proving Ground terrain, atmosphere, lighting, and materials
-   against the approved visual target.
-4. Begin the real Identity Handshake only once the Project Hub transition it
-   reveals is stable.
+1. **Compilation.** `SceneService.cpp` was substantially rewritten and
+   `SceneService.h` gained a new public type. Expect the first CI run to be the
+   real syntax check. The most likely failure points are `ProvingGroundProp`
+   member initialisation and the `Entity_CreateLight` overload arity.
+2. **`LoadScene` behaviour change.** Reopen no longer goes through
+   `wi::scene::LoadModel`. This is architecturally correct and symmetric with
+   `SaveScene`, but it changes an accepted, working workflow. Re-verify Save,
+   Save As, close and reopen carefully, including saved transform persistence.
+3. **Terrain winding.** The generated relief mesh winds triangles to match
+   `Entity_CreatePlane`'s `+Y` quad. If the ground renders inside-out or black,
+   swap the two triangle index orders in `CreateGroundRelief`.
+4. **Performance.** MSAO, realistic sky with aerial perspective, height fog,
+   five volumetric lights and two shadow casters are all new cost. The prior
+   result was VSync-limited at 75 FPS on an RTX 4070 Ti, so there should be
+   headroom, but a regression here is plausible and would be explainable.
+   Dropping `setAO(AO_MSAO)` to `AO_HBAO` or `AO_DISABLED` is the first lever.
+5. **Sun angle and exposure.** The sun pitch, intensity and `skyExposure` were
+   chosen without seeing a frame. The scene may read too dark or too warm.
+6. **Headless test coverage is partial.** The save/reload round trip runs
+   against a mesh-free scene only, because `MeshComponent::CreateRenderData()`
+   needs a graphics device. Full generated-scene reload remains a packaged
+   Release acceptance step, not an automated one.
+7. **Legacy projects are not migrated.** Projects generated before this
+   milestone still contain the old serialized grid entities in their saved
+   WISCENE. They remain hidden from the hierarchy by the
+   `__renegade_internal_` filter, but they are still in the file. Only newly
+   created projects are clean.
+
+## Required verification before this milestone can pass
+
+### Automated
+
+- Build `RenegadeStudio` and `RenegadeBridgeTests` for Windows x64 Debug and
+  Release through `.github/workflows/studio.yml`.
+- Run `RenegadeBridgeTests` in both configurations.
+- Confirm the Wicked pin is exactly `3a800b71` and the submodule is clean.
+- Run `git diff --check`.
+
+### Human Windows acceptance
+
+Test the exact packaged Release artifact through both:
+
+```text
+Run-RenegadeStudio-DX12.cmd
+Run-RenegadeStudio-Vulkan.cmd
+```
+
+Follow the numbered checklist in
+`docs/PHASE3_VIEWPORT_VISUAL_FOUNDATION.md`. Required report:
+
+```text
+DX12 GRID PASS / GENERATED SCENE PASS / ATMOSPHERE PASS /
+EDITING REGRESSION PASS / SAVE REOPEN PASS / PERFORMANCE PASS /
+VULKAN PASS
+```
+
+Visual comparison must use the project owner's approved reference imagery.
+Green CI alone cannot pass this milestone.
+
+## Next bounded task
+
+**If CI or Windows acceptance fails:** repair only what failed, on the same
+branch, and record the repair here. Do not fold new scope into a fix cycle.
+
+**If this milestone passes:** the next bounded milestone is **Editor Visual
+Polish**, which finally clears the deferred defects and the remaining prototype
+presentation:
+
+1. Reduce the transform gizmo to a sane screen-space size.
+2. Restyle the gizmo to the approved holographic language.
+3. Thin the selection outline.
+4. Replace the Content Browser placeholder text with a real empty state.
+5. Apply the approved reference imagery to the Project Hub and workspace shell.
+
+Request the approved concept imagery from the project owner before starting
+item 5.
+
+Still not started and explicitly out of scope until scheduled: scene tabs,
+docking, formal dirty-state tracking, unsaved-change prompts, crash recovery,
+asset import, terrain authoring, arbitrary local fog volumes, persisted camera
+speed and editor layout, and the Identity Handshake.
+
+## Working and delivery model
+
+Each GitHub push and build cycle costs roughly 30 minutes, so the project owner
+wants fewer, larger transfers:
+
+- group roughly 4–8 related improvements into one coherent milestone;
+- retain separate, reviewable commits for major internal concerns;
+- push one development branch;
+- open one PR;
+- run CI once for the completed batch;
+- perform one meaningful Windows test session; and
+- collect minor defects for the next relevant batch rather than immediately
+  triggering another build.
+
+Do not turn this into an unbounded mega-change. A normal unit should still
+produce one testable vertical outcome.
+
+## Final source-of-truth note
+
+At this handoff, GitHub `main` is still
+`d04e346b0b9ee4a1f30f8d649ffc705d9bfde212`. The work described above lives only
+on `phase3/viewport-visual-foundation` and has not been merged. A leading `-`
+from `git submodule status` only means the Wicked submodule has not been
+downloaded in that checkout; it does not mean Renegade is out of sync.
