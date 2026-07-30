@@ -16,6 +16,8 @@ namespace renegade::studio
     {
     public:
         void BindSession(bridge::StudioSession& session) noexcept;
+        void BindDiagnostics(
+            wi::Application::InfoDisplayer& diagnostics) noexcept;
         void DeleteGPUResources() override;
         void Load() override;
         void Render() const override;
@@ -29,37 +31,67 @@ namespace renegade::studio
         void RefreshProjectHub();
 
     private:
-        enum class HistoryAction
+        enum class EditorAction
         {
             None,
             Undo,
             Redo,
+            FocusSelection,
+            DuplicateSelection,
+            DeleteSelection,
+            SaveScene,
+            SaveSceneAs,
+            TranslateTool,
+            RotateTool,
+            ScaleTool,
         };
 
-        void ApplySelectedTranslation(int axis, float value);
+        enum class TransformTool
+        {
+            Translate,
+            Rotate,
+            Scale,
+        };
+
+        void ApplySelectedTransformValue(
+            TransformTool tool,
+            int axis,
+            float value);
         void ApplyRenegadeTheme();
         void CreateProjectHub();
         void CreateWorkspaceShell();
         void CreateProject();
         void ClearSelectionOutline() noexcept;
+        void DeleteSelection();
+        void DuplicateSelection();
+        void FocusSelection();
+        void HandleEditorShortcuts();
         bool HandleViewportSelection(const XMFLOAT4& pointer);
         void HandleViewportNavigation(float dt, const XMFLOAT4& pointer);
         [[nodiscard]] bool IsPointerOverViewport(
             const XMFLOAT4& pointer) const noexcept;
+        [[nodiscard]] bool IsSelectedEntityValid() const;
         void OpenProject();
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
+        void ProcessPendingAction();
         void ReturnToProjectHub();
         void SelectRecentProject(std::size_t index);
+        void SetTransformTool(TransformTool tool);
         void SetProjectHubVisible(bool visible);
         void SyncGizmoSelection();
         void SyncSelectionOutline();
+        void SaveScene();
         void SaveSceneAs();
         void ReopenScene();
 
         bridge::StudioSession* session_ = nullptr;
+        wi::Application::InfoDisplayer* diagnostics_ = nullptr;
         wi::gui::Window toolbarPanel_;
         wi::gui::Label workspaceTitle_;
+        wi::gui::Button translateToolButton_;
+        wi::gui::Button rotateToolButton_;
+        wi::gui::Button scaleToolButton_;
         wi::gui::Button projectHubButton_;
         wi::gui::Window hierarchyPanel_;
         wi::gui::Label statusLabel_;
@@ -67,11 +99,24 @@ namespace renegade::studio
         wi::gui::TreeList hierarchyTree_;
         wi::gui::Window inspectorPanel_;
         wi::gui::Label inspectorLabel_;
+        wi::gui::Label positionLabel_;
+        wi::gui::Label rotationLabel_;
+        wi::gui::Label scaleLabel_;
         wi::gui::TextInputField translationX_;
         wi::gui::TextInputField translationY_;
         wi::gui::TextInputField translationZ_;
+        wi::gui::TextInputField rotationX_;
+        wi::gui::TextInputField rotationY_;
+        wi::gui::TextInputField rotationZ_;
+        wi::gui::TextInputField scaleX_;
+        wi::gui::TextInputField scaleY_;
+        wi::gui::TextInputField scaleZ_;
+        wi::gui::Button focusButton_;
+        wi::gui::Button duplicateButton_;
+        wi::gui::Button deleteButton_;
         wi::gui::Button undoButton_;
         wi::gui::Button redoButton_;
+        wi::gui::Button saveButton_;
         wi::gui::Button saveAsButton_;
         wi::gui::Button reopenButton_;
         wi::gui::Window contentPanel_;
@@ -99,7 +144,7 @@ namespace renegade::studio
         wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity outlinedEntity_ = wi::ecs::INVALID_ENTITY;
         std::uint8_t outlinedEntityPreviousStencil_ = 0;
-        XMFLOAT3 gizmoTranslationBefore_ = {};
+        bridge::TransformState gizmoTransformBefore_;
         XMFLOAT4 viewportBounds_ = {};
         XMFLOAT4 cameraPointerAnchor_ = {};
         float cameraMoveSpeed_ = 5.0f;
@@ -107,7 +152,7 @@ namespace renegade::studio
         bool flyCameraActive_ = false;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
-        HistoryAction pendingHistoryAction_ = HistoryAction::None;
+        EditorAction pendingAction_ = EditorAction::None;
     };
 
     class StudioApplication final : public wi::Application

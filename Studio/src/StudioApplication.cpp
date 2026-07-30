@@ -1,6 +1,7 @@
 #include "StudioApplication.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -26,6 +27,12 @@ namespace renegade::studio
         scene = &session.Scenes().GetScene();
     }
 
+    void StudioRenderPath::BindDiagnostics(
+        wi::Application::InfoDisplayer& diagnostics) noexcept
+    {
+        diagnostics_ = &diagnostics;
+    }
+
     void StudioRenderPath::Load()
     {
         setSSREnabled(false);
@@ -48,10 +55,10 @@ namespace renegade::studio
         CreateProjectHub();
         ApplyRenegadeTheme();
 
-        gizmo_.isTranslator = true;
-        gizmo_.isRotator = false;
-        gizmo_.isScalator = false;
         gizmo_.translate_snap = 0.1f;
+        gizmo_.rotate_snap = 15.0f / 180.0f * XM_PI;
+        gizmo_.scale_snap = 0.1f;
+        SetTransformTool(TransformTool::Translate);
 
         RefreshHierarchy();
         RefreshInspector();
@@ -204,6 +211,42 @@ namespace renegade::studio
         workspaceTitle_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         toolbarPanel_.AddWidget(&workspaceTitle_);
 
+        const auto createToolButton = [this](
+            wi::gui::Button& button,
+            const char* name,
+            const char* text,
+            const char* tooltip,
+            const EditorAction action)
+        {
+            button.Create(name);
+            button.SetText(text);
+            button.SetTooltip(tooltip);
+            button.SetAngularHighlightWidth(4.0f);
+            button.OnClick([this, action](const wi::gui::EventArgs&)
+            {
+                pendingAction_ = action;
+            });
+            toolbarPanel_.AddWidget(&button);
+        };
+        createToolButton(
+            translateToolButton_,
+            "Translate Tool",
+            "MOVE [W]",
+            "Translate the selected entity",
+            EditorAction::TranslateTool);
+        createToolButton(
+            rotateToolButton_,
+            "Rotate Tool",
+            "ROTATE [E]",
+            "Rotate the selected entity",
+            EditorAction::RotateTool);
+        createToolButton(
+            scaleToolButton_,
+            "Scale Tool",
+            "SCALE [R]",
+            "Scale the selected entity",
+            EditorAction::ScaleTool);
+
         projectHubButton_.Create("Open Project Hub");
         projectHubButton_.SetText("PROJECTS");
         projectHubButton_.SetTooltip("Return to the Renegade Project Hub");
@@ -258,32 +301,137 @@ namespace renegade::studio
         inspectorLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         inspectorPanel_.AddWidget(&inspectorLabel_);
 
-        const auto createTranslationInput = [this](
+        const auto createSectionLabel = [this](
+            wi::gui::Label& label,
+            const char* name,
+            const char* text)
+        {
+            label.Create(name);
+            label.SetText(text);
+            label.font.params.size = 13;
+            label.font.params.color = HologramMuted;
+            label.font.params.h_align = wi::font::WIFALIGN_LEFT;
+            inspectorPanel_.AddWidget(&label);
+        };
+        createSectionLabel(
+            positionLabel_,
+            "Position Section",
+            "POSITION");
+        createSectionLabel(
+            rotationLabel_,
+            "Rotation Section",
+            "ROTATION // DEGREES");
+        createSectionLabel(
+            scaleLabel_,
+            "Scale Section",
+            "SCALE");
+
+        const auto createTransformInput = [this](
             wi::gui::TextInputField& input,
             const char* name,
             const char* description,
+            const TransformTool tool,
             const int axis)
         {
             input.Create(name);
             input.SetDescription(description);
             input.SetValue(0.0f);
             input.SetSize(XMFLOAT2(90.0f, 28.0f));
-            input.OnInputAccepted([this, axis](const wi::gui::EventArgs& args)
+            input.OnInputAccepted(
+                [this, tool, axis](const wi::gui::EventArgs& args)
             {
-                ApplySelectedTranslation(axis, args.fValue);
+                ApplySelectedTransformValue(tool, axis, args.fValue);
             });
             inspectorPanel_.AddWidget(&input);
         };
-        createTranslationInput(translationX_, "Translation X", "X: ", 0);
-        createTranslationInput(translationY_, "Translation Y", "Y: ", 1);
-        createTranslationInput(translationZ_, "Translation Z", "Z: ", 2);
+        createTransformInput(
+            translationX_,
+            "Translation X",
+            "X: ",
+            TransformTool::Translate,
+            0);
+        createTransformInput(
+            translationY_,
+            "Translation Y",
+            "Y: ",
+            TransformTool::Translate,
+            1);
+        createTransformInput(
+            translationZ_,
+            "Translation Z",
+            "Z: ",
+            TransformTool::Translate,
+            2);
+        createTransformInput(
+            rotationX_,
+            "Rotation X",
+            "X: ",
+            TransformTool::Rotate,
+            0);
+        createTransformInput(
+            rotationY_,
+            "Rotation Y",
+            "Y: ",
+            TransformTool::Rotate,
+            1);
+        createTransformInput(
+            rotationZ_,
+            "Rotation Z",
+            "Z: ",
+            TransformTool::Rotate,
+            2);
+        createTransformInput(
+            scaleX_,
+            "Scale X",
+            "X: ",
+            TransformTool::Scale,
+            0);
+        createTransformInput(
+            scaleY_,
+            "Scale Y",
+            "Y: ",
+            TransformTool::Scale,
+            1);
+        createTransformInput(
+            scaleZ_,
+            "Scale Z",
+            "Z: ",
+            TransformTool::Scale,
+            2);
+
+        focusButton_.Create("Focus Selected");
+        focusButton_.SetText("FOCUS [F]");
+        focusButton_.SetTooltip("Frame the selected entity in the viewport");
+        focusButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::FocusSelection;
+        });
+        inspectorPanel_.AddWidget(&focusButton_);
+
+        duplicateButton_.Create("Duplicate Selected");
+        duplicateButton_.SetText("DUPLICATE");
+        duplicateButton_.SetTooltip("Duplicate selected entity (Ctrl+D)");
+        duplicateButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::DuplicateSelection;
+        });
+        inspectorPanel_.AddWidget(&duplicateButton_);
+
+        deleteButton_.Create("Delete Selected");
+        deleteButton_.SetText("DELETE");
+        deleteButton_.SetTooltip("Delete selected entity (Delete)");
+        deleteButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::DeleteSelection;
+        });
+        inspectorPanel_.AddWidget(&deleteButton_);
 
         undoButton_.Create("Undo Transform");
         undoButton_.SetText("UNDO");
         undoButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
         undoButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingHistoryAction_ = HistoryAction::Undo;
+            pendingAction_ = EditorAction::Undo;
         });
         inspectorPanel_.AddWidget(&undoButton_);
 
@@ -292,16 +440,26 @@ namespace renegade::studio
         redoButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
         redoButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingHistoryAction_ = HistoryAction::Redo;
+            pendingAction_ = EditorAction::Redo;
         });
         inspectorPanel_.AddWidget(&redoButton_);
+
+        saveButton_.Create("Save Scene");
+        saveButton_.SetText("SAVE");
+        saveButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
+        saveButton_.SetTooltip("Save the current scene (Ctrl+S)");
+        saveButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::SaveScene;
+        });
+        inspectorPanel_.AddWidget(&saveButton_);
 
         saveAsButton_.Create("Save Scene As");
         saveAsButton_.SetText("SAVE AS...");
         saveAsButton_.SetSize(XMFLOAT2(112.0f, 28.0f));
         saveAsButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            SaveSceneAs();
+            pendingAction_ = EditorAction::SaveSceneAs;
         });
         inspectorPanel_.AddWidget(&saveAsButton_);
 
@@ -509,21 +667,13 @@ namespace renegade::studio
             return;
         }
 
-        // wiGUI invokes OnClick while Button::Update is still active. Apply
-        // history only after the complete GUI update has returned.
-        if (pendingHistoryAction_ != HistoryAction::None)
-        {
-            const HistoryAction action = pendingHistoryAction_;
-            pendingHistoryAction_ = HistoryAction::None;
+        HandleEditorShortcuts();
 
-            const bool changed = action == HistoryAction::Undo
-                ? session_->Commands().Undo()
-                : session_->Commands().Redo();
-            if (changed)
-            {
-                RefreshInspector();
-                RefreshStatus();
-            }
+        // wiGUI invokes OnClick while Button::Update is still active. Apply
+        // editor actions only after the complete GUI update has returned.
+        if (pendingAction_ != EditorAction::None)
+        {
+            ProcessPendingAction();
             return;
         }
 
@@ -573,18 +723,23 @@ namespace renegade::studio
                 return;
             }
 
-            const XMFLOAT3 translationAfter = transform->translation_local;
-            transform->translation_local = gizmoTranslationBefore_;
+            const auto transformAfter = bridge::CaptureTransform(*transform);
+            transform->translation_local =
+                gizmoTransformBefore_.translation;
+            transform->rotation_local =
+                gizmoTransformBefore_.rotation;
+            transform->scale_local =
+                gizmoTransformBefore_.scale;
             transform->SetDirty();
             transform->UpdateTransform();
 
             session_->Commands().Execute(
-                std::make_unique<bridge::SetTranslationCommand>(
+                std::make_unique<bridge::SetTransformCommand>(
                     session_->Scenes().GetScene(),
                     gizmoEntity_,
-                    gizmoTranslationBefore_,
-                    translationAfter));
-            gizmoTranslationBefore_ = translationAfter;
+                    gizmoTransformBefore_,
+                    transformAfter));
+            gizmoTransformBefore_ = transformAfter;
             RefreshInspector();
             RefreshStatus();
         }
@@ -654,12 +809,18 @@ namespace renegade::studio
         toolbarPanel_.SetPos(XMFLOAT2(8.0f, 8.0f));
         toolbarPanel_.SetSize(XMFLOAT2(width - 16.0f, toolbarHeight));
         workspaceTitle_.SetPos(XMFLOAT2(14.0f, 12.0f));
-        workspaceTitle_.SetSize(XMFLOAT2(440.0f, 30.0f));
+        workspaceTitle_.SetSize(XMFLOAT2(300.0f, 30.0f));
+        translateToolButton_.SetPos(XMFLOAT2(314.0f, 9.0f));
+        translateToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
+        rotateToolButton_.SetPos(XMFLOAT2(414.0f, 9.0f));
+        rotateToolButton_.SetSize(XMFLOAT2(100.0f, 30.0f));
+        scaleToolButton_.SetPos(XMFLOAT2(522.0f, 9.0f));
+        scaleToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
         projectHubButton_.SetPos(XMFLOAT2(width - 132.0f, 9.0f));
         projectHubButton_.SetSize(XMFLOAT2(108.0f, 30.0f));
-        statusLabel_.SetPos(XMFLOAT2(455.0f, 14.0f));
+        statusLabel_.SetPos(XMFLOAT2(628.0f, 14.0f));
         statusLabel_.SetSize(XMFLOAT2(
-            std::max(200.0f, width - 610.0f),
+            std::max(120.0f, width - 782.0f),
             24.0f));
 
         hierarchyPanel_.SetPos(XMFLOAT2(8.0f, toolbarHeight + 16.0f));
@@ -681,13 +842,67 @@ namespace renegade::studio
             height - toolbarHeight - 24.0f));
         inspectorLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
         inspectorLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 28.0f));
-        translationX_.SetPos(XMFLOAT2(12.0f, 50.0f));
-        translationY_.SetPos(XMFLOAT2(112.0f, 50.0f));
-        translationZ_.SetPos(XMFLOAT2(212.0f, 50.0f));
-        undoButton_.SetPos(XMFLOAT2(12.0f, 92.0f));
-        redoButton_.SetPos(XMFLOAT2(112.0f, 92.0f));
-        saveAsButton_.SetPos(XMFLOAT2(12.0f, 134.0f));
-        reopenButton_.SetPos(XMFLOAT2(134.0f, 134.0f));
+        const float fieldGap = 8.0f;
+        const float fieldWidth = (rightWidth - 40.0f) / 3.0f;
+        const auto positionInputRow = [&](
+            wi::gui::TextInputField& x,
+            wi::gui::TextInputField& y,
+            wi::gui::TextInputField& z,
+            const float rowY)
+        {
+            x.SetPos(XMFLOAT2(12.0f, rowY));
+            y.SetPos(XMFLOAT2(12.0f + fieldWidth + fieldGap, rowY));
+            z.SetPos(XMFLOAT2(
+                12.0f + (fieldWidth + fieldGap) * 2.0f,
+                rowY));
+            x.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+            y.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+            z.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+        };
+        positionLabel_.SetPos(XMFLOAT2(12.0f, 44.0f));
+        positionLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
+        positionInputRow(
+            translationX_,
+            translationY_,
+            translationZ_,
+            64.0f);
+        rotationLabel_.SetPos(XMFLOAT2(12.0f, 104.0f));
+        rotationLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
+        positionInputRow(rotationX_, rotationY_, rotationZ_, 124.0f);
+        scaleLabel_.SetPos(XMFLOAT2(12.0f, 164.0f));
+        scaleLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
+        positionInputRow(scaleX_, scaleY_, scaleZ_, 184.0f);
+
+        const float threeButtonWidth = (rightWidth - 40.0f) / 3.0f;
+        focusButton_.SetPos(XMFLOAT2(12.0f, 230.0f));
+        duplicateButton_.SetPos(XMFLOAT2(
+            12.0f + threeButtonWidth + fieldGap,
+            230.0f));
+        deleteButton_.SetPos(XMFLOAT2(
+            12.0f + (threeButtonWidth + fieldGap) * 2.0f,
+            230.0f));
+        focusButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        duplicateButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        deleteButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+
+        const float twoButtonWidth = (rightWidth - 32.0f) / 2.0f;
+        undoButton_.SetPos(XMFLOAT2(12.0f, 270.0f));
+        redoButton_.SetPos(XMFLOAT2(
+            20.0f + twoButtonWidth,
+            270.0f));
+        undoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
+        redoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
+
+        saveButton_.SetPos(XMFLOAT2(12.0f, 310.0f));
+        saveAsButton_.SetPos(XMFLOAT2(
+            12.0f + threeButtonWidth + fieldGap,
+            310.0f));
+        reopenButton_.SetPos(XMFLOAT2(
+            12.0f + (threeButtonWidth + fieldGap) * 2.0f,
+            310.0f));
+        saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
 
         contentPanel_.SetPos(XMFLOAT2(
             leftWidth + 16.0f,
@@ -751,6 +966,18 @@ namespace renegade::studio
 
         hubMessageLabel_.SetPos(XMFLOAT2(40.0f, height - 74.0f));
         hubMessageLabel_.SetSize(XMFLOAT2(width - 90.0f, 38.0f));
+
+        if (diagnostics_ != nullptr)
+        {
+            diagnostics_->rect.left = static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.x + 10.0f));
+            diagnostics_->rect.top = static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.y + 10.0f));
+            diagnostics_->rect.right = static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.z));
+            diagnostics_->rect.bottom = static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.w));
+        }
     }
 
     void StudioRenderPath::RefreshStatus()
@@ -771,10 +998,17 @@ namespace renegade::studio
         const std::string projectName = session_->Projects().HasProject()
             ? session_->Projects().CurrentProject().name
             : "PROVING GROUND";
+        const char* transformTool = gizmo_.isRotator
+            ? "ROTATE"
+            : gizmo_.isScalator
+                ? "SCALE"
+                : "MOVE";
         statusLabel_.SetText(
             projectName + " // " +
-            std::to_string(scenes.EntityCount()) +
-            " ENTITIES // UNDO " +
+            std::to_string(scenes.ListEntities().size()) +
+            " ITEMS // " +
+            transformTool +
+            " // UNDO " +
             std::to_string(session_->Commands().UndoCount()) +
             " // REDO " +
             std::to_string(session_->Commands().RedoCount()));
@@ -816,8 +1050,20 @@ namespace renegade::studio
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
         translationZ_.SetEnabled(hasTransform);
+        rotationX_.SetEnabled(hasTransform);
+        rotationY_.SetEnabled(hasTransform);
+        rotationZ_.SetEnabled(hasTransform);
+        scaleX_.SetEnabled(hasTransform);
+        scaleY_.SetEnabled(hasTransform);
+        scaleZ_.SetEnabled(hasTransform);
+        focusButton_.SetEnabled(hasTransform);
+        duplicateButton_.SetEnabled(hasTransform);
+        deleteButton_.SetEnabled(hasTransform);
         undoButton_.SetEnabled(hasSession && session_->Commands().CanUndo());
         redoButton_.SetEnabled(hasSession && session_->Commands().CanRedo());
+        saveButton_.SetEnabled(
+            hasSession && !session_->Scenes().CurrentPath().empty());
+        saveAsButton_.SetEnabled(hasSession);
         reopenButton_.SetEnabled(
             hasSession && !session_->Scenes().CurrentPath().empty());
 
@@ -827,14 +1073,282 @@ namespace renegade::studio
             translationX_.SetValue(0.0f);
             translationY_.SetValue(0.0f);
             translationZ_.SetValue(0.0f);
+            rotationX_.SetValue(0.0f);
+            rotationY_.SetValue(0.0f);
+            rotationZ_.SetValue(0.0f);
+            scaleX_.SetValue(1.0f);
+            scaleY_.SetValue(1.0f);
+            scaleZ_.SetValue(1.0f);
             return;
         }
 
-        inspectorLabel_.SetText("TRANSFORM // ENTITY " + std::to_string(entity));
+        const auto* name =
+            session_->Scenes().GetScene().names.GetComponent(entity);
+        inspectorLabel_.SetText(
+            "TRANSFORM // " +
+            (name != nullptr && !name->name.empty()
+                ? name->name
+                : "ENTITY " + std::to_string(entity)));
         translationX_.SetValue(transform->translation_local.x);
         translationY_.SetValue(transform->translation_local.y);
         translationZ_.SetValue(transform->translation_local.z);
+        const auto rotation =
+            wi::math::QuaternionToRollPitchYaw(transform->rotation_local);
+        rotationX_.SetValue(rotation.x / XM_PI * 180.0f);
+        rotationY_.SetValue(rotation.y / XM_PI * 180.0f);
+        rotationZ_.SetValue(rotation.z / XM_PI * 180.0f);
+        scaleX_.SetValue(transform->scale_local.x);
+        scaleY_.SetValue(transform->scale_local.y);
+        scaleZ_.SetValue(transform->scale_local.z);
         SyncGizmoSelection();
+    }
+
+    void StudioRenderPath::HandleEditorShortcuts()
+    {
+        if (projectHubVisible_ ||
+            flyCameraActive_ ||
+            GetGUI().IsTyping() ||
+            pendingAction_ != EditorAction::None)
+        {
+            return;
+        }
+
+        const auto key = [](const char value)
+        {
+            return static_cast<wi::input::BUTTON>(value);
+        };
+        const bool control =
+            wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL) ||
+            wi::input::Down(wi::input::KEYBOARD_BUTTON_RCONTROL);
+        const bool shift =
+            wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
+            wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT);
+
+        if (control && wi::input::Press(key('Z')))
+        {
+            pendingAction_ = EditorAction::Undo;
+        }
+        else if (control && wi::input::Press(key('Y')))
+        {
+            pendingAction_ = EditorAction::Redo;
+        }
+        else if (control && wi::input::Press(key('D')))
+        {
+            pendingAction_ = EditorAction::DuplicateSelection;
+        }
+        else if (control && wi::input::Press(key('S')))
+        {
+            pendingAction_ = shift
+                ? EditorAction::SaveSceneAs
+                : EditorAction::SaveScene;
+        }
+        else if (wi::input::Press(wi::input::KEYBOARD_BUTTON_DELETE))
+        {
+            pendingAction_ = EditorAction::DeleteSelection;
+        }
+        else if (wi::input::Press(key('F')))
+        {
+            pendingAction_ = EditorAction::FocusSelection;
+        }
+        else if (wi::input::Press(key('W')))
+        {
+            pendingAction_ = EditorAction::TranslateTool;
+        }
+        else if (wi::input::Press(key('E')))
+        {
+            pendingAction_ = EditorAction::RotateTool;
+        }
+        else if (wi::input::Press(key('R')))
+        {
+            pendingAction_ = EditorAction::ScaleTool;
+        }
+    }
+
+    bool StudioRenderPath::IsSelectedEntityValid() const
+    {
+        return session_ != nullptr &&
+            session_->Selection().HasSelection() &&
+            session_->Scenes().ContainsEntity(
+                session_->Selection().SelectedEntity());
+    }
+
+    void StudioRenderPath::ProcessPendingAction()
+    {
+        if (session_ == nullptr)
+        {
+            pendingAction_ = EditorAction::None;
+            return;
+        }
+
+        const EditorAction action = pendingAction_;
+        pendingAction_ = EditorAction::None;
+        switch (action)
+        {
+        case EditorAction::Undo:
+        case EditorAction::Redo:
+        {
+            ClearSelectionOutline();
+            const bool changed = action == EditorAction::Undo
+                ? session_->Commands().Undo()
+                : session_->Commands().Redo();
+            if (changed)
+            {
+                if (session_->Selection().HasSelection() &&
+                    !IsSelectedEntityValid())
+                {
+                    session_->Selection().Clear();
+                }
+                RefreshHierarchy();
+                RefreshInspector();
+                RefreshStatus();
+            }
+            else
+            {
+                SyncSelectionOutline();
+            }
+            break;
+        }
+        case EditorAction::FocusSelection:
+            FocusSelection();
+            break;
+        case EditorAction::DuplicateSelection:
+            DuplicateSelection();
+            break;
+        case EditorAction::DeleteSelection:
+            DeleteSelection();
+            break;
+        case EditorAction::SaveScene:
+            SaveScene();
+            break;
+        case EditorAction::SaveSceneAs:
+            SaveSceneAs();
+            break;
+        case EditorAction::TranslateTool:
+            SetTransformTool(TransformTool::Translate);
+            break;
+        case EditorAction::RotateTool:
+            SetTransformTool(TransformTool::Rotate);
+            break;
+        case EditorAction::ScaleTool:
+            SetTransformTool(TransformTool::Scale);
+            break;
+        case EditorAction::None:
+        default:
+            break;
+        }
+    }
+
+    void StudioRenderPath::SetTransformTool(const TransformTool tool)
+    {
+        gizmo_.isTranslator = tool == TransformTool::Translate;
+        gizmo_.isRotator = tool == TransformTool::Rotate;
+        gizmo_.isScalator = tool == TransformTool::Scale;
+
+        translateToolButton_.SetColor(
+            gizmo_.isTranslator ? HologramSelected : HologramIdle,
+            wi::gui::IDLE);
+        rotateToolButton_.SetColor(
+            gizmo_.isRotator ? HologramSelected : HologramIdle,
+            wi::gui::IDLE);
+        scaleToolButton_.SetColor(
+            gizmo_.isScalator ? HologramSelected : HologramIdle,
+            wi::gui::IDLE);
+        SyncGizmoSelection();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::FocusSelection()
+    {
+        if (!IsSelectedEntityValid())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        auto& scene = session_->Scenes().GetScene();
+        scene.Update(0.0f);
+        const auto* transform = scene.transforms.GetComponent(entity);
+        if (transform == nullptr)
+        {
+            return;
+        }
+
+        XMVECTOR center = transform->GetPositionV();
+        float distance = 5.0f;
+        if (scene.objects.Contains(entity))
+        {
+            const auto index = scene.objects.GetIndex(entity);
+            if (index < scene.aabb_objects.size())
+            {
+                const auto& bounds = scene.aabb_objects[index];
+                const XMFLOAT3 boundsCenter = bounds.getCenter();
+                center = XMLoadFloat3(&boundsCenter);
+                distance = std::max(2.5f, bounds.getRadius() * 2.5f);
+            }
+        }
+
+        const XMVECTOR forward = XMVector3Normalize(camera->GetAt());
+        const XMVECTOR eye = center - forward * distance;
+        const XMMATRIX view = XMMatrixLookAtLH(
+            eye,
+            center,
+            camera->GetUp());
+        editorCameraTransform_.ClearTransform();
+        editorCameraTransform_.MatrixTransform(
+            XMMatrixInverse(nullptr, view));
+        editorCameraTransform_.UpdateTransform();
+        camera->TransformCamera(editorCameraTransform_);
+        camera->UpdateCamera();
+    }
+
+    void StudioRenderPath::DuplicateSelection()
+    {
+        if (!IsSelectedEntityValid())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        ClearSelectionOutline();
+        auto command = std::make_unique<bridge::DuplicateEntityCommand>(
+            session_->Scenes().GetScene(),
+            entity);
+        auto* duplicateCommand = command.get();
+        if (!session_->Commands().Execute(std::move(command)))
+        {
+            SyncSelectionOutline();
+            return;
+        }
+
+        session_->Selection().Select(
+            duplicateCommand->DuplicatedEntity());
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::DeleteSelection()
+    {
+        if (!IsSelectedEntityValid())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        ClearSelectionOutline();
+        if (!session_->Commands().Execute(
+                std::make_unique<bridge::DeleteEntityCommand>(
+                    session_->Scenes().GetScene(),
+                    entity)))
+        {
+            SyncSelectionOutline();
+            return;
+        }
+
+        session_->Selection().Clear();
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
     }
 
     bool StudioRenderPath::IsPointerOverViewport(
@@ -989,7 +1503,8 @@ namespace renegade::studio
             return false;
         }
 
-        if (picked.entity == wi::ecs::INVALID_ENTITY)
+        if (picked.entity == wi::ecs::INVALID_ENTITY ||
+            !session_->Scenes().IsHierarchyVisible(picked.entity))
         {
             session_->Selection().Clear();
         }
@@ -1063,7 +1578,8 @@ namespace renegade::studio
         }
     }
 
-    void StudioRenderPath::ApplySelectedTranslation(
+    void StudioRenderPath::ApplySelectedTransformValue(
+        const TransformTool tool,
         const int axis,
         const float value)
     {
@@ -1080,25 +1596,69 @@ namespace renegade::studio
             return;
         }
 
-        XMFLOAT3 translation = transform->translation_local;
-        if (axis == 0)
+        auto next = bridge::CaptureTransform(*transform);
+        if (tool == TransformTool::Translate)
         {
-            translation.x = value;
+            if (axis == 0)
+            {
+                next.translation.x = value;
+            }
+            else if (axis == 1)
+            {
+                next.translation.y = value;
+            }
+            else
+            {
+                next.translation.z = value;
+            }
         }
-        else if (axis == 1)
+        else if (tool == TransformTool::Rotate)
         {
-            translation.y = value;
+            auto rotation =
+                wi::math::QuaternionToRollPitchYaw(transform->rotation_local);
+            const float radians = value / 180.0f * XM_PI;
+            if (axis == 0)
+            {
+                rotation.x = radians;
+            }
+            else if (axis == 1)
+            {
+                rotation.y = radians;
+            }
+            else
+            {
+                rotation.z = radians;
+            }
+            XMStoreFloat4(
+                &next.rotation,
+                XMQuaternionNormalize(
+                    XMQuaternionRotationRollPitchYaw(
+                        rotation.x,
+                        rotation.y,
+                        rotation.z)));
         }
         else
         {
-            translation.z = value;
+            if (axis == 0)
+            {
+                next.scale.x = value;
+            }
+            else if (axis == 1)
+            {
+                next.scale.y = value;
+            }
+            else
+            {
+                next.scale.z = value;
+            }
         }
 
         session_->Commands().Execute(
-            std::make_unique<bridge::SetTranslationCommand>(
+            std::make_unique<bridge::SetTransformCommand>(
                 session_->Scenes().GetScene(),
                 entity,
-                translation));
+                next));
+        SetTransformTool(tool);
         RefreshInspector();
         RefreshStatus();
     }
@@ -1321,7 +1881,7 @@ namespace renegade::studio
         gizmo_.selectedEntitiesNonRecursive.push_back(entity);
         gizmo_.PreTranslate();
         gizmoEntity_ = entity;
-        gizmoTranslationBefore_ = transform->translation_local;
+        gizmoTransformBefore_ = bridge::CaptureTransform(*transform);
     }
 
     void StudioRenderPath::ClearSelectionOutline() noexcept
@@ -1371,6 +1931,27 @@ namespace renegade::studio
         outlinedEntity_ = selected;
         outlinedEntityPreviousStencil_ = object->userStencilRef;
         object->SetUserStencilRef(SelectionStencilReference);
+    }
+
+    void StudioRenderPath::SaveScene()
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        const std::string scenePath = session_->Scenes().CurrentPath();
+        if (scenePath.empty())
+        {
+            SaveSceneAs();
+            return;
+        }
+
+        ClearSelectionOutline();
+        session_->SaveScene(scenePath);
+        SyncSelectionOutline();
+        RefreshStatus();
+        RefreshInspector();
     }
 
     void StudioRenderPath::SaveSceneAs()
@@ -1443,16 +2024,18 @@ namespace renegade::studio
 
         infoDisplay.active = true;
         infoDisplay.watermark = false;
-        infoDisplay.device_name = true;
-        infoDisplay.resolution = true;
-        infoDisplay.logical_size = true;
-        infoDisplay.colorspace = true;
+        infoDisplay.device_name = false;
+        infoDisplay.resolution = false;
+        infoDisplay.logical_size = false;
+        infoDisplay.colorspace = false;
         infoDisplay.fpsinfo = true;
+        infoDisplay.size = 14;
 
         session_.Projects().Initialize("Saved/RenegadeStudio.ini");
         PrepareProvingGround();
 
         renderer_.BindSession(session_);
+        renderer_.BindDiagnostics(infoDisplay);
         renderer_.init(canvas);
         renderer_.Load();
         ActivatePath(&renderer_);
