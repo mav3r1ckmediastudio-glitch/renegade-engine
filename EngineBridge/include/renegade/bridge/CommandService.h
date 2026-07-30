@@ -18,6 +18,51 @@ namespace renegade::bridge
     [[nodiscard]] TransformState CaptureTransform(
         const wi::scene::TransformComponent& transform) noexcept;
 
+    // A curated view of WeatherComponent.
+    //
+    // WeatherComponent carries well over a hundred values once the two
+    // volumetric cloud layers are counted. Exposing them raw would be
+    // unusable, and capturing them all for Undo would make every slider drag
+    // copy kilobytes. This is the set a creator actually reaches for; anything
+    // absent here is left untouched by ApplyWeather, so authored values that
+    // Renegade does not yet surface are never destroyed by an edit.
+    struct WeatherState
+    {
+        enum class SkyMode
+        {
+            Realistic,            // physically based atmosphere
+            RealisticWithClouds,  // atmosphere plus volumetric clouds
+            Skybox,               // skyMap texture, cheapest
+        };
+
+        SkyMode skyMode = SkyMode::Realistic;
+        bool aerialPerspective = true;
+
+        float skyExposure = 1.0f;
+        float ambientIntensity = 0.0f;
+
+        float fogStart = 100.0f;
+        float fogDensity = 0.0f;
+        bool heightFog = false;
+        float fogHeightStart = 1.0f;
+        float fogHeightEnd = 3.0f;
+
+        float cloudCoverage = 1.0f;
+        float cloudStartHeight = 1500.0f;
+        float cloudThickness = 5000.0f;
+        bool cloudsCastShadow = false;
+    };
+
+    [[nodiscard]] WeatherState CaptureWeather(
+        const wi::scene::WeatherComponent& weather) noexcept;
+
+    // Applies only the fields WeatherState covers. Everything else on the
+    // component - atmosphere parameters, sky map name, wind, ocean, rain - is
+    // deliberately left as authored.
+    void ApplyWeather(
+        wi::scene::WeatherComponent& weather,
+        const WeatherState& state) noexcept;
+
     class ICommand
     {
     public:
@@ -92,6 +137,27 @@ namespace renegade::bridge
         wi::ecs::Entity entity_;
         TransformState before_;
         TransformState after_;
+    };
+
+    class SetWeatherCommand final : public ICommand
+    {
+    public:
+        SetWeatherCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity entity,
+            const WeatherState& before,
+            const WeatherState& after);
+
+        bool Execute() override;
+        void Undo() override;
+
+    private:
+        bool Apply(const WeatherState& state);
+
+        wi::scene::Scene* scene_;
+        wi::ecs::Entity entity_;
+        WeatherState before_;
+        WeatherState after_;
     };
 
     class DuplicateEntityCommand final : public ICommand
