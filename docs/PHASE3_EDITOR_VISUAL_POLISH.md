@@ -61,9 +61,12 @@ reimplemented and got wrong.
 ### Where it is drawn
 
 `StudioRenderPath` overrides the virtual `RenderPath3D::RenderTransparents`,
-calls the base, then draws the grid. That is the same call Wicked draws its own
-grid helper from, so the main render target and scene depth buffer are already
-bound and the grid still receives bloom and tonemapping.
+calls the base, then opens a separate pass that loads Wicked's main colour and
+depth attachments. With MSAA enabled, the pass also resolves into `rtMain`.
+The main viewport and scissor are rebound before the draw. Wicked ends its own
+passes before `RenderTransparents` returns, so this explicit ownership is
+required for both DX12 and Vulkan. The grid is still written before
+post-processing and therefore receives bloom and tonemapping.
 
 ### Shader delivery
 
@@ -123,7 +126,8 @@ Test the exact packaged Release artifact through both
 3. Flying up and back changes the grid spacing smoothly, with no visible pop.
 4. Scene geometry occludes the grid correctly. The grid does not draw over the
    deck, the pedestal or the distant structures.
-5. Grid colour is ice-blue including the two axis lines. No red or white lines.
+5. Grid minor/major lines and the Z axis are ice-blue; the X axis is the
+   deliberate amber orientation accent. No stock red or white lines appear.
 6. The grid toggle in the command bar and the `G` key both work. The label
    tracks the state.
 7. Close Studio with the grid off, reopen, and confirm it is still off. Turn it
