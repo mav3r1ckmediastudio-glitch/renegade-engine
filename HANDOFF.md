@@ -348,6 +348,36 @@ Conclusion: the stock helper is the correct choice for *removing serialized grid
 entities*, which it did, but it can never be the expanding holographic grid the
 approved direction wants. That requires a Renegade-owned grid.
 
+Upstream `master` was fetched during this investigation and resolves to
+`3a800b7134aafe58461093c8abb2e274d4e64033` — the exact commit we are pinned to.
+The pin is current, not stale, and there is no newer grid implementation to
+sync to.
+
+### DeepWiki indexes an older commit — worked example
+
+`https://deepwiki.com/turanszkij/WickedEngine` was consulted during this
+investigation and it describes a **different, older** grid implementation:
+
+| | DeepWiki | Pinned `3a800b7` |
+|---|---|---|
+| Grid block | `wiRenderer.cpp:8353` | `wiRenderer.cpp:8555` |
+| Accessors | `wiRenderer.h:1192/1193` | `wiRenderer.h:1223/1224` |
+| Vertex buffer | `if (!grid.IsValid())` then `CreateBuffer(&bd, verts, &grid)`, cached once | `device->AllocateGPU(...)`, rebuilt every frame |
+| Draw call | `Draw(gridVertexCount, 0, cmd)` | `Draw(count * 2, 0, cmd)` |
+
+`gridVertexCount` and `grid.IsValid()` do not exist anywhere in our
+`wiRenderer.cpp`. Both versions agree on the substance — a CPU-built, finite
+20x20 line list bound to `PSO_debug[DEBUGRENDERING_GRID]` — but the line numbers
+and the buffer strategy differ.
+
+Note the trap in DeepWiki's phrasing: "bind grid pipeline" describes a
+`PipelineState` object, which reads like a dedicated grid shader. It is not.
+That PSO points at `VSTYPE_VERTEXCOLOR` / `PSTYPE_VERTEXCOLOR`, a six-line
+pass-through that transforms a position and interpolates a vertex colour.
+
+This is exactly the hazard the earlier handoff warned about. Verify every
+Wicked claim against the pinned submodule before acting on it.
+
 ### Approved approach for the Renegade grid
 
 A shader-based infinite grid, owned by Renegade, with no Wicked source or pin
@@ -427,33 +457,49 @@ Agreed scope. Branch from `main` once PR #1 is merged, for example
    throughout, including the axis lines.
 4. Disable `wi::renderer::SetToDrawGridHelper` once the Renegade grid replaces
    it, and keep the grid off on the Project Hub.
-5. Update `docs/FEATURE_MATRIX.csv` row `REN-REN-004`.
+5. Add a grid visibility toggle to the command bar, persisted through
+   `ProjectService`'s settings file so it survives a restart. Wicked's Editor
+   already does exactly this at `Editor/GeneralWindow.cpp:162-170`: create the
+   checkbox, apply on click, write to `config["options"]["grid_helper"]`, and
+   restore on startup. Copy the pattern, not the widget. This is also the first
+   editor preference Renegade persists at all, so it establishes the shape for
+   camera speed and layout later.
+6. Update `docs/FEATURE_MATRIX.csv` row `REN-REN-004`.
 
 **Deferred defects from the editor usability milestone**
 
-6. Reduce the transform gizmo to a sane screen-space size.
-7. Restyle the gizmo to the approved holographic language.
-8. Thin the selection outline.
+7. Reduce the transform gizmo to a sane screen-space size.
+8. Restyle the gizmo to the approved holographic language.
+9. Thin the selection outline.
 
 **Visual corrections from open defects 1-4 and 6**
 
-9. Rebalance sun pitch, intensity, `skyExposure` and `ambient` so the terrain
-   and distant masses read as smoked near-black rather than warm tan.
-10. Reduce emissive strength and raise `bloomThreshold` so the hologram core
+10. Rebalance sun pitch, intensity, `skyExposure` and `ambient` so the terrain
+    and distant masses read as smoked near-black rather than warm tan.
+11. Reduce emissive strength and raise `bloomThreshold` so the hologram core
     and pedestal read as cyan instead of clipping to white.
-11. Raise the terrain relief amplitude or shorten its wavelength so it is
+12. Raise the terrain relief amplitude or shorten its wavelength so it is
     visible from editor camera height.
-12. Retune `fogHeightStart`/`fogHeightEnd` so low-lying mist reads on the deck.
-13. Soften the hard terrain edge against the sky.
+13. Retune `fogHeightStart`/`fogHeightEnd` so low-lying mist reads on the deck.
+14. Soften the hard terrain edge against the sky.
 
 **Presentation cleanup**
 
-14. Number duplicate generated entity names in `ProvingGroundBlueprint()`.
-15. Fix the clipping workspace title label in `ResizeLayout`.
-16. Replace the Content Browser placeholder text with a real empty state.
+15. Number duplicate generated entity names in `ProvingGroundBlueprint()`.
+16. Fix the clipping workspace title label in `ResizeLayout`.
+17. Replace the Content Browser placeholder text with a real empty state.
 
 Request the approved concept imagery from the project owner before starting
-items 9-13. Those are subjective and were guessed blind once already.
+items 10-14. Those are subjective and were guessed blind once already.
+
+Noted for later, not this milestone. Wicked's Editor has two further patterns
+worth taking when the matching Renegade feature is scheduled:
+
+- `Editor/Editor.cpp:1257-1267` saves every debug visualisation flag, force
+  hides them for cinema mode, then restores. That is the right shape for a
+  Renegade presentation or playtest mode.
+- `wiRenderer_BindLua.cpp:167` exposes `SetGridHelperEnabled` to Lua. Relevant
+  once Renegade scripting comes online under `REN-SCR-001`.
 
 Still not started and explicitly out of scope until scheduled: scene tabs,
 docking, formal dirty-state tracking, unsaved-change prompts, crash recovery,
