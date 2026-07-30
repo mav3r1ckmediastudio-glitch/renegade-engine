@@ -4,130 +4,124 @@
 
 **Project:** Renegade Engine (working title)
 
-**Active phase:** 2 — final Windows display gate
+**Active phase:** 3 — Studio foundation
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Published branch:** `main` at
-`db6b6cac23ad37b7e01593da1a747ef82977fa5a`
+**Published branch before this increment:** `main` at
+`207d098a040f36fe0f19e4939a9b03d750615627`
 
-**Prepared display-gate code:**
-`1fc5b629a94ad3417fd8ad645ed3bc0cd49ce6b3`
+**Prepared Phase 3 code:** `30c5d3c` — Build the Phase 3 project hub
 
-**Prepared UI decision and evidence:**
-`11e6944d9525e10999548b9a7c3ff65af287cbd1`
+**Prepared Phase 3 architecture/docs:** `1f9c0ee` — Define the Phase 3 project
+foundation
 
 **Pinned Wicked commit:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Current outcome
+## Phase 2 closure
 
-The Renegade-owned Phase 2 Studio and Runtime shells are functional on the
-project owner's Windows GPU.
+The project owner ran the exact `207d098` Release Studio package on an NVIDIA
+GeForce RTX 4070 Ti and confirmed both the DX12 and Vulkan launch paths appeared
+to work correctly. The Vulkan log identified `GraphicsDevice_Vulkan`.
 
-Human-observed Studio acceptance:
+Together with the earlier human-observed persistence and Runtime checks, the
+accepted Phase 2 result is:
 
-- fixture scene loads and renders;
-- hierarchy selection and transform inspector work;
-- the viewport translation gizmo works;
-- ten edits undo and redo in order;
-- UI clicks do not also manipulate the viewport gizmo;
-- Save As and repeated Save As create valid WISCENE files;
-- Reopen restores the saved transform; and
-- Studio remains open after saving.
+```text
+DX12 PASS / VULKAN PASS / DPI PASS / INPUT PASS / HDR NOT AVAILABLE
+```
 
-Human-observed Runtime acceptance:
+Phase 2 is closed. `wiGUI` remains the accepted native UI integration and
+rendering foundation under ADR 0002.
 
-- the fixture scene renders; and
-- hierarchy, inspector, gizmo, Save, Undo, and Redo controls are absent.
+## Prepared Phase 3 outcome
 
-The submitted `cube.wiscene` had a valid archive header and a complete
-Zstandard payload that decompressed from 986 bytes to 4,935 bytes.
+The first production-direction Studio increment now provides:
 
-## Published CI evidence
+- `ProjectService` behind `EngineBridge`;
+- versioned `.renegade` project descriptors under ADR 0003;
+- create, open, validate, recent-project, select, launch, and return-to-Hub
+  workflows;
+- persistent recent-project ordering in `Saved/RenegadeStudio.ini`;
+- a generated live Proving Ground inherited by new projects;
+- a Renegade-owned smoked-black/cyan holographic theme;
+- permanent toolbar, hierarchy, inspector, viewport, and content regions;
+- preserved selection, translation gizmo, Undo/Redo, Save As, and Reopen
+  paths; and
+- project lifecycle and recent-project persistence test coverage.
 
-At published `b4da74a`:
-
-- Phase 2 workflow
-  [30494616840](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30494616840)
-  passed Windows x64 Debug and Release.
-- Windows baseline
-  [30494616805](https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/actions/runs/30494616805)
-  passed Windows x64 Debug and Release.
-
-The project owner then published `be5167b` and `db6b6ca`; the new SceneService
-archive lifecycle passed Save As, repeated Save As, and Reopen on Windows.
-
-## Accepted UI foundation
-
-ADR 0002 accepts `wiGUI` as the production integration and rendering
-foundation.
-
-This does not select Wicked's stock Editor or stock styling. Renegade owns its
-UI/UX, theme, docking, layouts, components, icons, project hub, panels, and
-workflows. `EngineBridge` remains UI-toolkit independent.
-
-The pinned ImGui Docking sample was rejected for Phase 3 because:
-
-- it explicitly sets `allow_hdr = false` with the comment that ImGui does not
-  support HDR;
-- platform multi-viewports and keyboard navigation are disabled; and
-- its source warns that DPI font scaling does not produce good results.
-
-The decision can be revisited only if a future pinned ImGui backend passes all
-mandatory platform gates.
-
-## Prepared display-gate increment
-
-Code commit `1fc5b62`:
-
-- parses `dx12` or `vulkan` before graphics-device creation;
-- fixes the Windows title-bar encoding defect;
-- labels the actual graphics backend in Studio and Runtime titles;
-- displays adapter, physical resolution, logical size, colour space, and FPS;
-- applies the Windows-recommended rectangle on per-monitor DPI changes;
-- compiles Renegade application sources as UTF-8 on MSVC; and
-- packages double-click DX12/Vulkan launchers and checklists.
-
-Documentation commit `11e6944`:
-
-- accepts ADR 0002;
-- records completed interaction, persistence, and Runtime acceptance;
-- updates the feature-exposure matrix;
-- defines the final display/input gate; and
-- updates the roadmap and changelog.
+The Studio title now identifies Phase 3 and the real DX12/Vulkan backend.
 
 Wicked remains exact and unmodified.
+
+## Project descriptor
+
+Each project starts with:
+
+```text
+<Project Name>/
+├── <Project Name>.renegade
+├── Content/
+│   └── Scenes/
+│       └── Main.wiscene
+└── Saved/
+```
+
+The descriptor stores only versioned project-relative metadata. It does not
+replace WISCENE.
 
 ## Validation completed in this workspace
 
 - `git diff --check` passed.
 - Every `docs/FEATURE_MATRIX.csv` row has 16 fields.
-- The submodule resolves exactly to the documented Wicked commit.
-- Source comparison confirms the ImGui HDR and platform limitations.
-- Source comparison confirms Wicked selects the backend during
-  `Application::SetWindow()`, so argument parsing must happen first.
-- The final Windows C++ compile cannot run in this Linux workspace because
-  CMake and the Windows SDK are unavailable.
+- The pinned submodule still resolves to
+  `3a800b7134aafe58461093c8abb2e274d4e64033`.
+- GNU C++17 syntax checks passed for all changed EngineBridge sources,
+  `StudioApplication.cpp`, and `BridgeCommandTests.cpp` against the pinned
+  Wicked headers.
+- The syntax check used `-D__SCE__` only to bypass Wicked's unavailable Linux
+  SDL platform declarations; it does not represent a PlayStation build.
+- CMake, MSVC, the Windows SDK, and a render-capable Windows environment are
+  unavailable here. GitHub Actions and the project owner's GPU remain the
+  compile and visual authorities.
 
-## Publication and Windows verification
+## Windows publication and verification
 
-1. Publish `1fc5b62`, `11e6944`, and this handoff commit to `main`.
-2. Require both GitHub Actions workflows to pass Debug and Release.
-3. Download the new Release artifact.
-4. In the Studio package, follow `PHASE2-DISPLAY-GATE.txt`.
-5. In the Runtime package, follow its shorter display-gate checklist.
-6. Record:
-   `DX12 PASS / VULKAN PASS / DPI PASS / INPUT PASS /
-   HDR PASS OR NOT AVAILABLE`.
-7. Give a different AI or human the exact published commit and
-   `docs/VERIFICATION_CHECKLIST.md`.
+1. Publish the prepared commits to `main`.
+2. Require the renamed **Renegade Studio** workflow and **Windows baseline**
+   workflow to pass Debug and Release.
+3. Download the Release Studio artifact for the exact published commit.
+4. Extract `RenegadeStudio-Release.zip` into a fresh folder.
+5. Follow `README-FIRST.txt`.
+6. Report:
 
-## Next bounded work after the gate passes
+```text
+DX12 HUB PASS / CREATE PASS / RECENTS PASS / REOPEN PASS / VULKAN PASS
+```
 
-1. Close Phase 2.
-2. Run a Renegade UI/UX design increment before broad production panel code.
-3. Define the first proving-ground scene so the viewport no longer presents
-   only a cube.
-4. Accept the project-metadata ADR.
-5. Begin Phase 3 with the project hub and Renegade-owned dockable workspace.
+A visual or behavioural failure overrides green CI.
+
+## Known limits
+
+- The live holographic UI and Proving Ground have not yet been visually
+  inspected on Windows.
+- Recent-project settings currently live beside the portable Studio package.
+  A later `SettingsService` increment will move user state to the final
+  per-user location.
+- The Project Hub has no thumbnails, search, sorting, or filters yet.
+- The Identity Handshake, iris scan, voice welcome, and split reveal are not
+  implemented in this increment.
+- The workspace regions are fixed. Renegade-owned docking and layout
+  persistence remain Phase 3 work.
+- Save As does not yet update the project's startup-scene setting; scene tabs,
+  dirty-state tracking, and explicit Save are the next scene-workflow unit.
+- The return-to-Hub warning uses command history as a conservative proxy for
+  unsaved state until formal dirty tracking exists.
+
+## Next bounded work after this increment passes
+
+1. Correct any CI, project-lifecycle, or live visual failures.
+2. Build the skippable Identity Handshake transition that reveals this real
+   Project Hub, including profile name and reduced-motion/disable controls.
+3. Begin the scene-tab, dirty-state, Save, and unsaved-change workflow.
