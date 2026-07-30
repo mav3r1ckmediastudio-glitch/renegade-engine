@@ -15,7 +15,10 @@ struct VertexOutput
 	float2 clipXY   : TEXCOORD0;
 };
 
-[RootSignature("RootFlags(0), CBV(b0)")]
+// Must match the pixel stage's root signature exactly. See RenegadeGridPS.hlsl
+// for why ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT is present despite this stage
+// binding no vertex buffer.
+[RootSignature("RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT), CBV(b0)")]
 VertexOutput main(uint vertexID : SV_VertexID)
 {
 	// Oversized triangle covering the viewport:

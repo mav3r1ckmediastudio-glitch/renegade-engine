@@ -27,7 +27,7 @@ cbuffer RenegadeGridCB : register(b0)
 {
 	float4x4 g_viewProjection;
 	float4x4 g_inverseViewProjection;
-	float4   g_cameraPosition;   // xyz = world position, w unused
+	float4   g_cameraPosition;   // xyz = world position, w = grid plane height
 	float4   g_minorColor;       // rgb + a = peak opacity
 	float4   g_majorColor;
 	float4   g_axisColorX;
@@ -36,8 +36,15 @@ cbuffer RenegadeGridCB : register(b0)
 	                             // z = base spacing, w = master opacity
 };
 
-// World position where the ray through a clip-space point meets y = 0.
-// Returns false when the ray is parallel to, or points away from, the plane.
+// World position where the ray through a clip-space point meets the grid
+// plane. Returns false when the ray is parallel to, or points away from, it.
+//
+// The plane sits a hair above y = 0 rather than on it. The generated Proving
+// Ground deck's top surface is at exactly y = 0, so a grid at y = 0 is
+// coplanar with it and loses the depth test - DSSTYPE_DEPTHREAD compares with
+// GREATER under reverse Z, and equal depths are not greater. Wicked's own
+// helper carries the same offset for the same reason:
+//   const float h = 0.01f; // avoid z-fight with zero plane
 bool IntersectGroundPlane(float2 clipXY, out float3 worldPosition)
 {
 	worldPosition = float3(0.0, 0.0, 0.0);
@@ -63,7 +70,8 @@ bool IntersectGroundPlane(float2 clipXY, out float3 worldPosition)
 		return false;
 	}
 
-	const float t = -origin.y / direction.y;
+	const float planeHeight = g_cameraPosition.w;
+	const float t = (planeHeight - origin.y) / direction.y;
 
 	// Behind the camera, or beyond the far plane.
 	if (t < 0.0 || t > 1.0)
@@ -94,7 +102,12 @@ float AxisCoverage(float coordinate, float derivative)
 	return 1.0 - saturate(abs(coordinate) / max(derivative, 1e-8));
 }
 
-[RootSignature("RootFlags(0), CBV(b0)")]
+// ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT matches Wicked's Example_ImGui. Without
+// it, Wicked's DX12 backend fails to build the indirect draw command
+// signatures it derives from an embedded root signature, logging
+// CreateCommandSignature E_INVALIDARG errors at startup. Those indirect paths
+// are never used by this shader, but the error spam would hide real problems.
+[RootSignature("RootFlags(ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT), CBV(b0)")]
 PixelOutput main(VertexOutput input)
 {
 	PixelOutput output;

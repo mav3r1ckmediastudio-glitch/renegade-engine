@@ -198,16 +198,20 @@ namespace renegade::studio
         XMStoreFloat4x4(
             &constants.inverseViewProjection,
             XMMatrixInverse(nullptr, viewProjection));
+        // w is the grid plane height. The generated deck's top surface is at
+        // exactly y = 0, so a grid drawn at y = 0 is coplanar with it and
+        // loses the GREATER depth test. 2 cm is invisible at any working
+        // camera distance and is the same trick Wicked's own helper uses.
         constants.cameraPosition = XMFLOAT4(
             camera->Eye.x,
             camera->Eye.y,
             camera->Eye.z,
-            0.0f);
+            0.02f);
 
         // Ice-blue is the approved interaction colour. Unlike Wicked's helper,
         // every line including the two axes is Renegade's to choose.
-        constants.minorColor = XMFLOAT4(0.36f, 0.84f, 1.0f, 0.16f);
-        constants.majorColor = XMFLOAT4(0.46f, 0.90f, 1.0f, 0.34f);
+        constants.minorColor = XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
+        constants.majorColor = XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
         constants.axisColorX = XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
         constants.axisColorZ = XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
 
