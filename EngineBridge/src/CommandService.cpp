@@ -38,6 +38,25 @@ namespace
             !NearlyEqual(before.scale.z, after.scale.z);
     }
 
+    bool IsMeaningfulWeather(
+        const renegade::bridge::WeatherState& before,
+        const renegade::bridge::WeatherState& after) noexcept
+    {
+        return before.skyMode != after.skyMode ||
+            before.aerialPerspective != after.aerialPerspective ||
+            !NearlyEqual(before.skyExposure, after.skyExposure) ||
+            !NearlyEqual(before.ambientIntensity, after.ambientIntensity) ||
+            !NearlyEqual(before.fogStart, after.fogStart) ||
+            !NearlyEqual(before.fogDensity, after.fogDensity) ||
+            before.heightFog != after.heightFog ||
+            !NearlyEqual(before.fogHeightStart, after.fogHeightStart) ||
+            !NearlyEqual(before.fogHeightEnd, after.fogHeightEnd) ||
+            !NearlyEqual(before.cloudCoverage, after.cloudCoverage) ||
+            !NearlyEqual(before.cloudStartHeight, after.cloudStartHeight) ||
+            !NearlyEqual(before.cloudThickness, after.cloudThickness) ||
+            before.cloudsCastShadow != after.cloudsCastShadow;
+    }
+
     bool EntityExists(
         const wi::scene::Scene& scene,
         const wi::ecs::Entity entity)
@@ -154,16 +173,29 @@ namespace renegade::bridge
         weather.fogHeightStart = state.fogHeightStart;
         weather.fogHeightEnd = state.fogHeightEnd;
 
-        // Both cloud layers follow the single authored coverage so the
-        // curated control does what it says without exposing a second layer.
+        // The curated coverage control authors the primary layer only. The
+        // advanced second layer is deliberately left untouched until Renegade
+        // exposes it, matching the preservation contract of WeatherState.
         weather.volumetricCloudParameters.layerFirst.coverageAmount =
-            state.cloudCoverage;
-        weather.volumetricCloudParameters.layerSecond.coverageAmount =
             state.cloudCoverage;
         weather.volumetricCloudParameters.cloudStartHeight =
             state.cloudStartHeight;
         weather.volumetricCloudParameters.cloudThickness =
             state.cloudThickness;
+    }
+
+    SetWeatherCommand::SetWeatherCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const WeatherState& weather)
+        : scene_(&scene)
+        , entity_(entity)
+        , after_(weather)
+    {
+        const auto* existing = scene.weathers.GetComponent(entity);
+        before_ = existing == nullptr
+            ? WeatherState{}
+            : CaptureWeather(*existing);
     }
 
     SetWeatherCommand::SetWeatherCommand(
@@ -180,6 +212,10 @@ namespace renegade::bridge
 
     bool SetWeatherCommand::Execute()
     {
+        if (!IsMeaningfulWeather(before_, after_))
+        {
+            return false;
+        }
         return Apply(after_);
     }
 

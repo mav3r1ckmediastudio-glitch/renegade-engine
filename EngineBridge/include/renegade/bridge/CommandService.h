@@ -145,6 +145,10 @@ namespace renegade::bridge
         SetWeatherCommand(
             wi::scene::Scene& scene,
             wi::ecs::Entity entity,
+            const WeatherState& weather);
+        SetWeatherCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity entity,
             const WeatherState& before,
             const WeatherState& after);
 
