@@ -8,14 +8,16 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Expected published baseline before this increment:** `8fc89ba` — Record
-Phase 3 viewport interaction handoff
+**Published failing milestone:** `c4eb43d` — Record the Phase 3 editor
+usability handoff
 
 **Prepared command implementation:** `cb04cf4` — Add undoable scene editing
 commands
 
 **Prepared Studio implementation:** `547906a` — Build the Phase 3 editor
 usability milestone
+
+**Prepared CI repair:** `08c8f12` — Fix headless editor command tests
 
 **Pinned Wicked commit:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -32,10 +34,10 @@ The project owner launched the first Phase 3 Project Hub build on an NVIDIA
 GeForce RTX 4070 Ti. Project creation, scene loading, hierarchy population,
 the live Proving Ground, and a VSync-limited 75 FPS passed.
 
-Viewport click selection, selected-object outlining, and fly-camera navigation
-are implemented at `8fc89ba` and were in GitHub CI when this larger milestone
-began. They must pass on the project owner's Windows system before the new
-increment is published.
+Viewport click selection and fly-camera navigation at `8fc89ba` passed on the
+project owner's Windows system. Selected-object outlining also works, but its
+current silhouette is too thick; that is recorded for a later visual-polish
+milestone and does not block this functional repair.
 
 The Hub and Proving Ground remain functional visual baselines, not acceptance
 of the final approved holographic mockups.
@@ -64,6 +66,28 @@ The selection service remains shared between the viewport, hierarchy,
 Inspector, outline, and gizmo. Wicked source and the pinned submodule pointer
 remain unchanged.
 
+## Windows CI failure and focused repair
+
+GitHub Actions compiled the exact `c4eb43d` Studio milestone successfully in
+Windows x64 Debug and Release. `RenegadeBridgeTests.exe` then crashed in both
+configurations.
+
+The new duplicate/delete commands called `Scene::Update()` after ECS
+mutations. Wicked's scene update requires an initialized graphics device, but
+the bridge test is intentionally headless. The hierarchy-filter test would
+have reached the same renderer dependency by constructing the full Proving
+Ground.
+
+Repair `08c8f12`:
+
+- removes renderer-dependent scene updates from duplicate/delete commands;
+- leaves scene advancement with Studio's normal `RenderPath3D` frame loop; and
+- replaces the rendered Proving Ground hierarchy fixture with lightweight
+  named ECS entities.
+
+The editor features, Wicked source, submodule pin, WISCENE format, and Runtime
+remain unchanged.
+
 ## Validation completed in this workspace
 
 The following commands passed after implementation:
@@ -83,9 +107,11 @@ g++ -std=c++17 -D__SCE__ -I WickedEngine/WickedEngine \
 git diff --check
 ```
 
-`RenegadeBridgeTests` now covers complete transform state, duplicate and delete
-Undo/Redo, generated hierarchy filtering, prior repeated history, no-op
-filtering, selection, hierarchy, and project lifecycle behaviour.
+The same gates passed after repair `08c8f12`. `RenegadeBridgeTests` still
+covers complete transform state, duplicate and delete Undo/Redo, generated
+hierarchy filtering, prior repeated history, no-op filtering, selection,
+hierarchy, and project lifecycle behaviour without constructing a rendered
+scene.
 
 Every `docs/FEATURE_MATRIX.csv` row has 16 fields. The pinned Wicked submodule
 pointer is unchanged.
@@ -99,17 +125,14 @@ and visual authorities.
 
 ## Publication order
 
-1. Finish Windows CI and manual viewport verification for exact baseline
-   `8fc89ba`.
-2. Correct any compile, selection, outline, camera, or save-isolation failure
-   before publishing this milestone.
-3. Merge and publish the single editor-usability bundle.
-4. Require the Renegade Studio and Windows baseline workflows to pass Debug and
+1. Merge and publish the focused CI-repair bundle on top of exact
+   `c4eb43d`.
+2. Require the Renegade Studio and Windows baseline workflows to pass Debug and
    Release, including `RenegadeBridgeTests`.
-5. Download the Release Studio artifact for the exact published commit.
-6. Extract `RenegadeStudio-Release.zip` into a fresh folder.
-7. Follow `README-FIRST.txt`.
-8. Report:
+3. Download the Release Studio artifact for the exact repaired commit.
+4. Extract `RenegadeStudio-Release.zip` into a fresh folder.
+5. Follow `README-FIRST.txt`.
+6. Report:
 
 ```text
 DX12 EDITING PASS / HIERARCHY PASS / TRANSFORM PASS / FOCUS PASS /
@@ -121,8 +144,8 @@ Visual or behavioural failure overrides green CI.
 
 ## Known limits and risks
 
-- The new milestone has passed pinned-header syntax checks but has not yet been
-  compiled by MSVC or visually inspected on Windows.
+- The Studio milestone compiled in MSVC Debug and Release at `c4eb43d`, but the
+  repaired bridge test has not yet rerun in GitHub Actions.
 - Recursive duplicate/delete restoration relies on Wicked's in-memory entity
   serialization with entity remapping disabled; automated coverage is prepared
   but the Windows test executable remains authoritative.

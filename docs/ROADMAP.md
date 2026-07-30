@@ -8,10 +8,11 @@ Status: Phase 2 closed after DX12, Vulkan, DPI, input, persistence, and
 Runtime separation passed on the project owner's Windows GPU; physical HDR was
 not available. The first Phase 3 Project Hub/workspace launched on Windows at
 a VSync-limited 75 FPS. Its first viewport-selection, outline, and fly-camera
-interaction increment is in Windows CI and visual verification. A larger
-editor-usability milestone is prepared on top of it with hierarchy cleanup,
-complete transform editing, focus, duplicate/delete, shortcuts, and undoable
-scene commands.
+interaction increment passed on the project owner's GPU, with later outline
+thickness refinement noted. The larger editor-usability milestone compiled in
+Windows Debug and Release, but `RenegadeBridgeTests` crashed because bridge
+commands advanced a rendered scene without a graphics device. A focused
+headless-test repair is prepared on top of that milestone.
 
 ## Phase plan
 
@@ -68,11 +69,11 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-- Finish the exact `8fc89ba` viewport-interaction Windows build and visual
-  check; correct any failure before publishing work based on it.
-- Publish the larger editor-usability milestone only after that baseline
-  passes.
+- Publish the focused headless-test repair on top of exact milestone
+  `c4eb43d`.
 - Require Windows x64 Debug and Release CI plus `RenegadeBridgeTests`.
+- Confirm `RenegadeBridgeTests` completes rather than crashing in both
+  configurations.
 - Verify the hierarchy hides generated grid internals and the command bar is
   unobstructed.
 - Verify position, rotation, and scale fields remain synchronised with the

@@ -35,6 +35,9 @@ scene mutations:
 The UI does not retain a second scene model. Persistent scene edits are
 committed through `CommandService`; the gizmo's live preview is restored to
 its before-state before the completed transform command is executed.
+Bridge commands do not call renderer-dependent `Scene::Update()`. The
+render-capable Studio frame loop owns scene advancement, while headless bridge
+tests use lightweight ECS fixtures that require no graphics device.
 
 ## Controls
 

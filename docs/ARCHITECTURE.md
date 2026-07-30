@@ -81,6 +81,8 @@ Import, shader, packaging, migration, feature-inventory, and validation tools.
 4. Commands own editor mutations that require undo/redo.
 5. Creator-facing state must survive save, close, reopen, and standalone play.
 6. Editor services must remain independent of the chosen UI toolkit.
+7. Headless bridge commands mutate scene data but do not advance the rendered
+   scene. The render-capable application loop owns `Scene::Update()`.
 
 ## UI foundation
 
