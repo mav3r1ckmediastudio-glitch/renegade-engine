@@ -53,6 +53,16 @@ Renegade-owned theme and layout. `ProjectService` owns `.renegade` descriptor
 validation and recent-project state. Studio calls that service rather than
 parsing project files in widgets.
 
+`CommandService` owns persistent Studio scene mutations. Full local transforms
+use a toolkit-independent `TransformState`; duplicate and delete commands use
+recursive in-memory Wicked entity archives so Undo/Redo can restore the same
+entity IDs. Studio may preview a live gizmo transform, but it restores the
+before-state before committing the completed command.
+
+Generated Proving Ground helpers use a reserved `__renegade_internal_` name
+prefix. They remain serialized scene entities but `SceneService` excludes them
+from the creator-facing hierarchy and selection surface.
+
 ### Runtime
 
 Standalone player without editor code. It loads project settings, startup scene,

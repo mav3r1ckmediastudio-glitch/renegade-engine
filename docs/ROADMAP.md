@@ -8,7 +8,10 @@ Status: Phase 2 closed after DX12, Vulkan, DPI, input, persistence, and
 Runtime separation passed on the project owner's Windows GPU; physical HDR was
 not available. The first Phase 3 Project Hub/workspace launched on Windows at
 a VSync-limited 75 FPS. Its first viewport-selection, outline, and fly-camera
-interaction increment is prepared for Windows CI and visual verification.
+interaction increment is in Windows CI and visual verification. A larger
+editor-usability milestone is prepared on top of it with hierarchy cleanup,
+complete transform editing, focus, duplicate/delete, shortcuts, and undoable
+scene commands.
 
 ## Phase plan
 
@@ -65,21 +68,22 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-- Publish the Phase 3 viewport interaction increment based on code commit
-  `dc32684`.
+- Finish the exact `8fc89ba` viewport-interaction Windows build and visual
+  check; correct any failure before publishing work based on it.
+- Publish the larger editor-usability milestone only after that baseline
+  passes.
 - Require Windows x64 Debug and Release CI plus `RenegadeBridgeTests`.
-- Run the packaged DX12 and Vulkan Hub and viewport-interaction checks.
-- Create a project, persist its recent-project card, restart Studio, and reopen
-  its startup scene.
-- Select assets from both the viewport and hierarchy and confirm the outline,
-  inspector, and gizmo follow the shared selection.
-- Verify right-mouse freelook and WASD/QE fly navigation remain confined to the
-  3D viewport.
-- Save and reopen after selecting an object and confirm the editor-only
-  selection stencil is absent from serialized scene state.
-- Visually assess the live holographic shell and Proving Ground against the
-  approved direction.
-- Fix failures before beginning scene tabs or the Identity Handshake.
+- Verify the hierarchy hides generated grid internals and the command bar is
+  unobstructed.
+- Verify position, rotation, and scale fields remain synchronised with the
+  Move, Rotate, and Scale gizmos.
+- Verify focus, duplicate, delete, Undo/Redo, Save, and all documented
+  shortcuts on DX12.
+- Close and reopen the project to confirm saved transform state persists.
+- Repeat viewport selection, transforms, focus, duplicate/delete, and history
+  on Vulkan.
+- Fix failures before beginning scene tabs, formal dirty-state handling, or
+  the Identity Handshake.
 
 ## Status rules
 

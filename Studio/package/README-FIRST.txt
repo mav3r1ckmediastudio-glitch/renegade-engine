@@ -1,5 +1,5 @@
-RENEGADE PHASE 3 PROJECT HUB CHECK
-==================================
+RENEGADE PHASE 3 EDITOR USABILITY CHECK
+=======================================
 
 This is the first production-direction Studio increment. It is not the final
 Identity Handshake animation or finished editor.
@@ -25,13 +25,22 @@ Identity Handshake animation or finished editor.
    Keep holding it and use W/A/S/D to move and Q/E to descend/ascend. Hold Shift
    to move faster. Use the wheel over the viewport to change movement speed.
    Confirm these controls do not activate over the editor panels.
-9. Move a selected entity and confirm Undo, Redo, Save As, and Reopen still
-   work. Reopen must not preserve a cyan material or stencil on the asset.
-10. Click PROJECTS. Confirm the new project appears as a recent-project card.
-11. Select the card, click LAUNCH PROJECT, and confirm its scene reopens.
-12. Close Studio, reopen DX12, and confirm the recent-project card persists.
-13. Close Studio, run Run-RenegadeStudio-Vulkan.cmd, and repeat steps 6-8 and
-    10-11.
+9. Confirm generated grid-line internals do not flood the hierarchy and the
+   command bar is no longer covered by diagnostic text.
+10. Edit Position, Rotation, and Scale in the Inspector. Use W/E/R to switch
+    Move/Rotate/Scale gizmos and confirm the selected entity follows each edit.
+11. Press F to frame several differently sized objects.
+12. Duplicate with Ctrl+D and the button. Delete the copy with Delete and the
+    button. Undo and redo both operations.
+13. Undo and redo position, rotation, and scale edits.
+14. Press Ctrl+S, close Studio, reopen the project, and confirm the saved
+    transform persists. Ctrl+Shift+S must still open Save As.
+15. Confirm shortcuts do not trigger while typing in a text field.
+16. Click PROJECTS. Confirm the new project appears as a recent-project card.
+17. Select the card, click LAUNCH PROJECT, and confirm its scene reopens.
+18. Close Studio, reopen DX12, and confirm the recent-project card persists.
+19. Close Studio, run Run-RenegadeStudio-Vulkan.cmd, and repeat steps 6-15 and
+    17.
 
 The generated project must contain:
 
@@ -41,5 +50,6 @@ The generated project must contain:
 
 Report the first failed numbered step, or report:
 
-DX12 HUB PASS / VIEWPORT SELECT PASS / OUTLINE PASS / CAMERA PASS /
-RECENTS PASS / REOPEN PASS / VULKAN PASS
+DX12 EDITING PASS / HIERARCHY PASS / TRANSFORM PASS / FOCUS PASS /
+DUPLICATE-DELETE PASS / HISTORY PASS / SAVE PASS / SHORTCUTS PASS /
+RECENTS PASS / VULKAN EDITING PASS

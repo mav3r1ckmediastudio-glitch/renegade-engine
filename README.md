@@ -10,8 +10,10 @@ documentation, and release process.
 > owner's Windows GPU. The first project-aware holographic Hub, workspace, and
 > live Proving Ground launched successfully on Windows at a VSync-limited
 > 75 FPS. Direct viewport selection, selected-object outlining, and fly-camera
-> navigation are prepared for Windows verification. This repository is not
-> yet a usable game engine release.
+> navigation are in Windows verification. The next larger editor-usability
+> milestone adds complete transform editing, editing shortcuts, focus,
+> duplicate/delete, filtered hierarchy presentation, and undoable scene
+> mutations. This repository is not yet a usable game engine release.
 
 ## Baseline
 
