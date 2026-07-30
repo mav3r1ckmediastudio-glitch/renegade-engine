@@ -9,30 +9,80 @@ agent
 
 **Canonical branch:** `main`
 
-**Branch awaiting review:** `phase3/viewport-visual-foundation`
+**Branch awaiting review:** `phase3/editor-visual-polish`
 
-**Branch base:** `main` at `d04e346b0b9ee4a1f30f8d649ffc705d9bfde212`
+**Branch base:** `main` at `a80e180909ed9e0a62618bc4dee5916e19621d67`
 
 **Active phase:** Phase 3 — Studio foundation
 
-**Current milestone:** Viewport and Proving Ground Visual Foundation —
-**functionally accepted on Windows; visual direction not yet accepted**
+**Current milestone:** Editor Visual Polish — implemented, **not yet built,
+not yet visually accepted**
+
+**Previous milestone:** Viewport and Proving Ground Visual Foundation — merged
+to `main` as PR #1, functionally accepted on Windows
 
 ## Status in one paragraph
 
-The Viewport and Proving Ground Visual Foundation milestone is implemented on
-`phase3/viewport-visual-foundation` and is open as PR #1. All four CI jobs
-passed and the project owner has tested it on Windows: the grid, the generated
-scene, save/close/reopen and every prior editing workflow behave correctly, and
-the frame rate sits at the display's 75 Hz VSync ceiling with no measurable
-change under editor load. What is **not** accepted is the look. The viewport
-reads as a warm desert rather than the approved industrial holographic
-direction, the emissives are blown out, and the grid is the stock finite 20x20
-helper rather than an expanding one. Those corrections are the next milestone.
+Editor Visual Polish is implemented on `phase3/editor-visual-polish` in three
+commits. Renegade now draws its own infinite grid from a Renegade-owned shader
+instead of Wicked's fixed 20x20 helper, the grid has a persisted visibility
+toggle, the oversized gizmo and thick selection outline are fixed, and the
+generated hierarchy no longer contains duplicate names. None of it has been
+compiled: the authoring machine still has no CMake or MSVC toolchain. **The
+grid in particular has never been seen.** A shader bug will not fail CI, which
+only builds C++; it will show up on Windows as a viewport with no grid and a
+warning in the backlog.
 
-## Windows acceptance result
+## This milestone: Editor Visual Polish
 
-Reported by the project owner against the packaged DX12 Release:
+### Commits on `phase3/editor-visual-polish`
+
+| Commit | Subject |
+|---|---|
+| `0b7d590` | Replace the stock grid helper with a Renegade shader grid |
+| `5669f38` | Persist editor preferences beside the recent-project registry |
+| `2f97604` | Make generated entity names unique and cover it with a test |
+| (docs) | Record the Phase 3 editor visual polish |
+
+Full detail in `docs/PHASE3_EDITOR_VISUAL_POLISH.md`, including the numbered
+Windows acceptance checklist. Summary:
+
+- `Studio/shaders/RenegadeGridVS.hlsl` and `RenegadeGridPS.hlsl` draw an
+  infinite, adaptive, analytically anti-aliased ground grid in Renegade's own
+  colours, injected by overriding the virtual `RenderTransparents`.
+- Occlusion is done by writing `SV_Depth` from the ground intersection, so no
+  depth texture is bound and reverse-Z is inherited rather than reimplemented.
+- Shaders are standalone with an inline root signature and compile at runtime
+  from `Content/shaders/` beside the executable, following `Example_ImGui`.
+- Grid visibility toggles from the command bar or `G` and persists through a
+  new `ProjectService` editor-preference store.
+- Gizmo `tool_scale` 1.0 -> 0.60, thinner arms, reduced opacity. Selection
+  outline thickness 2.0 -> 1.0.
+- Generated entity names are unique and a test enforces it.
+
+### Ranked risks for this milestone
+
+1. **The grid shader has never run.** Most likely failure is a silent one: no
+   grid plus a backlog warning. Check the backlog first. Candidate causes are
+   the inline root signature being rejected, the constant buffer binding at
+   `b0` not matching, or the HLSL failing to compile under SPIR-V for Vulkan
+   even if DX12 is fine.
+2. **Matrix convention.** The shader uses `mul(matrix, vector)` with matrices
+   stored by `XMStoreFloat4x4` without transpose, matching Wicked's own
+   `vertexcolorVS.hlsl`. If the grid appears in the wrong place or not at all,
+   this is the first thing to check.
+3. **`SV_Depth` and reverse Z.** If the grid draws over geometry it should be
+   behind, or vanishes entirely, the depth write is wrong. `DSSTYPE_DEPTHREAD`
+   compares with `GREATER`.
+4. **Runtime shader compilation cost.** Compilation happens once during
+   `Load()`. If startup feels slow, that is why, and precompiling to an
+   embedded header at build time is the fix.
+5. **Gizmo scale 0.60 is a guess.** It is one tunable in `Load()`.
+
+## Previous milestone: Windows acceptance result
+
+Reported by the project owner against the packaged DX12 Release for the
+Viewport and Proving Ground Visual Foundation milestone, now merged:
 
 ```text
 DX12 GRID PASS / GENERATED SCENE PASS / EDITING REGRESSION PASS /
@@ -459,10 +509,10 @@ VULKAN PASS
 Visual comparison must use the project owner's approved reference imagery.
 Green CI alone cannot pass this milestone.
 
-## Next bounded milestone: Editor Visual Polish
+## Editor Visual Polish scope, as implemented
 
-Agreed scope. Branch from `main` once PR #1 is merged, for example
-`phase3/editor-visual-polish`. One PR, one CI cycle, one Windows test session.
+Implemented on `phase3/editor-visual-polish`. Retained here as the record of
+what was agreed and delivered.
 
 **Renegade-owned infinite grid**
 
