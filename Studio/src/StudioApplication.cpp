@@ -229,11 +229,55 @@ namespace renegade::studio
     void StudioRenderPath::RenderTransparents(
         const wi::graphics::CommandList cmd) const
     {
-        // The base pass leaves the main render target and the scene depth
-        // buffer bound, which is exactly what the grid needs. Wicked draws its
-        // own grid helper from inside this same call.
         RenderPath3D::RenderTransparents(cmd);
+
+        if (!gridVisible_ || projectHubVisible_ ||
+            !gridPipeline_.IsValid() || camera == nullptr)
+        {
+            return;
+        }
+
+        // Wicked ends every render pass before RenderTransparents() returns.
+        // Open an explicit pass over the main colour and depth attachments so
+        // the grid is valid on both DX12 and Vulkan. Match Wicked's own
+        // transparent-pass attachment setup, including an MSAA resolve.
+        auto* device = wi::graphics::GetDevice();
+        wi::graphics::RenderPassImage attachments[3] = {};
+        std::uint32_t attachmentCount = 0;
+        attachments[attachmentCount++] =
+            wi::graphics::RenderPassImage::RenderTarget(
+                &rtMain_render,
+                wi::graphics::RenderPassImage::LoadOp::LOAD);
+        if (getMSAASampleCount() > 1)
+        {
+            attachments[attachmentCount++] =
+                wi::graphics::RenderPassImage::Resolve(&rtMain);
+        }
+        attachments[attachmentCount++] =
+            wi::graphics::RenderPassImage::DepthStencil(
+                &depthBuffer_Main,
+                wi::graphics::RenderPassImage::LoadOp::LOAD,
+                wi::graphics::RenderPassImage::StoreOp::STORE,
+                wi::graphics::ResourceState::DEPTHSTENCIL,
+                wi::graphics::ResourceState::DEPTHSTENCIL,
+                wi::graphics::ResourceState::DEPTHSTENCIL);
+
+        device->RenderPassBegin(attachments, attachmentCount, cmd);
+
+        wi::graphics::Viewport viewport;
+        viewport.width =
+            static_cast<float>(depthBuffer_Main.GetDesc().width);
+        viewport.height =
+            static_cast<float>(depthBuffer_Main.GetDesc().height);
+        viewport.min_depth = 0.0f;
+        viewport.max_depth = 1.0f;
+        device->BindViewports(1, &viewport, cmd);
+
+        const wi::graphics::Rect scissor = GetScissorInternalResolution();
+        device->BindScissorRects(1, &scissor, cmd);
+
         DrawEditorGrid(cmd);
+        device->RenderPassEnd(cmd);
     }
 
     void StudioRenderPath::SetGridVisible(const bool visible)
