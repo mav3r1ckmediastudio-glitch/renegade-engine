@@ -82,7 +82,7 @@ int main()
         !NearlyEqual(safe.maximumHeight, 2000.0f) ||
         !NearlyEqual(safe.lowAltitudeBlend, 0.0f) ||
         !NearlyEqual(safe.baseBlend, 1.0f) ||
-        !NearlyEqual(safe.slopeBlend, 16.0f) ||
+        !NearlyEqual(safe.slopeBlend, 1.0f) ||
         !NearlyEqual(safe.lodBias, 4.0f))
     {
         return Fail("terrain safety bounds did not apply");

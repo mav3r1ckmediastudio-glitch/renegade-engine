@@ -92,6 +92,7 @@ namespace renegade::studio
             Focus,
             ToggleGrid,
             EnvironmentWorkspace,
+            TerrainWorkspace,
             SceneWorkspace,
         };
 
@@ -113,6 +114,7 @@ namespace renegade::studio
         void SetHierarchyFilter(std::string filter);
         void SetGridVisible(bool visible) noexcept;
         void SetEnvironmentWorkspaceActive(bool active) noexcept;
+        void SetTerrainWorkspaceActive(bool active) noexcept;
         void SetPanelSizes(
             float hierarchyWidth,
             float inspectorWidth,
@@ -155,6 +157,7 @@ namespace renegade::studio
         int activeViewportMenu_ = -1;
         bool gridVisible_ = true;
         bool environmentWorkspaceActive_ = false;
+        bool terrainWorkspaceActive_ = false;
         bool pointerConsumed_ = false;
         wi::Resource brandLockup_;
         std::vector<HierarchyRow> hierarchyRows_;

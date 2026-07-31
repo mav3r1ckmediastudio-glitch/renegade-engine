@@ -596,6 +596,7 @@ namespace renegade::studio
             session_->Selection().Select(
                 static_cast<wi::ecs::Entity>(args.userdata));
             SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
             RefreshInspector();
             RefreshStatus();
         });
@@ -1377,15 +1378,15 @@ namespace renegade::studio
         createTerrainSlider(terrainMaximumHeight_, "Terrain Maximum Height",
             "MAX HEIGHT", "Highest generated terrain elevation.",
             TerrainField::MaximumHeight, -1999.0f, 2000.0f, 3999.0f);
-        createTerrainSlider(terrainLowAltitudeBlend_, "Terrain Low Blend",
-            "LOW ALTITUDE", "Automatic low-altitude material threshold.",
+        createTerrainSlider(terrainLowAltitudeBlend_, "Terrain Rock Slope",
+            "ROCK ON SLOPES", "Steepness required before rock appears; lower values put rock on gentler slopes.",
             TerrainField::LowAltitudeBlend, 0.0f, 1.0f, 1000.0f);
-        createTerrainSlider(terrainBaseBlend_, "Terrain Base Blend",
-            "BASE HEIGHT", "Automatic base/high material threshold.",
+        createTerrainSlider(terrainBaseBlend_, "Terrain Low Height",
+            "LOW-GROUND MATERIAL", "How far the low-ground material reaches up from minimum height.",
             TerrainField::BaseBlend, 0.0f, 1.0f, 1000.0f);
-        createTerrainSlider(terrainSlopeBlend_, "Terrain Slope Blend",
-            "ROCK SLOPE", "Automatic rock material slope threshold.",
-            TerrainField::SlopeBlend, 0.0f, 16.0f, 1600.0f);
+        createTerrainSlider(terrainSlopeBlend_, "Terrain High Height",
+            "HIGH-GROUND MATERIAL", "How far the high-ground material reaches down from maximum height.",
+            TerrainField::SlopeBlend, 0.0f, 1.0f, 1000.0f);
         createTerrainSlider(terrainLodBias_, "Terrain LOD Bias",
             "LOD BIAS", "Terrain detail bias; zero is the safe default.",
             TerrainField::LodBias, -4.0f, 4.0f, 800.0f);
@@ -1502,6 +1503,7 @@ namespace renegade::studio
             session_->Selection().Select(
                 static_cast<wi::ecs::Entity>(entity));
             SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
             RefreshHierarchy();
             RefreshInspector();
             RefreshStatus();
@@ -1553,6 +1555,9 @@ namespace renegade::studio
                 break;
             case RenegadeStudioChrome::Action::EnvironmentWorkspace:
                 pendingAction_ = EditorAction::OpenEnvironmentWorkspace;
+                break;
+            case RenegadeStudioChrome::Action::TerrainWorkspace:
+                pendingAction_ = EditorAction::OpenTerrainWorkspace;
                 break;
             case RenegadeStudioChrome::Action::SceneWorkspace:
                 pendingAction_ = EditorAction::OpenSceneWorkspace;
@@ -2378,12 +2383,19 @@ namespace renegade::studio
         const auto selectedEntity = hasSession
             ? session_->Selection().SelectedEntity()
             : wi::ecs::INVALID_ENTITY;
+        const auto terrainWorkspaceEntity =
+            hasSession && terrainWorkspaceActive_ &&
+            session_->Scenes().GetScene().terrains.GetCount() > 0
+            ? session_->Scenes().GetScene().terrains.GetEntity(0)
+            : wi::ecs::INVALID_ENTITY;
         const auto entity = environmentWorkspaceActive_
             ? EditableWeatherEntity()
-            : selectedEntity;
+            : terrainWorkspaceActive_
+                ? terrainWorkspaceEntity
+                : selectedEntity;
         auto* transform = hasSession
             ? session_->Scenes().GetScene().transforms.GetComponent(
-                environmentWorkspaceActive_
+                environmentWorkspaceActive_ || terrainWorkspaceActive_
                     ? wi::ecs::INVALID_ENTITY
                     : selectedEntity)
             : nullptr;
@@ -2399,7 +2411,7 @@ namespace renegade::studio
         const bool hasWeather = weather != nullptr;
         const bool hasTerrain = terrain != nullptr;
         if (hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
-            !environmentWorkspaceActive_)
+            !environmentWorkspaceActive_ && !terrainWorkspaceActive_)
         {
             const auto* selectedName =
                 session_->Scenes().GetScene().names.GetComponent(
@@ -2846,18 +2858,22 @@ namespace renegade::studio
             break;
         case EditorAction::SelectTool:
             SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
             SetTransformTool(TransformTool::Select);
             break;
         case EditorAction::TranslateTool:
             SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
             SetTransformTool(TransformTool::Translate);
             break;
         case EditorAction::RotateTool:
             SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
             SetTransformTool(TransformTool::Rotate);
             break;
         case EditorAction::ScaleTool:
             SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
             SetTransformTool(TransformTool::Scale);
             break;
         case EditorAction::ToggleGrid:
@@ -2866,8 +2882,12 @@ namespace renegade::studio
         case EditorAction::OpenEnvironmentWorkspace:
             SetEnvironmentWorkspaceActive(true);
             break;
+        case EditorAction::OpenTerrainWorkspace:
+            SetTerrainWorkspaceActive(true);
+            break;
         case EditorAction::OpenSceneWorkspace:
             SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
             break;
         case EditorAction::StartSunPreview:
             StartSunPreview();
@@ -2947,8 +2967,38 @@ namespace renegade::studio
         }
         environmentWorkspaceActive_ = active && session_ != nullptr &&
             session_->Scenes().WeatherEntity() != wi::ecs::INVALID_ENTITY;
+        if (environmentWorkspaceActive_)
+        {
+            terrainWorkspaceActive_ = false;
+        }
         studioChrome_.SetEnvironmentWorkspaceActive(
             environmentWorkspaceActive_);
+        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
+        ClearSelectionOutline();
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::SetTerrainWorkspaceActive(const bool active)
+    {
+        if (sunPreviewPlaying_)
+        {
+            StopSunPreview(true);
+        }
+        terrainWorkspaceActive_ = active && session_ != nullptr;
+        if (terrainWorkspaceActive_)
+        {
+            environmentWorkspaceActive_ = false;
+        }
+        studioChrome_.SetEnvironmentWorkspaceActive(environmentWorkspaceActive_);
+        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
+        if (terrainWorkspaceActive_ &&
+            session_->Scenes().GetScene().terrains.GetCount() > 0)
+        {
+            session_->Selection().Select(
+                session_->Scenes().GetScene().terrains.GetEntity(0));
+        }
         ClearSelectionOutline();
         RefreshHierarchy();
         RefreshInspector();
@@ -3203,6 +3253,8 @@ namespace renegade::studio
 
         environmentWorkspaceActive_ = false;
         studioChrome_.SetEnvironmentWorkspaceActive(false);
+        terrainWorkspaceActive_ = false;
+        studioChrome_.SetTerrainWorkspaceActive(false);
 
         if (picked.entity == wi::ecs::INVALID_ENTITY ||
             !session_->Scenes().IsHierarchyVisible(picked.entity))
@@ -4226,7 +4278,7 @@ namespace renegade::studio
             terrain.baseBlend = std::clamp(value, 0.0f, 1.0f);
             break;
         case TerrainField::SlopeBlend:
-            terrain.slopeBlend = std::clamp(value, 0.0f, 16.0f);
+            terrain.slopeBlend = std::clamp(value, 0.0f, 1.0f);
             break;
         case TerrainField::LodBias:
             terrain.lodBias = std::clamp(value, -4.0f, 4.0f);

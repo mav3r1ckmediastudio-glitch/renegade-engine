@@ -491,6 +491,12 @@ namespace renegade::studio
         environmentWorkspaceActive_ = active;
     }
 
+    void RenegadeStudioChrome::SetTerrainWorkspaceActive(
+        const bool active) noexcept
+    {
+        terrainWorkspaceActive_ = active;
+    }
+
     void RenegadeStudioChrome::SetPanelSizes(
         const float hierarchyWidth,
         const float inspectorWidth,
@@ -860,7 +866,7 @@ namespace renegade::studio
                 toolX += widths[index] + 5.0f;
             }
 
-            const float sceneMetaX = width_ - 300.0f;
+            const float sceneMetaX = width_ - 360.0f;
             if (!consumed && y >= 34.0f && y < 58.0f)
             {
                 if (x >= sceneMetaX + 16.0f && x < sceneMetaX + 76.0f)
@@ -877,6 +883,15 @@ namespace renegade::studio
                     if (action_)
                     {
                         action_(Action::EnvironmentWorkspace);
+                    }
+                    consumed = true;
+                }
+                else if (x >= sceneMetaX + 208.0f &&
+                    x < sceneMetaX + 286.0f)
+                {
+                    if (action_)
+                    {
+                        action_(Action::TerrainWorkspace);
                     }
                     consumed = true;
                 }
@@ -1105,7 +1120,7 @@ namespace renegade::studio
             toolX += controlWidth + 5.0f;
         }
 
-        const float sceneMetaWidth = 300.0f;
+        const float sceneMetaWidth = 360.0f;
         const float sceneMetaX = width_ - sceneMetaWidth;
         DrawRect(
             sceneMetaX - 116.0f,
@@ -1134,9 +1149,12 @@ namespace renegade::studio
             1.25f,
             0.08f);
         const wi::Color sceneWorkspaceColor =
-            environmentWorkspaceActive_ ? TextSecondary : TextStrong;
+            environmentWorkspaceActive_ || terrainWorkspaceActive_
+                ? TextSecondary : TextStrong;
         const wi::Color environmentWorkspaceColor =
             environmentWorkspaceActive_ ? TextStrong : TextSecondary;
+        const wi::Color terrainWorkspaceColor =
+            terrainWorkspaceActive_ ? TextStrong : TextSecondary;
         DrawText(
             "SCENE",
             sceneMetaX + 20.0f,
@@ -1145,7 +1163,8 @@ namespace renegade::studio
             sceneWorkspaceColor,
             cmd,
             1.3f,
-            environmentWorkspaceActive_ ? 0.0f : 0.12f);
+            environmentWorkspaceActive_ || terrainWorkspaceActive_
+                ? 0.0f : 0.12f);
         DrawText(
             "ENVIRONMENT",
             sceneMetaX + 86.0f,
@@ -1155,12 +1174,25 @@ namespace renegade::studio
             cmd,
             1.1f,
             environmentWorkspaceActive_ ? 0.12f : 0.0f);
+        DrawText(
+            "TERRAIN",
+            sceneMetaX + 212.0f,
+            38.0f,
+            9,
+            terrainWorkspaceColor,
+            cmd,
+            1.15f,
+            terrainWorkspaceActive_ ? 0.12f : 0.0f);
         DrawRect(
-            environmentWorkspaceActive_
-                ? sceneMetaX + 82.0f
-                : sceneMetaX + 16.0f,
+            terrainWorkspaceActive_
+                ? sceneMetaX + 208.0f
+                : environmentWorkspaceActive_
+                    ? sceneMetaX + 82.0f
+                    : sceneMetaX + 16.0f,
             57.0f,
-            environmentWorkspaceActive_ ? 120.0f : 60.0f,
+            terrainWorkspaceActive_
+                ? 78.0f
+                : environmentWorkspaceActive_ ? 120.0f : 60.0f,
             2.0f,
             Forge,
             cmd);

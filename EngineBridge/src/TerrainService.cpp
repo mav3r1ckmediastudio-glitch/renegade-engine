@@ -93,7 +93,7 @@ namespace renegade::bridge
             2000.0f);
         terrain.region1 = std::clamp(state.lowAltitudeBlend, 0.0f, 1.0f);
         terrain.region2 = std::clamp(state.baseBlend, 0.0f, 1.0f);
-        terrain.region3 = std::clamp(state.slopeBlend, 0.0f, 16.0f);
+        terrain.region3 = std::clamp(state.slopeBlend, 0.0f, 1.0f);
         terrain.lod_bias = std::clamp(state.lodBias, -4.0f, 4.0f);
 
         if (restartGeneration && terrain.scene != nullptr &&

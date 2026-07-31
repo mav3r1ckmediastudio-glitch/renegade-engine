@@ -16,6 +16,34 @@
 
 **Active bounded task:** Terrain Authoring V1
 
+## Terrain workspace usability repair
+
+Packaged testing of the first Studio controls exposed behavioural failures that
+override its green CI result. Terrain access was hidden behind an empty viewport
+selection, disappeared after save/reopen unless the terrain happened to be
+selected again, and the control labelled `ROCK SLOPE` edited Wicked's high
+altitude threshold rather than its slope threshold.
+
+The current local repair adds a permanent `TERRAIN` workspace tab beside
+`SCENE` and `ENVIRONMENT`. While active, it resolves the first native Terrain
+component directly from the loaded scene, so the panel remains reachable after
+reopen and does not depend on clicking the sky or a hierarchy row. Entering the
+workspace selects an existing terrain for the command-backed controls; a scene
+without terrain presents `CREATE TERRAIN`. The three automatic material rules
+are relabelled to match Wicked's actual native order: rock slope, low-ground
+height, and high-ground height. The high-ground threshold is constrained to its
+meaningful normalized 0-1 domain instead of the previous ineffective 0-16
+range.
+
+This repair does not add sculpting. The next bounded slice must implement
+viewport hit testing and undoable edits to serialized native chunk height data
+for raise/lower, smooth and flatten. Do not present generation controls as
+sculpt brushes.
+
+Local verification: `git diff --check` passes. CMake is unavailable in this
+Linux workspace, so Windows CI and packaged save/reopen/visual testing remain
+mandatory.
+
 ## Latest work in progress
 
 Branch `phase3/terrain-authoring` starts from merged `main` at `475ac45`.

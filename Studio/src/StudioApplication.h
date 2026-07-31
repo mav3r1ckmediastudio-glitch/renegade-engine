@@ -55,6 +55,7 @@ namespace renegade::studio
             ScaleTool,
             ToggleGrid,
             OpenEnvironmentWorkspace,
+            OpenTerrainWorkspace,
             OpenSceneWorkspace,
             StartSunPreview,
             PauseSunPreview,
@@ -221,6 +222,7 @@ namespace renegade::studio
         bool CommitTerrain(const bridge::TerrainState& terrain);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
+        void SetTerrainWorkspaceActive(bool active);
         void ApplyRenegadeTheme();
         void LoadGridResources();
         void LayoutInspectorActions(bool environment, bool terrain = false);
@@ -398,6 +400,7 @@ namespace renegade::studio
         bridge::WeatherState weatherSliderBefore_;
         bridge::WeatherState weatherSliderAfter_;
         bool environmentWorkspaceActive_ = false;
+        bool terrainWorkspaceActive_ = false;
         bool precipitationSliderActive_ = false;
         PrecipitationField precipitationSliderField_ =
             PrecipitationField::Intensity;
