@@ -407,6 +407,54 @@ namespace renegade::bridge
         return editor.GetBool(key.c_str());
     }
 
+    void ProjectService::SetEditorPreference(
+        const std::string& key,
+        const float value)
+    {
+        if (stateFilePath_.empty() || key.empty())
+        {
+            return;
+        }
+
+        try
+        {
+            fs::create_directories(fs::u8path(stateFilePath_).parent_path());
+            wi::config::File state;
+            state.Open(stateFilePath_);
+            state.GetSection("editor").Set(key.c_str(), value);
+            state.Commit();
+        }
+        catch (const std::exception&)
+        {
+            // A read-only settings location must not break the editor.
+            // The preference simply will not survive this session.
+        }
+    }
+
+    float ProjectService::GetEditorPreference(
+        const std::string& key,
+        const float fallback) const
+    {
+        if (stateFilePath_.empty() || key.empty())
+        {
+            return fallback;
+        }
+
+        wi::config::File state;
+        if (!state.Open(stateFilePath_) || !state.HasSection("editor"))
+        {
+            return fallback;
+        }
+
+        const auto& editor = state.GetSection("editor");
+        if (!editor.Has(key.c_str()))
+        {
+            return fallback;
+        }
+
+        return editor.GetFloat(key.c_str());
+    }
+
     void ProjectService::PersistRecents()
     {
         if (stateFilePath_.empty())

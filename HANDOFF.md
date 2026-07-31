@@ -34,7 +34,36 @@ acceptance on DX12 and Vulkan:
 The creator can now change the look of a scene inside the editor rather than
 by rebuilding. That was the goal set two milestones ago and it is met.
 
-## Pending: Brand Identity Application (not yet verified)
+## Pending: Studio Shell Rebuild (not yet verified, supersedes the brand-colour-only pass below)
+
+A second, larger unverified change followed the brand-colour pass once the
+project owner supplied the actual UI reference: `Renegade_Brand_Guidelines_v1.0.pdf`
+pages 18-23 (a Studio UI mockup captioned "the live editor... must be rebuilt
+toward this direction," plus Studio UI principles and a component-styling
+spec) and `Renegade_Studio_Workspace_Prototype_v1.0_Standalone.html` (a
+working HTML/CSS/JS reference for exact layout and behaviour). The
+colour-only pass below did not implement any of that; this one does:
+native drag-resize/collapsible/persisted Hierarchy, Inspector and bottom
+dock; a scene tab strip with a real (undo-history-based) dirty indicator; a
+four-tab bottom dock (Asset Browser/Console/Output/Diagnostics) with real
+content - a new `EngineBridge::ContentBrowserService` filesystem scan for
+Assets, live `wi::backlog` for Console/Output, live stats for Diagnostics;
+a File/Edit/View/Window menu bar (no Build menu - there is no build pipeline
+to back it); and an in-brand unsaved-changes modal + save toast that
+replaces the old native `messageBoxCustom` confirmation. Full detail,
+including what was deliberately left out (a tabbed Inspector, to avoid
+touching the already-accepted Environment Authoring milestone blind) and the
+exact verification steps required, is in
+`docs/PHASE3_STUDIO_SHELL_REBUILD.md`.
+
+This touches roughly 1,500 lines across `EngineBridge` and `Studio` and has
+**not been compiled**, let alone run or visually inspected - there was no
+DX12/Vulkan toolchain or Windows machine available while authoring it. Do
+not treat any part of this as accepted until it has been built, the
+regression list has been run, and the result is recorded in
+`docs/VERIFICATION_CHECKLIST.md` and here.
+
+## Pending: Brand Identity Application (not yet verified, superseded above)
 
 An unverified change applies the now-available brand reference
 (`Renegade_Studio_UI_Design_Tokens_v1.0.json`, `Renegade_Brand_Guidelines_v1.0.pdf`,
@@ -42,15 +71,11 @@ brand quick-reference slide) to Studio's theme, replacing the placeholder
 "holographic workstation" colours in `Studio/src/StudioApplication.cpp` with
 the pinned brand palette (Forge as the general accent, Tech Cyan reserved for
 the viewport/grid, Obsidian/Graphite/Bone/Ash for shell/text). Full detail in
-`docs/PHASE3_BRAND_IDENTITY_APPLICATION.md`.
-
-This was authored outside Windows with no DX12/Vulkan toolchain available, so
-it has not been built, run, or visually inspected. It is a colour/theme-only
-change (no layout, font, or behavioural changes) but still requires the
-standard Windows build and visual pass before it can be accepted per
-`AGENTS.md`. Do not treat this as done until someone runs the verification
-steps at the bottom of `docs/PHASE3_BRAND_IDENTITY_APPLICATION.md` and records
-the result here and in `docs/VERIFICATION_CHECKLIST.md`.
+`docs/PHASE3_BRAND_IDENTITY_APPLICATION.md`. Two colour-role mistakes from
+this pass (panel background, default border) were corrected in the Studio
+Shell Rebuild above once the authoritative Studio UI token page was found;
+treat this section as historical context for that correction, not a
+separate outstanding change.
 
 ## Start here
 

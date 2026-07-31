@@ -1,5 +1,14 @@
 # Phase 3 Brand Identity Application
 
+> **Correction, folded into `docs/PHASE3_STUDIO_SHELL_REBUILD.md`:** once the
+> brand guidelines PDF's own "UI design tokens" page (page 22) was found,
+> two role assignments below turned out to be wrong: panel background is
+> Carbon `#171716`, not Obsidian; the default border/ambient shadow is
+> neutral Gunmetal `#474442`, not Forge (Forge is focus/active only - "glow
+> is reserved for focus, launch and live energy," not an always-on effect).
+> Both are fixed in the current code. The table below is left as originally
+> written for history.
+
 ## Outcome
 
 Studio's theme stops using the placeholder "holographic workstation"

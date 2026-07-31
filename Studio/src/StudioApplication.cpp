@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <utility>
+
+#include <wiBacklog.h>
 
 namespace
 {
@@ -20,11 +23,13 @@ namespace
     constexpr wi::Color HologramActive = wi::Color(237, 123, 45, 255); // ignition #ED7B2D
     constexpr wi::Color HologramText = wi::Color(210, 200, 188, 255);  // bone     #D2C8BC
     constexpr wi::Color HologramMuted = wi::Color(133, 126, 120, 255); // ash      #857E78
-    constexpr wi::Color HologramBorder = wi::Color(210, 91, 29, 150);  // forge    #D25B1D
-    constexpr wi::Color HologramPanel = wi::Color(11, 11, 11, 236);    // obsidian #0B0B0B
+    constexpr wi::Color HologramBorder = wi::Color(71, 68, 66, 210);   // gunmetal #474442 (border default)
+    constexpr wi::Color HologramPanel = wi::Color(23, 23, 22, 236);    // carbon   #171716 (panel background)
     constexpr wi::Color HologramSelected = wi::Color(210, 91, 29, 245);// forge    #D25B1D
     constexpr wi::Color WarningAmber = wi::Color(240, 166, 64, 255);   // warning  #F0A640
     constexpr wi::Color ViewportCyan = wi::Color(56, 183, 215, 238);   // tech_cyan #38B7D7
+    constexpr wi::Color DangerColor = wi::Color(217, 85, 85, 255);     // danger   #D95555
+    constexpr wi::Color SuccessColor = wi::Color(76, 195, 138, 255);   // success  #4CC38A
 }
 
 namespace renegade::studio
@@ -508,7 +513,7 @@ namespace renegade::studio
         projectHubButton_.SetAngularHighlightWidth(4.0f);
         projectHubButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            ReturnToProjectHub();
+            RequestCloseScene();
         });
         toolbarPanel_.AddWidget(&projectHubButton_);
 
@@ -886,28 +891,428 @@ namespace renegade::studio
         });
         inspectorPanel_.AddWidget(&reopenButton_);
 
-        contentPanel_.Create(
-            "Content Browser",
+        CreateMenuBar();
+        CreateSceneTabStrip();
+        CreateBottomDock();
+        CreateAssetBrowser();
+        CreateConsolePanel();
+        CreateModalAndToast();
+        CreatePanelChrome();
+        LoadPanelGeometry();
+    }
+
+    void StudioRenderPath::CreateMenuBar()
+    {
+        const auto createMenuButton = [this](
+            wi::gui::Button& button,
+            const char* name,
+            const char* text,
+            const Menu menu)
+        {
+            button.Create(name);
+            button.SetText(text);
+            button.OnClick([this, menu](const wi::gui::EventArgs&)
+            {
+                ToggleMenu(menu);
+            });
+            toolbarPanel_.AddWidget(&button);
+        };
+        createMenuButton(menuButtonFile_, "Menu File", "FILE", Menu::File);
+        createMenuButton(menuButtonEdit_, "Menu Edit", "EDIT", Menu::Edit);
+        createMenuButton(menuButtonView_, "Menu View", "VIEW", Menu::View);
+        createMenuButton(
+            menuButtonWindow_,
+            "Menu Window",
+            "WINDOW",
+            Menu::Window);
+
+        const auto createDropdown = [this](wi::gui::Window& dropdown, const char* name)
+        {
+            dropdown.Create(name, wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+            dropdown.SetShadowRadius(6.0f);
+            dropdown.SetVisible(false);
+            GetGUI().AddWidget(&dropdown);
+        };
+        createDropdown(menuDropdownFile_, "File Menu Dropdown");
+        createDropdown(menuDropdownEdit_, "Edit Menu Dropdown");
+        createDropdown(menuDropdownView_, "View Menu Dropdown");
+        createDropdown(menuDropdownWindow_, "Window Menu Dropdown");
+
+        const auto createMenuItem = [this](
+            wi::gui::Button& item,
+            wi::gui::Window& dropdown,
+            const char* name,
+            const char* text,
+            std::function<void()> action)
+        {
+            item.Create(name);
+            item.SetText(text);
+            item.font.params.h_align = wi::font::WIFALIGN_LEFT;
+            item.OnClick([this, action](const wi::gui::EventArgs&)
+            {
+                CloseAllMenus();
+                action();
+            });
+            dropdown.AddWidget(&item);
+        };
+
+        createMenuItem(
+            menuFileSave_,
+            menuDropdownFile_,
+            "Menu File Save",
+            "SAVE SCENE (CTRL+S)",
+            [this] { pendingAction_ = EditorAction::SaveScene; });
+        createMenuItem(
+            menuFileSaveAs_,
+            menuDropdownFile_,
+            "Menu File Save As",
+            "SAVE AS...",
+            [this] { pendingAction_ = EditorAction::SaveSceneAs; });
+        createMenuItem(
+            menuFileCloseScene_,
+            menuDropdownFile_,
+            "Menu File Close Scene",
+            "CLOSE SCENE",
+            [this] { RequestCloseScene(); });
+
+        createMenuItem(
+            menuEditUndo_,
+            menuDropdownEdit_,
+            "Menu Edit Undo",
+            "UNDO (CTRL+Z)",
+            [this] { pendingAction_ = EditorAction::Undo; });
+        createMenuItem(
+            menuEditRedo_,
+            menuDropdownEdit_,
+            "Menu Edit Redo",
+            "REDO (CTRL+Y)",
+            [this] { pendingAction_ = EditorAction::Redo; });
+
+        createMenuItem(
+            menuViewHierarchy_,
+            menuDropdownView_,
+            "Menu View Hierarchy",
+            "TOGGLE HIERARCHY",
+            [this] { SetLeftPanelVisible(!hierarchyVisible_); });
+        createMenuItem(
+            menuViewInspector_,
+            menuDropdownView_,
+            "Menu View Inspector",
+            "TOGGLE INSPECTOR",
+            [this] { SetRightPanelVisible(!inspectorVisible_); });
+        createMenuItem(
+            menuViewAssets_,
+            menuDropdownView_,
+            "Menu View Assets",
+            "ASSET BROWSER",
+            [this] { ToggleDockTab(DockTab::Assets); });
+        createMenuItem(
+            menuViewConsole_,
+            menuDropdownView_,
+            "Menu View Console",
+            "CONSOLE",
+            [this] { ToggleDockTab(DockTab::Console); });
+        createMenuItem(
+            menuViewOutput_,
+            menuDropdownView_,
+            "Menu View Output",
+            "OUTPUT",
+            [this] { ToggleDockTab(DockTab::Output); });
+        createMenuItem(
+            menuViewDiagnostics_,
+            menuDropdownView_,
+            "Menu View Diagnostics",
+            "DIAGNOSTICS",
+            [this] { ToggleDockTab(DockTab::Diagnostics); });
+
+        createMenuItem(
+            menuWindowResetLayout_,
+            menuDropdownWindow_,
+            "Menu Window Reset Layout",
+            "RESET WORKSPACE",
+            [this] { ResetWorkspaceLayout(); });
+    }
+
+    void StudioRenderPath::CreateSceneTabStrip()
+    {
+        sceneTabsPanel_.Create(
+            "Scene Tabs",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        sceneTabsPanel_.SetShadowRadius(4.0f);
+        GetGUI().AddWidget(&sceneTabsPanel_);
+
+        sceneTabButton_.Create("Scene Tab");
+        sceneTabButton_.SetText("PROVING_GROUND.WISCENE");
+        sceneTabButton_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        sceneTabButton_.SetColor(HologramFocus, wi::gui::IDLE);
+        sceneTabsPanel_.AddWidget(&sceneTabButton_);
+
+        sceneTabCloseButton_.Create("Scene Tab Close");
+        sceneTabCloseButton_.SetText("x");
+        sceneTabCloseButton_.SetTooltip(
+            "Close the scene. Prompts to save if there are unsaved changes.");
+        sceneTabCloseButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            RequestCloseScene();
+        });
+        sceneTabsPanel_.AddWidget(&sceneTabCloseButton_);
+    }
+
+    void StudioRenderPath::CreateBottomDock()
+    {
+        contentPanel_.Create(
+            "Bottom Dock",
+            wi::gui::Window::WindowControls::RESIZE_TOP |
+                wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
         contentPanel_.SetShadowRadius(8.0f);
         GetGUI().AddWidget(&contentPanel_);
 
-        contentLabel_.Create("Content Browser Title");
-        contentLabel_.SetText("CONTENT // PROJECT ASSETS");
-        contentLabel_.font.params.size = 16;
-        contentLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        contentPanel_.AddWidget(&contentLabel_);
+        const auto createDockTab = [this](
+            wi::gui::Button& button,
+            const char* name,
+            const char* text,
+            const DockTab tab)
+        {
+            button.Create(name);
+            button.SetText(text);
+            button.OnClick([this, tab](const wi::gui::EventArgs&)
+            {
+                ToggleDockTab(tab);
+            });
+            contentPanel_.AddWidget(&button);
+        };
+        createDockTab(
+            dockTabAssetsButton_,
+            "Dock Tab Assets",
+            "ASSET BROWSER",
+            DockTab::Assets);
+        createDockTab(
+            dockTabConsoleButton_,
+            "Dock Tab Console",
+            "CONSOLE",
+            DockTab::Console);
+        createDockTab(
+            dockTabOutputButton_,
+            "Dock Tab Output",
+            "OUTPUT",
+            DockTab::Output);
+        createDockTab(
+            dockTabDiagnosticsButton_,
+            "Dock Tab Diagnostics",
+            "DIAGNOSTICS",
+            DockTab::Diagnostics);
 
-        contentPlaceholder_.Create("Content Browser Placeholder");
-        contentPlaceholder_.SetText(
-            "No assets imported yet.\n\n"
-            "Asset import and the project-aware browser are not built. Until "
-            "they are, scenes are authored from the generated Proving Ground "
-            "and edited in the viewport.");
-        contentPlaceholder_.SetFitTextEnabled(true);
-        contentPlaceholder_.font.params.color = HologramMuted;
-        contentPlaceholder_.font.params.size = 14;
-        contentPanel_.AddWidget(&contentPlaceholder_);
+        dockCollapseButton_.Create("Dock Collapse");
+        dockCollapseButton_.SetText("v");
+        dockCollapseButton_.SetTooltip("Collapse the bottom dock");
+        dockCollapseButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            SetDockTab(activeDockTab_, false);
+        });
+        contentPanel_.AddWidget(&dockCollapseButton_);
+    }
+
+    void StudioRenderPath::CreateAssetBrowser()
+    {
+        assetSearchField_.Create("Asset Search");
+        assetSearchField_.SetDescription("SEARCH: ");
+        assetSearchField_.SetCancelInputEnabled(false);
+        assetSearchField_.OnInputAccepted([this](const wi::gui::EventArgs& args)
+        {
+            assetSearchFilter_ = args.sValue;
+            RefreshAssetBrowser();
+        });
+        contentPanel_.AddWidget(&assetSearchField_);
+
+        assetBreadcrumbLabel_.Create("Asset Breadcrumb");
+        assetBreadcrumbLabel_.SetText("CONTENT");
+        assetBreadcrumbLabel_.font.params.color = HologramMuted;
+        assetBreadcrumbLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        contentPanel_.AddWidget(&assetBreadcrumbLabel_);
+
+        for (std::size_t index = 0; index < assetFolderButtons_.size(); ++index)
+        {
+            auto& button = assetFolderButtons_[index];
+            button.Create("Asset Folder " + std::to_string(index));
+            button.SetText("");
+            button.font.params.h_align = wi::font::WIFALIGN_LEFT;
+            button.OnClick([this, index](const wi::gui::EventArgs&)
+            {
+                if (session_ == nullptr)
+                {
+                    return;
+                }
+                const auto& folders = session_->Content().Folders();
+                if (index >= folders.size())
+                {
+                    return;
+                }
+                session_->Content().SelectFolder(folders[index].relativePath);
+                RefreshAssetBrowser();
+            });
+            contentPanel_.AddWidget(&button);
+        }
+
+        for (std::size_t index = 0; index < assetCardButtons_.size(); ++index)
+        {
+            auto& button = assetCardButtons_[index];
+            button.Create("Asset Card " + std::to_string(index));
+            button.SetText("");
+            button.font.params.size = 12;
+            button.font.params.v_align = wi::font::WIFALIGN_TOP;
+            contentPanel_.AddWidget(&button);
+        }
+
+        assetEmptyStateLabel_.Create("Asset Browser Empty State");
+        assetEmptyStateLabel_.SetText(
+            "This folder has no files yet. Renegade lists what is really on "
+            "disk under the project's Content directory; asset import is a "
+            "separate capability that is not built yet.");
+        assetEmptyStateLabel_.SetFitTextEnabled(true);
+        assetEmptyStateLabel_.font.params.color = HologramMuted;
+        assetEmptyStateLabel_.font.params.size = 13;
+        contentPanel_.AddWidget(&assetEmptyStateLabel_);
+    }
+
+    void StudioRenderPath::CreateConsolePanel()
+    {
+        consoleClearButton_.Create("Console Clear");
+        consoleClearButton_.SetText("CLEAR");
+        consoleClearButton_.SetTooltip("Clear the engine log (wi::backlog)");
+        consoleClearButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            wi::backlog::clear();
+            RefreshConsole();
+        });
+        contentPanel_.AddWidget(&consoleClearButton_);
+
+        consoleLogLabel_.Create("Console Log");
+        consoleLogLabel_.SetText("");
+        consoleLogLabel_.SetFitTextEnabled(false);
+        consoleLogLabel_.SetWrapEnabled(true);
+        consoleLogLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        consoleLogLabel_.font.params.v_align = wi::font::WIFALIGN_TOP;
+        consoleLogLabel_.font.params.size = 13;
+        contentPanel_.AddWidget(&consoleLogLabel_);
+
+        diagnosticsLabel_.Create("Diagnostics Panel");
+        diagnosticsLabel_.SetText("");
+        diagnosticsLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        diagnosticsLabel_.font.params.v_align = wi::font::WIFALIGN_TOP;
+        diagnosticsLabel_.font.params.size = 13;
+        contentPanel_.AddWidget(&diagnosticsLabel_);
+    }
+
+    void StudioRenderPath::CreateModalAndToast()
+    {
+        modalWindow_.Create(
+            "Unsaved Changes Modal",
+            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        modalWindow_.SetShadowRadius(16.0f);
+        modalWindow_.SetVisible(false);
+        GetGUI().AddWidget(&modalWindow_);
+
+        modalTitleLabel_.Create("Modal Title");
+        modalTitleLabel_.SetText("UNSAVED CHANGES");
+        modalTitleLabel_.font.params.size = 16;
+        modalTitleLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        modalWindow_.AddWidget(&modalTitleLabel_);
+
+        modalBodyLabel_.Create("Modal Body");
+        modalBodyLabel_.SetText(
+            "This scene has unsaved editor history.\n"
+            "Save your work before closing it?");
+        modalBodyLabel_.SetFitTextEnabled(true);
+        modalBodyLabel_.font.params.color = HologramMuted;
+        modalBodyLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        modalWindow_.AddWidget(&modalBodyLabel_);
+
+        modalCancelButton_.Create("Modal Cancel");
+        modalCancelButton_.SetText("CANCEL");
+        modalCancelButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            HideUnsavedChangesModal();
+        });
+        modalWindow_.AddWidget(&modalCancelButton_);
+
+        modalDiscardButton_.Create("Modal Discard");
+        modalDiscardButton_.SetText("DISCARD");
+        modalDiscardButton_.SetColor(DangerColor, wi::gui::IDLE);
+        modalDiscardButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            HideUnsavedChangesModal();
+            ReturnToProjectHub();
+        });
+        modalWindow_.AddWidget(&modalDiscardButton_);
+
+        modalSaveButton_.Create("Modal Save");
+        modalSaveButton_.SetText("SAVE");
+        modalSaveButton_.SetColor(HologramFocus, wi::gui::IDLE);
+        modalSaveButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            SaveScene();
+            HideUnsavedChangesModal();
+            ReturnToProjectHub();
+        });
+        modalWindow_.AddWidget(&modalSaveButton_);
+
+        toastPanel_.Create(
+            "Toast",
+            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        toastPanel_.SetShadowRadius(6.0f);
+        toastPanel_.SetVisible(false);
+        GetGUI().AddWidget(&toastPanel_);
+
+        toastTitleLabel_.Create("Toast Title");
+        toastTitleLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        toastPanel_.AddWidget(&toastTitleLabel_);
+
+        toastDetailLabel_.Create("Toast Detail");
+        toastDetailLabel_.font.params.color = HologramMuted;
+        toastDetailLabel_.font.params.size = 12;
+        toastDetailLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        toastPanel_.AddWidget(&toastDetailLabel_);
+    }
+
+    void StudioRenderPath::CreatePanelChrome()
+    {
+        // Native wi::gui::Window resize controls give the creator the
+        // "visible splitters, minimum sizes protect usability" behaviour the
+        // brand guidelines (Panel and window behaviour) call for, without
+        // Renegade needing to reimplement hit-testing and dragging.
+        hierarchyPanel_.controls = hierarchyPanel_.controls |
+            wi::gui::Window::WindowControls::RESIZE_RIGHT;
+        hierarchyPanel_.OnResize([this]
+        {
+            leftPanelWidth_ = std::clamp(
+                hierarchyPanel_.GetSize().x,
+                240.0f,
+                520.0f);
+            ResizeLayout();
+            PersistPanelGeometry();
+        });
+
+        inspectorPanel_.controls = inspectorPanel_.controls |
+            wi::gui::Window::WindowControls::RESIZE_LEFT;
+        inspectorPanel_.OnResize([this]
+        {
+            rightPanelWidth_ = std::clamp(
+                inspectorPanel_.GetSize().x,
+                300.0f,
+                560.0f);
+            ResizeLayout();
+            PersistPanelGeometry();
+        });
+
+        contentPanel_.OnResize([this]
+        {
+            bottomDockHeight_ = std::clamp(
+                contentPanel_.GetSize().y,
+                180.0f,
+                640.0f);
+            ResizeLayout();
+            PersistPanelGeometry();
+        });
     }
 
     void StudioRenderPath::CreateProjectHub()
@@ -1036,8 +1441,12 @@ namespace renegade::studio
         theme.font.shadow_color = wi::Color(0, 0, 0, 220);
         theme.shadow = 3.0f;
         theme.shadow_color = HologramBorder;
-        theme.shadow_highlight = true;
-        theme.shadow_highlight_color = XMFLOAT3(0.824f, 0.357f, 0.114f); // forge #D25B1D
+        // Glow is reserved for focus, launch and live energy (brand guidelines,
+        // "Elevation"), not a constant ambient effect on every panel, so the
+        // theme-wide highlight stays off. Focus/active states still read as
+        // Forge because IDLE/FOCUS/ACTIVE widget colours below carry it.
+        theme.shadow_highlight = false;
+        theme.shadow_highlight_color = XMFLOAT3(0.824f, 0.357f, 0.114f); // forge #D25B1D, used only if enabled per-widget
         theme.shadow_highlight_spread = 0.35f;
         theme.tooltipImage = theme.image;
         theme.tooltipImage.color = HologramIdle;
@@ -1079,9 +1488,49 @@ namespace renegade::studio
     {
         RenderPath3D::Update(dt);
 
+        if (toastTimer_ > 0.0f)
+        {
+            toastTimer_ -= dt;
+            if (toastTimer_ <= 0.0f)
+            {
+                toastTimer_ = 0.0f;
+                toastPanel_.SetVisible(false);
+            }
+        }
+
         if (session_ == nullptr || projectHubVisible_)
         {
             return;
+        }
+
+        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
+        {
+            if (modalVisible_)
+            {
+                HideUnsavedChangesModal();
+            }
+            else if (openMenu_ != Menu::None)
+            {
+                CloseAllMenus();
+            }
+        }
+
+        if (modalVisible_)
+        {
+            // The modal blocks the rest of the frame: main panels are
+            // SetEnabled(false) in ShowUnsavedChangesModal(), but the
+            // viewport/gizmo/shortcut path below is bypassed here too so a
+            // key press can't act on the scene behind the dialog.
+            return;
+        }
+
+        // Live views only need to be rebuilt while their tab is visible.
+        if (bottomDockOpen_ &&
+            (activeDockTab_ == DockTab::Console ||
+             activeDockTab_ == DockTab::Output ||
+             activeDockTab_ == DockTab::Diagnostics))
+        {
+            RefreshConsole();
         }
 
         HandleEditorShortcuts();
@@ -1215,56 +1664,145 @@ namespace renegade::studio
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
         const float toolbarHeight = 54.0f;
-        const float leftWidth = std::clamp(width * 0.2f, 250.0f, 310.0f);
-        const float rightWidth = std::clamp(width * 0.22f, 290.0f, 350.0f);
-        const float bottomHeight = std::clamp(height * 0.22f, 160.0f, 220.0f);
+        const float sceneTabHeight = 34.0f;
+        const float collapsedDockHeight = 32.0f;
+
+        // Persisted, user-resizable panel geometry (drag the panel edges or
+        // Window > Reset Workspace), not proportions recomputed from the
+        // window size every time. Still clamped so an extreme window size
+        // cannot make the viewport disappear.
+        const float leftWidth = hierarchyVisible_
+            ? std::clamp(leftPanelWidth_, 240.0f, std::max(240.0f, width - 600.0f))
+            : 0.0f;
+        const float rightWidth = inspectorVisible_
+            ? std::clamp(rightPanelWidth_, 300.0f, std::max(300.0f, width - 600.0f))
+            : 0.0f;
+        const float bottomHeight = bottomDockOpen_
+            ? std::clamp(
+                bottomDockHeight_,
+                180.0f,
+                std::max(180.0f, height * 0.6f))
+            : collapsedDockHeight;
 
         viewportBounds_ = XMFLOAT4(
             leftWidth + 16.0f,
-            toolbarHeight + 16.0f,
+            toolbarHeight + sceneTabHeight + 16.0f,
             width - rightWidth - 16.0f,
             height - bottomHeight - 16.0f);
 
         toolbarPanel_.SetPos(XMFLOAT2(8.0f, 8.0f));
         toolbarPanel_.SetSize(XMFLOAT2(width - 16.0f, toolbarHeight));
         workspaceTitle_.SetPos(XMFLOAT2(14.0f, 12.0f));
-        workspaceTitle_.SetSize(XMFLOAT2(300.0f, 30.0f));
-        translateToolButton_.SetPos(XMFLOAT2(314.0f, 9.0f));
+        workspaceTitle_.SetSize(XMFLOAT2(270.0f, 30.0f));
+        menuButtonFile_.SetPos(XMFLOAT2(292.0f, 12.0f));
+        menuButtonFile_.SetSize(XMFLOAT2(52.0f, 26.0f));
+        menuButtonEdit_.SetPos(XMFLOAT2(346.0f, 12.0f));
+        menuButtonEdit_.SetSize(XMFLOAT2(52.0f, 26.0f));
+        menuButtonView_.SetPos(XMFLOAT2(400.0f, 12.0f));
+        menuButtonView_.SetSize(XMFLOAT2(52.0f, 26.0f));
+        menuButtonWindow_.SetPos(XMFLOAT2(454.0f, 12.0f));
+        menuButtonWindow_.SetSize(XMFLOAT2(72.0f, 26.0f));
+
+        const auto layoutDropdown = [](
+            wi::gui::Window& dropdown,
+            const std::vector<wi::gui::Widget*>& items,
+            const float x,
+            const float y,
+            const float itemWidth)
+        {
+            constexpr float itemHeight = 30.0f;
+            dropdown.SetPos(XMFLOAT2(x, y));
+            dropdown.SetSize(XMFLOAT2(
+                itemWidth,
+                itemHeight * static_cast<float>(items.size()) + 8.0f));
+            float rowY = 4.0f;
+            for (auto* item : items)
+            {
+                item->SetPos(XMFLOAT2(4.0f, rowY));
+                item->SetSize(XMFLOAT2(itemWidth - 8.0f, itemHeight - 4.0f));
+                rowY += itemHeight;
+            }
+        };
+        layoutDropdown(
+            menuDropdownFile_,
+            {&menuFileSave_, &menuFileSaveAs_, &menuFileCloseScene_},
+            292.0f,
+            toolbarHeight + 2.0f,
+            215.0f);
+        layoutDropdown(
+            menuDropdownEdit_,
+            {&menuEditUndo_, &menuEditRedo_},
+            346.0f,
+            toolbarHeight + 2.0f,
+            190.0f);
+        layoutDropdown(
+            menuDropdownView_,
+            {
+                &menuViewHierarchy_,
+                &menuViewInspector_,
+                &menuViewAssets_,
+                &menuViewConsole_,
+                &menuViewOutput_,
+                &menuViewDiagnostics_,
+            },
+            400.0f,
+            toolbarHeight + 2.0f,
+            220.0f);
+        layoutDropdown(
+            menuDropdownWindow_,
+            {&menuWindowResetLayout_},
+            454.0f,
+            toolbarHeight + 2.0f,
+            220.0f);
+
+        translateToolButton_.SetPos(XMFLOAT2(546.0f, 9.0f));
         translateToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
-        rotateToolButton_.SetPos(XMFLOAT2(414.0f, 9.0f));
+        rotateToolButton_.SetPos(XMFLOAT2(646.0f, 9.0f));
         rotateToolButton_.SetSize(XMFLOAT2(100.0f, 30.0f));
-        scaleToolButton_.SetPos(XMFLOAT2(522.0f, 9.0f));
+        scaleToolButton_.SetPos(XMFLOAT2(754.0f, 9.0f));
         scaleToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
-        gridToggleButton_.SetPos(XMFLOAT2(630.0f, 9.0f));
+        gridToggleButton_.SetPos(XMFLOAT2(862.0f, 9.0f));
         gridToggleButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
         projectHubButton_.SetPos(XMFLOAT2(width - 132.0f, 9.0f));
         projectHubButton_.SetSize(XMFLOAT2(108.0f, 30.0f));
-        statusLabel_.SetPos(XMFLOAT2(736.0f, 14.0f));
+        statusLabel_.SetPos(XMFLOAT2(968.0f, 14.0f));
         statusLabel_.SetSize(XMFLOAT2(
-            std::max(120.0f, width - 890.0f),
+            std::max(120.0f, width - 1122.0f),
             24.0f));
 
+        LayoutSceneTabStrip(leftWidth, rightWidth, toolbarHeight + 16.0f);
+
+        hierarchyPanel_.SetVisible(hierarchyVisible_);
         hierarchyPanel_.SetPos(XMFLOAT2(8.0f, toolbarHeight + 16.0f));
         hierarchyPanel_.SetSize(XMFLOAT2(
             leftWidth,
             height - toolbarHeight - 24.0f));
+        // Child sizing always uses the "real" stored panel width, even
+        // when the panel is hidden and its outer leftWidth/rightWidth
+        // collapse to 0 for viewport/sibling layout - this keeps every
+        // child widget a valid, non-negative size while simply not being
+        // rendered (SetVisible(false) on the parent already handles that).
+        const float safeLeftWidth = hierarchyVisible_ ? leftWidth : leftPanelWidth_;
+        const float safeRightWidth = inspectorVisible_ ? rightWidth : rightPanelWidth_;
+
         hierarchyLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
-        hierarchyLabel_.SetSize(XMFLOAT2(leftWidth - 24.0f, 28.0f));
+        hierarchyLabel_.SetSize(XMFLOAT2(safeLeftWidth - 24.0f, 28.0f));
         hierarchyTree_.SetPos(XMFLOAT2(10.0f, 44.0f));
         hierarchyTree_.SetSize(XMFLOAT2(
-            leftWidth - 20.0f,
+            safeLeftWidth - 20.0f,
             height - toolbarHeight - 82.0f));
 
+        inspectorPanel_.SetVisible(inspectorVisible_);
         inspectorPanel_.SetPos(XMFLOAT2(
-            width - rightWidth - 8.0f,
+            width - safeRightWidth - 8.0f,
             toolbarHeight + 16.0f));
         inspectorPanel_.SetSize(XMFLOAT2(
-            rightWidth,
+            safeRightWidth,
             height - toolbarHeight - 24.0f));
         inspectorLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
-        inspectorLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 28.0f));
+        inspectorLabel_.SetSize(XMFLOAT2(safeRightWidth - 24.0f, 28.0f));
         const float fieldGap = 8.0f;
-        const float fieldWidth = (rightWidth - 40.0f) / 3.0f;
+        const float fieldWidth = (safeRightWidth - 40.0f) / 3.0f;
         const auto positionInputRow = [&](
             wi::gui::TextInputField& x,
             wi::gui::TextInputField& y,
@@ -1294,7 +1832,7 @@ namespace renegade::studio
         scaleLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
         positionInputRow(scaleX_, scaleY_, scaleZ_, 184.0f);
 
-        const float environmentFieldWidth = rightWidth - 24.0f;
+        const float environmentFieldWidth = safeRightWidth - 24.0f;
         const auto positionEnvironmentWidget =
             [environmentFieldWidth](
                 wi::gui::Widget& widget,
@@ -1328,20 +1866,8 @@ namespace renegade::studio
                 session_->Selection().SelectedEntity());
         LayoutInspectorActions(environmentSelected);
 
-        contentPanel_.SetPos(XMFLOAT2(
-            leftWidth + 16.0f,
-            height - bottomHeight - 8.0f));
-        contentPanel_.SetSize(XMFLOAT2(
-            width - leftWidth - rightWidth - 32.0f,
-            bottomHeight));
-        contentLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
-        contentLabel_.SetSize(XMFLOAT2(
-            contentPanel_.GetSize().x - 24.0f,
-            28.0f));
-        contentPlaceholder_.SetPos(XMFLOAT2(12.0f, 50.0f));
-        contentPlaceholder_.SetSize(XMFLOAT2(
-            contentPanel_.GetSize().x - 24.0f,
-            bottomHeight - 62.0f));
+        LayoutBottomDock(leftWidth, rightWidth, width, height);
+        LayoutModalAndToast(width, height);
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
         projectHubPanel_.SetSize(XMFLOAT2(width - 24.0f, height - 24.0f));
@@ -1404,6 +1930,478 @@ namespace renegade::studio
         }
     }
 
+    void StudioRenderPath::LayoutSceneTabStrip(
+        const float leftWidth,
+        const float rightWidth,
+        const float top)
+    {
+        const float width = GetLogicalWidth();
+        constexpr float tabHeight = 34.0f;
+        sceneTabsPanel_.SetPos(XMFLOAT2(leftWidth + 16.0f, top));
+        sceneTabsPanel_.SetSize(XMFLOAT2(
+            std::max(120.0f, width - leftWidth - rightWidth - 32.0f),
+            tabHeight));
+        sceneTabButton_.SetPos(XMFLOAT2(4.0f, 3.0f));
+        sceneTabButton_.SetSize(XMFLOAT2(
+            std::max(60.0f, sceneTabsPanel_.GetSize().x - 42.0f),
+            tabHeight - 6.0f));
+        sceneTabCloseButton_.SetPos(XMFLOAT2(
+            sceneTabsPanel_.GetSize().x - 34.0f,
+            3.0f));
+        sceneTabCloseButton_.SetSize(XMFLOAT2(30.0f, tabHeight - 6.0f));
+    }
+
+    void StudioRenderPath::LayoutBottomDock(
+        const float leftWidth,
+        const float rightWidth,
+        const float width,
+        const float height)
+    {
+        constexpr float collapsedDockHeight = 32.0f;
+        const float dockHeight = bottomDockOpen_
+            ? std::clamp(
+                bottomDockHeight_,
+                180.0f,
+                std::max(180.0f, height * 0.6f))
+            : collapsedDockHeight;
+
+        contentPanel_.SetPos(XMFLOAT2(
+            leftWidth + 16.0f,
+            height - dockHeight - 8.0f));
+        contentPanel_.SetSize(XMFLOAT2(
+            std::max(200.0f, width - leftWidth - rightWidth - 32.0f),
+            dockHeight));
+
+        const float dockWidth = contentPanel_.GetSize().x;
+        constexpr float tabRowHeight = 30.0f;
+        float tabX = 4.0f;
+        const auto layoutTab = [&](wi::gui::Button& button, const float tabWidth)
+        {
+            button.SetPos(XMFLOAT2(tabX, 2.0f));
+            button.SetSize(XMFLOAT2(tabWidth, tabRowHeight - 4.0f));
+            tabX += tabWidth + 2.0f;
+        };
+        layoutTab(dockTabAssetsButton_, 130.0f);
+        layoutTab(dockTabConsoleButton_, 90.0f);
+        layoutTab(dockTabOutputButton_, 84.0f);
+        layoutTab(dockTabDiagnosticsButton_, 104.0f);
+        dockCollapseButton_.SetPos(XMFLOAT2(dockWidth - 34.0f, 2.0f));
+        dockCollapseButton_.SetSize(XMFLOAT2(28.0f, tabRowHeight - 4.0f));
+
+        const float contentTop = tabRowHeight + 4.0f;
+        const float contentHeight = std::max(
+            40.0f,
+            dockHeight - contentTop - 6.0f);
+        LayoutAssetBrowser(dockWidth, contentHeight);
+        LayoutConsolePanel(dockWidth, contentHeight);
+
+        const bool showAssets = bottomDockOpen_ && activeDockTab_ == DockTab::Assets;
+        const bool showConsole = bottomDockOpen_ &&
+            (activeDockTab_ == DockTab::Console || activeDockTab_ == DockTab::Output);
+        const bool showDiagnostics = bottomDockOpen_ &&
+            activeDockTab_ == DockTab::Diagnostics;
+
+        assetSearchField_.SetVisible(showAssets);
+        assetBreadcrumbLabel_.SetVisible(showAssets);
+        for (auto& button : assetFolderButtons_)
+        {
+            button.SetVisible(showAssets && button.IsVisible());
+        }
+        for (auto& button : assetCardButtons_)
+        {
+            button.SetVisible(showAssets && button.IsVisible());
+        }
+        assetEmptyStateLabel_.SetVisible(
+            showAssets && assetEmptyStateLabel_.IsVisible());
+
+        consoleClearButton_.SetVisible(showConsole);
+        consoleLogLabel_.SetVisible(showConsole);
+        diagnosticsLabel_.SetVisible(showDiagnostics);
+    }
+
+    void StudioRenderPath::LayoutAssetBrowser(
+        const float contentWidth,
+        const float contentHeight)
+    {
+        constexpr float folderColumnWidth = 170.0f;
+        assetSearchField_.SetPos(XMFLOAT2(4.0f, 2.0f));
+        assetSearchField_.SetSize(XMFLOAT2(folderColumnWidth - 8.0f, 26.0f));
+
+        float folderY = 32.0f;
+        for (auto& button : assetFolderButtons_)
+        {
+            button.SetPos(XMFLOAT2(4.0f, folderY));
+            button.SetSize(XMFLOAT2(folderColumnWidth - 8.0f, 22.0f));
+            folderY += 23.0f;
+        }
+
+        const float gridX = folderColumnWidth + 6.0f;
+        const float gridWidth = std::max(120.0f, contentWidth - gridX - 4.0f);
+        assetBreadcrumbLabel_.SetPos(XMFLOAT2(gridX, 2.0f));
+        assetBreadcrumbLabel_.SetSize(XMFLOAT2(gridWidth, 22.0f));
+
+        constexpr float cardWidth = 108.0f;
+        constexpr float cardHeight = 96.0f;
+        constexpr float cardGap = 8.0f;
+        const int columns = std::max(
+            1,
+            static_cast<int>((gridWidth + cardGap) / (cardWidth + cardGap)));
+        for (std::size_t index = 0; index < assetCardButtons_.size(); ++index)
+        {
+            const int column = static_cast<int>(index) % columns;
+            const int row = static_cast<int>(index) / columns;
+            assetCardButtons_[index].SetPos(XMFLOAT2(
+                gridX + static_cast<float>(column) * (cardWidth + cardGap),
+                30.0f + static_cast<float>(row) * (cardHeight + cardGap)));
+            assetCardButtons_[index].SetSize(XMFLOAT2(cardWidth, cardHeight));
+        }
+
+        assetEmptyStateLabel_.SetPos(XMFLOAT2(gridX, 30.0f));
+        assetEmptyStateLabel_.SetSize(XMFLOAT2(
+            gridWidth,
+            std::max(40.0f, contentHeight - 34.0f)));
+    }
+
+    void StudioRenderPath::LayoutConsolePanel(
+        const float contentWidth,
+        const float contentHeight)
+    {
+        consoleClearButton_.SetPos(XMFLOAT2(4.0f, 2.0f));
+        consoleClearButton_.SetSize(XMFLOAT2(80.0f, 24.0f));
+        consoleLogLabel_.SetPos(XMFLOAT2(4.0f, 30.0f));
+        consoleLogLabel_.SetSize(XMFLOAT2(
+            std::max(120.0f, contentWidth - 8.0f),
+            std::max(40.0f, contentHeight - 34.0f)));
+        diagnosticsLabel_.SetPos(XMFLOAT2(4.0f, 2.0f));
+        diagnosticsLabel_.SetSize(XMFLOAT2(
+            std::max(120.0f, contentWidth - 8.0f),
+            contentHeight));
+    }
+
+    void StudioRenderPath::LayoutModalAndToast(
+        const float width,
+        const float height)
+    {
+        constexpr float modalWidth = 460.0f;
+        constexpr float modalHeight = 190.0f;
+        modalWindow_.SetPos(XMFLOAT2(
+            (width - modalWidth) * 0.5f,
+            (height - modalHeight) * 0.5f));
+        modalWindow_.SetSize(XMFLOAT2(modalWidth, modalHeight));
+        modalTitleLabel_.SetPos(XMFLOAT2(16.0f, 12.0f));
+        modalTitleLabel_.SetSize(XMFLOAT2(modalWidth - 32.0f, 24.0f));
+        modalBodyLabel_.SetPos(XMFLOAT2(16.0f, 44.0f));
+        modalBodyLabel_.SetSize(XMFLOAT2(modalWidth - 32.0f, 80.0f));
+        modalCancelButton_.SetPos(XMFLOAT2(16.0f, modalHeight - 42.0f));
+        modalCancelButton_.SetSize(XMFLOAT2(110.0f, 30.0f));
+        modalDiscardButton_.SetPos(XMFLOAT2(134.0f, modalHeight - 42.0f));
+        modalDiscardButton_.SetSize(XMFLOAT2(110.0f, 30.0f));
+        modalSaveButton_.SetPos(XMFLOAT2(
+            modalWidth - 126.0f,
+            modalHeight - 42.0f));
+        modalSaveButton_.SetSize(XMFLOAT2(110.0f, 30.0f));
+
+        constexpr float toastWidth = 320.0f;
+        constexpr float toastHeight = 64.0f;
+        toastPanel_.SetPos(XMFLOAT2(
+            width - toastWidth - 18.0f,
+            height - toastHeight - 44.0f));
+        toastPanel_.SetSize(XMFLOAT2(toastWidth, toastHeight));
+        toastTitleLabel_.SetPos(XMFLOAT2(12.0f, 8.0f));
+        toastTitleLabel_.SetSize(XMFLOAT2(toastWidth - 24.0f, 20.0f));
+        toastDetailLabel_.SetPos(XMFLOAT2(12.0f, 30.0f));
+        toastDetailLabel_.SetSize(XMFLOAT2(toastWidth - 24.0f, 26.0f));
+    }
+
+    void StudioRenderPath::RefreshAssetBrowser()
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        auto& content = session_->Content();
+        const auto& folders = content.Folders();
+        for (std::size_t index = 0; index < assetFolderButtons_.size(); ++index)
+        {
+            auto& button = assetFolderButtons_[index];
+            if (index >= folders.size())
+            {
+                button.SetVisible(false);
+                continue;
+            }
+            const auto& folder = folders[index];
+            const std::string indent(
+                static_cast<std::size_t>(std::max(0, folder.depth)) * 2,
+                ' ');
+            button.SetText(indent + folder.name);
+            button.SetColor(
+                folder.relativePath == content.SelectedFolder()
+                    ? HologramSelected
+                    : HologramIdle,
+                wi::gui::IDLE);
+            button.SetVisible(bottomDockOpen_ && activeDockTab_ == DockTab::Assets);
+        }
+
+        assetBreadcrumbLabel_.SetText(
+            "CONTENT" +
+            (content.SelectedFolder().empty()
+                 ? std::string()
+                 : (" / " + content.SelectedFolder())));
+
+        auto assets = content.AssetsInFolder(content.SelectedFolder());
+        if (!assetSearchFilter_.empty())
+        {
+            assets.erase(
+                std::remove_if(
+                    assets.begin(),
+                    assets.end(),
+                    [this](const bridge::ContentAsset& asset)
+                    {
+                        return asset.name.find(assetSearchFilter_) ==
+                            std::string::npos;
+                    }),
+                assets.end());
+        }
+
+        for (std::size_t index = 0; index < assetCardButtons_.size(); ++index)
+        {
+            auto& button = assetCardButtons_[index];
+            if (index >= assets.size())
+            {
+                button.SetVisible(false);
+                continue;
+            }
+            const auto& asset = assets[index];
+            button.SetText(
+                asset.name + "\n" +
+                bridge::ContentBrowserService::TypeLabel(asset.type));
+            button.SetVisible(bottomDockOpen_ && activeDockTab_ == DockTab::Assets);
+        }
+
+        assetEmptyStateLabel_.SetVisible(
+            bottomDockOpen_ &&
+            activeDockTab_ == DockTab::Assets &&
+            assets.empty());
+    }
+
+    void StudioRenderPath::RefreshConsole()
+    {
+        consoleLogLabel_.SetText(wi::backlog::getText());
+
+        if (session_ == nullptr)
+        {
+            diagnosticsLabel_.SetText("NO SESSION");
+            return;
+        }
+
+        diagnosticsLabel_.SetText(
+            "RENDERER // " +
+            std::string(wi::graphics::GetDevice()->GetAdapterName()) + "\n" +
+            "RESOLUTION // " + std::to_string(GetPhysicalWidth()) + " x " +
+            std::to_string(GetPhysicalHeight()) + "\n" +
+            "ENTITIES // " + std::to_string(session_->Scenes().ListEntities().size()) + "\n" +
+            "UNDO // " + std::to_string(session_->Commands().UndoCount()) +
+            "  REDO // " + std::to_string(session_->Commands().RedoCount()));
+    }
+
+    void StudioRenderPath::SetDockTab(const DockTab tab, const bool forceOpen)
+    {
+        if (bottomDockOpen_ && activeDockTab_ == tab && !forceOpen)
+        {
+            bottomDockOpen_ = false;
+        }
+        else
+        {
+            activeDockTab_ = tab;
+            bottomDockOpen_ = true;
+        }
+
+        for (auto* button : {
+                 &dockTabAssetsButton_,
+                 &dockTabConsoleButton_,
+                 &dockTabOutputButton_,
+                 &dockTabDiagnosticsButton_,
+             })
+        {
+            button->SetColor(HologramIdle, wi::gui::IDLE);
+        }
+        if (bottomDockOpen_)
+        {
+            wi::gui::Button* activeButton = &dockTabAssetsButton_;
+            switch (activeDockTab_)
+            {
+            case DockTab::Assets: activeButton = &dockTabAssetsButton_; break;
+            case DockTab::Console: activeButton = &dockTabConsoleButton_; break;
+            case DockTab::Output: activeButton = &dockTabOutputButton_; break;
+            case DockTab::Diagnostics: activeButton = &dockTabDiagnosticsButton_; break;
+            }
+            activeButton->SetColor(HologramFocus, wi::gui::IDLE);
+        }
+
+        if (bottomDockOpen_ &&
+            (activeDockTab_ == DockTab::Console || activeDockTab_ == DockTab::Output ||
+             activeDockTab_ == DockTab::Diagnostics))
+        {
+            RefreshConsole();
+        }
+        if (bottomDockOpen_ && activeDockTab_ == DockTab::Assets)
+        {
+            RefreshAssetBrowser();
+        }
+
+        ResizeLayout();
+        PersistPanelGeometry();
+    }
+
+    void StudioRenderPath::ToggleDockTab(const DockTab tab)
+    {
+        SetDockTab(tab, activeDockTab_ != tab || !bottomDockOpen_);
+    }
+
+    void StudioRenderPath::SetLeftPanelVisible(const bool visible)
+    {
+        hierarchyVisible_ = visible;
+        ResizeLayout();
+        PersistPanelGeometry();
+    }
+
+    void StudioRenderPath::SetRightPanelVisible(const bool visible)
+    {
+        inspectorVisible_ = visible;
+        ResizeLayout();
+        PersistPanelGeometry();
+    }
+
+    void StudioRenderPath::ToggleMenu(const Menu menu)
+    {
+        const Menu next = (openMenu_ == menu) ? Menu::None : menu;
+        CloseAllMenus();
+        openMenu_ = next;
+        menuDropdownFile_.SetVisible(openMenu_ == Menu::File);
+        menuDropdownEdit_.SetVisible(openMenu_ == Menu::Edit);
+        menuDropdownView_.SetVisible(openMenu_ == Menu::View);
+        menuDropdownWindow_.SetVisible(openMenu_ == Menu::Window);
+    }
+
+    void StudioRenderPath::CloseAllMenus()
+    {
+        openMenu_ = Menu::None;
+        menuDropdownFile_.SetVisible(false);
+        menuDropdownEdit_.SetVisible(false);
+        menuDropdownView_.SetVisible(false);
+        menuDropdownWindow_.SetVisible(false);
+    }
+
+    bool StudioRenderPath::IsSceneDirty() const
+    {
+        return session_ != nullptr &&
+            session_->Commands().UndoCount() != lastSavedUndoCount_;
+    }
+
+    void StudioRenderPath::MarkSavedForDirtyTracking()
+    {
+        lastSavedUndoCount_ = session_ != nullptr
+            ? session_->Commands().UndoCount()
+            : 0;
+    }
+
+    void StudioRenderPath::RequestCloseScene()
+    {
+        if (IsSceneDirty())
+        {
+            ShowUnsavedChangesModal();
+            return;
+        }
+
+        ReturnToProjectHub();
+    }
+
+    void StudioRenderPath::ShowUnsavedChangesModal()
+    {
+        modalVisible_ = true;
+        modalWindow_.SetVisible(true);
+        toolbarPanel_.SetEnabled(false);
+        sceneTabsPanel_.SetEnabled(false);
+        hierarchyPanel_.SetEnabled(false);
+        inspectorPanel_.SetEnabled(false);
+        contentPanel_.SetEnabled(false);
+    }
+
+    void StudioRenderPath::HideUnsavedChangesModal()
+    {
+        modalVisible_ = false;
+        modalWindow_.SetVisible(false);
+        toolbarPanel_.SetEnabled(true);
+        sceneTabsPanel_.SetEnabled(true);
+        hierarchyPanel_.SetEnabled(true);
+        inspectorPanel_.SetEnabled(true);
+        contentPanel_.SetEnabled(true);
+    }
+
+    void StudioRenderPath::ShowToast(
+        const std::string& title,
+        const std::string& detail)
+    {
+        toastTitleLabel_.SetText(title);
+        toastDetailLabel_.SetText(detail);
+        toastPanel_.SetVisible(true);
+        toastTimer_ = 1.6f;
+    }
+
+    void StudioRenderPath::ResetWorkspaceLayout()
+    {
+        leftPanelWidth_ = 320.0f;
+        rightPanelWidth_ = 360.0f;
+        bottomDockHeight_ = 300.0f;
+        bottomDockOpen_ = false;
+        hierarchyVisible_ = true;
+        inspectorVisible_ = true;
+        activeDockTab_ = DockTab::Assets;
+        ResizeLayout();
+        PersistPanelGeometry();
+    }
+
+    void StudioRenderPath::PersistPanelGeometry()
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        auto& projects = session_->Projects();
+        projects.SetEditorPreference("layout_left_width", leftPanelWidth_);
+        projects.SetEditorPreference("layout_right_width", rightPanelWidth_);
+        projects.SetEditorPreference("layout_bottom_height", bottomDockHeight_);
+        projects.SetEditorPreference("layout_hierarchy_visible", hierarchyVisible_);
+        projects.SetEditorPreference("layout_inspector_visible", inspectorVisible_);
+    }
+
+    void StudioRenderPath::LoadPanelGeometry()
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        auto& projects = session_->Projects();
+        leftPanelWidth_ = projects.GetEditorPreference(
+            "layout_left_width",
+            leftPanelWidth_);
+        rightPanelWidth_ = projects.GetEditorPreference(
+            "layout_right_width",
+            rightPanelWidth_);
+        bottomDockHeight_ = projects.GetEditorPreference(
+            "layout_bottom_height",
+            bottomDockHeight_);
+        hierarchyVisible_ = projects.GetEditorPreference(
+            "layout_hierarchy_visible",
+            hierarchyVisible_);
+        inspectorVisible_ = projects.GetEditorPreference(
+            "layout_inspector_visible",
+            inspectorVisible_);
+    }
+
     void StudioRenderPath::RefreshStatus()
     {
         if (session_ == nullptr)
@@ -1436,6 +2434,18 @@ namespace renegade::studio
             std::to_string(session_->Commands().UndoCount()) +
             " // REDO " +
             std::to_string(session_->Commands().RedoCount()));
+
+        // Real dirty state (undo history since the last save), not a
+        // cosmetic flag: the scene tab's dot only lights up when
+        // IsSceneDirty() is true.
+        const bool dirty = IsSceneDirty();
+        sceneTabCloseButton_.SetColor(
+            dirty ? WarningAmber : HologramIdle,
+            wi::gui::IDLE);
+        sceneTabCloseButton_.SetTooltip(
+            dirty
+                ? "Unsaved changes. Close will offer to save first."
+                : "Close the scene.");
     }
 
     void StudioRenderPath::RefreshHierarchy()
@@ -2444,6 +3454,14 @@ namespace renegade::studio
                     "PROJECT CREATED // " +
                     session_->Projects().CurrentProject().descriptorPath);
                 selectedRecentProject_ = -1;
+                MarkSavedForDirtyTracking();
+                sceneTabButton_.SetText(
+                    wi::helper::GetFileNameFromPath(
+                        session_->Projects().StartupScenePath()));
+                session_->Content().Refresh(
+                    session_->Projects().CurrentProject().rootPath +
+                    "/Content");
+                RefreshAssetBrowser();
                 RefreshProjectHub();
                 SetProjectHubVisible(false);
             });
@@ -2502,6 +3520,13 @@ namespace renegade::studio
             "PROJECT ONLINE // " +
             session_->Projects().CurrentProject().descriptorPath);
         selectedRecentProject_ = -1;
+        MarkSavedForDirtyTracking();
+        sceneTabButton_.SetText(
+            wi::helper::GetFileNameFromPath(
+                session_->Projects().StartupScenePath()));
+        session_->Content().Refresh(
+            session_->Projects().CurrentProject().rootPath + "/Content");
+        RefreshAssetBrowser();
         RefreshProjectHub();
         SetProjectHubVisible(false);
     }
@@ -2530,20 +3555,12 @@ namespace renegade::studio
             return;
         }
 
-        if (session_->Commands().CanUndo())
-        {
-            const auto result = wi::helper::messageBoxCustom(
-                "This scene has editor history. Save it before opening another "
-                "project if you want to keep those changes.\n\n"
-                "Return to the Project Hub?",
-                "Return to Project Hub",
-                "YesNo");
-            if (result != wi::helper::MessageBoxResult::Yes)
-            {
-                return;
-            }
-        }
-
+        // Unsaved-changes confirmation now happens once, up front, in
+        // RequestCloseScene() via the in-brand modal (Cancel/Discard/Save) -
+        // matching Renegade_Studio_Workspace_Prototype_v1.0_Standalone.html.
+        // A caller that reaches ReturnToProjectHub() directly (the modal's
+        // own Discard/Save buttons) has already resolved that question, so
+        // prompting again here would double the interruption.
         selectedRecentProject_ = -1;
         hubMessageLabel_.font.params.color = HologramMuted;
         hubMessageLabel_.SetText("PROJECT HUB ONLINE // SELECT AN OPERATION");
@@ -2574,9 +3591,15 @@ namespace renegade::studio
         projectHubVisible_ = visible;
         projectHubPanel_.SetVisible(visible);
         toolbarPanel_.SetVisible(!visible);
-        hierarchyPanel_.SetVisible(!visible);
-        inspectorPanel_.SetVisible(!visible);
+        sceneTabsPanel_.SetVisible(!visible);
+        hierarchyPanel_.SetVisible(!visible && hierarchyVisible_);
+        inspectorPanel_.SetVisible(!visible && inspectorVisible_);
         contentPanel_.SetVisible(!visible);
+        CloseAllMenus();
+        if (visible)
+        {
+            HideUnsavedChangesModal();
+        }
 
         // The frame-rate readout belongs to the authoring viewport and must
         // not appear over the Project Hub. DrawEditorGrid checks
@@ -2690,6 +3713,10 @@ namespace renegade::studio
         ClearSelectionOutline();
         session_->SaveScene(scenePath);
         SyncSelectionOutline();
+        MarkSavedForDirtyTracking();
+        ShowToast(
+            "Workspace saved",
+            wi::helper::GetFileNameFromPath(scenePath));
         RefreshStatus();
         RefreshInspector();
     }
@@ -2718,6 +3745,12 @@ namespace renegade::studio
                         ClearSelectionOutline();
                         session_->SaveScene(scenePath);
                         SyncSelectionOutline();
+                        MarkSavedForDirtyTracking();
+                        sceneTabButton_.SetText(
+                            wi::helper::GetFileNameFromPath(scenePath));
+                        ShowToast(
+                            "Workspace saved",
+                            wi::helper::GetFileNameFromPath(scenePath));
                         RefreshStatus();
                         RefreshInspector();
                     });
@@ -2733,6 +3766,7 @@ namespace renegade::studio
 
         ClearSelectionOutline();
         session_->ReloadScene();
+        MarkSavedForDirtyTracking();
         RefreshHierarchy();
         RefreshInspector();
         RefreshStatus();

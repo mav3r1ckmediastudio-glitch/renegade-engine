@@ -50,6 +50,12 @@ namespace renegade::bridge
         [[nodiscard]] bool GetEditorPreference(
             const std::string& key,
             bool fallback) const;
+        // Same preference store, float-valued. Used for persisted panel
+        // geometry (widths, dock height) rather than a second file/section.
+        void SetEditorPreference(const std::string& key, float value);
+        [[nodiscard]] float GetEditorPreference(
+            const std::string& key,
+            float fallback) const;
 
     private:
         bool ReadProject(

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/ContentBrowserService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
@@ -40,6 +41,16 @@ namespace renegade::bridge
             return projects_;
         }
 
+        [[nodiscard]] ContentBrowserService& Content() noexcept
+        {
+            return content_;
+        }
+
+        [[nodiscard]] const ContentBrowserService& Content() const noexcept
+        {
+            return content_;
+        }
+
         void NewScene()
         {
             commands_.Clear();
@@ -71,5 +82,6 @@ namespace renegade::bridge
         SceneService scenes_;
         SelectionService selection_;
         CommandService commands_;
+        ContentBrowserService content_;
     };
 }
