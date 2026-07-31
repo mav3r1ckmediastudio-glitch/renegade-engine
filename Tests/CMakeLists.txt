@@ -32,3 +32,21 @@ set_target_properties(RenegadePrecipitationTests PROPERTIES
 add_dependencies(RenegadeBridgeTests RenegadePrecipitationTests)
 
 add_test(NAME RenegadePrecipitationTests COMMAND RenegadePrecipitationTests)
+
+add_executable(RenegadeSunTests
+    SunTests.cpp
+)
+
+target_link_libraries(RenegadeSunTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeSunTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+# Windows Studio CI builds the bridge target explicitly before CTest.
+add_dependencies(RenegadeBridgeTests RenegadeSunTests)
+
+add_test(NAME RenegadeSunTests COMMAND RenegadeSunTests)

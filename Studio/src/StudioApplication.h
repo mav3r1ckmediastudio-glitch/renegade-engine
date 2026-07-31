@@ -10,6 +10,7 @@
 
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/PrecipitationService.h"
+#include "renegade/bridge/SunService.h"
 #include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
@@ -53,6 +54,8 @@ namespace renegade::studio
             ToggleGrid,
             OpenEnvironmentWorkspace,
             OpenSceneWorkspace,
+            StartSunPreview,
+            PauseSunPreview,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -108,6 +111,13 @@ namespace renegade::studio
             Turbulence,
         };
 
+        enum class SunField
+        {
+            Time,
+            Azimuth,
+            Elevation,
+        };
+
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -137,6 +147,17 @@ namespace renegade::studio
             float value) noexcept;
         bool CommitPrecipitation(
             const bridge::PrecipitationState& precipitation);
+        void ApplySunPreset(bridge::SunPreset preset);
+        void BeginSunSlider(SunField field);
+        void PreviewSunSlider(SunField field, float value);
+        void CommitSunSlider(SunField field, float value);
+        static void SetSunFieldValue(
+            bridge::SunState& sun,
+            SunField field,
+            float value) noexcept;
+        bool CommitSun(const bridge::SunState& sun);
+        void StartSunPreview();
+        void StopSunPreview(bool commit);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
         void ApplyRenegadeTheme();
@@ -223,6 +244,14 @@ namespace renegade::studio
         RenegadeSlider precipitationWindAzimuth_;
         RenegadeSlider precipitationWindSpeed_;
         RenegadeSlider precipitationTurbulence_;
+        wi::gui::Label sunLabel_;
+        RenegadeComboBox sunPreset_;
+        RenegadeSlider sunTime_;
+        RenegadeSlider sunAzimuth_;
+        RenegadeSlider sunElevation_;
+        RenegadeSlider sunPreviewSpeed_;
+        RenegadeButton sunPlayButton_;
+        RenegadeButton sunPauseButton_;
         RenegadeButton focusButton_;
         RenegadeButton duplicateButton_;
         RenegadeButton deleteButton_;
@@ -283,6 +312,14 @@ namespace renegade::studio
             wi::ecs::INVALID_ENTITY;
         bridge::PrecipitationState precipitationSliderBefore_;
         bridge::PrecipitationState precipitationSliderAfter_;
+        bool sunSliderActive_ = false;
+        SunField sunSliderField_ = SunField::Time;
+        bridge::SunState sunSliderBefore_;
+        bridge::SunState sunSliderAfter_;
+        bool sunPreviewPlaying_ = false;
+        float sunPreviewSpeedHoursPerSecond_ = 0.100f;
+        bridge::SunState sunPreviewBefore_;
+        bridge::SunState sunPreviewCurrent_;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;

@@ -1040,6 +1040,133 @@ namespace renegade::studio
             20.0f,
             400.0f);
 
+        createSectionLabel(
+            sunLabel_,
+            "Environment Sun Section",
+            "SUN // TIME OF DAY");
+        sunPreset_.Create("Sun Preset");
+        sunPreset_.AddItem("CUSTOM", 0);
+        sunPreset_.AddItem(
+            "DAWN",
+            static_cast<std::uint64_t>(bridge::SunPreset::Dawn) + 1u);
+        sunPreset_.AddItem(
+            "MIDDAY",
+            static_cast<std::uint64_t>(bridge::SunPreset::Midday) + 1u);
+        sunPreset_.AddItem(
+            "GOLDEN HOUR",
+            static_cast<std::uint64_t>(bridge::SunPreset::GoldenHour) + 1u);
+        sunPreset_.AddItem(
+            "DUSK",
+            static_cast<std::uint64_t>(bridge::SunPreset::Dusk) + 1u);
+        sunPreset_.AddItem(
+            "MIDNIGHT",
+            static_cast<std::uint64_t>(bridge::SunPreset::Midnight) + 1u);
+        sunPreset_.SetTooltip(
+            "Move the serialized scene sun to a curated time of day.");
+        sunPreset_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (args.userdata > 0)
+            {
+                ApplySunPreset(static_cast<bridge::SunPreset>(
+                    args.userdata - 1u));
+            }
+        });
+        inspectorPanel_.AddWidget(&sunPreset_);
+
+        const auto createSunSlider = [this](
+            RenegadeSlider& input,
+            const char* name,
+            const char* label,
+            const char* tooltip,
+            const SunField field,
+            const float minimum,
+            const float maximum,
+            const float steps)
+        {
+            input.Create(minimum, maximum, 0.0f, steps, name, label);
+            input.SetTooltip(tooltip);
+            input.OnDragStarted([this, field](const float)
+            {
+                BeginSunSlider(field);
+            });
+            input.OnValuePreview([this, field](const float value)
+            {
+                PreviewSunSlider(field, value);
+            });
+            input.OnValueCommitted([this, field](const float value)
+            {
+                CommitSunSlider(field, value);
+            });
+            inspectorPanel_.AddWidget(&input);
+        };
+        createSunSlider(
+            sunTime_,
+            "Sun Time",
+            "TIME // HOURS",
+            "Time from 00:00 to 24:00. The value box accepts direct input.",
+            SunField::Time,
+            0.0f,
+            24.0f,
+            288.0f);
+        createSunSlider(
+            sunAzimuth_,
+            "Sun Azimuth",
+            "AZIMUTH",
+            "Horizontal sun direction in degrees.",
+            SunField::Azimuth,
+            -180.0f,
+            180.0f,
+            360.0f);
+        createSunSlider(
+            sunElevation_,
+            "Sun Elevation",
+            "ELEVATION",
+            "Sun height above or below the horizon in degrees.",
+            SunField::Elevation,
+            -90.0f,
+            90.0f,
+            360.0f);
+
+        sunPreviewSpeed_.Create(
+            0.001f,
+            24.0f,
+            0.100f,
+            23999.0f,
+            "Sun Preview Speed",
+            "PREVIEW HOURS / SEC");
+        sunPreviewSpeed_.SetTooltip(
+            "Editor-only preview speed from 0.001 to 24.000 hours per "
+            "second. It is not written to the scene.");
+        sunPreviewSpeed_.OnValuePreview([this](const float value)
+        {
+            sunPreviewSpeedHoursPerSecond_ = value;
+        });
+        sunPreviewSpeed_.OnValueCommitted([this](const float value)
+        {
+            sunPreviewSpeedHoursPerSecond_ = value;
+        });
+        inspectorPanel_.AddWidget(&sunPreviewSpeed_);
+
+        sunPlayButton_.Create("Play Sun Preview");
+        sunPlayButton_.SetText("PLAY DAY");
+        sunPlayButton_.SetTooltip(
+            "Preview the 24-hour path. Pausing commits one Undo step.");
+        sunPlayButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::StartSunPreview;
+        });
+        inspectorPanel_.AddWidget(&sunPlayButton_);
+
+        sunPauseButton_.Create("Pause Sun Preview");
+        sunPauseButton_.SetText("PAUSE");
+        sunPauseButton_.SetTooltip(
+            "Pause the preview and commit its final time as one Undo step.");
+        sunPauseButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::PauseSunPreview;
+        });
+        inspectorPanel_.AddWidget(&sunPauseButton_);
+
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
         focusButton_.SetTooltip("Frame the selected entity in the viewport");
@@ -1450,6 +1577,7 @@ namespace renegade::studio
         ownLabel(environmentFogLabel_);
         ownLabel(environmentCloudLabel_);
         ownLabel(precipitationLabel_);
+        ownLabel(sunLabel_);
 
         wi::gui::Theme scrollbarTheme = theme;
         scrollbarTheme.image.corner_rounding = false;
@@ -1489,6 +1617,21 @@ namespace renegade::studio
         }
 
         viewportBounds_ = studioChrome_.ViewportBounds();
+
+        if (sunPreviewPlaying_)
+        {
+            bridge::SetSunTime(
+                sunPreviewCurrent_,
+                sunPreviewCurrent_.timeHours +
+                    dt * sunPreviewSpeedHoursPerSecond_);
+            bridge::ApplySun(
+                session_->Scenes().GetScene(),
+                EditableWeatherEntity(),
+                sunPreviewCurrent_);
+            sunTime_.SetValue(sunPreviewCurrent_.timeHours);
+            sunAzimuth_.SetValue(sunPreviewCurrent_.azimuthDegrees);
+            sunElevation_.SetValue(sunPreviewCurrent_.elevationDegrees);
+        }
 
         HandleEditorShortcuts();
 
@@ -1756,11 +1899,25 @@ namespace renegade::studio
         positionEnvironmentWidget(precipitationWindAzimuth_, 732.0f);
         positionEnvironmentWidget(precipitationWindSpeed_, 766.0f);
         positionEnvironmentWidget(precipitationTurbulence_, 800.0f);
+        positionEnvironmentWidget(sunLabel_, 834.0f, 20.0f);
+        positionEnvironmentWidget(sunPreset_, 854.0f);
+        positionEnvironmentWidget(sunTime_, 888.0f);
+        positionEnvironmentWidget(sunAzimuth_, 922.0f);
+        positionEnvironmentWidget(sunElevation_, 956.0f);
+        positionEnvironmentWidget(sunPreviewSpeed_, 990.0f);
+        sunPlayButton_.SetPos(XMFLOAT2(12.0f, 1024.0f));
+        sunPauseButton_.SetPos(XMFLOAT2(
+            20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
+            1024.0f));
+        sunPlayButton_.SetSize(XMFLOAT2(
+            (environmentFieldWidth - 8.0f) * 0.5f,
+            28.0f));
+        sunPauseButton_.SetSize(XMFLOAT2(
+            (environmentFieldWidth - 8.0f) * 0.5f,
+            28.0f));
 
         const bool environmentSelected =
-            session_ != nullptr &&
-            session_->Scenes().GetScene().weathers.Contains(
-                session_->Selection().SelectedEntity());
+            environmentWorkspaceActive_;
         LayoutInspectorActions(environmentSelected);
 
         contentPanel_.SetPos(XMFLOAT2(
@@ -1917,7 +2074,7 @@ namespace renegade::studio
         const float threeButtonWidth = (width - 40.0f) / 3.0f;
         const float twoButtonWidth = (width - 32.0f) / 2.0f;
         const float actionStart = environment
-            ? std::max(836.0f, inspectorPanel_.GetSize().y - 82.0f)
+            ? std::max(1068.0f, inspectorPanel_.GetSize().y - 82.0f)
             : 230.0f;
         const float historyRow = environment
             ? actionStart
@@ -2037,6 +2194,14 @@ namespace renegade::studio
         setEnvironmentVisible(precipitationWindAzimuth_);
         setEnvironmentVisible(precipitationWindSpeed_);
         setEnvironmentVisible(precipitationTurbulence_);
+        setEnvironmentVisible(sunLabel_);
+        setEnvironmentVisible(sunPreset_);
+        setEnvironmentVisible(sunTime_);
+        setEnvironmentVisible(sunAzimuth_);
+        setEnvironmentVisible(sunElevation_);
+        setEnvironmentVisible(sunPreviewSpeed_);
+        setEnvironmentVisible(sunPlayButton_);
+        setEnvironmentVisible(sunPauseButton_);
 
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
@@ -2102,6 +2267,17 @@ namespace renegade::studio
                 precipitation.windAzimuthDegrees);
             precipitationWindSpeed_.SetValue(precipitation.windSpeed);
             precipitationTurbulence_.SetValue(precipitation.turbulence);
+
+            const auto sun = bridge::CaptureSun(
+                session_->Scenes().GetScene(),
+                entity);
+            sunPreset_.SetSelectedWithoutCallback(0);
+            sunTime_.SetValue(sun.timeHours);
+            sunAzimuth_.SetValue(sun.azimuthDegrees);
+            sunElevation_.SetValue(sun.elevationDegrees);
+            sunPreviewSpeed_.SetValue(sunPreviewSpeedHoursPerSecond_);
+            sunPlayButton_.SetEnabled(!sunPreviewPlaying_);
+            sunPauseButton_.SetEnabled(sunPreviewPlaying_);
 
             const bool physicalSky =
                 state.skyMode != bridge::WeatherState::SkyMode::Skybox;
@@ -2251,6 +2427,7 @@ namespace renegade::studio
         case EditorAction::Undo:
         case EditorAction::Redo:
         {
+            StopSunPreview(true);
             ClearSelectionOutline();
             const bool changed = action == EditorAction::Undo
                 ? session_->Commands().Undo()
@@ -2318,6 +2495,12 @@ namespace renegade::studio
         case EditorAction::OpenSceneWorkspace:
             SetEnvironmentWorkspaceActive(false);
             break;
+        case EditorAction::StartSunPreview:
+            StartSunPreview();
+            break;
+        case EditorAction::PauseSunPreview:
+            StopSunPreview(true);
+            break;
         case EditorAction::None:
         default:
             break;
@@ -2369,6 +2552,10 @@ namespace renegade::studio
 
     void StudioRenderPath::SetEnvironmentWorkspaceActive(const bool active)
     {
+        if (!active && sunPreviewPlaying_)
+        {
+            StopSunPreview(true);
+        }
         environmentWorkspaceActive_ = active && session_ != nullptr &&
             session_->Scenes().WeatherEntity() != wi::ecs::INVALID_ENTITY;
         studioChrome_.SetEnvironmentWorkspaceActive(
@@ -3185,6 +3372,167 @@ namespace renegade::studio
         RefreshStatus();
     }
 
+    bool StudioRenderPath::CommitSun(const bridge::SunState& sun)
+    {
+        if (session_ == nullptr)
+        {
+            return false;
+        }
+        const auto entity = EditableWeatherEntity();
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetSunCommand>(
+                session_->Scenes().GetScene(),
+                entity,
+                sun));
+        RefreshInspector();
+        RefreshStatus();
+        return changed;
+    }
+
+    void StudioRenderPath::ApplySunPreset(const bridge::SunPreset preset)
+    {
+        StopSunPreview(true);
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        const auto current = bridge::CaptureSun(
+            session_->Scenes().GetScene(),
+            entity);
+        CommitSun(bridge::MakeSunPreset(current, preset));
+    }
+
+    void StudioRenderPath::SetSunFieldValue(
+        bridge::SunState& sun,
+        const SunField field,
+        const float value) noexcept
+    {
+        switch (field)
+        {
+        case SunField::Time:
+            bridge::SetSunTime(sun, value);
+            break;
+        case SunField::Azimuth:
+            bridge::SetSunAzimuth(sun, value);
+            break;
+        case SunField::Elevation:
+            bridge::SetSunElevation(sun, value);
+            break;
+        }
+    }
+
+    void StudioRenderPath::BeginSunSlider(const SunField field)
+    {
+        StopSunPreview(true);
+        sunSliderActive_ = false;
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return;
+        }
+        sunSliderActive_ = true;
+        sunSliderField_ = field;
+        sunSliderBefore_ = bridge::CaptureSun(
+            session_->Scenes().GetScene(),
+            entity);
+        sunSliderAfter_ = sunSliderBefore_;
+    }
+
+    void StudioRenderPath::PreviewSunSlider(
+        const SunField field,
+        const float value)
+    {
+        if (!sunSliderActive_ || sunSliderField_ != field ||
+            session_ == nullptr)
+        {
+            return;
+        }
+        sunSliderAfter_ = sunSliderBefore_;
+        SetSunFieldValue(sunSliderAfter_, field, value);
+        bridge::ApplySun(
+            session_->Scenes().GetScene(),
+            EditableWeatherEntity(),
+            sunSliderAfter_);
+    }
+
+    void StudioRenderPath::CommitSunSlider(
+        const SunField field,
+        const float value)
+    {
+        if (!sunSliderActive_ || sunSliderField_ != field ||
+            session_ == nullptr)
+        {
+            return;
+        }
+        SetSunFieldValue(sunSliderAfter_, field, value);
+        auto& scene = session_->Scenes().GetScene();
+        const auto entity = EditableWeatherEntity();
+        bridge::ApplySun(scene, entity, sunSliderBefore_);
+        session_->Commands().Execute(
+            std::make_unique<bridge::SetSunCommand>(
+                scene,
+                entity,
+                sunSliderBefore_,
+                sunSliderAfter_));
+        sunSliderActive_ = false;
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::StartSunPreview()
+    {
+        if (sunPreviewPlaying_ || session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return;
+        }
+        sunPreviewBefore_ = bridge::CaptureSun(
+            session_->Scenes().GetScene(),
+            entity);
+        sunPreviewCurrent_ = sunPreviewBefore_;
+        sunPreviewPlaying_ = true;
+        sunPlayButton_.SetEnabled(false);
+        sunPauseButton_.SetEnabled(true);
+    }
+
+    void StudioRenderPath::StopSunPreview(const bool commit)
+    {
+        if (!sunPreviewPlaying_ || session_ == nullptr)
+        {
+            return;
+        }
+        sunPreviewPlaying_ = false;
+        auto& scene = session_->Scenes().GetScene();
+        const auto entity = EditableWeatherEntity();
+        bridge::ApplySun(scene, entity, sunPreviewBefore_);
+        if (commit)
+        {
+            session_->Commands().Execute(
+                std::make_unique<bridge::SetSunCommand>(
+                    scene,
+                    entity,
+                    sunPreviewBefore_,
+                    sunPreviewCurrent_));
+        }
+        sunPlayButton_.SetEnabled(true);
+        sunPauseButton_.SetEnabled(false);
+        RefreshInspector();
+        RefreshStatus();
+    }
+
     void StudioRenderPath::CreateProject()
     {
         if (session_ == nullptr)
@@ -3333,6 +3681,8 @@ namespace renegade::studio
                 return;
             }
         }
+
+        StopSunPreview(true);
 
         selectedRecentProject_ = -1;
         hubMessageLabel_.font.params.color = HologramMuted;
@@ -3490,6 +3840,7 @@ namespace renegade::studio
             return;
         }
 
+        StopSunPreview(true);
         ClearSelectionOutline();
         session_->SaveScene(scenePath);
         SyncSelectionOutline();
@@ -3503,6 +3854,8 @@ namespace renegade::studio
         {
             return;
         }
+
+        StopSunPreview(true);
 
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::SAVE;
@@ -3534,6 +3887,7 @@ namespace renegade::studio
             return;
         }
 
+        StopSunPreview(false);
         ClearSelectionOutline();
         session_->ReloadScene();
         RefreshHierarchy();
