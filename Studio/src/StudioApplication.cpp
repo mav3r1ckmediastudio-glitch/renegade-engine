@@ -526,16 +526,33 @@ namespace renegade::studio
         });
         hierarchyPanel_.AddWidget(&hierarchyTree_);
 
+        hierarchySearch_.Create("Hierarchy Search");
+        hierarchySearch_.SetDescription("⌕  ");
+        hierarchySearch_.SetTooltip("Filter the visible scene hierarchy");
+        hierarchySearch_.SetCancelInputEnabled(false);
+        hierarchySearch_.OnInput([this](const wi::gui::EventArgs& args)
+        {
+            studioChrome_.SetHierarchyFilter(args.sValue);
+        });
+        hierarchySearch_.OnInputAccepted(
+            [this](const wi::gui::EventArgs& args)
+        {
+            studioChrome_.SetHierarchyFilter(args.sValue);
+        });
+        GetGUI().AddWidget(&hierarchySearch_);
+
         inspectorPanel_.Create(
             "Inspector",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        inspectorPanel_.SetShadowRadius(8.0f);
+        inspectorPanel_.SetShadowRadius(0.0f);
+        inspectorPanel_.SetColor(wi::Color::Transparent());
         GetGUI().AddWidget(&inspectorPanel_);
 
         inspectorLabel_.Create("Transform Inspector");
         inspectorLabel_.SetText("TRANSFORM // SELECT AN ENTITY");
         inspectorLabel_.font.params.size = 16;
         inspectorLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        inspectorLabel_.SetColor(wi::Color::Transparent());
         inspectorPanel_.AddWidget(&inspectorLabel_);
 
         const auto createSectionLabel = [this](
@@ -548,6 +565,7 @@ namespace renegade::studio
             label.font.params.size = 13;
             label.font.params.color = HologramMuted;
             label.font.params.h_align = wi::font::WIFALIGN_LEFT;
+            label.SetColor(wi::Color::Transparent());
             inspectorPanel_.AddWidget(&label);
         };
         createSectionLabel(
@@ -897,6 +915,29 @@ namespace renegade::studio
         // hidden by SetProjectHubVisible(); they are retained temporarily as
         // a behavioural reference, not used as the finished presentation.
         studioChrome_.Create();
+        studioChrome_.OnHierarchySelected(
+            [this](const std::uint64_t entity)
+        {
+            if (session_ == nullptr)
+            {
+                return;
+            }
+            session_->Selection().Select(
+                static_cast<wi::ecs::Entity>(entity));
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+        });
+        studioChrome_.OnToolSelected([this](const int tool)
+        {
+            pendingAction_ = tool == 0
+                ? EditorAction::SelectTool
+                : tool == 1
+                    ? EditorAction::TranslateTool
+                    : tool == 2
+                        ? EditorAction::RotateTool
+                        : EditorAction::ScaleTool;
+        });
         GetGUI().AddWidget(&studioChrome_);
     }
 
@@ -1073,6 +1114,8 @@ namespace renegade::studio
             return;
         }
 
+        viewportBounds_ = studioChrome_.ViewportBounds();
+
         HandleEditorShortcuts();
 
         // wiGUI invokes OnClick while Button::Update is still active. Apply
@@ -1205,8 +1248,12 @@ namespace renegade::studio
         const float height = GetLogicalHeight();
         studioChrome_.SetLayout(width, height);
         const float toolbarHeight = 54.0f;
-        const float leftWidth = std::clamp(width * 0.2f, 250.0f, 310.0f);
-        const float rightWidth = std::clamp(width * 0.22f, 290.0f, 350.0f);
+        const float leftWidth = projectHubVisible_
+            ? std::clamp(width * 0.2f, 250.0f, 310.0f)
+            : width < 1350.0f ? 260.0f : 320.0f;
+        const float rightWidth = projectHubVisible_
+            ? std::clamp(width * 0.22f, 290.0f, 350.0f)
+            : studioChrome_.InspectorWidth();
         const float bottomHeight = std::clamp(height * 0.22f, 160.0f, 220.0f);
 
         viewportBounds_ = projectHubVisible_
@@ -1246,13 +1293,17 @@ namespace renegade::studio
         hierarchyTree_.SetSize(XMFLOAT2(
             leftWidth - 20.0f,
             height - toolbarHeight - 82.0f));
+        hierarchySearch_.SetPos(XMFLOAT2(12.0f, 117.0f));
+        hierarchySearch_.SetSize(XMFLOAT2(leftWidth - 24.0f, 31.0f));
 
         inspectorPanel_.SetPos(XMFLOAT2(
-            width - rightWidth - 8.0f,
-            toolbarHeight + 16.0f));
+            projectHubVisible_ ? width - rightWidth - 8.0f : width - rightWidth,
+            projectHubVisible_ ? toolbarHeight + 16.0f : 64.0f));
         inspectorPanel_.SetSize(XMFLOAT2(
             rightWidth,
-            height - toolbarHeight - 24.0f));
+            projectHubVisible_
+                ? height - toolbarHeight - 24.0f
+                : height - 64.0f - 28.0f));
         inspectorLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
         inspectorLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 28.0f));
         const float fieldGap = 8.0f;
@@ -1456,6 +1507,7 @@ namespace renegade::studio
                 entity.name,
                 entity.depth,
                 entity.entity == selected,
+                static_cast<std::uint64_t>(entity.entity),
             });
         }
         studioChrome_.SetHierarchyRows(std::move(chromeRows));
@@ -1799,6 +1851,9 @@ namespace renegade::studio
         case EditorAction::SaveSceneAs:
             SaveSceneAs();
             break;
+        case EditorAction::SelectTool:
+            SetTransformTool(TransformTool::Select);
+            break;
         case EditorAction::TranslateTool:
             SetTransformTool(TransformTool::Translate);
             break;
@@ -1833,7 +1888,9 @@ namespace renegade::studio
             gizmo_.isScalator ? HologramSelected : HologramIdle,
             wi::gui::IDLE);
         studioChrome_.SetActiveTool(
-            tool == TransformTool::Translate
+            tool == TransformTool::Select
+                ? 0
+                : tool == TransformTool::Translate
                 ? 1
                 : tool == TransformTool::Rotate
                     ? 2
@@ -2592,11 +2649,13 @@ namespace renegade::studio
 
         projectHubVisible_ = visible;
         projectHubPanel_.SetVisible(visible);
-        // The proof deliberately hides every stock workspace surface. This is
-        // not a reskin: RenegadeStudioChrome owns the visible shell.
+        // Stock workspace surfaces stay hidden. RenegadeStudioChrome owns the
+        // shell, while the transparent Inspector host schedules only controls
+        // whose rendering is overridden by Renegade subclasses.
         toolbarPanel_.SetVisible(false);
         hierarchyPanel_.SetVisible(false);
-        inspectorPanel_.SetVisible(false);
+        inspectorPanel_.SetVisible(!visible);
+        hierarchySearch_.SetVisible(!visible);
         contentPanel_.SetVisible(false);
         studioChrome_.SetVisible(!visible);
 
@@ -2605,7 +2664,9 @@ namespace renegade::studio
         // projectHubVisible_ for the same reason.
         if (diagnostics_ != nullptr)
         {
-            diagnostics_->active = !visible;
+            // The stock overlay collides with the Renegade wordmark. Runtime
+            // diagnostics belong in the owned bottom drawer instead.
+            diagnostics_->active = false;
         }
 
         if (!visible)

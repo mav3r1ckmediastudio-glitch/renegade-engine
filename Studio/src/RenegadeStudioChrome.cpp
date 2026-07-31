@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <utility>
 
 namespace
@@ -9,6 +10,7 @@ namespace
     constexpr float TopBarHeight = 64.0f;
     constexpr float SceneTabsHeight = 34.0f;
     constexpr float BottomTabsHeight = 32.0f;
+    constexpr float DrawerHeight = 238.0f;
     constexpr float StatusBarHeight = 28.0f;
     constexpr float PanelHeaderHeight = 43.0f;
 
@@ -76,6 +78,160 @@ namespace
 
 namespace renegade::studio
 {
+    void RenegadeTextInputField::Render(
+        const wi::Canvas& canvas,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible())
+        {
+            return;
+        }
+        const wi::Color edge = state == wi::gui::ACTIVE
+            ? Forge
+            : state == wi::gui::FOCUS ? TechCyan : Border;
+        DrawBorderedRect(
+            translation.x,
+            translation.y,
+            scale.x,
+            scale.y,
+            wi::Color(6, 10, 12, 248),
+            IsEnabled() ? edge : BorderSoft,
+            cmd);
+        font_description.Draw(cmd);
+        ApplyScissor(canvas, scissorRect, cmd);
+        if (state == wi::gui::ACTIVE)
+        {
+            font_input.Draw(cmd);
+        }
+        else
+        {
+            font.Draw(cmd);
+        }
+    }
+
+    void RenegadeButton::Render(
+        const wi::Canvas&,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible())
+        {
+            return;
+        }
+        const bool engaged =
+            state == wi::gui::ACTIVE || state == wi::gui::FOCUS;
+        DrawBorderedRect(
+            translation.x,
+            translation.y,
+            scale.x,
+            scale.y,
+            engaged ? wi::Color(28, 20, 16, 255) : Surface2,
+            engaged ? Forge : Border,
+            cmd);
+        font.Draw(cmd);
+    }
+
+    void RenegadeCheckBox::Render(
+        const wi::Canvas&,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible())
+        {
+            return;
+        }
+        const float box = std::min(18.0f, scale.y - 4.0f);
+        DrawBorderedRect(
+            translation.x,
+            translation.y + (scale.y - box) * 0.5f,
+            box,
+            box,
+            wi::Color(6, 10, 12, 255),
+            state == wi::gui::FOCUS ? TechCyan : Border,
+            cmd);
+        if (checked)
+        {
+            DrawRect(
+                translation.x + 4.0f,
+                translation.y + (scale.y - box) * 0.5f + 4.0f,
+                box - 8.0f,
+                box - 8.0f,
+                Forge,
+                cmd);
+        }
+        DrawText(
+            GetName(),
+            translation.x + box + 9.0f,
+            translation.y + 8.0f,
+            10,
+            IsEnabled() ? TextSecondary : Muted,
+            cmd,
+            0.25f);
+    }
+
+    void RenegadeComboBox::Render(
+        const wi::Canvas&,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible())
+        {
+            return;
+        }
+        const bool open = state == wi::gui::ACTIVE;
+        DrawBorderedRect(
+            translation.x,
+            translation.y,
+            scale.x,
+            scale.y,
+            wi::Color(6, 10, 12, 255),
+            open || state == wi::gui::FOCUS ? Forge : Border,
+            cmd);
+        const std::string value = selected >= 0 &&
+            selected < static_cast<int>(items.size())
+            ? items[static_cast<std::size_t>(selected)].name
+            : "SELECT...";
+        DrawText(
+            value,
+            translation.x + 10.0f,
+            translation.y + 8.0f,
+            10,
+            TextSecondary,
+            cmd,
+            0.35f);
+        DrawText(
+            open ? "▲" : "▼",
+            translation.x + scale.x - 21.0f,
+            translation.y + 8.0f,
+            9,
+            open ? Forge : Muted,
+            cmd);
+        if (!open)
+        {
+            return;
+        }
+        const int count = std::min(
+            static_cast<int>(items.size()),
+            maxVisibleItemCount);
+        for (int index = 0; index < count; ++index)
+        {
+            const float y = translation.y + scale.y * (index + 1);
+            DrawBorderedRect(
+                translation.x,
+                y,
+                scale.x,
+                scale.y,
+                index == hovered ? Surface2 : Surface0,
+                index == hovered ? TechCyan : BorderSoft,
+                cmd);
+            DrawText(
+                items[static_cast<std::size_t>(index)].name,
+                translation.x + 10.0f,
+                y + 8.0f,
+                10,
+                index == hovered ? TextStrong : TextSecondary,
+                cmd,
+                0.35f);
+        }
+    }
+
     void RenegadeStudioChrome::Create()
     {
         SetName("Renegade-owned Studio chrome");
@@ -90,6 +246,7 @@ namespace renegade::studio
         width_ = std::max(1.0f, width);
         height_ = std::max(1.0f, height);
         hierarchyWidth_ = width_ < 1350.0f ? 260.0f : 320.0f;
+        inspectorWidth_ = width_ < 1350.0f ? 310.0f : 360.0f;
         SetPos(XMFLOAT2(0.0f, 0.0f));
         SetSize(XMFLOAT2(width_, height_));
     }
@@ -98,6 +255,7 @@ namespace renegade::studio
         std::vector<HierarchyRow> rows)
     {
         hierarchyRows_ = std::move(rows);
+        SetHierarchyFilter(hierarchyFilter_);
     }
 
     void RenegadeStudioChrome::SetSceneName(std::string sceneName)
@@ -120,13 +278,62 @@ namespace renegade::studio
         activeTool_ = toolIndex;
     }
 
+    void RenegadeStudioChrome::SetHierarchyFilter(std::string filter)
+    {
+        hierarchyFilter_ = std::move(filter);
+        std::transform(
+            hierarchyFilter_.begin(),
+            hierarchyFilter_.end(),
+            hierarchyFilter_.begin(),
+            [](const unsigned char character)
+            {
+                return static_cast<char>(std::tolower(character));
+            });
+        visibleHierarchyRows_.clear();
+        for (std::size_t index = 0; index < hierarchyRows_.size(); ++index)
+        {
+            std::string name = hierarchyRows_[index].name;
+            std::transform(
+                name.begin(),
+                name.end(),
+                name.begin(),
+                [](const unsigned char character)
+                {
+                    return static_cast<char>(std::tolower(character));
+                });
+            if (hierarchyFilter_.empty() ||
+                name.find(hierarchyFilter_) != std::string::npos)
+            {
+                visibleHierarchyRows_.push_back(index);
+            }
+        }
+    }
+
+    void RenegadeStudioChrome::OnHierarchySelected(
+        std::function<void(std::uint64_t)> callback)
+    {
+        hierarchySelected_ = std::move(callback);
+    }
+
+    void RenegadeStudioChrome::OnToolSelected(
+        std::function<void(int)> callback)
+    {
+        toolSelected_ = std::move(callback);
+    }
+
     XMFLOAT4 RenegadeStudioChrome::ViewportBounds() const noexcept
     {
         return XMFLOAT4(
             hierarchyWidth_,
             TopBarHeight + SceneTabsHeight,
-            width_,
-            height_ - BottomTabsHeight - StatusBarHeight);
+            width_ - inspectorWidth_,
+            height_ - BottomTabsHeight - StatusBarHeight -
+                (activeBottomTab_ >= 0 ? DrawerHeight : 0.0f));
+    }
+
+    float RenegadeStudioChrome::InspectorWidth() const noexcept
+    {
+        return inspectorWidth_;
     }
 
     void RenegadeStudioChrome::Update(
@@ -134,9 +341,69 @@ namespace renegade::studio
         const float dt)
     {
         Widget::Update(canvas, dt);
-        // This first slice is deliberately presentation-only. An empty hitbox
-        // keeps viewport selection and navigation fully functional while the
-        // visual direction is being accepted.
+        if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            const XMFLOAT4 pointer = wi::input::GetPointer();
+            const float x = pointer.x;
+            const float y = pointer.y;
+            const float menuEnd = 531.0f;
+            const float firstToolX = menuEnd + 13.0f;
+            constexpr std::array<float, 4> widths = {
+                82.0f, 102.0f, 82.0f, 82.0f};
+            float toolX = firstToolX;
+            for (int index = 0; index < 4; ++index)
+            {
+                if (x >= toolX && x < toolX + widths[index] &&
+                    y >= 15.0f && y < 49.0f)
+                {
+                    if (toolSelected_)
+                    {
+                        toolSelected_(index);
+                    }
+                    break;
+                }
+                toolX += widths[index] + 5.0f;
+            }
+
+            const float searchY = TopBarHeight + PanelHeaderHeight + 10.0f;
+            const float rowsTop = searchY + 42.0f;
+            constexpr float rowHeight = 28.0f;
+            if (x >= 8.0f && x < hierarchyWidth_ - 8.0f && y >= rowsTop)
+            {
+                const auto visibleIndex = static_cast<std::size_t>(
+                    (y - rowsTop) / rowHeight);
+                if (visibleIndex < visibleHierarchyRows_.size() &&
+                    hierarchySelected_)
+                {
+                    hierarchySelected_(hierarchyRows_[
+                        visibleHierarchyRows_[visibleIndex]].entity);
+                }
+            }
+
+            const float bottomTabsTop =
+                height_ - BottomTabsHeight - StatusBarHeight;
+            if (x >= hierarchyWidth_ &&
+                x < width_ - inspectorWidth_ &&
+                y >= bottomTabsTop && y < bottomTabsTop + BottomTabsHeight)
+            {
+                constexpr std::array<const char*, 4> tabs = {
+                    "ASSET BROWSER", "CONSOLE", "OUTPUT", "DIAGNOSTICS"};
+                float tabX = hierarchyWidth_;
+                for (int index = 0; index < 4; ++index)
+                {
+                    const float tabWidth =
+                        std::string(tabs[index]).size() * 7.2f + 31.0f;
+                    if (x >= tabX && x < tabX + tabWidth)
+                    {
+                        activeBottomTab_ = activeBottomTab_ == index
+                            ? -1
+                            : index;
+                        break;
+                    }
+                    tabX += tabWidth;
+                }
+            }
+        }
         hitBox = wi::primitive::Hitbox2D(
             XMFLOAT2(-1.0f, -1.0f),
             XMFLOAT2(0.0f, 0.0f));
@@ -152,8 +419,11 @@ namespace renegade::studio
         }
 
         const float viewportTop = TopBarHeight + SceneTabsHeight;
+        const float inspectorX = width_ - inspectorWidth_;
         const float bottomTabsTop =
             height_ - BottomTabsHeight - StatusBarHeight;
+        const float viewportBottom = bottomTabsTop -
+            (activeBottomTab_ >= 0 ? DrawerHeight : 0.0f);
         const float statusTop = height_ - StatusBarHeight;
 
         // App frame and low-noise industrial shell:
@@ -321,13 +591,16 @@ namespace renegade::studio
         const float rowsTop = searchY + 42.0f;
         const float rowsBottom = statusTop - 8.0f;
         constexpr float rowHeight = 28.0f;
-        for (std::size_t index = 0; index < hierarchyRows_.size(); ++index)
+        for (std::size_t visibleIndex = 0;
+             visibleIndex < visibleHierarchyRows_.size();
+             ++visibleIndex)
         {
-            const float rowY = rowsTop + index * rowHeight;
+            const float rowY = rowsTop + visibleIndex * rowHeight;
             if (rowY + rowHeight > rowsBottom)
             {
                 break;
             }
+            const std::size_t index = visibleHierarchyRows_[visibleIndex];
             const auto& row = hierarchyRows_[index];
             if (row.selected)
             {
@@ -375,14 +648,14 @@ namespace renegade::studio
         DrawRect(
             hierarchyWidth_,
             TopBarHeight,
-            width_ - hierarchyWidth_,
+            inspectorX - hierarchyWidth_,
             SceneTabsHeight,
             wi::Color(8, 12, 15, 255),
             cmd);
         DrawRect(
             hierarchyWidth_,
             viewportTop - 1.0f,
-            width_ - hierarchyWidth_,
+            inspectorX - hierarchyWidth_,
             1.0f,
             Border,
             cmd);
@@ -419,13 +692,13 @@ namespace renegade::studio
             hierarchyWidth_,
             viewportTop,
             1.0f,
-            bottomTabsTop - viewportTop,
+            viewportBottom - viewportTop,
             Border,
             cmd);
         DrawRect(
             hierarchyWidth_,
             viewportTop,
-            width_ - hierarchyWidth_,
+            inspectorX - hierarchyWidth_,
             1.0f,
             BorderSoft,
             cmd);
@@ -455,7 +728,7 @@ namespace renegade::studio
         }
         if (!selectionName_.empty())
         {
-            const float tagY = bottomTabsTop - 39.0f;
+            const float tagY = viewportBottom - 39.0f;
             DrawRect(
                 hierarchyWidth_ + 14.0f,
                 tagY,
@@ -480,25 +753,66 @@ namespace renegade::studio
                 1.0f);
         }
 
-        // Hidden-until-needed bottom drawer: only its tabs are present.
+        if (activeBottomTab_ >= 0)
+        {
+            const float drawerTop = bottomTabsTop - DrawerHeight;
+            DrawRect(
+                hierarchyWidth_, drawerTop,
+                inspectorX - hierarchyWidth_, DrawerHeight,
+                wi::Color(8, 13, 16, 252), cmd);
+            DrawRect(
+                hierarchyWidth_, drawerTop,
+                inspectorX - hierarchyWidth_, 1.0f, Border, cmd);
+            constexpr std::array<const char*, 4> drawerTitles = {
+                "PROJECT ASSETS", "CONSOLE", "BUILD OUTPUT", "DIAGNOSTICS"};
+            DrawText(
+                drawerTitles[activeBottomTab_],
+                hierarchyWidth_ + 16.0f, drawerTop + 15.0f,
+                11, TextSecondary, cmd, 1.1f, 0.08f);
+            DrawRect(
+                hierarchyWidth_ + 16.0f, drawerTop + 38.0f,
+                inspectorX - hierarchyWidth_ - 32.0f,
+                1.0f, BorderSoft, cmd);
+            const char* message = activeBottomTab_ == 0
+                ? "No imported assets yet. Asset import is a separate capability."
+                : activeBottomTab_ == 1
+                    ? "Console connected. No messages in this session."
+                    : activeBottomTab_ == 2
+                        ? "Build output will appear here."
+                        : "Runtime diagnostics are shown here when available.";
+            DrawText(
+                message,
+                hierarchyWidth_ + 16.0f, drawerTop + 55.0f,
+                10, Muted, cmd);
+        }
+
+        // Hidden-until-needed bottom drawer tabs.
         DrawRect(
             hierarchyWidth_,
             bottomTabsTop,
-            width_ - hierarchyWidth_,
+            inspectorX - hierarchyWidth_,
             BottomTabsHeight,
             wi::Color(8, 16, 21, 250),
             cmd);
         DrawRect(
             hierarchyWidth_,
             bottomTabsTop,
-            width_ - hierarchyWidth_,
+            inspectorX - hierarchyWidth_,
             1.0f,
             Border,
             cmd);
         float bottomX = hierarchyWidth_ + 15.0f;
+        int tabIndex = 0;
         for (const char* tab : {
                  "ASSET BROWSER", "CONSOLE", "OUTPUT", "DIAGNOSTICS"})
         {
+            if (activeBottomTab_ == tabIndex)
+            {
+                DrawRect(
+                    bottomX - 7.0f, bottomTabsTop,
+                    std::string(tab).size() * 7.2f + 18.0f,
+                    2.0f, Forge, cmd);
+            }
             DrawText(
                 tab,
                 bottomX,
@@ -515,7 +829,27 @@ namespace renegade::studio
                 BottomTabsHeight,
                 BorderSoft,
                 cmd);
+            ++tabIndex;
         }
+
+        // Context Inspector background. Interactive Renegade controls render
+        // over this surface and retain the existing command/service wiring.
+        DrawRect(
+            inspectorX, TopBarHeight,
+            inspectorWidth_, statusTop - TopBarHeight,
+            Surface0, cmd);
+        DrawRect(
+            inspectorX, TopBarHeight,
+            1.0f, statusTop - TopBarHeight,
+            Border, cmd);
+        DrawRect(
+            inspectorX, TopBarHeight,
+            inspectorWidth_, PanelHeaderHeight,
+            Surface2, cmd);
+        DrawRect(
+            inspectorX, TopBarHeight + PanelHeaderHeight - 1.0f,
+            inspectorWidth_, 1.0f,
+            BorderSoft, cmd);
 
         // Status is secondary information, never a second toolbar.
         DrawRect(0.0f, statusTop, width_, StatusBarHeight, Surface0, cmd);
@@ -531,8 +865,8 @@ namespace renegade::studio
             cmd,
             0.75f);
         DrawText(
-            "RENEGADE STUDIO VISUAL PROOF",
-            width_ - 270.0f,
+            "RENEGADE STUDIO // OWNED CHROME",
+            width_ - 285.0f,
             statusTop + 9.0f,
             9,
             TechCyan,

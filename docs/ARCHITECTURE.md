@@ -55,6 +55,12 @@ overrides `Widget::Render` and draws the Studio shell from Renegade-owned
 primitives and design tokens. Interactive components will migrate onto that
 visual foundation one accepted vertical slice at a time.
 
+The first functional slice uses `RenegadeTextInputField`, `RenegadeButton`,
+`RenegadeCheckBox`, and `RenegadeComboBox`. They inherit wiGUI's proven focus,
+keyboard and pointer mechanics but override rendering completely. This is the
+standard migration seam: reuse low-level interaction machinery when it is
+useful, while Renegade owns all visible pixels and all workflow composition.
+
 `ProjectService` owns `.renegade` descriptor validation and recent-project
 state. Studio calls that service rather than parsing project files in widgets.
 

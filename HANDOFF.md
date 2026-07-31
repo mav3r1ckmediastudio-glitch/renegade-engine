@@ -14,7 +14,7 @@
 
 **Active phase:** Phase 3 — Studio foundation
 
-**Active bounded task:** Renegade-owned Studio chrome visual proof
+**Active bounded task:** Renegade-owned Studio chrome functional slice
 
 ## Status
 
@@ -34,7 +34,26 @@ acceptance on DX12 and Vulkan:
 The creator can now change the look of a scene inside the editor rather than
 by rebuilding. That was the goal set two milestones ago and it is met.
 
-## Pending: Renegade-owned Studio chrome visual proof
+## Accepted: Renegade-owned Studio chrome visual proof
+
+The product owner accepted the packaged DX12 visual proof from PR #7 at
+`bf41c75`. The Renegade-owned canvas architecture is now the approved Studio
+baseline. Do not reinterpret the layout or return to stock Wicked widget
+rendering.
+
+## Pending: first functional chrome slice
+
+The next commit reconnects the real hierarchy, tool selection, Transform and
+Environment Inspector controls, and a collapsed-by-default bottom drawer.
+Renegade subclasses retain native input behaviour while overriding the render
+path for every visible control pixel. See
+`docs/PHASE3_STUDIO_CHROME_FUNCTIONAL_SLICE.md`.
+
+This slice is not accepted until Windows CI is green and the product owner has
+run the packaged DX12 artifact through the hierarchy, transform, weather,
+drawer, Undo/Redo and save/reopen checklist. Vulkan follows DX12 acceptance.
+
+## Superseded visual-proof notes
 
 The previous full-shell attempts were rejected by the product owner because
 they rearranged and recoloured Wicked's stock widgets instead of reproducing
@@ -47,15 +66,10 @@ that uses Wicked only for canvas scheduling. The proof hides every stock
 workspace panel and renders only the approved top application bar, scene tab,
 Hierarchy edge, viewport chrome, collapsed bottom tabs, and status bar.
 
-This is intentionally not a complete workspace. Menus, Hierarchy rows and
-bottom tabs are presentation-only in this proof; existing keyboard shortcuts,
-viewport navigation, viewport selection, grid, gizmo, outline, and scene
-rendering remain live. Inspector presentation and all docking interactions are
-excluded until the product owner approves a compiled screenshot.
-
-See `docs/PHASE3_STUDIO_CHROME_VISUAL_PROOF.md`. Do not extend this slice or
-claim it is accepted until the packaged Windows Release has been visually
-checked against the standalone prototype.
+That bounded proof has now served its purpose and is accepted. Its deliberately
+presentation-only elements are being replaced incrementally by the functional
+slice above. See `docs/PHASE3_STUDIO_CHROME_VISUAL_PROOF.md` for the original
+gate and `docs/PHASE3_STUDIO_CHROME_FUNCTIONAL_SLICE.md` for current scope.
 
 ## Start here
 

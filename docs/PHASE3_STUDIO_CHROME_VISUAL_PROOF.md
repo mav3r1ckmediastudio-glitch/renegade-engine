@@ -7,6 +7,10 @@ Engine as the renderer and low-level UI host.
 
 This is a visual architecture gate, not a complete workspace milestone.
 
+**Accepted:** The product owner approved the packaged Windows DX12 result from
+PR #7 at `bf41c75` on 2026-07-31. Functional migration now continues in
+`PHASE3_STUDIO_CHROME_FUNCTIONAL_SLICE.md`.
+
 ## Starting point
 
 - Branch base: `main`
