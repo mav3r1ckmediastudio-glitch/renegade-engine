@@ -68,3 +68,20 @@ set_target_properties(RenegadeOceanTests PROPERTIES
 add_dependencies(RenegadeBridgeTests RenegadeOceanTests)
 
 add_test(NAME RenegadeOceanTests COMMAND RenegadeOceanTests)
+
+add_executable(RenegadeTerrainTests
+    TerrainTests.cpp
+)
+
+target_link_libraries(RenegadeTerrainTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeTerrainTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeTerrainTests)
+
+add_test(NAME RenegadeTerrainTests COMMAND RenegadeTerrainTests)

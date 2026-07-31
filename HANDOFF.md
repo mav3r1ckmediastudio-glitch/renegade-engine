@@ -1,6 +1,6 @@
 # Renegade Engine — Development Handoff
 
-**Handoff date:** 2026-07-30
+**Handoff date:** 2026-07-31
 
 **Intended recipient:** Claude Code, Codex, or another coding agent
 
@@ -14,7 +14,23 @@
 
 **Active phase:** Phase 3 — Studio foundation
 
-**Active bounded task:** Renegade-owned Studio chrome functional slice
+**Active bounded task:** Terrain Authoring V1
+
+## Latest work in progress
+
+Branch `phase3/terrain-authoring` starts from merged `main` at `475ac45`.
+The first terrain foundation adds `TerrainService`, native terrain creation,
+restrained Flat World/Island/Coastline/Highlands presets, safety bounds,
+command-backed state changes, and `RenegadeTerrainTests`. It also records the
+product-owner decision to move terrain ahead of the previously planned Light
+and Material gate in `docs/ROADMAP.md` and
+`docs/PHASE3_TERRAIN_AUTHORING.md`.
+
+This is not Terrain V1 completion. Studio controls, viewport sculpt/paint,
+heightmap import/export, save/reopen evidence, packaged Runtime testing, and
+Windows visual acceptance remain. The current environment has no CMake and is
+not a Windows target, so the new test executable has not yet been compiled.
+`git diff --check` passes. Do not claim this branch visually accepted.
 
 ## Status
 
