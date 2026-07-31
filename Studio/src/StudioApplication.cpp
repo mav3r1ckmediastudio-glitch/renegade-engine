@@ -104,6 +104,27 @@ namespace renegade::studio
                 session_->Projects().GetEditorPreference("grid_visible", true);
         }
         gridToggleButton_.SetText(gridVisible_ ? "GRID ON" : "GRID OFF");
+        studioChrome_.SetGridVisible(gridVisible_);
+
+        if (session_ != nullptr)
+        {
+            for (int index = 0; index < 4; ++index)
+            {
+                if (session_->Projects().GetEditorPreference(
+                        "drawer_tab_" + std::to_string(index),
+                        index == 0))
+                {
+                    lastDrawerTab_ = index;
+                    break;
+                }
+            }
+            const bool drawerOpen =
+                session_->Projects().GetEditorPreference(
+                    "drawer_open",
+                    false);
+            studioChrome_.SetActiveBottomTab(
+                drawerOpen ? lastDrawerTab_ : -1);
+        }
 
         RefreshHierarchy();
         RefreshInspector();
@@ -284,6 +305,7 @@ namespace renegade::studio
     {
         gridVisible_ = visible;
         gridToggleButton_.SetText(visible ? "GRID ON" : "GRID OFF");
+        studioChrome_.SetGridVisible(visible);
 
         if (session_ != nullptr)
         {
@@ -528,6 +550,8 @@ namespace renegade::studio
 
         hierarchySearch_.Create("Hierarchy Search");
         hierarchySearch_.SetDescription("⌕  ");
+        hierarchySearch_.SetValue("");
+        hierarchySearch_.SetPlaceholder("SEARCH SCENE...");
         hierarchySearch_.SetTooltip("Filter the visible scene hierarchy");
         hierarchySearch_.SetCancelInputEnabled(false);
         hierarchySearch_.OnInput([this](const wi::gui::EventArgs& args)
@@ -882,7 +906,7 @@ namespace renegade::studio
         reopenButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
         reopenButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            ReopenScene();
+            pendingAction_ = EditorAction::ReopenScene;
         });
         inspectorPanel_.AddWidget(&reopenButton_);
 
@@ -937,6 +961,62 @@ namespace renegade::studio
                     : tool == 2
                         ? EditorAction::RotateTool
                         : EditorAction::ScaleTool;
+        });
+        studioChrome_.OnAction(
+            [this](const RenegadeStudioChrome::Action action)
+        {
+            switch (action)
+            {
+            case RenegadeStudioChrome::Action::ProjectHub:
+                pendingAction_ = EditorAction::ProjectHub;
+                break;
+            case RenegadeStudioChrome::Action::Save:
+                pendingAction_ = EditorAction::SaveScene;
+                break;
+            case RenegadeStudioChrome::Action::SaveAs:
+                pendingAction_ = EditorAction::SaveSceneAs;
+                break;
+            case RenegadeStudioChrome::Action::Reopen:
+                pendingAction_ = EditorAction::ReopenScene;
+                break;
+            case RenegadeStudioChrome::Action::Undo:
+                pendingAction_ = EditorAction::Undo;
+                break;
+            case RenegadeStudioChrome::Action::Redo:
+                pendingAction_ = EditorAction::Redo;
+                break;
+            case RenegadeStudioChrome::Action::Duplicate:
+                pendingAction_ = EditorAction::DuplicateSelection;
+                break;
+            case RenegadeStudioChrome::Action::Delete:
+                pendingAction_ = EditorAction::DeleteSelection;
+                break;
+            case RenegadeStudioChrome::Action::Focus:
+                pendingAction_ = EditorAction::FocusSelection;
+                break;
+            case RenegadeStudioChrome::Action::ToggleGrid:
+                pendingAction_ = EditorAction::ToggleGrid;
+                break;
+            }
+        });
+        studioChrome_.OnDrawerChanged([this](const int tab)
+        {
+            if (tab >= 0)
+            {
+                lastDrawerTab_ = tab;
+            }
+            if (session_ == nullptr)
+            {
+                return;
+            }
+            auto& projects = session_->Projects();
+            projects.SetEditorPreference("drawer_open", tab >= 0);
+            for (int index = 0; index < 4; ++index)
+            {
+                projects.SetEditorPreference(
+                    "drawer_tab_" + std::to_string(index),
+                    lastDrawerTab_ == index);
+            }
         });
         GetGUI().AddWidget(&studioChrome_);
     }
@@ -1103,6 +1183,52 @@ namespace renegade::studio
         projectHubPanel_.SetColor(
             wi::Color(2, 9, 16, 232),
             wi::gui::WIDGET_ID_WINDOW_BASE);
+
+        // The global Project Hub theme is intentionally not the workspace
+        // theme. Reassert the owned Inspector host after the global pass so
+        // Wicked cannot repaint its rounded cyan window or section pills.
+        inspectorPanel_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.SetColor(
+            wi::Color::Transparent(),
+            wi::gui::WIDGET_ID_WINDOW_BASE);
+        inspectorPanel_.SetShadowRadius(0.0f);
+
+        const auto ownLabel = [](wi::gui::Label& label)
+        {
+            label.SetColor(wi::Color::Transparent());
+            label.SetShadowRadius(0.0f);
+            label.font.params.color = wi::Color(244, 239, 233, 255);
+            label.font.params.bolden = 0.18f;
+            label.font.params.shadowColor = wi::Color::Transparent();
+        };
+        ownLabel(inspectorLabel_);
+        ownLabel(positionLabel_);
+        ownLabel(rotationLabel_);
+        ownLabel(scaleLabel_);
+        ownLabel(environmentSkyLabel_);
+        ownLabel(environmentFogLabel_);
+        ownLabel(environmentCloudLabel_);
+
+        wi::gui::Theme scrollbarTheme = theme;
+        scrollbarTheme.image.corner_rounding = false;
+        for (auto& corner : scrollbarTheme.image.corners_rounding)
+        {
+            corner.radius = 0.0f;
+        }
+        scrollbarTheme.shadow = 0.0f;
+        inspectorPanel_.scrollbar_vertical.SetTheme(scrollbarTheme);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(12, 18, 22, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(38, 52, 61, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_INACTIVE);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
     }
 
     void StudioRenderPath::Update(const float dt)
@@ -1123,6 +1249,14 @@ namespace renegade::studio
         if (pendingAction_ != EditorAction::None)
         {
             ProcessPendingAction();
+            return;
+        }
+
+        // The Renegade-owned shell uses deliberate hit regions rather than
+        // stock Wicked widgets. Never let a chrome click fall through into
+        // scene selection, gizmo manipulation, or camera navigation.
+        if (studioChrome_.ConsumedPointerThisFrame())
+        {
             return;
         }
 
@@ -1850,6 +1984,12 @@ namespace renegade::studio
             break;
         case EditorAction::SaveSceneAs:
             SaveSceneAs();
+            break;
+        case EditorAction::ReopenScene:
+            ReopenScene();
+            break;
+        case EditorAction::ProjectHub:
+            ReturnToProjectHub();
             break;
         case EditorAction::SelectTool:
             SetTransformTool(TransformTool::Select);

@@ -312,3 +312,13 @@ Each GitHub push and build cycle costs roughly 30 minutes:
 
 Do not turn this into an unbounded mega-change. A normal unit should still
 produce one testable vertical outcome.
+
+## Workspace stabilization pending packaged verification
+
+The owned chrome follow-up adds the official wordmark asset, square Inspector
+host styling, bold high-contrast workspace text, click-through isolation,
+functional File/Edit/View menus, honest unavailable states and a drawer that
+closes by chevron, active-tab click, Escape or outside click. Drawer open state,
+last tab and grid visibility persist through `ProjectService` editor
+preferences. See `docs/PHASE3_WORKSPACE_STABILIZATION.md` for the full Windows
+acceptance pass. Do not mark this passed from CI alone.

@@ -22,6 +22,11 @@ moving the already-accepted editor behaviour onto Renegade-rendered controls.
 - Asset Browser, Console, Output and Diagnostics tabs toggle one collapsed-by-
   default bottom drawer. Their content remains intentionally limited to the
   capabilities that actually exist.
+- The stabilization follow-up adds explicit drawer chevrons, active-tab,
+  Escape and outside-click closure plus editor-preference restoration.
+- File, Edit and View menus now expose the existing editor workflows. States
+  without a backend are marked unavailable instead of being rendered as
+  plausible dummy controls.
 - The stock FPS/error overlay is disabled because it collided with the
   wordmark; diagnostics have an owned drawer destination.
 
@@ -44,8 +49,8 @@ and cloud shadows continue through the previously accepted implementation.
 - Asset import is still not built; the Asset Browser says so.
 - Console/build/diagnostic data models are not built; the drawer supplies the
   approved interaction and destination rather than invented output.
-- Menus, play controls, scene-tab lifecycle and docking persistence remain
-  later vertical slices.
+- Play controls, scene-tab lifecycle, panel resizing and docking persistence
+  remain later vertical slices.
 - Light and material authoring remain the next engine-feature milestone after
   the owned workspace regression gate.
 

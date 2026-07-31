@@ -43,6 +43,8 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
         "$<TARGET_FILE_DIR:RenegadeStudio>"
@@ -55,5 +57,8 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeGridPS.hlsl"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeGridPS.hlsl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
     VERBATIM
 )

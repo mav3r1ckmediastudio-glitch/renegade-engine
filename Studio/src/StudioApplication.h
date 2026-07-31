@@ -43,6 +43,8 @@ namespace renegade::studio
             DeleteSelection,
             SaveScene,
             SaveSceneAs,
+            ReopenScene,
+            ProjectHub,
             SelectTool,
             TranslateTool,
             RotateTool,
@@ -223,6 +225,7 @@ namespace renegade::studio
         bool gizmoDragActive_ = false;
         bool flyCameraActive_ = false;
         bool gridVisible_ = true;
+        int lastDrawerTab_ = 0;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;

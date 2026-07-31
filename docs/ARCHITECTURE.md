@@ -146,6 +146,13 @@ Renegade owns every visible shell primitive, information architecture, visual
 language, component, docking/layout layer, project hub, and workflow.
 EngineBridge remains UI-toolkit independent.
 
+The accepted Studio visual proof is the workspace UX authority. The supplied
+Renegade brand guideline is narrower: it governs only the official mark,
+wordmark lockup and logo type treatment. Its palette, layouts and general
+typography do not override the accepted editor direction. The official lockup
+is packaged as a Studio-owned UI asset rather than reconstructed with Wicked
+widgets.
+
 ## Project metadata
 
 ADR 0003 defines the v1 `.renegade` descriptor. It is a versioned,

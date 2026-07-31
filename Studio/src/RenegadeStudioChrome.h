@@ -12,8 +12,12 @@ namespace renegade::studio
     class RenegadeTextInputField final : public wi::gui::TextInputField
     {
     public:
+        void SetPlaceholder(std::string placeholder);
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override { return "RenegadeTextInputField"; }
+
+    private:
+        std::string placeholder_;
     };
 
     class RenegadeButton final : public wi::gui::Button
@@ -44,6 +48,20 @@ namespace renegade::studio
     class RenegadeStudioChrome final : public wi::gui::Widget
     {
     public:
+        enum class Action
+        {
+            ProjectHub,
+            Save,
+            SaveAs,
+            Reopen,
+            Undo,
+            Redo,
+            Duplicate,
+            Delete,
+            Focus,
+            ToggleGrid,
+        };
+
         struct HierarchyRow
         {
             std::string name;
@@ -60,11 +78,16 @@ namespace renegade::studio
         void SetSelectionName(std::string selectionName);
         void SetActiveTool(int toolIndex) noexcept;
         void SetHierarchyFilter(std::string filter);
+        void SetGridVisible(bool visible) noexcept;
+        void SetActiveBottomTab(int tab, bool notify = false);
         void OnHierarchySelected(std::function<void(std::uint64_t)> callback);
         void OnToolSelected(std::function<void(int)> callback);
+        void OnAction(std::function<void(Action)> callback);
+        void OnDrawerChanged(std::function<void(int)> callback);
 
         [[nodiscard]] XMFLOAT4 ViewportBounds() const noexcept;
         [[nodiscard]] float InspectorWidth() const noexcept;
+        [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
 
         void Update(const wi::Canvas& canvas, float dt) override;
         void Render(
@@ -82,6 +105,11 @@ namespace renegade::studio
         float inspectorWidth_ = 360.0f;
         int activeTool_ = 1;
         int activeBottomTab_ = -1;
+        int activeMenu_ = -1;
+        int activeViewportMenu_ = -1;
+        bool gridVisible_ = true;
+        bool pointerConsumed_ = false;
+        wi::Resource brandLockup_;
         std::vector<HierarchyRow> hierarchyRows_;
         std::vector<std::size_t> visibleHierarchyRows_;
         std::string sceneName_ = "PROVING GROUND";
@@ -90,5 +118,7 @@ namespace renegade::studio
         std::string hierarchyFilter_;
         std::function<void(std::uint64_t)> hierarchySelected_;
         std::function<void(int)> toolSelected_;
+        std::function<void(Action)> action_;
+        std::function<void(int)> drawerChanged_;
     };
 }
