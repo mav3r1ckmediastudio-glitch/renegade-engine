@@ -167,6 +167,12 @@ Wicked's GPU rain emitter and snow is a distinct Renegade-authored visual
 profile over that emitter. This preserves an upgrade path to a snow-specific
 renderer without coupling Studio widgets to Wicked's raw rain fields.
 
+Sun authoring is isolated behind `SunService`. One command updates the
+serialized Weather sun direction and the primary directional-light transform
+together, keeping atmosphere, illumination, shadows and Undo/Redo in lockstep.
+Its deterministic editor clock is also the contract for the future Lua runtime
+day/night system.
+
 ## Project metadata
 
 ADR 0003 defines the v1 `.renegade` descriptor. It is a versioned,

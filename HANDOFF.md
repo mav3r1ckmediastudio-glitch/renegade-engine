@@ -332,9 +332,9 @@ one Undo command per drag. Its authoritative regression list is
 packaged DX12 and Vulkan before PR #7 leaves draft. The product owner completed
 that pass successfully and PR #7 merged to `main` at `beefe97`.
 
-## Environment workspace and precipitation follow-up
+## Environment workspace and precipitation accepted
 
-The next bounded slice moves Environment out of Scene Hierarchy and into a
+The accepted slice moves Environment out of Scene Hierarchy and into a
 dedicated top-right `SCENE / ENVIRONMENT` workspace switch. Studio resolves the
 primary serialized Weather entity directly without discarding the creator's
 current object selection.
@@ -346,3 +346,15 @@ direction, wind strength and turbulence through `SetPrecipitationCommand` with
 live preview and one Undo step per drag. WISCENE stores the underlying native
 weather values. Snow accumulation, footprints, temperature and snow material
 coverage remain explicitly deferred rather than represented by dummy controls.
+The product owner passed the packaged functional checks, the Windows CI target
+correction passed all four checks, and PR #8 merged at `d0ff493`.
+
+## Sun and time-of-day follow-up
+
+The next bounded patch adds `SunService` and a real `SUN // TIME OF DAY`
+section to the accepted Environment workspace. It authors Wicked's serialized
+`sunDirection` and the scene's primary directional-light transform together,
+with presets, manual angles, live preview, Undo/Redo and save/reopen support.
+
+Runtime Lua progression, geographic solar simulation, moon phases and seasons
+are explicitly outside this patch.
