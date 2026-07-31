@@ -8,13 +8,13 @@
 
 **Canonical branch:** `main`
 
-**Verified starting commit:** `8787a4cb0d3287057fe2f61833084ad653b99ff6`
+**Verified starting commit:** `944f8991a0fbc25885f27f4ae9f278708e95e334`
 
 **Wicked Engine pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 **Active phase:** Phase 3 — Studio foundation
 
-**Next milestone:** Light and Material Authoring
+**Active bounded task:** Renegade-owned Studio chrome functional slice
 
 ## Status
 
@@ -34,6 +34,43 @@ acceptance on DX12 and Vulkan:
 The creator can now change the look of a scene inside the editor rather than
 by rebuilding. That was the goal set two milestones ago and it is met.
 
+## Accepted: Renegade-owned Studio chrome visual proof
+
+The product owner accepted the packaged DX12 visual proof from PR #7 at
+`bf41c75`. The Renegade-owned canvas architecture is now the approved Studio
+baseline. Do not reinterpret the layout or return to stock Wicked widget
+rendering.
+
+## Pending: first functional chrome slice
+
+The next commit reconnects the real hierarchy, tool selection, Transform and
+Environment Inspector controls, and a collapsed-by-default bottom drawer.
+Renegade subclasses retain native input behaviour while overriding the render
+path for every visible control pixel. See
+`docs/PHASE3_STUDIO_CHROME_FUNCTIONAL_SLICE.md`.
+
+This slice is not accepted until Windows CI is green and the product owner has
+run the packaged DX12 artifact through the hierarchy, transform, weather,
+drawer, Undo/Redo and save/reopen checklist. Vulkan follows DX12 acceptance.
+
+## Superseded visual-proof notes
+
+The previous full-shell attempts were rejected by the product owner because
+they rearranged and recoloured Wicked's stock widgets instead of reproducing
+the approved Renegade Studio concept. PR #6 is rejected, must be closed without
+merge, and is not an implementation baseline.
+
+The replacement starts from clean `main` at `944f899`. It adds
+`RenegadeStudioChrome`, a Renegade-owned `Widget::Render` implementation
+that uses Wicked only for canvas scheduling. The proof hides every stock
+workspace panel and renders only the approved top application bar, scene tab,
+Hierarchy edge, viewport chrome, collapsed bottom tabs, and status bar.
+
+That bounded proof has now served its purpose and is accepted. Its deliberately
+presentation-only elements are being replaced incrementally by the functional
+slice above. See `docs/PHASE3_STUDIO_CHROME_VISUAL_PROOF.md` for the original
+gate and `docs/PHASE3_STUDIO_CHROME_FUNCTIONAL_SLICE.md` for current scope.
+
 ## Start here
 
 ```bash
@@ -48,7 +85,7 @@ Verify before changing anything:
 
 ```bash
 git status --short
-git rev-parse HEAD          # 8787a4cb0d3287057fe2f61833084ad653b99ff6
+git rev-parse HEAD          # 944f8991a0fbc25885f27f4ae9f278708e95e334
 git submodule status        # 3a800b71... WickedEngine
 ```
 
@@ -275,3 +312,21 @@ Each GitHub push and build cycle costs roughly 30 minutes:
 
 Do not turn this into an unbounded mega-change. A normal unit should still
 produce one testable vertical outcome.
+
+## Workspace stabilization pending packaged verification
+
+The owned chrome follow-up adds the official wordmark asset, square Inspector
+host styling, bold high-contrast workspace text, click-through isolation,
+functional File/Edit/View menus, honest unavailable states and a drawer that
+closes by chevron, active-tab click, Escape or outside click. Drawer open state,
+last tab and grid visibility persist through `ProjectService` editor
+preferences. See `docs/PHASE3_WORKSPACE_STABILIZATION.md` for the full Windows
+acceptance pass. Do not mark this passed from CI alone.
+
+Packaged review subsequently proved the Inspector was transparent and the
+owned shell had removed panel resizing. The corrective commit makes the
+Inspector opaque, adds persistent Hierarchy/Inspector/drawer splitters, and
+introduces owned Environment slider-plus-number controls with live preview and
+one Undo command per drag. Its authoritative regression list is
+`docs/PHASE3_WORKSPACE_STABILIZATION_CORRECTION.md`. These defects must pass on
+packaged DX12 and Vulkan before PR #7 leaves draft.

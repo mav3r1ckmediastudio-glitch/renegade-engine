@@ -17,6 +17,38 @@ namespace
     constexpr wi::Color HologramPanel = wi::Color(3, 12, 20, 236);
     constexpr wi::Color HologramSelected = wi::Color(0, 102, 138, 245);
     constexpr wi::Color WarningAmber = wi::Color(255, 150, 40, 255);
+    constexpr int LayoutPreferenceBits = 10;
+
+    int ReadLayoutPreference(
+        const renegade::bridge::ProjectService& projects,
+        const std::string& key,
+        const int fallback)
+    {
+        int value = 0;
+        for (int bit = 0; bit < LayoutPreferenceBits; ++bit)
+        {
+            if (projects.GetEditorPreference(
+                    key + "_bit_" + std::to_string(bit),
+                    false))
+            {
+                value |= 1 << bit;
+            }
+        }
+        return value > 0 ? value : fallback;
+    }
+
+    void WriteLayoutPreference(
+        renegade::bridge::ProjectService& projects,
+        const std::string& key,
+        const int value)
+    {
+        for (int bit = 0; bit < LayoutPreferenceBits; ++bit)
+        {
+            projects.SetEditorPreference(
+                key + "_bit_" + std::to_string(bit),
+                (value & (1 << bit)) != 0);
+        }
+    }
 }
 
 namespace renegade::studio
@@ -104,6 +136,47 @@ namespace renegade::studio
                 session_->Projects().GetEditorPreference("grid_visible", true);
         }
         gridToggleButton_.SetText(gridVisible_ ? "GRID ON" : "GRID OFF");
+        studioChrome_.SetGridVisible(gridVisible_);
+
+        if (session_ != nullptr)
+        {
+            for (int index = 0; index < 4; ++index)
+            {
+                if (session_->Projects().GetEditorPreference(
+                        "drawer_tab_" + std::to_string(index),
+                        index == 0))
+                {
+                    lastDrawerTab_ = index;
+                    break;
+                }
+            }
+            const bool drawerOpen =
+                session_->Projects().GetEditorPreference(
+                    "drawer_open",
+                    false);
+            studioChrome_.SetActiveBottomTab(
+                drawerOpen ? lastDrawerTab_ : -1);
+
+            auto& projects = session_->Projects();
+            if (projects.GetEditorPreference(
+                    "workspace_layout_saved",
+                    false))
+            {
+                studioChrome_.SetPanelSizes(
+                    static_cast<float>(ReadLayoutPreference(
+                        projects,
+                        "hierarchy_width",
+                        static_cast<int>(studioChrome_.HierarchyWidth()))),
+                    static_cast<float>(ReadLayoutPreference(
+                        projects,
+                        "inspector_width",
+                        static_cast<int>(studioChrome_.InspectorWidth()))),
+                    static_cast<float>(ReadLayoutPreference(
+                        projects,
+                        "drawer_height",
+                        static_cast<int>(studioChrome_.DrawerHeight()))));
+            }
+        }
 
         RefreshHierarchy();
         RefreshInspector();
@@ -284,6 +357,7 @@ namespace renegade::studio
     {
         gridVisible_ = visible;
         gridToggleButton_.SetText(visible ? "GRID ON" : "GRID OFF");
+        studioChrome_.SetGridVisible(visible);
 
         if (session_ != nullptr)
         {
@@ -526,16 +600,38 @@ namespace renegade::studio
         });
         hierarchyPanel_.AddWidget(&hierarchyTree_);
 
+        hierarchySearch_.Create("Hierarchy Search");
+        hierarchySearch_.SetDescription("⌕  ");
+        hierarchySearch_.SetValue("");
+        hierarchySearch_.SetPlaceholder("SEARCH SCENE...");
+        hierarchySearch_.SetTooltip("Filter the visible scene hierarchy");
+        hierarchySearch_.SetCancelInputEnabled(false);
+        hierarchySearch_.OnInput([this](const wi::gui::EventArgs& args)
+        {
+            studioChrome_.SetHierarchyFilter(args.sValue);
+        });
+        hierarchySearch_.OnInputAccepted(
+            [this](const wi::gui::EventArgs& args)
+        {
+            studioChrome_.SetHierarchyFilter(args.sValue);
+        });
+        GetGUI().AddWidget(&hierarchySearch_);
+
         inspectorPanel_.Create(
             "Inspector",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        inspectorPanel_.SetShadowRadius(8.0f);
+        inspectorPanel_.SetShadowRadius(0.0f);
+        inspectorPanel_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.SetColor(
+            wi::Color(8, 11, 13, 255),
+            wi::gui::WIDGET_ID_WINDOW_BASE);
         GetGUI().AddWidget(&inspectorPanel_);
 
         inspectorLabel_.Create("Transform Inspector");
         inspectorLabel_.SetText("TRANSFORM // SELECT AN ENTITY");
         inspectorLabel_.font.params.size = 16;
         inspectorLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        inspectorLabel_.SetColor(wi::Color::Transparent());
         inspectorPanel_.AddWidget(&inspectorLabel_);
 
         const auto createSectionLabel = [this](
@@ -548,6 +644,7 @@ namespace renegade::studio
             label.font.params.size = 13;
             label.font.params.color = HologramMuted;
             label.font.params.h_align = wi::font::WIFALIGN_LEFT;
+            label.SetColor(wi::Color::Transparent());
             inspectorPanel_.AddWidget(&label);
         };
         createSectionLabel(
@@ -702,93 +799,134 @@ namespace renegade::studio
             "Apply atmospheric scattering to scene geometry.",
             WeatherToggle::AerialPerspective);
 
-        const auto createWeatherInput = [this](
-            wi::gui::TextInputField& input,
+        const auto createWeatherSlider = [this](
+            RenegadeSlider& input,
             const char* name,
-            const char* description,
+            const char* label,
             const char* tooltip,
-            const WeatherField field)
+            const WeatherField field,
+            const float minimum,
+            const float maximum,
+            const float steps)
         {
-            input.Create(name);
-            input.SetDescription(description);
+            input.Create(
+                minimum,
+                maximum,
+                0.0f,
+                steps,
+                name,
+                label);
             input.SetTooltip(tooltip);
-            input.SetValue(0.0f);
-            input.OnInputAccepted(
-                [this, field](const wi::gui::EventArgs& args)
+            input.OnDragStarted([this, field](const float)
             {
-                ApplySelectedWeatherValue(field, args.fValue);
+                BeginWeatherSlider(field);
+            });
+            input.OnValuePreview([this, field](const float value)
+            {
+                PreviewWeatherSlider(field, value);
+            });
+            input.OnValueCommitted([this, field](const float value)
+            {
+                CommitWeatherSlider(field, value);
             });
             inspectorPanel_.AddWidget(&input);
         };
-        createWeatherInput(
+        createWeatherSlider(
             skyExposure_,
             "Sky Exposure",
-            "Exposure: ",
+            "EXPOSURE",
             "Brightness of the physical sky.",
-            WeatherField::SkyExposure);
-        createWeatherInput(
+            WeatherField::SkyExposure,
+            0.0f,
+            4.0f,
+            400.0f);
+        createWeatherSlider(
             ambientIntensity_,
             "Ambient Intensity",
-            "Ambient: ",
+            "AMBIENT",
             "Neutral intensity applied while preserving the authored hue.",
-            WeatherField::AmbientIntensity);
+            WeatherField::AmbientIntensity,
+            0.0f,
+            2.0f,
+            400.0f);
 
         createSectionLabel(
             environmentFogLabel_,
             "Environment Fog Section",
             "FOG // HEIGHT LAYER");
-        createWeatherInput(
+        createWeatherSlider(
             fogStart_,
             "Fog Start",
-            "Start: ",
+            "START",
             "Distance from the camera before fog begins.",
-            WeatherField::FogStart);
-        createWeatherInput(
+            WeatherField::FogStart,
+            0.0f,
+            500.0f,
+            500.0f);
+        createWeatherSlider(
             fogDensity_,
             "Fog Density",
-            "Density: ",
+            "DENSITY",
             "Overall atmospheric fog density.",
-            WeatherField::FogDensity);
+            WeatherField::FogDensity,
+            0.0f,
+            0.1f,
+            1000.0f);
         createWeatherToggle(
             heightFog_,
             "Height fog: ",
             "Restrict fog vertically between the authored heights.",
             WeatherToggle::HeightFog);
-        createWeatherInput(
+        createWeatherSlider(
             fogHeightStart_,
             "Fog Height Start",
-            "Base: ",
+            "BASE",
             "Lower height of the fog layer.",
-            WeatherField::FogHeightStart);
-        createWeatherInput(
+            WeatherField::FogHeightStart,
+            -100.0f,
+            100.0f,
+            400.0f);
+        createWeatherSlider(
             fogHeightEnd_,
             "Fog Height End",
-            "Top: ",
+            "TOP",
             "Upper height of the fog layer.",
-            WeatherField::FogHeightEnd);
+            WeatherField::FogHeightEnd,
+            -100.0f,
+            200.0f,
+            600.0f);
 
         createSectionLabel(
             environmentCloudLabel_,
             "Environment Cloud Section",
             "VOLUMETRIC CLOUDS");
-        createWeatherInput(
+        createWeatherSlider(
             cloudCoverage_,
             "Cloud Coverage",
-            "Coverage: ",
+            "COVERAGE",
             "Primary cloud-layer coverage amount.",
-            WeatherField::CloudCoverage);
-        createWeatherInput(
+            WeatherField::CloudCoverage,
+            0.0f,
+            1.0f,
+            100.0f);
+        createWeatherSlider(
             cloudStartHeight_,
             "Cloud Start Height",
-            "Base: ",
+            "BASE",
             "Altitude where the volumetric cloud volume begins.",
-            WeatherField::CloudStartHeight);
-        createWeatherInput(
+            WeatherField::CloudStartHeight,
+            100.0f,
+            10000.0f,
+            990.0f);
+        createWeatherSlider(
             cloudThickness_,
             "Cloud Thickness",
-            "Depth: ",
+            "DEPTH",
             "Vertical depth of the volumetric cloud volume.",
-            WeatherField::CloudThickness);
+            WeatherField::CloudThickness,
+            100.0f,
+            10000.0f,
+            990.0f);
         createWeatherToggle(
             cloudsCastShadow_,
             "Cloud shadows: ",
@@ -864,7 +1002,7 @@ namespace renegade::studio
         reopenButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
         reopenButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            ReopenScene();
+            pendingAction_ = EditorAction::ReopenScene;
         });
         inspectorPanel_.AddWidget(&reopenButton_);
 
@@ -890,6 +1028,124 @@ namespace renegade::studio
         contentPlaceholder_.font.params.color = HologramMuted;
         contentPlaceholder_.font.params.size = 14;
         contentPanel_.AddWidget(&contentPlaceholder_);
+
+        // The proof slice is a Renegade-owned renderer. It is added after the
+        // legacy widgets so it sits behind future interactive components in
+        // wiGUI's back-to-front render order. The legacy workspace panels are
+        // hidden by SetProjectHubVisible(); they are retained temporarily as
+        // a behavioural reference, not used as the finished presentation.
+        studioChrome_.Create();
+        studioChrome_.OnHierarchySelected(
+            [this](const std::uint64_t entity)
+        {
+            if (session_ == nullptr)
+            {
+                return;
+            }
+            session_->Selection().Select(
+                static_cast<wi::ecs::Entity>(entity));
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+        });
+        studioChrome_.OnToolSelected([this](const int tool)
+        {
+            pendingAction_ = tool == 0
+                ? EditorAction::SelectTool
+                : tool == 1
+                    ? EditorAction::TranslateTool
+                    : tool == 2
+                        ? EditorAction::RotateTool
+                        : EditorAction::ScaleTool;
+        });
+        studioChrome_.OnAction(
+            [this](const RenegadeStudioChrome::Action action)
+        {
+            switch (action)
+            {
+            case RenegadeStudioChrome::Action::ProjectHub:
+                pendingAction_ = EditorAction::ProjectHub;
+                break;
+            case RenegadeStudioChrome::Action::Save:
+                pendingAction_ = EditorAction::SaveScene;
+                break;
+            case RenegadeStudioChrome::Action::SaveAs:
+                pendingAction_ = EditorAction::SaveSceneAs;
+                break;
+            case RenegadeStudioChrome::Action::Reopen:
+                pendingAction_ = EditorAction::ReopenScene;
+                break;
+            case RenegadeStudioChrome::Action::Undo:
+                pendingAction_ = EditorAction::Undo;
+                break;
+            case RenegadeStudioChrome::Action::Redo:
+                pendingAction_ = EditorAction::Redo;
+                break;
+            case RenegadeStudioChrome::Action::Duplicate:
+                pendingAction_ = EditorAction::DuplicateSelection;
+                break;
+            case RenegadeStudioChrome::Action::Delete:
+                pendingAction_ = EditorAction::DeleteSelection;
+                break;
+            case RenegadeStudioChrome::Action::Focus:
+                pendingAction_ = EditorAction::FocusSelection;
+                break;
+            case RenegadeStudioChrome::Action::ToggleGrid:
+                pendingAction_ = EditorAction::ToggleGrid;
+                break;
+            }
+        });
+        studioChrome_.OnDrawerChanged([this](const int tab)
+        {
+            if (tab >= 0)
+            {
+                lastDrawerTab_ = tab;
+            }
+            if (session_ == nullptr)
+            {
+                return;
+            }
+            auto& projects = session_->Projects();
+            projects.SetEditorPreference("drawer_open", tab >= 0);
+            for (int index = 0; index < 4; ++index)
+            {
+                projects.SetEditorPreference(
+                    "drawer_tab_" + std::to_string(index),
+                    lastDrawerTab_ == index);
+            }
+        });
+        studioChrome_.OnLayoutChanged(
+            [this](
+                const float hierarchyWidth,
+                const float inspectorWidth,
+                const float drawerHeight,
+                const bool finished)
+        {
+            workspaceLayoutDirty_ = true;
+            if (!finished || session_ == nullptr)
+            {
+                return;
+            }
+
+            // ProjectService currently exposes durable boolean preferences.
+            // Encode the three bounded pixel dimensions without bypassing the
+            // service or leaking editor layout into project/scene data.
+            auto& projects = session_->Projects();
+            WriteLayoutPreference(
+                projects,
+                "hierarchy_width",
+                static_cast<int>(std::round(hierarchyWidth)));
+            WriteLayoutPreference(
+                projects,
+                "inspector_width",
+                static_cast<int>(std::round(inspectorWidth)));
+            WriteLayoutPreference(
+                projects,
+                "drawer_height",
+                static_cast<int>(std::round(drawerHeight)));
+            projects.SetEditorPreference("workspace_layout_saved", true);
+        });
+        GetGUI().AddWidget(&studioChrome_);
     }
 
     void StudioRenderPath::CreateProjectHub()
@@ -1054,6 +1310,52 @@ namespace renegade::studio
         projectHubPanel_.SetColor(
             wi::Color(2, 9, 16, 232),
             wi::gui::WIDGET_ID_WINDOW_BASE);
+
+        // The global Project Hub theme is intentionally not the workspace
+        // theme. Reassert the owned Inspector host after the global pass so
+        // Wicked cannot repaint its rounded cyan window or section pills.
+        inspectorPanel_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.SetColor(
+            wi::Color(8, 11, 13, 255),
+            wi::gui::WIDGET_ID_WINDOW_BASE);
+        inspectorPanel_.SetShadowRadius(0.0f);
+
+        const auto ownLabel = [](wi::gui::Label& label)
+        {
+            label.SetColor(wi::Color::Transparent());
+            label.SetShadowRadius(0.0f);
+            label.font.params.color = wi::Color(244, 239, 233, 255);
+            label.font.params.bolden = 0.18f;
+            label.font.params.shadowColor = wi::Color::Transparent();
+        };
+        ownLabel(inspectorLabel_);
+        ownLabel(positionLabel_);
+        ownLabel(rotationLabel_);
+        ownLabel(scaleLabel_);
+        ownLabel(environmentSkyLabel_);
+        ownLabel(environmentFogLabel_);
+        ownLabel(environmentCloudLabel_);
+
+        wi::gui::Theme scrollbarTheme = theme;
+        scrollbarTheme.image.corner_rounding = false;
+        for (auto& corner : scrollbarTheme.image.corners_rounding)
+        {
+            corner.radius = 0.0f;
+        }
+        scrollbarTheme.shadow = 0.0f;
+        inspectorPanel_.scrollbar_vertical.SetTheme(scrollbarTheme);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(12, 18, 22, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(38, 52, 61, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_INACTIVE);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
     }
 
     void StudioRenderPath::Update(const float dt)
@@ -1065,6 +1367,14 @@ namespace renegade::studio
             return;
         }
 
+        if (workspaceLayoutDirty_)
+        {
+            workspaceLayoutDirty_ = false;
+            ResizeLayout();
+        }
+
+        viewportBounds_ = studioChrome_.ViewportBounds();
+
         HandleEditorShortcuts();
 
         // wiGUI invokes OnClick while Button::Update is still active. Apply
@@ -1072,6 +1382,14 @@ namespace renegade::studio
         if (pendingAction_ != EditorAction::None)
         {
             ProcessPendingAction();
+            return;
+        }
+
+        // The Renegade-owned shell uses deliberate hit regions rather than
+        // stock Wicked widgets. Never let a chrome click fall through into
+        // scene selection, gizmo manipulation, or camera navigation.
+        if (studioChrome_.ConsumedPointerThisFrame())
+        {
             return;
         }
 
@@ -1195,16 +1513,25 @@ namespace renegade::studio
 
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
+        studioChrome_.SetLayout(width, height);
         const float toolbarHeight = 54.0f;
-        const float leftWidth = std::clamp(width * 0.2f, 250.0f, 310.0f);
-        const float rightWidth = std::clamp(width * 0.22f, 290.0f, 350.0f);
-        const float bottomHeight = std::clamp(height * 0.22f, 160.0f, 220.0f);
+        const float leftWidth = projectHubVisible_
+            ? std::clamp(width * 0.2f, 250.0f, 310.0f)
+            : studioChrome_.HierarchyWidth();
+        const float rightWidth = projectHubVisible_
+            ? std::clamp(width * 0.22f, 290.0f, 350.0f)
+            : studioChrome_.InspectorWidth();
+        const float bottomHeight = projectHubVisible_
+            ? std::clamp(height * 0.22f, 160.0f, 220.0f)
+            : studioChrome_.DrawerHeight();
 
-        viewportBounds_ = XMFLOAT4(
-            leftWidth + 16.0f,
-            toolbarHeight + 16.0f,
-            width - rightWidth - 16.0f,
-            height - bottomHeight - 16.0f);
+        viewportBounds_ = projectHubVisible_
+            ? XMFLOAT4(
+                leftWidth + 16.0f,
+                toolbarHeight + 16.0f,
+                width - rightWidth - 16.0f,
+                height - bottomHeight - 16.0f)
+            : studioChrome_.ViewportBounds();
 
         toolbarPanel_.SetPos(XMFLOAT2(8.0f, 8.0f));
         toolbarPanel_.SetSize(XMFLOAT2(width - 16.0f, toolbarHeight));
@@ -1235,13 +1562,17 @@ namespace renegade::studio
         hierarchyTree_.SetSize(XMFLOAT2(
             leftWidth - 20.0f,
             height - toolbarHeight - 82.0f));
+        hierarchySearch_.SetPos(XMFLOAT2(12.0f, 117.0f));
+        hierarchySearch_.SetSize(XMFLOAT2(leftWidth - 24.0f, 31.0f));
 
         inspectorPanel_.SetPos(XMFLOAT2(
-            width - rightWidth - 8.0f,
-            toolbarHeight + 16.0f));
+            projectHubVisible_ ? width - rightWidth - 8.0f : width - rightWidth,
+            projectHubVisible_ ? toolbarHeight + 16.0f : 64.0f));
         inspectorPanel_.SetSize(XMFLOAT2(
             rightWidth,
-            height - toolbarHeight - 24.0f));
+            projectHubVisible_
+                ? height - toolbarHeight - 24.0f
+                : height - 64.0f - 28.0f));
         inspectorLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
         inspectorLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 28.0f));
         const float fieldGap = 8.0f;
@@ -1417,13 +1748,17 @@ namespace renegade::studio
             std::to_string(session_->Commands().UndoCount()) +
             " // REDO " +
             std::to_string(session_->Commands().RedoCount()));
+        studioChrome_.SetSceneName(projectName);
+        studioChrome_.SetStatusText(statusLabel_.GetText());
     }
 
     void StudioRenderPath::RefreshHierarchy()
     {
         hierarchyTree_.ClearItems();
+        std::vector<RenegadeStudioChrome::HierarchyRow> chromeRows;
         if (session_ == nullptr)
         {
+            studioChrome_.SetHierarchyRows({});
             return;
         }
 
@@ -1437,7 +1772,14 @@ namespace renegade::studio
             item.open = true;
             item.selected = entity.entity == selected;
             hierarchyTree_.AddItem(item);
+            chromeRows.push_back({
+                entity.name,
+                entity.depth,
+                entity.entity == selected,
+                static_cast<std::uint64_t>(entity.entity),
+            });
         }
+        studioChrome_.SetHierarchyRows(std::move(chromeRows));
     }
 
     void StudioRenderPath::LayoutInspectorActions(const bool environment)
@@ -1500,6 +1842,17 @@ namespace renegade::studio
 
         const bool hasTransform = transform != nullptr;
         const bool hasWeather = weather != nullptr;
+        if (hasSession && entity != wi::ecs::INVALID_ENTITY)
+        {
+            const auto* selectedName =
+                session_->Scenes().GetScene().names.GetComponent(entity);
+            studioChrome_.SetSelectionName(
+                selectedName != nullptr ? selectedName->name : std::string{});
+        }
+        else
+        {
+            studioChrome_.SetSelectionName({});
+        }
         LayoutInspectorActions(hasWeather);
         const auto setTransformVisible = [hasWeather](wi::gui::Widget& widget)
         {
@@ -1767,6 +2120,15 @@ namespace renegade::studio
         case EditorAction::SaveSceneAs:
             SaveSceneAs();
             break;
+        case EditorAction::ReopenScene:
+            ReopenScene();
+            break;
+        case EditorAction::ProjectHub:
+            ReturnToProjectHub();
+            break;
+        case EditorAction::SelectTool:
+            SetTransformTool(TransformTool::Select);
+            break;
         case EditorAction::TranslateTool:
             SetTransformTool(TransformTool::Translate);
             break;
@@ -1800,6 +2162,14 @@ namespace renegade::studio
         scaleToolButton_.SetColor(
             gizmo_.isScalator ? HologramSelected : HologramIdle,
             wi::gui::IDLE);
+        studioChrome_.SetActiveTool(
+            tool == TransformTool::Select
+                ? 0
+                : tool == TransformTool::Translate
+                ? 1
+                : tool == TransformTool::Rotate
+                    ? 2
+                    : 3);
         SyncGizmoSelection();
         RefreshStatus();
     }
@@ -2229,15 +2599,54 @@ namespace renegade::studio
         return changed;
     }
 
-    void StudioRenderPath::ApplySelectedWeatherValue(
+    void StudioRenderPath::SetWeatherFieldValue(
+        bridge::WeatherState& weather,
         const WeatherField field,
-        const float value)
+        const float value) noexcept
     {
+        switch (field)
+        {
+        case WeatherField::SkyExposure:
+            weather.skyExposure = std::clamp(value, 0.0f, 8.0f);
+            break;
+        case WeatherField::AmbientIntensity:
+            weather.ambientIntensity = std::clamp(value, 0.0f, 8.0f);
+            break;
+        case WeatherField::FogStart:
+            weather.fogStart = std::clamp(value, 0.0f, 100000.0f);
+            break;
+        case WeatherField::FogDensity:
+            weather.fogDensity = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case WeatherField::FogHeightStart:
+            weather.fogHeightStart =
+                std::clamp(value, -100000.0f, 100000.0f);
+            break;
+        case WeatherField::FogHeightEnd:
+            weather.fogHeightEnd =
+                std::clamp(value, -100000.0f, 100000.0f);
+            break;
+        case WeatherField::CloudCoverage:
+            weather.cloudCoverage = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case WeatherField::CloudStartHeight:
+            weather.cloudStartHeight =
+                std::clamp(value, 0.0f, 50000.0f);
+            break;
+        case WeatherField::CloudThickness:
+            weather.cloudThickness =
+                std::clamp(value, 1.0f, 50000.0f);
+            break;
+        }
+    }
+
+    void StudioRenderPath::BeginWeatherSlider(const WeatherField field)
+    {
+        weatherSliderActive_ = false;
         if (session_ == nullptr || !session_->Selection().HasSelection())
         {
             return;
         }
-
         const auto entity = session_->Selection().SelectedEntity();
         const auto* component =
             session_->Scenes().GetScene().weathers.GetComponent(entity);
@@ -2245,43 +2654,73 @@ namespace renegade::studio
         {
             return;
         }
+        weatherSliderActive_ = true;
+        weatherSliderField_ = field;
+        weatherSliderEntity_ = entity;
+        weatherSliderBefore_ = bridge::CaptureWeather(*component);
+        weatherSliderAfter_ = weatherSliderBefore_;
+    }
 
-        auto next = bridge::CaptureWeather(*component);
-        switch (field)
+    void StudioRenderPath::PreviewWeatherSlider(
+        const WeatherField field,
+        const float value)
+    {
+        if (!weatherSliderActive_ || weatherSliderField_ != field ||
+            session_ == nullptr)
         {
-        case WeatherField::SkyExposure:
-            next.skyExposure = std::clamp(value, 0.0f, 8.0f);
-            break;
-        case WeatherField::AmbientIntensity:
-            next.ambientIntensity = std::clamp(value, 0.0f, 8.0f);
-            break;
-        case WeatherField::FogStart:
-            next.fogStart = std::clamp(value, 0.0f, 100000.0f);
-            break;
-        case WeatherField::FogDensity:
-            next.fogDensity = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case WeatherField::FogHeightStart:
-            next.fogHeightStart =
-                std::clamp(value, -100000.0f, 100000.0f);
-            break;
-        case WeatherField::FogHeightEnd:
-            next.fogHeightEnd =
-                std::clamp(value, -100000.0f, 100000.0f);
-            break;
-        case WeatherField::CloudCoverage:
-            next.cloudCoverage = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case WeatherField::CloudStartHeight:
-            next.cloudStartHeight =
-                std::clamp(value, 0.0f, 50000.0f);
-            break;
-        case WeatherField::CloudThickness:
-            next.cloudThickness =
-                std::clamp(value, 1.0f, 50000.0f);
-            break;
+            return;
         }
-        CommitSelectedWeather(next);
+        auto& scene = session_->Scenes().GetScene();
+        auto* component = scene.weathers.GetComponent(weatherSliderEntity_);
+        if (component == nullptr)
+        {
+            weatherSliderActive_ = false;
+            return;
+        }
+        weatherSliderAfter_ = weatherSliderBefore_;
+        SetWeatherFieldValue(weatherSliderAfter_, field, value);
+        bridge::ApplyWeather(*component, weatherSliderAfter_);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == weatherSliderEntity_)
+        {
+            scene.weather = *component;
+        }
+    }
+
+    void StudioRenderPath::CommitWeatherSlider(
+        const WeatherField field,
+        const float value)
+    {
+        if (!weatherSliderActive_ || weatherSliderField_ != field ||
+            session_ == nullptr)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        auto* component = scene.weathers.GetComponent(weatherSliderEntity_);
+        if (component == nullptr)
+        {
+            weatherSliderActive_ = false;
+            return;
+        }
+
+        SetWeatherFieldValue(weatherSliderAfter_, field, value);
+        bridge::ApplyWeather(*component, weatherSliderBefore_);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == weatherSliderEntity_)
+        {
+            scene.weather = *component;
+        }
+        session_->Commands().Execute(
+            std::make_unique<bridge::SetWeatherCommand>(
+                scene,
+                weatherSliderEntity_,
+                weatherSliderBefore_,
+                weatherSliderAfter_));
+        weatherSliderActive_ = false;
+        weatherSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        RefreshInspector();
+        RefreshStatus();
     }
 
     void StudioRenderPath::ApplySelectedWeatherToggle(
@@ -2554,17 +2993,24 @@ namespace renegade::studio
 
         projectHubVisible_ = visible;
         projectHubPanel_.SetVisible(visible);
-        toolbarPanel_.SetVisible(!visible);
-        hierarchyPanel_.SetVisible(!visible);
+        // Stock workspace surfaces stay hidden. RenegadeStudioChrome owns the
+        // shell, while the opaque Inspector host schedules the functional
+        // controls rendered by Renegade subclasses.
+        toolbarPanel_.SetVisible(false);
+        hierarchyPanel_.SetVisible(false);
         inspectorPanel_.SetVisible(!visible);
-        contentPanel_.SetVisible(!visible);
+        hierarchySearch_.SetVisible(!visible);
+        contentPanel_.SetVisible(false);
+        studioChrome_.SetVisible(!visible);
 
         // The frame-rate readout belongs to the authoring viewport and must
         // not appear over the Project Hub. DrawEditorGrid checks
         // projectHubVisible_ for the same reason.
         if (diagnostics_ != nullptr)
         {
-            diagnostics_->active = !visible;
+            // The stock overlay collides with the Renegade wordmark. Runtime
+            // diagnostics belong in the owned bottom drawer instead.
+            diagnostics_->active = false;
         }
 
         if (!visible)

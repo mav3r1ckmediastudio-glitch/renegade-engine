@@ -9,6 +9,7 @@
 #include <Translator.h>
 
 #include "renegade/bridge/StudioSession.h"
+#include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
 {
@@ -42,6 +43,9 @@ namespace renegade::studio
             DeleteSelection,
             SaveScene,
             SaveSceneAs,
+            ReopenScene,
+            ProjectHub,
+            SelectTool,
             TranslateTool,
             RotateTool,
             ScaleTool,
@@ -65,6 +69,7 @@ namespace renegade::studio
 
         enum class TransformTool
         {
+            Select,
             Translate,
             Rotate,
             Scale,
@@ -94,10 +99,16 @@ namespace renegade::studio
             TransformTool tool,
             int axis,
             float value);
-        void ApplySelectedWeatherValue(WeatherField field, float value);
         void ApplySelectedWeatherToggle(WeatherToggle toggle, bool value);
         void ApplySelectedSkyMode(bridge::WeatherState::SkyMode mode);
         void ApplyWeatherPreset(int preset);
+        void BeginWeatherSlider(WeatherField field);
+        void PreviewWeatherSlider(WeatherField field, float value);
+        void CommitWeatherSlider(WeatherField field, float value);
+        static void SetWeatherFieldValue(
+            bridge::WeatherState& weather,
+            WeatherField field,
+            float value) noexcept;
         bool CommitSelectedWeather(const bridge::WeatherState& weather);
         void ApplyRenegadeTheme();
         void LoadGridResources();
@@ -143,45 +154,46 @@ namespace renegade::studio
         wi::gui::Label statusLabel_;
         wi::gui::Label hierarchyLabel_;
         wi::gui::TreeList hierarchyTree_;
+        RenegadeTextInputField hierarchySearch_;
         wi::gui::Window inspectorPanel_;
         wi::gui::Label inspectorLabel_;
         wi::gui::Label positionLabel_;
         wi::gui::Label rotationLabel_;
         wi::gui::Label scaleLabel_;
-        wi::gui::TextInputField translationX_;
-        wi::gui::TextInputField translationY_;
-        wi::gui::TextInputField translationZ_;
-        wi::gui::TextInputField rotationX_;
-        wi::gui::TextInputField rotationY_;
-        wi::gui::TextInputField rotationZ_;
-        wi::gui::TextInputField scaleX_;
-        wi::gui::TextInputField scaleY_;
-        wi::gui::TextInputField scaleZ_;
+        RenegadeTextInputField translationX_;
+        RenegadeTextInputField translationY_;
+        RenegadeTextInputField translationZ_;
+        RenegadeTextInputField rotationX_;
+        RenegadeTextInputField rotationY_;
+        RenegadeTextInputField rotationZ_;
+        RenegadeTextInputField scaleX_;
+        RenegadeTextInputField scaleY_;
+        RenegadeTextInputField scaleZ_;
         wi::gui::Label environmentSkyLabel_;
-        wi::gui::ComboBox environmentPreset_;
-        wi::gui::ComboBox skyMode_;
-        wi::gui::CheckBox aerialPerspective_;
-        wi::gui::TextInputField skyExposure_;
-        wi::gui::TextInputField ambientIntensity_;
+        RenegadeComboBox environmentPreset_;
+        RenegadeComboBox skyMode_;
+        RenegadeCheckBox aerialPerspective_;
+        RenegadeSlider skyExposure_;
+        RenegadeSlider ambientIntensity_;
         wi::gui::Label environmentFogLabel_;
-        wi::gui::TextInputField fogStart_;
-        wi::gui::TextInputField fogDensity_;
-        wi::gui::CheckBox heightFog_;
-        wi::gui::TextInputField fogHeightStart_;
-        wi::gui::TextInputField fogHeightEnd_;
+        RenegadeSlider fogStart_;
+        RenegadeSlider fogDensity_;
+        RenegadeCheckBox heightFog_;
+        RenegadeSlider fogHeightStart_;
+        RenegadeSlider fogHeightEnd_;
         wi::gui::Label environmentCloudLabel_;
-        wi::gui::TextInputField cloudCoverage_;
-        wi::gui::TextInputField cloudStartHeight_;
-        wi::gui::TextInputField cloudThickness_;
-        wi::gui::CheckBox cloudsCastShadow_;
-        wi::gui::Button focusButton_;
-        wi::gui::Button duplicateButton_;
-        wi::gui::Button deleteButton_;
-        wi::gui::Button undoButton_;
-        wi::gui::Button redoButton_;
-        wi::gui::Button saveButton_;
-        wi::gui::Button saveAsButton_;
-        wi::gui::Button reopenButton_;
+        RenegadeSlider cloudCoverage_;
+        RenegadeSlider cloudStartHeight_;
+        RenegadeSlider cloudThickness_;
+        RenegadeCheckBox cloudsCastShadow_;
+        RenegadeButton focusButton_;
+        RenegadeButton duplicateButton_;
+        RenegadeButton deleteButton_;
+        RenegadeButton undoButton_;
+        RenegadeButton redoButton_;
+        RenegadeButton saveButton_;
+        RenegadeButton saveAsButton_;
+        RenegadeButton reopenButton_;
         wi::gui::Window contentPanel_;
         wi::gui::Label contentLabel_;
         wi::gui::Label contentPlaceholder_;
@@ -201,6 +213,7 @@ namespace renegade::studio
         wi::gui::Button continueProjectButton_;
         wi::gui::Label hubMessageLabel_;
         wi::gui::Button gridToggleButton_;
+        RenegadeStudioChrome studioChrome_;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;
         wi::graphics::Shader gridPixelShader_;
@@ -218,6 +231,13 @@ namespace renegade::studio
         bool gizmoDragActive_ = false;
         bool flyCameraActive_ = false;
         bool gridVisible_ = true;
+        int lastDrawerTab_ = 0;
+        bool workspaceLayoutDirty_ = false;
+        bool weatherSliderActive_ = false;
+        WeatherField weatherSliderField_ = WeatherField::SkyExposure;
+        wi::ecs::Entity weatherSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::WeatherState weatherSliderBefore_;
+        bridge::WeatherState weatherSliderAfter_;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;

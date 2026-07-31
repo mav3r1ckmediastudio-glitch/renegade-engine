@@ -48,10 +48,21 @@ Wicked operations. Initial service boundaries:
 Renegade's editor shell, panels, layout, project hub, content browser, hierarchy,
 inspectors, viewport tooling, preferences, and visual language.
 
-The Phase 3 shell uses the accepted native `wiGUI` integration with a
-Renegade-owned theme and layout. `ProjectService` owns `.renegade` descriptor
-validation and recent-project state. Studio calls that service rather than
-parsing project files in widgets.
+The Phase 3 shell uses the accepted native `wiGUI` integration as a canvas,
+update scheduler, and low-level input host. It does not use Wicked's stock
+widget rendering as Renegade's visual language. `RenegadeStudioChrome`
+overrides `Widget::Render` and draws the Studio shell from Renegade-owned
+primitives and design tokens. Interactive components will migrate onto that
+visual foundation one accepted vertical slice at a time.
+
+The first functional slice uses `RenegadeTextInputField`, `RenegadeButton`,
+`RenegadeCheckBox`, and `RenegadeComboBox`. They inherit wiGUI's proven focus,
+keyboard and pointer mechanics but override rendering completely. This is the
+standard migration seam: reuse low-level interaction machinery when it is
+useful, while Renegade owns all visible pixels and all workflow composition.
+
+`ProjectService` owns `.renegade` descriptor validation and recent-project
+state. Studio calls that service rather than parsing project files in widgets.
 
 `CommandService` owns persistent Studio scene mutations. Full local transforms
 use a toolkit-independent `TransformState`; duplicate and delete commands use
@@ -128,9 +139,26 @@ ADR 0002 accepts Wicked's native `wiGUI` as Renegade's production integration
 and rendering foundation after the Phase 2 HDR-source, DPI, input, persistence,
 DX12, and Vulkan gate.
 
-This does not select Wicked's stock Editor or styling. Renegade owns its
-information architecture, visual language, components, docking/layout layer,
-project hub, and workflows. EngineBridge remains UI-toolkit independent.
+This does not select Wicked's stock Editor, widget presentation, or styling.
+The accepted boundary allows Renegade widgets to inherit `wi::gui::Widget` for
+canvas scheduling and input while completely overriding their rendering.
+Renegade owns every visible shell primitive, information architecture, visual
+language, component, docking/layout layer, project hub, and workflow.
+EngineBridge remains UI-toolkit independent.
+
+The accepted Studio visual proof is the workspace UX authority. The supplied
+Renegade brand guideline is narrower: it governs only the official mark,
+wordmark lockup and logo type treatment. Its palette, layouts and general
+typography do not override the accepted editor direction. The official lockup
+is packaged as a Studio-owned UI asset rather than reconstructed with Wicked
+widgets.
+
+Owned continuous controls use a preview/commit transaction: capture component
+state at drag start, apply temporary direct preview while moving, restore the
+captured state on release, then execute one before/after command. This keeps
+the viewport responsive without turning every rendered frame into an Undo
+entry. Workspace splitters are shell state, persisted through ProjectService
+editor preferences rather than scene serialization.
 
 ## Project metadata
 
