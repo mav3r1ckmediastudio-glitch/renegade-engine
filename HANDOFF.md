@@ -34,6 +34,24 @@ acceptance on DX12 and Vulkan:
 The creator can now change the look of a scene inside the editor rather than
 by rebuilding. That was the goal set two milestones ago and it is met.
 
+## Pending: Brand Identity Application (not yet verified)
+
+An unverified change applies the now-available brand reference
+(`Renegade_Studio_UI_Design_Tokens_v1.0.json`, `Renegade_Brand_Guidelines_v1.0.pdf`,
+brand quick-reference slide) to Studio's theme, replacing the placeholder
+"holographic workstation" colours in `Studio/src/StudioApplication.cpp` with
+the pinned brand palette (Forge as the general accent, Tech Cyan reserved for
+the viewport/grid, Obsidian/Graphite/Bone/Ash for shell/text). Full detail in
+`docs/PHASE3_BRAND_IDENTITY_APPLICATION.md`.
+
+This was authored outside Windows with no DX12/Vulkan toolchain available, so
+it has not been built, run, or visually inspected. It is a colour/theme-only
+change (no layout, font, or behavioural changes) but still requires the
+standard Windows build and visual pass before it can be accepted per
+`AGENTS.md`. Do not treat this as done until someone runs the verification
+steps at the bottom of `docs/PHASE3_BRAND_IDENTITY_APPLICATION.md` and records
+the result here and in `docs/VERIFICATION_CHECKLIST.md`.
+
 ## Start here
 
 ```bash

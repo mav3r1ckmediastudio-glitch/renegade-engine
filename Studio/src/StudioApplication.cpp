@@ -8,15 +8,23 @@
 namespace
 {
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
-    constexpr wi::Color HologramIdle = wi::Color(8, 30, 42, 224);
-    constexpr wi::Color HologramFocus = wi::Color(0, 126, 164, 238);
-    constexpr wi::Color HologramActive = wi::Color(92, 232, 255, 255);
-    constexpr wi::Color HologramText = wi::Color(196, 244, 255, 255);
-    constexpr wi::Color HologramMuted = wi::Color(102, 166, 181, 255);
-    constexpr wi::Color HologramBorder = wi::Color(0, 183, 224, 150);
-    constexpr wi::Color HologramPanel = wi::Color(3, 12, 20, 236);
-    constexpr wi::Color HologramSelected = wi::Color(0, 102, 138, 245);
-    constexpr wi::Color WarningAmber = wi::Color(255, 150, 40, 255);
+
+    // Renegade brand palette, pinned to Renegade_Studio_UI_Design_Tokens_v1.0.json.
+    // Names are kept from the pre-brand "Hologram" placeholder theme to limit
+    // the diff; the values below are the accepted brand hex values, not
+    // approximations. Forge is the general UI accent (focus/active/selection);
+    // Tech Cyan is reserved for the viewport (grid + camera-relative chrome),
+    // per the brand quick-reference. See docs/PHASE3_BRAND_IDENTITY_APPLICATION.md.
+    constexpr wi::Color HologramIdle = wi::Color(46, 43, 42, 224);      // graphite #2E2B2A
+    constexpr wi::Color HologramFocus = wi::Color(210, 91, 29, 238);   // forge    #D25B1D
+    constexpr wi::Color HologramActive = wi::Color(237, 123, 45, 255); // ignition #ED7B2D
+    constexpr wi::Color HologramText = wi::Color(210, 200, 188, 255);  // bone     #D2C8BC
+    constexpr wi::Color HologramMuted = wi::Color(133, 126, 120, 255); // ash      #857E78
+    constexpr wi::Color HologramBorder = wi::Color(210, 91, 29, 150);  // forge    #D25B1D
+    constexpr wi::Color HologramPanel = wi::Color(11, 11, 11, 236);    // obsidian #0B0B0B
+    constexpr wi::Color HologramSelected = wi::Color(210, 91, 29, 245);// forge    #D25B1D
+    constexpr wi::Color WarningAmber = wi::Color(240, 166, 64, 255);   // warning  #F0A640
+    constexpr wi::Color ViewportCyan = wi::Color(56, 183, 215, 238);   // tech_cyan #38B7D7
 }
 
 namespace renegade::studio
@@ -208,12 +216,15 @@ namespace renegade::studio
             camera->Eye.z,
             0.02f);
 
-        // Ice-blue is the approved interaction colour. Unlike Wicked's helper,
-        // every line including the two axes is Renegade's to choose.
-        constants.minorColor = XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
-        constants.majorColor = XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
-        constants.axisColorX = XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
-        constants.axisColorZ = XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
+        // Tech Cyan is the brand's dedicated viewport colour (see
+        // Renegade_Studio_UI_Design_Tokens_v1.0.json); every grid line
+        // including the minor/major/Z-axis uses it. The X axis keeps its role
+        // as the deliberate orientation accent, now the brand's Ignition
+        // orange rather than an ad hoc amber approximation.
+        constants.minorColor = XMFLOAT4(0.220f, 0.718f, 0.843f, 0.28f); // tech_cyan #38B7D7
+        constants.majorColor = XMFLOAT4(0.220f, 0.718f, 0.843f, 0.50f); // tech_cyan #38B7D7
+        constants.axisColorX = XMFLOAT4(0.929f, 0.482f, 0.176f, 0.70f); // ignition  #ED7B2D
+        constants.axisColorZ = XMFLOAT4(0.220f, 0.718f, 0.843f, 0.70f); // tech_cyan #38B7D7
 
         // Fade start/end, base spacing, master opacity. The fade window keeps
         // the horizon from turning into an aliased smear.
@@ -284,6 +295,12 @@ namespace renegade::studio
     {
         gridVisible_ = visible;
         gridToggleButton_.SetText(visible ? "GRID ON" : "GRID OFF");
+        // The grid toggle is the one command-bar control that governs
+        // viewport-only presentation, so it borrows Tech Cyan rather than the
+        // Forge accent used for every other interactive control.
+        gridToggleButton_.SetColor(
+            visible ? ViewportCyan : HologramIdle,
+            wi::gui::IDLE);
 
         if (session_ != nullptr)
         {
@@ -476,6 +493,7 @@ namespace renegade::studio
         projectHubButton_.Create("Open Project Hub");
         gridToggleButton_.Create("Grid Toggle");
         gridToggleButton_.SetText("GRID ON");
+        gridToggleButton_.SetColor(ViewportCyan, wi::gui::IDLE);
         gridToggleButton_.SetTooltip(
             "Show or hide the editor grid [G]. The grid is never saved into a "
             "scene.");
@@ -901,7 +919,7 @@ namespace renegade::studio
         GetGUI().AddWidget(&projectHubPanel_);
 
         hubBrandLabel_.Create("Renegade Hub Brand");
-        hubBrandLabel_.SetText("RENEGADE // IDENTITY ACCEPTED");
+        hubBrandLabel_.SetText("RENEGADE // BUILD WITHOUT PERMISSION.");
         hubBrandLabel_.font.params.size = 14;
         hubBrandLabel_.font.params.color = HologramMuted;
         hubBrandLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
@@ -1011,14 +1029,15 @@ namespace renegade::studio
         theme.image.corner_rounding = true;
         for (auto& corner : theme.image.corners_rounding)
         {
-            corner.radius = 7.0f;
+            // radius_px.panel from the design tokens.
+            corner.radius = 8.0f;
         }
         theme.font.color = HologramText;
         theme.font.shadow_color = wi::Color(0, 0, 0, 220);
         theme.shadow = 3.0f;
         theme.shadow_color = HologramBorder;
         theme.shadow_highlight = true;
-        theme.shadow_highlight_color = XMFLOAT3(0.0f, 0.72f, 1.0f);
+        theme.shadow_highlight_color = XMFLOAT3(0.824f, 0.357f, 0.114f); // forge #D25B1D
         theme.shadow_highlight_spread = 0.35f;
         theme.tooltipImage = theme.image;
         theme.tooltipImage.color = HologramIdle;
