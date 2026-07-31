@@ -9,6 +9,7 @@
 #include <Translator.h>
 
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
 #include "RenegadeStudioChrome.h"
@@ -56,6 +57,9 @@ namespace renegade::studio
             OpenSceneWorkspace,
             StartSunPreview,
             PauseSunPreview,
+            SetOceanEnabled,
+            SetOceanResolution,
+            ApplyOceanPreset,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -118,6 +122,27 @@ namespace renegade::studio
             Elevation,
         };
 
+        enum class OceanField
+        {
+            PatchLength,
+            TimeScale,
+            WaveAmplitude,
+            WindAzimuth,
+            WindSpeed,
+            WindDependency,
+            ChoppyScale,
+            WaterRed,
+            WaterGreen,
+            WaterBlue,
+            WaterOpacity,
+            ExtinctionRed,
+            ExtinctionGreen,
+            ExtinctionBlue,
+            WaterHeight,
+            SurfaceDetail,
+            DisplacementTolerance,
+        };
+
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -158,6 +183,17 @@ namespace renegade::studio
         bool CommitSun(const bridge::SunState& sun);
         void StartSunPreview();
         void StopSunPreview(bool commit);
+        void ApplyOceanEnabled(bool enabled);
+        void ApplyOceanResolution(int dimension);
+        void ApplyOceanPreset(bridge::OceanPreset preset);
+        void BeginOceanSlider(OceanField field);
+        void PreviewOceanSlider(OceanField field, float value);
+        void CommitOceanSlider(OceanField field, float value);
+        static void SetOceanFieldValue(
+            bridge::OceanState& ocean,
+            OceanField field,
+            float value) noexcept;
+        bool CommitOcean(const bridge::OceanState& ocean);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
         void ApplyRenegadeTheme();
@@ -252,6 +288,27 @@ namespace renegade::studio
         RenegadeSlider sunPreviewSpeed_;
         RenegadeButton sunPlayButton_;
         RenegadeButton sunPauseButton_;
+        wi::gui::Label oceanLabel_;
+        RenegadeCheckBox oceanEnabled_;
+        RenegadeComboBox oceanPreset_;
+        RenegadeComboBox oceanResolution_;
+        RenegadeSlider oceanWaterHeight_;
+        RenegadeSlider oceanPatchLength_;
+        RenegadeSlider oceanWaveAmplitude_;
+        RenegadeSlider oceanChoppyScale_;
+        RenegadeSlider oceanTimeScale_;
+        RenegadeSlider oceanWindAzimuth_;
+        RenegadeSlider oceanWindSpeed_;
+        RenegadeSlider oceanWindDependency_;
+        RenegadeSlider oceanSurfaceDetail_;
+        RenegadeSlider oceanDisplacementTolerance_;
+        RenegadeSlider oceanWaterRed_;
+        RenegadeSlider oceanWaterGreen_;
+        RenegadeSlider oceanWaterBlue_;
+        RenegadeSlider oceanWaterOpacity_;
+        RenegadeSlider oceanExtinctionRed_;
+        RenegadeSlider oceanExtinctionGreen_;
+        RenegadeSlider oceanExtinctionBlue_;
         RenegadeButton focusButton_;
         RenegadeButton duplicateButton_;
         RenegadeButton deleteButton_;
@@ -320,6 +377,14 @@ namespace renegade::studio
         float sunPreviewSpeedHoursPerSecond_ = 0.100f;
         bridge::SunState sunPreviewBefore_;
         bridge::SunState sunPreviewCurrent_;
+        bool oceanSliderActive_ = false;
+        OceanField oceanSliderField_ = OceanField::WaterHeight;
+        wi::ecs::Entity oceanSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::OceanState oceanSliderBefore_;
+        bridge::OceanState oceanSliderAfter_;
+        bool pendingOceanEnabled_ = false;
+        int pendingOceanResolution_ = 512;
+        bridge::OceanPreset pendingOceanPreset_ = bridge::OceanPreset::Calm;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;

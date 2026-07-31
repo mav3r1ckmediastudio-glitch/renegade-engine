@@ -87,6 +87,14 @@ while the second cloud layer, wind, rain, ocean, weather maps, and advanced
 scattering parameters survive an edit unmodified. Light and material authoring
 must follow the same pattern.
 
+Dedicated state services extend that curated model without widening
+`WeatherState`: `PrecipitationState`, `SunState` and `OceanState` own their
+respective native fields and commands. `OceanState` is intentionally complete
+for the pinned `OceanParameters`, including FFT resolution and spectral wind.
+`ApplyOcean` invalidates Wicked's lazy FFT runtime only when an authored change
+requires recreation, while always synchronizing the serialized primary Weather
+component into `Scene::weather`.
+
 ### Renegade-owned shaders
 
 Renegade may own shaders without forking Wicked. `Studio/shaders` holds
