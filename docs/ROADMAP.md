@@ -12,7 +12,13 @@ and Proving Ground Visual Foundation, Editor Visual Polish, and Environment
 Authoring milestones are merged into `main` at `8787a4c` and accepted on
 packaged DX12 and Vulkan. Renegade draws its own infinite shader grid, persists
 editor preferences, and authors sky, fog, volumetric clouds, and cloud shadows
-through undoable commands. `main` is clean with no branch awaiting review.
+through undoable commands.
+
+Since then, the Renegade-owned Studio chrome functional slice (PR #7),
+Environment workspace and precipitation (PR #8), Sun and time-of-day
+authoring (PR #9), and Native ocean authoring (PR #10) have all merged and
+passed packaged DX12/Vulkan acceptance. `main` is clean at `475ac45` with no
+branch on its history awaiting review.
 
 Remaining for the phase: light and material authoring, then the asset-facing
 work that Phase 4 depends on.

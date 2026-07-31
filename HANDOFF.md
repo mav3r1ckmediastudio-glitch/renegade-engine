@@ -8,7 +8,7 @@
 
 **Canonical branch:** `main`
 
-**Verified starting commit:** `944f8991a0fbc25885f27f4ae9f278708e95e334`
+**Verified starting commit:** `475ac45de2ac9fbc226f877825d17bb6df8174b9`
 
 **Wicked Engine pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
@@ -18,40 +18,33 @@
 
 ## Status
 
-`main` is clean, merged, and accepted. There is no branch awaiting review and
-no outstanding repair.
+`main` is clean, merged, and accepted at `475ac45`. There is no branch on
+`main`'s history awaiting review; `phase3/terrain-authoring` is open and in
+progress (see "Latest work in progress" above).
 
-Two milestones landed since the last handoff and both passed packaged Windows
-acceptance on DX12 and Vulkan:
+Four milestones landed on `main` since the Environment Authoring handoff, each
+passing packaged Windows acceptance on DX12 and Vulkan before merge — full
+detail in the dated sections below ("Workspace stabilization accepted",
+"Environment workspace and precipitation accepted", "Sun and time-of-day
+accepted", and "Native Ocean authoring accepted"):
 
-- **Editor Visual Polish** — Renegade's own infinite shader grid, a persisted
-  grid visibility preference, a correctly sized transform gizmo, a thinner
-  selection outline, and unique generated entity names.
-- **Environment Authoring** — a curated Environment inspector that authors
-  Wicked's atmosphere, fog, volumetric clouds, and cloud shadows through
-  undoable commands.
-
-The creator can now change the look of a scene inside the editor rather than
-by rebuilding. That was the goal set two milestones ago and it is met.
+- **Renegade-owned Studio chrome** — functional slice (PR #7) reconnecting the
+  real hierarchy, tool selection, Transform/Environment Inspector, and a
+  collapsed-by-default bottom drawer onto Renegade-rendered controls.
+- **Environment workspace and precipitation** (PR #8) — a dedicated `SCENE /
+  ENVIRONMENT` switch, native rain, and a functional snow visual profile.
+- **Sun and time-of-day authoring** (PR #9) — `SunService`, manual/preset sun
+  authoring, and a Play/Pause preview transport.
+- **Native ocean authoring** (PR #10) — `OceanService`, a camera-relative FFT
+  ocean with full native parameter coverage, and four presets.
 
 ## Accepted: Renegade-owned Studio chrome visual proof
 
 The product owner accepted the packaged DX12 visual proof from PR #7 at
 `bf41c75`. The Renegade-owned canvas architecture is now the approved Studio
 baseline. Do not reinterpret the layout or return to stock Wicked widget
-rendering.
-
-## Pending: first functional chrome slice
-
-The next commit reconnects the real hierarchy, tool selection, Transform and
-Environment Inspector controls, and a collapsed-by-default bottom drawer.
-Renegade subclasses retain native input behaviour while overriding the render
-path for every visible control pixel. See
-`docs/PHASE3_STUDIO_CHROME_FUNCTIONAL_SLICE.md`.
-
-This slice is not accepted until Windows CI is green and the product owner has
-run the packaged DX12 artifact through the hierarchy, transform, weather,
-drawer, Undo/Redo and save/reopen checklist. Vulkan follows DX12 acceptance.
+rendering. The functional slice that followed it is accepted — see
+"Workspace stabilization accepted" below; there is no pending chrome slice.
 
 ## Superseded visual-proof notes
 
@@ -85,7 +78,7 @@ Verify before changing anything:
 
 ```bash
 git status --short
-git rev-parse HEAD          # 944f8991a0fbc25885f27f4ae9f278708e95e334
+git rev-parse HEAD          # 475ac45de2ac9fbc226f877825d17bb6df8174b9
 git submodule status        # 3a800b71... WickedEngine
 ```
 
@@ -260,7 +253,12 @@ against the pinned submodule before acting on it.
   persisted camera speed and editor layout, and the Identity Handshake are all
   not started.
 
-## Next bounded milestone: Light and Material Authoring
+## Following gate: Light and Material Authoring
+
+Superseded as the *immediate* next gate by the product-owner decision on
+2026-07-31 to run Terrain Authoring V1 first (see "Latest work in progress"
+above and `docs/ROADMAP.md`). This spec still stands as the gate that follows
+Terrain; do not start it before Terrain V1 is accepted.
 
 The Environment inspector proved the pattern. Extend it to the two remaining
 component types that block the creator from fixing the generated scene's look.
@@ -367,9 +365,9 @@ second and routes both Play and Pause through the deferred `EditorAction` queue.
 The product owner passed the corrected packaged workflow and PR #9 merged to
 `main` at `4327ff1`.
 
-## Native Ocean authoring follow-up
+## Native Ocean authoring accepted
 
-The next bounded slice adds `OceanService` and an `OCEAN // NATIVE FFT` section
+The accepted slice adds `OceanService` and an `OCEAN // NATIVE FFT` section
 to Environment. It exposes every field of the pinned Wicked
 `OceanParameters`, including FFT resolution and ocean-specific wind fields that
 Wicked's own Weather window omits. Calm, Coastal, Storm and Alien presets plus
@@ -382,4 +380,4 @@ shoreline, caustics or underwater authoring parameters. Those remain explicit
 future Renegade shader work; Ocean V1 must not claim or simulate them.
 
 Authoritative scope and packaged acceptance are in
-`docs/PHASE3_NATIVE_OCEAN_AUTHORING.md`.
+`docs/PHASE3_NATIVE_OCEAN_AUTHORING.md`. PR #10 merged to `main` at `475ac45`.

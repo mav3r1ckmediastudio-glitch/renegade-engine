@@ -4,6 +4,68 @@ All notable user-facing changes are recorded here. Newest first.
 
 ## Unreleased — Phase 3 Studio foundation
 
+### Native ocean authoring
+
+- Added `OceanService` and an `OCEAN // NATIVE FFT` section to the Environment
+  workspace, exposing every field of Wicked's pinned `OceanParameters`:
+  FFT displacement-map resolution, patch length, simulation time scale, wave
+  amplitude, ocean wind direction/speed/dependency, choppy scale, water RGBA,
+  extinction RGB, water height, surface detail, and screen-edge displacement
+  tolerance.
+- Added Calm, Coastal, Storm, and Alien ocean presets.
+- Added `SetOceanCommand` so every preset, toggle, resolution change, and
+  completed slider edit is one Undo/Redo transaction with live drag preview.
+- The camera-relative FFT surface reflects the current scene and sky through
+  Studio's existing renderer reflections. Foam, caustics, refraction, and
+  terrain/shoreline intersection are explicitly not built.
+
+### Sun and time-of-day authoring
+
+- Added `SunService` and a `SUN // TIME OF DAY` section to the Environment
+  workspace, authoring Wicked's serialized `sunDirection` and the scene's
+  primary directional-light transform together.
+- Added a 00:00–24:00 time slider and numeric field, independently editable
+  azimuth and elevation, and Dawn/Midday/Golden Hour/Dusk/Midnight presets.
+- Added `PLAY DAY`, a preview transport from 0.001 to 24.000 hours per second,
+  and `PAUSE`, which commits the preview's final position as one Undo/Redo
+  command. Both route through Studio's deferred `EditorAction` queue rather
+  than mutating state inside Wicked's button callback.
+- The solar path is deterministic and art-directable (sunrise 06:00, solar
+  noon 75°, sunset 18:00); geographic simulation, moon phases, seasons, and
+  Lua runtime progression remain future work.
+
+### Environment workspace and precipitation
+
+- Moved Environment out of the Scene Hierarchy into a dedicated top-right
+  `SCENE / ENVIRONMENT` workspace switch that resolves the primary weather
+  entity without discarding the creator's current object selection.
+- Added native rain and a functional snow visual profile over Wicked's native
+  GPU precipitation emitter, with intensity, fall speed, particle size, wind
+  direction, wind strength, and turbulence controls.
+- Added `SetPrecipitationCommand` with live slider preview and one Undo step
+  per completed drag. Unsurfaced native particle values are captured and
+  restored rather than overwritten.
+- Snow accumulation, footprints, temperature, and material coverage remain
+  explicitly deferred rather than represented by dummy controls.
+
+### Renegade-owned Studio chrome — functional slice and stabilization
+
+- Reconnected the real hierarchy, tool selection (Select/Translate/Rotate/
+  Scale), Transform and Environment Inspector controls, and a
+  collapsed-by-default bottom drawer (Asset Browser, Console, Output,
+  Diagnostics) onto Renegade-rendered controls, retaining Wicked's native
+  input mechanics while owning every visible pixel.
+- Added functional File/Edit/View menus; states without a backend are marked
+  unavailable rather than rendered as plausible dummy controls.
+- Added the official wordmark asset, an opaque Inspector, persistent
+  Hierarchy/Inspector/drawer splitters, and owned Environment slider-plus-
+  number controls with live preview and one Undo command per drag.
+- Added drawer close by chevron, active-tab click, Escape, or outside click,
+  with drawer open state, last tab, and grid visibility persisted through
+  `ProjectService` editor preferences.
+- Disabled the stock FPS/error overlay, which collided with the wordmark;
+  diagnostics now have an owned drawer destination.
+
 ### Environment authoring
 
 - Added a curated Environment inspector that replaces the Transform inspector
