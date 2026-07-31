@@ -9,6 +9,7 @@
 #include <Translator.h>
 
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/PrecipitationService.h"
 #include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
@@ -50,6 +51,8 @@ namespace renegade::studio
             RotateTool,
             ScaleTool,
             ToggleGrid,
+            OpenEnvironmentWorkspace,
+            OpenSceneWorkspace,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -95,6 +98,16 @@ namespace renegade::studio
             CloudsCastShadow,
         };
 
+        enum class PrecipitationField
+        {
+            Intensity,
+            FallSpeed,
+            ParticleScale,
+            WindAzimuth,
+            WindSpeed,
+            Turbulence,
+        };
+
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -110,6 +123,22 @@ namespace renegade::studio
             WeatherField field,
             float value) noexcept;
         bool CommitSelectedWeather(const bridge::WeatherState& weather);
+        void ApplyPrecipitationMode(bridge::PrecipitationMode mode);
+        void BeginPrecipitationSlider(PrecipitationField field);
+        void PreviewPrecipitationSlider(
+            PrecipitationField field,
+            float value);
+        void CommitPrecipitationSlider(
+            PrecipitationField field,
+            float value);
+        static void SetPrecipitationFieldValue(
+            bridge::PrecipitationState& precipitation,
+            PrecipitationField field,
+            float value) noexcept;
+        bool CommitPrecipitation(
+            const bridge::PrecipitationState& precipitation);
+        [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
+        void SetEnvironmentWorkspaceActive(bool active);
         void ApplyRenegadeTheme();
         void LoadGridResources();
         void LayoutInspectorActions(bool environment);
@@ -186,6 +215,14 @@ namespace renegade::studio
         RenegadeSlider cloudStartHeight_;
         RenegadeSlider cloudThickness_;
         RenegadeCheckBox cloudsCastShadow_;
+        wi::gui::Label precipitationLabel_;
+        RenegadeComboBox precipitationMode_;
+        RenegadeSlider precipitationIntensity_;
+        RenegadeSlider precipitationFallSpeed_;
+        RenegadeSlider precipitationParticleScale_;
+        RenegadeSlider precipitationWindAzimuth_;
+        RenegadeSlider precipitationWindSpeed_;
+        RenegadeSlider precipitationTurbulence_;
         RenegadeButton focusButton_;
         RenegadeButton duplicateButton_;
         RenegadeButton deleteButton_;
@@ -238,6 +275,14 @@ namespace renegade::studio
         wi::ecs::Entity weatherSliderEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::WeatherState weatherSliderBefore_;
         bridge::WeatherState weatherSliderAfter_;
+        bool environmentWorkspaceActive_ = false;
+        bool precipitationSliderActive_ = false;
+        PrecipitationField precipitationSliderField_ =
+            PrecipitationField::Intensity;
+        wi::ecs::Entity precipitationSliderEntity_ =
+            wi::ecs::INVALID_ENTITY;
+        bridge::PrecipitationState precipitationSliderBefore_;
+        bridge::PrecipitationState precipitationSliderAfter_;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;

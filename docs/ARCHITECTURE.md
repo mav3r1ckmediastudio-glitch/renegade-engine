@@ -160,6 +160,13 @@ the viewport responsive without turning every rendered frame into an Undo
 entry. Workspace splitters are shell state, persisted through ProjectService
 editor preferences rather than scene serialization.
 
+The Environment workspace resolves `SceneService::WeatherEntity()` directly;
+the serialized Weather entity is deliberately omitted from hierarchy rows.
+Native precipitation is isolated behind `PrecipitationService`: rain maps to
+Wicked's GPU rain emitter and snow is a distinct Renegade-authored visual
+profile over that emitter. This preserves an upgrade path to a snow-specific
+renderer without coupling Studio widgets to Wicked's raw rain fields.
+
 ## Project metadata
 
 ADR 0003 defines the v1 `.renegade` descriptor. It is a versioned,

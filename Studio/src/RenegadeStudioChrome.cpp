@@ -485,6 +485,12 @@ namespace renegade::studio
         gridVisible_ = visible;
     }
 
+    void RenegadeStudioChrome::SetEnvironmentWorkspaceActive(
+        const bool active) noexcept
+    {
+        environmentWorkspaceActive_ = active;
+    }
+
     void RenegadeStudioChrome::SetPanelSizes(
         const float hierarchyWidth,
         const float inspectorWidth,
@@ -854,6 +860,28 @@ namespace renegade::studio
                 toolX += widths[index] + 5.0f;
             }
 
+            const float sceneMetaX = width_ - 300.0f;
+            if (!consumed && y >= 34.0f && y < 58.0f)
+            {
+                if (x >= sceneMetaX + 16.0f && x < sceneMetaX + 76.0f)
+                {
+                    if (action_)
+                    {
+                        action_(Action::SceneWorkspace);
+                    }
+                    consumed = true;
+                }
+                else if (x >= sceneMetaX + 82.0f &&
+                    x < sceneMetaX + 202.0f)
+                {
+                    if (action_)
+                    {
+                        action_(Action::EnvironmentWorkspace);
+                    }
+                    consumed = true;
+                }
+            }
+
             float chipX = hierarchyWidth_ + 12.0f;
             constexpr std::array<const char*, 3> chips = {
                 "PERSPECTIVE", "LIT", "SHOW"};
@@ -1105,7 +1133,37 @@ namespace renegade::studio
             cmd,
             1.25f,
             0.08f);
-        DrawText("SCENE", sceneMetaX + 20.0f, 38.0f, 9, Success, cmd, 1.7f);
+        const wi::Color sceneWorkspaceColor =
+            environmentWorkspaceActive_ ? TextSecondary : TextStrong;
+        const wi::Color environmentWorkspaceColor =
+            environmentWorkspaceActive_ ? TextStrong : TextSecondary;
+        DrawText(
+            "SCENE",
+            sceneMetaX + 20.0f,
+            38.0f,
+            9,
+            sceneWorkspaceColor,
+            cmd,
+            1.3f,
+            environmentWorkspaceActive_ ? 0.0f : 0.12f);
+        DrawText(
+            "ENVIRONMENT",
+            sceneMetaX + 86.0f,
+            38.0f,
+            9,
+            environmentWorkspaceColor,
+            cmd,
+            1.1f,
+            environmentWorkspaceActive_ ? 0.12f : 0.0f);
+        DrawRect(
+            environmentWorkspaceActive_
+                ? sceneMetaX + 82.0f
+                : sceneMetaX + 16.0f,
+            57.0f,
+            environmentWorkspaceActive_ ? 120.0f : 60.0f,
+            2.0f,
+            Forge,
+            cmd);
 
         // Left hierarchy panel:
         DrawRect(

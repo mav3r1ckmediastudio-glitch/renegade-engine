@@ -595,6 +595,7 @@ namespace renegade::studio
             }
             session_->Selection().Select(
                 static_cast<wi::ecs::Entity>(args.userdata));
+            SetEnvironmentWorkspaceActive(false);
             RefreshInspector();
             RefreshStatus();
         });
@@ -933,6 +934,112 @@ namespace renegade::studio
             "Allow volumetric clouds to cast moving shadows on the world.",
             WeatherToggle::CloudsCastShadow);
 
+        createSectionLabel(
+            precipitationLabel_,
+            "Environment Precipitation Section",
+            "PRECIPITATION // NATIVE PARTICLES");
+
+        precipitationMode_.Create("Precipitation Mode");
+        precipitationMode_.AddItem(
+            "OFF",
+            static_cast<std::uint64_t>(bridge::PrecipitationMode::None));
+        precipitationMode_.AddItem(
+            "RAIN",
+            static_cast<std::uint64_t>(bridge::PrecipitationMode::Rain));
+        precipitationMode_.AddItem(
+            "SNOW",
+            static_cast<std::uint64_t>(bridge::PrecipitationMode::Snow));
+        precipitationMode_.SetTooltip(
+            "Rain uses Wicked's native precipitation renderer. Snow uses a "
+            "Renegade-authored slow flake profile over the same GPU emitter.");
+        precipitationMode_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            ApplyPrecipitationMode(
+                static_cast<bridge::PrecipitationMode>(args.userdata));
+        });
+        inspectorPanel_.AddWidget(&precipitationMode_);
+
+        const auto createPrecipitationSlider = [this](
+            RenegadeSlider& input,
+            const char* name,
+            const char* label,
+            const char* tooltip,
+            const PrecipitationField field,
+            const float minimum,
+            const float maximum,
+            const float steps)
+        {
+            input.Create(minimum, maximum, 0.0f, steps, name, label);
+            input.SetTooltip(tooltip);
+            input.OnDragStarted([this, field](const float)
+            {
+                BeginPrecipitationSlider(field);
+            });
+            input.OnValuePreview([this, field](const float value)
+            {
+                PreviewPrecipitationSlider(field, value);
+            });
+            input.OnValueCommitted([this, field](const float value)
+            {
+                CommitPrecipitationSlider(field, value);
+            });
+            inspectorPanel_.AddWidget(&input);
+        };
+        createPrecipitationSlider(
+            precipitationIntensity_,
+            "Precipitation Intensity",
+            "INTENSITY",
+            "Particle density. Zero disables precipitation.",
+            PrecipitationField::Intensity,
+            0.0f,
+            1.0f,
+            200.0f);
+        createPrecipitationSlider(
+            precipitationFallSpeed_,
+            "Precipitation Fall Speed",
+            "FALL SPEED",
+            "Downward particle speed; snow profiles start much slower.",
+            PrecipitationField::FallSpeed,
+            0.01f,
+            2.0f,
+            400.0f);
+        createPrecipitationSlider(
+            precipitationParticleScale_,
+            "Precipitation Particle Scale",
+            "PARTICLE SIZE",
+            "Rendered particle size.",
+            PrecipitationField::ParticleScale,
+            0.005f,
+            0.1f,
+            400.0f);
+        createPrecipitationSlider(
+            precipitationWindAzimuth_,
+            "Precipitation Wind Azimuth",
+            "WIND DIRECTION",
+            "Horizontal wind direction in degrees.",
+            PrecipitationField::WindAzimuth,
+            -180.0f,
+            180.0f,
+            360.0f);
+        createPrecipitationSlider(
+            precipitationWindSpeed_,
+            "Precipitation Wind Speed",
+            "WIND SPEED",
+            "Horizontal wind strength applied to precipitation.",
+            PrecipitationField::WindSpeed,
+            0.0f,
+            20.0f,
+            400.0f);
+        createPrecipitationSlider(
+            precipitationTurbulence_,
+            "Precipitation Turbulence",
+            "TURBULENCE",
+            "Random particle drift; higher values create snow flurries.",
+            PrecipitationField::Turbulence,
+            0.0f,
+            20.0f,
+            400.0f);
+
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
         focusButton_.SetTooltip("Frame the selected entity in the viewport");
@@ -1044,6 +1151,7 @@ namespace renegade::studio
             }
             session_->Selection().Select(
                 static_cast<wi::ecs::Entity>(entity));
+            SetEnvironmentWorkspaceActive(false);
             RefreshHierarchy();
             RefreshInspector();
             RefreshStatus();
@@ -1092,6 +1200,12 @@ namespace renegade::studio
                 break;
             case RenegadeStudioChrome::Action::ToggleGrid:
                 pendingAction_ = EditorAction::ToggleGrid;
+                break;
+            case RenegadeStudioChrome::Action::EnvironmentWorkspace:
+                pendingAction_ = EditorAction::OpenEnvironmentWorkspace;
+                break;
+            case RenegadeStudioChrome::Action::SceneWorkspace:
+                pendingAction_ = EditorAction::OpenSceneWorkspace;
                 break;
             }
         });
@@ -1335,6 +1449,7 @@ namespace renegade::studio
         ownLabel(environmentSkyLabel_);
         ownLabel(environmentFogLabel_);
         ownLabel(environmentCloudLabel_);
+        ownLabel(precipitationLabel_);
 
         wi::gui::Theme scrollbarTheme = theme;
         scrollbarTheme.image.corner_rounding = false;
@@ -1633,6 +1748,14 @@ namespace renegade::studio
         positionEnvironmentWidget(cloudStartHeight_, 474.0f);
         positionEnvironmentWidget(cloudThickness_, 508.0f);
         positionEnvironmentWidget(cloudsCastShadow_, 542.0f);
+        positionEnvironmentWidget(precipitationLabel_, 576.0f, 20.0f);
+        positionEnvironmentWidget(precipitationMode_, 596.0f);
+        positionEnvironmentWidget(precipitationIntensity_, 630.0f);
+        positionEnvironmentWidget(precipitationFallSpeed_, 664.0f);
+        positionEnvironmentWidget(precipitationParticleScale_, 698.0f);
+        positionEnvironmentWidget(precipitationWindAzimuth_, 732.0f);
+        positionEnvironmentWidget(precipitationWindSpeed_, 766.0f);
+        positionEnvironmentWidget(precipitationTurbulence_, 800.0f);
 
         const bool environmentSelected =
             session_ != nullptr &&
@@ -1763,8 +1886,13 @@ namespace renegade::studio
         }
 
         const auto selected = session_->Selection().SelectedEntity();
+        const auto weatherEntity = session_->Scenes().WeatherEntity();
         for (const auto& entity : session_->Scenes().ListEntities())
         {
+            if (entity.entity == weatherEntity)
+            {
+                continue;
+            }
             wi::gui::TreeList::Item item;
             item.name = entity.name;
             item.level = entity.depth;
@@ -1789,7 +1917,7 @@ namespace renegade::studio
         const float threeButtonWidth = (width - 40.0f) / 3.0f;
         const float twoButtonWidth = (width - 32.0f) / 2.0f;
         const float actionStart = environment
-            ? std::max(578.0f, inspectorPanel_.GetSize().y - 82.0f)
+            ? std::max(836.0f, inspectorPanel_.GetSize().y - 82.0f)
             : 230.0f;
         const float historyRow = environment
             ? actionStart
@@ -1829,11 +1957,17 @@ namespace renegade::studio
     void StudioRenderPath::RefreshInspector()
     {
         const bool hasSession = session_ != nullptr;
-        const auto entity = hasSession
+        const auto selectedEntity = hasSession
             ? session_->Selection().SelectedEntity()
             : wi::ecs::INVALID_ENTITY;
+        const auto entity = environmentWorkspaceActive_
+            ? EditableWeatherEntity()
+            : selectedEntity;
         auto* transform = hasSession
-            ? session_->Scenes().GetScene().transforms.GetComponent(entity)
+            ? session_->Scenes().GetScene().transforms.GetComponent(
+                environmentWorkspaceActive_
+                    ? wi::ecs::INVALID_ENTITY
+                    : selectedEntity)
             : nullptr;
         auto* weather = hasSession
             ? session_->Scenes().GetScene().weathers.GetComponent(entity)
@@ -1842,10 +1976,12 @@ namespace renegade::studio
 
         const bool hasTransform = transform != nullptr;
         const bool hasWeather = weather != nullptr;
-        if (hasSession && entity != wi::ecs::INVALID_ENTITY)
+        if (hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
+            !environmentWorkspaceActive_)
         {
             const auto* selectedName =
-                session_->Scenes().GetScene().names.GetComponent(entity);
+                session_->Scenes().GetScene().names.GetComponent(
+                    selectedEntity);
             studioChrome_.SetSelectionName(
                 selectedName != nullptr ? selectedName->name : std::string{});
         }
@@ -1893,6 +2029,14 @@ namespace renegade::studio
         setEnvironmentVisible(cloudStartHeight_);
         setEnvironmentVisible(cloudThickness_);
         setEnvironmentVisible(cloudsCastShadow_);
+        setEnvironmentVisible(precipitationLabel_);
+        setEnvironmentVisible(precipitationMode_);
+        setEnvironmentVisible(precipitationIntensity_);
+        setEnvironmentVisible(precipitationFallSpeed_);
+        setEnvironmentVisible(precipitationParticleScale_);
+        setEnvironmentVisible(precipitationWindAzimuth_);
+        setEnvironmentVisible(precipitationWindSpeed_);
+        setEnvironmentVisible(precipitationTurbulence_);
 
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
@@ -1922,10 +2066,12 @@ namespace renegade::studio
             const auto* name =
                 session_->Scenes().GetScene().names.GetComponent(entity);
             inspectorLabel_.SetText(
-                "ENVIRONMENT // " +
-                (name != nullptr && !name->name.empty()
-                    ? name->name
-                    : "ENTITY " + std::to_string(entity)));
+                environmentWorkspaceActive_
+                    ? "ENVIRONMENT // SCENE WEATHER"
+                    : "ENVIRONMENT // " +
+                        (name != nullptr && !name->name.empty()
+                            ? name->name
+                            : "ENTITY " + std::to_string(entity)));
 
             const auto state = bridge::CaptureWeather(*weather);
             environmentPreset_.SetSelectedWithoutCallback(0);
@@ -1944,6 +2090,19 @@ namespace renegade::studio
             cloudThickness_.SetValue(state.cloudThickness);
             cloudsCastShadow_.SetCheck(state.cloudsCastShadow);
 
+            const auto precipitation =
+                bridge::CapturePrecipitation(*weather);
+            precipitationMode_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(precipitation.mode));
+            precipitationIntensity_.SetValue(precipitation.intensity);
+            precipitationFallSpeed_.SetValue(precipitation.fallSpeed);
+            precipitationParticleScale_.SetValue(
+                precipitation.particleScale);
+            precipitationWindAzimuth_.SetValue(
+                precipitation.windAzimuthDegrees);
+            precipitationWindSpeed_.SetValue(precipitation.windSpeed);
+            precipitationTurbulence_.SetValue(precipitation.turbulence);
+
             const bool physicalSky =
                 state.skyMode != bridge::WeatherState::SkyMode::Skybox;
             const bool volumetricClouds =
@@ -1956,6 +2115,14 @@ namespace renegade::studio
             cloudsCastShadow_.SetEnabled(volumetricClouds);
             fogHeightStart_.SetEnabled(state.heightFog);
             fogHeightEnd_.SetEnabled(state.heightFog);
+            const bool precipitationEnabled = precipitation.mode !=
+                bridge::PrecipitationMode::None;
+            precipitationIntensity_.SetEnabled(precipitationEnabled);
+            precipitationFallSpeed_.SetEnabled(precipitationEnabled);
+            precipitationParticleScale_.SetEnabled(precipitationEnabled);
+            precipitationWindAzimuth_.SetEnabled(precipitationEnabled);
+            precipitationWindSpeed_.SetEnabled(precipitationEnabled);
+            precipitationTurbulence_.SetEnabled(precipitationEnabled);
             SyncGizmoSelection();
             return;
         }
@@ -2127,19 +2294,29 @@ namespace renegade::studio
             ReturnToProjectHub();
             break;
         case EditorAction::SelectTool:
+            SetEnvironmentWorkspaceActive(false);
             SetTransformTool(TransformTool::Select);
             break;
         case EditorAction::TranslateTool:
+            SetEnvironmentWorkspaceActive(false);
             SetTransformTool(TransformTool::Translate);
             break;
         case EditorAction::RotateTool:
+            SetEnvironmentWorkspaceActive(false);
             SetTransformTool(TransformTool::Rotate);
             break;
         case EditorAction::ScaleTool:
+            SetEnvironmentWorkspaceActive(false);
             SetTransformTool(TransformTool::Scale);
             break;
         case EditorAction::ToggleGrid:
             SetGridVisible(!gridVisible_);
+            break;
+        case EditorAction::OpenEnvironmentWorkspace:
+            SetEnvironmentWorkspaceActive(true);
+            break;
+        case EditorAction::OpenSceneWorkspace:
+            SetEnvironmentWorkspaceActive(false);
             break;
         case EditorAction::None:
         default:
@@ -2171,6 +2348,34 @@ namespace renegade::studio
                     ? 2
                     : 3);
         SyncGizmoSelection();
+        RefreshStatus();
+    }
+
+    wi::ecs::Entity StudioRenderPath::EditableWeatherEntity() const noexcept
+    {
+        if (session_ == nullptr)
+        {
+            return wi::ecs::INVALID_ENTITY;
+        }
+        if (environmentWorkspaceActive_)
+        {
+            return session_->Scenes().WeatherEntity();
+        }
+        const auto selected = session_->Selection().SelectedEntity();
+        return session_->Scenes().GetScene().weathers.Contains(selected)
+            ? selected
+            : wi::ecs::INVALID_ENTITY;
+    }
+
+    void StudioRenderPath::SetEnvironmentWorkspaceActive(const bool active)
+    {
+        environmentWorkspaceActive_ = active && session_ != nullptr &&
+            session_->Scenes().WeatherEntity() != wi::ecs::INVALID_ENTITY;
+        studioChrome_.SetEnvironmentWorkspaceActive(
+            environmentWorkspaceActive_);
+        ClearSelectionOutline();
+        RefreshHierarchy();
+        RefreshInspector();
         RefreshStatus();
     }
 
@@ -2415,10 +2620,13 @@ namespace renegade::studio
             ~0u,
             session_->Scenes().GetScene());
         const auto current = session_->Selection().SelectedEntity();
-        if (picked.entity == current)
+        if (picked.entity == current && !environmentWorkspaceActive_)
         {
             return false;
         }
+
+        environmentWorkspaceActive_ = false;
+        studioChrome_.SetEnvironmentWorkspaceActive(false);
 
         if (picked.entity == wi::ecs::INVALID_ENTITY ||
             !session_->Scenes().IsHierarchyVisible(picked.entity))
@@ -2500,7 +2708,8 @@ namespace renegade::studio
         const int axis,
         const float value)
     {
-        if (session_ == nullptr || !session_->Selection().HasSelection())
+        if (environmentWorkspaceActive_ || session_ == nullptr ||
+            !session_->Selection().HasSelection())
         {
             return;
         }
@@ -2583,12 +2792,16 @@ namespace renegade::studio
     bool StudioRenderPath::CommitSelectedWeather(
         const bridge::WeatherState& weather)
     {
-        if (session_ == nullptr || !session_->Selection().HasSelection())
+        if (session_ == nullptr)
         {
             return false;
         }
 
-        const auto entity = session_->Selection().SelectedEntity();
+        const auto entity = EditableWeatherEntity();
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
         const bool changed = session_->Commands().Execute(
             std::make_unique<bridge::SetWeatherCommand>(
                 session_->Scenes().GetScene(),
@@ -2643,11 +2856,11 @@ namespace renegade::studio
     void StudioRenderPath::BeginWeatherSlider(const WeatherField field)
     {
         weatherSliderActive_ = false;
-        if (session_ == nullptr || !session_->Selection().HasSelection())
+        if (session_ == nullptr)
         {
             return;
         }
-        const auto entity = session_->Selection().SelectedEntity();
+        const auto entity = EditableWeatherEntity();
         const auto* component =
             session_->Scenes().GetScene().weathers.GetComponent(entity);
         if (component == nullptr)
@@ -2727,12 +2940,12 @@ namespace renegade::studio
         const WeatherToggle toggle,
         const bool value)
     {
-        if (session_ == nullptr || !session_->Selection().HasSelection())
+        if (session_ == nullptr)
         {
             return;
         }
 
-        const auto entity = session_->Selection().SelectedEntity();
+        const auto entity = EditableWeatherEntity();
         const auto* component =
             session_->Scenes().GetScene().weathers.GetComponent(entity);
         if (component == nullptr)
@@ -2759,12 +2972,12 @@ namespace renegade::studio
     void StudioRenderPath::ApplySelectedSkyMode(
         const bridge::WeatherState::SkyMode mode)
     {
-        if (session_ == nullptr || !session_->Selection().HasSelection())
+        if (session_ == nullptr)
         {
             return;
         }
 
-        const auto entity = session_->Selection().SelectedEntity();
+        const auto entity = EditableWeatherEntity();
         const auto* component =
             session_->Scenes().GetScene().weathers.GetComponent(entity);
         if (component == nullptr)
@@ -2779,12 +2992,12 @@ namespace renegade::studio
 
     void StudioRenderPath::ApplyWeatherPreset(const int preset)
     {
-        if (session_ == nullptr || !session_->Selection().HasSelection())
+        if (session_ == nullptr)
         {
             return;
         }
 
-        const auto entity = session_->Selection().SelectedEntity();
+        const auto entity = EditableWeatherEntity();
         const auto* component =
             session_->Scenes().GetScene().weathers.GetComponent(entity);
         if (component == nullptr)
@@ -2813,6 +3026,163 @@ namespace renegade::studio
         }
         CommitSelectedWeather(
             bridge::MakeWeatherPreset(current, selectedPreset));
+    }
+
+    bool StudioRenderPath::CommitPrecipitation(
+        const bridge::PrecipitationState& precipitation)
+    {
+        if (session_ == nullptr)
+        {
+            return false;
+        }
+        const auto entity = EditableWeatherEntity();
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetPrecipitationCommand>(
+                session_->Scenes().GetScene(),
+                entity,
+                precipitation));
+        RefreshInspector();
+        RefreshStatus();
+        return changed;
+    }
+
+    void StudioRenderPath::ApplyPrecipitationMode(
+        const bridge::PrecipitationMode mode)
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+        CommitPrecipitation(bridge::MakePrecipitationProfile(
+            bridge::CapturePrecipitation(*component),
+            mode));
+    }
+
+    void StudioRenderPath::SetPrecipitationFieldValue(
+        bridge::PrecipitationState& precipitation,
+        const PrecipitationField field,
+        const float value) noexcept
+    {
+        switch (field)
+        {
+        case PrecipitationField::Intensity:
+            precipitation.intensity = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case PrecipitationField::FallSpeed:
+            precipitation.fallSpeed = std::clamp(value, 0.01f, 2.0f);
+            break;
+        case PrecipitationField::ParticleScale:
+            precipitation.particleScale =
+                std::clamp(value, 0.005f, 0.1f);
+            break;
+        case PrecipitationField::WindAzimuth:
+            precipitation.windAzimuthDegrees =
+                std::clamp(value, -180.0f, 180.0f);
+            break;
+        case PrecipitationField::WindSpeed:
+            precipitation.windSpeed = std::clamp(value, 0.0f, 50.0f);
+            break;
+        case PrecipitationField::Turbulence:
+            precipitation.turbulence = std::clamp(value, 0.0f, 20.0f);
+            break;
+        }
+    }
+
+    void StudioRenderPath::BeginPrecipitationSlider(
+        const PrecipitationField field)
+    {
+        precipitationSliderActive_ = false;
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        const auto* component =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (component == nullptr)
+        {
+            return;
+        }
+        precipitationSliderActive_ = true;
+        precipitationSliderField_ = field;
+        precipitationSliderEntity_ = entity;
+        precipitationSliderBefore_ =
+            bridge::CapturePrecipitation(*component);
+        precipitationSliderAfter_ = precipitationSliderBefore_;
+    }
+
+    void StudioRenderPath::PreviewPrecipitationSlider(
+        const PrecipitationField field,
+        const float value)
+    {
+        if (!precipitationSliderActive_ ||
+            precipitationSliderField_ != field || session_ == nullptr)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        auto* component =
+            scene.weathers.GetComponent(precipitationSliderEntity_);
+        if (component == nullptr)
+        {
+            precipitationSliderActive_ = false;
+            return;
+        }
+        precipitationSliderAfter_ = precipitationSliderBefore_;
+        SetPrecipitationFieldValue(precipitationSliderAfter_, field, value);
+        bridge::ApplyPrecipitation(*component, precipitationSliderAfter_);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == precipitationSliderEntity_)
+        {
+            scene.weather = *component;
+        }
+    }
+
+    void StudioRenderPath::CommitPrecipitationSlider(
+        const PrecipitationField field,
+        const float value)
+    {
+        if (!precipitationSliderActive_ ||
+            precipitationSliderField_ != field || session_ == nullptr)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        auto* component =
+            scene.weathers.GetComponent(precipitationSliderEntity_);
+        if (component == nullptr)
+        {
+            precipitationSliderActive_ = false;
+            return;
+        }
+        SetPrecipitationFieldValue(precipitationSliderAfter_, field, value);
+        bridge::ApplyPrecipitation(*component, precipitationSliderBefore_);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == precipitationSliderEntity_)
+        {
+            scene.weather = *component;
+        }
+        session_->Commands().Execute(
+            std::make_unique<bridge::SetPrecipitationCommand>(
+                scene,
+                precipitationSliderEntity_,
+                precipitationSliderBefore_,
+                precipitationSliderAfter_));
+        precipitationSliderActive_ = false;
+        precipitationSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        RefreshInspector();
+        RefreshStatus();
     }
 
     void StudioRenderPath::CreateProject()
@@ -3028,7 +3398,8 @@ namespace renegade::studio
         gizmoEntity_ = wi::ecs::INVALID_ENTITY;
         gizmoDragActive_ = false;
 
-        if (session_ == nullptr || !session_->Selection().HasSelection())
+        if (environmentWorkspaceActive_ || session_ == nullptr ||
+            !session_->Selection().HasSelection())
         {
             return;
         }
@@ -3073,6 +3444,11 @@ namespace renegade::studio
 
     void StudioRenderPath::SyncSelectionOutline()
     {
+        if (environmentWorkspaceActive_)
+        {
+            ClearSelectionOutline();
+            return;
+        }
         const auto selected = session_ != nullptr
             ? session_->Selection().SelectedEntity()
             : wi::ecs::INVALID_ENTITY;

@@ -63,3 +63,6 @@ step. Numeric entry follows the same command path.
    before/after weather state.
 8. Presets, toggles, save/reopen, clouds, fog, height fog and cloud shadows
    retain their previously accepted behaviour under DX12 and Vulkan.
+
+Product-owner packaged review passed all correction checks before PR #7 was
+merged to `main` at `beefe97`.
