@@ -313,7 +313,7 @@ Each GitHub push and build cycle costs roughly 30 minutes:
 Do not turn this into an unbounded mega-change. A normal unit should still
 produce one testable vertical outcome.
 
-## Workspace stabilization pending packaged verification
+## Workspace stabilization accepted
 
 The owned chrome follow-up adds the official wordmark asset, square Inspector
 host styling, bold high-contrast workspace text, click-through isolation,
@@ -329,4 +329,20 @@ Inspector opaque, adds persistent Hierarchy/Inspector/drawer splitters, and
 introduces owned Environment slider-plus-number controls with live preview and
 one Undo command per drag. Its authoritative regression list is
 `docs/PHASE3_WORKSPACE_STABILIZATION_CORRECTION.md`. These defects must pass on
-packaged DX12 and Vulkan before PR #7 leaves draft.
+packaged DX12 and Vulkan before PR #7 leaves draft. The product owner completed
+that pass successfully and PR #7 merged to `main` at `beefe97`.
+
+## Environment workspace and precipitation follow-up
+
+The next bounded slice moves Environment out of Scene Hierarchy and into a
+dedicated top-right `SCENE / ENVIRONMENT` workspace switch. Studio resolves the
+primary serialized Weather entity directly without discarding the creator's
+current object selection.
+
+Rain uses Wicked's native GPU precipitation path. Snow is a functional slow,
+large, unstretched flake profile over that emitter with native rain splashes
+disabled. Both modes expose intensity, fall speed, particle size, wind
+direction, wind strength and turbulence through `SetPrecipitationCommand` with
+live preview and one Undo step per drag. WISCENE stores the underlying native
+weather values. Snow accumulation, footprints, temperature and snow material
+coverage remain explicitly deferred rather than represented by dummy controls.

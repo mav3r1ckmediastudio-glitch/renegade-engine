@@ -91,6 +91,8 @@ namespace renegade::studio
             Delete,
             Focus,
             ToggleGrid,
+            EnvironmentWorkspace,
+            SceneWorkspace,
         };
 
         struct HierarchyRow
@@ -110,6 +112,7 @@ namespace renegade::studio
         void SetActiveTool(int toolIndex) noexcept;
         void SetHierarchyFilter(std::string filter);
         void SetGridVisible(bool visible) noexcept;
+        void SetEnvironmentWorkspaceActive(bool active) noexcept;
         void SetPanelSizes(
             float hierarchyWidth,
             float inspectorWidth,
@@ -151,6 +154,7 @@ namespace renegade::studio
         int activeMenu_ = -1;
         int activeViewportMenu_ = -1;
         bool gridVisible_ = true;
+        bool environmentWorkspaceActive_ = false;
         bool pointerConsumed_ = false;
         wi::Resource brandLockup_;
         std::vector<HierarchyRow> hierarchyRows_;
