@@ -12,6 +12,7 @@
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
+#include "renegade/bridge/TerrainService.h"
 #include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
@@ -60,6 +61,8 @@ namespace renegade::studio
             SetOceanEnabled,
             SetOceanResolution,
             ApplyOceanPreset,
+            CreateTerrain,
+            ApplyTerrainPreset,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -143,6 +146,18 @@ namespace renegade::studio
             DisplacementTolerance,
         };
 
+        enum class TerrainField
+        {
+            VisibleChunkRadius,
+            ChunkScale,
+            MinimumHeight,
+            MaximumHeight,
+            LowAltitudeBlend,
+            BaseBlend,
+            SlopeBlend,
+            LodBias,
+        };
+
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -194,11 +209,21 @@ namespace renegade::studio
             OceanField field,
             float value) noexcept;
         bool CommitOcean(const bridge::OceanState& ocean);
+        void CreateTerrain();
+        void ApplyTerrainPreset(bridge::TerrainPreset preset);
+        void BeginTerrainSlider(TerrainField field);
+        void PreviewTerrainSlider(TerrainField field, float value);
+        void CommitTerrainSlider(TerrainField field, float value);
+        static void SetTerrainFieldValue(
+            bridge::TerrainState& terrain,
+            TerrainField field,
+            float value) noexcept;
+        bool CommitTerrain(const bridge::TerrainState& terrain);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
         void ApplyRenegadeTheme();
         void LoadGridResources();
-        void LayoutInspectorActions(bool environment);
+        void LayoutInspectorActions(bool environment, bool terrain = false);
         void DrawEditorGrid(wi::graphics::CommandList cmd) const;
         void SetGridVisible(bool visible);
         void CreateProjectHub();
@@ -309,6 +334,17 @@ namespace renegade::studio
         RenegadeSlider oceanExtinctionRed_;
         RenegadeSlider oceanExtinctionGreen_;
         RenegadeSlider oceanExtinctionBlue_;
+        wi::gui::Label terrainLabel_;
+        RenegadeButton createTerrainButton_;
+        RenegadeComboBox terrainPreset_;
+        RenegadeSlider terrainVisibleRadius_;
+        RenegadeSlider terrainChunkScale_;
+        RenegadeSlider terrainMinimumHeight_;
+        RenegadeSlider terrainMaximumHeight_;
+        RenegadeSlider terrainLowAltitudeBlend_;
+        RenegadeSlider terrainBaseBlend_;
+        RenegadeSlider terrainSlopeBlend_;
+        RenegadeSlider terrainLodBias_;
         RenegadeButton focusButton_;
         RenegadeButton duplicateButton_;
         RenegadeButton deleteButton_;
@@ -385,6 +421,13 @@ namespace renegade::studio
         bool pendingOceanEnabled_ = false;
         int pendingOceanResolution_ = 512;
         bridge::OceanPreset pendingOceanPreset_ = bridge::OceanPreset::Calm;
+        bool terrainSliderActive_ = false;
+        TerrainField terrainSliderField_ = TerrainField::VisibleChunkRadius;
+        wi::ecs::Entity terrainSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::TerrainState terrainSliderBefore_;
+        bridge::TerrainState terrainSliderAfter_;
+        bridge::TerrainPreset pendingTerrainPreset_ =
+            bridge::TerrainPreset::FlatWorld;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;

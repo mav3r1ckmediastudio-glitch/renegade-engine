@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include <WickedEngine.h>
 
@@ -55,6 +56,28 @@ namespace renegade::bridge
         wi::scene::Scene& scene,
         const TerrainState& state,
         const char* name = "Terrain");
+
+    class CreateTerrainCommand final : public ICommand
+    {
+    public:
+        CreateTerrainCommand(
+            wi::scene::Scene& scene,
+            const TerrainState& terrain,
+            const char* name = "Terrain");
+
+        bool Execute() override;
+        void Undo() override;
+
+        [[nodiscard]] wi::ecs::Entity CreatedEntity() const noexcept;
+
+    private:
+        wi::scene::Scene* scene_ = nullptr;
+        TerrainState terrain_;
+        std::string name_;
+        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+        wi::Archive snapshot_;
+        bool hasSnapshot_ = false;
+    };
 
     class SetTerrainCommand final : public ICommand
     {

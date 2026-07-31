@@ -33,6 +33,19 @@ namespace
             !NearlyEqual(before.lodBias, after.lodBias);
     }
 
+    bool EntityExists(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
+        wi::unordered_set<wi::ecs::Entity> entities;
+        scene.FindAllEntities(entities);
+        return entities.count(entity) != 0;
+    }
+
 }
 
 namespace renegade::bridge
@@ -174,6 +187,65 @@ namespace renegade::bridge
         ApplyTerrain(terrain, state, false);
         terrain.Generation_Restart();
         return entity;
+    }
+
+    CreateTerrainCommand::CreateTerrainCommand(
+        wi::scene::Scene& scene,
+        const TerrainState& terrain,
+        const char* name)
+        : scene_(&scene)
+        , terrain_(terrain)
+        , name_(name == nullptr ? "Terrain" : name)
+    {
+    }
+
+    bool CreateTerrainCommand::Execute()
+    {
+        if (scene_ == nullptr)
+        {
+            return false;
+        }
+        if (entity_ == wi::ecs::INVALID_ENTITY)
+        {
+            entity_ = CreateTerrain(*scene_, terrain_, name_.c_str());
+            return entity_ != wi::ecs::INVALID_ENTITY;
+        }
+        if (!hasSnapshot_ || EntityExists(*scene_, entity_))
+        {
+            return false;
+        }
+        snapshot_.SetReadModeAndResetPos(true);
+        wi::ecs::EntitySerializer serializer;
+        serializer.allow_remap = false;
+        const auto restored = scene_->Entity_Serialize(snapshot_, serializer);
+        auto* restoredTerrain = scene_->terrains.GetComponent(restored);
+        if (restoredTerrain != nullptr)
+        {
+            restoredTerrain->scene = scene_;
+            restoredTerrain->Generation_Restart();
+        }
+        return restored == entity_;
+    }
+
+    void CreateTerrainCommand::Undo()
+    {
+        if (scene_ == nullptr || !EntityExists(*scene_, entity_))
+        {
+            return;
+        }
+        if (!hasSnapshot_)
+        {
+            snapshot_.SetReadModeAndResetPos(false);
+            wi::ecs::EntitySerializer serializer;
+            scene_->Entity_Serialize(snapshot_, serializer, entity_);
+            hasSnapshot_ = true;
+        }
+        scene_->Entity_Remove(entity_);
+    }
+
+    wi::ecs::Entity CreateTerrainCommand::CreatedEntity() const noexcept
+    {
+        return entity_;
     }
 
     SetTerrainCommand::SetTerrainCommand(
