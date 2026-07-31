@@ -349,9 +349,9 @@ coverage remain explicitly deferred rather than represented by dummy controls.
 The product owner passed the packaged functional checks, the Windows CI target
 correction passed all four checks, and PR #8 merged at `d0ff493`.
 
-## Sun and time-of-day follow-up
+## Sun and time-of-day accepted
 
-The next bounded patch adds `SunService` and a real `SUN // TIME OF DAY`
+The accepted patch adds `SunService` and a real `SUN // TIME OF DAY`
 section to the accepted Environment workspace. It authors Wicked's serialized
 `sunDirection` and the scene's primary directional-light transform together,
 with presets, manual angles, live preview, Undo/Redo and save/reopen support.
@@ -363,5 +363,23 @@ Packaged Windows review found two follow-up defects before merge: the minimum
 preview speed of `0.1` hours per second was still too fast for useful review,
 and Pause performed command/inspector work directly inside Wicked's button
 callback. The correction expands preview-speed precision to `0.001` hours per
-second and routes both Play and Pause through the deferred `EditorAction`
-queue. Re-test these two points before the sun PR leaves draft.
+second and routes both Play and Pause through the deferred `EditorAction` queue.
+The product owner passed the corrected packaged workflow and PR #9 merged to
+`main` at `4327ff1`.
+
+## Native Ocean authoring follow-up
+
+The next bounded slice adds `OceanService` and an `OCEAN // NATIVE FFT` section
+to Environment. It exposes every field of the pinned Wicked
+`OceanParameters`, including FFT resolution and ocean-specific wind fields that
+Wicked's own Weather window omits. Calm, Coastal, Storm and Alien presets plus
+live slider preview use `SetOceanCommand` for complete Undo/Redo and native
+WISCENE persistence.
+
+Studio already enables renderer reflections, so the ocean receives native
+scene/sky reflection without a fake control. The pinned engine exposes no foam,
+shoreline, caustics or underwater authoring parameters. Those remain explicit
+future Renegade shader work; Ocean V1 must not claim or simulate them.
+
+Authoritative scope and packaged acceptance are in
+`docs/PHASE3_NATIVE_OCEAN_AUTHORING.md`.

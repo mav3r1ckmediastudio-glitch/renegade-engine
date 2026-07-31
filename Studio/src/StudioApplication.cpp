@@ -1167,6 +1167,142 @@ namespace renegade::studio
         });
         inspectorPanel_.AddWidget(&sunPauseButton_);
 
+        createSectionLabel(
+            oceanLabel_,
+            "Environment Ocean Section",
+            "OCEAN // NATIVE FFT");
+        oceanEnabled_.Create("Ocean enabled: ");
+        oceanEnabled_.SetTooltip(
+            "Enable Wicked's infinite camera-relative FFT ocean surface.");
+        oceanEnabled_.OnClick([this](const wi::gui::EventArgs& args)
+        {
+            pendingOceanEnabled_ = args.bValue;
+            pendingAction_ = EditorAction::SetOceanEnabled;
+        });
+        inspectorPanel_.AddWidget(&oceanEnabled_);
+
+        oceanPreset_.Create("Ocean Preset");
+        oceanPreset_.AddItem("CUSTOM", 0);
+        oceanPreset_.AddItem(
+            "CALM",
+            static_cast<std::uint64_t>(bridge::OceanPreset::Calm) + 1u);
+        oceanPreset_.AddItem(
+            "COASTAL",
+            static_cast<std::uint64_t>(bridge::OceanPreset::Coastal) + 1u);
+        oceanPreset_.AddItem(
+            "STORM",
+            static_cast<std::uint64_t>(bridge::OceanPreset::Storm) + 1u);
+        oceanPreset_.AddItem(
+            "ALIEN",
+            static_cast<std::uint64_t>(bridge::OceanPreset::Alien) + 1u);
+        oceanPreset_.SetTooltip(
+            "Apply a complete native-ocean starting point as one Undo step.");
+        oceanPreset_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            if (args.userdata > 0)
+            {
+                pendingOceanPreset_ = static_cast<bridge::OceanPreset>(
+                    args.userdata - 1u);
+                pendingAction_ = EditorAction::ApplyOceanPreset;
+            }
+        });
+        inspectorPanel_.AddWidget(&oceanPreset_);
+
+        oceanResolution_.Create("Ocean FFT Resolution");
+        oceanResolution_.AddItem("64 // LOW", 64);
+        oceanResolution_.AddItem("128", 128);
+        oceanResolution_.AddItem("256", 256);
+        oceanResolution_.AddItem("512 // DEFAULT", 512);
+        oceanResolution_.AddItem("1024 // EXPENSIVE", 1024);
+        oceanResolution_.SetTooltip(
+            "FFT displacement-map dimension. 1024 can be expensive and "
+            "recreates the native simulation resources.");
+        oceanResolution_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            pendingOceanResolution_ = static_cast<int>(args.userdata);
+            pendingAction_ = EditorAction::SetOceanResolution;
+        });
+        inspectorPanel_.AddWidget(&oceanResolution_);
+
+        const auto createOceanSlider = [this](
+            RenegadeSlider& input,
+            const char* name,
+            const char* label,
+            const char* tooltip,
+            const OceanField field,
+            const float minimum,
+            const float maximum,
+            const float steps)
+        {
+            input.Create(minimum, maximum, 0.0f, steps, name, label);
+            input.SetTooltip(tooltip);
+            input.OnDragStarted([this, field](const float)
+            {
+                BeginOceanSlider(field);
+            });
+            input.OnValuePreview([this, field](const float value)
+            {
+                PreviewOceanSlider(field, value);
+            });
+            input.OnValueCommitted([this, field](const float value)
+            {
+                CommitOceanSlider(field, value);
+            });
+            inspectorPanel_.AddWidget(&input);
+        };
+        createOceanSlider(oceanWaterHeight_, "Ocean Water Height", "LEVEL",
+            "World-space ocean height.", OceanField::WaterHeight,
+            -100.0f, 100.0f, 800.0f);
+        createOceanSlider(oceanPatchLength_, "Ocean Patch Length", "PATCH SIZE",
+            "FFT tiling scale; changing it recreates the simulation.",
+            OceanField::PatchLength, 1.0f, 1000.0f, 999.0f);
+        createOceanSlider(oceanWaveAmplitude_, "Ocean Wave Amplitude", "WAVE AMPLITUDE",
+            "Transverse wave energy; changing it recreates the simulation.",
+            OceanField::WaveAmplitude, 0.0f, 1000.0f, 1000.0f);
+        createOceanSlider(oceanChoppyScale_, "Ocean Choppy Scale", "CHOPPINESS",
+            "Longitudinal wave displacement.", OceanField::ChoppyScale,
+            0.0f, 10.0f, 1000.0f);
+        createOceanSlider(oceanTimeScale_, "Ocean Time Scale", "SIMULATION SPEED",
+            "Speed of FFT wave evolution.", OceanField::TimeScale,
+            0.0f, 4.0f, 4000.0f);
+        createOceanSlider(oceanWindAzimuth_, "Ocean Wind Azimuth", "WIND DIRECTION",
+            "Ocean-specific horizontal wind direction in degrees.",
+            OceanField::WindAzimuth, -180.0f, 180.0f, 720.0f);
+        createOceanSlider(oceanWindSpeed_, "Ocean Wind Speed", "WIND SPEED",
+            "Ocean spectrum wind speed; changing it recreates the simulation.",
+            OceanField::WindSpeed, 0.0f, 1200.0f, 1200.0f);
+        createOceanSlider(oceanWindDependency_, "Ocean Wind Dependency", "WIND DEPENDENCY",
+            "Smaller values strengthen alignment with wind direction.",
+            OceanField::WindDependency, 0.0f, 1.0f, 1000.0f);
+        createOceanSlider(oceanSurfaceDetail_, "Ocean Surface Detail", "SURFACE DETAIL",
+            "Geometry detail from 1 to 10; high values cost GPU time.",
+            OceanField::SurfaceDetail, 1.0f, 10.0f, 9.0f);
+        createOceanSlider(oceanDisplacementTolerance_,
+            "Ocean Displacement Tolerance", "EDGE TOLERANCE",
+            "Reduces screen-edge glitches from large waves at a detail cost.",
+            OceanField::DisplacementTolerance, 1.0f, 10.0f, 900.0f);
+        createOceanSlider(oceanWaterRed_, "Ocean Water Red", "WATER RED",
+            "Native water surface red channel.", OceanField::WaterRed,
+            0.0f, 1.0f, 1000.0f);
+        createOceanSlider(oceanWaterGreen_, "Ocean Water Green", "WATER GREEN",
+            "Native water surface green channel.", OceanField::WaterGreen,
+            0.0f, 1.0f, 1000.0f);
+        createOceanSlider(oceanWaterBlue_, "Ocean Water Blue", "WATER BLUE",
+            "Native water surface blue channel.", OceanField::WaterBlue,
+            0.0f, 1.0f, 1000.0f);
+        createOceanSlider(oceanWaterOpacity_, "Ocean Water Opacity", "WATER OPACITY",
+            "Native water surface alpha.", OceanField::WaterOpacity,
+            0.0f, 1.0f, 1000.0f);
+        createOceanSlider(oceanExtinctionRed_, "Ocean Extinction Red", "DEPTH RED",
+            "Native absorption/extinction red channel.",
+            OceanField::ExtinctionRed, 0.0f, 1.0f, 1000.0f);
+        createOceanSlider(oceanExtinctionGreen_, "Ocean Extinction Green", "DEPTH GREEN",
+            "Native absorption/extinction green channel.",
+            OceanField::ExtinctionGreen, 0.0f, 1.0f, 1000.0f);
+        createOceanSlider(oceanExtinctionBlue_, "Ocean Extinction Blue", "DEPTH BLUE",
+            "Native absorption/extinction blue channel.",
+            OceanField::ExtinctionBlue, 0.0f, 1.0f, 1000.0f);
+
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
         focusButton_.SetTooltip("Frame the selected entity in the viewport");
@@ -1578,6 +1714,7 @@ namespace renegade::studio
         ownLabel(environmentCloudLabel_);
         ownLabel(precipitationLabel_);
         ownLabel(sunLabel_);
+        ownLabel(oceanLabel_);
 
         wi::gui::Theme scrollbarTheme = theme;
         scrollbarTheme.image.corner_rounding = false;
@@ -1915,6 +2052,27 @@ namespace renegade::studio
         sunPauseButton_.SetSize(XMFLOAT2(
             (environmentFieldWidth - 8.0f) * 0.5f,
             28.0f));
+        positionEnvironmentWidget(oceanLabel_, 1060.0f, 20.0f);
+        positionEnvironmentWidget(oceanEnabled_, 1080.0f);
+        positionEnvironmentWidget(oceanPreset_, 1114.0f);
+        positionEnvironmentWidget(oceanResolution_, 1148.0f);
+        positionEnvironmentWidget(oceanWaterHeight_, 1182.0f);
+        positionEnvironmentWidget(oceanPatchLength_, 1216.0f);
+        positionEnvironmentWidget(oceanWaveAmplitude_, 1250.0f);
+        positionEnvironmentWidget(oceanChoppyScale_, 1284.0f);
+        positionEnvironmentWidget(oceanTimeScale_, 1318.0f);
+        positionEnvironmentWidget(oceanWindAzimuth_, 1352.0f);
+        positionEnvironmentWidget(oceanWindSpeed_, 1386.0f);
+        positionEnvironmentWidget(oceanWindDependency_, 1420.0f);
+        positionEnvironmentWidget(oceanSurfaceDetail_, 1454.0f);
+        positionEnvironmentWidget(oceanDisplacementTolerance_, 1488.0f);
+        positionEnvironmentWidget(oceanWaterRed_, 1522.0f);
+        positionEnvironmentWidget(oceanWaterGreen_, 1556.0f);
+        positionEnvironmentWidget(oceanWaterBlue_, 1590.0f);
+        positionEnvironmentWidget(oceanWaterOpacity_, 1624.0f);
+        positionEnvironmentWidget(oceanExtinctionRed_, 1658.0f);
+        positionEnvironmentWidget(oceanExtinctionGreen_, 1692.0f);
+        positionEnvironmentWidget(oceanExtinctionBlue_, 1726.0f);
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
@@ -2074,7 +2232,7 @@ namespace renegade::studio
         const float threeButtonWidth = (width - 40.0f) / 3.0f;
         const float twoButtonWidth = (width - 32.0f) / 2.0f;
         const float actionStart = environment
-            ? std::max(1068.0f, inspectorPanel_.GetSize().y - 82.0f)
+            ? std::max(1772.0f, inspectorPanel_.GetSize().y - 82.0f)
             : 230.0f;
         const float historyRow = environment
             ? actionStart
@@ -2202,6 +2360,27 @@ namespace renegade::studio
         setEnvironmentVisible(sunPreviewSpeed_);
         setEnvironmentVisible(sunPlayButton_);
         setEnvironmentVisible(sunPauseButton_);
+        setEnvironmentVisible(oceanLabel_);
+        setEnvironmentVisible(oceanEnabled_);
+        setEnvironmentVisible(oceanPreset_);
+        setEnvironmentVisible(oceanResolution_);
+        setEnvironmentVisible(oceanWaterHeight_);
+        setEnvironmentVisible(oceanPatchLength_);
+        setEnvironmentVisible(oceanWaveAmplitude_);
+        setEnvironmentVisible(oceanChoppyScale_);
+        setEnvironmentVisible(oceanTimeScale_);
+        setEnvironmentVisible(oceanWindAzimuth_);
+        setEnvironmentVisible(oceanWindSpeed_);
+        setEnvironmentVisible(oceanWindDependency_);
+        setEnvironmentVisible(oceanSurfaceDetail_);
+        setEnvironmentVisible(oceanDisplacementTolerance_);
+        setEnvironmentVisible(oceanWaterRed_);
+        setEnvironmentVisible(oceanWaterGreen_);
+        setEnvironmentVisible(oceanWaterBlue_);
+        setEnvironmentVisible(oceanWaterOpacity_);
+        setEnvironmentVisible(oceanExtinctionRed_);
+        setEnvironmentVisible(oceanExtinctionGreen_);
+        setEnvironmentVisible(oceanExtinctionBlue_);
 
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
@@ -2278,6 +2457,51 @@ namespace renegade::studio
             sunPreviewSpeed_.SetValue(sunPreviewSpeedHoursPerSecond_);
             sunPlayButton_.SetEnabled(!sunPreviewPlaying_);
             sunPauseButton_.SetEnabled(sunPreviewPlaying_);
+
+            const auto ocean = bridge::CaptureOcean(*weather);
+            oceanEnabled_.SetCheck(ocean.enabled);
+            oceanPreset_.SetSelectedWithoutCallback(0);
+            oceanResolution_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(
+                    ocean.displacementMapDimension));
+            oceanWaterHeight_.SetValue(ocean.waterHeight);
+            oceanPatchLength_.SetValue(ocean.patchLength);
+            oceanWaveAmplitude_.SetValue(ocean.waveAmplitude);
+            oceanChoppyScale_.SetValue(ocean.choppyScale);
+            oceanTimeScale_.SetValue(ocean.timeScale);
+            oceanWindAzimuth_.SetValue(ocean.windAzimuthDegrees);
+            oceanWindSpeed_.SetValue(ocean.windSpeed);
+            oceanWindDependency_.SetValue(ocean.windDependency);
+            oceanSurfaceDetail_.SetValue(
+                static_cast<float>(ocean.surfaceDetail));
+            oceanDisplacementTolerance_.SetValue(
+                ocean.surfaceDisplacementTolerance);
+            oceanWaterRed_.SetValue(ocean.waterColor.x);
+            oceanWaterGreen_.SetValue(ocean.waterColor.y);
+            oceanWaterBlue_.SetValue(ocean.waterColor.z);
+            oceanWaterOpacity_.SetValue(ocean.waterColor.w);
+            oceanExtinctionRed_.SetValue(ocean.extinctionColor.x);
+            oceanExtinctionGreen_.SetValue(ocean.extinctionColor.y);
+            oceanExtinctionBlue_.SetValue(ocean.extinctionColor.z);
+
+            oceanResolution_.SetEnabled(ocean.enabled);
+            oceanWaterHeight_.SetEnabled(ocean.enabled);
+            oceanPatchLength_.SetEnabled(ocean.enabled);
+            oceanWaveAmplitude_.SetEnabled(ocean.enabled);
+            oceanChoppyScale_.SetEnabled(ocean.enabled);
+            oceanTimeScale_.SetEnabled(ocean.enabled);
+            oceanWindAzimuth_.SetEnabled(ocean.enabled);
+            oceanWindSpeed_.SetEnabled(ocean.enabled);
+            oceanWindDependency_.SetEnabled(ocean.enabled);
+            oceanSurfaceDetail_.SetEnabled(ocean.enabled);
+            oceanDisplacementTolerance_.SetEnabled(ocean.enabled);
+            oceanWaterRed_.SetEnabled(ocean.enabled);
+            oceanWaterGreen_.SetEnabled(ocean.enabled);
+            oceanWaterBlue_.SetEnabled(ocean.enabled);
+            oceanWaterOpacity_.SetEnabled(ocean.enabled);
+            oceanExtinctionRed_.SetEnabled(ocean.enabled);
+            oceanExtinctionGreen_.SetEnabled(ocean.enabled);
+            oceanExtinctionBlue_.SetEnabled(ocean.enabled);
 
             const bool physicalSky =
                 state.skyMode != bridge::WeatherState::SkyMode::Skybox;
@@ -2500,6 +2724,15 @@ namespace renegade::studio
             break;
         case EditorAction::PauseSunPreview:
             StopSunPreview(true);
+            break;
+        case EditorAction::SetOceanEnabled:
+            ApplyOceanEnabled(pendingOceanEnabled_);
+            break;
+        case EditorAction::SetOceanResolution:
+            ApplyOceanResolution(pendingOceanResolution_);
+            break;
+        case EditorAction::ApplyOceanPreset:
+            ApplyOceanPreset(pendingOceanPreset_);
             break;
         case EditorAction::None:
         default:
@@ -3529,6 +3762,211 @@ namespace renegade::studio
         }
         sunPlayButton_.SetEnabled(true);
         sunPauseButton_.SetEnabled(false);
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    bool StudioRenderPath::CommitOcean(const bridge::OceanState& ocean)
+    {
+        if (session_ == nullptr)
+        {
+            return false;
+        }
+        const auto entity = EditableWeatherEntity();
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetOceanCommand>(
+                session_->Scenes().GetScene(),
+                entity,
+                ocean));
+        RefreshInspector();
+        RefreshStatus();
+        return changed;
+    }
+
+    void StudioRenderPath::ApplyOceanEnabled(const bool enabled)
+    {
+        StopSunPreview(true);
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        const auto* weather =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (weather == nullptr)
+        {
+            return;
+        }
+        auto ocean = bridge::CaptureOcean(*weather);
+        ocean.enabled = enabled;
+        CommitOcean(ocean);
+    }
+
+    void StudioRenderPath::ApplyOceanResolution(const int dimension)
+    {
+        StopSunPreview(true);
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        const auto* weather =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (weather == nullptr)
+        {
+            return;
+        }
+        auto ocean = bridge::CaptureOcean(*weather);
+        ocean.displacementMapDimension = dimension;
+        CommitOcean(ocean);
+    }
+
+    void StudioRenderPath::ApplyOceanPreset(const bridge::OceanPreset preset)
+    {
+        StopSunPreview(true);
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        const auto* weather =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (weather == nullptr)
+        {
+            return;
+        }
+        CommitOcean(bridge::MakeOceanPreset(
+            bridge::CaptureOcean(*weather),
+            preset));
+    }
+
+    void StudioRenderPath::SetOceanFieldValue(
+        bridge::OceanState& ocean,
+        const OceanField field,
+        const float value) noexcept
+    {
+        switch (field)
+        {
+        case OceanField::PatchLength:
+            ocean.patchLength = std::clamp(value, 1.0f, 2000.0f);
+            break;
+        case OceanField::TimeScale:
+            ocean.timeScale = std::clamp(value, 0.0f, 4.0f);
+            break;
+        case OceanField::WaveAmplitude:
+            ocean.waveAmplitude = std::clamp(value, 0.0f, 2000.0f);
+            break;
+        case OceanField::WindAzimuth:
+            ocean.windAzimuthDegrees =
+                std::clamp(value, -180.0f, 180.0f);
+            break;
+        case OceanField::WindSpeed:
+            ocean.windSpeed = std::clamp(value, 0.0f, 2000.0f);
+            break;
+        case OceanField::WindDependency:
+            ocean.windDependency = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case OceanField::ChoppyScale:
+            ocean.choppyScale = std::clamp(value, 0.0f, 10.0f);
+            break;
+        case OceanField::WaterRed:
+            ocean.waterColor.x = std::clamp(value, 0.0f, 4.0f);
+            break;
+        case OceanField::WaterGreen:
+            ocean.waterColor.y = std::clamp(value, 0.0f, 4.0f);
+            break;
+        case OceanField::WaterBlue:
+            ocean.waterColor.z = std::clamp(value, 0.0f, 4.0f);
+            break;
+        case OceanField::WaterOpacity:
+            ocean.waterColor.w = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case OceanField::ExtinctionRed:
+            ocean.extinctionColor.x = std::clamp(value, 0.0f, 4.0f);
+            break;
+        case OceanField::ExtinctionGreen:
+            ocean.extinctionColor.y = std::clamp(value, 0.0f, 4.0f);
+            break;
+        case OceanField::ExtinctionBlue:
+            ocean.extinctionColor.z = std::clamp(value, 0.0f, 4.0f);
+            break;
+        case OceanField::WaterHeight:
+            ocean.waterHeight = std::clamp(value, -1000.0f, 1000.0f);
+            break;
+        case OceanField::SurfaceDetail:
+            ocean.surfaceDetail = static_cast<std::uint32_t>(
+                std::clamp(std::lround(value), 1l, 10l));
+            break;
+        case OceanField::DisplacementTolerance:
+            ocean.surfaceDisplacementTolerance =
+                std::clamp(value, 1.0f, 10.0f);
+            break;
+        }
+    }
+
+    void StudioRenderPath::BeginOceanSlider(const OceanField field)
+    {
+        StopSunPreview(true);
+        oceanSliderActive_ = false;
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = EditableWeatherEntity();
+        const auto* weather =
+            session_->Scenes().GetScene().weathers.GetComponent(entity);
+        if (weather == nullptr)
+        {
+            return;
+        }
+        oceanSliderActive_ = true;
+        oceanSliderField_ = field;
+        oceanSliderEntity_ = entity;
+        oceanSliderBefore_ = bridge::CaptureOcean(*weather);
+        oceanSliderAfter_ = oceanSliderBefore_;
+    }
+
+    void StudioRenderPath::PreviewOceanSlider(
+        const OceanField field,
+        const float value)
+    {
+        if (!oceanSliderActive_ || oceanSliderField_ != field ||
+            session_ == nullptr)
+        {
+            return;
+        }
+        oceanSliderAfter_ = oceanSliderBefore_;
+        SetOceanFieldValue(oceanSliderAfter_, field, value);
+        bridge::ApplyOcean(
+            session_->Scenes().GetScene(),
+            oceanSliderEntity_,
+            oceanSliderAfter_);
+    }
+
+    void StudioRenderPath::CommitOceanSlider(
+        const OceanField field,
+        const float value)
+    {
+        if (!oceanSliderActive_ || oceanSliderField_ != field ||
+            session_ == nullptr)
+        {
+            return;
+        }
+        SetOceanFieldValue(oceanSliderAfter_, field, value);
+        auto& scene = session_->Scenes().GetScene();
+        bridge::ApplyOcean(scene, oceanSliderEntity_, oceanSliderBefore_);
+        session_->Commands().Execute(
+            std::make_unique<bridge::SetOceanCommand>(
+                scene,
+                oceanSliderEntity_,
+                oceanSliderBefore_,
+                oceanSliderAfter_));
+        oceanSliderActive_ = false;
+        oceanSliderEntity_ = wi::ecs::INVALID_ENTITY;
         RefreshInspector();
         RefreshStatus();
     }
