@@ -48,10 +48,15 @@ Wicked operations. Initial service boundaries:
 Renegade's editor shell, panels, layout, project hub, content browser, hierarchy,
 inspectors, viewport tooling, preferences, and visual language.
 
-The Phase 3 shell uses the accepted native `wiGUI` integration with a
-Renegade-owned theme and layout. `ProjectService` owns `.renegade` descriptor
-validation and recent-project state. Studio calls that service rather than
-parsing project files in widgets.
+The Phase 3 shell uses the accepted native `wiGUI` integration as a canvas,
+update scheduler, and low-level input host. It does not use Wicked's stock
+widget rendering as Renegade's visual language. `RenegadeStudioChrome`
+overrides `Widget::Render` and draws the Studio shell from Renegade-owned
+primitives and design tokens. Interactive components will migrate onto that
+visual foundation one accepted vertical slice at a time.
+
+`ProjectService` owns `.renegade` descriptor validation and recent-project
+state. Studio calls that service rather than parsing project files in widgets.
 
 `CommandService` owns persistent Studio scene mutations. Full local transforms
 use a toolkit-independent `TransformState`; duplicate and delete commands use
@@ -128,9 +133,12 @@ ADR 0002 accepts Wicked's native `wiGUI` as Renegade's production integration
 and rendering foundation after the Phase 2 HDR-source, DPI, input, persistence,
 DX12, and Vulkan gate.
 
-This does not select Wicked's stock Editor or styling. Renegade owns its
-information architecture, visual language, components, docking/layout layer,
-project hub, and workflows. EngineBridge remains UI-toolkit independent.
+This does not select Wicked's stock Editor, widget presentation, or styling.
+The accepted boundary allows Renegade widgets to inherit `wi::gui::Widget` for
+canvas scheduling and input while completely overriding their rendering.
+Renegade owns every visible shell primitive, information architecture, visual
+language, component, docking/layout layer, project hub, and workflow.
+EngineBridge remains UI-toolkit independent.
 
 ## Project metadata
 

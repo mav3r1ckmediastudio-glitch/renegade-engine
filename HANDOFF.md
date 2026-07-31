@@ -8,13 +8,13 @@
 
 **Canonical branch:** `main`
 
-**Verified starting commit:** `8787a4cb0d3287057fe2f61833084ad653b99ff6`
+**Verified starting commit:** `944f8991a0fbc25885f27f4ae9f278708e95e334`
 
 **Wicked Engine pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 **Active phase:** Phase 3 — Studio foundation
 
-**Next milestone:** Light and Material Authoring
+**Active bounded task:** Renegade-owned Studio chrome visual proof
 
 ## Status
 
@@ -34,6 +34,29 @@ acceptance on DX12 and Vulkan:
 The creator can now change the look of a scene inside the editor rather than
 by rebuilding. That was the goal set two milestones ago and it is met.
 
+## Pending: Renegade-owned Studio chrome visual proof
+
+The previous full-shell attempts were rejected by the product owner because
+they rearranged and recoloured Wicked's stock widgets instead of reproducing
+the approved Renegade Studio concept. PR #6 is rejected, must be closed without
+merge, and is not an implementation baseline.
+
+The replacement starts from clean `main` at `944f899`. It adds
+`RenegadeStudioChrome`, a Renegade-owned `Widget::Render` implementation
+that uses Wicked only for canvas scheduling. The proof hides every stock
+workspace panel and renders only the approved top application bar, scene tab,
+Hierarchy edge, viewport chrome, collapsed bottom tabs, and status bar.
+
+This is intentionally not a complete workspace. Menus, Hierarchy rows and
+bottom tabs are presentation-only in this proof; existing keyboard shortcuts,
+viewport navigation, viewport selection, grid, gizmo, outline, and scene
+rendering remain live. Inspector presentation and all docking interactions are
+excluded until the product owner approves a compiled screenshot.
+
+See `docs/PHASE3_STUDIO_CHROME_VISUAL_PROOF.md`. Do not extend this slice or
+claim it is accepted until the packaged Windows Release has been visually
+checked against the standalone prototype.
+
 ## Start here
 
 ```bash
@@ -48,7 +71,7 @@ Verify before changing anything:
 
 ```bash
 git status --short
-git rev-parse HEAD          # 8787a4cb0d3287057fe2f61833084ad653b99ff6
+git rev-parse HEAD          # 944f8991a0fbc25885f27f4ae9f278708e95e334
 git submodule status        # 3a800b71... WickedEngine
 ```
 

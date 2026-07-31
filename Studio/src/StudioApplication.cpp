@@ -890,6 +890,14 @@ namespace renegade::studio
         contentPlaceholder_.font.params.color = HologramMuted;
         contentPlaceholder_.font.params.size = 14;
         contentPanel_.AddWidget(&contentPlaceholder_);
+
+        // The proof slice is a Renegade-owned renderer. It is added after the
+        // legacy widgets so it sits behind future interactive components in
+        // wiGUI's back-to-front render order. The legacy workspace panels are
+        // hidden by SetProjectHubVisible(); they are retained temporarily as
+        // a behavioural reference, not used as the finished presentation.
+        studioChrome_.Create();
+        GetGUI().AddWidget(&studioChrome_);
     }
 
     void StudioRenderPath::CreateProjectHub()
@@ -1195,16 +1203,19 @@ namespace renegade::studio
 
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
+        studioChrome_.SetLayout(width, height);
         const float toolbarHeight = 54.0f;
         const float leftWidth = std::clamp(width * 0.2f, 250.0f, 310.0f);
         const float rightWidth = std::clamp(width * 0.22f, 290.0f, 350.0f);
         const float bottomHeight = std::clamp(height * 0.22f, 160.0f, 220.0f);
 
-        viewportBounds_ = XMFLOAT4(
-            leftWidth + 16.0f,
-            toolbarHeight + 16.0f,
-            width - rightWidth - 16.0f,
-            height - bottomHeight - 16.0f);
+        viewportBounds_ = projectHubVisible_
+            ? XMFLOAT4(
+                leftWidth + 16.0f,
+                toolbarHeight + 16.0f,
+                width - rightWidth - 16.0f,
+                height - bottomHeight - 16.0f)
+            : studioChrome_.ViewportBounds();
 
         toolbarPanel_.SetPos(XMFLOAT2(8.0f, 8.0f));
         toolbarPanel_.SetSize(XMFLOAT2(width - 16.0f, toolbarHeight));
@@ -1417,13 +1428,17 @@ namespace renegade::studio
             std::to_string(session_->Commands().UndoCount()) +
             " // REDO " +
             std::to_string(session_->Commands().RedoCount()));
+        studioChrome_.SetSceneName(projectName);
+        studioChrome_.SetStatusText(statusLabel_.GetText());
     }
 
     void StudioRenderPath::RefreshHierarchy()
     {
         hierarchyTree_.ClearItems();
+        std::vector<RenegadeStudioChrome::HierarchyRow> chromeRows;
         if (session_ == nullptr)
         {
+            studioChrome_.SetHierarchyRows({});
             return;
         }
 
@@ -1437,7 +1452,13 @@ namespace renegade::studio
             item.open = true;
             item.selected = entity.entity == selected;
             hierarchyTree_.AddItem(item);
+            chromeRows.push_back({
+                entity.name,
+                entity.depth,
+                entity.entity == selected,
+            });
         }
+        studioChrome_.SetHierarchyRows(std::move(chromeRows));
     }
 
     void StudioRenderPath::LayoutInspectorActions(const bool environment)
@@ -1500,6 +1521,17 @@ namespace renegade::studio
 
         const bool hasTransform = transform != nullptr;
         const bool hasWeather = weather != nullptr;
+        if (hasSession && entity != wi::ecs::INVALID_ENTITY)
+        {
+            const auto* selectedName =
+                session_->Scenes().GetScene().names.GetComponent(entity);
+            studioChrome_.SetSelectionName(
+                selectedName != nullptr ? selectedName->name : std::string{});
+        }
+        else
+        {
+            studioChrome_.SetSelectionName({});
+        }
         LayoutInspectorActions(hasWeather);
         const auto setTransformVisible = [hasWeather](wi::gui::Widget& widget)
         {
@@ -1800,6 +1832,12 @@ namespace renegade::studio
         scaleToolButton_.SetColor(
             gizmo_.isScalator ? HologramSelected : HologramIdle,
             wi::gui::IDLE);
+        studioChrome_.SetActiveTool(
+            tool == TransformTool::Translate
+                ? 1
+                : tool == TransformTool::Rotate
+                    ? 2
+                    : 3);
         SyncGizmoSelection();
         RefreshStatus();
     }
@@ -2554,10 +2592,13 @@ namespace renegade::studio
 
         projectHubVisible_ = visible;
         projectHubPanel_.SetVisible(visible);
-        toolbarPanel_.SetVisible(!visible);
-        hierarchyPanel_.SetVisible(!visible);
-        inspectorPanel_.SetVisible(!visible);
-        contentPanel_.SetVisible(!visible);
+        // The proof deliberately hides every stock workspace surface. This is
+        // not a reskin: RenegadeStudioChrome owns the visible shell.
+        toolbarPanel_.SetVisible(false);
+        hierarchyPanel_.SetVisible(false);
+        inspectorPanel_.SetVisible(false);
+        contentPanel_.SetVisible(false);
+        studioChrome_.SetVisible(!visible);
 
         // The frame-rate readout belongs to the authoring viewport and must
         // not appear over the Project Hub. DrawEditorGrid checks

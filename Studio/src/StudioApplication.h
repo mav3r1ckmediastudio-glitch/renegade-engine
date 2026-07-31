@@ -9,6 +9,7 @@
 #include <Translator.h>
 
 #include "renegade/bridge/StudioSession.h"
+#include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
 {
@@ -201,6 +202,7 @@ namespace renegade::studio
         wi::gui::Button continueProjectButton_;
         wi::gui::Label hubMessageLabel_;
         wi::gui::Button gridToggleButton_;
+        RenegadeStudioChrome studioChrome_;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;
         wi::graphics::Shader gridPixelShader_;
