@@ -408,3 +408,21 @@ future Renegade shader work; Ocean V1 must not claim or simulate them.
 
 Authoritative scope and packaged acceptance are in
 `docs/PHASE3_NATIVE_OCEAN_AUTHORING.md`.
+
+## Terrain Studio controls CI correction
+
+GitHub Actions job `91289051033` exposed a compile-only integration error in
+the terrain Inspector slider factory. The terrain controls used the legacy
+`wi::gui::Slider` construction and callback API even though their declared type
+is `RenegadeSlider`. The correction makes the factory match the established
+weather, precipitation, sun, and ocean pattern:
+
+- `Create(minimum, maximum, defaultValue, steps, name, label)`;
+- `OnDragStarted` for transaction capture;
+- `OnValuePreview` for live terrain preview; and
+- `OnValueCommitted` for the single Undo/Redo command.
+
+`git diff --check` passes and a repository scan found no other legacy callback
+use on a `RenegadeSlider`. This environment cannot run the Windows/CMake build,
+so the corrected Studio target, tests, packaging, and resulting executable
+remain subject to the next GitHub Actions run and packaged Windows inspection.

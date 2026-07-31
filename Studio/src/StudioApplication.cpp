@@ -1342,28 +1342,26 @@ namespace renegade::studio
         const auto createTerrainSlider = [this](
             RenegadeSlider& input,
             const char* name,
-            const char* description,
+            const char* label,
             const char* tooltip,
             const TerrainField field,
             const float minimum,
             const float maximum,
             const float steps)
         {
-            input.Create(name);
-            input.SetDescription(description);
+            input.Create(minimum, maximum, 0.0f, steps, name, label);
             input.SetTooltip(tooltip);
-            input.SetRange(minimum, maximum, steps);
-            input.OnSlideStart([this, field](const wi::gui::EventArgs&)
+            input.OnDragStarted([this, field](const float)
             {
                 BeginTerrainSlider(field);
             });
-            input.OnSlide([this, field](const wi::gui::EventArgs& args)
+            input.OnValuePreview([this, field](const float value)
             {
-                PreviewTerrainSlider(field, args.fValue);
+                PreviewTerrainSlider(field, value);
             });
-            input.OnSlideEnd([this, field](const wi::gui::EventArgs& args)
+            input.OnValueCommitted([this, field](const float value)
             {
-                CommitTerrainSlider(field, args.fValue);
+                CommitTerrainSlider(field, value);
             });
             inspectorPanel_.AddWidget(&input);
         };
