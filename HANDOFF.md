@@ -32,6 +32,15 @@ Windows visual acceptance remain. The current environment has no CMake and is
 not a Windows target, so the new test executable has not yet been compiled.
 `git diff --check` passes. Do not claim this branch visually accepted.
 
+The next local commit, `dd43851`, adds the first Studio-facing terrain slice:
+undoable terrain creation, automatic selection and hierarchy refresh, all four
+presets, and eight command-backed generation controls. Creation Undo/Redo uses
+a recursive Wicked entity archive and restores the native terrain's scene
+binding before restarting generation. Terrain duplication is deliberately
+disabled. This commit also has not been compiled or visually tested on Windows;
+the patch must not be presented as accepted until CI and the packaged checks
+in `docs/PHASE3_TERRAIN_AUTHORING.md` pass.
+
 ## Status
 
 `main` is clean, merged, and accepted. There is no branch awaiting review and

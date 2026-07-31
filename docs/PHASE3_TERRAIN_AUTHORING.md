@@ -26,9 +26,26 @@ parallel heightfield format is introduced.
 - `RenegadeTerrainTests` covers capture, apply, presets, safety, no-op
   filtering, Undo, and Redo without requiring a graphics device.
 
+## Implemented Studio slice — pending Windows verification
+
+- Empty-selection Inspector action creates and selects one native terrain.
+- `CreateTerrainCommand` snapshots the native entity tree for Undo/Redo while
+  preserving the terrain entity identity across redo.
+- The selected terrain exposes Flat World, Island, Coastline, and Highlands.
+- Visible chunk radius, chunk scale, minimum/maximum height, low/base/slope
+  automatic material thresholds, and LOD bias use preview/commit sliders.
+- Each completed slider drag and preset application contributes at most one
+  `CommandService` history entry; terrain generation restarts on commit.
+- Terrain duplication is disabled until recursive native terrain cloning has a
+  dedicated validated workflow.
+
+Implementation commit: `dd43851`. This slice has not compiled or run in the
+current Linux workspace because its Windows CMake toolchain is unavailable.
+
 ## Remaining V1 slices
 
-1. Terrain workspace and create/preset/generation controls.
+1. Windows compile and packaged visual verification of create/preset/generation
+   controls at `dd43851`.
 2. Viewport sculpt transaction: raise/lower, smooth, flatten, adjustable
    radius, strength, and falloff.
 3. Four-region material painting plus slope- and height-rule controls.
