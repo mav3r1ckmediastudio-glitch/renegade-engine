@@ -1128,14 +1128,15 @@ namespace renegade::studio
             360.0f);
 
         sunPreviewSpeed_.Create(
-            0.1f,
+            0.001f,
             24.0f,
-            1.0f,
-            239.0f,
+            0.100f,
+            23999.0f,
             "Sun Preview Speed",
             "PREVIEW HOURS / SEC");
         sunPreviewSpeed_.SetTooltip(
-            "Editor-only preview speed. It is not written to the scene.");
+            "Editor-only preview speed from 0.001 to 24.000 hours per "
+            "second. It is not written to the scene.");
         sunPreviewSpeed_.OnValuePreview([this](const float value)
         {
             sunPreviewSpeedHoursPerSecond_ = value;
@@ -1152,7 +1153,7 @@ namespace renegade::studio
             "Preview the 24-hour path. Pausing commits one Undo step.");
         sunPlayButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            StartSunPreview();
+            pendingAction_ = EditorAction::StartSunPreview;
         });
         inspectorPanel_.AddWidget(&sunPlayButton_);
 
@@ -1162,7 +1163,7 @@ namespace renegade::studio
             "Pause the preview and commit its final time as one Undo step.");
         sunPauseButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            StopSunPreview(true);
+            pendingAction_ = EditorAction::PauseSunPreview;
         });
         inspectorPanel_.AddWidget(&sunPauseButton_);
 
@@ -2493,6 +2494,12 @@ namespace renegade::studio
             break;
         case EditorAction::OpenSceneWorkspace:
             SetEnvironmentWorkspaceActive(false);
+            break;
+        case EditorAction::StartSunPreview:
+            StartSunPreview();
+            break;
+        case EditorAction::PauseSunPreview:
+            StopSunPreview(true);
             break;
         case EditorAction::None:
         default:

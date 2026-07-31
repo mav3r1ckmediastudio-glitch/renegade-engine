@@ -54,6 +54,8 @@ namespace renegade::studio
             ToggleGrid,
             OpenEnvironmentWorkspace,
             OpenSceneWorkspace,
+            StartSunPreview,
+            PauseSunPreview,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -315,7 +317,7 @@ namespace renegade::studio
         bridge::SunState sunSliderBefore_;
         bridge::SunState sunSliderAfter_;
         bool sunPreviewPlaying_ = false;
-        float sunPreviewSpeedHoursPerSecond_ = 1.0f;
+        float sunPreviewSpeedHoursPerSecond_ = 0.100f;
         bridge::SunState sunPreviewBefore_;
         bridge::SunState sunPreviewCurrent_;
         bool projectHubVisible_ = true;

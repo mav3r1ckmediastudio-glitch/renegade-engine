@@ -358,3 +358,10 @@ with presets, manual angles, live preview, Undo/Redo and save/reopen support.
 
 Runtime Lua progression, geographic solar simulation, moon phases and seasons
 are explicitly outside this patch.
+
+Packaged Windows review found two follow-up defects before merge: the minimum
+preview speed of `0.1` hours per second was still too fast for useful review,
+and Pause performed command/inspector work directly inside Wicked's button
+callback. The correction expands preview-speed precision to `0.001` hours per
+second and routes both Play and Pause through the deferred `EditorAction`
+queue. Re-test these two points before the sun PR leaves draft.

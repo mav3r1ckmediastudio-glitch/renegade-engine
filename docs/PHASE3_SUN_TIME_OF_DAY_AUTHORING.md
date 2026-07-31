@@ -14,8 +14,13 @@ progression remains the next bounded phase.
 - Azimuth and elevation remain independently editable for art direction.
 - Dawn, Midday, Golden Hour, Dusk and Midnight presets each produce one
   Undo/Redo command.
-- `PLAY DAY` previews the complete path at an adjustable editor-only speed.
+- `PLAY DAY` previews the complete path at an adjustable editor-only speed
+  from `0.001` to `24.000` hours per second.
 - `PAUSE` commits the preview's final position as one Undo/Redo command.
+
+Play and Pause are deferred through Studio's `EditorAction` queue. This keeps
+scene mutation, command creation and inspector refresh outside Wicked's active
+button update, matching the safety rule used by the rest of the workspace.
 
 ## Engine ownership
 
@@ -48,7 +53,8 @@ than reimplementing sun rotation.
 1. Time slider and numeric input move the atmosphere and directional light.
 2. Azimuth and elevation can be authored independently.
 3. All five presets visibly select distinct times.
-4. Play advances continuously and Pause stops immediately.
+4. Play advances continuously, supports three-decimal preview speeds and
+   Pause stops immediately without switching workspace tabs.
 5. A completed slider drag produces exactly one Undo step.
 6. A Play/Pause preview produces at most one Undo step.
 7. Undo and Redo restore both sky direction and world shadows.
