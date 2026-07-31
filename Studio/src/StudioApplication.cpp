@@ -17,6 +17,38 @@ namespace
     constexpr wi::Color HologramPanel = wi::Color(3, 12, 20, 236);
     constexpr wi::Color HologramSelected = wi::Color(0, 102, 138, 245);
     constexpr wi::Color WarningAmber = wi::Color(255, 150, 40, 255);
+    constexpr int LayoutPreferenceBits = 10;
+
+    int ReadLayoutPreference(
+        const renegade::bridge::ProjectService& projects,
+        const std::string& key,
+        const int fallback)
+    {
+        int value = 0;
+        for (int bit = 0; bit < LayoutPreferenceBits; ++bit)
+        {
+            if (projects.GetEditorPreference(
+                    key + "_bit_" + std::to_string(bit),
+                    false))
+            {
+                value |= 1 << bit;
+            }
+        }
+        return value > 0 ? value : fallback;
+    }
+
+    void WriteLayoutPreference(
+        renegade::bridge::ProjectService& projects,
+        const std::string& key,
+        const int value)
+    {
+        for (int bit = 0; bit < LayoutPreferenceBits; ++bit)
+        {
+            projects.SetEditorPreference(
+                key + "_bit_" + std::to_string(bit),
+                (value & (1 << bit)) != 0);
+        }
+    }
 }
 
 namespace renegade::studio
@@ -124,6 +156,26 @@ namespace renegade::studio
                     false);
             studioChrome_.SetActiveBottomTab(
                 drawerOpen ? lastDrawerTab_ : -1);
+
+            auto& projects = session_->Projects();
+            if (projects.GetEditorPreference(
+                    "workspace_layout_saved",
+                    false))
+            {
+                studioChrome_.SetPanelSizes(
+                    static_cast<float>(ReadLayoutPreference(
+                        projects,
+                        "hierarchy_width",
+                        static_cast<int>(studioChrome_.HierarchyWidth()))),
+                    static_cast<float>(ReadLayoutPreference(
+                        projects,
+                        "inspector_width",
+                        static_cast<int>(studioChrome_.InspectorWidth()))),
+                    static_cast<float>(ReadLayoutPreference(
+                        projects,
+                        "drawer_height",
+                        static_cast<int>(studioChrome_.DrawerHeight()))));
+            }
         }
 
         RefreshHierarchy();
@@ -570,6 +622,9 @@ namespace renegade::studio
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
         inspectorPanel_.SetShadowRadius(0.0f);
         inspectorPanel_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.SetColor(
+            wi::Color(8, 11, 13, 255),
+            wi::gui::WIDGET_ID_WINDOW_BASE);
         GetGUI().AddWidget(&inspectorPanel_);
 
         inspectorLabel_.Create("Transform Inspector");
@@ -744,93 +799,134 @@ namespace renegade::studio
             "Apply atmospheric scattering to scene geometry.",
             WeatherToggle::AerialPerspective);
 
-        const auto createWeatherInput = [this](
-            wi::gui::TextInputField& input,
+        const auto createWeatherSlider = [this](
+            RenegadeSlider& input,
             const char* name,
-            const char* description,
+            const char* label,
             const char* tooltip,
-            const WeatherField field)
+            const WeatherField field,
+            const float minimum,
+            const float maximum,
+            const float steps)
         {
-            input.Create(name);
-            input.SetDescription(description);
+            input.Create(
+                minimum,
+                maximum,
+                0.0f,
+                steps,
+                name,
+                label);
             input.SetTooltip(tooltip);
-            input.SetValue(0.0f);
-            input.OnInputAccepted(
-                [this, field](const wi::gui::EventArgs& args)
+            input.OnDragStarted([this, field](const float)
             {
-                ApplySelectedWeatherValue(field, args.fValue);
+                BeginWeatherSlider(field);
+            });
+            input.OnValuePreview([this, field](const float value)
+            {
+                PreviewWeatherSlider(field, value);
+            });
+            input.OnValueCommitted([this, field](const float value)
+            {
+                CommitWeatherSlider(field, value);
             });
             inspectorPanel_.AddWidget(&input);
         };
-        createWeatherInput(
+        createWeatherSlider(
             skyExposure_,
             "Sky Exposure",
-            "Exposure: ",
+            "EXPOSURE",
             "Brightness of the physical sky.",
-            WeatherField::SkyExposure);
-        createWeatherInput(
+            WeatherField::SkyExposure,
+            0.0f,
+            4.0f,
+            400.0f);
+        createWeatherSlider(
             ambientIntensity_,
             "Ambient Intensity",
-            "Ambient: ",
+            "AMBIENT",
             "Neutral intensity applied while preserving the authored hue.",
-            WeatherField::AmbientIntensity);
+            WeatherField::AmbientIntensity,
+            0.0f,
+            2.0f,
+            400.0f);
 
         createSectionLabel(
             environmentFogLabel_,
             "Environment Fog Section",
             "FOG // HEIGHT LAYER");
-        createWeatherInput(
+        createWeatherSlider(
             fogStart_,
             "Fog Start",
-            "Start: ",
+            "START",
             "Distance from the camera before fog begins.",
-            WeatherField::FogStart);
-        createWeatherInput(
+            WeatherField::FogStart,
+            0.0f,
+            500.0f,
+            500.0f);
+        createWeatherSlider(
             fogDensity_,
             "Fog Density",
-            "Density: ",
+            "DENSITY",
             "Overall atmospheric fog density.",
-            WeatherField::FogDensity);
+            WeatherField::FogDensity,
+            0.0f,
+            0.1f,
+            1000.0f);
         createWeatherToggle(
             heightFog_,
             "Height fog: ",
             "Restrict fog vertically between the authored heights.",
             WeatherToggle::HeightFog);
-        createWeatherInput(
+        createWeatherSlider(
             fogHeightStart_,
             "Fog Height Start",
-            "Base: ",
+            "BASE",
             "Lower height of the fog layer.",
-            WeatherField::FogHeightStart);
-        createWeatherInput(
+            WeatherField::FogHeightStart,
+            -100.0f,
+            100.0f,
+            400.0f);
+        createWeatherSlider(
             fogHeightEnd_,
             "Fog Height End",
-            "Top: ",
+            "TOP",
             "Upper height of the fog layer.",
-            WeatherField::FogHeightEnd);
+            WeatherField::FogHeightEnd,
+            -100.0f,
+            200.0f,
+            600.0f);
 
         createSectionLabel(
             environmentCloudLabel_,
             "Environment Cloud Section",
             "VOLUMETRIC CLOUDS");
-        createWeatherInput(
+        createWeatherSlider(
             cloudCoverage_,
             "Cloud Coverage",
-            "Coverage: ",
+            "COVERAGE",
             "Primary cloud-layer coverage amount.",
-            WeatherField::CloudCoverage);
-        createWeatherInput(
+            WeatherField::CloudCoverage,
+            0.0f,
+            1.0f,
+            100.0f);
+        createWeatherSlider(
             cloudStartHeight_,
             "Cloud Start Height",
-            "Base: ",
+            "BASE",
             "Altitude where the volumetric cloud volume begins.",
-            WeatherField::CloudStartHeight);
-        createWeatherInput(
+            WeatherField::CloudStartHeight,
+            100.0f,
+            10000.0f,
+            990.0f);
+        createWeatherSlider(
             cloudThickness_,
             "Cloud Thickness",
-            "Depth: ",
+            "DEPTH",
             "Vertical depth of the volumetric cloud volume.",
-            WeatherField::CloudThickness);
+            WeatherField::CloudThickness,
+            100.0f,
+            10000.0f,
+            990.0f);
         createWeatherToggle(
             cloudsCastShadow_,
             "Cloud shadows: ",
@@ -1018,6 +1114,37 @@ namespace renegade::studio
                     lastDrawerTab_ == index);
             }
         });
+        studioChrome_.OnLayoutChanged(
+            [this](
+                const float hierarchyWidth,
+                const float inspectorWidth,
+                const float drawerHeight,
+                const bool finished)
+        {
+            workspaceLayoutDirty_ = true;
+            if (!finished || session_ == nullptr)
+            {
+                return;
+            }
+
+            // ProjectService currently exposes durable boolean preferences.
+            // Encode the three bounded pixel dimensions without bypassing the
+            // service or leaking editor layout into project/scene data.
+            auto& projects = session_->Projects();
+            WriteLayoutPreference(
+                projects,
+                "hierarchy_width",
+                static_cast<int>(std::round(hierarchyWidth)));
+            WriteLayoutPreference(
+                projects,
+                "inspector_width",
+                static_cast<int>(std::round(inspectorWidth)));
+            WriteLayoutPreference(
+                projects,
+                "drawer_height",
+                static_cast<int>(std::round(drawerHeight)));
+            projects.SetEditorPreference("workspace_layout_saved", true);
+        });
         GetGUI().AddWidget(&studioChrome_);
     }
 
@@ -1189,7 +1316,7 @@ namespace renegade::studio
         // Wicked cannot repaint its rounded cyan window or section pills.
         inspectorPanel_.SetColor(wi::Color::Transparent());
         inspectorPanel_.SetColor(
-            wi::Color::Transparent(),
+            wi::Color(8, 11, 13, 255),
             wi::gui::WIDGET_ID_WINDOW_BASE);
         inspectorPanel_.SetShadowRadius(0.0f);
 
@@ -1238,6 +1365,12 @@ namespace renegade::studio
         if (session_ == nullptr || projectHubVisible_)
         {
             return;
+        }
+
+        if (workspaceLayoutDirty_)
+        {
+            workspaceLayoutDirty_ = false;
+            ResizeLayout();
         }
 
         viewportBounds_ = studioChrome_.ViewportBounds();
@@ -1384,11 +1517,13 @@ namespace renegade::studio
         const float toolbarHeight = 54.0f;
         const float leftWidth = projectHubVisible_
             ? std::clamp(width * 0.2f, 250.0f, 310.0f)
-            : width < 1350.0f ? 260.0f : 320.0f;
+            : studioChrome_.HierarchyWidth();
         const float rightWidth = projectHubVisible_
             ? std::clamp(width * 0.22f, 290.0f, 350.0f)
             : studioChrome_.InspectorWidth();
-        const float bottomHeight = std::clamp(height * 0.22f, 160.0f, 220.0f);
+        const float bottomHeight = projectHubVisible_
+            ? std::clamp(height * 0.22f, 160.0f, 220.0f)
+            : studioChrome_.DrawerHeight();
 
         viewportBounds_ = projectHubVisible_
             ? XMFLOAT4(
@@ -2464,15 +2599,54 @@ namespace renegade::studio
         return changed;
     }
 
-    void StudioRenderPath::ApplySelectedWeatherValue(
+    void StudioRenderPath::SetWeatherFieldValue(
+        bridge::WeatherState& weather,
         const WeatherField field,
-        const float value)
+        const float value) noexcept
     {
+        switch (field)
+        {
+        case WeatherField::SkyExposure:
+            weather.skyExposure = std::clamp(value, 0.0f, 8.0f);
+            break;
+        case WeatherField::AmbientIntensity:
+            weather.ambientIntensity = std::clamp(value, 0.0f, 8.0f);
+            break;
+        case WeatherField::FogStart:
+            weather.fogStart = std::clamp(value, 0.0f, 100000.0f);
+            break;
+        case WeatherField::FogDensity:
+            weather.fogDensity = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case WeatherField::FogHeightStart:
+            weather.fogHeightStart =
+                std::clamp(value, -100000.0f, 100000.0f);
+            break;
+        case WeatherField::FogHeightEnd:
+            weather.fogHeightEnd =
+                std::clamp(value, -100000.0f, 100000.0f);
+            break;
+        case WeatherField::CloudCoverage:
+            weather.cloudCoverage = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case WeatherField::CloudStartHeight:
+            weather.cloudStartHeight =
+                std::clamp(value, 0.0f, 50000.0f);
+            break;
+        case WeatherField::CloudThickness:
+            weather.cloudThickness =
+                std::clamp(value, 1.0f, 50000.0f);
+            break;
+        }
+    }
+
+    void StudioRenderPath::BeginWeatherSlider(const WeatherField field)
+    {
+        weatherSliderActive_ = false;
         if (session_ == nullptr || !session_->Selection().HasSelection())
         {
             return;
         }
-
         const auto entity = session_->Selection().SelectedEntity();
         const auto* component =
             session_->Scenes().GetScene().weathers.GetComponent(entity);
@@ -2480,43 +2654,73 @@ namespace renegade::studio
         {
             return;
         }
+        weatherSliderActive_ = true;
+        weatherSliderField_ = field;
+        weatherSliderEntity_ = entity;
+        weatherSliderBefore_ = bridge::CaptureWeather(*component);
+        weatherSliderAfter_ = weatherSliderBefore_;
+    }
 
-        auto next = bridge::CaptureWeather(*component);
-        switch (field)
+    void StudioRenderPath::PreviewWeatherSlider(
+        const WeatherField field,
+        const float value)
+    {
+        if (!weatherSliderActive_ || weatherSliderField_ != field ||
+            session_ == nullptr)
         {
-        case WeatherField::SkyExposure:
-            next.skyExposure = std::clamp(value, 0.0f, 8.0f);
-            break;
-        case WeatherField::AmbientIntensity:
-            next.ambientIntensity = std::clamp(value, 0.0f, 8.0f);
-            break;
-        case WeatherField::FogStart:
-            next.fogStart = std::clamp(value, 0.0f, 100000.0f);
-            break;
-        case WeatherField::FogDensity:
-            next.fogDensity = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case WeatherField::FogHeightStart:
-            next.fogHeightStart =
-                std::clamp(value, -100000.0f, 100000.0f);
-            break;
-        case WeatherField::FogHeightEnd:
-            next.fogHeightEnd =
-                std::clamp(value, -100000.0f, 100000.0f);
-            break;
-        case WeatherField::CloudCoverage:
-            next.cloudCoverage = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case WeatherField::CloudStartHeight:
-            next.cloudStartHeight =
-                std::clamp(value, 0.0f, 50000.0f);
-            break;
-        case WeatherField::CloudThickness:
-            next.cloudThickness =
-                std::clamp(value, 1.0f, 50000.0f);
-            break;
+            return;
         }
-        CommitSelectedWeather(next);
+        auto& scene = session_->Scenes().GetScene();
+        auto* component = scene.weathers.GetComponent(weatherSliderEntity_);
+        if (component == nullptr)
+        {
+            weatherSliderActive_ = false;
+            return;
+        }
+        weatherSliderAfter_ = weatherSliderBefore_;
+        SetWeatherFieldValue(weatherSliderAfter_, field, value);
+        bridge::ApplyWeather(*component, weatherSliderAfter_);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == weatherSliderEntity_)
+        {
+            scene.weather = *component;
+        }
+    }
+
+    void StudioRenderPath::CommitWeatherSlider(
+        const WeatherField field,
+        const float value)
+    {
+        if (!weatherSliderActive_ || weatherSliderField_ != field ||
+            session_ == nullptr)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        auto* component = scene.weathers.GetComponent(weatherSliderEntity_);
+        if (component == nullptr)
+        {
+            weatherSliderActive_ = false;
+            return;
+        }
+
+        SetWeatherFieldValue(weatherSliderAfter_, field, value);
+        bridge::ApplyWeather(*component, weatherSliderBefore_);
+        if (scene.weathers.GetCount() > 0 &&
+            scene.weathers.GetEntity(0) == weatherSliderEntity_)
+        {
+            scene.weather = *component;
+        }
+        session_->Commands().Execute(
+            std::make_unique<bridge::SetWeatherCommand>(
+                scene,
+                weatherSliderEntity_,
+                weatherSliderBefore_,
+                weatherSliderAfter_));
+        weatherSliderActive_ = false;
+        weatherSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        RefreshInspector();
+        RefreshStatus();
     }
 
     void StudioRenderPath::ApplySelectedWeatherToggle(
@@ -2790,8 +2994,8 @@ namespace renegade::studio
         projectHubVisible_ = visible;
         projectHubPanel_.SetVisible(visible);
         // Stock workspace surfaces stay hidden. RenegadeStudioChrome owns the
-        // shell, while the transparent Inspector host schedules only controls
-        // whose rendering is overridden by Renegade subclasses.
+        // shell, while the opaque Inspector host schedules the functional
+        // controls rendered by Renegade subclasses.
         toolbarPanel_.SetVisible(false);
         hierarchyPanel_.SetVisible(false);
         inspectorPanel_.SetVisible(!visible);

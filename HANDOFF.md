@@ -322,3 +322,11 @@ closes by chevron, active-tab click, Escape or outside click. Drawer open state,
 last tab and grid visibility persist through `ProjectService` editor
 preferences. See `docs/PHASE3_WORKSPACE_STABILIZATION.md` for the full Windows
 acceptance pass. Do not mark this passed from CI alone.
+
+Packaged review subsequently proved the Inspector was transparent and the
+owned shell had removed panel resizing. The corrective commit makes the
+Inspector opaque, adds persistent Hierarchy/Inspector/drawer splitters, and
+introduces owned Environment slider-plus-number controls with live preview and
+one Undo command per drag. Its authoritative regression list is
+`docs/PHASE3_WORKSPACE_STABILIZATION_CORRECTION.md`. These defects must pass on
+packaged DX12 and Vulkan before PR #7 leaves draft.

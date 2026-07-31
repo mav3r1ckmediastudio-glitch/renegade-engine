@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <utility>
 
 namespace
@@ -10,7 +11,6 @@ namespace
     constexpr float TopBarHeight = 64.0f;
     constexpr float SceneTabsHeight = 34.0f;
     constexpr float BottomTabsHeight = 32.0f;
-    constexpr float DrawerHeight = 238.0f;
     constexpr float StatusBarHeight = 28.0f;
     constexpr float PanelHeaderHeight = 43.0f;
 
@@ -283,6 +283,150 @@ namespace renegade::studio
         }
     }
 
+    void RenegadeSlider::Create(
+        const float minimum,
+        const float maximum,
+        const float defaultValue,
+        const float steps,
+        const std::string& name,
+        std::string label)
+    {
+        Slider::Create(
+            minimum,
+            maximum,
+            defaultValue,
+            steps,
+            name);
+        label_ = std::move(label);
+        SetShadowRadius(0.0f);
+        valueInputField.SetShadowRadius(0.0f);
+        Slider::OnSlide([this](const wi::gui::EventArgs& args)
+        {
+            const bool mouseDrag =
+                wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) &&
+                valueInputField.GetState() != wi::gui::ACTIVE;
+            if (!dragging_ && dragStarted_)
+            {
+                dragStarted_(valueBeforeUpdate_);
+            }
+            dragging_ = mouseDrag;
+            if (valuePreview_)
+            {
+                valuePreview_(args.fValue);
+            }
+            if (!mouseDrag && valueCommitted_)
+            {
+                valueCommitted_(args.fValue);
+            }
+        });
+    }
+
+    void RenegadeSlider::OnDragStarted(
+        std::function<void(float)> callback)
+    {
+        dragStarted_ = std::move(callback);
+    }
+
+    void RenegadeSlider::OnValuePreview(
+        std::function<void(float)> callback)
+    {
+        valuePreview_ = std::move(callback);
+    }
+
+    void RenegadeSlider::OnValueCommitted(
+        std::function<void(float)> callback)
+    {
+        valueCommitted_ = std::move(callback);
+    }
+
+    void RenegadeSlider::Update(
+        const wi::Canvas& canvas,
+        const float dt)
+    {
+        valueBeforeUpdate_ = value;
+        Slider::Update(canvas, dt);
+        if (dragging_ && !wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            dragging_ = false;
+            if (valueCommitted_)
+            {
+                valueCommitted_(value);
+            }
+        }
+    }
+
+    void RenegadeSlider::Render(
+        const wi::Canvas& canvas,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible())
+        {
+            return;
+        }
+
+        ApplyScissor(canvas, scissorRect, cmd);
+        const XMFLOAT2 inputPos = valueInputField.GetPos();
+        const XMFLOAT2 inputSize = valueInputField.GetSize();
+        const float trackX = translation.x + 3.0f;
+        const float trackWidth = std::max(
+            24.0f,
+            inputPos.x - trackX - 9.0f);
+        const float trackY = translation.y + scale.y - 6.0f;
+        const float normalized = end > start
+            ? std::clamp((value - start) / (end - start), 0.0f, 1.0f)
+            : 0.0f;
+
+        DrawText(
+            label_,
+            translation.x + 3.0f,
+            translation.y + 3.0f,
+            9,
+            TextStrong,
+            cmd,
+            0.2f,
+            0.18f);
+        DrawRect(trackX, trackY, trackWidth, 4.0f, Border, cmd);
+        DrawRect(
+            trackX,
+            trackY,
+            trackWidth * normalized,
+            4.0f,
+            Forge,
+            cmd);
+        const float knobX = trackX + trackWidth * normalized;
+        DrawRect(
+            knobX - 3.0f,
+            translation.y + scale.y - 13.0f,
+            6.0f,
+            12.0f,
+            state == wi::gui::ACTIVE ? TextStrong : Forge,
+            cmd);
+
+        const wi::Color inputBorder =
+            valueInputField.GetState() == wi::gui::ACTIVE
+                ? Forge
+                : valueInputField.GetState() == wi::gui::FOCUS
+                    ? TechCyan
+                    : Border;
+        DrawBorderedRect(
+            inputPos.x,
+            inputPos.y,
+            inputSize.x,
+            inputSize.y,
+            wi::Color(6, 10, 12, 255),
+            inputBorder,
+            cmd);
+        DrawText(
+            valueInputField.GetText(),
+            inputPos.x + 7.0f,
+            inputPos.y + 8.0f,
+            10,
+            TextStrong,
+            cmd,
+            0.0f,
+            0.18f);
+    }
+
     void RenegadeStudioChrome::Create()
     {
         SetName("Renegade-owned Studio chrome");
@@ -298,8 +442,13 @@ namespace renegade::studio
     {
         width_ = std::max(1.0f, width);
         height_ = std::max(1.0f, height);
-        hierarchyWidth_ = width_ < 1350.0f ? 260.0f : 320.0f;
-        inspectorWidth_ = width_ < 1350.0f ? 310.0f : 360.0f;
+        if (!layoutInitialized_)
+        {
+            hierarchyWidth_ = width_ < 1350.0f ? 260.0f : 320.0f;
+            inspectorWidth_ = width_ < 1350.0f ? 310.0f : 360.0f;
+            layoutInitialized_ = true;
+        }
+        SetPanelSizes(hierarchyWidth_, inspectorWidth_, drawerHeight_);
         SetPos(XMFLOAT2(0.0f, 0.0f));
         SetSize(XMFLOAT2(width_, height_));
     }
@@ -334,6 +483,38 @@ namespace renegade::studio
     void RenegadeStudioChrome::SetGridVisible(const bool visible) noexcept
     {
         gridVisible_ = visible;
+    }
+
+    void RenegadeStudioChrome::SetPanelSizes(
+        const float hierarchyWidth,
+        const float inspectorWidth,
+        const float drawerHeight) noexcept
+    {
+        const float availableWidth = std::max(760.0f, width_);
+        const float maximumHierarchy = std::max(
+            220.0f,
+            std::min(480.0f, availableWidth - 760.0f));
+        hierarchyWidth_ = std::clamp(
+            hierarchyWidth,
+            220.0f,
+            maximumHierarchy);
+        const float maximumInspector = std::max(
+            280.0f,
+            std::min(
+                520.0f,
+                availableWidth - hierarchyWidth_ - 420.0f));
+        inspectorWidth_ = std::clamp(
+            inspectorWidth,
+            280.0f,
+            maximumInspector);
+        const float maximumDrawer = std::max(
+            140.0f,
+            height_ - TopBarHeight - SceneTabsHeight -
+                BottomTabsHeight - StatusBarHeight - 180.0f);
+        drawerHeight_ = std::clamp(
+            drawerHeight,
+            140.0f,
+            std::min(480.0f, maximumDrawer));
     }
 
     void RenegadeStudioChrome::SetActiveBottomTab(
@@ -402,6 +583,12 @@ namespace renegade::studio
         drawerChanged_ = std::move(callback);
     }
 
+    void RenegadeStudioChrome::OnLayoutChanged(
+        std::function<void(float, float, float, bool)> callback)
+    {
+        layoutChanged_ = std::move(callback);
+    }
+
     XMFLOAT4 RenegadeStudioChrome::ViewportBounds() const noexcept
     {
         return XMFLOAT4(
@@ -409,12 +596,22 @@ namespace renegade::studio
             TopBarHeight + SceneTabsHeight,
             width_ - inspectorWidth_,
             height_ - BottomTabsHeight - StatusBarHeight -
-                (activeBottomTab_ >= 0 ? DrawerHeight : 0.0f));
+                (activeBottomTab_ >= 0 ? drawerHeight_ : 0.0f));
+    }
+
+    float RenegadeStudioChrome::HierarchyWidth() const noexcept
+    {
+        return hierarchyWidth_;
     }
 
     float RenegadeStudioChrome::InspectorWidth() const noexcept
     {
         return inspectorWidth_;
+    }
+
+    float RenegadeStudioChrome::DrawerHeight() const noexcept
+    {
+        return drawerHeight_;
     }
 
     bool RenegadeStudioChrome::ConsumedPointerThisFrame() const noexcept
@@ -428,6 +625,105 @@ namespace renegade::studio
     {
         Widget::Update(canvas, dt);
         pointerConsumed_ = false;
+        const XMFLOAT4 layoutPointer = wi::input::GetPointer();
+        const float inspectorEdge = width_ - inspectorWidth_;
+        const float bottomTabsEdge =
+            height_ - BottomTabsHeight - StatusBarHeight;
+        const float drawerEdge = bottomTabsEdge - drawerHeight_;
+        hoveredSplitter_ = 0;
+        if (layoutPointer.y >= TopBarHeight &&
+            layoutPointer.y < height_ - StatusBarHeight)
+        {
+            if (std::abs(layoutPointer.x - hierarchyWidth_) <= 4.0f)
+            {
+                hoveredSplitter_ = 1;
+            }
+            else if (std::abs(layoutPointer.x - inspectorEdge) <= 4.0f)
+            {
+                hoveredSplitter_ = 2;
+            }
+        }
+        if (activeBottomTab_ >= 0 &&
+            layoutPointer.x > hierarchyWidth_ &&
+            layoutPointer.x < inspectorEdge &&
+            std::abs(layoutPointer.y - drawerEdge) <= 4.0f)
+        {
+            hoveredSplitter_ = 3;
+        }
+
+        if (resizingPanel_ != 0)
+        {
+            const int activeSplitter = resizingPanel_;
+            if (wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+            {
+                if (resizingPanel_ == 1)
+                {
+                    SetPanelSizes(
+                        layoutPointer.x,
+                        inspectorWidth_,
+                        drawerHeight_);
+                }
+                else if (resizingPanel_ == 2)
+                {
+                    SetPanelSizes(
+                        hierarchyWidth_,
+                        width_ - layoutPointer.x,
+                        drawerHeight_);
+                }
+                else
+                {
+                    SetPanelSizes(
+                        hierarchyWidth_,
+                        inspectorWidth_,
+                        bottomTabsEdge - layoutPointer.y);
+                }
+                if (layoutChanged_)
+                {
+                    layoutChanged_(
+                        hierarchyWidth_,
+                        inspectorWidth_,
+                        drawerHeight_,
+                        false);
+                }
+            }
+            else
+            {
+                if (layoutChanged_)
+                {
+                    layoutChanged_(
+                        hierarchyWidth_,
+                        inspectorWidth_,
+                        drawerHeight_,
+                        true);
+                }
+                resizingPanel_ = 0;
+            }
+            wi::input::SetCursor(
+                activeSplitter == 3
+                    ? wi::input::CURSOR_RESIZE_NS
+                    : wi::input::CURSOR_RESIZE_EW);
+            pointerConsumed_ = true;
+            hitBox = wi::primitive::Hitbox2D(
+                XMFLOAT2(-1.0f, -1.0f),
+                XMFLOAT2(0.0f, 0.0f));
+            return;
+        }
+        if (hoveredSplitter_ != 0)
+        {
+            wi::input::SetCursor(
+                hoveredSplitter_ == 3
+                    ? wi::input::CURSOR_RESIZE_NS
+                    : wi::input::CURSOR_RESIZE_EW);
+            if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+            {
+                resizingPanel_ = hoveredSplitter_;
+                pointerConsumed_ = true;
+                hitBox = wi::primitive::Hitbox2D(
+                    XMFLOAT2(-1.0f, -1.0f),
+                    XMFLOAT2(0.0f, 0.0f));
+                return;
+            }
+        }
         if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
         {
             activeMenu_ = -1;
@@ -446,7 +742,7 @@ namespace renegade::studio
             const float inspectorX = width_ - inspectorWidth_;
             const float bottomTabsTop =
                 height_ - BottomTabsHeight - StatusBarHeight;
-            const float drawerTop = bottomTabsTop - DrawerHeight;
+            const float drawerTop = bottomTabsTop - drawerHeight_;
             bool consumed = false;
             bool drawerTabInteraction = false;
 
@@ -683,7 +979,7 @@ namespace renegade::studio
         const float bottomTabsTop =
             height_ - BottomTabsHeight - StatusBarHeight;
         const float viewportBottom = bottomTabsTop -
-            (activeBottomTab_ >= 0 ? DrawerHeight : 0.0f);
+            (activeBottomTab_ >= 0 ? drawerHeight_ : 0.0f);
         const float statusTop = height_ - StatusBarHeight;
 
         // App frame and low-noise industrial shell:
@@ -1050,10 +1346,10 @@ namespace renegade::studio
 
         if (activeBottomTab_ >= 0)
         {
-            const float drawerTop = bottomTabsTop - DrawerHeight;
+            const float drawerTop = bottomTabsTop - drawerHeight_;
             DrawRect(
                 hierarchyWidth_, drawerTop,
-                inspectorX - hierarchyWidth_, DrawerHeight,
+                inspectorX - hierarchyWidth_, drawerHeight_,
                 wi::Color(8, 13, 16, 252), cmd);
             DrawRect(
                 hierarchyWidth_, drawerTop,
@@ -1164,6 +1460,41 @@ namespace renegade::studio
             inspectorX, TopBarHeight + PanelHeaderHeight - 1.0f,
             inspectorWidth_, 1.0f,
             BorderSoft, cmd);
+
+        // Renegade-owned splitters replace the resize affordances lost when
+        // the stock Wicked windows were removed. They remain quiet until
+        // hovered or dragged.
+        const wi::Color leftSplitter =
+            hoveredSplitter_ == 1 || resizingPanel_ == 1 ? Forge : Border;
+        const wi::Color rightSplitter =
+            hoveredSplitter_ == 2 || resizingPanel_ == 2 ? Forge : Border;
+        DrawRect(
+            hierarchyWidth_ - 1.0f,
+            TopBarHeight,
+            2.0f,
+            statusTop - TopBarHeight,
+            leftSplitter,
+            cmd);
+        DrawRect(
+            inspectorX - 1.0f,
+            TopBarHeight,
+            2.0f,
+            statusTop - TopBarHeight,
+            rightSplitter,
+            cmd);
+        if (activeBottomTab_ >= 0)
+        {
+            const float drawerTop = bottomTabsTop - drawerHeight_;
+            DrawRect(
+                hierarchyWidth_,
+                drawerTop - 1.0f,
+                inspectorX - hierarchyWidth_,
+                2.0f,
+                hoveredSplitter_ == 3 || resizingPanel_ == 3
+                    ? Forge
+                    : Border,
+                cmd);
+        }
 
         const auto drawPopup = [cmd](
             const float x,

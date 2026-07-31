@@ -69,3 +69,11 @@ Required on Windows DX12 Release, followed by the Vulkan cross-check:
 7. Drawer and grid preference survive a complete Studio restart.
 8. Transform, gizmo, weather, clouds, fog, cloud shadows, Undo/Redo and scene
    save/reopen regressions still pass.
+
+## Packaged-review correction
+
+The first packaged review exposed a transparent Inspector and missing panel
+resize affordances. Those are not accepted variations. The correction also
+adds the bounded Environment slider-plus-number controls approved during that
+review. See `PHASE3_WORKSPACE_STABILIZATION_CORRECTION.md`; its acceptance list
+supersedes the affected Inspector and layout checks above.

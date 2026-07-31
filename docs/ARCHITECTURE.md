@@ -153,6 +153,13 @@ typography do not override the accepted editor direction. The official lockup
 is packaged as a Studio-owned UI asset rather than reconstructed with Wicked
 widgets.
 
+Owned continuous controls use a preview/commit transaction: capture component
+state at drag start, apply temporary direct preview while moving, restore the
+captured state on release, then execute one before/after command. This keeps
+the viewport responsive without turning every rendered frame into an Undo
+entry. Workspace splitters are shell state, persisted through ProjectService
+editor preferences rather than scene serialization.
+
 ## Project metadata
 
 ADR 0003 defines the v1 `.renegade` descriptor. It is a versioned,

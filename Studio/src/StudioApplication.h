@@ -99,10 +99,16 @@ namespace renegade::studio
             TransformTool tool,
             int axis,
             float value);
-        void ApplySelectedWeatherValue(WeatherField field, float value);
         void ApplySelectedWeatherToggle(WeatherToggle toggle, bool value);
         void ApplySelectedSkyMode(bridge::WeatherState::SkyMode mode);
         void ApplyWeatherPreset(int preset);
+        void BeginWeatherSlider(WeatherField field);
+        void PreviewWeatherSlider(WeatherField field, float value);
+        void CommitWeatherSlider(WeatherField field, float value);
+        static void SetWeatherFieldValue(
+            bridge::WeatherState& weather,
+            WeatherField field,
+            float value) noexcept;
         bool CommitSelectedWeather(const bridge::WeatherState& weather);
         void ApplyRenegadeTheme();
         void LoadGridResources();
@@ -167,18 +173,18 @@ namespace renegade::studio
         RenegadeComboBox environmentPreset_;
         RenegadeComboBox skyMode_;
         RenegadeCheckBox aerialPerspective_;
-        RenegadeTextInputField skyExposure_;
-        RenegadeTextInputField ambientIntensity_;
+        RenegadeSlider skyExposure_;
+        RenegadeSlider ambientIntensity_;
         wi::gui::Label environmentFogLabel_;
-        RenegadeTextInputField fogStart_;
-        RenegadeTextInputField fogDensity_;
+        RenegadeSlider fogStart_;
+        RenegadeSlider fogDensity_;
         RenegadeCheckBox heightFog_;
-        RenegadeTextInputField fogHeightStart_;
-        RenegadeTextInputField fogHeightEnd_;
+        RenegadeSlider fogHeightStart_;
+        RenegadeSlider fogHeightEnd_;
         wi::gui::Label environmentCloudLabel_;
-        RenegadeTextInputField cloudCoverage_;
-        RenegadeTextInputField cloudStartHeight_;
-        RenegadeTextInputField cloudThickness_;
+        RenegadeSlider cloudCoverage_;
+        RenegadeSlider cloudStartHeight_;
+        RenegadeSlider cloudThickness_;
         RenegadeCheckBox cloudsCastShadow_;
         RenegadeButton focusButton_;
         RenegadeButton duplicateButton_;
@@ -226,6 +232,12 @@ namespace renegade::studio
         bool flyCameraActive_ = false;
         bool gridVisible_ = true;
         int lastDrawerTab_ = 0;
+        bool workspaceLayoutDirty_ = false;
+        bool weatherSliderActive_ = false;
+        WeatherField weatherSliderField_ = WeatherField::SkyExposure;
+        wi::ecs::Entity weatherSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::WeatherState weatherSliderBefore_;
+        bridge::WeatherState weatherSliderAfter_;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
