@@ -18,13 +18,10 @@
 
 ## Latest work in progress — robust scene documents
 
-The working tree is based on `982b516ffe9c16c2e6b099adea262b8357edfbe0`
-on `phase3/terrain-authoring`. That commit compiles but its packaged Open Scene
-workflow failed and is not accepted.
-
-The replacement implementation is currently uncommitted. It introduces a
-UI-free `SceneDocumentService` and keeps the WickedEngine submodule unchanged
-at `3a800b7134aafe58461093c8abb2e274d4e64033`:
+The implementation is pushed to `phase3/terrain-authoring` at
+`b6ffd8dbe788dd3ec2470c16689ff0ad901c5f45`. It introduces a UI-free
+`SceneDocumentService` and keeps the WickedEngine submodule unchanged at
+`3a800b7134aafe58461093c8abb2e274d4e64033`:
 
 - WISCENE validation/deserialization is prepared through Wicked's public
   archive and scene APIs without touching the active document;
@@ -60,7 +57,23 @@ Terrain implementation files were not changed. Pre-existing untracked state
 inside the WickedEngine submodule was left untouched and must not be removed or
 committed.
 
-Validation in the Linux workspace:
+GitHub Actions run `30715812768` compiled both Debug and Release Studio builds,
+but `RenegadeBridgeTests` failed in the new Save As round-trip test. Release
+reported `Save As changed the source or lost the current state`; Debug then
+segfaulted during teardown. The production document code was not the cause.
+The test retained a reference returned by Wicked's transform component manager,
+then created more transform components. Component storage reallocation made the
+reference stale, so later fixture writes invoked undefined behaviour.
+
+Test-only correction `c01928040c7652e37d0bf016ae94f87f8841d0fd`
+removes the long-lived component reference and reacquires the transform through
+the stable landmark entity before each later read or mutation.
+`git diff --check` and GNU C++17 syntax compilation of
+`Tests/BridgeCommandTests.cpp` pass with the existing temporary SDL declaration
+shim. Full Windows Debug and Release CTest must be rerun; no packaged workflow
+claim changes until CI and packaged acceptance pass.
+
+Validation of the document implementation in the Linux workspace:
 
 - `git diff --check` — passed.
 - GNU C++17 syntax-only compilation — passed for
