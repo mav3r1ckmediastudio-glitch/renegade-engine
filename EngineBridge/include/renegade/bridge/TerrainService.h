@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <WickedEngine.h>
 
@@ -102,5 +103,53 @@ namespace renegade::bridge
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
         TerrainState before_;
         TerrainState after_;
+    };
+
+    enum class TerrainSculptMode { Raise, Lower, Smooth, Flatten };
+
+    struct TerrainChunkHeights
+    {
+        wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
+        std::vector<float> heights;
+    };
+
+    struct TerrainSculptState
+    {
+        std::vector<TerrainChunkHeights> chunks;
+    };
+
+    [[nodiscard]] TerrainSculptState CaptureTerrainSculpt(
+        const wi::scene::Scene& scene,
+        const wi::terrain::Terrain& terrain);
+    bool ApplyTerrainSculpt(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const TerrainSculptState& state);
+    bool SculptTerrain(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const XMFLOAT3& center,
+        float radius,
+        float strength,
+        float falloff,
+        TerrainSculptMode mode,
+        float flattenHeight);
+
+    class SculptTerrainCommand final : public ICommand
+    {
+    public:
+        SculptTerrainCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity terrainEntity,
+            TerrainSculptState before,
+            TerrainSculptState after);
+        bool Execute() override;
+        void Undo() override;
+    private:
+        bool Apply(const TerrainSculptState& state);
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity terrainEntity_ = wi::ecs::INVALID_ENTITY;
+        TerrainSculptState before_;
+        TerrainSculptState after_;
     };
 }

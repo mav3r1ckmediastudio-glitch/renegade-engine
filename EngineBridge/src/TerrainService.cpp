@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 
 namespace
 {
@@ -290,5 +291,139 @@ namespace renegade::bridge
         }
         ApplyTerrain(*terrain, state);
         return true;
+    }
+
+    TerrainSculptState CaptureTerrainSculpt(
+        const wi::scene::Scene& scene,
+        const wi::terrain::Terrain& terrain)
+    {
+        TerrainSculptState state;
+        state.chunks.reserve(terrain.chunks.size());
+        for (const auto& entry : terrain.chunks)
+        {
+            const auto& chunk = entry.second;
+            const auto* mesh = scene.meshes.GetComponent(chunk.entity);
+            if (mesh == nullptr || mesh->vertex_positions.empty()) continue;
+            auto& saved = state.chunks.emplace_back();
+            saved.entity = chunk.entity;
+            saved.heights.reserve(mesh->vertex_positions.size());
+            for (const auto& position : mesh->vertex_positions)
+                saved.heights.push_back(position.y);
+        }
+        return state;
+    }
+
+    bool ApplyTerrainSculpt(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const TerrainSculptState& state)
+    {
+        bool changed = false;
+        for (const auto& saved : state.chunks)
+        {
+            auto* mesh = scene.meshes.GetComponent(saved.entity);
+            if (mesh == nullptr || mesh->vertex_positions.size() != saved.heights.size())
+                continue;
+            wi::terrain::ChunkData* chunk = nullptr;
+            for (auto& entry : terrain.chunks)
+                if (entry.second.entity == saved.entity) { chunk = &entry.second; break; }
+            if (chunk == nullptr) continue;
+            for (std::size_t i = 0; i < saved.heights.size(); ++i)
+                mesh->vertex_positions[i].y = saved.heights[i];
+            mesh->CreateRenderData();
+            if (mesh->bvh.IsValid()) mesh->BuildBVH();
+            chunk->heightmap_data.resize(saved.heights.size());
+            for (std::size_t i = 0; i < saved.heights.size(); ++i)
+            {
+                const float normalized = std::clamp(
+                    (saved.heights[i] - terrain.bottomLevel) /
+                    std::max(0.001f, terrain.topLevel - terrain.bottomLevel), 0.0f, 1.0f);
+                chunk->heightmap_data[i] = static_cast<std::uint16_t>(normalized * 65535.0f);
+            }
+            chunk->heightmap = {};
+            terrain.CreateChunkRegionTexture(*chunk);
+            changed = true;
+        }
+        return changed;
+    }
+
+    bool SculptTerrain(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const XMFLOAT3& center,
+        const float radius,
+        const float strength,
+        const float falloff,
+        const TerrainSculptMode mode,
+        const float flattenHeight)
+    {
+        if (radius <= 0.0f || strength <= 0.0f) return false;
+        bool changed = false;
+        for (auto& entry : terrain.chunks)
+        {
+            auto& chunk = entry.second;
+            bool chunkChanged = false;
+            auto* mesh = scene.meshes.GetComponent(chunk.entity);
+            auto* transform = scene.transforms.GetComponent(chunk.entity);
+            if (mesh == nullptr || transform == nullptr) continue;
+            const XMMATRIX world = transform->GetMatrix();
+            float localMean = 0.0f;
+            std::size_t localCount = 0;
+            for (const auto& p : mesh->vertex_positions)
+            {
+                XMFLOAT3 wp; XMStoreFloat3(&wp, XMVector3TransformCoord(XMLoadFloat3(&p), world));
+                const float dx = wp.x - center.x, dz = wp.z - center.z;
+                if (dx * dx + dz * dz <= radius * radius) { localMean += p.y; ++localCount; }
+            }
+            if (localCount == 0) continue;
+            localMean /= static_cast<float>(localCount);
+            for (auto& p : mesh->vertex_positions)
+            {
+                XMFLOAT3 wp; XMStoreFloat3(&wp, XMVector3TransformCoord(XMLoadFloat3(&p), world));
+                const float dx = wp.x - center.x, dz = wp.z - center.z;
+                const float distance = std::sqrt(dx * dx + dz * dz);
+                if (distance > radius) continue;
+                const float edge = std::clamp(1.0f - distance / radius, 0.0f, 1.0f);
+                const float weight = strength * std::pow(edge, 1.0f + falloff * 3.0f);
+                switch (mode)
+                {
+                case TerrainSculptMode::Raise: p.y += weight; break;
+                case TerrainSculptMode::Lower: p.y -= weight; break;
+                case TerrainSculptMode::Smooth: p.y += (localMean - p.y) * std::min(weight, 1.0f); break;
+                case TerrainSculptMode::Flatten: p.y += (flattenHeight - p.y) * std::min(weight, 1.0f); break;
+                }
+                changed = true;
+                chunkChanged = true;
+            }
+            if (chunkChanged)
+            {
+                mesh->CreateRenderData();
+                if (mesh->bvh.IsValid()) mesh->BuildBVH();
+                chunk.heightmap_data.resize(mesh->vertex_positions.size());
+                for (std::size_t i = 0; i < mesh->vertex_positions.size(); ++i)
+                {
+                    const float normalized = std::clamp((mesh->vertex_positions[i].y - terrain.bottomLevel) /
+                        std::max(0.001f, terrain.topLevel - terrain.bottomLevel), 0.0f, 1.0f);
+                    chunk.heightmap_data[i] = static_cast<std::uint16_t>(normalized * 65535.0f);
+                }
+                chunk.heightmap = {};
+                terrain.CreateChunkRegionTexture(chunk);
+            }
+        }
+        return changed;
+    }
+
+    SculptTerrainCommand::SculptTerrainCommand(wi::scene::Scene& scene,
+        const wi::ecs::Entity terrainEntity, TerrainSculptState before,
+        TerrainSculptState after)
+        : scene_(&scene), terrainEntity_(terrainEntity), before_(std::move(before)), after_(std::move(after)) {}
+
+    bool SculptTerrainCommand::Execute() { return Apply(after_); }
+    void SculptTerrainCommand::Undo() { Apply(before_); }
+    bool SculptTerrainCommand::Apply(const TerrainSculptState& state)
+    {
+        if (scene_ == nullptr) return false;
+        auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
+        return terrain != nullptr && ApplyTerrainSculpt(*scene_, *terrain, state);
     }
 }

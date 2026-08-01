@@ -220,6 +220,7 @@ namespace renegade::studio
             TerrainField field,
             float value) noexcept;
         bool CommitTerrain(const bridge::TerrainState& terrain);
+        bool HandleTerrainSculpt(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
         void SetTerrainWorkspaceActive(bool active);
@@ -347,6 +348,11 @@ namespace renegade::studio
         RenegadeSlider terrainBaseBlend_;
         RenegadeSlider terrainSlopeBlend_;
         RenegadeSlider terrainLodBias_;
+        wi::gui::Label terrainSculptLabel_;
+        RenegadeComboBox terrainSculptMode_;
+        RenegadeSlider terrainBrushRadius_;
+        RenegadeSlider terrainBrushStrength_;
+        RenegadeSlider terrainBrushFalloff_;
         RenegadeButton focusButton_;
         RenegadeButton duplicateButton_;
         RenegadeButton deleteButton_;
@@ -431,6 +437,16 @@ namespace renegade::studio
         bridge::TerrainState terrainSliderAfter_;
         bridge::TerrainPreset pendingTerrainPreset_ =
             bridge::TerrainPreset::FlatWorld;
+        bridge::TerrainSculptMode terrainSculptModeValue_ =
+            bridge::TerrainSculptMode::Raise;
+        float terrainBrushRadiusValue_ = 12.0f;
+        float terrainBrushStrengthValue_ = 1.0f;
+        float terrainBrushFalloffValue_ = 0.55f;
+        float terrainFlattenHeight_ = 0.0f;
+        bool terrainStrokeActive_ = false;
+        bool terrainStrokeChanged_ = false;
+        wi::ecs::Entity terrainStrokeEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::TerrainSculptState terrainStrokeBefore_;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;

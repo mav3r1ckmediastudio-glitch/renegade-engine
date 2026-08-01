@@ -1391,6 +1391,35 @@ namespace renegade::studio
             "LOD BIAS", "Terrain detail bias; zero is the safe default.",
             TerrainField::LodBias, -4.0f, 4.0f, 800.0f);
 
+        createSectionLabel(terrainSculptLabel_, "Terrain Sculpt Section", "SCULPT // VIEWPORT BRUSH");
+        terrainSculptMode_.Create("Terrain Sculpt Mode");
+        terrainSculptMode_.AddItem("RAISE", static_cast<std::uint64_t>(bridge::TerrainSculptMode::Raise));
+        terrainSculptMode_.AddItem("LOWER", static_cast<std::uint64_t>(bridge::TerrainSculptMode::Lower));
+        terrainSculptMode_.AddItem("SMOOTH", static_cast<std::uint64_t>(bridge::TerrainSculptMode::Smooth));
+        terrainSculptMode_.AddItem("FLATTEN", static_cast<std::uint64_t>(bridge::TerrainSculptMode::Flatten));
+        terrainSculptMode_.SetTooltip("Choose how dragging the left mouse button changes terrain.");
+        terrainSculptMode_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            terrainSculptModeValue_ = static_cast<bridge::TerrainSculptMode>(args.userdata);
+        });
+        inspectorPanel_.AddWidget(&terrainSculptMode_);
+        const auto createBrushSlider = [this](RenegadeSlider& slider, const char* name,
+            const char* label, const char* tooltip, float minimum, float maximum,
+            float value, float steps, float* target)
+        {
+            slider.Create(minimum, maximum, value, steps, name, label);
+            slider.SetTooltip(tooltip);
+            slider.OnValuePreview([target](float v) { *target = v; });
+            slider.OnValueCommitted([target](float v) { *target = v; });
+            inspectorPanel_.AddWidget(&slider);
+        };
+        createBrushSlider(terrainBrushRadius_, "Terrain Brush Radius", "BRUSH SIZE",
+            "Radius of the brush in world units.", 1.0f, 100.0f, 12.0f, 990.0f, &terrainBrushRadiusValue_);
+        createBrushSlider(terrainBrushStrength_, "Terrain Brush Strength", "STRENGTH",
+            "Height change applied while dragging.", 0.05f, 5.0f, 1.0f, 990.0f, &terrainBrushStrengthValue_);
+        createBrushSlider(terrainBrushFalloff_, "Terrain Brush Falloff", "FALLOFF",
+            "Zero is soft; one concentrates the effect at the centre.", 0.0f, 1.0f, 0.55f, 1000.0f, &terrainBrushFalloffValue_);
+
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
         focusButton_.SetTooltip("Frame the selected entity in the viewport");
@@ -1900,6 +1929,10 @@ namespace renegade::studio
             gizmo_.Update(*camera, pointer, *this);
         }
 
+        if (HandleTerrainSculpt(pointer))
+        {
+            return;
+        }
         if (HandleViewportSelection(pointer))
         {
             return;
@@ -2177,6 +2210,11 @@ namespace renegade::studio
         positionEnvironmentWidget(terrainBaseBlend_, 268.0f);
         positionEnvironmentWidget(terrainSlopeBlend_, 302.0f);
         positionEnvironmentWidget(terrainLodBias_, 336.0f);
+        positionEnvironmentWidget(terrainSculptLabel_, 380.0f, 20.0f);
+        positionEnvironmentWidget(terrainSculptMode_, 400.0f);
+        positionEnvironmentWidget(terrainBrushRadius_, 434.0f);
+        positionEnvironmentWidget(terrainBrushStrength_, 468.0f);
+        positionEnvironmentWidget(terrainBrushFalloff_, 502.0f);
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
@@ -2424,9 +2462,9 @@ namespace renegade::studio
             studioChrome_.SetSelectionName({});
         }
         LayoutInspectorActions(hasWeather, hasTerrain);
-        const auto setTransformVisible = [hasWeather, hasTerrain](wi::gui::Widget& widget)
+        const auto setTransformVisible = [this, hasWeather, hasTerrain](wi::gui::Widget& widget)
         {
-            widget.SetVisible(!hasWeather && !hasTerrain);
+            widget.SetVisible(!environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !hasWeather && !hasTerrain);
         };
         setTransformVisible(positionLabel_);
         setTransformVisible(rotationLabel_);
@@ -2501,14 +2539,14 @@ namespace renegade::studio
         setEnvironmentVisible(oceanExtinctionGreen_);
         setEnvironmentVisible(oceanExtinctionBlue_);
 
-        const auto setTerrainVisible = [hasTerrain](wi::gui::Widget& widget)
+        const auto setTerrainVisible = [this, hasTerrain](wi::gui::Widget& widget)
         {
-            widget.SetVisible(hasTerrain);
+            widget.SetVisible(terrainWorkspaceActive_ && hasTerrain);
         };
         terrainLabel_.SetVisible(
-            hasTerrain || (hasSession && !hasWeather && !hasTransform));
+            terrainWorkspaceActive_);
         createTerrainButton_.SetVisible(
-            hasSession && !hasWeather && !hasTerrain && !hasTransform);
+            hasSession && terrainWorkspaceActive_ && !hasTerrain);
         setTerrainVisible(terrainPreset_);
         setTerrainVisible(terrainVisibleRadius_);
         setTerrainVisible(terrainChunkScale_);
@@ -2518,6 +2556,11 @@ namespace renegade::studio
         setTerrainVisible(terrainBaseBlend_);
         setTerrainVisible(terrainSlopeBlend_);
         setTerrainVisible(terrainLodBias_);
+        setTerrainVisible(terrainSculptLabel_);
+        setTerrainVisible(terrainSculptMode_);
+        setTerrainVisible(terrainBrushRadius_);
+        setTerrainVisible(terrainBrushStrength_);
+        setTerrainVisible(terrainBrushFalloff_);
 
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
@@ -2691,7 +2734,9 @@ namespace renegade::studio
 
         if (!hasTransform)
         {
-            inspectorLabel_.SetText("TRANSFORM // SELECT AN ENTITY");
+            inspectorLabel_.SetText(terrainWorkspaceActive_
+                ? "TERRAIN // CREATE OR EDIT LANDSCAPE"
+                : "TRANSFORM // SELECT AN ENTITY");
             translationX_.SetValue(0.0f);
             translationY_.SetValue(0.0f);
             translationZ_.SetValue(0.0f);
@@ -3220,6 +3265,60 @@ namespace renegade::studio
 
         wi::input::SetPointer(cameraPointerAnchor_);
         wi::input::HidePointer(true);
+    }
+
+    bool StudioRenderPath::HandleTerrainSculpt(const XMFLOAT4& pointer)
+    {
+        if (!terrainWorkspaceActive_ || session_ == nullptr || flyCameraActive_ ||
+            GetGUI().HasFocus() || !IsPointerOverViewport(pointer) ||
+            session_->Scenes().GetScene().terrains.GetCount() == 0)
+        {
+            return false;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        const auto terrainEntity = scene.terrains.GetEntity(0);
+        auto* terrain = scene.terrains.GetComponent(terrainEntity);
+        if (terrain == nullptr) return false;
+        const auto ray = wi::renderer::GetPickRay(static_cast<long>(pointer.x),
+            static_cast<long>(pointer.y), *this, *camera);
+        const auto picked = wi::scene::Pick(ray, wi::enums::FILTER_TERRAIN, ~0u, scene);
+        if (picked.entity != wi::ecs::INVALID_ENTITY)
+        {
+            wi::renderer::DrawSphere(wi::primitive::Sphere(picked.position,
+                terrainBrushRadiusValue_), XMFLOAT4(0.20f, 0.92f, 1.0f, 0.22f), true);
+        }
+        if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) &&
+            picked.entity != wi::ecs::INVALID_ENTITY)
+        {
+            terrainStrokeActive_ = true;
+            terrainStrokeChanged_ = false;
+            terrainStrokeEntity_ = terrainEntity;
+            terrainStrokeBefore_ = bridge::CaptureTerrainSculpt(scene, *terrain);
+            terrainFlattenHeight_ = picked.position.y;
+        }
+        if (terrainStrokeActive_ && wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) &&
+            picked.entity != wi::ecs::INVALID_ENTITY)
+        {
+            terrainStrokeChanged_ |= bridge::SculptTerrain(scene, *terrain,
+                picked.position, terrainBrushRadiusValue_,
+                terrainBrushStrengthValue_ * 0.12f, terrainBrushFalloffValue_,
+                terrainSculptModeValue_, terrainFlattenHeight_);
+            return true;
+        }
+        if (terrainStrokeActive_ && wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            terrainStrokeActive_ = false;
+            if (terrainStrokeChanged_)
+            {
+                auto after = bridge::CaptureTerrainSculpt(scene, *terrain);
+                bridge::ApplyTerrainSculpt(scene, *terrain, terrainStrokeBefore_);
+                session_->Commands().Execute(std::make_unique<bridge::SculptTerrainCommand>(
+                    scene, terrainStrokeEntity_, std::move(terrainStrokeBefore_), std::move(after)));
+                RefreshStatus();
+            }
+            return true;
+        }
+        return false;
     }
 
     bool StudioRenderPath::HandleViewportSelection(

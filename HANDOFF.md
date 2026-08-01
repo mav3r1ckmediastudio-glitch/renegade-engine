@@ -381,3 +381,29 @@ future Renegade shader work; Ocean V1 must not claim or simulate them.
 
 Authoritative scope and packaged acceptance are in
 `docs/PHASE3_NATIVE_OCEAN_AUTHORING.md`. PR #10 merged to `main` at `475ac45`.
+
+## Terrain workspace and sculpting correction pending verification
+
+The terrain branch now keeps Transform widgets out of the permanent Terrain
+workspace and gives its no-terrain state an explicit Terrain heading and Create
+Terrain action. Existing native terrain resolves independently of hierarchy
+selection and save/reopen selection state.
+
+The same correction adds real viewport Raise, Lower, Smooth and Flatten
+brushes with radius, strength and falloff. Picking is restricted to native
+terrain chunks. A drag edits mesh vertex heights and the serialized 16-bit
+chunk height data; releasing the mouse creates one `SculptTerrainCommand`, so
+Undo and Redo operate on the whole stroke. A cyan depth-tested sphere shows the
+active brush footprint.
+
+Changed files: `EngineBridge/include/renegade/bridge/TerrainService.h`,
+`EngineBridge/src/TerrainService.cpp`, `Studio/src/StudioApplication.h`,
+`Studio/src/StudioApplication.cpp`, `docs/FEATURE_MATRIX.csv`, and this file.
+
+Local validation: `git diff --check` passed. Compilation was not available in
+the Linux recovery workspace because `cmake` is not installed. Windows CI must
+therefore compile the patch before packaged testing. Required packaged checks:
+Terrain tab with no Transform bleed; create and reopen access; all four brush
+modes; brush guide; one Undo/Redo item per drag; save, close and reopen retaining
+the edited heights. Material painting and 16-bit heightmap import/export remain
+the next Terrain V1 slices and are not claimed here.
