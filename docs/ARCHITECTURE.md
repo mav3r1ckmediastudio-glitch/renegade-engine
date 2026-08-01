@@ -95,6 +95,22 @@ for the pinned `OceanParameters`, including FFT resolution and spectral wind.
 requires recreation, while always synchronizing the serialized primary Weather
 component into `Scene::weather`.
 
+Terrain sculpting treats Wicked's streamed chunks as views into one canonical
+integer height grid. Neighbouring 67x67 chunk meshes deliberately duplicate
+their shared edge and corner vertices; a sculpt edit is therefore calculated
+once per global grid coordinate, copied to every duplicate, and followed by a
+cross-chunk normal/tangent rebuild. Smooth samples the same global grid. The
+native per-chunk 16-bit height data remains the serialized authority and a
+whole multi-chunk stroke remains one `SculptTerrainCommand`.
+
+Until material importing exists, new terrain uses a bundled grass PBR default.
+Source AO and roughness TGAs are packed at build time into Wicked's surface-map
+layout (R=AO, G=roughness, B=metalness, A=reflectance), while base colour and
+normal are pre-tiled consistently for the fixed native chunk UVs. Studio and
+Runtime ship the generated maps beside their executables. Scene load rebinds
+only filenames identifying this bundled default, so later creator-assigned
+terrain materials are never overwritten.
+
 ### Renegade-owned shaders
 
 Renegade may own shaders without forking Wicked. `Studio/shaders` holds

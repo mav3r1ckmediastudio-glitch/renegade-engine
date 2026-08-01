@@ -20,7 +20,7 @@ parallel heightfield format is introduced.
 - Flat World, Island, Coastline, and Highlands presets use restrained height
   envelopes rather than exaggerated showcase values.
 - `CreateTerrain` creates the native component, transform, hierarchy name, and
-  four neutral automatic material regions.
+  four automatic material regions using the bundled grass PBR default.
 - Safety bounds protect chunk radii, scale, height range, blend thresholds,
   and LOD bias.
 - `RenegadeTerrainTests` covers capture, apply, presets, safety, no-op
@@ -42,15 +42,41 @@ parallel heightfield format is introduced.
 Implementation commit: `dd43851`. This slice has not compiled or run in the
 current Linux workspace because its Windows CMake toolchain is unavailable.
 
+## Seam and default-material correction — pending Windows verification
+
+- Sculpting now builds a bounded canonical grid across every chunk touched by
+  the brush. Shared edge and corner vertices receive one identical height.
+- Smooth samples a 3x3 neighbourhood in that global grid, including adjacent
+  chunks, rather than averaging each tile independently.
+- Changed vertices and their normal-dependent neighbours rebuild matching
+  normals, tangents, render data, BVHs, bounds, native 16-bit height data, and
+  chunk region textures as one stroke. The completed command also refreshes
+  native heightfield collision; live drag preview does not rebuild physics on
+  every mouse sample.
+- The existing complete-stroke snapshot continues to make all affected chunks
+  one Undo/Redo operation.
+- New terrain automatically assigns the supplied grass base colour, normal,
+  AO and roughness maps. `RenegadeTerrainSurfacePacker` produces Wicked's packed
+  surface texture and 32x pre-tiled base/normal maps during the Studio and
+  Runtime builds; source TGAs remain unchanged.
+- WISCENE load rebinds only the bundled default filenames to the current
+  package, preserving the default through save/reopen without overriding later
+  custom terrain materials.
+
+The height source is retained for the later displacement/parallax decision and
+is not applied to the sculpted large-scale geometry. Windows CI, packaged DX12
+seam/material inspection, Undo/Redo, save/reopen, Runtime, and Vulkan remain
+the acceptance gate.
+
 ## Remaining V1 slices
 
 1. Windows compile and packaged visual verification of create/preset/generation
    controls at `dd43851`.
-2. Viewport sculpt transaction: raise/lower, smooth, flatten, adjustable
-   radius, strength, and falloff.
+2. Packaged verification of the viewport sculpt transaction, shared seams,
+   bundled default PBR material, and save/reopen.
 3. Four-region material painting plus slope- and height-rule controls.
 4. 16-bit PNG/RAW heightmap import and export with validation.
-5. Painted chunk snapshot commands, save/reopen, and packaged Runtime check.
+5. Painted chunk snapshot commands and packaged Runtime acceptance.
 
 Procedural world generation, runtime deformation, rivers, roads, landscape
 splines, foliage scattering, and biome generation remain out of V1.

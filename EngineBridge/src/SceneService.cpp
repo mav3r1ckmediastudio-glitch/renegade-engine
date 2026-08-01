@@ -1,5 +1,7 @@
 #include "renegade/bridge/SceneService.h"
 
+#include "renegade/bridge/TerrainService.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -665,6 +667,7 @@ namespace renegade::bridge
 
         scene_.Clear();
         scene_.Merge(candidate);
+        RebindDefaultTerrainMaterials(scene_);
         currentPath_ = filePath;
         lastError_.clear();
         return true;

@@ -51,12 +51,18 @@ namespace renegade::bridge
         TerrainPreset preset) noexcept;
 
     // Creates the native component and its four automatic material slots.
-    // Texture assignment is intentionally asset-pipeline work; the generated
-    // neutral colours make the terrain usable before imported assets exist.
+    // The base slot uses Renegade's bundled grass PBR material until the
+    // asset-facing material workflow can replace it.
     [[nodiscard]] wi::ecs::Entity CreateTerrain(
         wi::scene::Scene& scene,
         const TerrainState& state,
         const char* name = "Terrain");
+
+    // Rebinds only Renegade's bundled default terrain maps after a WISCENE
+    // load. Wicked stores resource names relative to the scene archive, while
+    // these read-only defaults live beside Studio and Runtime instead of in
+    // each project.
+    void RebindDefaultTerrainMaterials(wi::scene::Scene& scene);
 
     class CreateTerrainCommand final : public ICommand
     {

@@ -415,3 +415,38 @@ Paint Tool use the stored world transform; the follow-up changes this call to
 `GetWorldMatrix()`. `git diff --check` passes and the remaining sculpt calls were
 checked against the pinned headers/source. Windows CI is still the compilation
 gate, and a successful compile still does not constitute behavioural acceptance.
+
+### Cross-chunk seams and bundled grass correction prepared
+
+The follow-up patch replaces per-chunk sculpt calculation with a canonical
+integer grid spanning the chunks intersected by the brush. Wicked's duplicate
+edge/corner vertices now receive the same height; Smooth reads a cross-chunk
+3x3 neighbourhood; affected normals, tangents, render data, BVHs, bounds,
+height data, region textures, and completed-stroke heightfield collision rebuild
+together. Live preview deliberately defers collision work until command commit.
+The existing stroke snapshot continues to cover every chunk in one Undo/Redo
+command.
+
+New terrain also uses the supplied grass PBR maps automatically. A small
+`RenegadeTerrainSurfacePacker` build target combines AO and roughness into
+Wicked's required surface-map channels and pre-tiles base colour and normal for
+the native per-chunk UV layout. The original TGAs remain source assets; Studio
+and Runtime package only the generated runtime maps. Scene load rebinds only
+this recognisable bundled default so save/reopen and a different installation
+path do not lose it, while future creator materials remain untouched.
+
+Changed implementation files:
+`EngineBridge/include/renegade/bridge/TerrainService.h`,
+`EngineBridge/src/TerrainService.cpp`, `EngineBridge/src/SceneService.cpp`,
+`Studio/CMakeLists.txt`, `Runtime/CMakeLists.txt`,
+`Tools/TerrainSurfacePacker.cpp`, and `.github/workflows/studio.yml`.
+Documentation is updated in `docs/ARCHITECTURE.md`,
+`docs/PHASE3_TERRAIN_AUTHORING.md`, `docs/FEATURE_MATRIX.csv`, and this file.
+
+Local evidence: `git diff --check` passed and the standalone packer compiles
+cleanly with C++17 `-Wall -Wextra -Werror`. This Linux workspace has no CMake,
+so only Windows CI can compile the complete Wicked-linked targets. Do not merge
+until the packaged build proves a brush stroke crossing edges and a four-tile
+corner stays closed in Raise, Lower, Smooth and Flatten; one Undo/Redo covers
+the stroke; grass has no chunk texture seam; save/reopen retains geometry and
+material; and Runtime plus Vulkan show the same saved terrain.
