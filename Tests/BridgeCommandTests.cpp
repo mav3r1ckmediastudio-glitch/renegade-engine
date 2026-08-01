@@ -1020,16 +1020,82 @@ int main()
         {
             return Fail("preparing a valid scene mutated the active document");
         }
-        if (!session.Documents().CommitPreparedOpen(std::move(prepared)) ||
-            session.Scenes().ContainsEntity(survivor) ||
-            !session.Scenes().ContainsEntity(loadedEntity) ||
-            session.Scenes().CurrentPath() != sourcePath.generic_string() ||
-            session.Selection().HasSelection() ||
-            session.Commands().CanUndo() ||
-            session.Commands().IsDirty() ||
-            session.Documents().LastOpenedCamera() != loadedCamera)
+        // Wicked's EntitySerializer remaps entity handles on every
+        // deserialize (wiScene_Serializers.cpp comments this as intentional,
+        // to keep serialized entities "unique and persistent across the
+        // scene"), even when reading into a brand-new scene. loadedEntity and
+        // loadedCamera are therefore only valid identities in the *source*
+        // session, before it was saved; the reopened entities in `session`
+        // will carry different runtime IDs. Every postcondition below is
+        // checked independently so a future regression reports exactly what
+        // broke instead of one aggregate message, and the reopened entities
+        // are located by stable semantic identity (name plus required
+        // component) rather than by the pre-save runtime ID.
+        if (!session.Documents().CommitPreparedOpen(std::move(prepared)))
         {
-            return Fail("prepared scene commit was not an atomic replacement");
+            return Fail("prepared scene commit returned false");
+        }
+        if (session.Scenes().ContainsEntity(survivor))
+        {
+            return Fail(
+                "prepared scene commit did not clear the previous document");
+        }
+
+        const auto findEntityByName = [](
+            const renegade::bridge::StudioSession& target,
+            const std::string& name) -> wi::ecs::Entity
+        {
+            for (const auto& candidate : target.Scenes().ListEntities())
+            {
+                if (candidate.name == name)
+                {
+                    return candidate.entity;
+                }
+            }
+            return wi::ecs::INVALID_ENTITY;
+        };
+
+        const auto reopenedLandmark =
+            findEntityByName(session, "Prepared Landmark");
+        if (reopenedLandmark == wi::ecs::INVALID_ENTITY ||
+            session.Scenes().GetScene().transforms.GetComponent(
+                reopenedLandmark) == nullptr)
+        {
+            return Fail(
+                "reopened scene is missing the prepared landmark entity");
+        }
+        if (session.Scenes().CurrentPath() != sourcePath.generic_string())
+        {
+            return Fail(
+                "prepared scene commit did not update the current path");
+        }
+        if (session.Selection().HasSelection())
+        {
+            return Fail("prepared scene commit left a stale selection");
+        }
+        if (session.Commands().CanUndo())
+        {
+            return Fail("prepared scene commit left stale Undo history");
+        }
+        if (session.Commands().IsDirty())
+        {
+            return Fail("prepared scene commit left the document dirty");
+        }
+
+        const auto reopenedCamera =
+            findEntityByName(session, "Authored Camera");
+        if (reopenedCamera == wi::ecs::INVALID_ENTITY ||
+            session.Scenes().GetScene().cameras.GetComponent(
+                reopenedCamera) == nullptr)
+        {
+            return Fail(
+                "reopened scene is missing the authored camera entity");
+        }
+        if (session.Documents().LastOpenedCamera() != reopenedCamera)
+        {
+            return Fail(
+                "prepared scene commit did not carry the authored camera "
+                "identity through remapping");
         }
     }
 
