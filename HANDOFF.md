@@ -418,6 +418,10 @@ gate, and a successful compile still does not constitute behavioural acceptance.
 
 ### Cross-chunk seams and bundled grass correction prepared
 
+Implementation commit: `762c828` on top of terrain sculpt compile fix
+`8509bf9`. The downloadable mail patch is intended to be applied after the
+separate texture commit `87ad2d2`; the paths do not overlap.
+
 The follow-up patch replaces per-chunk sculpt calculation with a canonical
 integer grid spanning the chunks intersected by the brush. Wicked's duplicate
 edge/corner vertices now receive the same height; Smooth reads a cross-chunk

@@ -44,6 +44,9 @@ current Linux workspace because its Windows CMake toolchain is unavailable.
 
 ## Seam and default-material correction — pending Windows verification
 
+Implementation commit: `762c828` (code-only; apply after the separate texture
+asset commit `87ad2d2`).
+
 - Sculpting now builds a bounded canonical grid across every chunk touched by
   the brush. Shared edge and corner vertices receive one identical height.
 - Smooth samples a 3x3 neighbourhood in that global grid, including adjacent
