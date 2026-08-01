@@ -643,7 +643,34 @@ namespace renegade::bridge
                             DefaultGrassPackedTileCount,
                         1.0f,
                         DefaultGrassPackedTileCount);
+
+                    // ConfigureDefaultGrassMaterial() re-points the
+                    // default-grass texture paths to the current install
+                    // (they are absolute and machine-specific) and calls
+                    // appearance setters that each flip the material's
+                    // DIRTY flag. When this runs as part of Open Scene,
+                    // the material was just deserialized clean with its
+                    // textures already resolved, so the reconfigure is a
+                    // no-op in practice - but the DIRTY flag it leaves
+                    // behind makes the terrain's next Generation_Update
+                    // treat the material as edited and call
+                    // Generation_Restart(), which clears every chunk and
+                    // regenerates the terrain procedurally. That silently
+                    // discards authored/sculpted heightmap data even
+                    // though the archive round-trip was correct.
+                    //
+                    // Preserve the material's pre-reconfigure dirty state
+                    // so a load does not force a terrain restart. Every
+                    // other caller of RebindDefaultTerrainMaterials()
+                    // issues its own explicit Generation_Restart()
+                    // afterward, so nothing that intends to rebuild is
+                    // affected.
+                    const bool wasDirty = material->IsDirty();
                     ConfigureDefaultGrassMaterial(*material, textureScale);
+                    if (!wasDirty)
+                    {
+                        material->SetDirty(false);
+                    }
                 }
             }
         }
