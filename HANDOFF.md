@@ -16,6 +16,28 @@
 
 **Active bounded task:** Renegade-owned Studio chrome functional slice
 
+## Latest work in progress — terrain polish patch
+
+A code-only follow-up is prepared for `phase3/terrain-authoring` after remote
+commit `8f57d6d`. It groups the next build-worthy terrain improvements:
+
+- removes the redundant before-state restore and second whole-stroke rebuild
+  on sculpt release;
+- retains only changed chunks in sculpt Undo/Redo and refreshes physics only
+  for those chunks;
+- adds a persistent live 1x–32x texture scale, defaulting to Meadow 8x;
+- adds Meadow 8x, Coarse Grass 12x, and Fine Ground Cover 16x presets;
+- adds Apply Default and Reload Files material controls;
+- shows brush settings plus last-stroke tile count and finish time; and
+- restores live FPS in the Renegade-owned bottom status bar.
+
+The patch changes only Renegade-owned `EngineBridge`, `Studio`, `Tests`, and
+documentation files. It does not change the WickedEngine submodule or add
+texture binaries. Local syntax compilation was attempted with GNU C++ but was
+blocked before project sources by the checkout's unavailable SDL declarations;
+Windows CI and packaged DX12/Vulkan testing are therefore required. See
+`docs/PHASE3_TERRAIN_POLISH.md` for exact acceptance.
+
 ## Status
 
 `main` is clean, merged, and accepted at `475ac45`. There is no branch on
@@ -454,3 +476,25 @@ until the packaged build proves a brush stroke crossing edges and a four-tile
 corner stays closed in Raise, Lower, Smooth and Flatten; one Undo/Redo covers
 the stroke; grass has no chunk texture seam; save/reopen retains geometry and
 material; and Runtime plus Vulkan show the same saved terrain.
+
+### Owned live FPS readout prepared
+
+The former Wicked `InfoDisplayer` FPS overlay disappeared when the owned Studio
+chrome intentionally disabled that overlay to prevent wordmark collisions. The
+replacement is now rendered by `RenegadeStudioChrome` in the bottom status bar.
+It samples the real UI frame delta, averages over quarter-second windows to
+avoid unreadable frame-to-frame jitter, updates four times per second, and hides
+with the workspace on Project Hub. The stock FPS flag remains disabled so the
+two presentations cannot overlap.
+
+Changed files: `Studio/src/RenegadeStudioChrome.h`,
+`Studio/src/RenegadeStudioChrome.cpp`, `Studio/src/StudioApplication.cpp`,
+`docs/PHASE3_STUDIO_CHROME_FUNCTIONAL_SLICE.md`,
+`docs/FEATURE_MATRIX.csv`, and this file.
+
+Local evidence: source inspection confirms `RenegadeStudioChrome::Update` owns
+the sample accumulator and `RenegadeStudioChrome::Render` owns the status-bar
+text. Full compilation is unavailable because this recovery workspace has no
+CMake. The next Windows artifact must confirm the value appears without
+overlapping the status message or wordmark at normal and narrow window sizes,
+updates under VSync-on and VSync-off conditions, and is absent on Project Hub.

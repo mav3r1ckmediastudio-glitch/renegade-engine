@@ -1,8 +1,11 @@
 #include "StudioApplication.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <utility>
 
 namespace
@@ -1391,6 +1394,84 @@ namespace renegade::studio
             "LOD BIAS", "Terrain detail bias; zero is the safe default.",
             TerrainField::LodBias, -4.0f, 4.0f, 800.0f);
 
+        createSectionLabel(
+            terrainMaterialLabel_,
+            "Terrain Material Section",
+            "MATERIAL // DEFAULT GRASS");
+        terrainMaterialPreset_.Create("Terrain Material Preset");
+        terrainMaterialPreset_.AddItem("CUSTOM", 0u);
+        terrainMaterialPreset_.AddItem(
+            "MEADOW // 8X",
+            static_cast<std::uint64_t>(
+                bridge::TerrainMaterialPreset::Meadow) + 1u);
+        terrainMaterialPreset_.AddItem(
+            "COARSE GRASS // 12X",
+            static_cast<std::uint64_t>(
+                bridge::TerrainMaterialPreset::CoarseGrass) + 1u);
+        terrainMaterialPreset_.AddItem(
+            "FINE GROUND COVER // 16X",
+            static_cast<std::uint64_t>(
+                bridge::TerrainMaterialPreset::FineGroundCover) + 1u);
+        terrainMaterialPreset_.SetTooltip(
+            "Change grass density live without regenerating texture files.");
+        terrainMaterialPreset_.OnSelect(
+            [this](const wi::gui::EventArgs& args)
+        {
+            if (args.userdata > 0u)
+            {
+                pendingTerrainMaterialPreset_ =
+                    static_cast<bridge::TerrainMaterialPreset>(
+                        args.userdata - 1u);
+                pendingAction_ = EditorAction::ApplyTerrainMaterialPreset;
+            }
+        });
+        inspectorPanel_.AddWidget(&terrainMaterialPreset_);
+
+        terrainTextureScale_.Create(
+            1.0f,
+            bridge::DefaultGrassPackedTileCount,
+            bridge::DefaultGrassTextureScale,
+            31.0f,
+            "Terrain Texture Scale",
+            "TEXTURE SCALE");
+        terrainTextureScale_.SetTooltip(
+            "Visible grass repeats. Updates live and is stored in WISCENE.");
+        terrainTextureScale_.OnDragStarted([this](const float)
+        {
+            BeginTerrainTextureScale();
+        });
+        terrainTextureScale_.OnValuePreview([this](const float value)
+        {
+            PreviewTerrainTextureScale(value);
+        });
+        terrainTextureScale_.OnValueCommitted([this](const float value)
+        {
+            CommitTerrainTextureScale(value);
+        });
+        inspectorPanel_.AddWidget(&terrainTextureScale_);
+
+        terrainApplyDefaultGrassButton_.Create("Apply Default Grass");
+        terrainApplyDefaultGrassButton_.SetText("APPLY DEFAULT");
+        terrainApplyDefaultGrassButton_.SetTooltip(
+            "Assign the bundled grass to all four terrain material regions.");
+        terrainApplyDefaultGrassButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::ApplyDefaultGrass;
+        });
+        inspectorPanel_.AddWidget(&terrainApplyDefaultGrassButton_);
+
+        terrainReloadMaterialButton_.Create("Reload Terrain Material");
+        terrainReloadMaterialButton_.SetText("RELOAD FILES");
+        terrainReloadMaterialButton_.SetTooltip(
+            "Reload changed bundled texture files without rebuilding Studio.");
+        terrainReloadMaterialButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::ReloadTerrainMaterial;
+        });
+        inspectorPanel_.AddWidget(&terrainReloadMaterialButton_);
+
         createSectionLabel(terrainSculptLabel_, "Terrain Sculpt Section", "SCULPT // VIEWPORT BRUSH");
         terrainSculptMode_.Create("Terrain Sculpt Mode");
         terrainSculptMode_.AddItem("RAISE", static_cast<std::uint64_t>(bridge::TerrainSculptMode::Raise));
@@ -1409,8 +1490,18 @@ namespace renegade::studio
         {
             slider.Create(minimum, maximum, value, steps, name, label);
             slider.SetTooltip(tooltip);
-            slider.OnValuePreview([target](float v) { *target = v; });
-            slider.OnValueCommitted([target](float v) { *target = v; });
+            const auto update = [this, target](const float value)
+            {
+                *target = value;
+                std::ostringstream brush;
+                brush << "BRUSH // SIZE " << std::fixed
+                      << std::setprecision(0) << terrainBrushRadiusValue_
+                      << " // STRENGTH " << std::setprecision(2)
+                      << terrainBrushStrengthValue_;
+                terrainBrushReadout_.SetText(brush.str());
+            };
+            slider.OnValuePreview(update);
+            slider.OnValueCommitted(update);
             inspectorPanel_.AddWidget(&slider);
         };
         createBrushSlider(terrainBrushRadius_, "Terrain Brush Radius", "BRUSH SIZE",
@@ -1419,6 +1510,13 @@ namespace renegade::studio
             "Height change applied while dragging.", 0.05f, 5.0f, 1.0f, 990.0f, &terrainBrushStrengthValue_);
         createBrushSlider(terrainBrushFalloff_, "Terrain Brush Falloff", "FALLOFF",
             "Zero is soft; one concentrates the effect at the centre.", 0.0f, 1.0f, 0.55f, 1000.0f, &terrainBrushFalloffValue_);
+
+        terrainBrushReadout_.Create("Terrain Brush Readout");
+        terrainBrushReadout_.SetText("BRUSH // SIZE 12 // STRENGTH 1.00");
+        inspectorPanel_.AddWidget(&terrainBrushReadout_);
+        terrainStrokeDiagnostic_.Create("Terrain Stroke Diagnostic");
+        terrainStrokeDiagnostic_.SetText("LAST STROKE // READY");
+        inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);
 
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
@@ -2210,11 +2308,26 @@ namespace renegade::studio
         positionEnvironmentWidget(terrainBaseBlend_, 268.0f);
         positionEnvironmentWidget(terrainSlopeBlend_, 302.0f);
         positionEnvironmentWidget(terrainLodBias_, 336.0f);
-        positionEnvironmentWidget(terrainSculptLabel_, 380.0f, 20.0f);
-        positionEnvironmentWidget(terrainSculptMode_, 400.0f);
-        positionEnvironmentWidget(terrainBrushRadius_, 434.0f);
-        positionEnvironmentWidget(terrainBrushStrength_, 468.0f);
-        positionEnvironmentWidget(terrainBrushFalloff_, 502.0f);
+        positionEnvironmentWidget(terrainMaterialLabel_, 380.0f, 20.0f);
+        positionEnvironmentWidget(terrainMaterialPreset_, 400.0f);
+        positionEnvironmentWidget(terrainTextureScale_, 434.0f);
+        terrainApplyDefaultGrassButton_.SetPos(XMFLOAT2(12.0f, 468.0f));
+        terrainReloadMaterialButton_.SetPos(XMFLOAT2(
+            20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
+            468.0f));
+        terrainApplyDefaultGrassButton_.SetSize(XMFLOAT2(
+            (environmentFieldWidth - 8.0f) * 0.5f,
+            28.0f));
+        terrainReloadMaterialButton_.SetSize(XMFLOAT2(
+            (environmentFieldWidth - 8.0f) * 0.5f,
+            28.0f));
+        positionEnvironmentWidget(terrainSculptLabel_, 510.0f, 20.0f);
+        positionEnvironmentWidget(terrainSculptMode_, 530.0f);
+        positionEnvironmentWidget(terrainBrushRadius_, 564.0f);
+        positionEnvironmentWidget(terrainBrushStrength_, 598.0f);
+        positionEnvironmentWidget(terrainBrushFalloff_, 632.0f);
+        positionEnvironmentWidget(terrainBrushReadout_, 666.0f, 20.0f);
+        positionEnvironmentWidget(terrainStrokeDiagnostic_, 686.0f, 20.0f);
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
@@ -2378,7 +2491,7 @@ namespace renegade::studio
         const float actionStart = environment
             ? std::max(1772.0f, inspectorPanel_.GetSize().y - 82.0f)
             : terrain
-                ? 376.0f
+                ? 726.0f
                 : 230.0f;
         const float historyRow = environment
             ? actionStart
@@ -2556,11 +2669,18 @@ namespace renegade::studio
         setTerrainVisible(terrainBaseBlend_);
         setTerrainVisible(terrainSlopeBlend_);
         setTerrainVisible(terrainLodBias_);
+        setTerrainVisible(terrainMaterialLabel_);
+        setTerrainVisible(terrainMaterialPreset_);
+        setTerrainVisible(terrainTextureScale_);
+        setTerrainVisible(terrainApplyDefaultGrassButton_);
+        setTerrainVisible(terrainReloadMaterialButton_);
         setTerrainVisible(terrainSculptLabel_);
         setTerrainVisible(terrainSculptMode_);
         setTerrainVisible(terrainBrushRadius_);
         setTerrainVisible(terrainBrushStrength_);
         setTerrainVisible(terrainBrushFalloff_);
+        setTerrainVisible(terrainBrushReadout_);
+        setTerrainVisible(terrainStrokeDiagnostic_);
 
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
@@ -2728,6 +2848,29 @@ namespace renegade::studio
             terrainBaseBlend_.SetValue(state.baseBlend);
             terrainSlopeBlend_.SetValue(state.slopeBlend);
             terrainLodBias_.SetValue(state.lodBias);
+            const float textureScale = bridge::CaptureTerrainTextureScale(
+                session_->Scenes().GetScene(),
+                *terrain);
+            terrainTextureScale_.SetValue(textureScale);
+            int materialPreset = 0;
+            for (int presetIndex = 0; presetIndex < 3; ++presetIndex)
+            {
+                const auto preset = static_cast<bridge::TerrainMaterialPreset>(
+                    presetIndex);
+                if (std::abs(
+                        textureScale -
+                        bridge::MakeTerrainMaterialPreset(preset)) < 0.01f)
+                {
+                    materialPreset = presetIndex + 1;
+                    break;
+                }
+            }
+            terrainMaterialPreset_.SetSelectedWithoutCallback(materialPreset);
+            std::ostringstream brush;
+            brush << "BRUSH // SIZE " << std::fixed << std::setprecision(0)
+                  << terrainBrushRadiusValue_ << " // STRENGTH "
+                  << std::setprecision(2) << terrainBrushStrengthValue_;
+            terrainBrushReadout_.SetText(brush.str());
             SyncGizmoSelection();
             return;
         }
@@ -2954,6 +3097,15 @@ namespace renegade::studio
             break;
         case EditorAction::ApplyTerrainPreset:
             ApplyTerrainPreset(pendingTerrainPreset_);
+            break;
+        case EditorAction::ApplyTerrainMaterialPreset:
+            ApplyTerrainMaterialPreset(pendingTerrainMaterialPreset_);
+            break;
+        case EditorAction::ApplyDefaultGrass:
+            ApplyDefaultGrass();
+            break;
+        case EditorAction::ReloadTerrainMaterial:
+            ReloadTerrainMaterial();
             break;
         case EditorAction::None:
         default:
@@ -3310,10 +3462,35 @@ namespace renegade::studio
             terrainStrokeActive_ = false;
             if (terrainStrokeChanged_)
             {
+                const auto finishStarted =
+                    std::chrono::steady_clock::now();
                 auto after = bridge::CaptureTerrainSculpt(scene, *terrain);
-                bridge::ApplyTerrainSculpt(scene, *terrain, terrainStrokeBefore_);
-                session_->Commands().Execute(std::make_unique<bridge::SculptTerrainCommand>(
-                    scene, terrainStrokeEntity_, std::move(terrainStrokeBefore_), std::move(after)));
+                const std::size_t affectedChunks =
+                    bridge::RetainChangedTerrainSculpt(
+                        terrainStrokeBefore_,
+                        after);
+                if (affectedChunks > 0)
+                {
+                    bridge::RefreshTerrainSculptPhysics(
+                        scene,
+                        *terrain,
+                        after);
+                    session_->Commands().RecordExecuted(
+                        std::make_unique<bridge::SculptTerrainCommand>(
+                            scene,
+                            terrainStrokeEntity_,
+                            std::move(terrainStrokeBefore_),
+                            std::move(after)));
+                }
+                const auto elapsed = std::chrono::duration_cast<
+                    std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - finishStarted);
+                terrainStrokeDiagnostic_.SetText(
+                    "LAST STROKE // " +
+                    std::to_string(affectedChunks) +
+                    " TILES // " +
+                    std::to_string(elapsed.count()) +
+                    " MS");
                 RefreshStatus();
             }
             return true;
@@ -4454,6 +4631,159 @@ namespace renegade::studio
         RefreshStatus();
     }
 
+    void StudioRenderPath::ApplyTerrainMaterialPreset(
+        const bridge::TerrainMaterialPreset preset)
+    {
+        if (session_ == nullptr ||
+            session_->Scenes().GetScene().terrains.GetCount() == 0)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        const auto entity = scene.terrains.GetEntity(0);
+        const auto* terrain = scene.terrains.GetComponent(entity);
+        if (terrain == nullptr)
+        {
+            return;
+        }
+        auto before = bridge::CaptureTerrainMaterial(scene, *terrain);
+        auto after = before;
+        bridge::SetTerrainTextureScale(
+            after,
+            bridge::MakeTerrainMaterialPreset(preset));
+        session_->Commands().Execute(
+            std::make_unique<bridge::SetTerrainMaterialCommand>(
+                scene,
+                entity,
+                std::move(before),
+                std::move(after)));
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::BeginTerrainTextureScale()
+    {
+        terrainTextureScaleActive_ = false;
+        if (session_ == nullptr ||
+            session_->Scenes().GetScene().terrains.GetCount() == 0)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        terrainMaterialEntity_ = scene.terrains.GetEntity(0);
+        const auto* terrain = scene.terrains.GetComponent(
+            terrainMaterialEntity_);
+        if (terrain == nullptr)
+        {
+            terrainMaterialEntity_ = wi::ecs::INVALID_ENTITY;
+            return;
+        }
+        terrainMaterialBefore_ = bridge::CaptureTerrainMaterial(scene, *terrain);
+        terrainMaterialAfter_ = terrainMaterialBefore_;
+        terrainTextureScaleActive_ = true;
+    }
+
+    void StudioRenderPath::PreviewTerrainTextureScale(const float value)
+    {
+        if (!terrainTextureScaleActive_ || session_ == nullptr)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        auto* terrain = scene.terrains.GetComponent(terrainMaterialEntity_);
+        if (terrain == nullptr)
+        {
+            return;
+        }
+        terrainMaterialAfter_ = terrainMaterialBefore_;
+        bridge::SetTerrainTextureScale(terrainMaterialAfter_, value);
+        bridge::ApplyTerrainMaterial(
+            scene,
+            *terrain,
+            terrainMaterialAfter_,
+            true);
+    }
+
+    void StudioRenderPath::CommitTerrainTextureScale(const float value)
+    {
+        if (!terrainTextureScaleActive_ || session_ == nullptr)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        auto* terrain = scene.terrains.GetComponent(terrainMaterialEntity_);
+        if (terrain != nullptr)
+        {
+            bridge::SetTerrainTextureScale(terrainMaterialAfter_, value);
+            const float before = terrainMaterialBefore_.slots[0].texMulAdd.x;
+            const float after = terrainMaterialAfter_.slots[0].texMulAdd.x;
+            if (std::abs(before - after) > 0.00001f)
+            {
+                bridge::ApplyTerrainMaterial(
+                    scene,
+                    *terrain,
+                    terrainMaterialAfter_,
+                    true);
+                session_->Commands().RecordExecuted(
+                    std::make_unique<bridge::SetTerrainMaterialCommand>(
+                        scene,
+                        terrainMaterialEntity_,
+                        std::move(terrainMaterialBefore_),
+                        std::move(terrainMaterialAfter_)));
+            }
+        }
+        terrainTextureScaleActive_ = false;
+        terrainMaterialEntity_ = wi::ecs::INVALID_ENTITY;
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::ApplyDefaultGrass()
+    {
+        if (session_ == nullptr ||
+            session_->Scenes().GetScene().terrains.GetCount() == 0)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        const auto entity = scene.terrains.GetEntity(0);
+        const auto* terrain = scene.terrains.GetComponent(entity);
+        if (terrain == nullptr)
+        {
+            return;
+        }
+        auto before = bridge::CaptureTerrainMaterial(scene, *terrain);
+        auto after = bridge::MakeDefaultGrassMaterial(
+            bridge::DefaultGrassTextureScale);
+        session_->Commands().Execute(
+            std::make_unique<bridge::SetTerrainMaterialCommand>(
+                scene,
+                entity,
+                std::move(before),
+                std::move(after)));
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::ReloadTerrainMaterial()
+    {
+        if (session_ == nullptr ||
+            session_->Scenes().GetScene().terrains.GetCount() == 0)
+        {
+            return;
+        }
+        auto& scene = session_->Scenes().GetScene();
+        auto* terrain = scene.terrains.GetComponent(
+            scene.terrains.GetEntity(0));
+        if (terrain != nullptr)
+        {
+            bridge::ReloadDefaultTerrainMaterial(scene, *terrain);
+            terrainStrokeDiagnostic_.SetText("MATERIAL // FILES RELOADED");
+        }
+        RefreshInspector();
+        RefreshStatus();
+    }
+
     void StudioRenderPath::CreateProject()
     {
         if (session_ == nullptr)
@@ -4644,13 +4974,11 @@ namespace renegade::studio
         contentPanel_.SetVisible(false);
         studioChrome_.SetVisible(!visible);
 
-        // The frame-rate readout belongs to the authoring viewport and must
-        // not appear over the Project Hub. DrawEditorGrid checks
-        // projectHubVisible_ for the same reason.
+        // The stock overlay collides with Renegade's owned shell. Live FPS is
+        // rendered by RenegadeStudioChrome's status bar instead and therefore
+        // hides automatically with the rest of the workspace on Project Hub.
         if (diagnostics_ != nullptr)
         {
-            // The stock overlay collides with the Renegade wordmark. Runtime
-            // diagnostics belong in the owned bottom drawer instead.
             diagnostics_->active = false;
         }
 
@@ -4846,7 +5174,7 @@ namespace renegade::studio
         infoDisplay.resolution = false;
         infoDisplay.logical_size = false;
         infoDisplay.colorspace = false;
-        infoDisplay.fpsinfo = true;
+        infoDisplay.fpsinfo = false;
         infoDisplay.size = 14;
 
         session_.Projects().Initialize("Saved/RenegadeStudio.ini");

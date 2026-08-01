@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <unordered_set>
 #include <unordered_map>
+#include <utility>
 
 namespace
 {
@@ -197,6 +198,11 @@ namespace
         return found == grid.end() ? fallback : found->second.height;
     }
 
+    void RefreshChunkPhysics(
+        wi::terrain::Terrain& terrain,
+        wi::terrain::ChunkData& chunk,
+        wi::scene::MeshComponent& mesh);
+
     void UpdateTerrainChunkHeightData(
         wi::terrain::Terrain& terrain,
         wi::terrain::ChunkData& chunk,
@@ -315,31 +321,15 @@ namespace
 
             if (refreshPhysics && terrain.IsPhysicsEnabled())
             {
-                const auto* transform =
-                    terrain.scene->transforms.GetComponent(chunk->entity);
-                if (transform != nullptr)
-                {
-                    auto& shape = mesh->precomputed_rigidbody_physics_shape;
-                    shape.shape = wi::scene::RigidBodyPhysicsComponent::HEIGHTFIELD;
-                    shape.mass = 0.0f;
-                    shape.friction = 0.8f;
-                    wi::physics::CreateRigidBodyShape(
-                        shape,
-                        transform->scale_local,
-                        mesh);
-                    auto* rigidBody =
-                        terrain.scene->rigidbodies.GetComponent(chunk->entity);
-                    if (rigidBody != nullptr)
-                    {
-                        rigidBody->SetRefreshParametersNeeded();
-                    }
-                }
+                RefreshChunkPhysics(terrain, *chunk, *mesh);
             }
         }
     }
 
     void ConfigureDefaultGrassMaterial(
-        wi::scene::MaterialComponent& material)
+        wi::scene::MaterialComponent& material,
+        const float textureScale =
+            renegade::bridge::DefaultGrassTextureScale)
     {
         const std::string root = wi::helper::GetCurrentPath() +
             "/Content/terrain/default_grass/";
@@ -349,13 +339,141 @@ namespace
         material.SetReflectance(0.02f);
         material.SetNormalMapStrength(1.0f);
         material.SetOcclusionEnabled_Primary(true);
+        const float uvMultiplier = std::clamp(
+            textureScale,
+            1.0f,
+            renegade::bridge::DefaultGrassPackedTileCount) /
+            renegade::bridge::DefaultGrassPackedTileCount;
+        material.texMulAdd = XMFLOAT4(
+            uvMultiplier,
+            uvMultiplier,
+            0.0f,
+            0.0f);
         material.textures[wi::scene::MaterialComponent::BASECOLORMAP].name =
             std::string(root) + "default_grass_basecolor.tga";
         material.textures[wi::scene::MaterialComponent::NORMALMAP].name =
             std::string(root) + "default_grass_normal.tga";
         material.textures[wi::scene::MaterialComponent::SURFACEMAP].name =
             std::string(root) + "default_grass_surface.tga";
+        material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource =
+            wi::resourcemanager::Load(material.textures[
+                wi::scene::MaterialComponent::BASECOLORMAP].name);
+        material.textures[wi::scene::MaterialComponent::NORMALMAP].resource =
+            wi::resourcemanager::Load(material.textures[
+                wi::scene::MaterialComponent::NORMALMAP].name);
+        material.textures[wi::scene::MaterialComponent::SURFACEMAP].resource =
+            wi::resourcemanager::Load(material.textures[
+                wi::scene::MaterialComponent::SURFACEMAP].name);
         material.CreateRenderData();
+    }
+
+    renegade::bridge::TerrainMaterialSlotState CaptureMaterialSlot(
+        const wi::scene::MaterialComponent& material)
+    {
+        renegade::bridge::TerrainMaterialSlotState state;
+        state.baseColor = material.baseColor;
+        state.texMulAdd = material.texMulAdd;
+        state.roughness = material.roughness;
+        state.metalness = material.metalness;
+        state.reflectance = material.reflectance;
+        state.normalMapStrength = material.normalMapStrength;
+        state.primaryOcclusion = material.IsOcclusionEnabled_Primary();
+        state.baseColorMap = material.textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].name;
+        state.normalMap = material.textures[
+            wi::scene::MaterialComponent::NORMALMAP].name;
+        state.surfaceMap = material.textures[
+            wi::scene::MaterialComponent::SURFACEMAP].name;
+        return state;
+    }
+
+    void ApplyMaterialSlot(
+        wi::scene::MaterialComponent& material,
+        const renegade::bridge::TerrainMaterialSlotState& state)
+    {
+        material.SetBaseColor(state.baseColor);
+        material.texMulAdd = state.texMulAdd;
+        material.SetRoughness(state.roughness);
+        material.SetMetalness(state.metalness);
+        material.SetReflectance(state.reflectance);
+        material.SetNormalMapStrength(state.normalMapStrength);
+        material.SetOcclusionEnabled_Primary(state.primaryOcclusion);
+        auto bind = [&material](const int slot, const std::string& name)
+        {
+            auto& texture = material.textures[slot];
+            texture.name = name;
+            texture.resource = name.empty()
+                ? wi::Resource{}
+                : wi::resourcemanager::Load(name);
+        };
+        bind(wi::scene::MaterialComponent::BASECOLORMAP, state.baseColorMap);
+        bind(wi::scene::MaterialComponent::NORMALMAP, state.normalMap);
+        bind(wi::scene::MaterialComponent::SURFACEMAP, state.surfaceMap);
+        material.SetDirty();
+        material.CreateRenderData();
+    }
+
+    bool SameMaterialSlot(
+        const renegade::bridge::TerrainMaterialSlotState& left,
+        const renegade::bridge::TerrainMaterialSlotState& right) noexcept
+    {
+        const auto same4 = [](const XMFLOAT4& a, const XMFLOAT4& b)
+        {
+            return NearlyEqual(a.x, b.x) && NearlyEqual(a.y, b.y) &&
+                NearlyEqual(a.z, b.z) && NearlyEqual(a.w, b.w);
+        };
+        return same4(left.baseColor, right.baseColor) &&
+            same4(left.texMulAdd, right.texMulAdd) &&
+            NearlyEqual(left.roughness, right.roughness) &&
+            NearlyEqual(left.metalness, right.metalness) &&
+            NearlyEqual(left.reflectance, right.reflectance) &&
+            NearlyEqual(left.normalMapStrength, right.normalMapStrength) &&
+            left.primaryOcclusion == right.primaryOcclusion &&
+            left.baseColorMap == right.baseColorMap &&
+            left.normalMap == right.normalMap &&
+            left.surfaceMap == right.surfaceMap;
+    }
+
+    bool SameMaterialState(
+        const renegade::bridge::TerrainMaterialState& left,
+        const renegade::bridge::TerrainMaterialState& right) noexcept
+    {
+        for (std::size_t index = 0; index < left.slots.size(); ++index)
+        {
+            if (!SameMaterialSlot(left.slots[index], right.slots[index]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void RefreshChunkPhysics(
+        wi::terrain::Terrain& terrain,
+        wi::terrain::ChunkData& chunk,
+        wi::scene::MeshComponent& mesh)
+    {
+        if (!terrain.IsPhysicsEnabled() || terrain.scene == nullptr)
+        {
+            return;
+        }
+        const auto* transform =
+            terrain.scene->transforms.GetComponent(chunk.entity);
+        if (transform == nullptr)
+        {
+            return;
+        }
+        auto& shape = mesh.precomputed_rigidbody_physics_shape;
+        shape.shape = wi::scene::RigidBodyPhysicsComponent::HEIGHTFIELD;
+        shape.mass = 0.0f;
+        shape.friction = 0.8f;
+        wi::physics::CreateRigidBodyShape(shape, transform->scale_local, &mesh);
+        auto* rigidBody =
+            terrain.scene->rigidbodies.GetComponent(chunk.entity);
+        if (rigidBody != nullptr)
+        {
+            rigidBody->SetRefreshParametersNeeded();
+        }
     }
 
 }
@@ -520,10 +638,177 @@ namespace renegade::bridge
                 if (wi::helper::GetFileNameFromPath(baseColor) ==
                     "default_grass_basecolor.tga")
                 {
-                    ConfigureDefaultGrassMaterial(*material);
+                    const float textureScale = std::clamp(
+                        material->texMulAdd.x *
+                            DefaultGrassPackedTileCount,
+                        1.0f,
+                        DefaultGrassPackedTileCount);
+                    ConfigureDefaultGrassMaterial(*material, textureScale);
                 }
             }
         }
+    }
+
+    TerrainMaterialState CaptureTerrainMaterial(
+        const wi::scene::Scene& scene,
+        const wi::terrain::Terrain& terrain)
+    {
+        TerrainMaterialState state;
+        for (std::size_t index = 0; index < state.slots.size(); ++index)
+        {
+            if (index >= terrain.materialEntities.size())
+            {
+                continue;
+            }
+            const auto* material = scene.materials.GetComponent(
+                terrain.materialEntities[index]);
+            if (material != nullptr)
+            {
+                state.slots[index] = CaptureMaterialSlot(*material);
+            }
+        }
+        return state;
+    }
+
+    void ApplyTerrainMaterial(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const TerrainMaterialState& state,
+        const bool restartGeneration)
+    {
+        for (std::size_t index = 0; index < state.slots.size(); ++index)
+        {
+            if (index >= terrain.materialEntities.size())
+            {
+                continue;
+            }
+            auto* material = scene.materials.GetComponent(
+                terrain.materialEntities[index]);
+            if (material != nullptr)
+            {
+                ApplyMaterialSlot(*material, state.slots[index]);
+            }
+        }
+        if (restartGeneration && terrain.scene != nullptr)
+        {
+            terrain.Generation_Restart();
+        }
+    }
+
+    float CaptureTerrainTextureScale(
+        const wi::scene::Scene& scene,
+        const wi::terrain::Terrain& terrain) noexcept
+    {
+        if (terrain.materialEntities.empty())
+        {
+            return DefaultGrassTextureScale;
+        }
+        const auto* material = scene.materials.GetComponent(
+            terrain.materialEntities.front());
+        if (material == nullptr)
+        {
+            return DefaultGrassTextureScale;
+        }
+        return std::clamp(
+            material->texMulAdd.x * DefaultGrassPackedTileCount,
+            1.0f,
+            DefaultGrassPackedTileCount);
+    }
+
+    void SetTerrainTextureScale(
+        TerrainMaterialState& state,
+        const float scale) noexcept
+    {
+        const float multiplier = std::clamp(
+            scale,
+            1.0f,
+            DefaultGrassPackedTileCount) / DefaultGrassPackedTileCount;
+        for (auto& slot : state.slots)
+        {
+            slot.texMulAdd.x = multiplier;
+            slot.texMulAdd.y = multiplier;
+            slot.texMulAdd.z = 0.0f;
+            slot.texMulAdd.w = 0.0f;
+        }
+    }
+
+    float MakeTerrainMaterialPreset(
+        const TerrainMaterialPreset preset) noexcept
+    {
+        switch (preset)
+        {
+        case TerrainMaterialPreset::Meadow:
+            return 8.0f;
+        case TerrainMaterialPreset::CoarseGrass:
+            return 12.0f;
+        case TerrainMaterialPreset::FineGroundCover:
+            return 16.0f;
+        }
+        return DefaultGrassTextureScale;
+    }
+
+    TerrainMaterialState MakeDefaultGrassMaterial(const float textureScale)
+    {
+        TerrainMaterialState state;
+        TerrainMaterialSlotState slot;
+        const std::string root = wi::helper::GetCurrentPath() +
+            "/Content/terrain/default_grass/";
+        slot.baseColorMap = root + "default_grass_basecolor.tga";
+        slot.normalMap = root + "default_grass_normal.tga";
+        slot.surfaceMap = root + "default_grass_surface.tga";
+        const float multiplier = std::clamp(
+            textureScale,
+            1.0f,
+            DefaultGrassPackedTileCount) / DefaultGrassPackedTileCount;
+        slot.texMulAdd = XMFLOAT4(multiplier, multiplier, 0.0f, 0.0f);
+        state.slots.fill(slot);
+        return state;
+    }
+
+    void ReloadDefaultTerrainMaterial(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain)
+    {
+        wi::resourcemanager::ReloadOutdatedResources();
+        RebindDefaultTerrainMaterials(scene);
+        terrain.Generation_Restart();
+    }
+
+    SetTerrainMaterialCommand::SetTerrainMaterialCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity terrainEntity,
+        TerrainMaterialState before,
+        TerrainMaterialState after)
+        : scene_(&scene)
+        , terrainEntity_(terrainEntity)
+        , before_(std::move(before))
+        , after_(std::move(after))
+    {
+    }
+
+    bool SetTerrainMaterialCommand::Execute()
+    {
+        return !SameMaterialState(before_, after_) && Apply(after_);
+    }
+
+    void SetTerrainMaterialCommand::Undo()
+    {
+        Apply(before_);
+    }
+
+    bool SetTerrainMaterialCommand::Apply(const TerrainMaterialState& state)
+    {
+        if (scene_ == nullptr)
+        {
+            return false;
+        }
+        auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
+        if (terrain == nullptr)
+        {
+            return false;
+        }
+        ApplyTerrainMaterial(*scene_, *terrain, state);
+        return true;
     }
 
     CreateTerrainCommand::CreateTerrainCommand(
@@ -647,6 +932,77 @@ namespace renegade::bridge
                 saved.heights.push_back(position.y);
         }
         return state;
+    }
+
+    std::size_t RetainChangedTerrainSculpt(
+        TerrainSculptState& before,
+        TerrainSculptState& after) noexcept
+    {
+        std::unordered_map<wi::ecs::Entity, const TerrainChunkHeights*>
+            afterByEntity;
+        afterByEntity.reserve(after.chunks.size());
+        for (const auto& chunk : after.chunks)
+        {
+            afterByEntity.emplace(chunk.entity, &chunk);
+        }
+
+        TerrainSculptState changedBefore;
+        TerrainSculptState changedAfter;
+        changedBefore.chunks.reserve(before.chunks.size());
+        changedAfter.chunks.reserve(before.chunks.size());
+        for (auto& beforeChunk : before.chunks)
+        {
+            const auto found = afterByEntity.find(beforeChunk.entity);
+            if (found == afterByEntity.end() ||
+                found->second->heights.size() != beforeChunk.heights.size())
+            {
+                continue;
+            }
+            bool changed = false;
+            for (std::size_t index = 0;
+                index < beforeChunk.heights.size(); ++index)
+            {
+                if (!NearlyEqual(
+                        beforeChunk.heights[index],
+                        found->second->heights[index]))
+                {
+                    changed = true;
+                    break;
+                }
+            }
+            if (!changed)
+            {
+                continue;
+            }
+            changedBefore.chunks.push_back(std::move(beforeChunk));
+            changedAfter.chunks.push_back(*found->second);
+        }
+        before = std::move(changedBefore);
+        after = std::move(changedAfter);
+        return before.chunks.size();
+    }
+
+    void RefreshTerrainSculptPhysics(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const TerrainSculptState& changedState)
+    {
+        for (const auto& saved : changedState.chunks)
+        {
+            auto* mesh = scene.meshes.GetComponent(saved.entity);
+            if (mesh == nullptr)
+            {
+                continue;
+            }
+            for (auto& entry : terrain.chunks)
+            {
+                if (entry.second.entity == saved.entity)
+                {
+                    RefreshChunkPhysics(terrain, entry.second, *mesh);
+                    break;
+                }
+            }
+        }
     }
 
     bool ApplyTerrainSculpt(

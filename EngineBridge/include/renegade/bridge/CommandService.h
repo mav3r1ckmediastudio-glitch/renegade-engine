@@ -87,6 +87,10 @@ namespace renegade::bridge
     {
     public:
         bool Execute(std::unique_ptr<ICommand> command);
+        // Records a command whose after-state is already live. This is used
+        // by continuous editor previews so mouse release does not restore and
+        // rebuild the before-state only to execute the same change again.
+        bool RecordExecuted(std::unique_ptr<ICommand> command);
         bool Undo();
         bool Redo();
         void Clear() noexcept;

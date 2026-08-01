@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -64,6 +65,73 @@ namespace renegade::bridge
     // each project.
     void RebindDefaultTerrainMaterials(wi::scene::Scene& scene);
 
+    constexpr float DefaultGrassPackedTileCount = 32.0f;
+    constexpr float DefaultGrassTextureScale = 8.0f;
+
+    enum class TerrainMaterialPreset
+    {
+        Meadow,
+        CoarseGrass,
+        FineGroundCover,
+    };
+
+    struct TerrainMaterialSlotState
+    {
+        XMFLOAT4 baseColor = XMFLOAT4(1, 1, 1, 1);
+        XMFLOAT4 texMulAdd = XMFLOAT4(1, 1, 0, 0);
+        float roughness = 1.0f;
+        float metalness = 0.0f;
+        float reflectance = 0.02f;
+        float normalMapStrength = 1.0f;
+        bool primaryOcclusion = true;
+        std::string baseColorMap;
+        std::string normalMap;
+        std::string surfaceMap;
+    };
+
+    struct TerrainMaterialState
+    {
+        std::array<TerrainMaterialSlotState, wi::terrain::MATERIAL_COUNT> slots;
+    };
+
+    [[nodiscard]] TerrainMaterialState CaptureTerrainMaterial(
+        const wi::scene::Scene& scene,
+        const wi::terrain::Terrain& terrain);
+    void ApplyTerrainMaterial(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const TerrainMaterialState& state,
+        bool restartGeneration = true);
+    [[nodiscard]] float CaptureTerrainTextureScale(
+        const wi::scene::Scene& scene,
+        const wi::terrain::Terrain& terrain) noexcept;
+    void SetTerrainTextureScale(TerrainMaterialState& state, float scale) noexcept;
+    [[nodiscard]] float MakeTerrainMaterialPreset(
+        TerrainMaterialPreset preset) noexcept;
+    [[nodiscard]] TerrainMaterialState MakeDefaultGrassMaterial(
+        float textureScale = DefaultGrassTextureScale);
+    void ReloadDefaultTerrainMaterial(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain);
+
+    class SetTerrainMaterialCommand final : public ICommand
+    {
+    public:
+        SetTerrainMaterialCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity terrainEntity,
+            TerrainMaterialState before,
+            TerrainMaterialState after);
+        bool Execute() override;
+        void Undo() override;
+    private:
+        bool Apply(const TerrainMaterialState& state);
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity terrainEntity_ = wi::ecs::INVALID_ENTITY;
+        TerrainMaterialState before_;
+        TerrainMaterialState after_;
+    };
+
     class CreateTerrainCommand final : public ICommand
     {
     public:
@@ -127,6 +195,15 @@ namespace renegade::bridge
     [[nodiscard]] TerrainSculptState CaptureTerrainSculpt(
         const wi::scene::Scene& scene,
         const wi::terrain::Terrain& terrain);
+    // Removes identical chunks from both states and returns the number of
+    // chunks that make up the completed stroke.
+    std::size_t RetainChangedTerrainSculpt(
+        TerrainSculptState& before,
+        TerrainSculptState& after) noexcept;
+    void RefreshTerrainSculptPhysics(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const TerrainSculptState& changedState);
     bool ApplyTerrainSculpt(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,

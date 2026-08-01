@@ -166,6 +166,9 @@ namespace renegade::studio
         std::string statusText_ = "STUDIO READY";
         std::string selectionName_;
         std::string hierarchyFilter_;
+        float fpsSampleTime_ = 0.0f;
+        float displayedFps_ = 0.0f;
+        std::uint32_t fpsSampleFrames_ = 0;
         std::function<void(std::uint64_t)> hierarchySelected_;
         std::function<void(int)> toolSelected_;
         std::function<void(Action)> action_;

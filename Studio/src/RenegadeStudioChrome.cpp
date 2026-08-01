@@ -636,6 +636,18 @@ namespace renegade::studio
         const float dt)
     {
         Widget::Update(canvas, dt);
+        if (dt > 0.0f)
+        {
+            fpsSampleTime_ += dt;
+            ++fpsSampleFrames_;
+            if (fpsSampleTime_ >= 0.25f)
+            {
+                displayedFps_ = static_cast<float>(fpsSampleFrames_) /
+                    fpsSampleTime_;
+                fpsSampleTime_ = 0.0f;
+                fpsSampleFrames_ = 0;
+            }
+        }
         pointerConsumed_ = false;
         const XMFLOAT4 layoutPointer = wi::input::GetPointer();
         const float inspectorEdge = width_ - inspectorWidth_;
@@ -1705,6 +1717,25 @@ namespace renegade::studio
             statusTop + 9.0f,
             9,
             Muted,
+            cmd,
+            0.75f);
+        const std::string fpsText = displayedFps_ > 0.0f
+            ? std::to_string(static_cast<int>(std::lround(displayedFps_))) +
+                " FPS"
+            : "-- FPS";
+        DrawRect(
+            width_ - 402.0f,
+            statusTop + 7.0f,
+            1.0f,
+            14.0f,
+            Border,
+            cmd);
+        DrawText(
+            fpsText,
+            width_ - 386.0f,
+            statusTop + 9.0f,
+            9,
+            TextStrong,
             cmd,
             0.75f);
         DrawText(

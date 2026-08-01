@@ -64,6 +64,9 @@ namespace renegade::studio
             ApplyOceanPreset,
             CreateTerrain,
             ApplyTerrainPreset,
+            ApplyTerrainMaterialPreset,
+            ApplyDefaultGrass,
+            ReloadTerrainMaterial,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -215,6 +218,12 @@ namespace renegade::studio
         void BeginTerrainSlider(TerrainField field);
         void PreviewTerrainSlider(TerrainField field, float value);
         void CommitTerrainSlider(TerrainField field, float value);
+        void ApplyTerrainMaterialPreset(bridge::TerrainMaterialPreset preset);
+        void BeginTerrainTextureScale();
+        void PreviewTerrainTextureScale(float value);
+        void CommitTerrainTextureScale(float value);
+        void ApplyDefaultGrass();
+        void ReloadTerrainMaterial();
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -348,11 +357,18 @@ namespace renegade::studio
         RenegadeSlider terrainBaseBlend_;
         RenegadeSlider terrainSlopeBlend_;
         RenegadeSlider terrainLodBias_;
+        wi::gui::Label terrainMaterialLabel_;
+        RenegadeComboBox terrainMaterialPreset_;
+        RenegadeSlider terrainTextureScale_;
+        RenegadeButton terrainApplyDefaultGrassButton_;
+        RenegadeButton terrainReloadMaterialButton_;
         wi::gui::Label terrainSculptLabel_;
         RenegadeComboBox terrainSculptMode_;
         RenegadeSlider terrainBrushRadius_;
         RenegadeSlider terrainBrushStrength_;
         RenegadeSlider terrainBrushFalloff_;
+        wi::gui::Label terrainBrushReadout_;
+        wi::gui::Label terrainStrokeDiagnostic_;
         RenegadeButton focusButton_;
         RenegadeButton duplicateButton_;
         RenegadeButton deleteButton_;
@@ -435,8 +451,14 @@ namespace renegade::studio
         wi::ecs::Entity terrainSliderEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::TerrainState terrainSliderBefore_;
         bridge::TerrainState terrainSliderAfter_;
+        bool terrainTextureScaleActive_ = false;
+        wi::ecs::Entity terrainMaterialEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::TerrainMaterialState terrainMaterialBefore_;
+        bridge::TerrainMaterialState terrainMaterialAfter_;
         bridge::TerrainPreset pendingTerrainPreset_ =
             bridge::TerrainPreset::FlatWorld;
+        bridge::TerrainMaterialPreset pendingTerrainMaterialPreset_ =
+            bridge::TerrainMaterialPreset::Meadow;
         bridge::TerrainSculptMode terrainSculptModeValue_ =
             bridge::TerrainSculptMode::Raise;
         float terrainBrushRadiusValue_ = 12.0f;

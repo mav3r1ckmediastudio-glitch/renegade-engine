@@ -323,6 +323,17 @@ namespace renegade::bridge
         return true;
     }
 
+    bool CommandService::RecordExecuted(std::unique_ptr<ICommand> command)
+    {
+        if (command == nullptr)
+        {
+            return false;
+        }
+        undoStack_.push_back(std::move(command));
+        redoStack_.clear();
+        return true;
+    }
+
     bool CommandService::Undo()
     {
         if (undoStack_.empty())

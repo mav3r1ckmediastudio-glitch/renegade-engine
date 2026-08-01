@@ -6,6 +6,20 @@
 
 namespace
 {
+    class PreviewCommand final : public renegade::bridge::ICommand
+    {
+    public:
+        explicit PreviewCommand(int& value) : value_(&value) {}
+        bool Execute() override
+        {
+            *value_ = 2;
+            return true;
+        }
+        void Undo() override { *value_ = 1; }
+    private:
+        int* value_ = nullptr;
+    };
+
     bool NearlyEqual(float left, float right)
     {
         return std::abs(left - right) < 0.0001f;
@@ -110,6 +124,28 @@ int main()
         return Fail("restrained terrain presets were not distinct");
     }
 
-    std::cout << "PASS: native terrain state, presets, safety and Undo/Redo\n";
+    renegade::bridge::TerrainMaterialState material;
+    renegade::bridge::SetTerrainTextureScale(material, 8.0f);
+    if (!NearlyEqual(material.slots[0].texMulAdd.x, 0.25f) ||
+        !NearlyEqual(
+            renegade::bridge::MakeTerrainMaterialPreset(
+                renegade::bridge::TerrainMaterialPreset::CoarseGrass),
+            12.0f))
+    {
+        return Fail("terrain material scale was not mapped to packed UVs");
+    }
+
+    int previewValue = 2;
+    renegade::bridge::CommandService previewCommands;
+    if (!previewCommands.RecordExecuted(
+            std::make_unique<PreviewCommand>(previewValue)) ||
+        previewValue != 2 ||
+        !previewCommands.Undo() || previewValue != 1 ||
+        !previewCommands.Redo() || previewValue != 2)
+    {
+        return Fail("completed preview was not retained for Undo/Redo");
+    }
+
+    std::cout << "PASS: terrain state, material scale, preview history and Undo/Redo\n";
     return 0;
 }

@@ -28,7 +28,8 @@ moving the already-accepted editor behaviour onto Renegade-rendered controls.
   without a backend are marked unavailable instead of being rendered as
   plausible dummy controls.
 - The stock FPS/error overlay is disabled because it collided with the
-  wordmark; diagnostics have an owned drawer destination.
+  wordmark. A compact, lightly smoothed live FPS readout now occupies the
+  owned bottom status bar; broader diagnostics retain their drawer destination.
 
 ## Rendering boundary
 
@@ -66,6 +67,8 @@ Required packaged Windows Release checks:
    save/reopen preserve them.
 6. Every bottom tab opens and closes the drawer while viewport input remains
    constrained to the visible viewport.
-7. No stock pill-shaped Studio workspace control or overlapping diagnostics
+7. The bottom status bar shows a stable live FPS value while the workspace is
+   visible and hides it on the Project Hub.
+8. No stock pill-shaped Studio workspace control or overlapping diagnostics
    text is visible.
-8. Vulkan receives the same regression pass after DX12 acceptance.
+9. Vulkan receives the same regression pass after DX12 acceptance.
