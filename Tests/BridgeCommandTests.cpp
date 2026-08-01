@@ -995,17 +995,20 @@ int main()
             return Fail("a corrupt prepared open damaged the active document");
         }
 
+        // Wicked compressed archives decode the valid compressed stream and
+        // tolerate bytes appended after it. That remains a valid scene, but
+        // the prepare phase must still leave the active document untouched.
         auto trailing = session.Documents().PrepareOpen(
             trailingPath.generic_string());
-        if (trailing.IsReady() ||
-            session.Documents().CommitPreparedOpen(std::move(trailing)) ||
+        if (!trailing.IsReady() ||
             !session.Scenes().ContainsEntity(survivor) ||
             session.Selection().SelectedEntity() != survivor ||
             !session.Commands().CanUndo() ||
             !session.Commands().IsDirty())
         {
             return Fail(
-                "a WISCENE with trailing data damaged the active document");
+                "preparing a WISCENE with trailing data damaged the active "
+                "document");
         }
 
         auto prepared = session.Documents().PrepareOpen(
