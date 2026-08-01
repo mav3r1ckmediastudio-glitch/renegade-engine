@@ -1986,6 +1986,13 @@ namespace renegade::studio
 
         RenderPath3D::Update(dt);
 
+        // TEMPORARY diagnostic: see LogTerrainDiagnostics() declaration.
+        if (terrainDiagnosticFramesRemaining_ > 0 && session_ != nullptr)
+        {
+            LogTerrainDiagnostics("post-update");
+            --terrainDiagnosticFramesRemaining_;
+        }
+
         if (session_ == nullptr || projectHubVisible_)
         {
             return;
@@ -5077,6 +5084,10 @@ namespace renegade::studio
         RefreshInspector();
         RefreshStatus();
         SetProjectHubVisible(false);
+
+        // TEMPORARY diagnostic: see LogTerrainDiagnostics() declaration.
+        LogTerrainDiagnostics("commit");
+        terrainDiagnosticFramesRemaining_ = 6;
     }
 
     void StudioRenderPath::AdoptOpenedSceneCamera()
@@ -5193,6 +5204,37 @@ namespace renegade::studio
         camera->width = static_cast<float>(GetInternalResolution().x);
         camera->height = static_cast<float>(GetInternalResolution().y);
         camera->UpdateCamera();
+    }
+
+    void StudioRenderPath::LogTerrainDiagnostics(const char* label)
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        const auto& scene = session_->Scenes().GetScene();
+        std::ostringstream out;
+        out << "Renegade terrain diag [" << label << "]: "
+            << "terrains=" << scene.terrains.GetCount();
+        if (camera != nullptr)
+        {
+            out << " camera.Eye=(" << camera->Eye.x << ", "
+                << camera->Eye.y << ", " << camera->Eye.z << ")";
+        }
+        for (size_t i = 0; i < scene.terrains.GetCount(); ++i)
+        {
+            const wi::terrain::Terrain& terrain = scene.terrains[i];
+            const wi::ecs::Entity entity = scene.terrains.GetEntity(i);
+            out << " | terrain[" << i << "] entity=" << entity
+                << " chunks=" << terrain.chunks.size()
+                << " center_chunk=(" << terrain.center_chunk.x << ", "
+                << terrain.center_chunk.z << ")"
+                << " generationStarted="
+                << (terrain.IsGenerationStarted() ? "1" : "0")
+                << " generationRadius=" << terrain.generation;
+        }
+        wi::backlog::post(out.str(), wi::backlog::LogLevel::Warning);
     }
 
     void StudioRenderPath::OpenProjectDescriptor(

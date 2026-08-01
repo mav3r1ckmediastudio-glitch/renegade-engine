@@ -266,6 +266,13 @@ namespace renegade::studio
         // next frame. No-ops if the scene has no terrain.
         void AdoptOpenedSceneTerrainFallbackCamera(
             const wi::scene::Scene& openedScene);
+        // TEMPORARY diagnostic: logs each terrain's chunk count, center
+        // chunk, and the editor camera position to the backlog for a
+        // few frames after a scene Open, to determine whether chunks
+        // are missing immediately on commit (data-level loss) or get
+        // evicted over the next few frames (streaming/removal). Remove
+        // once the terrain-not-surviving-Open report is root-caused.
+        void LogTerrainDiagnostics(const char* label);
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
@@ -422,6 +429,9 @@ namespace renegade::studio
         wi::graphics::Texture selectionOutlineMask_;
         wi::graphics::Texture selectionOutlineMaskMsaa_;
         wi::scene::TransformComponent editorCameraTransform_;
+        // TEMPORARY diagnostic counter for LogTerrainDiagnostics(); see
+        // its declaration.
+        int terrainDiagnosticFramesRemaining_ = 0;
         wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity outlinedEntity_ = wi::ecs::INVALID_ENTITY;
         std::uint8_t outlinedEntityPreviousStencil_ = 0;
