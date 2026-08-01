@@ -465,6 +465,11 @@ namespace renegade::studio
         sceneName_ = std::move(sceneName);
     }
 
+    void RenegadeStudioChrome::SetSceneDirty(const bool dirty) noexcept
+    {
+        sceneDirty_ = dirty;
+    }
+
     void RenegadeStudioChrome::SetStatusText(std::string statusText)
     {
         statusText_ = std::move(statusText);
@@ -797,7 +802,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 5> popupItemCounts = {
-                    4, 4, 4, 1, 3};
+                    5, 4, 4, 1, 3};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -813,11 +818,11 @@ namespace renegade::studio
                             action_(command);
                         }
                     };
-                    if (activeMenu_ == 0 && item >= 0 && item < 4)
+                    if (activeMenu_ == 0 && item >= 0 && item < 5)
                     {
-                        constexpr std::array<Action, 4> actions = {
-                            Action::ProjectHub, Action::Save,
-                            Action::SaveAs, Action::Reopen};
+                        constexpr std::array<Action, 5> actions = {
+                            Action::ProjectHub, Action::OpenScene,
+                            Action::Save, Action::SaveAs, Action::Reopen};
                         invoke(actions[item]);
                     }
                     else if (activeMenu_ == 1 && item >= 0 && item < 4)
@@ -1364,7 +1369,7 @@ namespace renegade::studio
             Forge,
             cmd);
         DrawText(
-            sceneName_ + ".WISCENE",
+            sceneName_ + ".WISCENE" + (sceneDirty_ ? " *" : ""),
             hierarchyWidth_ + 14.0f,
             TopBarHeight + 12.0f,
             10,
@@ -1651,8 +1656,9 @@ namespace renegade::studio
             std::vector<std::pair<std::string, bool>> items;
             if (activeMenu_ == 0)
             {
-                items = {{"PROJECT HUB", true}, {"SAVE", true},
-                    {"SAVE AS...", true}, {"REOPEN SCENE", true}};
+                items = {{"PROJECT HUB", true}, {"OPEN SCENE...", true},
+                    {"SAVE", true}, {"SAVE AS...", true},
+                    {"REOPEN SCENE", true}};
             }
             else if (activeMenu_ == 1)
             {

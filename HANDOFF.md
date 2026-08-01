@@ -498,3 +498,35 @@ text. Full compilation is unavailable because this recovery workspace has no
 CMake. The next Windows artifact must confirm the value appears without
 overlapping the status message or wordmark at normal and narrow window sizes,
 updates under VSync-on and VSync-off conditions, and is absent on Project Hub.
+
+### WISCENE Open Scene workflow restored
+
+Prepared on top of `5b0f34c` after packaged terrain testing exposed that Save
+As could write an arbitrary `.wiscene`, but the current owned Studio chrome no
+longer exposed a route to open it. The restoration adds `OPEN SCENE...` to the
+Project Hub and `FILE` menu, routes the native picker through `StudioSession`
+and `SceneService`, refreshes hierarchy/Inspector/status after a successful
+load, and displays the opened filename in the active scene tab.
+
+Scene replacement now uses tracked saved-state depth rather than treating any
+Undo history as unsaved. A genuinely dirty scene receives the Windows-native
+Save/Discard/Cancel prompt. Successful Save and Save As establish a clean
+state; Undo away from it marks the scene dirty; Redo back to it clears the
+marker; a new command branch invalidates an unreachable saved state. The scene
+tab shows `*` while dirty. Failed loads are transactional at the StudioSession
+boundary and no longer clear the current selection or command history.
+
+Changed files: `EngineBridge/include/renegade/bridge/CommandService.h`,
+`EngineBridge/src/CommandService.cpp`,
+`EngineBridge/include/renegade/bridge/StudioSession.h`,
+`Studio/src/RenegadeStudioChrome.h`,
+`Studio/src/RenegadeStudioChrome.cpp`, `Studio/src/StudioApplication.h`,
+`Studio/src/StudioApplication.cpp`, `Tests/BridgeCommandTests.cpp`,
+`docs/PHASE3_EDITOR_USABILITY.md`, `docs/FEATURE_MATRIX.csv`, and this file.
+
+The downloadable mail patch is based byte-for-byte on remote branch commit
+`5b0f34c`; its final commit hash will be assigned when applied. Required
+packaged acceptance: open a saved `.wiscene` from both Hub and File; verify the
+tab filename and terrain; edit and test Cancel, Discard, and Save while opening
+another scene; try an invalid/corrupt file and confirm the active scene remains;
+then Save, close Studio, reopen the project, and manually open the saved scene.

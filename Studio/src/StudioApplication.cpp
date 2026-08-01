@@ -1653,6 +1653,9 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::ProjectHub:
                 pendingAction_ = EditorAction::ProjectHub;
                 break;
+            case RenegadeStudioChrome::Action::OpenScene:
+                pendingAction_ = EditorAction::OpenScene;
+                break;
             case RenegadeStudioChrome::Action::Save:
                 pendingAction_ = EditorAction::SaveScene;
                 break;
@@ -1800,6 +1803,17 @@ namespace renegade::studio
             OpenProject();
         });
         projectHubPanel_.AddWidget(&openProjectButton_);
+
+        openSceneButton_.Create("Open Renegade Scene");
+        openSceneButton_.SetText("OPEN SCENE...");
+        openSceneButton_.SetTooltip(
+            "Open an existing Wicked scene (.wiscene) in Renegade Studio");
+        openSceneButton_.SetAngularHighlightWidth(5.0f);
+        openSceneButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            OpenScene();
+        });
+        projectHubPanel_.AddWidget(&openSceneButton_);
 
         recentProjectsLabel_.Create("Recent Projects");
         recentProjectsLabel_.SetText("RECENT OPERATIONS");
@@ -2363,6 +2377,8 @@ namespace renegade::studio
         createProjectButton_.SetSize(XMFLOAT2(170.0f, 32.0f));
         openProjectButton_.SetPos(XMFLOAT2(570.0f, 160.0f));
         openProjectButton_.SetSize(XMFLOAT2(170.0f, 32.0f));
+        openSceneButton_.SetPos(XMFLOAT2(752.0f, 160.0f));
+        openSceneButton_.SetSize(XMFLOAT2(170.0f, 32.0f));
 
         recentProjectsLabel_.SetPos(XMFLOAT2(40.0f, 218.0f));
         recentProjectsLabel_.SetSize(XMFLOAT2(500.0f, 28.0f));
@@ -2421,6 +2437,8 @@ namespace renegade::studio
         if (!scenes.LastError().empty())
         {
             statusLabel_.SetText("SCENE ERROR // " + scenes.LastError());
+            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+            studioChrome_.SetStatusText(statusLabel_.GetText());
             return;
         }
 
@@ -2441,7 +2459,14 @@ namespace renegade::studio
             std::to_string(session_->Commands().UndoCount()) +
             " // REDO " +
             std::to_string(session_->Commands().RedoCount()));
-        studioChrome_.SetSceneName(projectName);
+        std::string sceneName = projectName;
+        if (!scenes.CurrentPath().empty())
+        {
+            sceneName = wi::helper::RemoveExtension(
+                wi::helper::GetFileNameFromPath(scenes.CurrentPath()));
+        }
+        studioChrome_.SetSceneName(sceneName);
+        studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
         studioChrome_.SetStatusText(statusLabel_.GetText());
     }
 
@@ -3031,6 +3056,9 @@ namespace renegade::studio
             break;
         case EditorAction::DeleteSelection:
             DeleteSelection();
+            break;
+        case EditorAction::OpenScene:
+            OpenScene();
             break;
         case EditorAction::SaveScene:
             SaveScene();
@@ -4857,6 +4885,83 @@ namespace renegade::studio
             });
     }
 
+    bool StudioRenderPath::ConfirmSceneReplacement()
+    {
+        if (session_ == nullptr || !session_->Commands().IsDirty())
+        {
+            return session_ != nullptr;
+        }
+
+        const std::string currentPath = session_->Scenes().CurrentPath();
+        const std::string sceneName = currentPath.empty()
+            ? "the current scene"
+            : "\"" + wi::helper::GetFileNameFromPath(currentPath) + "\"";
+        const auto result = wi::helper::messageBoxCustom(
+            "Do you want to save changes to " + sceneName + "?",
+            "Unsaved changes",
+            "YesNoCancel");
+        if (result == wi::helper::MessageBoxResult::No ||
+            result == wi::helper::MessageBoxResult::OK)
+        {
+            return true;
+        }
+        if (result != wi::helper::MessageBoxResult::Yes)
+        {
+            return false;
+        }
+        if (currentPath.empty())
+        {
+            SaveSceneAs();
+            return false;
+        }
+
+        StopSunPreview(true);
+        ClearSelectionOutline();
+        const bool saved = session_->SaveScene(currentPath);
+        SyncSelectionOutline();
+        RefreshStatus();
+        RefreshInspector();
+        return saved;
+    }
+
+    void StudioRenderPath::OpenScene()
+    {
+        if (session_ == nullptr || !ConfirmSceneReplacement())
+        {
+            return;
+        }
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Renegade Scene (.wiscene)";
+        params.extensions.push_back("wiscene");
+        wi::helper::FileDialog(
+            params,
+            [this](const std::string& scenePath)
+            {
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, scenePath](uint64_t)
+                    {
+                        StopSunPreview(false);
+                        ClearSelectionOutline();
+                        if (!session_->LoadScene(scenePath))
+                        {
+                            SyncSelectionOutline();
+                            RefreshStatus();
+                            RefreshInspector();
+                            return;
+                        }
+                        SetEnvironmentWorkspaceActive(false);
+                        SetTerrainWorkspaceActive(false);
+                        RefreshHierarchy();
+                        RefreshInspector();
+                        RefreshStatus();
+                        SetProjectHubVisible(false);
+                    });
+            });
+    }
+
     void StudioRenderPath::OpenProjectDescriptor(
         const std::string& descriptorPath)
     {
@@ -4919,18 +5024,9 @@ namespace renegade::studio
             return;
         }
 
-        if (session_->Commands().CanUndo())
+        if (!ConfirmSceneReplacement())
         {
-            const auto result = wi::helper::messageBoxCustom(
-                "This scene has editor history. Save it before opening another "
-                "project if you want to keep those changes.\n\n"
-                "Return to the Project Hub?",
-                "Return to Project Hub",
-                "YesNo");
-            if (result != wi::helper::MessageBoxResult::Yes)
-            {
-                return;
-            }
+            return;
         }
 
         StopSunPreview(true);

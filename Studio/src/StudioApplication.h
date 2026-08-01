@@ -45,6 +45,7 @@ namespace renegade::studio
             FocusSelection,
             DuplicateSelection,
             DeleteSelection,
+            OpenScene,
             SaveScene,
             SaveSceneAs,
             ReopenScene,
@@ -252,6 +253,7 @@ namespace renegade::studio
             const XMFLOAT4& pointer) const noexcept;
         [[nodiscard]] bool IsSelectedEntityValid() const;
         void OpenProject();
+        void OpenScene();
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
@@ -264,6 +266,7 @@ namespace renegade::studio
         void SaveScene();
         void SaveSceneAs();
         void ReopenScene();
+        [[nodiscard]] bool ConfirmSceneReplacement();
 
         bridge::StudioSession* session_ = nullptr;
         wi::Application::InfoDisplayer* diagnostics_ = nullptr;
@@ -387,6 +390,7 @@ namespace renegade::studio
         wi::gui::TextInputField projectNameInput_;
         wi::gui::Button createProjectButton_;
         wi::gui::Button openProjectButton_;
+        wi::gui::Button openSceneButton_;
         wi::gui::Label recentProjectsLabel_;
         std::array<
             wi::gui::Button,

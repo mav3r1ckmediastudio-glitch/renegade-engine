@@ -12,6 +12,7 @@
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
+#include "renegade/bridge/StudioSession.h"
 
 namespace
 {
@@ -91,26 +92,47 @@ int main()
     }
 
     if (!NearlyEqual(childTransform.translation_local.x, 4.0f) ||
-        !commands.CanUndo() || commands.CanRedo())
+        !commands.CanUndo() || commands.CanRedo() || !commands.IsDirty())
     {
         return Fail("execute state is incorrect");
     }
 
+    commands.MarkSaved();
+    if (commands.IsDirty())
+    {
+        return Fail("mark saved did not establish a clean scene state");
+    }
+
     if (!commands.Undo() ||
         !NearlyEqual(childTransform.translation_local.x, 0.0f) ||
-        !commands.CanRedo())
+        !commands.CanRedo() || !commands.IsDirty())
     {
         return Fail("undo did not restore the original transform");
     }
 
     if (!commands.Redo() ||
         !NearlyEqual(childTransform.translation_local.x, 4.0f) ||
-        commands.CanRedo())
+        commands.CanRedo() || commands.IsDirty())
     {
         return Fail("redo did not restore the edited transform");
     }
 
+    if (!commands.Undo() ||
+        !commands.Execute(
+            std::make_unique<renegade::bridge::SetTranslationCommand>(
+                scenes.GetScene(),
+                child,
+                XMFLOAT3(2.0f, 0.0f, 0.0f))) ||
+        !commands.IsDirty() || commands.CanRedo())
+    {
+        return Fail("a new command branch did not invalidate the saved state");
+    }
+
     commands.Clear();
+    if (commands.IsDirty())
+    {
+        return Fail("clearing command history did not reset dirty state");
+    }
     childTransform.translation_local = XMFLOAT3{};
     childTransform.SetDirty();
     childTransform.UpdateTransform();
@@ -650,6 +672,39 @@ int main()
         }
     }
 
+    // A failed Open Scene attempt is transactional: the current scene,
+    // selection, command history and dirty state remain available.
+    {
+        renegade::bridge::StudioSession session;
+        const auto survivor = wi::ecs::CreateEntity();
+        session.Scenes().GetScene().names.Create(survivor) = "Survivor";
+        session.Scenes().GetScene().transforms.Create(survivor);
+        session.Selection().Select(survivor);
+        if (!session.Commands().Execute(
+                std::make_unique<renegade::bridge::SetTranslationCommand>(
+                    session.Scenes().GetScene(),
+                    survivor,
+                    XMFLOAT3(3.0f, 0.0f, 0.0f))))
+        {
+            return Fail("transactional open fixture command did not execute");
+        }
+        const auto missing = std::filesystem::temp_directory_path() /
+            ("renegade-missing-scene-" +
+                std::to_string(
+                    std::chrono::steady_clock::now()
+                        .time_since_epoch()
+                        .count()) +
+                ".wiscene");
+        if (session.LoadScene(missing.generic_string()) ||
+            !session.Scenes().ContainsEntity(survivor) ||
+            session.Selection().SelectedEntity() != survivor ||
+            !session.Commands().CanUndo() ||
+            !session.Commands().IsDirty())
+        {
+            return Fail("failed scene open discarded the active editor state");
+        }
+    }
+
     TemporaryDirectory projectFixture;
     projectFixture.path =
         std::filesystem::temp_directory_path() /
@@ -724,6 +779,7 @@ int main()
            "weather and duplicate/delete undo-redo, repeated history, "
            "no-op filtering, Proving Ground blueprint structure, unique "
            "generated names, headless scene save/reload, project lifecycle, "
-           "and persisted editor preferences\n";
+           "transactional failed scene open, dirty-state tracking, and "
+           "persisted editor preferences\n";
     return 0;
 }

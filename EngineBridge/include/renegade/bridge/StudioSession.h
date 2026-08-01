@@ -49,21 +49,34 @@ namespace renegade::bridge
 
         bool LoadScene(const std::string& filePath)
         {
+            if (!scenes_.LoadScene(filePath))
+            {
+                return false;
+            }
             commands_.Clear();
             selection_.Clear();
-            return scenes_.LoadScene(filePath);
+            return true;
         }
 
         bool SaveScene(const std::string& filePath)
         {
-            return scenes_.SaveScene(filePath);
+            if (!scenes_.SaveScene(filePath))
+            {
+                return false;
+            }
+            commands_.MarkSaved();
+            return true;
         }
 
         bool ReloadScene()
         {
+            if (!scenes_.ReloadScene())
+            {
+                return false;
+            }
             commands_.Clear();
             selection_.Clear();
-            return scenes_.ReloadScene();
+            return true;
         }
 
     private:

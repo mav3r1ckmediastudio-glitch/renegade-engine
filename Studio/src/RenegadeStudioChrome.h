@@ -82,6 +82,7 @@ namespace renegade::studio
         enum class Action
         {
             ProjectHub,
+            OpenScene,
             Save,
             SaveAs,
             Reopen,
@@ -108,6 +109,7 @@ namespace renegade::studio
         void SetLayout(float width, float height);
         void SetHierarchyRows(std::vector<HierarchyRow> rows);
         void SetSceneName(std::string sceneName);
+        void SetSceneDirty(bool dirty) noexcept;
         void SetStatusText(std::string statusText);
         void SetSelectionName(std::string selectionName);
         void SetActiveTool(int toolIndex) noexcept;
@@ -163,6 +165,7 @@ namespace renegade::studio
         std::vector<HierarchyRow> hierarchyRows_;
         std::vector<std::size_t> visibleHierarchyRows_;
         std::string sceneName_ = "PROVING GROUND";
+        bool sceneDirty_ = false;
         std::string statusText_ = "STUDIO READY";
         std::string selectionName_;
         std::string hierarchyFilter_;
