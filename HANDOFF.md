@@ -407,3 +407,11 @@ Terrain tab with no Transform bleed; create and reopen access; all four brush
 modes; brush guide; one Undo/Redo item per drag; save, close and reopen retaining
 the edited heights. Material painting and 16-bit heightmap import/export remain
 the next Terrain V1 slices and are not claimed here.
+
+Renegade Studio run 39 failed for branch commit `936f563` in both Release and
+Debug at `TerrainService.cpp:369`: the sculpt loop called the nonexistent
+`TransformComponent::GetMatrix()`. The pinned Wicked transform API and its own
+Paint Tool use the stored world transform; the follow-up changes this call to
+`GetWorldMatrix()`. `git diff --check` passes and the remaining sculpt calls were
+checked against the pinned headers/source. Windows CI is still the compilation
+gate, and a successful compile still does not constitute behavioural acceptance.

@@ -366,7 +366,7 @@ namespace renegade::bridge
             auto* mesh = scene.meshes.GetComponent(chunk.entity);
             auto* transform = scene.transforms.GetComponent(chunk.entity);
             if (mesh == nullptr || transform == nullptr) continue;
-            const XMMATRIX world = transform->GetMatrix();
+            const XMMATRIX world = transform->GetWorldMatrix();
             float localMean = 0.0f;
             std::size_t localCount = 0;
             for (const auto& p : mesh->vertex_positions)
