@@ -583,11 +583,20 @@ int main()
         renegade::bridge::StudioSession authored;
         const auto landmark = wi::ecs::CreateEntity();
         authored.Scenes().GetScene().names.Create(landmark) = "Landmark";
-        auto& landmarkTransform =
-            authored.Scenes().GetScene().transforms.Create(landmark);
-        landmarkTransform.translation_local = XMFLOAT3(2.0f, 3.0f, 4.0f);
-        landmarkTransform.SetDirty();
-        landmarkTransform.UpdateTransform();
+        authored.Scenes().GetScene().transforms.Create(landmark);
+        {
+            auto* landmarkTransform = authored.Scenes()
+                .GetScene()
+                .transforms
+                .GetComponent(landmark);
+            if (landmarkTransform == nullptr)
+            {
+                return Fail("landmark transform fixture was not created");
+            }
+            landmarkTransform->translation_local = XMFLOAT3(2.0f, 3.0f, 4.0f);
+            landmarkTransform->SetDirty();
+            landmarkTransform->UpdateTransform();
+        }
 
         const auto environment = wi::ecs::CreateEntity();
         authored.Scenes().GetScene().names.Create(environment) = "Environment";
@@ -764,10 +773,18 @@ int main()
 
         for (int version = 0; version < 12; ++version)
         {
-            landmarkTransform.translation_local.x =
+            auto* landmarkTransform = authored.Scenes()
+                .GetScene()
+                .transforms
+                .GetComponent(landmark);
+            if (landmarkTransform == nullptr)
+            {
+                return Fail("rolling backup fixture lost its transform");
+            }
+            landmarkTransform->translation_local.x =
                 10.0f + static_cast<float>(version);
-            landmarkTransform.SetDirty();
-            landmarkTransform.UpdateTransform();
+            landmarkTransform->SetDirty();
+            landmarkTransform->UpdateTransform();
             if (!authored.SaveScene(scenePath.generic_string()))
             {
                 return Fail("rolling automatic backup save failed");
@@ -795,7 +812,15 @@ int main()
 
         // Save As writes the current document to a new path without changing
         // the already saved source archive.
-        const float sourceVersion = landmarkTransform.translation_local.x;
+        const auto* sourceTransform = authored.Scenes()
+            .GetScene()
+            .transforms
+            .GetComponent(landmark);
+        if (sourceTransform == nullptr)
+        {
+            return Fail("Save As fixture lost its source transform");
+        }
+        const float sourceVersion = sourceTransform->translation_local.x;
         if (!authored.Commands().Execute(
                 std::make_unique<renegade::bridge::SetTranslationCommand>(
                     authored.Scenes().GetScene(),
