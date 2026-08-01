@@ -5092,6 +5092,22 @@ namespace renegade::studio
             openedScene.cameras.GetComponent(cameraEntity);
         if (openedCamera == nullptr)
         {
+            // No authored camera in the opened document (common for
+            // terrain-only scenes that were never given an explicit
+            // Camera entity). Wicked's terrain chunk streaming
+            // (wi::terrain::Terrain::Generation_Update, run every real
+            // frame from RenderPath3D::Update) evicts and permanently
+            // discards any chunk whose distance from the *current*
+            // editor camera exceeds its removal radius. Leaving the
+            // camera wherever it happened to be from the previous
+            // document means a freshly opened terrain scene has its
+            // just-loaded, correctly-deserialized chunks evicted and
+            // silently replaced with fresh procedural generation before
+            // the user ever sees them - which reads as "the terrain
+            // didn't save" even though the archive round-trip was
+            // correct. Recenter over the terrain's own saved chunk
+            // position instead of leaving the stale camera in place.
+            AdoptOpenedSceneTerrainFallbackCamera(openedScene);
             return;
         }
 
@@ -5114,6 +5130,68 @@ namespace renegade::studio
             editorCameraTransform_ = *openedTransform;
             camera->TransformCamera(editorCameraTransform_);
         }
+        camera->UpdateCamera();
+    }
+
+    void StudioRenderPath::AdoptOpenedSceneTerrainFallbackCamera(
+        const wi::scene::Scene& openedScene)
+    {
+        if (camera == nullptr || openedScene.terrains.GetCount() == 0)
+        {
+            return;
+        }
+
+        const wi::terrain::Terrain& terrain = openedScene.terrains[0];
+        if (terrain.chunks.empty())
+        {
+            return;
+        }
+
+        // Prefer the chunk at the terrain's own saved center; fall back
+        // to whichever loaded chunk is closest to it if that exact
+        // coordinate was not generated/saved.
+        auto best = terrain.chunks.find(terrain.center_chunk);
+        if (best == terrain.chunks.end())
+        {
+            best = terrain.chunks.begin();
+            int bestDist =
+                std::max(
+                    std::abs(terrain.center_chunk.x - best->first.x),
+                    std::abs(terrain.center_chunk.z - best->first.z));
+            for (auto it = terrain.chunks.begin();
+                 it != terrain.chunks.end();
+                 ++it)
+            {
+                const int dist = std::max(
+                    std::abs(terrain.center_chunk.x - it->first.x),
+                    std::abs(terrain.center_chunk.z - it->first.z));
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    best = it;
+                }
+            }
+        }
+        if (best == terrain.chunks.end())
+        {
+            return;
+        }
+
+        const XMFLOAT3 targetPosition = best->second.sphere.center;
+        const float radius = std::max(best->second.sphere.radius, 1.0f);
+        const XMVECTOR at = XMLoadFloat3(&targetPosition);
+        const XMVECTOR eye =
+            at +
+            XMVectorSet(0.0f, radius * 1.5f, -radius * 2.5f, 0.0f);
+        const XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+        const XMMATRIX view = XMMatrixLookAtLH(eye, at, up);
+        editorCameraTransform_.ClearTransform();
+        editorCameraTransform_.MatrixTransform(
+            XMMatrixInverse(nullptr, view));
+        editorCameraTransform_.UpdateTransform();
+        camera->TransformCamera(editorCameraTransform_);
+        camera->width = static_cast<float>(GetInternalResolution().x);
+        camera->height = static_cast<float>(GetInternalResolution().y);
         camera->UpdateCamera();
     }
 

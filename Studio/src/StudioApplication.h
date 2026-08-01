@@ -258,6 +258,14 @@ namespace renegade::studio
         void BeginOpenScene(const std::string& scenePath);
         void CompleteOpenScene(bridge::PreparedSceneOpen prepared);
         void AdoptOpenedSceneCamera();
+        // Fallback used by AdoptOpenedSceneCamera() when the opened
+        // document has no authored camera. Recenters the editor camera
+        // over the terrain's own saved chunk position so Wicked's
+        // camera-distance chunk streaming does not evict the
+        // just-loaded, correctly-deserialized terrain chunks on the
+        // next frame. No-ops if the scene has no terrain.
+        void AdoptOpenedSceneTerrainFallbackCamera(
+            const wi::scene::Scene& openedScene);
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
