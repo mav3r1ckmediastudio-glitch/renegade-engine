@@ -1973,6 +1973,17 @@ namespace renegade::studio
 
     void StudioRenderPath::Update(const float dt)
     {
+        // Scene deserialization runs on Wicked's job system. Keep the current
+        // document visible but immutable until its prepared replacement is
+        // committed at EVENT_THREAD_SAFE_POINT. This check intentionally
+        // precedes RenderPath3D::Update(), because wiGUI callbacks can author
+        // scene changes from inside the base update.
+        if (sceneOpenInProgress_)
+        {
+            pendingAction_ = EditorAction::None;
+            return;
+        }
+
         RenderPath3D::Update(dt);
 
         if (session_ == nullptr || projectHubVisible_)
@@ -2434,9 +2445,26 @@ namespace renegade::studio
         }
 
         const auto& scenes = session_->Scenes();
+        if (sceneOpenInProgress_)
+        {
+            const std::string openingName = wi::helper::GetFileNameFromPath(
+                openingScenePath_);
+            statusLabel_.SetText("OPENING SCENE // " + openingName);
+            studioChrome_.SetStatusText(statusLabel_.GetText());
+            return;
+        }
         if (!scenes.LastError().empty())
         {
             statusLabel_.SetText("SCENE ERROR // " + scenes.LastError());
+            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+            studioChrome_.SetStatusText(statusLabel_.GetText());
+            return;
+        }
+
+        if (!session_->Documents().LastWarning().empty())
+        {
+            statusLabel_.SetText(
+                "SCENE WARNING // " + session_->Documents().LastWarning());
             studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
             studioChrome_.SetStatusText(statusLabel_.GetText());
             return;
@@ -2943,7 +2971,15 @@ namespace renegade::studio
         if (projectHubVisible_ ||
             flyCameraActive_ ||
             GetGUI().IsTyping() ||
-            pendingAction_ != EditorAction::None)
+            pendingAction_ != EditorAction::None ||
+            gizmoDragActive_ ||
+            weatherSliderActive_ ||
+            precipitationSliderActive_ ||
+            sunSliderActive_ ||
+            oceanSliderActive_ ||
+            terrainSliderActive_ ||
+            terrainTextureScaleActive_ ||
+            terrainStrokeActive_)
         {
             return;
         }
@@ -4885,11 +4921,22 @@ namespace renegade::studio
             });
     }
 
-    bool StudioRenderPath::ConfirmSceneReplacement()
+    void StudioRenderPath::RequestSceneReplacement(
+        std::function<void()> continuation)
     {
-        if (session_ == nullptr || !session_->Commands().IsDirty())
+        if (session_ == nullptr || !continuation)
         {
-            return session_ != nullptr;
+            return;
+        }
+
+        // A running preview is a real pending scene edit. Commit it first so
+        // the dirty-state question includes what the creator can currently
+        // see in the viewport.
+        StopSunPreview(true);
+        if (!session_->Commands().IsDirty())
+        {
+            continuation();
+            return;
         }
 
         const std::string currentPath = session_->Scenes().CurrentPath();
@@ -4903,30 +4950,40 @@ namespace renegade::studio
         if (result == wi::helper::MessageBoxResult::No ||
             result == wi::helper::MessageBoxResult::OK)
         {
-            return true;
+            continuation();
+            return;
         }
         if (result != wi::helper::MessageBoxResult::Yes)
         {
-            return false;
+            return;
         }
         if (currentPath.empty())
         {
-            SaveSceneAs();
-            return false;
+            SaveSceneAs(
+                [continuation = std::move(continuation)](const bool saved)
+                {
+                    if (saved)
+                    {
+                        continuation();
+                    }
+                });
+            return;
         }
 
-        StopSunPreview(true);
         ClearSelectionOutline();
         const bool saved = session_->SaveScene(currentPath);
         SyncSelectionOutline();
         RefreshStatus();
         RefreshInspector();
-        return saved;
+        if (saved)
+        {
+            continuation();
+        }
     }
 
     void StudioRenderPath::OpenScene()
     {
-        if (session_ == nullptr || !ConfirmSceneReplacement())
+        if (session_ == nullptr || sceneOpenInProgress_)
         {
             return;
         }
@@ -4943,23 +5000,121 @@ namespace renegade::studio
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, scenePath](uint64_t)
                     {
-                        StopSunPreview(false);
-                        ClearSelectionOutline();
-                        if (!session_->LoadScene(scenePath))
-                        {
-                            SyncSelectionOutline();
-                            RefreshStatus();
-                            RefreshInspector();
-                            return;
-                        }
-                        SetEnvironmentWorkspaceActive(false);
-                        SetTerrainWorkspaceActive(false);
-                        RefreshHierarchy();
-                        RefreshInspector();
-                        RefreshStatus();
-                        SetProjectHubVisible(false);
+                        RequestSceneReplacement(
+                            [this, scenePath]()
+                            {
+                                BeginOpenScene(scenePath);
+                            });
                     });
             });
+    }
+
+    void StudioRenderPath::BeginOpenScene(const std::string& scenePath)
+    {
+        if (session_ == nullptr || sceneOpenInProgress_)
+        {
+            return;
+        }
+
+        sceneOpenInProgress_ = true;
+        openingScenePath_ = scenePath;
+        sceneOpenWorkload_.priority = wi::jobsystem::Priority::Low;
+        if (projectHubVisible_)
+        {
+            hubMessageLabel_.font.params.color = HologramMuted;
+            hubMessageLabel_.SetText(
+                "SCENE OPENING // " +
+                wi::helper::GetFileNameFromPath(scenePath));
+        }
+        RefreshStatus();
+
+        auto prepared = std::make_shared<bridge::PreparedSceneOpen>();
+        wi::jobsystem::Execute(
+            sceneOpenWorkload_,
+            [this, scenePath, prepared](wi::jobsystem::JobArgs)
+            {
+                *prepared = session_->Documents().PrepareOpen(scenePath);
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, prepared](uint64_t)
+                    {
+                        CompleteOpenScene(std::move(*prepared));
+                    });
+            });
+    }
+
+    void StudioRenderPath::CompleteOpenScene(
+        bridge::PreparedSceneOpen prepared)
+    {
+        sceneOpenInProgress_ = false;
+        openingScenePath_.clear();
+
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        ClearSelectionOutline();
+        if (!session_->Documents().CommitPreparedOpen(std::move(prepared)))
+        {
+            SyncSelectionOutline();
+            if (projectHubVisible_)
+            {
+                hubMessageLabel_.font.params.color = WarningAmber;
+                hubMessageLabel_.SetText(
+                    "SCENE OPEN FAILED // " +
+                    session_->Scenes().LastError());
+            }
+            RefreshStatus();
+            RefreshInspector();
+            return;
+        }
+
+        AdoptOpenedSceneCamera();
+        SetEnvironmentWorkspaceActive(false);
+        SetTerrainWorkspaceActive(false);
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+        SetProjectHubVisible(false);
+    }
+
+    void StudioRenderPath::AdoptOpenedSceneCamera()
+    {
+        if (session_ == nullptr || camera == nullptr)
+        {
+            return;
+        }
+
+        const auto cameraEntity = session_->Documents().LastOpenedCamera();
+        const auto& openedScene = session_->Scenes().GetScene();
+        const auto* openedCamera =
+            openedScene.cameras.GetComponent(cameraEntity);
+        if (openedCamera == nullptr)
+        {
+            return;
+        }
+
+        camera->Eye = openedCamera->Eye;
+        camera->At = openedCamera->At;
+        camera->Up = openedCamera->Up;
+        camera->fov = openedCamera->fov;
+        camera->zNearP = openedCamera->zNearP;
+        camera->zFarP = openedCamera->zFarP;
+        camera->focal_length = openedCamera->focal_length;
+        camera->aperture_size = openedCamera->aperture_size;
+        camera->aperture_shape = openedCamera->aperture_shape;
+        camera->width = static_cast<float>(GetInternalResolution().x);
+        camera->height = static_cast<float>(GetInternalResolution().y);
+
+        const auto* openedTransform =
+            openedScene.transforms.GetComponent(cameraEntity);
+        if (openedTransform != nullptr)
+        {
+            editorCameraTransform_ = *openedTransform;
+            camera->TransformCamera(editorCameraTransform_);
+        }
+        camera->UpdateCamera();
     }
 
     void StudioRenderPath::OpenProjectDescriptor(
@@ -5024,18 +5179,16 @@ namespace renegade::studio
             return;
         }
 
-        if (!ConfirmSceneReplacement())
-        {
-            return;
-        }
-
-        StopSunPreview(true);
-
-        selectedRecentProject_ = -1;
-        hubMessageLabel_.font.params.color = HologramMuted;
-        hubMessageLabel_.SetText("PROJECT HUB ONLINE // SELECT AN OPERATION");
-        RefreshProjectHub();
-        SetProjectHubVisible(true);
+        RequestSceneReplacement(
+            [this]()
+            {
+                selectedRecentProject_ = -1;
+                hubMessageLabel_.font.params.color = HologramMuted;
+                hubMessageLabel_.SetText(
+                    "PROJECT HUB ONLINE // SELECT AN OPERATION");
+                RefreshProjectHub();
+                SetProjectHubVisible(true);
+            });
     }
 
     void StudioRenderPath::SelectRecentProject(const std::size_t index)
@@ -5193,7 +5346,8 @@ namespace renegade::studio
         RefreshInspector();
     }
 
-    void StudioRenderPath::SaveSceneAs()
+    void StudioRenderPath::SaveSceneAs(
+        std::function<void(bool)> completion)
     {
         if (session_ == nullptr)
         {
@@ -5208,20 +5362,31 @@ namespace renegade::studio
         params.extensions.push_back("wiscene");
         wi::helper::FileDialog(
             params,
-            [this](const std::string& selectedPath)
+            [this, completion](const std::string& selectedPath)
             {
                 const std::string scenePath =
                     wi::helper::ForceExtension(selectedPath, "wiscene");
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, scenePath](uint64_t)
+                    [this, scenePath, completion](uint64_t)
                     {
                         ClearSelectionOutline();
-                        session_->SaveScene(scenePath);
+                        const bool saved = session_->SaveScene(scenePath);
                         SyncSelectionOutline();
                         RefreshStatus();
                         RefreshInspector();
+                        if (completion)
+                        {
+                            completion(saved);
+                        }
                     });
+            },
+            [completion]()
+            {
+                if (completion)
+                {
+                    completion(false);
+                }
             });
     }
 
@@ -5232,12 +5397,19 @@ namespace renegade::studio
             return;
         }
 
-        StopSunPreview(false);
-        ClearSelectionOutline();
-        session_->ReloadScene();
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
+        const std::string scenePath = session_->Scenes().CurrentPath();
+        if (scenePath.empty())
+        {
+            session_->ReloadScene();
+            RefreshStatus();
+            return;
+        }
+
+        RequestSceneReplacement(
+            [this, scenePath]()
+            {
+                BeginOpenScene(scenePath);
+            });
     }
 
     void StudioApplication::SetStartupScene(std::string filePath)

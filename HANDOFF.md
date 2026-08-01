@@ -1,6 +1,6 @@
 # Renegade Engine — Development Handoff
 
-**Handoff date:** 2026-07-30
+**Handoff date:** 2026-08-01
 
 **Intended recipient:** Claude Code, Codex, or another coding agent
 
@@ -14,7 +14,66 @@
 
 **Active phase:** Phase 3 — Studio foundation
 
-**Active bounded task:** Renegade-owned Studio chrome functional slice
+**Active bounded task:** Robust Wicked-backed scene document workflow
+
+## Latest work in progress — robust scene documents
+
+The working tree is based on `982b516ffe9c16c2e6b099adea262b8357edfbe0`
+on `phase3/terrain-authoring`. That commit compiles but its packaged Open Scene
+workflow failed and is not accepted.
+
+The replacement implementation is currently uncommitted. It introduces a
+UI-free `SceneDocumentService` and keeps the WickedEngine submodule unchanged
+at `3a800b7134aafe58461093c8abb2e274d4e64033`:
+
+- WISCENE validation/deserialization is prepared through Wicked's public
+  archive and scene APIs without touching the active document;
+- Studio runs preparation on Wicked's low-priority job system and commits at
+  `EVENT_THREAD_SAFE_POINT`;
+- scene, path, selection reset and history reset change together only after a
+  successful preparation;
+- missing files and archives with invalid/incompatible headers preserve the
+  active document;
+- Project Hub and workspace show opening/failure state;
+- the first authored scene camera is adopted;
+- untitled Save-before-Open resumes the pending Open after successful Save As;
+  cancel or failed save aborts it; and
+- Runtime startup uses the same Wicked archive preparation operation;
+- Save and Save As serialize to a temporary WISCENE, reopen it for validation,
+  protect the previous destination, replace it atomically and validate the
+  final file before clearing dirty state;
+- each overwrite preserves the prior document as an openable
+  `*.bak.wiscene`;
+- successful saves retain the newest ten automatic WISCENE backups under
+  `Saved/Backups/Scenes/<scene-name>`; and
+- Reopen now uses the same unsaved-change prompt and asynchronous prepared
+  Open path instead of a separate synchronous reload.
+
+This safety model was cross-checked against GameGuru MAX's mature map workflow:
+protect the old file before overwrite, create rolling post-save backups and
+stage loading before replacing live editor state. Renegade implements that
+general design independently around Wicked WISCENE; no GameGuru MAX source was
+copied.
+
+No Wicked fork, branch, source edit or submodule-pointer change was made.
+Terrain implementation files were not changed. Pre-existing untracked state
+inside the WickedEngine submodule was left untouched and must not be removed or
+committed.
+
+Validation in the Linux workspace:
+
+- `git diff --check` — passed.
+- GNU C++17 syntax-only compilation — passed for
+  `SceneDocumentService.cpp`, `SceneService.cpp`, `StudioApplication.cpp`,
+  and `BridgeCommandTests.cpp`, using a temporary
+  SDL declaration shim because the recovery image has no SDL development
+  package.
+- CMake/build/CTest — not available because `cmake` is not installed.
+- Packaged Windows DX12/Vulkan — required and not yet run.
+
+The authoritative scope and packaged checklist are in
+`docs/PHASE3_WICKED_OPEN_SCENE_INTEGRATION.md`. Do not claim the scene document
+workflow works until that checklist passes in the packaged build.
 
 ## Latest work in progress — terrain polish patch
 

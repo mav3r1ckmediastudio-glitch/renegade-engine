@@ -1,5 +1,6 @@
 #include "renegade/bridge/SceneService.h"
 
+#include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/TerrainService.h"
 
 #include <algorithm>
@@ -633,96 +634,25 @@ namespace renegade::bridge
 
     bool SceneService::LoadScene(const std::string& filePath)
     {
-        if (!wi::helper::FileExists(filePath))
+        auto prepared = PrepareWickedSceneOpen(filePath);
+        if (!prepared.IsReady())
         {
-            lastError_ = "Scene file does not exist: " + filePath;
-            return false;
-        }
-
-        // Deserialize the archive directly rather than through
-        // wi::scene::LoadModel. LoadModel is an import path: it reparents every
-        // unparented transform under a temporary root and calls the
-        // renderer-dependent Scene::Update() before detaching again. Reading
-        // the archive with Scene::Serialize is the exact inverse of SaveScene
-        // and preserves the authored hierarchy.
-        wi::scene::Scene candidate;
-        {
-            wi::Archive archive(filePath, true);
-            if (!archive.IsOpen())
-            {
-                lastError_ = "Could not open scene file: " + filePath;
-                return false;
-            }
-
-            candidate.Serialize(archive);
-        }
-
-        wi::unordered_set<wi::ecs::Entity> entities;
-        candidate.FindAllEntities(entities);
-        if (entities.empty())
-        {
-            lastError_ = "Scene loaded no entities: " + filePath;
+            lastError_ = prepared.Error();
             return false;
         }
 
         scene_.Clear();
-        scene_.Merge(candidate);
+        scene_.Merge(*prepared.scene_);
+        for (std::size_t index = 0; index < scene_.terrains.GetCount(); ++index)
+        {
+            auto& terrain = scene_.terrains[index];
+            terrain.terrainEntity = scene_.terrains.GetEntity(index);
+            terrain.scene = &scene_;
+        }
         RebindDefaultTerrainMaterials(scene_);
-        currentPath_ = filePath;
+        currentPath_ = std::move(prepared.path_);
         lastError_.clear();
         return true;
-    }
-
-    bool SceneService::SaveScene(const std::string& filePath)
-    {
-        if (filePath.empty())
-        {
-            lastError_ = "A scene path is required.";
-            return false;
-        }
-
-        {
-            wi::Archive archive(filePath, false);
-            if (!archive.IsOpen())
-            {
-                lastError_ = "Could not create scene file: " + filePath;
-                return false;
-            }
-
-            archive.SetCompressionEnabled(true);
-
-            // Serialization writes local transforms only, and
-            // TransformComponent recomputes its world matrix on read. Calling
-            // the renderer-dependent Scene::Update() here would break headless
-            // callers, and the Studio frame loop already owns advancement.
-            scene_.Serialize(archive);
-
-            // Archive writes on destruction. Calling Close() here would make
-            // the destructor close the same archive a second time after its
-            // data buffer has already been cleared.
-        }
-
-        if (!wi::helper::FileExists(filePath))
-        {
-            lastError_ = "Scene file was not written: " + filePath;
-            return false;
-        }
-
-        currentPath_ = filePath;
-        lastError_.clear();
-        return true;
-    }
-
-    bool SceneService::ReloadScene()
-    {
-        if (currentPath_.empty())
-        {
-            lastError_ = "There is no saved scene to reopen.";
-            return false;
-        }
-
-        const std::string path = currentPath_;
-        return LoadScene(path);
     }
 
     wi::scene::Scene& SceneService::GetScene() noexcept

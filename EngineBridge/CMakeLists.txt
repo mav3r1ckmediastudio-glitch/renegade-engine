@@ -6,6 +6,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/TerrainService.h
     include/renegade/bridge/ProjectService.h
     include/renegade/bridge/SceneService.h
+    include/renegade/bridge/SceneDocumentService.h
     include/renegade/bridge/SelectionService.h
     include/renegade/bridge/StudioSession.h
     src/CommandService.cpp
@@ -15,6 +16,7 @@ add_library(RenegadeEngineBridge STATIC
     src/TerrainService.cpp
     src/ProjectService.cpp
     src/SceneService.cpp
+    src/SceneDocumentService.cpp
     src/SelectionService.cpp
 )
 

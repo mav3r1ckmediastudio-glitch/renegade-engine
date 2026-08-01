@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -254,6 +255,9 @@ namespace renegade::studio
         [[nodiscard]] bool IsSelectedEntityValid() const;
         void OpenProject();
         void OpenScene();
+        void BeginOpenScene(const std::string& scenePath);
+        void CompleteOpenScene(bridge::PreparedSceneOpen prepared);
+        void AdoptOpenedSceneCamera();
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
@@ -264,9 +268,11 @@ namespace renegade::studio
         void SyncGizmoSelection();
         void SyncSelectionOutline();
         void SaveScene();
-        void SaveSceneAs();
+        void SaveSceneAs(
+            std::function<void(bool)> completion = {});
         void ReopenScene();
-        [[nodiscard]] bool ConfirmSceneReplacement();
+        void RequestSceneReplacement(
+            std::function<void()> continuation);
 
         bridge::StudioSession* session_ = nullptr;
         wi::Application::InfoDisplayer* diagnostics_ = nullptr;
@@ -476,6 +482,9 @@ namespace renegade::studio
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
+        wi::jobsystem::context sceneOpenWorkload_;
+        std::string openingScenePath_;
+        bool sceneOpenInProgress_ = false;
     };
 
     class StudioApplication final : public wi::Application

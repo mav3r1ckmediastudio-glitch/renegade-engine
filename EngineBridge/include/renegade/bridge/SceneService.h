@@ -8,6 +8,8 @@
 
 namespace renegade::bridge
 {
+    class SceneDocumentService;
+
     struct SceneEntity
     {
         wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
@@ -84,9 +86,9 @@ namespace renegade::bridge
     public:
         void NewScene();
         void CreateProvingGround();
+        // Runtime startup load. Studio scene replacement goes through
+        // SceneDocumentService so selection/history are committed with it.
         bool LoadScene(const std::string& filePath);
-        bool SaveScene(const std::string& filePath);
-        bool ReloadScene();
 
         [[nodiscard]] wi::scene::Scene& GetScene() noexcept;
         [[nodiscard]] const wi::scene::Scene& GetScene() const noexcept;
@@ -103,6 +105,8 @@ namespace renegade::bridge
         [[nodiscard]] const std::string& LastError() const noexcept;
 
     private:
+        friend class SceneDocumentService;
+
         wi::scene::Scene scene_;
         std::string currentPath_;
         std::string lastError_;

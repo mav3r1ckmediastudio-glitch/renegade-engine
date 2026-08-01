@@ -34,6 +34,7 @@ Wicked operations. Initial service boundaries:
 
 - `ProjectService`
 - `SceneService`
+- `SceneDocumentService`
 - `SelectionService`
 - `CommandService`
 - `AssetService`
@@ -63,6 +64,24 @@ useful, while Renegade owns all visible pixels and all workflow composition.
 
 `ProjectService` owns `.renegade` descriptor validation and recent-project
 state. Studio calls that service rather than parsing project files in widgets.
+
+`SceneDocumentService` is the UI-free scene-document operation boundary.
+WISCENE preparation uses Wicked's archive and scene serialization on Wicked's
+job system without mutating the active document. Studio commits the prepared
+scene, document path, selection reset and command-history reset together at a
+Wicked thread-safe point. `SceneService::LoadScene` is reserved for Runtime
+startup and shares the same archive preparation operation; Studio must not use
+it as a second editor lifecycle.
+
+Save and Save As cross the same boundary. A save serializes the active Wicked
+scene into a same-directory temporary WISCENE, deserializes it as validation,
+protects the existing destination, replaces the destination atomically and
+validates the final file before marking the command history saved. The previous
+valid version remains as an openable `*.bak.wiscene`, while successful saves
+also maintain the newest ten WISCENE files under
+`Saved/Backups/Scenes/<scene-name>`. A backup warning never disguises a
+successful primary save, and a primary failure never changes the document path
+or clears dirty state.
 
 `CommandService` owns persistent Studio scene mutations. Full local transforms
 use a toolkit-independent `TransformState`; duplicate and delete commands use
