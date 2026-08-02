@@ -91,9 +91,29 @@ namespace
         RecordStage(path, "scene_serialize_begin");
         scene.Serialize(archive);
         RecordStage(path, "scene_serialize_complete");
-        RecordStage(path, "archive_close_begin");
-        archive.Close();
-        RecordStage(path, "archive_close_complete");
+
+        RecordStage(path, "archive_save_begin");
+        const bool archiveWritten = archive.SaveFile(path);
+        RecordStage(path, "archive_save_complete");
+
+        // Disarm the filename-backed archive before its destructor runs.
+        // wi::Archive::Close() (invoked by ~Archive()) is not idempotent: in
+        // write mode it unconditionally calls SaveFile() again, and a second
+        // call after the explicit SaveFile() above writes `pos` bytes from an
+        // already-cleared, null data pointer. That is an access violation,
+        // not a C++ exception, so it crashes past any try/catch below Wicked's
+        // Archive. Replacing the object with a fresh, filename-less Archive
+        // means its eventual destructor finds an empty fileName and Close()
+        // becomes a no-op. This mirrors the existing pattern in
+        // SceneDocumentService.cpp.
+        archive = wi::Archive();
+        RecordStage(path, "archive_disarmed");
+
+        if (!archiveWritten)
+        {
+            error = "Could not write the imported WISCENE asset: " + path;
+            return false;
+        }
 
         RecordStage(path, "written_archive_validation_begin");
         wi::Archive validation(path, true, false);
