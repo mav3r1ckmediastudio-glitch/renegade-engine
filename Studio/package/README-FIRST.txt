@@ -61,3 +61,23 @@ DX12 EDITING PASS / HIERARCHY PASS / TRANSFORM PASS / ENVIRONMENT PASS /
 CLOUDS PASS / CLOUD SHADOWS PASS / FOCUS PASS / DUPLICATE-DELETE PASS /
 HISTORY PASS / SAVE PASS / SHORTCUTS PASS / RECENTS PASS /
 VULKAN EDITING PASS
+
+LIGHT AUTHORING GATE
+====================
+
+1. Open ADD and choose POINT LIGHT. Confirm the cursor enters placement mode,
+   a cyan hit marker follows terrain or geometry, and left-click creates the
+   light at that surface.
+2. Repeat for SPOT LIGHT and RECTANGLE LIGHT. Confirm their initial emission
+   faces away from the clicked surface and their Inspector opens immediately.
+3. Enter placement again, then press Escape. Repeat and right-click. Confirm
+   neither cancellation creates a hierarchy row or Undo entry.
+4. Confirm a placement click does not also select/sculpt the hit object, move
+   a gizmo, or begin fly-camera navigation.
+5. Choose DIRECTIONAL LIGHT. Confirm it creates immediately and shows a
+   constant-size sun-and-arrow icon in the viewport.
+6. Click the icon and confirm the Directional light is selected and its Light
+   Inspector opens. Rotate it and confirm the arrow changes direction.
+7. Verify Undo/Redo, Delete/Undo, Save/Open, DX12, and Vulkan for all four
+   types. Launch Runtime and confirm no sun icon, placement marker, or light
+   source visualizer appears in the game.

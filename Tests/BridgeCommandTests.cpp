@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/LightService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
@@ -435,6 +436,19 @@ int main()
         "__renegade_internal_grid_test";
     scenes.GetScene().transforms.Create(internalGridEntity);
 
+    const auto hierarchyLight = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(hierarchyLight) = "Hierarchy Light";
+    scenes.GetScene().transforms.Create(hierarchyLight);
+    scenes.GetScene().lights.Create(hierarchyLight);
+    const auto hierarchyModel = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(hierarchyModel) = "Hierarchy Model";
+    scenes.GetScene().transforms.Create(hierarchyModel);
+    scenes.GetScene().objects.Create(hierarchyModel);
+    const auto hierarchyCharacter = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(hierarchyCharacter) = "Hierarchy Character";
+    scenes.GetScene().transforms.Create(hierarchyCharacter);
+    scenes.GetScene().humanoids.Create(hierarchyCharacter);
+
     const auto creatorEntities = scenes.ListEntities();
     if (creatorEntities.size() >= scenes.EntityCount())
     {
@@ -446,6 +460,32 @@ int main()
         {
             return Fail("internal entity name leaked into the hierarchy");
         }
+    }
+    const auto hasCategorisedEntity = [&creatorEntities](
+        const wi::ecs::Entity expectedEntity,
+        const renegade::bridge::SceneEntityCategory expectedCategory)
+    {
+        return std::any_of(
+            creatorEntities.begin(),
+            creatorEntities.end(),
+            [expectedEntity, expectedCategory](
+                const renegade::bridge::SceneEntity& candidate)
+            {
+                return candidate.entity == expectedEntity &&
+                    candidate.category == expectedCategory;
+            });
+    };
+    if (!hasCategorisedEntity(
+            hierarchyLight,
+            renegade::bridge::SceneEntityCategory::Lights) ||
+        !hasCategorisedEntity(
+            hierarchyModel,
+            renegade::bridge::SceneEntityCategory::Models) ||
+        !hasCategorisedEntity(
+            hierarchyCharacter,
+            renegade::bridge::SceneEntityCategory::Characters))
+    {
+        return Fail("hierarchy component categories are incorrect");
     }
 
     // Generated Proving Ground structure.
@@ -636,6 +676,45 @@ int main()
         authoredChunkData.blendmap_layers.resize(1);
         authoredChunkData.blendmap_layers[0].pixels = {3, 17, 128, 244};
 
+        const XMFLOAT4 placedLightRotation = XMFLOAT4(
+            std::sin(XM_PIDIV4 * 0.5f),
+            0.0f,
+            0.0f,
+            std::cos(XM_PIDIV4 * 0.5f));
+        auto createLight =
+            std::make_unique<renegade::bridge::CreateLightCommand>(
+                authored.Scenes().GetScene(),
+                wi::scene::LightComponent::SPOT,
+                XMFLOAT3(7.0f, 8.0f, 9.0f),
+                placedLightRotation);
+        auto* createLightCommand = createLight.get();
+        if (!authored.Commands().Execute(std::move(createLight)))
+        {
+            return Fail("round-trip Add Light command did not execute");
+        }
+        const auto authoredLightEntity = createLightCommand->CreatedEntity();
+        auto* authoredLight = authored.Scenes().GetScene().lights.GetComponent(
+            authoredLightEntity);
+        if (authoredLight == nullptr)
+        {
+            return Fail("round-trip Add Light component was not created");
+        }
+        auto authoredLightState = renegade::bridge::CaptureLight(*authoredLight);
+        authoredLightState.color = XMFLOAT3(0.2f, 0.4f, 0.8f);
+        authoredLightState.intensity = 321.0f;
+        authoredLightState.range = 47.0f;
+        authoredLightState.castShadow = true;
+        authoredLightState.volumetrics = true;
+        authoredLightState.volumetricBoost = 1.75f;
+        if (!authored.Commands().Execute(
+                std::make_unique<renegade::bridge::SetLightCommand>(
+                    authored.Scenes().GetScene(),
+                    authoredLightEntity,
+                    authoredLightState)))
+        {
+            return Fail("round-trip authored light state did not apply");
+        }
+
         if (!authored.SaveScene(scenePath.generic_string()) ||
             !std::filesystem::is_regular_file(scenePath) ||
             authored.Scenes().CurrentPath() != scenePath.generic_string())
@@ -702,6 +781,44 @@ int main()
         if (!reloadedLandmark)
         {
             return Fail("the reloaded scene lost a named entity");
+        }
+        bool reloadedAuthoredLight = false;
+        for (const auto& entity : reopened.Scenes().ListEntities())
+        {
+            if (entity.name != "Spot Light")
+            {
+                continue;
+            }
+            const auto* light =
+                reopened.Scenes().GetScene().lights.GetComponent(entity.entity);
+            const auto* transform = reopened.Scenes()
+                .GetScene()
+                .transforms.GetComponent(entity.entity);
+            if (light == nullptr || transform == nullptr ||
+                light->GetType() != wi::scene::LightComponent::SPOT ||
+                !NearlyEqual(light->color.x, 0.2f) ||
+                !NearlyEqual(light->color.z, 0.8f) ||
+                !NearlyEqual(light->intensity, 321.0f) ||
+                !NearlyEqual(light->range, 47.0f) ||
+                !light->IsCastingShadow() ||
+                !light->IsVolumetricsEnabled() ||
+                !NearlyEqual(light->volumetric_boost, 1.75f) ||
+                !NearlyEqual(transform->translation_local.x, 7.0f) ||
+                !NearlyEqual(transform->translation_local.z, 9.0f) ||
+                !NearlyEqual(
+                    transform->rotation_local.x,
+                    placedLightRotation.x) ||
+                !NearlyEqual(
+                    transform->rotation_local.w,
+                    placedLightRotation.w))
+            {
+                return Fail("the reloaded scene changed the authored light");
+            }
+            reloadedAuthoredLight = true;
+        }
+        if (!reloadedAuthoredLight)
+        {
+            return Fail("the reloaded scene lost the added light");
         }
         if (reopened.Scenes().GetScene().terrains.GetCount() != 1)
         {

@@ -16,14 +16,21 @@ through undoable commands.
 
 Since then, the Renegade-owned Studio chrome functional slice (PR #7),
 Environment workspace and precipitation (PR #8), Sun and time-of-day
-authoring (PR #9), and Native ocean authoring (PR #10) have all merged and
-passed packaged DX12/Vulkan acceptance. `main` remains at `475ac45`; PR #11
-carries the active terrain and robust scene-document work on
-`phase3/terrain-authoring`.
+authoring (PR #9), Native ocean authoring (PR #10), and Terrain Authoring V1
+plus the protected scene-document workflow (PR #11) have merged. Terrain
+sculpt Save/Open passed packaged DX12 and Vulkan acceptance on the project
+owner's Windows GPU.
 
-By product-owner decision on 2026-07-31, Terrain Authoring V1 is now the active
-gate. Light and material authoring follows it, then the asset-facing work that
-Phase 4 depends on.
+Light and Material Authoring is active on PR #12. Its UI-independent light and
+material contracts passed all four Gate 1 checks at `38c9f24`; the Light
+Inspector is visible in the packaged editor and Gate 2 Windows CI passed at
+`32351d9`. The active completion slice adds a permanent Renegade Add menu for
+all four native light types, click-to-place local lights, selectable
+editor-only markers for every light type, a grouped collapsible hierarchy,
+automatic selection, command-backed creation and WISCENE round-trip coverage.
+Material UI follows only after the complete light
+creation/edit/delete workflow passes packaged DX12 and Vulkan acceptance, then
+the asset-facing work that Phase 4 depends on.
 
 ## Phase plan
 
@@ -86,29 +93,15 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-**Terrain Authoring V1.** Establish a real landmass workflow on Wicked's native
-streamed terrain before returning to Light and Material Authoring.
+**Light and Material Authoring.** Extend the proven Environment inspector
+pattern to the two component types that still block creators from directly
+tuning the generated scene's look.
 
-- Create named native terrain with neutral automatic material regions.
-- Create the standard 1,716 x 1,716 m native terrain. Terrain-shape presets
-  are deferred until each one produces a visibly distinct, tested landform.
-- Add raise/lower, smooth, and flatten brushes with radius, strength, and
-  falloff.
-- Add material-layer painting and automatic slope/height rules.
-- Import and export validated 16-bit heightmaps.
-- Route persistent changes through `CommandService`; preserve native WISCENE
-  serialization and all unexposed terrain fields.
-- Require Windows Debug and Release CI, headless bridge tests, packaged DX12
-  visual acceptance, save/reopen, and Vulkan cross-check.
-
-See `docs/PHASE3_TERRAIN_AUTHORING.md` for the bounded slice sequence.
-
-**Following gate: Light and Material Authoring.** The Environment inspector
-proved the pattern; extend it to the two component types that still block the
-creator from fixing the generated scene's look.
-
-- Add a Light inspector for `LightComponent`: type, colour, intensity, range,
-  cone angles, cast-shadow, volumetrics and `volumetric_boost`.
+- Gate 1 passed all four PR checks for the native light and material command
+  contracts including terrain-material rejection.
+- Add a Light inspector for `LightComponent`: all four native types; colour;
+  intensity; range; cone angles; radius; capsule length / rectangle width;
+  rectangle height; cast-shadow; volumetrics; and `volumetric_boost`.
 - Add a Material inspector for `MaterialComponent`: base colour, metalness,
   roughness, reflectance, emissive colour and strength.
 - Route every persistent edit through `CommandService` with Undo/Redo,
@@ -116,12 +109,17 @@ creator from fixing the generated scene's look.
   covered fields and leave everything else on the component untouched.
 - Filter no-op edits from history; preview live on drag but commit one command
   on release.
-- Extend `RenegadeBridgeTests` with headless Undo/Redo coverage. Component
-  edits need no graphics device.
-- Require Windows x64 Debug and Release CI plus `RenegadeBridgeTests`.
-- Acceptance: from a freshly generated project and without rebuilding, darken
-  the terrain to smoked near-black, pull the hologram core back from clipped
-  white to readable cyan, and reopen with both intact.
+- Keep ordinary material authoring separate from `TerrainService`; the generic
+  material route must reject every terrain-owned material.
+- Require fresh Windows checks after each visible Inspector slice.
+- Light acceptance: visibly tune Gateway Beam and each type-specific shape;
+  verify one Undo entry per drag; Save/Open; Runtime; DX12 and Vulkan.
+- Material acceptance: from a freshly generated project and without
+  rebuilding pull an ordinary mesh back from clipped white to readable cyan;
+  Save/Open it while preserving all terrain chunks.
+
+See `docs/PHASE3_LIGHT_MATERIAL_AUTHORING.md` for the authoritative stop/go
+sequence and packaged checklist.
 
 Do not begin scene tabs, formal dirty-state handling, asset import, or the
 Identity Handshake.
