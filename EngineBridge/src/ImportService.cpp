@@ -1,5 +1,6 @@
 #include "renegade/bridge/ImportService.h"
 
+#include <algorithm>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -12,6 +13,70 @@
 namespace
 {
     namespace fs = std::filesystem;
+
+    // Meters. The default Automatic target extent: a human/prop-scale
+    // reference, the same order of magnitude GameGuru MAX's Automatic mode
+    // targets (60 inches / ~1.5 m against their inches-native engine), sized
+    // up slightly for Wicked's metres-native convention.
+    constexpr float AutomaticScaleTargetExtent = 2.0f;
+
+    // Union of every mesh's own local vertex-position bounds -- not a
+    // world-space, hierarchy-aware bounding box like GameGuru MAX's
+    // Automatic mode computes (DBOAssImp.cpp walks the full node/bone tree
+    // via each mesh's world/offset matrix). This is an honest approximation:
+    // exactly right for the common single-node or flat-hierarchy import,
+    // and not accounted for if a model's nodes carry large relative offsets
+    // or their own per-node scale. Only valid against the still-isolated
+    // scene PrepareGltfAsset produces.
+    float ComputeAutomaticScaleFactor(
+        const wi::scene::Scene& scene) noexcept
+    {
+        bool any = false;
+        XMFLOAT3 boundsMin(0.0f, 0.0f, 0.0f);
+        XMFLOAT3 boundsMax(0.0f, 0.0f, 0.0f);
+        for (std::size_t meshIndex = 0;
+            meshIndex < scene.meshes.GetCount();
+            ++meshIndex)
+        {
+            const auto& mesh = scene.meshes[meshIndex];
+            for (const auto& position : mesh.vertex_positions)
+            {
+                if (!any)
+                {
+                    boundsMin = position;
+                    boundsMax = position;
+                    any = true;
+                    continue;
+                }
+                boundsMin.x = std::min(boundsMin.x, position.x);
+                boundsMin.y = std::min(boundsMin.y, position.y);
+                boundsMin.z = std::min(boundsMin.z, position.z);
+                boundsMax.x = std::max(boundsMax.x, position.x);
+                boundsMax.y = std::max(boundsMax.y, position.y);
+                boundsMax.z = std::max(boundsMax.z, position.z);
+            }
+        }
+
+        if (!any)
+        {
+            return 1.0f;
+        }
+
+        const float extentX = boundsMax.x - boundsMin.x;
+        const float extentY = boundsMax.y - boundsMin.y;
+        const float extentZ = boundsMax.z - boundsMin.z;
+        const float largestExtent =
+            std::max(extentX, std::max(extentY, extentZ));
+        if (largestExtent <= 0.0001f)
+        {
+            // Degenerate (e.g. a single point or a flat plane on every
+            // axis Automatic could sensibly normalize) -- leave scale
+            // untouched rather than divide by a near-zero extent.
+            return 1.0f;
+        }
+
+        return AutomaticScaleTargetExtent / largestExtent;
+    }
 
     // Mirrors the file-local helper of the same name in CommandService.cpp.
     // Not shared through a header because it is a small, self-contained
@@ -485,13 +550,34 @@ namespace renegade::bridge
         return result;
     }
 
+    float ImportService::ResolveScaleFactor(
+        const ModelScaleMode mode,
+        const wi::scene::Scene& preparedScene) noexcept
+    {
+        switch (mode)
+        {
+            case ModelScaleMode::Centimeters:
+                return 0.01f;
+            case ModelScaleMode::Inches:
+                return 0.0254f;
+            case ModelScaleMode::Automatic:
+                return ComputeAutomaticScaleFactor(preparedScene);
+            case ModelScaleMode::Meters:
+            case ModelScaleMode::Original:
+            default:
+                return 1.0f;
+        }
+    }
+
     PlaceImportedModelCommand::PlaceImportedModelCommand(
         wi::scene::Scene& targetScene,
         wi::allocator::shared_ptr<wi::scene::Scene> preparedScene,
-        const XMFLOAT3& placementPosition)
+        const XMFLOAT3& placementPosition,
+        const float scaleFactor)
         : scene_(&targetScene)
         , preparedScene_(std::move(preparedScene))
         , placementPosition_(placementPosition)
+        , scaleFactor_(scaleFactor > 0.0f ? scaleFactor : 1.0f)
     {
     }
 
@@ -526,6 +612,10 @@ namespace renegade::bridge
             if (auto* transform = scene_->transforms.GetComponent(entity_))
             {
                 transform->translation_local = placementPosition_;
+                transform->scale_local = XMFLOAT3(
+                    scaleFactor_,
+                    scaleFactor_,
+                    scaleFactor_);
                 transform->SetDirty();
             }
 

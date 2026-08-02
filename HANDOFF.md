@@ -106,11 +106,16 @@ pass for the service and tests, but this Linux container has no CMake and
 cannot itself execute the Windows DX12/Vulkan import round trip — all
 packaged evidence above came from the project owner's machine.
 
-## Active slice — Model Import: Scene Placement (uncommitted)
+## Active slice — Model Import: Scene Placement
 
-Not yet committed or built. This is local, unverified work following Gate 1
-closure — see `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for the full scope,
-design rationale, and packaged acceptance checklist. Summary:
+Committed and built by the project owner; `ADD > IMPORT MODEL...` merge into
+the active scene, hierarchy placement, and Undo removing the whole imported
+hierarchy have been confirmed against `crate_box` in a packaged build. The
+full `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` acceptance checklist (Redo,
+Save/Reopen persistence, Runtime comparison, Vulkan repeat, busy-guard,
+malformed-file) has not been run to completion yet. See
+`docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for the full scope and design
+rationale. Summary:
 
 - Added `PreparedModelImport::ReleaseScene()` so a caller can take ownership
   of the converted scene without going through the Gate 1 WISCENE round
@@ -140,17 +145,54 @@ design rationale, and packaged acceptance checklist. Summary:
   the existing Save path. `BUILD > VALIDATE GLB/GLTF IMPORT...` is
   untouched.
 
-Changed files:
+### Follow-on, uncommitted: import scale correction
+
+Added after the project owner reported an imported `crate_box` landing
+"VERY large." Not yet committed or built. See "Import scale correction" in
+`docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for full design rationale and the
+GameGuru MAX comparison it is modeled after.
+
+- Added `ImportService::ModelScaleMode` (`Original`/`Meters`/`Centimeters`/
+  `Inches`/`Automatic`) and `ImportService::ResolveScaleFactor()` to
+  `EngineBridge/include/renegade/bridge/ImportService.h` /
+  `EngineBridge/src/ImportService.cpp`. `Automatic` normalizes the union of
+  every mesh's local vertex-position bounds to a 2 m target extent; the
+  others are fixed literal unit-correction multipliers (or a 1.0 no-op for
+  `Original`/`Meters`, which are always identical for a glTF source).
+- Added `PreparedModelImport::PeekScene()` so a caller can resolve a scale
+  factor against the still-isolated prepared scene before
+  `ReleaseScene()` hands it to `PlaceImportedModelCommand`.
+- Added a `scaleFactor` constructor parameter (default `1.0f`, backward
+  compatible) to `PlaceImportedModelCommand`; applied as the import root's
+  uniform `Scale` alongside its placement position, non-destructively —
+  never baked into vertex data — so it is captured by the same
+  `Entity_Serialize` snapshot Undo/Redo already uses.
+- `CompleteModelImportPlacement()` in `Studio/src/StudioApplication.cpp` now
+  always resolves `ModelScaleMode::Automatic` and passes it through; the
+  status bar reports the applied factor (`AUTO SCALE x0.XXX`) as packaged
+  evidence.
+- There is no UI choice among the five scale modes yet — `Automatic` always
+  applies on import, and there is no way to change it afterward except the
+  existing manual "select root, edit Scale X/Y/Z" workaround. A picker
+  control was deliberately deferred rather than risk a blind edit to the
+  Inspector's hand-rolled, hardcoded absolute-pixel layout with no way to
+  verify the result without a packaged build; `Centimeters`/`Inches` are
+  fully implemented and tested in `ImportService`, just not yet exposed.
+- Added `ResolveScaleFactor` unit coverage (literal multipliers, empty-scene
+  fallback, and a synthetic 20-unit-cube bounding-box normalization) and
+  extended the existing `PlaceImportedModelCommand` Execute/Undo/Redo test
+  to assert the scale factor is applied and survives Redo, in
+  `Tests/ImportTests.cpp`.
+
+Changed files (this follow-on only):
 
 - `EngineBridge/include/renegade/bridge/ImportService.h`
 - `EngineBridge/src/ImportService.cpp`
-- `Studio/src/RenegadeStudioChrome.h`
-- `Studio/src/RenegadeStudioChrome.cpp`
-- `Studio/src/StudioApplication.h`
 - `Studio/src/StudioApplication.cpp`
 - `Tests/ImportTests.cpp`
-- `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` (new)
+- `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`
 - `docs/FEATURE_MATRIX.csv`
+- `docs/ROADMAP.md`
 - `HANDOFF.md`
 
 **No local validation has run against this yet** — no syntax check, no
@@ -158,13 +200,16 @@ build, no packaged test. It has not even been committed. Before treating any
 part of this as working:
 
 1. Run the same kind of local C++17 syntax check used for prior slices
-   (see the Gate 1 commands below) against the seven changed source files.
+   (see the Gate 1 commands below) against the four changed source files.
 2. Commit and push, then run Windows CI.
-3. Package Release, then run every step in
-   `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`'s packaged acceptance checklist
-   on both DX12 and Vulkan. A crash, a failure to merge, a broken Undo/Redo,
-   or a loss of the imported model on Save/Reopen all stop this gate, same
-   as every other gate in this repository.
+3. Package Release, then re-run `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`'s
+   packaged acceptance checklist on both DX12 and Vulkan, paying particular
+   attention to the new step 5 (plausible size, `AUTO SCALE` status text,
+   and matching Inspector Scale X/Y/Z) and the scale assertions folded into
+   steps 6 and 7 (Redo/Save-Reopen preserving the applied scale). A crash, a
+   failure to merge, a broken Undo/Redo, or a loss of the imported model or
+   its applied scale on Save/Reopen all stop this gate, same as every other
+   gate in this repository.
 
 ## Completed slice — Model Import V1 Gate 1
 

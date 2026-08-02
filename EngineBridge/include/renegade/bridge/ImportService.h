@@ -72,6 +72,16 @@ namespace renegade::bridge
             return result_;
         }
 
+        // Read-only look at the converted scene without transferring
+        // ownership, so a caller can resolve something that depends on the
+        // converted geometry (such as an automatic scale factor) before
+        // deciding to take the scene via ReleaseScene(). Returns nullptr if
+        // IsReady() is false.
+        [[nodiscard]] const wi::scene::Scene* PeekScene() const noexcept
+        {
+            return scene_.IsValid() ? scene_.get() : nullptr;
+        }
+
         // Hands ownership of the converted scene to the caller, for callers
         // that place the model directly (PlaceImportedModelCommand) rather
         // than running the Gate 1 WISCENE round-trip proof. Only meaningful
@@ -90,6 +100,25 @@ namespace renegade::bridge
         ImportResult result_;
     };
 
+    // A creator-facing unit-correction choice for a just-converted model,
+    // applied as a uniform, non-destructive Scale on the import root
+    // transform -- never baked into vertex positions, bone matrices, or
+    // animation keyframes the way GameGuru MAX's importer applies its
+    // equivalent scaling modes. glTF 2.0 mandates metres and a Y-up,
+    // right-handed space, so Original and Meters always resolve to the same
+    // multiplier for this importer; both are offered so the choice reads
+    // the same as a familiar FBX/OBJ importer's list, even though only
+    // Centimeters, Inches, and Automatic actually change anything for a
+    // GLB/GLTF source.
+    enum class ModelScaleMode
+    {
+        Original,
+        Meters,
+        Centimeters,
+        Inches,
+        Automatic,
+    };
+
     // UI-independent conversion boundary for Model Import V1. The caller owns
     // file selection and presentation. Wicked's converter requires an active
     // graphics device while it creates native mesh/material render data, but
@@ -106,6 +135,20 @@ namespace renegade::bridge
 
         [[nodiscard]] static ImportedSceneSummary Summarize(
             const wi::scene::Scene& scene) noexcept;
+
+        // Resolves a scale mode against a prepared (converted, freshly
+        // isolated) scene into a single uniform multiplier for the import
+        // root's Scale. Automatic normalizes the union of every mesh's own
+        // local vertex-position bounds to a human-scale (2 m) target extent
+        // -- an honest approximation, not GameGuru MAX's world-space,
+        // bone-aware bounding box, but exactly right for the common
+        // single-node or flat-hierarchy model. Only meaningful against the
+        // isolated scene PrepareGltfAsset produces, before it is merged into
+        // a larger active scene, since a merged scene's meshes would no
+        // longer belong to just the imported model.
+        [[nodiscard]] static float ResolveScaleFactor(
+            ModelScaleMode mode,
+            const wi::scene::Scene& preparedScene) noexcept;
     };
 
     // Merges a freshly converted model directly into a live Studio scene and
@@ -122,11 +165,17 @@ namespace renegade::bridge
         // ImportService::PrepareGltfAsset (via PreparedModelImport::
         // ReleaseScene()). Wicked's Scene::Merge() empties the source scene
         // as it moves content into targetScene, so this command takes
-        // ownership of it.
+        // ownership of it. scaleFactor is applied as a uniform Scale on the
+        // import root alongside placementPosition; pass 1.0f for no
+        // correction, or ImportService::ResolveScaleFactor()'s result to
+        // apply a unit-correction/Automatic mode chosen before this command
+        // is constructed (that resolution needs the still-isolated prepared
+        // scene, so it must happen before ReleaseScene() hands it over).
         PlaceImportedModelCommand(
             wi::scene::Scene& targetScene,
             wi::allocator::shared_ptr<wi::scene::Scene> preparedScene,
-            const XMFLOAT3& placementPosition);
+            const XMFLOAT3& placementPosition,
+            float scaleFactor = 1.0f);
 
         bool Execute() override;
         void Undo() override;
@@ -137,6 +186,7 @@ namespace renegade::bridge
         wi::scene::Scene* scene_ = nullptr;
         wi::allocator::shared_ptr<wi::scene::Scene> preparedScene_;
         XMFLOAT3 placementPosition_ = {};
+        float scaleFactor_ = 1.0f;
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
         wi::Archive snapshot_;
         bool hasSnapshot_ = false;

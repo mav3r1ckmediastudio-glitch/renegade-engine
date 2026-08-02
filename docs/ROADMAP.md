@@ -39,10 +39,16 @@ A follow-up correction fixed a write-path crash and a false-positive
 round-trip comparison; Gate 1 acceptance is now closed on packaged DX12 and
 Vulkan against both a single-object model and a multi-node, multi-material,
 skinned/animated model (see `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` and
-`HANDOFF.md`). A smaller, uncommitted follow-on slice adds `ADD > IMPORT
-MODEL...`, merging a converted model directly into the active scene with
-Undo/Redo, short of full Asset Browser registration; it has not yet run in a
-packaged build.
+`HANDOFF.md`). A smaller follow-on slice adds `ADD > IMPORT MODEL...`,
+merging a converted model directly into the active scene with Undo/Redo,
+short of full Asset Browser registration; it is committed and built, with a
+packaged crate_box merge/hierarchy/Undo check confirmed and the rest of its
+acceptance checklist outstanding. A further, uncommitted addition resolves
+an automatic, non-destructive import-scale correction (`ModelScaleMode`:
+Original/Meters/Centimeters/Inches/Automatic, modeled after GameGuru MAX's
+importer) applied to the import root's Scale, fixing an oversized crate
+import the project owner reported; only `Automatic` is wired to the import
+flow so far, with no UI to choose another mode yet.
 
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light

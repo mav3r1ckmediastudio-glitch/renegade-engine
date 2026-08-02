@@ -6032,11 +6032,28 @@ namespace renegade::studio
             position.z += camera->At.z * 5.0f;
         }
 
+        // Resolve Automatic scale against the still-isolated prepared scene
+        // before ReleaseScene() hands it to the command -- once merged, its
+        // meshes are indistinguishable from every other mesh already in the
+        // active scene. This is the default correction for arbitrary
+        // downloaded/authored models with an unknown source unit (the
+        // "imports VERY large" case); it is a non-destructive uniform Scale
+        // on the import root, never baked into vertex data, so it can be
+        // freely edited or reset afterward like any other transform.
+        float scaleFactor = 1.0f;
+        if (const auto* preparedScene = prepared.PeekScene())
+        {
+            scaleFactor = bridge::ImportService::ResolveScaleFactor(
+                bridge::ModelScaleMode::Automatic,
+                *preparedScene);
+        }
+
         ClearSelectionOutline();
         auto command = std::make_unique<bridge::PlaceImportedModelCommand>(
             session_->Scenes().GetScene(),
             prepared.ReleaseScene(),
-            position);
+            position,
+            scaleFactor);
         auto* placeCommand = command.get();
         if (!session_->Commands().Execute(std::move(command)))
         {
@@ -6054,8 +6071,12 @@ namespace renegade::studio
         RefreshStatus();
 
         const fs::path source = fs::u8path(sourcePath);
+        std::ostringstream scaleReadout;
+        scaleReadout.precision(3);
+        scaleReadout << std::fixed << scaleFactor;
         studioChrome_.SetStatusText(
-            "IMPORT MODEL // PLACED // " + source.filename().u8string());
+            "IMPORT MODEL // PLACED // " + source.filename().u8string() +
+            " // AUTO SCALE x" + scaleReadout.str());
     }
 
     void StudioRenderPath::CreateProject()

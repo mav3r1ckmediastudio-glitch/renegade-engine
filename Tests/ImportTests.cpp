@@ -1,5 +1,6 @@
 #include "renegade/bridge/ImportService.h"
 
+#include <cmath>
 #include <iostream>
 #include <utility>
 
@@ -53,6 +54,71 @@ int main()
         return Fail("scene structural summary is incorrect");
     }
 
+    // ResolveScaleFactor: Original/Meters are always a no-op for a
+    // glTF-mandated metres source; Centimeters/Inches are fixed literal
+    // multipliers; Automatic normalizes the union of every mesh's local
+    // vertex-position bounds to the 2 m target extent.
+    {
+        wi::scene::Scene empty;
+        const float originalFactor = renegade::bridge::ImportService::
+            ResolveScaleFactor(
+                renegade::bridge::ModelScaleMode::Original,
+                empty);
+        const float metersFactor = renegade::bridge::ImportService::
+            ResolveScaleFactor(
+                renegade::bridge::ModelScaleMode::Meters,
+                empty);
+        if (originalFactor != 1.0f || metersFactor != 1.0f)
+        {
+            return Fail("Original/Meters scale mode did not resolve to 1.0");
+        }
+
+        const float centimetersFactor = renegade::bridge::ImportService::
+            ResolveScaleFactor(
+                renegade::bridge::ModelScaleMode::Centimeters,
+                empty);
+        if (centimetersFactor != 0.01f)
+        {
+            return Fail("Centimeters scale mode did not resolve to 0.01");
+        }
+
+        const float inchesFactor = renegade::bridge::ImportService::
+            ResolveScaleFactor(
+                renegade::bridge::ModelScaleMode::Inches,
+                empty);
+        if (inchesFactor != 0.0254f)
+        {
+            return Fail("Inches scale mode did not resolve to 0.0254");
+        }
+
+        // An empty scene has no vertex data to normalize against; Automatic
+        // must fall back to a no-op rather than divide by zero.
+        const float emptyAutomaticFactor = renegade::bridge::ImportService::
+            ResolveScaleFactor(
+                renegade::bridge::ModelScaleMode::Automatic,
+                empty);
+        if (emptyAutomaticFactor != 1.0f)
+        {
+            return Fail("Automatic scale mode did not fall back to 1.0 for an empty scene");
+        }
+
+        wi::scene::Scene withMesh;
+        const auto meshEntity = wi::ecs::CreateEntity();
+        auto& mesh = withMesh.meshes.Create(meshEntity);
+        // A 20-unit cube: the largest extent (20) should normalize to the
+        // 2 m target extent, i.e. a 0.1x factor.
+        mesh.vertex_positions.push_back(XMFLOAT3(-10.0f, -10.0f, -10.0f));
+        mesh.vertex_positions.push_back(XMFLOAT3(10.0f, 10.0f, 10.0f));
+        const float automaticFactor = renegade::bridge::ImportService::
+            ResolveScaleFactor(
+                renegade::bridge::ModelScaleMode::Automatic,
+                withMesh);
+        if (std::abs(automaticFactor - 0.1f) > 0.0001f)
+        {
+            return Fail("Automatic scale mode did not normalize the largest mesh extent");
+        }
+    }
+
     const auto incomplete = imports.CompleteGltfAsset({});
     if (incomplete.succeeded || incomplete.error.find("not ready") == std::string::npos)
     {
@@ -77,8 +143,9 @@ int main()
         prepared->transforms.Create(importedEntity);
 
         const XMFLOAT3 placement(1.0f, 2.0f, 3.0f);
+        const float scaleFactor = 0.1f;
         renegade::bridge::PlaceImportedModelCommand place(
-            target, std::move(prepared), placement);
+            target, std::move(prepared), placement, scaleFactor);
 
         if (!place.Execute())
         {
@@ -102,6 +169,12 @@ int main()
         {
             return Fail("PlaceImportedModelCommand did not position the imported root");
         }
+        if (placedTransform->scale_local.x != scaleFactor ||
+            placedTransform->scale_local.y != scaleFactor ||
+            placedTransform->scale_local.z != scaleFactor)
+        {
+            return Fail("PlaceImportedModelCommand did not apply the scale factor");
+        }
 
         place.Undo();
         if (target.transforms.GetCount() != 1)
@@ -113,10 +186,17 @@ int main()
         {
             return Fail("PlaceImportedModelCommand redo did not restore the imported entity");
         }
-        if (target.transforms.GetCount() != 2 ||
-            target.transforms.GetComponent(placedEntity) == nullptr)
+        const auto* redoneTransform =
+            target.transforms.GetComponent(placedEntity);
+        if (target.transforms.GetCount() != 2 || redoneTransform == nullptr)
         {
             return Fail("PlaceImportedModelCommand redo did not restore the original entity id");
+        }
+        if (redoneTransform->scale_local.x != scaleFactor ||
+            redoneTransform->scale_local.y != scaleFactor ||
+            redoneTransform->scale_local.z != scaleFactor)
+        {
+            return Fail("PlaceImportedModelCommand redo did not restore the applied scale factor");
         }
     }
 
