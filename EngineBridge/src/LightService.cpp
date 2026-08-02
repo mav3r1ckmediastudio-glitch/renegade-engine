@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 namespace
 {
@@ -12,6 +13,49 @@ namespace
     bool NearlyEqual(const float left, const float right) noexcept
     {
         return std::abs(left - right) <= Epsilon;
+    }
+
+    bool EntityExists(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
+        wi::unordered_set<wi::ecs::Entity> entities;
+        scene.FindAllEntities(entities);
+        return entities.count(entity) != 0;
+    }
+
+    XMFLOAT4 SanitizeRotation(const XMFLOAT4& rotation) noexcept
+    {
+        const XMVECTOR value = XMLoadFloat4(&rotation);
+        const float lengthSquared = XMVectorGetX(XMVector4LengthSq(value));
+        if (!std::isfinite(lengthSquared) || lengthSquared < Epsilon)
+        {
+            return XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+        }
+        XMFLOAT4 result;
+        XMStoreFloat4(&result, XMQuaternionNormalize(value));
+        return result;
+    }
+
+    const char* LightTypeName(
+        const wi::scene::LightComponent::LightType type) noexcept
+    {
+        switch (type)
+        {
+        case wi::scene::LightComponent::DIRECTIONAL:
+            return "Directional Light";
+        case wi::scene::LightComponent::SPOT:
+            return "Spot Light";
+        case wi::scene::LightComponent::RECTANGLE:
+            return "Rectangle Light";
+        case wi::scene::LightComponent::POINT:
+        default:
+            return "Point Light";
+        }
     }
 }
 
@@ -106,6 +150,141 @@ namespace renegade::bridge
         light.SetCastShadow(safe.castShadow);
         light.SetVolumetricsEnabled(safe.volumetrics);
         light.volumetric_boost = safe.volumetricBoost;
+    }
+
+    LightState MakeNewLightState(
+        const wi::scene::LightComponent::LightType type) noexcept
+    {
+        LightState state;
+        state.type = type;
+        state.color = XMFLOAT3(1.0f, 1.0f, 1.0f);
+        state.range = 60.0f;
+        state.outerConeDegrees = 45.0f;
+        state.innerConeDegrees = 0.0f;
+        state.radius = 0.025f;
+
+        switch (type)
+        {
+        case wi::scene::LightComponent::DIRECTIONAL:
+            state.intensity = 10.0f;
+            state.radius = 0.25f;
+            break;
+        case wi::scene::LightComponent::SPOT:
+            state.intensity = 100.0f;
+            break;
+        case wi::scene::LightComponent::RECTANGLE:
+            state.intensity = 20.0f;
+            state.length = 2.0f;
+            state.height = 2.0f;
+            break;
+        case wi::scene::LightComponent::POINT:
+        default:
+            state.type = wi::scene::LightComponent::POINT;
+            state.intensity = 20.0f;
+            break;
+        }
+        return state;
+    }
+
+    CreateLightCommand::CreateLightCommand(
+        wi::scene::Scene& scene,
+        const wi::scene::LightComponent::LightType type,
+        const XMFLOAT3& position,
+        const XMFLOAT4& rotation)
+        : scene_(&scene)
+        , type_(MakeNewLightState(type).type)
+        , position_(position)
+        , rotation_(SanitizeRotation(rotation))
+    {
+    }
+
+    bool CreateLightCommand::Execute()
+    {
+        if (scene_ == nullptr)
+        {
+            return false;
+        }
+
+        if (hasSnapshot_)
+        {
+            if (EntityExists(*scene_, entity_))
+            {
+                return false;
+            }
+            snapshot_.SetReadModeAndResetPos(true);
+            wi::ecs::EntitySerializer serializer;
+            serializer.allow_remap = false;
+            return scene_->Entity_Serialize(snapshot_, serializer) == entity_;
+        }
+
+        const auto state = MakeNewLightState(type_);
+        entity_ = scene_->Entity_CreateLight(
+            MakeUniqueName(),
+            position_,
+            state.color,
+            state.intensity,
+            state.range,
+            state.type,
+            state.outerConeDegrees * DegreesToRadians,
+            state.innerConeDegrees * DegreesToRadians);
+        auto* light = scene_->lights.GetComponent(entity_);
+        if (entity_ == wi::ecs::INVALID_ENTITY || light == nullptr)
+        {
+            entity_ = wi::ecs::INVALID_ENTITY;
+            return false;
+        }
+        ApplyLight(*light, state);
+        auto* transform = scene_->transforms.GetComponent(entity_);
+        if (transform == nullptr)
+        {
+            scene_->Entity_Remove(entity_);
+            entity_ = wi::ecs::INVALID_ENTITY;
+            return false;
+        }
+        transform->rotation_local = rotation_;
+        transform->SetDirty();
+        transform->UpdateTransform();
+
+        snapshot_.SetReadModeAndResetPos(false);
+        wi::ecs::EntitySerializer serializer;
+        scene_->Entity_Serialize(snapshot_, serializer, entity_);
+        hasSnapshot_ = true;
+        return true;
+    }
+
+    void CreateLightCommand::Undo()
+    {
+        if (scene_ != nullptr && EntityExists(*scene_, entity_))
+        {
+            scene_->Entity_Remove(entity_);
+        }
+    }
+
+    wi::ecs::Entity CreateLightCommand::CreatedEntity() const noexcept
+    {
+        return entity_;
+    }
+
+    std::string CreateLightCommand::MakeUniqueName() const
+    {
+        const std::string base = LightTypeName(type_);
+        std::string candidate = base;
+        int suffix = 2;
+        bool collision = true;
+        while (collision)
+        {
+            collision = false;
+            for (std::size_t index = 0; index < scene_->names.GetCount(); ++index)
+            {
+                if (scene_->names[index].name == candidate)
+                {
+                    collision = true;
+                    candidate = base + " " + std::to_string(suffix++);
+                    break;
+                }
+            }
+        }
+        return candidate;
     }
 
     SetLightCommand::SetLightCommand(

@@ -106,6 +106,19 @@ while the second cloud layer, wind, rain, ocean, weather maps, and advanced
 scattering parameters survive an edit unmodified. Light and material authoring
 must follow the same pattern.
 
+Creator-facing entity creation follows the same command boundary. The first
+implementation, `CreateLightCommand`, calls Wicked's native
+`Scene::Entity_CreateLight` and snapshots the complete resulting entity through
+Wicked's `Entity_Serialize`. Undo removes it and Redo restores the same entity
+identity without reconstructing a parallel Renegade light. Studio owns the Add
+menu, surface-raycast placement, selection, and Inspector transition; the
+bridge owns native creation and history. Point, Spot, and Rectangle use a
+modal click-to-place tool; Directional creates camera-relative because its
+position is only an editor anchor. Directional discoverability is a
+screen-space Studio icon rendered and hit-tested from the native transform.
+It is not a scene entity, component, mesh, serialized light visualizer, or
+Runtime feature.
+
 Dedicated state services extend that curated model without widening
 `WeatherState`: `PrecipitationState`, `SunState` and `OceanState` own their
 respective native fields and commands. `OceanState` is intentionally complete

@@ -23,9 +23,13 @@ owner's Windows GPU.
 
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light
-Inspector is the next visible stop/go slice. Material UI follows only after the
-light slice passes CI and packaged acceptance, then the asset-facing work that
-Phase 4 depends on.
+Inspector is visible in the packaged editor and Gate 2 Windows CI passed at
+`32351d9`. The active completion slice adds a permanent Renegade Add menu for
+all four native light types, click-to-place local lights, a selectable
+editor-only Directional icon, automatic selection, command-backed creation and
+WISCENE round-trip coverage. Material UI follows only after the complete light
+creation/edit/delete workflow passes packaged DX12 and Vulkan acceptance, then
+the asset-facing work that Phase 4 depends on.
 
 ## Phase plan
 

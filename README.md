@@ -17,9 +17,13 @@ documentation, and release process.
 > terrain, sculpts across chunk seams, and preserves all 169 sculpted chunks
 > through packaged DX12 and Vulkan Save/Open round trips. Light and material
 > bridge contracts have passed the first PR gate. A Renegade-owned Light
-> Inspector is now the active gated slice; its UI and packaged behaviour remain
-> pending Windows CI and owner acceptance. Material UI and asset authoring are
-> not built. This repository is not yet a usable game engine release.
+> Inspector is visible in the packaged editor and its Windows CI is green.
+> The active gated slice adds a Renegade-owned Add menu for creating all four
+> native Wicked light types with surface click placement for local lights and
+> a selectable editor-only Directional icon, plus Undo/Redo, Delete, selection,
+> and WISCENE persistence; packaged behaviour remains pending owner acceptance. Material UI
+> and asset authoring are not built. This repository is not yet a usable game
+> engine release.
 
 ## Baseline
 

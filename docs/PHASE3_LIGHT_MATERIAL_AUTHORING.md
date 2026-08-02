@@ -25,10 +25,12 @@ DX12, Runtime, and Vulkan builds.
 - Slice 0 is complete.
 - The Light and Material bridge proofs are implemented together in Gate 1.
 - All four PR #12 checks passed at `38c9f24` on 2026-08-02.
-- Slice 2 now adds the Renegade Light Inspector and must pass fresh CI before
-  packaged DX12 testing begins.
-- No Light Inspector behaviour or visual result is accepted from compilation
-  alone.
+- Slice 2 Light Inspector CI passed at `32351d9` and its selection-driven UI
+  was visually confirmed in packaged DX12.
+- Slice 2A is active: native Add Light, surface placement, Directional scene
+  icon, and complete packaged lifecycle acceptance.
+- No placement, icon, persistence, or Runtime result is accepted from
+  compilation alone.
 
 ## Verified Wicked capability map
 
@@ -178,6 +180,37 @@ are wired.
 Gate: packaged DX12 must show a visibly changed light, one Undo entry per drag,
 correct Undo/Redo, and no change after Save/Open.
 
+### Slice 2A — Add Light workflow
+
+- Add a permanent Renegade-owned `ADD` menu to the top bar; do not introduce a
+  stock Wicked Editor window or a permanent Lighting workspace.
+- Offer Point, Spot, Directional, and Rectangle Light entries.
+- Execute a UI-independent `CreateLightCommand` that calls Wicked's native
+  `Scene::Entity_CreateLight`, gives the entity a unique creator-facing name,
+  and stores a native entity snapshot for Undo/Redo.
+- Point, Spot, and Rectangle enter a modal placement tool. Raycast the next
+  viewport click against terrain or scene geometry, show a live hit/normal
+  preview, and consume that click so it cannot also select or sculpt.
+- Align new Spot and Rectangle emission to the clicked surface normal. `Esc`
+  or right-click cancels without creating an entity or history entry.
+- Create Directional immediately five metres in front of the editor camera;
+  its position anchors a Renegade-owned sun-and-direction icon even though
+  only its rotation affects illumination.
+- Draw and hit-test Directional icons entirely in Studio. They must remain a
+  constant screen size, select the native entity, and never serialize or
+  appear in Runtime as a mesh, helper entity, or Wicked visualizer flag.
+- Select every successfully created light automatically so the existing Light
+  Inspector opens immediately.
+- Use Wicked Editor's native starting values and rectangle source shape rather
+  than inventing parallel light data.
+- Reuse the existing `DeleteEntityCommand` for Delete and restoration.
+- Prove native Name, Layer, Transform, and Light components; all four types;
+  unique names; rectangle shape; Undo/Redo; Delete/Undo; and WISCENE round trip.
+
+Gate: packaged DX12 must create, select, inspect, edit, Undo/Redo, Delete/Undo,
+save, close and reopen every light type. Repeat the visual workflow in Vulkan
+before beginning the Material Inspector.
+
 ### Slice 3 — Material bridge proof
 
 - Add UI-independent `MaterialState`, target resolution, terrain ownership
@@ -226,6 +259,12 @@ Runtime, and Vulkan must pass before merge.
 | Slider creates hundreds of Undo steps | Assert one completed drag records one command |
 | No-op dirties the document | Assert unchanged state returns false and history remains empty |
 | Entity disappears during edit | Command fails without history or unrelated mutation |
+| Add Light creates UI-only state | Assert native Name, Layer, Transform and Light components exist |
+| Add/Undo/Redo changes identity | Serialize the entity snapshot and restore the same entity and unique name |
+| Added light is not discoverable | Use the permanent ADD menu and auto-select the created hierarchy entity |
+| Directional light has no visible source | Draw a selectable editor-only sun/direction icon at its transform without serialized helper state |
+| Placement click performs two tools | Placement consumes viewport input before navigation, sculpting, gizmos, and ordinary selection |
+| Editor helper leaks into the game | Keep scene icons in Studio and assert new native lights do not enable the serialized visualizer flag |
 | Shared or multi-material mesh is ambiguous | Resolve only one unique material; otherwise reject |
 | Generic material edit regenerates terrain | Reject every terrain-owned material in EngineBridge |
 | Save/Open changes authored values | Serialize, reopen, recapture, and compare curated states |
@@ -238,7 +277,7 @@ Runtime, and Vulkan must pass before merge.
 - No material texture import, reassignment, reimport, or asset database.
 - No multi-material slot picker.
 - No terrain-region appearance editing through the generic Material Inspector.
-- No light creation/deletion workflow beyond the existing entity commands.
+- No light cookies, mask assignment, or batch-placement workflow.
 - No advanced light cascades, masks, lens flares, cookies, static baking, or
   forced shadow-resolution UI.
 - No advanced PBR shader, transparency, clearcoat, sheen, transmission,

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include <WickedEngine.h>
 
 #include "renegade/bridge/CommandService.h"
@@ -37,6 +39,39 @@ namespace renegade::bridge
     void ApplyLight(
         wi::scene::LightComponent& light,
         const LightState& state) noexcept;
+
+    // Creator-facing defaults for a newly authored native Wicked light.
+    // These follow Wicked Editor's own creation values while giving each
+    // shape useful dimensions before the Inspector edits it.
+    [[nodiscard]] LightState MakeNewLightState(
+        wi::scene::LightComponent::LightType type) noexcept;
+
+    class CreateLightCommand final : public ICommand
+    {
+    public:
+        CreateLightCommand(
+            wi::scene::Scene& scene,
+            wi::scene::LightComponent::LightType type,
+            const XMFLOAT3& position,
+            const XMFLOAT4& rotation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+
+        bool Execute() override;
+        void Undo() override;
+
+        [[nodiscard]] wi::ecs::Entity CreatedEntity() const noexcept;
+
+    private:
+        [[nodiscard]] std::string MakeUniqueName() const;
+
+        wi::scene::Scene* scene_ = nullptr;
+        wi::scene::LightComponent::LightType type_ =
+            wi::scene::LightComponent::POINT;
+        XMFLOAT3 position_ = {};
+        XMFLOAT4 rotation_ = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+        wi::Archive snapshot_;
+        bool hasSnapshot_ = false;
+    };
 
     class SetLightCommand final : public ICommand
     {

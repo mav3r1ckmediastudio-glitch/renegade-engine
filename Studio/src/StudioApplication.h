@@ -47,6 +47,7 @@ namespace renegade::studio
             FocusSelection,
             DuplicateSelection,
             DeleteSelection,
+            CreateLight,
             OpenScene,
             SaveScene,
             SaveSceneAs,
@@ -262,6 +263,18 @@ namespace renegade::studio
             LightField field,
             float value) noexcept;
         bool CommitSelectedLight(const bridge::LightState& light);
+        void CreateLight(
+            wi::scene::LightComponent::LightType type);
+        void PlaceLight(
+            wi::scene::LightComponent::LightType type,
+            const XMFLOAT3& position,
+            const XMFLOAT4& rotation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+        bool HandleLightPlacement(const XMFLOAT4& pointer);
+        void CancelLightPlacement();
+        bool HandleDirectionalLightSceneIcons(const XMFLOAT4& pointer);
+        [[nodiscard]] bool ProjectEditorPoint(
+            const XMFLOAT3& world,
+            XMFLOAT2& screen) const noexcept;
         bool HandleTerrainSculpt(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
@@ -538,6 +551,11 @@ namespace renegade::studio
         wi::ecs::Entity lightSliderEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::LightState lightSliderBefore_;
         bridge::LightState lightSliderAfter_;
+        wi::scene::LightComponent::LightType pendingLightType_ =
+            wi::scene::LightComponent::POINT;
+        wi::scene::LightComponent::LightType lightPlacementType_ =
+            wi::scene::LightComponent::POINT;
+        bool lightPlacementActive_ = false;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;

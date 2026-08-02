@@ -22,6 +22,80 @@ namespace
     constexpr wi::Color WarningAmber = wi::Color(255, 150, 40, 255);
     constexpr int LayoutPreferenceBits = 10;
 
+    XMFLOAT4 RotationFromTo(
+        const XMFLOAT3& source,
+        const XMFLOAT3& target) noexcept
+    {
+        const XMVECTOR sourceVector = XMLoadFloat3(&source);
+        const XMVECTOR targetVector = XMLoadFloat3(&target);
+        if (XMVectorGetX(XMVector3LengthSq(sourceVector)) < 0.0001f ||
+            XMVectorGetX(XMVector3LengthSq(targetVector)) < 0.0001f)
+        {
+            return XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+        }
+        const XMVECTOR from = XMVector3Normalize(sourceVector);
+        const XMVECTOR to = XMVector3Normalize(targetVector);
+        const float dot = XMVectorGetX(XMVector3Dot(from, to));
+        if (dot >= 0.9999f)
+        {
+            return XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+        }
+        if (dot <= -0.9999f)
+        {
+            XMVECTOR axis = XMVector3Cross(from, XMVectorSet(1, 0, 0, 0));
+            if (XMVectorGetX(XMVector3LengthSq(axis)) < 0.0001f)
+            {
+                axis = XMVector3Cross(from, XMVectorSet(0, 0, 1, 0));
+            }
+            XMFLOAT4 rotation;
+            XMStoreFloat4(
+                &rotation,
+                XMQuaternionRotationAxis(XMVector3Normalize(axis), XM_PI));
+            return rotation;
+        }
+
+        const XMVECTOR axis = XMVector3Cross(from, to);
+        XMFLOAT4 rotation;
+        XMStoreFloat4(
+            &rotation,
+            XMQuaternionNormalize(XMVectorSet(
+                XMVectorGetX(axis),
+                XMVectorGetY(axis),
+                XMVectorGetZ(axis),
+                1.0f + dot)));
+        return rotation;
+    }
+
+    const char* PlacementLightName(
+        const wi::scene::LightComponent::LightType type) noexcept
+    {
+        switch (type)
+        {
+        case wi::scene::LightComponent::SPOT:
+            return "SPOT";
+        case wi::scene::LightComponent::RECTANGLE:
+            return "RECTANGLE";
+        case wi::scene::LightComponent::DIRECTIONAL:
+            return "DIRECTIONAL";
+        case wi::scene::LightComponent::POINT:
+        default:
+            return "POINT";
+        }
+    }
+
+    void DrawEditorLine(
+        const XMFLOAT2& start,
+        const XMFLOAT2& end,
+        const XMFLOAT4& color)
+    {
+        wi::renderer::RenderableLine2D line;
+        line.start = start;
+        line.end = end;
+        line.color_start = color;
+        line.color_end = color;
+        wi::renderer::DrawLine(line);
+    }
+
     int ReadLayoutPreference(
         const renegade::bridge::ProjectService& projects,
         const std::string& key,
@@ -1828,6 +1902,22 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::Delete:
                 pendingAction_ = EditorAction::DeleteSelection;
                 break;
+            case RenegadeStudioChrome::Action::CreatePointLight:
+                pendingLightType_ = wi::scene::LightComponent::POINT;
+                pendingAction_ = EditorAction::CreateLight;
+                break;
+            case RenegadeStudioChrome::Action::CreateSpotLight:
+                pendingLightType_ = wi::scene::LightComponent::SPOT;
+                pendingAction_ = EditorAction::CreateLight;
+                break;
+            case RenegadeStudioChrome::Action::CreateDirectionalLight:
+                pendingLightType_ = wi::scene::LightComponent::DIRECTIONAL;
+                pendingAction_ = EditorAction::CreateLight;
+                break;
+            case RenegadeStudioChrome::Action::CreateRectangleLight:
+                pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
+                pendingAction_ = EditorAction::CreateLight;
+                break;
             case RenegadeStudioChrome::Action::Focus:
                 pendingAction_ = EditorAction::FocusSelection;
                 break;
@@ -2150,6 +2240,9 @@ namespace renegade::studio
         }
 
         viewportBounds_ = studioChrome_.ViewportBounds();
+        const XMFLOAT4 pointer = wi::input::GetPointer();
+        const bool directionalIconConsumed =
+            HandleDirectionalLightSceneIcons(pointer);
 
         if (sunPreviewPlaying_)
         {
@@ -2184,13 +2277,22 @@ namespace renegade::studio
             return;
         }
 
+        if (directionalIconConsumed)
+        {
+            return;
+        }
+
         if (gizmoEntity_ != session_->Selection().SelectedEntity())
         {
             SyncGizmoSelection();
             SyncSelectionOutline();
         }
 
-        const XMFLOAT4 pointer = wi::input::GetPointer();
+        if (HandleLightPlacement(pointer))
+        {
+            return;
+        }
+
         HandleViewportNavigation(dt, pointer);
 
         if (GetGUI().HasFocus() && !gizmoDragActive_)
@@ -2639,6 +2741,17 @@ namespace renegade::studio
         {
             statusLabel_.SetText(
                 "SCENE WARNING // " + session_->Documents().LastWarning());
+            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+            studioChrome_.SetStatusText(statusLabel_.GetText());
+            return;
+        }
+
+        if (lightPlacementActive_)
+        {
+            statusLabel_.SetText(
+                std::string("PLACE ") +
+                PlacementLightName(lightPlacementType_) +
+                " LIGHT // LEFT CLICK SURFACE // ESC OR RIGHT CLICK CANCEL");
             studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
             studioChrome_.SetStatusText(statusLabel_.GetText());
             return;
@@ -3227,6 +3340,7 @@ namespace renegade::studio
             sunSliderActive_ ||
             oceanSliderActive_ ||
             lightSliderActive_ ||
+            lightPlacementActive_ ||
             terrainSliderActive_ ||
             terrainTextureScaleActive_ ||
             terrainStrokeActive_)
@@ -3307,6 +3421,10 @@ namespace renegade::studio
 
         const EditorAction action = pendingAction_;
         pendingAction_ = EditorAction::None;
+        if (lightPlacementActive_ && action != EditorAction::CreateLight)
+        {
+            CancelLightPlacement();
+        }
         switch (action)
         {
         case EditorAction::Undo:
@@ -3342,6 +3460,9 @@ namespace renegade::studio
             break;
         case EditorAction::DeleteSelection:
             DeleteSelection();
+            break;
+        case EditorAction::CreateLight:
+            CreateLight(pendingLightType_);
             break;
         case EditorAction::OpenScene:
             OpenScene();
@@ -3605,6 +3726,305 @@ namespace renegade::studio
         RefreshHierarchy();
         RefreshInspector();
         RefreshStatus();
+    }
+
+    void StudioRenderPath::CreateLight(
+        const wi::scene::LightComponent::LightType type)
+    {
+        if (session_ == nullptr || camera == nullptr)
+        {
+            return;
+        }
+
+        StopSunPreview(true);
+        SetEnvironmentWorkspaceActive(false);
+        SetTerrainWorkspaceActive(false);
+
+        lightPlacementActive_ = false;
+        if (type != wi::scene::LightComponent::DIRECTIONAL)
+        {
+            lightPlacementType_ = type;
+            lightPlacementActive_ = true;
+            ClearSelectionOutline();
+            RefreshStatus();
+            return;
+        }
+
+        XMFLOAT3 position = camera->Eye;
+        position.x += camera->At.x * 5.0f;
+        position.y += camera->At.y * 5.0f;
+        position.z += camera->At.z * 5.0f;
+
+        PlaceLight(type, position);
+    }
+
+    void StudioRenderPath::PlaceLight(
+        const wi::scene::LightComponent::LightType type,
+        const XMFLOAT3& position,
+        const XMFLOAT4& rotation)
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        ClearSelectionOutline();
+        auto command = std::make_unique<bridge::CreateLightCommand>(
+            session_->Scenes().GetScene(),
+            type,
+            position,
+            rotation);
+        auto* createCommand = command.get();
+        if (!session_->Commands().Execute(std::move(command)))
+        {
+            SyncSelectionOutline();
+            return;
+        }
+
+        lightPlacementActive_ = false;
+        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+        session_->Selection().Select(createCommand->CreatedEntity());
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::CancelLightPlacement()
+    {
+        if (!lightPlacementActive_)
+        {
+            return;
+        }
+        lightPlacementActive_ = false;
+        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+        RefreshStatus();
+    }
+
+    bool StudioRenderPath::HandleLightPlacement(const XMFLOAT4& pointer)
+    {
+        if (!lightPlacementActive_ || session_ == nullptr)
+        {
+            return false;
+        }
+
+        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
+            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+        {
+            CancelLightPlacement();
+            return true;
+        }
+
+        if (flyCameraActive_ || GetGUI().HasFocus() ||
+            !IsPointerOverViewport(pointer))
+        {
+            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+            return false;
+        }
+
+        const auto ray = wi::renderer::GetPickRay(
+            static_cast<long>(pointer.x),
+            static_cast<long>(pointer.y),
+            *this,
+            *camera);
+        const auto picked = wi::scene::Pick(
+            ray,
+            wi::enums::FILTER_OBJECT_ALL,
+            ~0u,
+            session_->Scenes().GetScene());
+        if (picked.entity == wi::ecs::INVALID_ENTITY)
+        {
+            wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
+            return true;
+        }
+
+        wi::input::SetCursor(wi::input::CURSOR_CROSS);
+        wi::renderer::DrawSphere(
+            wi::primitive::Sphere(picked.position, 0.18f),
+            XMFLOAT4(0.20f, 0.92f, 1.0f, 0.90f),
+            false);
+        wi::renderer::RenderableLine normal;
+        normal.start = picked.position;
+        XMStoreFloat3(
+            &normal.end,
+            XMLoadFloat3(&picked.position) +
+                XMLoadFloat3(&picked.normal) * 0.8f);
+        normal.color_start = XMFLOAT4(0.20f, 0.92f, 1.0f, 0.95f);
+        normal.color_end = XMFLOAT4(1.0f, 0.55f, 0.15f, 0.95f);
+        wi::renderer::DrawLine(normal, false);
+
+        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            return true;
+        }
+
+        XMFLOAT4 rotation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+        if (lightPlacementType_ == wi::scene::LightComponent::SPOT)
+        {
+            rotation = RotationFromTo(XMFLOAT3(0, 1, 0), picked.normal);
+        }
+        else if (lightPlacementType_ == wi::scene::LightComponent::RECTANGLE)
+        {
+            rotation = RotationFromTo(XMFLOAT3(0, 0, -1), picked.normal);
+        }
+        PlaceLight(lightPlacementType_, picked.position, rotation);
+        return true;
+    }
+
+    bool StudioRenderPath::ProjectEditorPoint(
+        const XMFLOAT3& world,
+        XMFLOAT2& screen) const noexcept
+    {
+        if (camera == nullptr)
+        {
+            return false;
+        }
+        const XMVECTOR clip = XMVector4Transform(
+            XMVectorSet(world.x, world.y, world.z, 1.0f),
+            camera->GetViewProjection());
+        const float w = XMVectorGetW(clip);
+        if (w <= 0.001f)
+        {
+            return false;
+        }
+        const XMVECTOR ndc = clip / w;
+        const float z = XMVectorGetZ(ndc);
+        if (z < 0.0f || z > 1.0f)
+        {
+            return false;
+        }
+        screen.x = (XMVectorGetX(ndc) * 0.5f + 0.5f) * GetLogicalWidth();
+        screen.y = (-XMVectorGetY(ndc) * 0.5f + 0.5f) * GetLogicalHeight();
+        return IsPointerOverViewport(XMFLOAT4(screen.x, screen.y, 0, 0));
+    }
+
+    bool StudioRenderPath::HandleDirectionalLightSceneIcons(
+        const XMFLOAT4& pointer)
+    {
+        if (session_ == nullptr || camera == nullptr || projectHubVisible_)
+        {
+            return false;
+        }
+
+        auto& scene = session_->Scenes().GetScene();
+        const auto selected = session_->Selection().SelectedEntity();
+        wi::ecs::Entity hit = wi::ecs::INVALID_ENTITY;
+        float bestDistanceSquared = 22.0f * 22.0f;
+        const bool canSelect = !lightPlacementActive_ &&
+            !flyCameraActive_ && !GetGUI().HasFocus() &&
+            !gizmo_.IsInteracting() &&
+            IsPointerOverViewport(pointer) &&
+            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+
+        for (std::size_t index = 0; index < scene.lights.GetCount(); ++index)
+        {
+            const auto entity = scene.lights.GetEntity(index);
+            const auto& light = scene.lights[index];
+            if (light.GetType() != wi::scene::LightComponent::DIRECTIONAL ||
+                !session_->Scenes().IsHierarchyVisible(entity))
+            {
+                continue;
+            }
+            const auto* transform = scene.transforms.GetComponent(entity);
+            if (transform == nullptr)
+            {
+                continue;
+            }
+
+            const XMFLOAT3 position = transform->GetPosition();
+            XMFLOAT2 center;
+            if (!ProjectEditorPoint(position, center))
+            {
+                continue;
+            }
+            const float dx = pointer.x - center.x;
+            const float dy = pointer.y - center.y;
+            const float distanceSquared = dx * dx + dy * dy;
+            const bool hovered = distanceSquared <= 22.0f * 22.0f;
+            const XMFLOAT4 color = entity == selected
+                ? XMFLOAT4(1.0f, 0.55f, 0.15f, 1.0f)
+                : hovered
+                    ? XMFLOAT4(0.58f, 0.95f, 1.0f, 1.0f)
+                    : XMFLOAT4(0.20f, 0.84f, 1.0f, 0.92f);
+
+            constexpr int Segments = 16;
+            constexpr float Radius = 8.0f;
+            for (int segment = 0; segment < Segments; ++segment)
+            {
+                const float angle0 = static_cast<float>(segment) /
+                    static_cast<float>(Segments) * XM_2PI;
+                const float angle1 = static_cast<float>(segment + 1) /
+                    static_cast<float>(Segments) * XM_2PI;
+                DrawEditorLine(
+                    XMFLOAT2(center.x + std::cos(angle0) * Radius,
+                        center.y + std::sin(angle0) * Radius),
+                    XMFLOAT2(center.x + std::cos(angle1) * Radius,
+                        center.y + std::sin(angle1) * Radius),
+                    color);
+            }
+            for (int rayIndex = 0; rayIndex < 8; ++rayIndex)
+            {
+                const float angle = static_cast<float>(rayIndex) / 8.0f * XM_2PI;
+                DrawEditorLine(
+                    XMFLOAT2(center.x + std::cos(angle) * 11.0f,
+                        center.y + std::sin(angle) * 11.0f),
+                    XMFLOAT2(center.x + std::cos(angle) * 16.0f,
+                        center.y + std::sin(angle) * 16.0f),
+                    color);
+            }
+
+            XMFLOAT3 directionTarget = position;
+            directionTarget.x += light.direction.x;
+            directionTarget.y += light.direction.y;
+            directionTarget.z += light.direction.z;
+            XMFLOAT2 projectedDirection;
+            XMFLOAT2 arrow = XMFLOAT2(0.0f, 1.0f);
+            if (ProjectEditorPoint(directionTarget, projectedDirection))
+            {
+                arrow = XMFLOAT2(
+                    projectedDirection.x - center.x,
+                    projectedDirection.y - center.y);
+                const float length = std::sqrt(
+                    arrow.x * arrow.x + arrow.y * arrow.y);
+                if (length > 0.001f)
+                {
+                    arrow.x /= length;
+                    arrow.y /= length;
+                }
+            }
+            const XMFLOAT2 arrowEnd = XMFLOAT2(
+                center.x + arrow.x * 22.0f,
+                center.y + arrow.y * 22.0f);
+            DrawEditorLine(center, arrowEnd, color);
+            const XMFLOAT2 perpendicular = XMFLOAT2(-arrow.y, arrow.x);
+            DrawEditorLine(
+                arrowEnd,
+                XMFLOAT2(arrowEnd.x - arrow.x * 6.0f + perpendicular.x * 4.0f,
+                    arrowEnd.y - arrow.y * 6.0f + perpendicular.y * 4.0f),
+                color);
+            DrawEditorLine(
+                arrowEnd,
+                XMFLOAT2(arrowEnd.x - arrow.x * 6.0f - perpendicular.x * 4.0f,
+                    arrowEnd.y - arrow.y * 6.0f - perpendicular.y * 4.0f),
+                color);
+
+            if (canSelect && hovered && distanceSquared < bestDistanceSquared)
+            {
+                bestDistanceSquared = distanceSquared;
+                hit = entity;
+            }
+        }
+
+        if (hit == wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
+        SetEnvironmentWorkspaceActive(false);
+        SetTerrainWorkspaceActive(false);
+        session_->Selection().Select(hit);
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+        return true;
     }
 
     bool StudioRenderPath::IsPointerOverViewport(

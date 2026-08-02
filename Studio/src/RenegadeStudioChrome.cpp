@@ -775,9 +775,9 @@ namespace renegade::studio
             bool consumed = false;
             bool drawerTabInteraction = false;
 
-            constexpr std::array<const char*, 5> menus = {
-                "FILE", "EDIT", "VIEW", "BUILD", "WINDOW"};
-            std::array<float, 5> menuPositions = {};
+            constexpr std::array<const char*, 6> menus = {
+                "FILE", "EDIT", "ADD", "VIEW", "BUILD", "WINDOW"};
+            std::array<float, 6> menuPositions = {};
             float menuX = 222.0f;
             for (std::size_t index = 0; index < menus.size(); ++index)
             {
@@ -801,8 +801,8 @@ namespace renegade::studio
                 constexpr float popupWidth = 226.0f;
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
-                constexpr std::array<int, 5> popupItemCounts = {
-                    5, 4, 4, 1, 3};
+                constexpr std::array<int, 6> popupItemCounts = {
+                    5, 4, 4, 4, 1, 3};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -834,6 +834,15 @@ namespace renegade::studio
                     }
                     else if (activeMenu_ == 2 && item >= 0 && item < 4)
                     {
+                        constexpr std::array<Action, 4> actions = {
+                            Action::CreatePointLight,
+                            Action::CreateSpotLight,
+                            Action::CreateDirectionalLight,
+                            Action::CreateRectangleLight};
+                        invoke(actions[item]);
+                    }
+                    else if (activeMenu_ == 3 && item >= 0 && item < 4)
+                    {
                         if (item == 0)
                         {
                             invoke(Action::Focus);
@@ -847,7 +856,7 @@ namespace renegade::studio
                             SetActiveBottomTab(item == 2 ? 0 : 3, true);
                         }
                     }
-                    else if (activeMenu_ == 4 && item >= 0 && item < 3)
+                    else if (activeMenu_ == 5 && item >= 0 && item < 3)
                     {
                         if (item == 2)
                         {
@@ -861,7 +870,7 @@ namespace renegade::studio
                 }
             }
 
-            const float menuEnd = 531.0f;
+            const float menuEnd = 580.0f;
             const float firstToolX = menuEnd + 13.0f;
             constexpr std::array<float, 4> widths = {
                 82.0f, 102.0f, 82.0f, 82.0f};
@@ -1069,8 +1078,8 @@ namespace renegade::studio
         DrawRect(204.0f, 0.0f, 1.0f, TopBarHeight, BorderSoft, cmd);
 
         // Menus are deliberately quiet. Ember is reserved for active state.
-        constexpr std::array<const char*, 5> menus = {
-            "FILE", "EDIT", "VIEW", "BUILD", "WINDOW"};
+        constexpr std::array<const char*, 6> menus = {
+            "FILE", "EDIT", "ADD", "VIEW", "BUILD", "WINDOW"};
         float menuX = 222.0f;
         int menuIndex = 0;
         for (const char* menu : menus)
@@ -1645,8 +1654,8 @@ namespace renegade::studio
 
         if (activeMenu_ >= 0)
         {
-            constexpr std::array<const char*, 5> menuLabels = {
-                "FILE", "EDIT", "VIEW", "BUILD", "WINDOW"};
+            constexpr std::array<const char*, 6> menuLabels = {
+                "FILE", "EDIT", "ADD", "VIEW", "BUILD", "WINDOW"};
             float popupX = 214.0f;
             for (int index = 0; index < activeMenu_; ++index)
             {
@@ -1667,11 +1676,16 @@ namespace renegade::studio
             }
             else if (activeMenu_ == 2)
             {
+                items = {{"POINT LIGHT", true}, {"SPOT LIGHT", true},
+                    {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true}};
+            }
+            else if (activeMenu_ == 3)
+            {
                 items = {{"FOCUS SELECTION", true},
                     {gridVisible_ ? "HIDE EDITOR GRID" : "SHOW EDITOR GRID", true},
                     {"ASSET BROWSER", true}, {"DIAGNOSTICS", true}};
             }
-            else if (activeMenu_ == 3)
+            else if (activeMenu_ == 4)
             {
                 items = {{"PACKAGING NOT AVAILABLE YET", false}};
             }

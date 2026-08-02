@@ -12,12 +12,9 @@
 
 **Gate 1 remote commit:** `38c9f24`
 
-**Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
+**Gate 2 remote commit:** `32351d9`
 
-The GitHub integration can read PR #12 but returned HTTP 403 when asked to
-update its metadata. Its current title remains
-`Plan and prove light material authoring bridge`; the intended milestone title
-is `Light and Material Authoring`. This metadata cleanup does not block CI.
+**Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current truth
 
@@ -31,60 +28,71 @@ Undo/Redo, no-op filtering, native-field preservation tests, material target
 resolution, and service-level rejection of every terrain-owned material. The
 project owner reported all four required PR checks green at `38c9f24`.
 
-## Gate 2 — Light Inspector implementation
+Gate 2 at `32351d9` adds the Renegade-owned selection-driven Light Inspector.
+All four Windows checks passed and the project owner visually confirmed that
+selecting `Gateway Beam` reveals the expected native Spot controls. The full
+edit/Undo/Redo/Save/Open/Runtime/Vulkan behaviour matrix has not yet been
+reported complete.
 
-The next patch adds the first visible authoring slice without starting the
-Material Inspector. It:
+## Active slice — Add Light workflow
 
-- extends `LightState` with Wicked's native source `radius`, `length`, and
-  `height` fields;
-- updates `RenegadeLightTests` so these shape fields are proven through native
-  apply, Undo, Redo, sanitization, and no-op detection;
-- adds a Renegade-owned Light section beneath Transform for selected light
-  entities;
-- exposes Directional, Point, Spot, and Rectangle types;
-- exposes RGB colour, intensity, range, cast-shadow, real volumetrics, and
-  volumetric boost;
-- exposes type-aware source shapes matching Wicked's reference editor:
-  Directional radius; Point radius and capsule length; Spot cone angles and
-  radius; Rectangle width and height;
-- disables range for Directional lights;
-- previews slider edits directly, restores the captured native state at drag
-  completion, and executes exactly one `SetLightCommand`; and
-- preserves the existing Transform section and every unexposed Wicked light
-  field.
+The next patch completes light authoring before Material UI starts. It:
+
+- adds a permanent `ADD` menu to Renegade's owned top bar;
+- offers Point, Spot, Directional, and Rectangle Light;
+- calls Wicked's native `Scene::Entity_CreateLight` behind a UI-independent
+  `CreateLightCommand`;
+- enters click-to-place mode for Point, Spot, and Rectangle, raycasting the
+  viewport against terrain and scene geometry;
+- previews the surface hit and normal, consumes placement input, and supports
+  `Esc` or right-click cancellation;
+- aligns Spot and Rectangle emission to the clicked surface normal;
+- creates Directional immediately five metres in front of the editor camera;
+- draws a constant-size, selectable sun-and-direction icon for every visible
+  Directional light entirely in Studio, with no serialized helper state;
+- assigns unique creator-facing names such as `Point Light 2`;
+- selects the new entity automatically so the existing Inspector opens;
+- snapshots the complete native entity for Undo/Redo;
+- reuses the existing Delete command and restoration path; and
+- adds native component, all-type, naming, rectangle-shape, history, Delete,
+  and WISCENE round-trip tests.
 
 No stock Wicked Editor window is embedded. No Wicked file or submodule pointer
 is changed. No material UI or terrain material path is added.
 
-## Local validation of the Gate 2 patch
+## Local validation of the Add Light patch
 
 - `git diff --check` passes.
-- Changed `LightService`, `LightTests`, and `StudioApplication` translation
-  units pass local C++17 syntax validation using the pinned Wicked headers.
-- CSV shape and documentation consistency checks remain part of the final
-  packaging pass.
-- Windows compilation and runtime behaviour are not claimed locally; PR #12
-  must run fresh Windows checks after the patch is pushed.
+- Changed `LightService`, `LightTests`, `BridgeCommandTests`,
+  `RenegadeStudioChrome`, and `StudioApplication` translation units pass local
+  C++17 syntax validation using the pinned Wicked headers and a temporary SDL
+  declaration shim required only because this container lacks SDL development
+  headers.
+- The container has no CMake installation, so Windows compilation and runtime
+  behaviour are not claimed locally. PR #12 must run fresh Windows checks.
 
-## Required Gate 2 acceptance
+## Required Add Light acceptance
 
-1. Apply and push the Gate 2 patch to
+1. Apply and push the Add Light patch to
    `phase3/light-material-authoring` without merging PR #12.
 2. Require all four PR checks to pass again.
 3. Package Release and launch DX12 Studio.
-4. Select `Gateway Beam`; confirm the Inspector shows Spot controls and no
-   Rectangle/Point-only shape controls.
-5. Tune RGB, intensity, range, inner/outer cone, radius, cast-shadow,
-   volumetrics, and boost; confirm the viewport responds live.
-6. Confirm one completed slider drag creates exactly one Undo step, then verify
-   Undo and Redo.
-7. Change selected native lights through Directional, Point, Spot, and
-   Rectangle; verify the correct type-specific shape controls and visible
-   renderer behaviour.
-8. Save, close, reopen, and confirm the authored values and appearance remain.
-9. Launch Runtime with the saved scene and compare the light appearance.
-10. Repeat the editor check with the `vulkan` argument.
+4. Open `ADD` and create each of Point, Spot, Directional, and Rectangle Light.
+5. Confirm every new light appears in the hierarchy, is selected automatically,
+   and opens the correct type-aware Inspector controls.
+6. Confirm Point, Spot, and Rectangle show a placement preview and appear at
+   the clicked surface; Spot and Rectangle face along its normal. Confirm the
+   placement click does not also select, sculpt, move a gizmo, or start camera
+   navigation, and cancellation creates no light.
+7. Confirm Directional creates immediately, shows a selectable sun/direction
+   icon in the viewport, and that selecting the icon opens its Inspector.
+   Confirm no editor icon or light visualizer appears in Runtime.
+8. Verify Undo removes the new light, Redo restores it, Delete removes it, and
+   Undo restores the deletion.
+9. Edit representative values, then Save, close, reopen, and confirm all four
+   created lights and their appearance remain.
+10. Launch Runtime with the saved scene and compare light appearance.
+11. Repeat the complete editor visual check with the `vulkan` argument.
 
 A visible or behavioural failure stops the gate even if CI is green. Do not
 begin the Material Inspector until the Light Inspector passes the applicable
@@ -92,8 +100,9 @@ checks above.
 
 ## Following slice
 
-After Gate 2 passes, wire the already-tested `MaterialService` into a
-Renegade-owned Material Inspector for ordinary mesh materials only. Keep
+After the complete Add/Edit/Delete light workflow passes DX12, Save/Open,
+Runtime, and Vulkan acceptance, wire the already-tested `MaterialService` into
+a Renegade-owned Material Inspector for ordinary mesh materials only. Keep
 terrain materials behind `TerrainService`, explain ambiguous multi-material
 targets, and require a sculpt-preserving packaged regression check.
 

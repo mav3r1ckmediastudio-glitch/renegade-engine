@@ -1,6 +1,8 @@
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include <string>
 
 #include "renegade/bridge/LightService.h"
 
@@ -164,6 +166,102 @@ int main()
         return Fail("removed light produced a command-history entry");
     }
 
-    std::cout << "PASS: native light state, preservation, safety and Undo/Redo\n";
+    // Add Light is a native entity-authoring command, not a Studio-only
+    // shortcut. Prove all four types create the components Wicked owns.
+    wi::scene::Scene authored;
+    renegade::bridge::CommandService createCommands;
+    constexpr std::array<wi::scene::LightComponent::LightType, 4> types = {
+        wi::scene::LightComponent::POINT,
+        wi::scene::LightComponent::SPOT,
+        wi::scene::LightComponent::DIRECTIONAL,
+        wi::scene::LightComponent::RECTANGLE,
+    };
+    std::array<wi::ecs::Entity, types.size()> created = {};
+    const XMFLOAT4 authoredRotation = XMFLOAT4(
+        0.0f,
+        std::sin(XM_PIDIV4 * 0.5f),
+        0.0f,
+        std::cos(XM_PIDIV4 * 0.5f));
+    for (std::size_t index = 0; index < types.size(); ++index)
+    {
+        const XMFLOAT3 position(
+            10.0f + static_cast<float>(index),
+            20.0f,
+            30.0f);
+        auto command = std::make_unique<renegade::bridge::CreateLightCommand>(
+            authored,
+            types[index],
+            position,
+            authoredRotation);
+        auto* create = command.get();
+        if (!createCommands.Execute(std::move(command)))
+        {
+            return Fail("native Add Light command did not execute");
+        }
+        created[index] = create->CreatedEntity();
+        const auto* createdLight = authored.lights.GetComponent(created[index]);
+        const auto* transform = authored.transforms.GetComponent(created[index]);
+        const auto* name = authored.names.GetComponent(created[index]);
+        if (createdLight == nullptr || transform == nullptr || name == nullptr ||
+            !authored.layers.Contains(created[index]) ||
+            createdLight->GetType() != types[index] || name->name.empty() ||
+            createdLight->IsVisualizerEnabled() ||
+            !NearlyEqual(transform->translation_local.x, position.x) ||
+            !NearlyEqual(transform->translation_local.y, position.y) ||
+            !NearlyEqual(transform->translation_local.z, position.z) ||
+            !NearlyEqual(transform->rotation_local.y, authoredRotation.y) ||
+            !NearlyEqual(transform->rotation_local.w, authoredRotation.w))
+        {
+            return Fail("Add Light did not create a complete native entity");
+        }
+    }
+    const auto* rectangle = authored.lights.GetComponent(created.back());
+    if (rectangle == nullptr || !NearlyEqual(rectangle->length, 2.0f) ||
+        !NearlyEqual(rectangle->height, 2.0f))
+    {
+        return Fail("new rectangle light lost its native source shape");
+    }
+
+    auto secondPoint =
+        std::make_unique<renegade::bridge::CreateLightCommand>(
+            authored,
+            wi::scene::LightComponent::POINT,
+            XMFLOAT3(0.0f, 1.0f, 2.0f));
+    auto* secondPointCommand = secondPoint.get();
+    if (!createCommands.Execute(std::move(secondPoint)))
+    {
+        return Fail("second Add Light command did not execute");
+    }
+    const auto secondPointEntity = secondPointCommand->CreatedEntity();
+    const auto* secondPointName = authored.names.GetComponent(secondPointEntity);
+    if (secondPointName == nullptr || secondPointName->name != "Point Light 2")
+    {
+        return Fail("new lights did not receive unique creator-facing names");
+    }
+
+    if (!createCommands.Undo() || authored.lights.Contains(secondPointEntity) ||
+        !createCommands.Redo() || !authored.lights.Contains(secondPointEntity))
+    {
+        return Fail("Add Light Undo/Redo did not restore the same entity");
+    }
+    const auto* redonePointName = authored.names.GetComponent(secondPointEntity);
+    if (redonePointName == nullptr || redonePointName->name != "Point Light 2")
+    {
+        return Fail("Add Light Redo did not preserve the authored identity");
+    }
+
+    renegade::bridge::CommandService deleteCommands;
+    if (!deleteCommands.Execute(
+            std::make_unique<renegade::bridge::DeleteEntityCommand>(
+                authored,
+                secondPointEntity)) ||
+        authored.lights.Contains(secondPointEntity) ||
+        !deleteCommands.Undo() ||
+        !authored.lights.Contains(secondPointEntity))
+    {
+        return Fail("a newly added light did not support Delete and Undo");
+    }
+
+    std::cout << "PASS: native light edit, Add, Delete, preservation and history\n";
     return 0;
 }
