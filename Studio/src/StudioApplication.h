@@ -258,6 +258,13 @@ namespace renegade::studio
         void RunModelImportPlacement(const std::string& sourcePath);
         void CompleteModelImportPlacement(
             bridge::PreparedModelImport prepared);
+        void CreateImportScalePanel();
+        void ShowImportScalePanel(
+            wi::ecs::Entity entity,
+            float appliedScaleFactor,
+            const std::string& sourceFileName);
+        void ApplyImportScaleMode(bridge::ModelScaleMode mode);
+        void DismissImportScalePanel();
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -486,6 +493,12 @@ namespace renegade::studio
         wi::gui::Button continueProjectButton_;
         wi::gui::Label hubMessageLabel_;
         wi::gui::Button gridToggleButton_;
+        wi::gui::Window importScalePanel_;
+        wi::gui::Label importScaleTitleLabel_;
+        wi::gui::Label importScaleReadoutLabel_;
+        RenegadeComboBox importScaleModeCombo_;
+        RenegadeButton importScaleApplyButton_;
+        RenegadeButton importScaleDismissButton_;
         RenegadeStudioChrome studioChrome_;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;
@@ -574,6 +587,8 @@ namespace renegade::studio
         wi::jobsystem::context modelImportWorkload_;
         std::string openingScenePath_;
         bool sceneOpenInProgress_ = false;
+        wi::ecs::Entity importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
+        float importScaleAppliedFactor_ = 1.0f;
     };
 
     class StudioApplication final : public wi::Application

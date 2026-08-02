@@ -80,20 +80,40 @@ modes. Two differences from GameGuru MAX's implementation, both deliberate:
   approximation — not a precise world-space bound — for a model whose nodes
   carry large relative offsets or per-node scale of their own.
 
-`ADD > IMPORT MODEL...` always applies `Automatic` today; there is no UI
-choice among the other four modes yet. `Original` and `Meters` always
-resolve to the same 1.0 multiplier for a GLB/GLTF source specifically,
-since glTF 2.0 mandates metres — both exist in the enum for a mode list
-that reads the same as a familiar FBX/OBJ importer's, and so `Centimeters`/
-`Inches` are ready to expose later without further service changes. A
-manual override control (a mode picker applied to the currently selected
-entity, independent of import) is deliberately deferred: it would need to
-either recompute a bounding box scoped to just the imported entity's
-descendant subtree inside the live active scene, or forgo `Automatic`
-entirely for the manual case, and it would touch the Inspector's
-hand-rolled, hardcoded absolute-pixel layout across many lines with no way
-to verify the result without a packaged build. Both are real, scoped
-follow-on work, not abandoned scope.
+`ADD > IMPORT MODEL...` always applies `Automatic` first. `Original` and
+`Meters` always resolve to the same 1.0 multiplier for a GLB/GLTF source
+specifically, since glTF 2.0 mandates metres — both exist in the enum for a
+mode list that reads the same as a familiar FBX/OBJ importer's.
+
+## Manual override: the Import Scale panel
+
+Immediately after a model is placed, a small popup (`importScalePanel_`)
+appears reporting the Automatic factor that was just applied and offering a
+combo box to reinterpret the source unit: **Original/Meters (x1.0)**,
+**Centimeters (x0.01)**, or **Inches (x0.0254)**. Choosing one and pressing
+**APPLY** resets the imported root's Scale to that literal multiplier
+through the same `SetTransformCommand`/Undo-Redo path as any manual
+Transform edit (mirroring `ApplySelectedTransformValue`), and updates the
+readout. **CLOSE** dismisses the panel without changing anything.
+
+Two things this panel deliberately does not do:
+
+- **It never re-offers `Automatic`.** Recomputing it correctly would need a
+  bounding box scoped to just the imported entity's descendant subtree
+  inside the live, already-merged active scene (the original computation
+  ran against the isolated, pre-merge scene, where every mesh present
+  belonged to the one imported model — that assumption no longer holds
+  after `Scene::Merge()`). That subtree-scoped computation is separate,
+  not-yet-built work; today the only way back to something like Automatic
+  is Undo and re-import.
+- **It is not wired into the Inspector.** Rather than insert a new row into
+  the Transform section's hand-rolled, hardcoded absolute-pixel layout
+  (`ResizeLayout`) — which would mean renumbering every row below Scale
+  with no way to verify the result short of a packaged build — it is a
+  fully independent `wi::gui::Window`, positioned and sized on its own in
+  `ResizeLayout`, that only appears right after an import and can be
+  dismissed. It does not persist as a docked panel and does not apply to
+  any entity other than the one just imported.
 
 No stock Wicked Editor window is embedded. No Wicked file or submodule
 pointer is changed. The `BUILD > VALIDATE GLB/GLTF IMPORT...` diagnostic
@@ -117,18 +137,32 @@ repurposed into this creator-facing flow.
    scene content (not "VERY large" or vanishingly small), the status bar
    reports `AUTO SCALE x0.XXX`, and the imported root's Scale X/Y/Z in the
    Inspector all read that same value uniformly.
-6. Confirm Undo removes the entire imported hierarchy in one step (not
-   node-by-node), Redo restores it complete — including the same applied
-   Scale — and the restored entity is still selectable and inspectable.
-7. Edit a transform on the imported root, then Save, close, and Reopen.
-   Confirm the imported model, its applied scale, and the edit all survive.
-8. Launch Runtime with the saved scene and confirm the model renders there
-   the same size and place as in Studio.
-9. Repeat the complete check with the `vulkan` argument.
-10. Attempt an import while a `BUILD > VALIDATE GLB/GLTF IMPORT...` proof or
+6. Confirm the Import Scale panel appears automatically right after
+   placement, its readout matches the status bar's `AUTO SCALE` value, and
+   it is positioned fully on-screen over the viewport (not clipped or
+   overlapping the toolbar/Inspector) at a few different window sizes.
+7. Pick each of Original/Meters, Centimeters, and Inches in turn and press
+   APPLY; confirm the imported root's Scale X/Y/Z updates to the expected
+   literal value each time (x1.0, x0.01, x0.0254) and the panel's readout
+   updates to match. Confirm CLOSE dismisses the panel with no change.
+8. Confirm each manual APPLY is its own Undo step (undoing it returns to
+   the previously applied scale, not removing the whole imported model),
+   and Redo restores the manually applied scale.
+9. Undo the import itself while the Import Scale panel is still open (or
+   open a different scene); confirm APPLY no-ops safely and does not throw,
+   crash, or resurrect the removed entity.
+10. Confirm Undo removes the entire imported hierarchy in one step (not
+    node-by-node), Redo restores it complete — including the same applied
+    Scale — and the restored entity is still selectable and inspectable.
+11. Edit a transform on the imported root, then Save, close, and Reopen.
+    Confirm the imported model, its applied scale, and the edit all survive.
+12. Launch Runtime with the saved scene and confirm the model renders there
+    the same size and place as in Studio.
+13. Repeat the complete check with the `vulkan` argument.
+14. Attempt an import while a `BUILD > VALIDATE GLB/GLTF IMPORT...` proof or
     another `ADD > IMPORT MODEL...` is already running; confirm the busy
     message appears and no partial/duplicate entity is created.
-11. Attempt an import of a malformed or unsupported file; confirm a
+15. Attempt an import of a malformed or unsupported file; confirm a
     controlled failure dialog, never a desktop exit, and confirm nothing
     was added to the scene.
 

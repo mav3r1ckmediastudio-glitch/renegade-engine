@@ -47,9 +47,11 @@ slice's follow-on, an automatic, non-destructive import-scale correction
 (`ModelScaleMode`: Original/Meters/Centimeters/Inches/Automatic, modeled
 after GameGuru MAX's importer) applied to the import root's Scale, has also
 passed full packaged acceptance on both renderers, fixing an oversized crate
-import the project owner reported. Only `Automatic` is wired to the import
-flow so far, with no UI to choose another mode yet -- a manual scale-mode
-picker remains deferred future work.
+import the project owner reported. A further, uncommitted addition adds a
+manual Import Scale panel: a small popup shown right after placement,
+independent of the Inspector's own hardcoded layout, offering
+Original/Meters, Centimeters, and Inches as one-click Undo/Redo-backed
+overrides of the Automatic factor. It has not yet run in a packaged build.
 
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light

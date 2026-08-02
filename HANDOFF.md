@@ -173,13 +173,10 @@ GameGuru MAX comparison it is modeled after.
   always resolves `ModelScaleMode::Automatic` and passes it through; the
   status bar reports the applied factor (`AUTO SCALE x0.XXX`) as packaged
   evidence.
-- There is no UI choice among the five scale modes yet — `Automatic` always
-  applies on import, and there is no way to change it afterward except the
-  existing manual "select root, edit Scale X/Y/Z" workaround. A picker
-  control was deliberately deferred rather than risk a blind edit to the
+- A manual override picker was deferred out of this original follow-on (see
+  the next, separate section below) rather than risk a blind edit to the
   Inspector's hand-rolled, hardcoded absolute-pixel layout with no way to
-  verify the result without a packaged build; `Centimeters`/`Inches` are
-  fully implemented and tested in `ImportService`, just not yet exposed.
+  verify the result without a packaged build.
 - Added `ResolveScaleFactor` unit coverage (literal multipliers, empty-scene
   fallback, and a synthetic 20-unit-cube bounding-box normalization) and
   extended the existing `PlaceImportedModelCommand` Execute/Undo/Redo test
@@ -205,7 +202,63 @@ model lands at a plausible size next to existing scene content instead of
 root's Scale X/Y/Z in the Inspector read that same value uniformly, Undo/
 Redo preserve the applied scale, and it survives Save/close/Reopen. This
 closes out the Model Import: Scene Placement slice's full acceptance
-checklist, not just the crate_box merge/hierarchy/Undo check noted above.
+checklist, not just the crate_box merge/hierarchy/Undo check noted earlier.
+
+### Further follow-on, uncommitted: manual Import Scale panel
+
+Requested by the project owner as the deferred piece from the section
+above. Not yet committed or built. See "Manual override: the Import Scale
+panel" in `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for full design rationale.
+
+- Added a self-contained popup (`importScalePanel_` and related widgets in
+  `Studio/src/StudioApplication.h`/`.cpp`) that appears automatically right
+  after `CompleteModelImportPlacement()` places a model, reporting the
+  Automatic factor already applied and offering **Original/Meters (x1.0)**,
+  **Centimeters (x0.01)**, and **Inches (x0.0254)** as one-click overrides.
+  Deliberately not `Automatic` again (would need a bounding box scoped to
+  just the imported entity's descendant subtree inside the live, merged
+  scene — separate, not-yet-built work) and deliberately not a new row in
+  the Inspector (see the risk this was deferred for above) — it is a fully
+  independent `wi::gui::Window`, positioned on its own in `ResizeLayout`
+  rather than inside the Transform section's hardcoded pixel chain.
+- `ApplyImportScaleMode()` resets the imported root's Scale to the chosen
+  literal multiplier through the existing `SetTransformCommand`/
+  `CaptureTransform` path — the same Undo/Redo-backed mechanism
+  `ApplySelectedTransformValue()` already uses for manual Transform edits —
+  so each APPLY is its own Undo step, independent of the import's own
+  Undo/Redo entry.
+- Guards against the imported entity having been removed (import undone, or
+  a different scene opened) while the panel is still open: `ApplyImportScaleMode()`
+  checks the entity still has a `TransformComponent` and dismisses the panel
+  instead of resolving against a stale entity.
+
+Changed files (this follow-on only):
+
+- `Studio/src/StudioApplication.h`
+- `Studio/src/StudioApplication.cpp`
+- `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`
+- `docs/FEATURE_MATRIX.csv`
+- `HANDOFF.md`
+
+**No local validation has run against this yet** — no syntax check, no
+build, no packaged test. It has not even been committed. This is new
+`wi::gui` widget wiring (a window, two labels, a combo box, two buttons)
+positioned independently in `ResizeLayout`, which is lower-risk than
+touching the existing Inspector chain but still entirely unverified. Before
+treating any part of this as working:
+
+1. Run the same kind of local C++17 syntax check used for prior slices
+   against the two changed source files.
+2. Commit and push, then run Windows CI.
+3. Package Release, then run `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`'s
+   packaged acceptance checklist steps 6-9 (the new Import Scale panel
+   steps) on both DX12 and Vulkan, in addition to re-confirming the earlier
+   steps still pass. In particular: the panel is fully on-screen at
+   different window sizes, each of the three modes applies the correct
+   literal Scale value and is its own Undo step, CLOSE is a true no-op, and
+   the "entity removed while panel open" guard does not crash. A crash, a
+   wrong Scale value, a broken Undo/Redo, or a panel that clips off-screen
+   all stop this gate.
 
 ## Completed slice — Model Import V1 Gate 1
 

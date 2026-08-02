@@ -216,6 +216,7 @@ namespace renegade::studio
 
         CreateWorkspaceShell();
         CreateProjectHub();
+        CreateImportScalePanel();
         ApplyRenegadeTheme();
 
         gizmo_.translate_snap = 0.1f;
@@ -2147,6 +2148,89 @@ namespace renegade::studio
         projectHubPanel_.AddWidget(&hubMessageLabel_);
     }
 
+    // A small, self-contained popup rather than a new row wedged into the
+    // Inspector's Transform section: the Inspector's layout is a long chain
+    // of hardcoded absolute pixel positions (see ResizeLayout), and
+    // inserting a row there would mean renumbering every row below it with
+    // no way to verify the result short of a packaged build. This window
+    // owns its own position/size in ResizeLayout instead, independent of
+    // that chain, and only appears right after ADD > IMPORT MODEL... places
+    // a model.
+    void StudioRenderPath::CreateImportScalePanel()
+    {
+        importScalePanel_.Create(
+            "Import Scale Panel",
+            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        importScalePanel_.SetShadowRadius(10.0f);
+        importScalePanel_.SetVisible(false);
+        GetGUI().AddWidget(&importScalePanel_);
+
+        importScaleTitleLabel_.Create("Import Scale Title");
+        importScaleTitleLabel_.SetText("IMPORT SCALE");
+        importScaleTitleLabel_.font.params.size = 15;
+        importScaleTitleLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        importScalePanel_.AddWidget(&importScaleTitleLabel_);
+
+        importScaleReadoutLabel_.Create("Import Scale Readout");
+        importScaleReadoutLabel_.SetText("");
+        importScaleReadoutLabel_.SetFitTextEnabled(true);
+        importScaleReadoutLabel_.font.params.size = 13;
+        importScaleReadoutLabel_.font.params.h_align =
+            wi::font::WIFALIGN_LEFT;
+        importScaleReadoutLabel_.font.params.v_align =
+            wi::font::WIFALIGN_TOP;
+        importScalePanel_.AddWidget(&importScaleReadoutLabel_);
+
+        importScaleModeCombo_.Create("Import Scale Mode");
+        // Original and Meters always resolve to the same 1.0 multiplier for
+        // a glTF source (glTF 2.0 mandates metres), so they are collapsed
+        // into one selectable item here rather than shown as two options
+        // that do the same thing. Automatic is not re-offered: it already
+        // ran once at import time against the isolated, not-yet-merged
+        // model; recomputing it here would need a bounding box scoped to
+        // just this entity's descendants inside the live scene, which is
+        // separate, not-yet-built work.
+        importScaleModeCombo_.AddItem(
+            "ORIGINAL / METERS (x1.0)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Original));
+        importScaleModeCombo_.AddItem(
+            "CENTIMETERS (x0.01)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Centimeters));
+        importScaleModeCombo_.AddItem(
+            "INCHES (x0.0254)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Inches));
+        importScaleModeCombo_.SetTooltip(
+            "Reinterpret the imported model's source unit and correct its "
+            "Scale accordingly");
+        importScalePanel_.AddWidget(&importScaleModeCombo_);
+
+        importScaleApplyButton_.Create("Import Scale Apply");
+        importScaleApplyButton_.SetText("APPLY");
+        importScaleApplyButton_.SetAngularHighlightWidth(4.0f);
+        importScaleApplyButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            if (importScaleModeCombo_.GetSelected() < 0)
+            {
+                return;
+            }
+            ApplyImportScaleMode(
+                static_cast<bridge::ModelScaleMode>(
+                    importScaleModeCombo_.GetSelectedUserdata()));
+        });
+        importScalePanel_.AddWidget(&importScaleApplyButton_);
+
+        importScaleDismissButton_.Create("Import Scale Dismiss");
+        importScaleDismissButton_.SetText("CLOSE");
+        importScaleDismissButton_.SetAngularHighlightWidth(4.0f);
+        importScaleDismissButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            DismissImportScalePanel();
+        });
+        importScalePanel_.AddWidget(&importScaleDismissButton_);
+    }
+
     void StudioRenderPath::ApplyRenegadeTheme()
     {
         wi::gui::Theme theme;
@@ -2684,6 +2768,42 @@ namespace renegade::studio
         contentPlaceholder_.SetSize(XMFLOAT2(
             contentPanel_.GetSize().x - 24.0f,
             bottomHeight - 62.0f));
+
+        // Positioned independently of the Inspector's hardcoded column
+        // (see CreateImportScalePanel) -- a small popup centered over the
+        // viewport rather than a row inside that fragile layout chain.
+        const float importScalePanelWidth = 320.0f;
+        const float importScalePanelHeight = 168.0f;
+        importScalePanel_.SetPos(XMFLOAT2(
+            viewportBounds_.x +
+                (viewportBounds_.z - viewportBounds_.x) * 0.5f -
+                importScalePanelWidth * 0.5f,
+            viewportBounds_.y + 24.0f));
+        importScalePanel_.SetSize(XMFLOAT2(
+            importScalePanelWidth,
+            importScalePanelHeight));
+        importScaleTitleLabel_.SetPos(XMFLOAT2(12.0f, 8.0f));
+        importScaleTitleLabel_.SetSize(XMFLOAT2(
+            importScalePanelWidth - 24.0f,
+            22.0f));
+        importScaleReadoutLabel_.SetPos(XMFLOAT2(12.0f, 34.0f));
+        importScaleReadoutLabel_.SetSize(XMFLOAT2(
+            importScalePanelWidth - 24.0f,
+            40.0f));
+        importScaleModeCombo_.SetPos(XMFLOAT2(12.0f, 82.0f));
+        importScaleModeCombo_.SetSize(XMFLOAT2(
+            importScalePanelWidth - 24.0f,
+            28.0f));
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 126.0f));
+        importScaleApplyButton_.SetSize(XMFLOAT2(
+            (importScalePanelWidth - 24.0f - 8.0f) * 0.5f,
+            30.0f));
+        importScaleDismissButton_.SetPos(XMFLOAT2(
+            12.0f + (importScalePanelWidth - 24.0f - 8.0f) * 0.5f + 8.0f,
+            126.0f));
+        importScaleDismissButton_.SetSize(XMFLOAT2(
+            (importScalePanelWidth - 24.0f - 8.0f) * 0.5f,
+            30.0f));
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
         projectHubPanel_.SetSize(XMFLOAT2(width - 24.0f, height - 24.0f));
@@ -6077,6 +6197,86 @@ namespace renegade::studio
         studioChrome_.SetStatusText(
             "IMPORT MODEL // PLACED // " + source.filename().u8string() +
             " // AUTO SCALE x" + scaleReadout.str());
+
+        ShowImportScalePanel(
+            placeCommand->PlacedEntity(),
+            scaleFactor,
+            source.filename().u8string());
+    }
+
+    void StudioRenderPath::ShowImportScalePanel(
+        const wi::ecs::Entity entity,
+        const float appliedScaleFactor,
+        const std::string& sourceFileName)
+    {
+        importScaleTargetEntity_ = entity;
+        importScaleAppliedFactor_ = appliedScaleFactor;
+
+        std::ostringstream readout;
+        readout.precision(3);
+        readout << std::fixed << "CURRENT: AUTOMATIC x" << appliedScaleFactor
+            << '\n' << sourceFileName;
+        importScaleReadoutLabel_.SetText(readout.str());
+        importScaleModeCombo_.SetSelectedWithoutCallback(-1);
+        importScalePanel_.SetVisible(true);
+    }
+
+    void StudioRenderPath::ApplyImportScaleMode(
+        const bridge::ModelScaleMode mode)
+    {
+        // The manual picker never offers Automatic (see
+        // CreateImportScalePanel); resolving it correctly needs a bounding
+        // box scoped to just this entity's descendants inside the live,
+        // already-merged scene, which is separate, not-yet-built work. Guard
+        // against it defensively rather than resolve against the wrong
+        // scene.
+        if (session_ == nullptr || mode == bridge::ModelScaleMode::Automatic)
+        {
+            return;
+        }
+
+        auto& scene = session_->Scenes().GetScene();
+        auto* transform = scene.transforms.GetComponent(
+            importScaleTargetEntity_);
+        if (transform == nullptr)
+        {
+            // The imported entity no longer exists (e.g. the import itself
+            // was undone while this panel was still open).
+            DismissImportScalePanel();
+            return;
+        }
+
+        // None of the three modes this picker offers depend on scene
+        // content (Original/Meters/Centimeters/Inches are fixed literal
+        // multipliers; only Automatic reads the scene), so passing the
+        // active scene here is safe even though it is not the isolated,
+        // pre-merge scene ResolveScaleFactor's Automatic branch expects.
+        const float factor = bridge::ImportService::ResolveScaleFactor(
+            mode,
+            scene);
+
+        auto next = bridge::CaptureTransform(*transform);
+        next.scale = XMFLOAT3(factor, factor, factor);
+        session_->Commands().Execute(
+            std::make_unique<bridge::SetTransformCommand>(
+                scene,
+                importScaleTargetEntity_,
+                next));
+
+        importScaleAppliedFactor_ = factor;
+        std::ostringstream readout;
+        readout.precision(4);
+        readout << std::fixed << "APPLIED: x" << factor;
+        importScaleReadoutLabel_.SetText(readout.str());
+
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::DismissImportScalePanel()
+    {
+        importScalePanel_.SetVisible(false);
+        importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
     }
 
     void StudioRenderPath::CreateProject()
