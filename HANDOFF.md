@@ -231,6 +231,12 @@ panel" in `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for full design rationale.
   a different scene opened) while the panel is still open: `ApplyImportScaleMode()`
   checks the entity still has a `TransformComponent` and dismisses the panel
   instead of resolving against a stale entity.
+- `ApplyRenegadeTheme()` reasserts `importScalePanel_`'s background the same
+  way it already does for `inspectorPanel_`, and folds the two new labels
+  into the existing `ownLabel` pass, so the popup matches the rest of the
+  chrome's owned styling instead of only the global theme. The panel keeps
+  its own drop shadow (unlike the flush-docked Inspector) since it floats
+  over the viewport.
 
 Changed files (this follow-on only):
 

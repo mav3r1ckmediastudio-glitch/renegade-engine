@@ -2161,6 +2161,10 @@ namespace renegade::studio
         importScalePanel_.Create(
             "Import Scale Panel",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        // Unlike inspectorPanel_ (docked flush against the screen edge,
+        // shadow disabled in ApplyRenegadeTheme), this is a floating popup
+        // over the viewport -- keeping a visible drop shadow here is
+        // deliberate, so it reads as sitting on top of the scene.
         importScalePanel_.SetShadowRadius(10.0f);
         importScalePanel_.SetVisible(false);
         GetGUI().AddWidget(&importScalePanel_);
@@ -2292,6 +2296,14 @@ namespace renegade::studio
             wi::gui::WIDGET_ID_WINDOW_BASE);
         inspectorPanel_.SetShadowRadius(0.0f);
 
+        // Same reassertion as inspectorPanel_ above -- the Import Scale
+        // popup is a separate wi::gui::Window and does not inherit
+        // inspectorPanel_'s per-instance override, only the global theme.
+        importScalePanel_.SetColor(wi::Color::Transparent());
+        importScalePanel_.SetColor(
+            wi::Color(8, 11, 13, 255),
+            wi::gui::WIDGET_ID_WINDOW_BASE);
+
         const auto ownLabel = [](wi::gui::Label& label)
         {
             label.SetColor(wi::Color::Transparent());
@@ -2311,6 +2323,8 @@ namespace renegade::studio
         ownLabel(precipitationLabel_);
         ownLabel(sunLabel_);
         ownLabel(oceanLabel_);
+        ownLabel(importScaleTitleLabel_);
+        ownLabel(importScaleReadoutLabel_);
 
         wi::gui::Theme scrollbarTheme = theme;
         scrollbarTheme.image.corner_rounding = false;
