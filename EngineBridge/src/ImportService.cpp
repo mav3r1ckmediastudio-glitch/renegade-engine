@@ -1,6 +1,7 @@
 #include "renegade/bridge/ImportService.h"
 
 #include <filesystem>
+#include <fstream>
 
 #include <ModelImporter.h>
 
@@ -32,6 +33,45 @@ namespace
         HashBytes(hash, value.data(), value.size());
         const unsigned char terminator = 0;
         HashBytes(hash, &terminator, 1);
+    }
+
+    template<typename Component>
+    std::size_t StableIndex(
+        const wi::ecs::ComponentManager<Component>& manager,
+        const wi::ecs::Entity entity) noexcept
+    {
+        return entity == wi::ecs::INVALID_ENTITY
+            ? wi::ecs::INVALID_INDEX
+            : manager.GetIndex(entity);
+    }
+
+    fs::path StageLogPath(const std::string& assetPath)
+    {
+        return fs::u8path(assetPath + ".import.log");
+    }
+
+    void ResetStageLog(const std::string& assetPath) noexcept
+    {
+        std::ofstream log(
+            StageLogPath(assetPath),
+            std::ios::out | std::ios::trunc);
+        if (log)
+        {
+            log << "MODEL IMPORT V1 GATE 1\n";
+        }
+    }
+
+    void RecordStage(
+        const std::string& assetPath,
+        const char* stage) noexcept
+    {
+        std::ofstream log(
+            StageLogPath(assetPath),
+            std::ios::out | std::ios::app);
+        if (log)
+        {
+            log << stage << '\n';
+        }
     }
 
     bool WriteScene(
@@ -96,12 +136,10 @@ namespace renegade::bridge
         std::uint64_t fingerprint = FingerprintSeed;
         for (std::size_t index = 0; index < scene.names.GetCount(); ++index)
         {
-            HashValue(fingerprint, scene.names.GetEntity(index));
             HashString(fingerprint, scene.names[index].name);
         }
         for (std::size_t index = 0; index < scene.transforms.GetCount(); ++index)
         {
-            HashValue(fingerprint, scene.transforms.GetEntity(index));
             const auto& transform = scene.transforms[index];
             HashValue(fingerprint, transform.scale_local);
             HashValue(fingerprint, transform.rotation_local);
@@ -109,24 +147,38 @@ namespace renegade::bridge
         }
         for (std::size_t index = 0; index < scene.hierarchy.GetCount(); ++index)
         {
-            HashValue(fingerprint, scene.hierarchy.GetEntity(index));
-            HashValue(fingerprint, scene.hierarchy[index].parentID);
+            const auto entityIndex = StableIndex(
+                scene.transforms,
+                scene.hierarchy.GetEntity(index));
+            const auto parentIndex = StableIndex(
+                scene.transforms,
+                scene.hierarchy[index].parentID);
+            HashValue(fingerprint, entityIndex);
+            HashValue(fingerprint, parentIndex);
         }
         for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)
         {
-            HashValue(fingerprint, scene.objects.GetEntity(index));
-            HashValue(fingerprint, scene.objects[index].meshID);
+            const auto transformIndex = StableIndex(
+                scene.transforms,
+                scene.objects.GetEntity(index));
+            const auto meshIndex = StableIndex(
+                scene.meshes,
+                scene.objects[index].meshID);
+            HashValue(fingerprint, transformIndex);
+            HashValue(fingerprint, meshIndex);
         }
         for (std::size_t index = 0; index < scene.meshes.GetCount(); ++index)
         {
-            HashValue(fingerprint, scene.meshes.GetEntity(index));
             const auto& mesh = scene.meshes[index];
             HashValue(fingerprint, mesh.vertex_positions.size());
             HashValue(fingerprint, mesh.indices.size());
             HashValue(fingerprint, mesh.subsets.size());
             for (const auto& subset : mesh.subsets)
             {
-                HashValue(fingerprint, subset.materialID);
+                const auto materialIndex = StableIndex(
+                    scene.materials,
+                    subset.materialID);
+                HashValue(fingerprint, materialIndex);
                 HashValue(fingerprint, subset.indexOffset);
                 HashValue(fingerprint, subset.indexCount);
             }
@@ -135,7 +187,6 @@ namespace renegade::bridge
         for (std::size_t index = 0; index < scene.materials.GetCount(); ++index)
         {
             const auto& material = scene.materials[index];
-            HashValue(fingerprint, scene.materials.GetEntity(index));
             HashValue(fingerprint, material.baseColor);
             HashValue(fingerprint, material.emissiveColor);
             HashValue(fingerprint, material.roughness);
@@ -205,33 +256,57 @@ namespace renegade::bridge
             return result;
         }
 
-        wi::scene::Scene importedScene;
-        ImportModel_GLTF(sourcePath, importedScene);
-        result.imported = Summarize(importedScene);
+        ResetStageLog(assetPath);
+        RecordStage(assetPath, "validated");
+
+        // A Wicked Scene is a very large aggregate. Wicked's own editor keeps
+        // temporary import scenes on the heap; placing both the imported and
+        // reloaded scenes in this worker's stack can exhaust the Windows worker
+        // stack before ImportModel_GLTF() is entered.
+        auto importedScene =
+            wi::allocator::make_shared_single<wi::scene::Scene>();
+        RecordStage(assetPath, "temporary_scene_allocated");
+        RecordStage(assetPath, "converter_begin");
+        ImportModel_GLTF(sourcePath, *importedScene);
+        RecordStage(assetPath, "converter_complete");
+        result.imported = Summarize(*importedScene);
+        RecordStage(assetPath, "import_summary_complete");
         if (result.imported.meshes == 0 || result.imported.objects == 0)
         {
+            RecordStage(assetPath, "fail_no_mesh_or_object");
             result.error = "Wicked did not produce a mesh and object from the source model.";
             return result;
         }
 
-        if (!WriteScene(importedScene, assetPath, result.error))
+        if (!WriteScene(*importedScene, assetPath, result.error))
         {
+            RecordStage(assetPath, "fail_wiscene_write");
             return result;
         }
+        RecordStage(assetPath, "wiscene_write_complete");
+        importedScene.reset();
+        RecordStage(assetPath, "imported_scene_released");
 
-        wi::scene::Scene reloadedScene;
-        if (!ReadScene(assetPath, reloadedScene, result.error))
+        auto reloadedScene =
+            wi::allocator::make_shared_single<wi::scene::Scene>();
+        RecordStage(assetPath, "reload_scene_allocated");
+        if (!ReadScene(assetPath, *reloadedScene, result.error))
         {
+            RecordStage(assetPath, "fail_wiscene_reload");
             return result;
         }
-        result.reloaded = Summarize(reloadedScene);
+        RecordStage(assetPath, "wiscene_reload_complete");
+        result.reloaded = Summarize(*reloadedScene);
+        RecordStage(assetPath, "reload_summary_complete");
         if (!(result.imported == result.reloaded))
         {
+            RecordStage(assetPath, "fail_round_trip_difference");
             result.error = "Imported WISCENE structure changed during save and reload.";
             return result;
         }
 
         result.succeeded = true;
+        RecordStage(assetPath, "pass");
         return result;
     }
 }
