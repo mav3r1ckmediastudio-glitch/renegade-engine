@@ -16,7 +16,7 @@
 
 **Add Light remote commit:** `b81c4bb`
 
-**Model Import V1 Gate 1 commit:** Working tree; not committed or pushed
+**Model Import V1 serialization correction:** `e0427e9`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
