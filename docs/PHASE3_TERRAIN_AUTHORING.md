@@ -1,98 +1,72 @@
 # Phase 3 Terrain Authoring
 
-## Product decision
+## Current result
 
-Terrain Authoring supersedes Light and Material Authoring as the immediate next
-gate by product-owner decision on 2026-07-31. Light and Material Authoring
-remains required and follows this bounded terrain sequence.
+Terrain remains Wicked's native streamed WISCENE component and is authored
+through Renegade-owned controls. The standard configuration creates 13 x 13
+chunks at 132 m per chunk: 1,716 x 1,716 m, or about 2.945 km2.
 
-## V1 outcome
+The project owner has verified in the packaged DX12 editor that a sculpted
+169-chunk terrain survives Save, close, Open, and the first terrain generation
+update without changing shape. Windows Debug and Release CI are green at the
+cleanup base commit `0a1d0b6`.
 
-Renegade exposes Wicked's native streamed terrain through Renegade-owned bridge
-services and editor workflows. Terrain remains a native WISCENE component; no
-parallel heightfield format is introduced.
+## Delivered
 
-## Delivered foundation
+- `TerrainState`, `SetTerrainCommand`, and `CreateTerrainCommand` provide
+  bounded native creation, no-op filtering, and Undo/Redo.
+- The permanent Terrain workspace exposes generation values directly.
+- Raise, Lower, Smooth, and Flatten operate across shared chunk edges and
+  corners as one stroke and one Undo/Redo item.
+- Native per-chunk height and blend data remain the serialized authority.
+- New terrain uses the bundled default grass PBR material.
+- Texture scale, Apply Default, Reload Files, and the Meadow, Coarse Grass,
+  and Fine Ground Cover material-scale presets remain available.
+- Save/Open uses the protected scene-document transaction described in
+  `docs/PHASE3_WICKED_OPEN_SCENE_INTEGRATION.md`.
 
-- `TerrainState` captures the creator-facing generation envelope without
-  overwriting materials, modifiers, props, painted blend maps, or chunk data.
-- `SetTerrainCommand` provides no-op filtering and Undo/Redo.
-- Flat World, Island, Coastline, and Highlands presets use restrained height
-  envelopes rather than exaggerated showcase values.
-- `CreateTerrain` creates the native component, transform, hierarchy name, and
-  four automatic material regions using the bundled grass PBR default.
-- Safety bounds protect chunk radii, scale, height range, blend thresholds,
-  and LOD bias.
-- `RenegadeTerrainTests` covers capture, apply, presets, safety, no-op
-  filtering, Undo, and Redo without requiring a graphics device.
+## Removed misleading controls
 
-## Implemented Studio slice — pending Windows verification
+Flat World, Island, Coastline, and Highlands were only different parameter
+envelopes. They did not produce functioning, distinct landforms in the
+packaged editor. Their Studio selector, bridge API, pending action, and tests
+have therefore been removed.
 
-- Empty-selection Inspector action creates and selects one native terrain.
-- `CreateTerrainCommand` snapshots the native entity tree for Undo/Redo while
-  preserving the terrain entity identity across redo.
-- The selected terrain exposes Flat World, Island, Coastline, and Highlands.
-- Visible chunk radius, chunk scale, minimum/maximum height, low/base/slope
-  automatic material thresholds, and LOD bias use preview/commit sliders.
-- Each completed slider drag and preset application contributes at most one
-  `CommandService` history entry; terrain generation restarts on commit.
-- Terrain duplication is disabled until recursive native terrain cloning has a
-  dedicated validated workflow.
+New terrain now uses one explicit standard `TerrainState`. Shape presets are
+deferred until each preset has a real generation implementation and packaged
+visual tests. Material-scale presets are separate and are not removed by this
+decision.
 
-Implementation commit: `dd43851`. This slice has not compiled or run in the
-current Linux workspace because its Windows CMake toolchain is unavailable.
+## Persistence correction
 
-## Seam and default-material correction — pending Windows verification
+Commit `c7eea43` fixed the observed post-load terrain wipe. After a correct
+WISCENE deserialize, `RebindDefaultTerrainMaterials()` changed the grass
+material through setters that marked it dirty. Wicked interpreted that dirty
+material during the first `Generation_Update()` as a request for
+`Generation_Restart()`, clearing the 169 loaded sculpted chunks and replacing
+them procedurally.
 
-Implementation commit: `762c828` (code-only; apply after the separate texture
-asset commit `87ad2d2`).
+The rebind now preserves a clean material's clean state while retaining any
+genuine pre-existing dirty state. Other callers already request an explicit
+generation restart. Commit `0a1d0b6` removed the temporary diagnostic logging
+after the packaged DX12 proof held at 169 chunks.
 
-- Sculpting now builds a bounded canonical grid across every chunk touched by
-  the brush. Shared edge and corner vertices receive one identical height.
-- Smooth samples a 3x3 neighbourhood in that global grid, including adjacent
-  chunks, rather than averaging each tile independently.
-- Changed vertices and their normal-dependent neighbours rebuild matching
-  normals, tangents, render data, BVHs, bounds, native 16-bit height data, and
-  chunk region textures as one stroke. The completed command also refreshes
-  native heightfield collision; live drag preview does not rebuild physics on
-  every mouse sample.
-- The existing complete-stroke snapshot continues to make all affected chunks
-  one Undo/Redo operation.
-- New terrain automatically assigns the supplied grass base colour, normal,
-  AO and roughness maps. `RenegadeTerrainSurfacePacker` produces Wicked's packed
-  surface texture and 32x pre-tiled base/normal maps during the Studio and
-  Runtime builds; source TGAs remain unchanged.
-- WISCENE load rebinds only the bundled default filenames to the current
-  package, preserving the default through save/reopen without overriding later
-  custom terrain materials.
+## Remaining V1 work
 
-The height source is retained for the later displacement/parallax decision and
-is not applied to the sculpted large-scale geometry. Windows CI, packaged DX12
-seam/material inspection, Undo/Redo, save/reopen, Runtime, and Vulkan remain
-the acceptance gate.
+1. Packaged Vulkan repetition of sculpt, Save/Open, and the first update.
+2. Packaged verification of material-scale presets, Apply Default, Reload
+   Files, material Undo/Redo, and Runtime loading.
+3. Four-region material painting and automatic slope/height rules.
+4. Validated 16-bit PNG/RAW heightmap import and export.
+5. Real terrain-shape presets, only if each has distinct generated output and
+   visual regression evidence.
 
-## Remaining V1 slices
+Procedural worlds, runtime deformation, rivers, roads, landscape splines,
+foliage scattering, and biome generation remain out of this slice.
 
-1. Windows compile and packaged visual verification of create/preset/generation
-   controls at `dd43851`.
-2. Packaged verification of the viewport sculpt transaction, shared seams,
-   bundled default PBR material, and save/reopen.
-3. Four-region material painting plus slope- and height-rule controls.
-4. 16-bit PNG/RAW heightmap import and export with validation.
-5. Painted chunk snapshot commands and packaged Runtime acceptance.
+## Merge gate
 
-Procedural world generation, runtime deformation, rivers, roads, landscape
-splines, foliage scattering, and biome generation remain out of V1.
-
-## Windows verification gate
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Tools\Build-Studio-Windows.ps1 -Configuration Debug
-powershell -ExecutionPolicy Bypass -File .\Tools\Build-Studio-Windows.ps1 -Configuration Release
-ctest --test-dir .build\windows -C Release --output-on-failure
-```
-
-Packaged DX12 must then prove create, preset, Undo/Redo, save/reopen, terrain
-generation around a moving camera, ocean coastline interaction, cloud shadows,
-fog, and no regression to transform/environment authoring. Vulkan repeats
-after DX12 acceptance. Automated success is not visual acceptance.
+Run Windows Debug and Release CI after this cleanup. Package Release and prove
+the standard terrain still creates, sculpts, saves, closes, opens, and remains
+unchanged after the first update on DX12. Repeat the round trip on Vulkan.
+Automated success alone is not visual acceptance.

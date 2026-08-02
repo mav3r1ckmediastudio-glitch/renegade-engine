@@ -533,54 +533,6 @@ namespace renegade::bridge
         }
     }
 
-    TerrainState MakeTerrainPreset(
-        const TerrainState& current,
-        const TerrainPreset preset) noexcept
-    {
-        TerrainState result = current;
-        result.centerToCamera = false;
-        result.removeDistantChunks = false;
-        result.physics = true;
-        result.visibleChunkRadius = 6;
-        result.propChunkRadius = 4;
-        result.physicsChunkRadius = 3;
-        result.chunkScale = 2.0f;
-        result.lowAltitudeBlend = 0.12f;
-        result.baseBlend = 0.42f;
-        result.slopeBlend = 0.72f;
-        switch (preset)
-        {
-        case TerrainPreset::FlatWorld:
-            result.minimumHeight = -1.0f;
-            result.maximumHeight = 2.0f;
-            result.slopeBlend = 8.0f;
-            break;
-        case TerrainPreset::Island:
-            result.minimumHeight = -35.0f;
-            result.maximumHeight = 95.0f;
-            result.lowAltitudeBlend = 0.20f;
-            result.baseBlend = 0.48f;
-            result.slopeBlend = 0.80f;
-            break;
-        case TerrainPreset::Coastline:
-            result.minimumHeight = -18.0f;
-            result.maximumHeight = 70.0f;
-            result.lowAltitudeBlend = 0.16f;
-            result.baseBlend = 0.50f;
-            result.slopeBlend = 0.76f;
-            break;
-        case TerrainPreset::Highlands:
-            result.minimumHeight = -15.0f;
-            result.maximumHeight = 240.0f;
-            result.chunkScale = 3.0f;
-            result.lowAltitudeBlend = 0.08f;
-            result.baseBlend = 0.34f;
-            result.slopeBlend = 0.58f;
-            break;
-        }
-        return result;
-    }
-
     wi::ecs::Entity CreateTerrain(
         wi::scene::Scene& scene,
         const TerrainState& state,

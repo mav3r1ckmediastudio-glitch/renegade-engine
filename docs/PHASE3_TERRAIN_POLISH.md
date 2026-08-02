@@ -6,6 +6,10 @@ This bounded follow-up turns the accepted terrain proof into a faster material
 and sculpt iteration workflow. It does not add the remaining Terrain V1 paint,
 heightmap, erosion, vegetation, river, road, biome, or procedural systems.
 
+This document covers material-scale and sculpt polish only. The removed Flat
+World, Island, Coastline, and Highlands terrain-shape controls were a separate
+workflow and must not be confused with the material-scale presets below.
+
 ## Included
 
 - New terrain defaults to the bundled grass at an apparent 8x scale rather
@@ -40,7 +44,14 @@ scale is a serialized sampling multiplier, not another generated asset.
 after-state is already visible. It preserves the normal Undo/Redo ownership
 while avoiding redundant restore/re-execute work at transaction completion.
 
-## Acceptance
+## Verification status
+
+The project owner has verified the sculpted 169-chunk terrain Save/Open round
+trip on packaged DX12, including survival of the first terrain update after
+the material-dirty correction in `c7eea43`. Material-scale presets, Reload
+Files, Runtime, and Vulkan still require the acceptance pass below.
+
+## Remaining acceptance
 
 On the packaged Windows Release build:
 

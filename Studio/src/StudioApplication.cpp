@@ -1321,28 +1321,6 @@ namespace renegade::studio
         });
         inspectorPanel_.AddWidget(&createTerrainButton_);
 
-        terrainPreset_.Create("Terrain Preset");
-        terrainPreset_.AddItem("PRESET // CUSTOM", 0u);
-        terrainPreset_.AddItem("FLAT WORLD",
-            static_cast<std::uint64_t>(bridge::TerrainPreset::FlatWorld) + 1u);
-        terrainPreset_.AddItem("ISLAND",
-            static_cast<std::uint64_t>(bridge::TerrainPreset::Island) + 1u);
-        terrainPreset_.AddItem("COASTLINE",
-            static_cast<std::uint64_t>(bridge::TerrainPreset::Coastline) + 1u);
-        terrainPreset_.AddItem("HIGHLANDS",
-            static_cast<std::uint64_t>(bridge::TerrainPreset::Highlands) + 1u);
-        terrainPreset_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            if (args.userdata == 0u)
-            {
-                return;
-            }
-            pendingTerrainPreset_ = static_cast<bridge::TerrainPreset>(
-                args.userdata - 1u);
-            pendingAction_ = EditorAction::ApplyTerrainPreset;
-        });
-        inspectorPanel_.AddWidget(&terrainPreset_);
-
         const auto createTerrainSlider = [this](
             RenegadeSlider& input,
             const char* name,
@@ -2324,35 +2302,34 @@ namespace renegade::studio
 
         positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);
         positionEnvironmentWidget(createTerrainButton_, 64.0f);
-        positionEnvironmentWidget(terrainPreset_, 64.0f);
-        positionEnvironmentWidget(terrainVisibleRadius_, 98.0f);
-        positionEnvironmentWidget(terrainChunkScale_, 132.0f);
-        positionEnvironmentWidget(terrainMinimumHeight_, 166.0f);
-        positionEnvironmentWidget(terrainMaximumHeight_, 200.0f);
-        positionEnvironmentWidget(terrainLowAltitudeBlend_, 234.0f);
-        positionEnvironmentWidget(terrainBaseBlend_, 268.0f);
-        positionEnvironmentWidget(terrainSlopeBlend_, 302.0f);
-        positionEnvironmentWidget(terrainLodBias_, 336.0f);
-        positionEnvironmentWidget(terrainMaterialLabel_, 380.0f, 20.0f);
-        positionEnvironmentWidget(terrainMaterialPreset_, 400.0f);
-        positionEnvironmentWidget(terrainTextureScale_, 434.0f);
-        terrainApplyDefaultGrassButton_.SetPos(XMFLOAT2(12.0f, 468.0f));
+        positionEnvironmentWidget(terrainVisibleRadius_, 64.0f);
+        positionEnvironmentWidget(terrainChunkScale_, 98.0f);
+        positionEnvironmentWidget(terrainMinimumHeight_, 132.0f);
+        positionEnvironmentWidget(terrainMaximumHeight_, 166.0f);
+        positionEnvironmentWidget(terrainLowAltitudeBlend_, 200.0f);
+        positionEnvironmentWidget(terrainBaseBlend_, 234.0f);
+        positionEnvironmentWidget(terrainSlopeBlend_, 268.0f);
+        positionEnvironmentWidget(terrainLodBias_, 302.0f);
+        positionEnvironmentWidget(terrainMaterialLabel_, 346.0f, 20.0f);
+        positionEnvironmentWidget(terrainMaterialPreset_, 366.0f);
+        positionEnvironmentWidget(terrainTextureScale_, 400.0f);
+        terrainApplyDefaultGrassButton_.SetPos(XMFLOAT2(12.0f, 434.0f));
         terrainReloadMaterialButton_.SetPos(XMFLOAT2(
             20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
-            468.0f));
+            434.0f));
         terrainApplyDefaultGrassButton_.SetSize(XMFLOAT2(
             (environmentFieldWidth - 8.0f) * 0.5f,
             28.0f));
         terrainReloadMaterialButton_.SetSize(XMFLOAT2(
             (environmentFieldWidth - 8.0f) * 0.5f,
             28.0f));
-        positionEnvironmentWidget(terrainSculptLabel_, 510.0f, 20.0f);
-        positionEnvironmentWidget(terrainSculptMode_, 530.0f);
-        positionEnvironmentWidget(terrainBrushRadius_, 564.0f);
-        positionEnvironmentWidget(terrainBrushStrength_, 598.0f);
-        positionEnvironmentWidget(terrainBrushFalloff_, 632.0f);
-        positionEnvironmentWidget(terrainBrushReadout_, 666.0f, 20.0f);
-        positionEnvironmentWidget(terrainStrokeDiagnostic_, 686.0f, 20.0f);
+        positionEnvironmentWidget(terrainSculptLabel_, 476.0f, 20.0f);
+        positionEnvironmentWidget(terrainSculptMode_, 496.0f);
+        positionEnvironmentWidget(terrainBrushRadius_, 530.0f);
+        positionEnvironmentWidget(terrainBrushStrength_, 564.0f);
+        positionEnvironmentWidget(terrainBrushFalloff_, 598.0f);
+        positionEnvironmentWidget(terrainBrushReadout_, 632.0f, 20.0f);
+        positionEnvironmentWidget(terrainStrokeDiagnostic_, 652.0f, 20.0f);
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
@@ -2713,7 +2690,6 @@ namespace renegade::studio
             terrainWorkspaceActive_);
         createTerrainButton_.SetVisible(
             hasSession && terrainWorkspaceActive_ && !hasTerrain);
-        setTerrainVisible(terrainPreset_);
         setTerrainVisible(terrainVisibleRadius_);
         setTerrainVisible(terrainChunkScale_);
         setTerrainVisible(terrainMinimumHeight_);
@@ -2891,7 +2867,6 @@ namespace renegade::studio
                     ? name->name
                     : "ENTITY " + std::to_string(entity)));
             const auto state = bridge::CaptureTerrain(*terrain);
-            terrainPreset_.SetSelectedWithoutCallback(0);
             terrainVisibleRadius_.SetValue(
                 static_cast<float>(state.visibleChunkRadius));
             terrainChunkScale_.SetValue(state.chunkScale);
@@ -3158,9 +3133,6 @@ namespace renegade::studio
             break;
         case EditorAction::CreateTerrain:
             CreateTerrain();
-            break;
-        case EditorAction::ApplyTerrainPreset:
-            ApplyTerrainPreset(pendingTerrainPreset_);
             break;
         case EditorAction::ApplyTerrainMaterialPreset:
             ApplyTerrainMaterialPreset(pendingTerrainMaterialPreset_);
@@ -4535,9 +4507,7 @@ namespace renegade::studio
         }
         auto command = std::make_unique<bridge::CreateTerrainCommand>(
             scene,
-            bridge::MakeTerrainPreset(
-                bridge::TerrainState{},
-                bridge::TerrainPreset::FlatWorld),
+            bridge::TerrainState{},
             "Terrain");
         auto* createCommand = command.get();
         if (!session_->Commands().Execute(std::move(command)))
@@ -4570,25 +4540,6 @@ namespace renegade::studio
         RefreshInspector();
         RefreshStatus();
         return changed;
-    }
-
-    void StudioRenderPath::ApplyTerrainPreset(
-        const bridge::TerrainPreset preset)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = session_->Selection().SelectedEntity();
-        const auto* terrain =
-            session_->Scenes().GetScene().terrains.GetComponent(entity);
-        if (terrain == nullptr)
-        {
-            return;
-        }
-        CommitTerrain(bridge::MakeTerrainPreset(
-            bridge::CaptureTerrain(*terrain),
-            preset));
     }
 
     void StudioRenderPath::SetTerrainFieldValue(

@@ -47,25 +47,25 @@ int main()
         return Fail("native terrain defaults were not captured");
     }
 
-    auto highlands = renegade::bridge::MakeTerrainPreset(
-        native,
-        renegade::bridge::TerrainPreset::Highlands);
+    const renegade::bridge::TerrainState standard;
     renegade::bridge::CommandService commands;
     if (!commands.Execute(
             std::make_unique<renegade::bridge::SetTerrainCommand>(
                 scene,
                 entity,
-                highlands)))
+                standard)))
     {
-        return Fail("Highlands preset did not execute");
+        return Fail("standard terrain state did not execute");
     }
 
     const auto applied = renegade::bridge::CaptureTerrain(terrain);
     if (applied.centerToCamera || applied.removeDistantChunks ||
-        !applied.physics || !NearlyEqual(applied.maximumHeight, 240.0f) ||
-        !NearlyEqual(applied.chunkScale, 3.0f))
+        !applied.physics || applied.visibleChunkRadius != 6 ||
+        !NearlyEqual(applied.minimumHeight, -20.0f) ||
+        !NearlyEqual(applied.maximumHeight, 120.0f) ||
+        !NearlyEqual(applied.chunkScale, 2.0f))
     {
-        return Fail("Highlands terrain state did not apply");
+        return Fail("standard terrain state did not apply");
     }
     if (!commands.Undo() || !terrain.IsCenterToCamEnabled() ||
         !NearlyEqual(terrain.topLevel, 380.0f))
@@ -73,7 +73,7 @@ int main()
         return Fail("terrain Undo did not restore native state");
     }
     if (!commands.Redo() || terrain.IsCenterToCamEnabled() ||
-        !NearlyEqual(terrain.topLevel, 240.0f))
+        !NearlyEqual(terrain.topLevel, 120.0f))
     {
         return Fail("terrain Redo did not restore authored state");
     }
@@ -108,22 +108,6 @@ int main()
         return Fail("identical terrain state polluted Undo history");
     }
 
-    const auto flat = renegade::bridge::MakeTerrainPreset(
-        safe,
-        renegade::bridge::TerrainPreset::FlatWorld);
-    const auto island = renegade::bridge::MakeTerrainPreset(
-        safe,
-        renegade::bridge::TerrainPreset::Island);
-    const auto coast = renegade::bridge::MakeTerrainPreset(
-        safe,
-        renegade::bridge::TerrainPreset::Coastline);
-    if (!NearlyEqual(flat.maximumHeight, 2.0f) ||
-        !NearlyEqual(island.minimumHeight, -35.0f) ||
-        !NearlyEqual(coast.maximumHeight, 70.0f))
-    {
-        return Fail("restrained terrain presets were not distinct");
-    }
-
     renegade::bridge::TerrainMaterialState material;
     renegade::bridge::SetTerrainTextureScale(material, 8.0f);
     if (!NearlyEqual(material.slots[0].texMulAdd.x, 0.25f) ||
@@ -146,6 +130,6 @@ int main()
         return Fail("completed preview was not retained for Undo/Redo");
     }
 
-    std::cout << "PASS: terrain state, material scale, preview history and Undo/Redo\n";
+    std::cout << "PASS: standard terrain state, material scale, preview history and Undo/Redo\n";
     return 0;
 }

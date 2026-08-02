@@ -65,7 +65,6 @@ namespace renegade::studio
             SetOceanResolution,
             ApplyOceanPreset,
             CreateTerrain,
-            ApplyTerrainPreset,
             ApplyTerrainMaterialPreset,
             ApplyDefaultGrass,
             ReloadTerrainMaterial,
@@ -216,7 +215,6 @@ namespace renegade::studio
             float value) noexcept;
         bool CommitOcean(const bridge::OceanState& ocean);
         void CreateTerrain();
-        void ApplyTerrainPreset(bridge::TerrainPreset preset);
         void BeginTerrainSlider(TerrainField field);
         void PreviewTerrainSlider(TerrainField field, float value);
         void CommitTerrainSlider(TerrainField field, float value);
@@ -365,7 +363,6 @@ namespace renegade::studio
         RenegadeSlider oceanExtinctionBlue_;
         wi::gui::Label terrainLabel_;
         RenegadeButton createTerrainButton_;
-        RenegadeComboBox terrainPreset_;
         RenegadeSlider terrainVisibleRadius_;
         RenegadeSlider terrainChunkScale_;
         RenegadeSlider terrainMinimumHeight_;
@@ -473,8 +470,6 @@ namespace renegade::studio
         wi::ecs::Entity terrainMaterialEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::TerrainMaterialState terrainMaterialBefore_;
         bridge::TerrainMaterialState terrainMaterialAfter_;
-        bridge::TerrainPreset pendingTerrainPreset_ =
-            bridge::TerrainPreset::FlatWorld;
         bridge::TerrainMaterialPreset pendingTerrainMaterialPreset_ =
             bridge::TerrainMaterialPreset::Meadow;
         bridge::TerrainSculptMode terrainSculptModeValue_ =

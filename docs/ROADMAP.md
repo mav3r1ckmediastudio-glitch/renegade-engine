@@ -17,8 +17,9 @@ through undoable commands.
 Since then, the Renegade-owned Studio chrome functional slice (PR #7),
 Environment workspace and precipitation (PR #8), Sun and time-of-day
 authoring (PR #9), and Native ocean authoring (PR #10) have all merged and
-passed packaged DX12/Vulkan acceptance. `main` is clean at `475ac45` with no
-branch on its history awaiting review.
+passed packaged DX12/Vulkan acceptance. `main` remains at `475ac45`; PR #11
+carries the active terrain and robust scene-document work on
+`phase3/terrain-authoring`.
 
 By product-owner decision on 2026-07-31, Terrain Authoring V1 is now the active
 gate. Light and material authoring follows it, then the asset-facing work that
@@ -89,7 +90,8 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 streamed terrain before returning to Light and Material Authoring.
 
 - Create named native terrain with neutral automatic material regions.
-- Expose restrained Flat World, Island, Coastline, and Highlands presets.
+- Create the standard 1,716 x 1,716 m native terrain. Terrain-shape presets
+  are deferred until each one produces a visibly distinct, tested landform.
 - Add raise/lower, smooth, and flatten brushes with radius, strength, and
   falloff.
 - Add material-layer painting and automatic slope/height rules.

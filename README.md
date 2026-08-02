@@ -13,9 +13,11 @@ documentation, and release process.
 > packaged DX12 testing. Renegade now draws its own infinite shader grid, and
 > a curated Environment inspector authors sky, fog, volumetric clouds, and
 > cloud shadows through undoable commands — both accepted on packaged DX12 and
-> Vulkan. Native terrain creation, restrained presets, and generation controls
-> are implemented on the terrain branch but still await Windows compilation
-> and visual acceptance. Light, material, and asset authoring are not built. This repository
+> Vulkan. The terrain branch creates the standard 1,716 x 1,716 m native
+> terrain, sculpts across chunk seams, and preserves all 169 sculpted chunks
+> through a packaged DX12 Save/Open round trip. Nonfunctional terrain-shape
+> presets have been removed; material-scale presets remain pending packaged
+> acceptance. Light, material, and asset authoring are not built. This repository
 > is not yet a usable game engine release.
 
 ## Baseline

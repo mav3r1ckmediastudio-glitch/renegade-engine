@@ -11,14 +11,6 @@
 
 namespace renegade::bridge
 {
-    enum class TerrainPreset
-    {
-        FlatWorld,
-        Island,
-        Coastline,
-        Highlands,
-    };
-
     // Curated, serializable authoring view of Wicked's streamed terrain.
     // Material assets and painted chunk data deliberately remain owned by the
     // native Terrain component and survive state edits untouched.
@@ -47,10 +39,6 @@ namespace renegade::bridge
         wi::terrain::Terrain& terrain,
         const TerrainState& state,
         bool restartGeneration = true) noexcept;
-    [[nodiscard]] TerrainState MakeTerrainPreset(
-        const TerrainState& current,
-        TerrainPreset preset) noexcept;
-
     // Creates the native component and its four automatic material slots.
     // The base slot uses Renegade's bundled grass PBR material until the
     // asset-facing material workflow can replace it.

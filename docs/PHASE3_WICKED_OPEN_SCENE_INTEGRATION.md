@@ -111,6 +111,18 @@ the Windows binaries or CTest.
 
 Do not mark this passed from compilation or headless tests.
 
+### Verified so far
+
+- Windows Debug and Release CI are green at cleanup base `0a1d0b6`.
+- The project owner verified on packaged DX12 that a sculpted terrain reopens
+  with all 169 chunks and remains unchanged through the first terrain update.
+- The post-load wipe was caused by bundled-material rebinding leaving a clean
+  material dirty; `c7eea43` preserves the incoming dirty state and
+  `0a1d0b6` removes the temporary diagnostics.
+
+This proves the reported terrain persistence failure is fixed. It does not yet
+prove the complete backup, forced-failure, Runtime, or Vulkan checklist.
+
 1. Build Debug and Release and run the full CTest suite.
 2. Package Release and launch DX12.
 3. From Project Hub, open two visibly different WISCENE files.
