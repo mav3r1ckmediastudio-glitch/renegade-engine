@@ -14,6 +14,11 @@
 
 **Gate 2 remote commit:** `32351d9`
 
+**Add Light remote commit:** `b81c4bb`
+
+**Discoverability correction commit:** `4ebc7a8` (patch-ready; not yet
+Windows-verified)
+
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current truth
@@ -34,6 +39,13 @@ selecting `Gateway Beam` reveals the expected native Spot controls. The full
 edit/Undo/Redo/Save/Open/Runtime/Vulkan behaviour matrix has not yet been
 reported complete.
 
+The project owner then tested Add Light at `b81c4bb`. All four native light
+types illuminate correctly, but the custom hierarchy clipped entities below
+its first visible page and only Directional had a viewport marker. This is a
+behavioural gate failure despite green CI. Commit `4ebc7a8` corrects both
+discoverability issues and remains pending fresh Windows CI and packaged visual
+acceptance.
+
 ## Active slice — Add Light workflow
 
 The next patch completes light authoring before Material UI starts. It:
@@ -48,8 +60,13 @@ The next patch completes light authoring before Material UI starts. It:
   `Esc` or right-click cancellation;
 - aligns Spot and Rectangle emission to the clicked surface normal;
 - creates Directional immediately five metres in front of the editor camera;
-- draws a constant-size, selectable sun-and-direction icon for every visible
-  Directional light entirely in Studio, with no serialized helper state;
+- draws distinct constant-size, selectable Point, Spot, Directional, and
+  Rectangle markers entirely in Studio, with no serialized helper state;
+- classifies visible entities from their native Wicked components and presents
+  collapsible Lights, Models, Characters, Cameras, Terrain, Effects, Audio,
+  and Scene Objects headers only when those categories are present;
+- reveals the selected entity by expanding its category and scrolling its row
+  into view, while retaining mouse-wheel scrolling for large categories;
 - assigns unique creator-facing names such as `Point Light 2`;
 - selects the new entity automatically so the existing Inspector opens;
 - snapshots the complete native entity for Undo/Redo;
@@ -71,6 +88,14 @@ is changed. No material UI or terrain material path is added.
 - The container has no CMake installation, so Windows compilation and runtime
   behaviour are not claimed locally. PR #12 must run fresh Windows checks.
 
+The `4ebc7a8` correction additionally passes `git diff --check`, preserves the
+16-column feature ledger, and passes C++17 syntax validation for
+`SceneService.cpp`, `RenegadeStudioChrome.cpp`, `StudioApplication.cpp`, and
+`BridgeCommandTests.cpp` against pinned Wicked headers. The bridge test now
+asserts native Light, Model, and Humanoid entities resolve to the intended
+hierarchy categories. Full Windows build and visual interaction remain the
+authoritative gate.
+
 ## Required Add Light acceptance
 
 1. Apply and push the Add Light patch to
@@ -78,15 +103,18 @@ is changed. No material UI or terrain material path is added.
 2. Require all four PR checks to pass again.
 3. Package Release and launch DX12 Studio.
 4. Open `ADD` and create each of Point, Spot, Directional, and Rectangle Light.
-5. Confirm every new light appears in the hierarchy, is selected automatically,
-   and opens the correct type-aware Inspector controls.
+5. Confirm every new light appears beneath the collapsible **Lights** header,
+   is revealed and selected automatically, and opens the correct type-aware
+   Inspector controls. Collapse/expand the header and wheel-scroll a long
+   category without selecting or moving a scene entity.
 6. Confirm Point, Spot, and Rectangle show a placement preview and appear at
    the clicked surface; Spot and Rectangle face along its normal. Confirm the
    placement click does not also select, sculpt, move a gizmo, or start camera
    navigation, and cancellation creates no light.
-7. Confirm Directional creates immediately, shows a selectable sun/direction
-   icon in the viewport, and that selecting the icon opens its Inspector.
-   Confirm no editor icon or light visualizer appears in Runtime.
+7. Confirm every type shows its distinct selectable viewport marker—Point
+   burst, Spot cone, Directional sun/direction, and Rectangle panel/direction—
+   and that selecting each marker opens its Inspector and reveals its hierarchy
+   row. Confirm no editor marker or light visualizer appears in Runtime.
 8. Verify Undo removes the new light, Redo restores it, Delete removes it, and
    Undo restores the deletion.
 9. Edit representative values, then Save, close, reopen, and confirm all four
