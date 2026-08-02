@@ -73,12 +73,15 @@ this container and is not a repository file. CMake is unavailable locally.
 
 Risks and next task:
 
-1. Run fresh Windows CI to prove MSVC compiles the extracted upstream source in
-   the Renegade target.
-2. Add/run an initialized DX12 packaged proof using a representative textured
-   GLB, then repeat in Vulkan. Confirm meshes, hierarchy, transforms, materials,
-   texture references and WISCENE reload counts.
-3. Do not start the visible importer workspace until that proof passes.
+1. Run fresh Windows CI to prove MSVC compiles the extracted upstream source and
+   temporary Studio proof route in the Renegade target.
+2. In packaged Studio, run **BUILD > VALIDATE GLB/GLTF IMPORT...** with the
+   same representative textured GLB in DX12 and Vulkan. Require PASS and
+   matching component counts; output belongs only under
+   `Saved/Validation/ModelImport`.
+3. Confirm the active scene, selection, hierarchy, Undo history, and dirty state
+   remain unchanged. Do not start the visible importer workspace until both
+   renderer proofs pass.
 4. Wicked's importer reports malformed-file errors through its reference-editor
    message box; production structured error capture remains a later hardening
    gate and must not be hidden.

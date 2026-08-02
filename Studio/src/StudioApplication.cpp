@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <iomanip>
 #include <memory>
 #include <sstream>
@@ -10,6 +11,7 @@
 
 namespace
 {
+    namespace fs = std::filesystem;
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
     constexpr wi::Color HologramIdle = wi::Color(8, 30, 42, 224);
     constexpr wi::Color HologramFocus = wi::Color(0, 126, 164, 238);
@@ -1962,6 +1964,9 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::SceneWorkspace:
                 pendingAction_ = EditorAction::OpenSceneWorkspace;
                 break;
+            case RenegadeStudioChrome::Action::ValidateModelImport:
+                pendingAction_ = EditorAction::ValidateModelImport;
+                break;
             }
         });
         studioChrome_.OnDrawerChanged([this](const int tab)
@@ -3567,6 +3572,9 @@ namespace renegade::studio
             break;
         case EditorAction::ReloadTerrainMaterial:
             ReloadTerrainMaterial();
+            break;
+        case EditorAction::ValidateModelImport:
+            ValidateModelImport();
             break;
         case EditorAction::None:
         default:
@@ -5783,6 +5791,92 @@ namespace renegade::studio
         }
         RefreshInspector();
         RefreshStatus();
+    }
+
+    void StudioRenderPath::ValidateModelImport()
+    {
+        if (session_ == nullptr ||
+            session_->Projects().CurrentProject().rootPath.empty())
+        {
+            wi::helper::messageBox(
+                "Open or create a Renegade project before running the model import proof.",
+                "Model Import Gate 1");
+            return;
+        }
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "GLB/GLTF model for Gate 1 validation";
+        params.extensions.push_back("glb");
+        params.extensions.push_back("gltf");
+        wi::helper::FileDialog(
+            params,
+            [this](const std::string& sourcePath)
+            {
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, sourcePath](uint64_t)
+                    {
+                        RunModelImportProof(sourcePath);
+                    });
+            });
+    }
+
+    void StudioRenderPath::RunModelImportProof(const std::string& sourcePath)
+    {
+        if (session_ == nullptr || sourcePath.empty())
+        {
+            return;
+        }
+
+        const fs::path outputDirectory =
+            fs::u8path(session_->Projects().CurrentProject().rootPath) /
+            "Saved" / "Validation" / "ModelImport";
+        const fs::path source = fs::u8path(sourcePath);
+        const fs::path assetPath =
+            outputDirectory / fs::u8path(source.stem().u8string() + ".wiscene");
+
+        studioChrome_.SetStatusText(
+            "MODEL IMPORT PROOF // RUNNING // " + source.filename().u8string());
+
+        const bridge::ImportResult result =
+            bridge::ImportService().ImportGltfAsset(
+                sourcePath,
+                assetPath.generic_u8string());
+
+        const auto* device = wi::graphics::GetDevice();
+        const std::string renderer = device != nullptr &&
+                device->GetShaderFormat() == wi::graphics::ShaderFormat::SPIRV
+            ? "VULKAN"
+            : "DX12";
+        std::ostringstream report;
+        report << (result.succeeded ? "PASS" : "FAIL")
+            << " // MODEL IMPORT V1 GATE 1\n\n"
+            << "Renderer: " << renderer << '\n'
+            << "Source: " << result.sourcePath << '\n'
+            << "WISCENE: " << result.assetPath << "\n\n";
+        if (result.succeeded)
+        {
+            report << "Objects: " << result.reloaded.objects << '\n'
+                << "Meshes: " << result.reloaded.meshes << '\n'
+                << "Materials: " << result.reloaded.materials << '\n'
+                << "Texture references: "
+                << result.reloaded.textureReferences << '\n'
+                << "Transforms: " << result.reloaded.transforms << '\n'
+                << "Hierarchy links: " << result.reloaded.hierarchy << '\n'
+                << "Armatures: " << result.reloaded.armatures << '\n'
+                << "Animations: " << result.reloaded.animations << "\n\n"
+                << "The isolated imported scene survived WISCENE save and reload unchanged.";
+        }
+        else
+        {
+            report << "Reason: " << result.error;
+        }
+
+        studioChrome_.SetStatusText(
+            std::string("MODEL IMPORT PROOF // ") +
+            (result.succeeded ? "PASS // " : "FAIL // ") + renderer);
+        wi::helper::messageBox(report.str(), "Model Import Gate 1");
     }
 
     void StudioRenderPath::CreateProject()

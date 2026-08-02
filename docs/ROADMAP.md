@@ -27,7 +27,11 @@ stock editor, converts into an isolated scene, validates a WISCENE round trip,
 and records component and texture-reference counts. Because the pinned
 converter creates GPU render data, the conversion proof must run in an
 initialized DX12/Vulkan process; UI-free does not mean GPU-free. The Asset
-Browser and visible importer workspace remain later gates.
+Browser and visible importer workspace remain later gates. A temporary
+Renegade-owned command under `BUILD > VALIDATE GLB/GLTF IMPORT...` selects a
+real model, writes only to `Saved/Validation/ModelImport`, and reports the
+isolated conversion and structural reload result without touching the active
+scene or registering a project asset.
 
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light

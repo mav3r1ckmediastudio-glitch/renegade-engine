@@ -113,6 +113,7 @@ namespace renegade::studio
             EnvironmentWorkspace,
             TerrainWorkspace,
             SceneWorkspace,
+            ValidateModelImport,
         };
 
         struct HierarchyRow

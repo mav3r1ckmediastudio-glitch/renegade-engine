@@ -20,7 +20,8 @@ documentation, and release process.
 > editor-only markers and grouped hierarchy discovery—has passed packaged DX12
 > and Vulkan acceptance and is merged. Model Import V1 Gate 1 now provides an
 > isolated Wicked GLB/GLTF-to-WISCENE conversion boundary; its authoritative
-> packaged GPU round trip remains pending. The visible importer, Asset Browser
+> packaged GPU round trip can now be invoked from **BUILD > VALIDATE GLB/GLTF
+> IMPORT...** and remains pending owner verification. The visible importer, Asset Browser
 > registry and Material UI are not built. This repository is not yet a usable
 > game engine release.
 

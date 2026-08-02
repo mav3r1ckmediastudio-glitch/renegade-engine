@@ -11,6 +11,7 @@
 
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/LightService.h"
+#include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
@@ -70,6 +71,7 @@ namespace renegade::studio
             ApplyTerrainMaterialPreset,
             ApplyDefaultGrass,
             ReloadTerrainMaterial,
+            ValidateModelImport,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -247,6 +249,8 @@ namespace renegade::studio
         void CommitTerrainTextureScale(float value);
         void ApplyDefaultGrass();
         void ReloadTerrainMaterial();
+        void ValidateModelImport();
+        void RunModelImportProof(const std::string& sourcePath);
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,

@@ -1010,6 +1010,10 @@ namespace renegade::studio
                             SetActiveBottomTab(item == 2 ? 0 : 3, true);
                         }
                     }
+                    else if (activeMenu_ == 4 && item == 0)
+                    {
+                        invoke(Action::ValidateModelImport);
+                    }
                     else if (activeMenu_ == 5 && item >= 0 && item < 3)
                     {
                         if (item == 2)
@@ -1926,7 +1930,7 @@ namespace renegade::studio
             }
             else if (activeMenu_ == 4)
             {
-                items = {{"PACKAGING NOT AVAILABLE YET", false}};
+                items = {{"VALIDATE GLB/GLTF IMPORT...", true}};
             }
             else
             {
