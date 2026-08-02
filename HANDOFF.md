@@ -266,6 +266,77 @@ treating any part of this as working:
    wrong Scale value, a broken Undo/Redo, or a panel that clips off-screen
    all stop this gate.
 
+## Active slice — Collision Authoring (uncommitted, service layer only)
+
+Started while the project owner packages and tests the two slices above,
+continuing the same "materials, scale, animations, collision" request that
+started the Model Import scale work. Not yet committed or built, and
+deliberately does not touch Studio/`StudioApplication.cpp` at all yet --
+this is a UI-independent bridge library addition only, following the same
+sequencing already used for `ImportService::ResolveScaleFactor` (prove the
+service layer with unit tests first, wire UI in a following slice).
+
+- Added `CollisionService` (`EngineBridge/include/renegade/bridge/
+  CollisionService.h` / `src/CollisionService.cpp`), mirroring
+  `MaterialService`/`LightService` exactly: a curated `CollisionState`
+  (shape, mass, friction, restitution, and shape-specific dimensions) over
+  Wicked's native `wi::scene::RigidBodyPhysicsComponent`, with
+  `CaptureCollision`/`SanitizeCollisionState`/`HasCollisionStateChange`/
+  `ApplyCollision`, and three commands: `CreateCollisionCommand`,
+  `SetCollisionCommand`, `RemoveCollisionCommand`.
+- Deliberately scoped to `BOX`/`SPHERE`/`CAPSULE` only -- the three shapes
+  Wicked sizes from explicit dimensions (half-extents/radius/height) rather
+  than derived mesh geometry, so they can attach to any entity with a
+  `TransformComponent`. `CONVEX_HULL`/`TRIANGLE_MESH` need a
+  `MeshComponent`-bearing entity and a `mesh_lod` to derive their shape
+  from -- a different targeting problem (which entity in an imported
+  hierarchy gets the collider?) that is out of scope here. `CYLINDER`/
+  `HEIGHTFIELD` are native shapes with no curated authoring surface yet
+  either. Vehicle and character physics are untouched.
+- `CreateCollisionCommand`/`RemoveCollisionCommand` are simpler than
+  `CreateLightCommand`: they add or remove a single component
+  (`ComponentManager<T>::Create`/`Remove`) on an entity that already exists
+  and is never created or destroyed by these commands, so Undo/Redo is a
+  plain component toggle -- no `wi::Archive` entity-level snapshot needed,
+  unlike `CreateLightCommand` (which creates and must be able to fully
+  restore a whole new entity) or `PlaceImportedModelCommand` (which merges
+  and must restore a whole imported hierarchy).
+- `ApplyCollision` calls `RigidBodyPhysicsComponent::SetRefreshParametersNeeded(true)`
+  after every edit, per the component's own documented purpose, so a live
+  physics simulation rebuilds the shape rather than continuing to use a
+  stale one.
+- Added `Tests/CollisionTests.cpp` (`RenegadeCollisionTests` in
+  `Tests/CMakeLists.txt`, wired the same way as `RenegadeMaterialTests`/
+  `RenegadeLightTests`): sanitize-floor coverage, create/duplicate-reject/
+  Undo/Redo, edit/no-op-filter/Undo/Redo, and remove/Undo (including
+  removing from an entity with no rigidbody) -- all against a synthetic
+  scene, no graphics device required.
+
+Changed files:
+
+- `EngineBridge/include/renegade/bridge/CollisionService.h` (new)
+- `EngineBridge/src/CollisionService.cpp` (new)
+- `EngineBridge/CMakeLists.txt`
+- `Tests/CollisionTests.cpp` (new)
+- `Tests/CMakeLists.txt`
+- `docs/FEATURE_MATRIX.csv`
+- `HANDOFF.md`
+
+**No local validation has run against this yet** -- no syntax check, no
+build, no packaged test, and there is deliberately no Studio UI to exercise
+it through yet. Before treating any part of this as working:
+
+1. Run the same kind of local C++17 syntax check used for prior slices
+   against the four changed/new source files.
+2. Commit and push, then run Windows CI -- `RenegadeCollisionTests` needs to
+   pass alongside the existing bridge test suite.
+3. This slice intentionally stops at the service layer. The next slice
+   wires it into Studio: most likely extending the Import Scale panel into
+   a combined Import Setup panel with a collision shape choice, defaulted
+   from the same bounding-box data already computed for Automatic scale,
+   attached to the import root the same way scale is. That UI work has not
+   started and needs its own packaged acceptance pass once it exists.
+
 ## Completed slice — Model Import V1 Gate 1
 
 Changed files:

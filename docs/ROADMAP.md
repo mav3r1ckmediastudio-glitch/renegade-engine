@@ -53,6 +53,16 @@ independent of the Inspector's own hardcoded layout, offering
 Original/Meters, Centimeters, and Inches as one-click Undo/Redo-backed
 overrides of the Automatic factor. It has not yet run in a packaged build.
 
+Continuing the same "materials, scale, animations, collision" request, a
+further uncommitted, UI-independent slice adds `CollisionService`
+(`EngineBridge`), a curated authoring surface over Wicked's native
+`RigidBodyPhysicsComponent` scoped to Box/Sphere/Capsule -- the shapes sized
+from explicit dimensions rather than derived mesh geometry. It has unit
+coverage (`RenegadeCollisionTests`) but no Studio wiring yet; materials ride
+for free once the Material Inspector below lands, and animations are
+already imported and preserved with no further work needed, per earlier
+research into this request.
+
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light
 Inspector is visible in the packaged editor and Gate 2 Windows CI passed at
