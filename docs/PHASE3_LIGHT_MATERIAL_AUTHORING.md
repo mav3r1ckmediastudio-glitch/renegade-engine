@@ -27,8 +27,9 @@ DX12, Runtime, and Vulkan builds.
 - All four PR #12 checks passed at `38c9f24` on 2026-08-02.
 - Slice 2 Light Inspector CI passed at `32351d9` and its selection-driven UI
   was visually confirmed in packaged DX12.
-- Slice 2A is active: native Add Light, surface placement, Directional scene
-  icon, and complete packaged lifecycle acceptance.
+- Slice 2A is active: native Add Light, surface placement, editor-only scene
+  markers for all four types, grouped hierarchy discoverability, and complete
+  packaged lifecycle acceptance.
 - No placement, icon, persistence, or Runtime result is accepted from
   compilation alone.
 
@@ -194,11 +195,16 @@ correct Undo/Redo, and no change after Save/Open.
 - Align new Spot and Rectangle emission to the clicked surface normal. `Esc`
   or right-click cancels without creating an entity or history entry.
 - Create Directional immediately five metres in front of the editor camera;
-  its position anchors a Renegade-owned sun-and-direction icon even though
+  its position anchors its Renegade-owned sun-and-direction marker even though
   only its rotation affects illumination.
-- Draw and hit-test Directional icons entirely in Studio. They must remain a
-  constant screen size, select the native entity, and never serialize or
-  appear in Runtime as a mesh, helper entity, or Wicked visualizer flag.
+- Draw and hit-test distinct Point, Spot, Directional, and Rectangle markers
+  entirely in Studio. They must remain a constant screen size, select the
+  native entity, and never serialize or appear in Runtime as a mesh, helper
+  entity, or Wicked visualizer flag.
+- Group hierarchy entities beneath collapsible component-driven headers:
+  Lights, Models, Characters, Cameras, Terrain, Effects, Audio, and Scene
+  Objects. Reveal a newly created or viewport-selected entity automatically,
+  and retain wheel scrolling for categories larger than the available panel.
 - Select every successfully created light automatically so the existing Light
   Inspector opens immediately.
 - Use Wicked Editor's native starting values and rectangle source shape rather
@@ -261,8 +267,8 @@ Runtime, and Vulkan must pass before merge.
 | Entity disappears during edit | Command fails without history or unrelated mutation |
 | Add Light creates UI-only state | Assert native Name, Layer, Transform and Light components exist |
 | Add/Undo/Redo changes identity | Serialize the entity snapshot and restore the same entity and unique name |
-| Added light is not discoverable | Use the permanent ADD menu and auto-select the created hierarchy entity |
-| Directional light has no visible source | Draw a selectable editor-only sun/direction icon at its transform without serialized helper state |
+| Added light is not discoverable | Use the permanent ADD menu, grouped hierarchy, automatic row reveal, and selectable scene marker |
+| Light has no visible source | Draw a distinct selectable editor-only marker at every light transform without serialized helper state |
 | Placement click performs two tools | Placement consumes viewport input before navigation, sculpting, gizmos, and ordinary selection |
 | Editor helper leaks into the game | Keep scene icons in Studio and assert new native lights do not enable the serialized visualizer flag |
 | Shared or multi-material mesh is ambiguous | Resolve only one unique material; otherwise reject |

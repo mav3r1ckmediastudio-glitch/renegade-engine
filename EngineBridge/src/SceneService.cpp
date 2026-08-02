@@ -31,6 +31,43 @@ namespace
             name->name.rfind(InternalEntityPrefix, 0) != 0;
     }
 
+    renegade::bridge::SceneEntityCategory CategoryForEntity(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        using Category = renegade::bridge::SceneEntityCategory;
+        if (scene.lights.Contains(entity))
+        {
+            return Category::Lights;
+        }
+        if (scene.humanoids.Contains(entity))
+        {
+            return Category::Characters;
+        }
+        if (scene.cameras.Contains(entity))
+        {
+            return Category::Cameras;
+        }
+        if (scene.terrains.Contains(entity))
+        {
+            return Category::Terrain;
+        }
+        if (scene.sounds.Contains(entity))
+        {
+            return Category::Audio;
+        }
+        if (scene.emitters.Contains(entity) || scene.hairs.Contains(entity) ||
+            scene.decals.Contains(entity))
+        {
+            return Category::Effects;
+        }
+        if (scene.objects.Contains(entity) || scene.meshes.Contains(entity))
+        {
+            return Category::Models;
+        }
+        return Category::Other;
+    }
+
     void SetTransform(
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity,
@@ -692,6 +729,7 @@ namespace renegade::bridge
             SceneEntity item;
             item.entity = entity;
             item.hasTransform = scene_.transforms.Contains(entity);
+            item.category = CategoryForEntity(scene_, entity);
 
             if (const auto* hierarchy = scene_.hierarchy.GetComponent(entity))
             {
@@ -741,10 +779,47 @@ namespace renegade::bridge
 
         std::vector<SceneEntity> ordered;
         ordered.reserve(entities.size());
-        const auto append = [&](const auto& self, const std::size_t index, const int depth) -> void
+        const auto branchCategory = [&](
+            const auto& self,
+            const std::size_t index) -> SceneEntityCategory
+        {
+            if (entities[index].category != SceneEntityCategory::Other)
+            {
+                return entities[index].category;
+            }
+
+            SceneEntityCategory result = SceneEntityCategory::Other;
+            const auto found = children.find(entities[index].entity);
+            if (found == children.end())
+            {
+                return result;
+            }
+            for (const auto child : found->second)
+            {
+                const auto candidate = self(self, child);
+                if (candidate == SceneEntityCategory::Other)
+                {
+                    continue;
+                }
+                if (result != SceneEntityCategory::Other &&
+                    result != candidate)
+                {
+                    return SceneEntityCategory::Other;
+                }
+                result = candidate;
+            }
+            return result;
+        };
+
+        const auto append = [&entities, &children, &ordered](
+            const auto& self,
+            const std::size_t index,
+            const int depth,
+            const SceneEntityCategory category) -> void
         {
             auto item = entities[index];
             item.depth = depth;
+            item.category = category;
             ordered.push_back(std::move(item));
 
             const auto found = children.find(entities[index].entity);
@@ -754,13 +829,13 @@ namespace renegade::bridge
             }
             for (const auto child : found->second)
             {
-                self(self, child, depth + 1);
+                self(self, child, depth + 1, category);
             }
         };
 
         for (const auto root : roots)
         {
-            append(append, root, 0);
+            append(append, root, 0, branchCategory(branchCategory, root));
         }
         return ordered;
     }

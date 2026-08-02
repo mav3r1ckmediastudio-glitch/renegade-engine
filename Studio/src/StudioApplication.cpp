@@ -83,6 +83,35 @@ namespace
         }
     }
 
+    renegade::studio::RenegadeStudioChrome::HierarchyCategory
+    ToHierarchyCategory(
+        const renegade::bridge::SceneEntityCategory category) noexcept
+    {
+        using BridgeCategory = renegade::bridge::SceneEntityCategory;
+        using ChromeCategory =
+            renegade::studio::RenegadeStudioChrome::HierarchyCategory;
+        switch (category)
+        {
+        case BridgeCategory::Lights:
+            return ChromeCategory::Lights;
+        case BridgeCategory::Models:
+            return ChromeCategory::Models;
+        case BridgeCategory::Characters:
+            return ChromeCategory::Characters;
+        case BridgeCategory::Cameras:
+            return ChromeCategory::Cameras;
+        case BridgeCategory::Terrain:
+            return ChromeCategory::Terrain;
+        case BridgeCategory::Effects:
+            return ChromeCategory::Effects;
+        case BridgeCategory::Audio:
+            return ChromeCategory::Audio;
+        case BridgeCategory::Other:
+        default:
+            return ChromeCategory::Other;
+        }
+    }
+
     void DrawEditorLine(
         const XMFLOAT2& start,
         const XMFLOAT2& end,
@@ -2241,8 +2270,7 @@ namespace renegade::studio
 
         viewportBounds_ = studioChrome_.ViewportBounds();
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        const bool directionalIconConsumed =
-            HandleDirectionalLightSceneIcons(pointer);
+        const bool lightIconConsumed = HandleLightSceneIcons(pointer);
 
         if (sunPreviewPlaying_)
         {
@@ -2277,7 +2305,7 @@ namespace renegade::studio
             return;
         }
 
-        if (directionalIconConsumed)
+        if (lightIconConsumed)
         {
             return;
         }
@@ -2815,6 +2843,7 @@ namespace renegade::studio
                 entity.depth,
                 entity.entity == selected,
                 static_cast<std::uint64_t>(entity.entity),
+                ToHierarchyCategory(entity.category),
             });
         }
         studioChrome_.SetHierarchyRows(std::move(chromeRows));
@@ -3897,7 +3926,7 @@ namespace renegade::studio
         return IsPointerOverViewport(XMFLOAT4(screen.x, screen.y, 0, 0));
     }
 
-    bool StudioRenderPath::HandleDirectionalLightSceneIcons(
+    bool StudioRenderPath::HandleLightSceneIcons(
         const XMFLOAT4& pointer)
     {
         if (session_ == nullptr || camera == nullptr || projectHubVisible_)
@@ -3919,8 +3948,7 @@ namespace renegade::studio
         {
             const auto entity = scene.lights.GetEntity(index);
             const auto& light = scene.lights[index];
-            if (light.GetType() != wi::scene::LightComponent::DIRECTIONAL ||
-                !session_->Scenes().IsHierarchyVisible(entity))
+            if (!session_->Scenes().IsHierarchyVisible(entity))
             {
                 continue;
             }
@@ -3946,31 +3974,23 @@ namespace renegade::studio
                     ? XMFLOAT4(0.58f, 0.95f, 1.0f, 1.0f)
                     : XMFLOAT4(0.20f, 0.84f, 1.0f, 0.92f);
 
-            constexpr int Segments = 16;
-            constexpr float Radius = 8.0f;
-            for (int segment = 0; segment < Segments; ++segment)
+            const auto drawCircle = [&](const float radius)
             {
-                const float angle0 = static_cast<float>(segment) /
-                    static_cast<float>(Segments) * XM_2PI;
-                const float angle1 = static_cast<float>(segment + 1) /
-                    static_cast<float>(Segments) * XM_2PI;
-                DrawEditorLine(
-                    XMFLOAT2(center.x + std::cos(angle0) * Radius,
-                        center.y + std::sin(angle0) * Radius),
-                    XMFLOAT2(center.x + std::cos(angle1) * Radius,
-                        center.y + std::sin(angle1) * Radius),
-                    color);
-            }
-            for (int rayIndex = 0; rayIndex < 8; ++rayIndex)
-            {
-                const float angle = static_cast<float>(rayIndex) / 8.0f * XM_2PI;
-                DrawEditorLine(
-                    XMFLOAT2(center.x + std::cos(angle) * 11.0f,
-                        center.y + std::sin(angle) * 11.0f),
-                    XMFLOAT2(center.x + std::cos(angle) * 16.0f,
-                        center.y + std::sin(angle) * 16.0f),
-                    color);
-            }
+                constexpr int Segments = 16;
+                for (int segment = 0; segment < Segments; ++segment)
+                {
+                    const float angle0 = static_cast<float>(segment) /
+                        static_cast<float>(Segments) * XM_2PI;
+                    const float angle1 = static_cast<float>(segment + 1) /
+                        static_cast<float>(Segments) * XM_2PI;
+                    DrawEditorLine(
+                        XMFLOAT2(center.x + std::cos(angle0) * radius,
+                            center.y + std::sin(angle0) * radius),
+                        XMFLOAT2(center.x + std::cos(angle1) * radius,
+                            center.y + std::sin(angle1) * radius),
+                        color);
+                }
+            };
 
             XMFLOAT3 directionTarget = position;
             directionTarget.x += light.direction.x;
@@ -3991,21 +4011,101 @@ namespace renegade::studio
                     arrow.y /= length;
                 }
             }
-            const XMFLOAT2 arrowEnd = XMFLOAT2(
-                center.x + arrow.x * 22.0f,
-                center.y + arrow.y * 22.0f);
-            DrawEditorLine(center, arrowEnd, color);
             const XMFLOAT2 perpendicular = XMFLOAT2(-arrow.y, arrow.x);
-            DrawEditorLine(
-                arrowEnd,
-                XMFLOAT2(arrowEnd.x - arrow.x * 6.0f + perpendicular.x * 4.0f,
-                    arrowEnd.y - arrow.y * 6.0f + perpendicular.y * 4.0f),
-                color);
-            DrawEditorLine(
-                arrowEnd,
-                XMFLOAT2(arrowEnd.x - arrow.x * 6.0f - perpendicular.x * 4.0f,
-                    arrowEnd.y - arrow.y * 6.0f - perpendicular.y * 4.0f),
-                color);
+
+            switch (light.GetType())
+            {
+            case wi::scene::LightComponent::POINT:
+                drawCircle(7.0f);
+                for (int rayIndex = 0; rayIndex < 4; ++rayIndex)
+                {
+                    const float angle =
+                        static_cast<float>(rayIndex) * XM_PIDIV2;
+                    DrawEditorLine(
+                        XMFLOAT2(center.x + std::cos(angle) * 10.0f,
+                            center.y + std::sin(angle) * 10.0f),
+                        XMFLOAT2(center.x + std::cos(angle) * 15.0f,
+                            center.y + std::sin(angle) * 15.0f),
+                        color);
+                }
+                break;
+            case wi::scene::LightComponent::SPOT:
+            {
+                const XMFLOAT2 tip = XMFLOAT2(
+                    center.x + arrow.x * 15.0f,
+                    center.y + arrow.y * 15.0f);
+                const XMFLOAT2 baseLeft = XMFLOAT2(
+                    center.x - arrow.x * 7.0f + perpendicular.x * 8.0f,
+                    center.y - arrow.y * 7.0f + perpendicular.y * 8.0f);
+                const XMFLOAT2 baseRight = XMFLOAT2(
+                    center.x - arrow.x * 7.0f - perpendicular.x * 8.0f,
+                    center.y - arrow.y * 7.0f - perpendicular.y * 8.0f);
+                DrawEditorLine(baseLeft, baseRight, color);
+                DrawEditorLine(baseLeft, tip, color);
+                DrawEditorLine(baseRight, tip, color);
+                DrawEditorLine(center, tip, color);
+                break;
+            }
+            case wi::scene::LightComponent::RECTANGLE:
+            {
+                constexpr float HalfWidth = 10.0f;
+                constexpr float HalfHeight = 7.0f;
+                const XMFLOAT2 topLeft(
+                    center.x - HalfWidth,
+                    center.y - HalfHeight);
+                const XMFLOAT2 topRight(
+                    center.x + HalfWidth,
+                    center.y - HalfHeight);
+                const XMFLOAT2 bottomLeft(
+                    center.x - HalfWidth,
+                    center.y + HalfHeight);
+                const XMFLOAT2 bottomRight(
+                    center.x + HalfWidth,
+                    center.y + HalfHeight);
+                DrawEditorLine(topLeft, topRight, color);
+                DrawEditorLine(topRight, bottomRight, color);
+                DrawEditorLine(bottomRight, bottomLeft, color);
+                DrawEditorLine(bottomLeft, topLeft, color);
+                DrawEditorLine(topLeft, bottomRight, color);
+                DrawEditorLine(topRight, bottomLeft, color);
+                break;
+            }
+            case wi::scene::LightComponent::DIRECTIONAL:
+            default:
+                drawCircle(8.0f);
+                for (int rayIndex = 0; rayIndex < 8; ++rayIndex)
+                {
+                    const float angle =
+                        static_cast<float>(rayIndex) / 8.0f * XM_2PI;
+                    DrawEditorLine(
+                        XMFLOAT2(center.x + std::cos(angle) * 11.0f,
+                            center.y + std::sin(angle) * 11.0f),
+                        XMFLOAT2(center.x + std::cos(angle) * 16.0f,
+                            center.y + std::sin(angle) * 16.0f),
+                        color);
+                }
+                break;
+            }
+
+            if (light.GetType() != wi::scene::LightComponent::POINT)
+            {
+                const XMFLOAT2 arrowEnd = XMFLOAT2(
+                    center.x + arrow.x * 22.0f,
+                    center.y + arrow.y * 22.0f);
+                DrawEditorLine(center, arrowEnd, color);
+                DrawEditorLine(
+                    arrowEnd,
+                    XMFLOAT2(
+                        arrowEnd.x - arrow.x * 6.0f + perpendicular.x * 4.0f,
+                        arrowEnd.y - arrow.y * 6.0f + perpendicular.y * 4.0f),
+                    color);
+                DrawEditorLine(
+                    arrowEnd,
+                    XMFLOAT2(
+                        arrowEnd.x - arrow.x * 6.0f - perpendicular.x * 4.0f,
+                        arrowEnd.y - arrow.y * 6.0f - perpendicular.y * 4.0f),
+                    color);
+            }
 
             if (canSelect && hovered && distanceSquared < bestDistanceSquared)
             {

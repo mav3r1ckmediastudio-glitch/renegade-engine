@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <iterator>
 #include <utility>
 
 namespace
@@ -13,6 +14,56 @@ namespace
     constexpr float BottomTabsHeight = 32.0f;
     constexpr float StatusBarHeight = 28.0f;
     constexpr float PanelHeaderHeight = 43.0f;
+    constexpr float HierarchyRowHeight = 28.0f;
+
+    std::size_t HierarchyRowCapacity(const float height) noexcept
+    {
+        const float searchY = TopBarHeight + PanelHeaderHeight + 10.0f;
+        const float rowsTop = searchY + 42.0f;
+        const float rowsBottom = height - StatusBarHeight - 8.0f;
+        return static_cast<std::size_t>(std::max(
+            1.0f,
+            std::floor((rowsBottom - rowsTop) / HierarchyRowHeight)));
+    }
+
+    using HierarchyCategory =
+        renegade::studio::RenegadeStudioChrome::HierarchyCategory;
+
+    constexpr std::array<HierarchyCategory, 8> HierarchyCategoryOrder = {
+        HierarchyCategory::Lights,
+        HierarchyCategory::Models,
+        HierarchyCategory::Characters,
+        HierarchyCategory::Cameras,
+        HierarchyCategory::Terrain,
+        HierarchyCategory::Effects,
+        HierarchyCategory::Audio,
+        HierarchyCategory::Other,
+    };
+
+    const char* HierarchyCategoryLabel(
+        const HierarchyCategory category) noexcept
+    {
+        switch (category)
+        {
+        case HierarchyCategory::Lights:
+            return "LIGHTS";
+        case HierarchyCategory::Models:
+            return "MODELS";
+        case HierarchyCategory::Characters:
+            return "CHARACTERS";
+        case HierarchyCategory::Cameras:
+            return "CAMERAS";
+        case HierarchyCategory::Terrain:
+            return "TERRAIN";
+        case HierarchyCategory::Effects:
+            return "EFFECTS";
+        case HierarchyCategory::Audio:
+            return "AUDIO";
+        case HierarchyCategory::Other:
+        default:
+            return "SCENE OBJECTS";
+        }
+    }
 
     constexpr wi::Color Surface0 = wi::Color(8, 11, 13, 252);
     constexpr wi::Color Surface2 = wi::Color(16, 23, 28, 255);
@@ -456,6 +507,22 @@ namespace renegade::studio
     void RenegadeStudioChrome::SetHierarchyRows(
         std::vector<HierarchyRow> rows)
     {
+        const auto selected = std::find_if(
+            rows.begin(),
+            rows.end(),
+            [](const HierarchyRow& row)
+            {
+                return row.selected;
+            });
+        const std::uint64_t selectedEntity = selected != rows.end()
+            ? selected->entity
+            : 0;
+        if (selectedEntity != 0 && selectedEntity != lastHierarchySelection_)
+        {
+            collapsedHierarchyCategories_[
+                static_cast<std::size_t>(selected->category)] = false;
+        }
+        lastHierarchySelection_ = selectedEntity;
         hierarchyRows_ = std::move(rows);
         SetHierarchyFilter(hierarchyFilter_);
     }
@@ -547,31 +614,88 @@ namespace renegade::studio
 
     void RenegadeStudioChrome::SetHierarchyFilter(std::string filter)
     {
-        hierarchyFilter_ = std::move(filter);
         std::transform(
-            hierarchyFilter_.begin(),
-            hierarchyFilter_.end(),
-            hierarchyFilter_.begin(),
+            filter.begin(),
+            filter.end(),
+            filter.begin(),
             [](const unsigned char character)
             {
                 return static_cast<char>(std::tolower(character));
             });
+        const bool filterChanged = filter != hierarchyFilter_;
+        hierarchyFilter_ = std::move(filter);
         visibleHierarchyRows_.clear();
-        for (std::size_t index = 0; index < hierarchyRows_.size(); ++index)
+        for (const auto category : HierarchyCategoryOrder)
         {
-            std::string name = hierarchyRows_[index].name;
-            std::transform(
-                name.begin(),
-                name.end(),
-                name.begin(),
-                [](const unsigned char character)
-                {
-                    return static_cast<char>(std::tolower(character));
-                });
-            if (hierarchyFilter_.empty() ||
-                name.find(hierarchyFilter_) != std::string::npos)
+            std::vector<std::size_t> matchingRows;
+            for (std::size_t index = 0; index < hierarchyRows_.size(); ++index)
             {
-                visibleHierarchyRows_.push_back(index);
+                if (hierarchyRows_[index].category != category)
+                {
+                    continue;
+                }
+                std::string name = hierarchyRows_[index].name;
+                std::transform(
+                    name.begin(),
+                    name.end(),
+                    name.begin(),
+                    [](const unsigned char character)
+                    {
+                        return static_cast<char>(std::tolower(character));
+                    });
+                if (hierarchyFilter_.empty() ||
+                    name.find(hierarchyFilter_) != std::string::npos)
+                {
+                    matchingRows.push_back(index);
+                }
+            }
+            if (matchingRows.empty())
+            {
+                continue;
+            }
+
+            visibleHierarchyRows_.push_back({true, category, 0});
+            const auto categoryIndex = static_cast<std::size_t>(category);
+            if (!hierarchyFilter_.empty() ||
+                !collapsedHierarchyCategories_[categoryIndex])
+            {
+                for (const auto rowIndex : matchingRows)
+                {
+                    visibleHierarchyRows_.push_back(
+                        {false, category, rowIndex});
+                }
+            }
+        }
+
+        const std::size_t capacity = HierarchyRowCapacity(height_);
+        const std::size_t maximumScroll = visibleHierarchyRows_.size() > capacity
+            ? visibleHierarchyRows_.size() - capacity
+            : 0;
+        hierarchyScrollRow_ = filterChanged
+            ? 0
+            : std::min(hierarchyScrollRow_, maximumScroll);
+
+        // A newly created or viewport-selected entity must be revealed even
+        // when its alphabetic position is below the first screenful.
+        const auto selected = std::find_if(
+            visibleHierarchyRows_.begin(),
+            visibleHierarchyRows_.end(),
+            [this](const VisibleHierarchyItem& item)
+            {
+                return !item.header &&
+                    hierarchyRows_[item.rowIndex].selected;
+            });
+        if (selected != visibleHierarchyRows_.end())
+        {
+            const std::size_t selectedRow = static_cast<std::size_t>(
+                std::distance(visibleHierarchyRows_.begin(), selected));
+            if (selectedRow < hierarchyScrollRow_)
+            {
+                hierarchyScrollRow_ = selectedRow;
+            }
+            else if (selectedRow >= hierarchyScrollRow_ + capacity)
+            {
+                hierarchyScrollRow_ = selectedRow - capacity + 1;
             }
         }
     }
@@ -752,6 +876,36 @@ namespace renegade::studio
                     XMFLOAT2(0.0f, 0.0f));
                 return;
             }
+        }
+
+        const float hierarchySearchY =
+            TopBarHeight + PanelHeaderHeight + 10.0f;
+        const float hierarchyRowsTop = hierarchySearchY + 42.0f;
+        const float hierarchyRowsBottom = height_ - StatusBarHeight - 8.0f;
+        if (layoutPointer.x >= 8.0f &&
+            layoutPointer.x < hierarchyWidth_ - 8.0f &&
+            layoutPointer.y >= hierarchyRowsTop &&
+            layoutPointer.y < hierarchyRowsBottom &&
+            std::abs(layoutPointer.z) > 0.1f)
+        {
+            const std::size_t capacity = HierarchyRowCapacity(height_);
+            const std::size_t maximumScroll =
+                visibleHierarchyRows_.size() > capacity
+                    ? visibleHierarchyRows_.size() - capacity
+                    : 0;
+            if (layoutPointer.z > 0.0f)
+            {
+                hierarchyScrollRow_ = hierarchyScrollRow_ > 0
+                    ? hierarchyScrollRow_ - 1
+                    : 0;
+            }
+            else
+            {
+                hierarchyScrollRow_ = std::min(
+                    hierarchyScrollRow_ + 1,
+                    maximumScroll);
+            }
+            pointerConsumed_ = true;
         }
         if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
         {
@@ -956,16 +1110,29 @@ namespace renegade::studio
 
             const float searchY = TopBarHeight + PanelHeaderHeight + 10.0f;
             const float rowsTop = searchY + 42.0f;
-            constexpr float rowHeight = 28.0f;
-            if (x >= 8.0f && x < hierarchyWidth_ - 8.0f && y >= rowsTop)
+            const float rowsBottom = height_ - StatusBarHeight - 8.0f;
+            if (x >= 8.0f && x < hierarchyWidth_ - 8.0f &&
+                y >= rowsTop && y < rowsBottom)
             {
-                const auto visibleIndex = static_cast<std::size_t>(
-                    (y - rowsTop) / rowHeight);
-                if (visibleIndex < visibleHierarchyRows_.size() &&
-                    hierarchySelected_)
+                const auto visibleIndex = hierarchyScrollRow_ +
+                    static_cast<std::size_t>(
+                        (y - rowsTop) / HierarchyRowHeight);
+                if (visibleIndex < visibleHierarchyRows_.size())
                 {
-                    hierarchySelected_(hierarchyRows_[
-                        visibleHierarchyRows_[visibleIndex]].entity);
+                    const auto item = visibleHierarchyRows_[visibleIndex];
+                    if (item.header)
+                    {
+                        const auto categoryIndex =
+                            static_cast<std::size_t>(item.category);
+                        collapsedHierarchyCategories_[categoryIndex] =
+                            !collapsedHierarchyCategories_[categoryIndex];
+                        SetHierarchyFilter(hierarchyFilter_);
+                    }
+                    else if (hierarchySelected_)
+                    {
+                        hierarchySelected_(
+                            hierarchyRows_[item.rowIndex].entity);
+                    }
                     consumed = true;
                 }
             }
@@ -1292,28 +1459,81 @@ namespace renegade::studio
 
         const float rowsTop = searchY + 42.0f;
         const float rowsBottom = statusTop - 8.0f;
-        constexpr float rowHeight = 28.0f;
-        for (std::size_t visibleIndex = 0;
+        std::size_t displayIndex = 0;
+        for (std::size_t visibleIndex = hierarchyScrollRow_;
              visibleIndex < visibleHierarchyRows_.size();
-             ++visibleIndex)
+             ++visibleIndex, ++displayIndex)
         {
-            const float rowY = rowsTop + visibleIndex * rowHeight;
-            if (rowY + rowHeight > rowsBottom)
+            const float rowY =
+                rowsTop + displayIndex * HierarchyRowHeight;
+            if (rowY + HierarchyRowHeight > rowsBottom)
             {
                 break;
             }
-            const std::size_t index = visibleHierarchyRows_[visibleIndex];
-            const auto& row = hierarchyRows_[index];
+            const auto& item = visibleHierarchyRows_[visibleIndex];
+            if (item.header)
+            {
+                const auto categoryIndex =
+                    static_cast<std::size_t>(item.category);
+                const bool expanded = !hierarchyFilter_.empty() ||
+                    !collapsedHierarchyCategories_[categoryIndex];
+                const auto itemCount = static_cast<std::size_t>(std::count_if(
+                    hierarchyRows_.begin(),
+                    hierarchyRows_.end(),
+                    [&item](const HierarchyRow& row)
+                    {
+                        return row.category == item.category;
+                    }));
+                DrawRect(
+                    8.0f,
+                    rowY,
+                    hierarchyWidth_ - 16.0f,
+                    HierarchyRowHeight,
+                    wi::Color(16, 23, 28, 235),
+                    cmd);
+                DrawText(
+                    expanded ? "▼" : "▶",
+                    16.0f,
+                    rowY + 8.0f,
+                    9,
+                    Forge,
+                    cmd);
+                DrawText(
+                    HierarchyCategoryLabel(item.category),
+                    34.0f,
+                    rowY + 7.0f,
+                    10,
+                    TextStrong,
+                    cmd,
+                    1.0f,
+                    0.16f);
+                DrawText(
+                    std::to_string(itemCount),
+                    hierarchyWidth_ - 35.0f,
+                    rowY + 7.0f,
+                    10,
+                    Muted,
+                    cmd);
+                continue;
+            }
+
+            const auto& row = hierarchyRows_[item.rowIndex];
             if (row.selected)
             {
                 DrawRect(
                     8.0f,
                     rowY,
                     hierarchyWidth_ - 16.0f,
-                    rowHeight,
+                    HierarchyRowHeight,
                     wi::Color(67, 28, 13, 150),
                     cmd);
-                DrawRect(8.0f, rowY, 2.0f, rowHeight, Forge, cmd);
+                DrawRect(
+                    8.0f,
+                    rowY,
+                    2.0f,
+                    HierarchyRowHeight,
+                    Forge,
+                    cmd);
             }
             const float indent = 14.0f + std::max(0, row.depth) * 16.0f;
             DrawText(
@@ -1346,6 +1566,25 @@ namespace renegade::studio
                 10,
                 Muted,
                 cmd);
+        }
+
+        const std::size_t capacity = HierarchyRowCapacity(height_);
+        if (visibleHierarchyRows_.size() > capacity)
+        {
+            const float trackX = hierarchyWidth_ - 6.0f;
+            const float trackHeight = rowsBottom - rowsTop;
+            const float thumbHeight = std::max(
+                24.0f,
+                trackHeight * static_cast<float>(capacity) /
+                    static_cast<float>(visibleHierarchyRows_.size()));
+            const std::size_t maximumScroll =
+                visibleHierarchyRows_.size() - capacity;
+            const float thumbY = rowsTop +
+                (trackHeight - thumbHeight) *
+                    static_cast<float>(hierarchyScrollRow_) /
+                    static_cast<float>(maximumScroll);
+            DrawRect(trackX, rowsTop, 2.0f, trackHeight, BorderSoft, cmd);
+            DrawRect(trackX, thumbY, 2.0f, thumbHeight, Forge, cmd);
         }
 
         // Scene tab strip and viewport framing:

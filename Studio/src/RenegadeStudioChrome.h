@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <functional>
 #include <cstdint>
@@ -79,6 +80,19 @@ namespace renegade::studio
     class RenegadeStudioChrome final : public wi::gui::Widget
     {
     public:
+        enum class HierarchyCategory : std::uint8_t
+        {
+            Lights,
+            Models,
+            Characters,
+            Cameras,
+            Terrain,
+            Effects,
+            Audio,
+            Other,
+            Count,
+        };
+
         enum class Action
         {
             ProjectHub,
@@ -107,6 +121,7 @@ namespace renegade::studio
             int depth = 0;
             bool selected = false;
             std::uint64_t entity = 0;
+            HierarchyCategory category = HierarchyCategory::Other;
         };
 
         void Create();
@@ -149,6 +164,13 @@ namespace renegade::studio
         }
 
     private:
+        struct VisibleHierarchyItem
+        {
+            bool header = false;
+            HierarchyCategory category = HierarchyCategory::Other;
+            std::size_t rowIndex = 0;
+        };
+
         float width_ = 1920.0f;
         float height_ = 1080.0f;
         float hierarchyWidth_ = 320.0f;
@@ -167,7 +189,12 @@ namespace renegade::studio
         bool pointerConsumed_ = false;
         wi::Resource brandLockup_;
         std::vector<HierarchyRow> hierarchyRows_;
-        std::vector<std::size_t> visibleHierarchyRows_;
+        std::vector<VisibleHierarchyItem> visibleHierarchyRows_;
+        std::array<bool,
+            static_cast<std::size_t>(HierarchyCategory::Count)>
+            collapsedHierarchyCategories_ = {};
+        std::size_t hierarchyScrollRow_ = 0;
+        std::uint64_t lastHierarchySelection_ = 0;
         std::string sceneName_ = "PROVING GROUND";
         bool sceneDirty_ = false;
         std::string statusText_ = "STUDIO READY";

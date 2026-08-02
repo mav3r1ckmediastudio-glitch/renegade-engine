@@ -114,10 +114,12 @@ identity without reconstructing a parallel Renegade light. Studio owns the Add
 menu, surface-raycast placement, selection, and Inspector transition; the
 bridge owns native creation and history. Point, Spot, and Rectangle use a
 modal click-to-place tool; Directional creates camera-relative because its
-position is only an editor anchor. Directional discoverability is a
-screen-space Studio icon rendered and hit-tested from the native transform.
-It is not a scene entity, component, mesh, serialized light visualizer, or
-Runtime feature.
+position is only an editor anchor. Light discoverability uses distinct
+screen-space Studio markers rendered and hit-tested from every native light
+transform. They are not scene entities, components, meshes, serialized light
+visualizers, or Runtime features. The custom hierarchy groups visible entities
+by their native component role, keeps those groups collapsible, reveals a new
+selection automatically, and retains wheel scrolling for large groups.
 
 Dedicated state services extend that curated model without widening
 `WeatherState`: `PrecipitationState`, `SunState` and `OceanState` own their

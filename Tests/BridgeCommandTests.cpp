@@ -436,6 +436,19 @@ int main()
         "__renegade_internal_grid_test";
     scenes.GetScene().transforms.Create(internalGridEntity);
 
+    const auto hierarchyLight = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(hierarchyLight) = "Hierarchy Light";
+    scenes.GetScene().transforms.Create(hierarchyLight);
+    scenes.GetScene().lights.Create(hierarchyLight);
+    const auto hierarchyModel = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(hierarchyModel) = "Hierarchy Model";
+    scenes.GetScene().transforms.Create(hierarchyModel);
+    scenes.GetScene().objects.Create(hierarchyModel);
+    const auto hierarchyCharacter = wi::ecs::CreateEntity();
+    scenes.GetScene().names.Create(hierarchyCharacter) = "Hierarchy Character";
+    scenes.GetScene().transforms.Create(hierarchyCharacter);
+    scenes.GetScene().humanoids.Create(hierarchyCharacter);
+
     const auto creatorEntities = scenes.ListEntities();
     if (creatorEntities.size() >= scenes.EntityCount())
     {
@@ -447,6 +460,32 @@ int main()
         {
             return Fail("internal entity name leaked into the hierarchy");
         }
+    }
+    const auto hasCategorisedEntity = [&creatorEntities](
+        const wi::ecs::Entity expectedEntity,
+        const renegade::bridge::SceneEntityCategory expectedCategory)
+    {
+        return std::any_of(
+            creatorEntities.begin(),
+            creatorEntities.end(),
+            [expectedEntity, expectedCategory](
+                const renegade::bridge::SceneEntity& candidate)
+            {
+                return candidate.entity == expectedEntity &&
+                    candidate.category == expectedCategory;
+            });
+    };
+    if (!hasCategorisedEntity(
+            hierarchyLight,
+            renegade::bridge::SceneEntityCategory::Lights) ||
+        !hasCategorisedEntity(
+            hierarchyModel,
+            renegade::bridge::SceneEntityCategory::Models) ||
+        !hasCategorisedEntity(
+            hierarchyCharacter,
+            renegade::bridge::SceneEntityCategory::Characters))
+    {
+        return Fail("hierarchy component categories are incorrect");
     }
 
     // Generated Proving Ground structure.

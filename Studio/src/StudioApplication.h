@@ -271,7 +271,7 @@ namespace renegade::studio
             const XMFLOAT4& rotation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
         bool HandleLightPlacement(const XMFLOAT4& pointer);
         void CancelLightPlacement();
-        bool HandleDirectionalLightSceneIcons(const XMFLOAT4& pointer);
+        bool HandleLightSceneIcons(const XMFLOAT4& pointer);
         [[nodiscard]] bool ProjectEditorPoint(
             const XMFLOAT3& world,
             XMFLOAT2& screen) const noexcept;

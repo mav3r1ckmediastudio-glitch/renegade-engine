@@ -10,6 +10,18 @@ namespace renegade::bridge
 {
     class SceneDocumentService;
 
+    enum class SceneEntityCategory
+    {
+        Lights,
+        Models,
+        Characters,
+        Cameras,
+        Terrain,
+        Effects,
+        Audio,
+        Other,
+    };
+
     struct SceneEntity
     {
         wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
@@ -17,6 +29,7 @@ namespace renegade::bridge
         std::string name;
         int depth = 0;
         bool hasTransform = false;
+        SceneEntityCategory category = SceneEntityCategory::Other;
     };
 
     // Renderer-independent description of one generated Proving Ground entity.
