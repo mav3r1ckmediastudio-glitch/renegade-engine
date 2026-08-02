@@ -33,10 +33,11 @@ int main()
     light.SetVolumetricsEnabled(false);
     light.volumetric_boost = 0.25f;
 
-    // Sentinel values outside the curated V1 state must survive every edit.
+    // Native shape fields are creator-facing in the Light Inspector.
     light.radius = 1.25f;
     light.length = 2.50f;
     light.height = 3.75f;
+    // Sentinel values outside the curated V1 state must survive every edit.
     light.cascade_distances = { 3.0f, 17.0f, 91.0f };
     light.forced_shadow_resolution = 2048;
     light.SetVisualizerEnabled(true);
@@ -54,6 +55,9 @@ int main()
     after.range = 90.0f;
     after.outerConeDegrees = 55.0f;
     after.innerConeDegrees = 18.0f;
+    after.radius = 4.25f;
+    after.length = 5.50f;
+    after.height = 6.75f;
     after.castShadow = false;
     after.volumetrics = true;
     after.volumetricBoost = 3.5f;
@@ -72,15 +76,15 @@ int main()
         !NearlyEqual(light.intensity, 350.0f) ||
         !NearlyEqual(light.range, 90.0f) ||
         !NearlyEqual(light.outerConeAngle, 55.0f * XM_PI / 180.0f) ||
+        !NearlyEqual(light.radius, 4.25f) ||
+        !NearlyEqual(light.length, 5.50f) ||
+        !NearlyEqual(light.height, 6.75f) ||
         light.IsCastingShadow() || !light.IsVolumetricsEnabled() ||
         !NearlyEqual(light.volumetric_boost, 3.5f))
     {
         return Fail("curated light state did not reach the native component");
     }
-    if (!NearlyEqual(light.radius, 1.25f) ||
-        !NearlyEqual(light.length, 2.50f) ||
-        !NearlyEqual(light.height, 3.75f) ||
-        light.cascade_distances.size() != 3 ||
+    if (light.cascade_distances.size() != 3 ||
         light.forced_shadow_resolution != 2048 ||
         !light.IsVisualizerEnabled() || !light.IsStatic() ||
         !light.IsVolumetricCloudsEnabled() ||
@@ -93,6 +97,9 @@ int main()
     if (!commands.Undo() ||
         light.GetType() != wi::scene::LightComponent::SPOT ||
         !NearlyEqual(light.intensity, 12.0f) ||
+        !NearlyEqual(light.radius, 1.25f) ||
+        !NearlyEqual(light.length, 2.50f) ||
+        !NearlyEqual(light.height, 3.75f) ||
         !light.IsCastingShadow() || light.IsVolumetricsEnabled())
     {
         return Fail("light Undo did not restore the curated state");
@@ -123,6 +130,9 @@ int main()
     unsafe.range = 500000.0f;
     unsafe.outerConeDegrees = 120.0f;
     unsafe.innerConeDegrees = 100.0f;
+    unsafe.radius = -1.0f;
+    unsafe.length = 500000.0f;
+    unsafe.height = -5.0f;
     unsafe.volumetricBoost = 99.0f;
     const auto safe = renegade::bridge::SanitizeLightState(unsafe);
     if (!NearlyEqual(safe.color.x, 0.0f) ||
@@ -131,6 +141,9 @@ int main()
         !NearlyEqual(safe.range, 100000.0f) ||
         !NearlyEqual(safe.outerConeDegrees, 89.9f) ||
         !NearlyEqual(safe.innerConeDegrees, 89.9f) ||
+        !NearlyEqual(safe.radius, 0.0f) ||
+        !NearlyEqual(safe.length, 100000.0f) ||
+        !NearlyEqual(safe.height, 0.0f) ||
         !NearlyEqual(safe.volumetricBoost, 10.0f))
     {
         return Fail("light safety bounds are incorrect");

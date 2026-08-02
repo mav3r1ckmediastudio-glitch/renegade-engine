@@ -20,6 +20,16 @@ DX12, Runtime, and Vulkan builds.
   Inspector, command history, WISCENE document workflow, and visual language
   remain authoritative.
 
+## Current gate status
+
+- Slice 0 is complete.
+- The Light and Material bridge proofs are implemented together in Gate 1.
+- All four PR #12 checks passed at `38c9f24` on 2026-08-02.
+- Slice 2 now adds the Renegade Light Inspector and must pass fresh CI before
+  packaged DX12 testing begins.
+- No Light Inspector behaviour or visual result is accepted from compilation
+  alone.
+
 ## Verified Wicked capability map
 
 ### Lights
@@ -30,6 +40,7 @@ DX12, Runtime, and Vulkan builds.
 - `color` and `intensity`;
 - `range`;
 - `outerConeAngle` and `innerConeAngle`;
+- `radius`, `length`, and `height` for native source shapes;
 - `CAST_SHADOW` and `VOLUMETRICS` flags; and
 - `volumetric_boost`.
 
@@ -84,13 +95,16 @@ Capture and apply only:
 - intensity;
 - range;
 - inner and outer cone angles;
+- source radius;
+- point-light capsule length / rectangle-light width;
+- rectangle-light height;
 - cast-shadow;
 - volumetrics enabled; and
 - volumetric boost.
 
-Applying a `LightState` must preserve radius, length, rectangle height,
-cascade distances, forced shadow resolution, light masks, camera source, lens
-flares, visualizer/static/cloud flags, and every future field not listed above.
+Applying a `LightState` must preserve cascade distances, forced shadow
+resolution, light masks, camera source, lens flares,
+visualizer/static/cloud flags, and every future field not listed above.
 
 ### `MaterialState`
 
@@ -152,9 +166,10 @@ are wired.
 
 - Extend the existing Renegade Inspector for selected light entities.
 - Use Renegade-owned type, colour, intensity, range, cone, shadow, volumetric,
-  and boost controls.
-- Show spot cone controls only for Spot lights; disable range for Directional
-  lights.
+  boost and native source-shape controls.
+- Show spot cone controls only for Spot lights; expose radius for Directional,
+  Point and Spot; expose capsule length for Point; expose width and height for
+  Rectangle; disable range for Directional lights.
 - Continuous sliders preview directly, restore the before-state on release,
   and commit one command. Discrete edits execute one command.
 - Keep transform controls available for the same light entity; the component

@@ -739,6 +739,179 @@ namespace renegade::studio
             2);
 
         createSectionLabel(
+            lightLabel_,
+            "Light Section",
+            "LIGHT // NATIVE WICKED");
+        lightType_.Create("Light Type");
+        lightType_.AddItem(
+            "DIRECTIONAL",
+            static_cast<std::uint64_t>(
+                wi::scene::LightComponent::DIRECTIONAL));
+        lightType_.AddItem(
+            "POINT",
+            static_cast<std::uint64_t>(wi::scene::LightComponent::POINT));
+        lightType_.AddItem(
+            "SPOT",
+            static_cast<std::uint64_t>(wi::scene::LightComponent::SPOT));
+        lightType_.AddItem(
+            "RECTANGLE",
+            static_cast<std::uint64_t>(wi::scene::LightComponent::RECTANGLE));
+        lightType_.SetTooltip(
+            "Wicked's four native light types. Type-specific shape controls "
+            "appear below.");
+        lightType_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            ApplySelectedLightType(
+                static_cast<wi::scene::LightComponent::LightType>(
+                    args.userdata));
+        });
+        inspectorPanel_.AddWidget(&lightType_);
+
+        const auto createLightSlider = [this](
+            RenegadeSlider& input,
+            const char* name,
+            const char* label,
+            const char* tooltip,
+            const LightField field,
+            const float minimum,
+            const float maximum,
+            const float steps)
+        {
+            input.Create(minimum, maximum, 0.0f, steps, name, label);
+            input.SetTooltip(tooltip);
+            input.OnDragStarted([this, field](const float)
+            {
+                BeginLightSlider(field);
+            });
+            input.OnValuePreview([this, field](const float value)
+            {
+                PreviewLightSlider(field, value);
+            });
+            input.OnValueCommitted([this, field](const float value)
+            {
+                CommitLightSlider(field, value);
+            });
+            inspectorPanel_.AddWidget(&input);
+        };
+        createLightSlider(
+            lightColorRed_,
+            "Light Color Red",
+            "COLOUR // RED",
+            "Red channel of the native light colour.",
+            LightField::ColorRed,
+            0.0f,
+            1.0f,
+            255.0f);
+        createLightSlider(
+            lightColorGreen_,
+            "Light Color Green",
+            "COLOUR // GREEN",
+            "Green channel of the native light colour.",
+            LightField::ColorGreen,
+            0.0f,
+            1.0f,
+            255.0f);
+        createLightSlider(
+            lightColorBlue_,
+            "Light Color Blue",
+            "COLOUR // BLUE",
+            "Blue channel of the native light colour.",
+            LightField::ColorBlue,
+            0.0f,
+            1.0f,
+            255.0f);
+        createLightSlider(
+            lightIntensity_,
+            "Light Intensity",
+            "INTENSITY",
+            "Brightness in Wicked's native physical units for this type.",
+            LightField::Intensity,
+            0.0f,
+            2000.0f,
+            20000.0f);
+        createLightSlider(
+            lightRange_,
+            "Light Range",
+            "RANGE",
+            "Maximum influence distance. Directional lights are scene-wide.",
+            LightField::Range,
+            0.0f,
+            1000.0f,
+            10000.0f);
+        createLightSlider(
+            lightOuterCone_,
+            "Light Outer Cone",
+            "SPOT // OUTER CONE",
+            "Outer spotlight cone angle in degrees.",
+            LightField::OuterCone,
+            0.1f,
+            89.9f,
+            898.0f);
+        createLightSlider(
+            lightInnerCone_,
+            "Light Inner Cone",
+            "SPOT // INNER CONE",
+            "Inner spotlight cone angle; it cannot exceed the outer cone.",
+            LightField::InnerCone,
+            0.0f,
+            89.9f,
+            899.0f);
+        createLightSlider(
+            lightRadius_,
+            "Light Radius",
+            "SOURCE // RADIUS",
+            "Physical source radius; also controls directional shadow softness.",
+            LightField::Radius,
+            0.0f,
+            10.0f,
+            1000.0f);
+        createLightSlider(
+            lightLength_,
+            "Light Length Or Width",
+            "SOURCE // LENGTH / WIDTH",
+            "Point capsule length, or rectangle width.",
+            LightField::Length,
+            0.0f,
+            100.0f,
+            2000.0f);
+        createLightSlider(
+            lightHeight_,
+            "Light Height",
+            "SOURCE // HEIGHT",
+            "Rectangle light height.",
+            LightField::Height,
+            0.0f,
+            100.0f,
+            2000.0f);
+
+        lightCastShadow_.Create("Cast shadows: ");
+        lightCastShadow_.SetTooltip(
+            "Render native Wicked shadows from this light.");
+        lightCastShadow_.OnClick([this](const wi::gui::EventArgs& args)
+        {
+            ApplySelectedLightToggle(LightToggle::CastShadow, args.bValue);
+        });
+        inspectorPanel_.AddWidget(&lightCastShadow_);
+
+        lightVolumetrics_.Create("Volumetric beam: ");
+        lightVolumetrics_.SetTooltip(
+            "Enable Wicked's real shadow-aware volumetric light scattering.");
+        lightVolumetrics_.OnClick([this](const wi::gui::EventArgs& args)
+        {
+            ApplySelectedLightToggle(LightToggle::Volumetrics, args.bValue);
+        });
+        inspectorPanel_.AddWidget(&lightVolumetrics_);
+        createLightSlider(
+            lightVolumetricBoost_,
+            "Light Volumetric Boost",
+            "VOLUMETRIC // BOOST",
+            "Increase this light's contribution to volumetric fog.",
+            LightField::VolumetricBoost,
+            0.0f,
+            10.0f,
+            1000.0f);
+
+        createSectionLabel(
             environmentSkyLabel_,
             "Environment Sky Section",
             "SKY // ATMOSPHERE");
@@ -1920,6 +2093,7 @@ namespace renegade::studio
         ownLabel(positionLabel_);
         ownLabel(rotationLabel_);
         ownLabel(scaleLabel_);
+        ownLabel(lightLabel_);
         ownLabel(environmentSkyLabel_);
         ownLabel(environmentFogLabel_);
         ownLabel(environmentCloudLabel_);
@@ -2237,6 +2411,21 @@ namespace renegade::studio
             widget.SetPos(XMFLOAT2(12.0f, rowY));
             widget.SetSize(XMFLOAT2(environmentFieldWidth, height));
         };
+        positionEnvironmentWidget(lightLabel_, 224.0f, 20.0f);
+        positionEnvironmentWidget(lightType_, 244.0f);
+        positionEnvironmentWidget(lightColorRed_, 278.0f);
+        positionEnvironmentWidget(lightColorGreen_, 312.0f);
+        positionEnvironmentWidget(lightColorBlue_, 346.0f);
+        positionEnvironmentWidget(lightIntensity_, 380.0f);
+        positionEnvironmentWidget(lightRange_, 414.0f);
+        positionEnvironmentWidget(lightOuterCone_, 448.0f);
+        positionEnvironmentWidget(lightInnerCone_, 482.0f);
+        positionEnvironmentWidget(lightRadius_, 516.0f);
+        positionEnvironmentWidget(lightLength_, 550.0f);
+        positionEnvironmentWidget(lightHeight_, 584.0f);
+        positionEnvironmentWidget(lightCastShadow_, 618.0f);
+        positionEnvironmentWidget(lightVolumetrics_, 650.0f);
+        positionEnvironmentWidget(lightVolumetricBoost_, 682.0f);
         positionEnvironmentWidget(environmentSkyLabel_, 44.0f, 20.0f);
         positionEnvironmentWidget(environmentPreset_, 64.0f);
         positionEnvironmentWidget(skyMode_, 98.0f);
@@ -2333,7 +2522,15 @@ namespace renegade::studio
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
-        LayoutInspectorActions(environmentSelected);
+        const bool terrainSelected = terrainWorkspaceActive_;
+        const bool lightSelected =
+            session_ != nullptr && !environmentSelected && !terrainSelected &&
+            session_->Scenes().GetScene().lights.Contains(
+                session_->Selection().SelectedEntity());
+        LayoutInspectorActions(
+            environmentSelected,
+            terrainSelected,
+            lightSelected);
 
         contentPanel_.SetPos(XMFLOAT2(
             leftWidth + 16.0f,
@@ -2512,7 +2709,8 @@ namespace renegade::studio
 
     void StudioRenderPath::LayoutInspectorActions(
         const bool environment,
-        const bool terrain)
+        const bool terrain,
+        const bool light)
     {
         const float width = inspectorPanel_.GetSize().x;
         constexpr float gap = 8.0f;
@@ -2522,7 +2720,9 @@ namespace renegade::studio
             ? std::max(1772.0f, inspectorPanel_.GetSize().y - 82.0f)
             : terrain
                 ? 726.0f
-                : 230.0f;
+                : light
+                    ? 726.0f
+                    : 230.0f;
         const float historyRow = environment
             ? actionStart
             : actionStart + 40.0f;
@@ -2586,11 +2786,16 @@ namespace renegade::studio
         auto* terrain = hasSession && !environmentWorkspaceActive_
             ? session_->Scenes().GetScene().terrains.GetComponent(entity)
             : nullptr;
+        auto* light = hasSession && !environmentWorkspaceActive_ &&
+            !terrainWorkspaceActive_
+            ? session_->Scenes().GetScene().lights.GetComponent(entity)
+            : nullptr;
         SyncSelectionOutline();
 
         const bool hasTransform = transform != nullptr;
         const bool hasWeather = weather != nullptr;
         const bool hasTerrain = terrain != nullptr;
+        const bool hasLight = light != nullptr;
         if (hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
             !environmentWorkspaceActive_ && !terrainWorkspaceActive_)
         {
@@ -2604,7 +2809,7 @@ namespace renegade::studio
         {
             studioChrome_.SetSelectionName({});
         }
-        LayoutInspectorActions(hasWeather, hasTerrain);
+        LayoutInspectorActions(hasWeather, hasTerrain, hasLight);
         const auto setTransformVisible = [this, hasWeather, hasTerrain](wi::gui::Widget& widget)
         {
             widget.SetVisible(!environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !hasWeather && !hasTerrain);
@@ -2621,6 +2826,26 @@ namespace renegade::studio
         setTransformVisible(scaleX_);
         setTransformVisible(scaleY_);
         setTransformVisible(scaleZ_);
+
+        const auto setLightVisible = [hasLight](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(hasLight);
+        };
+        setLightVisible(lightLabel_);
+        setLightVisible(lightType_);
+        setLightVisible(lightColorRed_);
+        setLightVisible(lightColorGreen_);
+        setLightVisible(lightColorBlue_);
+        setLightVisible(lightIntensity_);
+        setLightVisible(lightRange_);
+        setLightVisible(lightOuterCone_);
+        setLightVisible(lightInnerCone_);
+        setLightVisible(lightRadius_);
+        setLightVisible(lightLength_);
+        setLightVisible(lightHeight_);
+        setLightVisible(lightCastShadow_);
+        setLightVisible(lightVolumetrics_);
+        setLightVisible(lightVolumetricBoost_);
 
         const auto setEnvironmentVisible =
             [hasWeather](wi::gui::Widget& widget)
@@ -2903,11 +3128,57 @@ namespace renegade::studio
             return;
         }
 
+        if (hasLight)
+        {
+            const auto* name =
+                session_->Scenes().GetScene().names.GetComponent(entity);
+            inspectorLabel_.SetText(
+                "LIGHT // " +
+                (name != nullptr && !name->name.empty()
+                    ? name->name
+                    : "ENTITY " + std::to_string(entity)));
+            const auto state = bridge::CaptureLight(*light);
+            lightType_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(state.type));
+            lightColorRed_.SetValue(state.color.x);
+            lightColorGreen_.SetValue(state.color.y);
+            lightColorBlue_.SetValue(state.color.z);
+            lightIntensity_.SetValue(state.intensity);
+            lightRange_.SetValue(state.range);
+            lightOuterCone_.SetValue(state.outerConeDegrees);
+            lightInnerCone_.SetValue(state.innerConeDegrees);
+            lightRadius_.SetValue(state.radius);
+            lightLength_.SetValue(state.length);
+            lightHeight_.SetValue(state.height);
+            lightCastShadow_.SetCheck(state.castShadow);
+            lightVolumetrics_.SetCheck(state.volumetrics);
+            lightVolumetricBoost_.SetValue(state.volumetricBoost);
+
+            const bool directional = state.type ==
+                wi::scene::LightComponent::DIRECTIONAL;
+            const bool point = state.type ==
+                wi::scene::LightComponent::POINT;
+            const bool spot = state.type ==
+                wi::scene::LightComponent::SPOT;
+            const bool rectangle = state.type ==
+                wi::scene::LightComponent::RECTANGLE;
+            lightRange_.SetEnabled(!directional);
+            lightOuterCone_.SetVisible(spot);
+            lightInnerCone_.SetVisible(spot);
+            lightRadius_.SetVisible(directional || point || spot);
+            lightLength_.SetVisible(point || rectangle);
+            lightHeight_.SetVisible(rectangle);
+            lightVolumetricBoost_.SetEnabled(state.volumetrics);
+        }
+
         if (!hasTransform)
         {
-            inspectorLabel_.SetText(terrainWorkspaceActive_
-                ? "TERRAIN // CREATE OR EDIT LANDSCAPE"
-                : "TRANSFORM // SELECT AN ENTITY");
+            if (!hasLight)
+            {
+                inspectorLabel_.SetText(terrainWorkspaceActive_
+                    ? "TERRAIN // CREATE OR EDIT LANDSCAPE"
+                    : "TRANSFORM // SELECT AN ENTITY");
+            }
             translationX_.SetValue(0.0f);
             translationY_.SetValue(0.0f);
             translationZ_.SetValue(0.0f);
@@ -2922,11 +3193,14 @@ namespace renegade::studio
 
         const auto* name =
             session_->Scenes().GetScene().names.GetComponent(entity);
-        inspectorLabel_.SetText(
-            "TRANSFORM // " +
-            (name != nullptr && !name->name.empty()
-                ? name->name
-                : "ENTITY " + std::to_string(entity)));
+        if (!hasLight)
+        {
+            inspectorLabel_.SetText(
+                "TRANSFORM // " +
+                (name != nullptr && !name->name.empty()
+                    ? name->name
+                    : "ENTITY " + std::to_string(entity)));
+        }
         translationX_.SetValue(transform->translation_local.x);
         translationY_.SetValue(transform->translation_local.y);
         translationZ_.SetValue(transform->translation_local.z);
@@ -2952,6 +3226,7 @@ namespace renegade::studio
             precipitationSliderActive_ ||
             sunSliderActive_ ||
             oceanSliderActive_ ||
+            lightSliderActive_ ||
             terrainSliderActive_ ||
             terrainTextureScaleActive_ ||
             terrainStrokeActive_)
@@ -4487,6 +4762,197 @@ namespace renegade::studio
                 oceanSliderAfter_));
         oceanSliderActive_ = false;
         oceanSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    bool StudioRenderPath::CommitSelectedLight(
+        const bridge::LightState& light)
+    {
+        if (session_ == nullptr)
+        {
+            return false;
+        }
+        const auto entity = session_->Selection().SelectedEntity();
+        auto& scene = session_->Scenes().GetScene();
+        if (!scene.lights.Contains(entity))
+        {
+            return false;
+        }
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetLightCommand>(
+                scene,
+                entity,
+                light));
+        RefreshInspector();
+        RefreshStatus();
+        return changed;
+    }
+
+    void StudioRenderPath::ApplySelectedLightType(
+        const wi::scene::LightComponent::LightType type)
+    {
+        StopSunPreview(true);
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* light =
+            session_->Scenes().GetScene().lights.GetComponent(entity);
+        if (light == nullptr)
+        {
+            return;
+        }
+        auto state = bridge::CaptureLight(*light);
+        state.type = type;
+        CommitSelectedLight(state);
+    }
+
+    void StudioRenderPath::ApplySelectedLightToggle(
+        const LightToggle toggle,
+        const bool value)
+    {
+        StopSunPreview(true);
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* light =
+            session_->Scenes().GetScene().lights.GetComponent(entity);
+        if (light == nullptr)
+        {
+            return;
+        }
+        auto state = bridge::CaptureLight(*light);
+        switch (toggle)
+        {
+        case LightToggle::CastShadow:
+            state.castShadow = value;
+            break;
+        case LightToggle::Volumetrics:
+            state.volumetrics = value;
+            break;
+        }
+        CommitSelectedLight(state);
+    }
+
+    void StudioRenderPath::SetLightFieldValue(
+        bridge::LightState& light,
+        const LightField field,
+        const float value) noexcept
+    {
+        switch (field)
+        {
+        case LightField::ColorRed:
+            light.color.x = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case LightField::ColorGreen:
+            light.color.y = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case LightField::ColorBlue:
+            light.color.z = std::clamp(value, 0.0f, 1.0f);
+            break;
+        case LightField::Intensity:
+            light.intensity = std::clamp(value, 0.0f, 100000.0f);
+            break;
+        case LightField::Range:
+            light.range = std::clamp(value, 0.0f, 100000.0f);
+            break;
+        case LightField::OuterCone:
+            light.outerConeDegrees = std::clamp(value, 0.1f, 89.9f);
+            light.innerConeDegrees = std::min(
+                light.innerConeDegrees,
+                light.outerConeDegrees);
+            break;
+        case LightField::InnerCone:
+            light.innerConeDegrees = std::clamp(
+                value,
+                0.0f,
+                light.outerConeDegrees);
+            break;
+        case LightField::Radius:
+            light.radius = std::clamp(value, 0.0f, 100000.0f);
+            break;
+        case LightField::Length:
+            light.length = std::clamp(value, 0.0f, 100000.0f);
+            break;
+        case LightField::Height:
+            light.height = std::clamp(value, 0.0f, 100000.0f);
+            break;
+        case LightField::VolumetricBoost:
+            light.volumetricBoost = std::clamp(value, 0.0f, 10.0f);
+            break;
+        }
+    }
+
+    void StudioRenderPath::BeginLightSlider(const LightField field)
+    {
+        StopSunPreview(true);
+        lightSliderActive_ = false;
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* light =
+            session_->Scenes().GetScene().lights.GetComponent(entity);
+        if (light == nullptr)
+        {
+            return;
+        }
+        lightSliderActive_ = true;
+        lightSliderField_ = field;
+        lightSliderEntity_ = entity;
+        lightSliderBefore_ = bridge::CaptureLight(*light);
+        lightSliderAfter_ = lightSliderBefore_;
+    }
+
+    void StudioRenderPath::PreviewLightSlider(
+        const LightField field,
+        const float value)
+    {
+        if (!lightSliderActive_ || lightSliderField_ != field ||
+            session_ == nullptr)
+        {
+            return;
+        }
+        auto* light = session_->Scenes().GetScene().lights.GetComponent(
+            lightSliderEntity_);
+        if (light == nullptr)
+        {
+            return;
+        }
+        lightSliderAfter_ = lightSliderBefore_;
+        SetLightFieldValue(lightSliderAfter_, field, value);
+        bridge::ApplyLight(*light, lightSliderAfter_);
+    }
+
+    void StudioRenderPath::CommitLightSlider(
+        const LightField field,
+        const float value)
+    {
+        if (!lightSliderActive_ || lightSliderField_ != field ||
+            session_ == nullptr)
+        {
+            return;
+        }
+        SetLightFieldValue(lightSliderAfter_, field, value);
+        auto& scene = session_->Scenes().GetScene();
+        auto* light = scene.lights.GetComponent(lightSliderEntity_);
+        if (light != nullptr)
+        {
+            bridge::ApplyLight(*light, lightSliderBefore_);
+            session_->Commands().Execute(
+                std::make_unique<bridge::SetLightCommand>(
+                    scene,
+                    lightSliderEntity_,
+                    lightSliderBefore_,
+                    lightSliderAfter_));
+        }
+        lightSliderActive_ = false;
+        lightSliderEntity_ = wi::ecs::INVALID_ENTITY;
         RefreshInspector();
         RefreshStatus();
     }

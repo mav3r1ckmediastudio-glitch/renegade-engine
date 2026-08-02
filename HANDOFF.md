@@ -4,112 +4,98 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Active branch:** `phase3/terrain-authoring`
+**Active branch:** `phase3/light-material-authoring`
 
-**Cleanup base:** `0a1d0b6`
+**Branch base:** `c5a2fb8` (`Add native terrain authoring foundation (#11)`)
 
-**Pull request:** #11 into `main`
+**Pull request:** #12 into `main` (draft)
+
+**Gate 1 remote commit:** `38c9f24`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
+The GitHub integration can read PR #12 but returned HTTP 403 when asked to
+update its metadata. Its current title remains
+`Plan and prove light material authoring bridge`; the intended milestone title
+is `Light and Material Authoring`. This metadata cleanup does not block CI.
+
 ## Current truth
 
-Renegade's native terrain can be created, sculpted across chunk seams, saved,
-closed, and opened through the Renegade UI. The project owner verified in the
-packaged DX12 editor that all 169 sculpted chunks remain present and visually
-unchanged after Open and the first terrain generation update.
+PR #11 is merged. Terrain Authoring V1 and the protected WISCENE document
+workflow are on `main` at `c5a2fb8`. The project owner confirmed the terrain
+sculpt and Save/Open path behaves as expected in packaged DX12 and Vulkan.
 
-The standard terrain is 13 x 13 chunks. Each chunk is 132 m square at the
-standard configuration, giving 1,716 x 1,716 m (about 2.945 km2).
+PR #12 is the active Light and Material Authoring branch. Gate 1 contains
+UI-independent `LightService` and `MaterialService` contracts, command-based
+Undo/Redo, no-op filtering, native-field preservation tests, material target
+resolution, and service-level rejection of every terrain-owned material. The
+project owner reported all four required PR checks green at `38c9f24`.
 
-Windows Debug and Release CI are green at `0a1d0b6`. The Windows baseline is
-also green. Packaged Vulkan, Runtime terrain loading, material-preset behaviour,
-and the complete save-backup/failure checklist remain pending.
+## Gate 2 — Light Inspector implementation
 
-PR #11 is not yet merged. Obsolete PR #5 has been closed.
+The next patch adds the first visible authoring slice without starting the
+Material Inspector. It:
 
-## Terrain persistence root cause and fix
+- extends `LightState` with Wicked's native source `radius`, `length`, and
+  `height` fields;
+- updates `RenegadeLightTests` so these shape fields are proven through native
+  apply, Undo, Redo, sanitization, and no-op detection;
+- adds a Renegade-owned Light section beneath Transform for selected light
+  entities;
+- exposes Directional, Point, Spot, and Rectangle types;
+- exposes RGB colour, intensity, range, cast-shadow, real volumetrics, and
+  volumetric boost;
+- exposes type-aware source shapes matching Wicked's reference editor:
+  Directional radius; Point radius and capsule length; Spot cone angles and
+  radius; Rectangle width and height;
+- disables range for Directional lights;
+- previews slider edits directly, restores the captured native state at drag
+  completion, and executes exactly one `SetLightCommand`; and
+- preserves the existing Transform section and every unexposed Wicked light
+  field.
 
-The WISCENE deserialize was correct. The failure occurred immediately after
-load:
+No stock Wicked Editor window is embedded. No Wicked file or submodule pointer
+is changed. No material UI or terrain material path is added.
 
-1. `CommitPreparedOpen()` called `RebindDefaultTerrainMaterials()`.
-2. The rebind used material setters, which marked the bundled grass material
-   dirty.
-3. Wicked's first `Generation_Update()` interpreted the dirty material as a
-   regeneration request.
-4. `Generation_Restart()` cleared the 169 correctly loaded sculpted chunks and
-   replaced them with procedural terrain.
+## Local validation of the Gate 2 patch
 
-Commit `c7eea43` preserves the material's incoming dirty state during the
-default-texture rebind. A clean deserialized material remains clean; genuine
-pre-existing dirtiness remains dirty. Other callers already request an
-explicit restart. Commit `0a1d0b6` removed the temporary diagnostic logging
-after the packaged DX12 test remained at 169 chunks.
+- `git diff --check` passes.
+- Changed `LightService`, `LightTests`, and `StudioApplication` translation
+  units pass local C++17 syntax validation using the pinned Wicked headers.
+- CSV shape and documentation consistency checks remain part of the final
+  packaging pass.
+- Windows compilation and runtime behaviour are not claimed locally; PR #12
+  must run fresh Windows checks after the patch is pushed.
 
-## Cleanup prepared after `0a1d0b6`
+## Required Gate 2 acceptance
 
-The four terrain-shape controls—Flat World, Island, Coastline, and
-Highlands—were not functioning presets in the packaged editor. Their tests
-only proved that parameter values differed, not that different terrain was
-generated.
+1. Apply and push the Gate 2 patch to
+   `phase3/light-material-authoring` without merging PR #12.
+2. Require all four PR checks to pass again.
+3. Package Release and launch DX12 Studio.
+4. Select `Gateway Beam`; confirm the Inspector shows Spot controls and no
+   Rectangle/Point-only shape controls.
+5. Tune RGB, intensity, range, inner/outer cone, radius, cast-shadow,
+   volumetrics, and boost; confirm the viewport responds live.
+6. Confirm one completed slider drag creates exactly one Undo step, then verify
+   Undo and Redo.
+7. Change selected native lights through Directional, Point, Spot, and
+   Rectangle; verify the correct type-specific shape controls and visible
+   renderer behaviour.
+8. Save, close, reopen, and confirm the authored values and appearance remain.
+9. Launch Runtime with the saved scene and compare the light appearance.
+10. Repeat the editor check with the `vulkan` argument.
 
-The cleanup therefore:
+A visible or behavioural failure stops the gate even if CI is green. Do not
+begin the Material Inspector until the Light Inspector passes the applicable
+checks above.
 
-- removes the terrain-shape enum and `MakeTerrainPreset()` bridge API;
-- removes the Studio selector, pending action, and handler;
-- creates terrain directly from the standard `TerrainState`;
-- replaces preset-oriented tests with the known standard configuration;
-- retains the separate Meadow, Coarse Grass, and Fine Ground Cover
-  material-scale presets; and
-- updates project documentation to reflect verified behaviour and remaining
-  work.
+## Following slice
 
-No Wicked source or submodule pointer is changed. The working terrain
-persistence fix is untouched.
-
-## Scene document workflow
-
-PR #11 also contains the protected WISCENE document workflow:
-
-- Open and Reopen prepare a candidate scene before replacing the active one.
-- Save and Save As write and validate a same-directory temporary WISCENE.
-- A successful overwrite preserves the previous file as `*.bak.wiscene`.
-- Successful saves retain the newest ten rolling WISCENE backups under
-  `Saved/Backups/Scenes/<scene-name>`.
-- Failed operations must retain the active scene, path, and dirty state.
-- All interaction remains in the Renegade UI; no stock Wicked Editor windows
-  are used.
-
-The packaged DX12 terrain round trip proves the reported terrain-loss path is
-fixed. It does not prove every document scenario. The remaining authoritative
-checklist is in `docs/PHASE3_WICKED_OPEN_SCENE_INTEGRATION.md`.
-
-## Required verification before merge
-
-1. Apply the cleanup to `phase3/terrain-authoring` and push it.
-2. Require Renegade Studio Debug and Release CI to pass.
-3. Package Release and launch DX12.
-4. Create the standard terrain, sculpt across an edge and four-chunk corner,
-   Save, close, Open, wait for the first update, and confirm the shape remains.
-5. Confirm terrain Inspector contains no Flat World, Island, Coastline, or
-   Highlands control.
-6. Check the remaining material-scale controls and their Undo/Redo.
-7. Repeat the terrain Save/Open test with the `vulkan` argument.
-8. Test Runtime loading and the `.bak` plus rolling-backup paths before
-   promoting the whole document workflow to passed.
-9. Squash-merge PR #11 only after the applicable checks pass.
-
-## Known remaining terrain work
-
-- Packaged acceptance of material-scale presets and Reload Files.
-- Runtime and Vulkan parity.
-- Four-region material painting and automatic slope/height rules.
-- Validated 16-bit PNG/RAW heightmap import and export.
-- Real terrain-shape presets only when backed by distinct generation logic and
-  packaged visual regression tests.
-
-Light and Material Authoring follows the accepted Terrain V1 foundation.
+After Gate 2 passes, wire the already-tested `MaterialService` into a
+Renegade-owned Material Inspector for ordinary mesh materials only. Keep
+terrain materials behind `TerrainService`, explain ambiguous multi-material
+targets, and require a sculpt-preserving packaged regression check.
 
 ## Repository rules
 
@@ -118,5 +104,5 @@ Light and Material Authoring follows the accepted Terrain V1 foundation.
 - Do not claim behavioural success from compilation alone.
 - A visible failure overrides green CI.
 - Persistent scene mutations belong in EngineBridge commands and require
-  Undo/Redo plus save/reopen evidence.
-- `main` remains untouched until PR #11 is accepted.
+  Undo/Redo plus Save/Open evidence.
+- PR #12 remains a draft until every Light and Material gate is accepted.

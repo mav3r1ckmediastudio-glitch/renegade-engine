@@ -15,6 +15,9 @@ namespace renegade::bridge
         float range = 10.0f;
         float outerConeDegrees = 45.0f;
         float innerConeDegrees = 0.0f;
+        float radius = 0.025f;
+        float length = 0.0f;
+        float height = 0.0f;
         bool castShadow = false;
         bool volumetrics = false;
         float volumetricBoost = 0.0f;
@@ -28,9 +31,9 @@ namespace renegade::bridge
         const LightState& before,
         const LightState& after) noexcept;
 
-    // Applies only the curated fields in LightState. Radius, length, height,
-    // cascades, shadow resolution, masks, camera source, lens flares and all
-    // unexposed flags remain untouched.
+    // Applies only the curated fields in LightState. Cascades, shadow
+    // resolution, masks, camera source, lens flares and all unexposed flags
+    // remain untouched.
     void ApplyLight(
         wi::scene::LightComponent& light,
         const LightState& state) noexcept;

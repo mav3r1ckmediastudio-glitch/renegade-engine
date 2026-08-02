@@ -27,6 +27,9 @@ namespace renegade::bridge
         state.range = light.range;
         state.outerConeDegrees = light.outerConeAngle * RadiansToDegrees;
         state.innerConeDegrees = light.innerConeAngle * RadiansToDegrees;
+        state.radius = light.radius;
+        state.length = light.length;
+        state.height = light.height;
         state.castShadow = light.IsCastingShadow();
         state.volumetrics = light.IsVolumetricsEnabled();
         state.volumetricBoost = light.volumetric_boost;
@@ -54,6 +57,9 @@ namespace renegade::bridge
             result.innerConeDegrees,
             0.0f,
             result.outerConeDegrees);
+        result.radius = std::clamp(result.radius, 0.0f, 100000.0f);
+        result.length = std::clamp(result.length, 0.0f, 100000.0f);
+        result.height = std::clamp(result.height, 0.0f, 100000.0f);
         result.volumetricBoost = std::clamp(
             result.volumetricBoost,
             0.0f,
@@ -75,6 +81,9 @@ namespace renegade::bridge
             !NearlyEqual(left.range, right.range) ||
             !NearlyEqual(left.outerConeDegrees, right.outerConeDegrees) ||
             !NearlyEqual(left.innerConeDegrees, right.innerConeDegrees) ||
+            !NearlyEqual(left.radius, right.radius) ||
+            !NearlyEqual(left.length, right.length) ||
+            !NearlyEqual(left.height, right.height) ||
             left.castShadow != right.castShadow ||
             left.volumetrics != right.volumetrics ||
             !NearlyEqual(left.volumetricBoost, right.volumetricBoost);
@@ -91,6 +100,9 @@ namespace renegade::bridge
         light.range = safe.range;
         light.outerConeAngle = safe.outerConeDegrees * DegreesToRadians;
         light.innerConeAngle = safe.innerConeDegrees * DegreesToRadians;
+        light.radius = safe.radius;
+        light.length = safe.length;
+        light.height = safe.height;
         light.SetCastShadow(safe.castShadow);
         light.SetVolumetricsEnabled(safe.volumetrics);
         light.volumetric_boost = safe.volumetricBoost;

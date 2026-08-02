@@ -10,6 +10,7 @@
 #include <Translator.h>
 
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/LightService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
@@ -163,6 +164,27 @@ namespace renegade::studio
             LodBias,
         };
 
+        enum class LightField
+        {
+            ColorRed,
+            ColorGreen,
+            ColorBlue,
+            Intensity,
+            Range,
+            OuterCone,
+            InnerCone,
+            Radius,
+            Length,
+            Height,
+            VolumetricBoost,
+        };
+
+        enum class LightToggle
+        {
+            CastShadow,
+            Volumetrics,
+        };
+
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -229,13 +251,27 @@ namespace renegade::studio
             TerrainField field,
             float value) noexcept;
         bool CommitTerrain(const bridge::TerrainState& terrain);
+        void ApplySelectedLightType(
+            wi::scene::LightComponent::LightType type);
+        void ApplySelectedLightToggle(LightToggle toggle, bool value);
+        void BeginLightSlider(LightField field);
+        void PreviewLightSlider(LightField field, float value);
+        void CommitLightSlider(LightField field, float value);
+        static void SetLightFieldValue(
+            bridge::LightState& light,
+            LightField field,
+            float value) noexcept;
+        bool CommitSelectedLight(const bridge::LightState& light);
         bool HandleTerrainSculpt(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
         void SetTerrainWorkspaceActive(bool active);
         void ApplyRenegadeTheme();
         void LoadGridResources();
-        void LayoutInspectorActions(bool environment, bool terrain = false);
+        void LayoutInspectorActions(
+            bool environment,
+            bool terrain = false,
+            bool light = false);
         void DrawEditorGrid(wi::graphics::CommandList cmd) const;
         void SetGridVisible(bool visible);
         void CreateProjectHub();
@@ -307,6 +343,21 @@ namespace renegade::studio
         RenegadeTextInputField scaleX_;
         RenegadeTextInputField scaleY_;
         RenegadeTextInputField scaleZ_;
+        wi::gui::Label lightLabel_;
+        RenegadeComboBox lightType_;
+        RenegadeSlider lightColorRed_;
+        RenegadeSlider lightColorGreen_;
+        RenegadeSlider lightColorBlue_;
+        RenegadeSlider lightIntensity_;
+        RenegadeSlider lightRange_;
+        RenegadeSlider lightOuterCone_;
+        RenegadeSlider lightInnerCone_;
+        RenegadeSlider lightRadius_;
+        RenegadeSlider lightLength_;
+        RenegadeSlider lightHeight_;
+        RenegadeCheckBox lightCastShadow_;
+        RenegadeCheckBox lightVolumetrics_;
+        RenegadeSlider lightVolumetricBoost_;
         wi::gui::Label environmentSkyLabel_;
         RenegadeComboBox environmentPreset_;
         RenegadeComboBox skyMode_;
@@ -482,6 +533,11 @@ namespace renegade::studio
         bool terrainStrokeChanged_ = false;
         wi::ecs::Entity terrainStrokeEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::TerrainSculptState terrainStrokeBefore_;
+        bool lightSliderActive_ = false;
+        LightField lightSliderField_ = LightField::Intensity;
+        wi::ecs::Entity lightSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::LightState lightSliderBefore_;
+        bridge::LightState lightSliderAfter_;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
