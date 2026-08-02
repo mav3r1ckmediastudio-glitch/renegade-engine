@@ -3,6 +3,8 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <sstream>
 
 #include <ModelImporter.h>
 
@@ -148,6 +150,57 @@ namespace
             return false;
         }
         return true;
+    }
+
+    // Explains a round-trip mismatch field by field, instead of forcing a
+    // guess from a bare true/false. If every count matches, only the content
+    // fingerprint differs, which points at value-level drift (transform
+    // floats, texture path strings, or component ordering) rather than a
+    // missing or extra entity.
+    std::string DescribeSummaryDifference(
+        const renegade::bridge::ImportedSceneSummary& imported,
+        const renegade::bridge::ImportedSceneSummary& reloaded)
+    {
+        std::ostringstream out;
+        bool any = false;
+        auto reportField =
+            [&](const char* label, std::size_t before, std::size_t after)
+        {
+            if (before != after)
+            {
+                if (any)
+                {
+                    out << "; ";
+                }
+                out << label << ": " << before << " -> " << after;
+                any = true;
+            }
+        };
+        reportField("names", imported.names, reloaded.names);
+        reportField("transforms", imported.transforms, reloaded.transforms);
+        reportField("hierarchy", imported.hierarchy, reloaded.hierarchy);
+        reportField("objects", imported.objects, reloaded.objects);
+        reportField("meshes", imported.meshes, reloaded.meshes);
+        reportField("materials", imported.materials, reloaded.materials);
+        reportField("armatures", imported.armatures, reloaded.armatures);
+        reportField("animations", imported.animations, reloaded.animations);
+        reportField(
+            "textureReferences",
+            imported.textureReferences,
+            reloaded.textureReferences);
+
+        if (!any)
+        {
+            out << "All structural counts matched (" << imported.objects
+                << " objects, " << imported.meshes << " meshes, "
+                << imported.materials << " materials); only the content "
+                << "fingerprint differed (0x" << std::hex
+                << imported.structuralFingerprint << " -> 0x"
+                << reloaded.structuralFingerprint << std::dec
+                << "). Likely a value-level change: transform floats, "
+                << "texture path strings, or hierarchy/subset ordering.";
+        }
+        return out.str();
     }
 }
 
@@ -387,7 +440,9 @@ namespace renegade::bridge
         if (!(result.imported == result.reloaded))
         {
             RecordStage(result.assetPath, "fail_round_trip_difference");
-            result.error = "Imported WISCENE structure changed during save and reload.";
+            result.error =
+                "Imported WISCENE structure changed during save and reload. " +
+                DescribeSummaryDifference(result.imported, result.reloaded);
             return result;
         }
 
