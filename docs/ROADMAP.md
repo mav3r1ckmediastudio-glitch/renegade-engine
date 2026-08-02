@@ -31,7 +31,10 @@ Browser and visible importer workspace remain later gates. A temporary
 Renegade-owned command under `BUILD > VALIDATE GLB/GLTF IMPORT...` selects a
 real model, writes only to `Saved/Validation/ModelImport`, and reports the
 isolated conversion and structural reload result without touching the active
-scene or registering a project asset.
+scene or registering a project asset. Packaged logging has now proved the
+converter and imported-scene summary complete successfully. The correction in
+validation moves WISCENE serialization/reload out of the worker and onto
+Wicked's thread-safe engine stage, matching the upstream Editor save path.
 
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light

@@ -29,10 +29,11 @@ selectable editor-only markers.
 
 The active milestone is Model Import V1 Gate 1. `ImportService` compiles only
 Wicked's standalone GLB/GLTF conversion unit into EngineBridge while the stock
-Wicked Editor target remains disabled. It validates the source/destination,
-imports into an isolated temporary scene, writes WISCENE, reloads it, and
-compares native component and texture-reference counts. It does not merge an
-asset into the active Studio scene and adds no visible importer UI.
+Wicked Editor target remains disabled. It now uses an explicit two-stage
+boundary: conversion and summary produce a heap-backed `PreparedModelImport`
+on Wicked's job system; WISCENE write, reload and comparison consume it at
+`EVENT_THREAD_SAFE_POINT`. It does not merge an asset into the active Studio
+scene and adds no visible importer UI.
 
 The pinned Wicked converter creates mesh/material render data and calls
 `Scene::Update()`, so it requires an initialized graphics device. The service
@@ -53,6 +54,7 @@ Changed files:
 - `EngineBridge/README.md`
 - `docs/ARCHITECTURE.md`
 - `docs/ROADMAP.md`
+- `docs/PHASE4_MODEL_IMPORT_V1.md`
 - `docs/FEATURE_MATRIX.csv`
 - `HANDOFF.md`
 
@@ -64,33 +66,41 @@ g++ -std=c++17 -fsyntax-only <SDL declaration shim> \
   -IEngineBridge/include -IWickedEngine/WickedEngine -IWickedEngine/Editor \
   EngineBridge/src/ImportService.cpp Tests/ImportTests.cpp
 g++ -std=c++17 -fsyntax-only <SDL declaration shim> \
+  -IEngineBridge/include -IStudio/src \
+  -IWickedEngine/WickedEngine -IWickedEngine/Editor \
+  Studio/src/StudioApplication.cpp
+g++ -std=c++17 -fsyntax-only <SDL declaration shim> \
   -IWickedEngine/Editor -IWickedEngine/WickedEngine \
   WickedEngine/Editor/ModelImporter_GLTF.cpp
 ```
 
-Both syntax commands pass. The shim only supplies SDL declarations absent from
+All three syntax commands pass. The shim only supplies SDL declarations absent from
 this container and is not a repository file. CMake is unavailable locally.
 
 Risks and next task:
 
-The first packaged attempt crashed with the representative windmill GLB because
-the proof route ran Wicked's converter inside `EVENT_THREAD_SAFE_POINT`. The
-follow-up moves conversion and WISCENE validation onto a dedicated Wicked job
-context and returns to the safe point only to present the result, matching the
-upstream Editor's threading pattern. The attached GLB itself passed structural
-inspection (27 meshes, 68 nodes, seven embedded textures, one skin and one
-animation).
+The representative windmill and a simple control GLTF both crashed in earlier
+packaged attempts. Heap-allocating the temporary scenes produced a decisive
+persistent log: `converter_complete` and `import_summary_complete` were the
+last completed stages. The pinned converter therefore returned successfully;
+the crash occurred when the worker entered the WISCENE write boundary.
+Wicked's Editor converts on a worker but saves at its thread-safe engine point.
+The current correction follows that split and adds granular persistent
+breadcrumbs around archive creation, serialization, close, reload and
+comparison.
 
 1. Run fresh Windows CI to prove MSVC compiles the extracted upstream source and
    temporary Studio proof route in the Renegade target.
 2. In packaged Studio, run **BUILD > VALIDATE GLB/GLTF IMPORT...** with the
-   same representative textured GLB in DX12 and Vulkan. Require PASS and
+   simple control GLTF in DX12 first. Require PASS or a controlled FAIL dialog,
+   never a desktop exit. If it exits, collect the updated `.import.log`.
+3. Repeat with the representative textured GLB, then Vulkan. Require PASS and
    matching component counts; output belongs only under
    `Saved/Validation/ModelImport`.
-3. Confirm the active scene, selection, hierarchy, Undo history, and dirty state
+4. Confirm the active scene, selection, hierarchy, Undo history, and dirty state
    remain unchanged. Do not start the visible importer workspace until both
    renderer proofs pass.
-4. Wicked's importer reports malformed-file errors through its reference-editor
+5. Wicked's importer reports malformed-file errors through its reference-editor
    message box; production structured error capture remains a later hardening
    gate and must not be hidden.
 

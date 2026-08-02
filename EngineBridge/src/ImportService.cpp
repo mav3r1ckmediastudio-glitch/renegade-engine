@@ -1,5 +1,6 @@
 #include "renegade/bridge/ImportService.h"
 
+#include <exception>
 #include <filesystem>
 #include <fstream>
 
@@ -79,16 +80,24 @@ namespace
         const std::string& path,
         std::string& error)
     {
+        RecordStage(path, "archive_create_begin");
         wi::Archive archive(path, false, false);
+        RecordStage(path, "archive_create_complete");
         if (!archive.IsOpen())
         {
             error = "Could not create the imported WISCENE asset: " + path;
             return false;
         }
+        RecordStage(path, "scene_serialize_begin");
         scene.Serialize(archive);
+        RecordStage(path, "scene_serialize_complete");
+        RecordStage(path, "archive_close_begin");
         archive.Close();
+        RecordStage(path, "archive_close_complete");
 
+        RecordStage(path, "written_archive_validation_begin");
         wi::Archive validation(path, true, false);
+        RecordStage(path, "written_archive_validation_complete");
         if (!validation.IsOpen())
         {
             error = "Could not reopen the imported WISCENE asset: " + path;
@@ -102,13 +111,17 @@ namespace
         wi::scene::Scene& scene,
         std::string& error)
     {
+        RecordStage(path, "reload_archive_open_begin");
         wi::Archive archive(path, true, false);
+        RecordStage(path, "reload_archive_open_complete");
         if (!archive.IsOpen())
         {
             error = "Could not read the imported WISCENE asset: " + path;
             return false;
         }
+        RecordStage(path, "reload_deserialize_begin");
         scene.Serialize(archive);
+        RecordStage(path, "reload_deserialize_complete");
         if (archive.GetPos() != archive.GetSize())
         {
             error = "Imported WISCENE validation found trailing or incomplete data: " + path;
@@ -205,18 +218,19 @@ namespace renegade::bridge
         return result;
     }
 
-    ImportResult ImportService::ImportGltfAsset(
+    PreparedModelImport ImportService::PrepareGltfAsset(
         const std::string& sourcePath,
         const std::string& assetPath) const
     {
-        ImportResult result;
+        PreparedModelImport prepared;
+        auto& result = prepared.result_;
         result.sourcePath = sourcePath;
         result.assetPath = assetPath;
 
         if (sourcePath.empty() || assetPath.empty())
         {
             result.error = "A source GLB/GLTF path and destination WISCENE path are required.";
-            return result;
+            return prepared;
         }
 
         const auto sourceExtension = wi::helper::toUpper(
@@ -224,23 +238,23 @@ namespace renegade::bridge
         if (sourceExtension != "GLB" && sourceExtension != "GLTF")
         {
             result.error = "Model Import V1 only accepts .glb and .gltf files: " + sourcePath;
-            return result;
+            return prepared;
         }
         if (wi::helper::toUpper(
                 wi::helper::GetExtensionFromFileName(assetPath)) != "WISCENE")
         {
             result.error = "The reusable imported asset must be a .wiscene file: " + assetPath;
-            return result;
+            return prepared;
         }
         if (!wi::helper::FileExists(sourcePath))
         {
             result.error = "Source model does not exist: " + sourcePath;
-            return result;
+            return prepared;
         }
         if (wi::graphics::GetDevice() == nullptr)
         {
             result.error = "Wicked GLTF conversion requires an initialized graphics device.";
-            return result;
+            return prepared;
         }
 
         std::error_code directoryError;
@@ -253,7 +267,7 @@ namespace renegade::bridge
         {
             result.error = "Could not create the imported asset folder: " +
                 directoryError.message();
-            return result;
+            return prepared;
         }
 
         ResetStageLog(assetPath);
@@ -263,50 +277,102 @@ namespace renegade::bridge
         // temporary import scenes on the heap; placing both the imported and
         // reloaded scenes in this worker's stack can exhaust the Windows worker
         // stack before ImportModel_GLTF() is entered.
-        auto importedScene =
-            wi::allocator::make_shared_single<wi::scene::Scene>();
+        prepared.scene_ = wi::allocator::make_shared_single<wi::scene::Scene>();
         RecordStage(assetPath, "temporary_scene_allocated");
         RecordStage(assetPath, "converter_begin");
-        ImportModel_GLTF(sourcePath, *importedScene);
+        ImportModel_GLTF(sourcePath, *prepared.scene_);
         RecordStage(assetPath, "converter_complete");
-        result.imported = Summarize(*importedScene);
+        result.imported = Summarize(*prepared.scene_);
         RecordStage(assetPath, "import_summary_complete");
         if (result.imported.meshes == 0 || result.imported.objects == 0)
         {
             RecordStage(assetPath, "fail_no_mesh_or_object");
             result.error = "Wicked did not produce a mesh and object from the source model.";
+            prepared.scene_.reset();
+            return prepared;
+        }
+
+        RecordStage(assetPath, "prepared_for_thread_safe_completion");
+        return prepared;
+    }
+
+    ImportResult ImportService::CompleteGltfAsset(
+        PreparedModelImport prepared) const
+    {
+        const bool ready = prepared.IsReady();
+        ImportResult result = std::move(prepared.result_);
+        if (!ready)
+        {
+            if (result.error.empty())
+            {
+                result.error = "The prepared model import is not ready for WISCENE validation.";
+            }
             return result;
         }
 
-        if (!WriteScene(*importedScene, assetPath, result.error))
+        RecordStage(result.assetPath, "thread_safe_completion_begin");
+
+        try
         {
-            RecordStage(assetPath, "fail_wiscene_write");
+            if (!WriteScene(*prepared.scene_, result.assetPath, result.error))
+            {
+                RecordStage(result.assetPath, "fail_wiscene_write");
+                return result;
+            }
+        }
+        catch (const std::exception& exception)
+        {
+            RecordStage(result.assetPath, "fail_wiscene_write_exception");
+            result.error = "WISCENE serialization failed: " +
+                std::string(exception.what());
             return result;
         }
-        RecordStage(assetPath, "wiscene_write_complete");
-        importedScene.reset();
-        RecordStage(assetPath, "imported_scene_released");
+        catch (...)
+        {
+            RecordStage(result.assetPath, "fail_wiscene_write_exception");
+            result.error = "WISCENE serialization failed with an unknown error.";
+            return result;
+        }
+        RecordStage(result.assetPath, "wiscene_write_complete");
+        prepared.scene_.reset();
+        RecordStage(result.assetPath, "imported_scene_released");
 
         auto reloadedScene =
             wi::allocator::make_shared_single<wi::scene::Scene>();
-        RecordStage(assetPath, "reload_scene_allocated");
-        if (!ReadScene(assetPath, *reloadedScene, result.error))
+        RecordStage(result.assetPath, "reload_scene_allocated");
+        try
         {
-            RecordStage(assetPath, "fail_wiscene_reload");
+            if (!ReadScene(result.assetPath, *reloadedScene, result.error))
+            {
+                RecordStage(result.assetPath, "fail_wiscene_reload");
+                return result;
+            }
+        }
+        catch (const std::exception& exception)
+        {
+            RecordStage(result.assetPath, "fail_wiscene_reload_exception");
+            result.error = "WISCENE reload failed: " +
+                std::string(exception.what());
             return result;
         }
-        RecordStage(assetPath, "wiscene_reload_complete");
+        catch (...)
+        {
+            RecordStage(result.assetPath, "fail_wiscene_reload_exception");
+            result.error = "WISCENE reload failed with an unknown error.";
+            return result;
+        }
+        RecordStage(result.assetPath, "wiscene_reload_complete");
         result.reloaded = Summarize(*reloadedScene);
-        RecordStage(assetPath, "reload_summary_complete");
+        RecordStage(result.assetPath, "reload_summary_complete");
         if (!(result.imported == result.reloaded))
         {
-            RecordStage(assetPath, "fail_round_trip_difference");
+            RecordStage(result.assetPath, "fail_round_trip_difference");
             result.error = "Imported WISCENE structure changed during save and reload.";
             return result;
         }
 
         result.succeeded = true;
-        RecordStage(assetPath, "pass");
+        RecordStage(result.assetPath, "pass");
         return result;
     }
 }

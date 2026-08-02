@@ -134,10 +134,14 @@ component into `Scene::weather`.
 `ImportService` is the UI-independent boundary for Model Import V1. Renegade
 compiles Wicked's standalone `ModelImporter_GLTF.cpp` conversion unit into
 EngineBridge without enabling or linking the stock Wicked Editor application.
-The service imports GLB/GLTF into an isolated temporary `Scene`, summarizes its
-native components, writes a reusable WISCENE asset, reloads it, and rejects a
-round trip whose component structure changed. It never merges into the active
-Studio scene.
+The service uses a two-stage operation. `PrepareGltfAsset` imports GLB/GLTF into
+an isolated heap-backed `Scene` and summarizes its native components on
+Wicked's job system. `CompleteGltfAsset` receives that move-only prepared scene
+at `EVENT_THREAD_SAFE_POINT`, writes the reusable WISCENE, reloads it, and
+rejects a round trip whose component structure changed. This follows the
+upstream Editor boundary: model conversion is asynchronous, while WISCENE save
+runs at the engine-safe point. Neither stage merges into the active Studio
+scene.
 
 The pinned Wicked converter is editor-independent but not renderer-independent:
 it calls native mesh/material render-data creation and `Scene::Update()` during

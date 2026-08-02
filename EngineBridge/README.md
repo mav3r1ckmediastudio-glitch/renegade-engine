@@ -24,8 +24,9 @@ The implementation provides:
 - `StudioSession`, which exposes the document, project and editor-state
   services to Studio without duplicating scene replacement logic.
 - `ImportService`, which invokes Wicked's standalone GLB/GLTF converter into an
-  isolated temporary scene, writes a reusable WISCENE asset, reloads it, and
-  compares native component summaries without touching the active document.
+  isolated heap-backed scene on the job system, then writes and validates the
+  WISCENE at Studio's Wicked thread-safe point without touching the active
+  document.
 
 These are deliberately bounded service interfaces. Studio widgets must use
 them instead of creating UI-owned project or scene state.

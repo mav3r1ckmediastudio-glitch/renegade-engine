@@ -5857,15 +5857,17 @@ namespace renegade::studio
             modelImportWorkload_,
             [this, sourcePath, destinationPath](wi::jobsystem::JobArgs)
             {
-                auto result = std::make_shared<bridge::ImportResult>(
-                    bridge::ImportService().ImportGltfAsset(
+                auto prepared = std::make_shared<bridge::PreparedModelImport>(
+                    bridge::ImportService().PrepareGltfAsset(
                         sourcePath,
                         destinationPath));
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, result](uint64_t)
+                    [this, prepared](uint64_t)
                     {
-                        PresentModelImportProof(*result);
+                        auto result = bridge::ImportService().CompleteGltfAsset(
+                            std::move(*prepared));
+                        PresentModelImportProof(result);
                     });
             });
     }

@@ -47,6 +47,35 @@ namespace renegade::bridge
         ImportedSceneSummary reloaded;
     };
 
+    // Move-only result of the GLB/GLTF conversion phase. Conversion can run on
+    // Wicked's job system, but WISCENE serialization must be completed at the
+    // engine thread-safe point, matching the upstream Editor's save path.
+    class PreparedModelImport
+    {
+    public:
+        PreparedModelImport() = default;
+        PreparedModelImport(PreparedModelImport&&) noexcept = default;
+        PreparedModelImport& operator=(PreparedModelImport&&) noexcept = default;
+        PreparedModelImport(const PreparedModelImport&) = delete;
+        PreparedModelImport& operator=(const PreparedModelImport&) = delete;
+
+        [[nodiscard]] bool IsReady() const noexcept
+        {
+            return scene_.IsValid() && result_.error.empty();
+        }
+
+        [[nodiscard]] const ImportResult& Result() const noexcept
+        {
+            return result_;
+        }
+
+    private:
+        friend class ImportService;
+
+        wi::allocator::shared_ptr<wi::scene::Scene> scene_;
+        ImportResult result_;
+    };
+
     // UI-independent conversion boundary for Model Import V1. The caller owns
     // file selection and presentation. Wicked's converter requires an active
     // graphics device while it creates native mesh/material render data, but
@@ -54,9 +83,12 @@ namespace renegade::bridge
     class ImportService
     {
     public:
-        [[nodiscard]] ImportResult ImportGltfAsset(
+        [[nodiscard]] PreparedModelImport PrepareGltfAsset(
             const std::string& sourcePath,
             const std::string& assetPath) const;
+
+        [[nodiscard]] ImportResult CompleteGltfAsset(
+            PreparedModelImport prepared) const;
 
         [[nodiscard]] static ImportedSceneSummary Summarize(
             const wi::scene::Scene& scene) noexcept;

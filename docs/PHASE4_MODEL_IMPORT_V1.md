@@ -20,9 +20,11 @@ the selected model in the Asset Browser.
 - Nothing is written to project `Content` and no asset record is created.
 - The converter runs only after Studio has initialized its DX12 or Vulkan
   graphics device.
-- Conversion and WISCENE round-trip work run on Wicked's job system, matching
-  the upstream Editor importer. Only status and result presentation return to
-  `EVENT_THREAD_SAFE_POINT`; the converter must never run inside that callback.
+- Conversion and imported-scene summarization run on Wicked's job system.
+- The heap-backed prepared scene is handed to `EVENT_THREAD_SAFE_POINT`, where
+  WISCENE serialization, reload, comparison, and result presentation run.
+  This matches Wicked's split between asynchronous model conversion and its
+  engine-safe save path.
 
 ## Packaged acceptance
 
@@ -51,10 +53,36 @@ then exited Studio during import. The source GLB passed container and JSON
 structure inspection and uses only optional `KHR_materials_specular` material
 data supported by the pinned Wicked converter.
 
-The corrected route starts conversion on a dedicated Wicked job-system context
-and subscribes to the thread-safe point only after the import result exists.
-Both renderer acceptance tests must use the same GLB again; the original crash
-is evidence of a failed gate, not evidence of a bad source asset.
+The first correction moved the complete conversion and round trip onto a
+dedicated Wicked job-system context and subscribed to the thread-safe point
+only after the final result existed. That did not fix the crash.
+
+## Second packaged-test correction
+
+The proof route had two independent execution defects:
+
+1. It originally created two full Wicked `Scene` aggregates on the current
+   thread's stack. Both scenes are now heap-backed, matching Wicked's importer.
+2. It then performed `Scene::Serialize()` inside the worker job. Wicked's own
+   Editor converts on a worker but invokes WISCENE save from its thread-safe
+   engine stage.
+
+The persistent stage log from the simple control GLTF ended at:
+
+```text
+converter_complete
+import_summary_complete
+```
+
+This proves the pinned Wicked converter returned successfully and Renegade
+summarized the imported scene. The exit occurred only when entering the
+unlogged WISCENE write boundary. The corrected pipeline now returns the
+heap-backed prepared scene to `EVENT_THREAD_SAFE_POINT` before serialization.
+It also records archive creation, serialization, close, reload and comparison
+as separate persistent stages.
+
+Both renderer acceptance tests must use the same source again. Every earlier
+crash remains evidence of a failed gate, not evidence of a bad source asset.
 
 ## Next gate after acceptance
 
