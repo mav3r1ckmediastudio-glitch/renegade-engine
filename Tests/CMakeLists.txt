@@ -85,3 +85,37 @@ set_target_properties(RenegadeTerrainTests PROPERTIES
 add_dependencies(RenegadeBridgeTests RenegadeTerrainTests)
 
 add_test(NAME RenegadeTerrainTests COMMAND RenegadeTerrainTests)
+
+add_executable(RenegadeLightTests
+    LightTests.cpp
+)
+
+target_link_libraries(RenegadeLightTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeLightTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeLightTests)
+
+add_test(NAME RenegadeLightTests COMMAND RenegadeLightTests)
+
+add_executable(RenegadeMaterialTests
+    MaterialTests.cpp
+)
+
+target_link_libraries(RenegadeMaterialTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeMaterialTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeMaterialTests)
+
+add_test(NAME RenegadeMaterialTests COMMAND RenegadeMaterialTests)
