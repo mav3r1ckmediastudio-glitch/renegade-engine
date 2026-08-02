@@ -119,3 +119,20 @@ set_target_properties(RenegadeMaterialTests PROPERTIES
 add_dependencies(RenegadeBridgeTests RenegadeMaterialTests)
 
 add_test(NAME RenegadeMaterialTests COMMAND RenegadeMaterialTests)
+
+add_executable(RenegadeImportTests
+    ImportTests.cpp
+)
+
+target_link_libraries(RenegadeImportTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeImportTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeImportTests)
+
+add_test(NAME RenegadeImportTests COMMAND RenegadeImportTests)

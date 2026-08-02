@@ -21,6 +21,14 @@ plus the protected scene-document workflow (PR #11) have merged. Terrain
 sculpt Save/Open passed packaged DX12 and Vulkan acceptance on the project
 owner's Windows GPU.
 
+Model Import V1 Gate 1 follows accepted Light Authoring. Its first implementation
+compiles Wicked's GLB/GLTF converter into EngineBridge without enabling the
+stock editor, converts into an isolated scene, validates a WISCENE round trip,
+and records component and texture-reference counts. Because the pinned
+converter creates GPU render data, the conversion proof must run in an
+initialized DX12/Vulkan process; UI-free does not mean GPU-free. The Asset
+Browser and visible importer workspace remain later gates.
+
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light
 Inspector is visible in the packaged editor and Gate 2 Windows CI passed at

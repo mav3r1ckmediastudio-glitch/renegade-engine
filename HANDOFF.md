@@ -4,11 +4,11 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Active branch:** `phase3/light-material-authoring`
+**Active branch:** `phase4/model-import-v1`
 
-**Branch base:** `c5a2fb8` (`Add native terrain authoring foundation (#11)`)
+**Branch base:** `e515172` (`Plan and prove light material authoring bridge (#12)`)
 
-**Pull request:** #12 into `main` (draft)
+**Pull request:** Not opened yet
 
 **Gate 1 remote commit:** `38c9f24`
 
@@ -16,37 +16,74 @@
 
 **Add Light remote commit:** `b81c4bb`
 
-**Discoverability correction commit:** `4ebc7a8` (patch-ready; not yet
-Windows-verified)
+**Model Import V1 Gate 1 commit:** Working tree; not committed or pushed
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current truth
 
-PR #11 is merged. Terrain Authoring V1 and the protected WISCENE document
-workflow are on `main` at `c5a2fb8`. The project owner confirmed the terrain
-sculpt and Save/Open path behaves as expected in packaged DX12 and Vulkan.
+PR #12 is merged into `main` at `e515172`. The project owner confirmed the
+complete light workflow works as intended in packaged DX12 and Vulkan,
+including creation, placement, grouped hierarchy discoverability and
+selectable editor-only markers.
 
-PR #12 is the active Light and Material Authoring branch. Gate 1 contains
-UI-independent `LightService` and `MaterialService` contracts, command-based
-Undo/Redo, no-op filtering, native-field preservation tests, material target
-resolution, and service-level rejection of every terrain-owned material. The
-project owner reported all four required PR checks green at `38c9f24`.
+The active milestone is Model Import V1 Gate 1. `ImportService` compiles only
+Wicked's standalone GLB/GLTF conversion unit into EngineBridge while the stock
+Wicked Editor target remains disabled. It validates the source/destination,
+imports into an isolated temporary scene, writes WISCENE, reloads it, and
+compares native component and texture-reference counts. It does not merge an
+asset into the active Studio scene and adds no visible importer UI.
 
-Gate 2 at `32351d9` adds the Renegade-owned selection-driven Light Inspector.
-All four Windows checks passed and the project owner visually confirmed that
-selecting `Gateway Beam` reveals the expected native Spot controls. The full
-edit/Undo/Redo/Save/Open/Runtime/Vulkan behaviour matrix has not yet been
-reported complete.
+The pinned Wicked converter creates mesh/material render data and calls
+`Scene::Update()`, so it requires an initialized graphics device. The service
+rejects calls without one. Local C++17 syntax checks pass for the service,
+tests, and upstream importer source, but this Linux container has no CMake and
+cannot execute the authoritative Windows DX12/Vulkan import round trip.
 
-The project owner then tested Add Light at `b81c4bb`. All four native light
-types illuminate correctly, but the custom hierarchy clipped entities below
-its first visible page and only Directional had a viewport marker. This is a
-behavioural gate failure despite green CI. Commit `4ebc7a8` corrects both
-discoverability issues and remains pending fresh Windows CI and packaged visual
-acceptance.
+## Active slice — Model Import V1 Gate 1
 
-## Active slice — Add Light workflow
+Changed files:
+
+- `EngineBridge/include/renegade/bridge/ImportService.h`
+- `EngineBridge/src/ImportService.cpp`
+- `EngineBridge/CMakeLists.txt`
+- `Tests/ImportTests.cpp`
+- `Tests/CMakeLists.txt`
+- `README.md`
+- `EngineBridge/README.md`
+- `docs/ARCHITECTURE.md`
+- `docs/ROADMAP.md`
+- `docs/FEATURE_MATRIX.csv`
+- `HANDOFF.md`
+
+Local validation:
+
+```text
+git diff --check
+g++ -std=c++17 -fsyntax-only <SDL declaration shim> \
+  -IEngineBridge/include -IWickedEngine/WickedEngine -IWickedEngine/Editor \
+  EngineBridge/src/ImportService.cpp Tests/ImportTests.cpp
+g++ -std=c++17 -fsyntax-only <SDL declaration shim> \
+  -IWickedEngine/Editor -IWickedEngine/WickedEngine \
+  WickedEngine/Editor/ModelImporter_GLTF.cpp
+```
+
+Both syntax commands pass. The shim only supplies SDL declarations absent from
+this container and is not a repository file. CMake is unavailable locally.
+
+Risks and next task:
+
+1. Run fresh Windows CI to prove MSVC compiles the extracted upstream source in
+   the Renegade target.
+2. Add/run an initialized DX12 packaged proof using a representative textured
+   GLB, then repeat in Vulkan. Confirm meshes, hierarchy, transforms, materials,
+   texture references and WISCENE reload counts.
+3. Do not start the visible importer workspace until that proof passes.
+4. Wicked's importer reports malformed-file errors through its reference-editor
+   message box; production structured error capture remains a later hardening
+   gate and must not be hidden.
+
+## Completed previous slice — Add Light workflow
 
 The next patch completes light authoring before Material UI starts. It:
 

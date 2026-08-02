@@ -23,17 +23,22 @@ The implementation provides:
   alongside it.
 - `StudioSession`, which exposes the document, project and editor-state
   services to Studio without duplicating scene replacement logic.
+- `ImportService`, which invokes Wicked's standalone GLB/GLTF converter into an
+  isolated temporary scene, writes a reusable WISCENE asset, reloads it, and
+  compares native component summaries without touching the active document.
 
 These are deliberately bounded service interfaces. Studio widgets must use
 them instead of creating UI-owned project or scene state.
 
 ## Two rules that are easy to break
 
-**No renderer-dependent calls.** `Scene::Update()` must not appear anywhere in
-this layer; the render-capable Studio frame loop owns scene advancement. The
-same applies transitively — `wi::scene::LoadModel` is an import path that calls
-`Scene::Update()` internally, which is why `SceneDocumentService` prepares a
-native archive read directly through Wicked's `Archive` and `Scene::Serialize`.
+**No accidental renderer-dependent calls.** Scene documents and commands must
+not advance the rendered scene; the render-capable Studio frame loop owns that
+work. This applies transitively to `wi::scene::LoadModel`, which is why
+`SceneDocumentService` reads native archives directly. `ImportService` is the
+documented exception: Wicked's pinned GLTF converter creates render data during
+conversion, so it explicitly requires an initialized graphics device while
+still keeping the imported scene isolated from the active document.
 
 **Curated state, not whole components.** A command's state struct captures only
 the fields Renegade exposes, and applying it must leave every other value on the
