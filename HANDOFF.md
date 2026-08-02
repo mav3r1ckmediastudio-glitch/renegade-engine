@@ -106,14 +106,15 @@ pass for the service and tests, but this Linux container has no CMake and
 cannot itself execute the Windows DX12/Vulkan import round trip — all
 packaged evidence above came from the project owner's machine.
 
-## Active slice — Model Import: Scene Placement
+## Completed slice — Model Import: Scene Placement
 
-Committed and built by the project owner; `ADD > IMPORT MODEL...` merge into
+Committed and built by the project owner. `ADD > IMPORT MODEL...` merge into
 the active scene, hierarchy placement, and Undo removing the whole imported
-hierarchy have been confirmed against `crate_box` in a packaged build. The
-full `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` acceptance checklist (Redo,
-Save/Reopen persistence, Runtime comparison, Vulkan repeat, busy-guard,
-malformed-file) has not been run to completion yet. See
+hierarchy were first confirmed against `crate_box` in a packaged build; the
+project owner has since reported the full
+`docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` acceptance checklist passing on both
+DX12 and Vulkan (Redo, Save/Reopen persistence, Runtime comparison,
+busy-guard, malformed-file, and the scale-specific checks below). See
 `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for the full scope and design
 rationale. Summary:
 
@@ -145,10 +146,11 @@ rationale. Summary:
   the existing Save path. `BUILD > VALIDATE GLB/GLTF IMPORT...` is
   untouched.
 
-### Follow-on, uncommitted: import scale correction
+### Follow-on: import scale correction
 
 Added after the project owner reported an imported `crate_box` landing
-"VERY large." Not yet committed or built. See "Import scale correction" in
+"VERY large." Committed, built, and packaged-accepted on both DX12 and
+Vulkan — see "Packaged evidence" below. See "Import scale correction" in
 `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for full design rationale and the
 GameGuru MAX comparison it is modeled after.
 
@@ -195,21 +197,15 @@ Changed files (this follow-on only):
 - `docs/ROADMAP.md`
 - `HANDOFF.md`
 
-**No local validation has run against this yet** — no syntax check, no
-build, no packaged test. It has not even been committed. Before treating any
-part of this as working:
-
-1. Run the same kind of local C++17 syntax check used for prior slices
-   (see the Gate 1 commands below) against the four changed source files.
-2. Commit and push, then run Windows CI.
-3. Package Release, then re-run `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`'s
-   packaged acceptance checklist on both DX12 and Vulkan, paying particular
-   attention to the new step 5 (plausible size, `AUTO SCALE` status text,
-   and matching Inspector Scale X/Y/Z) and the scale assertions folded into
-   steps 6 and 7 (Redo/Save-Reopen preserving the applied scale). A crash, a
-   failure to merge, a broken Undo/Redo, or a loss of the imported model or
-   its applied scale on Save/Reopen all stop this gate, same as every other
-   gate in this repository.
+**Packaged evidence (project owner):** the full
+`docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` acceptance checklist passed on
+packaged DX12 and Vulkan, including the scale-specific steps: an imported
+model lands at a plausible size next to existing scene content instead of
+"VERY large," the status bar reports `AUTO SCALE x0.XXX`, the imported
+root's Scale X/Y/Z in the Inspector read that same value uniformly, Undo/
+Redo preserve the applied scale, and it survives Save/close/Reopen. This
+closes out the Model Import: Scene Placement slice's full acceptance
+checklist, not just the crate_box merge/hierarchy/Undo check noted above.
 
 ## Completed slice — Model Import V1 Gate 1
 

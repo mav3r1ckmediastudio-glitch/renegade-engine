@@ -41,14 +41,15 @@ Vulkan against both a single-object model and a multi-node, multi-material,
 skinned/animated model (see `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` and
 `HANDOFF.md`). A smaller follow-on slice adds `ADD > IMPORT MODEL...`,
 merging a converted model directly into the active scene with Undo/Redo,
-short of full Asset Browser registration; it is committed and built, with a
-packaged crate_box merge/hierarchy/Undo check confirmed and the rest of its
-acceptance checklist outstanding. A further, uncommitted addition resolves
-an automatic, non-destructive import-scale correction (`ModelScaleMode`:
-Original/Meters/Centimeters/Inches/Automatic, modeled after GameGuru MAX's
-importer) applied to the import root's Scale, fixing an oversized crate
-import the project owner reported; only `Automatic` is wired to the import
-flow so far, with no UI to choose another mode yet.
+short of full Asset Browser registration; it is committed, built, and has
+passed the full packaged acceptance checklist on DX12 and Vulkan. That
+slice's follow-on, an automatic, non-destructive import-scale correction
+(`ModelScaleMode`: Original/Meters/Centimeters/Inches/Automatic, modeled
+after GameGuru MAX's importer) applied to the import root's Scale, has also
+passed full packaged acceptance on both renderers, fixing an oversized crate
+import the project owner reported. Only `Automatic` is wired to the import
+flow so far, with no UI to choose another mode yet -- a manual scale-mode
+picker remains deferred future work.
 
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light
