@@ -34,6 +34,7 @@ Wicked operations. Initial service boundaries:
 
 - `ProjectService`
 - `SceneService`
+- `SceneDocumentService`
 - `SelectionService`
 - `CommandService`
 - `AssetService`
@@ -63,6 +64,24 @@ useful, while Renegade owns all visible pixels and all workflow composition.
 
 `ProjectService` owns `.renegade` descriptor validation and recent-project
 state. Studio calls that service rather than parsing project files in widgets.
+
+`SceneDocumentService` is the UI-free scene-document operation boundary.
+WISCENE preparation uses Wicked's archive and scene serialization on Wicked's
+job system without mutating the active document. Studio commits the prepared
+scene, document path, selection reset and command-history reset together at a
+Wicked thread-safe point. `SceneService::LoadScene` is reserved for Runtime
+startup and shares the same archive preparation operation; Studio must not use
+it as a second editor lifecycle.
+
+Save and Save As cross the same boundary. A save serializes the active Wicked
+scene into a same-directory temporary WISCENE, deserializes it as validation,
+protects the existing destination, replaces the destination atomically and
+validates the final file before marking the command history saved. The previous
+valid version remains as an openable `*.bak.wiscene`, while successful saves
+also maintain the newest ten WISCENE files under
+`Saved/Backups/Scenes/<scene-name>`. A backup warning never disguises a
+successful primary save, and a primary failure never changes the document path
+or clears dirty state.
 
 `CommandService` owns persistent Studio scene mutations. Full local transforms
 use a toolkit-independent `TransformState`; duplicate and delete commands use
@@ -94,6 +113,22 @@ for the pinned `OceanParameters`, including FFT resolution and spectral wind.
 `ApplyOcean` invalidates Wicked's lazy FFT runtime only when an authored change
 requires recreation, while always synchronizing the serialized primary Weather
 component into `Scene::weather`.
+
+Terrain sculpting treats Wicked's streamed chunks as views into one canonical
+integer height grid. Neighbouring 67x67 chunk meshes deliberately duplicate
+their shared edge and corner vertices; a sculpt edit is therefore calculated
+once per global grid coordinate, copied to every duplicate, and followed by a
+cross-chunk normal/tangent rebuild. Smooth samples the same global grid. The
+native per-chunk 16-bit height data remains the serialized authority and a
+whole multi-chunk stroke remains one `SculptTerrainCommand`.
+
+Until material importing exists, new terrain uses a bundled grass PBR default.
+Source AO and roughness TGAs are packed at build time into Wicked's surface-map
+layout (R=AO, G=roughness, B=metalness, A=reflectance), while base colour and
+normal are pre-tiled consistently for the fixed native chunk UVs. Studio and
+Runtime ship the generated maps beside their executables. Scene load rebinds
+only filenames identifying this bundled default, so later creator-assigned
+terrain materials are never overwritten.
 
 ### Renegade-owned shaders
 

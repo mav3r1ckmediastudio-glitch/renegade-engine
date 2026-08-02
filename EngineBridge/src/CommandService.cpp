@@ -318,6 +318,25 @@ namespace renegade::bridge
             return false;
         }
 
+        if (savedStateReachable_ && savedDepth_ > undoStack_.size())
+        {
+            savedStateReachable_ = false;
+        }
+        undoStack_.push_back(std::move(command));
+        redoStack_.clear();
+        return true;
+    }
+
+    bool CommandService::RecordExecuted(std::unique_ptr<ICommand> command)
+    {
+        if (command == nullptr)
+        {
+            return false;
+        }
+        if (savedStateReachable_ && savedDepth_ > undoStack_.size())
+        {
+            savedStateReachable_ = false;
+        }
         undoStack_.push_back(std::move(command));
         redoStack_.clear();
         return true;
@@ -360,6 +379,14 @@ namespace renegade::bridge
     {
         undoStack_.clear();
         redoStack_.clear();
+        savedDepth_ = 0;
+        savedStateReachable_ = true;
+    }
+
+    void CommandService::MarkSaved() noexcept
+    {
+        savedDepth_ = undoStack_.size();
+        savedStateReachable_ = true;
     }
 
     bool CommandService::CanUndo() const noexcept
@@ -370,6 +397,11 @@ namespace renegade::bridge
     bool CommandService::CanRedo() const noexcept
     {
         return !redoStack_.empty();
+    }
+
+    bool CommandService::IsDirty() const noexcept
+    {
+        return !savedStateReachable_ || undoStack_.size() != savedDepth_;
     }
 
     std::size_t CommandService::UndoCount() const noexcept

@@ -12,6 +12,7 @@
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
+#include "renegade/bridge/StudioSession.h"
 
 namespace
 {
@@ -91,26 +92,47 @@ int main()
     }
 
     if (!NearlyEqual(childTransform.translation_local.x, 4.0f) ||
-        !commands.CanUndo() || commands.CanRedo())
+        !commands.CanUndo() || commands.CanRedo() || !commands.IsDirty())
     {
         return Fail("execute state is incorrect");
     }
 
+    commands.MarkSaved();
+    if (commands.IsDirty())
+    {
+        return Fail("mark saved did not establish a clean scene state");
+    }
+
     if (!commands.Undo() ||
         !NearlyEqual(childTransform.translation_local.x, 0.0f) ||
-        !commands.CanRedo())
+        !commands.CanRedo() || !commands.IsDirty())
     {
         return Fail("undo did not restore the original transform");
     }
 
     if (!commands.Redo() ||
         !NearlyEqual(childTransform.translation_local.x, 4.0f) ||
-        commands.CanRedo())
+        commands.CanRedo() || commands.IsDirty())
     {
         return Fail("redo did not restore the edited transform");
     }
 
+    if (!commands.Undo() ||
+        !commands.Execute(
+            std::make_unique<renegade::bridge::SetTranslationCommand>(
+                scenes.GetScene(),
+                child,
+                XMFLOAT3(2.0f, 0.0f, 0.0f))) ||
+        !commands.IsDirty() || commands.CanRedo())
+    {
+        return Fail("a new command branch did not invalidate the saved state");
+    }
+
     commands.Clear();
+    if (commands.IsDirty())
+    {
+        return Fail("clearing command history did not reset dirty state");
+    }
     childTransform.translation_local = XMFLOAT3{};
     childTransform.SetDirty();
     childTransform.UpdateTransform();
@@ -558,19 +580,28 @@ int main()
         std::filesystem::create_directories(sceneFixture.path);
         const auto scenePath = sceneFixture.path / "RoundTrip.wiscene";
 
-        renegade::bridge::SceneService authored;
+        renegade::bridge::StudioSession authored;
         const auto landmark = wi::ecs::CreateEntity();
-        authored.GetScene().names.Create(landmark) = "Landmark";
-        auto& landmarkTransform =
-            authored.GetScene().transforms.Create(landmark);
-        landmarkTransform.translation_local = XMFLOAT3(2.0f, 3.0f, 4.0f);
-        landmarkTransform.SetDirty();
-        landmarkTransform.UpdateTransform();
+        authored.Scenes().GetScene().names.Create(landmark) = "Landmark";
+        authored.Scenes().GetScene().transforms.Create(landmark);
+        {
+            auto* landmarkTransform = authored.Scenes()
+                .GetScene()
+                .transforms
+                .GetComponent(landmark);
+            if (landmarkTransform == nullptr)
+            {
+                return Fail("landmark transform fixture was not created");
+            }
+            landmarkTransform->translation_local = XMFLOAT3(2.0f, 3.0f, 4.0f);
+            landmarkTransform->SetDirty();
+            landmarkTransform->UpdateTransform();
+        }
 
         const auto environment = wi::ecs::CreateEntity();
-        authored.GetScene().names.Create(environment) = "Environment";
+        authored.Scenes().GetScene().names.Create(environment) = "Environment";
         auto& authoredWeather =
-            authored.GetScene().weathers.Create(environment);
+            authored.Scenes().GetScene().weathers.Create(environment);
         authoredWeather.SetRealisticSky(true);
         authoredWeather.SetRealisticSkyAerialPerspective(true);
         authoredWeather.SetVolumetricClouds(true);
@@ -583,26 +614,49 @@ int main()
         authoredWeather.volumetricCloudParameters.cloudStartHeight = 1650.0f;
         authoredWeather.volumetricCloudParameters.cloudThickness = 3600.0f;
 
+        // Use a small native terrain fixture, including authored height and
+        // blend pixels, so the document round trip covers terrain state rather
+        // than only ordinary entity components.
+        const auto terrainEntity = wi::ecs::CreateEntity();
+        authored.Scenes().GetScene().names.Create(terrainEntity) = "Terrain";
+        authored.Scenes().GetScene().transforms.Create(terrainEntity);
+        auto& authoredTerrain =
+            authored.Scenes().GetScene().terrains.Create(terrainEntity);
+        authoredTerrain.terrainEntity = terrainEntity;
+        authoredTerrain.scene = &authored.Scenes().GetScene();
+        authoredTerrain.seed = 77123;
+        authoredTerrain.chunk_scale = 3.25f;
+        authoredTerrain.bottomLevel = -44.0f;
+        authoredTerrain.topLevel = 188.0f;
+        wi::terrain::Chunk authoredChunk;
+        authoredChunk.x = 4;
+        authoredChunk.z = -2;
+        auto& authoredChunkData = authoredTerrain.chunks[authoredChunk];
+        authoredChunkData.heightmap_data = {12, 1400, 32000, 65535};
+        authoredChunkData.blendmap_layers.resize(1);
+        authoredChunkData.blendmap_layers[0].pixels = {3, 17, 128, 244};
+
         if (!authored.SaveScene(scenePath.generic_string()) ||
             !std::filesystem::is_regular_file(scenePath) ||
-            authored.CurrentPath() != scenePath.generic_string())
+            authored.Scenes().CurrentPath() != scenePath.generic_string())
         {
             return Fail("scene service did not write the scene archive");
         }
 
-        renegade::bridge::SceneService reopened;
+        renegade::bridge::StudioSession reopened;
         if (!reopened.LoadScene(scenePath.generic_string()))
         {
             return Fail("scene service did not reload the scene archive");
         }
-        if (reopened.EntityCount() != authored.EntityCount())
+        if (reopened.Scenes().EntityCount() != authored.Scenes().EntityCount())
         {
             return Fail("the reloaded scene lost or gained entities");
         }
-        const auto reopenedWeatherEntity = reopened.WeatherEntity();
+        const auto reopenedWeatherEntity = reopened.Scenes().WeatherEntity();
         const auto* reopenedWeather =
-            reopened.GetScene().weathers.GetComponent(reopenedWeatherEntity);
-        if (reopened.GetScene().weathers.GetCount() != 1 ||
+            reopened.Scenes().GetScene().weathers.GetComponent(
+                reopenedWeatherEntity);
+        if (reopened.Scenes().GetScene().weathers.GetCount() != 1 ||
             reopenedWeatherEntity == wi::ecs::INVALID_ENTITY ||
             reopenedWeather == nullptr ||
             !reopenedWeather->IsHeightFog() ||
@@ -624,7 +678,7 @@ int main()
         }
 
         bool reloadedLandmark = false;
-        for (const auto& entity : reopened.ListEntities())
+        for (const auto& entity : reopened.Scenes().ListEntities())
         {
             if (entity.name.rfind("__renegade_internal_", 0) == 0)
             {
@@ -635,7 +689,8 @@ int main()
                 continue;
             }
             const auto* transform =
-                reopened.GetScene().transforms.GetComponent(entity.entity);
+                reopened.Scenes().GetScene().transforms.GetComponent(
+                    entity.entity);
             if (transform == nullptr ||
                 !NearlyEqual(transform->translation_local.x, 2.0f) ||
                 !NearlyEqual(transform->translation_local.z, 4.0f))
@@ -647,6 +702,400 @@ int main()
         if (!reloadedLandmark)
         {
             return Fail("the reloaded scene lost a named entity");
+        }
+        if (reopened.Scenes().GetScene().terrains.GetCount() != 1)
+        {
+            return Fail("the reloaded scene lost its terrain component");
+        }
+        const auto& reopenedTerrain =
+            reopened.Scenes().GetScene().terrains[0];
+        const auto reopenedChunk = reopenedTerrain.chunks.find(authoredChunk);
+        if (reopenedTerrain.scene != &reopened.Scenes().GetScene() ||
+            reopenedTerrain.terrainEntity !=
+                reopened.Scenes().GetScene().terrains.GetEntity(0) ||
+            reopenedTerrain.seed != authoredTerrain.seed ||
+            !NearlyEqual(
+                reopenedTerrain.chunk_scale,
+                authoredTerrain.chunk_scale) ||
+            !NearlyEqual(
+                reopenedTerrain.bottomLevel,
+                authoredTerrain.bottomLevel) ||
+            !NearlyEqual(reopenedTerrain.topLevel, authoredTerrain.topLevel) ||
+            reopenedChunk == reopenedTerrain.chunks.end() ||
+            reopenedChunk->second.heightmap_data.size() != 4 ||
+            reopenedChunk->second.heightmap_data[2] != 32000 ||
+            reopenedChunk->second.blendmap_layers.size() != 1 ||
+            reopenedChunk->second.blendmap_layers[0].pixels.size() != 4 ||
+            reopenedChunk->second.blendmap_layers[0].pixels[3] != 244)
+        {
+            return Fail("the reloaded scene lost authored terrain data");
+        }
+
+        // A second save protects the previously valid document as .bak, and
+        // successful saves maintain a bounded rolling backup history.
+        if (!authored.Commands().Execute(
+                std::make_unique<renegade::bridge::SetTranslationCommand>(
+                    authored.Scenes().GetScene(),
+                    landmark,
+                    XMFLOAT3(8.0f, 3.0f, 4.0f))) ||
+            !authored.SaveScene(scenePath.generic_string()) ||
+            authored.Commands().IsDirty())
+        {
+            return Fail("transactional overwrite did not complete cleanly");
+        }
+
+        const auto previousPath =
+            scenePath.parent_path() / "RoundTrip.bak.wiscene";
+        renegade::bridge::StudioSession previous;
+        if (!std::filesystem::is_regular_file(previousPath) ||
+            !previous.LoadScene(previousPath.generic_string()))
+        {
+            return Fail("transactional overwrite did not preserve a .bak");
+        }
+        bool previousLandmarkRestored = false;
+        for (const auto& entity : previous.Scenes().ListEntities())
+        {
+            if (entity.name != "Landmark")
+            {
+                continue;
+            }
+            const auto* transform = previous.Scenes()
+                .GetScene()
+                .transforms
+                .GetComponent(entity.entity);
+            previousLandmarkRestored = transform != nullptr &&
+                NearlyEqual(transform->translation_local.x, 2.0f);
+        }
+        if (!previousLandmarkRestored)
+        {
+            return Fail("the .bak did not contain the previous scene state");
+        }
+
+        for (int version = 0; version < 12; ++version)
+        {
+            auto* landmarkTransform = authored.Scenes()
+                .GetScene()
+                .transforms
+                .GetComponent(landmark);
+            if (landmarkTransform == nullptr)
+            {
+                return Fail("rolling backup fixture lost its transform");
+            }
+            landmarkTransform->translation_local.x =
+                10.0f + static_cast<float>(version);
+            landmarkTransform->SetDirty();
+            landmarkTransform->UpdateTransform();
+            if (!authored.SaveScene(scenePath.generic_string()))
+            {
+                return Fail("rolling automatic backup save failed");
+            }
+        }
+
+        const auto backupDirectory = std::filesystem::u8path(
+            authored.Documents().AutomaticBackupDirectory(
+                scenePath.generic_string()));
+        std::size_t backupCount = 0;
+        for (const auto& backup :
+            std::filesystem::directory_iterator(backupDirectory))
+        {
+            if (backup.is_regular_file() &&
+                backup.path().extension() == ".wiscene")
+            {
+                ++backupCount;
+            }
+        }
+        if (backupCount !=
+            renegade::bridge::SceneDocumentService::MaximumAutomaticBackups)
+        {
+            return Fail("automatic scene backup retention is not bounded");
+        }
+
+        // Save As writes the current document to a new path without changing
+        // the already saved source archive.
+        const auto* sourceTransform = authored.Scenes()
+            .GetScene()
+            .transforms
+            .GetComponent(landmark);
+        if (sourceTransform == nullptr)
+        {
+            return Fail("Save As fixture lost its source transform");
+        }
+        const float sourceVersion = sourceTransform->translation_local.x;
+        if (!authored.Commands().Execute(
+                std::make_unique<renegade::bridge::SetTranslationCommand>(
+                    authored.Scenes().GetScene(),
+                    landmark,
+                    XMFLOAT3(44.0f, 3.0f, 4.0f))))
+        {
+            return Fail("Save As fixture command did not execute");
+        }
+        const auto saveAsPath = sceneFixture.path / "RoundTripCopy.wiscene";
+        if (!authored.SaveScene(saveAsPath.generic_string()) ||
+            authored.Scenes().CurrentPath() != saveAsPath.generic_string() ||
+            authored.Commands().IsDirty())
+        {
+            return Fail("Save As did not establish the new saved document");
+        }
+
+        renegade::bridge::StudioSession originalAfterSaveAs;
+        renegade::bridge::StudioSession copyAfterSaveAs;
+        if (!originalAfterSaveAs.LoadScene(scenePath.generic_string()) ||
+            !copyAfterSaveAs.LoadScene(saveAsPath.generic_string()))
+        {
+            return Fail("Save As archives could not be reopened");
+        }
+        float originalX = 0.0f;
+        float copyX = 0.0f;
+        for (const auto& entity : originalAfterSaveAs.Scenes().ListEntities())
+        {
+            if (entity.name == "Landmark")
+            {
+                originalX = originalAfterSaveAs.Scenes()
+                    .GetScene()
+                    .transforms
+                    .GetComponent(entity.entity)
+                    ->translation_local.x;
+            }
+        }
+        for (const auto& entity : copyAfterSaveAs.Scenes().ListEntities())
+        {
+            if (entity.name == "Landmark")
+            {
+                copyX = copyAfterSaveAs.Scenes()
+                    .GetScene()
+                    .transforms
+                    .GetComponent(entity.entity)
+                    ->translation_local.x;
+            }
+        }
+        if (!NearlyEqual(originalX, sourceVersion) ||
+            !NearlyEqual(copyX, 44.0f))
+        {
+            return Fail("Save As changed the source or lost the current state");
+        }
+
+        // A failed save must not change document identity or clear dirty state.
+        const auto invalidDestination =
+            sceneFixture.path / "NotAFile.wiscene";
+        std::filesystem::create_directory(invalidDestination);
+        if (!authored.Commands().Execute(
+                std::make_unique<renegade::bridge::SetTranslationCommand>(
+                    authored.Scenes().GetScene(),
+                    landmark,
+                    XMFLOAT3(55.0f, 3.0f, 4.0f))) ||
+            authored.SaveScene(invalidDestination.generic_string()) ||
+            authored.Scenes().CurrentPath() != saveAsPath.generic_string() ||
+            !authored.Commands().IsDirty())
+        {
+            return Fail("failed save changed document identity or dirty state");
+        }
+    }
+
+    // A failed Open Scene attempt is transactional: the current scene,
+    // selection, command history and dirty state remain available.
+    {
+        renegade::bridge::StudioSession session;
+        const auto survivor = wi::ecs::CreateEntity();
+        session.Scenes().GetScene().names.Create(survivor) = "Survivor";
+        session.Scenes().GetScene().transforms.Create(survivor);
+        session.Selection().Select(survivor);
+        if (!session.Commands().Execute(
+                std::make_unique<renegade::bridge::SetTranslationCommand>(
+                    session.Scenes().GetScene(),
+                    survivor,
+                    XMFLOAT3(3.0f, 0.0f, 0.0f))))
+        {
+            return Fail("transactional open fixture command did not execute");
+        }
+        const auto missing = std::filesystem::temp_directory_path() /
+            ("renegade-missing-scene-" +
+                std::to_string(
+                    std::chrono::steady_clock::now()
+                        .time_since_epoch()
+                        .count()) +
+                ".wiscene");
+        if (session.LoadScene(missing.generic_string()) ||
+            !session.Scenes().ContainsEntity(survivor) ||
+            session.Selection().SelectedEntity() != survivor ||
+            !session.Commands().CanUndo() ||
+            !session.Commands().IsDirty())
+        {
+            return Fail("failed scene open discarded the active editor state");
+        }
+    }
+
+    // Open Scene has a distinct prepare/commit boundary. Preparing a valid
+    // replacement on a worker must not touch the active document; committing
+    // it replaces scene, path, selection and history together. An invalid
+    // archive must never reach that commit point.
+    {
+        TemporaryDirectory openFixture;
+        openFixture.path =
+            std::filesystem::temp_directory_path() /
+            (
+                "renegade-document-open-" +
+                std::to_string(
+                    std::chrono::steady_clock::now()
+                        .time_since_epoch()
+                        .count()));
+        std::filesystem::create_directories(openFixture.path);
+        const auto sourcePath = openFixture.path / "Prepared.wiscene";
+        const auto corruptPath = openFixture.path / "Corrupt.wiscene";
+        const auto trailingPath = openFixture.path / "Trailing.wiscene";
+
+        renegade::bridge::StudioSession source;
+        const auto loadedEntity = wi::ecs::CreateEntity();
+        source.Scenes().GetScene().names.Create(loadedEntity) =
+            "Prepared Landmark";
+        source.Scenes().GetScene().transforms.Create(loadedEntity);
+        const auto loadedCamera = wi::ecs::CreateEntity();
+        source.Scenes().GetScene().names.Create(loadedCamera) =
+            "Authored Camera";
+        source.Scenes().GetScene().transforms.Create(loadedCamera);
+        source.Scenes().GetScene().cameras.Create(loadedCamera);
+        if (!source.SaveScene(sourcePath.generic_string()))
+        {
+            return Fail("document-open fixture scene was not written");
+        }
+        {
+            std::ofstream corrupt(corruptPath, std::ios::binary);
+            corrupt << "this is not a Wicked archive";
+        }
+        std::filesystem::copy_file(sourcePath, trailingPath);
+        {
+            std::ofstream trailing(
+                trailingPath,
+                std::ios::binary | std::ios::app);
+            trailing << "unexpected trailing bytes";
+        }
+
+        renegade::bridge::StudioSession session;
+        const auto survivor = wi::ecs::CreateEntity();
+        session.Scenes().GetScene().names.Create(survivor) = "Survivor";
+        session.Scenes().GetScene().transforms.Create(survivor);
+        session.Selection().Select(survivor);
+        if (!session.Commands().Execute(
+                std::make_unique<renegade::bridge::SetTranslationCommand>(
+                    session.Scenes().GetScene(),
+                    survivor,
+                    XMFLOAT3(7.0f, 0.0f, 0.0f))))
+        {
+            return Fail("document-open history fixture did not execute");
+        }
+
+        auto corrupt = session.Documents().PrepareOpen(
+            corruptPath.generic_string());
+        if (corrupt.IsReady() ||
+            session.Documents().CommitPreparedOpen(std::move(corrupt)) ||
+            !session.Scenes().ContainsEntity(survivor) ||
+            session.Selection().SelectedEntity() != survivor ||
+            !session.Commands().CanUndo() ||
+            !session.Commands().IsDirty())
+        {
+            return Fail("a corrupt prepared open damaged the active document");
+        }
+
+        // Wicked compressed archives decode the valid compressed stream and
+        // tolerate bytes appended after it. That remains a valid scene, but
+        // the prepare phase must still leave the active document untouched.
+        auto trailing = session.Documents().PrepareOpen(
+            trailingPath.generic_string());
+        if (!trailing.IsReady() ||
+            !session.Scenes().ContainsEntity(survivor) ||
+            session.Selection().SelectedEntity() != survivor ||
+            !session.Commands().CanUndo() ||
+            !session.Commands().IsDirty())
+        {
+            return Fail(
+                "preparing a WISCENE with trailing data damaged the active "
+                "document");
+        }
+
+        auto prepared = session.Documents().PrepareOpen(
+            sourcePath.generic_string());
+        if (!prepared.IsReady() ||
+            !session.Scenes().ContainsEntity(survivor) ||
+            session.Selection().SelectedEntity() != survivor ||
+            !session.Commands().CanUndo())
+        {
+            return Fail("preparing a valid scene mutated the active document");
+        }
+        // Wicked's EntitySerializer remaps entity handles on every
+        // deserialize (wiScene_Serializers.cpp comments this as intentional,
+        // to keep serialized entities "unique and persistent across the
+        // scene"), even when reading into a brand-new scene. loadedEntity and
+        // loadedCamera are therefore only valid identities in the *source*
+        // session, before it was saved; the reopened entities in `session`
+        // will carry different runtime IDs. Every postcondition below is
+        // checked independently so a future regression reports exactly what
+        // broke instead of one aggregate message, and the reopened entities
+        // are located by stable semantic identity (name plus required
+        // component) rather than by the pre-save runtime ID.
+        if (!session.Documents().CommitPreparedOpen(std::move(prepared)))
+        {
+            return Fail("prepared scene commit returned false");
+        }
+        if (session.Scenes().ContainsEntity(survivor))
+        {
+            return Fail(
+                "prepared scene commit did not clear the previous document");
+        }
+
+        const auto findEntityByName = [](
+            const renegade::bridge::StudioSession& target,
+            const std::string& name) -> wi::ecs::Entity
+        {
+            for (const auto& candidate : target.Scenes().ListEntities())
+            {
+                if (candidate.name == name)
+                {
+                    return candidate.entity;
+                }
+            }
+            return wi::ecs::INVALID_ENTITY;
+        };
+
+        const auto reopenedLandmark =
+            findEntityByName(session, "Prepared Landmark");
+        if (reopenedLandmark == wi::ecs::INVALID_ENTITY ||
+            session.Scenes().GetScene().transforms.GetComponent(
+                reopenedLandmark) == nullptr)
+        {
+            return Fail(
+                "reopened scene is missing the prepared landmark entity");
+        }
+        if (session.Scenes().CurrentPath() != sourcePath.generic_string())
+        {
+            return Fail(
+                "prepared scene commit did not update the current path");
+        }
+        if (session.Selection().HasSelection())
+        {
+            return Fail("prepared scene commit left a stale selection");
+        }
+        if (session.Commands().CanUndo())
+        {
+            return Fail("prepared scene commit left stale Undo history");
+        }
+        if (session.Commands().IsDirty())
+        {
+            return Fail("prepared scene commit left the document dirty");
+        }
+
+        const auto reopenedCamera =
+            findEntityByName(session, "Authored Camera");
+        if (reopenedCamera == wi::ecs::INVALID_ENTITY ||
+            session.Scenes().GetScene().cameras.GetComponent(
+                reopenedCamera) == nullptr)
+        {
+            return Fail(
+                "reopened scene is missing the authored camera entity");
+        }
+        if (session.Documents().LastOpenedCamera() != reopenedCamera)
+        {
+            return Fail(
+                "prepared scene commit did not carry the authored camera "
+                "identity through remapping");
         }
     }
 
@@ -724,6 +1173,8 @@ int main()
            "weather and duplicate/delete undo-redo, repeated history, "
            "no-op filtering, Proving Ground blueprint structure, unique "
            "generated names, headless scene save/reload, project lifecycle, "
-           "and persisted editor preferences\n";
+           "transactional prepared scene open, corrupt-open protection, "
+           "dirty-state tracking, and "
+           "persisted editor preferences\n";
     return 0;
 }

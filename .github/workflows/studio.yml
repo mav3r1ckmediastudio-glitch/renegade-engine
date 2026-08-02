@@ -12,6 +12,7 @@ on:
       - "Runtime/**"
       - "Tests/**"
       - "Tools/Build-Studio-Windows.ps1"
+      - "Tools/TerrainSurfacePacker.cpp"
       - "Tools/Windows-Build.Common.ps1"
       - ".gitmodules"
   pull_request:
@@ -23,6 +24,7 @@ on:
       - "Runtime/**"
       - "Tests/**"
       - "Tools/Build-Studio-Windows.ps1"
+      - "Tools/TerrainSurfacePacker.cpp"
       - "Tools/Windows-Build.Common.ps1"
       - ".gitmodules"
   workflow_dispatch:

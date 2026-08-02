@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,7 @@
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
+#include "renegade/bridge/TerrainService.h"
 #include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
@@ -44,6 +46,7 @@ namespace renegade::studio
             FocusSelection,
             DuplicateSelection,
             DeleteSelection,
+            OpenScene,
             SaveScene,
             SaveSceneAs,
             ReopenScene,
@@ -54,12 +57,17 @@ namespace renegade::studio
             ScaleTool,
             ToggleGrid,
             OpenEnvironmentWorkspace,
+            OpenTerrainWorkspace,
             OpenSceneWorkspace,
             StartSunPreview,
             PauseSunPreview,
             SetOceanEnabled,
             SetOceanResolution,
             ApplyOceanPreset,
+            CreateTerrain,
+            ApplyTerrainMaterialPreset,
+            ApplyDefaultGrass,
+            ReloadTerrainMaterial,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -143,6 +151,18 @@ namespace renegade::studio
             DisplacementTolerance,
         };
 
+        enum class TerrainField
+        {
+            VisibleChunkRadius,
+            ChunkScale,
+            MinimumHeight,
+            MaximumHeight,
+            LowAltitudeBlend,
+            BaseBlend,
+            SlopeBlend,
+            LodBias,
+        };
+
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -194,11 +214,28 @@ namespace renegade::studio
             OceanField field,
             float value) noexcept;
         bool CommitOcean(const bridge::OceanState& ocean);
+        void CreateTerrain();
+        void BeginTerrainSlider(TerrainField field);
+        void PreviewTerrainSlider(TerrainField field, float value);
+        void CommitTerrainSlider(TerrainField field, float value);
+        void ApplyTerrainMaterialPreset(bridge::TerrainMaterialPreset preset);
+        void BeginTerrainTextureScale();
+        void PreviewTerrainTextureScale(float value);
+        void CommitTerrainTextureScale(float value);
+        void ApplyDefaultGrass();
+        void ReloadTerrainMaterial();
+        static void SetTerrainFieldValue(
+            bridge::TerrainState& terrain,
+            TerrainField field,
+            float value) noexcept;
+        bool CommitTerrain(const bridge::TerrainState& terrain);
+        bool HandleTerrainSculpt(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
+        void SetTerrainWorkspaceActive(bool active);
         void ApplyRenegadeTheme();
         void LoadGridResources();
-        void LayoutInspectorActions(bool environment);
+        void LayoutInspectorActions(bool environment, bool terrain = false);
         void DrawEditorGrid(wi::graphics::CommandList cmd) const;
         void SetGridVisible(bool visible);
         void CreateProjectHub();
@@ -215,6 +252,18 @@ namespace renegade::studio
             const XMFLOAT4& pointer) const noexcept;
         [[nodiscard]] bool IsSelectedEntityValid() const;
         void OpenProject();
+        void OpenScene();
+        void BeginOpenScene(const std::string& scenePath);
+        void CompleteOpenScene(bridge::PreparedSceneOpen prepared);
+        void AdoptOpenedSceneCamera();
+        // Fallback used by AdoptOpenedSceneCamera() when the opened
+        // document has no authored camera. Recenters the editor camera
+        // over the terrain's own saved chunk position so Wicked's
+        // camera-distance chunk streaming does not evict the
+        // just-loaded, correctly-deserialized terrain chunks on the
+        // next frame. No-ops if the scene has no terrain.
+        void AdoptOpenedSceneTerrainFallbackCamera(
+            const wi::scene::Scene& openedScene);
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
@@ -225,8 +274,11 @@ namespace renegade::studio
         void SyncGizmoSelection();
         void SyncSelectionOutline();
         void SaveScene();
-        void SaveSceneAs();
+        void SaveSceneAs(
+            std::function<void(bool)> completion = {});
         void ReopenScene();
+        void RequestSceneReplacement(
+            std::function<void()> continuation);
 
         bridge::StudioSession* session_ = nullptr;
         wi::Application::InfoDisplayer* diagnostics_ = nullptr;
@@ -309,6 +361,28 @@ namespace renegade::studio
         RenegadeSlider oceanExtinctionRed_;
         RenegadeSlider oceanExtinctionGreen_;
         RenegadeSlider oceanExtinctionBlue_;
+        wi::gui::Label terrainLabel_;
+        RenegadeButton createTerrainButton_;
+        RenegadeSlider terrainVisibleRadius_;
+        RenegadeSlider terrainChunkScale_;
+        RenegadeSlider terrainMinimumHeight_;
+        RenegadeSlider terrainMaximumHeight_;
+        RenegadeSlider terrainLowAltitudeBlend_;
+        RenegadeSlider terrainBaseBlend_;
+        RenegadeSlider terrainSlopeBlend_;
+        RenegadeSlider terrainLodBias_;
+        wi::gui::Label terrainMaterialLabel_;
+        RenegadeComboBox terrainMaterialPreset_;
+        RenegadeSlider terrainTextureScale_;
+        RenegadeButton terrainApplyDefaultGrassButton_;
+        RenegadeButton terrainReloadMaterialButton_;
+        wi::gui::Label terrainSculptLabel_;
+        RenegadeComboBox terrainSculptMode_;
+        RenegadeSlider terrainBrushRadius_;
+        RenegadeSlider terrainBrushStrength_;
+        RenegadeSlider terrainBrushFalloff_;
+        wi::gui::Label terrainBrushReadout_;
+        wi::gui::Label terrainStrokeDiagnostic_;
         RenegadeButton focusButton_;
         RenegadeButton duplicateButton_;
         RenegadeButton deleteButton_;
@@ -327,6 +401,7 @@ namespace renegade::studio
         wi::gui::TextInputField projectNameInput_;
         wi::gui::Button createProjectButton_;
         wi::gui::Button openProjectButton_;
+        wi::gui::Button openSceneButton_;
         wi::gui::Label recentProjectsLabel_;
         std::array<
             wi::gui::Button,
@@ -362,6 +437,7 @@ namespace renegade::studio
         bridge::WeatherState weatherSliderBefore_;
         bridge::WeatherState weatherSliderAfter_;
         bool environmentWorkspaceActive_ = false;
+        bool terrainWorkspaceActive_ = false;
         bool precipitationSliderActive_ = false;
         PrecipitationField precipitationSliderField_ =
             PrecipitationField::Intensity;
@@ -385,9 +461,33 @@ namespace renegade::studio
         bool pendingOceanEnabled_ = false;
         int pendingOceanResolution_ = 512;
         bridge::OceanPreset pendingOceanPreset_ = bridge::OceanPreset::Calm;
+        bool terrainSliderActive_ = false;
+        TerrainField terrainSliderField_ = TerrainField::VisibleChunkRadius;
+        wi::ecs::Entity terrainSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::TerrainState terrainSliderBefore_;
+        bridge::TerrainState terrainSliderAfter_;
+        bool terrainTextureScaleActive_ = false;
+        wi::ecs::Entity terrainMaterialEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::TerrainMaterialState terrainMaterialBefore_;
+        bridge::TerrainMaterialState terrainMaterialAfter_;
+        bridge::TerrainMaterialPreset pendingTerrainMaterialPreset_ =
+            bridge::TerrainMaterialPreset::Meadow;
+        bridge::TerrainSculptMode terrainSculptModeValue_ =
+            bridge::TerrainSculptMode::Raise;
+        float terrainBrushRadiusValue_ = 12.0f;
+        float terrainBrushStrengthValue_ = 1.0f;
+        float terrainBrushFalloffValue_ = 0.55f;
+        float terrainFlattenHeight_ = 0.0f;
+        bool terrainStrokeActive_ = false;
+        bool terrainStrokeChanged_ = false;
+        wi::ecs::Entity terrainStrokeEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::TerrainSculptState terrainStrokeBefore_;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
+        wi::jobsystem::context sceneOpenWorkload_;
+        std::string openingScenePath_;
+        bool sceneOpenInProgress_ = false;
     };
 
     class StudioApplication final : public wi::Application

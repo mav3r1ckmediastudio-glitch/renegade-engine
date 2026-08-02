@@ -87,18 +87,26 @@ namespace renegade::bridge
     {
     public:
         bool Execute(std::unique_ptr<ICommand> command);
+        // Records a command whose after-state is already live. This is used
+        // by continuous editor previews so mouse release does not restore and
+        // rebuild the before-state only to execute the same change again.
+        bool RecordExecuted(std::unique_ptr<ICommand> command);
         bool Undo();
         bool Redo();
         void Clear() noexcept;
+        void MarkSaved() noexcept;
 
         [[nodiscard]] bool CanUndo() const noexcept;
         [[nodiscard]] bool CanRedo() const noexcept;
+        [[nodiscard]] bool IsDirty() const noexcept;
         [[nodiscard]] std::size_t UndoCount() const noexcept;
         [[nodiscard]] std::size_t RedoCount() const noexcept;
 
     private:
         std::vector<std::unique_ptr<ICommand>> undoStack_;
         std::vector<std::unique_ptr<ICommand>> redoStack_;
+        std::size_t savedDepth_ = 0;
+        bool savedStateReachable_ = true;
     };
 
     class SetTranslationCommand final : public ICommand

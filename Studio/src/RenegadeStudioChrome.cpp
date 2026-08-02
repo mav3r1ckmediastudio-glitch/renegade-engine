@@ -465,6 +465,11 @@ namespace renegade::studio
         sceneName_ = std::move(sceneName);
     }
 
+    void RenegadeStudioChrome::SetSceneDirty(const bool dirty) noexcept
+    {
+        sceneDirty_ = dirty;
+    }
+
     void RenegadeStudioChrome::SetStatusText(std::string statusText)
     {
         statusText_ = std::move(statusText);
@@ -489,6 +494,12 @@ namespace renegade::studio
         const bool active) noexcept
     {
         environmentWorkspaceActive_ = active;
+    }
+
+    void RenegadeStudioChrome::SetTerrainWorkspaceActive(
+        const bool active) noexcept
+    {
+        terrainWorkspaceActive_ = active;
     }
 
     void RenegadeStudioChrome::SetPanelSizes(
@@ -630,6 +641,18 @@ namespace renegade::studio
         const float dt)
     {
         Widget::Update(canvas, dt);
+        if (dt > 0.0f)
+        {
+            fpsSampleTime_ += dt;
+            ++fpsSampleFrames_;
+            if (fpsSampleTime_ >= 0.25f)
+            {
+                displayedFps_ = static_cast<float>(fpsSampleFrames_) /
+                    fpsSampleTime_;
+                fpsSampleTime_ = 0.0f;
+                fpsSampleFrames_ = 0;
+            }
+        }
         pointerConsumed_ = false;
         const XMFLOAT4 layoutPointer = wi::input::GetPointer();
         const float inspectorEdge = width_ - inspectorWidth_;
@@ -779,7 +802,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 5> popupItemCounts = {
-                    4, 4, 4, 1, 3};
+                    5, 4, 4, 1, 3};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -795,11 +818,11 @@ namespace renegade::studio
                             action_(command);
                         }
                     };
-                    if (activeMenu_ == 0 && item >= 0 && item < 4)
+                    if (activeMenu_ == 0 && item >= 0 && item < 5)
                     {
-                        constexpr std::array<Action, 4> actions = {
-                            Action::ProjectHub, Action::Save,
-                            Action::SaveAs, Action::Reopen};
+                        constexpr std::array<Action, 5> actions = {
+                            Action::ProjectHub, Action::OpenScene,
+                            Action::Save, Action::SaveAs, Action::Reopen};
                         invoke(actions[item]);
                     }
                     else if (activeMenu_ == 1 && item >= 0 && item < 4)
@@ -860,7 +883,7 @@ namespace renegade::studio
                 toolX += widths[index] + 5.0f;
             }
 
-            const float sceneMetaX = width_ - 300.0f;
+            const float sceneMetaX = width_ - 360.0f;
             if (!consumed && y >= 34.0f && y < 58.0f)
             {
                 if (x >= sceneMetaX + 16.0f && x < sceneMetaX + 76.0f)
@@ -877,6 +900,15 @@ namespace renegade::studio
                     if (action_)
                     {
                         action_(Action::EnvironmentWorkspace);
+                    }
+                    consumed = true;
+                }
+                else if (x >= sceneMetaX + 208.0f &&
+                    x < sceneMetaX + 286.0f)
+                {
+                    if (action_)
+                    {
+                        action_(Action::TerrainWorkspace);
                     }
                     consumed = true;
                 }
@@ -1105,7 +1137,7 @@ namespace renegade::studio
             toolX += controlWidth + 5.0f;
         }
 
-        const float sceneMetaWidth = 300.0f;
+        const float sceneMetaWidth = 360.0f;
         const float sceneMetaX = width_ - sceneMetaWidth;
         DrawRect(
             sceneMetaX - 116.0f,
@@ -1134,9 +1166,12 @@ namespace renegade::studio
             1.25f,
             0.08f);
         const wi::Color sceneWorkspaceColor =
-            environmentWorkspaceActive_ ? TextSecondary : TextStrong;
+            environmentWorkspaceActive_ || terrainWorkspaceActive_
+                ? TextSecondary : TextStrong;
         const wi::Color environmentWorkspaceColor =
             environmentWorkspaceActive_ ? TextStrong : TextSecondary;
+        const wi::Color terrainWorkspaceColor =
+            terrainWorkspaceActive_ ? TextStrong : TextSecondary;
         DrawText(
             "SCENE",
             sceneMetaX + 20.0f,
@@ -1145,7 +1180,8 @@ namespace renegade::studio
             sceneWorkspaceColor,
             cmd,
             1.3f,
-            environmentWorkspaceActive_ ? 0.0f : 0.12f);
+            environmentWorkspaceActive_ || terrainWorkspaceActive_
+                ? 0.0f : 0.12f);
         DrawText(
             "ENVIRONMENT",
             sceneMetaX + 86.0f,
@@ -1155,12 +1191,25 @@ namespace renegade::studio
             cmd,
             1.1f,
             environmentWorkspaceActive_ ? 0.12f : 0.0f);
+        DrawText(
+            "TERRAIN",
+            sceneMetaX + 212.0f,
+            38.0f,
+            9,
+            terrainWorkspaceColor,
+            cmd,
+            1.15f,
+            terrainWorkspaceActive_ ? 0.12f : 0.0f);
         DrawRect(
-            environmentWorkspaceActive_
-                ? sceneMetaX + 82.0f
-                : sceneMetaX + 16.0f,
+            terrainWorkspaceActive_
+                ? sceneMetaX + 208.0f
+                : environmentWorkspaceActive_
+                    ? sceneMetaX + 82.0f
+                    : sceneMetaX + 16.0f,
             57.0f,
-            environmentWorkspaceActive_ ? 120.0f : 60.0f,
+            terrainWorkspaceActive_
+                ? 78.0f
+                : environmentWorkspaceActive_ ? 120.0f : 60.0f,
             2.0f,
             Forge,
             cmd);
@@ -1320,7 +1369,7 @@ namespace renegade::studio
             Forge,
             cmd);
         DrawText(
-            sceneName_ + ".WISCENE",
+            sceneName_ + ".WISCENE" + (sceneDirty_ ? " *" : ""),
             hierarchyWidth_ + 14.0f,
             TopBarHeight + 12.0f,
             10,
@@ -1607,8 +1656,9 @@ namespace renegade::studio
             std::vector<std::pair<std::string, bool>> items;
             if (activeMenu_ == 0)
             {
-                items = {{"PROJECT HUB", true}, {"SAVE", true},
-                    {"SAVE AS...", true}, {"REOPEN SCENE", true}};
+                items = {{"PROJECT HUB", true}, {"OPEN SCENE...", true},
+                    {"SAVE", true}, {"SAVE AS...", true},
+                    {"REOPEN SCENE", true}};
             }
             else if (activeMenu_ == 1)
             {
@@ -1673,6 +1723,25 @@ namespace renegade::studio
             statusTop + 9.0f,
             9,
             Muted,
+            cmd,
+            0.75f);
+        const std::string fpsText = displayedFps_ > 0.0f
+            ? std::to_string(static_cast<int>(std::lround(displayedFps_))) +
+                " FPS"
+            : "-- FPS";
+        DrawRect(
+            width_ - 402.0f,
+            statusTop + 7.0f,
+            1.0f,
+            14.0f,
+            Border,
+            cmd);
+        DrawText(
+            fpsText,
+            width_ - 386.0f,
+            statusTop + 9.0f,
+            9,
+            TextStrong,
             cmd,
             0.75f);
         DrawText(

@@ -12,6 +12,9 @@ viewport into a practical scene-editing surface. The milestone adds:
 - duplicate and delete;
 - undo and redo for complete transforms, duplication, and deletion;
 - direct Save alongside Save As and Reopen;
+- Open Scene from both the Project Hub and Studio File menu, with a native
+  `.wiscene` picker, Save/Discard/Cancel protection, and the opened filename
+  shown in the scene tab;
 - keyboard shortcuts for the common editing actions; and
 - a compact FPS readout confined to the viewport instead of diagnostic text
   overlapping the command bar.

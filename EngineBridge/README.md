@@ -7,17 +7,22 @@ Studio and Runtime workflows from upstream implementation changes.
 
 The implementation provides:
 
-- `SceneService`, which owns a Renegade scene, reads a WISCENE archive into a
-  temporary scene with `Scene::Serialize`, validates that it contains entities,
-  and only then replaces the active scene. It generates the Proving Ground from
-  `ProvingGroundBlueprint()` and exposes the primary weather entity.
+- `SceneService`, which owns Renegade's active Wicked scene, provides the
+  Runtime startup load, generates the Proving Ground from
+  `ProvingGroundBlueprint()`, and exposes the primary weather entity.
+- `SceneDocumentService`, which owns WISCENE Save, Save As, Open and Reopen.
+  Open prepares without touching the active scene and commits scene, path,
+  selection and history together at Studio's Wicked thread-safe point. Save
+  writes and validates a temporary archive, protects the previous version,
+  atomically replaces the destination and maintains ten rolling backups.
 - `SelectionService`, which owns editor selection independently of any UI.
 - `CommandService`, which owns undoable complete transforms, recursive entity
   duplication, recursive entity deletion, and curated weather edits.
 - `ProjectService`, which creates and validates v1 `.renegade` descriptors,
   persists the ordered recent-project list, and stores editor preferences
   alongside it.
-- `StudioSession`, which coordinates scene replacement and selection reset.
+- `StudioSession`, which exposes the document, project and editor-state
+  services to Studio without duplicating scene replacement logic.
 
 These are deliberately bounded service interfaces. Studio widgets must use
 them instead of creating UI-owned project or scene state.
@@ -27,8 +32,8 @@ them instead of creating UI-owned project or scene state.
 **No renderer-dependent calls.** `Scene::Update()` must not appear anywhere in
 this layer; the render-capable Studio frame loop owns scene advancement. The
 same applies transitively — `wi::scene::LoadModel` is an import path that calls
-`Scene::Update()` internally, which is why `LoadScene` reads the archive
-directly instead.
+`Scene::Update()` internally, which is why `SceneDocumentService` prepares a
+native archive read directly through Wicked's `Archive` and `Scene::Serialize`.
 
 **Curated state, not whole components.** A command's state struct captures only
 the fields Renegade exposes, and applying it must leave every other value on the

@@ -3,6 +3,7 @@
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/SelectionService.h"
 
 namespace renegade::bridge
@@ -25,6 +26,16 @@ namespace renegade::bridge
             return selection_;
         }
 
+        [[nodiscard]] SceneDocumentService& Documents() noexcept
+        {
+            return documents_;
+        }
+
+        [[nodiscard]] const SceneDocumentService& Documents() const noexcept
+        {
+            return documents_;
+        }
+
         [[nodiscard]] CommandService& Commands() noexcept
         {
             return commands_;
@@ -42,28 +53,22 @@ namespace renegade::bridge
 
         void NewScene()
         {
-            commands_.Clear();
-            selection_.Clear();
-            scenes_.NewScene();
+            documents_.NewScene();
         }
 
         bool LoadScene(const std::string& filePath)
         {
-            commands_.Clear();
-            selection_.Clear();
-            return scenes_.LoadScene(filePath);
+            return documents_.Open(filePath);
         }
 
         bool SaveScene(const std::string& filePath)
         {
-            return scenes_.SaveScene(filePath);
+            return documents_.Save(filePath);
         }
 
         bool ReloadScene()
         {
-            commands_.Clear();
-            selection_.Clear();
-            return scenes_.ReloadScene();
+            return documents_.Reload();
         }
 
     private:
@@ -71,5 +76,7 @@ namespace renegade::bridge
         SceneService scenes_;
         SelectionService selection_;
         CommandService commands_;
+        SceneDocumentService documents_{
+            scenes_, selection_, commands_, projects_};
     };
 }

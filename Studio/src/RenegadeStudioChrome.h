@@ -82,6 +82,7 @@ namespace renegade::studio
         enum class Action
         {
             ProjectHub,
+            OpenScene,
             Save,
             SaveAs,
             Reopen,
@@ -92,6 +93,7 @@ namespace renegade::studio
             Focus,
             ToggleGrid,
             EnvironmentWorkspace,
+            TerrainWorkspace,
             SceneWorkspace,
         };
 
@@ -107,12 +109,14 @@ namespace renegade::studio
         void SetLayout(float width, float height);
         void SetHierarchyRows(std::vector<HierarchyRow> rows);
         void SetSceneName(std::string sceneName);
+        void SetSceneDirty(bool dirty) noexcept;
         void SetStatusText(std::string statusText);
         void SetSelectionName(std::string selectionName);
         void SetActiveTool(int toolIndex) noexcept;
         void SetHierarchyFilter(std::string filter);
         void SetGridVisible(bool visible) noexcept;
         void SetEnvironmentWorkspaceActive(bool active) noexcept;
+        void SetTerrainWorkspaceActive(bool active) noexcept;
         void SetPanelSizes(
             float hierarchyWidth,
             float inspectorWidth,
@@ -155,14 +159,19 @@ namespace renegade::studio
         int activeViewportMenu_ = -1;
         bool gridVisible_ = true;
         bool environmentWorkspaceActive_ = false;
+        bool terrainWorkspaceActive_ = false;
         bool pointerConsumed_ = false;
         wi::Resource brandLockup_;
         std::vector<HierarchyRow> hierarchyRows_;
         std::vector<std::size_t> visibleHierarchyRows_;
         std::string sceneName_ = "PROVING GROUND";
+        bool sceneDirty_ = false;
         std::string statusText_ = "STUDIO READY";
         std::string selectionName_;
         std::string hierarchyFilter_;
+        float fpsSampleTime_ = 0.0f;
+        float displayedFps_ = 0.0f;
+        std::uint32_t fpsSampleFrames_ = 0;
         std::function<void(std::uint64_t)> hierarchySelected_;
         std::function<void(int)> toolSelected_;
         std::function<void(Action)> action_;

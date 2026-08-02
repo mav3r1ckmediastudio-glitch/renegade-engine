@@ -17,11 +17,13 @@ through undoable commands.
 Since then, the Renegade-owned Studio chrome functional slice (PR #7),
 Environment workspace and precipitation (PR #8), Sun and time-of-day
 authoring (PR #9), and Native ocean authoring (PR #10) have all merged and
-passed packaged DX12/Vulkan acceptance. `main` is clean at `475ac45` with no
-branch on its history awaiting review.
+passed packaged DX12/Vulkan acceptance. `main` remains at `475ac45`; PR #11
+carries the active terrain and robust scene-document work on
+`phase3/terrain-authoring`.
 
-Remaining for the phase: light and material authoring, then the asset-facing
-work that Phase 4 depends on.
+By product-owner decision on 2026-07-31, Terrain Authoring V1 is now the active
+gate. Light and material authoring follows it, then the asset-facing work that
+Phase 4 depends on.
 
 ## Phase plan
 
@@ -84,9 +86,26 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-**Light and Material Authoring.** The Environment inspector proved the pattern;
-extend it to the two component types that still block the creator from fixing
-the generated scene's look.
+**Terrain Authoring V1.** Establish a real landmass workflow on Wicked's native
+streamed terrain before returning to Light and Material Authoring.
+
+- Create named native terrain with neutral automatic material regions.
+- Create the standard 1,716 x 1,716 m native terrain. Terrain-shape presets
+  are deferred until each one produces a visibly distinct, tested landform.
+- Add raise/lower, smooth, and flatten brushes with radius, strength, and
+  falloff.
+- Add material-layer painting and automatic slope/height rules.
+- Import and export validated 16-bit heightmaps.
+- Route persistent changes through `CommandService`; preserve native WISCENE
+  serialization and all unexposed terrain fields.
+- Require Windows Debug and Release CI, headless bridge tests, packaged DX12
+  visual acceptance, save/reopen, and Vulkan cross-check.
+
+See `docs/PHASE3_TERRAIN_AUTHORING.md` for the bounded slice sequence.
+
+**Following gate: Light and Material Authoring.** The Environment inspector
+proved the pattern; extend it to the two component types that still block the
+creator from fixing the generated scene's look.
 
 - Add a Light inspector for `LightComponent`: type, colour, intensity, range,
   cone angles, cast-shadow, volumetrics and `volumetric_boost`.
