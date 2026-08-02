@@ -279,7 +279,23 @@ namespace renegade::bridge
             HashValue(fingerprint, material.metalness);
             for (const auto& texture : material.textures)
             {
-                HashString(fingerprint, texture.name);
+                // Wicked deliberately serializes texture.name relative to the
+                // WISCENE's own directory and does not restore it to an
+                // absolute path on reload (unlike embedded resource data,
+                // which does get GetSourceDirectory()-prefixed in
+                // wiResourceManager.cpp). A freshly imported scene therefore
+                // holds an absolute source path, while the same scene
+                // reloaded from disk holds a path relative to
+                // Saved/Validation/ModelImport -- two different strings for
+                // the same referenced file. Hashing the full path made this
+                // proof fail on every textured model regardless of whether
+                // anything was actually lost. Hash just the filename, which
+                // is invariant to that legitimate relative/absolute rewrite
+                // but still catches a texture slot pointing at a different
+                // file.
+                HashString(
+                    fingerprint,
+                    wi::helper::GetFileNameFromPath(texture.name));
                 HashValue(fingerprint, texture.uvset);
                 if (!texture.name.empty())
                 {
