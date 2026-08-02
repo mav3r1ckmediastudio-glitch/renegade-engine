@@ -72,6 +72,7 @@ namespace renegade::studio
             ApplyDefaultGrass,
             ReloadTerrainMaterial,
             ValidateModelImport,
+            ImportModel,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -253,6 +254,10 @@ namespace renegade::studio
         void RunModelImportProof(const std::string& sourcePath);
         void PresentModelImportProof(
             const bridge::ImportResult& result);
+        void ImportModel();
+        void RunModelImportPlacement(const std::string& sourcePath);
+        void CompleteModelImportPlacement(
+            bridge::PreparedModelImport prepared);
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,

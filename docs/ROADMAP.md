@@ -35,6 +35,14 @@ scene or registering a project asset. Packaged logging has now proved the
 converter and imported-scene summary complete successfully. The correction in
 validation moves WISCENE serialization/reload out of the worker and onto
 Wicked's thread-safe engine stage, matching the upstream Editor save path.
+A follow-up correction fixed a write-path crash and a false-positive
+round-trip comparison; Gate 1 acceptance is now closed on packaged DX12 and
+Vulkan against both a single-object model and a multi-node, multi-material,
+skinned/animated model (see `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` and
+`HANDOFF.md`). A smaller, uncommitted follow-on slice adds `ADD > IMPORT
+MODEL...`, merging a converted model directly into the active scene with
+Undo/Redo, short of full Asset Browser registration; it has not yet run in a
+packaged build.
 
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light

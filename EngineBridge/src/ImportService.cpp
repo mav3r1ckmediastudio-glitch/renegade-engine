@@ -5,12 +5,30 @@
 #include <fstream>
 #include <ios>
 #include <sstream>
+#include <utility>
 
 #include <ModelImporter.h>
 
 namespace
 {
     namespace fs = std::filesystem;
+
+    // Mirrors the file-local helper of the same name in CommandService.cpp.
+    // Not shared through a header because it is a small, self-contained
+    // check and both call sites already depend on the full scene API.
+    bool EntityExists(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
+
+        wi::unordered_set<wi::ecs::Entity> entities;
+        scene.FindAllEntities(entities);
+        return entities.count(entity) != 0;
+    }
 
     constexpr std::uint64_t FingerprintSeed = 1469598103934665603ull;
     constexpr std::uint64_t FingerprintPrime = 1099511628211ull;
@@ -465,5 +483,85 @@ namespace renegade::bridge
         result.succeeded = true;
         RecordStage(result.assetPath, "pass");
         return result;
+    }
+
+    PlaceImportedModelCommand::PlaceImportedModelCommand(
+        wi::scene::Scene& targetScene,
+        wi::allocator::shared_ptr<wi::scene::Scene> preparedScene,
+        const XMFLOAT3& placementPosition)
+        : scene_(&targetScene)
+        , preparedScene_(std::move(preparedScene))
+        , placementPosition_(placementPosition)
+    {
+    }
+
+    bool PlaceImportedModelCommand::Execute()
+    {
+        if (!hasSnapshot_)
+        {
+            // First execution: merge the freshly converted scene in.
+            if (scene_ == nullptr || !preparedScene_.IsValid())
+            {
+                return false;
+            }
+
+            const std::size_t transformCountBefore =
+                scene_->transforms.GetCount();
+
+            // Scene::Merge() moves preparedScene_'s contents into *scene_ and
+            // leaves preparedScene_ empty; release our reference immediately
+            // afterward so nothing holds a stale handle to it.
+            scene_->Merge(*preparedScene_);
+            preparedScene_.reset();
+
+            if (scene_->transforms.GetCount() <= transformCountBefore)
+            {
+                return false;
+            }
+
+            // Matches Wicked's own convention (Editor.cpp: "Imported models
+            // always have a root transform entity") -- the first newly added
+            // transform is the imported model's root.
+            entity_ = scene_->transforms.GetEntity(transformCountBefore);
+            if (auto* transform = scene_->transforms.GetComponent(entity_))
+            {
+                transform->translation_local = placementPosition_;
+                transform->SetDirty();
+            }
+
+            snapshot_.SetReadModeAndResetPos(false);
+            wi::ecs::EntitySerializer serializer;
+            scene_->Entity_Serialize(snapshot_, serializer, entity_);
+            hasSnapshot_ = true;
+            return true;
+        }
+
+        // Redo: Undo removed the root and its whole imported hierarchy;
+        // restore them from the snapshot with their original entity IDs.
+        if (scene_ == nullptr || EntityExists(*scene_, entity_))
+        {
+            return false;
+        }
+
+        snapshot_.SetReadModeAndResetPos(true);
+        wi::ecs::EntitySerializer serializer;
+        serializer.allow_remap = false;
+        const auto restored = scene_->Entity_Serialize(snapshot_, serializer);
+        return restored == entity_;
+    }
+
+    void PlaceImportedModelCommand::Undo()
+    {
+        if (scene_ != nullptr && EntityExists(*scene_, entity_))
+        {
+            // Recursive by default: removes the whole imported hierarchy,
+            // not just the root.
+            scene_->Entity_Remove(entity_);
+        }
+    }
+
+    wi::ecs::Entity PlaceImportedModelCommand::PlacedEntity() const noexcept
+    {
+        return entity_;
     }
 }

@@ -3,8 +3,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 
 #include <WickedEngine.h>
+
+#include "renegade/bridge/CommandService.h"
 
 namespace renegade::bridge
 {
@@ -69,6 +72,17 @@ namespace renegade::bridge
             return result_;
         }
 
+        // Hands ownership of the converted scene to the caller, for callers
+        // that place the model directly (PlaceImportedModelCommand) rather
+        // than running the Gate 1 WISCENE round-trip proof. Only meaningful
+        // when IsReady() is true; the returned pointer may be empty
+        // otherwise, and is always empty after this has been called once.
+        [[nodiscard]] wi::allocator::shared_ptr<wi::scene::Scene>
+        ReleaseScene() noexcept
+        {
+            return std::move(scene_);
+        }
+
     private:
         friend class ImportService;
 
@@ -92,5 +106,39 @@ namespace renegade::bridge
 
         [[nodiscard]] static ImportedSceneSummary Summarize(
             const wi::scene::Scene& scene) noexcept;
+    };
+
+    // Merges a freshly converted model directly into a live Studio scene and
+    // supports Undo/Redo. This is deliberately separate from the Gate 1 proof
+    // pipeline above (PrepareGltfAsset/CompleteGltfAsset), which never
+    // touches the active scene. PlaceImportedModelCommand does not write any
+    // asset file of its own; the placed entity persists the same way any
+    // other native entity does, through the normal scene Save path. Reusable
+    // project asset registration is a separate, later milestone.
+    class PlaceImportedModelCommand final : public ICommand
+    {
+    public:
+        // preparedScene must be a valid, ready result of
+        // ImportService::PrepareGltfAsset (via PreparedModelImport::
+        // ReleaseScene()). Wicked's Scene::Merge() empties the source scene
+        // as it moves content into targetScene, so this command takes
+        // ownership of it.
+        PlaceImportedModelCommand(
+            wi::scene::Scene& targetScene,
+            wi::allocator::shared_ptr<wi::scene::Scene> preparedScene,
+            const XMFLOAT3& placementPosition);
+
+        bool Execute() override;
+        void Undo() override;
+
+        [[nodiscard]] wi::ecs::Entity PlacedEntity() const noexcept;
+
+    private:
+        wi::scene::Scene* scene_ = nullptr;
+        wi::allocator::shared_ptr<wi::scene::Scene> preparedScene_;
+        XMFLOAT3 placementPosition_ = {};
+        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+        wi::Archive snapshot_;
+        bool hasSnapshot_ = false;
     };
 }

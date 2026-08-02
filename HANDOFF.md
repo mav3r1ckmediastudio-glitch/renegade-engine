@@ -106,7 +106,67 @@ pass for the service and tests, but this Linux container has no CMake and
 cannot itself execute the Windows DX12/Vulkan import round trip — all
 packaged evidence above came from the project owner's machine.
 
-## Active slice — Model Import V1 Gate 1
+## Active slice — Model Import: Scene Placement (uncommitted)
+
+Not yet committed or built. This is local, unverified work following Gate 1
+closure — see `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for the full scope,
+design rationale, and packaged acceptance checklist. Summary:
+
+- Added `PreparedModelImport::ReleaseScene()` so a caller can take ownership
+  of the converted scene without going through the Gate 1 WISCENE round
+  trip.
+- Added `PlaceImportedModelCommand` (`ICommand`) in
+  `EngineBridge/include/renegade/bridge/ImportService.h` /
+  `EngineBridge/src/ImportService.cpp`: merges a prepared scene into the
+  active Studio scene via `Scene::Merge()`, locates the new root the same
+  way stock Wicked Editor does ("imported models always have a root
+  transform entity" — the first newly added transform), positions it five
+  metres in front of the camera, and snapshots it with
+  `Scene::Entity_Serialize(..., RECURSIVE)` for Undo/Redo, mirroring the
+  existing `DuplicateEntityCommand`/`DeleteEntityCommand` pattern.
+- Added `ADD > IMPORT MODEL...` to `RenegadeStudioChrome`
+  (`Studio/src/RenegadeStudioChrome.h`/`.cpp`) and wired it through
+  `StudioApplication`'s existing deferred `EditorAction` queue
+  (`ImportModel()` / `RunModelImportPlacement()` /
+  `CompleteModelImportPlacement()`), following the same file-dialog →
+  worker-thread conversion → `EVENT_THREAD_SAFE_POINT` completion shape as
+  `ValidateModelImport()`/`RunModelImportProof()`, and the same
+  select-and-reveal UX as `PlaceLight()`.
+- Added `PlaceImportedModelCommand` Execute/Undo/Redo coverage to
+  `Tests/ImportTests.cpp` using a synthetic scene (no real GLTF conversion,
+  since that needs a graphics device this test harness does not have).
+- This does not register a reusable project asset and does not write any
+  asset file; the model persists only as part of the active scene through
+  the existing Save path. `BUILD > VALIDATE GLB/GLTF IMPORT...` is
+  untouched.
+
+Changed files:
+
+- `EngineBridge/include/renegade/bridge/ImportService.h`
+- `EngineBridge/src/ImportService.cpp`
+- `Studio/src/RenegadeStudioChrome.h`
+- `Studio/src/RenegadeStudioChrome.cpp`
+- `Studio/src/StudioApplication.h`
+- `Studio/src/StudioApplication.cpp`
+- `Tests/ImportTests.cpp`
+- `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` (new)
+- `docs/FEATURE_MATRIX.csv`
+- `HANDOFF.md`
+
+**No local validation has run against this yet** — no syntax check, no
+build, no packaged test. It has not even been committed. Before treating any
+part of this as working:
+
+1. Run the same kind of local C++17 syntax check used for prior slices
+   (see the Gate 1 commands below) against the seven changed source files.
+2. Commit and push, then run Windows CI.
+3. Package Release, then run every step in
+   `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`'s packaged acceptance checklist
+   on both DX12 and Vulkan. A crash, a failure to merge, a broken Undo/Redo,
+   or a loss of the imported model on Save/Reopen all stop this gate, same
+   as every other gate in this repository.
+
+## Completed slice — Model Import V1 Gate 1
 
 Changed files:
 
@@ -158,14 +218,13 @@ and Vulkan with matching counts. **Gate 1 acceptance is closed.**
 2. Wicked's importer reports malformed-file errors through its
    reference-editor message box; production structured error capture remains
    a later hardening gate and must not be hidden.
-3. Begin the next milestone named in `docs/PHASE4_MODEL_IMPORT_V1.md`'s "Next
-   gate after acceptance": a Renegade-owned **Asset Browser > Add Asset**
-   importer workspace with isolated preview, import settings, project asset
-   registration, and a reusable browser entry. Model placement into the
-   active Studio scene and scene-instance inspection follow that
-   registered-asset boundary — neither exists yet. The current `BUILD >
-   VALIDATE GLB/GLTF IMPORT...` command stays as a diagnostic proof route; it
-   is not the creator-facing importer and should not be repurposed into one.
+3. Scene placement (merging an imported model into the active scene with
+   Undo/Redo) is drafted in the new active slice above, but is uncommitted
+   and has not run in packaged Studio yet. The full **Asset Browser > Add
+   Asset** workspace — project asset registration and a reusable browser
+   entry, so a model can be instanced without re-converting — remains
+   further out and is intentionally not part of that draft; see
+   `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`.
 
 ## Completed previous slice — Add Light workflow
 

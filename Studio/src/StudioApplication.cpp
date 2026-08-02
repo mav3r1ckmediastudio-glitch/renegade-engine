@@ -1967,6 +1967,9 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::ValidateModelImport:
                 pendingAction_ = EditorAction::ValidateModelImport;
                 break;
+            case RenegadeStudioChrome::Action::ImportModel:
+                pendingAction_ = EditorAction::ImportModel;
+                break;
             }
         });
         studioChrome_.OnDrawerChanged([this](const int tab)
@@ -3575,6 +3578,9 @@ namespace renegade::studio
             break;
         case EditorAction::ValidateModelImport:
             ValidateModelImport();
+            break;
+        case EditorAction::ImportModel:
+            ImportModel();
             break;
         case EditorAction::None:
         default:
@@ -5908,6 +5914,148 @@ namespace renegade::studio
             std::string("MODEL IMPORT PROOF // ") +
             (result.succeeded ? "PASS // " : "FAIL // ") + renderer);
         wi::helper::messageBox(report.str(), "Model Import Gate 1");
+    }
+
+    void StudioRenderPath::ImportModel()
+    {
+        if (session_ == nullptr ||
+            session_->Projects().CurrentProject().rootPath.empty())
+        {
+            wi::helper::messageBox(
+                "Open or create a Renegade project before importing a model.",
+                "Import Model");
+            return;
+        }
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "GLB/GLTF model to import into the scene";
+        params.extensions.push_back("glb");
+        params.extensions.push_back("gltf");
+        wi::helper::FileDialog(
+            params,
+            [this](const std::string& sourcePath)
+            {
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, sourcePath](uint64_t)
+                    {
+                        if (sourcePath.empty())
+                        {
+                            return;
+                        }
+                        if (wi::jobsystem::IsBusy(modelImportWorkload_))
+                        {
+                            wi::helper::messageBox(
+                                "A model import is already running.",
+                                "Import Model");
+                            return;
+                        }
+
+                        const fs::path source = fs::u8path(sourcePath);
+                        studioChrome_.SetStatusText(
+                            "IMPORT MODEL // CONVERTING // " +
+                            source.filename().u8string());
+                        RunModelImportPlacement(sourcePath);
+                    });
+            });
+    }
+
+    void StudioRenderPath::RunModelImportPlacement(
+        const std::string& sourcePath)
+    {
+        if (session_ == nullptr || sourcePath.empty())
+        {
+            return;
+        }
+
+        // ImportService::PrepareGltfAsset requires a .wiscene-shaped
+        // destination for its extension check and stage-breadcrumb log, but
+        // placement never writes there. The converted model is merged
+        // straight into the active scene by PlaceImportedModelCommand and
+        // persists the same way any other native entity does, through the
+        // normal Save path -- it does not become a separate, reusable
+        // project asset. That registration step belongs to the later Asset
+        // Browser > Add Asset milestone.
+        const fs::path stagingDirectory =
+            fs::u8path(session_->Projects().CurrentProject().rootPath) /
+            "Saved" / "Validation" / "ModelImport";
+        const fs::path source = fs::u8path(sourcePath);
+        const fs::path stagingPath = stagingDirectory /
+            fs::u8path(source.stem().u8string() + ".wiscene");
+
+        const std::string stagingPathString =
+            stagingPath.generic_u8string();
+        wi::jobsystem::Execute(
+            modelImportWorkload_,
+            [this, sourcePath, stagingPathString](wi::jobsystem::JobArgs)
+            {
+                auto prepared = std::make_shared<bridge::PreparedModelImport>(
+                    bridge::ImportService().PrepareGltfAsset(
+                        sourcePath,
+                        stagingPathString));
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, prepared](uint64_t)
+                    {
+                        CompleteModelImportPlacement(std::move(*prepared));
+                    });
+            });
+    }
+
+    void StudioRenderPath::CompleteModelImportPlacement(
+        bridge::PreparedModelImport prepared)
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        if (!prepared.IsReady())
+        {
+            studioChrome_.SetStatusText("IMPORT MODEL // FAILED");
+            wi::helper::messageBox(
+                "Could not import the model.\n\nReason: " +
+                    prepared.Result().error,
+                "Import Model");
+            return;
+        }
+
+        const std::string sourcePath = prepared.Result().sourcePath;
+
+        XMFLOAT3 position(0.0f, 0.0f, 0.0f);
+        if (camera != nullptr)
+        {
+            position = camera->Eye;
+            position.x += camera->At.x * 5.0f;
+            position.y += camera->At.y * 5.0f;
+            position.z += camera->At.z * 5.0f;
+        }
+
+        ClearSelectionOutline();
+        auto command = std::make_unique<bridge::PlaceImportedModelCommand>(
+            session_->Scenes().GetScene(),
+            prepared.ReleaseScene(),
+            position);
+        auto* placeCommand = command.get();
+        if (!session_->Commands().Execute(std::move(command)))
+        {
+            studioChrome_.SetStatusText("IMPORT MODEL // FAILED");
+            wi::helper::messageBox(
+                "The converted model produced no placeable entity.",
+                "Import Model");
+            SyncSelectionOutline();
+            return;
+        }
+
+        session_->Selection().Select(placeCommand->PlacedEntity());
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+
+        const fs::path source = fs::u8path(sourcePath);
+        studioChrome_.SetStatusText(
+            "IMPORT MODEL // PLACED // " + source.filename().u8string());
     }
 
     void StudioRenderPath::CreateProject()
