@@ -5817,6 +5817,22 @@ namespace renegade::studio
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, sourcePath](uint64_t)
                     {
+                        if (sourcePath.empty())
+                        {
+                            return;
+                        }
+                        if (wi::jobsystem::IsBusy(modelImportWorkload_))
+                        {
+                            wi::helper::messageBox(
+                                "A model import validation is already running.",
+                                "Model Import Gate 1");
+                            return;
+                        }
+
+                        const fs::path source = fs::u8path(sourcePath);
+                        studioChrome_.SetStatusText(
+                            "MODEL IMPORT PROOF // RUNNING // " +
+                            source.filename().u8string());
                         RunModelImportProof(sourcePath);
                     });
             });
@@ -5836,14 +5852,27 @@ namespace renegade::studio
         const fs::path assetPath =
             outputDirectory / fs::u8path(source.stem().u8string() + ".wiscene");
 
-        studioChrome_.SetStatusText(
-            "MODEL IMPORT PROOF // RUNNING // " + source.filename().u8string());
+        const std::string destinationPath = assetPath.generic_u8string();
+        wi::jobsystem::Execute(
+            modelImportWorkload_,
+            [this, sourcePath, destinationPath](wi::jobsystem::JobArgs)
+            {
+                auto result = std::make_shared<bridge::ImportResult>(
+                    bridge::ImportService().ImportGltfAsset(
+                        sourcePath,
+                        destinationPath));
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, result](uint64_t)
+                    {
+                        PresentModelImportProof(*result);
+                    });
+            });
+    }
 
-        const bridge::ImportResult result =
-            bridge::ImportService().ImportGltfAsset(
-                sourcePath,
-                assetPath.generic_u8string());
-
+    void StudioRenderPath::PresentModelImportProof(
+        const bridge::ImportResult& result)
+    {
         const auto* device = wi::graphics::GetDevice();
         const std::string renderer = device != nullptr &&
                 device->GetShaderFormat() == wi::graphics::ShaderFormat::SPIRV

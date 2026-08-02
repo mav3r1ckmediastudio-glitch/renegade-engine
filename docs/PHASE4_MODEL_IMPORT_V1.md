@@ -20,6 +20,9 @@ the selected model in the Asset Browser.
 - Nothing is written to project `Content` and no asset record is created.
 - The converter runs only after Studio has initialized its DX12 or Vulkan
   graphics device.
+- Conversion and WISCENE round-trip work run on Wicked's job system, matching
+  the upstream Editor importer. Only status and result presentation return to
+  `EVENT_THREAD_SAFE_POINT`; the converter must never run inside that callback.
 
 ## Packaged acceptance
 
@@ -38,6 +41,20 @@ slots gives stronger evidence than a single untextured primitive.
 A crash, failure dialog, changed active scene, or differing structural counts
 stops the gate. A pass does not yet authorize the visible importer workspace;
 the owner must report both packaged renderer results first.
+
+## First packaged-test correction
+
+The first packaged proof route incorrectly invoked the complete converter from
+`EVENT_THREAD_SAFE_POINT`. A valid 18 MB Sketchfab GLB containing 68 nodes,
+27 meshes, two materials, seven embedded textures, one skin, and one animation
+then exited Studio during import. The source GLB passed container and JSON
+structure inspection and uses only optional `KHR_materials_specular` material
+data supported by the pinned Wicked converter.
+
+The corrected route starts conversion on a dedicated Wicked job-system context
+and subscribes to the thread-safe point only after the import result exists.
+Both renderer acceptance tests must use the same GLB again; the original crash
+is evidence of a failed gate, not evidence of a bad source asset.
 
 ## Next gate after acceptance
 

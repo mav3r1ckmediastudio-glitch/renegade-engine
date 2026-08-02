@@ -73,6 +73,14 @@ this container and is not a repository file. CMake is unavailable locally.
 
 Risks and next task:
 
+The first packaged attempt crashed with the representative windmill GLB because
+the proof route ran Wicked's converter inside `EVENT_THREAD_SAFE_POINT`. The
+follow-up moves conversion and WISCENE validation onto a dedicated Wicked job
+context and returns to the safe point only to present the result, matching the
+upstream Editor's threading pattern. The attached GLB itself passed structural
+inspection (27 meshes, 68 nodes, seven embedded textures, one skin and one
+animation).
+
 1. Run fresh Windows CI to prove MSVC compiles the extracted upstream source and
    temporary Studio proof route in the Renegade target.
 2. In packaged Studio, run **BUILD > VALIDATE GLB/GLTF IMPORT...** with the

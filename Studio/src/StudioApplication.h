@@ -251,6 +251,8 @@ namespace renegade::studio
         void ReloadTerrainMaterial();
         void ValidateModelImport();
         void RunModelImportProof(const std::string& sourcePath);
+        void PresentModelImportProof(
+            const bridge::ImportResult& result);
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -564,6 +566,7 @@ namespace renegade::studio
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
         wi::jobsystem::context sceneOpenWorkload_;
+        wi::jobsystem::context modelImportWorkload_;
         std::string openingScenePath_;
         bool sceneOpenInProgress_ = false;
     };
