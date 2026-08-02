@@ -18,6 +18,9 @@
 
 **Model Import V1 serialization correction:** `e0427e9`
 
+**Model Import V1 write-crash and round-trip fingerprint correction:**
+`550d6d7`, `4e78e1b`, `50bb1eb`
+
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current truth
@@ -37,9 +40,71 @@ scene and adds no visible importer UI.
 
 The pinned Wicked converter creates mesh/material render data and calls
 `Scene::Update()`, so it requires an initialized graphics device. The service
-rejects calls without one. Local C++17 syntax checks pass for the service,
-tests, and upstream importer source, but this Linux container has no CMake and
-cannot execute the authoritative Windows DX12/Vulkan import round trip.
+rejects calls without one.
+
+Two further defects were found from a packaged desktop-exit report against
+`C:/Users/paulw/Downloads/crate_box/scene.gltf` and fixed at `550d6d7`,
+`4e78e1b`, and `50bb1eb`:
+
+1. **Write-path crash (`550d6d7`).** `WriteScene()` called `archive.Close()`
+   explicitly mid-function to flush the file before reopening it for
+   round-trip validation, then let the same `wi::Archive` local go out of
+   scope. `~Archive()` unconditionally calls `Close()` again, and
+   `Archive::Close()` is not idempotent: in write mode it re-invokes
+   `SaveFile()` every time, and the second call ran with an already-cleared,
+   null `data_ptr` and a stale non-zero `pos`, writing megabytes from address
+   0. That is an access violation, not a C++ exception, so it skipped every
+   `try/catch` and took the whole process down below `wiscene_write_complete`
+   with no further breadcrumb — exactly matching the `.import.log` evidence.
+   Fixed by writing once via `archive.SaveFile(path)` and then disarming the
+   archive (`archive = wi::Archive();`) before its destructor can run,
+   mirroring the existing pattern already used in
+   `SceneDocumentService.cpp`.
+2. **Round-trip false failure (`4e78e1b`, `50bb1eb`).** Once the crash was
+   fixed, Gate 1 produced a controlled `FAIL` instead: "Imported WISCENE
+   structure changed during save and reload," with identical object/mesh/
+   material/transform/hierarchy counts on both sides. Root cause:
+   `MaterialComponent::Serialize` in Wicked writes texture names relative to
+   the WISCENE's own directory (`wi::helper::GetPathRelative(dir, ...)`) but
+   does not restore them to absolute on load (unlike embedded resource data
+   in `wiResourceManager.cpp`, which is explicitly re-prefixed with
+   `archive.GetSourceDirectory()`). A freshly imported scene therefore holds
+   an absolute source texture path, and the same scene reloaded from disk
+   holds a path relative to `Saved/Validation/ModelImport/` — two different
+   strings for the same file. `ImportService::Summarize()`'s structural
+   fingerprint was hashing the full texture path, so it flagged this
+   legitimate, intentional Wicked behaviour as a structural regression on
+   every textured model. Fixed by hashing only
+   `wi::helper::GetFileNameFromPath(texture.name)`, which still catches a
+   texture slot pointing at a genuinely different file but is invariant to
+   the relative/absolute rewrite. `4e78e1b` also added a field-by-field
+   diff to the failure message so future mismatches are diagnosable from the
+   dialog/log instead of guessed at.
+
+**Packaged evidence (project owner, both renderers, commit `50bb1eb`):**
+
+- `BUILD > VALIDATE GLB/GLTF IMPORT...` against
+  `C:/Users/paulw/Downloads/crate_box/scene.gltf` reports
+  `PASS // MODEL IMPORT V1 GATE 1` in both DX12 and Vulkan, with identical
+  counts on both: 1 object, 1 mesh, 1 material, 2 texture references, 7
+  transforms, 8 hierarchy links, 0 armatures, 0 animations.
+- `BUILD > VALIDATE GLB/GLTF IMPORT...` against
+  `C:/Users/paulw/Downloads/windmill_in_soviet_village.glb` reports
+  `PASS // MODEL IMPORT V1 GATE 1` in both DX12 and Vulkan, with identical
+  counts on both: 27 objects, 27 meshes, 2 materials, 6 texture references,
+  70 transforms, 109 hierarchy links, 1 armature, 1 animation.
+
+The active scene, selection, and dirty state were unaffected across all four
+runs per the on-screen hierarchy/inspector state.
+
+Between the two assets this proves the crash fix and the round-trip
+fingerprint fix hold for both a minimal single-object case and a multi-node,
+multi-material, skinned, animated case, with matching counts across DX12 and
+Vulkan on both. **Model Import V1 Gate 1 acceptance from
+`docs/PHASE4_MODEL_IMPORT_V1.md` is satisfied.** Local C++17 syntax checks
+pass for the service and tests, but this Linux container has no CMake and
+cannot itself execute the Windows DX12/Vulkan import round trip — all
+packaged evidence above came from the project owner's machine.
 
 ## Active slice — Model Import V1 Gate 1
 
@@ -80,29 +145,27 @@ this container and is not a repository file. CMake is unavailable locally.
 Risks and next task:
 
 The representative windmill and a simple control GLTF both crashed in earlier
-packaged attempts. Heap-allocating the temporary scenes produced a decisive
-persistent log: `converter_complete` and `import_summary_complete` were the
-last completed stages. The pinned converter therefore returned successfully;
-the crash occurred when the worker entered the WISCENE write boundary.
-Wicked's Editor converts on a worker but saves at its thread-safe engine point.
-The current correction follows that split and adds granular persistent
-breadcrumbs around archive creation, serialization, close, reload and
-comparison.
+packaged attempts, and a corrected build still crashed on `crate_box`. Both
+root causes are now understood and fixed (see above): a double-`Close()`
+null-pointer write, then a false-positive round-trip comparison. `crate_box`
+(single object, no armature/animation) and `windmill_in_soviet_village.glb`
+(27 objects/meshes, 2 materials, 1 armature, 1 animation) both now pass DX12
+and Vulkan with matching counts. **Gate 1 acceptance is closed.**
 
-1. Run fresh Windows CI to prove MSVC compiles the extracted upstream source and
-   temporary Studio proof route in the Renegade target.
-2. In packaged Studio, run **BUILD > VALIDATE GLB/GLTF IMPORT...** with the
-   simple control GLTF in DX12 first. Require PASS or a controlled FAIL dialog,
-   never a desktop exit. If it exits, collect the updated `.import.log`.
-3. Repeat with the representative textured GLB, then Vulkan. Require PASS and
-   matching component counts; output belongs only under
-   `Saved/Validation/ModelImport`.
-4. Confirm the active scene, selection, hierarchy, Undo history, and dirty state
-   remain unchanged. Do not start the visible importer workspace until both
-   renderer proofs pass.
-5. Wicked's importer reports malformed-file errors through its reference-editor
-   message box; production structured error capture remains a later hardening
-   gate and must not be hidden.
+1. Run fresh Windows CI to prove MSVC compiles `550d6d7`/`4e78e1b`/`50bb1eb`
+   in the Renegade target; this has not yet run in CI, only on the project
+   owner's packaged local builds.
+2. Wicked's importer reports malformed-file errors through its
+   reference-editor message box; production structured error capture remains
+   a later hardening gate and must not be hidden.
+3. Begin the next milestone named in `docs/PHASE4_MODEL_IMPORT_V1.md`'s "Next
+   gate after acceptance": a Renegade-owned **Asset Browser > Add Asset**
+   importer workspace with isolated preview, import settings, project asset
+   registration, and a reusable browser entry. Model placement into the
+   active Studio scene and scene-instance inspection follow that
+   registered-asset boundary — neither exists yet. The current `BUILD >
+   VALIDATE GLB/GLTF IMPORT...` command stays as a diagnostic proof route; it
+   is not the creator-facing importer and should not be repurposed into one.
 
 ## Completed previous slice — Add Light workflow
 
