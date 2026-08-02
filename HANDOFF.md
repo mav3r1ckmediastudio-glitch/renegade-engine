@@ -284,15 +284,21 @@ service layer with unit tests first, wire UI in a following slice).
   `CaptureCollision`/`SanitizeCollisionState`/`HasCollisionStateChange`/
   `ApplyCollision`, and three commands: `CreateCollisionCommand`,
   `SetCollisionCommand`, `RemoveCollisionCommand`.
-- Deliberately scoped to `BOX`/`SPHERE`/`CAPSULE` only -- the three shapes
-  Wicked sizes from explicit dimensions (half-extents/radius/height) rather
-  than derived mesh geometry, so they can attach to any entity with a
-  `TransformComponent`. `CONVEX_HULL`/`TRIANGLE_MESH` need a
-  `MeshComponent`-bearing entity and a `mesh_lod` to derive their shape
-  from -- a different targeting problem (which entity in an imported
-  hierarchy gets the collider?) that is out of scope here. `CYLINDER`/
-  `HEIGHTFIELD` are native shapes with no curated authoring surface yet
-  either. Vehicle and character physics are untouched.
+- Deliberately scoped to `BOX`/`SPHERE`/`CAPSULE`/`CYLINDER` -- the four
+  shapes Wicked sizes from explicit dimensions (half-extents/radius/height)
+  rather than derived mesh geometry, so any of them can attach to any
+  entity with a `TransformComponent`. `CYLINDER` costs nothing extra:
+  Wicked stores it in the same `CapsuleParams` (radius/height) as `CAPSULE`
+  per the component's own "also cylinder params" comment, confirmed by a
+  dedicated `RenegadeCollisionTests` case. `CONVEX_HULL`/`TRIANGLE_MESH`
+  need a `MeshComponent`-bearing entity and a `mesh_lod` to derive their
+  shape from instead -- a different targeting problem (which entity in a
+  multi-node imported hierarchy gets the collider?) that is out of scope
+  here, and `TRIANGLE_MESH` is only physically valid for a static body in
+  most physics backends. `HEIGHTFIELD` is a regular-grid terrain shape and
+  is out of scope entirely -- `TerrainService` already owns that domain,
+  it is not a fit for an imported prop's collider. Vehicle and character
+  physics are untouched.
 - `CreateCollisionCommand`/`RemoveCollisionCommand` are simpler than
   `CreateLightCommand`: they add or remove a single component
   (`ComponentManager<T>::Create`/`Remove`) on an entity that already exists
@@ -308,9 +314,10 @@ service layer with unit tests first, wire UI in a following slice).
 - Added `Tests/CollisionTests.cpp` (`RenegadeCollisionTests` in
   `Tests/CMakeLists.txt`, wired the same way as `RenegadeMaterialTests`/
   `RenegadeLightTests`): sanitize-floor coverage, create/duplicate-reject/
-  Undo/Redo, edit/no-op-filter/Undo/Redo, and remove/Undo (including
-  removing from an entity with no rigidbody) -- all against a synthetic
-  scene, no graphics device required.
+  Undo/Redo, edit/no-op-filter/Undo/Redo, remove/Undo (including removing
+  from an entity with no rigidbody), and a dedicated Cylinder case proving
+  its dimensions reach the native capsule storage -- all against a
+  synthetic scene, no graphics device required.
 
 Changed files:
 
@@ -336,6 +343,79 @@ it through yet. Before treating any part of this as working:
    from the same bounding-box data already computed for Automatic scale,
    attached to the import root the same way scale is. That UI work has not
    started and needs its own packaged acceptance pass once it exists.
+
+## Active slice — Import animation autoplay (uncommitted)
+
+Added alongside the Collision Authoring slice, at the project owner's
+request to bundle it into the same pending commit. Closes out the
+"animations" part of the original "materials, scale, animations, collision"
+request -- and turned out to need no new rendering/display capability at
+all, just one missing call.
+
+Root cause, confirmed by reading the source rather than assumed: Wicked's
+`wi::scene::AnimationComponent` defaults to `LOOPED` but not `PLAYING`
+(`_flags = LOOPED`); `Scene::RunAnimationUpdateSystem` only advances an
+animation's timer once `IsPlaying()` is true; and
+`WickedEngine/Editor/ModelImporter_GLTF.cpp` creates every imported
+animation's component but never calls `Play()` on it. An imported model's
+armature and keyframe data were never missing or broken (Gate 1 already
+proved the windmill's "1 armature, 1 animation" survive conversion and
+round-trip intact) -- they were simply frozen at frame zero because nothing
+had ever started them, the same as any other native Wicked animation would
+be if its `Play()` were never called.
+
+- `PlaceImportedModelCommand::Execute()`'s first-execution branch
+  (`EngineBridge/src/ImportService.cpp`) now captures
+  `scene_->animations.GetCount()` before `Scene::Merge()`, then calls
+  `.Play()` on every newly-added animation afterward, before the
+  Undo/Redo snapshot is taken.
+- This only reaches animations belonging to the just-imported model, never
+  a pre-existing one already in the target scene, because Wicked's own
+  importer always creates the animation entity and appends it to
+  `scene.animations` as part of the same merge.
+- Confirmed (not assumed) that `Undo`/`Redo` already cover this for free:
+  `ModelImporter_GLTF.cpp` attaches every animation entity under the import
+  root via `Component_Attach(entity, state.rootEntity)`, so it is inside
+  the same hierarchy subtree that `PlaceImportedModelCommand`'s existing
+  `Entity_Serialize(..., RECURSIVE)` snapshot and `Entity_Remove(...,
+  recursive = true)` already capture and restore -- calling `Play()` before
+  that snapshot is taken means the playing state round-trips through
+  Undo/Redo exactly like any other authored value, with no new snapshot
+  logic required.
+- Extended the existing `PlaceImportedModelCommand` synthetic-scene test in
+  `Tests/ImportTests.cpp` with a fixture animation entity attached under the
+  imported root (mirroring `ModelImporter_GLTF.cpp`'s exact attachment
+  call), asserting it starts paused, is playing immediately after Execute,
+  is removed by Undo, and is playing again after Redo.
+- Does not add any pause/seek/scrub/blend control, and does not change
+  behavior for any animation authored directly in Studio rather than
+  imported -- this only affects the moment a GLB/GLTF model with animation
+  data is placed into the scene.
+
+Changed files:
+
+- `EngineBridge/src/ImportService.cpp`
+- `Tests/ImportTests.cpp`
+- `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`
+- `docs/FEATURE_MATRIX.csv`
+- `docs/ROADMAP.md`
+- `HANDOFF.md`
+
+**No local validation has run against this yet** -- no syntax check, no
+build, no packaged test. Before treating any part of this as working:
+
+1. Run the same kind of local C++17 syntax check used for prior slices
+   against the two changed source files.
+2. Commit and push, then run Windows CI -- `RenegadeImportTests`' extended
+   assertions need to pass.
+3. Package Release and repeat an import of `windmill_in_soviet_village.glb`
+   (or any animated GLB) on both DX12 and Vulkan; confirm the blades (or
+   equivalent) visibly animate immediately on placement with no extra
+   click, that Undo stops and removes the animation along with the rest of
+   the imported hierarchy, that Redo resumes it, and that Save/close/Reopen
+   preserves the playing state. A model that imports but does not animate,
+   or an Undo that leaves an orphaned animation still playing, both stop
+   this gate.
 
 ## Completed slice — Model Import V1 Gate 1
 

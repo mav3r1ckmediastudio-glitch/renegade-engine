@@ -593,6 +593,8 @@ namespace renegade::bridge
 
             const std::size_t transformCountBefore =
                 scene_->transforms.GetCount();
+            const std::size_t animationCountBefore =
+                scene_->animations.GetCount();
 
             // Scene::Merge() moves preparedScene_'s contents into *scene_ and
             // leaves preparedScene_ empty; release our reference immediately
@@ -617,6 +619,26 @@ namespace renegade::bridge
                     scaleFactor_,
                     scaleFactor_);
                 transform->SetDirty();
+            }
+
+            // wi::scene::AnimationComponent defaults to LOOPED but not
+            // PLAYING -- Wicked's own GLTF importer creates the component
+            // and leaves it paused; RunAnimationUpdateSystem only advances
+            // an animation's timer once IsPlaying() is true. Without this,
+            // an imported model's armature/animation data is present and
+            // correct (as Gate 1 already proved) but sits frozen at frame
+            // zero forever. Every animation entity the importer creates is
+            // Component_Attach'd under the import root (ModelImporter_GLTF.cpp),
+            // so this loop only reaches animations that belong to this
+            // import, never a pre-existing one already in the target scene,
+            // and Play() being called before the snapshot below means
+            // Undo/Redo restores the playing state exactly like any other
+            // authored value.
+            for (std::size_t index = animationCountBefore;
+                index < scene_->animations.GetCount();
+                ++index)
+            {
+                scene_->animations[index].Play();
             }
 
             snapshot_.SetReadModeAndResetPos(false);

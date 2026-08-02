@@ -142,6 +142,18 @@ int main()
         prepared->names.Create(importedEntity) = "Imported Root";
         prepared->transforms.Create(importedEntity);
 
+        // Mirrors ModelImporter_GLTF.cpp: every imported animation entity is
+        // Component_Attach'd under the import root, and its AnimationComponent
+        // starts paused (LOOPED but not PLAYING) until something calls Play().
+        const auto animationEntity = wi::ecs::CreateEntity();
+        prepared->names.Create(animationEntity) = "Imported Animation";
+        prepared->Component_Attach(animationEntity, importedEntity);
+        auto& importedAnimation = prepared->animations.Create(animationEntity);
+        if (importedAnimation.IsPlaying())
+        {
+            return Fail("test fixture animation was not created in the paused default state");
+        }
+
         const XMFLOAT3 placement(1.0f, 2.0f, 3.0f);
         const float scaleFactor = 0.1f;
         renegade::bridge::PlaceImportedModelCommand place(
@@ -175,11 +187,18 @@ int main()
         {
             return Fail("PlaceImportedModelCommand did not apply the scale factor");
         }
+        const auto* placedAnimation =
+            target.animations.GetComponent(animationEntity);
+        if (placedAnimation == nullptr || !placedAnimation->IsPlaying())
+        {
+            return Fail("PlaceImportedModelCommand did not auto-play the imported animation");
+        }
 
         place.Undo();
-        if (target.transforms.GetCount() != 1)
+        if (target.transforms.GetCount() != 1 ||
+            target.animations.Contains(animationEntity))
         {
-            return Fail("PlaceImportedModelCommand::Undo did not remove the imported entity");
+            return Fail("PlaceImportedModelCommand::Undo did not remove the imported entity and its animation");
         }
 
         if (!place.Execute())
@@ -191,6 +210,12 @@ int main()
         if (target.transforms.GetCount() != 2 || redoneTransform == nullptr)
         {
             return Fail("PlaceImportedModelCommand redo did not restore the original entity id");
+        }
+        const auto* redoneAnimation =
+            target.animations.GetComponent(animationEntity);
+        if (redoneAnimation == nullptr || !redoneAnimation->IsPlaying())
+        {
+            return Fail("PlaceImportedModelCommand redo did not restore the playing animation");
         }
         if (redoneTransform->scale_local.x != scaleFactor ||
             redoneTransform->scale_local.y != scaleFactor ||

@@ -9,14 +9,17 @@ namespace renegade::bridge
     // A curated view of wi::scene::RigidBodyPhysicsComponent, mirroring the
     // MaterialState/LightState pattern: fields a creator actually reaches
     // for, applied non-destructively over whatever else is on the
-    // component. Deliberately scoped to the three primitive shapes that are
+    // component. Deliberately scoped to the four primitive shapes that are
     // sized from explicit dimensions rather than derived from mesh
-    // geometry (Box/Sphere/Capsule) -- Convex Hull and Triangle Mesh need a
-    // MeshComponent-bearing entity and a mesh_lod to derive their shape
-    // from, which is a different, not-yet-designed targeting problem than
-    // attaching a bounding primitive to any transform. Cylinder and
-    // Heightfield are native shapes too but have no curated authoring
-    // surface here yet.
+    // geometry (Box/Sphere/Capsule/Cylinder), so any of them can attach to
+    // any entity with a TransformComponent. Convex Hull and Triangle Mesh
+    // need a MeshComponent-bearing entity and a mesh_lod to derive their
+    // shape from instead -- a different, not-yet-designed targeting
+    // problem (which entity in a multi-node imported hierarchy owns the
+    // collider?), and Triangle Mesh is only physically valid for a static
+    // body in most physics backends. Heightfield is a regular-grid terrain
+    // shape and out of scope entirely -- Renegade already covers that
+    // domain through TerrainService, not an imported prop's collider.
     struct CollisionState
     {
         wi::scene::RigidBodyPhysicsComponent::CollisionShape shape =
@@ -27,6 +30,10 @@ namespace renegade::bridge
         float restitution = 0.1f;
         XMFLOAT3 boxHalfExtents = XMFLOAT3(1.0f, 1.0f, 1.0f);
         float sphereRadius = 1.0f;
+        // Wicked stores Capsule and Cylinder dimensions in the same
+        // underlying CapsuleParams (see RigidBodyPhysicsComponent's own
+        // "also cylinder params" comment) -- one radius/height pair here
+        // serves both shapes, selected by CollisionState::shape.
         float capsuleRadius = 1.0f;
         float capsuleHeight = 1.0f;
     };

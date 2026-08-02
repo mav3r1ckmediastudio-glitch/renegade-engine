@@ -51,8 +51,10 @@ Save/Save As/Reopen path, and nothing else.
    editor camera (matching stock Wicked Editor's own "place in front of
    camera" convention and its "imported models always have a root transform
    entity" rule for locating that root), applies the resolved scale factor
-   as the root's uniform `Scale`, and snapshots the merged entity via
-   `Scene::Entity_Serialize(..., RECURSIVE)` for Undo/Redo.
+   as the root's uniform `Scale`, calls `Play()` on every animation the
+   import added (see "Import animation autoplay" below), and snapshots the
+   merged entity via `Scene::Entity_Serialize(..., RECURSIVE)` for
+   Undo/Redo.
 4. The new entity is selected and revealed in the hierarchy, matching the
    Add Light UX convention. The status bar reports the applied scale factor
    (`AUTO SCALE x0.XXX`) so packaged evidence can confirm what was applied.
@@ -120,6 +122,29 @@ pointer is changed. The `BUILD > VALIDATE GLB/GLTF IMPORT...` diagnostic
 proof route is untouched and remains the Gate 1 evidence path; it is not
 repurposed into this creator-facing flow.
 
+## Import animation autoplay
+
+`wi::scene::AnimationComponent` is created `LOOPED` but not `PLAYING` by
+default, and Wicked's own `ModelImporter_GLTF.cpp` never calls `Play()` on
+the animations it creates — so an imported model's armature and keyframe
+data can be complete and correct (as Gate 1's structural round-trip already
+proved for `windmill_in_soviet_village.glb`'s "1 armature, 1 animation")
+while sitting frozen at frame zero, because nothing ever started it. This
+is not a missing rendering or skinning capability; it is one uncalled
+method.
+
+`PlaceImportedModelCommand::Execute()` now calls `.Play()` on every
+animation the import adds, before the Undo/Redo snapshot is taken.
+`ModelImporter_GLTF.cpp` attaches every animation entity under the import
+root (`Component_Attach(entity, state.rootEntity)`), so this needs no new
+Undo/Redo machinery: it is already inside the same subtree the existing
+`Entity_Serialize(..., RECURSIVE)` snapshot and `Entity_Remove(...,
+recursive = true)` capture and restore.
+
+This only starts playback; there is no pause, seek, scrub, or blend control
+anywhere in Studio yet, and it does not touch animations authored any other
+way.
+
 ## Packaged acceptance
 
 1. Package Release and launch DX12 Studio in a project with an existing
@@ -154,15 +179,20 @@ repurposed into this creator-facing flow.
 10. Confirm Undo removes the entire imported hierarchy in one step (not
     node-by-node), Redo restores it complete — including the same applied
     Scale — and the restored entity is still selectable and inspectable.
-11. Edit a transform on the imported root, then Save, close, and Reopen.
-    Confirm the imported model, its applied scale, and the edit all survive.
-12. Launch Runtime with the saved scene and confirm the model renders there
-    the same size and place as in Studio.
-13. Repeat the complete check with the `vulkan` argument.
-14. Attempt an import while a `BUILD > VALIDATE GLB/GLTF IMPORT...` proof or
+11. Confirm the windmill's blades (or the equivalent moving part on
+    whichever animated GLB is used) visibly rotate/animate immediately on
+    placement, with no extra click needed. Confirm Undo stops the animation
+    along with the rest of the removed hierarchy, and Redo resumes it.
+12. Edit a transform on the imported root, then Save, close, and Reopen.
+    Confirm the imported model, its applied scale, its playing animation,
+    and the edit all survive.
+13. Launch Runtime with the saved scene and confirm the model renders,
+    scales, and animates there the same as in Studio.
+14. Repeat the complete check with the `vulkan` argument.
+15. Attempt an import while a `BUILD > VALIDATE GLB/GLTF IMPORT...` proof or
     another `ADD > IMPORT MODEL...` is already running; confirm the busy
     message appears and no partial/duplicate entity is created.
-15. Attempt an import of a malformed or unsupported file; confirm a
+16. Attempt an import of a malformed or unsupported file; confirm a
     controlled failure dialog, never a desktop exit, and confirm nothing
     was added to the scene.
 

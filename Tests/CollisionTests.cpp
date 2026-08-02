@@ -188,6 +188,33 @@ int main()
         return Fail("RemoveCollisionCommand accepted an entity with no rigidbody");
     }
 
-    std::cout << "PASS: collision create/edit/remove and Undo/Redo\n";
+    // CYLINDER shares Capsule's underlying radius/height storage in Wicked
+    // (RigidBodyPhysicsComponent's own "also cylinder params" comment) --
+    // prove CollisionState's capsuleRadius/capsuleHeight fields actually
+    // reach the native component under this shape too, not just CAPSULE.
+    const auto cylinderEntity = wi::ecs::CreateEntity();
+    scene.transforms.Create(cylinderEntity);
+    CollisionState cylinder;
+    cylinder.shape = Shape::CYLINDER;
+    cylinder.capsuleRadius = 0.4f;
+    cylinder.capsuleHeight = 2.2f;
+    renegade::bridge::CommandService cylinderCommands;
+    if (!cylinderCommands.Execute(
+            std::make_unique<renegade::bridge::CreateCollisionCommand>(
+                scene,
+                cylinderEntity,
+                cylinder)))
+    {
+        return Fail("CreateCollisionCommand did not execute for Cylinder");
+    }
+    const auto* cylinderBody = scene.rigidbodies.GetComponent(cylinderEntity);
+    if (cylinderBody == nullptr || cylinderBody->shape != Shape::CYLINDER ||
+        !NearlyEqual(cylinderBody->capsule.radius, 0.4f) ||
+        !NearlyEqual(cylinderBody->capsule.height, 2.2f))
+    {
+        return Fail("Cylinder dimensions did not reach the native capsule storage");
+    }
+
+    std::cout << "PASS: collision create/edit/remove, Cylinder, and Undo/Redo\n";
     return 0;
 }
