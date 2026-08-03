@@ -133,6 +133,11 @@ namespace renegade::bridge
         [[nodiscard]] ImportResult CompleteGltfAsset(
             PreparedModelImport prepared) const;
 
+        // Save and round-trip validate the reusable WISCENE while retaining
+        // the prepared Wicked scene for immediate placement.
+        [[nodiscard]] ImportResult SavePreparedGltfAsset(
+            PreparedModelImport& prepared) const;
+
         [[nodiscard]] static ImportedSceneSummary Summarize(
             const wi::scene::Scene& scene) noexcept;
 
