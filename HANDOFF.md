@@ -437,25 +437,76 @@ had almost nowhere to render before hitting the panel's own scissor edge
 and disappearing. The combo logic itself was never broken -- the options
 were just being drawn into a region that gets cut away.
 
-Fixed in `StudioApplication.cpp`'s `ResizeLayout()`: `importScalePanel_`
-grew from 168 to 288px tall, and `importScaleApplyButton_`/
-`importScaleDismissButton_` moved from y=126 to y=234 to leave the combo's
-full dropdown room to render inside the panel's own bounds instead of
-immediately crowding it with the button row.
+A first attempt grew `importScalePanel_` from 168 to 288px tall in
+`ResizeLayout()` (and moved the buttons down to y=234) on the theory that
+the dropdown was being scissor-clipped. That change is retained -- the extra
+height is harmless and gives the dropdown room -- but it did **not** fix the
+report, and neither did a second attempt (deferring the button handlers
+through `pendingAction_` plus a one-shot `importScalePanel_.Activate()` on
+the theory of a wiGUI input-priority / force-disable cascade). Both were
+wrong diagnoses. See the definitive root cause below.
+
+### Definitive root cause and fix (the controls were created disabled)
+
+After the two attempts above failed on packaged builds, a temporary
+on-screen diagnostic was added to `StudioRenderPath::Update()` that printed,
+every frame the panel was visible, the pointer position, the panel's and
+APPLY button's hitboxes, their `GetState()` and `force_disable` flags, the
+GUI focus flag, and the state of every GUI widget registered ahead of the
+panel. Packaged DX12 output with the mouse held over APPLY read:
+
+```text
+ISP st=1 fd=0 guiFoc=1 | ptr 841,373 | pnl 780,122 320x288
+  | apply st=0 fd=0 ah 792,357 | AHEAD tb=0 hier=0 srch=0 insp=0
+    cont=0 chrome=0 hub=0
+```
+
+That is conclusive: the pointer (841,373) is squarely inside the APPLY
+button's hitbox (792,357 + 144x30), nothing ahead of the panel is active,
+and `fd=0` on both the panel and the button -- so force-disable was never
+involved. Yet APPLY stays `st=0` (IDLE). In wiGUI, `Button::Update` gates
+its entire hover/click block on `IsEnabled() && dt > 0`, and
+`Widget::IsEnabled()` is `enabled && visible && !force_disable`. The button
+renders (so `visible` is true) and `fd=0`, which means its own `enabled`
+flag was false.
+
+Root cause: `CreateImportScalePanel()` called `importScalePanel_.SetVisible(
+false)` **before** adding the combo box and buttons. `wi::gui::Window::
+AddWidget` stamps each child with `SetEnabled(this->IsEnabled())`, evaluated
+at add time -- and because the window was already hidden,
+`Window::IsEnabled()` returned false, so every child was created
+permanently disabled. `Window::SetVisible(true)` in `ShowImportScalePanel()`
+re-shows the children but never re-enables them, so they rendered perfectly
+and ignored all input -- the combo, APPLY and CLOSE were all dead. The
+Inspector never hit this because its children are added while it is visible.
+
+Fixed by hiding the panel only *after* every child has been added (moved the
+`SetVisible(false)` to the end of `CreateImportScalePanel()`), so each child
+inherits an enabled state. The failed second attempt's dead code was reverted
+(the `Activate()` call and its incorrect force-disable rationale removed); the
+`pendingAction_`-deferred button handlers were kept, since deferring scene/GUI
+mutations out of an `OnClick` that fires mid-GUI-update is correct regardless
+and matches every other button in the file. The temporary diagnostic was
+removed.
 
 Changed files:
 
 - `Studio/src/StudioApplication.cpp`
+- `Studio/src/StudioApplication.h` (the two deferred `EditorAction` values
+  and `pendingImportScaleMode_`, from the retained second-attempt refactor)
 - `HANDOFF.md`
 
-**No local validation has run against this yet** -- no syntax check, no
-build, no packaged test. Before treating this as fixed:
+**Local validation:** `StudioApplication.cpp` (which includes the header)
+passes a C++17 `-fsyntax-only` check against the pinned Wicked headers using
+the same temporary SDL declaration shim prior slices required. The fix was
+found from packaged DX12 diagnostic evidence (above); the corrected build has
+**not** yet been packaged. Before treating this as fixed:
 
-1. Run the same kind of local C++17 syntax check used for prior slices.
-2. Commit and push, then run Windows CI.
-3. Package Release, reimport a GLB, and confirm the combo's dropdown is
-   fully visible (all three options readable, not clipped) and each is
-   actually clickable/selectable, on both DX12 and Vulkan.
+1. Commit and push, then run Windows CI.
+2. Package Release, reimport a GLB, and confirm on both DX12 and Vulkan that
+   the combo opens and accepts a selection, APPLY applies the chosen scale
+   and is its own Undo step, and CLOSE dismisses the panel -- every control
+   responding on the first interaction, not after retries.
 
 ## Completed slice — Model Import V1 Gate 1
 

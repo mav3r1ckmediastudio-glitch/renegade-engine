@@ -2181,8 +2181,17 @@ namespace renegade::studio
         // over the viewport -- keeping a visible drop shadow here is
         // deliberate, so it reads as sitting on top of the scene.
         importScalePanel_.SetShadowRadius(10.0f);
-        importScalePanel_.SetVisible(false);
         GetGUI().AddWidget(&importScalePanel_);
+        // IMPORTANT: the panel must stay visible while its children are
+        // added below. wi::gui::Window::AddWidget stamps each child with
+        // SetEnabled(this->IsEnabled()), and Widget::IsEnabled() is
+        // (enabled && visible && !force_disable) -- so adding a child while
+        // the window is hidden permanently creates that child *disabled*,
+        // and Window::SetVisible(true) later re-shows it but never
+        // re-enables it. That left every control in this panel rendering
+        // but ignoring all input (the combo, APPLY and CLOSE were all
+        // dead). The panel is hidden at the end of this function instead,
+        // after every child has inherited an enabled state.
 
         importScaleTitleLabel_.Create("Import Scale Title");
         importScaleTitleLabel_.SetText("IMPORT SCALE");
@@ -2259,6 +2268,11 @@ namespace renegade::studio
             pendingAction_ = EditorAction::DismissImportScale;
         });
         importScalePanel_.AddWidget(&importScaleDismissButton_);
+
+        // Hide only now that every child has been added while the window was
+        // visible/enabled (see the note above GetGUI().AddWidget). The panel
+        // is revealed on demand by ShowImportScalePanel().
+        importScalePanel_.SetVisible(false);
     }
 
     void StudioRenderPath::ApplyRenegadeTheme()
@@ -6278,21 +6292,6 @@ namespace renegade::studio
         importScaleReadoutLabel_.SetText(readout.str());
         importScaleModeCombo_.SetSelectedWithoutCallback(-1);
         importScalePanel_.SetVisible(true);
-
-        // CreateImportScalePanel() adds this window to GetGUI() last, after
-        // every docked shell panel (toolbar/hierarchy/inspector/content/
-        // project hub). wiGUI's GUI::Update()/Window::Update() walk their
-        // widget list in add-order and force_disable every widget that
-        // comes after one already reporting a non-IDLE state this frame
-        // (see wiGUI.cpp) -- so, being last, this popup could go
-        // completely unresponsive (no hover, no click, on any child)
-        // whenever anything else in the chrome is mid-interaction the
-        // instant it opens, with no way to self-recover since a
-        // force-disabled widget can never fire the Activate() that would
-        // normally promote it back to the front. Activate() here forces
-        // that promotion immediately instead of waiting on a click that can
-        // never arrive.
-        importScalePanel_.Activate();
     }
 
     void StudioRenderPath::ApplyImportScaleMode(
