@@ -119,3 +119,74 @@ set_target_properties(RenegadeMaterialTests PROPERTIES
 add_dependencies(RenegadeBridgeTests RenegadeMaterialTests)
 
 add_test(NAME RenegadeMaterialTests COMMAND RenegadeMaterialTests)
+
+add_executable(RenegadeImportTests
+    ImportTests.cpp
+)
+
+target_link_libraries(RenegadeImportTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeImportTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeImportTests)
+
+add_test(NAME RenegadeImportTests COMMAND RenegadeImportTests)
+
+add_executable(RenegadeCollisionTests
+    CollisionTests.cpp
+)
+
+target_link_libraries(RenegadeCollisionTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeCollisionTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeCollisionTests)
+
+add_test(NAME RenegadeCollisionTests COMMAND RenegadeCollisionTests)
+
+add_executable(RenegadeAssetBrowserTests
+    AssetBrowserTests.cpp
+)
+
+target_link_libraries(RenegadeAssetBrowserTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeAssetBrowserTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeAssetBrowserTests)
+
+add_test(NAME RenegadeAssetBrowserTests COMMAND RenegadeAssetBrowserTests)
+
+add_executable(RenegadeProjectStructureTests
+    ProjectStructureTests.cpp
+)
+
+target_link_libraries(RenegadeProjectStructureTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeProjectStructureTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeProjectStructureTests)
+
+add_test(
+    NAME RenegadeProjectStructureTests
+    COMMAND RenegadeProjectStructureTests
+)

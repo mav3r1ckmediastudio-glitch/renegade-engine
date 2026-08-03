@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <iomanip>
 #include <memory>
 #include <sstream>
@@ -10,6 +11,7 @@
 
 namespace
 {
+    namespace fs = std::filesystem;
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
     constexpr wi::Color HologramIdle = wi::Color(8, 30, 42, 224);
     constexpr wi::Color HologramFocus = wi::Color(0, 126, 164, 238);
@@ -155,6 +157,114 @@ namespace
                 (value & (1 << bit)) != 0);
         }
     }
+
+    fs::path AllocateImportedModelAssetPath(
+        const fs::path& projectRoot,
+        const fs::path& source)
+    {
+        const fs::path contentDirectory =
+            projectRoot / "Content" / "Models";
+        const fs::path sourceDirectory =
+            projectRoot / "SourceAssets" / "Models";
+        std::error_code ignored;
+        fs::create_directories(contentDirectory, ignored);
+        ignored.clear();
+        fs::create_directories(sourceDirectory, ignored);
+
+        std::string stem = source.stem().u8string();
+        if (stem.empty())
+        {
+            stem = "ImportedModel";
+        }
+
+        for (std::uint32_t index = 1; ; ++index)
+        {
+            const std::string candidateStem = index == 1
+                ? stem
+                : stem + "_" + std::to_string(index);
+            const fs::path assetPath =
+                contentDirectory / fs::u8path(candidateStem + ".wiscene");
+            const fs::path sourceSnapshot =
+                sourceDirectory / fs::u8path(candidateStem);
+            if (!fs::exists(assetPath) && !fs::exists(sourceSnapshot))
+            {
+                return assetPath;
+            }
+        }
+    }
+
+    bool CopyOriginalModelSource(
+        const fs::path& source,
+        const fs::path& projectRoot,
+        const fs::path& assetPath,
+        std::string& error)
+    {
+        if (!fs::is_regular_file(source))
+        {
+            error = "The selected source model no longer exists: " +
+                source.generic_u8string();
+            return false;
+        }
+
+        const fs::path snapshotDirectory =
+            projectRoot / "SourceAssets" / "Models" / assetPath.stem();
+        std::error_code copyError;
+        fs::create_directories(snapshotDirectory, copyError);
+        if (copyError)
+        {
+            error = "Could not create the model source snapshot folder: " +
+                copyError.message();
+            return false;
+        }
+
+        fs::copy_file(
+            source,
+            snapshotDirectory / source.filename(),
+            fs::copy_options::overwrite_existing,
+            copyError);
+        if (copyError)
+        {
+            std::error_code ignored;
+            fs::remove_all(snapshotDirectory, ignored);
+            error = "Could not copy the original model into SourceAssets: " +
+                copyError.message();
+            return false;
+        }
+
+        // Preserve the common same-stem binary sidecar for external GLTF.
+        if (wi::helper::toUpper(source.extension().u8string()) == ".GLTF")
+        {
+            for (const char* extension : {".bin", ".BIN"})
+            {
+                const fs::path sidecar = source.parent_path() /
+                    fs::u8path(source.stem().u8string() + extension);
+                if (!fs::is_regular_file(sidecar))
+                {
+                    continue;
+                }
+                copyError.clear();
+                fs::copy_file(
+                    sidecar,
+                    snapshotDirectory / sidecar.filename(),
+                    fs::copy_options::overwrite_existing,
+                    copyError);
+                if (copyError)
+                {
+                    std::error_code ignored;
+                    fs::remove_all(snapshotDirectory, ignored);
+                    error =
+                        "Could not copy the GLTF binary sidecar into "
+                        "SourceAssets: " +
+                        copyError.message();
+                    return false;
+                }
+                break;
+            }
+        }
+
+        error.clear();
+        return true;
+    }
 }
 
 namespace renegade::studio
@@ -214,6 +324,7 @@ namespace renegade::studio
 
         CreateWorkspaceShell();
         CreateProjectHub();
+        CreateImportScalePanel();
         ApplyRenegadeTheme();
 
         gizmo_.translate_snap = 0.1f;
@@ -288,6 +399,7 @@ namespace renegade::studio
         RefreshInspector();
         RefreshStatus();
         RefreshProjectHub();
+        RefreshAssetBrowser();
         SetProjectHubVisible(true);
 
         RenderPath3D::Load();
@@ -1962,6 +2074,12 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::SceneWorkspace:
                 pendingAction_ = EditorAction::OpenSceneWorkspace;
                 break;
+            case RenegadeStudioChrome::Action::ValidateModelImport:
+                pendingAction_ = EditorAction::ValidateModelImport;
+                break;
+            case RenegadeStudioChrome::Action::ImportModel:
+                pendingAction_ = EditorAction::ImportModel;
+                break;
             }
         });
         studioChrome_.OnDrawerChanged([this](const int tab)
@@ -1969,6 +2087,10 @@ namespace renegade::studio
             if (tab >= 0)
             {
                 lastDrawerTab_ = tab;
+            }
+            if (tab == 0)
+            {
+                RefreshAssetBrowser();
             }
             if (session_ == nullptr)
             {
@@ -1982,6 +2104,16 @@ namespace renegade::studio
                     "drawer_tab_" + std::to_string(index),
                     lastDrawerTab_ == index);
             }
+        });
+        studioChrome_.OnAssetBrowserFolderSelected(
+            [this](const std::string& relativePath)
+        {
+            SelectAssetBrowserFolder(relativePath);
+        });
+        studioChrome_.OnAssetBrowserItemSelected(
+            [this](const std::string& relativePath)
+        {
+            SelectAssetBrowserItem(relativePath);
         });
         studioChrome_.OnLayoutChanged(
             [this](
@@ -2139,6 +2271,118 @@ namespace renegade::studio
         projectHubPanel_.AddWidget(&hubMessageLabel_);
     }
 
+    // A small, self-contained popup rather than a new row wedged into the
+    // Inspector's Transform section: the Inspector's layout is a long chain
+    // of hardcoded absolute pixel positions (see ResizeLayout), and
+    // inserting a row there would mean renumbering every row below it with
+    // no way to verify the result short of a packaged build. This window
+    // owns its own position/size in ResizeLayout instead, independent of
+    // that chain, and only appears right after ADD > IMPORT MODEL... places
+    // a model.
+    void StudioRenderPath::CreateImportScalePanel()
+    {
+        importScalePanel_.Create(
+            "Import Scale Panel",
+            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        // Unlike inspectorPanel_ (docked flush against the screen edge,
+        // shadow disabled in ApplyRenegadeTheme), this is a floating popup
+        // over the viewport -- keeping a visible drop shadow here is
+        // deliberate, so it reads as sitting on top of the scene.
+        importScalePanel_.SetShadowRadius(10.0f);
+        GetGUI().AddWidget(&importScalePanel_);
+        // IMPORTANT: the panel must stay visible while its children are
+        // added below. wi::gui::Window::AddWidget stamps each child with
+        // SetEnabled(this->IsEnabled()), and Widget::IsEnabled() is
+        // (enabled && visible && !force_disable) -- so adding a child while
+        // the window is hidden permanently creates that child *disabled*,
+        // and Window::SetVisible(true) later re-shows it but never
+        // re-enables it. That left every control in this panel rendering
+        // but ignoring all input (the combo, APPLY and CLOSE were all
+        // dead). The panel is hidden at the end of this function instead,
+        // after every child has inherited an enabled state.
+
+        importScaleTitleLabel_.Create("Import Scale Title");
+        importScaleTitleLabel_.SetText("IMPORT SCALE");
+        importScaleTitleLabel_.font.params.size = 15;
+        importScaleTitleLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        importScalePanel_.AddWidget(&importScaleTitleLabel_);
+
+        importScaleReadoutLabel_.Create("Import Scale Readout");
+        importScaleReadoutLabel_.SetText("");
+        importScaleReadoutLabel_.SetFitTextEnabled(true);
+        importScaleReadoutLabel_.font.params.size = 13;
+        importScaleReadoutLabel_.font.params.h_align =
+            wi::font::WIFALIGN_LEFT;
+        importScaleReadoutLabel_.font.params.v_align =
+            wi::font::WIFALIGN_TOP;
+        importScalePanel_.AddWidget(&importScaleReadoutLabel_);
+
+        importScaleModeCombo_.Create("Import Scale Mode");
+        // Original and Meters always resolve to the same 1.0 multiplier for
+        // a glTF source (glTF 2.0 mandates metres), so they are collapsed
+        // into one selectable item here rather than shown as two options
+        // that do the same thing. Automatic is not re-offered: it already
+        // ran once at import time against the isolated, not-yet-merged
+        // model; recomputing it here would need a bounding box scoped to
+        // just this entity's descendants inside the live scene, which is
+        // separate, not-yet-built work.
+        importScaleModeCombo_.AddItem(
+            "ORIGINAL / METERS (x1.0)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Original));
+        importScaleModeCombo_.AddItem(
+            "CENTIMETERS (x0.01)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Centimeters));
+        importScaleModeCombo_.AddItem(
+            "INCHES (x0.0254)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Inches));
+        importScaleModeCombo_.SetTooltip(
+            "Reinterpret the imported model's source unit and correct its "
+            "Scale accordingly");
+        importScalePanel_.AddWidget(&importScaleModeCombo_);
+
+        importScaleApplyButton_.Create("Import Scale Apply");
+        importScaleApplyButton_.SetText("APPLY");
+        importScaleApplyButton_.SetAngularHighlightWidth(4.0f);
+        importScaleApplyButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            // Deliberately deferred through pendingAction_/
+            // ProcessPendingAction() rather than calling
+            // ApplyImportScaleMode() here directly -- wiGUI invokes OnClick
+            // while Button::Update is still active (see the comment on
+            // StudioRenderPath::Update), and ApplyImportScaleMode() executes
+            // a Command and calls RefreshInspector()/RefreshStatus(), which
+            // can touch other GUI widgets while GetGUI().Update() is still
+            // iterating its own widget list. Every other button in this file
+            // follows the same capture-value-then-defer shape (see
+            // pendingOceanPreset_/pendingTerrainMaterialPreset_).
+            if (importScaleModeCombo_.GetSelected() < 0)
+            {
+                return;
+            }
+            pendingImportScaleMode_ = static_cast<bridge::ModelScaleMode>(
+                importScaleModeCombo_.GetSelectedUserdata());
+            pendingAction_ = EditorAction::ApplyImportScale;
+        });
+        importScalePanel_.AddWidget(&importScaleApplyButton_);
+
+        importScaleDismissButton_.Create("Import Scale Dismiss");
+        importScaleDismissButton_.SetText("CLOSE");
+        importScaleDismissButton_.SetAngularHighlightWidth(4.0f);
+        importScaleDismissButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            // Deferred for the same reason as importScaleApplyButton_ above.
+            pendingAction_ = EditorAction::DismissImportScale;
+        });
+        importScalePanel_.AddWidget(&importScaleDismissButton_);
+
+        // Hide only now that every child has been added while the window was
+        // visible/enabled (see the note above GetGUI().AddWidget). The panel
+        // is revealed on demand by ShowImportScalePanel().
+        importScalePanel_.SetVisible(false);
+    }
+
     void StudioRenderPath::ApplyRenegadeTheme()
     {
         wi::gui::Theme theme;
@@ -2200,6 +2444,14 @@ namespace renegade::studio
             wi::gui::WIDGET_ID_WINDOW_BASE);
         inspectorPanel_.SetShadowRadius(0.0f);
 
+        // Same reassertion as inspectorPanel_ above -- the Import Scale
+        // popup is a separate wi::gui::Window and does not inherit
+        // inspectorPanel_'s per-instance override, only the global theme.
+        importScalePanel_.SetColor(wi::Color::Transparent());
+        importScalePanel_.SetColor(
+            wi::Color(8, 11, 13, 255),
+            wi::gui::WIDGET_ID_WINDOW_BASE);
+
         const auto ownLabel = [](wi::gui::Label& label)
         {
             label.SetColor(wi::Color::Transparent());
@@ -2219,6 +2471,8 @@ namespace renegade::studio
         ownLabel(precipitationLabel_);
         ownLabel(sunLabel_);
         ownLabel(oceanLabel_);
+        ownLabel(importScaleTitleLabel_);
+        ownLabel(importScaleReadoutLabel_);
 
         wi::gui::Theme scrollbarTheme = theme;
         scrollbarTheme.image.corner_rounding = false;
@@ -2676,6 +2930,55 @@ namespace renegade::studio
         contentPlaceholder_.SetSize(XMFLOAT2(
             contentPanel_.GetSize().x - 24.0f,
             bottomHeight - 62.0f));
+
+        // Positioned independently of the Inspector's hardcoded column
+        // (see CreateImportScalePanel) -- a small popup centered over the
+        // viewport rather than a row inside that fragile layout chain.
+        //
+        // wi::gui::Window::Render scissor-clips every child widget to the
+        // window's own rectangle (widget->parent->scissorRect), including a
+        // ComboBox's dropdown list when it opens -- Wicked's auto-flip
+        // logic in ComboBox::GetDropOffset only checks against the full
+        // canvas height, not the parent window's bounds, so it never
+        // triggers here. The panel must itself be tall enough to contain
+        // the combo's fully open dropdown (its own 28px row plus three
+        // 28px items, ~112px) or the options render clipped to invisible,
+        // unselectable, even though the combo logic itself is fine. This
+        // is why the panel is taller than its visible idle content and the
+        // buttons sit well below the combo rather than immediately under
+        // it.
+        const float importScalePanelWidth = 320.0f;
+        const float importScalePanelHeight = 288.0f;
+        importScalePanel_.SetPos(XMFLOAT2(
+            viewportBounds_.x +
+                (viewportBounds_.z - viewportBounds_.x) * 0.5f -
+                importScalePanelWidth * 0.5f,
+            viewportBounds_.y + 24.0f));
+        importScalePanel_.SetSize(XMFLOAT2(
+            importScalePanelWidth,
+            importScalePanelHeight));
+        importScaleTitleLabel_.SetPos(XMFLOAT2(12.0f, 8.0f));
+        importScaleTitleLabel_.SetSize(XMFLOAT2(
+            importScalePanelWidth - 24.0f,
+            22.0f));
+        importScaleReadoutLabel_.SetPos(XMFLOAT2(12.0f, 34.0f));
+        importScaleReadoutLabel_.SetSize(XMFLOAT2(
+            importScalePanelWidth - 24.0f,
+            40.0f));
+        importScaleModeCombo_.SetPos(XMFLOAT2(12.0f, 82.0f));
+        importScaleModeCombo_.SetSize(XMFLOAT2(
+            importScalePanelWidth - 24.0f,
+            28.0f));
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 234.0f));
+        importScaleApplyButton_.SetSize(XMFLOAT2(
+            (importScalePanelWidth - 24.0f - 8.0f) * 0.5f,
+            30.0f));
+        importScaleDismissButton_.SetPos(XMFLOAT2(
+            12.0f + (importScalePanelWidth - 24.0f - 8.0f) * 0.5f + 8.0f,
+            234.0f));
+        importScaleDismissButton_.SetSize(XMFLOAT2(
+            (importScalePanelWidth - 24.0f - 8.0f) * 0.5f,
+            30.0f));
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
         projectHubPanel_.SetSize(XMFLOAT2(width - 24.0f, height - 24.0f));
@@ -3567,6 +3870,18 @@ namespace renegade::studio
             break;
         case EditorAction::ReloadTerrainMaterial:
             ReloadTerrainMaterial();
+            break;
+        case EditorAction::ValidateModelImport:
+            ValidateModelImport();
+            break;
+        case EditorAction::ImportModel:
+            ImportModel();
+            break;
+        case EditorAction::ApplyImportScale:
+            ApplyImportScaleMode(pendingImportScaleMode_);
+            break;
+        case EditorAction::DismissImportScale:
+            DismissImportScalePanel();
             break;
         case EditorAction::None:
         default:
@@ -5783,6 +6098,487 @@ namespace renegade::studio
         }
         RefreshInspector();
         RefreshStatus();
+    }
+
+    void StudioRenderPath::ValidateModelImport()
+    {
+        if (session_ == nullptr ||
+            session_->Projects().CurrentProject().rootPath.empty())
+        {
+            wi::helper::messageBox(
+                "Open or create a Renegade project before running the model import proof.",
+                "Model Import Gate 1");
+            return;
+        }
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "GLB/GLTF model for Gate 1 validation";
+        params.extensions.push_back("glb");
+        params.extensions.push_back("gltf");
+        wi::helper::FileDialog(
+            params,
+            [this](const std::string& sourcePath)
+            {
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, sourcePath](uint64_t)
+                    {
+                        if (sourcePath.empty())
+                        {
+                            return;
+                        }
+                        if (wi::jobsystem::IsBusy(modelImportWorkload_))
+                        {
+                            wi::helper::messageBox(
+                                "A model import validation is already running.",
+                                "Model Import Gate 1");
+                            return;
+                        }
+
+                        const fs::path source = fs::u8path(sourcePath);
+                        studioChrome_.SetStatusText(
+                            "MODEL IMPORT PROOF // RUNNING // " +
+                            source.filename().u8string());
+                        RunModelImportProof(sourcePath);
+                    });
+            });
+    }
+
+    void StudioRenderPath::RunModelImportProof(const std::string& sourcePath)
+    {
+        if (session_ == nullptr || sourcePath.empty())
+        {
+            return;
+        }
+
+        const fs::path outputDirectory =
+            fs::u8path(session_->Projects().CurrentProject().rootPath) /
+            "Saved" / "Validation" / "ModelImport";
+        const fs::path source = fs::u8path(sourcePath);
+        const fs::path assetPath =
+            outputDirectory / fs::u8path(source.stem().u8string() + ".wiscene");
+
+        const std::string destinationPath = assetPath.generic_u8string();
+        wi::jobsystem::Execute(
+            modelImportWorkload_,
+            [this, sourcePath, destinationPath](wi::jobsystem::JobArgs)
+            {
+                auto prepared = std::make_shared<bridge::PreparedModelImport>(
+                    bridge::ImportService().PrepareGltfAsset(
+                        sourcePath,
+                        destinationPath));
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, prepared](uint64_t)
+                    {
+                        auto result = bridge::ImportService().CompleteGltfAsset(
+                            std::move(*prepared));
+                        PresentModelImportProof(result);
+                    });
+            });
+    }
+
+    void StudioRenderPath::PresentModelImportProof(
+        const bridge::ImportResult& result)
+    {
+        const auto* device = wi::graphics::GetDevice();
+        const std::string renderer = device != nullptr &&
+                device->GetShaderFormat() == wi::graphics::ShaderFormat::SPIRV
+            ? "VULKAN"
+            : "DX12";
+        std::ostringstream report;
+        report << (result.succeeded ? "PASS" : "FAIL")
+            << " // MODEL IMPORT V1 GATE 1\n\n"
+            << "Renderer: " << renderer << '\n'
+            << "Source: " << result.sourcePath << '\n'
+            << "WISCENE: " << result.assetPath << "\n\n";
+        if (result.succeeded)
+        {
+            report << "Objects: " << result.reloaded.objects << '\n'
+                << "Meshes: " << result.reloaded.meshes << '\n'
+                << "Materials: " << result.reloaded.materials << '\n'
+                << "Texture references: "
+                << result.reloaded.textureReferences << '\n'
+                << "Transforms: " << result.reloaded.transforms << '\n'
+                << "Hierarchy links: " << result.reloaded.hierarchy << '\n'
+                << "Armatures: " << result.reloaded.armatures << '\n'
+                << "Animations: " << result.reloaded.animations << "\n\n"
+                << "The isolated imported scene survived WISCENE save and reload unchanged.";
+        }
+        else
+        {
+            report << "Reason: " << result.error;
+        }
+
+        studioChrome_.SetStatusText(
+            std::string("MODEL IMPORT PROOF // ") +
+            (result.succeeded ? "PASS // " : "FAIL // ") + renderer);
+        wi::helper::messageBox(report.str(), "Model Import Gate 1");
+    }
+
+    void StudioRenderPath::ImportModel()
+    {
+        if (session_ == nullptr ||
+            session_->Projects().CurrentProject().rootPath.empty())
+        {
+            wi::helper::messageBox(
+                "Open or create a Renegade project before importing a model.",
+                "Import Model");
+            return;
+        }
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "GLB/GLTF model to import into the scene";
+        params.extensions.push_back("glb");
+        params.extensions.push_back("gltf");
+        wi::helper::FileDialog(
+            params,
+            [this](const std::string& sourcePath)
+            {
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, sourcePath](uint64_t)
+                    {
+                        if (sourcePath.empty())
+                        {
+                            return;
+                        }
+                        if (wi::jobsystem::IsBusy(modelImportWorkload_))
+                        {
+                            wi::helper::messageBox(
+                                "A model import is already running.",
+                                "Import Model");
+                            return;
+                        }
+
+                        const fs::path source = fs::u8path(sourcePath);
+                        studioChrome_.SetStatusText(
+                            "IMPORT MODEL // CONVERTING // " +
+                            source.filename().u8string());
+                        RunModelImportPlacement(sourcePath);
+                    });
+            });
+    }
+
+    void StudioRenderPath::RunModelImportPlacement(
+        const std::string& sourcePath)
+    {
+        if (session_ == nullptr || sourcePath.empty())
+        {
+            return;
+        }
+
+        const fs::path projectRoot =
+            fs::u8path(session_->Projects().CurrentProject().rootPath);
+        const fs::path source = fs::u8path(sourcePath);
+        const fs::path assetPath =
+            AllocateImportedModelAssetPath(projectRoot, source);
+        const std::string assetPathString = assetPath.generic_u8string();
+
+        wi::jobsystem::Execute(
+            modelImportWorkload_,
+            [this, sourcePath, assetPathString](wi::jobsystem::JobArgs)
+            {
+                auto prepared = std::make_shared<bridge::PreparedModelImport>(
+                    bridge::ImportService().PrepareGltfAsset(
+                        sourcePath,
+                        assetPathString));
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, prepared](uint64_t)
+                    {
+                        CompleteModelImportPlacement(std::move(*prepared));
+                    });
+            });
+    }
+
+    void StudioRenderPath::CompleteModelImportPlacement(
+        bridge::PreparedModelImport prepared)
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        if (!prepared.IsReady())
+        {
+            studioChrome_.SetStatusText("IMPORT MODEL // FAILED");
+            wi::helper::messageBox(
+                "Could not import the model.\n\nReason: " +
+                    prepared.Result().error,
+                "Import Model");
+            return;
+        }
+
+        const std::string sourcePath = prepared.Result().sourcePath;
+        const bridge::ImportResult savedAsset =
+            bridge::ImportService().SavePreparedGltfAsset(prepared);
+        if (!savedAsset.succeeded)
+        {
+            studioChrome_.SetStatusText("IMPORT MODEL // ASSET SAVE FAILED");
+            wi::helper::messageBox(
+                "The model converted, but its reusable project asset could "
+                "not be saved.\n\nReason: " + savedAsset.error,
+                "Import Model");
+            return;
+        }
+
+        const fs::path projectRoot =
+            fs::u8path(session_->Projects().CurrentProject().rootPath);
+        const fs::path savedAssetPath = fs::u8path(savedAsset.assetPath);
+        std::string sourceCopyError;
+        if (!CopyOriginalModelSource(
+                fs::u8path(sourcePath),
+                projectRoot,
+                savedAssetPath,
+                sourceCopyError))
+        {
+            std::error_code ignored;
+            fs::remove(savedAssetPath, ignored);
+            studioChrome_.SetStatusText(
+                "IMPORT MODEL // SOURCE SNAPSHOT FAILED");
+            wi::helper::messageBox(
+                "The converted asset was not registered because Renegade "
+                "could not preserve its selected source file.\n\nReason: " +
+                    sourceCopyError,
+                "Import Model");
+            return;
+        }
+
+        XMFLOAT3 position(0.0f, 0.0f, 0.0f);
+        if (camera != nullptr)
+        {
+            position = camera->Eye;
+            position.x += camera->At.x * 5.0f;
+            position.y += camera->At.y * 5.0f;
+            position.z += camera->At.z * 5.0f;
+        }
+
+        // Resolve Automatic scale against the still-isolated prepared scene
+        // before ReleaseScene() hands it to the command -- once merged, its
+        // meshes are indistinguishable from every other mesh already in the
+        // active scene. This is the default correction for arbitrary
+        // downloaded/authored models with an unknown source unit (the
+        // "imports VERY large" case); it is a non-destructive uniform Scale
+        // on the import root, never baked into vertex data, so it can be
+        // freely edited or reset afterward like any other transform.
+        float scaleFactor = 1.0f;
+        if (const auto* preparedScene = prepared.PeekScene())
+        {
+            scaleFactor = bridge::ImportService::ResolveScaleFactor(
+                bridge::ModelScaleMode::Automatic,
+                *preparedScene);
+        }
+
+        ClearSelectionOutline();
+        auto command = std::make_unique<bridge::PlaceImportedModelCommand>(
+            session_->Scenes().GetScene(),
+            prepared.ReleaseScene(),
+            position,
+            scaleFactor);
+        auto* placeCommand = command.get();
+        if (!session_->Commands().Execute(std::move(command)))
+        {
+            studioChrome_.SetStatusText("IMPORT MODEL // FAILED");
+            wi::helper::messageBox(
+                "The converted model produced no placeable entity.",
+                "Import Model");
+            SyncSelectionOutline();
+            return;
+        }
+
+        session_->Selection().Select(placeCommand->PlacedEntity());
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+
+        assetBrowserCurrentFolder_ = "Content/Models";
+        RefreshAssetBrowser();
+
+        const fs::path source = fs::u8path(sourcePath);
+        std::ostringstream scaleReadout;
+        scaleReadout.precision(3);
+        scaleReadout << std::fixed << scaleFactor;
+        studioChrome_.SetStatusText(
+            "IMPORT MODEL // ASSET SAVED + PLACED // " +
+            savedAssetPath.filename().u8string() +
+            " // AUTO SCALE x" + scaleReadout.str());
+
+        ShowImportScalePanel(
+            placeCommand->PlacedEntity(),
+            scaleFactor,
+            source.filename().u8string());
+    }
+
+    void StudioRenderPath::ShowImportScalePanel(
+        const wi::ecs::Entity entity,
+        const float appliedScaleFactor,
+        const std::string& sourceFileName)
+    {
+        importScaleTargetEntity_ = entity;
+        importScaleAppliedFactor_ = appliedScaleFactor;
+
+        std::ostringstream readout;
+        readout.precision(3);
+        readout << std::fixed << "CURRENT: AUTOMATIC x" << appliedScaleFactor
+            << '\n' << sourceFileName;
+        importScaleReadoutLabel_.SetText(readout.str());
+        importScaleModeCombo_.SetSelectedWithoutCallback(-1);
+        importScalePanel_.SetVisible(true);
+    }
+
+    void StudioRenderPath::ApplyImportScaleMode(
+        const bridge::ModelScaleMode mode)
+    {
+        // The manual picker never offers Automatic (see
+        // CreateImportScalePanel); resolving it correctly needs a bounding
+        // box scoped to just this entity's descendants inside the live,
+        // already-merged scene, which is separate, not-yet-built work. Guard
+        // against it defensively rather than resolve against the wrong
+        // scene.
+        if (session_ == nullptr || mode == bridge::ModelScaleMode::Automatic)
+        {
+            return;
+        }
+
+        auto& scene = session_->Scenes().GetScene();
+        auto* transform = scene.transforms.GetComponent(
+            importScaleTargetEntity_);
+        if (transform == nullptr)
+        {
+            // The imported entity no longer exists (e.g. the import itself
+            // was undone while this panel was still open).
+            DismissImportScalePanel();
+            return;
+        }
+
+        // None of the three modes this picker offers depend on scene
+        // content (Original/Meters/Centimeters/Inches are fixed literal
+        // multipliers; only Automatic reads the scene), so passing the
+        // active scene here is safe even though it is not the isolated,
+        // pre-merge scene ResolveScaleFactor's Automatic branch expects.
+        const float factor = bridge::ImportService::ResolveScaleFactor(
+            mode,
+            scene);
+
+        auto next = bridge::CaptureTransform(*transform);
+        next.scale = XMFLOAT3(factor, factor, factor);
+        session_->Commands().Execute(
+            std::make_unique<bridge::SetTransformCommand>(
+                scene,
+                importScaleTargetEntity_,
+                next));
+
+        importScaleAppliedFactor_ = factor;
+        std::ostringstream readout;
+        readout.precision(4);
+        readout << std::fixed << "APPLIED: x" << factor;
+        importScaleReadoutLabel_.SetText(readout.str());
+
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::DismissImportScalePanel()
+    {
+        importScalePanel_.SetVisible(false);
+        importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
+    }
+
+    void StudioRenderPath::RefreshAssetBrowser()
+    {
+        std::vector<RenegadeStudioChrome::AssetFolderRow> folders;
+        std::vector<RenegadeStudioChrome::AssetCard> assets;
+
+        if (session_ == nullptr || !session_->Projects().HasProject())
+        {
+            studioChrome_.SetAssetBrowserData(
+                std::move(folders),
+                std::move(assets),
+                "NO PROJECT");
+            return;
+        }
+
+        const auto snapshot = assetBrowserService_.Scan(
+            session_->Projects().CurrentProject().rootPath,
+            assetBrowserCurrentFolder_);
+        if (!snapshot.succeeded)
+        {
+            studioChrome_.SetAssetBrowserData(
+                std::move(folders),
+                std::move(assets),
+                "CONTENT UNAVAILABLE");
+            studioChrome_.SetStatusText(
+                "ASSET BROWSER // " + snapshot.error);
+            return;
+        }
+
+        assetBrowserCurrentFolder_ = snapshot.currentFolder;
+        folders.reserve(snapshot.folders.size());
+        for (const auto& folder : snapshot.folders)
+        {
+            RenegadeStudioChrome::AssetFolderRow row;
+            row.name = folder.name;
+            row.relativePath = folder.projectRelativePath;
+            row.depth = static_cast<int>(folder.depth);
+            row.selected = folder.selected;
+            folders.push_back(std::move(row));
+        }
+
+        assets.reserve(snapshot.assets.size());
+        for (const auto& asset : snapshot.assets)
+        {
+            RenegadeStudioChrome::AssetCard card;
+            card.name = asset.name;
+            card.relativePath = asset.projectRelativePath;
+            card.typeLabel =
+                bridge::AssetBrowserService::TypeLabel(asset.type);
+            card.directory = asset.directory;
+            assets.push_back(std::move(card));
+        }
+
+        studioChrome_.SetAssetBrowserData(
+            std::move(folders),
+            std::move(assets),
+            snapshot.currentFolder);
+        studioChrome_.SetStatusText(
+            "ASSET BROWSER // " + snapshot.currentFolder);
+    }
+
+    void StudioRenderPath::SelectAssetBrowserFolder(
+        const std::string& relativePath)
+    {
+        if (relativePath.empty())
+        {
+            return;
+        }
+        assetBrowserCurrentFolder_ = relativePath;
+        RefreshAssetBrowser();
+    }
+
+    void StudioRenderPath::SelectAssetBrowserItem(
+        const std::string& relativePath)
+    {
+        if (session_ == nullptr || relativePath.empty())
+        {
+            return;
+        }
+
+        const fs::path absolute =
+            fs::u8path(session_->Projects().CurrentProject().rootPath) /
+            fs::u8path(relativePath);
+        if (fs::is_directory(absolute))
+        {
+            SelectAssetBrowserFolder(relativePath);
+            return;
+        }
+
+        // V1 deliberately stops at real project browsing and selection.
+        // Type-specific open/place/apply and drag payloads are the next slice.
+        studioChrome_.SetStatusText(
+            "ASSET SELECTED // " + relativePath);
     }
 
     void StudioRenderPath::CreateProject()

@@ -21,6 +21,51 @@ plus the protected scene-document workflow (PR #11) have merged. Terrain
 sculpt Save/Open passed packaged DX12 and Vulkan acceptance on the project
 owner's Windows GPU.
 
+Model Import V1 Gate 1 follows accepted Light Authoring. Its first implementation
+compiles Wicked's GLB/GLTF converter into EngineBridge without enabling the
+stock editor, converts into an isolated scene, validates a WISCENE round trip,
+and records component and texture-reference counts. Because the pinned
+converter creates GPU render data, the conversion proof must run in an
+initialized DX12/Vulkan process; UI-free does not mean GPU-free. The Asset
+Browser and visible importer workspace remain later gates. A temporary
+Renegade-owned command under `BUILD > VALIDATE GLB/GLTF IMPORT...` selects a
+real model, writes only to `Saved/Validation/ModelImport`, and reports the
+isolated conversion and structural reload result without touching the active
+scene or registering a project asset. Packaged logging has now proved the
+converter and imported-scene summary complete successfully. The correction in
+validation moves WISCENE serialization/reload out of the worker and onto
+Wicked's thread-safe engine stage, matching the upstream Editor save path.
+A follow-up correction fixed a write-path crash and a false-positive
+round-trip comparison; Gate 1 acceptance is now closed on packaged DX12 and
+Vulkan against both a single-object model and a multi-node, multi-material,
+skinned/animated model (see `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` and
+`HANDOFF.md`). A smaller follow-on slice adds `ADD > IMPORT MODEL...`,
+merging a converted model directly into the active scene with Undo/Redo,
+short of full Asset Browser registration; it is committed, built, and has
+passed the full packaged acceptance checklist on DX12 and Vulkan. That
+slice's follow-on, an automatic, non-destructive import-scale correction
+(`ModelScaleMode`: Original/Meters/Centimeters/Inches/Automatic, modeled
+after GameGuru MAX's importer) applied to the import root's Scale, has also
+passed full packaged acceptance on both renderers, fixing an oversized crate
+import the project owner reported. A further, uncommitted addition adds a
+manual Import Scale panel: a small popup shown right after placement,
+independent of the Inspector's own hardcoded layout, offering
+Original/Meters, Centimeters, and Inches as one-click Undo/Redo-backed
+overrides of the Automatic factor. It has not yet run in a packaged build.
+
+Continuing the same "materials, scale, animations, collision" request, a
+further uncommitted, UI-independent slice adds `CollisionService`
+(`EngineBridge`), a curated authoring surface over Wicked's native
+`RigidBodyPhysicsComponent` scoped to Box/Sphere/Capsule/Cylinder -- the
+shapes sized from explicit dimensions rather than derived mesh geometry. It has unit
+coverage (`RenegadeCollisionTests`) but no Studio wiring yet; materials ride
+for free once the Material Inspector below lands. Animations needed one
+small correction rather than nothing at all: Wicked's `AnimationComponent`
+is created paused by default and the GLTF importer never starts it, so
+`PlaceImportedModelCommand` now calls `Play()` on every animation an import
+adds -- also uncommitted, also unverified, bundled into the same pending
+commit as the collision work.
+
 Light and Material Authoring is active on PR #12. Its UI-independent light and
 material contracts passed all four Gate 1 checks at `38c9f24`; the Light
 Inspector is visible in the packaged editor and Gate 2 Windows CI passed at

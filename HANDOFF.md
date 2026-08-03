@@ -4,11 +4,11 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Active branch:** `phase3/light-material-authoring`
+**Active branch:** `phase4/model-import-v1`
 
-**Branch base:** `c5a2fb8` (`Add native terrain authoring foundation (#11)`)
+**Branch base:** `e515172` (`Plan and prove light material authoring bridge (#12)`)
 
-**Pull request:** #12 into `main` (draft)
+**Pull request:** Not opened yet
 
 **Gate 1 remote commit:** `38c9f24`
 
@@ -16,37 +16,559 @@
 
 **Add Light remote commit:** `b81c4bb`
 
-**Discoverability correction commit:** `4ebc7a8` (patch-ready; not yet
-Windows-verified)
+**Model Import V1 serialization correction:** `e0427e9`
+
+**Model Import V1 write-crash and round-trip fingerprint correction:**
+`550d6d7`, `4e78e1b`, `50bb1eb`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current truth
 
-PR #11 is merged. Terrain Authoring V1 and the protected WISCENE document
-workflow are on `main` at `c5a2fb8`. The project owner confirmed the terrain
-sculpt and Save/Open path behaves as expected in packaged DX12 and Vulkan.
+PR #12 is merged into `main` at `e515172`. The project owner confirmed the
+complete light workflow works as intended in packaged DX12 and Vulkan,
+including creation, placement, grouped hierarchy discoverability and
+selectable editor-only markers.
 
-PR #12 is the active Light and Material Authoring branch. Gate 1 contains
-UI-independent `LightService` and `MaterialService` contracts, command-based
-Undo/Redo, no-op filtering, native-field preservation tests, material target
-resolution, and service-level rejection of every terrain-owned material. The
-project owner reported all four required PR checks green at `38c9f24`.
+The active milestone is Model Import V1 Gate 1. `ImportService` compiles only
+Wicked's standalone GLB/GLTF conversion unit into EngineBridge while the stock
+Wicked Editor target remains disabled. It now uses an explicit two-stage
+boundary: conversion and summary produce a heap-backed `PreparedModelImport`
+on Wicked's job system; WISCENE write, reload and comparison consume it at
+`EVENT_THREAD_SAFE_POINT`. It does not merge an asset into the active Studio
+scene and adds no visible importer UI.
 
-Gate 2 at `32351d9` adds the Renegade-owned selection-driven Light Inspector.
-All four Windows checks passed and the project owner visually confirmed that
-selecting `Gateway Beam` reveals the expected native Spot controls. The full
-edit/Undo/Redo/Save/Open/Runtime/Vulkan behaviour matrix has not yet been
-reported complete.
+The pinned Wicked converter creates mesh/material render data and calls
+`Scene::Update()`, so it requires an initialized graphics device. The service
+rejects calls without one.
 
-The project owner then tested Add Light at `b81c4bb`. All four native light
-types illuminate correctly, but the custom hierarchy clipped entities below
-its first visible page and only Directional had a viewport marker. This is a
-behavioural gate failure despite green CI. Commit `4ebc7a8` corrects both
-discoverability issues and remains pending fresh Windows CI and packaged visual
-acceptance.
+Two further defects were found from a packaged desktop-exit report against
+`C:/Users/paulw/Downloads/crate_box/scene.gltf` and fixed at `550d6d7`,
+`4e78e1b`, and `50bb1eb`:
 
-## Active slice — Add Light workflow
+1. **Write-path crash (`550d6d7`).** `WriteScene()` called `archive.Close()`
+   explicitly mid-function to flush the file before reopening it for
+   round-trip validation, then let the same `wi::Archive` local go out of
+   scope. `~Archive()` unconditionally calls `Close()` again, and
+   `Archive::Close()` is not idempotent: in write mode it re-invokes
+   `SaveFile()` every time, and the second call ran with an already-cleared,
+   null `data_ptr` and a stale non-zero `pos`, writing megabytes from address
+   0. That is an access violation, not a C++ exception, so it skipped every
+   `try/catch` and took the whole process down below `wiscene_write_complete`
+   with no further breadcrumb — exactly matching the `.import.log` evidence.
+   Fixed by writing once via `archive.SaveFile(path)` and then disarming the
+   archive (`archive = wi::Archive();`) before its destructor can run,
+   mirroring the existing pattern already used in
+   `SceneDocumentService.cpp`.
+2. **Round-trip false failure (`4e78e1b`, `50bb1eb`).** Once the crash was
+   fixed, Gate 1 produced a controlled `FAIL` instead: "Imported WISCENE
+   structure changed during save and reload," with identical object/mesh/
+   material/transform/hierarchy counts on both sides. Root cause:
+   `MaterialComponent::Serialize` in Wicked writes texture names relative to
+   the WISCENE's own directory (`wi::helper::GetPathRelative(dir, ...)`) but
+   does not restore them to absolute on load (unlike embedded resource data
+   in `wiResourceManager.cpp`, which is explicitly re-prefixed with
+   `archive.GetSourceDirectory()`). A freshly imported scene therefore holds
+   an absolute source texture path, and the same scene reloaded from disk
+   holds a path relative to `Saved/Validation/ModelImport/` — two different
+   strings for the same file. `ImportService::Summarize()`'s structural
+   fingerprint was hashing the full texture path, so it flagged this
+   legitimate, intentional Wicked behaviour as a structural regression on
+   every textured model. Fixed by hashing only
+   `wi::helper::GetFileNameFromPath(texture.name)`, which still catches a
+   texture slot pointing at a genuinely different file but is invariant to
+   the relative/absolute rewrite. `4e78e1b` also added a field-by-field
+   diff to the failure message so future mismatches are diagnosable from the
+   dialog/log instead of guessed at.
+
+**Packaged evidence (project owner, both renderers, commit `50bb1eb`):**
+
+- `BUILD > VALIDATE GLB/GLTF IMPORT...` against
+  `C:/Users/paulw/Downloads/crate_box/scene.gltf` reports
+  `PASS // MODEL IMPORT V1 GATE 1` in both DX12 and Vulkan, with identical
+  counts on both: 1 object, 1 mesh, 1 material, 2 texture references, 7
+  transforms, 8 hierarchy links, 0 armatures, 0 animations.
+- `BUILD > VALIDATE GLB/GLTF IMPORT...` against
+  `C:/Users/paulw/Downloads/windmill_in_soviet_village.glb` reports
+  `PASS // MODEL IMPORT V1 GATE 1` in both DX12 and Vulkan, with identical
+  counts on both: 27 objects, 27 meshes, 2 materials, 6 texture references,
+  70 transforms, 109 hierarchy links, 1 armature, 1 animation.
+
+The active scene, selection, and dirty state were unaffected across all four
+runs per the on-screen hierarchy/inspector state.
+
+Between the two assets this proves the crash fix and the round-trip
+fingerprint fix hold for both a minimal single-object case and a multi-node,
+multi-material, skinned, animated case, with matching counts across DX12 and
+Vulkan on both. **Model Import V1 Gate 1 acceptance from
+`docs/PHASE4_MODEL_IMPORT_V1.md` is satisfied.** Local C++17 syntax checks
+pass for the service and tests, but this Linux container has no CMake and
+cannot itself execute the Windows DX12/Vulkan import round trip — all
+packaged evidence above came from the project owner's machine.
+
+## Completed slice — Model Import: Scene Placement
+
+Committed and built by the project owner. `ADD > IMPORT MODEL...` merge into
+the active scene, hierarchy placement, and Undo removing the whole imported
+hierarchy were first confirmed against `crate_box` in a packaged build; the
+project owner has since reported the full
+`docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` acceptance checklist passing on both
+DX12 and Vulkan (Redo, Save/Reopen persistence, Runtime comparison,
+busy-guard, malformed-file, and the scale-specific checks below). See
+`docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for the full scope and design
+rationale. Summary:
+
+- Added `PreparedModelImport::ReleaseScene()` so a caller can take ownership
+  of the converted scene without going through the Gate 1 WISCENE round
+  trip.
+- Added `PlaceImportedModelCommand` (`ICommand`) in
+  `EngineBridge/include/renegade/bridge/ImportService.h` /
+  `EngineBridge/src/ImportService.cpp`: merges a prepared scene into the
+  active Studio scene via `Scene::Merge()`, locates the new root the same
+  way stock Wicked Editor does ("imported models always have a root
+  transform entity" — the first newly added transform), positions it five
+  metres in front of the camera, and snapshots it with
+  `Scene::Entity_Serialize(..., RECURSIVE)` for Undo/Redo, mirroring the
+  existing `DuplicateEntityCommand`/`DeleteEntityCommand` pattern.
+- Added `ADD > IMPORT MODEL...` to `RenegadeStudioChrome`
+  (`Studio/src/RenegadeStudioChrome.h`/`.cpp`) and wired it through
+  `StudioApplication`'s existing deferred `EditorAction` queue
+  (`ImportModel()` / `RunModelImportPlacement()` /
+  `CompleteModelImportPlacement()`), following the same file-dialog →
+  worker-thread conversion → `EVENT_THREAD_SAFE_POINT` completion shape as
+  `ValidateModelImport()`/`RunModelImportProof()`, and the same
+  select-and-reveal UX as `PlaceLight()`.
+- Added `PlaceImportedModelCommand` Execute/Undo/Redo coverage to
+  `Tests/ImportTests.cpp` using a synthetic scene (no real GLTF conversion,
+  since that needs a graphics device this test harness does not have).
+- This does not register a reusable project asset and does not write any
+  asset file; the model persists only as part of the active scene through
+  the existing Save path. `BUILD > VALIDATE GLB/GLTF IMPORT...` is
+  untouched.
+
+### Follow-on: import scale correction
+
+Added after the project owner reported an imported `crate_box` landing
+"VERY large." Committed, built, and packaged-accepted on both DX12 and
+Vulkan — see "Packaged evidence" below. See "Import scale correction" in
+`docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for full design rationale and the
+GameGuru MAX comparison it is modeled after.
+
+- Added `ImportService::ModelScaleMode` (`Original`/`Meters`/`Centimeters`/
+  `Inches`/`Automatic`) and `ImportService::ResolveScaleFactor()` to
+  `EngineBridge/include/renegade/bridge/ImportService.h` /
+  `EngineBridge/src/ImportService.cpp`. `Automatic` normalizes the union of
+  every mesh's local vertex-position bounds to a 2 m target extent; the
+  others are fixed literal unit-correction multipliers (or a 1.0 no-op for
+  `Original`/`Meters`, which are always identical for a glTF source).
+- Added `PreparedModelImport::PeekScene()` so a caller can resolve a scale
+  factor against the still-isolated prepared scene before
+  `ReleaseScene()` hands it to `PlaceImportedModelCommand`.
+- Added a `scaleFactor` constructor parameter (default `1.0f`, backward
+  compatible) to `PlaceImportedModelCommand`; applied as the import root's
+  uniform `Scale` alongside its placement position, non-destructively —
+  never baked into vertex data — so it is captured by the same
+  `Entity_Serialize` snapshot Undo/Redo already uses.
+- `CompleteModelImportPlacement()` in `Studio/src/StudioApplication.cpp` now
+  always resolves `ModelScaleMode::Automatic` and passes it through; the
+  status bar reports the applied factor (`AUTO SCALE x0.XXX`) as packaged
+  evidence.
+- A manual override picker was deferred out of this original follow-on (see
+  the next, separate section below) rather than risk a blind edit to the
+  Inspector's hand-rolled, hardcoded absolute-pixel layout with no way to
+  verify the result without a packaged build.
+- Added `ResolveScaleFactor` unit coverage (literal multipliers, empty-scene
+  fallback, and a synthetic 20-unit-cube bounding-box normalization) and
+  extended the existing `PlaceImportedModelCommand` Execute/Undo/Redo test
+  to assert the scale factor is applied and survives Redo, in
+  `Tests/ImportTests.cpp`.
+
+Changed files (this follow-on only):
+
+- `EngineBridge/include/renegade/bridge/ImportService.h`
+- `EngineBridge/src/ImportService.cpp`
+- `Studio/src/StudioApplication.cpp`
+- `Tests/ImportTests.cpp`
+- `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`
+- `docs/FEATURE_MATRIX.csv`
+- `docs/ROADMAP.md`
+- `HANDOFF.md`
+
+**Packaged evidence (project owner):** the full
+`docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` acceptance checklist passed on
+packaged DX12 and Vulkan, including the scale-specific steps: an imported
+model lands at a plausible size next to existing scene content instead of
+"VERY large," the status bar reports `AUTO SCALE x0.XXX`, the imported
+root's Scale X/Y/Z in the Inspector read that same value uniformly, Undo/
+Redo preserve the applied scale, and it survives Save/close/Reopen. This
+closes out the Model Import: Scene Placement slice's full acceptance
+checklist, not just the crate_box merge/hierarchy/Undo check noted earlier.
+
+### Further follow-on, uncommitted: manual Import Scale panel
+
+Requested by the project owner as the deferred piece from the section
+above. Not yet committed or built. See "Manual override: the Import Scale
+panel" in `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md` for full design rationale.
+
+- Added a self-contained popup (`importScalePanel_` and related widgets in
+  `Studio/src/StudioApplication.h`/`.cpp`) that appears automatically right
+  after `CompleteModelImportPlacement()` places a model, reporting the
+  Automatic factor already applied and offering **Original/Meters (x1.0)**,
+  **Centimeters (x0.01)**, and **Inches (x0.0254)** as one-click overrides.
+  Deliberately not `Automatic` again (would need a bounding box scoped to
+  just the imported entity's descendant subtree inside the live, merged
+  scene — separate, not-yet-built work) and deliberately not a new row in
+  the Inspector (see the risk this was deferred for above) — it is a fully
+  independent `wi::gui::Window`, positioned on its own in `ResizeLayout`
+  rather than inside the Transform section's hardcoded pixel chain.
+- `ApplyImportScaleMode()` resets the imported root's Scale to the chosen
+  literal multiplier through the existing `SetTransformCommand`/
+  `CaptureTransform` path — the same Undo/Redo-backed mechanism
+  `ApplySelectedTransformValue()` already uses for manual Transform edits —
+  so each APPLY is its own Undo step, independent of the import's own
+  Undo/Redo entry.
+- Guards against the imported entity having been removed (import undone, or
+  a different scene opened) while the panel is still open: `ApplyImportScaleMode()`
+  checks the entity still has a `TransformComponent` and dismisses the panel
+  instead of resolving against a stale entity.
+- `ApplyRenegadeTheme()` reasserts `importScalePanel_`'s background the same
+  way it already does for `inspectorPanel_`, and folds the two new labels
+  into the existing `ownLabel` pass, so the popup matches the rest of the
+  chrome's owned styling instead of only the global theme. The panel keeps
+  its own drop shadow (unlike the flush-docked Inspector) since it floats
+  over the viewport.
+
+Changed files (this follow-on only):
+
+- `Studio/src/StudioApplication.h`
+- `Studio/src/StudioApplication.cpp`
+- `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`
+- `docs/FEATURE_MATRIX.csv`
+- `HANDOFF.md`
+
+**No local validation has run against this yet** — no syntax check, no
+build, no packaged test. It has not even been committed. This is new
+`wi::gui` widget wiring (a window, two labels, a combo box, two buttons)
+positioned independently in `ResizeLayout`, which is lower-risk than
+touching the existing Inspector chain but still entirely unverified. Before
+treating any part of this as working:
+
+1. Run the same kind of local C++17 syntax check used for prior slices
+   against the two changed source files.
+2. Commit and push, then run Windows CI.
+3. Package Release, then run `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`'s
+   packaged acceptance checklist steps 6-9 (the new Import Scale panel
+   steps) on both DX12 and Vulkan, in addition to re-confirming the earlier
+   steps still pass. In particular: the panel is fully on-screen at
+   different window sizes, each of the three modes applies the correct
+   literal Scale value and is its own Undo step, CLOSE is a true no-op, and
+   the "entity removed while panel open" guard does not crash. A crash, a
+   wrong Scale value, a broken Undo/Redo, or a panel that clips off-screen
+   all stop this gate.
+
+## Active slice — Collision Authoring (uncommitted, service layer only)
+
+Started while the project owner packages and tests the two slices above,
+continuing the same "materials, scale, animations, collision" request that
+started the Model Import scale work. Not yet committed or built, and
+deliberately does not touch Studio/`StudioApplication.cpp` at all yet --
+this is a UI-independent bridge library addition only, following the same
+sequencing already used for `ImportService::ResolveScaleFactor` (prove the
+service layer with unit tests first, wire UI in a following slice).
+
+- Added `CollisionService` (`EngineBridge/include/renegade/bridge/
+  CollisionService.h` / `src/CollisionService.cpp`), mirroring
+  `MaterialService`/`LightService` exactly: a curated `CollisionState`
+  (shape, mass, friction, restitution, and shape-specific dimensions) over
+  Wicked's native `wi::scene::RigidBodyPhysicsComponent`, with
+  `CaptureCollision`/`SanitizeCollisionState`/`HasCollisionStateChange`/
+  `ApplyCollision`, and three commands: `CreateCollisionCommand`,
+  `SetCollisionCommand`, `RemoveCollisionCommand`.
+- Deliberately scoped to `BOX`/`SPHERE`/`CAPSULE`/`CYLINDER` -- the four
+  shapes Wicked sizes from explicit dimensions (half-extents/radius/height)
+  rather than derived mesh geometry, so any of them can attach to any
+  entity with a `TransformComponent`. `CYLINDER` costs nothing extra:
+  Wicked stores it in the same `CapsuleParams` (radius/height) as `CAPSULE`
+  per the component's own "also cylinder params" comment, confirmed by a
+  dedicated `RenegadeCollisionTests` case. `CONVEX_HULL`/`TRIANGLE_MESH`
+  need a `MeshComponent`-bearing entity and a `mesh_lod` to derive their
+  shape from instead -- a different targeting problem (which entity in a
+  multi-node imported hierarchy gets the collider?) that is out of scope
+  here, and `TRIANGLE_MESH` is only physically valid for a static body in
+  most physics backends. `HEIGHTFIELD` is a regular-grid terrain shape and
+  is out of scope entirely -- `TerrainService` already owns that domain,
+  it is not a fit for an imported prop's collider. Vehicle and character
+  physics are untouched.
+- `CreateCollisionCommand`/`RemoveCollisionCommand` are simpler than
+  `CreateLightCommand`: they add or remove a single component
+  (`ComponentManager<T>::Create`/`Remove`) on an entity that already exists
+  and is never created or destroyed by these commands, so Undo/Redo is a
+  plain component toggle -- no `wi::Archive` entity-level snapshot needed,
+  unlike `CreateLightCommand` (which creates and must be able to fully
+  restore a whole new entity) or `PlaceImportedModelCommand` (which merges
+  and must restore a whole imported hierarchy).
+- `ApplyCollision` calls `RigidBodyPhysicsComponent::SetRefreshParametersNeeded(true)`
+  after every edit, per the component's own documented purpose, so a live
+  physics simulation rebuilds the shape rather than continuing to use a
+  stale one.
+- Added `Tests/CollisionTests.cpp` (`RenegadeCollisionTests` in
+  `Tests/CMakeLists.txt`, wired the same way as `RenegadeMaterialTests`/
+  `RenegadeLightTests`): sanitize-floor coverage, create/duplicate-reject/
+  Undo/Redo, edit/no-op-filter/Undo/Redo, remove/Undo (including removing
+  from an entity with no rigidbody), and a dedicated Cylinder case proving
+  its dimensions reach the native capsule storage -- all against a
+  synthetic scene, no graphics device required.
+
+Changed files:
+
+- `EngineBridge/include/renegade/bridge/CollisionService.h` (new)
+- `EngineBridge/src/CollisionService.cpp` (new)
+- `EngineBridge/CMakeLists.txt`
+- `Tests/CollisionTests.cpp` (new)
+- `Tests/CMakeLists.txt`
+- `docs/FEATURE_MATRIX.csv`
+- `HANDOFF.md`
+
+**No local validation has run against this yet** -- no syntax check, no
+build, no packaged test, and there is deliberately no Studio UI to exercise
+it through yet. Before treating any part of this as working:
+
+1. Run the same kind of local C++17 syntax check used for prior slices
+   against the four changed/new source files.
+2. Commit and push, then run Windows CI -- `RenegadeCollisionTests` needs to
+   pass alongside the existing bridge test suite.
+3. This slice intentionally stops at the service layer. The next slice
+   wires it into Studio: most likely extending the Import Scale panel into
+   a combined Import Setup panel with a collision shape choice, defaulted
+   from the same bounding-box data already computed for Automatic scale,
+   attached to the import root the same way scale is. That UI work has not
+   started and needs its own packaged acceptance pass once it exists.
+
+## Active slice — Import animation autoplay (uncommitted)
+
+Added alongside the Collision Authoring slice, at the project owner's
+request to bundle it into the same pending commit. Closes out the
+"animations" part of the original "materials, scale, animations, collision"
+request -- and turned out to need no new rendering/display capability at
+all, just one missing call.
+
+Root cause, confirmed by reading the source rather than assumed: Wicked's
+`wi::scene::AnimationComponent` defaults to `LOOPED` but not `PLAYING`
+(`_flags = LOOPED`); `Scene::RunAnimationUpdateSystem` only advances an
+animation's timer once `IsPlaying()` is true; and
+`WickedEngine/Editor/ModelImporter_GLTF.cpp` creates every imported
+animation's component but never calls `Play()` on it. An imported model's
+armature and keyframe data were never missing or broken (Gate 1 already
+proved the windmill's "1 armature, 1 animation" survive conversion and
+round-trip intact) -- they were simply frozen at frame zero because nothing
+had ever started them, the same as any other native Wicked animation would
+be if its `Play()` were never called.
+
+- `PlaceImportedModelCommand::Execute()`'s first-execution branch
+  (`EngineBridge/src/ImportService.cpp`) now captures
+  `scene_->animations.GetCount()` before `Scene::Merge()`, then calls
+  `.Play()` on every newly-added animation afterward, before the
+  Undo/Redo snapshot is taken.
+- This only reaches animations belonging to the just-imported model, never
+  a pre-existing one already in the target scene, because Wicked's own
+  importer always creates the animation entity and appends it to
+  `scene.animations` as part of the same merge.
+- Confirmed (not assumed) that `Undo`/`Redo` already cover this for free:
+  `ModelImporter_GLTF.cpp` attaches every animation entity under the import
+  root via `Component_Attach(entity, state.rootEntity)`, so it is inside
+  the same hierarchy subtree that `PlaceImportedModelCommand`'s existing
+  `Entity_Serialize(..., RECURSIVE)` snapshot and `Entity_Remove(...,
+  recursive = true)` already capture and restore -- calling `Play()` before
+  that snapshot is taken means the playing state round-trips through
+  Undo/Redo exactly like any other authored value, with no new snapshot
+  logic required.
+- Extended the existing `PlaceImportedModelCommand` synthetic-scene test in
+  `Tests/ImportTests.cpp` with a fixture animation entity attached under the
+  imported root (mirroring `ModelImporter_GLTF.cpp`'s exact attachment
+  call), asserting it starts paused, is playing immediately after Execute,
+  is removed by Undo, and is playing again after Redo.
+- Does not add any pause/seek/scrub/blend control, and does not change
+  behavior for any animation authored directly in Studio rather than
+  imported -- this only affects the moment a GLB/GLTF model with animation
+  data is placed into the scene.
+
+Changed files:
+
+- `EngineBridge/src/ImportService.cpp`
+- `Tests/ImportTests.cpp`
+- `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`
+- `docs/FEATURE_MATRIX.csv`
+- `docs/ROADMAP.md`
+- `HANDOFF.md`
+
+**No local validation has run against this yet** -- no syntax check, no
+build, no packaged test. Before treating any part of this as working:
+
+1. Run the same kind of local C++17 syntax check used for prior slices
+   against the two changed source files.
+2. Commit and push, then run Windows CI -- `RenegadeImportTests`' extended
+   assertions need to pass.
+3. Package Release and repeat an import of `windmill_in_soviet_village.glb`
+   (or any animated GLB) on both DX12 and Vulkan; confirm the blades (or
+   equivalent) visibly animate immediately on placement with no extra
+   click, that Undo stops and removes the animation along with the rest of
+   the imported hierarchy, that Redo resumes it, and that Save/close/Reopen
+   preserves the playing state. A model that imports but does not animate,
+   or an Undo that leaves an orphaned animation still playing, both stop
+   this gate.
+
+## Bug fix, uncommitted: Import Scale panel dropdown was unselectable
+
+The project owner packaged and ran the already-shipped Import Scale panel
+(models import "beautifully" and now animate) and reported the panel opens
+but its combo box "won't let me select anything."
+
+Root cause, confirmed by reading `WickedEngine/WickedEngine/wiGUI.cpp`
+rather than guessed: `Window::Render` scissor-clips every child widget to
+`widget->parent->scissorRect` -- the window's own rectangle -- including a
+`ComboBox`'s dropdown list once it opens. `ComboBox::GetDropOffset`'s
+auto-flip-upward logic only checks the dropdown against the full canvas
+height (`screenheight`), never against the parent window's bounds, so it
+never rescues a dropdown that would overflow a *short* parent -- it only
+flips if the drop would go off the bottom of the whole screen. The Import
+Scale panel is 168px tall with the combo sitting near its bottom edge, so
+its three-item dropdown (roughly 28px header + 3 x 28px items = ~112px)
+had almost nowhere to render before hitting the panel's own scissor edge
+and disappearing. The combo logic itself was never broken -- the options
+were just being drawn into a region that gets cut away.
+
+A first attempt grew `importScalePanel_` from 168 to 288px tall in
+`ResizeLayout()` (and moved the buttons down to y=234) on the theory that
+the dropdown was being scissor-clipped. That change is retained -- the extra
+height is harmless and gives the dropdown room -- but it did **not** fix the
+report, and neither did a second attempt (deferring the button handlers
+through `pendingAction_` plus a one-shot `importScalePanel_.Activate()` on
+the theory of a wiGUI input-priority / force-disable cascade). Both were
+wrong diagnoses. See the definitive root cause below.
+
+### Definitive root cause and fix (the controls were created disabled)
+
+After the two attempts above failed on packaged builds, a temporary
+on-screen diagnostic was added to `StudioRenderPath::Update()` that printed,
+every frame the panel was visible, the pointer position, the panel's and
+APPLY button's hitboxes, their `GetState()` and `force_disable` flags, the
+GUI focus flag, and the state of every GUI widget registered ahead of the
+panel. Packaged DX12 output with the mouse held over APPLY read:
+
+```text
+ISP st=1 fd=0 guiFoc=1 | ptr 841,373 | pnl 780,122 320x288
+  | apply st=0 fd=0 ah 792,357 | AHEAD tb=0 hier=0 srch=0 insp=0
+    cont=0 chrome=0 hub=0
+```
+
+That is conclusive: the pointer (841,373) is squarely inside the APPLY
+button's hitbox (792,357 + 144x30), nothing ahead of the panel is active,
+and `fd=0` on both the panel and the button -- so force-disable was never
+involved. Yet APPLY stays `st=0` (IDLE). In wiGUI, `Button::Update` gates
+its entire hover/click block on `IsEnabled() && dt > 0`, and
+`Widget::IsEnabled()` is `enabled && visible && !force_disable`. The button
+renders (so `visible` is true) and `fd=0`, which means its own `enabled`
+flag was false.
+
+Root cause: `CreateImportScalePanel()` called `importScalePanel_.SetVisible(
+false)` **before** adding the combo box and buttons. `wi::gui::Window::
+AddWidget` stamps each child with `SetEnabled(this->IsEnabled())`, evaluated
+at add time -- and because the window was already hidden,
+`Window::IsEnabled()` returned false, so every child was created
+permanently disabled. `Window::SetVisible(true)` in `ShowImportScalePanel()`
+re-shows the children but never re-enables them, so they rendered perfectly
+and ignored all input -- the combo, APPLY and CLOSE were all dead. The
+Inspector never hit this because its children are added while it is visible.
+
+Fixed by hiding the panel only *after* every child has been added (moved the
+`SetVisible(false)` to the end of `CreateImportScalePanel()`), so each child
+inherits an enabled state. The failed second attempt's dead code was reverted
+(the `Activate()` call and its incorrect force-disable rationale removed); the
+`pendingAction_`-deferred button handlers were kept, since deferring scene/GUI
+mutations out of an `OnClick` that fires mid-GUI-update is correct regardless
+and matches every other button in the file. The temporary diagnostic was
+removed.
+
+Changed files:
+
+- `Studio/src/StudioApplication.cpp`
+- `Studio/src/StudioApplication.h` (the two deferred `EditorAction` values
+  and `pendingImportScaleMode_`, from the retained second-attempt refactor)
+- `HANDOFF.md`
+
+**Local validation:** `StudioApplication.cpp` (which includes the header)
+passes a C++17 `-fsyntax-only` check against the pinned Wicked headers using
+the same temporary SDL declaration shim prior slices required. The fix was
+found from packaged DX12 diagnostic evidence (above); the corrected build has
+**not** yet been packaged. Before treating this as fixed:
+
+1. Commit and push, then run Windows CI.
+2. Package Release, reimport a GLB, and confirm on both DX12 and Vulkan that
+   the combo opens and accepts a selection, APPLY applies the chosen scale
+   and is its own Undo step, and CLOSE dismisses the panel -- every control
+   responding on the first interaction, not after retries.
+
+## Completed slice — Model Import V1 Gate 1
+
+Changed files:
+
+- `EngineBridge/include/renegade/bridge/ImportService.h`
+- `EngineBridge/src/ImportService.cpp`
+- `EngineBridge/CMakeLists.txt`
+- `Tests/ImportTests.cpp`
+- `Tests/CMakeLists.txt`
+- `README.md`
+- `EngineBridge/README.md`
+- `docs/ARCHITECTURE.md`
+- `docs/ROADMAP.md`
+- `docs/PHASE4_MODEL_IMPORT_V1.md`
+- `docs/FEATURE_MATRIX.csv`
+- `HANDOFF.md`
+
+Local validation:
+
+```text
+git diff --check
+g++ -std=c++17 -fsyntax-only <SDL declaration shim> \
+  -IEngineBridge/include -IWickedEngine/WickedEngine -IWickedEngine/Editor \
+  EngineBridge/src/ImportService.cpp Tests/ImportTests.cpp
+g++ -std=c++17 -fsyntax-only <SDL declaration shim> \
+  -IEngineBridge/include -IStudio/src \
+  -IWickedEngine/WickedEngine -IWickedEngine/Editor \
+  Studio/src/StudioApplication.cpp
+g++ -std=c++17 -fsyntax-only <SDL declaration shim> \
+  -IWickedEngine/Editor -IWickedEngine/WickedEngine \
+  WickedEngine/Editor/ModelImporter_GLTF.cpp
+```
+
+All three syntax commands pass. The shim only supplies SDL declarations absent from
+this container and is not a repository file. CMake is unavailable locally.
+
+Risks and next task:
+
+The representative windmill and a simple control GLTF both crashed in earlier
+packaged attempts, and a corrected build still crashed on `crate_box`. Both
+root causes are now understood and fixed (see above): a double-`Close()`
+null-pointer write, then a false-positive round-trip comparison. `crate_box`
+(single object, no armature/animation) and `windmill_in_soviet_village.glb`
+(27 objects/meshes, 2 materials, 1 armature, 1 animation) both now pass DX12
+and Vulkan with matching counts. **Gate 1 acceptance is closed.**
+
+1. Run fresh Windows CI to prove MSVC compiles `550d6d7`/`4e78e1b`/`50bb1eb`
+   in the Renegade target; this has not yet run in CI, only on the project
+   owner's packaged local builds.
+2. Wicked's importer reports malformed-file errors through its
+   reference-editor message box; production structured error capture remains
+   a later hardening gate and must not be hidden.
+3. Scene placement (merging an imported model into the active scene with
+   Undo/Redo) is drafted in the new active slice above, but is uncommitted
+   and has not run in packaged Studio yet. The full **Asset Browser > Add
+   Asset** workspace — project asset registration and a reusable browser
+   entry, so a model can be instanced without re-converting — remains
+   further out and is intentionally not part of that draft; see
+   `docs/PHASE4_MODEL_IMPORT_PLACEMENT.md`.
+
+## Completed previous slice — Add Light workflow
 
 The next patch completes light authoring before Material UI starts. It:
 

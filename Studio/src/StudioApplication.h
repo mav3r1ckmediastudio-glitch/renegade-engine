@@ -10,7 +10,9 @@
 #include <Translator.h>
 
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
+#include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
@@ -37,6 +39,7 @@ namespace renegade::studio
         void RefreshHierarchy();
         void RefreshInspector();
         void RefreshProjectHub();
+        void RefreshAssetBrowser();
 
     private:
         enum class EditorAction
@@ -70,6 +73,10 @@ namespace renegade::studio
             ApplyTerrainMaterialPreset,
             ApplyDefaultGrass,
             ReloadTerrainMaterial,
+            ValidateModelImport,
+            ImportModel,
+            ApplyImportScale,
+            DismissImportScale,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -247,6 +254,21 @@ namespace renegade::studio
         void CommitTerrainTextureScale(float value);
         void ApplyDefaultGrass();
         void ReloadTerrainMaterial();
+        void ValidateModelImport();
+        void RunModelImportProof(const std::string& sourcePath);
+        void PresentModelImportProof(
+            const bridge::ImportResult& result);
+        void ImportModel();
+        void RunModelImportPlacement(const std::string& sourcePath);
+        void CompleteModelImportPlacement(
+            bridge::PreparedModelImport prepared);
+        void CreateImportScalePanel();
+        void ShowImportScalePanel(
+            wi::ecs::Entity entity,
+            float appliedScaleFactor,
+            const std::string& sourceFileName);
+        void ApplyImportScaleMode(bridge::ModelScaleMode mode);
+        void DismissImportScalePanel();
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -289,6 +311,8 @@ namespace renegade::studio
         void SetGridVisible(bool visible);
         void CreateProjectHub();
         void CreateWorkspaceShell();
+        void SelectAssetBrowserFolder(const std::string& relativePath);
+        void SelectAssetBrowserItem(const std::string& relativePath);
         void CreateProject();
         void ClearSelectionOutline() noexcept;
         void DeleteSelection();
@@ -458,6 +482,8 @@ namespace renegade::studio
         wi::gui::Window contentPanel_;
         wi::gui::Label contentLabel_;
         wi::gui::Label contentPlaceholder_;
+        bridge::AssetBrowserService assetBrowserService_;
+        std::string assetBrowserCurrentFolder_ = "Content";
         wi::gui::Window projectHubPanel_;
         wi::gui::Label hubBrandLabel_;
         wi::gui::Label hubTitleLabel_;
@@ -475,6 +501,12 @@ namespace renegade::studio
         wi::gui::Button continueProjectButton_;
         wi::gui::Label hubMessageLabel_;
         wi::gui::Button gridToggleButton_;
+        wi::gui::Window importScalePanel_;
+        wi::gui::Label importScaleTitleLabel_;
+        wi::gui::Label importScaleReadoutLabel_;
+        RenegadeComboBox importScaleModeCombo_;
+        RenegadeButton importScaleApplyButton_;
+        RenegadeButton importScaleDismissButton_;
         RenegadeStudioChrome studioChrome_;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;
@@ -560,8 +592,13 @@ namespace renegade::studio
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
         wi::jobsystem::context sceneOpenWorkload_;
+        wi::jobsystem::context modelImportWorkload_;
         std::string openingScenePath_;
         bool sceneOpenInProgress_ = false;
+        wi::ecs::Entity importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
+        float importScaleAppliedFactor_ = 1.0f;
+        bridge::ModelScaleMode pendingImportScaleMode_ =
+            bridge::ModelScaleMode::Original;
     };
 
     class StudioApplication final : public wi::Application

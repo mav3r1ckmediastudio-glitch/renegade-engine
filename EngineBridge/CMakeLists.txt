@@ -1,7 +1,10 @@
 add_library(RenegadeEngineBridge STATIC
+    include/renegade/bridge/AssetBrowserService.h
     include/renegade/bridge/CommandService.h
     include/renegade/bridge/LightService.h
+    include/renegade/bridge/ImportService.h
     include/renegade/bridge/MaterialService.h
+    include/renegade/bridge/CollisionService.h
     include/renegade/bridge/OceanService.h
     include/renegade/bridge/PrecipitationService.h
     include/renegade/bridge/SunService.h
@@ -11,9 +14,12 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/SceneDocumentService.h
     include/renegade/bridge/SelectionService.h
     include/renegade/bridge/StudioSession.h
+    src/AssetBrowserService.cpp
     src/CommandService.cpp
     src/LightService.cpp
+    src/ImportService.cpp
     src/MaterialService.cpp
+    src/CollisionService.cpp
     src/OceanService.cpp
     src/PrecipitationService.cpp
     src/SunService.cpp
@@ -22,6 +28,17 @@ add_library(RenegadeEngineBridge STATIC
     src/SceneService.cpp
     src/SceneDocumentService.cpp
     src/SelectionService.cpp
+)
+
+# Wicked's format converter is self-contained even though upstream keeps it in
+# the reference Editor directory. Compile only that converter into Renegade's
+# bridge; this does not enable or link the stock Wicked Editor application.
+target_sources(RenegadeEngineBridge PRIVATE
+    ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_GLTF.cpp
+)
+
+target_include_directories(RenegadeEngineBridge PRIVATE
+    ${PROJECT_SOURCE_DIR}/WickedEngine/Editor
 )
 
 add_library(Renegade::EngineBridge ALIAS RenegadeEngineBridge)

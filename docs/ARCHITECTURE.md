@@ -129,6 +129,27 @@ for the pinned `OceanParameters`, including FFT resolution and spectral wind.
 requires recreation, while always synchronizing the serialized primary Weather
 component into `Scene::weather`.
 
+### Model import boundary
+
+`ImportService` is the UI-independent boundary for Model Import V1. Renegade
+compiles Wicked's standalone `ModelImporter_GLTF.cpp` conversion unit into
+EngineBridge without enabling or linking the stock Wicked Editor application.
+The service uses a two-stage operation. `PrepareGltfAsset` imports GLB/GLTF into
+an isolated heap-backed `Scene` and summarizes its native components on
+Wicked's job system. `CompleteGltfAsset` receives that move-only prepared scene
+at `EVENT_THREAD_SAFE_POINT`, writes the reusable WISCENE, reloads it, and
+rejects a round trip whose component structure changed. This follows the
+upstream Editor boundary: model conversion is asynchronous, while WISCENE save
+runs at the engine-safe point. Neither stage merges into the active Studio
+scene.
+
+The pinned Wicked converter is editor-independent but not renderer-independent:
+it calls native mesh/material render-data creation and `Scene::Update()` during
+conversion. `ImportService` therefore requires an initialized Wicked graphics
+device and returns a clear error without one. A genuinely GPU-free importer
+would require an approved Wicked core patch or a maintained Renegade fork of
+the conversion code; Model Import V1 takes neither path.
+
 Terrain sculpting treats Wicked's streamed chunks as views into one canonical
 integer height grid. Neighbouring 67x67 chunk meshes deliberately duplicate
 their shared edge and corner vertices; a sculpt edit is therefore calculated

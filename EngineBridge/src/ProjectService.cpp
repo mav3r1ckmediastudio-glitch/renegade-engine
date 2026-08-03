@@ -1,6 +1,7 @@
 #include "renegade/bridge/ProjectService.h"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <filesystem>
 #include <system_error>
@@ -14,6 +15,44 @@ namespace
 
     constexpr const char* ProjectFormat = "renegade-project";
     constexpr const char* DefaultStartupScene = "Content/Scenes/Main.wiscene";
+
+    constexpr std::array<const char*, 35> DefaultProjectDirectories = {
+        "Content/Scenes",
+        "Content/Models",
+        "Content/Prefabs",
+        "Content/Materials",
+        "Content/Textures",
+        "Content/Audio/SFX",
+        "Content/Audio/Music",
+        "Content/Audio/Ambience",
+        "Content/Audio/Dialogue",
+        "Content/Audio/UI",
+        "Content/Video",
+        "Content/Vegetation",
+        "Content/Characters",
+        "Content/Player",
+        "Content/Weapons",
+        "Content/Projectiles",
+        "Content/Particles",
+        "Content/Scripts",
+        "Content/UI",
+        "Content/Data",
+        "Content/Generated",
+        "SourceAssets/Models",
+        "SourceAssets/Textures",
+        "SourceAssets/Audio",
+        "SourceAssets/Video",
+        "SourceAssets/Animation",
+        "Saved/Autosaves",
+        "Saved/Backups",
+        "Saved/ImportLogs",
+        "Saved/Thumbnails",
+        "Saved/CrashReports",
+        "Saved/EditorState",
+        "Intermediate",
+        "Builds/Windows",
+        "Builds/Development",
+    };
 
     std::string NormalizedAbsolutePath(const std::string& path)
     {
@@ -55,6 +94,28 @@ namespace
             {
                 return part == "..";
             });
+    }
+
+    bool EnsureDefaultProjectDirectories(
+        const fs::path& root,
+        std::string& error)
+    {
+        std::error_code directoryError;
+        for (const char* directory : DefaultProjectDirectories)
+        {
+            fs::create_directories(
+                root / fs::u8path(directory),
+                directoryError);
+            if (directoryError)
+            {
+                error = "Could not initialise project folder '" +
+                    std::string(directory) + "': " +
+                    directoryError.message();
+                return false;
+            }
+        }
+        error.clear();
+        return true;
     }
 }
 
@@ -107,8 +168,10 @@ namespace renegade::bridge
             }
 
             const fs::path scenePath = root / fs::u8path(DefaultStartupScene);
-            fs::create_directories(scenePath.parent_path());
-            fs::create_directories(root / "Saved");
+            for (const char* directory : DefaultProjectDirectories)
+            {
+                fs::create_directories(root / fs::u8path(directory));
+            }
             fs::copy_file(
                 fs::u8path(templateScenePath),
                 scenePath,
@@ -145,6 +208,14 @@ namespace renegade::bridge
         ProjectMetadata metadata;
         std::string error;
         if (!ReadProject(descriptorPath, metadata, error))
+        {
+            lastError_ = std::move(error);
+            return false;
+        }
+
+        if (!EnsureDefaultProjectDirectories(
+                fs::u8path(metadata.rootPath),
+                error))
         {
             lastError_ = std::move(error);
             return false;
