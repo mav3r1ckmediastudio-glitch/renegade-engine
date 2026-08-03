@@ -95,6 +95,28 @@ namespace
                 return part == "..";
             });
     }
+
+    bool EnsureDefaultProjectDirectories(
+        const fs::path& root,
+        std::string& error)
+    {
+        std::error_code directoryError;
+        for (const char* directory : DefaultProjectDirectories)
+        {
+            fs::create_directories(
+                root / fs::u8path(directory),
+                directoryError);
+            if (directoryError)
+            {
+                error = "Could not initialise project folder '" +
+                    std::string(directory) + "': " +
+                    directoryError.message();
+                return false;
+            }
+        }
+        error.clear();
+        return true;
+    }
 }
 
 namespace renegade::bridge
@@ -186,6 +208,14 @@ namespace renegade::bridge
         ProjectMetadata metadata;
         std::string error;
         if (!ReadProject(descriptorPath, metadata, error))
+        {
+            lastError_ = std::move(error);
+            return false;
+        }
+
+        if (!EnsureDefaultProjectDirectories(
+                fs::u8path(metadata.rootPath),
+                error))
         {
             lastError_ = std::move(error);
             return false;

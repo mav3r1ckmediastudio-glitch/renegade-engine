@@ -133,13 +133,35 @@ namespace
 
     fs::path StageLogPath(const std::string& assetPath)
     {
+        const fs::path asset = fs::u8path(assetPath).lexically_normal();
+        fs::path probe = asset.parent_path();
+        while (!probe.empty())
+        {
+            if (wi::helper::toUpper(probe.filename().u8string()) == "CONTENT")
+            {
+                return probe.parent_path() / "Saved" / "ImportLogs" /
+                    fs::u8path(asset.filename().u8string() + ".import.log");
+            }
+            const fs::path parent = probe.parent_path();
+            if (parent == probe)
+            {
+                break;
+            }
+            probe = parent;
+        }
         return fs::u8path(assetPath + ".import.log");
     }
 
     void ResetStageLog(const std::string& assetPath) noexcept
     {
+        const fs::path logPath = StageLogPath(assetPath);
+        std::error_code ignored;
+        if (!logPath.parent_path().empty())
+        {
+            fs::create_directories(logPath.parent_path(), ignored);
+        }
         std::ofstream log(
-            StageLogPath(assetPath),
+            logPath,
             std::ios::out | std::ios::trunc);
         if (log)
         {
@@ -468,22 +490,22 @@ namespace renegade::bridge
         return prepared;
     }
 
-    ImportResult ImportService::CompleteGltfAsset(
-        PreparedModelImport prepared) const
+    ImportResult ImportService::SavePreparedGltfAsset(
+        PreparedModelImport& prepared) const
     {
         const bool ready = prepared.IsReady();
-        ImportResult result = std::move(prepared.result_);
+        ImportResult result = prepared.result_;
         if (!ready)
         {
             if (result.error.empty())
             {
-                result.error = "The prepared model import is not ready for WISCENE validation.";
+                result.error =
+                    "The prepared model import is not ready for WISCENE validation.";
             }
             return result;
         }
 
         RecordStage(result.assetPath, "thread_safe_completion_begin");
-
         try
         {
             if (!WriteScene(*prepared.scene_, result.assetPath, result.error))
@@ -502,13 +524,12 @@ namespace renegade::bridge
         catch (...)
         {
             RecordStage(result.assetPath, "fail_wiscene_write_exception");
-            result.error = "WISCENE serialization failed with an unknown error.";
+            result.error =
+                "WISCENE serialization failed with an unknown error.";
             return result;
         }
-        RecordStage(result.assetPath, "wiscene_write_complete");
-        prepared.scene_.reset();
-        RecordStage(result.assetPath, "imported_scene_released");
 
+        RecordStage(result.assetPath, "wiscene_write_complete");
         auto reloadedScene =
             wi::allocator::make_shared_single<wi::scene::Scene>();
         RecordStage(result.assetPath, "reload_scene_allocated");
@@ -533,6 +554,7 @@ namespace renegade::bridge
             result.error = "WISCENE reload failed with an unknown error.";
             return result;
         }
+
         RecordStage(result.assetPath, "wiscene_reload_complete");
         result.reloaded = Summarize(*reloadedScene);
         RecordStage(result.assetPath, "reload_summary_complete");
@@ -547,6 +569,18 @@ namespace renegade::bridge
 
         result.succeeded = true;
         RecordStage(result.assetPath, "pass");
+        return result;
+    }
+
+    ImportResult ImportService::CompleteGltfAsset(
+        PreparedModelImport prepared) const
+    {
+        ImportResult result = SavePreparedGltfAsset(prepared);
+        prepared.scene_.reset();
+        if (result.succeeded)
+        {
+            RecordStage(result.assetPath, "imported_scene_released");
+        }
         return result;
     }
 

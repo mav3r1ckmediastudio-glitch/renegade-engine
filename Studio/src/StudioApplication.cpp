@@ -157,6 +157,114 @@ namespace
                 (value & (1 << bit)) != 0);
         }
     }
+
+    fs::path AllocateImportedModelAssetPath(
+        const fs::path& projectRoot,
+        const fs::path& source)
+    {
+        const fs::path contentDirectory =
+            projectRoot / "Content" / "Models";
+        const fs::path sourceDirectory =
+            projectRoot / "SourceAssets" / "Models";
+        std::error_code ignored;
+        fs::create_directories(contentDirectory, ignored);
+        ignored.clear();
+        fs::create_directories(sourceDirectory, ignored);
+
+        std::string stem = source.stem().u8string();
+        if (stem.empty())
+        {
+            stem = "ImportedModel";
+        }
+
+        for (std::uint32_t index = 1; ; ++index)
+        {
+            const std::string candidateStem = index == 1
+                ? stem
+                : stem + "_" + std::to_string(index);
+            const fs::path assetPath =
+                contentDirectory / fs::u8path(candidateStem + ".wiscene");
+            const fs::path sourceSnapshot =
+                sourceDirectory / fs::u8path(candidateStem);
+            if (!fs::exists(assetPath) && !fs::exists(sourceSnapshot))
+            {
+                return assetPath;
+            }
+        }
+    }
+
+    bool CopyOriginalModelSource(
+        const fs::path& source,
+        const fs::path& projectRoot,
+        const fs::path& assetPath,
+        std::string& error)
+    {
+        if (!fs::is_regular_file(source))
+        {
+            error = "The selected source model no longer exists: " +
+                source.generic_u8string();
+            return false;
+        }
+
+        const fs::path snapshotDirectory =
+            projectRoot / "SourceAssets" / "Models" / assetPath.stem();
+        std::error_code copyError;
+        fs::create_directories(snapshotDirectory, copyError);
+        if (copyError)
+        {
+            error = "Could not create the model source snapshot folder: " +
+                copyError.message();
+            return false;
+        }
+
+        fs::copy_file(
+            source,
+            snapshotDirectory / source.filename(),
+            fs::copy_options::overwrite_existing,
+            copyError);
+        if (copyError)
+        {
+            std::error_code ignored;
+            fs::remove_all(snapshotDirectory, ignored);
+            error = "Could not copy the original model into SourceAssets: " +
+                copyError.message();
+            return false;
+        }
+
+        // Preserve the common same-stem binary sidecar for external GLTF.
+        if (wi::helper::toUpper(source.extension().u8string()) == ".GLTF")
+        {
+            for (const char* extension : {".bin", ".BIN"})
+            {
+                const fs::path sidecar = source.parent_path() /
+                    fs::u8path(source.stem().u8string() + extension);
+                if (!fs::is_regular_file(sidecar))
+                {
+                    continue;
+                }
+                copyError.clear();
+                fs::copy_file(
+                    sidecar,
+                    snapshotDirectory / sidecar.filename(),
+                    fs::copy_options::overwrite_existing,
+                    copyError);
+                if (copyError)
+                {
+                    std::error_code ignored;
+                    fs::remove_all(snapshotDirectory, ignored);
+                    error =
+                        "Could not copy the GLTF binary sidecar into "
+                        "SourceAssets: " +
+                        copyError.message();
+                    return false;
+                }
+                break;
+            }
+        }
+
+        error.clear();
+        return true;
+    }
 }
 
 namespace renegade::studio
@@ -6162,31 +6270,21 @@ namespace renegade::studio
             return;
         }
 
-        // ImportService::PrepareGltfAsset requires a .wiscene-shaped
-        // destination for its extension check and stage-breadcrumb log, but
-        // placement never writes there. The converted model is merged
-        // straight into the active scene by PlaceImportedModelCommand and
-        // persists the same way any other native entity does, through the
-        // normal Save path -- it does not become a separate, reusable
-        // project asset. That registration step belongs to the later Asset
-        // Browser > Add Asset milestone.
-        const fs::path stagingDirectory =
-            fs::u8path(session_->Projects().CurrentProject().rootPath) /
-            "Saved" / "Validation" / "ModelImport";
+        const fs::path projectRoot =
+            fs::u8path(session_->Projects().CurrentProject().rootPath);
         const fs::path source = fs::u8path(sourcePath);
-        const fs::path stagingPath = stagingDirectory /
-            fs::u8path(source.stem().u8string() + ".wiscene");
+        const fs::path assetPath =
+            AllocateImportedModelAssetPath(projectRoot, source);
+        const std::string assetPathString = assetPath.generic_u8string();
 
-        const std::string stagingPathString =
-            stagingPath.generic_u8string();
         wi::jobsystem::Execute(
             modelImportWorkload_,
-            [this, sourcePath, stagingPathString](wi::jobsystem::JobArgs)
+            [this, sourcePath, assetPathString](wi::jobsystem::JobArgs)
             {
                 auto prepared = std::make_shared<bridge::PreparedModelImport>(
                     bridge::ImportService().PrepareGltfAsset(
                         sourcePath,
-                        stagingPathString));
+                        assetPathString));
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, prepared](uint64_t)
@@ -6215,6 +6313,39 @@ namespace renegade::studio
         }
 
         const std::string sourcePath = prepared.Result().sourcePath;
+        const bridge::ImportResult savedAsset =
+            bridge::ImportService().SavePreparedGltfAsset(prepared);
+        if (!savedAsset.succeeded)
+        {
+            studioChrome_.SetStatusText("IMPORT MODEL // ASSET SAVE FAILED");
+            wi::helper::messageBox(
+                "The model converted, but its reusable project asset could "
+                "not be saved.\n\nReason: " + savedAsset.error,
+                "Import Model");
+            return;
+        }
+
+        const fs::path projectRoot =
+            fs::u8path(session_->Projects().CurrentProject().rootPath);
+        const fs::path savedAssetPath = fs::u8path(savedAsset.assetPath);
+        std::string sourceCopyError;
+        if (!CopyOriginalModelSource(
+                fs::u8path(sourcePath),
+                projectRoot,
+                savedAssetPath,
+                sourceCopyError))
+        {
+            std::error_code ignored;
+            fs::remove(savedAssetPath, ignored);
+            studioChrome_.SetStatusText(
+                "IMPORT MODEL // SOURCE SNAPSHOT FAILED");
+            wi::helper::messageBox(
+                "The converted asset was not registered because Renegade "
+                "could not preserve its selected source file.\n\nReason: " +
+                    sourceCopyError,
+                "Import Model");
+            return;
+        }
 
         XMFLOAT3 position(0.0f, 0.0f, 0.0f);
         if (camera != nullptr)
@@ -6263,12 +6394,16 @@ namespace renegade::studio
         RefreshInspector();
         RefreshStatus();
 
+        assetBrowserCurrentFolder_ = "Content/Models";
+        RefreshAssetBrowser();
+
         const fs::path source = fs::u8path(sourcePath);
         std::ostringstream scaleReadout;
         scaleReadout.precision(3);
         scaleReadout << std::fixed << scaleFactor;
         studioChrome_.SetStatusText(
-            "IMPORT MODEL // PLACED // " + source.filename().u8string() +
+            "IMPORT MODEL // ASSET SAVED + PLACED // " +
+            savedAssetPath.filename().u8string() +
             " // AUTO SCALE x" + scaleReadout.str());
 
         ShowImportScalePanel(
