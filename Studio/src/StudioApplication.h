@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -77,6 +78,11 @@ namespace renegade::studio
             ImportModel,
             ApplyImportScale,
             DismissImportScale,
+            FinishImportReview,
+            CancelImportReview,
+            ToggleImportReviewReference,
+            ApplyImportReviewScale,
+            ApplyImportReviewScaleMultiplier,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -269,6 +275,33 @@ namespace renegade::studio
             const std::string& sourceFileName);
         void ApplyImportScaleMode(bridge::ModelScaleMode mode);
         void DismissImportScalePanel();
+        void CreateImportReviewPanel();
+        void EnterImportReview(bridge::PreparedModelImport prepared);
+        void PlaceReviewedImport(
+            bridge::PreparedModelImport prepared,
+            float reviewedScaleFactor);
+        void FinishImportReview();
+        void CancelImportReview();
+        void FrameImportReviewModel(bool reframeCamera);
+        void CreateImportReviewReference();
+        void LoadImportReviewReferenceEntity();
+        void SetImportReviewReferenceRenderable(bool renderable);
+        [[nodiscard]] bool IsImportReviewReferenceEntity(
+            wi::ecs::Entity entity) const noexcept;
+        [[nodiscard]] wi::primitive::AABB
+        ComputeImportReviewReferenceBounds() const;
+        void ToggleImportReviewReference();
+        void CreateImportReviewLighting();
+        void RemoveImportReviewReference();
+        void RemoveImportReviewHelpers();
+        void ApplyImportReviewScale(
+            bridge::ModelScaleMode mode,
+            bool reframeCamera);
+        void SetImportReviewModelScale(
+            float effectiveFactor,
+            bool reframeCamera);
+        [[nodiscard]] wi::primitive::AABB
+        ComputeImportReviewModelBounds() const;
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -507,6 +540,15 @@ namespace renegade::studio
         RenegadeComboBox importScaleModeCombo_;
         RenegadeButton importScaleApplyButton_;
         RenegadeButton importScaleDismissButton_;
+        wi::gui::Window importReviewPanel_;
+        wi::gui::Label importReviewTitleLabel_;
+        wi::gui::Label importReviewStatusLabel_;
+        RenegadeButton importReviewFinishButton_;
+        RenegadeButton importReviewCancelButton_;
+        RenegadeButton importReviewReferenceButton_;
+        RenegadeComboBox importReviewScaleCombo_;
+        RenegadeButton importReviewApplyScaleButton_;
+        RenegadeSlider importReviewScaleSlider_;
         RenegadeStudioChrome studioChrome_;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;
@@ -599,6 +641,21 @@ namespace renegade::studio
         float importScaleAppliedFactor_ = 1.0f;
         bridge::ModelScaleMode pendingImportScaleMode_ =
             bridge::ModelScaleMode::Original;
+        bool importReviewActive_ = false;
+        std::shared_ptr<bridge::PreparedModelImport> importReviewPrepared_;
+        wi::scene::Scene* importReviewSavedScene_ = nullptr;
+        wi::scene::TransformComponent importReviewSavedCameraTransform_;
+        std::string importReviewSourceFileName_;
+        wi::ecs::Entity importReviewReferenceEntity_ =
+            wi::ecs::INVALID_ENTITY;
+        std::vector<wi::ecs::Entity> importReviewReferenceEntities_;
+        bool importReviewReferenceVisible_ = true;
+        bridge::ModelScaleMode pendingImportReviewScaleMode_ =
+            bridge::ModelScaleMode::Original;
+        float importReviewScaleFactor_ = 1.0f;
+        float importReviewScaleBaseFactor_ = 1.0f;
+        float importReviewScaleMultiplier_ = 1.0f;
+        std::vector<wi::ecs::Entity> importReviewLightEntities_;
     };
 
     class StudioApplication final : public wi::Application

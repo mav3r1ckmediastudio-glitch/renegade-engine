@@ -55,6 +55,8 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/reference/low_poly_human"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
         "$<TARGET_FILE_DIR:RenegadeStudio>"
@@ -70,6 +72,12 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/reference/low_poly_human/scene.gltf"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/reference/low_poly_human/scene.gltf"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/reference/low_poly_human/scene.bin"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/reference/low_poly_human/scene.bin"
     COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_ao.tga"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_roughness.tga"

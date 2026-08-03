@@ -82,6 +82,17 @@ namespace renegade::bridge
             return scene_.IsValid() ? scene_.get() : nullptr;
         }
 
+        // Mutable access to the isolated prepared scene without transferring
+        // ownership, for the Asset Import Review workflow which renders and
+        // (in later stages) adjusts this scene in place before the user
+        // confirms. Unlike ReleaseScene() the scene stays owned by this
+        // PreparedModelImport, so a subsequent SavePreparedGltfAsset()/
+        // placement still works. Returns nullptr if IsReady() is false.
+        [[nodiscard]] wi::scene::Scene* MutableScene() noexcept
+        {
+            return scene_.IsValid() ? scene_.get() : nullptr;
+        }
+
         // Hands ownership of the converted scene to the caller, for callers
         // that place the model directly (PlaceImportedModelCommand) rather
         // than running the Gate 1 WISCENE round-trip proof. Only meaningful
@@ -154,6 +165,16 @@ namespace renegade::bridge
         [[nodiscard]] static float ResolveScaleFactor(
             ModelScaleMode mode,
             const wi::scene::Scene& preparedScene) noexcept;
+
+        // Loads a glTF/GLB reference asset into outScene, uniformly scaled so
+        // its overall height is targetHeightMeters and floor-aligned to Y=0.
+        // Used by the Import Review workflow for its neutral scale-reference
+        // figure. Returns false if the file could not be loaded or contained
+        // no renderable geometry, letting the caller fall back to a primitive.
+        [[nodiscard]] static bool LoadReferenceModel(
+            const std::string& sourcePath,
+            float targetHeightMeters,
+            wi::scene::Scene& outScene);
     };
 
     // Merges a freshly converted model directly into a live Studio scene and

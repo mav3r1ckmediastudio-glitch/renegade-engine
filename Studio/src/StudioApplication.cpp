@@ -325,6 +325,7 @@ namespace renegade::studio
         CreateWorkspaceShell();
         CreateProjectHub();
         CreateImportScalePanel();
+        CreateImportReviewPanel();
         ApplyRenegadeTheme();
 
         gizmo_.translate_snap = 0.1f;
@@ -2383,6 +2384,126 @@ namespace renegade::studio
         importScalePanel_.SetVisible(false);
     }
 
+    void StudioRenderPath::CreateImportReviewPanel()
+    {
+        importReviewPanel_.Create(
+            "Import Review Panel",
+            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+        importReviewPanel_.SetShadowRadius(10.0f);
+        GetGUI().AddWidget(&importReviewPanel_);
+        // Same child-enable caveat as CreateImportScalePanel: every child is
+        // added while the window is still visible/enabled, and the panel is
+        // hidden only at the end so no control is permanently disabled.
+
+        importReviewTitleLabel_.Create("Import Review Title");
+        importReviewTitleLabel_.SetText("IMPORT REVIEW");
+        importReviewTitleLabel_.font.params.size = 15;
+        importReviewTitleLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        importReviewPanel_.AddWidget(&importReviewTitleLabel_);
+
+        importReviewStatusLabel_.Create("Import Review Status");
+        importReviewStatusLabel_.SetText("");
+        importReviewStatusLabel_.SetFitTextEnabled(true);
+        importReviewStatusLabel_.font.params.size = 13;
+        importReviewStatusLabel_.font.params.h_align =
+            wi::font::WIFALIGN_LEFT;
+        importReviewStatusLabel_.font.params.v_align =
+            wi::font::WIFALIGN_TOP;
+        importReviewPanel_.AddWidget(&importReviewStatusLabel_);
+
+        importReviewFinishButton_.Create("Import Review Finish");
+        importReviewFinishButton_.SetText("FINISH IMPORT");
+        importReviewFinishButton_.SetAngularHighlightWidth(4.0f);
+        importReviewFinishButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            // Deferred through pendingAction_ for the same reason as every
+            // other button in this file (see importScaleApplyButton_).
+            pendingAction_ = EditorAction::FinishImportReview;
+        });
+        importReviewPanel_.AddWidget(&importReviewFinishButton_);
+
+        importReviewCancelButton_.Create("Import Review Cancel");
+        importReviewCancelButton_.SetText("CANCEL");
+        importReviewCancelButton_.SetAngularHighlightWidth(4.0f);
+        importReviewCancelButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::CancelImportReview;
+        });
+        importReviewPanel_.AddWidget(&importReviewCancelButton_);
+
+        importReviewScaleCombo_.Create("Import Review Scale Mode");
+        // glTF is always authored in metres, so there is no honest way to
+        // auto-detect a model's "correct" size -- a model that imports huge
+        // was exported in the wrong unit. These options are therefore: trust
+        // the file, correct a known source unit, or force a preview height.
+        importReviewScaleCombo_.AddItem(
+            "ORIGINAL / METERS (x1.0)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Original));
+        importReviewScaleCombo_.AddItem(
+            "SOURCE IN CENTIMETERS (x0.01)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Centimeters));
+        importReviewScaleCombo_.AddItem(
+            "SOURCE IN INCHES (x0.0254)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Inches));
+        importReviewScaleCombo_.AddItem(
+            "FORCE HEIGHT TO 2M (PREVIEW)",
+            static_cast<std::uint64_t>(bridge::ModelScaleMode::Automatic));
+        importReviewScaleCombo_.SetTooltip(
+            "Interpret the model's scale for the reusable asset. glTF is "
+            "always metres, so a huge import means the wrong source unit.");
+        importReviewPanel_.AddWidget(&importReviewScaleCombo_);
+
+        importReviewApplyScaleButton_.Create("Import Review Apply Scale");
+        importReviewApplyScaleButton_.SetText("APPLY SCALE");
+        importReviewApplyScaleButton_.SetAngularHighlightWidth(4.0f);
+        importReviewApplyScaleButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            if (importReviewScaleCombo_.GetSelected() < 0)
+            {
+                return;
+            }
+            pendingImportReviewScaleMode_ =
+                static_cast<bridge::ModelScaleMode>(
+                    importReviewScaleCombo_.GetSelectedUserdata());
+            pendingAction_ = EditorAction::ApplyImportReviewScale;
+        });
+        importReviewPanel_.AddWidget(&importReviewApplyScaleButton_);
+
+        importReviewScaleSlider_.Create(
+            0.05f, 5.0f, 1.0f, 495.0f,
+            "Import Review Scale Multiplier", "FINE x");
+        importReviewScaleSlider_.SetTooltip(
+            "Fine-tune the scale on top of the selected preset");
+        importReviewScaleSlider_.OnValuePreview([this](const float value)
+        {
+            // Deferred through pendingAction_ so the scene/label mutation
+            // happens after GetGUI().Update() returns, not mid-iteration.
+            importReviewScaleMultiplier_ = value;
+            pendingAction_ = EditorAction::ApplyImportReviewScaleMultiplier;
+        });
+        importReviewScaleSlider_.OnValueCommitted([this](const float value)
+        {
+            importReviewScaleMultiplier_ = value;
+            pendingAction_ = EditorAction::ApplyImportReviewScaleMultiplier;
+        });
+        importReviewPanel_.AddWidget(&importReviewScaleSlider_);
+
+        importReviewReferenceButton_.Create("Import Review Reference");
+        importReviewReferenceButton_.SetText("HIDE REFERENCE PERSON");
+        importReviewReferenceButton_.SetAngularHighlightWidth(4.0f);
+        importReviewReferenceButton_.OnClick(
+            [this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::ToggleImportReviewReference;
+        });
+        importReviewPanel_.AddWidget(&importReviewReferenceButton_);
+
+        importReviewPanel_.SetVisible(false);
+    }
+
     void StudioRenderPath::ApplyRenegadeTheme()
     {
         wi::gui::Theme theme;
@@ -2452,6 +2573,14 @@ namespace renegade::studio
             wi::Color(8, 11, 13, 255),
             wi::gui::WIDGET_ID_WINDOW_BASE);
 
+        // Same reassertion as importScalePanel_ above -- the Import Review
+        // popup is a separate wi::gui::Window and only inherits the global
+        // theme, not inspectorPanel_'s per-instance override.
+        importReviewPanel_.SetColor(wi::Color::Transparent());
+        importReviewPanel_.SetColor(
+            wi::Color(8, 11, 13, 255),
+            wi::gui::WIDGET_ID_WINDOW_BASE);
+
         const auto ownLabel = [](wi::gui::Label& label)
         {
             label.SetColor(wi::Color::Transparent());
@@ -2513,6 +2642,50 @@ namespace renegade::studio
 
         if (session_ == nullptr || projectHubVisible_)
         {
+            return;
+        }
+
+        // Import Review (Stage 2): while active, RenderPath3D::scene points at
+        // the isolated prepared model, not the project scene. Keep camera
+        // navigation live so the creator can inspect the model, route the
+        // review panel's FINISH/CANCEL through pendingAction_, and suppress
+        // gizmo, selection, terrain sculpt and editor shortcuts so nothing
+        // can mutate the hidden active scene while it is out of view.
+        if (importReviewActive_)
+        {
+            if (workspaceLayoutDirty_)
+            {
+                workspaceLayoutDirty_ = false;
+                ResizeLayout();
+            }
+            viewportBounds_ = studioChrome_.ViewportBounds();
+            const XMFLOAT4 reviewPointer = wi::input::GetPointer();
+            if (pendingAction_ != EditorAction::None)
+            {
+                if (pendingAction_ == EditorAction::FinishImportReview ||
+                    pendingAction_ == EditorAction::CancelImportReview ||
+                    pendingAction_ ==
+                        EditorAction::ToggleImportReviewReference ||
+                    pendingAction_ ==
+                        EditorAction::ApplyImportReviewScale ||
+                    pendingAction_ ==
+                        EditorAction::ApplyImportReviewScaleMultiplier)
+                {
+                    ProcessPendingAction();
+                }
+                else
+                {
+                    // Ignore unrelated editor actions until the review is
+                    // resolved with FINISH or CANCEL.
+                    pendingAction_ = EditorAction::None;
+                }
+                return;
+            }
+            if (studioChrome_.ConsumedPointerThisFrame())
+            {
+                return;
+            }
+            HandleViewportNavigation(dt, reviewPointer);
             return;
         }
 
@@ -2979,6 +3152,45 @@ namespace renegade::studio
         importScaleDismissButton_.SetSize(XMFLOAT2(
             (importScalePanelWidth - 24.0f - 8.0f) * 0.5f,
             30.0f));
+
+        // Import Review panel: a small floating popup anchored near the
+        // bottom of the viewport so it does not cover the framed model. Only
+        // FINISH/CANCEL and a status line for Stage 2; the richer review
+        // controls (name, destination, scale) arrive in later stages.
+        // Docked into the right-hand toolbar column (over the inert inspector)
+        // rather than floating over the viewport, so the review controls never
+        // cover the model being inspected. The column is full-height, so the
+        // scale combo's open dropdown has ample room and never clips.
+        const float reviewPanelWidth = rightWidth;
+        importReviewPanel_.SetPos(XMFLOAT2(width - rightWidth, 64.0f));
+        importReviewPanel_.SetSize(XMFLOAT2(
+            reviewPanelWidth,
+            height - 64.0f - 28.0f));
+        importReviewTitleLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
+        importReviewTitleLabel_.SetSize(XMFLOAT2(
+            reviewPanelWidth - 24.0f, 24.0f));
+        importReviewStatusLabel_.SetPos(XMFLOAT2(12.0f, 40.0f));
+        importReviewStatusLabel_.SetSize(XMFLOAT2(
+            reviewPanelWidth - 24.0f, 52.0f));
+        importReviewScaleCombo_.SetPos(XMFLOAT2(12.0f, 100.0f));
+        importReviewScaleCombo_.SetSize(XMFLOAT2(
+            reviewPanelWidth - 24.0f, 28.0f));
+        importReviewApplyScaleButton_.SetPos(XMFLOAT2(12.0f, 136.0f));
+        importReviewApplyScaleButton_.SetSize(XMFLOAT2(
+            reviewPanelWidth - 24.0f, 28.0f));
+        importReviewScaleSlider_.SetPos(XMFLOAT2(12.0f, 176.0f));
+        importReviewScaleSlider_.SetSize(XMFLOAT2(
+            reviewPanelWidth - 24.0f, 24.0f));
+        importReviewReferenceButton_.SetPos(XMFLOAT2(12.0f, 214.0f));
+        importReviewReferenceButton_.SetSize(XMFLOAT2(
+            reviewPanelWidth - 24.0f, 28.0f));
+        importReviewFinishButton_.SetPos(XMFLOAT2(12.0f, 256.0f));
+        importReviewFinishButton_.SetSize(XMFLOAT2(
+            (reviewPanelWidth - 24.0f - 8.0f) * 0.5f, 32.0f));
+        importReviewCancelButton_.SetPos(XMFLOAT2(
+            12.0f + (reviewPanelWidth - 24.0f - 8.0f) * 0.5f + 8.0f, 256.0f));
+        importReviewCancelButton_.SetSize(XMFLOAT2(
+            (reviewPanelWidth - 24.0f - 8.0f) * 0.5f, 32.0f));
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
         projectHubPanel_.SetSize(XMFLOAT2(width - 24.0f, height - 24.0f));
@@ -3882,6 +4094,23 @@ namespace renegade::studio
             break;
         case EditorAction::DismissImportScale:
             DismissImportScalePanel();
+            break;
+        case EditorAction::FinishImportReview:
+            FinishImportReview();
+            break;
+        case EditorAction::CancelImportReview:
+            CancelImportReview();
+            break;
+        case EditorAction::ToggleImportReviewReference:
+            ToggleImportReviewReference();
+            break;
+        case EditorAction::ApplyImportReviewScale:
+            ApplyImportReviewScale(pendingImportReviewScaleMode_, true);
+            break;
+        case EditorAction::ApplyImportReviewScaleMultiplier:
+            SetImportReviewModelScale(
+                importReviewScaleBaseFactor_ * importReviewScaleMultiplier_,
+                true);
             break;
         case EditorAction::None:
         default:
@@ -6312,6 +6541,23 @@ namespace renegade::studio
             return;
         }
 
+        // Stage 2 (Asset Import Review V1): rather than immediately saving and
+        // merging the converted model into the active scene, hand the still-
+        // isolated prepared scene to the Import Review workflow. The active
+        // project scene stays untouched until the user confirms with FINISH
+        // (PlaceReviewedImport) or discards with CANCEL.
+        EnterImportReview(std::move(prepared));
+    }
+
+    void StudioRenderPath::PlaceReviewedImport(
+        bridge::PreparedModelImport prepared,
+        const float reviewedScaleFactor)
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
         const std::string sourcePath = prepared.Result().sourcePath;
         const bridge::ImportResult savedAsset =
             bridge::ImportService().SavePreparedGltfAsset(prepared);
@@ -6364,13 +6610,12 @@ namespace renegade::studio
         // "imports VERY large" case); it is a non-destructive uniform Scale
         // on the import root, never baked into vertex data, so it can be
         // freely edited or reset afterward like any other transform.
-        float scaleFactor = 1.0f;
-        if (const auto* preparedScene = prepared.PeekScene())
-        {
-            scaleFactor = bridge::ImportService::ResolveScaleFactor(
-                bridge::ModelScaleMode::Automatic,
-                *preparedScene);
-        }
+        // Preserve the scale the creator reviewed rather than recomputing a
+        // fresh factor: the prepared scene's root already carries this scale
+        // (baked during review), so the placed instance and the saved
+        // .wiscene agree on size.
+        const float scaleFactor =
+            reviewedScaleFactor > 0.0f ? reviewedScaleFactor : 1.0f;
 
         ClearSelectionOutline();
         auto command = std::make_unique<bridge::PlaceImportedModelCommand>(
@@ -6397,19 +6642,599 @@ namespace renegade::studio
         assetBrowserCurrentFolder_ = "Content/Models";
         RefreshAssetBrowser();
 
-        const fs::path source = fs::u8path(sourcePath);
+        // The old post-placement Import Scale popup is intentionally not shown
+        // here: the Import Review workflow already let the creator choose and
+        // preview the scale before confirming, so re-prompting for it after
+        // placement would be redundant (and left a stray window on screen).
         std::ostringstream scaleReadout;
         scaleReadout.precision(3);
         scaleReadout << std::fixed << scaleFactor;
         studioChrome_.SetStatusText(
             "IMPORT MODEL // ASSET SAVED + PLACED // " +
             savedAssetPath.filename().u8string() +
-            " // AUTO SCALE x" + scaleReadout.str());
+            " // SCALE x" + scaleReadout.str());
+    }
 
-        ShowImportScalePanel(
-            placeCommand->PlacedEntity(),
-            scaleFactor,
-            source.filename().u8string());
+    void StudioRenderPath::EnterImportReview(
+        bridge::PreparedModelImport prepared)
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        if (!prepared.IsReady())
+        {
+            studioChrome_.SetStatusText("IMPORT REVIEW // FAILED");
+            wi::helper::messageBox(
+                "Could not prepare the model for review.\n\nReason: " +
+                    prepared.Result().error,
+                "Import Review");
+            return;
+        }
+
+        // Take ownership of the whole PreparedModelImport (not just its
+        // scene) so FINISH can still run the existing SavePreparedGltfAsset()
+        // and placement path, and so later-stage review adjustments can
+        // mutate the isolated scene in place through MutableScene().
+        importReviewPrepared_ =
+            std::make_shared<bridge::PreparedModelImport>(std::move(prepared));
+
+        const fs::path source =
+            fs::u8path(importReviewPrepared_->Result().sourcePath);
+        importReviewSourceFileName_ = source.filename().u8string();
+
+        // Preserve the active scene pointer and the editor camera so CANCEL
+        // can restore both exactly. RenderPath3D::scene is only a pointer;
+        // while it points at the isolated prepared scene the active project
+        // scene is neither rendered nor updated -- that is the isolation the
+        // handoff requires (no merge-then-hide).
+        importReviewSavedScene_ = scene;
+        importReviewSavedCameraTransform_ = editorCameraTransform_;
+
+        ClearSelectionOutline();
+        scene = importReviewPrepared_->MutableScene();
+        importReviewActive_ = true;
+
+        importReviewReferenceEntity_ = wi::ecs::INVALID_ENTITY;
+        importReviewReferenceVisible_ = true;
+        importReviewScaleMultiplier_ = 1.0f;
+        importReviewScaleSlider_.SetValue(1.0f);
+
+        // Neutral review lighting so the model (and its PBR materials) read
+        // clearly against the dark background. Created before scaling; the
+        // scale and floor-align passes skip light entities.
+        CreateImportReviewLighting();
+
+        // Default to the model's authored size (no silent distortion). The
+        // camera still frames it, so even a wrongly-huge model is visible, and
+        // the tiny reference person makes an off scale obvious at a glance.
+        pendingImportReviewScaleMode_ = bridge::ModelScaleMode::Original;
+        importReviewScaleCombo_.SetSelectedWithoutCallback(0);
+        ApplyImportReviewScale(bridge::ModelScaleMode::Original, true);
+        importReviewReferenceButton_.SetText("HIDE REFERENCE PERSON");
+
+        importReviewPanel_.SetVisible(true);
+        studioChrome_.SetStatusText(
+            "IMPORT REVIEW // " + importReviewSourceFileName_);
+    }
+
+    void StudioRenderPath::FinishImportReview()
+    {
+        if (!importReviewActive_ || importReviewPrepared_ == nullptr)
+        {
+            return;
+        }
+
+        // Strip review-only helpers from the isolated scene while `scene`
+        // still points at it, so the saved .wiscene and its thumbnail contain
+        // only the model -- never the reference person.
+        RemoveImportReviewHelpers();
+
+        // Move the prepared import out of the review state, tear the review
+        // down (restore the active scene as the render target), then run the
+        // existing save-and-place path against the active scene. The camera
+        // is left where the creator framed it.
+        bridge::PreparedModelImport prepared =
+            std::move(*importReviewPrepared_);
+        const float reviewedScaleFactor = importReviewScaleFactor_;
+        importReviewPrepared_.reset();
+        importReviewPanel_.SetVisible(false);
+        scene = importReviewSavedScene_ != nullptr
+            ? importReviewSavedScene_
+            : &session_->Scenes().GetScene();
+        importReviewSavedScene_ = nullptr;
+        importReviewActive_ = false;
+        importReviewSourceFileName_.clear();
+
+        PlaceReviewedImport(std::move(prepared), reviewedScaleFactor);
+    }
+
+    void StudioRenderPath::CancelImportReview()
+    {
+        if (!importReviewActive_)
+        {
+            return;
+        }
+
+        importReviewPanel_.SetVisible(false);
+        RemoveImportReviewHelpers();
+
+        // Restore the active scene as the render target and the editor camera
+        // to exactly where it was when review began. No asset, source copy or
+        // placement was created; the prepared import (its isolated scene) is
+        // discarded here.
+        scene = importReviewSavedScene_ != nullptr
+            ? importReviewSavedScene_
+            : &session_->Scenes().GetScene();
+        importReviewSavedScene_ = nullptr;
+        editorCameraTransform_ = importReviewSavedCameraTransform_;
+        editorCameraTransform_.UpdateTransform();
+        camera->TransformCamera(editorCameraTransform_);
+        camera->UpdateCamera();
+
+        importReviewPrepared_.reset();
+        importReviewActive_ = false;
+        importReviewSourceFileName_.clear();
+
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+        studioChrome_.SetStatusText("IMPORT REVIEW // CANCELLED");
+    }
+
+    void StudioRenderPath::FrameImportReviewModel(const bool reframeCamera)
+    {
+        if (scene == nullptr)
+        {
+            return;
+        }
+
+        scene->Update(0.0f);
+
+        // Floor alignment against the model's OWN bounds (never the reference),
+        // so its lowest point rests on the Y=0 grid. Only model root transforms
+        // are shifted -- lights and the reference are skipped, and children
+        // inherit the move through the hierarchy.
+        wi::primitive::AABB modelBounds = ComputeImportReviewModelBounds();
+        const float minY = modelBounds.getMin().y;
+        if (std::abs(minY) > 1.0e-4f)
+        {
+            for (std::size_t i = 0; i < scene->transforms.GetCount(); ++i)
+            {
+                const wi::ecs::Entity entity =
+                    scene->transforms.GetEntity(i);
+                if (scene->lights.Contains(entity) ||
+                    entity == importReviewReferenceEntity_)
+                {
+                    continue;
+                }
+                const auto* node = scene->hierarchy.GetComponent(entity);
+                const bool isChild = node != nullptr &&
+                    node->parentID != wi::ecs::INVALID_ENTITY;
+                if (isChild)
+                {
+                    continue;
+                }
+                auto& transform = scene->transforms[i];
+                transform.Translate(XMFLOAT3(0.0f, -minY, 0.0f));
+                transform.UpdateTransform();
+            }
+            scene->Update(0.0f);
+            modelBounds = ComputeImportReviewModelBounds();
+        }
+
+        // Keep the reference person alive and simply reposition it beside the
+        // rescaled, floored model (no destroy/recreate -- that was what made it
+        // vanish mid-drag), then refresh so its bounds are current.
+        CreateImportReviewReference();
+        scene->Update(0.0f);
+        modelBounds = ComputeImportReviewModelBounds();
+
+        if (!reframeCamera)
+        {
+            return;
+        }
+
+        // Frame the camera on the model AND the visible reference together, so
+        // both stay in shot at every scale -- the reference never leaves the
+        // frame and gives constant real-world size context while scaling.
+        XMFLOAT3 mn = modelBounds.getMin();
+        XMFLOAT3 mx = modelBounds.getMax();
+        if (importReviewReferenceEntity_ != wi::ecs::INVALID_ENTITY &&
+            importReviewReferenceVisible_)
+        {
+            const wi::primitive::AABB refBounds =
+                ComputeImportReviewReferenceBounds();
+            const XMFLOAT3 rmn = refBounds.getMin();
+            const XMFLOAT3 rmx = refBounds.getMax();
+            if (rmn.x <= rmx.x)
+            {
+                mn.x = std::min(mn.x, rmn.x);
+                mn.y = std::min(mn.y, rmn.y);
+                mn.z = std::min(mn.z, rmn.z);
+                mx.x = std::max(mx.x, rmx.x);
+                mx.y = std::max(mx.y, rmx.y);
+                mx.z = std::max(mx.z, rmx.z);
+            }
+        }
+
+        const XMFLOAT3 centerF(
+            (mn.x + mx.x) * 0.5f,
+            (mn.y + mx.y) * 0.5f,
+            (mn.z + mx.z) * 0.5f);
+        const float dx = mx.x - mn.x;
+        const float dy = mx.y - mn.y;
+        const float dz = mx.z - mn.z;
+        float radius = 0.5f * std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (radius < 1.0e-3f)
+        {
+            radius = 1.0f;
+        }
+        const float halfFov =
+            (camera != nullptr ? camera->fov : XM_PI / 3.0f) * 0.5f;
+        const float distance = radius / std::sin(halfFov) * 1.25f;
+
+        const XMVECTOR center = XMLoadFloat3(&centerF);
+        const XMVECTOR direction = XMVector3Normalize(
+            XMVectorSet(0.55f, 0.42f, -1.0f, 0.0f));
+        const XMVECTOR eye =
+            XMVectorAdd(center, XMVectorScale(direction, distance));
+        const XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+        const XMMATRIX view = XMMatrixLookAtLH(eye, center, up);
+
+        editorCameraTransform_.ClearTransform();
+        editorCameraTransform_.MatrixTransform(
+            XMMatrixInverse(nullptr, view));
+        editorCameraTransform_.UpdateTransform();
+        if (camera != nullptr)
+        {
+            camera->TransformCamera(editorCameraTransform_);
+            camera->UpdateCamera();
+        }
+    }
+
+    void StudioRenderPath::CreateImportReviewReference()
+    {
+        if (scene == nullptr)
+        {
+            return;
+        }
+
+        // The reference is the bundled low-poly human (or a fallback box).
+        // Created once and then only repositioned -- destroying/recreating it
+        // every scale tick was what made it vanish mid-drag. It is a review-
+        // only helper: RemoveImportReviewHelpers() deletes its whole subtree
+        // before save so it never enters the .wiscene or thumbnail.
+        if (importReviewReferenceEntity_ == wi::ecs::INVALID_ENTITY)
+        {
+            LoadImportReviewReferenceEntity();
+        }
+        auto* transform =
+            (importReviewReferenceEntity_ != wi::ecs::INVALID_ENTITY)
+            ? scene->transforms.GetComponent(importReviewReferenceEntity_)
+            : nullptr;
+        if (transform == nullptr)
+        {
+            importReviewReferenceEntity_ = wi::ecs::INVALID_ENTITY;
+            importReviewReferenceEntities_.clear();
+            return;
+        }
+
+        // Reposition the reference root beside the model (model bounds exclude
+        // the whole reference subtree), keeping its own height and floor
+        // offset that LoadImportReviewReferenceEntity established.
+        const wi::primitive::AABB modelBounds =
+            ComputeImportReviewModelBounds();
+        transform->translation_local = XMFLOAT3(
+            modelBounds.getMax().x + 0.8f,
+            transform->translation_local.y,
+            modelBounds.getCenter().z);
+        transform->SetDirty();
+        transform->UpdateTransform();
+
+        SetImportReviewReferenceRenderable(importReviewReferenceVisible_);
+    }
+
+    void StudioRenderPath::LoadImportReviewReferenceEntity()
+    {
+        if (scene == nullptr)
+        {
+            return;
+        }
+        importReviewReferenceEntities_.clear();
+        importReviewReferenceEntity_ = wi::ecs::INVALID_ENTITY;
+
+        // NOTE: a 3D glTF human reference was prototyped here (see
+        // ImportService::LoadReferenceModel and the staged Content/reference/
+        // asset), but importing a glTF's GPU resources on the main thread
+        // mid-frame corrupts the DX12 command list and drops the device on
+        // Finish. Until that load is moved onto the job-thread/safe-point path
+        // the real model importer uses -- or replaced with a camera-facing
+        // silhouette billboard (a flat textured quad, no runtime mesh import)
+        // -- the reference stays the crash-safe primitive box below.
+
+        // A 2 m cube (spans +/-1) scaled to a ~1.8 m upright box, its base
+        // resting on Y=0 (centre at 0.9).
+        importReviewReferenceEntity_ =
+            scene->Entity_CreateCube("Import Review Reference Person");
+        importReviewReferenceEntities_.push_back(importReviewReferenceEntity_);
+        if (auto* transform =
+                scene->transforms.GetComponent(importReviewReferenceEntity_))
+        {
+            transform->scale_local = XMFLOAT3(0.225f, 0.9f, 0.14f);
+            transform->translation_local = XMFLOAT3(0.0f, 0.9f, 0.0f);
+            transform->SetDirty();
+            transform->UpdateTransform();
+        }
+    }
+
+    void StudioRenderPath::SetImportReviewReferenceRenderable(
+        const bool renderable)
+    {
+        if (scene == nullptr)
+        {
+            return;
+        }
+        for (const wi::ecs::Entity entity : importReviewReferenceEntities_)
+        {
+            if (auto* object = scene->objects.GetComponent(entity))
+            {
+                object->SetRenderable(renderable);
+            }
+        }
+    }
+
+    bool StudioRenderPath::IsImportReviewReferenceEntity(
+        const wi::ecs::Entity entity) const noexcept
+    {
+        for (const wi::ecs::Entity candidate : importReviewReferenceEntities_)
+        {
+            if (candidate == entity)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    wi::primitive::AABB
+    StudioRenderPath::ComputeImportReviewReferenceBounds() const
+    {
+        // Union of the reference subtree's object world AABBs, for framing.
+        wi::primitive::AABB bounds;
+        bool has = false;
+        if (scene != nullptr)
+        {
+            const std::size_t count = std::min(
+                scene->objects.GetCount(), scene->aabb_objects.size());
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (!IsImportReviewReferenceEntity(
+                        scene->objects.GetEntity(i)))
+                {
+                    continue;
+                }
+                const wi::primitive::AABB& box = scene->aabb_objects[i];
+                bounds = has ? wi::primitive::AABB::Merge(bounds, box) : box;
+                has = true;
+            }
+        }
+        return bounds;
+    }
+
+    wi::primitive::AABB
+    StudioRenderPath::ComputeImportReviewModelBounds() const
+    {
+        // Union of every object's world AABB except the reference person, so
+        // scale/floor/framing act on the imported model alone.
+        wi::primitive::AABB bounds;
+        bool has = false;
+        if (scene != nullptr)
+        {
+            const std::size_t count = std::min(
+                scene->objects.GetCount(), scene->aabb_objects.size());
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (IsImportReviewReferenceEntity(scene->objects.GetEntity(i)))
+                {
+                    continue;
+                }
+                const wi::primitive::AABB& box = scene->aabb_objects[i];
+                bounds = has ? wi::primitive::AABB::Merge(bounds, box) : box;
+                has = true;
+            }
+        }
+        if (!has && scene != nullptr)
+        {
+            bounds = scene->bounds;
+        }
+        return bounds;
+    }
+
+    void StudioRenderPath::ToggleImportReviewReference()
+    {
+        if (!importReviewActive_ ||
+            importReviewReferenceEntity_ == wi::ecs::INVALID_ENTITY ||
+            scene == nullptr)
+        {
+            return;
+        }
+
+        importReviewReferenceVisible_ = !importReviewReferenceVisible_;
+        SetImportReviewReferenceRenderable(importReviewReferenceVisible_);
+        importReviewReferenceButton_.SetText(
+            importReviewReferenceVisible_
+                ? "HIDE REFERENCE PERSON"
+                : "SHOW REFERENCE PERSON");
+    }
+
+    void StudioRenderPath::RemoveImportReviewReference()
+    {
+        // Remove the whole reference subtree (root recursive). Called at
+        // Finish/Cancel; during review the reference now persists and is only
+        // repositioned.
+        if (scene != nullptr &&
+            importReviewReferenceEntity_ != wi::ecs::INVALID_ENTITY)
+        {
+            scene->Entity_Remove(importReviewReferenceEntity_);
+        }
+        importReviewReferenceEntity_ = wi::ecs::INVALID_ENTITY;
+        importReviewReferenceEntities_.clear();
+    }
+
+    void StudioRenderPath::RemoveImportReviewHelpers()
+    {
+        // Delete every review-only helper (the reference person and the review
+        // lights) from the isolated scene. Called before FINISH saves/merges
+        // so the reusable asset and its thumbnail contain only the model, and
+        // on CANCEL before the scene is discarded.
+        RemoveImportReviewReference();
+        if (scene != nullptr)
+        {
+            for (const wi::ecs::Entity entity : importReviewLightEntities_)
+            {
+                scene->Entity_Remove(entity);
+            }
+        }
+        importReviewLightEntities_.clear();
+    }
+
+    void StudioRenderPath::CreateImportReviewLighting()
+    {
+        if (scene == nullptr)
+        {
+            return;
+        }
+        importReviewLightEntities_.clear();
+
+        // A key + fill directional pair gives the model shape; the ambient
+        // lift keeps shadowed faces from going pure black. All are review-only
+        // helpers (RemoveImportReviewHelpers strips them before save), so they
+        // are never baked into the reusable .wiscene or a later placement.
+        const wi::ecs::Entity key = scene->Entity_CreateLight(
+            "Import Review Key Light",
+            XMFLOAT3(0.0f, 0.0f, 0.0f),
+            XMFLOAT3(1.0f, 0.98f, 0.94f),
+            3.4f,
+            40.0f,
+            wi::scene::LightComponent::DIRECTIONAL);
+        if (auto* transform = scene->transforms.GetComponent(key))
+        {
+            transform->RotateRollPitchYaw(
+                XMFLOAT3(XM_PIDIV4, XM_PIDIV4 * 0.6f, 0.0f));
+            transform->UpdateTransform();
+        }
+        importReviewLightEntities_.push_back(key);
+
+        const wi::ecs::Entity fill = scene->Entity_CreateLight(
+            "Import Review Fill Light",
+            XMFLOAT3(0.0f, 0.0f, 0.0f),
+            XMFLOAT3(0.74f, 0.82f, 1.0f),
+            1.5f,
+            40.0f,
+            wi::scene::LightComponent::DIRECTIONAL);
+        if (auto* transform = scene->transforms.GetComponent(fill))
+        {
+            transform->RotateRollPitchYaw(
+                XMFLOAT3(XM_PIDIV4 * 0.4f, -XM_PIDIV2, 0.0f));
+            transform->UpdateTransform();
+        }
+        importReviewLightEntities_.push_back(fill);
+
+        // Only add a review weather if the converted model brought none, so we
+        // never clobber authored environment data.
+        if (scene->weathers.GetCount() == 0)
+        {
+            const wi::ecs::Entity weatherEntity = wi::ecs::CreateEntity();
+            auto& weather = scene->weathers.Create(weatherEntity);
+            weather.ambient = XMFLOAT3(0.55f, 0.55f, 0.60f);
+            importReviewLightEntities_.push_back(weatherEntity);
+        }
+    }
+
+    void StudioRenderPath::ApplyImportReviewScale(
+        const bridge::ModelScaleMode mode,
+        const bool reframeCamera)
+    {
+        if (!importReviewActive_ || scene == nullptr)
+        {
+            return;
+        }
+
+        // Compute the preset's base factor. Original/cm/inches are fixed unit
+        // multipliers; "Force height to 2 m" scales the model's own (reference-
+        // excluded) world height to 2 m from its current size.
+        float base;
+        if (mode == bridge::ModelScaleMode::Automatic)
+        {
+            scene->Update(0.0f);
+            const wi::primitive::AABB modelBounds =
+                ComputeImportReviewModelBounds();
+            const float height =
+                modelBounds.getMax().y - modelBounds.getMin().y;
+            const float current =
+                importReviewScaleFactor_ > 0.0f ? importReviewScaleFactor_
+                                                : 1.0f;
+            base = (height > 1.0e-4f) ? current * (2.0f / height) : 1.0f;
+        }
+        else
+        {
+            base = bridge::ImportService::ResolveScaleFactor(mode, *scene);
+        }
+
+        importReviewScaleBaseFactor_ = base;
+        importReviewScaleMultiplier_ = 1.0f;
+        importReviewScaleSlider_.SetValue(1.0f);
+        SetImportReviewModelScale(base, reframeCamera);
+    }
+
+    void StudioRenderPath::SetImportReviewModelScale(
+        const float effectiveFactor,
+        const bool reframeCamera)
+    {
+        if (!importReviewActive_ || scene == nullptr)
+        {
+            return;
+        }
+
+        // Set a uniform scale on the model's root transforms, skipping the
+        // review lights and the reference person (the reference stays a fixed
+        // real-world size). Applied by *setting* (not multiplying) the root
+        // scale, matching PlaceImportedModelCommand.
+        importReviewScaleFactor_ = effectiveFactor;
+
+        for (std::size_t i = 0; i < scene->transforms.GetCount(); ++i)
+        {
+            const wi::ecs::Entity entity = scene->transforms.GetEntity(i);
+            if (scene->lights.Contains(entity) ||
+                entity == importReviewReferenceEntity_)
+            {
+                continue;
+            }
+            const auto* node = scene->hierarchy.GetComponent(entity);
+            const bool isChild = node != nullptr &&
+                node->parentID != wi::ecs::INVALID_ENTITY;
+            if (isChild)
+            {
+                continue;
+            }
+            auto& transform = scene->transforms[i];
+            transform.scale_local =
+                XMFLOAT3(effectiveFactor, effectiveFactor, effectiveFactor);
+            transform.SetDirty();
+            transform.UpdateTransform();
+        }
+        scene->Update(0.0f);
+
+        // FrameImportReviewModel floor-aligns the model, repositions the
+        // (persistent) reference beside it, and re-frames the camera.
+        FrameImportReviewModel(reframeCamera);
+
+        std::ostringstream readout;
+        readout.precision(3);
+        readout << std::fixed << "REVIEWING: " << importReviewSourceFileName_
+            << "\nDISPLAY SCALE x" << importReviewScaleFactor_;
+        importReviewStatusLabel_.SetText(readout.str());
     }
 
     void StudioRenderPath::ShowImportScalePanel(

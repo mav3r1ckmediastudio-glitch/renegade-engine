@@ -505,6 +505,17 @@ namespace renegade::bridge
             return result;
         }
 
+        // The reusable asset reflects any review-time edits (display scale,
+        // floor alignment) applied to the prepared scene before this point.
+        // Validate that the scene actually being written round-trips
+        // faithfully -- compare the reload against the CURRENT scene, not the
+        // pre-review baseline captured at conversion time. For the unmodified
+        // diagnostic path this is identical to the original summary, so the
+        // Gate 1 proof is unchanged; for the Import Review path it correctly
+        // proves the reviewed asset (not the raw conversion) survives save and
+        // reload.
+        result.imported = Summarize(*prepared.scene_);
+
         RecordStage(result.assetPath, "thread_safe_completion_begin");
         try
         {
@@ -601,6 +612,77 @@ namespace renegade::bridge
             default:
                 return 1.0f;
         }
+    }
+
+    bool ImportService::LoadReferenceModel(
+        const std::string& sourcePath,
+        const float targetHeightMeters,
+        wi::scene::Scene& outScene)
+    {
+        try
+        {
+            ImportModel_GLTF(sourcePath, outScene);
+        }
+        catch (...)
+        {
+            return false;
+        }
+
+        outScene.Update(0.0f);
+        if (outScene.objects.GetCount() == 0)
+        {
+            return false;
+        }
+
+        const auto isRoot = [&outScene](const wi::ecs::Entity entity)
+        {
+            const auto* node = outScene.hierarchy.GetComponent(entity);
+            return node == nullptr ||
+                node->parentID == wi::ecs::INVALID_ENTITY;
+        };
+
+        // Uniform scale so the model's overall height matches the target.
+        const float height =
+            outScene.bounds.getMax().y - outScene.bounds.getMin().y;
+        const float scale = (height > 1.0e-4f && targetHeightMeters > 0.0f)
+            ? targetHeightMeters / height
+            : 1.0f;
+        for (std::size_t i = 0; i < outScene.transforms.GetCount(); ++i)
+        {
+            const wi::ecs::Entity entity = outScene.transforms.GetEntity(i);
+            if (!isRoot(entity))
+            {
+                continue;
+            }
+            auto& transform = outScene.transforms[i];
+            transform.scale_local = XMFLOAT3(
+                transform.scale_local.x * scale,
+                transform.scale_local.y * scale,
+                transform.scale_local.z * scale);
+            transform.SetDirty();
+            transform.UpdateTransform();
+        }
+        outScene.Update(0.0f);
+
+        // Floor-align so the lowest point rests on Y=0.
+        const float minY = outScene.bounds.getMin().y;
+        if (minY < -1.0e-4f || minY > 1.0e-4f)
+        {
+            for (std::size_t i = 0; i < outScene.transforms.GetCount(); ++i)
+            {
+                const wi::ecs::Entity entity =
+                    outScene.transforms.GetEntity(i);
+                if (!isRoot(entity))
+                {
+                    continue;
+                }
+                auto& transform = outScene.transforms[i];
+                transform.Translate(XMFLOAT3(0.0f, -minY, 0.0f));
+                transform.UpdateTransform();
+            }
+            outScene.Update(0.0f);
+        }
+        return true;
     }
 
     PlaceImportedModelCommand::PlaceImportedModelCommand(
