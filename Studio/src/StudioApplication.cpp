@@ -291,6 +291,7 @@ namespace renegade::studio
         RefreshInspector();
         RefreshStatus();
         RefreshProjectHub();
+        RefreshAssetBrowser();
         SetProjectHubVisible(true);
 
         RenderPath3D::Load();
@@ -1979,6 +1980,10 @@ namespace renegade::studio
             {
                 lastDrawerTab_ = tab;
             }
+            if (tab == 0)
+            {
+                RefreshAssetBrowser();
+            }
             if (session_ == nullptr)
             {
                 return;
@@ -1991,6 +1996,16 @@ namespace renegade::studio
                     "drawer_tab_" + std::to_string(index),
                     lastDrawerTab_ == index);
             }
+        });
+        studioChrome_.OnAssetBrowserFolderSelected(
+            [this](const std::string& relativePath)
+        {
+            SelectAssetBrowserFolder(relativePath);
+        });
+        studioChrome_.OnAssetBrowserItemSelected(
+            [this](const std::string& relativePath)
+        {
+            SelectAssetBrowserItem(relativePath);
         });
         studioChrome_.OnLayoutChanged(
             [this](
@@ -2214,13 +2229,23 @@ namespace renegade::studio
         importScaleApplyButton_.OnClick(
             [this](const wi::gui::EventArgs&)
         {
+            // Deliberately deferred through pendingAction_/
+            // ProcessPendingAction() rather than calling
+            // ApplyImportScaleMode() here directly -- wiGUI invokes OnClick
+            // while Button::Update is still active (see the comment on
+            // StudioRenderPath::Update), and ApplyImportScaleMode() executes
+            // a Command and calls RefreshInspector()/RefreshStatus(), which
+            // can touch other GUI widgets while GetGUI().Update() is still
+            // iterating its own widget list. Every other button in this file
+            // follows the same capture-value-then-defer shape (see
+            // pendingOceanPreset_/pendingTerrainMaterialPreset_).
             if (importScaleModeCombo_.GetSelected() < 0)
             {
                 return;
             }
-            ApplyImportScaleMode(
-                static_cast<bridge::ModelScaleMode>(
-                    importScaleModeCombo_.GetSelectedUserdata()));
+            pendingImportScaleMode_ = static_cast<bridge::ModelScaleMode>(
+                importScaleModeCombo_.GetSelectedUserdata());
+            pendingAction_ = EditorAction::ApplyImportScale;
         });
         importScalePanel_.AddWidget(&importScaleApplyButton_);
 
@@ -2230,7 +2255,8 @@ namespace renegade::studio
         importScaleDismissButton_.OnClick(
             [this](const wi::gui::EventArgs&)
         {
-            DismissImportScalePanel();
+            // Deferred for the same reason as importScaleApplyButton_ above.
+            pendingAction_ = EditorAction::DismissImportScale;
         });
         importScalePanel_.AddWidget(&importScaleDismissButton_);
     }
@@ -3728,6 +3754,12 @@ namespace renegade::studio
             break;
         case EditorAction::ImportModel:
             ImportModel();
+            break;
+        case EditorAction::ApplyImportScale:
+            ApplyImportScaleMode(pendingImportScaleMode_);
+            break;
+        case EditorAction::DismissImportScale:
+            DismissImportScalePanel();
             break;
         case EditorAction::None:
         default:
@@ -6246,6 +6278,21 @@ namespace renegade::studio
         importScaleReadoutLabel_.SetText(readout.str());
         importScaleModeCombo_.SetSelectedWithoutCallback(-1);
         importScalePanel_.SetVisible(true);
+
+        // CreateImportScalePanel() adds this window to GetGUI() last, after
+        // every docked shell panel (toolbar/hierarchy/inspector/content/
+        // project hub). wiGUI's GUI::Update()/Window::Update() walk their
+        // widget list in add-order and force_disable every widget that
+        // comes after one already reporting a non-IDLE state this frame
+        // (see wiGUI.cpp) -- so, being last, this popup could go
+        // completely unresponsive (no hover, no click, on any child)
+        // whenever anything else in the chrome is mid-interaction the
+        // instant it opens, with no way to self-recover since a
+        // force-disabled widget can never fire the Activate() that would
+        // normally promote it back to the front. Activate() here forces
+        // that promotion immediately instead of waiting on a click that can
+        // never arrive.
+        importScalePanel_.Activate();
     }
 
     void StudioRenderPath::ApplyImportScaleMode(
@@ -6304,6 +6351,100 @@ namespace renegade::studio
     {
         importScalePanel_.SetVisible(false);
         importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
+    }
+
+    void StudioRenderPath::RefreshAssetBrowser()
+    {
+        std::vector<RenegadeStudioChrome::AssetFolderRow> folders;
+        std::vector<RenegadeStudioChrome::AssetCard> assets;
+
+        if (session_ == nullptr || !session_->Projects().HasProject())
+        {
+            studioChrome_.SetAssetBrowserData(
+                std::move(folders),
+                std::move(assets),
+                "NO PROJECT");
+            return;
+        }
+
+        const auto snapshot = assetBrowserService_.Scan(
+            session_->Projects().CurrentProject().rootPath,
+            assetBrowserCurrentFolder_);
+        if (!snapshot.succeeded)
+        {
+            studioChrome_.SetAssetBrowserData(
+                std::move(folders),
+                std::move(assets),
+                "CONTENT UNAVAILABLE");
+            studioChrome_.SetStatusText(
+                "ASSET BROWSER // " + snapshot.error);
+            return;
+        }
+
+        assetBrowserCurrentFolder_ = snapshot.currentFolder;
+        folders.reserve(snapshot.folders.size());
+        for (const auto& folder : snapshot.folders)
+        {
+            RenegadeStudioChrome::AssetFolderRow row;
+            row.name = folder.name;
+            row.relativePath = folder.projectRelativePath;
+            row.depth = static_cast<int>(folder.depth);
+            row.selected = folder.selected;
+            folders.push_back(std::move(row));
+        }
+
+        assets.reserve(snapshot.assets.size());
+        for (const auto& asset : snapshot.assets)
+        {
+            RenegadeStudioChrome::AssetCard card;
+            card.name = asset.name;
+            card.relativePath = asset.projectRelativePath;
+            card.typeLabel =
+                bridge::AssetBrowserService::TypeLabel(asset.type);
+            card.directory = asset.directory;
+            assets.push_back(std::move(card));
+        }
+
+        studioChrome_.SetAssetBrowserData(
+            std::move(folders),
+            std::move(assets),
+            snapshot.currentFolder);
+        studioChrome_.SetStatusText(
+            "ASSET BROWSER // " + snapshot.currentFolder);
+    }
+
+    void StudioRenderPath::SelectAssetBrowserFolder(
+        const std::string& relativePath)
+    {
+        if (relativePath.empty())
+        {
+            return;
+        }
+        assetBrowserCurrentFolder_ = relativePath;
+        RefreshAssetBrowser();
+    }
+
+    void StudioRenderPath::SelectAssetBrowserItem(
+        const std::string& relativePath)
+    {
+        if (session_ == nullptr || relativePath.empty())
+        {
+            return;
+        }
+
+        const fs::path absolute =
+            fs::u8path(session_->Projects().CurrentProject().rootPath) /
+            fs::u8path(relativePath);
+        if (fs::is_directory(absolute))
+        {
+            SelectAssetBrowserFolder(relativePath);
+            return;
+        }
+
+        // V1 deliberately stops at real project browsing and selection.
+        // Type-specific open/place/apply and drag payloads are the next slice.
+        studioChrome_.SetStatusText(
+            "ASSET SELECTED // " + relativePath);
     }
 
     void StudioRenderPath::CreateProject()

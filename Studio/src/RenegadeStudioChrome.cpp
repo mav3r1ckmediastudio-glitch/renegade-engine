@@ -15,6 +15,10 @@ namespace
     constexpr float StatusBarHeight = 28.0f;
     constexpr float PanelHeaderHeight = 43.0f;
     constexpr float HierarchyRowHeight = 28.0f;
+    constexpr float AssetFolderRowHeight = 24.0f;
+    constexpr float AssetCardWidth = 132.0f;
+    constexpr float AssetCardHeight = 82.0f;
+    constexpr float AssetCardGap = 10.0f;
 
     std::size_t HierarchyRowCapacity(const float height) noexcept
     {
@@ -124,6 +128,30 @@ namespace
     {
         DrawRect(x, y, width, height, border, cmd);
         DrawRect(x + 1.0f, y + 1.0f, width - 2.0f, height - 2.0f, fill, cmd);
+    }
+
+    std::string Ellipsize(std::string value, const std::size_t maximum)
+    {
+        if (value.size() <= maximum)
+        {
+            return value;
+        }
+        if (maximum <= 3)
+        {
+            return value.substr(0, maximum);
+        }
+        value.resize(maximum - 3);
+        value += "...";
+        return value;
+    }
+
+    bool IsAssetDescendant(
+        const std::string& path,
+        const std::string& parent)
+    {
+        return path.size() > parent.size() &&
+            path.compare(0, parent.size(), parent) == 0 &&
+            path[parent.size()] == '/';
     }
 }
 
@@ -527,6 +555,42 @@ namespace renegade::studio
         SetHierarchyFilter(hierarchyFilter_);
     }
 
+    void RenegadeStudioChrome::SetAssetBrowserData(
+        std::vector<AssetFolderRow> folders,
+        std::vector<AssetCard> assets,
+        std::string currentPath)
+    {
+        assetBrowserFolders_ = std::move(folders);
+        assetBrowserAssets_ = std::move(assets);
+        assetBrowserCurrentPath_ = std::move(currentPath);
+        assetBrowserSelectedPath_.clear();
+        assetBrowserFolderScrollRow_ = 0;
+        assetBrowserAssetScrollRow_ = 0;
+
+        for (const auto& folder : assetBrowserFolders_)
+        {
+            if (!folder.selected)
+            {
+                continue;
+            }
+            for (auto collapsed = collapsedAssetFolders_.begin();
+                collapsed != collapsedAssetFolders_.end();)
+            {
+                if (folder.relativePath == *collapsed ||
+                    IsAssetDescendant(folder.relativePath, *collapsed))
+                {
+                    collapsed = collapsedAssetFolders_.erase(collapsed);
+                }
+                else
+                {
+                    ++collapsed;
+                }
+            }
+            break;
+        }
+        RebuildVisibleAssetFolders();
+    }
+
     void RenegadeStudioChrome::SetSceneName(std::string sceneName)
     {
         sceneName_ = std::move(sceneName);
@@ -700,6 +764,35 @@ namespace renegade::studio
         }
     }
 
+    void RenegadeStudioChrome::RebuildVisibleAssetFolders()
+    {
+        visibleAssetFolderRows_.clear();
+        for (std::size_t index = 0;
+            index < assetBrowserFolders_.size();
+            ++index)
+        {
+            const auto& folder = assetBrowserFolders_[index];
+            bool hidden = false;
+            for (const auto& collapsed : collapsedAssetFolders_)
+            {
+                if (IsAssetDescendant(folder.relativePath, collapsed))
+                {
+                    hidden = true;
+                    break;
+                }
+            }
+            if (!hidden)
+            {
+                visibleAssetFolderRows_.push_back(index);
+            }
+        }
+        assetBrowserFolderScrollRow_ = std::min(
+            assetBrowserFolderScrollRow_,
+            visibleAssetFolderRows_.empty()
+                ? std::size_t(0)
+                : visibleAssetFolderRows_.size() - 1);
+    }
+
     void RenegadeStudioChrome::OnHierarchySelected(
         std::function<void(std::uint64_t)> callback)
     {
@@ -722,6 +815,18 @@ namespace renegade::studio
         std::function<void(int)> callback)
     {
         drawerChanged_ = std::move(callback);
+    }
+
+    void RenegadeStudioChrome::OnAssetBrowserFolderSelected(
+        std::function<void(const std::string&)> callback)
+    {
+        assetBrowserFolderSelected_ = std::move(callback);
+    }
+
+    void RenegadeStudioChrome::OnAssetBrowserItemSelected(
+        std::function<void(const std::string&)> callback)
+    {
+        assetBrowserItemSelected_ = std::move(callback);
     }
 
     void RenegadeStudioChrome::OnLayoutChanged(
@@ -906,6 +1011,78 @@ namespace renegade::studio
                     maximumScroll);
             }
             pointerConsumed_ = true;
+        }
+
+        if (activeBottomTab_ == 0 && std::abs(layoutPointer.z) > 0.1f)
+        {
+            const float drawerTop = bottomTabsEdge - drawerHeight_;
+            const float bodyTop = drawerTop + 79.0f;
+            const float bodyBottom = bottomTabsEdge - 6.0f;
+            const float browserWidth = inspectorEdge - hierarchyWidth_;
+            const float folderPaneWidth = assetBrowserFoldersVisible_
+                ? std::clamp(browserWidth * 0.28f, 190.0f, 270.0f)
+                : 28.0f;
+            if (layoutPointer.y >= bodyTop &&
+                layoutPointer.y < bodyBottom &&
+                layoutPointer.x >= hierarchyWidth_ &&
+                layoutPointer.x < inspectorEdge)
+            {
+                const bool up = layoutPointer.z > 0.0f;
+                if (assetBrowserFoldersVisible_ &&
+                    layoutPointer.x < hierarchyWidth_ + folderPaneWidth)
+                {
+                    const std::size_t capacity = static_cast<std::size_t>(
+                        std::max(
+                            1.0f,
+                            std::floor(
+                                (bodyBottom - bodyTop) /
+                                AssetFolderRowHeight)));
+                    const std::size_t maximum =
+                        visibleAssetFolderRows_.size() > capacity
+                            ? visibleAssetFolderRows_.size() - capacity
+                            : 0;
+                    assetBrowserFolderScrollRow_ = up
+                        ? (assetBrowserFolderScrollRow_ > 0
+                            ? assetBrowserFolderScrollRow_ - 1
+                            : 0)
+                        : std::min(
+                            assetBrowserFolderScrollRow_ + 1,
+                            maximum);
+                }
+                else
+                {
+                    const float gridX =
+                        hierarchyWidth_ + folderPaneWidth + 12.0f;
+                    const float gridWidth = inspectorEdge - gridX - 12.0f;
+                    const int columns = std::max(
+                        1,
+                        static_cast<int>(
+                            (gridWidth + AssetCardGap) /
+                            (AssetCardWidth + AssetCardGap)));
+                    const std::size_t rowCount =
+                        (assetBrowserAssets_.size() +
+                            static_cast<std::size_t>(columns) - 1) /
+                        static_cast<std::size_t>(columns);
+                    const std::size_t visibleRows =
+                        static_cast<std::size_t>(std::max(
+                            1.0f,
+                            std::floor(
+                                (bodyBottom - bodyTop) /
+                                (AssetCardHeight + AssetCardGap))));
+                    const std::size_t maximum =
+                        rowCount > visibleRows
+                            ? rowCount - visibleRows
+                            : 0;
+                    assetBrowserAssetScrollRow_ = up
+                        ? (assetBrowserAssetScrollRow_ > 0
+                            ? assetBrowserAssetScrollRow_ - 1
+                            : 0)
+                        : std::min(
+                            assetBrowserAssetScrollRow_ + 1,
+                            maximum);
+                }
+                pointerConsumed_ = true;
+            }
         }
         if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
         {
@@ -1185,6 +1362,115 @@ namespace renegade::studio
                 drawerTabInteraction = true;
             }
 
+            if (!consumed && activeBottomTab_ == 0 &&
+                x >= hierarchyWidth_ && x < inspectorX &&
+                y >= drawerTop + 43.0f && y < bottomTabsTop)
+            {
+                const float browserWidth = inspectorX - hierarchyWidth_;
+                const float folderPaneWidth = assetBrowserFoldersVisible_
+                    ? std::clamp(browserWidth * 0.28f, 190.0f, 270.0f)
+                    : 28.0f;
+                const float bodyTop = drawerTop + 79.0f;
+                const float bodyBottom = bottomTabsTop - 6.0f;
+
+                if (x >= hierarchyWidth_ + 13.0f &&
+                    x < hierarchyWidth_ + 35.0f &&
+                    y >= drawerTop + 47.0f && y < drawerTop + 70.0f)
+                {
+                    assetBrowserFoldersVisible_ =
+                        !assetBrowserFoldersVisible_;
+                    consumed = true;
+                }
+                else if (assetBrowserFoldersVisible_ &&
+                    x < hierarchyWidth_ + folderPaneWidth &&
+                    y >= bodyTop && y < bodyBottom)
+                {
+                    const std::size_t visibleIndex =
+                        assetBrowserFolderScrollRow_ +
+                        static_cast<std::size_t>(
+                            (y - bodyTop) / AssetFolderRowHeight);
+                    if (visibleIndex < visibleAssetFolderRows_.size())
+                    {
+                        const std::size_t folderIndex =
+                            visibleAssetFolderRows_[visibleIndex];
+                        const auto& folder =
+                            assetBrowserFolders_[folderIndex];
+                        const float arrowEdge =
+                            hierarchyWidth_ + 18.0f +
+                            std::max(0, folder.depth) * 14.0f;
+                        if (x < arrowEdge + 15.0f)
+                        {
+                            if (collapsedAssetFolders_.count(
+                                    folder.relativePath) != 0)
+                            {
+                                collapsedAssetFolders_.erase(
+                                    folder.relativePath);
+                            }
+                            else
+                            {
+                                collapsedAssetFolders_.insert(
+                                    folder.relativePath);
+                            }
+                            RebuildVisibleAssetFolders();
+                        }
+                        else if (assetBrowserFolderSelected_)
+                        {
+                            assetBrowserFolderSelected_(
+                                folder.relativePath);
+                        }
+                        consumed = true;
+                    }
+                }
+                else if (y >= bodyTop && y < bodyBottom)
+                {
+                    const float gridX =
+                        hierarchyWidth_ + folderPaneWidth + 12.0f;
+                    const float gridWidth = inspectorX - gridX - 12.0f;
+                    const int columns = std::max(
+                        1,
+                        static_cast<int>(
+                            (gridWidth + AssetCardGap) /
+                            (AssetCardWidth + AssetCardGap)));
+                    if (x >= gridX)
+                    {
+                        const int column = static_cast<int>(
+                            (x - gridX) /
+                            (AssetCardWidth + AssetCardGap));
+                        const int visibleRow = static_cast<int>(
+                            (y - bodyTop) /
+                            (AssetCardHeight + AssetCardGap));
+                        if (column >= 0 && column < columns &&
+                            visibleRow >= 0)
+                        {
+                            const std::size_t assetIndex =
+                                (assetBrowserAssetScrollRow_ +
+                                    static_cast<std::size_t>(visibleRow)) *
+                                    static_cast<std::size_t>(columns) +
+                                static_cast<std::size_t>(column);
+                            if (assetIndex < assetBrowserAssets_.size())
+                            {
+                                const auto& asset =
+                                    assetBrowserAssets_[assetIndex];
+                                assetBrowserSelectedPath_ =
+                                    asset.relativePath;
+                                if (asset.directory &&
+                                    assetBrowserFolderSelected_)
+                                {
+                                    assetBrowserFolderSelected_(
+                                        asset.relativePath);
+                                }
+                                else if (assetBrowserItemSelected_)
+                                {
+                                    assetBrowserItemSelected_(
+                                        asset.relativePath);
+                                }
+                                consumed = true;
+                            }
+                        }
+                    }
+                }
+            }
+
             const bool insideDrawer = activeBottomTab_ >= 0 &&
                 x >= hierarchyWidth_ && x < inspectorX &&
                 y >= drawerTop && y < bottomTabsTop;
@@ -1204,6 +1490,270 @@ namespace renegade::studio
         hitBox = wi::primitive::Hitbox2D(
             XMFLOAT2(-1.0f, -1.0f),
             XMFLOAT2(0.0f, 0.0f));
+    }
+
+    void RenegadeStudioChrome::RenderAssetBrowser(
+        const float drawerTop,
+        const float inspectorX,
+        const wi::graphics::CommandList cmd) const
+    {
+        const float browserWidth = inspectorX - hierarchyWidth_;
+        const float toolbarY = drawerTop + 46.0f;
+        const float bodyTop = drawerTop + 79.0f;
+        const float bodyBottom =
+            height_ - BottomTabsHeight - StatusBarHeight - 6.0f;
+        const float folderPaneWidth = assetBrowserFoldersVisible_
+            ? std::clamp(browserWidth * 0.28f, 190.0f, 270.0f)
+            : 28.0f;
+
+        DrawBorderedRect(
+            hierarchyWidth_ + 13.0f,
+            toolbarY,
+            22.0f,
+            23.0f,
+            Surface2,
+            Border,
+            cmd);
+        DrawText(
+            assetBrowserFoldersVisible_ ? "<" : ">",
+            hierarchyWidth_ + 20.0f,
+            toolbarY + 7.0f,
+            9,
+            TextStrong,
+            cmd);
+
+        const float statusWidth = 82.0f;
+        const float searchWidth = std::clamp(
+            browserWidth * 0.22f,
+            150.0f,
+            260.0f);
+        const float searchX =
+            inspectorX - searchWidth - statusWidth - 26.0f;
+        DrawBorderedRect(
+            hierarchyWidth_ + 45.0f,
+            toolbarY,
+            std::max(120.0f, searchX - hierarchyWidth_ - 55.0f),
+            23.0f,
+            wi::Color(6, 10, 12, 255),
+            Border,
+            cmd);
+        DrawText(
+            Ellipsize(assetBrowserCurrentPath_, 64),
+            hierarchyWidth_ + 55.0f,
+            toolbarY + 7.0f,
+            9,
+            TextSecondary,
+            cmd,
+            0.2f,
+            0.16f);
+
+        DrawBorderedRect(
+            searchX,
+            toolbarY,
+            searchWidth,
+            23.0f,
+            wi::Color(6, 10, 12, 255),
+            Border,
+            cmd);
+        DrawText(
+            "SEARCH // NEXT SLICE",
+            searchX + 9.0f,
+            toolbarY + 7.0f,
+            9,
+            Muted,
+            cmd,
+            0.2f,
+            0.12f);
+
+        DrawBorderedRect(
+            inspectorX - statusWidth - 13.0f,
+            toolbarY,
+            statusWidth,
+            23.0f,
+            Surface2,
+            Border,
+            cmd);
+        DrawText(
+            "LOCAL CONTENT",
+            inspectorX - statusWidth - 7.0f,
+            toolbarY + 7.0f,
+            8,
+            TextSecondary,
+            cmd,
+            0.2f,
+            0.16f);
+
+        if (assetBrowserFoldersVisible_)
+        {
+            DrawRect(
+                hierarchyWidth_,
+                bodyTop,
+                folderPaneWidth,
+                bodyBottom - bodyTop,
+                wi::Color(6, 10, 12, 245),
+                cmd);
+            DrawRect(
+                hierarchyWidth_ + folderPaneWidth - 1.0f,
+                bodyTop,
+                1.0f,
+                bodyBottom - bodyTop,
+                Border,
+                cmd);
+
+            const std::size_t capacity =
+                static_cast<std::size_t>(std::max(
+                    1.0f,
+                    std::floor(
+                        (bodyBottom - bodyTop) /
+                        AssetFolderRowHeight)));
+            const std::size_t end = std::min(
+                visibleAssetFolderRows_.size(),
+                assetBrowserFolderScrollRow_ + capacity);
+            for (std::size_t visible = assetBrowserFolderScrollRow_;
+                visible < end;
+                ++visible)
+            {
+                const auto& folder = assetBrowserFolders_[
+                    visibleAssetFolderRows_[visible]];
+                const float y = bodyTop +
+                    static_cast<float>(
+                        visible - assetBrowserFolderScrollRow_) *
+                        AssetFolderRowHeight;
+                if (folder.selected)
+                {
+                    DrawRect(
+                        hierarchyWidth_ + 5.0f,
+                        y,
+                        folderPaneWidth - 10.0f,
+                        AssetFolderRowHeight,
+                        wi::Color(67, 28, 13, 145),
+                        cmd);
+                    DrawRect(
+                        hierarchyWidth_ + 5.0f,
+                        y,
+                        2.0f,
+                        AssetFolderRowHeight,
+                        Forge,
+                        cmd);
+                }
+
+                const float indent =
+                    hierarchyWidth_ + 14.0f +
+                    std::max(0, folder.depth) * 14.0f;
+                const bool collapsed =
+                    collapsedAssetFolders_.count(
+                        folder.relativePath) != 0;
+                DrawText(
+                    collapsed ? ">" : "v",
+                    indent,
+                    y + 7.0f,
+                    8,
+                    collapsed ? Muted : Forge,
+                    cmd);
+                DrawText(
+                    Ellipsize(folder.name, 26),
+                    indent + 17.0f,
+                    y + 6.0f,
+                    9,
+                    folder.selected ? TextStrong : TextSecondary,
+                    cmd,
+                    0.1f,
+                    0.15f);
+            }
+        }
+
+        const float gridX =
+            hierarchyWidth_ + folderPaneWidth + 12.0f;
+        const float gridWidth = inspectorX - gridX - 12.0f;
+        const int columns = std::max(
+            1,
+            static_cast<int>(
+                (gridWidth + AssetCardGap) /
+                (AssetCardWidth + AssetCardGap)));
+
+        if (assetBrowserAssets_.empty())
+        {
+            DrawText(
+                "THIS FOLDER IS EMPTY",
+                gridX + 6.0f,
+                bodyTop + 10.0f,
+                10,
+                Muted,
+                cmd,
+                0.8f,
+                0.14f);
+            return;
+        }
+
+        const std::size_t first =
+            assetBrowserAssetScrollRow_ *
+            static_cast<std::size_t>(columns);
+        for (std::size_t index = first;
+            index < assetBrowserAssets_.size();
+            ++index)
+        {
+            const std::size_t local = index - first;
+            const int row = static_cast<int>(
+                local / static_cast<std::size_t>(columns));
+            const int column = static_cast<int>(
+                local % static_cast<std::size_t>(columns));
+            const float x = gridX +
+                column * (AssetCardWidth + AssetCardGap);
+            const float y = bodyTop +
+                row * (AssetCardHeight + AssetCardGap);
+            if (y + AssetCardHeight > bodyBottom)
+            {
+                break;
+            }
+
+            const auto& asset = assetBrowserAssets_[index];
+            const bool selected =
+                asset.relativePath == assetBrowserSelectedPath_;
+            DrawBorderedRect(
+                x,
+                y,
+                AssetCardWidth,
+                AssetCardHeight,
+                selected
+                    ? wi::Color(38, 22, 16, 255)
+                    : Surface2,
+                selected ? Forge : Border,
+                cmd);
+            DrawRect(
+                x + 7.0f,
+                y + 7.0f,
+                AssetCardWidth - 14.0f,
+                35.0f,
+                wi::Color(8, 16, 21, 255),
+                cmd);
+            DrawText(
+                asset.directory ? "DIR" : "FILE",
+                x + 12.0f,
+                y + 15.0f,
+                8,
+                asset.directory ? TechCyan : Forge,
+                cmd,
+                0.4f,
+                0.16f);
+            DrawText(
+                Ellipsize(asset.typeLabel, 14),
+                x + 48.0f,
+                y + 15.0f,
+                8,
+                Muted,
+                cmd,
+                0.4f,
+                0.14f);
+            DrawText(
+                Ellipsize(asset.name, 18),
+                x + 8.0f,
+                y + 51.0f,
+                9,
+                selected ? TextStrong : TextSecondary,
+                cmd,
+                0.1f,
+                0.16f);
+        }
     }
 
     void RenegadeStudioChrome::Render(
@@ -1733,17 +2283,22 @@ namespace renegade::studio
                 hierarchyWidth_ + 16.0f, drawerTop + 38.0f,
                 inspectorX - hierarchyWidth_ - 32.0f,
                 1.0f, BorderSoft, cmd);
-            const char* message = activeBottomTab_ == 0
-                ? "No imported assets yet. Asset import is a separate capability."
-                : activeBottomTab_ == 1
+            if (activeBottomTab_ == 0)
+            {
+                RenderAssetBrowser(drawerTop, inspectorX, cmd);
+            }
+            else
+            {
+                const char* message = activeBottomTab_ == 1
                     ? "Console connected. No messages in this session."
                     : activeBottomTab_ == 2
                         ? "Build output will appear here."
                         : "Runtime diagnostics are shown here when available.";
-            DrawText(
-                message,
-                hierarchyWidth_ + 16.0f, drawerTop + 55.0f,
-                10, TextSecondary, cmd, 0.0f, 0.18f);
+                DrawText(
+                    message,
+                    hierarchyWidth_ + 16.0f, drawerTop + 55.0f,
+                    10, TextSecondary, cmd, 0.0f, 0.18f);
+            }
         }
 
         // Hidden-until-needed bottom drawer tabs.

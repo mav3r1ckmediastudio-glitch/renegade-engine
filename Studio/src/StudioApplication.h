@@ -10,6 +10,7 @@
 #include <Translator.h>
 
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
@@ -38,6 +39,7 @@ namespace renegade::studio
         void RefreshHierarchy();
         void RefreshInspector();
         void RefreshProjectHub();
+        void RefreshAssetBrowser();
 
     private:
         enum class EditorAction
@@ -73,6 +75,8 @@ namespace renegade::studio
             ReloadTerrainMaterial,
             ValidateModelImport,
             ImportModel,
+            ApplyImportScale,
+            DismissImportScale,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -307,6 +311,8 @@ namespace renegade::studio
         void SetGridVisible(bool visible);
         void CreateProjectHub();
         void CreateWorkspaceShell();
+        void SelectAssetBrowserFolder(const std::string& relativePath);
+        void SelectAssetBrowserItem(const std::string& relativePath);
         void CreateProject();
         void ClearSelectionOutline() noexcept;
         void DeleteSelection();
@@ -476,6 +482,8 @@ namespace renegade::studio
         wi::gui::Window contentPanel_;
         wi::gui::Label contentLabel_;
         wi::gui::Label contentPlaceholder_;
+        bridge::AssetBrowserService assetBrowserService_;
+        std::string assetBrowserCurrentFolder_ = "Content";
         wi::gui::Window projectHubPanel_;
         wi::gui::Label hubBrandLabel_;
         wi::gui::Label hubTitleLabel_;
@@ -589,6 +597,8 @@ namespace renegade::studio
         bool sceneOpenInProgress_ = false;
         wi::ecs::Entity importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
         float importScaleAppliedFactor_ = 1.0f;
+        bridge::ModelScaleMode pendingImportScaleMode_ =
+            bridge::ModelScaleMode::Original;
     };
 
     class StudioApplication final : public wi::Application

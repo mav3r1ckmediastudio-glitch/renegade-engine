@@ -5,6 +5,7 @@
 #include <functional>
 #include <cstdint>
 #include <vector>
+#include <unordered_set>
 
 #include <WickedEngine.h>
 
@@ -126,9 +127,29 @@ namespace renegade::studio
             HierarchyCategory category = HierarchyCategory::Other;
         };
 
+        struct AssetFolderRow
+        {
+            std::string name;
+            std::string relativePath;
+            int depth = 0;
+            bool selected = false;
+        };
+
+        struct AssetCard
+        {
+            std::string name;
+            std::string relativePath;
+            std::string typeLabel;
+            bool directory = false;
+        };
+
         void Create();
         void SetLayout(float width, float height);
         void SetHierarchyRows(std::vector<HierarchyRow> rows);
+        void SetAssetBrowserData(
+            std::vector<AssetFolderRow> folders,
+            std::vector<AssetCard> assets,
+            std::string currentPath);
         void SetSceneName(std::string sceneName);
         void SetSceneDirty(bool dirty) noexcept;
         void SetStatusText(std::string statusText);
@@ -147,6 +168,10 @@ namespace renegade::studio
         void OnToolSelected(std::function<void(int)> callback);
         void OnAction(std::function<void(Action)> callback);
         void OnDrawerChanged(std::function<void(int)> callback);
+        void OnAssetBrowserFolderSelected(
+            std::function<void(const std::string&)> callback);
+        void OnAssetBrowserItemSelected(
+            std::function<void(const std::string&)> callback);
         void OnLayoutChanged(
             std::function<void(float, float, float, bool)> callback);
 
@@ -173,6 +198,12 @@ namespace renegade::studio
             std::size_t rowIndex = 0;
         };
 
+        void RebuildVisibleAssetFolders();
+        void RenderAssetBrowser(
+            float drawerTop,
+            float inspectorX,
+            wi::graphics::CommandList cmd) const;
+
         float width_ = 1920.0f;
         float height_ = 1080.0f;
         float hierarchyWidth_ = 320.0f;
@@ -192,16 +223,25 @@ namespace renegade::studio
         wi::Resource brandLockup_;
         std::vector<HierarchyRow> hierarchyRows_;
         std::vector<VisibleHierarchyItem> visibleHierarchyRows_;
+        std::vector<AssetFolderRow> assetBrowserFolders_;
+        std::vector<std::size_t> visibleAssetFolderRows_;
+        std::vector<AssetCard> assetBrowserAssets_;
+        std::unordered_set<std::string> collapsedAssetFolders_;
         std::array<bool,
             static_cast<std::size_t>(HierarchyCategory::Count)>
             collapsedHierarchyCategories_ = {};
         std::size_t hierarchyScrollRow_ = 0;
+        std::size_t assetBrowserFolderScrollRow_ = 0;
+        std::size_t assetBrowserAssetScrollRow_ = 0;
         std::uint64_t lastHierarchySelection_ = 0;
         std::string sceneName_ = "PROVING GROUND";
         bool sceneDirty_ = false;
         std::string statusText_ = "STUDIO READY";
         std::string selectionName_;
         std::string hierarchyFilter_;
+        std::string assetBrowserCurrentPath_ = "Content";
+        std::string assetBrowserSelectedPath_;
+        bool assetBrowserFoldersVisible_ = true;
         float fpsSampleTime_ = 0.0f;
         float displayedFps_ = 0.0f;
         std::uint32_t fpsSampleFrames_ = 0;
@@ -209,6 +249,10 @@ namespace renegade::studio
         std::function<void(int)> toolSelected_;
         std::function<void(Action)> action_;
         std::function<void(int)> drawerChanged_;
+        std::function<void(const std::string&)>
+            assetBrowserFolderSelected_;
+        std::function<void(const std::string&)>
+            assetBrowserItemSelected_;
         std::function<void(float, float, float, bool)> layoutChanged_;
     };
 }

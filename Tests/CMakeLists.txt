@@ -153,3 +153,20 @@ set_target_properties(RenegadeCollisionTests PROPERTIES
 add_dependencies(RenegadeBridgeTests RenegadeCollisionTests)
 
 add_test(NAME RenegadeCollisionTests COMMAND RenegadeCollisionTests)
+
+add_executable(RenegadeAssetBrowserTests
+    AssetBrowserTests.cpp
+)
+
+target_link_libraries(RenegadeAssetBrowserTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeAssetBrowserTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeAssetBrowserTests)
+
+add_test(NAME RenegadeAssetBrowserTests COMMAND RenegadeAssetBrowserTests)
