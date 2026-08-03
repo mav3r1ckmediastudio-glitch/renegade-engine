@@ -117,6 +117,19 @@ Two things this panel deliberately does not do:
   dismissed. It does not persist as a docked panel and does not apply to
   any entity other than the one just imported.
 
+**Known-fixed bug:** `wi::gui::Window::Render` scissor-clips every child to
+the window's own rectangle, including a `ComboBox`'s dropdown list once
+open, and `ComboBox::GetDropOffset`'s auto-flip logic only checks against
+the full screen height, never the parent window's bounds. The panel's
+original 168px height left the dropdown almost nowhere to render before
+the panel's own edge clipped it away — the combo looked unresponsive but
+was actually rendering its options into a clipped-away region. Fixed by
+growing the panel to 288px and moving the Apply/Close buttons down to
+y=234, so the full three-item dropdown has room inside the panel's own
+scissor rect. Any future addition to this panel that needs more dropdown
+headroom (more items, another combo) needs to grow the panel further for
+the same reason.
+
 No stock Wicked Editor window is embedded. No Wicked file or submodule
 pointer is changed. The `BUILD > VALIDATE GLB/GLTF IMPORT...` diagnostic
 proof route is untouched and remains the Gate 1 evidence path; it is not

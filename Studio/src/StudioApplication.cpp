@@ -2786,8 +2786,21 @@ namespace renegade::studio
         // Positioned independently of the Inspector's hardcoded column
         // (see CreateImportScalePanel) -- a small popup centered over the
         // viewport rather than a row inside that fragile layout chain.
+        //
+        // wi::gui::Window::Render scissor-clips every child widget to the
+        // window's own rectangle (widget->parent->scissorRect), including a
+        // ComboBox's dropdown list when it opens -- Wicked's auto-flip
+        // logic in ComboBox::GetDropOffset only checks against the full
+        // canvas height, not the parent window's bounds, so it never
+        // triggers here. The panel must itself be tall enough to contain
+        // the combo's fully open dropdown (its own 28px row plus three
+        // 28px items, ~112px) or the options render clipped to invisible,
+        // unselectable, even though the combo logic itself is fine. This
+        // is why the panel is taller than its visible idle content and the
+        // buttons sit well below the combo rather than immediately under
+        // it.
         const float importScalePanelWidth = 320.0f;
-        const float importScalePanelHeight = 168.0f;
+        const float importScalePanelHeight = 288.0f;
         importScalePanel_.SetPos(XMFLOAT2(
             viewportBounds_.x +
                 (viewportBounds_.z - viewportBounds_.x) * 0.5f -
@@ -2808,13 +2821,13 @@ namespace renegade::studio
         importScaleModeCombo_.SetSize(XMFLOAT2(
             importScalePanelWidth - 24.0f,
             28.0f));
-        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 126.0f));
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 234.0f));
         importScaleApplyButton_.SetSize(XMFLOAT2(
             (importScalePanelWidth - 24.0f - 8.0f) * 0.5f,
             30.0f));
         importScaleDismissButton_.SetPos(XMFLOAT2(
             12.0f + (importScalePanelWidth - 24.0f - 8.0f) * 0.5f + 8.0f,
-            126.0f));
+            234.0f));
         importScaleDismissButton_.SetSize(XMFLOAT2(
             (importScalePanelWidth - 24.0f - 8.0f) * 0.5f,
             30.0f));

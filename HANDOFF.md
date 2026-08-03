@@ -417,6 +417,46 @@ build, no packaged test. Before treating any part of this as working:
    or an Undo that leaves an orphaned animation still playing, both stop
    this gate.
 
+## Bug fix, uncommitted: Import Scale panel dropdown was unselectable
+
+The project owner packaged and ran the already-shipped Import Scale panel
+(models import "beautifully" and now animate) and reported the panel opens
+but its combo box "won't let me select anything."
+
+Root cause, confirmed by reading `WickedEngine/WickedEngine/wiGUI.cpp`
+rather than guessed: `Window::Render` scissor-clips every child widget to
+`widget->parent->scissorRect` -- the window's own rectangle -- including a
+`ComboBox`'s dropdown list once it opens. `ComboBox::GetDropOffset`'s
+auto-flip-upward logic only checks the dropdown against the full canvas
+height (`screenheight`), never against the parent window's bounds, so it
+never rescues a dropdown that would overflow a *short* parent -- it only
+flips if the drop would go off the bottom of the whole screen. The Import
+Scale panel is 168px tall with the combo sitting near its bottom edge, so
+its three-item dropdown (roughly 28px header + 3 x 28px items = ~112px)
+had almost nowhere to render before hitting the panel's own scissor edge
+and disappearing. The combo logic itself was never broken -- the options
+were just being drawn into a region that gets cut away.
+
+Fixed in `StudioApplication.cpp`'s `ResizeLayout()`: `importScalePanel_`
+grew from 168 to 288px tall, and `importScaleApplyButton_`/
+`importScaleDismissButton_` moved from y=126 to y=234 to leave the combo's
+full dropdown room to render inside the panel's own bounds instead of
+immediately crowding it with the button row.
+
+Changed files:
+
+- `Studio/src/StudioApplication.cpp`
+- `HANDOFF.md`
+
+**No local validation has run against this yet** -- no syntax check, no
+build, no packaged test. Before treating this as fixed:
+
+1. Run the same kind of local C++17 syntax check used for prior slices.
+2. Commit and push, then run Windows CI.
+3. Package Release, reimport a GLB, and confirm the combo's dropdown is
+   fully visible (all three options readable, not clipped) and each is
+   actually clickable/selectable, on both DX12 and Vulkan.
+
 ## Completed slice — Model Import V1 Gate 1
 
 Changed files:
