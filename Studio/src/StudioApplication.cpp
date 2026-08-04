@@ -309,6 +309,13 @@ namespace renegade::studio
         wi::renderer::SetToDrawGridHelper(false);
         LoadGridResources();
 
+        // Loaded once here (a safe init point, like the UI wordmark) so the
+        // review's scale-reference billboard never triggers a mid-frame
+        // texture upload -- that is what dropped the device with the runtime
+        // glTF human reference.
+        importReviewSilhouetteTexture_ = wi::resourcemanager::Load(
+            "Content/reference/human_silhouette.png");
+
         // The generated Proving Ground is composed around the world origin so
         // that it shares the grid helper's footprint.
         const XMVECTOR eye = XMVectorSet(13.0f, 7.6f, -16.5f, 1.0f);
@@ -2659,6 +2666,7 @@ namespace renegade::studio
                 ResizeLayout();
             }
             viewportBounds_ = studioChrome_.ViewportBounds();
+            UpdateImportReviewReferenceBillboard();
             const XMFLOAT4 reviewPointer = wi::input::GetPointer();
             if (pendingAction_ != EditorAction::None)
             {
@@ -6725,6 +6733,21 @@ namespace renegade::studio
             return;
         }
 
+        // Drain the GPU before tearing down the review-only helpers. The
+        // renderer may still have an in-flight command list recorded against
+        // the CURRENT scene state (review lights + reference + their
+        // GPU-visible resources); destroying those entities out from under
+        // it here -- synchronously, mid-click, ahead of the Serialize+merge
+        // below -- was reproducing a DX12 "device removed" on Present
+        // (Close() failing with an invalid-parameter error) once the review
+        // lighting/reference stage landed. Waiting for the GPU to finish
+        // the outstanding frame first guarantees nothing it referenced is
+        // still live when we free it.
+        if (auto* device = wi::graphics::GetDevice())
+        {
+            device->WaitForGPU();
+        }
+
         // Strip review-only helpers from the isolated scene while `scene`
         // still points at it, so the saved .wiscene and its thumbnail contain
         // only the model -- never the reference person.
@@ -6757,6 +6780,14 @@ namespace renegade::studio
         }
 
         importReviewPanel_.SetVisible(false);
+
+        // Same GPU drain as FinishImportReview -- CANCEL tears down the same
+        // review-only helpers and must not free them while the GPU still has
+        // an in-flight command list referencing them.
+        if (auto* device = wi::graphics::GetDevice())
+        {
+            device->WaitForGPU();
+        }
         RemoveImportReviewHelpers();
 
         // Restore the active scene as the render target and the editor camera
@@ -6943,18 +6974,51 @@ namespace renegade::studio
         }
         importReviewReferenceEntities_.clear();
         importReviewReferenceEntity_ = wi::ecs::INVALID_ENTITY;
+        importReviewReferenceIsBillboard_ = false;
 
-        // NOTE: a 3D glTF human reference was prototyped here (see
-        // ImportService::LoadReferenceModel and the staged Content/reference/
-        // asset), but importing a glTF's GPU resources on the main thread
-        // mid-frame corrupts the DX12 command list and drops the device on
-        // Finish. Until that load is moved onto the job-thread/safe-point path
-        // the real model importer uses -- or replaced with a camera-facing
-        // silhouette billboard (a flat textured quad, no runtime mesh import)
-        // -- the reference stays the crash-safe primitive box below.
+        // Preferred reference: a camera-facing silhouette billboard -- a flat
+        // textured quad. Its texture is loaded once at startup and its
+        // vertex/material data is trivial, so unlike a runtime glTF import it
+        // never triggers a mid-frame GPU upload (no device-lost). A 3D glTF
+        // human path is staged (ImportService::LoadReferenceModel) but disabled
+        // pending a job-thread/safe-point load.
+        if (importReviewSilhouetteTexture_.IsValid())
+        {
+            const wi::ecs::Entity plane =
+                scene->Entity_CreatePlane("Import Review Reference Person");
+            importReviewReferenceEntity_ = plane;
+            importReviewReferenceEntities_.push_back(plane);
+            importReviewReferenceIsBillboard_ = true;
 
-        // A 2 m cube (spans +/-1) scaled to a ~1.8 m upright box, its base
-        // resting on Y=0 (centre at 0.9).
+            if (auto* transform = scene->transforms.GetComponent(plane))
+            {
+                // Entity_CreatePlane is a 2x2 quad in XZ. Stood upright as a
+                // billboard, its Z extent becomes height: scale so the figure
+                // is ~1.8 m tall and ~0.92 m wide, base resting on Y=0.
+                transform->scale_local = XMFLOAT3(0.46f, 1.0f, 0.90f);
+                transform->translation_local = XMFLOAT3(0.0f, 0.90f, 0.0f);
+                transform->SetDirty();
+                transform->UpdateTransform();
+            }
+            if (auto* material = scene->materials.GetComponent(plane))
+            {
+                material->shaderType =
+                    wi::scene::MaterialComponent::SHADERTYPE_UNLIT;
+                material->userBlendMode = wi::enums::BLENDMODE_ALPHA;
+                material->baseColor = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+                material->SetDoubleSided(true);
+                material->SetCastShadow(false);
+                material->SetReceiveShadow(false);
+                material->textures[
+                    wi::scene::MaterialComponent::BASECOLORMAP].resource =
+                        importReviewSilhouetteTexture_;
+                material->CreateRenderData();
+            }
+            return;
+        }
+
+        // Fallback (texture missing): a 2 m cube scaled to a ~1.8 m upright
+        // box, its base resting on Y=0 (centre at 0.9).
         importReviewReferenceEntity_ =
             scene->Entity_CreateCube("Import Review Reference Person");
         importReviewReferenceEntities_.push_back(importReviewReferenceEntity_);
@@ -6966,6 +7030,38 @@ namespace renegade::studio
             transform->SetDirty();
             transform->UpdateTransform();
         }
+    }
+
+    void StudioRenderPath::UpdateImportReviewReferenceBillboard()
+    {
+        if (!importReviewActive_ || scene == nullptr ||
+            !importReviewReferenceIsBillboard_ ||
+            importReviewReferenceEntity_ == wi::ecs::INVALID_ENTITY)
+        {
+            return;
+        }
+        auto* transform =
+            scene->transforms.GetComponent(importReviewReferenceEntity_);
+        if (transform == nullptr)
+        {
+            return;
+        }
+
+        // Yaw the upright quad about Y so its face points at the camera -- a
+        // horizontal billboard: it stays vertical and only turns to follow the
+        // view. The -90 deg pitch stands the XZ plane up; yaw aims it.
+        const XMFLOAT3 refPos = transform->GetPosition();
+        const XMFLOAT3 camPos =
+            (camera != nullptr) ? camera->Eye : XMFLOAT3(0.0f, 0.0f, 0.0f);
+        // Reversed delta (equivalent to yaw + 180 deg) so the quad's front,
+        // un-mirrored face points at the camera instead of its back.
+        const float yaw = std::atan2(
+            refPos.x - camPos.x, refPos.z - camPos.z);
+        const XMVECTOR orientation =
+            XMQuaternionRotationRollPitchYaw(-XM_PIDIV2, yaw, 0.0f);
+        XMStoreFloat4(&transform->rotation_local, orientation);
+        transform->SetDirty();
+        transform->UpdateTransform();
     }
 
     void StudioRenderPath::SetImportReviewReferenceRenderable(

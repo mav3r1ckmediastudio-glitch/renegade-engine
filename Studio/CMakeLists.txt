@@ -78,6 +78,9 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/reference/low_poly_human/scene.bin"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/reference/low_poly_human/scene.bin"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/reference/human_silhouette.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/reference/human_silhouette.png"
     COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_ao.tga"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_roughness.tga"

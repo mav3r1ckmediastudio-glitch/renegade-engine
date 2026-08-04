@@ -490,6 +490,29 @@ namespace renegade::bridge
         return prepared;
     }
 
+    namespace
+    {
+        // SavePreparedGltfAsset() reloads the just-written .wiscene into a
+        // throwaway Scene purely to validate the round trip, then discards
+        // it. That reload allocates real GPU-visible resources (material
+        // textures, mesh buffers); destroying the Scene -- which happens the
+        // instant the shared_ptr's refcount drops, i.e. at every return
+        // below -- frees those resources with no guarantee the GPU has
+        // finished the frame that may still reference them. This is the
+        // same class of bug already fixed for the Import Review helper
+        // teardown (see StudioApplication::FinishImportReview): drain the
+        // GPU before the temporary scene goes out of scope.
+        void DrainGPUBeforeDiscardingReloadScene(
+            wi::allocator::shared_ptr<wi::scene::Scene>& reloadedScene)
+        {
+            if (auto* device = wi::graphics::GetDevice())
+            {
+                device->WaitForGPU();
+            }
+            reloadedScene.reset();
+        }
+    }
+
     ImportResult ImportService::SavePreparedGltfAsset(
         PreparedModelImport& prepared) const
     {
@@ -549,6 +572,7 @@ namespace renegade::bridge
             if (!ReadScene(result.assetPath, *reloadedScene, result.error))
             {
                 RecordStage(result.assetPath, "fail_wiscene_reload");
+                DrainGPUBeforeDiscardingReloadScene(reloadedScene);
                 return result;
             }
         }
@@ -557,12 +581,14 @@ namespace renegade::bridge
             RecordStage(result.assetPath, "fail_wiscene_reload_exception");
             result.error = "WISCENE reload failed: " +
                 std::string(exception.what());
+            DrainGPUBeforeDiscardingReloadScene(reloadedScene);
             return result;
         }
         catch (...)
         {
             RecordStage(result.assetPath, "fail_wiscene_reload_exception");
             result.error = "WISCENE reload failed with an unknown error.";
+            DrainGPUBeforeDiscardingReloadScene(reloadedScene);
             return result;
         }
 
@@ -575,11 +601,13 @@ namespace renegade::bridge
             result.error =
                 "Imported WISCENE structure changed during save and reload. " +
                 DescribeSummaryDifference(result.imported, result.reloaded);
+            DrainGPUBeforeDiscardingReloadScene(reloadedScene);
             return result;
         }
 
         result.succeeded = true;
         RecordStage(result.assetPath, "pass");
+        DrainGPUBeforeDiscardingReloadScene(reloadedScene);
         return result;
     }
 

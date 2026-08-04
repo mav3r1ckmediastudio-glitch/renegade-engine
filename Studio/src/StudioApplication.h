@@ -285,6 +285,7 @@ namespace renegade::studio
         void FrameImportReviewModel(bool reframeCamera);
         void CreateImportReviewReference();
         void LoadImportReviewReferenceEntity();
+        void UpdateImportReviewReferenceBillboard();
         void SetImportReviewReferenceRenderable(bool renderable);
         [[nodiscard]] bool IsImportReviewReferenceEntity(
             wi::ecs::Entity entity) const noexcept;
@@ -650,6 +651,8 @@ namespace renegade::studio
             wi::ecs::INVALID_ENTITY;
         std::vector<wi::ecs::Entity> importReviewReferenceEntities_;
         bool importReviewReferenceVisible_ = true;
+        bool importReviewReferenceIsBillboard_ = false;
+        wi::Resource importReviewSilhouetteTexture_;
         bridge::ModelScaleMode pendingImportReviewScaleMode_ =
             bridge::ModelScaleMode::Original;
         float importReviewScaleFactor_ = 1.0f;
