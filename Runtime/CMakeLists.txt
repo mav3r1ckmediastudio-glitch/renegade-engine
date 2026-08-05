@@ -1,3 +1,29 @@
+add_library(RenegadeRuntimeBootstrap STATIC
+    src/RuntimeBootstrap.cpp
+    src/RuntimeBootstrap.h
+)
+
+add_library(Renegade::RuntimeBootstrap ALIAS RenegadeRuntimeBootstrap)
+
+target_link_libraries(RenegadeRuntimeBootstrap
+    PUBLIC
+        Renegade::EngineBridge
+)
+
+target_include_directories(RenegadeRuntimeBootstrap
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_compile_options(RenegadeRuntimeBootstrap
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeRuntimeBootstrap PROPERTIES
+    FOLDER "Renegade"
+)
+
 add_executable(RenegadeRuntime WIN32
     src/RuntimeApplication.cpp
     src/RuntimeApplication.h
@@ -7,7 +33,7 @@ add_dependencies(RenegadeRuntime RenegadeTerrainSurfacePacker)
 
 target_link_libraries(RenegadeRuntime
     PRIVATE
-        Renegade::EngineBridge
+        Renegade::RuntimeBootstrap
 )
 
 target_compile_definitions(RenegadeRuntime
@@ -32,12 +58,43 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Valid Project/Content/Scenes"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Invalid Version"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Escaping Path"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Missing Scene"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Corrupt Scene/Content/Scenes"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
         "$<TARGET_FILE_DIR:RenegadeRuntime>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/cube.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Valid Project/Content/Scenes/BootstrapTest.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP01/BootstrapProject.renegade"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Valid Project/BootstrapProject.renegade"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP01/InvalidVersion.renegade"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Invalid Version/InvalidVersion.renegade"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP01/EscapingPath.renegade"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Escaping Path/EscapingPath.renegade"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP01/MissingScene.renegade"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Missing Scene/MissingScene.renegade"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP01/CorruptScene.renegade"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Corrupt Scene/CorruptScene.renegade"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP01/Corrupt.wiscene"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Corrupt Scene/Content/Scenes/Corrupt.wiscene"
     COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
         "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_ao.tga"
         "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_roughness.tga"

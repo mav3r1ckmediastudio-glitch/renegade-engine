@@ -190,3 +190,29 @@ add_test(
     NAME RenegadeProjectStructureTests
     COMMAND RenegadeProjectStructureTests
 )
+
+
+add_executable(RenegadeRuntimeBootstrapTests
+    RuntimeBootstrapTests.cpp
+)
+
+target_link_libraries(RenegadeRuntimeBootstrapTests
+    PRIVATE
+        Renegade::RuntimeBootstrap
+)
+
+target_compile_options(RenegadeRuntimeBootstrapTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeRuntimeBootstrapTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeRuntimeBootstrapTests)
+
+add_test(
+    NAME RenegadeRuntimeBootstrapTests
+    COMMAND RenegadeRuntimeBootstrapTests
+)

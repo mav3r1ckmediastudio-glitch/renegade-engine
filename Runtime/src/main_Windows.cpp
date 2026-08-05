@@ -1,23 +1,197 @@
 #include "RuntimeApplication.h"
 
 #include <Windows.h>
+#include <shellapi.h>
 
-#include <cwchar>
 #include <cstring>
+#include <filesystem>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace
 {
+    namespace fs = std::filesystem;
+
+    constexpr const char* BootstrapLogPath = "Logs/RuntimeBootstrap.log";
     renegade::runtime::RuntimeApplication application;
 
-    const wchar_t* GraphicsBackendTitle() noexcept
+    std::string WideToUtf8(const wchar_t* value)
     {
+        if (value == nullptr || *value == L'\0')
+        {
+            return {};
+        }
+
+        const int byteCount = WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            value,
+            -1,
+            nullptr,
+            0,
+            nullptr,
+            nullptr);
+        if (byteCount <= 1)
+        {
+            return {};
+        }
+
+        std::string result(static_cast<std::size_t>(byteCount), '\0');
+        WideCharToMultiByte(
+            CP_UTF8,
+            0,
+            value,
+            -1,
+            result.data(),
+            byteCount,
+            nullptr,
+            nullptr);
+        result.resize(static_cast<std::size_t>(byteCount - 1));
+        return result;
+    }
+
+    std::wstring Utf8ToWide(const std::string& value)
+    {
+        if (value.empty())
+        {
+            return {};
+        }
+
+        const int characterCount = MultiByteToWideChar(
+            CP_UTF8,
+            0,
+            value.c_str(),
+            static_cast<int>(value.size()),
+            nullptr,
+            0);
+        if (characterCount <= 0)
+        {
+            return std::wstring(value.begin(), value.end());
+        }
+
+        std::wstring result(
+            static_cast<std::size_t>(characterCount),
+            L'\0');
+        MultiByteToWideChar(
+            CP_UTF8,
+            0,
+            value.c_str(),
+            static_cast<int>(value.size()),
+            result.data(),
+            characterCount);
+        return result;
+    }
+
+    std::vector<std::string> CollectProcessArguments()
+    {
+        int argumentCount = 0;
+        wchar_t** arguments =
+            CommandLineToArgvW(GetCommandLineW(), &argumentCount);
+        if (arguments == nullptr)
+        {
+            return {};
+        }
+
+        std::vector<std::string> result;
+        result.reserve(
+            argumentCount > 1 ?
+                static_cast<std::size_t>(argumentCount - 1) :
+                0u);
+        for (int index = 1; index < argumentCount; ++index)
+        {
+            result.push_back(WideToUtf8(arguments[index]));
+        }
+
+        LocalFree(arguments);
+        return result;
+    }
+
+    void SetExecutableWorkingDirectory()
+    {
+        std::wstring executablePath(32768, L'\0');
+        const DWORD length = GetModuleFileNameW(
+            nullptr,
+            executablePath.data(),
+            static_cast<DWORD>(executablePath.size()));
+        if (length == 0 || length >= executablePath.size())
+        {
+            return;
+        }
+
+        executablePath.resize(length);
+        const fs::path directory =
+            fs::path(executablePath).parent_path();
+        if (!directory.empty())
+        {
+            SetCurrentDirectoryW(directory.c_str());
+        }
+    }
+
+    std::wstring GraphicsBackendTitle(const std::string& projectName)
+    {
+        std::wstring title = L"Renegade Runtime";
+        if (!projectName.empty())
+        {
+            title += L" - ";
+            title += Utf8ToWide(projectName);
+        }
+
         const auto* device = wi::graphics::GetDevice();
         if (device != nullptr &&
             std::strcmp(device->GetTag(), "[Vulkan]") == 0)
         {
-            return L"Renegade Runtime - Phase 2 [Vulkan]";
+            title += L" [Vulkan]";
         }
-        return L"Renegade Runtime - Phase 2 [DX12]";
+        else
+        {
+            title += L" [DX12]";
+        }
+        return title;
+    }
+
+    void WriteBootstrapEvidence(
+        const renegade::runtime::RuntimeBootstrapResult& result)
+    {
+        std::string logError;
+        const bool logged = renegade::runtime::WriteRuntimeBootstrapLog(
+            result,
+            BootstrapLogPath,
+            logError);
+        (void)logged;
+    }
+
+    int ReportBootstrapFailure(
+        const renegade::runtime::RuntimeBootstrapResult& result)
+    {
+        std::string logError;
+        const bool logged = renegade::runtime::WriteRuntimeBootstrapLog(
+            result,
+            BootstrapLogPath,
+            logError);
+
+        std::string message = result.message;
+        message += "\n\nCode: ";
+        message += renegade::runtime::RuntimeBootstrapCodeName(result.code);
+        if (logged)
+        {
+            message += "\nLog: ";
+            message += BootstrapLogPath;
+        }
+        else
+        {
+            message += "\nLog error: ";
+            message += logError;
+        }
+
+        const std::wstring wideMessage = Utf8ToWide(message);
+        MessageBoxW(
+            nullptr,
+            wideMessage.c_str(),
+            L"Renegade Runtime startup failed",
+            MB_OK | MB_ICONERROR);
+
+        return static_cast<int>(result.code);
     }
 
     LRESULT CALLBACK RenegadeRuntimeWindowProc(
@@ -83,17 +257,18 @@ int APIENTRY wWinMain(
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     wi::arguments::Parse(commandLine);
+    SetExecutableWorkingDirectory();
 
-    wchar_t executablePath[MAX_PATH] = {};
-    if (GetModuleFileNameW(nullptr, executablePath, MAX_PATH) > 0)
+    auto bootstrap = renegade::runtime::ParseRuntimeLaunchArguments(
+        CollectProcessArguments());
+    bootstrap =
+        renegade::runtime::ResolveRuntimeProject(std::move(bootstrap));
+    if (!bootstrap.succeeded)
     {
-        wchar_t* lastSeparator = std::wcsrchr(executablePath, L'\\');
-        if (lastSeparator != nullptr)
-        {
-            *lastSeparator = L'\0';
-            SetCurrentDirectoryW(executablePath);
-        }
+        return ReportBootstrapFailure(bootstrap);
     }
+
+    application.SetBootstrapResult(bootstrap);
 
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
@@ -109,9 +284,12 @@ int APIENTRY wWinMain(
         return 1;
     }
 
+    const std::wstring startingTitle =
+        L"Renegade Runtime - Starting " +
+        Utf8ToWide(bootstrap.project.name);
     const HWND window = CreateWindowW(
         windowClass.lpszClassName,
-        L"Renegade Runtime - Phase 2",
+        startingTitle.c_str(),
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         0,
@@ -129,8 +307,8 @@ int APIENTRY wWinMain(
 
     ShowWindow(window, showCommand);
     application.SetWindow(window);
-    SetWindowTextW(window, GraphicsBackendTitle());
 
+    bool startupHandled = false;
     MSG message = {};
     while (message.message != WM_QUIT)
     {
@@ -142,6 +320,24 @@ int APIENTRY wWinMain(
         else
         {
             application.Run();
+
+            if (!startupHandled && application.StartupFinished())
+            {
+                startupHandled = true;
+                const auto& result = application.StartupResult();
+                WriteBootstrapEvidence(result);
+
+                if (!result.succeeded)
+                {
+                    const int exitCode = ReportBootstrapFailure(result);
+                    PostQuitMessage(exitCode);
+                    continue;
+                }
+
+                const std::wstring title =
+                    GraphicsBackendTitle(result.project.name);
+                SetWindowTextW(window, title.c_str());
+            }
         }
     }
 

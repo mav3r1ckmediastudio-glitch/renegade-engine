@@ -1,0 +1,6 @@
+format = renegade-project
+version = 1
+
+[project]
+name = LP01 Escaping Path
+startup_scene = ../cube.wiscene
