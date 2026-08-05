@@ -24,12 +24,19 @@ namespace renegade::runtime
         RenderPath3D::Load();
     }
 
-    void RuntimeApplication::SetStartupScene(std::string filePath)
+    void RuntimeApplication::SetBootstrapResult(RuntimeBootstrapResult result)
     {
-        if (!filePath.empty())
-        {
-            startupScene_ = std::move(filePath);
-        }
+        startupResult_ = std::move(result);
+    }
+
+    bool RuntimeApplication::StartupFinished() const noexcept
+    {
+        return startupFinished_;
+    }
+
+    const RuntimeBootstrapResult& RuntimeApplication::StartupResult() const noexcept
+    {
+        return startupResult_;
     }
 
     void RuntimeApplication::Initialize()
@@ -46,7 +53,15 @@ namespace renegade::runtime
 
         renderer_.BindScene(scenes_);
         renderer_.init(canvas);
-        scenes_.LoadScene(startupScene_);
+
+        startupResult_ =
+            LoadRuntimeProjectScene(scenes_, std::move(startupResult_));
+        startupFinished_ = true;
+        if (!startupResult_.succeeded)
+        {
+            return;
+        }
+
         renderer_.Load();
         ActivatePath(&renderer_);
     }

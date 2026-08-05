@@ -34,6 +34,18 @@ namespace renegade::bridge
             const std::string& projectName,
             const std::string& templateScenePath);
         bool OpenProject(const std::string& descriptorPath);
+
+        // Read-only descriptor validation for Runtime/bootstrap tooling.
+        // Unlike OpenProject(), this does not backfill folders, update recents
+        // or mutate the active editor project.
+        [[nodiscard]] bool InspectProject(
+            const std::string& descriptorPath,
+            ProjectMetadata& metadata,
+            std::string& error) const
+        {
+            return ReadProject(descriptorPath, metadata, error);
+        }
+
         void CloseProject() noexcept;
 
         [[nodiscard]] bool HasProject() const noexcept;

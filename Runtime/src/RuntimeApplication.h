@@ -1,9 +1,8 @@
 #pragma once
 
-#include <string>
-
 #include <WickedEngine.h>
 
+#include "RuntimeBootstrap.h"
 #include "renegade/bridge/SceneService.h"
 
 namespace renegade::runtime
@@ -21,12 +20,15 @@ namespace renegade::runtime
     class RuntimeApplication final : public wi::Application
     {
     public:
-        void SetStartupScene(std::string filePath);
+        void SetBootstrapResult(RuntimeBootstrapResult result);
+        [[nodiscard]] bool StartupFinished() const noexcept;
+        [[nodiscard]] const RuntimeBootstrapResult& StartupResult() const noexcept;
         void Initialize() override;
 
     private:
         bridge::SceneService scenes_;
         RuntimeRenderPath renderer_;
-        std::string startupScene_ = "Content/cube.wiscene";
+        RuntimeBootstrapResult startupResult_;
+        bool startupFinished_ = false;
     };
 }
