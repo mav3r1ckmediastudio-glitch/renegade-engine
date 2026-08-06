@@ -10,6 +10,7 @@ namespace renegade::bridge
     struct ProjectMetadata
     {
         std::uint32_t formatVersion = 1;
+        std::string projectId;
         std::string name;
         std::string descriptorPath;
         std::string rootPath;
@@ -37,14 +38,12 @@ namespace renegade::bridge
 
         // Read-only descriptor validation for Runtime/bootstrap tooling.
         // Unlike OpenProject(), this does not backfill folders, update recents
-        // or mutate the active editor project.
+        // or mutate the active editor project. Legacy descriptors without a
+        // stable project ID must first be opened by Studio for migration.
         [[nodiscard]] bool InspectProject(
             const std::string& descriptorPath,
             ProjectMetadata& metadata,
-            std::string& error) const
-        {
-            return ReadProject(descriptorPath, metadata, error);
-        }
+            std::string& error) const;
 
         void CloseProject() noexcept;
 

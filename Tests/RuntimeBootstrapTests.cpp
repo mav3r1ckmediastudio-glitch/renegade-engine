@@ -17,6 +17,9 @@ namespace
 {
     namespace fs = std::filesystem;
 
+    constexpr const char* FixtureProjectId =
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
     struct TemporaryDirectory
     {
         fs::path path;
@@ -47,6 +50,7 @@ namespace
         file.Set("format", "renegade-project");
         file.Set("version", version);
         auto& project = file.GetSection("project");
+        project.Set("project_id", FixtureProjectId);
         project.Set("name", name);
         project.Set("startup_scene", startupScene);
         file.Commit();
@@ -166,6 +170,7 @@ int main()
     auto resolved =
         renegade::runtime::ResolveRuntimeProject(parsed);
     if (!resolved.succeeded ||
+        resolved.project.projectId != FixtureProjectId ||
         resolved.project.name != "LP01 Bootstrap Project" ||
         fs::u8path(resolved.startupScenePath) !=
             validScene.lexically_normal())
@@ -334,6 +339,8 @@ int main()
         std::istreambuf_iterator<char>());
     if (logText.find("status=PASS") == std::string::npos ||
         logText.find("code=SUCCESS") == std::string::npos ||
+        logText.find("project_id=" + std::string(FixtureProjectId)) ==
+            std::string::npos ||
         logText.find("LP01 Bootstrap Project") == std::string::npos)
     {
         return Fail(

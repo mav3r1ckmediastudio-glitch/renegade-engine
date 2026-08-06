@@ -1,6 +1,7 @@
 add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/AssetBrowserService.h
     include/renegade/bridge/CommandService.h
+    include/renegade/bridge/IdentityService.h
     include/renegade/bridge/LightService.h
     include/renegade/bridge/ImportService.h
     include/renegade/bridge/MaterialService.h
@@ -16,6 +17,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/StudioSession.h
     src/AssetBrowserService.cpp
     src/CommandService.cpp
+    src/IdentityService.cpp
     src/LightService.cpp
     src/ImportService.cpp
     src/MaterialService.cpp

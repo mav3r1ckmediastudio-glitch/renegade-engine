@@ -1,5 +1,7 @@
 #include "renegade/bridge/ProjectService.h"
 
+#include "renegade/bridge/IdentityService.h"
+
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -179,6 +181,7 @@ namespace renegade::bridge
 
             ProjectMetadata metadata;
             metadata.formatVersion = CurrentFormatVersion;
+            metadata.projectId = GenerateStableId();
             metadata.name = projectName;
             metadata.rootPath = root.generic_u8string();
             metadata.descriptorPath =
@@ -221,10 +224,41 @@ namespace renegade::bridge
             return false;
         }
 
+        // The additive v1 identity field is migrated only through mutable
+        // Studio open. Runtime inspection remains read-only and fails closed
+        // until this one-time migration has succeeded.
+        if (metadata.projectId.empty())
+        {
+            metadata.projectId = GenerateStableId();
+            if (!WriteProject(metadata))
+            {
+                return false;
+            }
+        }
+
         currentProject_ = metadata;
         hasProject_ = true;
         lastError_.clear();
         AddRecent(metadata);
+        return true;
+    }
+
+    bool ProjectService::InspectProject(
+        const std::string& descriptorPath,
+        ProjectMetadata& metadata,
+        std::string& error) const
+    {
+        if (!ReadProject(descriptorPath, metadata, error))
+        {
+            return false;
+        }
+        if (metadata.projectId.empty())
+        {
+            error = "The project descriptor is missing its stable project ID. "
+                "Open it in Renegade Studio to migrate it.";
+            return false;
+        }
+        error.clear();
         return true;
     }
 
@@ -317,9 +351,15 @@ namespace renegade::bridge
             }
 
             const auto& project = projectFile.GetSection("project");
+            const std::string projectId = project.GetText("project_id");
             const std::string name = project.GetText("name");
             const fs::path startupScene =
                 fs::u8path(project.GetText("startup_scene"));
+            if (!projectId.empty() && !IsValidStableId(projectId))
+            {
+                error = "The project descriptor contains a malformed project ID.";
+                return false;
+            }
             if (!IsValidProjectName(name) || !IsSafeRelativePath(startupScene))
             {
                 error = "The project descriptor contains invalid project metadata.";
@@ -337,6 +377,7 @@ namespace renegade::bridge
             }
 
             metadata.formatVersion = static_cast<std::uint32_t>(version);
+            metadata.projectId = projectId;
             metadata.name = name;
             metadata.descriptorPath = descriptor.generic_u8string();
             metadata.rootPath = root.generic_u8string();
@@ -353,11 +394,18 @@ namespace renegade::bridge
 
     bool ProjectService::WriteProject(const ProjectMetadata& metadata)
     {
+        if (!IsValidStableId(metadata.projectId))
+        {
+            lastError_ = "Could not write a project without a valid stable project ID.";
+            return false;
+        }
+
         wi::config::File projectFile;
         projectFile.Open(metadata.descriptorPath);
         projectFile.Set("format", ProjectFormat);
         projectFile.Set("version", CurrentFormatVersion);
         auto& project = projectFile.GetSection("project");
+        project.Set("project_id", metadata.projectId);
         project.Set("name", metadata.name);
         project.Set("startup_scene", metadata.startupScene);
         projectFile.Commit();

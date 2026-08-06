@@ -266,6 +266,7 @@ namespace renegade::runtime
                 << "exit_code=" << static_cast<int>(result.code) << '\n'
                 << "message=" << result.message << '\n'
                 << "project_descriptor=" << result.projectDescriptorPath << '\n'
+                << "project_id=" << result.project.projectId << '\n'
                 << "project_name=" << result.project.name << '\n'
                 << "project_root=" << result.project.rootPath << '\n'
                 << "startup_scene=" << result.startupScenePath << '\n'

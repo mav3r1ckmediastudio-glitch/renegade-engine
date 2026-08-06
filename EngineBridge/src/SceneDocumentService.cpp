@@ -1,6 +1,7 @@
 #include "renegade/bridge/SceneDocumentService.h"
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
@@ -289,6 +290,16 @@ namespace renegade::bridge
         {
             scenes_.lastError_ = "Could not inspect the scene destination: " +
                 fileError.message();
+            return false;
+        }
+
+        std::string identityError;
+        if (!EnsurePersistentEntityIdentities(
+                scenes_.scene_,
+                identityError))
+        {
+            scenes_.lastError_ = "Scene identity validation failed: " +
+                identityError;
             return false;
         }
 
