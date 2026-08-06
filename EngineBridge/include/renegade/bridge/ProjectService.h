@@ -62,6 +62,7 @@ namespace renegade::bridge
         [[nodiscard]] std::string StartupScenePath() const;
         [[nodiscard]] const std::vector<RecentProject>& RecentProjects() const noexcept;
         [[nodiscard]] const std::string& LastError() const noexcept;
+        [[nodiscard]] const std::string& LastWarning() const noexcept;
 
         // Editor preferences persist beside the recent-project registry rather
         // than in a scene. They describe how the creator likes Studio to
@@ -78,6 +79,7 @@ namespace renegade::bridge
             ProjectMetadata& metadata,
             std::string& error) const;
         bool WriteProject(const ProjectMetadata& metadata);
+        bool RecoverProjectTransactions(const std::string& projectRoot);
         void AddRecent(const ProjectMetadata& metadata);
         void LoadRecents();
         void PersistRecents();

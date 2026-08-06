@@ -1,12 +1,17 @@
 #include "renegade/bridge/ProjectService.h"
 
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/ProjectDocumentTransaction.h"
 
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 #include <wiConfig.h>
 #include <wiHelper.h>
@@ -69,7 +74,7 @@ namespace
             return false;
         }
 
-        constexpr const char* invalidCharacters = "<>:\"/\\|?*";
+        constexpr const char* invalidCharacters = "<>:\"/\\|?*#;";
         return std::none_of(
             name.begin(),
             name.end(),
@@ -119,6 +124,126 @@ namespace
         error.clear();
         return true;
     }
+
+    bool ReadFileBytes(
+        const fs::path& path,
+        std::vector<std::uint8_t>& bytes,
+        std::string& error)
+    {
+        bytes.clear();
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            error = "Could not read project document: " +
+                path.generic_u8string();
+            return false;
+        }
+        stream.seekg(0, std::ios::end);
+        const std::streamoff size = stream.tellg();
+        if (size < 0)
+        {
+            error = "Could not inspect project document size: " +
+                path.generic_u8string();
+            return false;
+        }
+        stream.seekg(0, std::ios::beg);
+        bytes.resize(static_cast<std::size_t>(size));
+        if (!bytes.empty())
+        {
+            stream.read(
+                reinterpret_cast<char*>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size()));
+        }
+        if (!stream && !bytes.empty())
+        {
+            error = "Could not read complete project document: " +
+                path.generic_u8string();
+            bytes.clear();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    bool FileMatchesBytes(
+        const std::string& path,
+        const std::vector<std::uint8_t>& expected,
+        std::string& error)
+    {
+        std::vector<std::uint8_t> actual;
+        if (!ReadFileBytes(fs::u8path(path), actual, error))
+        {
+            return false;
+        }
+        if (actual != expected)
+        {
+            error = "The project document does not match its requested bytes.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    std::vector<std::uint8_t> SerializeProjectDescriptor(
+        const renegade::bridge::ProjectMetadata& metadata)
+    {
+        std::ostringstream stream;
+        stream << "format = " << ProjectFormat << '\n';
+        stream << "version = "
+               << renegade::bridge::ProjectService::CurrentFormatVersion
+               << "\n\n";
+        stream << "[project]\n";
+        stream << "project_id = " << metadata.projectId << '\n';
+        stream << "name = " << metadata.name << '\n';
+        stream << "startup_scene = " << metadata.startupScene << '\n';
+        stream << "startup_flow_id = " << metadata.startupFlowId << '\n';
+        stream << "startup_flow = " << metadata.startupFlow << '\n';
+        stream << "startup_screen_id = " << metadata.startupScreenId << '\n';
+        stream << "startup_screen = " << metadata.startupScreen << '\n';
+        const std::string text = stream.str();
+        return std::vector<std::uint8_t>(text.begin(), text.end());
+    }
+
+    bool ProjectMetadataMatches(
+        const renegade::bridge::ProjectMetadata& expected,
+        const renegade::bridge::ProjectMetadata& actual)
+    {
+        return actual.formatVersion ==
+                renegade::bridge::ProjectService::CurrentFormatVersion &&
+            actual.projectId == expected.projectId &&
+            actual.name == expected.name &&
+            actual.startupScene == expected.startupScene &&
+            actual.startupFlowId == expected.startupFlowId &&
+            actual.startupFlow == expected.startupFlow &&
+            actual.startupScreenId == expected.startupScreenId &&
+            actual.startupScreen == expected.startupScreen;
+    }
+
+    fs::path ProjectTransactionDirectory(const fs::path& root)
+    {
+        return root / "Intermediate" / "Transactions";
+    }
+
+    fs::path ProjectDescriptorBackupPath(const fs::path& descriptor)
+    {
+        return descriptor.parent_path() /
+            fs::u8path(
+                descriptor.stem().generic_u8string() + ".bak" +
+                descriptor.extension().generic_u8string());
+    }
+
+    void AppendWarning(std::string& warning, std::string addition)
+    {
+        if (addition.empty())
+        {
+            return;
+        }
+        if (!warning.empty())
+        {
+            warning += " ";
+        }
+        warning += std::move(addition);
+    }
 }
 
 namespace renegade::bridge
@@ -128,6 +253,7 @@ namespace renegade::bridge
         stateFilePath_ = NormalizedAbsolutePath(stateFilePath);
         recentProjects_.clear();
         lastError_.clear();
+        lastWarning_.clear();
         LoadRecents();
     }
 
@@ -137,11 +263,12 @@ namespace renegade::bridge
         const std::string& templateScenePath)
     {
         lastError_.clear();
+        lastWarning_.clear();
 
         if (!IsValidProjectName(projectName))
         {
             lastError_ =
-                "Project names cannot be empty or contain Windows filename characters.";
+                "Project names cannot be empty or contain unsafe filename or project-file characters.";
             return false;
         }
         if (parentDirectory.empty() || !fs::is_directory(fs::u8path(parentDirectory)))
@@ -208,6 +335,30 @@ namespace renegade::bridge
 
     bool ProjectService::OpenProject(const std::string& descriptorPath)
     {
+        lastError_.clear();
+        lastWarning_.clear();
+
+        if (!descriptorPath.empty())
+        {
+            try
+            {
+                const fs::path root =
+                    fs::absolute(fs::u8path(descriptorPath))
+                        .lexically_normal()
+                        .parent_path();
+                if (!RecoverProjectTransactions(root.generic_u8string()))
+                {
+                    return false;
+                }
+            }
+            catch (const std::exception& exception)
+            {
+                lastError_ = "Could not prepare project transaction recovery: " +
+                    std::string(exception.what());
+                return false;
+            }
+        }
+
         ProjectMetadata metadata;
         std::string error;
         if (!ReadProject(descriptorPath, metadata, error))
@@ -225,8 +376,8 @@ namespace renegade::bridge
         }
 
         // The additive v1 identity field is migrated only through mutable
-        // Studio open. Runtime inspection remains read-only and fails closed
-        // until this one-time migration has succeeded.
+        // Studio open. WriteProject() now provides validation, rollback,
+        // recovery evidence and a retained previous-descriptor backup.
         if (metadata.projectId.empty())
         {
             metadata.projectId = GenerateStableId();
@@ -267,6 +418,7 @@ namespace renegade::bridge
         currentProject_ = {};
         hasProject_ = false;
         lastError_.clear();
+        lastWarning_.clear();
     }
 
     bool ProjectService::HasProject() const noexcept
@@ -301,6 +453,11 @@ namespace renegade::bridge
     const std::string& ProjectService::LastError() const noexcept
     {
         return lastError_;
+    }
+
+    const std::string& ProjectService::LastWarning() const noexcept
+    {
+        return lastWarning_;
     }
 
     bool ProjectService::ReadProject(

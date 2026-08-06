@@ -381,7 +381,7 @@ namespace
         std::size_t offset = 0;
         while (offset < content.size())
         {
-            const std::size_t amount = std::min(
+            const std::size_t amount = (std::min)(
                 buffer.size(),
                 content.size() - offset);
             stream.read(
@@ -904,11 +904,13 @@ namespace
         std::size_t potentialCount = journal.commitCount;
         if (journal.activeIndex != ProjectTransactionNoDocument)
         {
-            potentialCount = std::max(
+            potentialCount = (std::max)(
                 potentialCount,
                 journal.activeIndex + 1);
         }
-        potentialCount = std::min(potentialCount, journal.documents.size());
+        potentialCount = (std::min)(
+            potentialCount,
+            journal.documents.size());
 
         for (std::size_t reverse = potentialCount; reverse > 0; --reverse)
         {
