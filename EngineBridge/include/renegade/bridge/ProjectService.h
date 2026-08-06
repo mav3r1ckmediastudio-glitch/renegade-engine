@@ -20,6 +20,11 @@ namespace renegade::bridge
         // Projects without either keep the LP01 startup-scene path.
         std::string startupFlowId;
         std::string startupFlow;
+        // Optional Renegade-owned Runtime screen root. The stable document ID
+        // is authoritative; startupScreen is a project-relative location hint.
+        // Projects without either retain the LP01/LP02 immediate-start path.
+        std::string startupScreenId;
+        std::string startupScreen;
     };
 
     struct RecentProject

@@ -33,6 +33,7 @@ UI-independent adapters and services that translate product workflows into
 Wicked operations. Initial service boundaries:
 
 - `ProjectService`
+- `ScreenService`
 - `SceneService`
 - `SceneDocumentService`
 - `SelectionService`
@@ -187,6 +188,34 @@ contains, so they must never reach a WISCENE or a `.renegade` descriptor. A
 read-only settings location degrades to a session-only preference rather than
 an error. Grid visibility is the first; camera speed and editor layout are still
 session-only and should adopt this route rather than inventing a second one.
+
+### Runtime screen and action boundary
+
+`ScreenService` owns the serialized Renegade `runtime-screen` document above
+Wicked. The document carries a stable document envelope, design size, bounded
+widget records, stable action IDs and deterministic focus order. Image resources
+must resolve to existing files inside the owning project's `Content` tree.
+Malformed documents, duplicate IDs, unsafe paths, missing required controls,
+unknown actions and ambiguous stable-ID resolution fail closed.
+
+Runtime presents the document on its existing `RenderPath3D`/`RenderPath2D`
+seam; it does not create a second application window or embed the stock Wicked
+Editor. Renegade owns focus, navigation, hidden/disabled skipping, pointer focus,
+confirm/debounce and the `RuntimeActionRequest` evidence shape. Mouse, keyboard
+and gamepad-labelled requests enter the same `RuntimeActionDispatcher`.
+The stable `play` action enters the existing LP02 project flow loader, while
+`quit` requests normal application-owned Win32 shutdown.
+
+Wicked `wiGUI` stores widgets in insertion order but renders that storage in
+reverse. Runtime therefore inserts the authored back-to-front widget document in
+reverse so the full-screen background renders first and title/buttons remain
+visible above it. This is an integration detail; authored document order remains
+back-to-front and independent of Wicked's internal storage order.
+
+A project descriptor may pair `startup_screen_id` with `startup_screen`.
+The stable ID is reference authority; the project-relative path is a mutable
+diagnostic and discovery hint. Projects without this optional pair retain the
+legacy LP01/LP02 immediate startup route.
 
 ### Runtime
 

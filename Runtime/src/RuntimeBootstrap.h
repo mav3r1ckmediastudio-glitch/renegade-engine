@@ -22,6 +22,8 @@ namespace renegade::runtime
         StartupFlowRejected = 25,
         FlowRejected = 26,
         FlowExecutionFailed = 27,
+        StartupScreenRejected = 28,
+        ScreenLoadFailed = 29,
     };
 
     struct RuntimeBootstrapResult
@@ -34,6 +36,7 @@ namespace renegade::runtime
         bridge::ProjectMetadata project;
         std::string startupScenePath;
         std::string startupFlowPath;
+        std::string startupScreenPath;
         std::vector<std::string> flowOutcomes;
         std::string flowDocumentId;
         std::string flowNodeId;
@@ -42,6 +45,15 @@ namespace renegade::runtime
         bridge::FlowTerminalAction flowTerminalAction =
             bridge::FlowTerminalAction::None;
         std::vector<std::string> flowTrace;
+        std::string screenDocumentId;
+        std::string screenFocusedWidgetId;
+        bool screenLoaded = false;
+        std::string lastActionId;
+        std::string lastActionWidgetId;
+        std::string lastActionInput;
+        std::string lastActionCode;
+        std::string lastActionMessage;
+        std::uint64_t lastActionSequence = 0;
         std::size_t entityCount = 0;
     };
 
@@ -52,8 +64,9 @@ namespace renegade::runtime
         const std::vector<std::string>& arguments);
 
     // Validates the .renegade descriptor without opening it as an editor
-    // project, resolves the startup WISCENE and optional Story Flow document,
-    // and rejects lexical or symlink escape outside the project root.
+    // project, resolves the startup WISCENE and optional Story Flow / Runtime
+    // screen documents, and rejects lexical or symlink escape outside the
+    // project root.
     [[nodiscard]] RuntimeBootstrapResult ResolveRuntimeProject(
         RuntimeBootstrapResult result);
 
