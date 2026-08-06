@@ -1,5 +1,7 @@
 #include "RuntimeBootstrap.h"
 
+#include "renegade/bridge/ScreenService.h"
+
 #include <algorithm>
 #include <exception>
 #include <filesystem>
@@ -240,10 +242,31 @@ namespace renegade::runtime
                 "flow outcomes cannot be executed.");
         }
 
+        std::string startupScreenPath;
+        if (!metadata.startupScreen.empty())
+        {
+            std::string screenError;
+            if (!bridge::ResolveRuntimeScreenDocumentPath(
+                    metadata.rootPath,
+                    metadata.projectId,
+                    metadata.startupScreenId,
+                    metadata.startupScreen,
+                    startupScreenPath,
+                    screenError))
+            {
+                return Fail(
+                    std::move(result),
+                    RuntimeBootstrapCode::StartupScreenRejected,
+                    "Could not resolve the project startup Runtime screen: " +
+                        screenError);
+            }
+        }
+
         result.project = std::move(metadata);
         result.projectDescriptorPath = result.project.descriptorPath;
         result.startupScenePath = startupScene.generic_u8string();
         result.startupFlowPath = std::move(startupFlowPath);
+        result.startupScreenPath = std::move(startupScreenPath);
         result.succeeded = true;
         result.code = RuntimeBootstrapCode::Success;
         result.message =
@@ -300,6 +323,10 @@ namespace renegade::runtime
             return "FLOW_REJECTED";
         case RuntimeBootstrapCode::FlowExecutionFailed:
             return "FLOW_EXECUTION_FAILED";
+        case RuntimeBootstrapCode::StartupScreenRejected:
+            return "STARTUP_SCREEN_REJECTED";
+        case RuntimeBootstrapCode::ScreenLoadFailed:
+            return "SCREEN_LOAD_FAILED";
         default:
             return "UNKNOWN";
         }
@@ -339,6 +366,8 @@ namespace renegade::runtime
                 << "startup_scene=" << result.startupScenePath << '\n'
                 << "startup_flow_id=" << result.project.startupFlowId << '\n'
                 << "startup_flow=" << result.startupFlowPath << '\n'
+                << "startup_screen_id=" << result.project.startupScreenId << '\n'
+                << "startup_screen=" << result.startupScreenPath << '\n'
                 << "flow_document_id=" << result.flowDocumentId << '\n'
                 << "flow_node_id=" << result.flowNodeId << '\n'
                 << "flow_node_name=" << result.flowNodeName << '\n'
@@ -347,6 +376,16 @@ namespace renegade::runtime
                 << bridge::FlowTerminalActionName(result.flowTerminalAction)
                 << '\n'
                 << "flow_trace_count=" << result.flowTrace.size() << '\n'
+                << "screen_document_id=" << result.screenDocumentId << '\n'
+                << "screen_loaded=" << (result.screenLoaded ? "true" : "false")
+                << '\n'
+                << "screen_focused_widget=" << result.screenFocusedWidgetId << '\n'
+                << "last_action_id=" << result.lastActionId << '\n'
+                << "last_action_widget=" << result.lastActionWidgetId << '\n'
+                << "last_action_input=" << result.lastActionInput << '\n'
+                << "last_action_code=" << result.lastActionCode << '\n'
+                << "last_action_message=" << result.lastActionMessage << '\n'
+                << "last_action_sequence=" << result.lastActionSequence << '\n'
                 << "entity_count=" << result.entityCount << '\n';
 
             for (std::size_t index = 0; index < result.flowTrace.size(); ++index)

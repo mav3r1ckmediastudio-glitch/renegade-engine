@@ -359,6 +359,10 @@ namespace renegade::bridge
                 project.GetText("startup_flow_id");
             const fs::path startupFlow =
                 fs::u8path(project.GetText("startup_flow"));
+            const std::string startupScreenId =
+                project.GetText("startup_screen_id");
+            const fs::path startupScreen =
+                fs::u8path(project.GetText("startup_screen"));
             if (!projectId.empty() && !IsValidStableId(projectId))
             {
                 error = "The project descriptor contains a malformed project ID.";
@@ -366,11 +370,16 @@ namespace renegade::bridge
             }
             const bool hasStartupFlowId = !startupFlowId.empty();
             const bool hasStartupFlowHint = !startupFlow.empty();
+            const bool hasStartupScreenId = !startupScreenId.empty();
+            const bool hasStartupScreenHint = !startupScreen.empty();
             if (!IsValidProjectName(name) ||
                 !IsSafeRelativePath(startupScene) ||
                 (hasStartupFlowId != hasStartupFlowHint) ||
                 (hasStartupFlowId && !IsValidStableId(startupFlowId)) ||
-                (hasStartupFlowHint && !IsSafeRelativePath(startupFlow)))
+                (hasStartupFlowHint && !IsSafeRelativePath(startupFlow)) ||
+                (hasStartupScreenId != hasStartupScreenHint) ||
+                (hasStartupScreenId && !IsValidStableId(startupScreenId)) ||
+                (hasStartupScreenHint && !IsSafeRelativePath(startupScreen)))
             {
                 error = "The project descriptor contains invalid project metadata.";
                 return false;
@@ -393,6 +402,8 @@ namespace renegade::bridge
             metadata.startupScene = startupScene.generic_u8string();
             metadata.startupFlowId = startupFlowId;
             metadata.startupFlow = startupFlow.generic_u8string();
+            metadata.startupScreenId = startupScreenId;
+            metadata.startupScreen = startupScreen.generic_u8string();
             error.clear();
             return true;
         }
@@ -412,12 +423,19 @@ namespace renegade::bridge
         }
         const bool hasStartupFlowId = !metadata.startupFlowId.empty();
         const bool hasStartupFlowHint = !metadata.startupFlow.empty();
+        const bool hasStartupScreenId = !metadata.startupScreenId.empty();
+        const bool hasStartupScreenHint = !metadata.startupScreen.empty();
         if (hasStartupFlowId != hasStartupFlowHint ||
             (hasStartupFlowId && !IsValidStableId(metadata.startupFlowId)) ||
             (hasStartupFlowHint &&
-                !IsSafeRelativePath(fs::u8path(metadata.startupFlow))))
+                !IsSafeRelativePath(fs::u8path(metadata.startupFlow))) ||
+            hasStartupScreenId != hasStartupScreenHint ||
+            (hasStartupScreenId &&
+                !IsValidStableId(metadata.startupScreenId)) ||
+            (hasStartupScreenHint &&
+                !IsSafeRelativePath(fs::u8path(metadata.startupScreen))))
         {
-            lastError_ = "Could not write an invalid startup Story Flow reference.";
+            lastError_ = "Could not write an invalid startup Flow or Runtime screen reference.";
             return false;
         }
 
@@ -431,6 +449,8 @@ namespace renegade::bridge
         project.Set("startup_scene", metadata.startupScene);
         project.Set("startup_flow_id", metadata.startupFlowId);
         project.Set("startup_flow", metadata.startupFlow);
+        project.Set("startup_screen_id", metadata.startupScreenId);
+        project.Set("startup_screen", metadata.startupScreen);
         projectFile.Commit();
 
         if (!wi::helper::FileExists(metadata.descriptorPath))

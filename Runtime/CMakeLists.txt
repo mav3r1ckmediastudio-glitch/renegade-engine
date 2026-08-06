@@ -1,8 +1,12 @@
 add_library(RenegadeRuntimeBootstrap STATIC
+    src/RuntimeActions.cpp
+    src/RuntimeActions.h
     src/RuntimeBootstrap.cpp
     src/RuntimeBootstrap.h
     src/RuntimeFlow.cpp
     src/RuntimeFlow.h
+    src/RuntimeScreen.cpp
+    src/RuntimeScreen.h
 )
 
 add_library(Renegade::RuntimeBootstrap ALIAS RenegadeRuntimeBootstrap)
@@ -74,6 +78,14 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Flow"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Scenes"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/Flow"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/Scenes"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/UI"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Invalid Screens"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
         "$<TARGET_FILE_DIR:RenegadeRuntime>"
@@ -119,6 +131,36 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP02/Valid Flow/Content/Scenes/LevelTwo.wiscene.rmeta"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Scenes/LevelTwo.wiscene.rmeta"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP03/Valid Screen/ScreenProject.renegade"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/ScreenProject.renegade"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP03/Valid Screen/Content/Flow/Main.renegade-flow"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/Flow/Main.renegade-flow"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP03/Valid Screen/Content/UI/Main.renegade-screen"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/UI/Main.renegade-screen"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP03/Valid Screen/Content/UI/renegade-runtime-background.png"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/UI/renegade-runtime-background.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/Scenes/LevelOne.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/Scenes/LevelTwo.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP03/Valid Screen/Content/Scenes/LevelOne.wiscene.rmeta"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/Scenes/LevelOne.wiscene.rmeta"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP03/Valid Screen/Content/Scenes/LevelTwo.wiscene.rmeta"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Valid Screen/Content/Scenes/LevelTwo.wiscene.rmeta"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP03/Invalid Screens"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP03/Invalid Screens"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/package/Run-LP03-Screen-Proof.cmd"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Run-LP03-Screen-Proof.cmd"
     COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
         "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_ao.tga"
         "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_roughness.tga"

@@ -3,6 +3,7 @@
 #include <Windows.h>
 #include <shellapi.h>
 
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -124,7 +125,8 @@ namespace
             fs::path(executablePath).parent_path();
         if (!directory.empty())
         {
-            SetCurrentDirectoryW(directory.c_str());
+            const std::wstring directoryText = directory.wstring();
+            SetCurrentDirectoryW(directoryText.c_str());
         }
     }
 
@@ -309,6 +311,8 @@ int APIENTRY wWinMain(
     application.SetWindow(window);
 
     bool startupHandled = false;
+    bool quitWindowRequested = false;
+    std::uint64_t writtenEvidenceRevision = 0;
     MSG message = {};
     while (message.message != WM_QUIT)
     {
@@ -321,12 +325,16 @@ int APIENTRY wWinMain(
         {
             application.Run();
 
+            if (application.EvidenceRevision() != writtenEvidenceRevision)
+            {
+                writtenEvidenceRevision = application.EvidenceRevision();
+                WriteBootstrapEvidence(application.StartupResult());
+            }
+
             if (!startupHandled && application.StartupFinished())
             {
                 startupHandled = true;
                 const auto& result = application.StartupResult();
-                WriteBootstrapEvidence(result);
-
                 if (!result.succeeded)
                 {
                     const int exitCode = ReportBootstrapFailure(result);
@@ -337,6 +345,12 @@ int APIENTRY wWinMain(
                 const std::wstring title =
                     GraphicsBackendTitle(result.project.name);
                 SetWindowTextW(window, title.c_str());
+            }
+
+            if (!quitWindowRequested && application.QuitRequested())
+            {
+                quitWindowRequested = true;
+                DestroyWindow(window);
             }
         }
     }
