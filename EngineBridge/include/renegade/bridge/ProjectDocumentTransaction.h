@@ -62,6 +62,10 @@ namespace renegade::bridge
         // their destination so the final replacement remains same-volume.
         std::string journalDirectory;
 
+        // Optional containment boundary. When set, every destination, journal
+        // and recovery artifact must remain inside this absolute project root.
+        std::string allowedRoot;
+
         // Optional fault/interrupt seam used by automated failure testing.
         ProjectDocumentTransactionHook operationHook;
     };

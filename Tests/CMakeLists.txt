@@ -349,3 +349,26 @@ add_test(
     NAME RenegadeProjectDocumentTransactionTests
     COMMAND RenegadeProjectDocumentTransactionTests
 )
+
+add_executable(RenegadeProjectServiceTransactionTests
+    ProjectServiceTransactionTests.cpp
+)
+
+target_link_libraries(RenegadeProjectServiceTransactionTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeProjectServiceTransactionTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeProjectServiceTransactionTests
+)
+
+add_test(
+    NAME RenegadeProjectServiceTransactionTests
+    COMMAND RenegadeProjectServiceTransactionTests
+)

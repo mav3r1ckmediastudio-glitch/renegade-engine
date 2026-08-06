@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -548,6 +549,40 @@ namespace
             "committed cleanup recovery left artifacts");
     }
 
+    void TestAllowedRootContainment(const fs::path& root)
+    {
+        const fs::path project = root / "Project";
+        const fs::path outside = root / "Outside.document";
+        fs::create_directories(project);
+
+        ProjectDocumentTransactionOptions options;
+        options.transactionId = "allowed-root";
+        options.journalDirectory =
+            (project / "Intermediate/Transactions").generic_u8string();
+        options.allowedRoot = project.generic_u8string();
+
+        ProjectDocumentTransaction transaction;
+        auto escaped = transaction.Execute(
+            {TextDocument(outside, "forbidden")},
+            options);
+        Check(!escaped.success &&
+                escaped.code == "destination_outside_allowed_root",
+            "allowed-root boundary accepted an escaped destination");
+        Check(!fs::exists(outside),
+            "allowed-root rejection touched the escaped destination");
+
+        options.transactionId = "escaped-journal";
+        options.journalDirectory = (root / "ExternalJournal").generic_u8string();
+        auto journalEscape = transaction.Execute(
+            {TextDocument(project / "Inside.document", "inside")},
+            options);
+        Check(!journalEscape.success &&
+                journalEscape.code == "journal_outside_allowed_root",
+            "allowed-root boundary accepted an escaped journal directory");
+        Check(!fs::exists(project / "Inside.document"),
+            "escaped journal rejection committed project content");
+    }
+
     void TestMalformedJournalRejected(const fs::path& root)
     {
         const fs::path target = root / "Protected.document";
@@ -586,7 +621,8 @@ int main()
     TestInterruptedCommitRecovery(root / "11-interrupted");
     TestNewDestinationRollback(root / "12-new-file");
     TestCommittedCleanupRecovery(root / "13-cleanup");
-    TestMalformedJournalRejected(root / "14-malformed");
+    TestAllowedRootContainment(root / "14-containment");
+    TestMalformedJournalRejected(root / "15-malformed");
 
     std::error_code ignored;
     fs::remove_all(root, ignored);

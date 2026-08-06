@@ -86,6 +86,7 @@ namespace renegade::bridge
         std::vector<RecentProject> recentProjects_;
         std::string stateFilePath_;
         std::string lastError_;
+        std::string lastWarning_;
         bool hasProject_ = false;
     };
 }

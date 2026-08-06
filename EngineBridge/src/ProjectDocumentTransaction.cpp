@@ -11,6 +11,7 @@
 #include <sstream>
 #include <system_error>
 #include <unordered_set>
+#include <utility>
 
 #if defined(_WIN32)
 #include <Windows.h>
@@ -112,6 +113,55 @@ namespace
             });
 #endif
         return key;
+    }
+
+
+    bool IsPathWithinRoot(const fs::path& root, const fs::path& path)
+    {
+        std::string rootKey = PathKey(root);
+        const std::string pathKey = PathKey(path);
+        if (pathKey == rootKey)
+        {
+            return true;
+        }
+        if (rootKey.empty())
+        {
+            return false;
+        }
+        if (rootKey.back() != '/')
+        {
+            rootKey.push_back('/');
+        }
+        return pathKey.rfind(rootKey, 0) == 0;
+    }
+
+    bool ResolveAllowedRoot(
+        const ProjectDocumentTransactionOptions& options,
+        fs::path& root,
+        std::string& error)
+    {
+        root.clear();
+        error.clear();
+        if (options.allowedRoot.empty())
+        {
+            return true;
+        }
+
+        std::error_code pathError;
+        root = NormalizedAbsolute(fs::u8path(options.allowedRoot), pathError);
+        if (pathError || root.empty())
+        {
+            error = "Could not resolve the project transaction root: " +
+                pathError.message();
+            return false;
+        }
+        if (!fs::is_directory(root, pathError) || pathError)
+        {
+            error = "The project transaction root is not a directory: " +
+                root.generic_u8string();
+            return false;
+        }
+        return true;
     }
 
     bool ReplaceFileAtomically(
@@ -914,6 +964,18 @@ namespace renegade::bridge
                 "A project document transaction requires at least one document.");
         }
 
+        fs::path allowedRoot;
+        std::string allowedRootError;
+        if (!ResolveAllowedRoot(options, allowedRoot, allowedRootError))
+        {
+            return FailureResult(
+                std::move(result),
+                ProjectDocumentTransactionStage::Prepare,
+                ProjectTransactionNoDocument,
+                "invalid_allowed_root",
+                std::move(allowedRootError));
+        }
+
         Journal journal;
         journal.transactionId = result.transactionId;
         journal.documents.reserve(documents.size());
@@ -968,6 +1030,17 @@ namespace renegade::bridge
                     "invalid_destination",
                     "Could not resolve a transaction destination path: " +
                         pathError.message());
+            }
+            if (!allowedRoot.empty() &&
+                !IsPathWithinRoot(allowedRoot, destination))
+            {
+                return FailureResult(
+                    std::move(result),
+                    ProjectDocumentTransactionStage::Prepare,
+                    sourceIndex,
+                    "destination_outside_allowed_root",
+                    "A project transaction destination escapes its project root: " +
+                        destination.generic_u8string());
             }
             if (!destinations.insert(PathKey(destination)).second)
             {
@@ -1149,6 +1222,17 @@ namespace renegade::bridge
                 "journal_directory_failed",
                 "Could not resolve the transaction journal directory: " +
                     journalError.message());
+        }
+        if (!allowedRoot.empty() &&
+            !IsPathWithinRoot(allowedRoot, journalDirectory))
+        {
+            return FailureResult(
+                std::move(result),
+                ProjectDocumentTransactionStage::Journal,
+                ProjectTransactionNoDocument,
+                "journal_outside_allowed_root",
+                "The project transaction journal directory escapes its project root: " +
+                    journalDirectory.generic_u8string());
         }
         fs::create_directories(journalDirectory, journalError);
         if (journalError)
@@ -1568,6 +1652,29 @@ namespace renegade::bridge
                     pathError.message());
         }
 
+        fs::path allowedRoot;
+        std::string allowedRootError;
+        if (!ResolveAllowedRoot(options, allowedRoot, allowedRootError))
+        {
+            return FailureResult(
+                std::move(result),
+                ProjectDocumentTransactionStage::Recover,
+                ProjectTransactionNoDocument,
+                "invalid_allowed_root",
+                std::move(allowedRootError));
+        }
+        if (!allowedRoot.empty() &&
+            !IsPathWithinRoot(allowedRoot, journalPath))
+        {
+            return FailureResult(
+                std::move(result),
+                ProjectDocumentTransactionStage::Recover,
+                ProjectTransactionNoDocument,
+                "journal_outside_allowed_root",
+                "The project transaction journal escapes its project root: " +
+                    journalPath.generic_u8string());
+        }
+
         Journal journal;
         std::string operationError;
         if (!ReadJournal(journalPath, journal, operationError))
@@ -1578,6 +1685,33 @@ namespace renegade::bridge
                 ProjectTransactionNoDocument,
                 "invalid_journal",
                 std::move(operationError));
+        }
+        if (!allowedRoot.empty())
+        {
+            for (std::size_t index = 0;
+                index < journal.documents.size(); ++index)
+            {
+                const auto& document = journal.documents[index];
+                const fs::path paths[] = {
+                    document.destination,
+                    document.staged,
+                    document.backup,
+                    document.restore,
+                };
+                for (const auto& path : paths)
+                {
+                    if (!IsPathWithinRoot(allowedRoot, path))
+                    {
+                        return FailureResult(
+                            std::move(result),
+                            ProjectDocumentTransactionStage::Recover,
+                            index,
+                            "journal_document_outside_allowed_root",
+                            "A recovered transaction document escapes its project root: " +
+                                path.generic_u8string());
+                    }
+                }
+            }
         }
         result.transactionId = journal.transactionId;
 
