@@ -66,22 +66,41 @@ namespace
         std::vector<std::uint8_t>& content,
         std::string& error)
     {
-        std::ifstream stream(path, std::ios::binary);
+        content.clear();
+
+        std::ifstream stream(path, std::ios::binary | std::ios::ate);
         if (!stream)
         {
             error = "Could not read document content: " +
                 path.generic_u8string();
             return false;
         }
-        content.assign(
-            std::istreambuf_iterator<char>(stream),
-            std::istreambuf_iterator<char>());
-        if (!stream.eof())
+
+        const std::streamoff size = stream.tellg();
+        if (size < 0)
         {
-            error = "Could not read complete document content: " +
+            error = "Could not inspect document content size: " +
                 path.generic_u8string();
             return false;
         }
+
+        content.resize(static_cast<std::size_t>(size));
+        stream.seekg(0, std::ios::beg);
+        if (!content.empty())
+        {
+            stream.read(
+                reinterpret_cast<char*>(content.data()),
+                static_cast<std::streamsize>(content.size()));
+            if (stream.gcount() !=
+                static_cast<std::streamsize>(content.size()))
+            {
+                content.clear();
+                error = "Could not read complete document content: " +
+                    path.generic_u8string();
+                return false;
+            }
+        }
+
         error.clear();
         return true;
     }
