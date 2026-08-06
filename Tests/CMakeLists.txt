@@ -236,3 +236,48 @@ add_test(
     NAME RenegadeRuntimeBootstrapTests
     COMMAND RenegadeRuntimeBootstrapTests
 )
+
+add_executable(RenegadeFlowTests
+    FlowTests.cpp
+)
+
+target_link_libraries(RenegadeFlowTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeFlowTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeFlowTests)
+
+add_test(
+    NAME RenegadeFlowTests
+    COMMAND RenegadeFlowTests
+)
+
+add_executable(RenegadeRuntimeFlowTests
+    RuntimeFlowTests.cpp
+)
+
+target_link_libraries(RenegadeRuntimeFlowTests
+    PRIVATE
+        Renegade::RuntimeBootstrap
+)
+
+target_compile_options(RenegadeRuntimeFlowTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeRuntimeFlowTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeRuntimeFlowTests)
+
+add_test(
+    NAME RenegadeRuntimeFlowTests
+    COMMAND RenegadeRuntimeFlowTests
+)

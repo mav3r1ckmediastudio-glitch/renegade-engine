@@ -1,6 +1,8 @@
 add_library(RenegadeRuntimeBootstrap STATIC
     src/RuntimeBootstrap.cpp
     src/RuntimeBootstrap.h
+    src/RuntimeFlow.cpp
+    src/RuntimeFlow.h
 )
 
 add_library(Renegade::RuntimeBootstrap ALIAS RenegadeRuntimeBootstrap)
@@ -68,6 +70,10 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Missing Scene"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Corrupt Scene/Content/Scenes"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Flow"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Scenes"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
         "$<TARGET_FILE_DIR:RenegadeRuntime>"
@@ -95,6 +101,24 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP01/Corrupt.wiscene"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Corrupt Scene/Content/Scenes/Corrupt.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP02/Valid Flow/FlowProject.renegade"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/FlowProject.renegade"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP02/Valid Flow/Content/Flow/Main.renegade-flow"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Flow/Main.renegade-flow"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Scenes/LevelOne.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Scenes/LevelTwo.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP02/Valid Flow/Content/Scenes/LevelOne.wiscene.rmeta"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Scenes/LevelOne.wiscene.rmeta"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/LP02/Valid Flow/Content/Scenes/LevelTwo.wiscene.rmeta"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP02/Valid Flow/Content/Scenes/LevelTwo.wiscene.rmeta"
     COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
         "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_ao.tga"
         "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_roughness.tga"

@@ -355,12 +355,22 @@ namespace renegade::bridge
             const std::string name = project.GetText("name");
             const fs::path startupScene =
                 fs::u8path(project.GetText("startup_scene"));
+            const std::string startupFlowId =
+                project.GetText("startup_flow_id");
+            const fs::path startupFlow =
+                fs::u8path(project.GetText("startup_flow"));
             if (!projectId.empty() && !IsValidStableId(projectId))
             {
                 error = "The project descriptor contains a malformed project ID.";
                 return false;
             }
-            if (!IsValidProjectName(name) || !IsSafeRelativePath(startupScene))
+            const bool hasStartupFlowId = !startupFlowId.empty();
+            const bool hasStartupFlowHint = !startupFlow.empty();
+            if (!IsValidProjectName(name) ||
+                !IsSafeRelativePath(startupScene) ||
+                (hasStartupFlowId != hasStartupFlowHint) ||
+                (hasStartupFlowId && !IsValidStableId(startupFlowId)) ||
+                (hasStartupFlowHint && !IsSafeRelativePath(startupFlow)))
             {
                 error = "The project descriptor contains invalid project metadata.";
                 return false;
@@ -375,13 +385,14 @@ namespace renegade::bridge
                     startupPath.generic_u8string();
                 return false;
             }
-
             metadata.formatVersion = static_cast<std::uint32_t>(version);
             metadata.projectId = projectId;
             metadata.name = name;
             metadata.descriptorPath = descriptor.generic_u8string();
             metadata.rootPath = root.generic_u8string();
             metadata.startupScene = startupScene.generic_u8string();
+            metadata.startupFlowId = startupFlowId;
+            metadata.startupFlow = startupFlow.generic_u8string();
             error.clear();
             return true;
         }
@@ -399,6 +410,16 @@ namespace renegade::bridge
             lastError_ = "Could not write a project without a valid stable project ID.";
             return false;
         }
+        const bool hasStartupFlowId = !metadata.startupFlowId.empty();
+        const bool hasStartupFlowHint = !metadata.startupFlow.empty();
+        if (hasStartupFlowId != hasStartupFlowHint ||
+            (hasStartupFlowId && !IsValidStableId(metadata.startupFlowId)) ||
+            (hasStartupFlowHint &&
+                !IsSafeRelativePath(fs::u8path(metadata.startupFlow))))
+        {
+            lastError_ = "Could not write an invalid startup Story Flow reference.";
+            return false;
+        }
 
         wi::config::File projectFile;
         projectFile.Open(metadata.descriptorPath);
@@ -408,6 +429,8 @@ namespace renegade::bridge
         project.Set("project_id", metadata.projectId);
         project.Set("name", metadata.name);
         project.Set("startup_scene", metadata.startupScene);
+        project.Set("startup_flow_id", metadata.startupFlowId);
+        project.Set("startup_flow", metadata.startupFlow);
         projectFile.Commit();
 
         if (!wi::helper::FileExists(metadata.descriptorPath))

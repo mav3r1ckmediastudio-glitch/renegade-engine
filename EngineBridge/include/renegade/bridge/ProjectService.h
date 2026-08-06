@@ -15,6 +15,11 @@ namespace renegade::bridge
         std::string descriptorPath;
         std::string rootPath;
         std::string startupScene = "Content/Scenes/Main.wiscene";
+        // Optional Renegade-owned Story Flow root. The stable document ID is
+        // authoritative; startupFlow is a project-relative location hint.
+        // Projects without either keep the LP01 startup-scene path.
+        std::string startupFlowId;
+        std::string startupFlow;
     };
 
     struct RecentProject

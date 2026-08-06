@@ -3,6 +3,7 @@
 #include <WickedEngine.h>
 
 #include "RuntimeBootstrap.h"
+#include "RuntimeFlow.h"
 #include "renegade/bridge/SceneService.h"
 
 namespace renegade::runtime
@@ -27,6 +28,7 @@ namespace renegade::runtime
 
     private:
         bridge::SceneService scenes_;
+        RuntimeFlowController flow_;
         RuntimeRenderPath renderer_;
         RuntimeBootstrapResult startupResult_;
         bool startupFinished_ = false;
