@@ -444,25 +444,43 @@ namespace
         }
     }
 
+    bool ValidateDocumentAtPath(
+        const DocumentPlan& plan,
+        const fs::path& path,
+        std::string& error)
+    {
+        std::error_code fileError;
+        if (!fs::is_regular_file(path, fileError) || fileError)
+        {
+            error = "The project document is not a readable regular file: " +
+                path.generic_u8string();
+            return false;
+        }
+        if (fs::file_size(path, fileError) != plan.content.size() ||
+            fileError)
+        {
+            error = "The project document length does not match its payload: " +
+                path.generic_u8string();
+            return false;
+        }
+
+        std::string matchError;
+        if (!FileMatchesContent(path, plan.content, matchError))
+        {
+            error = matchError.empty()
+                ? "The project document bytes differ from the staged payload: " +
+                    path.generic_u8string()
+                : std::move(matchError);
+            return false;
+        }
+        return InvokeValidator(plan.validator, path, error);
+    }
+
     bool ValidateStaged(
         const DocumentPlan& plan,
         std::string& error)
     {
-        std::error_code fileError;
-        if (!fs::is_regular_file(plan.staged, fileError) || fileError)
-        {
-            error = "The staged document is not a readable regular file: " +
-                plan.staged.generic_u8string();
-            return false;
-        }
-        if (fs::file_size(plan.staged, fileError) != plan.content.size() ||
-            fileError)
-        {
-            error = "The staged document length does not match its payload: " +
-                plan.staged.generic_u8string();
-            return false;
-        }
-        return InvokeValidator(plan.validator, plan.staged, error);
+        return ValidateDocumentAtPath(plan, plan.staged, error);
     }
 
     bool SerializeJournal(
@@ -1565,6 +1583,27 @@ namespace renegade::bridge
                         : std::move(operationError),
                     action == ProjectDocumentTransactionHookAction::Interrupt);
             }
+
+            if (!ValidateDocumentAtPath(
+                    document,
+                    document.destination,
+                    operationError))
+            {
+                return failDuringCommit(
+                    ProjectDocumentTransactionStage::Validate,
+                    index,
+                    "post_replace_validation_failed",
+                    operationError.empty()
+                        ? "A committed project document failed validation."
+                        : std::move(operationError),
+                    false);
+            }
+            AddEvent(
+                result,
+                ProjectDocumentTransactionStage::Validate,
+                index,
+                document.destination,
+                "committed_document_validated");
 
             journal.commitCount = index + 1;
             journal.activeIndex = ProjectTransactionNoDocument;

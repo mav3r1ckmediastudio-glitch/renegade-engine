@@ -191,6 +191,47 @@ int main()
     }
     fs::remove(secondScreen);
 
+    const std::string previousTitle = document.widgets[1].text;
+    document.widgets[1].text = "RENEGADE UPDATED";
+    if (!WriteScreenDocument(
+            actualScreen.generic_u8string(),
+            document,
+            error))
+    {
+        return Fail(
+            temporary.path,
+            "updated Runtime screen did not commit transactionally");
+    }
+
+    const fs::path screenBackup =
+        actualScreen.parent_path() /
+        fs::u8path(actualScreen.filename().generic_u8string() + ".bak");
+    ScreenDocument previousScreen;
+    if (!ReadScreenDocument(
+            screenBackup.generic_u8string(),
+            projectId,
+            previousScreen,
+            error) ||
+        previousScreen.widgets.size() != document.widgets.size() ||
+        previousScreen.widgets[1].text != previousTitle)
+    {
+        return Fail(
+            temporary.path,
+            "Runtime screen transaction did not retain its last-good backup");
+    }
+
+    if (!ReadScreenDocument(
+            actualScreen.generic_u8string(),
+            projectId,
+            reloaded,
+            error) ||
+        reloaded.widgets[1].text != "RENEGADE UPDATED")
+    {
+        return Fail(
+            temporary.path,
+            "Runtime screen transactional update was not authoritative");
+    }
+
     std::string resolved;
     if (!ResolveRuntimeScreenDocumentPath(
             root.generic_u8string(),

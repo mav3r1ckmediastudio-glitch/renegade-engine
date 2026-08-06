@@ -103,6 +103,47 @@ int main()
         return Fail(temporary.path, "flow document did not round-trip");
     }
 
+    const std::string previousLevelName = document.nodes[1].name;
+    document.nodes[1].name = "Level One Updated";
+    if (!WriteFlowDocument(
+            flowPath.generic_u8string(),
+            document,
+            error))
+    {
+        return Fail(
+            temporary.path,
+            "updated flow document did not commit transactionally");
+    }
+
+    const fs::path flowBackup =
+        flowPath.parent_path() /
+        fs::u8path(flowPath.filename().generic_u8string() + ".bak");
+    FlowDocument previousFlow;
+    if (!ReadFlowDocument(
+            flowBackup.generic_u8string(),
+            projectId,
+            previousFlow,
+            error) ||
+        previousFlow.nodes.size() != document.nodes.size() ||
+        previousFlow.nodes[1].name != previousLevelName)
+    {
+        return Fail(
+            temporary.path,
+            "Story Flow transaction did not retain its last-good backup");
+    }
+
+    if (!ReadFlowDocument(
+            flowPath.generic_u8string(),
+            projectId,
+            reopened,
+            error) ||
+        reopened.nodes[1].name != "Level One Updated")
+    {
+        return Fail(
+            temporary.path,
+            "Story Flow transactional update was not authoritative");
+    }
+
     const fs::path movedPath =
         temporary.path / "Content/Flow/Renamed.renegade-flow";
     fs::rename(flowPath, movedPath);

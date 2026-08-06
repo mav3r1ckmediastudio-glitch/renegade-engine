@@ -4,7 +4,9 @@
 #include <array>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <random>
 #include <sstream>
 #include <unordered_map>
@@ -51,6 +53,124 @@ namespace
     std::string EntityLabel(const wi::ecs::Entity entity)
     {
         return std::to_string(static_cast<std::uint64_t>(entity));
+    }
+
+    void RemoveWithoutThrow(const fs::path& path)
+    {
+        std::error_code ignored;
+        fs::remove(path, ignored);
+    }
+
+    bool ReadFileBytes(
+        const fs::path& path,
+        std::vector<std::uint8_t>& content,
+        std::string& error)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            error = "Could not read document content: " +
+                path.generic_u8string();
+            return false;
+        }
+        content.assign(
+            std::istreambuf_iterator<char>(stream),
+            std::istreambuf_iterator<char>());
+        if (!stream.eof())
+        {
+            error = "Could not read complete document content: " +
+                path.generic_u8string();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    bool FileMatchesBytes(
+        const fs::path& path,
+        const std::vector<std::uint8_t>& expected,
+        std::string& error)
+    {
+        std::vector<std::uint8_t> actual;
+        if (!ReadFileBytes(path, actual, error))
+        {
+            return false;
+        }
+        if (actual != expected)
+        {
+            error = "Document bytes did not match the requested payload: " +
+                path.generic_u8string();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    fs::path PermanentBackupPath(const fs::path& destination)
+    {
+        // Keep the backup's final extension as .bak so stable-ID document
+        // scans never mistake it for a second authoritative Flow/Screen file.
+        return destination.parent_path() / fs::u8path(
+            destination.filename().generic_u8string() + ".bak");
+    }
+
+    bool SameEnvelope(
+        const renegade::bridge::DocumentEnvelope& left,
+        const renegade::bridge::DocumentEnvelope& right)
+    {
+        return left.formatIdentifier == right.formatIdentifier &&
+            left.schemaVersion == right.schemaVersion &&
+            left.documentId == right.documentId &&
+            left.projectId == right.projectId &&
+            left.documentType == right.documentType &&
+            left.pathHint == right.pathHint &&
+            left.generatorVersion == right.generatorVersion &&
+            left.migratedFromVersion == right.migratedFromVersion;
+    }
+
+    void ApplyEnvelope(
+        wi::config::File& file,
+        const renegade::bridge::DocumentEnvelope& envelope)
+    {
+        file.Set("format", envelope.formatIdentifier);
+        file.Set("version", envelope.schemaVersion);
+        auto& document = file.GetSection("document");
+        document.Set("id", envelope.documentId);
+        document.Set("project_id", envelope.projectId);
+        document.Set("type", envelope.documentType);
+        document.Set("path_hint", envelope.pathHint);
+        document.Set("generator", envelope.generatorVersion);
+        document.Set(
+            "migrated_from",
+            static_cast<int>(envelope.migratedFromVersion));
+    }
+
+    bool ResolveTransactionLocation(
+        const fs::path& destination,
+        const std::string& pathHint,
+        fs::path& allowedRoot,
+        fs::path& journalDirectory)
+    {
+        const fs::path relative = fs::u8path(pathHint).lexically_normal();
+        fs::path candidate = destination;
+        for (const auto& ignored : relative)
+        {
+            (void)ignored;
+            candidate = candidate.parent_path();
+        }
+
+        if (!candidate.empty() &&
+            (candidate / relative).lexically_normal() == destination)
+        {
+            allowedRoot = candidate;
+            journalDirectory =
+                allowedRoot / "Intermediate" / "Transactions";
+            return true;
+        }
+
+        allowedRoot = destination.parent_path();
+        journalDirectory = allowedRoot / ".renegade-transactions";
+        return false;
     }
 }
 
@@ -178,14 +298,17 @@ namespace renegade::bridge
         return true;
     }
 
-    bool WriteDocumentEnvelope(
+    bool WriteTransactionalDocument(
         const std::string& filePath,
         const DocumentEnvelope& envelope,
+        const bool preserveExistingSections,
+        DocumentContentWriter contentWriter,
+        ProjectDocumentValidator validator,
         std::string& error)
     {
         if (filePath.empty())
         {
-            error = "A document-envelope path is required.";
+            error = "A Renegade document path is required.";
             return false;
         }
         if (!ValidateDocumentEnvelope(envelope, error))
@@ -193,33 +316,172 @@ namespace renegade::bridge
             return false;
         }
 
+        fs::path renderPath;
         try
         {
-            const fs::path path = fs::u8path(filePath).lexically_normal();
-            if (!path.parent_path().empty())
+            std::error_code pathError;
+            const fs::path destination =
+                fs::absolute(fs::u8path(filePath), pathError)
+                    .lexically_normal();
+            if (pathError || destination.filename().empty())
             {
-                fs::create_directories(path.parent_path());
+                error = "Could not resolve the Renegade document path: " +
+                    pathError.message();
+                return false;
+            }
+
+            const fs::path parent = destination.parent_path();
+            fs::create_directories(parent, pathError);
+            if (pathError)
+            {
+                error = "Could not create the Renegade document folder: " +
+                    pathError.message();
+                return false;
+            }
+
+            renderPath = parent / fs::u8path(
+                destination.filename().generic_u8string() +
+                ".renegade-render-" + GenerateStableId());
+
+            const bool destinationExists = fs::exists(destination, pathError);
+            if (pathError)
+            {
+                error = "Could not inspect the Renegade document: " +
+                    pathError.message();
+                return false;
+            }
+            if (destinationExists &&
+                !fs::is_regular_file(destination, pathError))
+            {
+                error = "The Renegade document destination is not a file: " +
+                    destination.generic_u8string();
+                return false;
+            }
+            if (pathError)
+            {
+                error = "Could not inspect the Renegade document: " +
+                    pathError.message();
+                return false;
+            }
+
+            if (preserveExistingSections && destinationExists)
+            {
+                fs::copy_file(
+                    destination,
+                    renderPath,
+                    fs::copy_options::overwrite_existing,
+                    pathError);
+                if (pathError)
+                {
+                    error = "Could not prepare the document render copy: " +
+                        pathError.message();
+                    return false;
+                }
             }
 
             wi::config::File file;
-            file.Open(path.generic_u8string());
-            file.Set("format", envelope.formatIdentifier);
-            file.Set("version", envelope.schemaVersion);
-            auto& document = file.GetSection("document");
-            document.Set("id", envelope.documentId);
-            document.Set("project_id", envelope.projectId);
-            document.Set("type", envelope.documentType);
-            document.Set("path_hint", envelope.pathHint);
-            document.Set("generator", envelope.generatorVersion);
-            document.Set(
-                "migrated_from",
-                static_cast<int>(envelope.migratedFromVersion));
+            file.Open(renderPath.generic_u8string());
+            ApplyEnvelope(file, envelope);
+            if (contentWriter)
+            {
+                contentWriter(file);
+            }
             file.Commit();
 
-            if (!wi::helper::FileExists(path.generic_u8string()))
+            if (!fs::is_regular_file(renderPath))
             {
-                error = "Could not write document envelope: " +
-                    path.generic_u8string();
+                error = "Could not render the Renegade document: " +
+                    renderPath.generic_u8string();
+                return false;
+            }
+
+            std::vector<std::uint8_t> content;
+            if (!ReadFileBytes(renderPath, content, error))
+            {
+                return false;
+            }
+            RemoveWithoutThrow(renderPath);
+            renderPath.clear();
+
+            std::vector<std::uint8_t> previous;
+            if (destinationExists &&
+                !ReadFileBytes(destination, previous, error))
+            {
+                return false;
+            }
+
+            std::vector<ProjectDocumentWrite> writes;
+            writes.reserve(
+                destinationExists && previous != content ? 2u : 1u);
+
+            if (destinationExists && previous != content)
+            {
+                ProjectDocumentWrite backup;
+                backup.destinationPath =
+                    PermanentBackupPath(destination).generic_u8string();
+                backup.content = previous;
+                backup.validator = [previous](
+                    const std::string& path,
+                    std::string& validationError)
+                {
+                    return FileMatchesBytes(
+                        fs::u8path(path),
+                        previous,
+                        validationError);
+                };
+                writes.push_back(std::move(backup));
+            }
+
+            ProjectDocumentWrite documentWrite;
+            documentWrite.destinationPath = destination.generic_u8string();
+            documentWrite.content = std::move(content);
+            documentWrite.validator = [
+                envelope,
+                validator = std::move(validator)](
+                    const std::string& path,
+                    std::string& validationError)
+            {
+                DocumentEnvelope roundTrip;
+                if (!ReadDocumentEnvelope(path, roundTrip, validationError))
+                {
+                    return false;
+                }
+                if (!SameEnvelope(envelope, roundTrip))
+                {
+                    validationError =
+                        "The document envelope did not round-trip exactly.";
+                    return false;
+                }
+                if (validator)
+                {
+                    return validator(path, validationError);
+                }
+                validationError.clear();
+                return true;
+            };
+            writes.push_back(std::move(documentWrite));
+
+            fs::path allowedRoot;
+            fs::path journalDirectory;
+            ResolveTransactionLocation(
+                destination,
+                envelope.pathHint,
+                allowedRoot,
+                journalDirectory);
+
+            ProjectDocumentTransactionOptions options;
+            options.transactionId = GenerateStableId();
+            options.journalDirectory =
+                journalDirectory.generic_u8string();
+            options.allowedRoot = allowedRoot.generic_u8string();
+
+            ProjectDocumentTransaction transaction;
+            const auto result =
+                transaction.Execute(std::move(writes), options);
+            if (!result.success)
+            {
+                error = "Renegade document transaction failed [" +
+                    result.code + "]: " + result.message;
                 return false;
             }
 
@@ -228,10 +490,25 @@ namespace renegade::bridge
         }
         catch (const std::exception& exception)
         {
-            error = std::string("Could not write document envelope: ") +
+            RemoveWithoutThrow(renderPath);
+            error = std::string("Could not write Renegade document: ") +
                 exception.what();
             return false;
         }
+    }
+
+    bool WriteDocumentEnvelope(
+        const std::string& filePath,
+        const DocumentEnvelope& envelope,
+        std::string& error)
+    {
+        return WriteTransactionalDocument(
+            filePath,
+            envelope,
+            true,
+            {},
+            {},
+            error);
     }
 
     bool ReadDocumentEnvelope(

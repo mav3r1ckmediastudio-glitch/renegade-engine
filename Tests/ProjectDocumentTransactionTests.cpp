@@ -508,6 +508,39 @@ namespace
             "new destination rollback left artifacts");
     }
 
+    void TestPostReplaceValidationRollback(const fs::path& root)
+    {
+        const fs::path target = root / "PostValidate.document";
+        WriteText(target, "old");
+
+        auto options = Options(root, "post-validation");
+        options.operationHook = [](
+            const ProjectDocumentTransactionStage stage,
+            const std::size_t,
+            const std::string& path,
+            std::string&)
+        {
+            if (stage == ProjectDocumentTransactionStage::AfterReplace)
+            {
+                WriteText(fs::u8path(path), "corrupt");
+            }
+            return ProjectDocumentTransactionHookAction::Continue;
+        };
+
+        ProjectDocumentTransaction transaction;
+        auto result = transaction.Execute(
+            {TextDocument(target, "new")},
+            options);
+
+        Check(!result.success && result.rolledBack &&
+                result.code == "post_replace_validation_failed",
+            "post-replacement corruption was not rejected and rolled back");
+        Check(ReadText(target) == "old",
+            "post-replacement validation failure did not restore old content");
+        Check(!result.recoveryRequired && !HasTransactionArtifacts(root),
+            "post-replacement validation rollback left recovery artifacts");
+    }
+
     void TestCommittedCleanupRecovery(const fs::path& root)
     {
         const fs::path target = root / "Cleanup.document";
@@ -620,9 +653,10 @@ int main()
     TestRollbackFailureThenRecovery(root / "10-rollback-recovery");
     TestInterruptedCommitRecovery(root / "11-interrupted");
     TestNewDestinationRollback(root / "12-new-file");
-    TestCommittedCleanupRecovery(root / "13-cleanup");
-    TestAllowedRootContainment(root / "14-containment");
-    TestMalformedJournalRejected(root / "15-malformed");
+    TestPostReplaceValidationRollback(root / "13-post-validation");
+    TestCommittedCleanupRecovery(root / "14-cleanup");
+    TestAllowedRootContainment(root / "15-containment");
+    TestMalformedJournalRejected(root / "16-malformed");
 
     std::error_code ignored;
     fs::remove_all(root, ignored);

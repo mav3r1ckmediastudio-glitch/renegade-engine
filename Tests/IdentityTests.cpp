@@ -161,6 +161,7 @@ int main()
     }
 
     const StableId documentId = loadedEnvelope.documentId;
+    const std::string previousPathHint = loadedEnvelope.pathHint;
     if (!RetargetDocumentEnvelope(
             loadedEnvelope,
             "Content/Scenes/Renamed/LevelOne.wiscene",
@@ -174,6 +175,22 @@ int main()
         return Fail(
             temporary.path,
             "document rename changed or invalidated its stable ID");
+    }
+
+    const fs::path envelopeBackup =
+        envelopePath.parent_path() /
+        fs::u8path(envelopePath.filename().generic_u8string() + ".bak");
+    DocumentEnvelope previousEnvelope;
+    if (!ReadDocumentEnvelope(
+            envelopeBackup.generic_u8string(),
+            previousEnvelope,
+            error) ||
+        previousEnvelope.pathHint != previousPathHint ||
+        previousEnvelope.documentId != documentId)
+    {
+        return Fail(
+            temporary.path,
+            "document-envelope transaction did not preserve its last-good backup");
     }
 
     if (ValidateDocumentEnvelopes(

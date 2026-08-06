@@ -1,12 +1,20 @@
 #pragma once
 
+#include "renegade/bridge/ProjectDocumentTransaction.h"
+
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include <WickedEngine.h>
+
+namespace wi::config
+{
+    struct File;
+}
 
 namespace renegade::bridge
 {
@@ -41,6 +49,22 @@ namespace renegade::bridge
     [[nodiscard]] bool ValidateDocumentEnvelope(
         const DocumentEnvelope& envelope,
         std::string& error);
+
+    using DocumentContentWriter =
+        std::function<void(wi::config::File& file)>;
+
+    // Build a complete Renegade-owned document in a non-authoritative render
+    // file, validate it, then commit it through the LF02 transaction boundary.
+    // preserveExistingSections is used only by the standalone envelope updater;
+    // complete Flow/Screen writers deliberately rebuild from a clean file.
+    [[nodiscard]] bool WriteTransactionalDocument(
+        const std::string& filePath,
+        const DocumentEnvelope& envelope,
+        bool preserveExistingSections,
+        DocumentContentWriter contentWriter,
+        ProjectDocumentValidator validator,
+        std::string& error);
+
     [[nodiscard]] bool WriteDocumentEnvelope(
         const std::string& filePath,
         const DocumentEnvelope& envelope,
