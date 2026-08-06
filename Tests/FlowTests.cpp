@@ -144,6 +144,20 @@ int main()
             "Story Flow transactional update was not authoritative");
     }
 
+    // The transactional-update assertions above intentionally renamed
+    // nodes[1] to prove the write/backup/reopen path. Revert it in memory
+    // *and* commit that revert to disk, since everything below this point
+    // re-reads the file rather than reusing the in-memory `document` — so
+    // the remaining interpreter assertions exercise the documented
+    // "Level One" fixture rather than this test's own leftover mutation.
+    document.nodes[1].name = previousLevelName;
+    if (!WriteFlowDocument(flowPath.generic_u8string(), document, error))
+    {
+        return Fail(
+            temporary.path,
+            "reverted flow document did not commit transactionally");
+    }
+
     const fs::path movedPath =
         temporary.path / "Content/Flow/Renamed.renegade-flow";
     fs::rename(flowPath, movedPath);
