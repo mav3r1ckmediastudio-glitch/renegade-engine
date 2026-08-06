@@ -262,8 +262,15 @@ namespace renegade::runtime
         controller_ = &controller;
         requestSink_ = std::move(requestSink);
 
-        for (const auto& widget : document_.widgets)
+        // Wicked's GUI stores widgets in insertion order but renders that
+        // storage in reverse. Iterate the authored back-to-front document
+        // order in reverse so backgrounds render first and controls remain
+        // visible above them.
+        for (auto iterator = document_.widgets.rbegin();
+             iterator != document_.widgets.rend();
+             ++iterator)
         {
+            const auto& widget = *iterator;
             const std::string widgetName = widget.name + "#" + widget.id;
             switch (widget.kind)
             {

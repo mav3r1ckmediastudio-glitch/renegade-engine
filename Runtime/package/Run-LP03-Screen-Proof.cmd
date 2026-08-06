@@ -8,7 +8,7 @@ if not exist "%PROJECT%" (
 )
 echo Launching LP03 Runtime screen proof on DX12...
 echo Project: "%PROJECT%"
-RenegadeRuntime.exe dx12 --project "%PROJECT%"
+RenegadeRuntime.exe dx12 "--project=%PROJECT%"
 set "RESULT=%ERRORLEVEL%"
 echo Runtime exit code: %RESULT%
 if exist "Logs\RuntimeBootstrap.log" type "Logs\RuntimeBootstrap.log"
