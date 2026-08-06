@@ -1,27 +1,51 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-02
+**Date:** 2026-08-06
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Active branch:** `phase4/model-import-v1`
+**Active branch:** `poc/lf01-stable-identity-document-envelope`
 
-**Branch base:** `e515172` (`Plan and prove light material authoring bridge (#12)`)
+**Branch base:** `871b07c` (`Add project-aware Runtime bootstrap (#16)`)
 
 **Pull request:** Not opened yet
 
-**Gate 1 remote commit:** `38c9f24`
+**LF01 verification:** Release build passed; all 13 CTest targets passed on the
+project owner's VS2022-safe Windows configuration.
 
-**Gate 2 remote commit:** `32351d9`
-
-**Add Light remote commit:** `b81c4bb`
-
-**Model Import V1 serialization correction:** `e0427e9`
-
-**Model Import V1 write-crash and round-trip fingerprint correction:**
-`550d6d7`, `4e78e1b`, `50bb1eb`
+**Protected unrelated local modification:**
+`Tools/Windows-Build.Common.ps1` remains outside LF01 and must not be staged.
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
+
+## LF01 current truth
+
+LF01 establishes stable UUID-v4 identity for projects, Renegade-owned document
+envelopes, and addressable authored scene entities. Project descriptors are now
+v2 and contain a project ID; mutable Studio `OpenProject` migrates legacy v1
+descriptors once, while read-only Runtime inspection fails closed until a
+project has been migrated.
+
+Persistent entity IDs are stored through Wicked's serialized
+`MetadataComponent` under a Renegade-owned key. Scene save assigns missing IDs
+and rejects malformed or duplicate IDs. Normal duplication assigns fresh IDs
+and the existing command snapshot preserves them through Undo/Redo. Runtime can
+rebuild a stable-ID-to-current-Wicked-entity index after load, so references do
+not depend on Wicked's process-local entity numbers.
+
+`RenegadeIdentityTests` proves UUID validation, project migration and identity
+survival across rename/move, document-envelope ownership and duplicate checks,
+entity diagnostics, duplicate semantics, WISCENE save/reload persistence, and
+stable lookup after entity remapping. The complete Release regression suite
+also passed: **13/13 tests, 0 failures**.
+
+LF01 deliberately does not implement Story Flow, save games, prefab-derived
+identity, project-wide transactional saves, cooking, packaging, or creator UI.
+The document-envelope writer remains a proof primitive for LF02 rather than a
+claim of project-wide transaction support.
+
+The older milestone history below is retained as reference and predates this
+LF01 branch.
 
 ## Current truth
 

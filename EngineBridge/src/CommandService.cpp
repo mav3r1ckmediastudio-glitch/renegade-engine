@@ -1,5 +1,7 @@
 #include "renegade/bridge/CommandService.h"
 
+#include "renegade/bridge/IdentityService.h"
+
 #include <algorithm>
 #include <cmath>
 #include <utility>
@@ -539,6 +541,8 @@ namespace renegade::bridge
                 return false;
             }
 
+            const auto entitiesBefore =
+                EnumeratePersistentSceneEntities(*scene_);
             duplicate_ = scene_->Entity_Duplicate(source_);
             if (duplicate_ == wi::ecs::INVALID_ENTITY)
             {
@@ -548,6 +552,29 @@ namespace renegade::bridge
             if (auto* name = scene_->names.GetComponent(duplicate_))
             {
                 name->name += " Copy";
+            }
+
+            // Wicked duplicates serialized MetadataComponent values verbatim.
+            // Every entity created by a normal duplicate therefore receives a
+            // fresh Renegade identity before the Undo/Redo snapshot is taken.
+            const auto entitiesAfter =
+                EnumeratePersistentSceneEntities(*scene_);
+            std::string identityError;
+            for (const auto entity : entitiesAfter)
+            {
+                if (!std::binary_search(
+                        entitiesBefore.begin(),
+                        entitiesBefore.end(),
+                        entity) &&
+                    !AssignNewPersistentEntityId(
+                        *scene_,
+                        entity,
+                        identityError))
+                {
+                    scene_->Entity_Remove(duplicate_);
+                    duplicate_ = wi::ecs::INVALID_ENTITY;
+                    return false;
+                }
             }
 
             snapshot_.SetReadModeAndResetPos(false);

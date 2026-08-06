@@ -191,6 +191,26 @@ add_test(
     COMMAND RenegadeProjectStructureTests
 )
 
+add_executable(RenegadeIdentityTests
+    IdentityTests.cpp
+)
+
+target_link_libraries(RenegadeIdentityTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeIdentityTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeIdentityTests)
+
+add_test(
+    NAME RenegadeIdentityTests
+    COMMAND RenegadeIdentityTests
+)
+
 
 add_executable(RenegadeRuntimeBootstrapTests
     RuntimeBootstrapTests.cpp

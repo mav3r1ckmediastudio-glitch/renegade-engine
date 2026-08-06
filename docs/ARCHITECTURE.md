@@ -257,3 +257,13 @@ day/night system.
 ADR 0003 defines the v1 `.renegade` descriptor. It is a versioned,
 project-relative identity above WISCENE. Project metadata does not replace or
 alter Wicked scene serialization.
+
+LF01 adds a Renegade-owned stable-identity layer without changing Wicked's ECS
+or WISCENE format. Projects and Renegade documents use canonical UUID-v4 IDs.
+Authored Wicked entities carry a persistent UUID-v4 in serialized
+`MetadataComponent` data; runtime code resolves that stable ID to the current
+process-local Wicked entity after load. File paths remain mutable diagnostic
+hints rather than reference authority. Normal duplication regenerates IDs for
+all newly created entities, while Undo/Redo restores the assigned identities.
+The LF01 document-envelope writer is deliberately non-transactional; backup,
+rollback, migration chains and project-wide commit remain LF02.
