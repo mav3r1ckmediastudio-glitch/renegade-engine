@@ -13,6 +13,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/SunService.h
     include/renegade/bridge/TerrainService.h
     include/renegade/bridge/ProjectService.h
+    include/renegade/bridge/ProjectDocumentTransaction.h
     include/renegade/bridge/SceneService.h
     include/renegade/bridge/SceneDocumentService.h
     include/renegade/bridge/SelectionService.h
@@ -31,6 +32,7 @@ add_library(RenegadeEngineBridge STATIC
     src/SunService.cpp
     src/TerrainService.cpp
     src/ProjectService.cpp
+    src/ProjectDocumentTransaction.cpp
     src/SceneService.cpp
     src/SceneDocumentService.cpp
     src/SelectionService.cpp
