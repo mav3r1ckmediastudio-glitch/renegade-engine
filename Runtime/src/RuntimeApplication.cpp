@@ -54,8 +54,18 @@ namespace renegade::runtime
         renderer_.BindScene(scenes_);
         renderer_.init(canvas);
 
-        startupResult_ =
-            LoadRuntimeProjectScene(scenes_, std::move(startupResult_));
+        if (!startupResult_.startupFlowPath.empty())
+        {
+            startupResult_ = LoadRuntimeProjectFlow(
+                scenes_,
+                flow_,
+                std::move(startupResult_));
+        }
+        else
+        {
+            startupResult_ =
+                LoadRuntimeProjectScene(scenes_, std::move(startupResult_));
+        }
         startupFinished_ = true;
         if (!startupResult_.succeeded)
         {

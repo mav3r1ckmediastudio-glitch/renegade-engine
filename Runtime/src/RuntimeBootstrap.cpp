@@ -13,7 +13,8 @@ namespace
 
     bool IsWithinProjectRoot(
         const fs::path& projectRoot,
-        const fs::path& startupScene,
+        const fs::path& candidatePath,
+        const char* subject,
         std::string& error)
     {
         std::error_code pathError;
@@ -26,20 +27,21 @@ namespace
             return false;
         }
 
-        const fs::path canonicalScene =
-            fs::weakly_canonical(startupScene, pathError);
+        const fs::path canonicalCandidate =
+            fs::weakly_canonical(candidatePath, pathError);
         if (pathError)
         {
-            error = "Could not canonicalize the project startup scene: " +
-                pathError.message();
+            error = std::string("Could not canonicalize the project ") +
+                subject + ": " + pathError.message();
             return false;
         }
 
         const fs::path relative =
-            fs::relative(canonicalScene, canonicalRoot, pathError);
+            fs::relative(canonicalCandidate, canonicalRoot, pathError);
         if (pathError || relative.empty() || relative.is_absolute())
         {
-            error = "The project startup scene is outside the project root.";
+            error = std::string("The project ") + subject +
+                " is outside the project root.";
             return false;
         }
 
@@ -52,7 +54,8 @@ namespace
             });
         if (escapes)
         {
-            error = "The project startup scene escapes the project root.";
+            error = std::string("The project ") + subject +
+                " escapes the project root.";
             return false;
         }
 
@@ -84,8 +87,36 @@ namespace renegade::runtime
         for (std::size_t index = 0; index < arguments.size(); ++index)
         {
             const std::string& argument = arguments[index];
-            std::string projectPath;
 
+            if (argument == "--flow-outcome")
+            {
+                if (index + 1 >= arguments.size() ||
+                    arguments[index + 1].empty())
+                {
+                    return Fail(
+                        std::move(result),
+                        RuntimeBootstrapCode::InvalidArguments,
+                        "The --flow-outcome argument requires a named outcome.");
+                }
+                result.flowOutcomes.push_back(arguments[++index]);
+                continue;
+            }
+            if (argument.rfind("--flow-outcome=", 0) == 0)
+            {
+                const std::string outcome = argument.substr(
+                    std::string("--flow-outcome=").size());
+                if (outcome.empty())
+                {
+                    return Fail(
+                        std::move(result),
+                        RuntimeBootstrapCode::InvalidArguments,
+                        "The --flow-outcome argument requires a named outcome.");
+                }
+                result.flowOutcomes.push_back(outcome);
+                continue;
+            }
+
+            std::string projectPath;
             if (argument == "--project")
             {
                 if (index + 1 >= arguments.size() ||
@@ -172,6 +203,7 @@ namespace renegade::runtime
         if (!IsWithinProjectRoot(
                 projectRoot,
                 startupScene,
+                "startup scene",
                 containmentError))
         {
             return Fail(
@@ -180,9 +212,38 @@ namespace renegade::runtime
                 containmentError);
         }
 
+        std::string startupFlowPath;
+        if (!metadata.startupFlow.empty())
+        {
+            std::string flowError;
+            if (!bridge::ResolveStoryFlowDocumentPath(
+                    metadata.rootPath,
+                    metadata.projectId,
+                    metadata.startupFlowId,
+                    metadata.startupFlow,
+                    startupFlowPath,
+                    flowError))
+            {
+                return Fail(
+                    std::move(result),
+                    RuntimeBootstrapCode::StartupFlowRejected,
+                    "Could not resolve the project startup Story Flow: " +
+                        flowError);
+            }
+        }
+        else if (!result.flowOutcomes.empty())
+        {
+            return Fail(
+                std::move(result),
+                RuntimeBootstrapCode::FlowRejected,
+                "The project does not declare startup_flow, so diagnostic "
+                "flow outcomes cannot be executed.");
+        }
+
         result.project = std::move(metadata);
         result.projectDescriptorPath = result.project.descriptorPath;
         result.startupScenePath = startupScene.generic_u8string();
+        result.startupFlowPath = std::move(startupFlowPath);
         result.succeeded = true;
         result.code = RuntimeBootstrapCode::Success;
         result.message =
@@ -233,6 +294,12 @@ namespace renegade::runtime
             return "STARTUP_SCENE_OUTSIDE_PROJECT";
         case RuntimeBootstrapCode::SceneLoadFailed:
             return "SCENE_LOAD_FAILED";
+        case RuntimeBootstrapCode::StartupFlowRejected:
+            return "STARTUP_FLOW_REJECTED";
+        case RuntimeBootstrapCode::FlowRejected:
+            return "FLOW_REJECTED";
+        case RuntimeBootstrapCode::FlowExecutionFailed:
+            return "FLOW_EXECUTION_FAILED";
         default:
             return "UNKNOWN";
         }
@@ -270,7 +337,23 @@ namespace renegade::runtime
                 << "project_name=" << result.project.name << '\n'
                 << "project_root=" << result.project.rootPath << '\n'
                 << "startup_scene=" << result.startupScenePath << '\n'
+                << "startup_flow_id=" << result.project.startupFlowId << '\n'
+                << "startup_flow=" << result.startupFlowPath << '\n'
+                << "flow_document_id=" << result.flowDocumentId << '\n'
+                << "flow_node_id=" << result.flowNodeId << '\n'
+                << "flow_node_name=" << result.flowNodeName << '\n'
+                << "flow_entry=" << result.flowEntry << '\n'
+                << "flow_terminal="
+                << bridge::FlowTerminalActionName(result.flowTerminalAction)
+                << '\n'
+                << "flow_trace_count=" << result.flowTrace.size() << '\n'
                 << "entity_count=" << result.entityCount << '\n';
+
+            for (std::size_t index = 0; index < result.flowTrace.size(); ++index)
+            {
+                stream << "flow_trace_" << index << '='
+                       << result.flowTrace[index] << '\n';
+            }
 
             if (!stream)
             {

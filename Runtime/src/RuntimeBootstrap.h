@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 
@@ -18,6 +19,9 @@ namespace renegade::runtime
         ProjectRejected = 22,
         StartupSceneOutsideProject = 23,
         SceneLoadFailed = 24,
+        StartupFlowRejected = 25,
+        FlowRejected = 26,
+        FlowExecutionFailed = 27,
     };
 
     struct RuntimeBootstrapResult
@@ -29,6 +33,15 @@ namespace renegade::runtime
         std::string projectDescriptorPath;
         bridge::ProjectMetadata project;
         std::string startupScenePath;
+        std::string startupFlowPath;
+        std::vector<std::string> flowOutcomes;
+        std::string flowDocumentId;
+        std::string flowNodeId;
+        std::string flowNodeName;
+        std::string flowEntry;
+        bridge::FlowTerminalAction flowTerminalAction =
+            bridge::FlowTerminalAction::None;
+        std::vector<std::string> flowTrace;
         std::size_t entityCount = 0;
     };
 
@@ -39,8 +52,8 @@ namespace renegade::runtime
         const std::vector<std::string>& arguments);
 
     // Validates the .renegade descriptor without opening it as an editor
-    // project, resolves the startup WISCENE, and rejects lexical or symlink
-    // escape outside the project root.
+    // project, resolves the startup WISCENE and optional Story Flow document,
+    // and rejects lexical or symlink escape outside the project root.
     [[nodiscard]] RuntimeBootstrapResult ResolveRuntimeProject(
         RuntimeBootstrapResult result);
 
