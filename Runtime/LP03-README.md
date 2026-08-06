@@ -52,6 +52,25 @@ Negative coverage includes malformed documents, duplicate widget/action IDs,
 missing Play, unknown action, invalid focus target, unsafe paths, duplicate
 screen identity and missing background resources.
 
+## Accepted evidence
+
+Accepted on 2026-08-06 for commit `288dc91bba8e0e184dd8ac4fbc3e2ba224ad3f53`:
+
+- GitHub Actions run #92: Debug PASS and Release PASS.
+- Release artifact: `renegade-studio-windows-x64-Release-288dc91bba8e0e184dd8ac4fbc3e2ba224ad3f53`.
+- Artifact digest: `sha256:23ea9b8657fb93ef01f2a79031190792d55b6f6530c8d206f1f329de918b9c2b`.
+- Packaged DX12 visual startup: PASS.
+- Mouse Play: PASS; entered LP02 Level One.
+- Mouse Quit: PASS; normal shutdown and exit code 0.
+- Keyboard Play: PASS; entered LP02 Level One.
+- Keyboard Quit: PASS; normal shutdown and exit code 0.
+- Gamepad-labelled controller/dispatcher path: automated PASS.
+- Physical gamepad hardware path: DEFERRED because no controller was available.
+
+The deferred physical-controller check is not represented as a pass. The same
+stable action dispatcher is covered automatically, while real Wicked hardware
+mapping remains a later physical verification item.
+
 ## Scope limits
 
 LP03 does not add Studio authoring, anchors, responsive layout, HUDs, custom

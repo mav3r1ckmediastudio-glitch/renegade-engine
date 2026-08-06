@@ -4,21 +4,59 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Active branch:** `poc/lf01-stable-identity-document-envelope`
+**Active branch:** `poc/lp03-minimal-runtime-screen`
 
-**Branch base:** `871b07c` (`Add project-aware Runtime bootstrap (#16)`)
+**Branch base:** `f578c849896edc4048fa931ac658c339c6efb3e7`
 
-**Pull request:** Not opened yet
+**Pull request:** Draft PR #19
 
-**LF01 verification:** Release build passed; all 13 CTest targets passed on the
-project owner's VS2022-safe Windows configuration.
+**LP03 verification:** GitHub Actions run #92 passed Debug and Release at `288dc91bba8e0e184dd8ac4fbc3e2ba224ad3f53`. Packaged Release proof passed startup rendering, mouse Play/Quit, keyboard Play/Quit, LP02 Level One entry, and normal exit code 0. Automated tests cover the gamepad-labelled dispatcher path; physical gamepad input is explicitly deferred because no controller was available.
 
 **Protected unrelated local modification:**
 `Tools/Windows-Build.Common.ps1` remains outside LF01 and must not be staged.
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## LF01 current truth
+## LP03 current truth
+
+LP03 adds a bounded, serialized Renegade-owned `runtime-screen` document and a
+Runtime-owned stable action dispatcher. A project may reference a startup screen
+by stable document ID with a project-relative path hint. Legacy projects without
+a startup screen keep the LP01/LP02 immediate-start behaviour.
+
+The accepted LP03 fixture contains one background image, one title, a `play`
+button and a `quit` button. Renegade owns focus order, current focus,
+hidden/disabled skipping, keyboard/mouse/gamepad-labelled activation requests,
+action dispatch and input-source evidence. `play` enters the existing LP02
+`LoadRuntimeProjectFlow()` boundary; `quit` requests ordinary Win32 window
+destruction and exits through normal Runtime shutdown.
+
+Validation evidence:
+
+- GitHub Actions run #92 passed both Debug and Release for `288dc91bba8e0e184dd8ac4fbc3e2ba224ad3f53`.
+- Release artifact: `renegade-studio-windows-x64-Release-288dc91bba8e0e184dd8ac4fbc3e2ba224ad3f53`.
+- Release artifact digest: `sha256:23ea9b8657fb93ef01f2a79031190792d55b6f6530c8d206f1f329de918b9c2b`.
+- Packaged DX12 startup rendered the background, `RENEGADE RUNTIME`, visible
+  Play/Quit buttons and deterministic initial Play focus.
+- Mouse Play entered LP02 Level One; mouse Quit exited normally with code 0.
+- Keyboard Play entered LP02 Level One; keyboard Quit exited normally with
+  code 0.
+- Runtime evidence recorded the screen ID, focused widget, stable action,
+  input source, result, flow trace and entity count.
+- `RenegadeRuntimeScreenTests` covers deterministic focus, hidden/disabled
+  skipping and keyboard/mouse/gamepad-labelled requests entering the same
+  stable dispatcher.
+- Physical gamepad input remains deferred because the project owner did not
+  have controller hardware available. This is recorded as untested hardware,
+  not as a pass or failure.
+
+LP03 does not add Studio screen authoring, a full UI designer, HUDs, anchors,
+responsive layout, custom fonts, scripting, video, cooking or standalone-game
+packaging. Those remain later lifecycle work.
+
+The older slice history below is retained as reference.
+
+## Prior slice — LF01
 
 LF01 establishes stable UUID-v4 identity for projects, Renegade-owned document
 envelopes, and addressable authored scene entities. Project descriptors are now
