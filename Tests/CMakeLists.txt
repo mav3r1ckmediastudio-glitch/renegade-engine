@@ -326,3 +326,49 @@ add_test(
     NAME RenegadeRuntimeScreenTests
     COMMAND RenegadeRuntimeScreenTests
 )
+
+add_executable(RenegadeProjectDocumentTransactionTests
+    ProjectDocumentTransactionTests.cpp
+)
+
+target_link_libraries(RenegadeProjectDocumentTransactionTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeProjectDocumentTransactionTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeProjectDocumentTransactionTests
+)
+
+add_test(
+    NAME RenegadeProjectDocumentTransactionTests
+    COMMAND RenegadeProjectDocumentTransactionTests
+)
+
+add_executable(RenegadeProjectServiceTransactionTests
+    ProjectServiceTransactionTests.cpp
+)
+
+target_link_libraries(RenegadeProjectServiceTransactionTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeProjectServiceTransactionTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeProjectServiceTransactionTests
+)
+
+add_test(
+    NAME RenegadeProjectServiceTransactionTests
+    COMMAND RenegadeProjectServiceTransactionTests
+)

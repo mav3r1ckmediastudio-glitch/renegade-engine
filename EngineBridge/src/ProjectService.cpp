@@ -1,12 +1,17 @@
 #include "renegade/bridge/ProjectService.h"
 
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/ProjectDocumentTransaction.h"
 
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <system_error>
+#include <utility>
+#include <vector>
 
 #include <wiConfig.h>
 #include <wiHelper.h>
@@ -69,7 +74,7 @@ namespace
             return false;
         }
 
-        constexpr const char* invalidCharacters = "<>:\"/\\|?*";
+        constexpr const char* invalidCharacters = "<>:\"/\\|?*#;";
         return std::none_of(
             name.begin(),
             name.end(),
@@ -119,6 +124,126 @@ namespace
         error.clear();
         return true;
     }
+
+    bool ReadFileBytes(
+        const fs::path& path,
+        std::vector<std::uint8_t>& bytes,
+        std::string& error)
+    {
+        bytes.clear();
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            error = "Could not read project document: " +
+                path.generic_u8string();
+            return false;
+        }
+        stream.seekg(0, std::ios::end);
+        const std::streamoff size = stream.tellg();
+        if (size < 0)
+        {
+            error = "Could not inspect project document size: " +
+                path.generic_u8string();
+            return false;
+        }
+        stream.seekg(0, std::ios::beg);
+        bytes.resize(static_cast<std::size_t>(size));
+        if (!bytes.empty())
+        {
+            stream.read(
+                reinterpret_cast<char*>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size()));
+        }
+        if (!stream && !bytes.empty())
+        {
+            error = "Could not read complete project document: " +
+                path.generic_u8string();
+            bytes.clear();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    bool FileMatchesBytes(
+        const std::string& path,
+        const std::vector<std::uint8_t>& expected,
+        std::string& error)
+    {
+        std::vector<std::uint8_t> actual;
+        if (!ReadFileBytes(fs::u8path(path), actual, error))
+        {
+            return false;
+        }
+        if (actual != expected)
+        {
+            error = "The project document does not match its requested bytes.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    std::vector<std::uint8_t> SerializeProjectDescriptor(
+        const renegade::bridge::ProjectMetadata& metadata)
+    {
+        std::ostringstream stream;
+        stream << "format = " << ProjectFormat << '\n';
+        stream << "version = "
+               << renegade::bridge::ProjectService::CurrentFormatVersion
+               << "\n\n";
+        stream << "[project]\n";
+        stream << "project_id = " << metadata.projectId << '\n';
+        stream << "name = " << metadata.name << '\n';
+        stream << "startup_scene = " << metadata.startupScene << '\n';
+        stream << "startup_flow_id = " << metadata.startupFlowId << '\n';
+        stream << "startup_flow = " << metadata.startupFlow << '\n';
+        stream << "startup_screen_id = " << metadata.startupScreenId << '\n';
+        stream << "startup_screen = " << metadata.startupScreen << '\n';
+        const std::string text = stream.str();
+        return std::vector<std::uint8_t>(text.begin(), text.end());
+    }
+
+    bool ProjectMetadataMatches(
+        const renegade::bridge::ProjectMetadata& expected,
+        const renegade::bridge::ProjectMetadata& actual)
+    {
+        return actual.formatVersion ==
+                renegade::bridge::ProjectService::CurrentFormatVersion &&
+            actual.projectId == expected.projectId &&
+            actual.name == expected.name &&
+            actual.startupScene == expected.startupScene &&
+            actual.startupFlowId == expected.startupFlowId &&
+            actual.startupFlow == expected.startupFlow &&
+            actual.startupScreenId == expected.startupScreenId &&
+            actual.startupScreen == expected.startupScreen;
+    }
+
+    fs::path ProjectTransactionDirectory(const fs::path& root)
+    {
+        return root / "Intermediate" / "Transactions";
+    }
+
+    fs::path ProjectDescriptorBackupPath(const fs::path& descriptor)
+    {
+        return descriptor.parent_path() /
+            fs::u8path(
+                descriptor.stem().generic_u8string() + ".bak" +
+                descriptor.extension().generic_u8string());
+    }
+
+    void AppendWarning(std::string& warning, std::string addition)
+    {
+        if (addition.empty())
+        {
+            return;
+        }
+        if (!warning.empty())
+        {
+            warning += " ";
+        }
+        warning += std::move(addition);
+    }
 }
 
 namespace renegade::bridge
@@ -128,6 +253,7 @@ namespace renegade::bridge
         stateFilePath_ = NormalizedAbsolutePath(stateFilePath);
         recentProjects_.clear();
         lastError_.clear();
+        lastWarning_.clear();
         LoadRecents();
     }
 
@@ -137,11 +263,12 @@ namespace renegade::bridge
         const std::string& templateScenePath)
     {
         lastError_.clear();
+        lastWarning_.clear();
 
         if (!IsValidProjectName(projectName))
         {
             lastError_ =
-                "Project names cannot be empty or contain Windows filename characters.";
+                "Project names cannot be empty or contain unsafe filename or project-file characters.";
             return false;
         }
         if (parentDirectory.empty() || !fs::is_directory(fs::u8path(parentDirectory)))
@@ -208,6 +335,30 @@ namespace renegade::bridge
 
     bool ProjectService::OpenProject(const std::string& descriptorPath)
     {
+        lastError_.clear();
+        lastWarning_.clear();
+
+        if (!descriptorPath.empty())
+        {
+            try
+            {
+                const fs::path root =
+                    fs::absolute(fs::u8path(descriptorPath))
+                        .lexically_normal()
+                        .parent_path();
+                if (!RecoverProjectTransactions(root.generic_u8string()))
+                {
+                    return false;
+                }
+            }
+            catch (const std::exception& exception)
+            {
+                lastError_ = "Could not prepare project transaction recovery: " +
+                    std::string(exception.what());
+                return false;
+            }
+        }
+
         ProjectMetadata metadata;
         std::string error;
         if (!ReadProject(descriptorPath, metadata, error))
@@ -225,8 +376,8 @@ namespace renegade::bridge
         }
 
         // The additive v1 identity field is migrated only through mutable
-        // Studio open. Runtime inspection remains read-only and fails closed
-        // until this one-time migration has succeeded.
+        // Studio open. WriteProject() now provides validation, rollback,
+        // recovery evidence and a retained previous-descriptor backup.
         if (metadata.projectId.empty())
         {
             metadata.projectId = GenerateStableId();
@@ -267,6 +418,7 @@ namespace renegade::bridge
         currentProject_ = {};
         hasProject_ = false;
         lastError_.clear();
+        lastWarning_.clear();
     }
 
     bool ProjectService::HasProject() const noexcept
@@ -301,6 +453,11 @@ namespace renegade::bridge
     const std::string& ProjectService::LastError() const noexcept
     {
         return lastError_;
+    }
+
+    const std::string& ProjectService::LastWarning() const noexcept
+    {
+        return lastWarning_;
     }
 
     bool ProjectService::ReadProject(
@@ -414,13 +571,97 @@ namespace renegade::bridge
         }
     }
 
+    bool ProjectService::RecoverProjectTransactions(
+        const std::string& projectRoot)
+    {
+        const fs::path root = fs::u8path(projectRoot).lexically_normal();
+        const fs::path directory = ProjectTransactionDirectory(root);
+        std::error_code error;
+        if (!fs::exists(directory, error))
+        {
+            if (error)
+            {
+                lastError_ = "Could not inspect project transaction recovery: " +
+                    error.message();
+                return false;
+            }
+            return true;
+        }
+        if (!fs::is_directory(directory, error) || error)
+        {
+            lastError_ = "The project transaction location is not a directory: " +
+                directory.generic_u8string();
+            return false;
+        }
+
+        std::vector<fs::path> journals;
+        for (fs::directory_iterator iterator(directory, error);
+            !error && iterator != fs::directory_iterator();
+            iterator.increment(error))
+        {
+            if (!iterator->is_regular_file())
+            {
+                continue;
+            }
+            const std::string name =
+                iterator->path().filename().generic_u8string();
+            if (name.rfind(".renegade-transaction-", 0) == 0 &&
+                iterator->path().extension() == ".journal")
+            {
+                journals.push_back(iterator->path());
+            }
+        }
+        if (error)
+        {
+            lastError_ = "Could not enumerate project transaction recovery: " +
+                error.message();
+            return false;
+        }
+        std::sort(journals.begin(), journals.end());
+
+        ProjectDocumentTransaction transaction;
+        ProjectDocumentTransactionOptions options;
+        options.journalDirectory = directory.generic_u8string();
+        options.allowedRoot = root.generic_u8string();
+        std::size_t recoveredCount = 0;
+        for (const auto& journal : journals)
+        {
+            const auto result = transaction.Recover(
+                journal.generic_u8string(),
+                options);
+            if (!result.success)
+            {
+                lastError_ = "Project transaction recovery failed [" +
+                    result.code + "]: " + result.message;
+                return false;
+            }
+            ++recoveredCount;
+        }
+        if (recoveredCount > 0)
+        {
+            AppendWarning(
+                lastWarning_,
+                "Recovered " + std::to_string(recoveredCount) +
+                    " interrupted project document transaction(s).");
+        }
+        return true;
+    }
+
     bool ProjectService::WriteProject(const ProjectMetadata& metadata)
     {
+        lastError_.clear();
         if (!IsValidStableId(metadata.projectId))
         {
             lastError_ = "Could not write a project without a valid stable project ID.";
             return false;
         }
+        if (!IsValidProjectName(metadata.name) ||
+            !IsSafeRelativePath(fs::u8path(metadata.startupScene)))
+        {
+            lastError_ = "Could not write invalid project metadata.";
+            return false;
+        }
+
         const bool hasStartupFlowId = !metadata.startupFlowId.empty();
         const bool hasStartupFlowHint = !metadata.startupFlow.empty();
         const bool hasStartupScreenId = !metadata.startupScreenId.empty();
@@ -439,25 +680,97 @@ namespace renegade::bridge
             return false;
         }
 
-        wi::config::File projectFile;
-        projectFile.Open(metadata.descriptorPath);
-        projectFile.Set("format", ProjectFormat);
-        projectFile.Set("version", CurrentFormatVersion);
-        auto& project = projectFile.GetSection("project");
-        project.Set("project_id", metadata.projectId);
-        project.Set("name", metadata.name);
-        project.Set("startup_scene", metadata.startupScene);
-        project.Set("startup_flow_id", metadata.startupFlowId);
-        project.Set("startup_flow", metadata.startupFlow);
-        project.Set("startup_screen_id", metadata.startupScreenId);
-        project.Set("startup_screen", metadata.startupScreen);
-        projectFile.Commit();
-
-        if (!wi::helper::FileExists(metadata.descriptorPath))
+        std::error_code pathError;
+        const fs::path descriptor =
+            fs::absolute(fs::u8path(metadata.descriptorPath), pathError)
+                .lexically_normal();
+        if (pathError || descriptor.filename().empty())
         {
-            lastError_ =
-                "Could not write project descriptor: " + metadata.descriptorPath;
+            lastError_ = "Could not resolve the project descriptor path: " +
+                pathError.message();
             return false;
+        }
+        const fs::path root = descriptor.parent_path();
+
+        std::vector<std::uint8_t> previousContent;
+        const bool replacingExisting = fs::exists(descriptor, pathError);
+        if (pathError)
+        {
+            lastError_ = "Could not inspect the project descriptor: " +
+                pathError.message();
+            return false;
+        }
+        if (replacingExisting &&
+            !ReadFileBytes(descriptor, previousContent, lastError_))
+        {
+            return false;
+        }
+
+        const std::vector<std::uint8_t> requestedContent =
+            SerializeProjectDescriptor(metadata);
+        std::vector<ProjectDocumentWrite> writes;
+        writes.reserve(replacingExisting ? 2u : 1u);
+
+        // The retained last-good descriptor participates in the same
+        // multi-file transaction as the new descriptor. A backup failure
+        // therefore leaves the live descriptor untouched rather than becoming
+        // a post-save warning or a crash window between two transactions.
+        if (replacingExisting && previousContent != requestedContent)
+        {
+            ProjectDocumentWrite backupWrite;
+            backupWrite.destinationPath =
+                ProjectDescriptorBackupPath(descriptor).generic_u8string();
+            backupWrite.content = previousContent;
+            backupWrite.validator = [previousContent](
+                const std::string& path,
+                std::string& error)
+            {
+                return FileMatchesBytes(path, previousContent, error);
+            };
+            writes.push_back(std::move(backupWrite));
+        }
+
+        ProjectDocumentWrite descriptorWrite;
+        descriptorWrite.destinationPath = descriptor.generic_u8string();
+        descriptorWrite.content = requestedContent;
+        descriptorWrite.validator = [this, metadata](
+            const std::string& path,
+            std::string& error)
+        {
+            ProjectMetadata validated;
+            if (!ReadProject(path, validated, error))
+            {
+                return false;
+            }
+            if (!ProjectMetadataMatches(metadata, validated))
+            {
+                error = "The staged project descriptor did not round-trip exactly.";
+                return false;
+            }
+            error.clear();
+            return true;
+        };
+        writes.push_back(std::move(descriptorWrite));
+
+        ProjectDocumentTransactionOptions options;
+        options.journalDirectory =
+            ProjectTransactionDirectory(root).generic_u8string();
+        options.allowedRoot = root.generic_u8string();
+
+        ProjectDocumentTransaction transaction;
+        const auto result = transaction.Execute(std::move(writes), options);
+        if (!result.success)
+        {
+            lastError_ = "Project descriptor transaction failed [" +
+                result.code + "]: " + result.message;
+            return false;
+        }
+        if (result.recoveryRequired)
+        {
+            AppendWarning(
+                lastWarning_,
+                "Project descriptor committed, but transaction cleanup remains pending: " +
+                    result.message);
         }
 
         lastError_.clear();

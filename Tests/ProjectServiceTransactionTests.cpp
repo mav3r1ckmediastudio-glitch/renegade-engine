@@ -1,0 +1,291 @@
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/ProjectDocumentTransaction.h"
+#include "renegade/bridge/ProjectService.h"
+
+namespace
+{
+    namespace fs = std::filesystem;
+    using renegade::bridge::ProjectDocumentTransaction;
+    using renegade::bridge::ProjectDocumentTransactionHookAction;
+    using renegade::bridge::ProjectDocumentTransactionOptions;
+    using renegade::bridge::ProjectDocumentTransactionStage;
+    using renegade::bridge::ProjectDocumentWrite;
+    using renegade::bridge::ProjectMetadata;
+    using renegade::bridge::ProjectService;
+
+    int failures = 0;
+
+    void Check(const bool condition, const char* message)
+    {
+        if (!condition)
+        {
+            ++failures;
+            std::cerr << "FAIL: " << message << '\n';
+        }
+    }
+
+    void WriteText(const fs::path& path, const std::string& text)
+    {
+        fs::create_directories(path.parent_path());
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream.write(text.data(), static_cast<std::streamsize>(text.size()));
+    }
+
+    std::string ReadText(const fs::path& path)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        return std::string(
+            std::istreambuf_iterator<char>(stream),
+            std::istreambuf_iterator<char>());
+    }
+
+    void WriteScene(const fs::path& path)
+    {
+        fs::create_directories(path.parent_path());
+        std::ofstream(path, std::ios::binary).put('\0');
+    }
+
+    std::string LegacyDescriptor(const std::string& name)
+    {
+        return "format = renegade-project\n"
+            "version = 1\n\n"
+            "[project]\n"
+            "name = " + name + "\n"
+            "startup_scene = Content/Scenes/Main.wiscene\n";
+    }
+
+    std::string CurrentDescriptor(
+        const std::string& name,
+        const std::string& projectId)
+    {
+        return "format = renegade-project\n"
+            "version = 1\n\n"
+            "[project]\n"
+            "project_id = " + projectId + "\n"
+            "name = " + name + "\n"
+            "startup_scene = Content/Scenes/Main.wiscene\n"
+            "startup_flow_id = \n"
+            "startup_flow = \n"
+            "startup_screen_id = \n"
+            "startup_screen = \n";
+    }
+
+    bool HasTransactionArtifacts(const fs::path& root)
+    {
+        std::error_code error;
+        if (!fs::exists(root, error))
+        {
+            return false;
+        }
+        for (fs::recursive_directory_iterator iterator(root, error);
+            !error && iterator != fs::recursive_directory_iterator();
+            iterator.increment(error))
+        {
+            const std::string name =
+                iterator->path().filename().generic_u8string();
+            if (name.find(".renegade-stage-") != std::string::npos ||
+                name.find(".renegade-backup-") != std::string::npos ||
+                name.find(".renegade-restore-") != std::string::npos ||
+                name.find(".renegade-transaction-") != std::string::npos ||
+                name.find(".journal.writing") != std::string::npos)
+            {
+                return true;
+            }
+        }
+        return error.value() != 0;
+    }
+
+    void TestTransactionalLegacyMigration(const fs::path& root)
+    {
+        const fs::path descriptor = root / "LegacyProject.renegade";
+        const fs::path scene = root / "Content/Scenes/Main.wiscene";
+        const std::string legacy = LegacyDescriptor("LegacyProject");
+        WriteScene(scene);
+        WriteText(descriptor, legacy);
+
+        ProjectService projects;
+        projects.Initialize((root / "editor-state.ini").generic_u8string());
+        Check(projects.OpenProject(descriptor.generic_u8string()),
+            "transactional legacy migration did not open");
+        if (!projects.HasProject())
+        {
+            return;
+        }
+
+        Check(renegade::bridge::IsValidStableId(
+                projects.CurrentProject().projectId),
+            "transactional migration did not assign a valid project ID");
+
+        const fs::path backup = root / "LegacyProject.bak.renegade";
+        Check(fs::is_regular_file(backup),
+            "transactional migration did not retain the previous descriptor");
+        Check(ReadText(backup) == legacy,
+            "transactional migration backup did not preserve exact old bytes");
+
+        ProjectMetadata inspected;
+        std::string error;
+        Check(projects.InspectProject(
+                descriptor.generic_u8string(), inspected, error),
+            "migrated descriptor did not pass read-only inspection");
+        Check(inspected.projectId == projects.CurrentProject().projectId,
+            "migrated descriptor ID changed during inspection");
+        Check(!HasTransactionArtifacts(root),
+            "successful migration left transaction artifacts");
+    }
+
+    void TestInterruptedOpenRecovery(const fs::path& root)
+    {
+        constexpr const char* projectId =
+            "71111111-1111-4111-8111-111111111111";
+        const fs::path descriptor = root / "RecoveryProject.renegade";
+        const fs::path scene = root / "Content/Scenes/Main.wiscene";
+        const std::string original =
+            CurrentDescriptor("RecoveryProject", projectId);
+        WriteScene(scene);
+        WriteText(descriptor, original);
+
+        ProjectDocumentWrite write;
+        write.destinationPath = descriptor.generic_u8string();
+        const std::string invalid = "format = interrupted\n";
+        write.content.assign(invalid.begin(), invalid.end());
+        write.validator = [](
+            const std::string&,
+            std::string& error)
+        {
+            error.clear();
+            return true;
+        };
+
+        ProjectDocumentTransactionOptions options;
+        options.transactionId = "project-open-recovery";
+        options.journalDirectory =
+            (root / "Intermediate/Transactions").generic_u8string();
+        options.allowedRoot = root.generic_u8string();
+        options.operationHook = [](
+            const ProjectDocumentTransactionStage stage,
+            const std::size_t index,
+            const std::string&,
+            std::string& error)
+        {
+            if (stage == ProjectDocumentTransactionStage::AfterReplace &&
+                index == 0)
+            {
+                error = "simulated process interruption";
+                return ProjectDocumentTransactionHookAction::Interrupt;
+            }
+            return ProjectDocumentTransactionHookAction::Continue;
+        };
+
+        ProjectDocumentTransaction transaction;
+        auto interrupted = transaction.Execute({std::move(write)}, options);
+        Check(!interrupted.success && interrupted.recoveryRequired,
+            "interrupted project descriptor did not retain recovery evidence");
+        Check(ReadText(descriptor) == invalid,
+            "interrupted transaction did not reach the intended crash window");
+
+        ProjectService projects;
+        projects.Initialize((root / "editor-state.ini").generic_u8string());
+        Check(projects.OpenProject(descriptor.generic_u8string()),
+            "project open did not recover an interrupted descriptor transaction");
+        Check(ReadText(descriptor) == original,
+            "project open recovery did not restore exact descriptor bytes");
+        Check(projects.CurrentProject().projectId == projectId,
+            "project open recovery loaded the wrong project identity");
+        Check(!projects.LastWarning().empty(),
+            "project open recovery did not surface recovery evidence");
+        Check(!HasTransactionArtifacts(root),
+            "project open recovery left transaction artifacts");
+    }
+
+
+    void TestMigrationBackupFailurePreservesDescriptor(const fs::path& root)
+    {
+        const fs::path descriptor = root / "BlockedProject.renegade";
+        const fs::path scene = root / "Content/Scenes/Main.wiscene";
+        const fs::path backup = root / "BlockedProject.bak.renegade";
+        const std::string legacy = LegacyDescriptor("BlockedProject");
+        WriteScene(scene);
+        WriteText(descriptor, legacy);
+        fs::create_directories(backup);
+
+        ProjectService projects;
+        projects.Initialize((root / "editor-state.ini").generic_u8string());
+        Check(!projects.OpenProject(descriptor.generic_u8string()),
+            "migration unexpectedly succeeded without a valid backup destination");
+        Check(!projects.HasProject(),
+            "failed migration activated the project");
+        Check(ReadText(descriptor) == legacy,
+            "backup failure changed the legacy descriptor");
+        Check(fs::is_directory(backup),
+            "backup failure replaced the blocking directory");
+        Check(!HasTransactionArtifacts(root),
+            "backup failure left transaction artifacts");
+    }
+
+    void TestFreshProjectHasNoPreviousBackup(const fs::path& root)
+    {
+        const fs::path parent = root / "Projects";
+        const fs::path templateScene = root / "Template.wiscene";
+        fs::create_directories(parent);
+        WriteScene(templateScene);
+
+        ProjectService projects;
+        projects.Initialize((root / "editor-state.ini").generic_u8string());
+        Check(projects.CreateProject(
+                parent.generic_u8string(),
+                "FreshProject",
+                templateScene.generic_u8string()),
+            "fresh project creation failed through transaction path");
+
+        const fs::path projectRoot = parent / "FreshProject";
+        const fs::path descriptor = projectRoot / "FreshProject.renegade";
+        Check(fs::is_regular_file(descriptor),
+            "fresh transactional descriptor was not created");
+        Check(!fs::exists(projectRoot / "FreshProject.bak.renegade"),
+            "fresh project incorrectly created a previous-version backup");
+        Check(!HasTransactionArtifacts(projectRoot),
+            "fresh project creation left transaction artifacts");
+
+        ProjectMetadata inspected;
+        std::string error;
+        Check(projects.InspectProject(
+                descriptor.generic_u8string(), inspected, error),
+            "fresh transactional descriptor did not round-trip");
+    }
+}
+
+int main()
+{
+    const auto unique = std::chrono::high_resolution_clock::now()
+        .time_since_epoch().count();
+    const fs::path root = fs::temp_directory_path() /
+        fs::u8path("renegade-project-service-transaction-" +
+            std::to_string(unique));
+    fs::create_directories(root);
+
+    TestTransactionalLegacyMigration(root / "01-migration");
+    TestInterruptedOpenRecovery(root / "02-recovery");
+    TestFreshProjectHasNoPreviousBackup(root / "03-create");
+    TestMigrationBackupFailurePreservesDescriptor(root / "04-backup-failure");
+
+    std::error_code ignored;
+    fs::remove_all(root, ignored);
+
+    if (failures != 0)
+    {
+        std::cerr << failures << " project service transaction checks failed\n";
+        return 1;
+    }
+
+    std::cout << "PASS: project descriptor transaction, migration and recovery\n";
+    return 0;
+}

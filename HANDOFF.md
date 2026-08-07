@@ -1,23 +1,38 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-06
+**Date:** 2026-08-07
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Active branch:** `poc/lp03-minimal-runtime-screen`
+**Active branch:** `poc/lf02-project-document-transaction`
 
-**Branch base:** `f578c849896edc4048fa931ac658c339c6efb3e7`
+**Branch base:** `1cde35e` (merged LP03, PR #19)
 
-**Pull request:** Draft PR #19
+**Pull request:** PR #20, "Implement LF02 project document transactions"
 
-**LP03 verification:** GitHub Actions run #92 passed Debug and Release at `288dc91bba8e0e184dd8ac4fbc3e2ba224ad3f53`. Packaged Release proof passed startup rendering, mouse Play/Quit, keyboard Play/Quit, LP02 Level One entry, and normal exit code 0. Automated tests cover the gamepad-labelled dispatcher path; physical gamepad input is explicitly deferred because no controller was available.
+**LF02 verification:** Accepted implementation commit `c58a3ddbcfea492c7e86489546d25c8779abb229`. Renegade Studio workflow run 31131260961: SUCCESS (Windows x64 Debug and Release, full CTest suite). Windows baseline workflow run 31131262731: SUCCESS (Windows x64 Debug and Release; the first attempt's Release job failed only on a GitHub Actions hosted-runner acquisition timeout, not a code failure, and passed clean on re-run with no code changes). Full automated test result: 19/19, reproduced locally in both Debug and Release before pushing and independently confirmed by both CI workflows above. Acceptance result: PASS WITH LIMITATIONS — see `docs/LF02_PROJECT_DOCUMENT_TRANSACTIONS.md` for the full proof record; sole limitation is that editor-owned Flow and Screen dirty-state tracking is deferred until mutable editor document models and authoring workspaces exist.
 
 **Protected unrelated local modification:**
-`Tools/Windows-Build.Common.ps1` remains outside LF01 and must not be staged.
+`Tools/Windows-Build.Common.ps1` remains outside LF02 and must not be staged.
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## LP03 current truth
+## LF02 current truth
+
+LF02 replaces the direct, non-transactional `wi::config::File` commits that LF01 explicitly left as a proof primitive with a real disk transaction (`ProjectDocumentTransaction`): same-directory staged writes, pre-commit validation, previous-version backup, deterministic path-ordered atomic replacement, rollback on partial failure, a durable journal, and automatic recovery of an interrupted transaction on next project open. `ProjectService::WriteProject` (including the LF01 legacy `project_id` migration), `WriteFlowDocument`, and `WriteScreenDocument` now commit through this transaction rather than direct `wi::config::File` writes.
+
+Validation evidence:
+
+- `RenegadeProjectDocumentTransactionTests` (16 checks) proves the transaction primitive in isolation: deterministic path-sorted commit, no-op save, forced failure at every stage (preparation, journal, staging, validation, backup, first replacement, later replacement, post-replacement re-validation), rollback of newly-created destinations, a rollback-failure requiring a separate `Recover()` call, simulated process interruption recovered by `Recover()`, a committed transaction surviving a cleanup-stage failure, `allowedRoot` containment against escaped destinations and journal directories, and rejection of a malformed/foreign journal file.
+- `RenegadeProjectServiceTransactionTests` (4 checks) proves the same contract through the real `ProjectService` production caller: transactional legacy migration with an exact-byte `.bak.renegade`, `OpenProject` recovering an interrupted descriptor transaction and surfacing it through `LastWarning()`, a blocked backup destination failing migration cleanly with the original descriptor untouched, and fresh project creation producing no spurious backup.
+- `RenegadeFlowTests` and `RenegadeScreenTests` were each extended with a transactional-update block proving the write/backup/reopen contract for Story Flow and Runtime screen documents respectively.
+- A test-fixture bug found during this work (the Flow transactional-update block left its fixture permanently renamed, causing `RenegadeFlowTests: game.start did not enter Level One`) was diagnosed, fixed, and verified — locally and independently reproduced as a real CI failure on the pre-fix commit, then confirmed fixed by both local and CI re-runs.
+
+LF02 does not add a project-wide multi-document Save command, does not change WISCENE's own save transaction (`SceneDocumentService`, unchanged), and does not add Story Flow or Runtime screen *authoring* UI. Two known gaps remain for a future slice: a migration-content-validation failure (as opposed to an I/O failure) has no dedicated test yet, and `ReplaceFileAtomically` is currently duplicated between `SceneDocumentService.cpp` and `ProjectDocumentTransaction.cpp` pending extraction to shared code.
+
+The older slice history below is retained as reference.
+
+## Prior slice — LP03
 
 LP03 adds a bounded, serialized Renegade-owned `runtime-screen` document and a
 Runtime-owned stable action dispatcher. A project may reference a startup screen

@@ -103,6 +103,61 @@ int main()
         return Fail(temporary.path, "flow document did not round-trip");
     }
 
+    const std::string previousLevelName = document.nodes[1].name;
+    document.nodes[1].name = "Level One Updated";
+    if (!WriteFlowDocument(
+            flowPath.generic_u8string(),
+            document,
+            error))
+    {
+        return Fail(
+            temporary.path,
+            "updated flow document did not commit transactionally");
+    }
+
+    const fs::path flowBackup =
+        flowPath.parent_path() /
+        fs::u8path(flowPath.filename().generic_u8string() + ".bak");
+    FlowDocument previousFlow;
+    if (!ReadFlowDocument(
+            flowBackup.generic_u8string(),
+            projectId,
+            previousFlow,
+            error) ||
+        previousFlow.nodes.size() != document.nodes.size() ||
+        previousFlow.nodes[1].name != previousLevelName)
+    {
+        return Fail(
+            temporary.path,
+            "Story Flow transaction did not retain its last-good backup");
+    }
+
+    if (!ReadFlowDocument(
+            flowPath.generic_u8string(),
+            projectId,
+            reopened,
+            error) ||
+        reopened.nodes[1].name != "Level One Updated")
+    {
+        return Fail(
+            temporary.path,
+            "Story Flow transactional update was not authoritative");
+    }
+
+    // The transactional-update assertions above intentionally renamed
+    // nodes[1] to prove the write/backup/reopen path. Revert it in memory
+    // *and* commit that revert to disk, since everything below this point
+    // re-reads the file rather than reusing the in-memory `document` — so
+    // the remaining interpreter assertions exercise the documented
+    // "Level One" fixture rather than this test's own leftover mutation.
+    document.nodes[1].name = previousLevelName;
+    if (!WriteFlowDocument(flowPath.generic_u8string(), document, error))
+    {
+        return Fail(
+            temporary.path,
+            "reverted flow document did not commit transactionally");
+    }
+
     const fs::path movedPath =
         temporary.path / "Content/Flow/Renamed.renegade-flow";
     fs::rename(flowPath, movedPath);

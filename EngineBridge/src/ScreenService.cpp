@@ -388,81 +388,103 @@ namespace renegade::bridge
         {
             return false;
         }
-        if (!WriteDocumentEnvelope(filePath, document.envelope, error))
-        {
-            return false;
-        }
 
-        try
-        {
-            wi::config::File file;
-            if (!file.Open(filePath))
+        const StableId expectedDocumentId = document.envelope.documentId;
+        const StableId expectedProjectId = document.envelope.projectId;
+        const std::size_t expectedActionCount = document.actions.size();
+        const std::size_t expectedWidgetCount = document.widgets.size();
+        const std::size_t expectedFocusCount = document.focusOrder.size();
+
+        return WriteTransactionalDocument(
+            filePath,
+            document.envelope,
+            false,
+            [&document](wi::config::File& file)
             {
-                error = "Could not reopen Runtime screen document: " + filePath;
-                return false;
-            }
+                auto& screen = file.GetSection("screen");
+                screen.Set("design_width", document.designWidth);
+                screen.Set("design_height", document.designHeight);
+                screen.Set(
+                    "action_count",
+                    static_cast<int>(document.actions.size()));
+                screen.Set(
+                    "widget_count",
+                    static_cast<int>(document.widgets.size()));
+                screen.Set(
+                    "focus_count",
+                    static_cast<int>(document.focusOrder.size()));
 
-            auto& screen = file.GetSection("screen");
-            screen.Set("design_width", document.designWidth);
-            screen.Set("design_height", document.designHeight);
-            screen.Set("action_count", static_cast<int>(document.actions.size()));
-            screen.Set("widget_count", static_cast<int>(document.widgets.size()));
-            screen.Set("focus_count", static_cast<int>(document.focusOrder.size()));
+                for (std::size_t index = 0;
+                    index < document.actions.size(); ++index)
+                {
+                    auto& section = file.GetSection(
+                        IndexedSection("action_", index).c_str());
+                    section.Set("id", document.actions[index].id);
+                }
 
-            for (std::size_t index = 0; index < document.actions.size(); ++index)
+                for (std::size_t index = 0;
+                    index < document.widgets.size(); ++index)
+                {
+                    const auto& widget = document.widgets[index];
+                    auto& section = file.GetSection(
+                        IndexedSection("widget_", index).c_str());
+                    section.Set("id", widget.id);
+                    section.Set(
+                        "kind",
+                        ScreenWidgetKindName(widget.kind));
+                    section.Set("name", widget.name);
+                    section.Set("x", widget.rect.x);
+                    section.Set("y", widget.rect.y);
+                    section.Set("width", widget.rect.width);
+                    section.Set("height", widget.rect.height);
+                    section.Set("visible", widget.visible);
+                    section.Set("enabled", widget.enabled);
+                    section.Set("text", widget.text);
+                    section.Set("resource", widget.resourcePath);
+                    section.Set("action", widget.actionId);
+                }
+
+                for (std::size_t index = 0;
+                    index < document.focusOrder.size(); ++index)
+                {
+                    auto& section = file.GetSection(
+                        IndexedSection("focus_", index).c_str());
+                    section.Set(
+                        "widget_id",
+                        document.focusOrder[index]);
+                }
+            },
+            [
+                expectedDocumentId,
+                expectedProjectId,
+                expectedActionCount,
+                expectedWidgetCount,
+                expectedFocusCount](
+                    const std::string& path,
+                    std::string& validationError)
             {
-                auto& section = file.GetSection(
-                    IndexedSection("action_", index).c_str());
-                section.Set("id", document.actions[index].id);
-            }
-
-            for (std::size_t index = 0; index < document.widgets.size(); ++index)
-            {
-                const auto& widget = document.widgets[index];
-                auto& section = file.GetSection(
-                    IndexedSection("widget_", index).c_str());
-                section.Set("id", widget.id);
-                section.Set("kind", ScreenWidgetKindName(widget.kind));
-                section.Set("name", widget.name);
-                section.Set("x", widget.rect.x);
-                section.Set("y", widget.rect.y);
-                section.Set("width", widget.rect.width);
-                section.Set("height", widget.rect.height);
-                section.Set("visible", widget.visible);
-                section.Set("enabled", widget.enabled);
-                section.Set("text", widget.text);
-                section.Set("resource", widget.resourcePath);
-                section.Set("action", widget.actionId);
-            }
-
-            for (std::size_t index = 0; index < document.focusOrder.size(); ++index)
-            {
-                auto& section = file.GetSection(
-                    IndexedSection("focus_", index).c_str());
-                section.Set("widget_id", document.focusOrder[index]);
-            }
-
-            file.Commit();
-
-            ScreenDocument roundTrip;
-            if (!ReadScreenDocument(
-                    filePath,
-                    document.envelope.projectId,
-                    roundTrip,
-                    error))
-            {
-                return false;
-            }
-
-            error.clear();
-            return true;
-        }
-        catch (const std::exception& exception)
-        {
-            error = std::string("Could not write Runtime screen document: ") +
-                exception.what();
-            return false;
-        }
+                ScreenDocument roundTrip;
+                if (!ReadScreenDocument(
+                        path,
+                        expectedProjectId,
+                        roundTrip,
+                        validationError))
+                {
+                    return false;
+                }
+                if (roundTrip.envelope.documentId != expectedDocumentId ||
+                    roundTrip.actions.size() != expectedActionCount ||
+                    roundTrip.widgets.size() != expectedWidgetCount ||
+                    roundTrip.focusOrder.size() != expectedFocusCount)
+                {
+                    validationError =
+                        "The Runtime screen document did not round-trip exactly.";
+                    return false;
+                }
+                validationError.clear();
+                return true;
+            },
+            error);
     }
 
     bool ReadScreenDocument(

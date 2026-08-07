@@ -563,90 +563,111 @@ namespace renegade::bridge
         {
             return false;
         }
-        if (!WriteDocumentEnvelope(filePath, document.envelope, error))
-        {
-            return false;
-        }
 
-        try
-        {
-            wi::config::File file;
-            if (!file.Open(filePath))
+        const StableId expectedDocumentId = document.envelope.documentId;
+        const StableId expectedProjectId = document.envelope.projectId;
+        const StableId expectedStartNode = document.startNodeId;
+        const std::size_t expectedNodeCount = document.nodes.size();
+        const std::size_t expectedRouteCount = document.routes.size();
+
+        return WriteTransactionalDocument(
+            filePath,
+            document.envelope,
+            false,
+            [&document](wi::config::File& file)
             {
-                error = "Could not reopen Story Flow document: " + filePath;
-                return false;
-            }
+                auto& flow = file.GetSection("flow");
+                flow.Set("start_node", document.startNodeId);
+                flow.Set(
+                    "node_count",
+                    static_cast<int>(document.nodes.size()));
+                flow.Set(
+                    "route_count",
+                    static_cast<int>(document.routes.size()));
 
-            auto& flow = file.GetSection("flow");
-            flow.Set("start_node", document.startNodeId);
-            flow.Set("node_count", static_cast<int>(document.nodes.size()));
-            flow.Set("route_count", static_cast<int>(document.routes.size()));
-
-            for (std::size_t index = 0; index < document.nodes.size(); ++index)
-            {
-                const auto& node = document.nodes[index];
-                auto& section = file.GetSection(
-                    IndexedSection("node_", index).c_str());
-                section.Set("id", node.id);
-                section.Set("kind", FlowNodeKindName(node.kind));
-                section.Set("name", node.name);
-                section.Set("scene_asset_id", node.sceneAssetId);
-                section.Set("scene_path_hint", node.scenePathHint);
-            }
-
-            for (std::size_t index = 0; index < document.routes.size(); ++index)
-            {
-                const auto& route = document.routes[index];
-                auto& section = file.GetSection(
-                    IndexedSection("route_", index).c_str());
-                section.Set("id", route.id);
-                section.Set("source", route.sourceNodeId);
-                section.Set("outcome", route.outcome);
-                section.Set("destination", route.destinationNodeId);
-                section.Set("destination_entry", route.destinationEntry);
-                section.Set("priority", route.priority);
-                section.Set(
-                    "condition_count",
-                    static_cast<int>(route.conditions.size()));
-
-                for (std::size_t conditionIndex = 0;
-                    conditionIndex < route.conditions.size();
-                    ++conditionIndex)
+                for (std::size_t index = 0;
+                    index < document.nodes.size(); ++index)
                 {
-                    const auto& condition = route.conditions[conditionIndex];
-                    section.Set(
-                        IndexedKey(conditionIndex, "key").c_str(),
-                        condition.key);
-                    section.Set(
-                        IndexedKey(conditionIndex, "operator").c_str(),
-                        FlowConditionOperatorName(condition.operation));
-                    section.Set(
-                        IndexedKey(conditionIndex, "value").c_str(),
-                        condition.value);
+                    const auto& node = document.nodes[index];
+                    auto& section = file.GetSection(
+                        IndexedSection("node_", index).c_str());
+                    section.Set("id", node.id);
+                    section.Set("kind", FlowNodeKindName(node.kind));
+                    section.Set("name", node.name);
+                    section.Set("scene_asset_id", node.sceneAssetId);
+                    section.Set("scene_path_hint", node.scenePathHint);
                 }
-            }
 
-            file.Commit();
+                for (std::size_t index = 0;
+                    index < document.routes.size(); ++index)
+                {
+                    const auto& route = document.routes[index];
+                    auto& section = file.GetSection(
+                        IndexedSection("route_", index).c_str());
+                    section.Set("id", route.id);
+                    section.Set("source", route.sourceNodeId);
+                    section.Set("outcome", route.outcome);
+                    section.Set("destination", route.destinationNodeId);
+                    section.Set(
+                        "destination_entry",
+                        route.destinationEntry);
+                    section.Set("priority", route.priority);
+                    section.Set(
+                        "condition_count",
+                        static_cast<int>(route.conditions.size()));
 
-            FlowDocument roundTrip;
-            if (!ReadFlowDocument(
-                    filePath,
-                    document.envelope.projectId,
-                    roundTrip,
-                    error))
+                    for (std::size_t conditionIndex = 0;
+                        conditionIndex < route.conditions.size();
+                        ++conditionIndex)
+                    {
+                        const auto& condition =
+                            route.conditions[conditionIndex];
+                        section.Set(
+                            IndexedKey(conditionIndex, "key").c_str(),
+                            condition.key);
+                        section.Set(
+                            IndexedKey(
+                                conditionIndex,
+                                "operator").c_str(),
+                            FlowConditionOperatorName(
+                                condition.operation));
+                        section.Set(
+                            IndexedKey(conditionIndex, "value").c_str(),
+                            condition.value);
+                    }
+                }
+            },
+            [
+                expectedDocumentId,
+                expectedProjectId,
+                expectedStartNode,
+                expectedNodeCount,
+                expectedRouteCount](
+                    const std::string& path,
+                    std::string& validationError)
             {
-                return false;
-            }
-
-            error.clear();
-            return true;
-        }
-        catch (const std::exception& exception)
-        {
-            error = std::string("Could not write Story Flow document: ") +
-                exception.what();
-            return false;
-        }
+                FlowDocument roundTrip;
+                if (!ReadFlowDocument(
+                        path,
+                        expectedProjectId,
+                        roundTrip,
+                        validationError))
+                {
+                    return false;
+                }
+                if (roundTrip.envelope.documentId != expectedDocumentId ||
+                    roundTrip.startNodeId != expectedStartNode ||
+                    roundTrip.nodes.size() != expectedNodeCount ||
+                    roundTrip.routes.size() != expectedRouteCount)
+                {
+                    validationError =
+                        "The Story Flow document did not round-trip exactly.";
+                    return false;
+                }
+                validationError.clear();
+                return true;
+            },
+            error);
     }
 
     bool ReadFlowDocument(
