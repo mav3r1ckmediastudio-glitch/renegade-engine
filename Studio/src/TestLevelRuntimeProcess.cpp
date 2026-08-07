@@ -591,10 +591,16 @@ namespace renegade::studio
         // Application" dialog) independently of the failure it reports back
         // to this process. That dialog is invisible to an automated caller
         // but blocks any unattended/CI launch indefinitely. Suppress it for
-        // the duration of this call only, then restore the previous mode so
-        // legitimate OS dialogs elsewhere in Studio are unaffected.
-        const UINT previousErrorMode = SetErrorMode(
-            SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+        // the duration of this call, on this thread only: SetErrorMode is
+        // process-wide and would also suppress hard-error dialogs on any
+        // other thread in Studio during this window, which is not the
+        // intent here. Microsoft's own guidance is explicit: "Callers
+        // should favor SetThreadErrorMode over SetErrorMode since it is
+        // less disruptive to the normal behavior of the system."
+        DWORD previousErrorMode = 0;
+        SetThreadErrorMode(
+            SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX,
+            &previousErrorMode);
         const BOOL created = CreateProcessW(
                 executable.c_str(),
                 mutableCommandLine.data(),
@@ -606,7 +612,7 @@ namespace renegade::studio
                 workingDirectoryPointer,
                 &startup,
                 &processInfo);
-        SetErrorMode(previousErrorMode);
+        SetThreadErrorMode(previousErrorMode, nullptr);
         if (!created)
         {
             const DWORD code = GetLastError();
