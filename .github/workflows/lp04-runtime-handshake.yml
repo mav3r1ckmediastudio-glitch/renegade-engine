@@ -1,19 +1,14 @@
 name: LP04 Runtime handshake probe
 
+# Manual-only (workflow_dispatch). This previously also ran on pull_request
+# for paths touching the handshake test/Runtime readiness code, but the
+# probe cannot currently pass on GitHub's hosted Windows runners - see
+# docs/LP04_GATE3B2_RUNTIME_HANDSHAKE_EVIDENCE.md. Automatically re-running
+# and failing a check nobody can fix (a hosted-runner graphics-environment
+# limitation, not a code defect) would just be noise. Kept available to
+# re-run by hand if a future runner generation might support it.
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/lp04-runtime-handshake.yml"
-      - "CMakeLists.txt"
-      - "EngineBridge/**"
-      - "Runtime/**"
-      - "Studio/src/TestLevelRuntimeProcess.cpp"
-      - "Studio/src/TestLevelRuntimeProcess.h"
-      - "Tests/CMakeLists.txt"
-      - "Tests/TestLevelRuntimeHandshakeTests.cpp"
-      - "Tools/TerrainSurfacePacker.cpp"
-      - ".gitmodules"
 
 permissions:
   contents: read
