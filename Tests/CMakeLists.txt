@@ -468,3 +468,32 @@ add_test(
     COMMAND RenegadeTestLevelRuntimeProcessTests
         "$<TARGET_FILE:RenegadeTestLevelProcessFixture>"
 )
+
+# LP04 Gate 3B2a - real Runtime handshake proof. Deliberately EXCLUDE_FROM_ALL
+# and NOT registered with add_test: this launches the real windowed
+# RenegadeRuntime.exe end to end, which has not yet been proven stable on
+# the GitHub Actions Windows runner's graphics adapter. Build and run this
+# target explicitly and locally first (Gate 3B2a); only promote it into
+# CTest/CI (Gate 3B2b) once real, observed behavior confirms it is stable.
+add_executable(RenegadeTestLevelRuntimeHandshakeTests EXCLUDE_FROM_ALL
+    TestLevelRuntimeHandshakeTests.cpp
+)
+
+target_link_libraries(RenegadeTestLevelRuntimeHandshakeTests
+    PRIVATE
+        Renegade::TestLevelRuntimeProcess
+)
+
+target_compile_options(RenegadeTestLevelRuntimeHandshakeTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeTestLevelRuntimeHandshakeTests PROPERTIES
+    FOLDER "Renegade/Manual"
+)
+
+add_dependencies(
+    RenegadeTestLevelRuntimeHandshakeTests
+    RenegadeRuntime
+)
