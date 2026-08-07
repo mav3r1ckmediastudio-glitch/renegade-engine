@@ -1,3 +1,34 @@
+add_library(RenegadeTestLevelRuntimeProcess STATIC
+    src/TestLevelRuntimeProcess.cpp
+    src/TestLevelRuntimeProcess.h
+)
+
+add_library(
+    Renegade::TestLevelRuntimeProcess
+    ALIAS RenegadeTestLevelRuntimeProcess
+)
+
+target_include_directories(RenegadeTestLevelRuntimeProcess
+    PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+
+target_link_libraries(RenegadeTestLevelRuntimeProcess
+    PUBLIC
+        Renegade::EngineBridge
+)
+
+target_compile_definitions(RenegadeTestLevelRuntimeProcess
+    PRIVATE
+        UNICODE
+        _UNICODE
+)
+
+target_compile_options(RenegadeTestLevelRuntimeProcess
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
 add_executable(RenegadeStudio WIN32
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/Translator.cpp"
     src/RenegadeStudioChrome.cpp
@@ -23,6 +54,7 @@ target_include_directories(RenegadeStudio
 target_link_libraries(RenegadeStudio
     PRIVATE
         Renegade::EngineBridge
+        Renegade::TestLevelRuntimeProcess
 )
 
 target_compile_definitions(RenegadeStudio

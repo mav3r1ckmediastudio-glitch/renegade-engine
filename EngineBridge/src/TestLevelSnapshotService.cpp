@@ -370,16 +370,17 @@ namespace renegade::bridge
         }
     }
 
-    bool TestLevelSnapshotService::Cleanup(
-        const TestLevelSnapshot& snapshot,
-        std::string& error) const
+    bool TestLevelSnapshotService::CleanupDirectory(
+        const std::string& projectRoot,
+        const std::string& sessionDirectoryText,
+        std::string& error)
     {
-        if (snapshot.sessionDirectory.empty())
+        if (sessionDirectoryText.empty())
         {
             error.clear();
             return true;
         }
-        if (snapshot.projectRoot.empty())
+        if (projectRoot.empty())
         {
             error = "Test Level snapshot cleanup is missing its project root.";
             return false;
@@ -389,7 +390,7 @@ namespace renegade::bridge
         {
             std::error_code pathError;
             const fs::path root =
-                fs::absolute(fs::u8path(snapshot.projectRoot), pathError)
+                fs::absolute(fs::u8path(projectRoot), pathError)
                     .lexically_normal();
             if (pathError)
             {
@@ -401,7 +402,7 @@ namespace renegade::bridge
                 (root / "Intermediate" / "TestLevelSnapshots")
                     .lexically_normal();
             const fs::path sessionDirectory =
-                fs::absolute(fs::u8path(snapshot.sessionDirectory), pathError)
+                fs::absolute(fs::u8path(sessionDirectoryText), pathError)
                     .lexically_normal();
             if (pathError || sessionDirectory.filename().empty() ||
                 sessionDirectory.parent_path() != snapshotsRoot)
@@ -419,5 +420,15 @@ namespace renegade::bridge
                 exception.what();
             return false;
         }
+    }
+
+    bool TestLevelSnapshotService::Cleanup(
+        const TestLevelSnapshot& snapshot,
+        std::string& error) const
+    {
+        return CleanupDirectory(
+            snapshot.projectRoot,
+            snapshot.sessionDirectory,
+            error);
     }
 }

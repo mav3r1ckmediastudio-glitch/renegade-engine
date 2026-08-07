@@ -69,6 +69,14 @@ namespace renegade::bridge
             TestLevelSnapshotFailureInjection failureInjection =
                 TestLevelSnapshotFailureInjection::None);
 
+        // Process-lifecycle code needs the same path-safety guarantee without
+        // constructing a scene-bound service instance. This is the single
+        // cleanup primitive used by both normal snapshot cleanup and Gate 3.
+        [[nodiscard]] static bool CleanupDirectory(
+            const std::string& projectRoot,
+            const std::string& sessionDirectory,
+            std::string& error);
+
         // Idempotent for an already-removed snapshot. Refuses paths that are
         // not direct children of <project>/Intermediate/TestLevelSnapshots.
         [[nodiscard]] bool Cleanup(

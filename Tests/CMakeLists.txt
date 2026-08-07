@@ -421,3 +421,50 @@ add_test(
     NAME RenegadeTestLevelSnapshotRuntimeTests
     COMMAND RenegadeTestLevelSnapshotRuntimeTests
 )
+
+add_executable(RenegadeTestLevelProcessFixture
+    TestLevelProcessFixture.cpp
+)
+
+target_compile_options(RenegadeTestLevelProcessFixture
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeTestLevelProcessFixture PROPERTIES
+    FOLDER "Renegade/TestFixtures"
+)
+
+add_executable(RenegadeTestLevelRuntimeProcessTests
+    TestLevelRuntimeProcessTests.cpp
+)
+
+target_link_libraries(RenegadeTestLevelRuntimeProcessTests
+    PRIVATE
+        Renegade::TestLevelRuntimeProcess
+)
+
+target_compile_options(RenegadeTestLevelRuntimeProcessTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeTestLevelRuntimeProcessTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(
+    RenegadeTestLevelRuntimeProcessTests
+    RenegadeTestLevelProcessFixture
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeTestLevelRuntimeProcessTests
+)
+
+add_test(
+    NAME RenegadeTestLevelRuntimeProcessTests
+    COMMAND RenegadeTestLevelRuntimeProcessTests
+        "$<TARGET_FILE:RenegadeTestLevelProcessFixture>"
+)
