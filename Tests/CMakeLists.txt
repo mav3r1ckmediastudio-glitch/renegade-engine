@@ -372,3 +372,23 @@ add_test(
     NAME RenegadeProjectServiceTransactionTests
     COMMAND RenegadeProjectServiceTransactionTests
 )
+
+add_executable(RenegadeTestLevelSnapshotTests
+    TestLevelSnapshotTests.cpp
+)
+
+target_link_libraries(RenegadeTestLevelSnapshotTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeTestLevelSnapshotTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeTestLevelSnapshotTests)
+
+add_test(
+    NAME RenegadeTestLevelSnapshotTests
+    COMMAND RenegadeTestLevelSnapshotTests
+)
