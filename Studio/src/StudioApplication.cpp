@@ -1,5 +1,7 @@
 #include "StudioApplication.h"
 
+#include "renegade/bridge/TestLevelSnapshotService.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -2074,6 +2076,12 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::SceneWorkspace:
                 pendingAction_ = EditorAction::OpenSceneWorkspace;
                 break;
+            case RenegadeStudioChrome::Action::TestLevelPlay:
+                pendingAction_ = EditorAction::StartTestLevel;
+                break;
+            case RenegadeStudioChrome::Action::TestLevelStop:
+                pendingAction_ = EditorAction::StopTestLevel;
+                break;
             case RenegadeStudioChrome::Action::ValidateModelImport:
                 pendingAction_ = EditorAction::ValidateModelImport;
                 break;
@@ -2498,6 +2506,8 @@ namespace renegade::studio
 
     void StudioRenderPath::Update(const float dt)
     {
+        PollTestLevel();
+
         // Scene deserialization runs on Wicked's job system. Keep the current
         // document visible but immutable until its prepared replacement is
         // committed at EVENT_THREAD_SAFE_POINT. This check intentionally
@@ -2513,6 +2523,18 @@ namespace renegade::studio
 
         if (session_ == nullptr || projectHubVisible_)
         {
+            return;
+        }
+
+        if (testLevelRuntime_.IsActive())
+        {
+            const auto state = testLevelRuntime_.LastResult().state;
+            statusLabel_.SetText(
+                state == TestLevelProcessState::Running
+                    ? "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT"
+                    : "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
+            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+            studioChrome_.SetStatusText(statusLabel_.GetText());
             return;
         }
 
@@ -3843,6 +3865,12 @@ namespace renegade::studio
         case EditorAction::OpenSceneWorkspace:
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
+            break;
+        case EditorAction::StartTestLevel:
+            StartTestLevel();
+            break;
+        case EditorAction::StopTestLevel:
+            StopTestLevel();
             break;
         case EditorAction::StartSunPreview:
             StartSunPreview();
@@ -6485,6 +6513,200 @@ namespace renegade::studio
     {
         importScalePanel_.SetVisible(false);
         importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
+    }
+
+    std::string StudioRenderPath::ResolveTestLevelRuntimePath() const
+    {
+        std::error_code pathError;
+        const fs::path workingDirectory = fs::current_path(pathError);
+        if (pathError)
+        {
+            return {};
+        }
+
+        std::vector<fs::path> candidates = {
+            workingDirectory / "Runtime" / "RenegadeRuntime.exe",
+            workingDirectory / "RenegadeRuntime.exe",
+        };
+
+        const fs::path configuration = workingDirectory.filename();
+        const fs::path buildRoot = workingDirectory.parent_path().parent_path();
+        if (!configuration.empty() && !buildRoot.empty())
+        {
+            candidates.push_back(
+                buildRoot / "Runtime" / configuration / "RenegadeRuntime.exe");
+        }
+
+        for (const auto& candidate : candidates)
+        {
+            pathError.clear();
+            if (fs::is_regular_file(candidate, pathError) && !pathError)
+            {
+                return candidate.lexically_normal().generic_u8string();
+            }
+        }
+        return {};
+    }
+
+    std::string StudioRenderPath::TestLevelBackendArgument() const
+    {
+        const auto* device = wi::graphics::GetDevice();
+        if (device != nullptr && std::string(device->GetTag()) == "[Vulkan]")
+        {
+            return "vulkan";
+        }
+        return "dx12";
+    }
+
+    void StudioRenderPath::StartTestLevel()
+    {
+        if (session_ == nullptr || !session_->Projects().HasProject())
+        {
+            wi::helper::messageBox(
+                "Open or create a Renegade project before starting Test Level.",
+                "Test Level");
+            return;
+        }
+        if (testLevelRuntime_.IsActive())
+        {
+            return;
+        }
+
+        bridge::TestLevelSnapshotService snapshotService(
+            session_->Scenes(),
+            session_->Commands());
+        bridge::TestLevelSnapshot snapshot;
+        std::string error;
+        ClearSelectionOutline();
+        const bool snapshotCreated = snapshotService.Create(
+            session_->Projects().CurrentProject(),
+            snapshot,
+            error);
+        SyncSelectionOutline();
+        if (!snapshotCreated)
+        {
+            studioChrome_.SetTestLevelState(
+                RenegadeStudioChrome::TestLevelState::Idle);
+            studioChrome_.SetStatusText("TEST LEVEL // SNAPSHOT FAILED");
+            wi::helper::messageBox(
+                "Renegade could not create the Test Level snapshot.\n\n" +
+                    error,
+                "Test Level");
+            return;
+        }
+
+        const std::string runtimePath = ResolveTestLevelRuntimePath();
+        if (runtimePath.empty())
+        {
+            std::string cleanupError;
+            snapshotService.Cleanup(snapshot, cleanupError);
+            studioChrome_.SetTestLevelState(
+                RenegadeStudioChrome::TestLevelState::Idle);
+            studioChrome_.SetStatusText("TEST LEVEL // RUNTIME NOT FOUND");
+
+            std::string message =
+                "RenegadeRuntime.exe was not found beside this Studio build.";
+            if (!cleanupError.empty())
+            {
+                message += "\n\nSnapshot cleanup warning: " + cleanupError;
+            }
+            wi::helper::messageBox(message, "Test Level");
+            return;
+        }
+
+        TestLevelLaunchOptions options;
+        options.executablePath = runtimePath;
+        options.workingDirectory =
+            fs::u8path(runtimePath).parent_path().generic_u8string();
+        options.arguments = {
+            TestLevelBackendArgument(),
+            "--project",
+            snapshot.descriptorPath,
+        };
+        options.startupTimeout = std::chrono::milliseconds(60000);
+
+        if (!testLevelRuntime_.Launch(
+                std::move(options),
+                std::move(snapshot),
+                error))
+        {
+            studioChrome_.SetTestLevelState(
+                RenegadeStudioChrome::TestLevelState::Idle);
+            studioChrome_.SetStatusText("TEST LEVEL // LAUNCH FAILED");
+            wi::helper::messageBox(
+                "Renegade could not launch Test Level.\n\n" + error,
+                "Test Level");
+            return;
+        }
+
+        studioChrome_.SetTestLevelState(
+            RenegadeStudioChrome::TestLevelState::Starting);
+        studioChrome_.SetStatusText(
+            "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
+    }
+
+    void StudioRenderPath::PollTestLevel()
+    {
+        if (!testLevelRuntime_.IsActive())
+        {
+            return;
+        }
+
+        const TestLevelProcessResult result = testLevelRuntime_.Poll();
+        if (result.state == TestLevelProcessState::Running)
+        {
+            studioChrome_.SetTestLevelState(
+                RenegadeStudioChrome::TestLevelState::Running);
+            studioChrome_.SetStatusText(
+                "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT");
+            return;
+        }
+        if (!result.finished)
+        {
+            studioChrome_.SetTestLevelState(
+                RenegadeStudioChrome::TestLevelState::Starting);
+            return;
+        }
+
+        studioChrome_.SetTestLevelState(
+            RenegadeStudioChrome::TestLevelState::Idle);
+        if (result.succeeded)
+        {
+            studioChrome_.SetStatusText("TEST LEVEL // COMPLETED");
+            return;
+        }
+
+        studioChrome_.SetStatusText("TEST LEVEL // FAILED");
+        std::string message = result.message.empty()
+            ? "The Test Level Runtime stopped before it became ready."
+            : result.message;
+        if (!result.warning.empty())
+        {
+            message += "\n\nWarning: " + result.warning;
+        }
+        wi::helper::messageBox(message, "Test Level");
+    }
+
+    void StudioRenderPath::StopTestLevel()
+    {
+        if (!testLevelRuntime_.IsActive())
+        {
+            studioChrome_.SetTestLevelState(
+                RenegadeStudioChrome::TestLevelState::Idle);
+            return;
+        }
+
+        const TestLevelProcessResult result = testLevelRuntime_.Stop();
+        studioChrome_.SetTestLevelState(
+            RenegadeStudioChrome::TestLevelState::Idle);
+        studioChrome_.SetStatusText(
+            result.cleanupSucceeded
+                ? "TEST LEVEL // STOPPED // SNAPSHOT CLEAN"
+                : "TEST LEVEL // STOPPED // CLEANUP WARNING");
+        if (!result.warning.empty())
+        {
+            wi::helper::messageBox(result.warning, "Test Level");
+        }
     }
 
     void StudioRenderPath::RefreshAssetBrowser()

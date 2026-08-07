@@ -18,6 +18,7 @@
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "RenegadeStudioChrome.h"
+#include "TestLevelRuntimeProcess.h"
 
 namespace renegade::studio
 {
@@ -64,6 +65,8 @@ namespace renegade::studio
             OpenEnvironmentWorkspace,
             OpenTerrainWorkspace,
             OpenSceneWorkspace,
+            StartTestLevel,
+            StopTestLevel,
             StartSunPreview,
             PauseSunPreview,
             SetOceanEnabled,
@@ -340,6 +343,11 @@ namespace renegade::studio
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
+        void StartTestLevel();
+        void PollTestLevel();
+        void StopTestLevel();
+        [[nodiscard]] std::string ResolveTestLevelRuntimePath() const;
+        [[nodiscard]] std::string TestLevelBackendArgument() const;
         void ReturnToProjectHub();
         void SelectRecentProject(std::size_t index);
         void SetTransformTool(TransformTool tool);
@@ -508,6 +516,7 @@ namespace renegade::studio
         RenegadeButton importScaleApplyButton_;
         RenegadeButton importScaleDismissButton_;
         RenegadeStudioChrome studioChrome_;
+        TestLevelRuntimeProcess testLevelRuntime_;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;
         wi::graphics::Shader gridPixelShader_;
