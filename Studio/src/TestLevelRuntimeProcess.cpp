@@ -1,5 +1,13 @@
 #include "TestLevelRuntimeProcess.h"
 
+// Windows.h's min/max macros silently break std::max and
+// std::numeric_limits<T>::max() below; NOMINMAX must be defined before the
+// include, not passed only as a compile definition, since translation-unit
+// order still matters if this header is ever included after Windows.h
+// elsewhere.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
 
 #include <algorithm>
@@ -577,7 +585,17 @@ namespace renegade::studio
         const wchar_t* workingDirectoryPointer =
             workingDirectory.empty() ? nullptr : workingDirectory.c_str();
 
-        if (!CreateProcessW(
+        // A malformed or unrecognized executable image (for example a file
+        // that is not a valid PE image at all) makes CreateProcessW trigger
+        // the OS's own hard-error popup (observed as the "Unsupported 16-Bit
+        // Application" dialog) independently of the failure it reports back
+        // to this process. That dialog is invisible to an automated caller
+        // but blocks any unattended/CI launch indefinitely. Suppress it for
+        // the duration of this call only, then restore the previous mode so
+        // legitimate OS dialogs elsewhere in Studio are unaffected.
+        const UINT previousErrorMode = SetErrorMode(
+            SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+        const BOOL created = CreateProcessW(
                 executable.c_str(),
                 mutableCommandLine.data(),
                 nullptr,
@@ -587,7 +605,9 @@ namespace renegade::studio
                 nullptr,
                 workingDirectoryPointer,
                 &startup,
-                &processInfo))
+                &processInfo);
+        SetErrorMode(previousErrorMode);
+        if (!created)
         {
             const DWORD code = GetLastError();
             return failLaunch(
