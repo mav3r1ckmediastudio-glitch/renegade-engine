@@ -18,6 +18,7 @@
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "RenegadeStudioChrome.h"
+#include "TestLevelRuntimeProcess.h"
 
 namespace renegade::studio
 {
@@ -77,6 +78,8 @@ namespace renegade::studio
             ImportModel,
             ApplyImportScale,
             DismissImportScale,
+            PlayTestLevel,
+            StopTestLevel,
         };
 
         // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
@@ -269,6 +272,11 @@ namespace renegade::studio
             const std::string& sourceFileName);
         void ApplyImportScaleMode(bridge::ModelScaleMode mode);
         void DismissImportScalePanel();
+        void PlayTestLevel();
+        void StopTestLevel();
+        void PollTestLevel();
+        void RefreshTestLevelButtons();
+        [[nodiscard]] std::string ResolveRuntimeExecutablePath() const;
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -479,6 +487,8 @@ namespace renegade::studio
         RenegadeButton saveButton_;
         RenegadeButton saveAsButton_;
         RenegadeButton reopenButton_;
+        RenegadeButton playButton_;
+        RenegadeButton stopButton_;
         wi::gui::Window contentPanel_;
         wi::gui::Label contentLabel_;
         wi::gui::Label contentPlaceholder_;
@@ -599,6 +609,10 @@ namespace renegade::studio
         float importScaleAppliedFactor_ = 1.0f;
         bridge::ModelScaleMode pendingImportScaleMode_ =
             bridge::ModelScaleMode::Original;
+        TestLevelRuntimeProcess testLevelProcess_;
+        bridge::TestLevelSnapshot testLevelSnapshot_;
+        bool testLevelActive_ = false;
+        std::string testLevelStatus_;
     };
 
     class StudioApplication final : public wi::Application

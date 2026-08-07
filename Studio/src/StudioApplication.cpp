@@ -1957,6 +1957,28 @@ namespace renegade::studio
         });
         inspectorPanel_.AddWidget(&reopenButton_);
 
+        playButton_.Create("Play Test Level");
+        playButton_.SetText("PLAY");
+        playButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
+        playButton_.SetTooltip(
+            "Launch the current unsaved scene state in a separate Runtime");
+        playButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::PlayTestLevel;
+        });
+        inspectorPanel_.AddWidget(&playButton_);
+
+        stopButton_.Create("Stop Test Level");
+        stopButton_.SetText("STOP");
+        stopButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
+        stopButton_.SetTooltip("Terminate the running Test Level Runtime");
+        stopButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::StopTestLevel;
+        });
+        stopButton_.SetVisible(false);
+        inspectorPanel_.AddWidget(&stopButton_);
+
         contentPanel_.Create(
             "Content Browser",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
@@ -2510,6 +2532,8 @@ namespace renegade::studio
         }
 
         RenderPath3D::Update(dt);
+
+        PollTestLevel();
 
         if (session_ == nullptr || projectHubVisible_)
         {
@@ -3201,6 +3225,12 @@ namespace renegade::studio
         saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
         saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
         reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+
+        const float playRow = saveRow + 40.0f;
+        playButton_.SetPos(XMFLOAT2(12.0f, playRow));
+        stopButton_.SetPos(XMFLOAT2(12.0f, playRow));
+        playButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
+        stopButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
     }
 
     void StudioRenderPath::RefreshInspector()
@@ -3882,6 +3912,12 @@ namespace renegade::studio
             break;
         case EditorAction::DismissImportScale:
             DismissImportScalePanel();
+            break;
+        case EditorAction::PlayTestLevel:
+            PlayTestLevel();
+            break;
+        case EditorAction::StopTestLevel:
+            StopTestLevel();
             break;
         case EditorAction::None:
         default:
@@ -7221,6 +7257,186 @@ namespace renegade::studio
             {
                 BeginOpenScene(scenePath);
             });
+    }
+
+    void StudioRenderPath::RefreshTestLevelButtons()
+    {
+        playButton_.SetVisible(!testLevelActive_);
+        stopButton_.SetVisible(testLevelActive_);
+    }
+
+    void StudioRenderPath::PlayTestLevel()
+    {
+        if (session_ == nullptr || testLevelActive_)
+        {
+            return;
+        }
+        if (!session_->Projects().HasProject())
+        {
+            testLevelStatus_ = "TEST LEVEL // NO PROJECT OPEN";
+            statusLabel_.SetText(testLevelStatus_);
+            studioChrome_.SetStatusText(testLevelStatus_);
+            return;
+        }
+
+        const std::string runtimePath = ResolveRuntimeExecutablePath();
+        if (runtimePath.empty())
+        {
+            testLevelStatus_ = "TEST LEVEL // RENEGADERUNTIME.EXE NOT FOUND";
+            statusLabel_.SetText(testLevelStatus_);
+            studioChrome_.SetStatusText(testLevelStatus_);
+            return;
+        }
+
+        bridge::TestLevelSnapshotService snapshots(
+            session_->Scenes(), session_->Commands());
+        std::string snapshotError;
+        if (!snapshots.Create(
+                session_->Projects().CurrentProject(),
+                testLevelSnapshot_,
+                snapshotError))
+        {
+            testLevelStatus_ =
+                "TEST LEVEL // SNAPSHOT FAILED: " + snapshotError;
+            statusLabel_.SetText(testLevelStatus_);
+            studioChrome_.SetStatusText(testLevelStatus_);
+            return;
+        }
+
+        TestLevelLaunchOptions options;
+        options.executablePath = runtimePath;
+        options.workingDirectory =
+            fs::path(runtimePath).parent_path().generic_u8string();
+        options.arguments =
+            {"dx12", "--project", testLevelSnapshot_.descriptorPath};
+        options.startupTimeout = std::chrono::milliseconds(60000);
+
+        std::string launchError;
+        if (!testLevelProcess_.Launch(
+                options, testLevelSnapshot_, launchError))
+        {
+            testLevelStatus_ = "TEST LEVEL // LAUNCH FAILED: " + launchError;
+            statusLabel_.SetText(testLevelStatus_);
+            studioChrome_.SetStatusText(testLevelStatus_);
+            return;
+        }
+
+        testLevelActive_ = true;
+        testLevelStatus_ = "TEST LEVEL // STARTING";
+        statusLabel_.SetText(testLevelStatus_);
+        studioChrome_.SetStatusText(testLevelStatus_);
+        RefreshTestLevelButtons();
+    }
+
+    void StudioRenderPath::StopTestLevel()
+    {
+        if (!testLevelActive_)
+        {
+            return;
+        }
+        static_cast<void>(testLevelProcess_.Stop());
+        testLevelActive_ = false;
+        testLevelSnapshot_ = {};
+        testLevelStatus_ = "TEST LEVEL // STOPPED";
+        statusLabel_.SetText(testLevelStatus_);
+        studioChrome_.SetStatusText(testLevelStatus_);
+        RefreshTestLevelButtons();
+    }
+
+    void StudioRenderPath::PollTestLevel()
+    {
+        if (!testLevelActive_)
+        {
+            return;
+        }
+
+        const auto result = testLevelProcess_.Poll();
+
+        if (!result.finished)
+        {
+            if (result.state == TestLevelProcessState::Running &&
+                testLevelStatus_ != "TEST LEVEL // RUNNING")
+            {
+                testLevelStatus_ = "TEST LEVEL // RUNNING";
+                statusLabel_.SetText(testLevelStatus_);
+                studioChrome_.SetStatusText(testLevelStatus_);
+            }
+            return;
+        }
+
+        testLevelActive_ = false;
+        testLevelSnapshot_ = {};
+
+        switch (result.state)
+        {
+        case TestLevelProcessState::Completed:
+            testLevelStatus_ = "TEST LEVEL // COMPLETED";
+            break;
+        case TestLevelProcessState::RuntimeReportedFailure:
+            testLevelStatus_ =
+                "TEST LEVEL // RUNTIME REPORTED FAILURE (CODE " +
+                std::to_string(result.exitCode) + ")";
+            break;
+        case TestLevelProcessState::AbnormalExit:
+            testLevelStatus_ = "TEST LEVEL // RUNTIME CRASHED (CODE " +
+                std::to_string(result.exitCode) + ")";
+            break;
+        case TestLevelProcessState::StartupTimedOut:
+            testLevelStatus_ = "TEST LEVEL // STARTUP TIMED OUT";
+            break;
+        case TestLevelProcessState::Stopped:
+            testLevelStatus_ = "TEST LEVEL // STOPPED";
+            break;
+        case TestLevelProcessState::WatchFailed:
+            testLevelStatus_ =
+                "TEST LEVEL // WATCH FAILED: " + result.message;
+            break;
+        case TestLevelProcessState::LaunchFailed:
+            testLevelStatus_ =
+                "TEST LEVEL // LAUNCH FAILED: " + result.message;
+            break;
+        default:
+            testLevelStatus_ = "TEST LEVEL // ENDED";
+            break;
+        }
+
+        statusLabel_.SetText(testLevelStatus_);
+        studioChrome_.SetStatusText(testLevelStatus_);
+        RefreshTestLevelButtons();
+    }
+
+    std::string StudioRenderPath::ResolveRuntimeExecutablePath() const
+    {
+        wchar_t modulePath[MAX_PATH] = {};
+        if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) == 0)
+        {
+            return {};
+        }
+        const fs::path studioDirectory =
+            fs::path(modulePath).parent_path();
+
+        // Packaged/shipped layout candidate: RenegadeRuntime.exe beside
+        // RenegadeStudio.exe.
+        const fs::path sibling = studioDirectory / "RenegadeRuntime.exe";
+        if (fs::is_regular_file(sibling))
+        {
+            return sibling.generic_u8string();
+        }
+
+        // Current dev-build layout candidate: BUILD/renegade/Studio/<Config>
+        // and BUILD/renegade/Runtime/<Config> are sibling directories
+        // sharing the same configuration folder name.
+        const fs::path configName = studioDirectory.filename();
+        const fs::path buildRoot =
+            studioDirectory.parent_path().parent_path();
+        const fs::path devBuild =
+            buildRoot / "Runtime" / configName / "RenegadeRuntime.exe";
+        if (fs::is_regular_file(devBuild))
+        {
+            return devBuild.generic_u8string();
+        }
+
+        return {};
     }
 
     void StudioApplication::SetStartupScene(std::string filePath)
