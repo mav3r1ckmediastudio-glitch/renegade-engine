@@ -4,6 +4,27 @@ All notable user-facing changes are recorded here. Newest first.
 
 ## Unreleased — Phase 3 Studio foundation
 
+### Project document transaction (LF02)
+
+- Added `ProjectDocumentTransaction`, a UI-free, format-agnostic disk
+  transaction: same-directory staged writes validated before commit,
+  previous-version backup, deterministic path-ordered atomic replacement,
+  rollback on partial failure, and a durable journal with a separate
+  `Recover()` path for an interrupted transaction on next project open.
+- `ProjectService::WriteProject` (including the LF01 legacy `project_id`
+  migration), `WriteFlowDocument`, and `WriteScreenDocument` now commit
+  through this transaction instead of a direct, unprotected
+  `wi::config::File` write. A migrated legacy project descriptor now
+  produces a real `.bak.renegade` of its pre-migration content.
+- Added `RenegadeProjectDocumentTransactionTests` (16 checks) and
+  `RenegadeProjectServiceTransactionTests` (4 checks), and extended
+  `RenegadeFlowTests`/`RenegadeScreenTests` with transactional-update
+  coverage for Story Flow and Runtime screen documents. Full suite: 19/19.
+- Accepted PASS WITH LIMITATIONS: editor-owned Flow and Screen dirty-state
+  tracking remains deferred until mutable editor document models and
+  authoring workspaces exist. See
+  `docs/LF02_PROJECT_DOCUMENT_TRANSACTIONS.md` for the full record.
+
 ### Native ocean authoring
 
 - Added `OceanService` and an `OCEAN // NATIVE FFT` section to the Environment
