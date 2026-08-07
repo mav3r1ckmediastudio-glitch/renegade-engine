@@ -6,6 +6,7 @@
 namespace renegade::bridge
 {
     class CommandService;
+    struct ProjectMetadata;
     class SceneService;
 
     struct TestLevelSnapshot
@@ -13,12 +14,20 @@ namespace renegade::bridge
         std::string projectRoot;
         std::string sessionDirectory;
         std::string scenePath;
+        // Populated by the project-aware Gate 2 overload. The scene-only Gate
+        // 1 primitive deliberately leaves this empty.
+        std::string descriptorPath;
 
         [[nodiscard]] bool IsValid() const noexcept
         {
             return !projectRoot.empty() &&
                 !sessionDirectory.empty() &&
                 !scenePath.empty();
+        }
+
+        [[nodiscard]] bool IsRuntimeReady() const noexcept
+        {
+            return IsValid() && !descriptorPath.empty();
         }
     };
 
@@ -28,6 +37,7 @@ namespace renegade::bridge
     {
         None,
         AfterArchiveWrite,
+        AfterDescriptorWrite,
     };
 
     // UI-free LP04 primitive. Serializes the currently live Wicked scene into
@@ -40,6 +50,17 @@ namespace renegade::bridge
         TestLevelSnapshotService(
             SceneService& scenes,
             const CommandService& commands) noexcept;
+
+        // Builds a Runtime-ready shadow project around the unsaved scene
+        // snapshot. The shadow descriptor reuses only the authoritative
+        // project's stable ID and name; Flow/Screen startup roots are omitted
+        // so Test Level starts directly in the captured scene.
+        [[nodiscard]] bool Create(
+            const ProjectMetadata& project,
+            TestLevelSnapshot& snapshot,
+            std::string& error,
+            TestLevelSnapshotFailureInjection failureInjection =
+                TestLevelSnapshotFailureInjection::None);
 
         [[nodiscard]] bool Create(
             const std::string& projectRoot,

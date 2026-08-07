@@ -392,3 +392,32 @@ add_test(
     NAME RenegadeTestLevelSnapshotTests
     COMMAND RenegadeTestLevelSnapshotTests
 )
+
+
+add_executable(RenegadeTestLevelSnapshotRuntimeTests
+    TestLevelSnapshotRuntimeTests.cpp
+)
+
+target_link_libraries(RenegadeTestLevelSnapshotRuntimeTests
+    PRIVATE
+        Renegade::RuntimeBootstrap
+)
+
+target_compile_options(RenegadeTestLevelSnapshotRuntimeTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeTestLevelSnapshotRuntimeTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeTestLevelSnapshotRuntimeTests
+)
+
+add_test(
+    NAME RenegadeTestLevelSnapshotRuntimeTests
+    COMMAND RenegadeTestLevelSnapshotRuntimeTests
+)

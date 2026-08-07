@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 
 #include <atomic>
@@ -9,6 +10,7 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <system_error>
@@ -19,6 +21,47 @@ namespace
     namespace fs = std::filesystem;
 
     std::atomic<std::uint64_t> snapshotSequence{0};
+    constexpr const char* TestLevelStartupScene =
+        "Content/Scenes/TestLevel.wiscene";
+
+    bool WriteSnapshotDescriptor(
+        const renegade::bridge::ProjectMetadata& sourceProject,
+        const fs::path& descriptorPath,
+        std::string& error)
+    {
+        std::ofstream stream(
+            descriptorPath,
+            std::ios::binary | std::ios::trunc);
+        if (!stream)
+        {
+            error = "Could not create the Test Level project descriptor: " +
+                descriptorPath.generic_u8string();
+            return false;
+        }
+
+        stream << "format = renegade-project\n";
+        stream << "version = "
+               << renegade::bridge::ProjectService::CurrentFormatVersion
+               << "\n\n";
+        stream << "[project]\n";
+        stream << "project_id = " << sourceProject.projectId << '\n';
+        stream << "name = " << sourceProject.name << '\n';
+        stream << "startup_scene = " << TestLevelStartupScene << '\n';
+        stream << "startup_flow_id = \n";
+        stream << "startup_flow = \n";
+        stream << "startup_screen_id = \n";
+        stream << "startup_screen = \n";
+        stream.flush();
+        if (!stream)
+        {
+            error = "Could not write the complete Test Level project "
+                "descriptor: " + descriptorPath.generic_u8string();
+            return false;
+        }
+
+        error.clear();
+        return true;
+    }
 
     std::string SnapshotToken()
     {
@@ -79,6 +122,99 @@ namespace renegade::bridge
         : scenes_(scenes),
           commands_(commands)
     {
+    }
+
+    bool TestLevelSnapshotService::Create(
+        const ProjectMetadata& project,
+        TestLevelSnapshot& snapshot,
+        std::string& error,
+        const TestLevelSnapshotFailureInjection failureInjection)
+    {
+        snapshot = {};
+        error.clear();
+
+        TestLevelSnapshot created;
+        const auto sceneFailure =
+            failureInjection ==
+                TestLevelSnapshotFailureInjection::AfterArchiveWrite
+            ? TestLevelSnapshotFailureInjection::AfterArchiveWrite
+            : TestLevelSnapshotFailureInjection::None;
+        if (!Create(project.rootPath, created, error, sceneFailure))
+        {
+            return false;
+        }
+
+        const auto failAndCleanup = [&](std::string message)
+        {
+            std::string cleanupError;
+            if (!Cleanup(created, cleanupError))
+            {
+                message += " Cleanup also failed: " + cleanupError;
+            }
+            snapshot = {};
+            error = std::move(message);
+            return false;
+        };
+
+        try
+        {
+            const fs::path descriptorPath =
+                fs::u8path(created.sessionDirectory) / "TestLevel.renegade";
+            if (!WriteSnapshotDescriptor(project, descriptorPath, error))
+            {
+                return failAndCleanup(error);
+            }
+
+            if (failureInjection ==
+                TestLevelSnapshotFailureInjection::AfterDescriptorWrite)
+            {
+                return failAndCleanup(
+                    "Injected Test Level snapshot failure after descriptor "
+                    "write.");
+            }
+
+            ProjectService projects;
+            ProjectMetadata inspected;
+            std::string inspectError;
+            if (!projects.InspectProject(
+                    descriptorPath.generic_u8string(),
+                    inspected,
+                    inspectError))
+            {
+                return failAndCleanup(
+                    "The Test Level project descriptor was rejected: " +
+                    inspectError);
+            }
+
+            const fs::path expectedRoot =
+                fs::u8path(created.sessionDirectory).lexically_normal();
+            if (inspected.formatVersion != ProjectService::CurrentFormatVersion ||
+                inspected.projectId != project.projectId ||
+                inspected.name != project.name ||
+                fs::u8path(inspected.rootPath).lexically_normal() !=
+                    expectedRoot ||
+                inspected.startupScene != TestLevelStartupScene ||
+                !inspected.startupFlowId.empty() ||
+                !inspected.startupFlow.empty() ||
+                !inspected.startupScreenId.empty() ||
+                !inspected.startupScreen.empty())
+            {
+                return failAndCleanup(
+                    "The Test Level project descriptor did not round-trip "
+                    "with the required Runtime startup metadata.");
+            }
+
+            created.descriptorPath = descriptorPath.generic_u8string();
+            snapshot = std::move(created);
+            error.clear();
+            return true;
+        }
+        catch (const std::exception& exception)
+        {
+            return failAndCleanup(
+                std::string("Could not create Test Level project snapshot: ") +
+                exception.what());
+        }
     }
 
     bool TestLevelSnapshotService::Create(
