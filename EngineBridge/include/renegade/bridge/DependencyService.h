@@ -83,4 +83,3 @@ namespace renegade::bridge
         const std::string& projectRoot,
         const std::string& declaredPath);
 }
-

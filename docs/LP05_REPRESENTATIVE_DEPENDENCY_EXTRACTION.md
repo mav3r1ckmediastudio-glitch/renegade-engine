@@ -61,4 +61,3 @@ computed references. Ordering and logical output are deterministic.
 6. Lua policy boundary and complete negative-case diagnostics.
 7. Deterministic transitive closure and machine-readable serialization.
 8. Repeatability, Debug/Release CI and packaged read-only proof.
-

@@ -7,4 +7,3 @@ expect missing Content/Audio/missing.ogg
 reject outside ../outside-project.txt
 reject metadata Content/Looks/like-a-path.png
 collision Content/Textures/Stone.png Content/Textures/stone.png
-

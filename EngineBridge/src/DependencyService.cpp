@@ -73,4 +73,3 @@ namespace renegade::bridge
         return result;
     }
 }
-

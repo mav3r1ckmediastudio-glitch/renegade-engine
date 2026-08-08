@@ -12,7 +12,6 @@ namespace
         return 1;
     }
 }
-
 int main()
 {
     namespace fs = std::filesystem;
@@ -48,4 +47,3 @@ int main()
     std::cout << "RenegadeDependencyTests passed\n";
     return 0;
 }
-
