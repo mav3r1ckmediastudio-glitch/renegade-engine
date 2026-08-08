@@ -6532,12 +6532,19 @@ namespace renegade::studio
 
     std::string StudioRenderPath::ResolveTestLevelRuntimePath() const
     {
-        std::error_code pathError;
-        const fs::path workingDirectory = fs::current_path(pathError);
-        if (pathError)
+        // fs::current_path() is not reliable here: common Windows file-open
+        // dialogs (Open Project, Open Scene, etc.) are documented to change
+        // the calling process's working directory as a side effect, and
+        // once that happens every candidate below silently resolves against
+        // the wrong root - RenegadeRuntime.exe still exists exactly where
+        // it always did, but this lookup would no longer find it. Anchor to
+        // this process's own executable path instead, which cannot drift.
+        wchar_t modulePath[MAX_PATH] = {};
+        if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) == 0)
         {
             return {};
         }
+        const fs::path workingDirectory = fs::path(modulePath).parent_path();
 
         std::vector<fs::path> candidates = {
             workingDirectory / "Runtime" / "RenegadeRuntime.exe",
@@ -6554,7 +6561,7 @@ namespace renegade::studio
 
         for (const auto& candidate : candidates)
         {
-            pathError.clear();
+            std::error_code pathError;
             if (fs::is_regular_file(candidate, pathError) && !pathError)
             {
                 return candidate.lexically_normal().generic_u8string();
