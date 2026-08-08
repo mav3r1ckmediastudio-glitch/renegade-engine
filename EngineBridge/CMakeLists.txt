@@ -18,6 +18,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/SceneDocumentService.h
     include/renegade/bridge/SelectionService.h
     include/renegade/bridge/StudioSession.h
+    include/renegade/bridge/TestLevelSnapshotService.h
     src/AssetBrowserService.cpp
     src/CommandService.cpp
     src/FlowService.cpp
@@ -36,6 +37,7 @@ add_library(RenegadeEngineBridge STATIC
     src/SceneService.cpp
     src/SceneDocumentService.cpp
     src/SelectionService.cpp
+    src/TestLevelSnapshotService.cpp
 )
 
 # Wicked's format converter is self-contained even though upstream keeps it in

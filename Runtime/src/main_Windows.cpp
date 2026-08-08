@@ -15,6 +15,7 @@ namespace
     namespace fs = std::filesystem;
 
     constexpr const char* BootstrapLogPath = "Logs/RuntimeBootstrap.log";
+    constexpr const char* ReadyEventArgument = "--renegade-ready-event=";
     renegade::runtime::RuntimeApplication application;
 
     std::string WideToUtf8(const wchar_t* value)
@@ -82,6 +83,20 @@ namespace
             result.data(),
             characterCount);
         return result;
+    }
+
+    std::wstring ReadyEventName(
+        const std::vector<std::string>& arguments)
+    {
+        for (const auto& argument : arguments)
+        {
+            if (argument.rfind(ReadyEventArgument, 0) == 0)
+            {
+                return Utf8ToWide(
+                    argument.substr(std::strlen(ReadyEventArgument)));
+            }
+        }
+        return {};
     }
 
     std::vector<std::string> CollectProcessArguments()
@@ -164,7 +179,8 @@ namespace
     }
 
     int ReportBootstrapFailure(
-        const renegade::runtime::RuntimeBootstrapResult& result)
+        const renegade::runtime::RuntimeBootstrapResult& result,
+        const bool showDialog = true)
     {
         std::string logError;
         const bool logged = renegade::runtime::WriteRuntimeBootstrapLog(
@@ -186,12 +202,15 @@ namespace
             message += logError;
         }
 
-        const std::wstring wideMessage = Utf8ToWide(message);
-        MessageBoxW(
-            nullptr,
-            wideMessage.c_str(),
-            L"Renegade Runtime startup failed",
-            MB_OK | MB_ICONERROR);
+        if (showDialog)
+        {
+            const std::wstring wideMessage = Utf8ToWide(message);
+            MessageBoxW(
+                nullptr,
+                wideMessage.c_str(),
+                L"Renegade Runtime startup failed",
+                MB_OK | MB_ICONERROR);
+        }
 
         return static_cast<int>(result.code);
     }
@@ -261,13 +280,17 @@ int APIENTRY wWinMain(
     wi::arguments::Parse(commandLine);
     SetExecutableWorkingDirectory();
 
+    const auto processArguments = CollectProcessArguments();
+    const std::wstring readyEventName = ReadyEventName(processArguments);
+    const bool testLevelLaunch = !readyEventName.empty();
+
     auto bootstrap = renegade::runtime::ParseRuntimeLaunchArguments(
-        CollectProcessArguments());
+        processArguments);
     bootstrap =
         renegade::runtime::ResolveRuntimeProject(std::move(bootstrap));
     if (!bootstrap.succeeded)
     {
-        return ReportBootstrapFailure(bootstrap);
+        return ReportBootstrapFailure(bootstrap, !testLevelLaunch);
     }
 
     application.SetBootstrapResult(bootstrap);
@@ -337,7 +360,9 @@ int APIENTRY wWinMain(
                 const auto& result = application.StartupResult();
                 if (!result.succeeded)
                 {
-                    const int exitCode = ReportBootstrapFailure(result);
+                    const int exitCode = ReportBootstrapFailure(
+                        result,
+                        !testLevelLaunch);
                     PostQuitMessage(exitCode);
                     continue;
                 }
@@ -345,6 +370,45 @@ int APIENTRY wWinMain(
                 const std::wstring title =
                     GraphicsBackendTitle(result.project.name);
                 SetWindowTextW(window, title.c_str());
+
+                if (testLevelLaunch)
+                {
+                    const HANDLE readyEvent = OpenEventW(
+                        EVENT_MODIFY_STATE,
+                        FALSE,
+                        readyEventName.c_str());
+                    if (readyEvent == nullptr)
+                    {
+                        auto failure = result;
+                        failure.succeeded = false;
+                        failure.code =
+                            renegade::runtime::RuntimeBootstrapCode::InvalidArguments;
+                        failure.message =
+                            "Test Level Runtime could not open the Studio "
+                            "readiness event.";
+                        const int exitCode =
+                            ReportBootstrapFailure(failure, false);
+                        PostQuitMessage(exitCode);
+                        continue;
+                    }
+
+                    const BOOL readySignaled = SetEvent(readyEvent);
+                    CloseHandle(readyEvent);
+                    if (!readySignaled)
+                    {
+                        auto failure = result;
+                        failure.succeeded = false;
+                        failure.code =
+                            renegade::runtime::RuntimeBootstrapCode::InvalidArguments;
+                        failure.message =
+                            "Test Level Runtime could not signal Studio that "
+                            "startup completed.";
+                        const int exitCode =
+                            ReportBootstrapFailure(failure, false);
+                        PostQuitMessage(exitCode);
+                        continue;
+                    }
+                }
             }
 
             if (!quitWindowRequested && application.QuitRequested())

@@ -116,6 +116,19 @@ try {
             -Destination $packageRoot `
             -Force
 
+        # Test Level launches the real Runtime as a child process. Keep the
+        # Runtime payload isolated under the Studio package so Studio can find
+        # it without changing Runtime's own working-directory/content contract.
+        $studioRuntimeRoot = Join-Path $packageRoot "Runtime"
+        New-Item -ItemType Directory -Path $studioRuntimeRoot -Force | Out-Null
+        Copy-Item -Path $runtimeExecutable -Destination $studioRuntimeRoot -Force
+        Copy-Item -Path $runtimeDxCompiler -Destination $studioRuntimeRoot -Force
+        Copy-Item `
+            -Path (Join-Path $runtimeDirectory "Content") `
+            -Destination (Join-Path $studioRuntimeRoot "Content") `
+            -Recurse `
+            -Force
+
         $packageArchive = Join-Path $ArtifactRoot "RenegadeStudio-$currentConfiguration.zip"
         if (Test-Path $packageArchive -PathType Leaf) {
             Remove-Item -Path $packageArchive -Force

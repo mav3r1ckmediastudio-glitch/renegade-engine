@@ -94,6 +94,13 @@ namespace renegade::studio
             Count,
         };
 
+        enum class TestLevelState : std::uint8_t
+        {
+            Idle,
+            Starting,
+            Running,
+        };
+
         enum class Action
         {
             ProjectHub,
@@ -115,6 +122,8 @@ namespace renegade::studio
             EnvironmentWorkspace,
             TerrainWorkspace,
             SceneWorkspace,
+            TestLevelPlay,
+            TestLevelStop,
             ValidateModelImport,
         };
 
@@ -159,6 +168,7 @@ namespace renegade::studio
         void SetGridVisible(bool visible) noexcept;
         void SetEnvironmentWorkspaceActive(bool active) noexcept;
         void SetTerrainWorkspaceActive(bool active) noexcept;
+        void SetTestLevelState(TestLevelState state) noexcept;
         void SetPanelSizes(
             float hierarchyWidth,
             float inspectorWidth,
@@ -219,6 +229,7 @@ namespace renegade::studio
         bool gridVisible_ = true;
         bool environmentWorkspaceActive_ = false;
         bool terrainWorkspaceActive_ = false;
+        TestLevelState testLevelState_ = TestLevelState::Idle;
         bool pointerConsumed_ = false;
         wi::Resource brandLockup_;
         std::vector<HierarchyRow> hierarchyRows_;

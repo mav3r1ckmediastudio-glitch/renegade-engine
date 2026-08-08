@@ -372,3 +372,128 @@ add_test(
     NAME RenegadeProjectServiceTransactionTests
     COMMAND RenegadeProjectServiceTransactionTests
 )
+
+add_executable(RenegadeTestLevelSnapshotTests
+    TestLevelSnapshotTests.cpp
+)
+
+target_link_libraries(RenegadeTestLevelSnapshotTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeTestLevelSnapshotTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeTestLevelSnapshotTests)
+
+add_test(
+    NAME RenegadeTestLevelSnapshotTests
+    COMMAND RenegadeTestLevelSnapshotTests
+)
+
+
+add_executable(RenegadeTestLevelSnapshotRuntimeTests
+    TestLevelSnapshotRuntimeTests.cpp
+)
+
+target_link_libraries(RenegadeTestLevelSnapshotRuntimeTests
+    PRIVATE
+        Renegade::RuntimeBootstrap
+)
+
+target_compile_options(RenegadeTestLevelSnapshotRuntimeTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeTestLevelSnapshotRuntimeTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeTestLevelSnapshotRuntimeTests
+)
+
+add_test(
+    NAME RenegadeTestLevelSnapshotRuntimeTests
+    COMMAND RenegadeTestLevelSnapshotRuntimeTests
+)
+
+add_executable(RenegadeTestLevelProcessFixture
+    TestLevelProcessFixture.cpp
+)
+
+target_compile_options(RenegadeTestLevelProcessFixture
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeTestLevelProcessFixture PROPERTIES
+    FOLDER "Renegade/TestFixtures"
+)
+
+add_executable(RenegadeTestLevelRuntimeProcessTests
+    TestLevelRuntimeProcessTests.cpp
+)
+
+target_link_libraries(RenegadeTestLevelRuntimeProcessTests
+    PRIVATE
+        Renegade::TestLevelRuntimeProcess
+)
+
+target_compile_options(RenegadeTestLevelRuntimeProcessTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeTestLevelRuntimeProcessTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(
+    RenegadeTestLevelRuntimeProcessTests
+    RenegadeTestLevelProcessFixture
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeTestLevelRuntimeProcessTests
+)
+
+add_test(
+    NAME RenegadeTestLevelRuntimeProcessTests
+    COMMAND RenegadeTestLevelRuntimeProcessTests
+        "$<TARGET_FILE:RenegadeTestLevelProcessFixture>"
+)
+
+# LP04 Gate 3B2a - real Runtime handshake proof. Deliberately EXCLUDE_FROM_ALL
+# and NOT registered with add_test: this launches the real windowed
+# RenegadeRuntime.exe end to end, which has not yet been proven stable on
+# the GitHub Actions Windows runner's graphics adapter. Build and run this
+# target explicitly and locally first (Gate 3B2a); only promote it into
+# CTest/CI (Gate 3B2b) once real, observed behavior confirms it is stable.
+add_executable(RenegadeTestLevelRuntimeHandshakeTests EXCLUDE_FROM_ALL
+    TestLevelRuntimeHandshakeTests.cpp
+)
+
+target_link_libraries(RenegadeTestLevelRuntimeHandshakeTests
+    PRIVATE
+        Renegade::TestLevelRuntimeProcess
+)
+
+target_compile_options(RenegadeTestLevelRuntimeHandshakeTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeTestLevelRuntimeHandshakeTests PROPERTIES
+    FOLDER "Renegade/Manual"
+)
+
+add_dependencies(
+    RenegadeTestLevelRuntimeHandshakeTests
+    RenegadeRuntime
+)

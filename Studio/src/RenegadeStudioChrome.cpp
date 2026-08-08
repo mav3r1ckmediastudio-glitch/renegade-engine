@@ -633,6 +633,12 @@ namespace renegade::studio
         terrainWorkspaceActive_ = active;
     }
 
+    void RenegadeStudioChrome::SetTestLevelState(
+        const TestLevelState state) noexcept
+    {
+        testLevelState_ = state;
+    }
+
     void RenegadeStudioChrome::SetPanelSizes(
         const float hierarchyWidth,
         const float inspectorWidth,
@@ -1229,6 +1235,25 @@ namespace renegade::studio
             }
 
             const float sceneMetaX = width_ - 360.0f;
+            if (!consumed &&
+                x >= sceneMetaX - 108.0f && x < sceneMetaX - 8.0f &&
+                y >= 15.0f && y < 49.0f)
+            {
+                if (action_)
+                {
+                    if (testLevelState_ == TestLevelState::Idle)
+                    {
+                        action_(Action::TestLevelPlay);
+                    }
+                    else if (testLevelState_ == TestLevelState::Running)
+                    {
+                        action_(Action::TestLevelStop);
+                    }
+                }
+                activeMenu_ = -1;
+                activeViewportMenu_ = -1;
+                consumed = true;
+            }
             if (!consumed && y >= 34.0f && y < 58.0f)
             {
                 if (x >= sceneMetaX + 16.0f && x < sceneMetaX + 76.0f)
@@ -1877,9 +1902,37 @@ namespace renegade::studio
             TopBarHeight,
             BorderSoft,
             cmd);
-        DrawText("▶", sceneMetaX - 93.0f, 20.0f, 17, Success, cmd, 0.0f, 0.1f);
-        DrawText("Ⅱ", sceneMetaX - 59.0f, 22.0f, 13, Muted, cmd, 1.0f);
-        DrawText("■", sceneMetaX - 27.0f, 22.0f, 12, Muted, cmd);
+        const bool testLevelStarting =
+            testLevelState_ == TestLevelState::Starting;
+        const bool testLevelRunning =
+            testLevelState_ == TestLevelState::Running;
+        const char* transportGlyph = testLevelRunning
+            ? "■"
+            : testLevelStarting ? "…" : "▶";
+        const char* transportLabel = testLevelRunning
+            ? "STOP"
+            : testLevelStarting ? "STARTING" : "PLAY";
+        const wi::Color transportColor = testLevelStarting
+            ? Muted
+            : testLevelRunning ? Forge : Success;
+        DrawText(
+            transportGlyph,
+            sceneMetaX - 96.0f,
+            20.0f,
+            16,
+            transportColor,
+            cmd,
+            0.0f,
+            0.1f);
+        DrawText(
+            transportLabel,
+            sceneMetaX - 70.0f,
+            26.0f,
+            9,
+            testLevelStarting ? Muted : TextStrong,
+            cmd,
+            0.75f,
+            0.12f);
         DrawRect(
             sceneMetaX,
             0.0f,
