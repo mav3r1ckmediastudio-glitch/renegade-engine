@@ -83,6 +83,7 @@ namespace renegade::bridge
     struct DependencyPathRegistration
     {
         bool inserted = false;
+        std::string existingCanonicalRelativePath;
         std::vector<DependencyDiagnostic> diagnostics;
     };
 
@@ -94,7 +95,8 @@ namespace renegade::bridge
             const std::string& canonicalRelativePath);
 
     private:
-        std::map<std::string, std::string> pathsByFoldedName_;
+        // O(n) intentionally: do not replace Windows Unicode ordinal comparison with byte-folded keys.
+        std::vector<std::string> registeredPaths_;
     };
 
     struct DependencyRoot

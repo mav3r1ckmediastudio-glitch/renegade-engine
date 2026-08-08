@@ -1,11 +1,18 @@
 #include "renegade/bridge/DependencyService.h"
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <utility>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#endif
 
 namespace renegade::bridge
 {
@@ -24,13 +31,67 @@ namespace renegade::bridge
             return true;
         }
 
-        std::string FoldPathCase(std::string path)
+#if !defined(_WIN32)
+        bool AsciiPathCaseEquivalent(
+            const std::string& left, const std::string& right)
         {
-            std::transform(path.begin(), path.end(), path.begin(),
-                [](unsigned char character) {
-                    return static_cast<char>(std::tolower(character));
-                });
-            return path;
+            if (left.size() != right.size())
+                return false;
+            for (std::size_t index = 0; index < left.size(); ++index)
+            {
+                const auto fold = [](const unsigned char character)
+                {
+                    return character >= 'A' && character <= 'Z'
+                        ? static_cast<unsigned char>(character + ('a' - 'A'))
+                        : character;
+                };
+                if (fold(static_cast<unsigned char>(left[index])) !=
+                    fold(static_cast<unsigned char>(right[index])))
+                    return false;
+            }
+            return true;
+        }
+#endif
+
+#if defined(_WIN32)
+        bool TryDecodeUtf8(const std::string& value, std::wstring& decoded)
+        {
+            if (value.size() > static_cast<std::size_t>(
+                    (std::numeric_limits<int>::max)()))
+                return false;
+            const int size = static_cast<int>(value.size());
+            const int required = MultiByteToWideChar(
+                CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), size, nullptr, 0);
+            if (required <= 0)
+                return false;
+            decoded.resize(static_cast<std::size_t>(required));
+            return MultiByteToWideChar(
+                CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), size,
+                decoded.data(), required) == required;
+        }
+#endif
+
+        bool PathCaseEquivalent(
+            const std::string& left, const std::string& right)
+        {
+            if (left == right)
+                return true;
+#if defined(_WIN32)
+            std::wstring decodedLeft;
+            std::wstring decodedRight;
+            if (!TryDecodeUtf8(left, decodedLeft) ||
+                !TryDecodeUtf8(right, decodedRight))
+                return false;
+            return CompareStringOrdinal(
+                decodedLeft.data(), static_cast<int>(decodedLeft.size()),
+                decodedRight.data(), static_cast<int>(decodedRight.size()),
+                TRUE) == CSTR_EQUAL;
+#else
+            // Renegade's supported target is Windows x64. Keep host-side
+            // syntax tests deterministic without pretending that a POSIX
+            // byte string implements Windows Unicode filename semantics.
+            return AsciiPathCaseEquivalent(left, right);
+#endif
         }
 
         std::string StablePathId(const std::string& path)
@@ -68,15 +129,28 @@ namespace renegade::bridge
             return result;
         }
 
+#if defined(_WIN32)
+        std::wstring decodedProjectRoot;
+        std::wstring decodedDeclaredPath;
+        if (!TryDecodeUtf8(projectRoot, decodedProjectRoot) ||
+            !TryDecodeUtf8(declaredPath, decodedDeclaredPath))
+        {
+            result.error = "Project root and dependency path must be valid UTF-8.";
+            return result;
+        }
+#endif
+
         std::error_code error;
-        const auto root = std::filesystem::weakly_canonical(projectRoot, error);
+        const auto root = std::filesystem::weakly_canonical(
+            std::filesystem::u8path(projectRoot), error);
         if (error || !std::filesystem::is_directory(root, error))
         {
             result.error = "Project root does not resolve to a directory.";
             return result;
         }
 
-        const std::filesystem::path declared(declaredPath);
+        const std::filesystem::path declared =
+            std::filesystem::u8path(declaredPath);
         if (declared.is_absolute())
         {
             result.error = "Absolute dependency paths are outside the project.";
@@ -97,16 +171,18 @@ namespace renegade::bridge
             return result;
         }
 
-        result.accepted = true;
-        result.exists = std::filesystem::is_regular_file(resolved, error) && !error;
-        result.absolutePath = resolved.generic_string();
-        result.canonicalRelativePath =
-            std::filesystem::relative(resolved, root, error).generic_string();
+        const auto declaredRelative =
+            std::filesystem::relative(lexical, root, error).lexically_normal();
         if (error)
         {
-            result = {};
             result.error = "Dependency path could not be made project-relative.";
+            return result;
         }
+
+        result.accepted = true;
+        result.exists = std::filesystem::is_regular_file(resolved, error) && !error;
+        result.absolutePath = resolved.generic_u8string();
+        result.canonicalRelativePath = declaredRelative.generic_u8string();
         return result;
     }
 
@@ -115,14 +191,21 @@ namespace renegade::bridge
         const std::string& canonicalRelativePath)
     {
         DependencyPathRegistration result;
-        const auto folded = FoldPathCase(canonicalRelativePath);
-        const auto [entry, inserted] =
-            pathsByFoldedName_.emplace(folded, canonicalRelativePath);
-        result.inserted = inserted;
-        if (inserted)
+        const auto entry = std::find_if(
+            registeredPaths_.begin(), registeredPaths_.end(),
+            [&canonicalRelativePath](const std::string& existing)
+            {
+                return PathCaseEquivalent(existing, canonicalRelativePath);
+            });
+        if (entry == registeredPaths_.end())
+        {
+            registeredPaths_.push_back(canonicalRelativePath);
+            result.inserted = true;
             return result;
+        }
 
-        const bool exactDuplicate = entry->second == canonicalRelativePath;
+        result.existingCanonicalRelativePath = *entry;
+        const bool exactDuplicate = *entry == canonicalRelativePath;
         result.diagnostics.push_back({
             exactDuplicate ? DependencyDiagnosticCode::Duplicate
                            : DependencyDiagnosticCode::CaseCollision,
@@ -131,7 +214,7 @@ namespace renegade::bridge
             exactDuplicate
                 ? "Dependency path was already registered."
                 : "Dependency path differs from an existing path only by case: " +
-                    entry->second,
+                    *entry,
         });
         return result;
     }
@@ -417,19 +500,10 @@ namespace renegade::bridge
             graph_.diagnostics.end(),
             registration.diagnostics.begin(), registration.diagnostics.end());
 
-        std::string targetId = StablePathId(resolved.canonicalRelativePath);
-        if (!registration.inserted)
-        {
-            const auto existing = std::find_if(
-                graph_.nodes.begin(), graph_.nodes.end(),
-                [&resolved](const DependencyNode& node)
-                {
-                    return FoldPathCase(node.projectRelativePath) ==
-                        FoldPathCase(resolved.canonicalRelativePath);
-                });
-            if (existing != graph_.nodes.end())
-                targetId = existing->id;
-        }
+        const std::string& identityPath = registration.inserted
+            ? resolved.canonicalRelativePath
+            : registration.existingCanonicalRelativePath;
+        const std::string targetId = StablePathId(identityPath);
         if (registration.inserted)
         {
             DependencyNode node;

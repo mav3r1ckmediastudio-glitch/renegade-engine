@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <utility>
 
 namespace
 {
@@ -72,6 +73,41 @@ namespace
             return false;
         }
     };
+
+    class PairProvider final : public renegade::bridge::IDependencyProvider
+    {
+    public:
+        PairProvider(std::string name, std::string first, std::string second)
+            : name_(std::move(name)), first_(std::move(first)),
+              second_(std::move(second)) {}
+
+        const char* Name() const noexcept override { return name_.c_str(); }
+        std::uint32_t Version() const noexcept override { return 1; }
+        bool Supports(const renegade::bridge::DependencyClass value)
+            const noexcept override
+        {
+            return value == renegade::bridge::DependencyClass::ProjectDocument;
+        }
+        bool Discover(
+            const renegade::bridge::DependencyProviderContext&,
+            const renegade::bridge::DependencyCandidateSink& emit,
+            std::string& error) const override
+        {
+            emit({first_, renegade::bridge::DependencyClass::Data,
+                renegade::bridge::DependencyRequirement::Required,
+                "fixture.first", false});
+            emit({second_, renegade::bridge::DependencyClass::Data,
+                renegade::bridge::DependencyRequirement::Required,
+                "fixture.second", false});
+            error.clear();
+            return true;
+        }
+
+    private:
+        std::string name_;
+        std::string first_;
+        std::string second_;
+    };
 }
 int main()
 {
@@ -93,6 +129,12 @@ int main()
     fs::create_directories(root / "Content/Scripts");
     std::ofstream(root / "Content/Scripts/main.lua") << "fixture";
     std::ofstream(root / "Content/Scripts/shared.lua") << "fixture";
+    fs::create_directories(root / "Content/Models");
+    const std::string unicodeModelUpper =
+        "Content/Models/\xC3\x89" "p\xC3\xA9" "e.glb";
+    const std::string unicodeModelLower =
+        "Content/Models/\xC3\xA9" "p\xC3\xA9" "e.glb";
+    std::ofstream(root / fs::u8path(unicodeModelUpper)) << "fixture";
 
     const auto existing = renegade::bridge::ResolveDependencyPath(
         root.string(), "Content/Textures/../Textures/Stone.png");
@@ -100,11 +142,38 @@ int main()
         existing.canonicalRelativePath != "Content/Textures/Stone.png")
         return Fail("existing dependency did not canonicalize deterministically");
 
+    const auto existingCaseVariant = renegade::bridge::ResolveDependencyPath(
+        root.generic_u8string(), "Content/Textures/stone.png");
+    if (!existingCaseVariant.accepted ||
+        existingCaseVariant.canonicalRelativePath !=
+            "Content/Textures/stone.png")
+        return Fail("existing dependency declaration casing was not preserved");
+
     const auto missing = renegade::bridge::ResolveDependencyPath(
         root.string(), "Content/Audio/missing.ogg");
     if (!missing.accepted || missing.exists ||
         missing.canonicalRelativePath != "Content/Audio/missing.ogg")
         return Fail("missing dependency was not accepted for graph diagnosis");
+
+    const auto missingCaseVariant = renegade::bridge::ResolveDependencyPath(
+        root.generic_u8string(), "Content/Audio/MISSING.ogg");
+    if (!missingCaseVariant.accepted || missingCaseVariant.exists ||
+        missingCaseVariant.canonicalRelativePath != "Content/Audio/MISSING.ogg")
+        return Fail("missing dependency declaration casing was not preserved");
+
+    const auto emptyDeclaredPath = renegade::bridge::ResolveDependencyPath(
+        root.generic_u8string(), "");
+    if (emptyDeclaredPath.accepted ||
+        emptyDeclaredPath.error !=
+            "Project root and dependency path are required." ||
+        emptyDeclaredPath.error.find("UTF-8") != std::string::npos)
+        return Fail("empty dependency path did not retain its required-path error");
+
+    const auto unicodeCaseVariant = renegade::bridge::ResolveDependencyPath(
+        root.generic_u8string(), unicodeModelLower);
+    if (!unicodeCaseVariant.accepted ||
+        unicodeCaseVariant.canonicalRelativePath != unicodeModelLower)
+        return Fail("Unicode dependency declaration casing was not preserved");
 
     const auto escaped = renegade::bridge::ResolveDependencyPath(
         root.string(), "../outside-project.txt");
@@ -116,6 +185,14 @@ int main()
     if (absolute.accepted)
         return Fail("absolute dependency path was accepted");
 
+#if defined(_WIN32)
+    const auto invalidUtf8 = renegade::bridge::ResolveDependencyPath(
+        root.generic_u8string(), std::string("Content/Models/\xC3\x28.glb", 21));
+    if (invalidUtf8.accepted || invalidUtf8.error.find("valid UTF-8") ==
+            std::string::npos)
+        return Fail("invalid UTF-8 dependency path was not rejected");
+#endif
+
     renegade::bridge::DependencyPathRegistry registry;
     const auto first = registry.Register(
         "scene:startup", "Content/Textures/Stone.png");
@@ -125,6 +202,8 @@ int main()
     const auto duplicate = registry.Register(
         "scene:secondary", "Content/Textures/Stone.png");
     if (duplicate.inserted || duplicate.diagnostics.size() != 1 ||
+        duplicate.existingCanonicalRelativePath !=
+            "Content/Textures/Stone.png" ||
         duplicate.diagnostics.front().code !=
             renegade::bridge::DependencyDiagnosticCode::Duplicate)
         return Fail("exact duplicate dependency was not diagnosed");
@@ -132,9 +211,25 @@ int main()
     const auto caseCollision = registry.Register(
         "scene:secondary", "Content/Textures/stone.png");
     if (caseCollision.inserted || caseCollision.diagnostics.size() != 1 ||
+        caseCollision.existingCanonicalRelativePath !=
+            "Content/Textures/Stone.png" ||
         caseCollision.diagnostics.front().code !=
             renegade::bridge::DependencyDiagnosticCode::CaseCollision)
         return Fail("case-only dependency collision was not diagnosed");
+
+#if defined(_WIN32)
+    renegade::bridge::DependencyPathRegistry unicodeRegistry;
+    const auto unicodeFirst = unicodeRegistry.Register(
+        "scene:startup", unicodeModelUpper);
+    const auto unicodeCollision = unicodeRegistry.Register(
+        "scene:secondary", unicodeModelLower);
+    if (!unicodeFirst.inserted || unicodeCollision.inserted ||
+        unicodeCollision.existingCanonicalRelativePath != unicodeModelUpper ||
+        unicodeCollision.diagnostics.size() != 1 ||
+        unicodeCollision.diagnostics.front().code !=
+            renegade::bridge::DependencyDiagnosticCode::CaseCollision)
+        return Fail("Unicode case-only dependency collision was not diagnosed");
+#endif
 
     const auto outside = fs::temp_directory_path() / "renegade-lp05-outside";
     fs::create_directories(outside);
@@ -181,6 +276,68 @@ int main()
         return Fail("case-collision edge did not resolve to its existing node");
     if (graph.nodes.front().provider != "fixture.project")
         return Fail("graph root provenance was discarded");
+
+    PairProvider duplicateProvider("fixture-duplicate",
+        "Content/Scenes/Startup.wiscene",
+        "Content/Scenes/Startup.wiscene");
+    renegade::bridge::DependencyCollector duplicateCollector(root.string());
+    if (!duplicateCollector.RegisterProvider(duplicateProvider, collectorError) ||
+        !duplicateCollector.AddRoot({"representative.renegade",
+            renegade::bridge::DependencyClass::ProjectDocument,
+            renegade::bridge::DependencyRequirement::Required,
+            "fixture.project"}, collectorError) ||
+        !duplicateCollector.DiscoverRootDependencies(collectorError))
+        return Fail("duplicate collector fixture failed");
+    const auto& duplicateGraph = duplicateCollector.Graph();
+    if (duplicateGraph.nodes.size() != 2 || duplicateGraph.edges.size() != 2 ||
+        duplicateGraph.diagnostics.size() != 1 ||
+        duplicateGraph.diagnostics.front().code !=
+            renegade::bridge::DependencyDiagnosticCode::Duplicate ||
+        duplicateGraph.edges[1].targetId != duplicateGraph.nodes[1].id)
+        return Fail("exact duplicate did not reuse the existing graph node");
+
+    PairProvider missingCaseProvider("fixture-missing-case",
+        "Content/Audio/missing.ogg", "Content/Audio/MISSING.ogg");
+    renegade::bridge::DependencyCollector missingCaseCollector(root.string());
+    if (!missingCaseCollector.RegisterProvider(
+            missingCaseProvider, collectorError) ||
+        !missingCaseCollector.AddRoot({"representative.renegade",
+            renegade::bridge::DependencyClass::ProjectDocument,
+            renegade::bridge::DependencyRequirement::Required,
+            "fixture.project"}, collectorError) ||
+        !missingCaseCollector.DiscoverRootDependencies(collectorError))
+        return Fail("missing case-collision collector fixture failed");
+    const auto& missingCaseGraph = missingCaseCollector.Graph();
+    if (missingCaseGraph.nodes.size() != 2 ||
+        missingCaseGraph.edges.size() != 2 ||
+        missingCaseGraph.diagnostics.size() != 2 ||
+        missingCaseGraph.diagnostics[0].code !=
+            renegade::bridge::DependencyDiagnosticCode::Missing ||
+        missingCaseGraph.diagnostics[1].code !=
+            renegade::bridge::DependencyDiagnosticCode::CaseCollision ||
+        missingCaseGraph.edges[1].targetId != missingCaseGraph.nodes[1].id)
+        return Fail("missing case collision did not reuse its graph node");
+
+#if defined(_WIN32)
+    PairProvider unicodeProvider(
+        "fixture-unicode-case", unicodeModelUpper, unicodeModelLower);
+    renegade::bridge::DependencyCollector unicodeCollector(
+        root.generic_u8string());
+    if (!unicodeCollector.RegisterProvider(unicodeProvider, collectorError) ||
+        !unicodeCollector.AddRoot({"representative.renegade",
+            renegade::bridge::DependencyClass::ProjectDocument,
+            renegade::bridge::DependencyRequirement::Required,
+            "fixture.project"}, collectorError) ||
+        !unicodeCollector.DiscoverRootDependencies(collectorError))
+        return Fail("Unicode case-collision collector fixture failed");
+    const auto& unicodeGraph = unicodeCollector.Graph();
+    if (unicodeGraph.nodes.size() != 2 || unicodeGraph.edges.size() != 2 ||
+        unicodeGraph.diagnostics.size() != 1 ||
+        unicodeGraph.diagnostics.front().code !=
+            renegade::bridge::DependencyDiagnosticCode::CaseCollision ||
+        unicodeGraph.edges[1].targetId != unicodeGraph.nodes[1].id)
+        return Fail("Unicode case collision did not reuse its graph node");
+#endif
 
     FailingProvider failingProvider;
     renegade::bridge::DependencyCollector failingCollector(root.string());
