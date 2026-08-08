@@ -2528,6 +2528,21 @@ namespace renegade::studio
 
         if (testLevelRuntime_.IsActive())
         {
+            // StopTestLevel is the only editor action that must still take
+            // effect while Runtime is active - without this, clicking STOP
+            // queues pendingAction_ but this function returns below before
+            // ever reaching the pendingAction_ dispatch further down, so the
+            // click would have no effect until Runtime happened to exit on
+            // its own. Any other action requested during an active session
+            // is discarded rather than silently deferred until Runtime
+            // exits and then firing unexpectedly.
+            if (pendingAction_ == EditorAction::StopTestLevel)
+            {
+                ProcessPendingAction();
+                return;
+            }
+            pendingAction_ = EditorAction::None;
+
             const auto state = testLevelRuntime_.LastResult().state;
             statusLabel_.SetText(
                 state == TestLevelProcessState::Running
