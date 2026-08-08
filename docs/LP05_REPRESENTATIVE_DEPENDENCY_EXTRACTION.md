@@ -61,3 +61,13 @@ computed references. Ordering and logical output are deterministic.
 6. Lua policy boundary and complete negative-case diagnostics.
 7. Deterministic transitive closure and machine-readable serialization.
 8. Repeatability, Debug/Release CI and packaged read-only proof.
+
+## Gate 2 implementation boundary
+
+Gate 2 admits canonical project-relative roots and defines the UI-free
+`IDependencyProvider` contract. Providers declare a stable name and version,
+the dependency classes they support, and typed candidates with provenance.
+`DependencyCollector` dispatches providers in stable name order and applies a
+provider's candidates only after that provider succeeds, preventing a failed
+provider from leaving a partial graph mutation. Concrete project, Story Flow,
+Runtime Screen and declared-reference providers remain Gate 3 work.
