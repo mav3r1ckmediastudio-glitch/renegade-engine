@@ -15,18 +15,11 @@ on:
       - "Tools/TerrainSurfacePacker.cpp"
       - "Tools/Windows-Build.Common.ps1"
       - ".gitmodules"
+
   pull_request:
-    paths:
-      - ".github/workflows/studio.yml"
-      - "CMakeLists.txt"
-      - "EngineBridge/**"
-      - "Studio/**"
-      - "Runtime/**"
-      - "Tests/**"
-      - "Tools/Build-Studio-Windows.ps1"
-      - "Tools/TerrainSurfacePacker.cpp"
-      - "Tools/Windows-Build.Common.ps1"
-      - ".gitmodules"
+    branches:
+      - main
+
   workflow_dispatch:
 
 permissions:

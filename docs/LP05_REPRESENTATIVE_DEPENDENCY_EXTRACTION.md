@@ -98,3 +98,89 @@ owning authoring or scripting policy, never inferred from Lua source text.
 This gate tests each provider at an explicit source root. Recursive traversal
 and complete transitive closure remain Gate 7, so Gate 3 does not silently
 introduce an incomplete traversal algorithm.
+
+## Gate 2 correction — Windows Unicode path identity
+
+The original Gate 2 resolver used the filesystem-resolved spelling as graph
+identity. On case-insensitive Windows filesystems that erased a provider's
+declared casing before duplicate/collision registration. The replacement keeps
+the resolved absolute path for containment, symlink protection, existence and
+reads, while the lexically normalized UTF-8 declaration supplies graph
+identity and diagnostics.
+
+The registry owns the single equivalence policy. On Windows it strictly
+decodes UTF-8 to UTF-16 and calls `CompareStringOrdinal(..., TRUE)`, the
+non-linguistic Windows comparison intended for NTFS filenames. It returns the
+first registered spelling to the collector, which hashes that exact spelling
+to reuse the existing node. The collector no longer performs a second fold.
+Exact UTF-8 equality remains `Duplicate`; ordinal case equivalence with a
+different spelling is `CaseCollision`. Invalid UTF-8 fails closed.
+
+Validated on real Windows Debug hardware and via a Linux host syntax check of
+the Win32 code path. The host run proves ASCII exact duplicates, existing and
+missing ASCII case collisions, node reuse, path security and all Gate 3
+assertions; only the owner-side Windows run executes the Unicode fixture
+(`Épée.glb` / `épée.glb`) and invalid-UTF-8 rejection.
+
+## Gate 2 correction — declared-path canonicalization leak
+
+The Unicode/case-identity fix above was correct in intent but had one
+remaining bug: it computed the declared-path identity with
+`std::filesystem::relative(lexical, root, error)`. That two-argument free
+function is defined by the standard as
+`weakly_canonical(p).lexically_relative(weakly_canonical(base))` — it
+silently canonicalizes both arguments against the filesystem, even though
+`lexical` was deliberately built to avoid that. On a case-insensitive Windows
+volume this let canonicalization quietly rewrite a declared spelling like
+`Content/Textures/stone.png` back to the on-disk `Stone.png`, reintroducing
+the exact bug the fix exists to prevent for any path that already exists on
+disk. It went undetected in Linux host validation because Linux filesystems
+are case-sensitive, so `stone.png` never case-insensitively resolves to
+`Stone.png` there. It reproduced as a live test failure —
+`RenegadeDependencyTests: existing dependency declaration casing was not
+preserved` — on the real Windows Debug build.
+
+Fix: swap the canonicalizing free function for the purely-lexical member
+function, which never touches the filesystem:
+
+```cpp
+const auto declaredRelative =
+    lexical.lexically_relative(root).lexically_normal();
+```
+
+Validated on Windows: full clean Debug build, `RenegadeDependencyTests` and
+all `RenegadeBridgeTests`/suite tests passing, repeated twice from a fresh
+configure with no regressions.
+
+## Release build — CL.exe access-violation, resolved as local hardware fault
+
+A separate, pre-existing issue blocked Release builds during this gate's
+development: Release `/O2` builds intermittently crashed with `CL.exe exited
+with code -1073741819` (STATUS_ACCESS_VIOLATION). Debug was unaffected
+throughout.
+
+Two rounds of toolchain investigation — upgrading the MSVC toolset, and
+applying `CMAKE_POLICY_DEFAULT_CMP0141 NEW` plus
+`CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded` for Release (`/Z7`, on the
+theory the crash was PDB type-server interaction) — did not resolve it; the
+crash kept recurring in a different translation unit each time. A further
+session eliminated every remaining software variable on the local machine
+(OneDrive sync stopped, zero orphaned build processes, `--parallel 1`) and
+the crash still reproduced. Windows Event Viewer showed why: the `CL.exe`
+access violations landed in the same second as
+`Microsoft-Windows-WHEA-Logger` corrected machine-check errors (internal
+parity errors) on the CPU. A 14-day WHEA history showed 6 such corrected
+errors, 4 of them clustered in a single 25-minute window across three
+different CPU cores, matching every local Release attempt made that night.
+BIOS and CPU microcode were both confirmed current. This is local hardware
+instability, not a compiler, CMake or code defect, and is being pursued
+separately with the hardware vendor.
+
+Release was verified sound by running the `Renegade Studio` GitHub Actions
+workflow (`studio.yml`, not the WickedEngine-only `windows-baseline.yml`,
+which does not build or test Renegade's own code) against this branch. Both
+Debug and Release jobs passed 23/23 tests, `RenegadeDependencyTests`
+included, no crash. This satisfies Release proof for LP05 Gates 1-3 on CI
+hardware. The `/Z7` CMake change is retained as harmless and directionally
+reasonable but was never the actual fix; local Release builds on the
+affected machine remain unreliable until the hardware issue is resolved.
