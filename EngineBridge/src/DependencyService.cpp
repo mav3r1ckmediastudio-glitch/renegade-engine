@@ -172,8 +172,8 @@ namespace renegade::bridge
         }
 
         const auto declaredRelative =
-            std::filesystem::relative(lexical, root, error).lexically_normal();
-        if (error)
+            lexical.lexically_relative(root).lexically_normal();
+        if (declaredRelative.empty())
         {
             result.error = "Dependency path could not be made project-relative.";
             return result;

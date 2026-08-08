@@ -5,11 +5,110 @@
 > now establish the dependency-graph contract, secure paths, provider boundary,
 > and concrete project, Story Flow, Runtime Screen and declared-reference
 > providers. Gate 2's path identity has been corrected for declared casing and
-> Windows Unicode ordinal comparison. See **LP05 Gate 2 correction — Windows
-> Unicode path identity** below for
-> changed files, verification and the next task. The
+> Windows Unicode ordinal comparison, then further corrected for a
+> filesystem-canonicalizing bug in that same fix — see **LP05 Gate 2
+> correction — declared-path canonicalization leak** below. A separate,
+> pre-existing Release-only `CL.exe` access-violation crash was investigated
+> and its previously documented `/Z7` fix confirmed **not sufficient** — see
+> **LP05 Release build — CL.exe access-violation, root cause still open**
+> below. Windows Debug is proven (23/23 `RenegadeDependencyTests` and full
+> suite, twice, on real Windows hardware); Windows Release remains blocked and
+> LP05 must not be considered accepted until it passes. The
 > older LF02 header immediately below is retained history and is no longer the
 > active branch/status.
+
+## LP05 Gate 2 correction — declared-path canonicalization leak
+
+Implementation commit: applied directly on top of `5474a6d`
+(`Fix LP05 Unicode path case identity`), one-line fix in
+`EngineBridge/src/DependencyService.cpp`.
+
+The Unicode/case-identity fix above was correct in intent but had one
+remaining bug: it computed the declared-path identity with
+
+```cpp
+std::filesystem::relative(lexical, root, error)
+```
+
+`std::filesystem::relative(p, base)` — the two-argument free function — is
+defined by the standard as `weakly_canonical(p).lexically_relative(
+weakly_canonical(base))`. It silently canonicalizes both arguments against
+the filesystem, even though `lexical` was deliberately built to avoid that.
+On a case-insensitive Windows volume this let canonicalization quietly
+rewrite a declared spelling like `Content/Textures/stone.png` back to the
+on-disk `Stone.png`, reintroducing the exact bug the fix exists to prevent
+for any path that already exists on disk. It went undetected in the
+patch's own Linux host validation because Linux filesystems are
+case-sensitive, so `stone.png` never case-insensitively resolves to
+`Stone.png` there — nothing for canonicalization to silently "correct."
+Windows execution is what actually catches it. It reproduced as a live test
+failure — `RenegadeDependencyTests: existing dependency declaration casing
+was not preserved` — on the real Windows Debug build.
+
+Fix: swap the canonicalizing free function for the purely-lexical member
+function, which never touches the filesystem:
+
+```cpp
+const auto declaredRelative =
+    lexical.lexically_relative(root).lexically_normal();
+if (declaredRelative.empty())
+{
+    result.error = "Dependency path could not be made project-relative.";
+    return result;
+}
+```
+
+Validated on Windows: full clean Debug build (`Tools\Build-Studio-Windows.ps1
+-Clean`), `RenegadeDependencyTests` and all 23 `RenegadeBridgeTests`/suite
+tests passing, repeated twice from a fresh configure with no regressions.
+
+## LP05 Release build — CL.exe access-violation, root cause still open
+
+A separate, pre-existing issue: Release `/O2` builds intermittently crash
+with `CL.exe exited with code -1073741819` (STATUS_ACCESS_VIOLATION),
+observed inside `CloseTypeServerPDB` on one run and with no debug-info
+stack at all on another. This is not caused by, and is not fixed by, the
+Gate 2 correction above — Debug builds compile and pass consistently.
+
+A prior session (LP02) attributed this to PDB type-server interaction under
+the default `/Zi` (`ProgramDatabase`) debug-info format and proposed
+switching Release to `/Z7` (`Embedded`) via
+`CMAKE_POLICY_DEFAULT_CMP0141 NEW` + `CMAKE_MSVC_DEBUG_INFORMATION_FORMAT`,
+but that fix had never actually been applied to this branch — neither
+setting existed anywhere in `CMakeLists.txt`. It has now been added:
+
+```cmake
+if(POLICY CMP0141)
+    cmake_policy(SET CMP0141 NEW)
+endif()
+set(CMAKE_POLICY_DEFAULT_CMP0141 NEW)
+...
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+    "$<IF:$<CONFIG:Release>,Embedded,ProgramDatabase>")
+```
+
+**Result: the crash still reproduces with this fix in place**, confirmed
+across two separate attempts after a full clean reconfigure — once inside
+`RenegadeRuntimeBootstrap.vcxproj` compiling `RuntimeFlow.cpp`, once inside
+`WickedEngine_emb_shaders.vcxproj` compiling `wiRenderer.cpp` — different
+translation units each time, always during Release optimization. A
+process-spawn exhaustion error (`D8040`) was also observed on one attempt
+after several consecutive builds left ~24 orphaned `MSBuild.exe`/`mspdbsrv.exe`
+processes running; clearing those and capping parallelism to `--parallel 1`
+ruled out spawn exhaustion as the cause but did not stop the access
+violation from recurring.
+
+Because the crash moves to a different file each time and persists with
+`/Z7`, the original PDB-type-server diagnosis is likely incomplete — this
+now looks more consistent with a `cl.exe`-internal fault under `/O2` on this
+specific toolset (`19.51.36246.0`, a Visual Studio "18" preview-channel
+build) than with a PDB-path-specific issue. The `/Z7` change is left in
+place since it is harmless and directionally correct, but **does not
+resolve Release** on its own. Root-causing this further — bisecting which
+translation unit or optimization actually triggers it, checking for a known
+Microsoft issue against this exact toolset build, or trying a different
+`/O2`-compatible workaround — needs a dedicated session and should not block
+this handoff.
 
 ## LP05 Gate 2 correction — Windows Unicode path identity
 
