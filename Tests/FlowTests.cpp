@@ -1,4 +1,5 @@
 #include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/DependencyService.h"
 
 #include <chrono>
 #include <filesystem>
@@ -101,6 +102,17 @@ int main()
         reopened.nodes.size() != 4 || reopened.routes.size() != 3)
     {
         return Fail(temporary.path, "flow document did not round-trip");
+    }
+
+    StoryFlowDependencyDocument dependencyDocument;
+    auto dependencyReader = MakeStoryFlowDependencyReader(projectId);
+    if (!dependencyReader(flowPath.generic_u8string(), dependencyDocument, error) ||
+        dependencyDocument.scenePathHints.size() != 2 ||
+        dependencyDocument.scenePathHints[1] !=
+            "Content/Scenes/LevelTwo.wiscene")
+    {
+        return Fail(temporary.path,
+            "Story Flow dependency adapter did not retain Level references");
     }
 
     const std::string previousLevelName = document.nodes[1].name;

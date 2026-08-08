@@ -11,6 +11,8 @@ namespace renegade::bridge
     enum class DependencyClass
     {
         ProjectDocument,
+        StoryFlowDocument,
+        RuntimeScreenDocument,
         Scene,
         ImportedContent,
         Texture,
@@ -133,6 +135,105 @@ namespace renegade::bridge
             const DependencyProviderContext& context,
             const DependencyCandidateSink& emit,
             std::string& error) const = 0;
+    };
+
+    struct ProjectDependencyDocument
+    {
+        std::string projectId;
+        std::string startupScene;
+        std::string startupFlow;
+        std::string startupScreen;
+    };
+
+    struct StoryFlowDependencyDocument
+    {
+        std::string projectId;
+        std::vector<std::string> scenePathHints;
+    };
+
+    struct RuntimeScreenDependencyDocument
+    {
+        std::string projectId;
+        std::vector<std::string> imagePaths;
+        std::vector<std::string> fontPaths;
+    };
+
+    using ProjectDependencyReader = std::function<bool(
+        const std::string&, ProjectDependencyDocument&, std::string&)>;
+    using StoryFlowDependencyReader = std::function<bool(
+        const std::string&, StoryFlowDependencyDocument&, std::string&)>;
+    using RuntimeScreenDependencyReader = std::function<bool(
+        const std::string&, RuntimeScreenDependencyDocument&, std::string&)>;
+
+    // Production adapters use the existing validated document services. They
+    // are factories rather than hard dependencies in the providers so the
+    // extraction policy remains testable without a renderer or UI.
+    [[nodiscard]] ProjectDependencyReader MakeProjectDependencyReader();
+    [[nodiscard]] StoryFlowDependencyReader MakeStoryFlowDependencyReader(
+        std::string expectedProjectId);
+    [[nodiscard]] RuntimeScreenDependencyReader MakeRuntimeScreenDependencyReader(
+        std::string expectedProjectId);
+
+    // Gate 3 document providers consume typed, validated document views. The
+    // reader seam lets production bind ProjectService/FlowService/ScreenService
+    // while tests remain independent of Wicked and wi::config.
+    class ProjectDependencyProvider final : public IDependencyProvider
+    {
+    public:
+        explicit ProjectDependencyProvider(ProjectDependencyReader reader);
+        [[nodiscard]] const char* Name() const noexcept override;
+        [[nodiscard]] std::uint32_t Version() const noexcept override;
+        [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
+        [[nodiscard]] bool Discover(const DependencyProviderContext& context,
+            const DependencyCandidateSink& emit, std::string& error) const override;
+    private:
+        ProjectDependencyReader reader_;
+    };
+
+    class StoryFlowDependencyProvider final : public IDependencyProvider
+    {
+    public:
+        explicit StoryFlowDependencyProvider(StoryFlowDependencyReader reader);
+        [[nodiscard]] const char* Name() const noexcept override;
+        [[nodiscard]] std::uint32_t Version() const noexcept override;
+        [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
+        [[nodiscard]] bool Discover(const DependencyProviderContext& context,
+            const DependencyCandidateSink& emit, std::string& error) const override;
+    private:
+        StoryFlowDependencyReader reader_;
+    };
+
+    class RuntimeScreenDependencyProvider final : public IDependencyProvider
+    {
+    public:
+        explicit RuntimeScreenDependencyProvider(RuntimeScreenDependencyReader reader);
+        [[nodiscard]] const char* Name() const noexcept override;
+        [[nodiscard]] std::uint32_t Version() const noexcept override;
+        [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
+        [[nodiscard]] bool Discover(const DependencyProviderContext& context,
+            const DependencyCandidateSink& emit, std::string& error) const override;
+    private:
+        RuntimeScreenDependencyReader reader_;
+    };
+
+    struct DeclaredDependencyReference
+    {
+        std::string sourcePath;
+        DependencyCandidate candidate;
+    };
+
+    class DeclaredReferenceDependencyProvider final : public IDependencyProvider
+    {
+    public:
+        explicit DeclaredReferenceDependencyProvider(
+            std::vector<DeclaredDependencyReference> references);
+        [[nodiscard]] const char* Name() const noexcept override;
+        [[nodiscard]] std::uint32_t Version() const noexcept override;
+        [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
+        [[nodiscard]] bool Discover(const DependencyProviderContext& context,
+            const DependencyCandidateSink& emit, std::string& error) const override;
+    private:
+        std::vector<DeclaredDependencyReference> references_;
     };
 
     // Gate 2 collector: owns graph-root admission and provider dispatch only.

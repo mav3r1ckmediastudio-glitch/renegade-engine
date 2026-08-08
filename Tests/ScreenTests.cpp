@@ -1,4 +1,5 @@
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/DependencyService.h"
 #include "renegade/bridge/ProjectService.h"
 
 #include <chrono>
@@ -165,6 +166,16 @@ int main()
             error))
     {
         return Fail(temporary.path, "valid screen did not serialize");
+    }
+
+    RuntimeScreenDependencyDocument dependencyDocument;
+    auto dependencyReader = MakeRuntimeScreenDependencyReader(projectId);
+    if (!dependencyReader(actualScreen.generic_u8string(), dependencyDocument, error) ||
+        dependencyDocument.imagePaths.size() != 1 ||
+        dependencyDocument.imagePaths.front() != "Content/UI/background.png")
+    {
+        return Fail(temporary.path,
+            "Runtime Screen dependency adapter did not retain Image resources");
     }
 
     ScreenDocument reloaded;

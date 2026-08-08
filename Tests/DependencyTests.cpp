@@ -84,6 +84,15 @@ int main()
     fs::create_directories(root / "Content/Scenes");
     std::ofstream(root / "representative.renegade") << "fixture";
     std::ofstream(root / "Content/Scenes/Startup.wiscene") << "fixture";
+    std::ofstream(root / "Content/Scenes/Secondary.wiscene") << "fixture";
+    fs::create_directories(root / "Content/Flow");
+    std::ofstream(root / "Content/Flow/Main.renegade-flow") << "fixture";
+    fs::create_directories(root / "Content/UI");
+    std::ofstream(root / "Content/UI/Main.renegade-screen") << "fixture";
+    std::ofstream(root / "Content/UI/background.png") << "fixture";
+    fs::create_directories(root / "Content/Scripts");
+    std::ofstream(root / "Content/Scripts/main.lua") << "fixture";
+    std::ofstream(root / "Content/Scripts/shared.lua") << "fixture";
 
     const auto existing = renegade::bridge::ResolveDependencyPath(
         root.string(), "Content/Textures/../Textures/Stone.png");
@@ -197,6 +206,101 @@ int main()
         unsafeCollector.Graph().diagnostics.front().code !=
             renegade::bridge::DependencyDiagnosticCode::OutsideProject)
         return Fail("outside-project graph root was not diagnosed");
+
+    using namespace renegade::bridge;
+    ProjectDependencyProvider projectProvider(
+        [](const std::string& path, ProjectDependencyDocument& document,
+            std::string& error)
+        {
+            if (fs::path(path).filename() != "representative.renegade")
+            {
+                error = "unexpected project path";
+                return false;
+            }
+            document.projectId = "fixture-project";
+            document.startupScene = "Content/Scenes/Startup.wiscene";
+            document.startupFlow = "Content/Flow/Main.renegade-flow";
+            document.startupScreen = "Content/UI/Main.renegade-screen";
+            error.clear();
+            return true;
+        });
+    DependencyCollector projectCollector(root.string());
+    if (!projectCollector.RegisterProvider(projectProvider, collectorError) ||
+        !projectCollector.AddRoot({"representative.renegade",
+            DependencyClass::ProjectDocument,
+            DependencyRequirement::Required, "fixture.project"}, collectorError) ||
+        !projectCollector.DiscoverRootDependencies(collectorError))
+        return Fail("Gate 3 project provider failed");
+    const auto& projectGraph = projectCollector.Graph();
+    if (projectGraph.nodes.size() != 4 || projectGraph.edges.size() != 3 ||
+        projectGraph.nodes[1].dependencyClass != DependencyClass::Scene ||
+        projectGraph.nodes[2].dependencyClass != DependencyClass::StoryFlowDocument ||
+        projectGraph.nodes[3].dependencyClass != DependencyClass::RuntimeScreenDocument)
+        return Fail("project provider did not emit the typed startup documents");
+
+    StoryFlowDependencyProvider flowProvider(
+        [](const std::string&, StoryFlowDependencyDocument& document,
+            std::string& error)
+        {
+            document.projectId = "fixture-project";
+            document.scenePathHints = {
+                "Content/Scenes/Startup.wiscene",
+                "Content/Scenes/Secondary.wiscene"};
+            error.clear();
+            return true;
+        });
+    DependencyCollector flowCollector(root.string());
+    if (!flowCollector.RegisterProvider(flowProvider, collectorError) ||
+        !flowCollector.AddRoot({"Content/Flow/Main.renegade-flow",
+            DependencyClass::StoryFlowDocument,
+            DependencyRequirement::Required, "fixture.flow"}, collectorError) ||
+        !flowCollector.DiscoverRootDependencies(collectorError) ||
+        flowCollector.Graph().nodes.size() != 3 ||
+        flowCollector.Graph().edges[1].provenance !=
+            "story_flow.level[1].scene_path_hint")
+        return Fail("Story Flow provider did not emit level scene hints");
+
+    RuntimeScreenDependencyProvider screenProvider(
+        [](const std::string&, RuntimeScreenDependencyDocument& document,
+            std::string& error)
+        {
+            document.projectId = "fixture-project";
+            document.imagePaths = {"Content/UI/background.png"};
+            document.fontPaths = {"Content/UI/missing-font.ttf"};
+            error.clear();
+            return true;
+        });
+    DependencyCollector screenCollector(root.string());
+    if (!screenCollector.RegisterProvider(screenProvider, collectorError) ||
+        !screenCollector.AddRoot({"Content/UI/Main.renegade-screen",
+            DependencyClass::RuntimeScreenDocument,
+            DependencyRequirement::Required, "fixture.screen"}, collectorError) ||
+        !screenCollector.DiscoverRootDependencies(collectorError))
+        return Fail("Runtime Screen provider failed");
+    const auto& screenGraph = screenCollector.Graph();
+    if (screenGraph.nodes.size() != 3 || screenGraph.edges.size() != 2 ||
+        screenGraph.nodes[1].dependencyClass != DependencyClass::Texture ||
+        screenGraph.nodes[2].dependencyClass != DependencyClass::Font ||
+        screenGraph.diagnostics.size() != 1 ||
+        screenGraph.diagnostics.front().code != DependencyDiagnosticCode::Missing)
+        return Fail("Runtime Screen provider did not preserve typed resources");
+
+    DeclaredReferenceDependencyProvider declaredProvider({
+        {"Content/Scripts/main.lua",
+            {"Content/Scripts/shared.lua", DependencyClass::Script,
+                DependencyRequirement::Required,
+                "script.declared_dependency[0]", false}}
+    });
+    DependencyCollector declaredCollector(root.string());
+    if (!declaredCollector.RegisterProvider(declaredProvider, collectorError) ||
+        !declaredCollector.AddRoot({"Content/Scripts/main.lua",
+            DependencyClass::Script, DependencyRequirement::Required,
+            "fixture.script"}, collectorError) ||
+        !declaredCollector.DiscoverRootDependencies(collectorError) ||
+        declaredCollector.Graph().nodes.size() != 2 ||
+        declaredCollector.Graph().edges.front().provenance !=
+            "script.declared_dependency[0]")
+        return Fail("declared-reference provider did not emit typed declaration");
 
     fs::remove_all(root, ignored);
     fs::remove_all(outside, ignored);

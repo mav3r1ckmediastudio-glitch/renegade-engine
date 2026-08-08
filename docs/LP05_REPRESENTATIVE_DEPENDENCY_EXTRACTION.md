@@ -71,3 +71,20 @@ the dependency classes they support, and typed candidates with provenance.
 provider's candidates only after that provider succeeds, preventing a failed
 provider from leaving a partial graph mutation. Concrete project, Story Flow,
 Runtime Screen and declared-reference providers remain Gate 3 work.
+
+## Gate 3 implementation boundary
+
+Gate 3 adds concrete providers for the validated project descriptor, Story
+Flow, Runtime Screen and explicit declarations. Production reader adapters use
+`ProjectService`, `ReadFlowDocument` and `ReadScreenDocument`; providers consume
+only typed document views and never scan arbitrary strings. Project extraction
+retains a declared missing startup-scene edge for diagnostics instead of making
+document inspection fail. Story Flow emits only Level-node scene path hints.
+Runtime Screen emits only authored Image resources; the provider schema also
+reserves typed font resources for the later custom-font document extension.
+Declared references are exact, typed source-to-target records supplied by the
+owning authoring or scripting policy, never inferred from Lua source text.
+
+This gate tests each provider at an explicit source root. Recursive traversal
+and complete transitive closure remain Gate 7, so Gate 3 does not silently
+introduce an incomplete traversal algorithm.

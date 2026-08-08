@@ -54,6 +54,10 @@ namespace renegade::bridge
             const std::string& descriptorPath,
             ProjectMetadata& metadata,
             std::string& error) const;
+        [[nodiscard]] bool InspectProjectForDependencies(
+            const std::string& descriptorPath,
+            ProjectMetadata& metadata,
+            std::string& error) const;
 
         void CloseProject() noexcept;
 
@@ -77,7 +81,8 @@ namespace renegade::bridge
         bool ReadProject(
             const std::string& descriptorPath,
             ProjectMetadata& metadata,
-            std::string& error) const;
+            std::string& error,
+            bool requireStartupScene = true) const;
         bool WriteProject(const ProjectMetadata& metadata);
         bool RecoverProjectTransactions(const std::string& projectRoot);
         void AddRecent(const ProjectMetadata& metadata);

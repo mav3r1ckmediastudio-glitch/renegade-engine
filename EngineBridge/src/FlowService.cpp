@@ -1,4 +1,5 @@
 #include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/DependencyService.h"
 
 #include <algorithm>
 #include <exception>
@@ -333,6 +334,25 @@ namespace
 
 namespace renegade::bridge
 {
+    StoryFlowDependencyReader MakeStoryFlowDependencyReader(
+        std::string expectedProjectId)
+    {
+        return [projectId = std::move(expectedProjectId)](
+            const std::string& path, StoryFlowDependencyDocument& document,
+            std::string& error)
+        {
+            FlowDocument flow;
+            if (!ReadFlowDocument(path, projectId, flow, error))
+                return false;
+            document.projectId = flow.envelope.projectId;
+            document.scenePathHints.clear();
+            for (const auto& node : flow.nodes)
+                if (node.kind == FlowNodeKind::Level)
+                    document.scenePathHints.push_back(node.scenePathHint);
+            error.clear();
+            return true;
+        };
+    }
     const char* FlowNodeKindName(const FlowNodeKind kind) noexcept
     {
         switch (kind)

@@ -1,4 +1,5 @@
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/DependencyService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -163,6 +164,29 @@ namespace
 
 namespace renegade::bridge
 {
+    RuntimeScreenDependencyReader MakeRuntimeScreenDependencyReader(
+        std::string expectedProjectId)
+    {
+        return [projectId = std::move(expectedProjectId)](
+            const std::string& path, RuntimeScreenDependencyDocument& document,
+            std::string& error)
+        {
+            ScreenDocument screen;
+            if (!ReadScreenDocument(path, projectId, screen, error))
+                return false;
+            document.projectId = screen.envelope.projectId;
+            document.imagePaths.clear();
+            document.fontPaths.clear();
+            for (const auto& widget : screen.widgets)
+            {
+                if (widget.kind == ScreenWidgetKind::Image &&
+                    !widget.resourcePath.empty())
+                    document.imagePaths.push_back(widget.resourcePath);
+            }
+            error.clear();
+            return true;
+        };
+    }
     const char* ScreenWidgetKindName(const ScreenWidgetKind kind) noexcept
     {
         switch (kind)

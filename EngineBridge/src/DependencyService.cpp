@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 namespace renegade::bridge
 {
@@ -133,6 +134,153 @@ namespace renegade::bridge
                     entry->second,
         });
         return result;
+    }
+
+    namespace
+    {
+        bool ValidateProviderContext(
+            const DependencyProviderContext& context,
+            std::string& absolutePath,
+            std::string& error)
+        {
+            if (context.source == nullptr)
+            {
+                error = "Dependency provider requires a source node.";
+                return false;
+            }
+            const auto resolved = ResolveDependencyPath(
+                context.projectRoot, context.source->projectRelativePath);
+            if (!resolved.accepted || !resolved.exists)
+            {
+                error = resolved.accepted
+                    ? "Dependency source document does not exist."
+                    : resolved.error;
+                return false;
+            }
+            absolutePath = resolved.absolutePath;
+            return true;
+        }
+
+        void EmitPath(const DependencyCandidateSink& emit,
+            std::string path, const DependencyClass dependencyClass,
+            std::string provenance)
+        {
+            if (!path.empty())
+                emit({std::move(path), dependencyClass,
+                    DependencyRequirement::Required,
+                    std::move(provenance), false});
+        }
+    }
+
+    ProjectDependencyProvider::ProjectDependencyProvider(ProjectDependencyReader reader)
+        : reader_(std::move(reader)) {}
+    const char* ProjectDependencyProvider::Name() const noexcept { return "project-document"; }
+    std::uint32_t ProjectDependencyProvider::Version() const noexcept { return 1; }
+    bool ProjectDependencyProvider::Supports(DependencyClass value) const noexcept
+    { return value == DependencyClass::ProjectDocument; }
+    bool ProjectDependencyProvider::Discover(const DependencyProviderContext& context,
+        const DependencyCandidateSink& emit, std::string& error) const
+    {
+        std::string path;
+        if (!reader_ || !ValidateProviderContext(context, path, error))
+        {
+            if (!reader_) error = "Project dependency reader is not configured.";
+            return false;
+        }
+        ProjectDependencyDocument document;
+        if (!reader_(path, document, error)) return false;
+        EmitPath(emit, document.startupScene, DependencyClass::Scene,
+            "project.startup_scene");
+        EmitPath(emit, document.startupFlow, DependencyClass::StoryFlowDocument,
+            "project.startup_flow");
+        EmitPath(emit, document.startupScreen, DependencyClass::RuntimeScreenDocument,
+            "project.startup_screen");
+        error.clear();
+        return true;
+    }
+
+    StoryFlowDependencyProvider::StoryFlowDependencyProvider(StoryFlowDependencyReader reader)
+        : reader_(std::move(reader)) {}
+    const char* StoryFlowDependencyProvider::Name() const noexcept { return "story-flow"; }
+    std::uint32_t StoryFlowDependencyProvider::Version() const noexcept { return 1; }
+    bool StoryFlowDependencyProvider::Supports(DependencyClass value) const noexcept
+    { return value == DependencyClass::StoryFlowDocument; }
+    bool StoryFlowDependencyProvider::Discover(const DependencyProviderContext& context,
+        const DependencyCandidateSink& emit, std::string& error) const
+    {
+        std::string path;
+        if (!reader_ || !ValidateProviderContext(context, path, error))
+        {
+            if (!reader_) error = "Story Flow dependency reader is not configured.";
+            return false;
+        }
+        StoryFlowDependencyDocument document;
+        if (!reader_(path, document, error)) return false;
+        for (std::size_t index = 0; index < document.scenePathHints.size(); ++index)
+            EmitPath(emit, document.scenePathHints[index], DependencyClass::Scene,
+                "story_flow.level[" + std::to_string(index) + "].scene_path_hint");
+        error.clear();
+        return true;
+    }
+
+    RuntimeScreenDependencyProvider::RuntimeScreenDependencyProvider(
+        RuntimeScreenDependencyReader reader) : reader_(std::move(reader)) {}
+    const char* RuntimeScreenDependencyProvider::Name() const noexcept { return "runtime-screen"; }
+    std::uint32_t RuntimeScreenDependencyProvider::Version() const noexcept { return 1; }
+    bool RuntimeScreenDependencyProvider::Supports(DependencyClass value) const noexcept
+    { return value == DependencyClass::RuntimeScreenDocument; }
+    bool RuntimeScreenDependencyProvider::Discover(const DependencyProviderContext& context,
+        const DependencyCandidateSink& emit, std::string& error) const
+    {
+        std::string path;
+        if (!reader_ || !ValidateProviderContext(context, path, error))
+        {
+            if (!reader_) error = "Runtime Screen dependency reader is not configured.";
+            return false;
+        }
+        RuntimeScreenDependencyDocument document;
+        if (!reader_(path, document, error)) return false;
+        for (std::size_t index = 0; index < document.imagePaths.size(); ++index)
+            EmitPath(emit, document.imagePaths[index], DependencyClass::Texture,
+                "runtime_screen.image[" + std::to_string(index) + "].resource");
+        for (std::size_t index = 0; index < document.fontPaths.size(); ++index)
+            EmitPath(emit, document.fontPaths[index], DependencyClass::Font,
+                "runtime_screen.font[" + std::to_string(index) + "].resource");
+        error.clear();
+        return true;
+    }
+
+    DeclaredReferenceDependencyProvider::DeclaredReferenceDependencyProvider(
+        std::vector<DeclaredDependencyReference> references)
+        : references_(std::move(references))
+    {
+        std::stable_sort(references_.begin(), references_.end(),
+            [](const auto& left, const auto& right)
+            {
+                if (left.sourcePath != right.sourcePath)
+                    return left.sourcePath < right.sourcePath;
+                return left.candidate.declaredPath < right.candidate.declaredPath;
+            });
+    }
+    const char* DeclaredReferenceDependencyProvider::Name() const noexcept
+    { return "declared-reference"; }
+    std::uint32_t DeclaredReferenceDependencyProvider::Version() const noexcept { return 1; }
+    bool DeclaredReferenceDependencyProvider::Supports(DependencyClass value) const noexcept
+    { return value == DependencyClass::Script || value == DependencyClass::Data; }
+    bool DeclaredReferenceDependencyProvider::Discover(
+        const DependencyProviderContext& context,
+        const DependencyCandidateSink& emit, std::string& error) const
+    {
+        if (context.source == nullptr)
+        {
+            error = "Declared-reference provider requires a source node.";
+            return false;
+        }
+        for (const auto& reference : references_)
+            if (reference.sourcePath == context.source->projectRelativePath)
+                emit(reference.candidate);
+        error.clear();
+        return true;
     }
 
     DependencyCollector::DependencyCollector(std::string projectRoot)

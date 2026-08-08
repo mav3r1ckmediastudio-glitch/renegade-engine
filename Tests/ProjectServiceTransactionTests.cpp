@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/DependencyService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 #include "renegade/bridge/ProjectService.h"
 
@@ -261,6 +262,31 @@ namespace
                 descriptor.generic_u8string(), inspected, error),
             "fresh transactional descriptor did not round-trip");
     }
+
+    void TestDependencyInspectionRetainsMissingStartup(const fs::path& root)
+    {
+        const fs::path descriptor = root / "MissingScene.renegade";
+        WriteText(descriptor, CurrentDescriptor(
+            "MissingScene", "11111111-1111-4111-8111-111111111111"));
+
+        ProjectService projects;
+        ProjectMetadata metadata;
+        std::string error;
+        Check(!projects.InspectProject(
+                descriptor.generic_u8string(), metadata, error),
+            "normal project inspection accepted a missing startup scene");
+        Check(projects.InspectProjectForDependencies(
+                descriptor.generic_u8string(), metadata, error),
+            "dependency inspection rejected a declared missing startup scene");
+        Check(metadata.startupScene == "Content/Scenes/Main.wiscene",
+            "dependency inspection discarded the missing startup declaration");
+        renegade::bridge::ProjectDependencyDocument dependencies;
+        auto reader = renegade::bridge::MakeProjectDependencyReader();
+        Check(reader(descriptor.generic_u8string(), dependencies, error),
+            "project dependency adapter rejected valid descriptor metadata");
+        Check(dependencies.startupScene == "Content/Scenes/Main.wiscene",
+            "project dependency adapter discarded the startup declaration");
+    }
 }
 
 int main()
@@ -276,6 +302,7 @@ int main()
     TestInterruptedOpenRecovery(root / "02-recovery");
     TestFreshProjectHasNoPreviousBackup(root / "03-create");
     TestMigrationBackupFailurePreservesDescriptor(root / "04-backup-failure");
+    TestDependencyInspectionRetainsMissingStartup(root / "05-dependency-inspection");
 
     std::error_code ignored;
     fs::remove_all(root, ignored);
