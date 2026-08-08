@@ -1,5 +1,7 @@
 #include "renegade/bridge/DependencyService.h"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 
 namespace renegade::bridge
@@ -17,6 +19,15 @@ namespace renegade::bridge
                     return false;
             }
             return true;
+        }
+
+        std::string FoldPathCase(std::string path)
+        {
+            std::transform(path.begin(), path.end(), path.begin(),
+                [](unsigned char character) {
+                    return static_cast<char>(std::tolower(character));
+                });
+            return path;
         }
     }
 
@@ -70,6 +81,32 @@ namespace renegade::bridge
             result = {};
             result.error = "Dependency path could not be made project-relative.";
         }
+        return result;
+    }
+
+    DependencyPathRegistration DependencyPathRegistry::Register(
+        const std::string& sourceId,
+        const std::string& canonicalRelativePath)
+    {
+        DependencyPathRegistration result;
+        const auto folded = FoldPathCase(canonicalRelativePath);
+        const auto [entry, inserted] =
+            pathsByFoldedName_.emplace(folded, canonicalRelativePath);
+        result.inserted = inserted;
+        if (inserted)
+            return result;
+
+        const bool exactDuplicate = entry->second == canonicalRelativePath;
+        result.diagnostics.push_back({
+            exactDuplicate ? DependencyDiagnosticCode::Duplicate
+                           : DependencyDiagnosticCode::CaseCollision,
+            sourceId,
+            canonicalRelativePath,
+            exactDuplicate
+                ? "Dependency path was already registered."
+                : "Dependency path differs from an existing path only by case: " +
+                    entry->second,
+        });
         return result;
     }
 }

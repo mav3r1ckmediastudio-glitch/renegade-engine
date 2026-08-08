@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -74,6 +75,23 @@ namespace renegade::bridge
         std::string canonicalRelativePath;
         std::string absolutePath;
         std::string error;
+    };
+
+    struct DependencyPathRegistration
+    {
+        bool inserted = false;
+        std::vector<DependencyDiagnostic> diagnostics;
+    };
+
+    class DependencyPathRegistry
+    {
+    public:
+        [[nodiscard]] DependencyPathRegistration Register(
+            const std::string& sourceId,
+            const std::string& canonicalRelativePath);
+
+    private:
+        std::map<std::string, std::string> pathsByFoldedName_;
     };
 
     // Resolves a declared dependency against projectRoot without requiring it
