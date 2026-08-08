@@ -103,3 +103,69 @@ chrome:
 - PLAY snapshots the current live scene;
 - the real Runtime launches using the same graphics backend as Studio;
 - STARTING remains distinct from RUNNING;
+- STOP terminates the running Runtime and returns Studio to PLAY;
+- Studio's own scene, selection and dirty state are unaffected by a Test
+  Level session, both while it runs and after STOP.
+
+The transport control reuses the chrome's existing top-bar glyph area
+(previously drawn but unwired) rather than adding a separate button
+elsewhere in the UI, matching where a creator would already expect
+play/stop controls to live.
+
+### Fixes found and applied during Gate 3B3 verification
+
+Three real defects were found only once the project owner exercised the
+actual click-through in a running Studio build - none were caught by
+compilation, the 22/22 automated suite, or a startup-only smoke test, since
+nothing in the existing automated coverage launches Studio and clicks its
+UI. Each was diagnosed against the real, running application before being
+fixed and re-verified.
+
+**STOP was unreachable.** `StudioRenderPath::Update()`'s branch for an
+active Test Level session returned unconditionally every frame before
+reaching the code that dispatches queued editor actions further down.
+Clicking STOP correctly queued the action, but nothing ever processed it
+while Runtime was active, so the click had no visible effect. Fixed by
+letting a queued `StopTestLevel` action through to dispatch before that
+branch's early return; any other action requested during an active session
+is discarded rather than left to fire unexpectedly once Runtime exits.
+
+**A stale Runtime binary produced a false "stuck on STARTING" symptom.**
+Early verification repeatedly showed Runtime launching and rendering
+correctly while Studio never left the STARTING state. The Runtime
+executable being launched had, at that point, last been built roughly
+20 hours before the READY-event feature was committed, so it had no
+readiness-signalling code at all - it ran normally and simply never
+signalled anything. Not a logic bug; resolved by rebuilding Runtime.
+
+**`ResolveTestLevelRuntimePath()` depended on `fs::current_path()`.**
+After the above was resolved, Studio still failed with "RenegadeRuntime.exe
+was not found beside this Studio build" against a Runtime binary that
+genuinely existed. Windows' common file-open dialogs (Open Project, Open
+Scene) are documented to change a process's working directory as a side
+effect of browsing to a file; once that happens, every relative candidate
+this lookup built silently resolved against the wrong root. Fixed by
+anchoring to Studio's own executable path via `GetModuleFileNameW`
+instead, which cannot drift regardless of what dialogs have been shown
+during the session.
+
+Verified after each fix: `RenegadeStudio.exe` builds clean in both Debug
+and Release, the full `ctest -C Debug` suite remains 22/22, and the actual
+PLAY -> STARTING -> RUNNING -> STOP interaction was re-confirmed working
+in a real, running Studio build by the project owner directly.
+
+### Known, deferred, non-blocking
+
+- The transport control's visual state (STARTING -> RUNNING, and the
+  STOP -> PLAY reversion after termination) has been observed to lag
+  behind the real underlying state while Runtime's window holds input
+  focus, catching up once focus returns to Studio. Most likely explained
+  by Studio's own render/update loop being throttled while its window is
+  unfocused, which is normal Windows/driver behaviour for background
+  real-time applications - not yet confirmed, and not blocking, since the
+  underlying state and every functional transition are correct throughout.
+- The real Runtime READY handshake was observed to succeed on a second
+  attempt after an earlier attempt in the same session appeared to hang
+  on STARTING, with no code change between attempts. Not reproduced since,
+  and not root-caused. Worth revisiting if it recurs.
+
