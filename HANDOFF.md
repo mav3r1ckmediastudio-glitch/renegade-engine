@@ -756,13 +756,22 @@ Branch: `poc/lp05-representative-dependency-extraction`
 
 Baseline: `51232c8` (`main`, LP04 accepted)
 
-Gate 1 implementation commit: `22d399c1e4783766c09256f400dd4daf1fcaf1d8`
+Gate 1 implementation commits:
+
+- `22d399c1e4783766c09256f400dd4daf1fcaf1d8` — initial contract, graph
+  schema, fixture manifest and project-boundary resolver;
+- `c489062` — diff-hygiene correction;
+- `db4acd0eac3c46e5e82ff848aa98f5f24d7ddc36` — executable duplicate,
+  case-collision and symlink-escape diagnostics/tests.
 
 LP05 has started with its authoritative proof contract, incremental fixture
 manifest, UI-free typed graph schema, and project-boundary path resolver. The
 WISCENE architecture is explicitly a Renegade-owned, read-only typed walker
 over Wicked's public ECS/component APIs; Wicked source and serializer internals
-are out of bounds.
+are out of bounds. Canonical-path registration now distinguishes exact
+duplicates from case-only aliases deterministically, and the path suite proves
+that a filesystem symlink cannot escape the project boundary where the host
+permits symlink creation.
 
 Changed files:
 
