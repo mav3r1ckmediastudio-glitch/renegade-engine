@@ -1,4 +1,4 @@
-# Renegade Engine — Current Handoff
+﻿# Renegade Engine — Current Handoff
 
 **Date:** 2026-08-08
 
@@ -6,7 +6,7 @@
 
 **Current main baseline:** `a14e3dc0a056a03e7c51e2fc38c1bb3786442d1e`
 
-**Documentation close-out branch:** `docs/lifecycle-roadmap-refresh`
+**Active branch:** `poc/lp05-representative-dependency-extraction`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
@@ -22,16 +22,9 @@ Temporary LP04 helper patch files may remain untracked. Do not use `git clean` a
 
 ## Current truth
 
-LP04 — Unsaved Test Level Snapshot is complete and accepted.
+LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP04 accepted behaviour" below for the summary and `docs/LP04_TEST_LEVEL_ACCEPTANCE.md` for the full record.
 
-PR #21, `Add LP04 unsaved Test Level snapshot gate`, merged the implementation into `main`.
-
-- Accepted implementation head: `f35ffef588f01a928ba833aea7262d70a67ee1b8`
-- Main merge commit: `fbf572e01bff04106b081c72e2ea14ec5fc22bb3`
-
-PR #23, `Record LP04 Test Level acceptance`, added the formal acceptance record.
-
-- Main squash merge commit: `51232c8df22e0f510167a1b7400643298afb5b6d`
+LP05 — Representative Dependency Extraction is active. Gates 1-3 are complete and both Windows Debug and Release are proven passing (23/23 tests, `RenegadeDependencyTests` included) on the `Renegade Studio` CI workflow. See "LP05 progress" below and `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md` for the full technical record, including the Gate 2 Unicode/canonicalization corrections and the Release `CL.exe` crash resolution.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 
@@ -112,13 +105,17 @@ The master-plan outcome is that assets become repeatable project resources rathe
 
 Existing GLB/GLTF import and scene placement are valuable foundations but are not yet a reusable project asset system.
 
-## Next bounded milestone
+## LP05 progress — Representative Dependency Extraction
 
-**LP05 — Representative Dependency Extraction**
+LP05 comes before broader asset identity/cooking/packaging work. Its purpose is to establish trustworthy, deterministic dependency discovery from representative Renegade/WISCENE content, producing Renegade-owned dependency/path records that later lifecycle slices can consume.
 
-LP05 comes before broader asset identity/cooking/packaging work.
+**Gates 1-3 are complete** on `poc/lp05-representative-dependency-extraction`: the dependency-graph contract, canonical path/security layer, UI-free provider interface, and concrete project, Story Flow, Runtime Screen and declared-reference providers. Gate 2's path identity was corrected twice after initial landing — once for Windows Unicode/case identity, once for a filesystem-canonicalization leak in that same fix — both proven on real Windows Debug hardware.
 
-Its purpose is to establish trustworthy, deterministic dependency discovery from representative Renegade/WISCENE content. It should produce Renegade-owned dependency/path records that later lifecycle slices can consume.
+**Both Debug and Release are proven.** A separate, pre-existing Release-only `CL.exe` access-violation crash blocked Release proof across two earlier sessions; it was root-caused this session to local CPU hardware instability (corrected machine-check errors confirmed via Windows Event Viewer/WHEA history), not a toolchain or code defect. Release was verified sound on GitHub Actions instead: the `Renegade Studio` workflow passed 23/23 tests in both Debug and Release, `RenegadeDependencyTests` included, no crash.
+
+Full technical detail for all of the above — the architectural decision, the gate-by-gate implementation boundaries, both Gate 2 corrections, and the complete Release crash investigation and resolution — is in `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`.
+
+**Not yet started:** Gate 4, the Renegade-owned read-only WISCENE typed walker using only Wicked's public ECS/component APIs. Do not modify Wicked or use serializer internals. This branch is not yet merged to `main`.
 
 ### LP05 architectural decision
 
@@ -127,8 +124,6 @@ For WISCENE native-resource extraction, use a **Renegade-owned, read-only typed 
 Do **not** modify Wicked's serializer merely to expose its internal resource-registration state. Wicked source remains off-limits unless a later gate demonstrates that no viable Renegade-owned external route exists.
 
 Representative extraction should cover the resource-bearing native components needed by the gate, deduplicate paths deterministically, preserve provenance, and report deliberately missing/unresolved dependencies as structured evidence.
-
-LP05 is not permission to build the full Content Browser, cooker or standalone packaging pipeline in one slice.
 
 ## Existing foundations relevant to LP05/Phase 4
 
@@ -162,3 +157,4 @@ These do not remove the need for stable **asset** IDs, source tracking, dependen
 - Do not use `git clean`.
 - Hosted CI GPU limitations must be documented rather than worked around by altering Wicked.
 - At lifecycle close-out, restore the intended `main` branch protection once documentation and next-milestone state are settled.
+- If a local Release build crashes with an unexplained access violation, check Windows Event Viewer/WHEA for hardware-level corrected errors before assuming a toolchain or code regression — see the LP05 Release resolution in `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md` for the precedent.

@@ -1,0 +1,17 @@
+# LP05 fixture grows alongside providers. Format is intentionally declarative.
+root project representative.renegade
+root scene Content/Scenes/Startup.wiscene
+provider project project.startup_scene Content/Scenes/Startup.wiscene
+provider project project.startup_flow Content/Flow/Main.renegade-flow
+provider project project.startup_screen Content/UI/Main.renegade-screen
+provider story-flow story_flow.level[0].scene_path_hint Content/Scenes/Startup.wiscene
+provider story-flow story_flow.level[1].scene_path_hint Content/Scenes/Secondary.wiscene
+provider runtime-screen runtime_screen.image[0].resource Content/UI/background.png
+provider runtime-screen runtime_screen.font[0].resource Content/UI/missing-font.ttf
+provider declared-reference script.declared_dependency[0] Content/Scripts/shared.lua
+expect scene Content/Scenes/Secondary.wiscene
+expect screen Content/UI/Main.renegade-screen
+expect missing Content/UI/missing-font.ttf
+reject outside ../outside-project.txt
+reject metadata Content/Looks/like-a-path.png
+collision Content/Textures/Stone.png Content/Textures/stone.png

@@ -1,4 +1,5 @@
 #include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/DependencyService.h"
 
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
@@ -248,6 +249,23 @@ namespace
 
 namespace renegade::bridge
 {
+    ProjectDependencyReader MakeProjectDependencyReader()
+    {
+        return [](const std::string& path,
+            ProjectDependencyDocument& document, std::string& error)
+        {
+            ProjectService projects;
+            ProjectMetadata metadata;
+            if (!projects.InspectProjectForDependencies(path, metadata, error))
+                return false;
+            document.projectId = metadata.projectId;
+            document.startupScene = metadata.startupScene;
+            document.startupFlow = metadata.startupFlow;
+            document.startupScreen = metadata.startupScreen;
+            error.clear();
+            return true;
+        };
+    }
     void ProjectService::Initialize(const std::string& stateFilePath)
     {
         stateFilePath_ = NormalizedAbsolutePath(stateFilePath);
@@ -413,6 +431,23 @@ namespace renegade::bridge
         return true;
     }
 
+    bool ProjectService::InspectProjectForDependencies(
+        const std::string& descriptorPath,
+        ProjectMetadata& metadata,
+        std::string& error) const
+    {
+        if (!ReadProject(descriptorPath, metadata, error, false))
+            return false;
+        if (metadata.projectId.empty())
+        {
+            error = "The project descriptor is missing its stable project ID. "
+                "Open it in Renegade Studio to migrate it before extraction.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
     void ProjectService::CloseProject() noexcept
     {
         currentProject_ = {};
@@ -463,7 +498,8 @@ namespace renegade::bridge
     bool ProjectService::ReadProject(
         const std::string& descriptorPath,
         ProjectMetadata& metadata,
-        std::string& error) const
+        std::string& error,
+        const bool requireStartupScene) const
     {
         if (descriptorPath.empty())
         {
@@ -544,7 +580,7 @@ namespace renegade::bridge
 
             const fs::path root = descriptor.parent_path();
             const fs::path startupPath = (root / startupScene).lexically_normal();
-            if (!fs::is_regular_file(startupPath))
+            if (requireStartupScene && !fs::is_regular_file(startupPath))
             {
                 error =
                     "Project startup scene is missing: " +
