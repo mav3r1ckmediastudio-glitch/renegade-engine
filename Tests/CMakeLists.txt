@@ -13,6 +13,14 @@ set_target_properties(RenegadeBridgeTests PROPERTIES
 
 add_test(NAME RenegadeBridgeTests COMMAND RenegadeBridgeTests)
 
+add_executable(RenegadeDependencyTests
+    DependencyTests.cpp
+)
+target_link_libraries(RenegadeDependencyTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeDependencyTests PROPERTIES FOLDER "Renegade/Tests")
+add_dependencies(RenegadeBridgeTests RenegadeDependencyTests)
+add_test(NAME RenegadeDependencyTests COMMAND RenegadeDependencyTests)
+
 add_executable(RenegadePrecipitationTests
     PrecipitationTests.cpp
 )

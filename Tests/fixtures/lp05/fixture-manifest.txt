@@ -1,0 +1,10 @@
+# LP05 fixture grows alongside providers. Format is intentionally declarative.
+root project representative.renegade
+root scene Content/Scenes/Startup.wiscene
+expect scene Content/Scenes/Secondary.wiscene
+expect screen Content/UI/MainMenu.screen
+expect missing Content/Audio/missing.ogg
+reject outside ../outside-project.txt
+reject metadata Content/Looks/like-a-path.png
+collision Content/Textures/Stone.png Content/Textures/stone.png
+
