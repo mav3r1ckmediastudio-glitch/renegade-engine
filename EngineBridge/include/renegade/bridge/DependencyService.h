@@ -6,6 +6,11 @@
 #include <string>
 #include <vector>
 
+namespace wi::scene
+{
+    struct Scene;
+}
+
 namespace renegade::bridge
 {
     enum class DependencyClass
@@ -160,12 +165,25 @@ namespace renegade::bridge
         std::vector<std::string> fontPaths;
     };
 
+    struct WisceneDependencyDocument
+    {
+        std::vector<DependencyCandidate> references;
+    };
+
     using ProjectDependencyReader = std::function<bool(
         const std::string&, ProjectDependencyDocument&, std::string&)>;
     using StoryFlowDependencyReader = std::function<bool(
         const std::string&, StoryFlowDependencyDocument&, std::string&)>;
     using RuntimeScreenDependencyReader = std::function<bool(
         const std::string&, RuntimeScreenDependencyDocument&, std::string&)>;
+    using WisceneDependencyReader = std::function<bool(
+        const std::string&, WisceneDependencyDocument&, std::string&)>;
+
+    // Public typed-walker seam. It is const and performs no loads, writes or
+    // renderer updates; the provider contract and output remain Wicked-free.
+    void InspectWisceneDependencies(
+        const wi::scene::Scene& scene,
+        WisceneDependencyDocument& document);
 
     // Production adapters use the existing validated document services. They
     // are factories rather than hard dependencies in the providers so the
@@ -175,6 +193,7 @@ namespace renegade::bridge
         std::string expectedProjectId);
     [[nodiscard]] RuntimeScreenDependencyReader MakeRuntimeScreenDependencyReader(
         std::string expectedProjectId);
+    [[nodiscard]] WisceneDependencyReader MakeWisceneDependencyReader();
 
     // Gate 3 document providers consume typed, validated document views. The
     // reader seam lets production bind ProjectService/FlowService/ScreenService
@@ -216,6 +235,22 @@ namespace renegade::bridge
             const DependencyCandidateSink& emit, std::string& error) const override;
     private:
         RuntimeScreenDependencyReader reader_;
+    };
+
+    // Gate 4 loads a WISCENE through Renegade's validated scene-document seam
+    // and walks only authoritative resource fields on public Wicked component
+    // structures. The reader keeps Wicked types out of this provider contract.
+    class WisceneDependencyProvider final : public IDependencyProvider
+    {
+    public:
+        explicit WisceneDependencyProvider(WisceneDependencyReader reader);
+        [[nodiscard]] const char* Name() const noexcept override;
+        [[nodiscard]] std::uint32_t Version() const noexcept override;
+        [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
+        [[nodiscard]] bool Discover(const DependencyProviderContext& context,
+            const DependencyCandidateSink& emit, std::string& error) const override;
+    private:
+        WisceneDependencyReader reader_;
     };
 
     struct DeclaredDependencyReference

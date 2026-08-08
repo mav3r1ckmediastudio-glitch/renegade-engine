@@ -1,8 +1,12 @@
 #include "renegade/bridge/DependencyService.h"
 
+#include <WickedEngine.h>
+
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <utility>
 
 namespace
@@ -11,6 +15,94 @@ namespace
     {
         std::cerr << "RenegadeDependencyTests: " << message << '\n';
         return 1;
+    }
+
+    std::string ReadBytes(const std::filesystem::path& path)
+    {
+        std::ifstream stream(path, std::ios::binary);
+        return {std::istreambuf_iterator<char>(stream),
+            std::istreambuf_iterator<char>()};
+    }
+
+    void PopulateGate4Scene(
+        wi::scene::Scene& scene,
+        const std::filesystem::path& path,
+        const bool includeEnvironmentProbe)
+    {
+        const auto projectRoot =
+            path.parent_path().parent_path().parent_path();
+        const auto resource = [&projectRoot](const char* relative)
+        {
+            return (projectRoot / relative).generic_u8string();
+        };
+
+        auto& firstMaterial = scene.materials.Create(wi::ecs::CreateEntity());
+        firstMaterial.textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].name =
+                resource("Content/Textures/albedo.png");
+        firstMaterial.textures[
+            wi::scene::MaterialComponent::NORMALMAP].name =
+                resource("Content/Textures/missing-normal.png");
+        auto& secondMaterial = scene.materials.Create(wi::ecs::CreateEntity());
+        secondMaterial.textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].name =
+                resource("Content/Textures/albedo.png");
+
+        auto& light = scene.lights.Create(wi::ecs::CreateEntity());
+        light.lensFlareNames = {
+            resource("Content/Textures/flare.png"),
+            resource("Content/Textures/albedo.png"),
+        };
+
+        if (includeEnvironmentProbe)
+        {
+            scene.probes.Create(wi::ecs::CreateEntity()).textureName =
+                resource("Content/Textures/probe.dds");
+        }
+
+        auto& weather = scene.weathers.Create(wi::ecs::CreateEntity());
+        weather.skyMapName = resource("Content/Textures/sky.dds");
+        weather.colorGradingMapName = resource("Content/Textures/grade.png");
+        weather.volumetricCloudsWeatherMapFirstName =
+            resource("Content/Textures/cloud-first.png");
+        weather.volumetricCloudsWeatherMapSecondName =
+            resource("Content/Textures/cloud-second.png");
+
+        scene.sounds.Create(wi::ecs::CreateEntity()).filename =
+            resource("Content/Audio/ambient.ogg");
+        scene.videos.Create(wi::ecs::CreateEntity()).filename =
+            resource("Content/Video/intro.mp4");
+        scene.scripts.Create(wi::ecs::CreateEntity()).filename =
+            resource("Content/Scripts/main.lua");
+
+        // This deliberately looks like a resource path. Gate 4 must not scan
+        // untyped metadata strings.
+        scene.metadatas.Create(wi::ecs::CreateEntity()).string_values.set(
+            "description", "Content/Textures/not-a-dependency.png");
+    }
+
+    bool WriteGate4Scene(const std::filesystem::path& path)
+    {
+        try
+        {
+            wi::scene::Scene scene;
+            // EnvironmentProbeComponent deserialization creates its render
+            // cubemap immediately. Keep the archive proof GPU-free and cover
+            // that public field through the direct const-scene walker below.
+            PopulateGate4Scene(scene, path, false);
+
+            wi::Archive archive(path.generic_u8string(), false, false);
+            if (!archive.IsOpen())
+                return false;
+            scene.Serialize(archive);
+            const bool saved = archive.SaveFile(path.generic_u8string());
+            archive = wi::Archive();
+            return saved;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     class FixtureProvider final : public renegade::bridge::IDependencyProvider
@@ -127,7 +219,7 @@ int main()
     std::ofstream(root / "Content/UI/Main.renegade-screen") << "fixture";
     std::ofstream(root / "Content/UI/background.png") << "fixture";
     fs::create_directories(root / "Content/Scripts");
-    std::ofstream(root / "Content/Scripts/main.lua") << "fixture";
+    std::ofstream(root / "Content/Scripts/main.lua") << "return true\n";
     std::ofstream(root / "Content/Scripts/shared.lua") << "fixture";
     fs::create_directories(root / "Content/Models");
     const std::string unicodeModelUpper =
@@ -458,6 +550,87 @@ int main()
         declaredCollector.Graph().edges.front().provenance !=
             "script.declared_dependency[0]")
         return Fail("declared-reference provider did not emit typed declaration");
+
+    const fs::path gate4Scene = root / "Content/Scenes/Gate4.wiscene";
+    wi::scene::Scene directGate4Scene;
+    PopulateGate4Scene(directGate4Scene, gate4Scene, true);
+    WisceneDependencyDocument directWalk;
+    InspectWisceneDependencies(directGate4Scene, directWalk);
+    if (directWalk.references.size() != 13 ||
+        directWalk.references[5].provenance !=
+            "wiscene.environment_probe[0].texture")
+        return Fail("const WISCENE walker omitted a native component field");
+
+    if (!WriteGate4Scene(gate4Scene))
+        return Fail("Gate 4 WISCENE fixture could not be serialized");
+    const std::string gate4BytesBefore = ReadBytes(gate4Scene);
+    if (gate4BytesBefore.empty())
+        return Fail("Gate 4 WISCENE fixture was empty");
+
+    const auto gate4Reader = MakeWisceneDependencyReader();
+    WisceneDependencyDocument firstRead;
+    WisceneDependencyDocument secondRead;
+    std::string gate4Error;
+    if (!gate4Reader(gate4Scene.generic_u8string(), firstRead, gate4Error) ||
+        !gate4Reader(gate4Scene.generic_u8string(), secondRead, gate4Error))
+        return Fail("production WISCENE dependency reader rejected its fixture");
+    if (firstRead.references.size() != 12 ||
+        secondRead.references.size() != firstRead.references.size())
+        return Fail("WISCENE walker did not emit the expected typed fields");
+    for (std::size_t index = 0; index < firstRead.references.size(); ++index)
+    {
+        const auto& firstReference = firstRead.references[index];
+        const auto& secondReference = secondRead.references[index];
+        if (firstReference.declaredPath != secondReference.declaredPath ||
+            firstReference.dependencyClass != secondReference.dependencyClass ||
+            firstReference.requirement != secondReference.requirement ||
+            firstReference.provenance != secondReference.provenance)
+            return Fail("repeated WISCENE walks changed logical output order");
+    }
+    if (firstRead.references.front().provenance !=
+            "wiscene.material[0].texture.base_color" ||
+        firstRead.references[9].dependencyClass != DependencyClass::Audio ||
+        firstRead.references[10].dependencyClass != DependencyClass::Video ||
+        firstRead.references[11].dependencyClass != DependencyClass::Script)
+        return Fail("WISCENE walker lost component field provenance or type");
+    for (const auto& reference : firstRead.references)
+        if (reference.declaredPath.find("not-a-dependency.png") !=
+                std::string::npos)
+            return Fail("path-looking metadata became a dependency edge");
+
+    WisceneDependencyProvider wisceneProvider(gate4Reader);
+    DependencyCollector wisceneCollector(root.generic_u8string());
+    if (!wisceneCollector.RegisterProvider(wisceneProvider, gate4Error) ||
+        !wisceneCollector.AddRoot({"Content/Scenes/Gate4.wiscene",
+            DependencyClass::Scene, DependencyRequirement::Required,
+            "fixture.wiscene"}, gate4Error) ||
+        !wisceneCollector.DiscoverRootDependencies(gate4Error))
+        return Fail("Gate 4 WISCENE provider failed");
+    const auto& wisceneGraph = wisceneCollector.Graph();
+    const auto missingCount = std::count_if(
+        wisceneGraph.diagnostics.begin(), wisceneGraph.diagnostics.end(),
+        [](const DependencyDiagnostic& diagnostic)
+        {
+            return diagnostic.code == DependencyDiagnosticCode::Missing;
+        });
+    const auto duplicateCount = std::count_if(
+        wisceneGraph.diagnostics.begin(), wisceneGraph.diagnostics.end(),
+        [](const DependencyDiagnostic& diagnostic)
+        {
+            return diagnostic.code == DependencyDiagnosticCode::Duplicate;
+        });
+    if (wisceneGraph.nodes.size() != 11 ||
+        wisceneGraph.edges.size() != 12 ||
+        wisceneGraph.diagnostics.size() != 11 ||
+        missingCount != 9 || duplicateCount != 2 ||
+        wisceneGraph.nodes[1].provider != "wiscene" ||
+        wisceneGraph.nodes[1].providerVersion != 1)
+        return Fail("WISCENE provider graph, diagnostics or ownership was incomplete");
+    if (wisceneGraph.edges[2].targetId != wisceneGraph.nodes[1].id ||
+        wisceneGraph.edges[4].targetId != wisceneGraph.nodes[1].id)
+        return Fail("duplicate native component references did not reuse one node");
+    if (ReadBytes(gate4Scene) != gate4BytesBefore)
+        return Fail("dependency extraction modified the authoritative WISCENE");
 
     fs::remove_all(root, ignored);
     fs::remove_all(outside, ignored);

@@ -43,6 +43,14 @@ namespace renegade::bridge
             return error_;
         }
 
+        // Read-only inspection seam for bridge services such as dependency
+        // extraction. The prepared scene remains owned by this result and can
+        // never replace or mutate Studio's active document through this view.
+        [[nodiscard]] const wi::scene::Scene* ReadOnlyScene() const noexcept
+        {
+            return scene_.get();
+        }
+
     private:
         friend class SceneService;
         friend class SceneDocumentService;

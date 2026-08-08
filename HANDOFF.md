@@ -4,9 +4,9 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Current main baseline:** `a14e3dc0a056a03e7c51e2fc38c1bb3786442d1e`
+**Current main baseline:** `1c9fe841046f4b9a56e7ed4966e251bca31b0330`
 
-**Active branch:** `poc/lp05-representative-dependency-extraction`
+**Active branch:** `poc/lp05-gate4-wiscene-typed-walker`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
@@ -28,7 +28,7 @@ LP05 — Representative Dependency Extraction is active. Gates 1-3 are complete 
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 
-- Main merge commit: `a14e3dc0a056a03e7c51e2fc38c1bb3786442d1e`
+- Main merge commit: `1c9fe841046f4b9a56e7ed4966e251bca31b0330`
 
 The four Windows PR checks completed successfully on the corrected PR #24 head:
 
@@ -109,13 +109,13 @@ Existing GLB/GLTF import and scene placement are valuable foundations but are no
 
 LP05 comes before broader asset identity/cooking/packaging work. Its purpose is to establish trustworthy, deterministic dependency discovery from representative Renegade/WISCENE content, producing Renegade-owned dependency/path records that later lifecycle slices can consume.
 
-**Gates 1-3 are complete** on `poc/lp05-representative-dependency-extraction`: the dependency-graph contract, canonical path/security layer, UI-free provider interface, and concrete project, Story Flow, Runtime Screen and declared-reference providers. Gate 2's path identity was corrected twice after initial landing — once for Windows Unicode/case identity, once for a filesystem-canonicalization leak in that same fix — both proven on real Windows Debug hardware.
+**Gates 1-3 are complete and merged** through PR #27 at `1c9fe841`. They establish the dependency-graph contract, canonical path/security layer, UI-free provider interface, and concrete project, Story Flow, Runtime Screen and declared-reference providers. Gate 2's path identity was corrected twice after initial landing — once for Windows Unicode/case identity, once for a filesystem-canonicalization leak in that same fix — both proven on real Windows Debug hardware.
 
 **Both Debug and Release are proven.** A separate, pre-existing Release-only `CL.exe` access-violation crash blocked Release proof across two earlier sessions; it was root-caused this session to local CPU hardware instability (corrected machine-check errors confirmed via Windows Event Viewer/WHEA history), not a toolchain or code defect. Release was verified sound on GitHub Actions instead: the `Renegade Studio` workflow passed 23/23 tests in both Debug and Release, `RenegadeDependencyTests` included, no crash.
 
 Full technical detail for all of the above — the architectural decision, the gate-by-gate implementation boundaries, both Gate 2 corrections, and the complete Release crash investigation and resolution — is in `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`.
 
-**Not yet started:** Gate 4, the Renegade-owned read-only WISCENE typed walker using only Wicked's public ECS/component APIs. Do not modify Wicked or use serializer internals. This branch is not yet merged to `main`.
+**Gate 4 is implemented on `poc/lp05-gate4-wiscene-typed-walker`, pending GitHub CI and independent verification.** It adds a Renegade-owned read-only WISCENE provider over the validated scene-open seam and walks public Material, Light, Environment Probe, Weather, Sound, Video and Script component resource fields. Tests cover all seven through the direct const-scene walker; the real headless WISCENE reader fixture covers the other six because Wicked's Environment Probe deserializer requires an initialized graphics device. Coverage includes typed provenance, repeated-read order, duplicates, missing resources, metadata exclusion and byte-identical source preservation. Wicked remains unchanged; serializer internals are not intercepted.
 
 ### LP05 architectural decision
 
