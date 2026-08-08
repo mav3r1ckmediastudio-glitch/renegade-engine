@@ -801,3 +801,43 @@ not materialized, so this gate still requires the normal Windows Debug and
 Release configure/build/CTest evidence. Next: add explicit graph roots and the
 provider interface, growing the LP05 fixture with the project/Flow/Screen
 providers rather than postponing integration.
+
+# LP05 Gate 2 — roots and provider interface (2026-08-08)
+
+Branch: `poc/lp05-representative-dependency-extraction`
+
+Implementation commit: `0dc57f9c8f7a1646fca4b7c6319b1d047021b4fb`
+
+Gate 2 adds canonical graph-root admission, the UI-free
+`IDependencyProvider` contract, stable provider-name dispatch, typed candidate
+emission and one-hop collection. Provider candidates are staged until the
+provider succeeds, so a provider error cannot leave a partial graph mutation.
+Root/provider provenance and versions reach graph nodes and edges. Duplicate
+and case-collision edges resolve to the existing canonical node rather than a
+dangling case-derived identity.
+
+Changed files:
+
+- `EngineBridge/include/renegade/bridge/DependencyService.h`
+- `EngineBridge/src/DependencyService.cpp`
+- `Tests/DependencyTests.cpp`
+- `Tests/fixtures/lp05/fixture-manifest.txt`
+- `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`
+- `docs/FEATURE_MATRIX.csv`
+
+Local validation:
+
+```text
+g++ -std=c++17 -Wall -Wextra -Werror -IEngineBridge/include \
+  EngineBridge/src/DependencyService.cpp Tests/DependencyTests.cpp \
+  -o /tmp/renegade-lp05-gate2-tests
+/tmp/renegade-lp05-gate2-tests
+RenegadeDependencyTests passed
+git diff --check
+PASS
+```
+
+This environment still has no full Windows/Wicked build dependency set, so
+Debug/Release CMake and CTest remain required on Windows. Next: Gate 3 concrete
+project, Story Flow, Runtime Screen and declared-reference providers, growing
+the representative fixture and tests alongside each provider.
