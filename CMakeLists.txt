@@ -1,6 +1,23 @@
 cmake_minimum_required(VERSION 3.19)
 
+# CMP0141 controls how MSVC debug information format is set. It must be
+# resolved before project() so CMAKE_MSVC_DEBUG_INFORMATION_FORMAT below
+# takes effect via the generator instead of the legacy /Zi-in-flags path.
+if(POLICY CMP0141)
+    cmake_policy(SET CMP0141 NEW)
+endif()
+set(CMAKE_POLICY_DEFAULT_CMP0141 NEW)
+
 project(RenegadeEngine LANGUAGES C CXX)
+
+# Release /O2 CL.exe has a reproducible access-violation crash
+# (-1073741819) inside CloseTypeServerPDB when using the default
+# ProgramDatabase (/Zi) debug format under this toolchain. Embedded (/Z7)
+# avoids the PDB type-server interaction that triggers it. Debug and
+# RelWithDebInfo keep ProgramDatabase since they do not crash and benefit
+# from separate .pdb files.
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+    "$<IF:$<CONFIG:Release>,Embedded,ProgramDatabase>")
 
 include(CTest)
 
