@@ -1,5 +1,13 @@
 # Renegade Engine — Current Handoff
 
+> **Current work (2026-08-08):** LP04 is accepted on `main` at `51232c8`.
+> LP05 is active on `poc/lp05-representative-dependency-extraction`. Gate 1
+> establishes the dependency-graph contract, incremental fixture, typed schema
+> and project-boundary path tests. See **LP05 Gate 1 — dependency graph
+> foundation** below for changed files, verification and the next task. The
+> older LF02 header immediately below is retained history and is no longer the
+> active branch/status.
+
 **Date:** 2026-08-07
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
@@ -742,3 +750,45 @@ targets, and require a sculpt-preserving packaged regression check.
 - Persistent scene mutations belong in EngineBridge commands and require
   Undo/Redo plus Save/Open evidence.
 - PR #12 remains a draft until every Light and Material gate is accepted.
+# LP05 Gate 1 — dependency graph foundation (2026-08-08)
+
+Branch: `poc/lp05-representative-dependency-extraction`
+
+Baseline: `51232c8` (`main`, LP04 accepted)
+
+Gate 1 implementation commit: `22d399c1e4783766c09256f400dd4daf1fcaf1d8`
+
+LP05 has started with its authoritative proof contract, incremental fixture
+manifest, UI-free typed graph schema, and project-boundary path resolver. The
+WISCENE architecture is explicitly a Renegade-owned, read-only typed walker
+over Wicked's public ECS/component APIs; Wicked source and serializer internals
+are out of bounds.
+
+Changed files:
+
+- `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`
+- `Tests/fixtures/lp05/fixture-manifest.txt`
+- `EngineBridge/include/renegade/bridge/DependencyService.h`
+- `EngineBridge/src/DependencyService.cpp`
+- `Tests/DependencyTests.cpp`
+- `EngineBridge/CMakeLists.txt`
+- `Tests/CMakeLists.txt`
+- `docs/FEATURE_MATRIX.csv`
+
+Verification available in the Linux scratch environment:
+
+```text
+g++ -std=c++17 -Wall -Wextra -Werror -IEngineBridge/include \
+  EngineBridge/src/DependencyService.cpp Tests/DependencyTests.cpp \
+  -o /tmp/renegade-lp05-dependency-tests
+/tmp/renegade-lp05-dependency-tests
+RenegadeDependencyTests passed
+git diff --check
+PASS
+```
+
+The scratch environment has no CMake installation and the Wicked submodule is
+not materialized, so this gate still requires the normal Windows Debug and
+Release configure/build/CTest evidence. Next: add explicit graph roots and the
+provider interface, growing the LP05 fixture with the project/Flow/Screen
+providers rather than postponing integration.
