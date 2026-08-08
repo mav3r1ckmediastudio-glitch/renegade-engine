@@ -4,10 +4,65 @@
 > LP05 is active on `poc/lp05-representative-dependency-extraction`. Gates 1-3
 > now establish the dependency-graph contract, secure paths, provider boundary,
 > and concrete project, Story Flow, Runtime Screen and declared-reference
-> providers. See **LP05 Gate 3 — document dependency providers** below for
+> providers. Gate 2's path identity has been corrected for declared casing and
+> Windows Unicode ordinal comparison. See **LP05 Gate 2 correction — Windows
+> Unicode path identity** below for
 > changed files, verification and the next task. The
 > older LF02 header immediately below is retained history and is no longer the
 > active branch/status.
+
+## LP05 Gate 2 correction — Windows Unicode path identity
+
+Implementation commit: `5474a6d` (`Fix LP05 Unicode path case identity`).
+
+The original Gate 2 resolver used the filesystem-resolved spelling as graph
+identity. On case-insensitive Windows filesystems that erased a provider's
+declared casing before duplicate/collision registration. The replacement keeps
+the resolved absolute path for containment, symlink protection, existence and
+reads, while the lexically normalized UTF-8 declaration supplies graph
+identity and diagnostics.
+
+The registry now owns the single equivalence policy. On Windows it strictly
+decodes UTF-8 to UTF-16 and calls `CompareStringOrdinal(..., TRUE)`, the
+non-linguistic Windows comparison intended for NTFS filenames. It returns the
+first registered spelling to the collector, which hashes that exact spelling
+to reuse the existing node. The collector no longer performs a second fold.
+Exact UTF-8 equality remains `Duplicate`; ordinal case equivalence with a
+different spelling is `CaseCollision`. Invalid UTF-8 fails closed.
+
+Changed files:
+
+- `EngineBridge/include/renegade/bridge/DependencyService.h`
+- `EngineBridge/src/DependencyService.cpp`
+- `Tests/DependencyTests.cpp`
+- `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`
+- `docs/FEATURE_MATRIX.csv`
+- `HANDOFF.md`
+
+Validation available in this Linux workspace:
+
+```text
+g++ -std=c++17 -Wall -Wextra -Werror -IEngineBridge/include \
+  Tests/DependencyTests.cpp EngineBridge/src/DependencyService.cpp \
+  -o /tmp/renegade-dependency-unicode-tests
+/tmp/renegade-dependency-unicode-tests
+RenegadeDependencyTests passed
+
+g++ -std=c++17 -Wall -Wextra -Werror -D_WIN32 \
+  -I/tmp/renegade-win-stub -IEngineBridge/include -fsyntax-only \
+  EngineBridge/src/DependencyService.cpp
+passed
+
+git diff --check
+passed
+```
+
+The host run proves ASCII exact duplicates, existing and missing ASCII case
+collisions, node reuse, path security and all Gate 3 assertions. The Windows
+branch syntax check covers the Win32 API code path, but only the normal Windows
+Debug/Release build and `RenegadeDependencyTests` can execute the Unicode
+fixture (`Épée.glb` / `épée.glb`) and invalid-UTF-8 rejection. That owner-side
+run remains required before Gate 4 is applied or LP05 is accepted.
 
 ## LP05 Gate 3 — document dependency providers
 

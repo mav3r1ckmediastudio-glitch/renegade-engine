@@ -72,6 +72,16 @@ provider's candidates only after that provider succeeds, preventing a failed
 provider from leaving a partial graph mutation. Concrete project, Story Flow,
 Runtime Screen and declared-reference providers remain Gate 3 work.
 
+Path resolution deliberately keeps two forms. A filesystem-resolved absolute
+path is authoritative for containment, symlink escape prevention, existence
+and reads. A lexically normalized UTF-8 project-relative declaration retains
+the provider's spelling and is authoritative for graph identity and collision
+diagnostics. On the Windows x64 target, case equivalence is non-linguistic
+Unicode ordinal comparison through `CompareStringOrdinal(..., TRUE)`; it is
+not byte-wise `tolower`, locale folding or Unicode normalization. The registry
+returns the first registered spelling, so every duplicate/collision edge reuses
+the same stable graph node without a second collector-side comparison.
+
 ## Gate 3 implementation boundary
 
 Gate 3 adds concrete providers for the validated project descriptor, Story
