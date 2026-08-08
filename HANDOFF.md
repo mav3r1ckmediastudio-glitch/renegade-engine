@@ -1,12 +1,67 @@
 # Renegade Engine — Current Handoff
 
 > **Current work (2026-08-08):** LP04 is accepted on `main` at `51232c8`.
-> LP05 is active on `poc/lp05-representative-dependency-extraction`. Gate 1
-> establishes the dependency-graph contract, incremental fixture, typed schema
-> and project-boundary path tests. See **LP05 Gate 1 — dependency graph
-> foundation** below for changed files, verification and the next task. The
+> LP05 is active on `poc/lp05-representative-dependency-extraction`. Gates 1-3
+> now establish the dependency-graph contract, secure paths, provider boundary,
+> and concrete project, Story Flow, Runtime Screen and declared-reference
+> providers. See **LP05 Gate 3 — document dependency providers** below for
+> changed files, verification and the next task. The
 > older LF02 header immediately below is retained history and is no longer the
 > active branch/status.
+
+## LP05 Gate 3 — document dependency providers
+
+Implementation commit: `0b6136d` (`Add LP05 document dependency providers`).
+
+Gate 3 adds typed dependency classes for Story Flow and Runtime Screen
+documents; concrete project, Story Flow, Runtime Screen and declared-reference
+providers; and production reader adapters backed by `ProjectService`,
+`ReadFlowDocument` and `ReadScreenDocument`. No Wicked files or submodule state
+changed. The project dependency reader uses a new strict metadata inspection
+route that permits a missing startup scene only so the graph can retain and
+diagnose its declaration; normal Runtime/Studio inspection remains unchanged
+and continues to reject the missing scene.
+
+Changed files:
+
+- `EngineBridge/include/renegade/bridge/DependencyService.h`
+- `EngineBridge/include/renegade/bridge/ProjectService.h`
+- `EngineBridge/src/DependencyService.cpp`
+- `EngineBridge/src/FlowService.cpp`
+- `EngineBridge/src/ProjectService.cpp`
+- `EngineBridge/src/ScreenService.cpp`
+- `Tests/DependencyTests.cpp`
+- `Tests/FlowTests.cpp`
+- `Tests/ProjectServiceTransactionTests.cpp`
+- `Tests/ScreenTests.cpp`
+- `Tests/fixtures/lp05/fixture-manifest.txt`
+- `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`
+- `docs/FEATURE_MATRIX.csv`
+- `HANDOFF.md`
+
+Validation run in the Linux workspace:
+
+```text
+g++ -std=c++17 -Wall -Wextra -Werror -IEngineBridge/include \
+  EngineBridge/src/DependencyService.cpp Tests/DependencyTests.cpp \
+  -o /tmp/renegade_dependency_tests
+/tmp/renegade_dependency_tests
+RenegadeDependencyTests passed
+git diff --check
+passed
+```
+
+The Wicked submodule and CMake are absent in this workspace, so the production
+reader-adapter additions to the existing Project, Flow and Screen suites require
+the normal Windows Debug/Release build and CTest run. Gate 3 deliberately tests
+each provider at an explicit source root; recursive transitive traversal remains
+Gate 7. Runtime Screen custom fonts are not yet part of the LP03 document, but
+the provider's typed font channel is covered synthetically and reserved for
+that later document extension.
+
+Next task: LP05 Gate 4, the Renegade-owned read-only WISCENE typed walker using
+only Wicked public ECS/component APIs, extending the fixture and tests one
+native resource field at a time. Do not modify Wicked or use serializer internals.
 
 **Date:** 2026-08-07
 
