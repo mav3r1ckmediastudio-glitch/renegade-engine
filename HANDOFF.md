@@ -1,21 +1,105 @@
 # Renegade Engine — Current Handoff
 
-> **Current work (2026-08-08):** LP04 is accepted on `main` at `51232c8`.
-> LP05 is active on `poc/lp05-representative-dependency-extraction`. Gates 1-3
-> now establish the dependency-graph contract, secure paths, provider boundary,
-> and concrete project, Story Flow, Runtime Screen and declared-reference
-> providers. Gate 2's path identity has been corrected for declared casing and
-> Windows Unicode ordinal comparison, then further corrected for a
-> filesystem-canonicalizing bug in that same fix — see **LP05 Gate 2
-> correction — declared-path canonicalization leak** below. A separate,
-> pre-existing Release-only `CL.exe` access-violation crash was investigated
-> and its previously documented `/Z7` fix confirmed **not sufficient** — see
-> **LP05 Release build — CL.exe access-violation, root cause still open**
-> below. Windows Debug is proven (23/23 `RenegadeDependencyTests` and full
-> suite, twice, on real Windows hardware); Windows Release remains blocked and
-> LP05 must not be considered accepted until it passes. The
-> older LF02 header immediately below is retained history and is no longer the
-> active branch/status.
+> **Current work (2026-08-08, evening):** LP04 is accepted on `main` at
+> `51232c8`. LP05 is active on `poc/lp05-representative-dependency-extraction`,
+> now 4 commits ahead of origin (`f392ad2`), pushed. Gates 1-3 establish the
+> dependency-graph contract, secure paths, provider boundary, and concrete
+> project, Story Flow, Runtime Screen and declared-reference providers. Gate 2's
+> path identity has been corrected for declared casing and Windows Unicode
+> ordinal comparison, then further corrected for a filesystem-canonicalizing bug
+> in that same fix — see **LP05 Gate 2 correction — declared-path
+> canonicalization leak** below. **LP05 Release is now proven: 23/23 tests
+> passed on GitHub Actions CI (`Renegade Studio` workflow, run
+> `31280263723`, `Windows x64 Release` job), including `RenegadeDependencyTests`
+> — see LP05 Release resolution below for the full story.** Windows Debug is
+> separately proven (23/23, twice, on real Windows hardware in earlier
+> sessions, and again on this CI run). **LP05 acceptance criteria — both
+> Debug and Release passing — are now satisfied.** The older LF02 header
+> immediately below is retained history and is no longer the active
+> branch/status.
+
+## LP05 Release resolution — CL.exe crash was a local hardware fault, not a toolchain bug (2026-08-08 evening)
+
+This closes out the investigation opened in "LP05 Release build —
+CL.exe access-violation, root cause still open" below. The short version:
+**the Release `/O2` crash was never a compiler, CMake, or code problem.** It
+was corrected-but-real CPU hardware instability on the project owner's local
+machine, and Release passes cleanly everywhere else.
+
+**Diagnosis.** Two further local Release build attempts were made this
+session with every previously-suspected software variable eliminated:
+`OneDrive.Sync.Service.exe` stopped, zero orphaned `MSBuild`/`mspdbsrv`/`cl`
+processes, `--parallel 1`. The crash still reproduced both times, reported as
+`D8040` ("error creating or communicating with child process") — but
+Windows Event Viewer's Application log showed this was downstream of the
+same access violation as before: `CL.exe` (`19.51.36246.0`) faulting with
+`Exception code: 0xc0000005` at the same two timestamps. One second before
+the first fault, the System log recorded a `Microsoft-Windows-WHEA-Logger`
+Event ID 19: *"A corrected hardware error has occurred... Reported by
+component: Processor Core... Error Source: Corrected Machine Check... Error
+Type: Internal parity error."* A 14-day WHEA history showed 6 such corrected
+errors total, but 4 of them landed inside a single 25-minute window that
+same evening across three different CPU cores (APIC ID 33, 40, 41) — a
+cluster whose timing lines up exactly with every local Release attempt made
+that night. BIOS (AMI 1836, 2026-04-16) and CPU microcode (`0x133`) were
+both confirmed current, well past Intel's documented `0x125`/`0x129` fixes
+for the 13th/14th-gen elevated-voltage degradation issue, so this is not an
+update-away problem. Given this machine's prior history (i9-13900K, Intel
+elevated-voltage defect previously resolved via BIOS update and CPU
+replacement under extended warranty), this reads as either a recurrence of
+that degradation or a related instability, and is being taken to
+PCSpecialist under warranty separately from this repo. ASUS "Multicore
+Enhancement" on the TUF Z790-PLUS WIFI D4 board — which silently exceeds
+Intel's stock power/voltage limits under sustained multi-core load and is a
+documented accelerant for this exact failure class — has not yet been
+checked in BIOS and is worth disabling regardless of the warranty outcome.
+
+This retroactively explains everything that made the bug look like a
+toolchain problem across two sessions: why it moved to a different
+translation unit every time (parity errors are not code-location-specific),
+why it was specific to `/O2` (the highest sustained multi-core compute load
+CL.exe puts on the chip), why upgrading to VS18 didn't help, and why `/Z7`
+didn't help — none of those were ever the actual variable.
+
+**Resolution.** Rather than continue debugging local hardware from within a
+coding session, Release was verified on GitHub Actions instead — different,
+unaffected hardware, and this repo already has CI infrastructure for exactly
+this. Two workflows exist and are easy to confuse: `windows-baseline.yml`
+("Windows baseline") only builds the pinned WickedEngine submodule library in
+isolation and does not touch `EngineBridge`, run `ctest`, or prove anything
+about Renegade's own code — it was triggered first by mistake this session
+and its green result is not evidence for LP05. `studio.yml` ("Renegade
+Studio") is the one that builds `RenegadeStudio`/`RenegadeRuntime`/
+`RenegadeBridgeTests` and runs the full CTest suite; it was manually
+triggered via `workflow_dispatch` against this branch (run `31280263723`,
+since the workflow's automatic push/PR triggers only watch `main` and
+`agent/**`, not this feature branch) and is the actual evidence. Both its
+Debug and Release jobs passed:
+
+```text
+1/23 Test  #1: RenegadeBridgeTests ....................... Passed 0.37 sec
+2/23 Test  #2: RenegadeDependencyTests ................... Passed 0.03 sec
+...
+23/23 Test #23: RenegadeTestLevelRuntimeProcessTests ...... Passed 0.52 sec
+100% tests passed out of 23
+Total Test time (real) = 3.36 sec
+```
+
+This is Release, on `f392ad2` (the tip of this branch, including the Gate 2
+canonicalization-leak fix and the `/Z7` CMake change), all 23 tests green,
+`RenegadeDependencyTests` included, no crash, no `D8040`. Debug passed
+identically on the same run. **This satisfies the Release proof this
+handoff has required since Gate 2's correction, and LP05's Debug+Release
+acceptance bar is met.** The `/Z7` CMake change is retained — it is still
+correct and harmless — but should not be described as "the fix" for the
+crash in any future summary; it was never the actual cause.
+
+**What remains before treating LP05 as fully closed:** this branch is
+pushed but not merged to `main`, and Gate 4 (the WISCENE typed walker) has
+not started. The local machine's Release builds remain untrustworthy until
+the hardware issue is physically resolved — do not re-litigate the crash as
+a software problem in a future session if it recurs locally; check WHEA
+first.
 
 ## LP05 Gate 2 correction — declared-path canonicalization leak
 
