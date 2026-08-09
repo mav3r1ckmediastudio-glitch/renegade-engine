@@ -30,14 +30,56 @@ namespace renegade::bridge
         std::vector<StableId> dependencyAssetIds;
     };
 
+    // Gate 3 provenance is deliberately an association between durable asset
+    // IDs, rather than a pair of filesystem paths.  A source may produce
+    // several assets; an imported product has exactly one authoritative
+    // source/import recipe.  The content hashes are snapshots from the last
+    // successful import, not a second mutable copy of an AssetRecord's state.
+    struct ImportedProductRecord
+    {
+        StableId sourceAssetId;
+        StableId productAssetId;
+        std::string importer;
+        std::uint32_t importerVersion = 1;
+        std::string settingsSchema;
+        std::uint32_t settingsVersion = 1;
+        std::string settingsJson;
+        std::string sourceContentHashAtImport;
+        std::string productContentHashAtImport;
+
+        [[nodiscard]] bool operator==(
+            const ImportedProductRecord& other) const noexcept
+        {
+            return sourceAssetId == other.sourceAssetId &&
+                productAssetId == other.productAssetId &&
+                importer == other.importer &&
+                importerVersion == other.importerVersion &&
+                settingsSchema == other.settingsSchema &&
+                settingsVersion == other.settingsVersion &&
+                settingsJson == other.settingsJson &&
+                sourceContentHashAtImport == other.sourceContentHashAtImport &&
+                productContentHashAtImport == other.productContentHashAtImport;
+        }
+    };
+
+    struct ImportedProductStatus
+    {
+        bool sourceAvailable = false;
+        bool productAvailable = false;
+        bool sourceChanged = false;
+        bool productChanged = false;
+    };
+
     struct AssetRegistry
     {
-        static constexpr std::uint32_t CurrentSchemaVersion = 1;
+        static constexpr std::uint32_t LegacySchemaVersion = 1;
+        static constexpr std::uint32_t CurrentSchemaVersion = 2;
 
         std::string formatIdentifier = "renegade-asset-registry";
         std::uint32_t schemaVersion = CurrentSchemaVersion;
         StableId projectId;
         std::vector<AssetRecord> records;
+        std::vector<ImportedProductRecord> importedProducts;
     };
 
     struct AssetRegistryRefresh
@@ -80,6 +122,19 @@ namespace renegade::bridge
     [[nodiscard]] bool DeserializeAssetRegistry(
         const std::string& json,
         AssetRegistry& registry,
+        std::string& error);
+
+    // Replaces the complete provenance set atomically in memory.  It never
+    // invokes an importer or reads/writes project content; callers persist
+    // the validated registry through WriteAssetRegistry().
+    [[nodiscard]] bool SetImportedProductRecords(
+        AssetRegistry& registry,
+        std::vector<ImportedProductRecord> records,
+        std::string& error);
+    [[nodiscard]] bool GetImportedProductStatus(
+        const AssetRegistry& registry,
+        const ImportedProductRecord& record,
+        ImportedProductStatus& status,
         std::string& error);
 
     // LC01 Gate 2: one authoritative registry document at the project root,
