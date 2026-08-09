@@ -10,26 +10,26 @@ Phase 3 established the Renegade Studio and Runtime foundations needed to move i
 
 LP04 is complete and accepted. Studio can launch the real standalone Runtime from the current live, unsaved scene through a disposable snapshot, wait for an explicit Runtime READY handshake, and STOP the Runtime cleanly without forcing an authoritative scene save.
 
-The active bounded milestone is **LP05 Gate 8 — Packaged Repeatability and Read-Only Proof**. Gates 1-7 established the deterministic Renegade-owned dependency graph; Gate 8 must prove byte-identical separate-process output and unchanged project inputs from the assembled Debug/Release Studio packages before LP05 closes.
+LP05 is complete and accepted. Its deterministic Renegade-owned dependency graph passed separate-process Debug/Release packaged proof at exact head `8abb9fad959268ee00c32e046ede13d852883fa4` and was squash-merged through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
 
-LP05 must use a **Renegade-owned, read-only typed walker** over the pinned Wicked ECS/component structures. Do not modify Wicked source merely to expose its internal serializer resource-registration state.
+The active bounded milestone is **LC01 Gate 1 — Stable Asset Record Contract**. It consumes LP05's accepted graph into Renegade-owned project asset records while remaining UI-free and read-only.
 
-### LP05 target
+### LC01 Gate 1 target
 
-LP05 should prove that Renegade can:
+LC01 Gate 1 should prove that Renegade can:
 
-- identify representative authored roots and collect the native resources they require;
-- extract WISCENE dependencies from the relevant Wicked components through typed ECS queries;
-- normalize and classify dependency paths without rewriting the source scene;
-- represent dependencies with stable Renegade-owned graph/path structures;
-- deduplicate repeated references deterministically;
-- preserve enough provenance to explain which authored object/component produced each dependency;
-- report deliberately missing or unresolved dependencies as structured evidence rather than silently dropping them;
-- cover representative imported model content and nested material/texture references;
-- remain read-only with respect to the authoritative project and WISCENE files;
+- assign UUID-v4 asset identity to each project-owned dependency node;
+- retain asset identity when the same canonical path is refreshed;
+- retain class, requirement, applicability, provider/version and source hash;
+- project graph edges onto stable asset IDs;
+- distinguish missing sources without inventing files or repairing content;
+- exclude engine/runtime-support nodes from the project asset registry;
+- report added, changed and removed records;
+- serialize and reload a versioned registry byte-identically;
+- reject invalid IDs, duplicate paths, cross-project registries and dangling asset relationships;
 - leave the pinned Wicked source unchanged.
 
-LP05 is deliberately narrower than a complete asset database or cooker. It establishes trustworthy dependency discovery first; later lifecycle slices can build asset identity, source tracking, reimport, copying/cooking, recovery and Content Browser workflows on top of that evidence.
+Gate 1 defines and proves the registry contract only. It does not yet write an authoritative registry into a project, infer moved assets, run import/reimport, copy/cook content, build a game or alter the Content Browser UI.
 
 ## Phase 4 deliverables
 
@@ -85,15 +85,15 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-**LP05 Gate 8 — Packaged Repeatability and Read-Only Proof**
+**LC01 Gate 1 — Stable Asset Record Contract**
 
-Acceptance is bounded to executing the accepted dependency graph from the assembled Studio package twice per configuration, comparing byte-identical machine-readable output and proving every fixture input is unchanged. It must not silently expand into the full Content Browser, asset cooker, game packaging pipeline or a Wicked source modification.
+Acceptance is bounded to converting an LP05 dependency graph into stable, validated project asset records; refreshing those records without changing their UUIDs; reporting source/closure changes; and round-tripping deterministic versioned JSON in Debug and Release.
 
-The architectural rule for WISCENE native-resource extraction is:
+The architectural rule is:
 
-> Renegade owns the extraction surface. Read the required Wicked component fields through the public/native scene and ECS structures, build Renegade-owned dependency records, and keep the pinned Wicked source untouched unless a later gate proves there is no viable external route.
+> Paths locate current content; UUIDs identify assets. LC01 consumes LP05's canonical paths and hashes but does not make a path the durable identity authority.
 
-After LP05, continue with LC01 in dependency order rather than jumping directly to broad UI work. Asset identity/source tracking and subsequent packaging/cooking work should consume the dependency model proved here.
+See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md` for the contract, exclusions and evidence plan.
 
 ## Status rules
 

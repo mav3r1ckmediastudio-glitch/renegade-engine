@@ -4,9 +4,9 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Current main baseline:** `8ef6250a4b8c3d33c498919cdf803eebf7669735`
+**Current main baseline:** `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`
 
-**Active branch:** `agent/lp05-gate8-packaged-proof`
+**Active branch:** `agent/lc01-gate1-asset-records`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
@@ -24,11 +24,13 @@ Temporary LP04 helper patch files may remain untracked. Do not use `git clean` a
 
 LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP04 accepted behaviour" below for the summary and `docs/LP04_TEST_LEVEL_ACCEPTANCE.md` for the full record.
 
-LP05 — Representative Dependency Extraction is at its final gate. Gates 1-7 are merged, independently reviewed and CI-proven. Gate 8 adds separate-process determinism and packaged read-only evidence on `agent/lp05-gate8-packaged-proof`; authoritative CI and independent verification remain pending. See "LP05 progress" below and `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`.
+LP05 — Representative Dependency Extraction is complete and accepted on `main`. Exact final head `8abb9fad959268ee00c32e046ede13d852883fa4` passed Studio run 144 and baseline run 150 in Debug and Release before independent project-owner review and squash merge through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
+
+LC01 — Asset Identity and Source Tracking is active on `agent/lc01-gate1-asset-records`. Gate 1 consumes the accepted LP05 graph into versioned project asset records with stable UUIDs, source hashes and dependency relationships. Persistence, move recovery, reimport, cooking and UI integration remain outside Gate 1. See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 
-- Current main merge commit: `8ef6250a4b8c3d33c498919cdf803eebf7669735` (PR #32)
+- Current main merge commit: `fec9b521884d1a8e9017b8bac574b0ef615ca6cd` (PR #33)
 
 The four Windows PR checks completed successfully on the corrected PR #24 head:
 
@@ -37,7 +39,7 @@ The four Windows PR checks completed successfully on the corrected PR #24 head:
 - `Windows x64 Debug`
 - `Windows x64 Release`
 
-Branch protection is intentionally being left disabled until this lifecycle close-out is complete. Restore the intended protection at the end of the lifecycle rather than during the documentation refresh.
+LP05 lifecycle close-out is complete. Restoring the intended `main` branch protection remains a repository-administration follow-up and must not be represented as complete until verified on GitHub.
 
 ## LP04 accepted behaviour
 
@@ -133,7 +135,7 @@ The representative Lua fixture covers all five diagnostic codes in deterministic
 
 **Gate 7 is accepted on `main`.** `DependencyCollector::DiscoverTransitiveDependencies` walks the dynamically growing graph once per `(node, provider)` pair, skips missing nodes, terminates safely across cycles and preserves transactional provider output. Existing files receive deterministic `fnv1a64` content hashes; missing nodes carry the explicit `missing` marker. `SerializeDependencyGraph` validates referential integrity and emits stable versioned UTF-8 JSON with sorted roots, nodes, edges and diagnostics. Exact PR head `e3defa0e9348712ea50057386a571f13cfbce955` passed Studio run 141 with 23/23 tests in Debug and Release and baseline run 145 in both configurations. The project owner independently reviewed that head before squash-merging PR #32 at `8ef6250a4b8c3d33c498919cdf803eebf7669735`.
 
-**Gate 8 is implemented on `agent/lp05-gate8-packaged-proof`.** A console-only dependency proof executable and fixed mini-project are copied into every assembled Studio Debug/Release package. The build launches that packaged executable twice as separate processes, requires byte-identical graph JSON and compares SHA-256 records for every fixture file before and after extraction. The normal build-result evidence records process count, graph hash/size and the complete source-file inventory. Implementation commit `0cd5a649f03120f64e1153e493b7a85fecdda9d3` passed Studio run 143 with 23/23 tests plus two successful packaged proof processes in both Debug and Release; pinned-Wicked baseline run 148 passed both configurations. The final evidence head adds the graph hash directly to each job log for cross-configuration comparison. Gate 8 and LP05 remain unaccepted until exact-final-head CI and independent verification pass.
+**Gate 8 and LP05 are accepted on `main`.** A console-only dependency proof executable and fixed mini-project are copied into every assembled Studio Debug/Release package. The build launches that packaged executable twice as separate processes, requires byte-identical graph JSON and compares SHA-256 records for every fixture file before and after extraction. Implementation commit `0cd5a649f03120f64e1153e493b7a85fecdda9d3` passed Studio run 143 and baseline run 148. Exact final head `8abb9fad959268ee00c32e046ede13d852883fa4` passed Studio run 144 with 23/23 tests in Debug and Release and baseline run 150 in both configurations. Debug and Release produced the identical 4,681-byte graph with SHA-256 `23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384`; all fixture source paths, sizes and hashes remained unchanged. The project owner independently reviewed that exact head before squash-merging PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
 
 ### LP05 architectural decision
 

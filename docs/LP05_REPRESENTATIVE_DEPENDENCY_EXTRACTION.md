@@ -7,6 +7,18 @@ transitive dependency closure for representative project content. It produces
 graph data and diagnostics only. It does not copy, cook, repair or package
 assets; LC01 consumes the accepted graph and LP06 owns standalone building.
 
+## Acceptance
+
+LP05 is complete and accepted. Exact final head
+`8abb9fad959268ee00c32e046ede13d852883fa4` passed Renegade Studio run 144
+with 23/23 tests in Debug and Release and pinned-Wicked baseline run 150 in
+both configurations. Each packaged configuration executed two separate proof
+processes. Debug and Release produced the identical 4,681-byte graph with
+SHA-256 `23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384`,
+and every fixture source path, size and SHA-256 remained unchanged. The
+project owner independently reviewed that exact head before squash-merging
+PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
+
 ## Architectural constraint
 
 WISCENE dependencies are extracted by a Renegade-owned, read-only typed walker
@@ -330,9 +342,12 @@ dependencies or build a game. Implementation commit
 `0cd5a649f03120f64e1153e493b7a85fecdda9d3` passed Studio run 143 with 23/23
 tests plus two successful packaged proof processes in both Debug and Release;
 pinned-Wicked baseline run 148 passed both configurations. The final evidence
-head prints the graph SHA-256 and byte count into each job log for direct
-Debug/Release comparison. Gate 8 and LP05 remain pending until exact-final-head
-CI and an independent reviewer accept the same commit.
+head `8abb9fad959268ee00c32e046ede13d852883fa4` printed the graph SHA-256
+and byte count into each job log for direct Debug/Release comparison. Studio
+run 144 and baseline run 150 passed both configurations; the graph hashes and
+sizes matched and the fixture remained unchanged. Independent project-owner
+review and squash merge `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`
+complete Gate 8 and LP05 acceptance.
 
 ## Gate 2 correction — Windows Unicode path identity
 

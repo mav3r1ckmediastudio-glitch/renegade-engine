@@ -1,0 +1,72 @@
+#pragma once
+
+#include "renegade/bridge/DependencyService.h"
+#include "renegade/bridge/IdentityService.h"
+
+#include <cstdint>
+#include <functional>
+#include <string>
+#include <vector>
+
+namespace renegade::bridge
+{
+    struct AssetRecord
+    {
+        StableId assetId;
+        std::string dependencyNodeId;
+        std::string projectRelativePath;
+        DependencyClass dependencyClass = DependencyClass::Data;
+        DependencyRequirement requirement = DependencyRequirement::Required;
+        std::string applicability = "windows-x64";
+        std::string provider;
+        std::uint32_t providerVersion = 1;
+        std::string contentHash;
+        bool root = false;
+        bool sourceAvailable = true;
+        std::vector<StableId> dependencyAssetIds;
+    };
+
+    struct AssetRegistry
+    {
+        static constexpr std::uint32_t CurrentSchemaVersion = 1;
+
+        std::string formatIdentifier = "renegade-asset-registry";
+        std::uint32_t schemaVersion = CurrentSchemaVersion;
+        StableId projectId;
+        std::vector<AssetRecord> records;
+    };
+
+    struct AssetRegistryRefresh
+    {
+        AssetRegistry registry;
+        std::vector<StableId> addedAssetIds;
+        std::vector<StableId> changedAssetIds;
+        std::vector<StableId> removedAssetIds;
+    };
+
+    using AssetIdGenerator = std::function<StableId()>;
+
+    // LC01 Gate 1 consumes LP05's accepted graph without touching project
+    // content. Existing path-to-ID assignments are retained, content changes
+    // are reported, and graph edges are projected onto stable asset IDs.
+    // Runtime-support nodes are deliberately not project asset records.
+    [[nodiscard]] bool RefreshAssetRegistry(
+        const StableId& projectId,
+        const DependencyGraph& graph,
+        const AssetRegistry* existingRegistry,
+        AssetRegistryRefresh& refresh,
+        std::string& error,
+        AssetIdGenerator generateId = GenerateStableId);
+
+    [[nodiscard]] bool ValidateAssetRegistry(
+        const AssetRegistry& registry,
+        std::string& error);
+    [[nodiscard]] bool SerializeAssetRegistry(
+        const AssetRegistry& registry,
+        std::string& json,
+        std::string& error);
+    [[nodiscard]] bool DeserializeAssetRegistry(
+        const std::string& json,
+        AssetRegistry& registry,
+        std::string& error);
+}
