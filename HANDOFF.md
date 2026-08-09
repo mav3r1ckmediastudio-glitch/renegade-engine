@@ -26,7 +26,7 @@ LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP
 
 LP05 — Representative Dependency Extraction is complete and accepted on `main`. Exact final head `8abb9fad959268ee00c32e046ede13d852883fa4` passed Studio run 144 and baseline run 150 in Debug and Release before independent project-owner review and squash merge through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
 
-LC01 — Asset Identity and Source Tracking is active on `agent/lc01-gate1-asset-records`. Gate 1 consumes the accepted LP05 graph into versioned project asset records with stable UUIDs, source hashes and dependency relationships. Persistence, move recovery, reimport, cooking and UI integration remain outside Gate 1. See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
+LC01 — Asset Identity and Source Tracking is active on `agent/lc01-gate1-asset-records`. Gate 1 consumes the accepted LP05 graph into versioned project asset records with stable UUIDs, source hashes and dependency relationships. Implementation commit `54107a7cc66fd16c8b8f40d8e9e619bd2b7548e2` passed Studio run 146 with 24/24 tests in Debug and Release, including `RenegadeAssetRegistryTests`, and baseline run 153 in both configurations. Persistence, move recovery, reimport, cooking and UI integration remain outside Gate 1. Exact-final-head CI and independent review remain pending. See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 

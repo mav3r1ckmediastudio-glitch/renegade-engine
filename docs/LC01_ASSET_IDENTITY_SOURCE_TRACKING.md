@@ -61,3 +61,17 @@ split into later bounded LC01 gates.
 
 Gate 1 remains unaccepted until exact-final-head CI and independent review
 both pass.
+
+## Implementation evidence
+
+Implementation commit `54107a7cc66fd16c8b8f40d8e9e619bd2b7548e2`
+passed Renegade Studio run 146 with 24/24 tests in Debug and Release.
+`RenegadeAssetRegistryTests` passed in both configurations. The existing LP05
+packaged proof also remained green with two processes and unchanged fixture
+inputs in each configuration. Pinned-Wicked baseline run 153 passed Debug and
+Release, and Wicked remained at
+`3a800b7134aafe58461093c8abb2e274d4e64033`.
+
+This proves the implementation commit. Gate 1 remains unaccepted until the
+documentation-complete exact final head passes CI and receives independent
+review.
