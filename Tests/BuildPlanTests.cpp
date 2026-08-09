@@ -434,8 +434,17 @@ int main()
     staleImport.settingsJson = "{\"scale_mode\":\"automatic\"}";
     staleImport.sourceContentHashAtImport = "fnv1a64:6000000000000006";
     staleImport.productContentHashAtImport = staleProduct->contentHash;
-    if (!SetImportedProductRecords(staleRegistry, {staleImport}, error))
+
+    // A stale provenance record can only arise after a valid import snapshot
+    // becomes out of date. SetImportedProductRecords() correctly refuses to
+    // create such state, so this negative fixture constructs the persisted
+    // structurally-valid stale record directly and then proves BuildService
+    // detects that its source hash no longer matches.
+    staleRegistry.schemaVersion = AssetRegistry::CurrentSchemaVersion;
+    staleRegistry.importedProducts = {staleImport};
+    if (!ValidateAssetRegistry(staleRegistry, error))
         return Fail(error.c_str());
+
     if (CreateWindowsGameBuildPlan(
             project,
             staleGraph,
