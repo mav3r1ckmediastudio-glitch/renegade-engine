@@ -139,9 +139,10 @@ missing diagnostics, metadata exclusion and byte-for-byte source-file identity
 after extraction. Gate 4 does not add recursive traversal; the scene is still
 exercised as an explicit root.
 
-Imported-source/BIN discovery, terrain/generated data and Always Include remain
-Gate 5. Lua source policy and computed-target diagnostics remain Gate 6.
-Transitive traversal and graph serialization remain Gate 7.
+Imported-source/BIN discovery, terrain/generated data and Always Include are
+implemented in Gate 5 as recorded below. Lua source policy and computed-target
+diagnostics remain Gate 6. Transitive traversal and graph serialization remain
+Gate 7.
 
 Gate 4's remote implementation commit
 `3d888de02c97a83ada27ba4f3d17f8a75053fd53` passed the authoritative
@@ -150,6 +151,91 @@ Each configuration passed the complete 23-test CTest suite, including the
 extended `RenegadeDependencyTests`. The separate pinned-Wicked baseline run 127
 also passed in Debug and Release. This is the accepted build/test proof because
 the project owner's local CPU is confirmed unstable under compilation load.
+
+## Gate 5 implementation boundary and correction
+
+PR #29 merged the first Gate 5 implementation to `main` at
+`84738acc95335822a276c8a0b7adc42d29f01aa9`, but an independent audit found
+that its acceptance evidence was incomplete. In particular, it had no
+generated-data evidence, its glTF fixture contained no material or animation
+structure, Always Include had no production-path tests and used an unescaped
+comma array, `GltfDependencyProvider` claimed all `ImportedContent` formats,
+and the repository handoff/evidence still described Gate 4 as active.
+
+Corrective draft PR #30 is based on that merged `main`. Its implementation
+head is `4707f77a61265dd70c309f4dcd1b857270a060b9`.
+
+### Imported content
+
+`GltfDependencyProvider` remains a raw-source provider, separate from
+`ImportService` and from the post-import WISCENE walker. It reads the glTF/GLB
+JSON document and emits only external `buffers[*].uri` and `images[*].uri`
+files. Embedded buffer-view images and data URIs are not file dependencies;
+missing external files still become graph nodes plus `Missing` diagnostics.
+
+The representative fixture now includes mesh accessors backed by an external
+BIN, three material texture slots and an animation sampler/channel. The reader
+records material-slot and animation counts as structural evidence while the
+dependency graph remains based on external resources. Percent-encoded URI
+paths, case-insensitive data-URI schemes, basic GLB version/length/chunk
+validation, a deliberately missing BIN and GLB JSON extraction are covered.
+Because `DependencyClass::ImportedContent` also covers OBJ, FBX, VRM/VRMA and
+PLY, the glTF provider self-filters by `.gltf`/`.glb` and succeeds without
+emitting candidates for other formats.
+
+### Terrain and generated data
+
+Terrain material resources remain ordinary public `MaterialComponent` texture
+fields and are therefore discovered by the Gate 4 WISCENE walker. The Gate 5
+fixture proves that project-owned base-colour and surface maps become graph
+nodes and that an install-anchored texture outside the project is diagnosed as
+`OutsideProject` rather than silently admitted.
+
+Pinned Wicked serializes sculpted per-chunk `heightmap_data`, authored
+`blendmap_layers` and `HeightmapModifier::data` directly inside the owning
+WISCENE. They are not external files. `WisceneDependencyDocument` therefore
+records deterministic `(provenance, byteCount)` embedded-generated-data
+evidence, sorted by terrain and chunk coordinates, without fabricating missing
+filesystem paths. The serialized fixture proves repeated-read ordering and
+byte-identical read-only inspection. External generated artifacts are ordinary
+project files and can be declared explicitly with the `generated_data` class
+through Always Include.
+
+This is an intentional boundary, not a missing provider: arbitrary generated
+binary data has no safe self-describing scan policy, while terrain-generated
+state already has WISCENE as its serialized authority. Packaging of bundled
+runtime-support files remains outside LP05.
+
+### Always Include
+
+Always Include remains a typed declaration on the project provider rather than
+a path-extension inference system. PR #29's `wi::config` comma array could not
+round-trip valid Windows filenames containing commas, `#` or `;`. New writes
+use a versioned count plus indexed class/path fields, with each path
+percent-encoded before it reaches the INI parser. The reader retains backward
+compatibility with PR #29's short-lived comma-array format.
+
+The public active-project `ProjectService::SetAlwaysInclude` seam commits these
+declarations through the normal descriptor transaction while preserving both
+persisted and in-memory metadata on validation failure.
+`RenegadeProjectServiceTransactionTests` covers real transactional create,
+write, read, exact metadata round trip, failure preservation, production
+dependency-adapter projection, typed `GeneratedData`, graph edges,
+delimiter-bearing filenames, legacy reads and malformed encoding rejection.
+`RenegadeDependencyTests` covers the
+representative glTF/GLB and terrain/generated-data behaviour above.
+
+### Gate 5 verification state
+
+Gate 5 implementation head `4707f77a61265dd70c309f4dcd1b857270a060b9`
+passed the authoritative Renegade Studio workflow run 135 in both Debug and
+Release with 23/23 tests in each configuration. The expanded
+`RenegadeDependencyTests` and `RenegadeProjectServiceTransactionTests` passed
+in both jobs. Pinned-Wicked baseline run 136 also passed in Debug and Release.
+Gate 5 is therefore implemented and CI-proven, but it is not independently
+accepted until a different AI or human verifies the exact final PR #30 head.
+The Wicked pin remains `3a800b7134aafe58461093c8abb2e274d4e64033`;
+no Wicked source or submodule change is permitted or required.
 
 ## Gate 2 correction — Windows Unicode path identity
 
