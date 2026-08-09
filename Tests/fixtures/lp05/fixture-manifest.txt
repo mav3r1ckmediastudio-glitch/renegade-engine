@@ -31,3 +31,7 @@ closure project flow scene script nested-script
 cycle scene Content/Scenes/Secondary.wiscene Content/Scenes/Startup.wiscene
 cycle script Content/Scripts/shared.lua Content/Scripts/main.lua
 serialize renegade-dependency-graph version=1 deterministic=true
+package proof-executable Tools/RenegadeDependencyProcessFixture.exe
+package proof-project Proof/LP05
+verify separate-process-runs 2
+verify project-inputs-byte-identical true

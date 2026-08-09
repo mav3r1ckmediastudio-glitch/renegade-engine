@@ -51,7 +51,12 @@ $result = [ordered]@{
     wickedCommit = $wickedCommit
     configurations = @($Configuration)
     platform = "x64"
-    targets = @("RenegadeStudio", "RenegadeRuntime", "RenegadeBridgeTests")
+    targets = @(
+        "RenegadeStudio",
+        "RenegadeRuntime",
+        "RenegadeBridgeTests",
+        "RenegadeDependencyProcessFixture"
+    )
     embeddedShaders = $true
     outputs = @()
     error = $null
@@ -101,6 +106,9 @@ try {
         $runtimeExecutable = Join-Path $runtimeDirectory "RenegadeRuntime.exe"
         $runtimeDxCompiler = Join-Path $runtimeDirectory "dxcompiler.dll"
         $runtimeFixtureScene = Join-Path $runtimeDirectory "Content\cube.wiscene"
+        $dependencyProofExecutable = Join-Path `
+            $buildRoot `
+            "Tests\$currentConfiguration\RenegadeDependencyProcessFixture.exe"
 
         $packageRoot = Join-Path $ArtifactRoot "packages\RenegadeStudio-$currentConfiguration"
         New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
@@ -115,6 +123,84 @@ try {
             -Path (Join-Path $repositoryRoot "Studio\package\*") `
             -Destination $packageRoot `
             -Force
+
+        # LP05 Gate 8: exercise dependency extraction from the assembled
+        # package twice as separate processes. Graph outputs live outside the
+        # fixture, and every fixture file is hashed before and after so a
+        # nominally successful extractor cannot conceal a source mutation.
+        $proofToolRoot = Join-Path $packageRoot "Tools"
+        $proofProjectRoot = Join-Path $packageRoot "Proof\LP05"
+        New-Item -ItemType Directory -Path $proofToolRoot -Force | Out-Null
+        New-Item -ItemType Directory -Path $proofProjectRoot -Force | Out-Null
+        $packagedProofExecutable = Join-Path `
+            $proofToolRoot `
+            "RenegadeDependencyProcessFixture.exe"
+        Copy-Item `
+            -Path $dependencyProofExecutable `
+            -Destination $packagedProofExecutable `
+            -Force
+        Copy-Item -Path $dxCompiler -Destination $proofToolRoot -Force
+        Copy-Item `
+            -Path (Join-Path $repositoryRoot "Tests\fixtures\lp05\process-project\*") `
+            -Destination $proofProjectRoot `
+            -Recurse `
+            -Force
+
+        $getProofFileRecords = {
+            param([string]$Root)
+            $prefixLength = $Root.TrimEnd(
+                [System.IO.Path]::DirectorySeparatorChar
+            ).Length + 1
+            @(
+                Get-ChildItem -Path $Root -File -Recurse |
+                    Sort-Object FullName |
+                    ForEach-Object {
+                        [ordered]@{
+                            path = $_.FullName.Substring($prefixLength).Replace(
+                                [System.IO.Path]::DirectorySeparatorChar,
+                                [char]'/'
+                            )
+                            bytes = $_.Length
+                            sha256 = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                        }
+                    }
+            )
+        }
+        $proofFilesBefore = & $getProofFileRecords -Root $proofProjectRoot
+        $proofRoot = Join-Path $ArtifactRoot "proof\$currentConfiguration"
+        New-Item -ItemType Directory -Path $proofRoot -Force | Out-Null
+        $proofGraphFirst = Join-Path $proofRoot "dependency-graph-1.json"
+        $proofGraphSecond = Join-Path $proofRoot "dependency-graph-2.json"
+
+        & $packagedProofExecutable $proofProjectRoot $proofGraphFirst
+        if ($LASTEXITCODE -ne 0) {
+            throw "LP05 Gate 8 packaged dependency proof run 1 failed with exit code $LASTEXITCODE."
+        }
+        & $packagedProofExecutable $proofProjectRoot $proofGraphSecond
+        if ($LASTEXITCODE -ne 0) {
+            throw "LP05 Gate 8 packaged dependency proof run 2 failed with exit code $LASTEXITCODE."
+        }
+
+        $firstGraphRecord = Get-RenegadeFileRecord -Path $proofGraphFirst
+        $secondGraphRecord = Get-RenegadeFileRecord -Path $proofGraphSecond
+        if ($firstGraphRecord.sha256 -ne $secondGraphRecord.sha256 -or
+            $firstGraphRecord.bytes -ne $secondGraphRecord.bytes) {
+            throw "LP05 Gate 8 separate-process dependency graphs were not byte-identical."
+        }
+        $proofFilesAfter = & $getProofFileRecords -Root $proofProjectRoot
+        $beforeJson = $proofFilesBefore | ConvertTo-Json -Depth 4 -Compress
+        $afterJson = $proofFilesAfter | ConvertTo-Json -Depth 4 -Compress
+        if ($beforeJson -ne $afterJson) {
+            throw "LP05 Gate 8 dependency extraction modified the packaged project fixture."
+        }
+        $dependencyProofRecord = [ordered]@{
+            status = "PASS"
+            processRuns = 2
+            executable = Get-RenegadeFileRecord -Path $packagedProofExecutable
+            graph = $firstGraphRecord
+            projectFileCount = $proofFilesBefore.Count
+            projectFiles = $proofFilesBefore
+        }
 
         # Test Level launches the real Runtime as a child process. Keep the
         # Runtime payload isolated under the Studio package so Studio can find
@@ -168,6 +254,7 @@ try {
             runtimeFixtureScene = Get-RenegadeFileRecord -Path $runtimeFixtureScene
             runtimePackage = Get-RenegadeFileRecord -Path $runtimePackageArchive
             bridgeTests = "PASS"
+            dependencyProof = $dependencyProofRecord
         }
     }
 

@@ -21,6 +21,28 @@ set_target_properties(RenegadeDependencyTests PROPERTIES FOLDER "Renegade/Tests"
 add_dependencies(RenegadeBridgeTests RenegadeDependencyTests)
 add_test(NAME RenegadeDependencyTests COMMAND RenegadeDependencyTests)
 
+# LP05 Gate 8 packaged proof fixture. The Windows build script copies this
+# console executable and its fixed mini-project into the Studio package, then
+# launches it twice as separate processes and compares both JSON outputs plus
+# every project-file hash. It is not a standalone CTest because the package
+# layout is part of the acceptance boundary.
+add_executable(RenegadeDependencyProcessFixture
+    DependencyProcessFixture.cpp
+)
+target_link_libraries(
+    RenegadeDependencyProcessFixture
+    PRIVATE
+        Renegade::EngineBridge
+)
+target_compile_options(RenegadeDependencyProcessFixture
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+set_target_properties(RenegadeDependencyProcessFixture PROPERTIES
+    FOLDER "Renegade/TestFixtures"
+)
+add_dependencies(RenegadeBridgeTests RenegadeDependencyProcessFixture)
+
 add_executable(RenegadePrecipitationTests
     PrecipitationTests.cpp
 )
