@@ -254,6 +254,21 @@ compares the graph files byte-for-byte and verifies SHA-256 records for every
 fixture input before and after. Outputs are written outside the project fixture.
 This is packaging of the proof harness, not asset cooking or game packaging.
 
+### Asset identity and source tracking
+
+`AssetRegistryService` is LC01's UI-independent consumer of the accepted LP05
+graph. A canonical project path locates the current source; a UUID-v4
+`assetId` is the durable identity authority. Refresh retains an existing ID
+for the same canonical path, updates source hashes and provider metadata,
+projects dependency edges onto asset IDs, and reports added, changed and
+removed records. Missing graph nodes remain explicit unavailable records.
+Runtime-support nodes are not admitted into the project asset registry.
+
+The versioned `renegade-asset-registry` JSON format is deterministic and
+validates project ownership, unique IDs and paths, complete source metadata
+and referential integrity. Gate 1 serializes and reloads this contract but
+does not yet choose or mutate an authoritative on-disk project location.
+
 ### Tools
 
 Import, shader, packaging, migration, feature-inventory, and validation tools.
