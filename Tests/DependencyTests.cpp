@@ -210,6 +210,64 @@ namespace
         std::string first_;
         std::string second_;
     };
+
+    class TransitiveFixtureProvider final :
+        public renegade::bridge::IDependencyProvider
+    {
+    public:
+        const char* Name() const noexcept override { return "gate7-fixture"; }
+        std::uint32_t Version() const noexcept override { return 1; }
+        bool Supports(renegade::bridge::DependencyClass) const noexcept override
+        {
+            return true;
+        }
+        bool Discover(
+            const renegade::bridge::DependencyProviderContext& context,
+            const renegade::bridge::DependencyCandidateSink& emit,
+            const renegade::bridge::DependencyDiagnosticSink&,
+            std::string& error) const override
+        {
+            using namespace renegade::bridge;
+            const auto& path = context.source->projectRelativePath;
+            if (path == "representative.renegade")
+            {
+                emit({"Content/Scenes/Startup.wiscene", DependencyClass::Scene,
+                    DependencyRequirement::Required, "project.startup_scene", false});
+                emit({"Content/Flow/Main.renegade-flow",
+                    DependencyClass::StoryFlowDocument,
+                    DependencyRequirement::Required, "project.startup_flow", false});
+            }
+            else if (path == "Content/Flow/Main.renegade-flow")
+            {
+                emit({"Content/Scenes/Secondary.wiscene", DependencyClass::Scene,
+                    DependencyRequirement::Required, "flow.level[1]", false});
+            }
+            else if (path == "Content/Scenes/Startup.wiscene")
+            {
+                emit({"Content/Scripts/main.lua", DependencyClass::Script,
+                    DependencyRequirement::Required, "scene.script[0]", false});
+            }
+            else if (path == "Content/Scenes/Secondary.wiscene")
+            {
+                emit({"Content/Scenes/Startup.wiscene", DependencyClass::Scene,
+                    DependencyRequirement::Required, "scene.return_to_start", false});
+            }
+            else if (path == "Content/Scripts/main.lua")
+            {
+                emit({"Content/Scripts/shared.lua", DependencyClass::Script,
+                    DependencyRequirement::Required, "lua.declared[0]", false});
+            }
+            else if (path == "Content/Scripts/shared.lua")
+            {
+                emit({"Content/Scripts/main.lua", DependencyClass::Script,
+                    DependencyRequirement::Required, "lua.cycle", false});
+                emit({"Content/Data/missing.json", DependencyClass::Data,
+                    DependencyRequirement::Required, "lua.data", false});
+            }
+            error.clear();
+            return true;
+        }
+    };
 }
 int main()
 {
@@ -636,6 +694,126 @@ int main()
     {
         return Fail("Lua policy scanned or modified source text");
     }
+
+    WisceneDependencyProvider closureSceneProvider(
+        [](const std::string&, WisceneDependencyDocument& document,
+            std::string& error)
+        {
+            document.references = {{"Content/Scripts/main.lua",
+                DependencyClass::Script, DependencyRequirement::Required,
+                "wiscene.script[0].filename", false}};
+            document.embeddedGeneratedData.clear();
+            error.clear();
+            return true;
+        });
+    DependencyCollector representativeClosure(root.string());
+    if (!representativeClosure.RegisterProvider(
+            projectProvider, collectorError) ||
+        !representativeClosure.RegisterProvider(flowProvider, collectorError) ||
+        !representativeClosure.RegisterProvider(screenProvider, collectorError) ||
+        !representativeClosure.RegisterProvider(
+            closureSceneProvider, collectorError) ||
+        !representativeClosure.RegisterProvider(luaProvider, collectorError) ||
+        !representativeClosure.AddRoot({"representative.renegade",
+            DependencyClass::ProjectDocument,
+            DependencyRequirement::Required,
+            "fixture.representative_closure"}, collectorError) ||
+        !representativeClosure.DiscoverTransitiveDependencies(collectorError))
+    {
+        return Fail("Gate 7 representative production-provider closure failed");
+    }
+    const auto& representativeGraph = representativeClosure.Graph();
+    const auto hasRepresentativePath = [&representativeGraph](const char* path)
+    {
+        return std::any_of(representativeGraph.nodes.begin(),
+            representativeGraph.nodes.end(),
+            [path](const DependencyNode& node)
+            {
+                return node.projectRelativePath == path;
+            });
+    };
+    if (!hasRepresentativePath("Content/Scenes/Secondary.wiscene") ||
+        !hasRepresentativePath("Content/UI/background.png") ||
+        !hasRepresentativePath("Content/Scripts/main.lua") ||
+        !hasRepresentativePath("Content/Scripts/shared.lua") ||
+        !hasRepresentativePath("Content/UI/missing-font.ttf"))
+    {
+        return Fail("Gate 7 did not connect the production provider chain");
+    }
+
+    TransitiveFixtureProvider transitiveProvider;
+    DependencyCollector transitiveCollector(root.string());
+    if (!transitiveCollector.RegisterProvider(
+            transitiveProvider, collectorError) ||
+        !transitiveCollector.AddRoot({"representative.renegade",
+            DependencyClass::ProjectDocument,
+            DependencyRequirement::Required,
+            "fixture.gate7"}, collectorError) ||
+        !transitiveCollector.DiscoverTransitiveDependencies(collectorError))
+    {
+        return Fail("Gate 7 transitive collection failed");
+    }
+    const auto& transitiveGraph = transitiveCollector.Graph();
+    if (transitiveGraph.nodes.size() != 7 ||
+        transitiveGraph.edges.size() != 8 ||
+        std::count_if(transitiveGraph.diagnostics.begin(),
+            transitiveGraph.diagnostics.end(),
+            [](const DependencyDiagnostic& diagnostic)
+            {
+                return diagnostic.code == DependencyDiagnosticCode::Duplicate;
+            }) != 2 ||
+        std::count_if(transitiveGraph.diagnostics.begin(),
+            transitiveGraph.diagnostics.end(),
+            [](const DependencyDiagnostic& diagnostic)
+            {
+                return diagnostic.code == DependencyDiagnosticCode::Missing;
+            }) != 1)
+    {
+        return Fail("Gate 7 closure did not preserve cycles and missing evidence");
+    }
+    if (std::any_of(transitiveGraph.nodes.begin(), transitiveGraph.nodes.end(),
+            [](const DependencyNode& node)
+            {
+                return node.contentHash.empty() ||
+                    (node.projectRelativePath == "Content/Data/missing.json"
+                        ? node.contentHash != "missing"
+                        : node.contentHash.rfind("fnv1a64:", 0) != 0);
+            }))
+    {
+        return Fail("Gate 7 did not populate deterministic content hashes");
+    }
+
+    const auto nodeCountBeforeRepeat = transitiveGraph.nodes.size();
+    const auto edgeCountBeforeRepeat = transitiveGraph.edges.size();
+    const auto diagnosticCountBeforeRepeat = transitiveGraph.diagnostics.size();
+    if (!transitiveCollector.DiscoverTransitiveDependencies(collectorError) ||
+        transitiveGraph.nodes.size() != nodeCountBeforeRepeat ||
+        transitiveGraph.edges.size() != edgeCountBeforeRepeat ||
+        transitiveGraph.diagnostics.size() != diagnosticCountBeforeRepeat)
+    {
+        return Fail("Gate 7 repeated traversal was not idempotent");
+    }
+
+    std::string firstGraphJson;
+    std::string secondGraphJson;
+    if (!SerializeDependencyGraph(
+            transitiveGraph, firstGraphJson, collectorError) ||
+        !SerializeDependencyGraph(
+            transitiveGraph, secondGraphJson, collectorError) ||
+        firstGraphJson != secondGraphJson ||
+        firstGraphJson.find("\"schema\": \"renegade-dependency-graph\"") ==
+            std::string::npos ||
+        firstGraphJson.find("\"version\": 1") == std::string::npos ||
+        firstGraphJson.find("\"content_hash\": \"fnv1a64:") ==
+            std::string::npos)
+    {
+        return Fail("Gate 7 graph serialization was not stable and complete");
+    }
+    DependencyGraph invalidGraph = transitiveGraph;
+    invalidGraph.edges.push_back({"unknown", "unknown", "invalid"});
+    std::string invalidJson;
+    if (SerializeDependencyGraph(invalidGraph, invalidJson, collectorError))
+        return Fail("Gate 7 serialized an invalid graph");
 
     const fs::path gate4Scene = root / "Content/Scenes/Gate4.wiscene";
     wi::scene::Scene directGate4Scene;

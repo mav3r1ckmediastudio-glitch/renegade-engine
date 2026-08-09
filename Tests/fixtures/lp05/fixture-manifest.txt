@@ -27,3 +27,7 @@ expect missing Content/UI/missing-font.ttf
 reject outside ../outside-project.txt
 reject metadata Content/Looks/like-a-path.png
 collision Content/Textures/Stone.png Content/Textures/stone.png
+closure project flow scene script nested-script
+cycle scene Content/Scenes/Secondary.wiscene Content/Scenes/Startup.wiscene
+cycle script Content/Scripts/shared.lua Content/Scripts/main.lua
+serialize renegade-dependency-graph version=1 deterministic=true
