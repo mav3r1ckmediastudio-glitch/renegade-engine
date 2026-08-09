@@ -1749,7 +1749,11 @@ namespace renegade::bridge
                             index,
                             "journal_document_outside_allowed_root",
                             "A recovered transaction document escapes its project root: " +
-                                path.generic_u8string());
+                                path.generic_u8string() +
+                                " (allowed root: " +
+                                allowedRoot.generic_u8string() +
+                                ", path key: " + PathKey(path) +
+                                ", root key: " + PathKey(allowedRoot) + ")");
                     }
                 }
             }
