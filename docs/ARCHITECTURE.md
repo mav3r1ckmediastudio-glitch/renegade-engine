@@ -222,6 +222,22 @@ legacy LP01/LP02 immediate startup route.
 Standalone player without editor code. It loads project settings, startup scene,
 assets, input configuration, and scripts, then runs the packaged game.
 
+### Dependency extraction boundary
+
+`DependencyCollector` owns UI-free graph admission and provider dispatch.
+Providers emit both typed dependency candidates and structured non-fatal
+diagnostics into temporary per-provider buffers; neither output is committed to
+the graph when that provider fails. This keeps negative evidence transactional
+alongside ordinary edges.
+
+Lua dependency discovery is policy-driven rather than source-text inference.
+`LuaDependencyPolicyProvider` consumes explicit typed nested-script
+declarations and explicit records of computed references that cannot be
+resolved statically. Declared targets become Script edges; undeclared computed
+targets become `UndeclaredComputedReference` diagnostics. Extraction never
+executes Lua and never treats arbitrary string literals as paths. Recursive
+provider traversal and graph serialization remain separate LP05 Gate 7 work.
+
 ### Tools
 
 Import, shader, packaging, migration, feature-inventory, and validation tools.

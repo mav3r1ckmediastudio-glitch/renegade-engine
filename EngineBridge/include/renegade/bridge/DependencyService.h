@@ -395,10 +395,9 @@ namespace renegade::bridge
         std::vector<LuaComputedDependencyReference> computedReferences_;
     };
 
-    // Gate 2 collector: owns graph-root admission and provider dispatch only.
-    // Later LP05 gates add concrete providers and transitive traversal without
-    // changing this UI-free contract. Providers are borrowed and must outlive
-    // the collector.
+    // Gates 2-6 collector: owns graph-root admission and transactional provider
+    // dispatch. Gate 7 adds transitive traversal without changing this UI-free
+    // provider contract. Providers are borrowed and must outlive the collector.
     class DependencyCollector
     {
     public:

@@ -162,8 +162,8 @@ structure, Always Include had no production-path tests and used an unescaped
 comma array, `GltfDependencyProvider` claimed all `ImportedContent` formats,
 and the repository handoff/evidence still described Gate 4 as active.
 
-Corrective draft PR #30 is based on that merged `main`. Its implementation
-head is `4707f77a61265dd70c309f4dcd1b857270a060b9`.
+Corrective PR #30 was based on that merged `main`. Its implementation head is
+`4707f77a61265dd70c309f4dcd1b857270a060b9`.
 
 ### Imported content
 
@@ -232,10 +232,51 @@ passed the authoritative Renegade Studio workflow run 135 in both Debug and
 Release with 23/23 tests in each configuration. The expanded
 `RenegadeDependencyTests` and `RenegadeProjectServiceTransactionTests` passed
 in both jobs. Pinned-Wicked baseline run 136 also passed in Debug and Release.
-Gate 5 is therefore implemented and CI-proven, but it is not independently
-accepted until a different AI or human verifies the exact final PR #30 head.
-The Wicked pin remains `3a800b7134aafe58461093c8abb2e274d4e64033`;
-no Wicked source or submodule change is permitted or required.
+Final PR head `974abac4a39c91f7baf3ccc29cc14a5910e836a4`
+then passed Renegade Studio run 136 with 23/23 tests in Debug and Release,
+while pinned-Wicked baseline run 137 passed both configurations. The project
+owner independently reviewed that exact head before squash-merging PR #30 at
+`1966d55a5bb9c4dfdcca222029e4aa10c48231d0`. Gate 5 is accepted. The Wicked
+pin remains `3a800b7134aafe58461093c8abb2e274d4e64033`; no Wicked source or
+submodule change is permitted or required.
+
+## Gate 6 implementation boundary
+
+Gate 6 adds structured provider diagnostics to the same transactional boundary
+as dependency candidates. A provider's candidates and diagnostics are gathered
+in temporary buffers and applied only after that provider succeeds. A failed
+provider therefore cannot leave either a partial graph edge or partial negative
+evidence.
+
+`LuaDependencyPolicyProvider` supports Script roots and consumes two explicit,
+typed policy inputs:
+
+- declared nested-script targets, which become required Script candidates;
+- computed references with no explicitly declared target, which become
+  `UndeclaredComputedReference` diagnostics attributed to the source script.
+
+This is deliberately not a Lua parser or a string scanner. Extraction does not
+execute Lua, does not infer a dependency from a path-looking string literal and
+does not attempt to evaluate a computed `dofile` expression. The owning
+authoring/scripting policy must explicitly declare a known target or explicitly
+record the unresolved computed reference.
+
+The Gate 6 representative fixture roots `Content/Scripts/main.lua`, declares a
+nested `shared.lua`, records `script_root .. next_script` as an unresolved
+`dofile` expression, and includes a path-looking metadata string that must not
+become an edge. One deterministic graph exercises all diagnostic codes:
+`OutsideProject`, `CaseCollision`, `Missing`, `Duplicate` and
+`UndeclaredComputedReference`. It also proves duplicate/collision node reuse,
+diagnostic source attribution, byte-identical source preservation and
+transactional rollback of diagnostics from a failing provider.
+
+Gate 6 implementation commit is
+`eb25d46bdb967f82c136ee030b216c656a220d54` on draft PR #31. Renegade Studio
+run 138 passed Debug and Release with 23/23 tests in each configuration,
+including `RenegadeDependencyTests`; pinned-Wicked baseline run 140 passed both
+configurations. Gate 6 is implemented and CI-proven, while independent
+verification of the exact final PR head remains pending. Gate 7 retains
+ownership of recursive traversal and machine-readable serialization.
 
 ## Gate 2 correction — Windows Unicode path identity
 
