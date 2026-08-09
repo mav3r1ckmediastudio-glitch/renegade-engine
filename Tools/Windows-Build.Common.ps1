@@ -119,14 +119,30 @@ function Invoke-RenegadeLoggedCommand {
     ) | Set-Content -Path $LogPath -Encoding UTF8
 
     $exitCode = -1
+    $commandOutputPath = "$LogPath.command-output"
+    if (Test-Path $commandOutputPath -PathType Leaf) {
+        Remove-Item -Path $commandOutputPath -Force
+    }
     Push-Location $WorkingDirectory
     try {
+        # Do not pipe the native process directly into Tee-Object. PowerShell
+        # can leave $LASTEXITCODE unchanged when a native command is the first
+        # element of a pipeline, which previously allowed a failing CTest run
+        # to be recorded as PASS. Capture first, record the exit code
+        # immediately, then replay the output to the console and durable log.
         $LASTEXITCODE = 0
-        & $FilePath @ArgumentList 2>&1 | Tee-Object -FilePath $LogPath -Append
+        & $FilePath @ArgumentList *> $commandOutputPath
         $exitCode = $LASTEXITCODE
     }
     finally {
         Pop-Location
+
+        if (Test-Path $commandOutputPath -PathType Leaf) {
+            Get-Content -Path $commandOutputPath |
+                Tee-Object -FilePath $LogPath -Append |
+                ForEach-Object { Write-Host $_ }
+            Remove-Item -Path $commandOutputPath -Force
+        }
     }
 
     if ($exitCode -ne 0) {
