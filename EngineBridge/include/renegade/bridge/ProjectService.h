@@ -77,6 +77,11 @@ namespace renegade::bridge
         [[nodiscard]] const std::string& LastError() const noexcept;
         [[nodiscard]] const std::string& LastWarning() const noexcept;
 
+        // Replace the active project's typed Always Include declarations and
+        // commit the descriptor through the normal project transaction path.
+        // On failure the active in-memory metadata remains unchanged.
+        bool SetAlwaysInclude(const std::vector<std::string>& declarations);
+
         // Editor preferences persist beside the recent-project registry rather
         // than in a scene. They describe how the creator likes Studio to
         // behave, not what a project contains, so they must never reach a

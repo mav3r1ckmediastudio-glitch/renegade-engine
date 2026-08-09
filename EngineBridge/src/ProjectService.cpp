@@ -104,6 +104,85 @@ namespace
             });
     }
 
+    constexpr std::uint32_t AlwaysIncludeFormatVersion = 1;
+    constexpr std::uint32_t MaximumAlwaysIncludeEntries = 4096;
+
+    std::string EncodeProjectConfigValue(const std::string& value)
+    {
+        constexpr char Hex[] = "0123456789ABCDEF";
+        std::string encoded;
+        encoded.reserve(value.size());
+        for (const unsigned char character : value)
+        {
+            const bool safe =
+                (character >= 'a' && character <= 'z') ||
+                (character >= 'A' && character <= 'Z') ||
+                (character >= '0' && character <= '9') ||
+                character == '/' || character == '.' || character == '_' ||
+                character == '-';
+            if (safe)
+            {
+                encoded.push_back(static_cast<char>(character));
+            }
+            else
+            {
+                encoded.push_back('%');
+                encoded.push_back(Hex[(character >> 4) & 0x0F]);
+                encoded.push_back(Hex[character & 0x0F]);
+            }
+        }
+        return encoded;
+    }
+
+    bool DecodeProjectConfigValue(
+        const std::string& encoded,
+        std::string& decoded)
+    {
+        const auto nibble = [](const char character) -> int
+        {
+            if (character >= '0' && character <= '9') return character - '0';
+            if (character >= 'a' && character <= 'f') return character - 'a' + 10;
+            if (character >= 'A' && character <= 'F') return character - 'A' + 10;
+            return -1;
+        };
+
+        decoded.clear();
+        decoded.reserve(encoded.size());
+        for (std::size_t index = 0; index < encoded.size(); ++index)
+        {
+            if (encoded[index] != '%')
+            {
+                decoded.push_back(encoded[index]);
+                continue;
+            }
+            if (index + 2 >= encoded.size())
+                return false;
+            const int high = nibble(encoded[index + 1]);
+            const int low = nibble(encoded[index + 2]);
+            if (high < 0 || low < 0)
+                return false;
+            decoded.push_back(static_cast<char>((high << 4) | low));
+            index += 2;
+        }
+        return true;
+    }
+
+    bool ParseAlwaysIncludeDeclaration(
+        const std::string& entry,
+        renegade::bridge::DependencyClass& dependencyClass,
+        std::string& path)
+    {
+        const auto separator = entry.find(':');
+        if (separator == std::string::npos ||
+            !renegade::bridge::TryParseDependencyClassName(
+                entry.substr(0, separator), dependencyClass))
+        {
+            return false;
+        }
+        path = entry.substr(separator + 1);
+        return IsSafeRelativePath(fs::u8path(path));
+    }
+
     bool EnsureDefaultProjectDirectories(
         const fs::path& root,
         std::string& error)
@@ -204,14 +283,23 @@ namespace
         if (!metadata.alwaysInclude.empty())
         {
             stream << "\n[dependencies]\n";
-            stream << "always_include = ";
+            stream << "always_include_format = "
+                   << AlwaysIncludeFormatVersion << '\n';
+            stream << "always_include_count = "
+                   << metadata.alwaysInclude.size() << '\n';
             for (std::size_t index = 0; index < metadata.alwaysInclude.size(); ++index)
             {
-                if (index != 0)
-                    stream << ",";
-                stream << metadata.alwaysInclude[index];
+                renegade::bridge::DependencyClass dependencyClass{};
+                std::string path;
+                const bool parsed = ParseAlwaysIncludeDeclaration(
+                    metadata.alwaysInclude[index], dependencyClass, path);
+                (void)parsed; // WriteProject validates before serialization.
+                stream << "always_include_" << index << "_class = "
+                       << renegade::bridge::DependencyClassName(dependencyClass)
+                       << '\n';
+                stream << "always_include_" << index << "_path = "
+                       << EncodeProjectConfigValue(path) << '\n';
             }
-            stream << '\n';
         }
         const std::string text = stream.str();
         return std::vector<std::uint8_t>(text.begin(), text.end());
@@ -279,17 +367,17 @@ namespace renegade::bridge
             document.alwaysInclude.reserve(metadata.alwaysInclude.size());
             for (const auto& entry : metadata.alwaysInclude)
             {
-                // ReadProject already validated this exact "class:path" shape
-                // before it ever reached ProjectMetadata; a malformed entry
-                // here would mean ReadProject's own contract was violated,
-                // not a recoverable per-entry condition, so this intentionally
-                // does not re-validate or silently skip.
-                const auto separator = entry.find(':');
                 DependencyCandidate candidate;
                 DependencyClass parsedClass{};
-                TryParseDependencyClassName(
-                    entry.substr(0, separator), parsedClass);
-                candidate.declaredPath = entry.substr(separator + 1);
+                std::string declaredPath;
+                if (!ParseAlwaysIncludeDeclaration(
+                        entry, parsedClass, declaredPath))
+                {
+                    error = "Validated project metadata contained an invalid "
+                        "Always Include declaration.";
+                    return false;
+                }
+                candidate.declaredPath = std::move(declaredPath);
                 candidate.dependencyClass = parsedClass;
                 candidate.requirement = DependencyRequirement::Required;
                 document.alwaysInclude.push_back(std::move(candidate));
@@ -527,6 +615,27 @@ namespace renegade::bridge
         return lastWarning_;
     }
 
+    bool ProjectService::SetAlwaysInclude(
+        const std::vector<std::string>& declarations)
+    {
+        lastError_.clear();
+        lastWarning_.clear();
+        if (!hasProject_)
+        {
+            lastError_ =
+                "Could not update Always Include without an active project.";
+            return false;
+        }
+
+        ProjectMetadata updated = currentProject_;
+        updated.alwaysInclude = declarations;
+        if (!WriteProject(updated))
+            return false;
+
+        currentProject_ = std::move(updated);
+        return true;
+    }
+
     bool ProjectService::ReadProject(
         const std::string& descriptorPath,
         ProjectMetadata& metadata,
@@ -614,21 +723,65 @@ namespace renegade::bridge
             if (projectFile.HasSection("dependencies"))
             {
                 const auto& dependencies = projectFile.GetSection("dependencies");
-                for (const auto& entry : dependencies.GetTextArray("always_include"))
+                if (dependencies.Has("always_include_format"))
                 {
-                    const auto separator = entry.find(':');
-                    renegade::bridge::DependencyClass parsedClass{};
-                    if (separator == std::string::npos ||
-                        !renegade::bridge::TryParseDependencyClassName(
-                            entry.substr(0, separator), parsedClass) ||
-                        !IsSafeRelativePath(
-                            fs::u8path(entry.substr(separator + 1))))
+                    const std::uint32_t format =
+                        dependencies.GetUint("always_include_format");
+                    const std::uint32_t count =
+                        dependencies.GetUint("always_include_count");
+                    if (!dependencies.Has("always_include_count") ||
+                        format != AlwaysIncludeFormatVersion ||
+                        count > MaximumAlwaysIncludeEntries)
                     {
                         error = "The project descriptor contains an invalid "
-                            "always-include dependency declaration: " + entry;
+                            "Always Include format or entry count.";
                         return false;
                     }
-                    alwaysInclude.push_back(entry);
+                    alwaysInclude.reserve(count);
+                    for (std::uint32_t index = 0; index < count; ++index)
+                    {
+                        const std::string prefix =
+                            "always_include_" + std::to_string(index);
+                        const std::string className =
+                            dependencies.GetText((prefix + "_class").c_str());
+                        const std::string encodedPath =
+                            dependencies.GetText((prefix + "_path").c_str());
+                        std::string path;
+                        renegade::bridge::DependencyClass parsedClass{};
+                        if (!renegade::bridge::TryParseDependencyClassName(
+                                className, parsedClass) ||
+                            !DecodeProjectConfigValue(encodedPath, path) ||
+                            !IsSafeRelativePath(fs::u8path(path)))
+                        {
+                            error = "The project descriptor contains an invalid "
+                                "Always Include entry at index " +
+                                std::to_string(index) + ".";
+                            return false;
+                        }
+                        alwaysInclude.push_back(className + ":" + path);
+                    }
+                }
+                else
+                {
+                    // Backward compatibility for the short-lived Gate 5
+                    // comma-array format merged in PR #29. New writes use
+                    // numbered, encoded fields because wi::config arrays
+                    // cannot escape commas, '#' or ';' in valid filenames.
+                    for (const auto& entry :
+                        dependencies.GetTextArray("always_include"))
+                    {
+                        renegade::bridge::DependencyClass parsedClass{};
+                        std::string path;
+                        if (!ParseAlwaysIncludeDeclaration(
+                                entry, parsedClass, path))
+                        {
+                            error = "The project descriptor contains an invalid "
+                                "legacy always-include dependency declaration: " +
+                                entry;
+                            return false;
+                        }
+                        alwaysInclude.push_back(entry);
+                    }
                 }
             }
 
@@ -771,14 +924,18 @@ namespace renegade::bridge
             return false;
         }
 
+        if (metadata.alwaysInclude.size() > MaximumAlwaysIncludeEntries)
+        {
+            lastError_ = "Could not write more than " +
+                std::to_string(MaximumAlwaysIncludeEntries) +
+                " Always Include dependency declarations.";
+            return false;
+        }
         for (const auto& entry : metadata.alwaysInclude)
         {
-            const auto separator = entry.find(':');
             DependencyClass parsedClass{};
-            if (separator == std::string::npos ||
-                !TryParseDependencyClassName(
-                    entry.substr(0, separator), parsedClass) ||
-                !IsSafeRelativePath(fs::u8path(entry.substr(separator + 1))))
+            std::string path;
+            if (!ParseAlwaysIncludeDeclaration(entry, parsedClass, path))
             {
                 lastError_ = "Could not write an invalid always-include "
                     "dependency declaration: " + entry;

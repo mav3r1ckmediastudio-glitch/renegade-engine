@@ -61,6 +61,7 @@ namespace renegade::bridge
             WisceneDependencyDocument& document)
         {
             document.references.clear();
+            document.embeddedGeneratedData.clear();
 
             for (std::size_t component = 0;
                 component < scene.materials.GetCount(); ++component)
@@ -75,6 +76,81 @@ namespace renegade::bridge
                         DependencyClass::Texture,
                         "wiscene.material[" + std::to_string(component) +
                             "].texture." + MaterialTextureSlots[slot]);
+                }
+            }
+
+            // Wicked serializes authored terrain height samples, blend maps
+            // and heightmap-modifier pixels directly inside the WISCENE.
+            // Capture deterministic evidence of those payloads without
+            // pretending that they are separate filesystem dependencies.
+            for (std::size_t component = 0;
+                component < scene.terrains.GetCount(); ++component)
+            {
+                const auto& terrain = scene.terrains[component];
+                std::vector<std::pair<wi::terrain::Chunk,
+                    const wi::terrain::ChunkData*>> chunks;
+                chunks.reserve(terrain.chunks.size());
+                for (const auto& entry : terrain.chunks)
+                    chunks.emplace_back(entry.first, &entry.second);
+                std::sort(chunks.begin(), chunks.end(),
+                    [](const auto& left, const auto& right)
+                    {
+                        if (left.first.x != right.first.x)
+                            return left.first.x < right.first.x;
+                        return left.first.z < right.first.z;
+                    });
+
+                const std::string terrainPrefix = "wiscene.terrain[" +
+                    std::to_string(component) + "]";
+                for (const auto& entry : chunks)
+                {
+                    const auto& chunk = entry.first;
+                    const auto& data = *entry.second;
+                    const std::string chunkPrefix = terrainPrefix + ".chunk[" +
+                        std::to_string(chunk.x) + "," +
+                        std::to_string(chunk.z) + "]";
+                    if (!data.heightmap_data.empty())
+                    {
+                        document.embeddedGeneratedData.push_back({
+                            chunkPrefix + ".heightmap",
+                            static_cast<std::uint64_t>(data.heightmap_data.size()) *
+                                sizeof(data.heightmap_data.front()),
+                        });
+                    }
+                    for (std::size_t layer = 0;
+                        layer < data.blendmap_layers.size(); ++layer)
+                    {
+                        const auto& pixels = data.blendmap_layers[layer].pixels;
+                        if (!pixels.empty())
+                        {
+                            document.embeddedGeneratedData.push_back({
+                                chunkPrefix + ".blendmap[" +
+                                    std::to_string(layer) + "]",
+                                static_cast<std::uint64_t>(pixels.size()),
+                            });
+                        }
+                    }
+                }
+
+                for (std::size_t modifierIndex = 0;
+                    modifierIndex < terrain.modifiers.size(); ++modifierIndex)
+                {
+                    const auto* modifier = terrain.modifiers[modifierIndex].get();
+                    if (modifier == nullptr ||
+                        modifier->type != wi::terrain::Modifier::Type::Heightmap)
+                    {
+                        continue;
+                    }
+                    const auto* heightmap =
+                        static_cast<const wi::terrain::HeightmapModifier*>(modifier);
+                    if (!heightmap->data.empty())
+                    {
+                        document.embeddedGeneratedData.push_back({
+                            terrainPrefix + ".modifier[" +
+                                std::to_string(modifierIndex) + "].heightmap",
+                            static_cast<std::uint64_t>(heightmap->data.size()),
+                        });
+                    }
                 }
             }
 
@@ -318,7 +394,34 @@ namespace renegade::bridge
 
         bool IsDataUri(const std::string& uri)
         {
-            return uri.rfind("data:", 0) == 0;
+            constexpr char DataScheme[] = "data:";
+            if (uri.size() < sizeof(DataScheme) - 1)
+                return false;
+            for (std::size_t index = 0; index < sizeof(DataScheme) - 1; ++index)
+            {
+                const unsigned char character =
+                    static_cast<unsigned char>(uri[index]);
+                const char folded = character >= 'A' && character <= 'Z'
+                    ? static_cast<char>(character + ('a' - 'A'))
+                    : static_cast<char>(character);
+                if (folded != DataScheme[index])
+                    return false;
+            }
+            return true;
+        }
+
+        bool IsGltfSourcePath(const std::string& path)
+        {
+            std::string extension =
+                std::filesystem::u8path(path).extension().generic_u8string();
+            std::transform(extension.begin(), extension.end(), extension.begin(),
+                [](const unsigned char character)
+                {
+                    return character >= 'A' && character <= 'Z'
+                        ? static_cast<char>(character + ('a' - 'A'))
+                        : static_cast<char>(character);
+                });
+            return extension == ".gltf" || extension == ".glb";
         }
 
         // A glTF (.gltf) file is the JSON text directly. A GLB (.glb) file
@@ -357,6 +460,13 @@ namespace renegade::bridge
             if (bytes.size() < GlbHeaderSize + ChunkHeaderSize)
             {
                 error = "GLB file is smaller than its required header.";
+                return false;
+            }
+            const std::uint32_t version = readUint32(4);
+            const std::uint32_t declaredLength = readUint32(8);
+            if (version != 2 || declaredLength != bytes.size())
+            {
+                error = "GLB header must declare version 2 and the exact file length.";
                 return false;
             }
             const std::uint32_t chunkLength = readUint32(GlbHeaderSize);
@@ -412,6 +522,42 @@ namespace renegade::bridge
                 result.references.push_back(std::move(candidate));
             }
         }
+
+        std::uint32_t CountGltfMaterialTextureSlots(
+            const nlohmann::json& document)
+        {
+            const auto materials = document.find("materials");
+            if (materials == document.end() || !materials->is_array())
+                return 0;
+
+            std::uint32_t count = 0;
+            const auto countTextureInfo = [&count](
+                const nlohmann::json& object, const char* key)
+            {
+                const auto value = object.find(key);
+                if (value != object.end() && value->is_object() &&
+                    value->find("index") != value->end() &&
+                    (*value)["index"].is_number_integer())
+                {
+                    ++count;
+                }
+            };
+            for (const auto& material : *materials)
+            {
+                if (!material.is_object())
+                    continue;
+                const auto pbr = material.find("pbrMetallicRoughness");
+                if (pbr != material.end() && pbr->is_object())
+                {
+                    countTextureInfo(*pbr, "baseColorTexture");
+                    countTextureInfo(*pbr, "metallicRoughnessTexture");
+                }
+                countTextureInfo(material, "normalTexture");
+                countTextureInfo(material, "occlusionTexture");
+                countTextureInfo(material, "emissiveTexture");
+            }
+            return count;
+        }
     }
 
     GltfDependencyReader MakeGltfDependencyReader()
@@ -421,6 +567,8 @@ namespace renegade::bridge
             std::string& error)
         {
             document.references.clear();
+            document.materialTextureSlotCount = 0;
+            document.animationCount = 0;
 
             std::ifstream stream(
                 std::filesystem::u8path(path), std::ios::binary);
@@ -446,12 +594,34 @@ namespace renegade::bridge
                 return false;
             }
 
+            const auto asset = parsed.find("asset");
+            if (asset == parsed.end() || !asset->is_object())
+            {
+                error = "The glTF/GLB document is missing its required asset object: " +
+                    path;
+                return false;
+            }
+            const auto version = asset->find("version");
+            if (version == asset->end() || !version->is_string() ||
+                version->get<std::string>().rfind("2.", 0) != 0)
+            {
+                error = "The glTF/GLB document is not glTF 2.x: " + path;
+                return false;
+            }
+
             const std::string baseDirectory =
                 std::filesystem::u8path(path).parent_path().generic_u8string();
             CollectGltfArrayUris(parsed, "buffers",
                 DependencyClass::ImportedContent, baseDirectory, document);
             CollectGltfArrayUris(parsed, "images",
                 DependencyClass::Texture, baseDirectory, document);
+            document.materialTextureSlotCount =
+                CountGltfMaterialTextureSlots(parsed);
+            const auto animations = parsed.find("animations");
+            document.animationCount = animations != parsed.end() &&
+                animations->is_array()
+                ? static_cast<std::uint32_t>(animations->size())
+                : 0;
 
             error.clear();
             return true;
@@ -759,6 +929,15 @@ namespace renegade::bridge
         {
             if (!reader_) error = "glTF dependency reader is not configured.";
             return false;
+        }
+        // ImportedContent is intentionally broader than glTF: Phase 4 also
+        // admits OBJ, FBX, VRM/VRMA and PLY. This provider must be inert for
+        // those formats so registering it cannot make unrelated imported
+        // roots fail JSON parsing.
+        if (!IsGltfSourcePath(path))
+        {
+            error.clear();
+            return true;
         }
         GltfDependencyDocument document;
         if (!reader_(path, document, error)) return false;

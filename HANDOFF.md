@@ -1,12 +1,12 @@
 ﻿# Renegade Engine — Current Handoff
 
-**Date:** 2026-08-08
+**Date:** 2026-08-09
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Current main baseline:** `1c9fe841046f4b9a56e7ed4966e251bca31b0330`
+**Current main baseline:** `84738acc95335822a276c8a0b7adc42d29f01aa9`
 
-**Active branch:** `poc/lp05-gate4-wiscene-typed-walker`
+**Active branch:** `agent/lp05-gate5-completion`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
@@ -24,11 +24,11 @@ Temporary LP04 helper patch files may remain untracked. Do not use `git clean` a
 
 LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP04 accepted behaviour" below for the summary and `docs/LP04_TEST_LEVEL_ACCEPTANCE.md` for the full record.
 
-LP05 — Representative Dependency Extraction is active. Gates 1-4 are complete and both Windows Debug and Release are proven passing (23/23 tests, `RenegadeDependencyTests` included) on the `Renegade Studio` CI workflow. See "LP05 progress" below and `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md` for the full technical record, including the Gate 2 Unicode/canonicalization corrections, the Gate 4 typed WISCENE walker and the Release `CL.exe` crash resolution.
+LP05 — Representative Dependency Extraction is active. Gates 1-4 are merged and CI-proven. Gate 5 was merged incompletely through PR #29; corrective PR #30 implements the missing representative imported-content, terrain/generated-data and Always Include evidence at implementation head `4707f77a61265dd70c309f4dcd1b857270a060b9`. Renegade Studio run 135 passed Debug and Release with 23/23 tests in each configuration, and pinned-Wicked baseline run 136 passed both configurations. Independent verification of the exact final PR head remains required before Gate 5 is accepted. See "LP05 progress" below and `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 
-- Main merge commit: `1c9fe841046f4b9a56e7ed4966e251bca31b0330`
+- Current main merge commit: `84738acc95335822a276c8a0b7adc42d29f01aa9` (PR #29)
 
 The four Windows PR checks completed successfully on the corrected PR #24 head:
 
@@ -116,6 +116,16 @@ LP05 comes before broader asset identity/cooking/packaging work. Its purpose is 
 Full technical detail for all of the above — the architectural decision, the gate-by-gate implementation boundaries, both Gate 2 corrections, and the complete Release crash investigation and resolution — is in `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`.
 
 **Gate 4 is implemented and GitHub CI-proven on `poc/lp05-gate4-wiscene-typed-walker`.** Remote implementation commit `3d888de02c97a83ada27ba4f3d17f8a75053fd53` passed Renegade Studio Debug and Release (23/23 tests in each configuration, `RenegadeDependencyTests` included) in workflow run 126; both pinned-Wicked baseline jobs also passed in run 127. It adds a Renegade-owned read-only WISCENE provider over the validated scene-open seam and walks public Material, Light, Environment Probe, Weather, Sound, Video and Script component resource fields. Tests cover all seven through the direct const-scene walker; the real headless WISCENE reader fixture covers the other six because Wicked's Environment Probe deserializer requires an initialized graphics device. Coverage includes typed provenance, repeated-read order, duplicates, missing resources, metadata exclusion and byte-identical source preservation. Wicked remains unchanged; serializer internals are not intercepted. Independent verification remains pending.
+
+**Gate 5 corrective implementation is in draft PR #30.** PR #29 merged useful foundations but did not satisfy the repository-defined Gate 5 boundary: it omitted generated-data evidence, did not use a representative material/animation glTF fixture, had no Always Include production tests, let its glTF provider claim every `ImportedContent` format, used an unescaped comma-array descriptor field, and left the handoff/evidence stale. Corrective implementation head `4707f77a61265dd70c309f4dcd1b857270a060b9` addresses those findings:
+
+- raw glTF/GLB discovery retains external buffer/image dependencies while recording material texture-slot and animation structure; GLB version/length are validated, data-URI scheme matching is case-insensitive, and non-glTF imported formats are ignored by this provider;
+- project-owned terrain material textures are normal WISCENE dependencies; Wicked-serialized terrain height samples, blend maps and heightmap-modifier bytes are recorded deterministically as embedded generated-data evidence owned by the scene rather than fake file nodes;
+- external generated artifacts can be declared explicitly as typed `generated_data` Always Include entries;
+- Always Include uses versioned indexed fields with percent-encoded paths, retains read compatibility with PR #29's short-lived comma-array format, rejects malformed declarations, and has a public active-project `SetAlwaysInclude` transaction seam covered through real create/write/read, failure preservation, dependency-adapter and graph projection tests, including filenames containing commas, spaces, `#` and `;`;
+- install-anchored terrain defaults outside the project remain an explicit `OutsideProject` diagnostic and do not silently enter the project graph. Packaging/runtime-support ownership remains outside LP05.
+
+Gate 5 is **implemented and CI-proven but not yet independently accepted** at this handoff revision. Implementation head `4707f77a61265dd70c309f4dcd1b857270a060b9` passed Renegade Studio run 135 in Debug and Release with 23/23 tests in each configuration; pinned-Wicked baseline run 136 passed both configurations. A different AI or human still needs to verify the exact final PR head. Gates 6-8 remain: Lua policy/negative diagnostics, deterministic transitive closure and serialization, then repeatability/packaged read-only proof.
 
 ### LP05 architectural decision
 
