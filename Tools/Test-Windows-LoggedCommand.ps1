@@ -45,3 +45,4 @@ if (-not (Select-String -Path $successLog -SimpleMatch "command-runner-success")
 }
 
 Write-Host "PASS: native command output and non-zero exit propagation"
+exit 0
