@@ -633,40 +633,68 @@ int main()
     if (ReadBytes(gate4Scene) != gate4BytesBefore)
         return Fail("dependency extraction modified the authoritative WISCENE");
 
-    // Gate 5 Terrain: default terrain materials are ordinary
-    // MaterialComponents (see TerrainService::ConfigureDefaultGrassMaterial),
-    // already walked by WalkWisceneDependencies above -- no new provider
-    // code exists or is needed for terrain. The one real edge case is that
-    // their texture paths are built at runtime as
-    // wi::helper::GetCurrentPath() + "/Content/terrain/...", an absolute,
-    // install-anchored path that was never an authored project-relative
-    // declaration. This proves ProjectRelativeCandidate and
-    // ResolveDependencyPath already classify that correctly as
-    // OutsideProject rather than silently mishandling it, and that a pure
-    // in-memory generated terrain (no material at all) produces zero
-    // dependency edges, since there is nothing on disk to discover.
-    //
-    // The fixture below does not call wi::helper::GetCurrentPath() itself:
-    // that function returns std::filesystem::current_path(), the process's
-    // working directory, which CTest sets differently across machines (this
-    // genuinely failed on CI while passing locally, tracked down to exactly
-    // this). What actually needs proving is narrower and environment-
-    // independent -- that *some* absolute, outside-project path is
-    // correctly diagnosed -- so this reuses the same deterministic sibling-
-    // of-root "outside" directory the escaping-symlink case above already
-    // establishes, which is guaranteed non-nested under root on any
-    // machine.
+    // Gate 5 Terrain/generated data: terrain materials are ordinary scene
+    // MaterialComponents and therefore use the Gate 4 typed walker. Sculpted
+    // height samples and authored blend maps are different: Wicked embeds
+    // them in the Terrain payload inside WISCENE, so they must be recorded as
+    // embedded generated-data evidence rather than fabricated file nodes.
+    // The fixture also retains the real bundled-default edge case: an
+    // install-anchored material path outside the project must be diagnosed
+    // and excluded, while project-owned terrain material files are found.
     {
         const fs::path terrainScene = root / "Content/Scenes/Gate5Terrain.wiscene";
         wi::scene::Scene terrainWorld;
+        const auto terrainMaterialEntity = wi::ecs::CreateEntity();
         auto& terrainMaterial =
-            terrainWorld.materials.Create(wi::ecs::CreateEntity());
-        const std::string runtimeAbsoluteGrassPath =
-            (outside / "Content/terrain/default_grass/default_grass_basecolor.tga")
-                .generic_u8string();
+            terrainWorld.materials.Create(terrainMaterialEntity);
+        const fs::path baseColor =
+            root / "Content/terrain/default_grass/default_grass_basecolor.tga";
+        const fs::path surface =
+            root / "Content/terrain/default_grass/default_grass_surface.tga";
+        fs::create_directories(baseColor.parent_path());
+        std::ofstream(baseColor) << "base";
+        std::ofstream(surface) << "surface";
         terrainMaterial.textures[wi::scene::MaterialComponent::BASECOLORMAP]
+            .name = baseColor.generic_u8string();
+        terrainMaterial.textures[wi::scene::MaterialComponent::SURFACEMAP]
+            .name = surface.generic_u8string();
+        const std::string runtimeAbsoluteGrassPath =
+            (outside / "Content/terrain/default_grass/default_grass_normal.tga")
+                .generic_u8string();
+        terrainMaterial.textures[wi::scene::MaterialComponent::NORMALMAP]
             .name = runtimeAbsoluteGrassPath;
-        terrainWorld.terrains.Create(wi::ecs::CreateEntity());
+        auto& terrain = terrainWorld.terrains.Create(wi::ecs::CreateEntity());
+        terrain.materialEntities.push_back(terrainMaterialEntity);
+        wi::terrain::Chunk generatedChunk;
+        generatedChunk.x = 2;
+        generatedChunk.z = -1;
+        auto& generated = terrain.chunks[generatedChunk];
+        generated.heightmap_data = {0, 8192, 32768, 65535};
+        generated.blendmap_layers.emplace_back().pixels = {0, 64, 128, 255};
+        wi::terrain::Chunk earlierChunk;
+        earlierChunk.x = -3;
+        earlierChunk.z = 4;
+        terrain.chunks[earlierChunk].heightmap_data = {100, 200};
+        auto heightmapModifier =
+            wi::allocator::make_shared_single<wi::terrain::HeightmapModifier>();
+        heightmapModifier->data = {10, 20, 30, 40};
+        heightmapModifier->width = 2;
+        heightmapModifier->height = 2;
+        terrain.modifiers.push_back(heightmapModifier);
+
+        WisceneDependencyDocument directTerrainWalk;
+        InspectWisceneDependencies(terrainWorld, directTerrainWalk);
+        if (directTerrainWalk.embeddedGeneratedData.size() != 4 ||
+            directTerrainWalk.embeddedGeneratedData[0].provenance !=
+                "wiscene.terrain[0].chunk[-3,4].heightmap" ||
+            directTerrainWalk.embeddedGeneratedData[0].byteCount != 4 ||
+            directTerrainWalk.embeddedGeneratedData[1].byteCount != 8 ||
+            directTerrainWalk.embeddedGeneratedData[2].byteCount != 4 ||
+            directTerrainWalk.embeddedGeneratedData[3].provenance !=
+                "wiscene.terrain[0].modifier[0].heightmap" ||
+            directTerrainWalk.embeddedGeneratedData[3].byteCount != 4)
+            return Fail("terrain walker did not record deterministic embedded "
+                "height/blend generated data");
 
         wi::Archive terrainArchive(terrainScene.generic_u8string(), false, false);
         if (!terrainArchive.IsOpen())
@@ -675,6 +703,32 @@ int main()
         if (!terrainArchive.SaveFile(terrainScene.generic_u8string()))
             return Fail("Gate 5 terrain fixture could not be serialized");
         terrainArchive = wi::Archive();
+
+        const std::string terrainBytesBefore = ReadBytes(terrainScene);
+        WisceneDependencyDocument serializedTerrainRead;
+        WisceneDependencyDocument serializedTerrainReadAgain;
+        std::string terrainReadError;
+        if (!gate4Reader(terrainScene.generic_u8string(),
+                serializedTerrainRead, terrainReadError) ||
+            !gate4Reader(terrainScene.generic_u8string(),
+                serializedTerrainReadAgain, terrainReadError) ||
+            serializedTerrainRead.embeddedGeneratedData.size() != 4 ||
+            serializedTerrainReadAgain.embeddedGeneratedData.size() != 4)
+            return Fail(("serialized terrain generated data was not observed: " +
+                terrainReadError).c_str());
+        for (std::size_t index = 0;
+            index < serializedTerrainRead.embeddedGeneratedData.size(); ++index)
+        {
+            const auto& first = serializedTerrainRead.embeddedGeneratedData[index];
+            const auto& second =
+                serializedTerrainReadAgain.embeddedGeneratedData[index];
+            if (first.provenance != second.provenance ||
+                first.byteCount != second.byteCount)
+                return Fail("serialized terrain generated-data order changed "
+                    "between reads");
+        }
+        if (ReadBytes(terrainScene) != terrainBytesBefore)
+            return Fail("terrain dependency inspection modified the WISCENE");
 
         std::string terrainError;
         DependencyCollector terrainCollector(root.generic_u8string());
@@ -695,11 +749,12 @@ int main()
         if (outsideProjectCount == 0)
             return Fail("runtime-absolute terrain material path was not "
                 "diagnosed as outside the project");
-        // Only the scene root node itself; the rejected absolute texture
-        // path must never have become a graph node.
-        if (terrainGraph.nodes.size() != 1)
-            return Fail("an outside-project terrain path incorrectly "
-                "became a dependency node");
+        // Scene root plus the two project-owned terrain textures. Embedded
+        // generated data stays owned by the scene; the rejected external
+        // runtime texture must not become a graph node.
+        if (terrainGraph.nodes.size() != 3 || terrainGraph.edges.size() != 2)
+            return Fail("terrain material closure or embedded-data boundary "
+                "was incorrect");
     }
 
     // Gate 5 Imported content: a raw, un-imported .gltf/.glb source file
@@ -710,28 +765,64 @@ int main()
     {
         const auto gltfReader = MakeGltfDependencyReader();
 
-        // -- ASCII (.gltf): external buffer, one external image with a
-        // percent-encoded space, one bufferView-based image (embedded, must
-        // not become a dependency), one data-URI image (embedded, must not
-        // become a dependency), and a missing external buffer to prove a
-        // missing declared dependency is diagnosed, never a load failure.
+        // -- ASCII (.gltf): representative imported content with an external
+        // BIN used by mesh/animation accessors, multiple material texture
+        // slots, an external image with a percent-encoded space, embedded
+        // bufferView/data-URI images, and a missing external buffer. The
+        // dependency closure is still exactly buffers/images; the material
+        // and animation structure proves those external resources are used by
+        // the content required by LP05 rather than being bare URI examples.
         const fs::path gltfPath = root / "Content/Models/Prop.gltf";
         {
             std::ofstream gltfFile(gltfPath);
             gltfFile << R"({
   "asset": { "version": "2.0" },
   "buffers": [
-    { "uri": "Prop.bin", "byteLength": 4 },
-    { "uri": "Missing.bin", "byteLength": 4 }
+    { "uri": "Prop.bin", "byteLength": 132 },
+    { "uri": "Missing.bin", "byteLength": 16 }
+  ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 48, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 96, "byteLength": 36 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "SCALAR" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" }
   ],
   "images": [
     { "uri": "albedo%20base.png" },
-    { "bufferView": 0 },
-    { "uri": "data:image/png;base64,AAAA" }
-  ]
+    { "bufferView": 3, "mimeType": "image/png" },
+    { "uri": "DATA:image/png;base64,AAAA" }
+  ],
+  "textures": [
+    { "source": 0 }, { "source": 1 }, { "source": 2 }
+  ],
+  "materials": [{
+    "pbrMetallicRoughness": {
+      "baseColorTexture": { "index": 0 },
+      "metallicRoughnessTexture": { "index": 1 }
+    },
+    "normalTexture": { "index": 2 }
+  }],
+  "nodes": [{ "mesh": 0 }],
+  "meshes": [{ "primitives": [{
+    "attributes": { "POSITION": 0 }, "material": 0
+  }] }],
+  "animations": [{
+    "samplers": [{ "input": 1, "output": 2, "interpolation": "LINEAR" }],
+    "channels": [{
+      "sampler": 0, "target": { "node": 0, "path": "rotation" }
+    }]
+  }],
+  "scenes": [{ "nodes": [0] }],
+  "scene": 0
 })";
         }
-        std::ofstream(root / "Content/Models/Prop.bin") << "fixt";
+        std::ofstream(root / "Content/Models/Prop.bin", std::ios::binary)
+            << std::string(132, 'x');
         std::ofstream(root / "Content/Models/albedo base.png") << "fixture";
         // "Missing.bin" is intentionally never created.
 
@@ -744,6 +835,10 @@ int main()
             return Fail("glTF reader did not emit exactly the three "
                 "external references (one missing buffer, one present "
                 "buffer, one present image)");
+        if (directRead.materialTextureSlotCount != 3 ||
+            directRead.animationCount != 1)
+            return Fail("glTF reader did not retain representative material "
+                "texture-slot and animation evidence");
         const bool sawDecodedImagePath = std::any_of(
             directRead.references.begin(), directRead.references.end(),
             [](const DependencyCandidate& candidate)
@@ -797,6 +892,21 @@ int main()
             return Fail("glTF buffer references were not classified as "
                 "ImportedContent");
 
+        // The class also covers other Phase 4 import formats. A registered
+        // glTF provider must ignore those roots instead of trying to parse
+        // an FBX/OBJ/PLY file as JSON and failing the whole collection.
+        std::ofstream(root / "Content/Models/Other.fbx", std::ios::binary)
+            << "not-gltf";
+        DependencyCollector otherFormatCollector(root.generic_u8string());
+        if (!otherFormatCollector.RegisterProvider(gltfProvider, gltfError) ||
+            !otherFormatCollector.AddRoot({"Content/Models/Other.fbx",
+                DependencyClass::ImportedContent, DependencyRequirement::Required,
+                "fixture.fbx"}, gltfError) ||
+            !otherFormatCollector.DiscoverRootDependencies(gltfError) ||
+            otherFormatCollector.Graph().nodes.size() != 1 ||
+            !otherFormatCollector.Graph().edges.empty())
+            return Fail("glTF provider claimed a non-glTF ImportedContent root");
+
         // -- GLB (binary container): the same JSON content, wrapped in a
         // minimal valid GLB chunk container, to prove the header/chunk
         // unwrapping path also works, not just the ASCII path.
@@ -840,6 +950,34 @@ int main()
         if (glbRead.references.size() != 2)
             return Fail("GLB reader did not emit the expected two "
                 "references from the unwrapped JSON chunk");
+
+        const fs::path badGlbPath = root / "Content/Models/BadLength.glb";
+        {
+            std::ofstream badGlb(badGlbPath, std::ios::binary);
+            const auto writeUint32 = [&badGlb](const std::uint32_t value)
+            {
+                const unsigned char bytes[4] = {
+                    static_cast<unsigned char>(value & 0xFF),
+                    static_cast<unsigned char>((value >> 8) & 0xFF),
+                    static_cast<unsigned char>((value >> 16) & 0xFF),
+                    static_cast<unsigned char>((value >> 24) & 0xFF),
+                };
+                badGlb.write(reinterpret_cast<const char*>(bytes), 4);
+            };
+            const std::uint32_t actualLength = static_cast<std::uint32_t>(
+                12 + 8 + paddedJson.size());
+            badGlb.write("glTF", 4);
+            writeUint32(2);
+            writeUint32(actualLength + 4); // Deliberately inconsistent.
+            writeUint32(static_cast<std::uint32_t>(paddedJson.size()));
+            badGlb.write("JSON", 4);
+            badGlb.write(paddedJson.data(),
+                static_cast<std::streamsize>(paddedJson.size()));
+        }
+        GltfDependencyDocument rejectedGlb;
+        if (gltfReader(badGlbPath.generic_u8string(),
+                rejectedGlb, glbReadError))
+            return Fail("GLB reader accepted an inconsistent declared length");
     }
 
     fs::remove_all(root, ignored);

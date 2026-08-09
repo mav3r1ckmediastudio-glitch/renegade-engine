@@ -179,6 +179,17 @@ namespace renegade::bridge
     struct WisceneDependencyDocument
     {
         std::vector<DependencyCandidate> references;
+        // Generated terrain payloads such as sculpted height samples and
+        // blend maps are serialized inside the owning WISCENE. They are
+        // therefore evidence carried by the scene root, not separate path
+        // dependencies. Recording them explicitly prevents the collector
+        // from either overlooking generated data or inventing fake files.
+        struct EmbeddedGeneratedData
+        {
+            std::string provenance;
+            std::uint64_t byteCount = 0;
+        };
+        std::vector<EmbeddedGeneratedData> embeddedGeneratedData;
     };
 
     using ProjectDependencyReader = std::function<bool(
@@ -289,6 +300,12 @@ namespace renegade::bridge
     struct GltfDependencyDocument
     {
         std::vector<DependencyCandidate> references;
+        // Structural evidence for the representative Gate 5 fixture. The
+        // external dependency closure still comes only from buffer/image
+        // URIs, while these counts prove that those resources are consumed
+        // by material texture slots and animation content.
+        std::uint32_t materialTextureSlotCount = 0;
+        std::uint32_t animationCount = 0;
     };
 
     using GltfDependencyReader = std::function<bool(

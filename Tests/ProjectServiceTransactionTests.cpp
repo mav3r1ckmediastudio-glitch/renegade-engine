@@ -287,6 +287,99 @@ namespace
         Check(dependencies.startupScene == "Content/Scenes/Main.wiscene",
             "project dependency adapter discarded the startup declaration");
     }
+
+    void TestAlwaysIncludeRoundTripAndProjection(const fs::path& root)
+    {
+        constexpr const char* projectId =
+            "81111111-1111-4111-8111-111111111111";
+        const fs::path descriptor = root / "AlwaysInclude.renegade";
+        WriteScene(root / "Content/Scenes/Main.wiscene");
+        WriteText(root / "Content/Textures/rock,wet.png", "texture");
+        WriteText(root / "Content/Data/state#1; final.bin", "generated");
+        WriteText(root / "Content/Fonts/runtime font.ttf", "font");
+
+        ProjectMetadata metadata;
+        metadata.formatVersion = ProjectService::CurrentFormatVersion;
+        metadata.projectId = projectId;
+        metadata.name = "AlwaysInclude";
+        metadata.descriptorPath = descriptor.generic_u8string();
+        metadata.rootPath = root.generic_u8string();
+        metadata.startupScene = "Content/Scenes/Main.wiscene";
+        metadata.alwaysInclude = {
+            "texture:Content/Textures/rock,wet.png",
+            "generated_data:Content/Data/state#1; final.bin",
+            "font:Content/Fonts/runtime font.ttf",
+        };
+
+        ProjectService projects;
+        Check(projects.WriteProject(metadata),
+            "Always Include descriptor did not write transactionally");
+        const std::string serialized = ReadText(descriptor);
+        Check(serialized.find("always_include_format = 1") != std::string::npos &&
+                serialized.find("rock%2Cwet.png") != std::string::npos &&
+                serialized.find("state%231%3B%20final.bin") != std::string::npos &&
+                serialized.find("runtime%20font.ttf") != std::string::npos,
+            "Always Include descriptor did not encode config delimiters");
+
+        ProjectMetadata inspected;
+        std::string error;
+        Check(projects.InspectProject(
+                descriptor.generic_u8string(), inspected, error),
+            "encoded Always Include descriptor did not inspect");
+        Check(inspected.alwaysInclude == metadata.alwaysInclude,
+            "Always Include declarations did not round-trip exactly");
+
+        auto reader = renegade::bridge::MakeProjectDependencyReader();
+        renegade::bridge::ProjectDependencyDocument document;
+        Check(reader(descriptor.generic_u8string(), document, error),
+            "project dependency reader rejected Always Include declarations");
+        Check(document.alwaysInclude.size() == 3 &&
+                document.alwaysInclude[0].dependencyClass ==
+                    renegade::bridge::DependencyClass::Texture &&
+                document.alwaysInclude[1].dependencyClass ==
+                    renegade::bridge::DependencyClass::GeneratedData &&
+                document.alwaysInclude[2].dependencyClass ==
+                    renegade::bridge::DependencyClass::Font,
+            "Always Include reader lost declared dependency classes");
+
+        renegade::bridge::ProjectDependencyProvider provider(reader);
+        renegade::bridge::DependencyCollector collector(root.generic_u8string());
+        Check(collector.RegisterProvider(provider, error) &&
+                collector.AddRoot({"AlwaysInclude.renegade",
+                    renegade::bridge::DependencyClass::ProjectDocument,
+                    renegade::bridge::DependencyRequirement::Required,
+                    "fixture.project"}, error) &&
+                collector.DiscoverRootDependencies(error),
+            "Always Include production provider did not build a graph");
+        const auto& graph = collector.Graph();
+        Check(graph.nodes.size() == 5 && graph.edges.size() == 4,
+            "Always Include graph omitted startup or declared dependencies");
+        Check(graph.nodes[3].dependencyClass ==
+                renegade::bridge::DependencyClass::GeneratedData,
+            "external generated data lost its declared graph class");
+
+        const fs::path legacyDescriptor = root / "LegacyAlwaysInclude.renegade";
+        WriteText(legacyDescriptor,
+            CurrentDescriptor("LegacyAlwaysInclude", projectId) +
+            "\n[dependencies]\n"
+            "always_include = generated_data:Content/Data/legacy.bin\n");
+        Check(projects.InspectProjectForDependencies(
+                legacyDescriptor.generic_u8string(), inspected, error) &&
+                inspected.alwaysInclude.size() == 1,
+            "PR #29 legacy Always Include format no longer reads");
+
+        const fs::path malformedDescriptor = root / "MalformedAlwaysInclude.renegade";
+        WriteText(malformedDescriptor,
+            CurrentDescriptor("MalformedAlwaysInclude", projectId) +
+            "\n[dependencies]\n"
+            "always_include_format = 1\n"
+            "always_include_count = 1\n"
+            "always_include_0_class = texture\n"
+            "always_include_0_path = Content/Textures/bad%ZZ.png\n");
+        Check(!projects.InspectProjectForDependencies(
+                malformedDescriptor.generic_u8string(), inspected, error),
+            "malformed encoded Always Include path was accepted");
+    }
 }
 
 int main()
@@ -303,6 +396,7 @@ int main()
     TestFreshProjectHasNoPreviousBackup(root / "03-create");
     TestMigrationBackupFailurePreservesDescriptor(root / "04-backup-failure");
     TestDependencyInspectionRetainsMissingStartup(root / "05-dependency-inspection");
+    TestAlwaysIncludeRoundTripAndProjection(root / "06-always-include");
 
     std::error_code ignored;
     fs::remove_all(root, ignored);
