@@ -9,6 +9,17 @@ provider story-flow story_flow.level[1].scene_path_hint Content/Scenes/Secondary
 provider runtime-screen runtime_screen.image[0].resource Content/UI/background.png
 provider runtime-screen runtime_screen.font[0].resource Content/UI/missing-font.ttf
 provider declared-reference script.declared_dependency[0] Content/Scripts/shared.lua
+provider wiscene material[0].base_color Content/Textures/albedo.png
+provider wiscene material[0].normal Content/Textures/missing-normal.png
+provider wiscene light[0].lens_flare[0] Content/Textures/flare.png
+provider wiscene environment_probe[0].texture Content/Textures/probe.dds
+provider wiscene weather[0].sky_map Content/Textures/sky.dds
+provider wiscene weather[0].color_grading_map Content/Textures/grade.png
+provider wiscene weather[0].cloud_weather_map_first Content/Textures/cloud-first.png
+provider wiscene weather[0].cloud_weather_map_second Content/Textures/cloud-second.png
+provider wiscene sound[0].filename Content/Audio/ambient.ogg
+provider wiscene video[0].filename Content/Video/intro.mp4
+provider wiscene script[0].filename Content/Scripts/main.lua
 expect scene Content/Scenes/Secondary.wiscene
 expect screen Content/UI/Main.renegade-screen
 expect missing Content/UI/missing-font.ttf

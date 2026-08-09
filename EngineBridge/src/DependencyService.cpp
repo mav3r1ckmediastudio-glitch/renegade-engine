@@ -1,6 +1,9 @@
 #include "renegade/bridge/DependencyService.h"
 
+#include "renegade/bridge/SceneDocumentService.h"
+
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <iomanip>
 #include <limits>
@@ -18,6 +21,123 @@ namespace renegade::bridge
 {
     namespace
     {
+        constexpr std::array<const char*,
+            wi::scene::MaterialComponent::TEXTURESLOT_COUNT> MaterialTextureSlots = {
+            "base_color", "normal", "surface", "emissive", "displacement",
+            "occlusion", "transmission", "sheen_color", "sheen_roughness",
+            "clearcoat", "clearcoat_roughness", "clearcoat_normal", "specular",
+            "anisotropy", "transparency",
+        };
+
+        void AppendWisceneReference(
+            WisceneDependencyDocument& document,
+            const std::string& path,
+            const DependencyClass dependencyClass,
+            std::string provenance)
+        {
+            if (path.empty())
+                return;
+            document.references.push_back({
+                path,
+                dependencyClass,
+                DependencyRequirement::Required,
+                std::move(provenance),
+                false,
+            });
+        }
+
+        void WalkWisceneDependencies(
+            const wi::scene::Scene& scene,
+            WisceneDependencyDocument& document)
+        {
+            document.references.clear();
+
+            for (std::size_t component = 0;
+                component < scene.materials.GetCount(); ++component)
+            {
+                const auto& material = scene.materials[component];
+                for (std::size_t slot = 0;
+                    slot < MaterialTextureSlots.size(); ++slot)
+                {
+                    AppendWisceneReference(
+                        document,
+                        material.textures[slot].name,
+                        DependencyClass::Texture,
+                        "wiscene.material[" + std::to_string(component) +
+                            "].texture." + MaterialTextureSlots[slot]);
+                }
+            }
+
+            for (std::size_t component = 0;
+                component < scene.lights.GetCount(); ++component)
+            {
+                const auto& light = scene.lights[component];
+                for (std::size_t texture = 0;
+                    texture < light.lensFlareNames.size(); ++texture)
+                {
+                    AppendWisceneReference(
+                        document,
+                        light.lensFlareNames[texture],
+                        DependencyClass::Texture,
+                        "wiscene.light[" + std::to_string(component) +
+                            "].lens_flare[" + std::to_string(texture) + "]");
+                }
+            }
+
+            for (std::size_t component = 0;
+                component < scene.probes.GetCount(); ++component)
+            {
+                AppendWisceneReference(
+                    document,
+                    scene.probes[component].textureName,
+                    DependencyClass::Texture,
+                    "wiscene.environment_probe[" +
+                        std::to_string(component) + "].texture");
+            }
+
+            for (std::size_t component = 0;
+                component < scene.weathers.GetCount(); ++component)
+            {
+                const auto& weather = scene.weathers[component];
+                const std::string prefix = "wiscene.weather[" +
+                    std::to_string(component) + "].";
+                AppendWisceneReference(document, weather.skyMapName,
+                    DependencyClass::Texture, prefix + "sky_map");
+                AppendWisceneReference(document, weather.colorGradingMapName,
+                    DependencyClass::Texture, prefix + "color_grading_map");
+                AppendWisceneReference(document,
+                    weather.volumetricCloudsWeatherMapFirstName,
+                    DependencyClass::Texture, prefix + "cloud_weather_map_first");
+                AppendWisceneReference(document,
+                    weather.volumetricCloudsWeatherMapSecondName,
+                    DependencyClass::Texture, prefix + "cloud_weather_map_second");
+            }
+
+            for (std::size_t component = 0;
+                component < scene.sounds.GetCount(); ++component)
+            {
+                AppendWisceneReference(document, scene.sounds[component].filename,
+                    DependencyClass::Audio,
+                    "wiscene.sound[" + std::to_string(component) + "].filename");
+            }
+
+            for (std::size_t component = 0;
+                component < scene.videos.GetCount(); ++component)
+            {
+                AppendWisceneReference(document, scene.videos[component].filename,
+                    DependencyClass::Video,
+                    "wiscene.video[" + std::to_string(component) + "].filename");
+            }
+
+            for (std::size_t component = 0;
+                component < scene.scripts.GetCount(); ++component)
+            {
+                AppendWisceneReference(document, scene.scripts[component].filename,
+                    DependencyClass::Script,
+                    "wiscene.script[" + std::to_string(component) + "].filename");
+            }
+        }
+
         bool IsWithin(const std::filesystem::path& root,
                       const std::filesystem::path& candidate)
         {
@@ -116,6 +236,34 @@ namespace renegade::bridge
         {
             return {code, sourceId, path, message};
         }
+    }
+
+    void InspectWisceneDependencies(
+        const wi::scene::Scene& scene,
+        WisceneDependencyDocument& document)
+    {
+        WalkWisceneDependencies(scene, document);
+    }
+
+    WisceneDependencyReader MakeWisceneDependencyReader()
+    {
+        return [](const std::string& path,
+            WisceneDependencyDocument& document,
+            std::string& error)
+        {
+            document.references.clear();
+            auto prepared = PrepareWickedSceneOpen(path);
+            if (!prepared.IsReady() || prepared.ReadOnlyScene() == nullptr)
+            {
+                error = prepared.Error().empty()
+                    ? "The WISCENE was not ready for dependency inspection."
+                    : prepared.Error();
+                return false;
+            }
+            InspectWisceneDependencies(*prepared.ReadOnlyScene(), document);
+            error.clear();
+            return true;
+        };
     }
 
     DependencyPathResult ResolveDependencyPath(
@@ -253,6 +401,28 @@ namespace renegade::bridge
                     DependencyRequirement::Required,
                     std::move(provenance), false});
         }
+
+        DependencyCandidate ProjectRelativeWisceneCandidate(
+            const std::string& projectRoot,
+            const DependencyCandidate& reference)
+        {
+            DependencyCandidate candidate = reference;
+            const auto declared =
+                std::filesystem::u8path(candidate.declaredPath);
+            if (!declared.is_absolute())
+                return candidate;
+
+            std::error_code error;
+            const auto root = std::filesystem::weakly_canonical(
+                std::filesystem::u8path(projectRoot), error);
+            if (error)
+                return candidate;
+
+            const auto relative = declared.lexically_normal().lexically_relative(root);
+            if (!relative.empty())
+                candidate.declaredPath = relative.generic_u8string();
+            return candidate;
+        }
     }
 
     ProjectDependencyProvider::ProjectDependencyProvider(ProjectDependencyReader reader)
@@ -329,6 +499,33 @@ namespace renegade::bridge
         for (std::size_t index = 0; index < document.fontPaths.size(); ++index)
             EmitPath(emit, document.fontPaths[index], DependencyClass::Font,
                 "runtime_screen.font[" + std::to_string(index) + "].resource");
+        error.clear();
+        return true;
+    }
+
+    WisceneDependencyProvider::WisceneDependencyProvider(
+        WisceneDependencyReader reader) : reader_(std::move(reader)) {}
+    const char* WisceneDependencyProvider::Name() const noexcept
+    { return "wiscene"; }
+    std::uint32_t WisceneDependencyProvider::Version() const noexcept
+    { return 1; }
+    bool WisceneDependencyProvider::Supports(DependencyClass value) const noexcept
+    { return value == DependencyClass::Scene; }
+    bool WisceneDependencyProvider::Discover(
+        const DependencyProviderContext& context,
+        const DependencyCandidateSink& emit,
+        std::string& error) const
+    {
+        std::string path;
+        if (!reader_ || !ValidateProviderContext(context, path, error))
+        {
+            if (!reader_) error = "WISCENE dependency reader is not configured.";
+            return false;
+        }
+        WisceneDependencyDocument document;
+        if (!reader_(path, document, error)) return false;
+        for (const auto& reference : document.references)
+            emit(ProjectRelativeWisceneCandidate(context.projectRoot, reference));
         error.clear();
         return true;
     }

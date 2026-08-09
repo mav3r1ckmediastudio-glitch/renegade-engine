@@ -99,6 +99,58 @@ This gate tests each provider at an explicit source root. Recursive traversal
 and complete transitive closure remain Gate 7, so Gate 3 does not silently
 introduce an incomplete traversal algorithm.
 
+## Gate 4 implementation boundary
+
+Gate 4 adds the `WisceneDependencyProvider` and a production reader that loads
+the source scene through Renegade's existing validated
+`PrepareWickedSceneOpen` seam. `PreparedSceneOpen` exposes a const-only scene
+view for inspection; the active Studio scene is never involved and the source
+archive is never written. The dependency contract remains free of Wicked
+types.
+
+The first complete native walker reads only these authoritative public fields:
+
+- every `MaterialComponent::textures[*].name` slot;
+- `LightComponent::lensFlareNames`;
+- `EnvironmentProbeComponent::textureName`;
+- the sky, colour-grading and two volumetric-cloud map names on
+  `WeatherComponent`;
+- `SoundComponent::filename`;
+- `VideoComponent::filename`;
+- `ScriptComponent::filename`.
+
+These become typed Texture, Audio, Video and Script candidates. Provenance is
+deterministic and identifies the component ordinal plus exact field or texture
+slot. Empty fields are ignored. Arbitrary metadata strings are never scanned.
+Wicked expands serialized resource names against the WISCENE directory while
+loading; the provider converts those public absolute field values back to
+project-relative declarations lexically before the existing path-security
+layer performs authoritative containment, existence and collision checks.
+
+`RenegadeDependencyTests` exercises all seven component classes through the
+direct const-scene walker, including Environment Probe. Its real serialized
+headless WISCENE covers Material, Light, Weather, Sound, Video and Script;
+Environment Probe is omitted from that archive fixture because Wicked creates
+its render cubemap during deserialization and therefore requires an initialized
+graphics device. The fixture includes repeated texture references, missing
+native resources and a path-looking metadata value. It proves typed field
+coverage and provenance, stable repeated read order, duplicate node reuse,
+missing diagnostics, metadata exclusion and byte-for-byte source-file identity
+after extraction. Gate 4 does not add recursive traversal; the scene is still
+exercised as an explicit root.
+
+Imported-source/BIN discovery, terrain/generated data and Always Include remain
+Gate 5. Lua source policy and computed-target diagnostics remain Gate 6.
+Transitive traversal and graph serialization remain Gate 7.
+
+Gate 4's remote implementation commit
+`3d888de02c97a83ada27ba4f3d17f8a75053fd53` passed the authoritative
+`Renegade Studio` GitHub Actions workflow run 126 in both Debug and Release.
+Each configuration passed the complete 23-test CTest suite, including the
+extended `RenegadeDependencyTests`. The separate pinned-Wicked baseline run 127
+also passed in Debug and Release. This is the accepted build/test proof because
+the project owner's local CPU is confirmed unstable under compilation load.
+
 ## Gate 2 correction — Windows Unicode path identity
 
 The original Gate 2 resolver used the filesystem-resolved spelling as graph
