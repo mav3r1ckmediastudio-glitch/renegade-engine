@@ -632,6 +632,75 @@ int main()
     if (ReadBytes(gate4Scene) != gate4BytesBefore)
         return Fail("dependency extraction modified the authoritative WISCENE");
 
+    // Gate 5 Terrain: default terrain materials are ordinary
+    // MaterialComponents (see TerrainService::ConfigureDefaultGrassMaterial),
+    // already walked by WalkWisceneDependencies above -- no new provider
+    // code exists or is needed for terrain. The one real edge case is that
+    // their texture paths are built at runtime as
+    // wi::helper::GetCurrentPath() + "/Content/terrain/...", an absolute,
+    // install-anchored path that was never an authored project-relative
+    // declaration. This proves ProjectRelativeWisceneCandidate and
+    // ResolveDependencyPath already classify that correctly as
+    // OutsideProject rather than silently mishandling it, and that a pure
+    // in-memory generated terrain (no material at all) produces zero
+    // dependency edges, since there is nothing on disk to discover.
+    {
+        const fs::path terrainScene = root / "Content/Scenes/Gate5Terrain.wiscene";
+        wi::scene::Scene terrainWorld;
+        auto& terrainMaterial =
+            terrainWorld.materials.Create(wi::ecs::CreateEntity());
+        const std::string runtimeAbsoluteGrassPath =
+            wi::helper::GetCurrentPath() +
+            "/Content/terrain/default_grass/default_grass_basecolor.tga";
+        terrainMaterial.textures[wi::scene::MaterialComponent::BASECOLORMAP]
+            .name = runtimeAbsoluteGrassPath;
+        terrainWorld.terrains.Create(wi::ecs::CreateEntity());
+
+        wi::Archive terrainArchive(terrainScene.generic_u8string(), false, false);
+        if (!terrainArchive.IsOpen())
+            return Fail("Gate 5 terrain fixture archive could not be opened");
+        terrainWorld.Serialize(terrainArchive);
+        if (!terrainArchive.SaveFile(terrainScene.generic_u8string()))
+            return Fail("Gate 5 terrain fixture could not be serialized");
+        terrainArchive = wi::Archive();
+
+        std::string terrainError;
+        DependencyCollector terrainCollector(root.generic_u8string());
+        if (!terrainCollector.RegisterProvider(wisceneProvider, terrainError) ||
+            !terrainCollector.AddRoot({"Content/Scenes/Gate5Terrain.wiscene",
+                DependencyClass::Scene, DependencyRequirement::Required,
+                "fixture.terrain"}, terrainError) ||
+            !terrainCollector.DiscoverRootDependencies(terrainError))
+            return Fail(("Gate 5 terrain provider failed: " + terrainError).c_str());
+
+        const auto& terrainGraph = terrainCollector.Graph();
+        const auto outsideProjectCount = std::count_if(
+            terrainGraph.diagnostics.begin(), terrainGraph.diagnostics.end(),
+            [](const DependencyDiagnostic& diagnostic)
+            {
+                return diagnostic.code == DependencyDiagnosticCode::OutsideProject;
+            });
+        if (outsideProjectCount == 0)
+        {
+            std::cerr << "DEBUG runtimeAbsoluteGrassPath=" << runtimeAbsoluteGrassPath << '\n';
+            std::cerr << "DEBUG diagnostics.size()=" << terrainGraph.diagnostics.size() << '\n';
+            for (const auto& diagnostic : terrainGraph.diagnostics)
+                std::cerr << "DEBUG diag code=" << static_cast<int>(diagnostic.code)
+                    << " path=" << diagnostic.path
+                    << " message=" << diagnostic.message << '\n';
+            std::cerr << "DEBUG nodes.size()=" << terrainGraph.nodes.size() << '\n';
+            for (const auto& node : terrainGraph.nodes)
+                std::cerr << "DEBUG node path=" << node.projectRelativePath << '\n';
+            return Fail("runtime-absolute terrain material path was not "
+                "diagnosed as outside the project");
+        }
+        // Only the scene root node itself; the rejected absolute texture
+        // path must never have become a graph node.
+        if (terrainGraph.nodes.size() != 1)
+            return Fail("an outside-project terrain path incorrectly "
+                "became a dependency node");
+    }
+
     fs::remove_all(root, ignored);
     fs::remove_all(outside, ignored);
     std::cout << "RenegadeDependencyTests passed\n";
