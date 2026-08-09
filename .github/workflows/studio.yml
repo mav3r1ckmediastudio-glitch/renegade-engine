@@ -12,6 +12,7 @@ on:
       - "Runtime/**"
       - "Tests/**"
       - "Tools/Build-Studio-Windows.ps1"
+      - "Tools/Test-Windows-LoggedCommand.ps1"
       - "Tools/TerrainSurfacePacker.cpp"
       - "Tools/Windows-Build.Common.ps1"
       - ".gitmodules"
@@ -53,6 +54,10 @@ jobs:
         run: >-
           ./Tools/Collect-Windows-Baseline.ps1
           -OutputRoot "artifacts/studio/ci-${{ matrix.configuration }}"
+
+      - name: Verify native command failure propagation
+        shell: pwsh
+        run: ./Tools/Test-Windows-LoggedCommand.ps1
 
       - name: Build Renegade Studio
         shell: pwsh
