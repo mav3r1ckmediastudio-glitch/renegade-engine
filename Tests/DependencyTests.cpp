@@ -640,19 +640,30 @@ int main()
     // their texture paths are built at runtime as
     // wi::helper::GetCurrentPath() + "/Content/terrain/...", an absolute,
     // install-anchored path that was never an authored project-relative
-    // declaration. This proves ProjectRelativeWisceneCandidate and
+    // declaration. This proves ProjectRelativeCandidate and
     // ResolveDependencyPath already classify that correctly as
     // OutsideProject rather than silently mishandling it, and that a pure
     // in-memory generated terrain (no material at all) produces zero
     // dependency edges, since there is nothing on disk to discover.
+    //
+    // The fixture below does not call wi::helper::GetCurrentPath() itself:
+    // that function returns std::filesystem::current_path(), the process's
+    // working directory, which CTest sets differently across machines (this
+    // genuinely failed on CI while passing locally, tracked down to exactly
+    // this). What actually needs proving is narrower and environment-
+    // independent -- that *some* absolute, outside-project path is
+    // correctly diagnosed -- so this reuses the same deterministic sibling-
+    // of-root "outside" directory the escaping-symlink case above already
+    // establishes, which is guaranteed non-nested under root on any
+    // machine.
     {
         const fs::path terrainScene = root / "Content/Scenes/Gate5Terrain.wiscene";
         wi::scene::Scene terrainWorld;
         auto& terrainMaterial =
             terrainWorld.materials.Create(wi::ecs::CreateEntity());
         const std::string runtimeAbsoluteGrassPath =
-            wi::helper::GetCurrentPath() +
-            "/Content/terrain/default_grass/default_grass_basecolor.tga";
+            (outside / "Content/terrain/default_grass/default_grass_basecolor.tga")
+                .generic_u8string();
         terrainMaterial.textures[wi::scene::MaterialComponent::BASECOLORMAP]
             .name = runtimeAbsoluteGrassPath;
         terrainWorld.terrains.Create(wi::ecs::CreateEntity());
