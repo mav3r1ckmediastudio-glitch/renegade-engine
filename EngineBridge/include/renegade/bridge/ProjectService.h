@@ -25,6 +25,15 @@ namespace renegade::bridge
         // Projects without either retain the LP01/LP02 immediate-start path.
         std::string startupScreenId;
         std::string startupScreen;
+        // Gate 5: project-relative paths declared to remain in the
+        // dependency closure regardless of whether any scene, flow or screen
+        // document currently references them. Each entry is stored as it was
+        // validated on read/write: "<dependency_class_name>:<project_relative_path>".
+        // Absent from a project descriptor entirely means no declarations,
+        // so projects written before this field existed keep loading
+        // unchanged. See DependencyClassName/TryParseDependencyClassName in
+        // DependencyService.h for the recognized class names.
+        std::vector<std::string> alwaysInclude;
     };
 
     struct RecentProject

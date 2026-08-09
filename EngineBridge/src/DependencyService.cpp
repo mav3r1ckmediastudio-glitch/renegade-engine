@@ -4,11 +4,21 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <limits>
 #include <sstream>
 #include <utility>
+
+// Gate 5: nlohmann::json, vendored via WickedEngine/Editor/tiny_gltf.h and
+// already linked into this library through ModelImporter_GLTF.cpp (see
+// EngineBridge/CMakeLists.txt). Included directly, without tiny_gltf.h,
+// because only raw JSON structure is needed here -- see
+// GltfDependencyDocument's declaration in DependencyService.h for why this
+// deliberately does not use tinygltf's own Model-loading API.
+#include "json.hpp"
 
 #if defined(_WIN32)
 #ifndef NOMINMAX
@@ -266,6 +276,188 @@ namespace renegade::bridge
         };
     }
 
+    namespace
+    {
+        // Percent-decodes a glTF URI. The spec requires this: whitespace and
+        // other reserved characters in a URI may be represented as %XX
+        // escapes (e.g. "a b.png" is declared as "a%20b.png"), and the raw
+        // escaped form is never a valid filesystem path.
+        std::string PercentDecodeUri(const std::string& uri)
+        {
+            std::string decoded;
+            decoded.reserve(uri.size());
+            for (std::size_t index = 0; index < uri.size(); ++index)
+            {
+                if (uri[index] == '%' && index + 2 < uri.size())
+                {
+                    const auto hexToNibble = [](const char character)
+                        -> int
+                    {
+                        if (character >= '0' && character <= '9')
+                            return character - '0';
+                        if (character >= 'a' && character <= 'f')
+                            return character - 'a' + 10;
+                        if (character >= 'A' && character <= 'F')
+                            return character - 'A' + 10;
+                        return -1;
+                    };
+                    const int high = hexToNibble(uri[index + 1]);
+                    const int low = hexToNibble(uri[index + 2]);
+                    if (high >= 0 && low >= 0)
+                    {
+                        decoded.push_back(static_cast<char>(
+                            (high << 4) | low));
+                        index += 2;
+                        continue;
+                    }
+                }
+                decoded.push_back(uri[index]);
+            }
+            return decoded;
+        }
+
+        bool IsDataUri(const std::string& uri)
+        {
+            return uri.rfind("data:", 0) == 0;
+        }
+
+        // A glTF (.gltf) file is the JSON text directly. A GLB (.glb) file
+        // is a binary container: a 12-byte header ("glTF" magic, version,
+        // total length) followed by chunks, each a 4-byte length + 4-byte
+        // type + payload; the JSON chunk (type 0x4E4F534A, "JSON" as a
+        // little-endian uint32) is always first per spec. This extracts just
+        // that JSON text from either form without touching any binary
+        // geometry data.
+        bool ExtractGltfJsonText(
+            const std::vector<std::uint8_t>& bytes,
+            std::string& jsonText,
+            std::string& error)
+        {
+            constexpr std::size_t GlbHeaderSize = 12;
+            constexpr std::uint32_t GlbMagic = 0x46546C67; // "glTF"
+            constexpr std::uint32_t JsonChunkType = 0x4E4F534A; // "JSON"
+
+            const auto readUint32 = [&bytes](const std::size_t offset)
+            {
+                return static_cast<std::uint32_t>(bytes[offset]) |
+                    (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+                    (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
+                    (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+            };
+
+            const bool looksLikeGlb =
+                bytes.size() >= GlbHeaderSize && readUint32(0) == GlbMagic;
+            if (!looksLikeGlb)
+            {
+                jsonText.assign(bytes.begin(), bytes.end());
+                return true;
+            }
+
+            constexpr std::size_t ChunkHeaderSize = 8;
+            if (bytes.size() < GlbHeaderSize + ChunkHeaderSize)
+            {
+                error = "GLB file is smaller than its required header.";
+                return false;
+            }
+            const std::uint32_t chunkLength = readUint32(GlbHeaderSize);
+            const std::uint32_t chunkType =
+                readUint32(GlbHeaderSize + 4);
+            const std::size_t chunkDataStart =
+                GlbHeaderSize + ChunkHeaderSize;
+            if (chunkType != JsonChunkType ||
+                bytes.size() < chunkDataStart + chunkLength)
+            {
+                error = "GLB file's first chunk is not a valid JSON chunk.";
+                return false;
+            }
+            jsonText.assign(
+                bytes.begin() + static_cast<std::ptrdiff_t>(chunkDataStart),
+                bytes.begin() + static_cast<std::ptrdiff_t>(
+                    chunkDataStart + chunkLength));
+            return true;
+        }
+
+        void CollectGltfArrayUris(
+            const nlohmann::json& document,
+            const char* arrayKey,
+            const DependencyClass dependencyClass,
+            const std::string& baseDirectory,
+            GltfDependencyDocument& result)
+        {
+            const auto arrayIt = document.find(arrayKey);
+            if (arrayIt == document.end() || !arrayIt->is_array())
+                return;
+            for (std::size_t index = 0; index < arrayIt->size(); ++index)
+            {
+                const auto& element = (*arrayIt)[index];
+                if (!element.is_object())
+                    continue;
+                const auto uriIt = element.find("uri");
+                if (uriIt == element.end() || !uriIt->is_string())
+                    continue; // bufferView-based: embedded, not external.
+                const std::string uri = uriIt->get<std::string>();
+                if (uri.empty() || IsDataUri(uri))
+                    continue; // embedded base64 data, not a file dependency.
+
+                const auto declaredPath =
+                    (std::filesystem::u8path(baseDirectory) /
+                        std::filesystem::u8path(PercentDecodeUri(uri)))
+                        .lexically_normal();
+                DependencyCandidate candidate;
+                candidate.declaredPath = declaredPath.generic_u8string();
+                candidate.dependencyClass = dependencyClass;
+                candidate.requirement = DependencyRequirement::Required;
+                candidate.provenance = std::string("gltf.") + arrayKey + "[" +
+                    std::to_string(index) + "].uri";
+                result.references.push_back(std::move(candidate));
+            }
+        }
+    }
+
+    GltfDependencyReader MakeGltfDependencyReader()
+    {
+        return [](const std::string& path,
+            GltfDependencyDocument& document,
+            std::string& error)
+        {
+            document.references.clear();
+
+            std::ifstream stream(
+                std::filesystem::u8path(path), std::ios::binary);
+            if (!stream.is_open())
+            {
+                error = "Could not open the glTF/GLB file: " + path;
+                return false;
+            }
+            const std::vector<std::uint8_t> bytes(
+                (std::istreambuf_iterator<char>(stream)),
+                std::istreambuf_iterator<char>());
+            stream.close();
+
+            std::string jsonText;
+            if (!ExtractGltfJsonText(bytes, jsonText, error))
+                return false;
+
+            const nlohmann::json parsed = nlohmann::json::parse(
+                jsonText, /* callback */ nullptr, /* allow_exceptions */ false);
+            if (parsed.is_discarded() || !parsed.is_object())
+            {
+                error = "The glTF/GLB file's JSON structure could not be parsed: " + path;
+                return false;
+            }
+
+            const std::string baseDirectory =
+                std::filesystem::u8path(path).parent_path().generic_u8string();
+            CollectGltfArrayUris(parsed, "buffers",
+                DependencyClass::ImportedContent, baseDirectory, document);
+            CollectGltfArrayUris(parsed, "images",
+                DependencyClass::Texture, baseDirectory, document);
+
+            error.clear();
+            return true;
+        };
+    }
+
     DependencyPathResult ResolveDependencyPath(
         const std::string& projectRoot,
         const std::string& declaredPath)
@@ -402,7 +594,15 @@ namespace renegade::bridge
                     std::move(provenance), false});
         }
 
-        DependencyCandidate ProjectRelativeWisceneCandidate(
+        // Rewrites an absolute declared path into a project-relative one
+        // wherever that is lexically possible, so ResolveDependencyPath sees
+        // an ordinary relative path instead of unconditionally rejecting an
+        // absolute one. Used for content whose declared paths are computed
+        // or resolved at runtime rather than authored as project-relative
+        // strings: WISCENE native components (e.g. terrain's runtime-built
+        // default-material paths) and glTF buffer/image URIs (declared
+        // relative to the glTF file's own directory, not the project root).
+        DependencyCandidate ProjectRelativeCandidate(
             const std::string& projectRoot,
             const DependencyCandidate& reference)
         {
@@ -448,6 +648,17 @@ namespace renegade::bridge
             "project.startup_flow");
         EmitPath(emit, document.startupScreen, DependencyClass::RuntimeScreenDocument,
             "project.startup_screen");
+        for (std::size_t index = 0; index < document.alwaysInclude.size(); ++index)
+        {
+            DependencyCandidate candidate = document.alwaysInclude[index];
+            if (candidate.declaredPath.empty())
+                continue;
+            candidate.requirement = DependencyRequirement::Required;
+            if (candidate.provenance.empty())
+                candidate.provenance =
+                    "project.always_include[" + std::to_string(index) + "]";
+            emit(candidate);
+        }
         error.clear();
         return true;
     }
@@ -525,7 +736,34 @@ namespace renegade::bridge
         WisceneDependencyDocument document;
         if (!reader_(path, document, error)) return false;
         for (const auto& reference : document.references)
-            emit(ProjectRelativeWisceneCandidate(context.projectRoot, reference));
+            emit(ProjectRelativeCandidate(context.projectRoot, reference));
+        error.clear();
+        return true;
+    }
+
+    GltfDependencyProvider::GltfDependencyProvider(
+        GltfDependencyReader reader) : reader_(std::move(reader)) {}
+    const char* GltfDependencyProvider::Name() const noexcept
+    { return "gltf"; }
+    std::uint32_t GltfDependencyProvider::Version() const noexcept
+    { return 1; }
+    bool GltfDependencyProvider::Supports(DependencyClass value) const noexcept
+    { return value == DependencyClass::ImportedContent; }
+    bool GltfDependencyProvider::Discover(
+        const DependencyProviderContext& context,
+        const DependencyCandidateSink& emit,
+        std::string& error) const
+    {
+        std::string path;
+        if (!reader_ || !ValidateProviderContext(context, path, error))
+        {
+            if (!reader_) error = "glTF dependency reader is not configured.";
+            return false;
+        }
+        GltfDependencyDocument document;
+        if (!reader_(path, document, error)) return false;
+        for (const auto& reference : document.references)
+            emit(ProjectRelativeCandidate(context.projectRoot, reference));
         error.clear();
         return true;
     }
@@ -721,5 +959,47 @@ namespace renegade::bridge
             }
         }
         graph_.edges.push_back({source.id, targetId, candidate.provenance});
+    }
+
+    namespace
+    {
+        constexpr std::array<std::pair<DependencyClass, const char*>, 13>
+            DependencyClassNames = {{
+                {DependencyClass::ProjectDocument, "project_document"},
+                {DependencyClass::StoryFlowDocument, "story_flow_document"},
+                {DependencyClass::RuntimeScreenDocument, "runtime_screen_document"},
+                {DependencyClass::Scene, "scene"},
+                {DependencyClass::ImportedContent, "imported_content"},
+                {DependencyClass::Texture, "texture"},
+                {DependencyClass::Audio, "audio"},
+                {DependencyClass::Video, "video"},
+                {DependencyClass::Font, "font"},
+                {DependencyClass::Script, "script"},
+                {DependencyClass::Data, "data"},
+                {DependencyClass::GeneratedData, "generated_data"},
+                {DependencyClass::RuntimeSupport, "runtime_support"},
+            }};
+    }
+
+    const char* DependencyClassName(const DependencyClass dependencyClass) noexcept
+    {
+        for (const auto& entry : DependencyClassNames)
+            if (entry.first == dependencyClass)
+                return entry.second;
+        return "";
+    }
+
+    bool TryParseDependencyClassName(
+        const std::string& name, DependencyClass& dependencyClass) noexcept
+    {
+        for (const auto& entry : DependencyClassNames)
+        {
+            if (name == entry.second)
+            {
+                dependencyClass = entry.first;
+                return true;
+            }
+        }
+        return false;
     }
 }

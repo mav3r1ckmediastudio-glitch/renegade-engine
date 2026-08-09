@@ -150,6 +150,17 @@ namespace renegade::bridge
         std::string startupScene;
         std::string startupFlow;
         std::string startupScreen;
+        // Gate 5: paths the project descriptor declares must remain in the
+        // dependency closure regardless of whether any scene, flow or screen
+        // document currently references them (e.g. a fallback texture or a
+        // required runtime font). Each entry carries its own declared class,
+        // matching every other typed provider in this file -- "always
+        // include" is a declared project-level fact about a specific kind of
+        // asset, never inferred from a path's extension. Each entry becomes
+        // its own graph root candidate with DependencyRequirement::Required,
+        // the same way startupScene/startupFlow/startupScreen already do;
+        // there is no separate provider type for this.
+        std::vector<DependencyCandidate> alwaysInclude;
     };
 
     struct StoryFlowDependencyDocument
@@ -259,6 +270,45 @@ namespace renegade::bridge
         DependencyCandidate candidate;
     };
 
+    // Gate 5: a raw, un-imported .gltf/.glb source file sitting in the
+    // project as its own dependency-bearing document. This is distinct from
+    // ImportService, which bakes GLTF content into an embedded Wicked scene
+    // at import time and never persists the source's own external resource
+    // paths -- once a WISCENE exists, Gate 4's typed walker already covers
+    // its baked-in resources. This provider covers the other case: the
+    // source file itself, before or independent of any import, declaring
+    // its own external buffer (.bin) and image dependencies per the glTF
+    // spec. It reads the glTF/GLB JSON structure directly (nlohmann::json,
+    // already vendored via WickedEngine/Editor/tiny_gltf.h and linked into
+    // this library through ModelImporter_GLTF.cpp) rather than using
+    // tinygltf's own Model-loading API, because that API treats a missing
+    // external .bin as a hard parse failure -- the opposite of this
+    // project's "missing declared dependency is a diagnostic, never a load
+    // failure" contract that every other provider follows via
+    // ResolveDependencyPath's own independent existence check.
+    struct GltfDependencyDocument
+    {
+        std::vector<DependencyCandidate> references;
+    };
+
+    using GltfDependencyReader = std::function<bool(
+        const std::string&, GltfDependencyDocument&, std::string&)>;
+
+    [[nodiscard]] GltfDependencyReader MakeGltfDependencyReader();
+
+    class GltfDependencyProvider final : public IDependencyProvider
+    {
+    public:
+        explicit GltfDependencyProvider(GltfDependencyReader reader);
+        [[nodiscard]] const char* Name() const noexcept override;
+        [[nodiscard]] std::uint32_t Version() const noexcept override;
+        [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
+        [[nodiscard]] bool Discover(const DependencyProviderContext& context,
+            const DependencyCandidateSink& emit, std::string& error) const override;
+    private:
+        GltfDependencyReader reader_;
+    };
+
     class DeclaredReferenceDependencyProvider final : public IDependencyProvider
     {
     public:
@@ -309,4 +359,15 @@ namespace renegade::bridge
     [[nodiscard]] DependencyPathResult ResolveDependencyPath(
         const std::string& projectRoot,
         const std::string& declaredPath);
+
+    // Gate 5: a stable, lowercase snake_case textual name for each
+    // DependencyClass, used only where a class must be declared in a
+    // human-authored text format (the project descriptor's "always_include"
+    // entries). This is not a general string<->class inference mechanism;
+    // callers still declare a type, they simply declare it by name in a text
+    // file instead of by constructing an enum value directly in code.
+    [[nodiscard]] const char* DependencyClassName(
+        DependencyClass dependencyClass) noexcept;
+    [[nodiscard]] bool TryParseDependencyClassName(
+        const std::string& name, DependencyClass& dependencyClass) noexcept;
 }
