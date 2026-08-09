@@ -130,7 +130,6 @@ function Invoke-RenegadeLoggedCommand {
         # element of a pipeline, which previously allowed a failing CTest run
         # to be recorded as PASS. Capture first, record the exit code
         # immediately, then replay the output to the console and durable log.
-        $LASTEXITCODE = 0
         & $FilePath @ArgumentList *> $commandOutputPath
         $exitCode = $LASTEXITCODE
     }
