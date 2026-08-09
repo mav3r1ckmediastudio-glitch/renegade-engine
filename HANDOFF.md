@@ -4,22 +4,18 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Current main baseline:** `bdb1fb98fcebc8eca5b8fb143ea8eec0cae5ec9c`
+**Current main baseline:** `c2ace926ff2486fd3b60e3717bdba6dc8d138217`
 
-**Active branch:** `agent/lc01-gate2-corrective`
+**Active branch:** `agent/lc01-gate4-moved-missing-recovery`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Critical local safety rule
 
-The project owner's clone contains an unrelated local modification to
-`Tools/Windows-Build.Common.ps1`. PR #36 necessarily changes the upstream copy
-to repair native exit-code propagation. Preserve the owner's local bytes before
-pulling and reconcile that file manually; do not reset, clean or discard them.
-
-Expected SHA-256:
-
-`3CEDE22CB6C8B53404E3A06A26F67D1E8E7C333FE8BECD3EA612AB3E25E0645E`
+The project owner's clone contains an unrelated uncommitted modification to
+`Tools/Windows-Build.Common.ps1`: direct native Git calls use `git.exe` and
+check `$LASTEXITCODE`. It has already been reapplied cleanly over PR #36's
+shared command-runner hardening. Do not reset, restore, stage or discard it.
 
 Temporary LP04 helper patch files may remain untracked. Do not use `git clean` and do not use `git add .`.
 
@@ -30,23 +26,25 @@ LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP
 LP05 — Representative Dependency Extraction is complete and accepted on `main`. Exact final head `8abb9fad959268ee00c32e046ede13d852883fa4` passed Studio run 144 and baseline run 150 in Debug and Release before independent project-owner review and squash merge through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
 
 LC01 — Asset Identity and Source Tracking is active on
-`agent/lc01-gate2-corrective`. Gate 1 is accepted on `main`: exact final head
-`0cd63d844c655eecebaf3f7bf04fdacbad2d50ed` passed Studio run 147 and baseline
-run 154 before independent review and squash merge through PR #34 at
-`580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`. PR #35 added Gate 2 persistence
-and was squash-merged at `bdb1fb98fcebc8eca5b8fb143ea8eec0cae5ec9c`,
-but its acceptance was invalid: raw CTest output showed 24/25 with
-`RenegadeAssetRegistryPersistenceTests` failing while PowerShell incorrectly
-recorded PASS. Corrective PR #36 fixes both faults. Candidate head
-`09601bc0f281cadd61d859d2c37249839840d2bc` passed Studio run 156 with a real
-25/25 in Debug and Release, including registry recovery, the explicit native
-exit-code probe passed in both configurations, and baseline run 172 passed
-Debug and Release with Wicked unchanged. Independent exact-head review and
-squash merge remain pending. See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
+`agent/lc01-gate4-moved-missing-recovery`. Gates 1-3 are accepted on `main`:
+Gate 1 merged through PR #34 at `580e5a5`, the corrected Gate 2 merged through
+PR #36 at `489e33d`, and Gate 3 source-to-imported-product provenance merged
+through PR #37 at `c2ace926ff2486fd3b60e3717bdba6dc8d138217`.
+
+Gate 4 implementation commit `3de23df` adds schema-version-3 missing-asset
+tombstones and identity recovery only when the evidence is unique in both
+directions. It preserves ID-keyed provenance across a move, keeps provenance
+valid while an endpoint is tombstoned, and reports ambiguous candidates without
+speculative relinking. `RenegadeAssetRegistryTests` now covers unique move,
+genuine loss, byte-identical tombstone reload, unique reappearance, one old
+identity matching multiple candidates, and one candidate matching multiple old
+identities. An isolated Linux harness passed; authoritative Windows Debug and
+Release CI and independent review remain pending. See
+`docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 
-- Current main merge commit: `bdb1fb98fcebc8eca5b8fb143ea8eec0cae5ec9c` (PR #35; Gate 2 corrective PR #36 pending)
+- Current main merge commit: `c2ace926ff2486fd3b60e3717bdba6dc8d138217` (PR #37; LC01 Gate 3 accepted)
 
 The four Windows PR checks completed successfully on the corrected PR #24 head:
 

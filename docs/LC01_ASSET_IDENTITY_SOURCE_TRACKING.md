@@ -187,3 +187,40 @@ versioned contract instead of asking them to infer provenance from paths.
 7. An unchanged LP05 refresh retains valid provenance exactly; a refresh that
    removes an endpoint fails rather than silently retargeting it.
 8. Debug and Release CI pass with Wicked unchanged.
+
+## Gate 4 — Moved and Missing Asset Recovery
+
+Gate 4 preserves an asset's UUID when a source changes project-relative path
+only where the evidence is unique. The registry retains a compact last-known
+tombstone for a genuinely absent asset. A later candidate may reclaim that ID
+only when its content hash and immutable dependency/provider classification
+produce one unambiguous match.
+
+Ambiguous candidates never relink automatically. They remain distinct new
+assets and receive an explicit recovery diagnostic for the future Renegade UI.
+Gate 4 does not move files, edit scenes, rewrite import settings, invoke
+reimport, or change creator content.
+
+### Gate 4 acceptance
+
+1. A single unique rename preserves the original asset ID and dependencies.
+2. A genuine loss creates a deterministic tombstone with its last-known
+   identity evidence.
+3. A later unique reappearance restores the tombstoned ID and removes only
+   that tombstone.
+4. Equal hashes or classifications that make the match non-unique never
+   auto-recover; the ambiguity is reported explicitly.
+5. Provenance relationships retain their IDs across a recovered move.
+6. Tombstones and recovery outcomes serialize/reload deterministically.
+7. No recovery operation reads or writes creator files.
+8. Debug and Release CI pass with Wicked unchanged.
+
+### Gate 4 candidate evidence
+
+Implementation commit `3de23df` adds schema-version-3 recovery tombstones,
+bidirectionally unique move/reappearance matching, provenance survival for
+missing endpoints and deterministic recovery diagnostics. The focused local
+Linux harness passed unique move, genuine loss, tombstone reload, unique
+reappearance, one-to-many ambiguity and many-to-one ambiguity cases. This is
+candidate evidence only: Gate 4 remains unaccepted until the exact published
+head passes authoritative Windows Debug and Release CI and independent review.

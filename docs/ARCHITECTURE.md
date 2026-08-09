@@ -288,6 +288,20 @@ directory can appear through both an 8.3 short name and its long name; recovery
 must accept those aliases without accepting a genuine escape or reparse-point
 redirect outside the project root.
 
+LC01 Gate 3 adds versioned imported-product provenance keyed entirely by
+durable asset IDs. It records the importer and settings schema versions,
+canonical settings JSON, and source/product hashes from the last successful
+import without invoking an importer during registry refresh.
+
+LC01 Gate 4 retains a compact tombstone when a previously available asset
+disappears. Recovery compares content hash, dependency class, requirement,
+applicability, provider and provider version. An ID is reclaimed only when the
+candidate-to-tombstone and tombstone-to-candidate relationship is unique in
+both directions; ambiguous candidates receive new IDs and leave all possible
+tombstones intact. Provenance remains keyed to the retained ID, so a unique
+move changes location without retargeting the import recipe. Refresh remains
+metadata-only and never moves, edits or imports creator files.
+
 ### Tools
 
 Import, shader, packaging, migration, feature-inventory, and validation tools.

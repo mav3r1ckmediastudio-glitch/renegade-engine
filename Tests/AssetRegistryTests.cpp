@@ -19,6 +19,10 @@ namespace
         "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     constexpr const char* AudioAssetId =
         "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    constexpr const char* AmbiguousAssetId1 =
+        "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    constexpr const char* AmbiguousAssetId2 =
+        "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
     int Fail(const char* message)
     {
@@ -282,6 +286,125 @@ int main()
         unchangedJson != provenanceJson ||
         unchanged.registry.importedProducts != provenanceReloaded.importedProducts)
         return Fail("unchanged refresh did not preserve IDs, provenance and bytes");
+
+    // Gate 4: a uniquely evidenced move keeps the durable identity and its
+    // provenance. Recovery must be unique on both sides of the match.
+    DependencyGraph movedGraph = graph;
+    movedGraph.nodes[1].id = "moved-scene";
+    movedGraph.nodes[1].projectRelativePath =
+        "Content/Scenes/Moved/Startup.wiscene";
+    for (auto& edge : movedGraph.edges)
+    {
+        if (edge.sourceId == "scene") edge.sourceId = "moved-scene";
+        if (edge.targetId == "scene") edge.targetId = "moved-scene";
+    }
+    AssetRegistryRefresh moved;
+    if (!RefreshAssetRegistry(ProjectId, movedGraph, &provenanceReloaded,
+            moved, error, [] { return StableId{}; }))
+        return Fail(error.c_str());
+    const AssetRecord* movedScene = FindRecord(
+        moved.registry, "Content/Scenes/Moved/Startup.wiscene");
+    if (movedScene == nullptr || movedScene->assetId != SceneAssetId ||
+        moved.recoveredAssetIds != std::vector<StableId>{SceneAssetId} ||
+        !moved.addedAssetIds.empty() || !moved.removedAssetIds.empty() ||
+        moved.registry.importedProducts != provenanceReloaded.importedProducts)
+        return Fail("unique move did not preserve identity and provenance");
+
+    DependencyGraph missingGraph = movedGraph;
+    missingGraph.nodes.erase(missingGraph.nodes.begin() + 1);
+    missingGraph.edges.erase(std::remove_if(
+        missingGraph.edges.begin(), missingGraph.edges.end(),
+        [](const DependencyEdge& edge)
+        {
+            return edge.sourceId == "moved-scene" ||
+                edge.targetId == "moved-scene";
+        }), missingGraph.edges.end());
+    AssetRegistryRefresh missing;
+    if (!RefreshAssetRegistry(ProjectId, missingGraph, &moved.registry,
+            missing, error, [] { return StableId{}; }))
+        return Fail(error.c_str());
+    if (!ContainsId(missing.removedAssetIds, SceneAssetId) ||
+        missing.registry.missingAssets.size() != 1 ||
+        missing.registry.missingAssets.front().assetId != SceneAssetId ||
+        missing.registry.missingAssets.front().lastKnownPath !=
+            "Content/Scenes/Moved/Startup.wiscene" ||
+        missing.registry.importedProducts != moved.registry.importedProducts)
+        return Fail("genuine loss did not retain a deterministic tombstone");
+    if (!GetImportedProductStatus(
+            missing.registry, imported, importStatus, error) ||
+        importStatus.productAvailable || !importStatus.productChanged)
+        return Fail("missing product provenance did not report unavailable");
+    std::string missingJson;
+    AssetRegistry missingReloaded;
+    std::string missingReloadedJson;
+    if (!SerializeAssetRegistry(missing.registry, missingJson, error) ||
+        !DeserializeAssetRegistry(missingJson, missingReloaded, error) ||
+        !SerializeAssetRegistry(missingReloaded, missingReloadedJson, error) ||
+        missingReloadedJson != missingJson)
+        return Fail("recovery tombstone did not round-trip byte-identically");
+
+    DependencyGraph reappearedGraph = missingGraph;
+    reappearedGraph.nodes.push_back(Node("returned-scene",
+        "Content/Scenes/Returned/Startup.wiscene", DependencyClass::Scene,
+        "fnv1a64:2000000000000002"));
+    AssetRegistryRefresh reappeared;
+    if (!RefreshAssetRegistry(ProjectId, reappearedGraph, &missingReloaded,
+            reappeared, error, [] { return StableId{}; }))
+        return Fail(error.c_str());
+    const AssetRecord* returnedScene = FindRecord(
+        reappeared.registry, "Content/Scenes/Returned/Startup.wiscene");
+    if (returnedScene == nullptr || returnedScene->assetId != SceneAssetId ||
+        !reappeared.registry.missingAssets.empty() ||
+        reappeared.recoveredAssetIds != std::vector<StableId>{SceneAssetId})
+        return Fail("unique reappearance did not reclaim tombstoned identity");
+
+    DependencyGraph ambiguousGraph = missingGraph;
+    ambiguousGraph.nodes.push_back(Node("candidate-a",
+        "Content/Scenes/CandidateA.wiscene", DependencyClass::Scene,
+        "fnv1a64:2000000000000002"));
+    ambiguousGraph.nodes.push_back(Node("candidate-b",
+        "Content/Scenes/CandidateB.wiscene", DependencyClass::Scene,
+        "fnv1a64:2000000000000002"));
+    std::vector<StableId> ambiguousGenerated = {
+        AmbiguousAssetId1, AmbiguousAssetId2};
+    std::size_t ambiguousIndex = 0;
+    AssetRegistryRefresh ambiguous;
+    if (!RefreshAssetRegistry(ProjectId, ambiguousGraph, &missingReloaded,
+            ambiguous, error, [&ambiguousGenerated, &ambiguousIndex]
+            { return ambiguousGenerated.at(ambiguousIndex++); }))
+        return Fail(error.c_str());
+    if (!ambiguous.recoveredAssetIds.empty() ||
+        ambiguous.ambiguousRecoveryAssetIds.size() != 2 ||
+        ambiguous.registry.missingAssets.size() != 1)
+        return Fail("ambiguous candidates stole a missing asset identity");
+    const AssetRecord* candidateA = FindRecord(
+        ambiguous.registry, "Content/Scenes/CandidateA.wiscene");
+    const AssetRecord* candidateB = FindRecord(
+        ambiguous.registry, "Content/Scenes/CandidateB.wiscene");
+    if (candidateA == nullptr || candidateB == nullptr ||
+        candidateA->assetId == SceneAssetId ||
+        candidateB->assetId == SceneAssetId)
+        return Fail("ambiguous candidates reused the tombstoned identity");
+
+    AssetRegistry twoTombstones = missingReloaded;
+    MissingAssetRecord secondTombstone = twoTombstones.missingAssets.front();
+    secondTombstone.assetId = AudioAssetId;
+    secondTombstone.lastKnownPath = "Content/Scenes/Other.wiscene";
+    twoTombstones.missingAssets.push_back(secondTombstone);
+    DependencyGraph oneCandidateGraph = missingGraph;
+    oneCandidateGraph.nodes.push_back(Node("candidate-only",
+        "Content/Scenes/CandidateOnly.wiscene", DependencyClass::Scene,
+        "fnv1a64:2000000000000002"));
+    AssetRegistryRefresh twoWayAmbiguous;
+    if (!RefreshAssetRegistry(ProjectId, oneCandidateGraph, &twoTombstones,
+            twoWayAmbiguous, error,
+            [] { return StableId(AmbiguousAssetId1); }))
+        return Fail(error.c_str());
+    if (!twoWayAmbiguous.recoveredAssetIds.empty() ||
+        twoWayAmbiguous.ambiguousRecoveryAssetIds !=
+            std::vector<StableId>{AmbiguousAssetId1} ||
+        twoWayAmbiguous.registry.missingAssets.size() != 2)
+        return Fail("candidate matching two tombstones was recovered speculatively");
 
     DependencyGraph updated = graph;
     updated.nodes[1].contentHash = "fnv1a64:2222222222222222";

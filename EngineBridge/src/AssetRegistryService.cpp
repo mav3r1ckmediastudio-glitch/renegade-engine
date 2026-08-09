@@ -109,6 +109,40 @@ namespace renegade::bridge
             return left.productAssetId < right.productAssetId;
         }
 
+        bool MissingAssetLess(
+            const MissingAssetRecord& left,
+            const MissingAssetRecord& right)
+        {
+            if (left.lastKnownPath != right.lastKnownPath)
+                return left.lastKnownPath < right.lastKnownPath;
+            return left.assetId < right.assetId;
+        }
+
+        bool CanRecoverAsset(
+            const AssetRecord& previous,
+            const DependencyNode& discovered)
+        {
+            return previous.contentHash != "missing" &&
+                previous.contentHash == discovered.contentHash &&
+                previous.dependencyClass == discovered.dependencyClass &&
+                previous.requirement == discovered.requirement &&
+                previous.applicability == discovered.applicability &&
+                previous.provider == discovered.provider &&
+                previous.providerVersion == discovered.providerVersion;
+        }
+
+        bool CanRecoverAsset(
+            const MissingAssetRecord& previous,
+            const DependencyNode& discovered)
+        {
+            return previous.contentHash == discovered.contentHash &&
+                previous.dependencyClass == discovered.dependencyClass &&
+                previous.requirement == discovered.requirement &&
+                previous.applicability == discovered.applicability &&
+                previous.provider == discovered.provider &&
+                previous.providerVersion == discovered.providerVersion;
+        }
+
         bool SameTrackedState(const AssetRecord& left, const AssetRecord& right)
         {
             return left.dependencyNodeId == right.dependencyNodeId &&
@@ -200,13 +234,14 @@ namespace renegade::bridge
     {
         if (registry.formatIdentifier != "renegade-asset-registry" ||
             (registry.schemaVersion != AssetRegistry::LegacySchemaVersion &&
+                registry.schemaVersion != AssetRegistry::ProvenanceSchemaVersion &&
                 registry.schemaVersion != AssetRegistry::CurrentSchemaVersion))
         {
             error = "Unsupported asset registry schema.";
             return false;
         }
         if (registry.schemaVersion == AssetRegistry::LegacySchemaVersion &&
-            !registry.importedProducts.empty())
+            (!registry.importedProducts.empty() || !registry.missingAssets.empty()))
         {
             error = "Legacy asset registry cannot contain import provenance.";
             return false;
@@ -219,6 +254,7 @@ namespace renegade::bridge
 
         std::set<StableId> ids;
         std::set<std::string> dependencyNodeIds;
+        std::set<std::string> activePaths;
         DependencyPathRegistry paths;
         for (const auto& record : registry.records)
         {
@@ -233,6 +269,7 @@ namespace renegade::bridge
             if (record.dependencyNodeId.empty() ||
                 !dependencyNodeIds.insert(record.dependencyNodeId).second ||
                 !IsSafeCanonicalProjectPath(record.projectRelativePath) ||
+                !activePaths.insert(record.projectRelativePath).second ||
                 !pathRegistration.inserted)
             {
                 error = "Asset registry contains an invalid or duplicate node/path.";
@@ -267,14 +304,43 @@ namespace renegade::bridge
             }
         }
 
+        if (registry.schemaVersion != AssetRegistry::CurrentSchemaVersion &&
+            !registry.missingAssets.empty())
+        {
+            error = "Legacy asset registry cannot contain recovery tombstones.";
+            return false;
+        }
+        std::set<StableId> missingIds;
+        std::set<std::string> missingPaths;
+        for (const auto& missing : registry.missingAssets)
+        {
+            if (!IsValidStableId(missing.assetId) ||
+                ids.find(missing.assetId) != ids.end() ||
+                !missingIds.insert(missing.assetId).second ||
+                !IsSafeCanonicalProjectPath(missing.lastKnownPath) ||
+                activePaths.find(missing.lastKnownPath) != activePaths.end() ||
+                !missingPaths.insert(missing.lastKnownPath).second ||
+                DependencyClassName(missing.dependencyClass)[0] == '\0' ||
+                RequirementName(missing.requirement)[0] == '\0' ||
+                missing.applicability.empty() ||
+                missing.provider.empty() || missing.providerVersion == 0 ||
+                !IsContentHash(missing.contentHash) || missing.contentHash == "missing")
+            {
+                error = "Asset registry contains invalid missing-asset recovery state.";
+                return false;
+            }
+        }
+
+        std::set<StableId> knownIds = ids;
+        knownIds.insert(missingIds.begin(), missingIds.end());
         std::set<StableId> importedProductIds;
         for (const auto& imported : registry.importedProducts)
         {
             if (!IsValidStableId(imported.sourceAssetId) ||
                 !IsValidStableId(imported.productAssetId) ||
                 imported.sourceAssetId == imported.productAssetId ||
-                ids.find(imported.sourceAssetId) == ids.end() ||
-                ids.find(imported.productAssetId) == ids.end() ||
+                knownIds.find(imported.sourceAssetId) == knownIds.end() ||
+                knownIds.find(imported.productAssetId) == knownIds.end() ||
                 !importedProductIds.insert(imported.productAssetId).second ||
                 imported.importer.empty() || imported.importerVersion == 0 ||
                 imported.settingsSchema.empty() ||
@@ -319,6 +385,7 @@ namespace renegade::bridge
             return false;
 
         std::map<std::string, AssetRecord> existingByPath;
+        std::vector<MissingAssetRecord> availableTombstones;
         if (existingRegistry != nullptr)
         {
             if (!ValidateAssetRegistry(*existingRegistry, error))
@@ -336,6 +403,7 @@ namespace renegade::bridge
             // silently leaving a recipe pointing at an unrelated new asset.
             refresh.registry.importedProducts =
                 existingRegistry->importedProducts;
+            availableTombstones = existingRegistry->missingAssets;
             refresh.registry.schemaVersion = existingRegistry->schemaVersion;
         }
 
@@ -345,6 +413,8 @@ namespace renegade::bridge
         std::set<StableId> assignedIds;
         for (const auto& item : existingByPath)
             assignedIds.insert(item.second.assetId);
+        for (const auto& item : availableTombstones)
+            assignedIds.insert(item.assetId);
 
         refresh.registry.projectId = projectId;
         std::vector<const DependencyNode*> nodes;
@@ -356,6 +426,34 @@ namespace renegade::bridge
             {
                 return left->id < right->id;
             });
+        std::set<std::string> currentPaths;
+        for (const DependencyNode* node : nodes)
+            if (IsProjectAssetNode(*node))
+                currentPaths.insert(node->projectRelativePath);
+        std::map<std::string, std::vector<StableId>> recoveryMatchesByNodeId;
+        std::map<StableId, std::size_t> recoveryCandidateCounts;
+        for (const DependencyNode* node : nodes)
+        {
+            if (!IsProjectAssetNode(*node) ||
+                existingByPath.find(node->projectRelativePath) != existingByPath.end())
+                continue;
+            auto& matches = recoveryMatchesByNodeId[node->id];
+            for (const auto& previous : existingByPath)
+            {
+                if (currentPaths.find(previous.first) == currentPaths.end() &&
+                    CanRecoverAsset(previous.second, *node))
+                    matches.push_back(previous.second.assetId);
+            }
+            for (const auto& previous : availableTombstones)
+                if (CanRecoverAsset(previous, *node))
+                    matches.push_back(previous.assetId);
+            std::sort(matches.begin(), matches.end());
+            matches.erase(std::unique(matches.begin(), matches.end()), matches.end());
+            for (const auto& match : matches)
+                ++recoveryCandidateCounts[match];
+        }
+        std::set<StableId> consumedExistingIds;
+        std::set<StableId> consumedTombstoneIds;
         for (const DependencyNode* nodePointer : nodes)
         {
             const DependencyNode& node = *nodePointer;
@@ -367,18 +465,40 @@ namespace renegade::bridge
             if (existing != existingByPath.end())
             {
                 record.assetId = existing->second.assetId;
+                consumedExistingIds.insert(record.assetId);
             }
             else
             {
-                record.assetId = generateId();
-                if (!IsValidStableId(record.assetId) ||
-                    !assignedIds.insert(record.assetId).second)
+                const auto matches = recoveryMatchesByNodeId.find(node.id);
+                const std::vector<StableId> noMatches;
+                const auto& recoveryMatches = matches == recoveryMatchesByNodeId.end()
+                    ? noMatches : matches->second;
+                if (recoveryMatches.size() == 1 &&
+                    recoveryCandidateCounts.at(recoveryMatches.front()) == 1)
                 {
-                    error = "Asset ID generator returned an invalid or duplicate ID.";
-                    refresh = {};
-                    return false;
+                    record.assetId = recoveryMatches.front();
+                    if (std::any_of(existingByPath.begin(), existingByPath.end(),
+                            [&record](const auto& item)
+                            { return item.second.assetId == record.assetId; }))
+                        consumedExistingIds.insert(record.assetId);
+                    else
+                        consumedTombstoneIds.insert(record.assetId);
+                    refresh.recoveredAssetIds.push_back(record.assetId);
                 }
-                refresh.addedAssetIds.push_back(record.assetId);
+                else
+                {
+                    record.assetId = generateId();
+                    if (!IsValidStableId(record.assetId) ||
+                        !assignedIds.insert(record.assetId).second)
+                    {
+                        error = "Asset ID generator returned an invalid or duplicate ID.";
+                        refresh = {};
+                        return false;
+                    }
+                    refresh.addedAssetIds.push_back(record.assetId);
+                    if (!recoveryMatches.empty())
+                        refresh.ambiguousRecoveryAssetIds.push_back(record.assetId);
+                }
             }
 
             record.dependencyNodeId = node.id;
@@ -429,10 +549,42 @@ namespace renegade::bridge
             existingByPath.erase(record.projectRelativePath);
         }
         for (const auto& removed : existingByPath)
+        {
+            if (consumedExistingIds.find(removed.second.assetId) !=
+                consumedExistingIds.end())
+                continue;
             refresh.removedAssetIds.push_back(removed.second.assetId);
+            if (removed.second.sourceAvailable &&
+                removed.second.contentHash != "missing")
+            {
+                refresh.registry.missingAssets.push_back({
+                    removed.second.assetId,
+                    removed.second.projectRelativePath,
+                    removed.second.dependencyClass,
+                    removed.second.requirement,
+                    removed.second.applicability,
+                    removed.second.provider,
+                    removed.second.providerVersion,
+                    removed.second.contentHash,
+                });
+            }
+        }
+        for (const auto& tombstone : availableTombstones)
+        {
+            if (consumedTombstoneIds.find(tombstone.assetId) ==
+                consumedTombstoneIds.end())
+                refresh.registry.missingAssets.push_back(tombstone);
+        }
+        std::sort(refresh.registry.missingAssets.begin(),
+            refresh.registry.missingAssets.end(), MissingAssetLess);
+        if (!refresh.registry.missingAssets.empty())
+            refresh.registry.schemaVersion = AssetRegistry::CurrentSchemaVersion;
         std::sort(refresh.addedAssetIds.begin(), refresh.addedAssetIds.end());
         std::sort(refresh.changedAssetIds.begin(), refresh.changedAssetIds.end());
         std::sort(refresh.removedAssetIds.begin(), refresh.removedAssetIds.end());
+        std::sort(refresh.recoveredAssetIds.begin(), refresh.recoveredAssetIds.end());
+        std::sort(refresh.ambiguousRecoveryAssetIds.begin(),
+            refresh.ambiguousRecoveryAssetIds.end());
 
         if (!ValidateAssetRegistry(refresh.registry, error))
         {
@@ -458,7 +610,10 @@ namespace renegade::bridge
         document["project_id"] = registry.projectId;
         document["assets"] = nlohmann::json::array();
         if (registry.schemaVersion == AssetRegistry::CurrentSchemaVersion)
+        {
             document["imported_products"] = nlohmann::json::array();
+            document["missing_assets"] = nlohmann::json::array();
+        }
         for (auto& record : records)
         {
             std::sort(record.dependencyAssetIds.begin(),
@@ -495,6 +650,19 @@ namespace renegade::bridge
                     imported.sourceContentHashAtImport},
                 {"product_content_hash_at_import",
                     imported.productContentHashAtImport},
+            });
+        }
+        for (const auto& missing : registry.missingAssets)
+        {
+            document["missing_assets"].push_back({
+                {"asset_id", missing.assetId},
+                {"last_known_path", missing.lastKnownPath},
+                {"class", DependencyClassName(missing.dependencyClass)},
+                {"requirement", RequirementName(missing.requirement)},
+                {"applicability", missing.applicability},
+                {"provider", missing.provider},
+                {"provider_version", missing.providerVersion},
+                {"content_hash", missing.contentHash},
             });
         }
         json = document.dump(2) + "\n";
@@ -610,9 +778,44 @@ namespace renegade::bridge
                     registry.importedProducts.push_back(std::move(imported));
                 }
             }
+            const auto missingAssets = document.find("missing_assets");
+            if (registry.schemaVersion == AssetRegistry::CurrentSchemaVersion &&
+                (missingAssets == document.end() || !missingAssets->is_array()))
+            {
+                error = "Asset registry field 'missing_assets' has the wrong type.";
+                return false;
+            }
+            if (registry.schemaVersion != AssetRegistry::CurrentSchemaVersion &&
+                missingAssets != document.end())
+            {
+                error = "Legacy asset registry must not contain recovery tombstones.";
+                return false;
+            }
+            if (missingAssets != document.end())
+            for (const auto& value : *missingAssets)
+            {
+                MissingAssetRecord missing;
+                std::string className;
+                std::string requirementName;
+                if (!value.is_object() ||
+                    !RequiredField(value, "asset_id", missing.assetId, error) ||
+                    !RequiredField(value, "last_known_path", missing.lastKnownPath, error) ||
+                    !RequiredField(value, "class", className, error) ||
+                    !RequiredField(value, "requirement", requirementName, error) ||
+                    !RequiredField(value, "applicability", missing.applicability, error) ||
+                    !RequiredField(value, "provider", missing.provider, error) ||
+                    !RequiredField(value, "provider_version", missing.providerVersion, error) ||
+                    !RequiredField(value, "content_hash", missing.contentHash, error) ||
+                    !TryParseDependencyClassName(className, missing.dependencyClass) ||
+                    !TryParseRequirement(requirementName, missing.requirement))
+                    return false;
+                registry.missingAssets.push_back(std::move(missing));
+            }
             std::sort(registry.records.begin(), registry.records.end(), RecordLess);
             std::sort(registry.importedProducts.begin(),
                 registry.importedProducts.end(), ImportedProductLess);
+            std::sort(registry.missingAssets.begin(), registry.missingAssets.end(),
+                MissingAssetLess);
             return ValidateAssetRegistry(registry, error);
         }
         catch (const nlohmann::json::exception& exception)
@@ -683,9 +886,10 @@ namespace renegade::bridge
         const auto product = std::find_if(registry.records.begin(),
             registry.records.end(), [&imported](const AssetRecord& candidate)
             { return candidate.assetId == imported.productAssetId; });
-        // ValidateAssetRegistry has already proved both exist.
-        status.sourceAvailable = source->sourceAvailable;
-        status.productAvailable = product->sourceAvailable;
+        status.sourceAvailable = source != registry.records.end() &&
+            source->sourceAvailable;
+        status.productAvailable = product != registry.records.end() &&
+            product->sourceAvailable;
         status.sourceChanged = !status.sourceAvailable ||
             source->contentHash != found->sourceContentHashAtImport;
         status.productChanged = !status.productAvailable ||

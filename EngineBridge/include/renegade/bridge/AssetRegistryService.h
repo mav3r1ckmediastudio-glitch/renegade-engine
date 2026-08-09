@@ -70,16 +70,30 @@ namespace renegade::bridge
         bool productChanged = false;
     };
 
+    struct MissingAssetRecord
+    {
+        StableId assetId;
+        std::string lastKnownPath;
+        DependencyClass dependencyClass = DependencyClass::Data;
+        DependencyRequirement requirement = DependencyRequirement::Required;
+        std::string applicability = "windows-x64";
+        std::string provider;
+        std::uint32_t providerVersion = 1;
+        std::string contentHash;
+    };
+
     struct AssetRegistry
     {
         static constexpr std::uint32_t LegacySchemaVersion = 1;
-        static constexpr std::uint32_t CurrentSchemaVersion = 2;
+        static constexpr std::uint32_t ProvenanceSchemaVersion = 2;
+        static constexpr std::uint32_t CurrentSchemaVersion = 3;
 
         std::string formatIdentifier = "renegade-asset-registry";
         std::uint32_t schemaVersion = CurrentSchemaVersion;
         StableId projectId;
         std::vector<AssetRecord> records;
         std::vector<ImportedProductRecord> importedProducts;
+        std::vector<MissingAssetRecord> missingAssets;
     };
 
     struct AssetRegistryRefresh
@@ -88,6 +102,8 @@ namespace renegade::bridge
         std::vector<StableId> addedAssetIds;
         std::vector<StableId> changedAssetIds;
         std::vector<StableId> removedAssetIds;
+        std::vector<StableId> recoveredAssetIds;
+        std::vector<StableId> ambiguousRecoveryAssetIds;
     };
 
     using AssetIdGenerator = std::function<StableId()>;
