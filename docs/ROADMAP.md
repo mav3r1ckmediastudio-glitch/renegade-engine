@@ -12,24 +12,24 @@ LP04 is complete and accepted. Studio can launch the real standalone Runtime fro
 
 LP05 is complete and accepted. Its deterministic Renegade-owned dependency graph passed separate-process Debug/Release packaged proof at exact head `8abb9fad959268ee00c32e046ede13d852883fa4` and was squash-merged through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
 
-The active bounded milestone is **LC01 Gate 1 — Stable Asset Record Contract**. It consumes LP05's accepted graph into Renegade-owned project asset records while remaining UI-free and read-only.
+LC01 Gate 1 is complete and accepted. Exact final head `0cd63d844c655eecebaf3f7bf04fdacbad2d50ed` passed Studio run 147 and baseline run 154 before squash merge through PR #34 at `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`.
 
-### LC01 Gate 1 target
+The active bounded milestone is **LC01 Gate 2 — Transactional Project Persistence**.
 
-LC01 Gate 1 should prove that Renegade can:
+### LC01 Gate 2 target
 
-- assign UUID-v4 asset identity to each project-owned dependency node;
-- retain asset identity when the same canonical path is refreshed;
-- retain class, requirement, applicability, provider/version and source hash;
-- project graph edges onto stable asset IDs;
-- distinguish missing sources without inventing files or repairing content;
-- exclude engine/runtime-support nodes from the project asset registry;
-- report added, changed and removed records;
-- serialize and reload a versioned registry byte-identically;
-- reject invalid IDs, duplicate paths, cross-project registries and dangling asset relationships;
+LC01 Gate 2 should prove that Renegade can:
+
+- commit the canonical registry to `AssetRegistry.renegade-assets` at the project root;
+- reload it only for the owning project UUID;
+- treat unchanged writes as byte-preserving no-ops;
+- preserve exact previous bytes across validation and replacement failures;
+- retain a durable journal across simulated interruption;
+- recover that interruption automatically before Project Open;
+- reject substituted, cross-project and non-canonical registry documents;
 - leave the pinned Wicked source unchanged.
 
-Gate 1 defines and proves the registry contract only. It does not yet write an authoritative registry into a project, infer moved assets, run import/reimport, copy/cook content, build a game or alter the Content Browser UI.
+Gate 2 persists and recovers the accepted Gate 1 contract only. It does not yet define source/product import records, infer moved assets, run reimport, copy/cook content, build a game or alter the Content Browser UI.
 
 ## Phase 4 deliverables
 
@@ -85,13 +85,13 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-**LC01 Gate 1 — Stable Asset Record Contract**
+**LC01 Gate 2 — Transactional Project Persistence**
 
-Acceptance is bounded to converting an LP05 dependency graph into stable, validated project asset records; refreshing those records without changing their UUIDs; reporting source/closure changes; and round-tripping deterministic versioned JSON in Debug and Release.
+Acceptance is bounded to committing and reopening the canonical Gate 1 registry through the shared project transaction boundary, proving exact old-byte preservation on failure and automatic Project Open recovery after interruption.
 
 The architectural rule is:
 
-> Paths locate current content; UUIDs identify assets. LC01 consumes LP05's canonical paths and hashes but does not make a path the durable identity authority.
+> Durable project metadata uses the same staged validation, containment, journal and rollback boundary as other Renegade-owned documents. Registry persistence must not invent a weaker write path.
 
 See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md` for the contract, exclusions and evidence plan.
 

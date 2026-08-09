@@ -6,6 +6,14 @@ LC01 turns LP05's read-only dependency closure into durable Renegade asset
 identity and source-tracking state. Paths answer where content currently is;
 UUIDs answer which asset it is.
 
+## Gate map
+
+1. Stable asset record contract.
+2. Transactional project persistence.
+3. Source-to-imported-product tracking and import settings.
+4. Moved/missing asset recovery while preserving identity.
+5. Packaged source-update/reopen proof and LC01 close-out.
+
 ## Gate 1 — Stable Asset Record Contract
 
 Gate 1 introduces a UI-free `AssetRegistryService` that consumes an accepted
@@ -59,8 +67,7 @@ split into later bounded LC01 gates.
 8. Debug and Release CI pass with Wicked pinned at
    `3a800b7134aafe58461093c8abb2e274d4e64033`.
 
-Gate 1 remains unaccepted until exact-final-head CI and independent review
-both pass.
+Gate 1 is accepted.
 
 ## Implementation evidence
 
@@ -72,6 +79,61 @@ inputs in each configuration. Pinned-Wicked baseline run 153 passed Debug and
 Release, and Wicked remained at
 `3a800b7134aafe58461093c8abb2e274d4e64033`.
 
-This proves the implementation commit. Gate 1 remains unaccepted until the
+Exact final head `0cd63d844c655eecebaf3f7bf04fdacbad2d50ed`
+passed Studio run 147 and baseline run 154 in Debug and Release. The project
+owner independently reviewed that exact head before squash-merging PR #34 at
+`580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`, completing Gate 1 acceptance.
+
+## Gate 2 — Transactional Project Persistence
+
+Gate 2 makes the registry a real project document. Its fixed authoritative
+location is `AssetRegistry.renegade-assets` at the project root. It does not
+live in `Content`, because it is metadata rather than a creator asset; it does
+not live in `Saved` or `Intermediate`, because it is durable project state.
+
+Writes serialize the validated Gate 1 model, stage and validate the exact
+requested canonical bytes, then commit through `ProjectDocumentTransaction`.
+The shared journal lives under `Intermediate/Transactions`, stays inside the
+project containment boundary and is automatically recovered before
+`ProjectService::OpenProject` activates a project.
+
+Reads require the expected project UUID, the supported schema, complete
+referential integrity and canonical byte ordering. A valid registry for a
+different project, or valid but non-canonical JSON, fails closed.
+
+### Gate 2 acceptance
+
+1. A valid registry commits to the fixed project-root document and reloads
+   byte-identically.
+2. Rewriting unchanged state is a successful byte-preserving no-op.
+3. Invalid in-memory state cannot create or replace the document.
+4. A different valid staged registry cannot be substituted for the requested
+   write.
+5. A forced replacement failure preserves the exact previous bytes and leaves
+   no recovery debris.
+6. An interruption after replacement retains a durable journal; the next
+   Project Open restores the exact previous registry and cleans all artifacts.
+7. Cross-project and non-canonical documents fail to load.
+8. Debug and Release CI pass with Wicked unchanged.
+
+Gate 2 remains unaccepted until exact-final-head CI and independent review
+both pass.
+
+### Gate 2 implementation evidence
+
+Implementation commit `30dc1500c98be70b82a08696e8b04f5a396d0ad9`
+passed Renegade Studio run 149 with 25/25 tests in Debug and Release.
+`RenegadeAssetRegistryPersistenceTests` passed in both configurations, and the
+Gate 1 registry suite remained green. Pinned-Wicked baseline run 157 passed
+Debug and Release with Wicked unchanged at
+`3a800b7134aafe58461093c8abb2e274d4e64033`.
+
+This proves the implementation commit. Gate 2 remains unaccepted until the
 documentation-complete exact final head passes CI and receives independent
 review.
+
+### Gate 2 exclusions
+
+Gate 2 does not define source/product pairings or import settings, infer moved
+assets, retain recovery tombstones, execute reimport, cook/package content or
+change Studio UI. Those remain Gates 3-5.

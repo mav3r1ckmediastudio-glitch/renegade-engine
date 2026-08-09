@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <set>
 #include <utility>
@@ -96,6 +98,49 @@ namespace renegade::bridge
                 left.root == right.root &&
                 left.sourceAvailable == right.sourceAvailable &&
                 left.dependencyAssetIds == right.dependencyAssetIds;
+        }
+
+        bool ResolveProjectRoot(
+            const std::string& projectRoot,
+            std::filesystem::path& resolved,
+            std::string& error)
+        {
+            error.clear();
+            resolved.clear();
+            if (projectRoot.empty())
+            {
+                error = "Asset registry persistence requires a project root.";
+                return false;
+            }
+            std::error_code pathError;
+            const std::filesystem::path absolute = std::filesystem::absolute(
+                std::filesystem::u8path(projectRoot), pathError);
+            if (pathError || absolute.empty())
+            {
+                error = "Could not resolve asset registry project root: " +
+                    projectRoot;
+                return false;
+            }
+            resolved = std::filesystem::weakly_canonical(absolute, pathError);
+            if (pathError || resolved.empty() ||
+                !std::filesystem::is_directory(resolved, pathError) || pathError)
+            {
+                error = "Asset registry project root is not a directory: " +
+                    projectRoot;
+                return false;
+            }
+            return true;
+        }
+
+        ProjectDocumentTransactionResult PersistenceFailure(
+            std::string code,
+            std::string message)
+        {
+            ProjectDocumentTransactionResult result;
+            result.stage = ProjectDocumentTransactionStage::Prepare;
+            result.code = std::move(code);
+            result.message = std::move(message);
+            return result;
         }
 
         template<typename T>
@@ -441,5 +486,151 @@ namespace renegade::bridge
                 exception.what();
             return false;
         }
+    }
+
+    bool ResolveAssetRegistryDocumentPath(
+        const std::string& projectRoot,
+        std::string& documentPath,
+        std::string& error)
+    {
+        std::filesystem::path root;
+        if (!ResolveProjectRoot(projectRoot, root, error))
+        {
+            documentPath.clear();
+            return false;
+        }
+        documentPath = (root / AssetRegistryDocumentName).generic_u8string();
+        error.clear();
+        return true;
+    }
+
+    ProjectDocumentTransactionResult WriteAssetRegistry(
+        const std::string& projectRoot,
+        const AssetRegistry& registry,
+        AssetRegistryPersistenceOptions options)
+    {
+        std::filesystem::path root;
+        std::string error;
+        if (!ResolveProjectRoot(projectRoot, root, error))
+            return PersistenceFailure("asset_registry_root", std::move(error));
+
+        std::string json;
+        if (!SerializeAssetRegistry(registry, json, error))
+            return PersistenceFailure("asset_registry_invalid", std::move(error));
+
+        ProjectDocumentWrite write;
+        write.destinationPath =
+            (root / AssetRegistryDocumentName).generic_u8string();
+        write.content.assign(json.begin(), json.end());
+        const StableId expectedProjectId = registry.projectId;
+        const std::string expectedJson = json;
+        write.validator = [expectedProjectId, expectedJson](
+            const std::string& stagedPath,
+            std::string& validationError)
+        {
+            std::ifstream stream(
+                std::filesystem::u8path(stagedPath), std::ios::binary);
+            const std::string staged{
+                std::istreambuf_iterator<char>(stream),
+                std::istreambuf_iterator<char>()};
+            if (!stream && !stream.eof())
+            {
+                validationError =
+                    "Could not read the staged asset registry.";
+                return false;
+            }
+            AssetRegistry parsed;
+            if (!DeserializeAssetRegistry(staged, parsed, validationError))
+                return false;
+            if (parsed.projectId != expectedProjectId)
+            {
+                validationError =
+                    "Staged asset registry belongs to another project.";
+                return false;
+            }
+            std::string canonical;
+            if (!SerializeAssetRegistry(parsed, canonical, validationError))
+                return false;
+            if (canonical != staged)
+            {
+                validationError =
+                    "Staged asset registry is not canonical.";
+                return false;
+            }
+            if (staged != expectedJson)
+            {
+                validationError =
+                    "Staged asset registry does not match the requested write.";
+                return false;
+            }
+            validationError.clear();
+            return true;
+        };
+
+        ProjectDocumentTransactionOptions transactionOptions;
+        transactionOptions.transactionId = std::move(options.transactionId);
+        transactionOptions.journalDirectory =
+            (root / "Intermediate" / "Transactions").generic_u8string();
+        transactionOptions.allowedRoot = root.generic_u8string();
+        transactionOptions.operationHook = std::move(options.operationHook);
+        ProjectDocumentTransaction transaction;
+        return transaction.Execute(
+            {std::move(write)}, std::move(transactionOptions));
+    }
+
+    bool ReadAssetRegistry(
+        const std::string& projectRoot,
+        const StableId& expectedProjectId,
+        AssetRegistry& registry,
+        std::string& error)
+    {
+        registry = {};
+        if (!IsValidStableId(expectedProjectId))
+        {
+            error = "Expected asset registry project ID is invalid.";
+            return false;
+        }
+        std::string documentPath;
+        if (!ResolveAssetRegistryDocumentPath(
+                projectRoot, documentPath, error))
+            return false;
+
+        const std::filesystem::path path =
+            std::filesystem::u8path(documentPath);
+        std::error_code fileError;
+        if (!std::filesystem::is_regular_file(path, fileError) || fileError)
+        {
+            error = "Asset registry document is missing: " + documentPath;
+            return false;
+        }
+        std::ifstream stream(path, std::ios::binary);
+        const std::string json{
+            std::istreambuf_iterator<char>(stream),
+            std::istreambuf_iterator<char>()};
+        if (!stream && !stream.eof())
+        {
+            error = "Could not read asset registry document: " + documentPath;
+            return false;
+        }
+
+        AssetRegistry parsed;
+        if (!DeserializeAssetRegistry(json, parsed, error))
+            return false;
+        if (parsed.projectId != expectedProjectId)
+        {
+            error = "Asset registry document belongs to another project.";
+            return false;
+        }
+        std::string canonical;
+        if (!SerializeAssetRegistry(parsed, canonical, error))
+            return false;
+        if (canonical != json)
+        {
+            error = "Asset registry document is valid but not canonical.";
+            return false;
+        }
+        registry = std::move(parsed);
+        error.clear();
+        return true;
     }
 }

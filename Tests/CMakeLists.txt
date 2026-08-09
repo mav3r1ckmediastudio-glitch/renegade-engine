@@ -35,6 +35,23 @@ set_target_properties(RenegadeAssetRegistryTests PROPERTIES
 add_dependencies(RenegadeBridgeTests RenegadeAssetRegistryTests)
 add_test(NAME RenegadeAssetRegistryTests COMMAND RenegadeAssetRegistryTests)
 
+add_executable(RenegadeAssetRegistryPersistenceTests
+    AssetRegistryPersistenceTests.cpp
+)
+target_link_libraries(
+    RenegadeAssetRegistryPersistenceTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+set_target_properties(RenegadeAssetRegistryPersistenceTests PROPERTIES
+    FOLDER "Renegade/Tests"
+)
+add_dependencies(RenegadeBridgeTests RenegadeAssetRegistryPersistenceTests)
+add_test(
+    NAME RenegadeAssetRegistryPersistenceTests
+    COMMAND RenegadeAssetRegistryPersistenceTests
+)
+
 # LP05 Gate 8 packaged proof fixture. The Windows build script copies this
 # console executable and its fixed mini-project into the Studio package, then
 # launches it twice as separate processes and compares both JSON outputs plus
