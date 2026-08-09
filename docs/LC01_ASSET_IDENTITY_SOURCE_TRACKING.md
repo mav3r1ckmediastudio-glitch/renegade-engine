@@ -116,8 +116,8 @@ different project, or valid but non-canonical JSON, fails closed.
 7. Cross-project and non-canonical documents fail to load.
 8. Debug and Release CI pass with Wicked unchanged.
 
-Gate 2 remains unaccepted until corrective PR #36 receives independent review
-and is squash-merged.
+Corrective PR #36 was independently reviewed and squash-merged as
+`489e33dfe5aa34756e94304c508f9cf2adc9265d`, completing Gate 2 acceptance.
 
 ### Gate 2 implementation evidence
 
@@ -145,11 +145,45 @@ explicit 25/25 in Debug and Release; the registry persistence test and the
 exit-code-23 probe passed in both. Baseline run 172 passed both configurations
 with Wicked unchanged at `3a800b7134aafe58461093c8abb2e274d4e64033`.
 
-Gate 2 remains unaccepted until independent review of the corrective final
-head and squash merge of PR #36.
+Corrective PR #36 was independently reviewed and squash-merged as
+`489e33dfe5aa34756e94304c508f9cf2adc9265d`, completing Gate 2 acceptance.
 
 ### Gate 2 exclusions
 
 Gate 2 does not define source/product pairings or import settings, infer moved
 assets, retain recovery tombstones, execute reimport, cook/package content or
 change Studio UI. Those remain Gates 3-5.
+
+## Gate 3 — Source-to-Imported-Product Tracking
+
+Gate 3 extends the durable registry with import provenance.  A provenance
+record connects one stable source asset ID to one stable imported product ID,
+and records the importer identity/version, a versioned settings schema and
+canonical settings JSON, plus the exact source and product hashes observed at
+the successful import boundary. A source can produce multiple products; a
+product can have only one authoritative source/import recipe.
+
+Existing version-1 registries remain readable and byte-preserving while they
+contain no provenance. Registering the first provenance record upgrades that
+registry to version 2 through the existing transactional write path.
+
+This is metadata only. Gate 3 does not invoke Wicked's importer, write a
+source file, trigger reimport, decide that a changed source should overwrite a
+product, or add creator-facing UI. It gives those later workflows a reliable,
+versioned contract instead of asking them to infer provenance from paths.
+
+### Gate 3 acceptance
+
+1. Provenance uses stable asset IDs, never absolute paths.
+2. A source can own multiple products; each product has at most one recipe.
+3. Importer and settings schema versions are explicit and non-zero.
+4. Settings are canonical JSON objects and registry serialization is
+   byte-deterministic.
+5. Provenance captures the current available hashes when registered; later
+   source/product changes and missing endpoints are reported without changing
+   any file.
+6. Self-links, dangling IDs, duplicate product ownership, malformed settings
+   and stale registration snapshots fail closed without modifying the registry.
+7. An unchanged LP05 refresh retains valid provenance exactly; a refresh that
+   removes an endpoint fails rather than silently retargeting it.
+8. Debug and Release CI pass with Wicked unchanged.

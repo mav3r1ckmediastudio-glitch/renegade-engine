@@ -131,6 +131,19 @@ int main()
     if (!SerializeAssetRegistry(first.registry, firstJson, error))
         return Fail(error.c_str());
 
+    AssetRegistry legacy = first.registry;
+    legacy.schemaVersion = AssetRegistry::LegacySchemaVersion;
+    std::string legacyJson;
+    if (!SerializeAssetRegistry(legacy, legacyJson, error))
+        return Fail(error.c_str());
+    AssetRegistry legacyReloaded;
+    std::string legacyReloadedJson;
+    if (!DeserializeAssetRegistry(legacyJson, legacyReloaded, error) ||
+        legacyReloaded.schemaVersion != AssetRegistry::LegacySchemaVersion ||
+        !SerializeAssetRegistry(legacyReloaded, legacyReloadedJson, error) ||
+        legacyReloadedJson != legacyJson)
+        return Fail("legacy registry was not preserved for explicit provenance migration");
+
     DependencyGraph reordered = graph;
     std::reverse(reordered.nodes.begin(), reordered.nodes.end());
     std::reverse(reordered.edges.begin(), reordered.edges.end());
@@ -161,11 +174,101 @@ int main()
         loadedJson != firstJson)
         return Fail("registry JSON did not round-trip byte-identically");
 
+    // Gate 3 provenance is an ID-based recipe, not an importer invocation.
+    // The synthetic project document acts as the source and the WISCENE as
+    // its product here; the contract deliberately permits other importer
+    // types to use the same durable relationship later.
+    ImportedProductRecord imported;
+    imported.sourceAssetId = ProjectAssetId;
+    imported.productAssetId = SceneAssetId;
+    imported.importer = "renegade.gltf";
+    imported.importerVersion = 1;
+    imported.settingsSchema = "renegade.gltf.settings";
+    imported.settingsVersion = 1;
+    imported.settingsJson = "{\"scale_mode\":\"automatic\",\"units\":\"meters\"}";
+    imported.sourceContentHashAtImport = "fnv1a64:1000000000000001";
+    imported.productContentHashAtImport = "fnv1a64:2000000000000002";
+    if (!SetImportedProductRecords(loaded, {imported}, error))
+        return Fail(error.c_str());
+    std::string provenanceJson;
+    if (!SerializeAssetRegistry(loaded, provenanceJson, error))
+        return Fail(error.c_str());
+    AssetRegistry provenanceReloaded;
+    if (!DeserializeAssetRegistry(provenanceJson, provenanceReloaded, error))
+        return Fail(error.c_str());
+    std::string provenanceReloadedJson;
+    if (!SerializeAssetRegistry(
+            provenanceReloaded, provenanceReloadedJson, error) ||
+        provenanceReloadedJson != provenanceJson)
+        return Fail("import provenance did not round-trip byte-identically");
+    ImportedProductStatus importStatus;
+    if (!GetImportedProductStatus(
+            provenanceReloaded, imported, importStatus, error) ||
+        !importStatus.sourceAvailable || !importStatus.productAvailable ||
+        importStatus.sourceChanged || importStatus.productChanged)
+        return Fail("fresh imported-product provenance was not current");
+
+    AssetRegistry sourceChangedRegistry = provenanceReloaded;
+    const auto changedSource = std::find_if(
+        sourceChangedRegistry.records.begin(),
+        sourceChangedRegistry.records.end(),
+        [](const AssetRecord& record)
+        {
+            return record.projectRelativePath == "representative.renegade";
+        });
+    if (changedSource == sourceChangedRegistry.records.end())
+        return Fail("source fixture record was missing");
+    changedSource->contentHash = "fnv1a64:1111111111111111";
+    if (!GetImportedProductStatus(
+            sourceChangedRegistry, imported, importStatus, error) ||
+        !importStatus.sourceChanged || importStatus.productChanged)
+        return Fail("source change was not detected from import provenance");
+
+    AssetRegistry missingProductRegistry = provenanceReloaded;
+    const auto missingProduct = std::find_if(
+        missingProductRegistry.records.begin(),
+        missingProductRegistry.records.end(),
+        [](const AssetRecord& record)
+        {
+            return record.projectRelativePath == "Content/Scenes/Startup.wiscene";
+        });
+    if (missingProduct == missingProductRegistry.records.end())
+        return Fail("product fixture record was missing");
+    missingProduct->sourceAvailable = false;
+    missingProduct->contentHash = "missing";
+    if (!GetImportedProductStatus(
+            missingProductRegistry, imported, importStatus, error) ||
+        !importStatus.sourceAvailable || importStatus.productAvailable ||
+        importStatus.sourceChanged || !importStatus.productChanged)
+        return Fail("missing imported product was not detected from provenance");
+
+    AssetRegistry rejectedProvenance = provenanceReloaded;
+    ImportedProductRecord invalidImported = imported;
+    invalidImported.productAssetId = imported.sourceAssetId;
+    if (SetImportedProductRecords(
+            rejectedProvenance, {invalidImported}, error) || error.empty() ||
+        rejectedProvenance.importedProducts !=
+            provenanceReloaded.importedProducts)
+        return Fail("invalid imported-product provenance changed the registry");
+
+    invalidImported = imported;
+    invalidImported.sourceContentHashAtImport = "fnv1a64:ffffffffffffffff";
+    if (SetImportedProductRecords(
+            rejectedProvenance, {invalidImported}, error) || error.empty() ||
+        rejectedProvenance.importedProducts !=
+            provenanceReloaded.importedProducts)
+        return Fail("non-current import hash snapshot changed the registry");
+
+    AssetRegistry upgradedLegacy = legacyReloaded;
+    if (!SetImportedProductRecords(upgradedLegacy, {imported}, error) ||
+        upgradedLegacy.schemaVersion != AssetRegistry::CurrentSchemaVersion)
+        return Fail("legacy registry did not upgrade when provenance was registered");
+
     AssetRegistryRefresh unchanged;
     if (!RefreshAssetRegistry(
             ProjectId,
             graph,
-            &loaded,
+            &provenanceReloaded,
             unchanged,
             error,
             [] { return StableId{}; }))
@@ -176,8 +279,9 @@ int main()
         return Fail("unchanged graph was reported as changed");
     std::string unchangedJson;
     if (!SerializeAssetRegistry(unchanged.registry, unchangedJson, error) ||
-        unchangedJson != firstJson)
-        return Fail("unchanged refresh did not preserve IDs and bytes");
+        unchangedJson != provenanceJson ||
+        unchanged.registry.importedProducts != provenanceReloaded.importedProducts)
+        return Fail("unchanged refresh did not preserve IDs, provenance and bytes");
 
     DependencyGraph updated = graph;
     updated.nodes[1].contentHash = "fnv1a64:2222222222222222";

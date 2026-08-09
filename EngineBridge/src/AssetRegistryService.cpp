@@ -78,11 +78,35 @@ namespace renegade::bridge
                 });
         }
 
+        bool IsCanonicalSettingsJson(const std::string& value)
+        {
+            if (value.empty())
+                return false;
+            try
+            {
+                const nlohmann::json parsed = nlohmann::json::parse(value);
+                return parsed.is_object() && parsed.dump() == value;
+            }
+            catch (const nlohmann::json::exception&)
+            {
+                return false;
+            }
+        }
+
         bool RecordLess(const AssetRecord& left, const AssetRecord& right)
         {
             if (left.projectRelativePath != right.projectRelativePath)
                 return left.projectRelativePath < right.projectRelativePath;
             return left.assetId < right.assetId;
+        }
+
+        bool ImportedProductLess(
+            const ImportedProductRecord& left,
+            const ImportedProductRecord& right)
+        {
+            if (left.sourceAssetId != right.sourceAssetId)
+                return left.sourceAssetId < right.sourceAssetId;
+            return left.productAssetId < right.productAssetId;
         }
 
         bool SameTrackedState(const AssetRecord& left, const AssetRecord& right)
@@ -175,9 +199,16 @@ namespace renegade::bridge
         std::string& error)
     {
         if (registry.formatIdentifier != "renegade-asset-registry" ||
-            registry.schemaVersion != AssetRegistry::CurrentSchemaVersion)
+            (registry.schemaVersion != AssetRegistry::LegacySchemaVersion &&
+                registry.schemaVersion != AssetRegistry::CurrentSchemaVersion))
         {
             error = "Unsupported asset registry schema.";
+            return false;
+        }
+        if (registry.schemaVersion == AssetRegistry::LegacySchemaVersion &&
+            !registry.importedProducts.empty())
+        {
+            error = "Legacy asset registry cannot contain import provenance.";
             return false;
         }
         if (!IsValidStableId(registry.projectId))
@@ -236,6 +267,29 @@ namespace renegade::bridge
             }
         }
 
+        std::set<StableId> importedProductIds;
+        for (const auto& imported : registry.importedProducts)
+        {
+            if (!IsValidStableId(imported.sourceAssetId) ||
+                !IsValidStableId(imported.productAssetId) ||
+                imported.sourceAssetId == imported.productAssetId ||
+                ids.find(imported.sourceAssetId) == ids.end() ||
+                ids.find(imported.productAssetId) == ids.end() ||
+                !importedProductIds.insert(imported.productAssetId).second ||
+                imported.importer.empty() || imported.importerVersion == 0 ||
+                imported.settingsSchema.empty() ||
+                imported.settingsVersion == 0 ||
+                !IsCanonicalSettingsJson(imported.settingsJson) ||
+                !IsContentHash(imported.sourceContentHashAtImport) ||
+                !IsContentHash(imported.productContentHashAtImport) ||
+                imported.sourceContentHashAtImport == "missing" ||
+                imported.productContentHashAtImport == "missing")
+            {
+                error = "Asset registry contains invalid imported-product provenance.";
+                return false;
+            }
+        }
+
         error.clear();
         return true;
     }
@@ -276,6 +330,13 @@ namespace renegade::bridge
             }
             for (const auto& record : existingRegistry->records)
                 existingByPath.emplace(record.projectRelativePath, record);
+            // Provenance is keyed by durable asset IDs.  Retain it through a
+            // normal dependency refresh; if a refreshed graph removes an
+            // endpoint, final registry validation fails closed rather than
+            // silently leaving a recipe pointing at an unrelated new asset.
+            refresh.registry.importedProducts =
+                existingRegistry->importedProducts;
+            refresh.registry.schemaVersion = existingRegistry->schemaVersion;
         }
 
         const std::set<std::string> rootIds(
@@ -396,6 +457,8 @@ namespace renegade::bridge
         document["version"] = registry.schemaVersion;
         document["project_id"] = registry.projectId;
         document["assets"] = nlohmann::json::array();
+        if (registry.schemaVersion == AssetRegistry::CurrentSchemaVersion)
+            document["imported_products"] = nlohmann::json::array();
         for (auto& record : records)
         {
             std::sort(record.dependencyAssetIds.begin(),
@@ -413,6 +476,25 @@ namespace renegade::bridge
                 {"root", record.root},
                 {"source_available", record.sourceAvailable},
                 {"dependencies", record.dependencyAssetIds},
+            });
+        }
+        auto importedProducts = registry.importedProducts;
+        std::sort(importedProducts.begin(), importedProducts.end(),
+            ImportedProductLess);
+        for (const auto& imported : importedProducts)
+        {
+            document["imported_products"].push_back({
+                {"source_asset_id", imported.sourceAssetId},
+                {"product_asset_id", imported.productAssetId},
+                {"importer", imported.importer},
+                {"importer_version", imported.importerVersion},
+                {"settings_schema", imported.settingsSchema},
+                {"settings_version", imported.settingsVersion},
+                {"settings", nlohmann::json::parse(imported.settingsJson)},
+                {"source_content_hash_at_import",
+                    imported.sourceContentHashAtImport},
+                {"product_content_hash_at_import",
+                    imported.productContentHashAtImport},
             });
         }
         json = document.dump(2) + "\n";
@@ -477,7 +559,60 @@ namespace renegade::bridge
                 }
                 registry.records.push_back(std::move(record));
             }
+            const auto importedProducts = document.find("imported_products");
+            if (registry.schemaVersion == AssetRegistry::CurrentSchemaVersion &&
+                (importedProducts == document.end() ||
+                    !importedProducts->is_array()))
+            {
+                error = "Asset registry field 'imported_products' has the wrong type.";
+                return false;
+            }
+            if (registry.schemaVersion == AssetRegistry::LegacySchemaVersion &&
+                importedProducts != document.end())
+            {
+                error = "Legacy asset registry must not contain import provenance.";
+                return false;
+            }
+            if (importedProducts != document.end())
+            {
+                for (const auto& value : *importedProducts)
+                {
+                    if (!value.is_object())
+                    {
+                        error = "Asset registry imported-product entry is not an object.";
+                        return false;
+                    }
+                    ImportedProductRecord imported;
+                    nlohmann::json settings;
+                    if (!RequiredField(value, "source_asset_id",
+                            imported.sourceAssetId, error) ||
+                        !RequiredField(value, "product_asset_id",
+                            imported.productAssetId, error) ||
+                        !RequiredField(value, "importer", imported.importer, error) ||
+                        !RequiredField(value, "importer_version",
+                            imported.importerVersion, error) ||
+                        !RequiredField(value, "settings_schema",
+                            imported.settingsSchema, error) ||
+                        !RequiredField(value, "settings_version",
+                            imported.settingsVersion, error) ||
+                        !RequiredField(value, "settings", settings, error) ||
+                        !RequiredField(value, "source_content_hash_at_import",
+                            imported.sourceContentHashAtImport, error) ||
+                        !RequiredField(value, "product_content_hash_at_import",
+                            imported.productContentHashAtImport, error))
+                        return false;
+                    if (!settings.is_object())
+                    {
+                        error = "Asset registry import settings must be an object.";
+                        return false;
+                    }
+                    imported.settingsJson = settings.dump();
+                    registry.importedProducts.push_back(std::move(imported));
+                }
+            }
             std::sort(registry.records.begin(), registry.records.end(), RecordLess);
+            std::sort(registry.importedProducts.begin(),
+                registry.importedProducts.end(), ImportedProductLess);
             return ValidateAssetRegistry(registry, error);
         }
         catch (const nlohmann::json::exception& exception)
@@ -486,6 +621,77 @@ namespace renegade::bridge
                 exception.what();
             return false;
         }
+    }
+
+    bool SetImportedProductRecords(
+        AssetRegistry& registry,
+        std::vector<ImportedProductRecord> records,
+        std::string& error)
+    {
+        AssetRegistry candidate = registry;
+        std::sort(records.begin(), records.end(), ImportedProductLess);
+        candidate.importedProducts = std::move(records);
+        if (!candidate.importedProducts.empty())
+            candidate.schemaVersion = AssetRegistry::CurrentSchemaVersion;
+        if (!ValidateAssetRegistry(candidate, error))
+            return false;
+        for (const auto& imported : candidate.importedProducts)
+        {
+            const auto source = std::find_if(candidate.records.begin(),
+                candidate.records.end(), [&imported](const AssetRecord& record)
+                { return record.assetId == imported.sourceAssetId; });
+            const auto product = std::find_if(candidate.records.begin(),
+                candidate.records.end(), [&imported](const AssetRecord& record)
+                { return record.assetId == imported.productAssetId; });
+            if (!source->sourceAvailable || !product->sourceAvailable ||
+                source->contentHash != imported.sourceContentHashAtImport ||
+                product->contentHash != imported.productContentHashAtImport)
+            {
+                error = "Imported-product provenance must snapshot the current source and product hashes.";
+                return false;
+            }
+        }
+        registry = std::move(candidate);
+        error.clear();
+        return true;
+    }
+
+    bool GetImportedProductStatus(
+        const AssetRegistry& registry,
+        const ImportedProductRecord& imported,
+        ImportedProductStatus& status,
+        std::string& error)
+    {
+        status = {};
+        if (!ValidateAssetRegistry(registry, error))
+            return false;
+        const auto found = std::find_if(registry.importedProducts.begin(),
+            registry.importedProducts.end(),
+            [&imported](const ImportedProductRecord& candidate)
+            {
+                return candidate.sourceAssetId == imported.sourceAssetId &&
+                    candidate.productAssetId == imported.productAssetId;
+            });
+        if (found == registry.importedProducts.end())
+        {
+            error = "Imported-product provenance record is not in this registry.";
+            return false;
+        }
+        const auto source = std::find_if(registry.records.begin(),
+            registry.records.end(), [&imported](const AssetRecord& candidate)
+            { return candidate.assetId == imported.sourceAssetId; });
+        const auto product = std::find_if(registry.records.begin(),
+            registry.records.end(), [&imported](const AssetRecord& candidate)
+            { return candidate.assetId == imported.productAssetId; });
+        // ValidateAssetRegistry has already proved both exist.
+        status.sourceAvailable = source->sourceAvailable;
+        status.productAvailable = product->sourceAvailable;
+        status.sourceChanged = !status.sourceAvailable ||
+            source->contentHash != found->sourceContentHashAtImport;
+        status.productChanged = !status.productAvailable ||
+            product->contentHash != found->productContentHashAtImport;
+        error.clear();
+        return true;
     }
 
     bool ResolveAssetRegistryDocumentPath(
