@@ -326,9 +326,13 @@ post-extraction inventory differs. The standard build-result JSON retains the
 process count, graph record and source inventory for independent inspection.
 
 This packages and executes the proof harness; it does not copy/cook project
-dependencies or build a game. Gate 8 and LP05 remain pending until Debug and
-Release produce matching authoritative evidence and an independent reviewer
-accepts the exact final PR head.
+dependencies or build a game. Implementation commit
+`0cd5a649f03120f64e1153e493b7a85fecdda9d3` passed Studio run 143 with 23/23
+tests plus two successful packaged proof processes in both Debug and Release;
+pinned-Wicked baseline run 148 passed both configurations. The final evidence
+head prints the graph SHA-256 and byte count into each job log for direct
+Debug/Release comparison. Gate 8 and LP05 remain pending until exact-final-head
+CI and an independent reviewer accept the same commit.
 
 ## Gate 2 correction — Windows Unicode path identity
 

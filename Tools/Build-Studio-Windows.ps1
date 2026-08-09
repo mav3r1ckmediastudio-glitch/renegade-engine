@@ -193,6 +193,11 @@ try {
         if ($beforeJson -ne $afterJson) {
             throw "LP05 Gate 8 dependency extraction modified the packaged project fixture."
         }
+        Write-Host (
+            "LP05_GATE8_GRAPH_SHA256={0} BYTES={1}" -f
+                $firstGraphRecord.sha256,
+                $firstGraphRecord.bytes
+        )
         $dependencyProofRecord = [ordered]@{
             status = "PASS"
             processRuns = 2
