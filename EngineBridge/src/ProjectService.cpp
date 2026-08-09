@@ -615,6 +615,27 @@ namespace renegade::bridge
         return lastWarning_;
     }
 
+    bool ProjectService::SetAlwaysInclude(
+        const std::vector<std::string>& declarations)
+    {
+        lastError_.clear();
+        lastWarning_.clear();
+        if (!hasProject_)
+        {
+            lastError_ =
+                "Could not update Always Include without an active project.";
+            return false;
+        }
+
+        ProjectMetadata updated = currentProject_;
+        updated.alwaysInclude = declarations;
+        if (!WriteProject(updated))
+            return false;
+
+        currentProject_ = std::move(updated);
+        return true;
+    }
+
     bool ProjectService::ReadProject(
         const std::string& descriptorPath,
         ProjectMetadata& metadata,

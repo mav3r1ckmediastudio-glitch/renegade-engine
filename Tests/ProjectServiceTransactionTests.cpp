@@ -290,29 +290,31 @@ namespace
 
     void TestAlwaysIncludeRoundTripAndProjection(const fs::path& root)
     {
-        constexpr const char* projectId =
-            "81111111-1111-4111-8111-111111111111";
-        const fs::path descriptor = root / "AlwaysInclude.renegade";
-        WriteScene(root / "Content/Scenes/Main.wiscene");
-        WriteText(root / "Content/Textures/rock,wet.png", "texture");
-        WriteText(root / "Content/Data/state#1; final.bin", "generated");
-        WriteText(root / "Content/Fonts/runtime font.ttf", "font");
+        const fs::path templateScene = root / "Template.wiscene";
+        WriteScene(templateScene);
 
-        ProjectMetadata metadata;
-        metadata.formatVersion = ProjectService::CurrentFormatVersion;
-        metadata.projectId = projectId;
-        metadata.name = "AlwaysInclude";
-        metadata.descriptorPath = descriptor.generic_u8string();
-        metadata.rootPath = root.generic_u8string();
-        metadata.startupScene = "Content/Scenes/Main.wiscene";
-        metadata.alwaysInclude = {
+        ProjectService projects;
+        projects.Initialize((root / "editor-state.ini").generic_u8string());
+        Check(projects.CreateProject(
+                root.generic_u8string(), "AlwaysInclude",
+                templateScene.generic_u8string()),
+            "Always Include fixture project did not create transactionally");
+        if (!projects.HasProject())
+            return;
+
+        const fs::path projectRoot = root / "AlwaysInclude";
+        const fs::path descriptor = projectRoot / "AlwaysInclude.renegade";
+        WriteText(projectRoot / "Content/Textures/rock,wet.png", "texture");
+        WriteText(projectRoot / "Content/Data/state#1; final.bin", "generated");
+        WriteText(projectRoot / "Content/Fonts/runtime font.ttf", "font");
+
+        const std::vector<std::string> declarations = {
             "texture:Content/Textures/rock,wet.png",
             "generated_data:Content/Data/state#1; final.bin",
             "font:Content/Fonts/runtime font.ttf",
         };
 
-        ProjectService projects;
-        Check(projects.WriteProject(metadata),
+        Check(projects.SetAlwaysInclude(declarations),
             "Always Include descriptor did not write transactionally");
         const std::string serialized = ReadText(descriptor);
         Check(serialized.find("always_include_format = 1") != std::string::npos &&
@@ -326,8 +328,13 @@ namespace
         Check(projects.InspectProject(
                 descriptor.generic_u8string(), inspected, error),
             "encoded Always Include descriptor did not inspect");
-        Check(inspected.alwaysInclude == metadata.alwaysInclude,
+        Check(inspected.alwaysInclude == declarations &&
+                projects.CurrentProject().alwaysInclude == declarations,
             "Always Include declarations did not round-trip exactly");
+        Check(!projects.SetAlwaysInclude({"texture:../escape.png"}) &&
+                projects.CurrentProject().alwaysInclude == declarations &&
+                ReadText(descriptor) == serialized,
+            "invalid Always Include update changed active or persisted metadata");
 
         auto reader = renegade::bridge::MakeProjectDependencyReader();
         renegade::bridge::ProjectDependencyDocument document;
@@ -343,7 +350,8 @@ namespace
             "Always Include reader lost declared dependency classes");
 
         renegade::bridge::ProjectDependencyProvider provider(reader);
-        renegade::bridge::DependencyCollector collector(root.generic_u8string());
+        renegade::bridge::DependencyCollector collector(
+            projectRoot.generic_u8string());
         Check(collector.RegisterProvider(provider, error) &&
                 collector.AddRoot({"AlwaysInclude.renegade",
                     renegade::bridge::DependencyClass::ProjectDocument,
@@ -358,7 +366,9 @@ namespace
                 renegade::bridge::DependencyClass::GeneratedData,
             "external generated data lost its declared graph class");
 
-        const fs::path legacyDescriptor = root / "LegacyAlwaysInclude.renegade";
+        const std::string projectId = projects.CurrentProject().projectId;
+        const fs::path legacyDescriptor = projectRoot /
+            "LegacyAlwaysInclude.renegade";
         WriteText(legacyDescriptor,
             CurrentDescriptor("LegacyAlwaysInclude", projectId) +
             "\n[dependencies]\n"
@@ -368,7 +378,8 @@ namespace
                 inspected.alwaysInclude.size() == 1,
             "PR #29 legacy Always Include format no longer reads");
 
-        const fs::path malformedDescriptor = root / "MalformedAlwaysInclude.renegade";
+        const fs::path malformedDescriptor = projectRoot /
+            "MalformedAlwaysInclude.renegade";
         WriteText(malformedDescriptor,
             CurrentDescriptor("MalformedAlwaysInclude", projectId) +
             "\n[dependencies]\n"
