@@ -244,7 +244,13 @@ int main()
 
     ProjectService reopened;
     reopened.Initialize((base / "reopened-editor-state.ini").generic_u8string());
-    Check(reopened.OpenProject(descriptor.generic_u8string()),
+    const bool reopenedProject =
+        reopened.OpenProject(descriptor.generic_u8string());
+    if (!reopenedProject)
+    {
+        std::cerr << "RECOVERY ERROR: " << reopened.LastError() << '\n';
+    }
+    Check(reopenedProject,
         "project open did not recover the interrupted registry transaction");
     Check(!reopened.LastWarning().empty() &&
             ReadText(fs::u8path(documentPath)) == originalBytes &&
