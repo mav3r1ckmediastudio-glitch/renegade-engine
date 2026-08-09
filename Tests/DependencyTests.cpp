@@ -120,6 +120,7 @@ namespace
         bool Discover(
             const renegade::bridge::DependencyProviderContext& context,
             const renegade::bridge::DependencyCandidateSink& emit,
+            const renegade::bridge::DependencyDiagnosticSink&,
             std::string& error) const override
         {
             if (context.source == nullptr)
@@ -156,12 +157,19 @@ namespace
         bool Discover(
             const renegade::bridge::DependencyProviderContext&,
             const renegade::bridge::DependencyCandidateSink& emit,
+            const renegade::bridge::DependencyDiagnosticSink& diagnose,
             std::string& error) const override
         {
             emit({"Content/Data/must-not-leak.json",
                 renegade::bridge::DependencyClass::Data,
                 renegade::bridge::DependencyRequirement::Required,
                 "failing.partial", false});
+            diagnose({
+                renegade::bridge::DependencyDiagnosticCode::
+                    UndeclaredComputedReference,
+                "computed-before-failure",
+                "must not leak",
+            });
             error = "intentional failure";
             return false;
         }
@@ -184,6 +192,7 @@ namespace
         bool Discover(
             const renegade::bridge::DependencyProviderContext&,
             const renegade::bridge::DependencyCandidateSink& emit,
+            const renegade::bridge::DependencyDiagnosticSink&,
             std::string& error) const override
         {
             emit({first_, renegade::bridge::DependencyClass::Data,
@@ -220,8 +229,13 @@ int main()
     std::ofstream(root / "Content/UI/Main.renegade-screen") << "fixture";
     std::ofstream(root / "Content/UI/background.png") << "fixture";
     fs::create_directories(root / "Content/Scripts");
-    std::ofstream(root / "Content/Scripts/main.lua") << "return true\n";
+    std::ofstream(root / "Content/Scripts/main.lua")
+        << "local metadata = 'Content/Textures/not-a-dependency.png'\n"
+           "local next_script = choose_script_at_runtime()\n"
+           "dofile(script_root .. next_script)\n"
+           "return true\n";
     std::ofstream(root / "Content/Scripts/shared.lua") << "fixture";
+    std::ofstream(root / "Content/Scripts/Alpha.lua") << "fixture";
     fs::create_directories(root / "Content/Models");
     const std::string unicodeModelUpper =
         "Content/Models/\xC3\x89" "p\xC3\xA9" "e.glb";
@@ -443,7 +457,8 @@ int main()
     if (failingCollector.DiscoverRootDependencies(collectorError))
         return Fail("provider failure was reported as success");
     if (failingCollector.Graph().nodes.size() != 1 ||
-        !failingCollector.Graph().edges.empty())
+        !failingCollector.Graph().edges.empty() ||
+        !failingCollector.Graph().diagnostics.empty())
         return Fail("failed provider leaked a partial graph mutation");
 
     renegade::bridge::DependencyCollector unsafeCollector(root.string());
@@ -551,6 +566,76 @@ int main()
         declaredCollector.Graph().edges.front().provenance !=
             "script.declared_dependency[0]")
         return Fail("declared-reference provider did not emit typed declaration");
+
+    const std::string luaBytesBefore =
+        ReadBytes(root / "Content/Scripts/main.lua");
+    LuaDependencyPolicyProvider luaProvider({
+        {"Content/Scripts/main.lua",
+            {"../outside.lua", DependencyClass::Script,
+                DependencyRequirement::Required,
+                "lua.declared_dependency.outside", false}},
+        {"Content/Scripts/main.lua",
+            {"Content/Scripts/Alpha.lua", DependencyClass::Script,
+                DependencyRequirement::Required,
+                "lua.declared_dependency.alpha", false}},
+        {"Content/Scripts/main.lua",
+            {"Content/Scripts/alpha.lua", DependencyClass::Script,
+                DependencyRequirement::Required,
+                "lua.declared_dependency.case_collision", false}},
+        {"Content/Scripts/main.lua",
+            {"Content/Scripts/missing.lua", DependencyClass::Script,
+                DependencyRequirement::Required,
+                "lua.declared_dependency.missing", false}},
+        {"Content/Scripts/main.lua",
+            {"Content/Scripts/shared.lua", DependencyClass::Script,
+                DependencyRequirement::Required,
+                "lua.declared_dependency.shared[0]", false}},
+        {"Content/Scripts/main.lua",
+            {"Content/Scripts/shared.lua", DependencyClass::Script,
+                DependencyRequirement::Required,
+                "lua.declared_dependency.shared[1]", false}},
+    }, {
+        {"Content/Scripts/main.lua", "script_root .. next_script",
+            "lua.dofile[0]"},
+    });
+    DependencyCollector luaCollector(root.string());
+    if (!luaCollector.RegisterProvider(luaProvider, collectorError) ||
+        !luaCollector.AddRoot({"Content/Scripts/main.lua",
+            DependencyClass::Script, DependencyRequirement::Required,
+            "fixture.lua"}, collectorError) ||
+        !luaCollector.DiscoverRootDependencies(collectorError))
+        return Fail("Lua policy provider failed");
+
+    const auto& luaGraph = luaCollector.Graph();
+    const std::vector<DependencyDiagnosticCode> expectedLuaDiagnostics = {
+        DependencyDiagnosticCode::OutsideProject,
+        DependencyDiagnosticCode::CaseCollision,
+        DependencyDiagnosticCode::Missing,
+        DependencyDiagnosticCode::Duplicate,
+        DependencyDiagnosticCode::UndeclaredComputedReference,
+    };
+    std::vector<DependencyDiagnosticCode> actualLuaDiagnostics;
+    for (const auto& diagnostic : luaGraph.diagnostics)
+        actualLuaDiagnostics.push_back(diagnostic.code);
+    if (luaGraph.nodes.size() != 4 || luaGraph.edges.size() != 5 ||
+        actualLuaDiagnostics != expectedLuaDiagnostics ||
+        luaGraph.diagnostics.back().path != "script_root .. next_script" ||
+        luaGraph.diagnostics.back().sourceId != luaGraph.rootIds.front() ||
+        luaGraph.edges[0].targetId != luaGraph.edges[1].targetId ||
+        luaGraph.edges[3].targetId != luaGraph.edges[4].targetId)
+    {
+        return Fail("Lua policy did not produce deterministic complete diagnostics");
+    }
+    if (std::any_of(luaGraph.nodes.begin(), luaGraph.nodes.end(),
+            [](const DependencyNode& node)
+            {
+                return node.projectRelativePath ==
+                    "Content/Textures/not-a-dependency.png";
+            }) ||
+        ReadBytes(root / "Content/Scripts/main.lua") != luaBytesBefore)
+    {
+        return Fail("Lua policy scanned or modified source text");
+    }
 
     const fs::path gate4Scene = root / "Content/Scenes/Gate4.wiscene";
     wi::scene::Scene directGate4Scene;

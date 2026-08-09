@@ -802,7 +802,8 @@ namespace renegade::bridge
     bool ProjectDependencyProvider::Supports(DependencyClass value) const noexcept
     { return value == DependencyClass::ProjectDocument; }
     bool ProjectDependencyProvider::Discover(const DependencyProviderContext& context,
-        const DependencyCandidateSink& emit, std::string& error) const
+        const DependencyCandidateSink& emit,
+        const DependencyDiagnosticSink&, std::string& error) const
     {
         std::string path;
         if (!reader_ || !ValidateProviderContext(context, path, error))
@@ -840,7 +841,8 @@ namespace renegade::bridge
     bool StoryFlowDependencyProvider::Supports(DependencyClass value) const noexcept
     { return value == DependencyClass::StoryFlowDocument; }
     bool StoryFlowDependencyProvider::Discover(const DependencyProviderContext& context,
-        const DependencyCandidateSink& emit, std::string& error) const
+        const DependencyCandidateSink& emit,
+        const DependencyDiagnosticSink&, std::string& error) const
     {
         std::string path;
         if (!reader_ || !ValidateProviderContext(context, path, error))
@@ -864,7 +866,8 @@ namespace renegade::bridge
     bool RuntimeScreenDependencyProvider::Supports(DependencyClass value) const noexcept
     { return value == DependencyClass::RuntimeScreenDocument; }
     bool RuntimeScreenDependencyProvider::Discover(const DependencyProviderContext& context,
-        const DependencyCandidateSink& emit, std::string& error) const
+        const DependencyCandidateSink& emit,
+        const DependencyDiagnosticSink&, std::string& error) const
     {
         std::string path;
         if (!reader_ || !ValidateProviderContext(context, path, error))
@@ -895,6 +898,7 @@ namespace renegade::bridge
     bool WisceneDependencyProvider::Discover(
         const DependencyProviderContext& context,
         const DependencyCandidateSink& emit,
+        const DependencyDiagnosticSink&,
         std::string& error) const
     {
         std::string path;
@@ -922,6 +926,7 @@ namespace renegade::bridge
     bool GltfDependencyProvider::Discover(
         const DependencyProviderContext& context,
         const DependencyCandidateSink& emit,
+        const DependencyDiagnosticSink&,
         std::string& error) const
     {
         std::string path;
@@ -966,7 +971,8 @@ namespace renegade::bridge
     { return value == DependencyClass::Script || value == DependencyClass::Data; }
     bool DeclaredReferenceDependencyProvider::Discover(
         const DependencyProviderContext& context,
-        const DependencyCandidateSink& emit, std::string& error) const
+        const DependencyCandidateSink& emit,
+        const DependencyDiagnosticSink&, std::string& error) const
     {
         if (context.source == nullptr)
         {
@@ -976,6 +982,94 @@ namespace renegade::bridge
         for (const auto& reference : references_)
             if (reference.sourcePath == context.source->projectRelativePath)
                 emit(reference.candidate);
+        error.clear();
+        return true;
+    }
+
+    LuaDependencyPolicyProvider::LuaDependencyPolicyProvider(
+        std::vector<DeclaredDependencyReference> declarations,
+        std::vector<LuaComputedDependencyReference> computedReferences)
+        : declarations_(std::move(declarations)),
+          computedReferences_(std::move(computedReferences))
+    {
+        std::stable_sort(declarations_.begin(), declarations_.end(),
+            [](const auto& left, const auto& right)
+            {
+                if (left.sourcePath != right.sourcePath)
+                    return left.sourcePath < right.sourcePath;
+                if (left.candidate.declaredPath != right.candidate.declaredPath)
+                {
+                    return left.candidate.declaredPath <
+                        right.candidate.declaredPath;
+                }
+                return left.candidate.provenance < right.candidate.provenance;
+            });
+        std::stable_sort(computedReferences_.begin(), computedReferences_.end(),
+            [](const auto& left, const auto& right)
+            {
+                if (left.sourcePath != right.sourcePath)
+                    return left.sourcePath < right.sourcePath;
+                if (left.expression != right.expression)
+                    return left.expression < right.expression;
+                return left.provenance < right.provenance;
+            });
+    }
+
+    const char* LuaDependencyPolicyProvider::Name() const noexcept
+    {
+        return "lua-policy";
+    }
+
+    std::uint32_t LuaDependencyPolicyProvider::Version() const noexcept
+    {
+        return 1;
+    }
+
+    bool LuaDependencyPolicyProvider::Supports(
+        const DependencyClass value) const noexcept
+    {
+        return value == DependencyClass::Script;
+    }
+
+    bool LuaDependencyPolicyProvider::Discover(
+        const DependencyProviderContext& context,
+        const DependencyCandidateSink& emit,
+        const DependencyDiagnosticSink& diagnose,
+        std::string& error) const
+    {
+        if (context.source == nullptr)
+        {
+            error = "Lua policy provider requires a source node.";
+            return false;
+        }
+
+        for (const auto& declaration : declarations_)
+        {
+            if (declaration.sourcePath != context.source->projectRelativePath)
+                continue;
+            if (declaration.candidate.dependencyClass != DependencyClass::Script ||
+                declaration.candidate.declaredPath.empty())
+            {
+                error = "Lua policy contains an invalid declared script dependency.";
+                return false;
+            }
+            emit(declaration.candidate);
+        }
+
+        for (const auto& reference : computedReferences_)
+        {
+            if (reference.sourcePath != context.source->projectRelativePath)
+                continue;
+            diagnose({
+                DependencyDiagnosticCode::UndeclaredComputedReference,
+                reference.expression,
+                "Computed Lua dependency is not explicitly declared" +
+                    (reference.provenance.empty()
+                        ? std::string{"."}
+                        : ": " + reference.provenance),
+            });
+        }
+
         error.clear();
         return true;
     }
@@ -1066,12 +1160,18 @@ namespace renegade::bridge
 
                 DependencyProviderContext context{projectRoot_, &source};
                 std::vector<DependencyCandidate> candidates;
+                std::vector<DependencyProviderDiagnostic> diagnostics;
                 std::string providerError;
                 const bool succeeded = provider->Discover(
                     context,
                     [&candidates](const DependencyCandidate& candidate)
                     {
                         candidates.push_back(candidate);
+                    },
+                    [&diagnostics](
+                        const DependencyProviderDiagnostic& diagnostic)
+                    {
+                        diagnostics.push_back(diagnostic);
                     },
                     providerError);
                 if (!succeeded)
@@ -1083,6 +1183,12 @@ namespace renegade::bridge
                 }
                 for (const auto& candidate : candidates)
                     AcceptCandidate(source, *provider, candidate);
+                for (const auto& diagnostic : diagnostics)
+                {
+                    graph_.diagnostics.push_back(PathDiagnostic(
+                        diagnostic.code, source.id, diagnostic.path,
+                        diagnostic.message));
+                }
             }
         }
         error.clear();

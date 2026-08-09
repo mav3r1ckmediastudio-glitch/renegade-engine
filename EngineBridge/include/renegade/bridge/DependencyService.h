@@ -130,6 +130,16 @@ namespace renegade::bridge
     using DependencyCandidateSink =
         std::function<void(const DependencyCandidate&)>;
 
+    struct DependencyProviderDiagnostic
+    {
+        DependencyDiagnosticCode code = DependencyDiagnosticCode::Missing;
+        std::string path;
+        std::string message;
+    };
+
+    using DependencyDiagnosticSink =
+        std::function<void(const DependencyProviderDiagnostic&)>;
+
     class IDependencyProvider
     {
     public:
@@ -141,6 +151,7 @@ namespace renegade::bridge
         [[nodiscard]] virtual bool Discover(
             const DependencyProviderContext& context,
             const DependencyCandidateSink& emit,
+            const DependencyDiagnosticSink& diagnose,
             std::string& error) const = 0;
     };
 
@@ -228,7 +239,9 @@ namespace renegade::bridge
         [[nodiscard]] std::uint32_t Version() const noexcept override;
         [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
         [[nodiscard]] bool Discover(const DependencyProviderContext& context,
-            const DependencyCandidateSink& emit, std::string& error) const override;
+            const DependencyCandidateSink& emit,
+            const DependencyDiagnosticSink& diagnose,
+            std::string& error) const override;
     private:
         ProjectDependencyReader reader_;
     };
@@ -241,7 +254,9 @@ namespace renegade::bridge
         [[nodiscard]] std::uint32_t Version() const noexcept override;
         [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
         [[nodiscard]] bool Discover(const DependencyProviderContext& context,
-            const DependencyCandidateSink& emit, std::string& error) const override;
+            const DependencyCandidateSink& emit,
+            const DependencyDiagnosticSink& diagnose,
+            std::string& error) const override;
     private:
         StoryFlowDependencyReader reader_;
     };
@@ -254,7 +269,9 @@ namespace renegade::bridge
         [[nodiscard]] std::uint32_t Version() const noexcept override;
         [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
         [[nodiscard]] bool Discover(const DependencyProviderContext& context,
-            const DependencyCandidateSink& emit, std::string& error) const override;
+            const DependencyCandidateSink& emit,
+            const DependencyDiagnosticSink& diagnose,
+            std::string& error) const override;
     private:
         RuntimeScreenDependencyReader reader_;
     };
@@ -270,7 +287,9 @@ namespace renegade::bridge
         [[nodiscard]] std::uint32_t Version() const noexcept override;
         [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
         [[nodiscard]] bool Discover(const DependencyProviderContext& context,
-            const DependencyCandidateSink& emit, std::string& error) const override;
+            const DependencyCandidateSink& emit,
+            const DependencyDiagnosticSink& diagnose,
+            std::string& error) const override;
     private:
         WisceneDependencyReader reader_;
     };
@@ -321,7 +340,9 @@ namespace renegade::bridge
         [[nodiscard]] std::uint32_t Version() const noexcept override;
         [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
         [[nodiscard]] bool Discover(const DependencyProviderContext& context,
-            const DependencyCandidateSink& emit, std::string& error) const override;
+            const DependencyCandidateSink& emit,
+            const DependencyDiagnosticSink& diagnose,
+            std::string& error) const override;
     private:
         GltfDependencyReader reader_;
     };
@@ -335,15 +356,48 @@ namespace renegade::bridge
         [[nodiscard]] std::uint32_t Version() const noexcept override;
         [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
         [[nodiscard]] bool Discover(const DependencyProviderContext& context,
-            const DependencyCandidateSink& emit, std::string& error) const override;
+            const DependencyCandidateSink& emit,
+            const DependencyDiagnosticSink& diagnose,
+            std::string& error) const override;
     private:
         std::vector<DeclaredDependencyReference> references_;
     };
 
-    // Gate 2 collector: owns graph-root admission and provider dispatch only.
-    // Later LP05 gates add concrete providers and transitive traversal without
-    // changing this UI-free contract. Providers are borrowed and must outlive
-    // the collector.
+    struct LuaComputedDependencyReference
+    {
+        std::string sourcePath;
+        std::string expression;
+        std::string provenance;
+    };
+
+    // Gate 6 policy boundary. Nested Lua dependencies are explicit typed
+    // declarations supplied by the owning authoring/scripting policy. A
+    // computed reference that has no explicit target is represented
+    // separately and becomes a structured diagnostic. Lua source text is
+    // never scanned for path-looking strings or executed during extraction.
+    class LuaDependencyPolicyProvider final : public IDependencyProvider
+    {
+    public:
+        LuaDependencyPolicyProvider(
+            std::vector<DeclaredDependencyReference> declarations,
+            std::vector<LuaComputedDependencyReference> computedReferences);
+        [[nodiscard]] const char* Name() const noexcept override;
+        [[nodiscard]] std::uint32_t Version() const noexcept override;
+        [[nodiscard]] bool Supports(
+            DependencyClass dependencyClass) const noexcept override;
+        [[nodiscard]] bool Discover(
+            const DependencyProviderContext& context,
+            const DependencyCandidateSink& emit,
+            const DependencyDiagnosticSink& diagnose,
+            std::string& error) const override;
+    private:
+        std::vector<DeclaredDependencyReference> declarations_;
+        std::vector<LuaComputedDependencyReference> computedReferences_;
+    };
+
+    // Gates 2-6 collector: owns graph-root admission and transactional provider
+    // dispatch. Gate 7 adds transitive traversal without changing this UI-free
+    // provider contract. Providers are borrowed and must outlive the collector.
     class DependencyCollector
     {
     public:
