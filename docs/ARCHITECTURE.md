@@ -235,8 +235,16 @@ Lua dependency discovery is policy-driven rather than source-text inference.
 declarations and explicit records of computed references that cannot be
 resolved statically. Declared targets become Script edges; undeclared computed
 targets become `UndeclaredComputedReference` diagnostics. Extraction never
-executes Lua and never treats arbitrary string literals as paths. Recursive
-provider traversal and graph serialization remain separate LP05 Gate 7 work.
+executes Lua and never treats arbitrary string literals as paths.
+
+Gate 7 completes the graph-production boundary. The collector traverses every
+newly admitted existing node once per supporting provider and terminates across
+cycles without discarding the typed cycle edge. Missing nodes remain graph
+evidence but are not opened or dispatched. Existing files carry an explicitly
+named `fnv1a64` content hash; missing nodes use the stable `missing` marker.
+The serializer validates root and edge references, then emits versioned UTF-8
+JSON with independently sorted roots, nodes, edges and diagnostics. This is a
+read-only interchange format for LC01; it performs no copying or cooking.
 
 ### Tools
 

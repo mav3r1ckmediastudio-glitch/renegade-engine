@@ -274,9 +274,37 @@ Gate 6 implementation commit is
 `eb25d46bdb967f82c136ee030b216c656a220d54` on draft PR #31. Renegade Studio
 run 138 passed Debug and Release with 23/23 tests in each configuration,
 including `RenegadeDependencyTests`; pinned-Wicked baseline run 140 passed both
-configurations. Gate 6 is implemented and CI-proven, while independent
-verification of the exact final PR head remains pending. Gate 7 retains
-ownership of recursive traversal and machine-readable serialization.
+configurations. Final head `30730cf4f397de730588a722d4dcd08b21f00619`
+passed Studio run 139 and pinned-Wicked baseline run 142 in both configurations.
+The project owner independently reviewed that exact head before squash-merging
+PR #31 at `ba7d37b21c6c01740a648821127d293e0b4e8c83`. Gate 6 is accepted.
+
+## Gate 7 implementation boundary
+
+`DependencyCollector::DiscoverTransitiveDependencies` processes the growing
+node list deterministically. Each supporting provider is dispatched at most
+once for a node, successful candidate and diagnostic batches remain
+transactional, missing nodes are retained but never opened, and cycles retain
+their typed edges without causing another traversal.
+
+Existing files receive a deterministic `fnv1a64:<hex>` content hash while a
+declared missing node receives the explicit `missing` marker. The algorithm is
+named in the value so a later schema version can adopt a stronger digest
+without silently changing interpretation.
+
+`SerializeDependencyGraph` first rejects duplicate/invalid nodes and dangling
+root or edge references. It then emits `renegade-dependency-graph` version 1
+UTF-8 JSON with roots, nodes, edges and diagnostics sorted independently of
+insertion order. Repeated traversal is idempotent and repeated serialization is
+byte-identical.
+
+The Gate 7 fixture connects the production Project, Story Flow, Runtime Screen,
+WISCENE and Lua provider types in one project → Story Flow → two scenes → root
+Lua → nested Lua closure. A focused traversal fixture also proves scene and Lua
+cycles, a missing leaf, complete content hashes, idempotence, stable JSON and
+invalid-edge rejection. Gate 7 does not copy, cook or package content.
+Authoritative Debug/Release CI and independent verification remain pending;
+Gate 8 retains repeated-process and packaged read-only proof.
 
 ## Gate 2 correction — Windows Unicode path identity
 

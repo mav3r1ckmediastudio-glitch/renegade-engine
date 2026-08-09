@@ -314,6 +314,37 @@ namespace renegade::bridge
             return stream.str();
         }
 
+        std::string ContentHash(
+            const std::string& absolutePath,
+            const bool exists)
+        {
+            if (!exists)
+                return "missing";
+            std::ifstream input(
+                std::filesystem::u8path(absolutePath), std::ios::binary);
+            if (!input)
+                return "unavailable";
+            std::uint64_t hash = 1469598103934665603ull;
+            std::array<char, 16384> buffer{};
+            while (input)
+            {
+                input.read(buffer.data(),
+                    static_cast<std::streamsize>(buffer.size()));
+                const auto count = input.gcount();
+                for (std::streamsize index = 0; index < count; ++index)
+                {
+                    hash ^= static_cast<unsigned char>(buffer[static_cast<std::size_t>(index)]);
+                    hash *= 1099511628211ull;
+                }
+            }
+            if (input.bad())
+                return "unavailable";
+            std::ostringstream stream;
+            stream << "fnv1a64:" << std::hex << std::setfill('0')
+                   << std::setw(16) << hash;
+            return stream.str();
+        }
+
         DependencyDiagnostic PathDiagnostic(
             const DependencyDiagnosticCode code,
             const std::string& sourceId,
@@ -1131,6 +1162,7 @@ namespace renegade::bridge
         node.requirement = root.requirement;
         node.provider = root.provenance.empty() ? "root" : root.provenance;
         node.providerVersion = 1;
+        node.contentHash = ContentHash(resolved.absolutePath, resolved.exists);
         graph_.rootIds.push_back(node.id);
         graph_.nodes.push_back(std::move(node));
         if (!resolved.exists)
@@ -1148,47 +1180,76 @@ namespace renegade::bridge
 
     bool DependencyCollector::DiscoverRootDependencies(std::string& error)
     {
-        const std::size_t rootCount = graph_.rootIds.size();
-        for (std::size_t index = 0; index < rootCount; ++index)
+        for (const auto& rootId : graph_.rootIds)
+        {
+            const auto node = std::find_if(graph_.nodes.begin(), graph_.nodes.end(),
+                [&rootId](const DependencyNode& value) { return value.id == rootId; });
+            if (node != graph_.nodes.end())
+            {
+                const DependencyNode source = *node;
+                if (!DiscoverNodeDependencies(source, error))
+                    return false;
+            }
+        }
+        error.clear();
+        return true;
+    }
+
+    bool DependencyCollector::DiscoverTransitiveDependencies(std::string& error)
+    {
+        for (std::size_t index = 0; index < graph_.nodes.size(); ++index)
         {
             const DependencyNode source = graph_.nodes[index];
-            for (const auto& [name, provider] : providers_)
-            {
-                (void)name;
-                if (!provider->Supports(source.dependencyClass))
-                    continue;
+            const auto resolved = ResolveDependencyPath(
+                projectRoot_, source.projectRelativePath);
+            if (!resolved.accepted || !resolved.exists)
+                continue;
+            if (!DiscoverNodeDependencies(source, error))
+                return false;
+        }
+        error.clear();
+        return true;
+    }
 
-                DependencyProviderContext context{projectRoot_, &source};
-                std::vector<DependencyCandidate> candidates;
-                std::vector<DependencyProviderDiagnostic> diagnostics;
-                std::string providerError;
-                const bool succeeded = provider->Discover(
-                    context,
-                    [&candidates](const DependencyCandidate& candidate)
-                    {
-                        candidates.push_back(candidate);
-                    },
-                    [&diagnostics](
-                        const DependencyProviderDiagnostic& diagnostic)
-                    {
-                        diagnostics.push_back(diagnostic);
-                    },
-                    providerError);
-                if (!succeeded)
+    bool DependencyCollector::DiscoverNodeDependencies(
+        const DependencyNode& source,
+        std::string& error)
+    {
+        for (const auto& [name, provider] : providers_)
+        {
+            if (!provider->Supports(source.dependencyClass) ||
+                !discoveredProviderSources_.emplace(source.id, name).second)
+                continue;
+
+            DependencyProviderContext context{projectRoot_, &source};
+            std::vector<DependencyCandidate> candidates;
+            std::vector<DependencyProviderDiagnostic> diagnostics;
+            std::string providerError;
+            const bool succeeded = provider->Discover(
+                context,
+                [&candidates](const DependencyCandidate& candidate)
                 {
-                    error = "Dependency provider '" + std::string(provider->Name()) +
-                        "' failed for " + source.projectRelativePath + ": " +
-                        providerError;
-                    return false;
-                }
-                for (const auto& candidate : candidates)
-                    AcceptCandidate(source, *provider, candidate);
-                for (const auto& diagnostic : diagnostics)
+                    candidates.push_back(candidate);
+                },
+                [&diagnostics](const DependencyProviderDiagnostic& diagnostic)
                 {
-                    graph_.diagnostics.push_back(PathDiagnostic(
-                        diagnostic.code, source.id, diagnostic.path,
-                        diagnostic.message));
-                }
+                    diagnostics.push_back(diagnostic);
+                },
+                providerError);
+            if (!succeeded)
+            {
+                discoveredProviderSources_.erase({source.id, name});
+                error = "Dependency provider '" + name + "' failed for " +
+                    source.projectRelativePath + ": " + providerError;
+                return false;
+            }
+            for (const auto& candidate : candidates)
+                AcceptCandidate(source, *provider, candidate);
+            for (const auto& diagnostic : diagnostics)
+            {
+                graph_.diagnostics.push_back(PathDiagnostic(
+                    diagnostic.code, source.id, diagnostic.path,
+                    diagnostic.message));
             }
         }
         error.clear();
@@ -1233,6 +1294,7 @@ namespace renegade::bridge
             node.requirement = candidate.requirement;
             node.provider = provider.Name();
             node.providerVersion = provider.Version();
+            node.contentHash = ContentHash(resolved.absolutePath, resolved.exists);
             node.runtimeSupport = candidate.runtimeSupport;
             graph_.nodes.push_back(std::move(node));
             if (!resolved.exists)
@@ -1286,5 +1348,134 @@ namespace renegade::bridge
             }
         }
         return false;
+    }
+
+    bool SerializeDependencyGraph(
+        const DependencyGraph& graph,
+        std::string& json,
+        std::string& error)
+    {
+        const auto requirementName = [](const DependencyRequirement value)
+        {
+            switch (value)
+            {
+            case DependencyRequirement::Required: return "required";
+            case DependencyRequirement::Optional: return "optional";
+            case DependencyRequirement::EditorOnly: return "editor_only";
+            }
+            return "unknown";
+        };
+        const auto diagnosticName = [](const DependencyDiagnosticCode value)
+        {
+            switch (value)
+            {
+            case DependencyDiagnosticCode::Missing: return "missing";
+            case DependencyDiagnosticCode::OutsideProject: return "outside_project";
+            case DependencyDiagnosticCode::Duplicate: return "duplicate";
+            case DependencyDiagnosticCode::CaseCollision: return "case_collision";
+            case DependencyDiagnosticCode::UndeclaredComputedReference:
+                return "undeclared_computed_reference";
+            }
+            return "unknown";
+        };
+
+        std::set<std::string> nodeIds;
+        for (const auto& node : graph.nodes)
+        {
+            if (node.id.empty() || node.projectRelativePath.empty() ||
+                !nodeIds.insert(node.id).second)
+            {
+                error = "Dependency graph contains an invalid or duplicate node.";
+                return false;
+            }
+        }
+        for (const auto& rootId : graph.rootIds)
+        {
+            if (nodeIds.find(rootId) == nodeIds.end())
+            {
+                error = "Dependency graph root does not reference a node.";
+                return false;
+            }
+        }
+        for (const auto& edge : graph.edges)
+        {
+            if (nodeIds.find(edge.sourceId) == nodeIds.end() ||
+                nodeIds.find(edge.targetId) == nodeIds.end())
+            {
+                error = "Dependency graph edge does not reference two nodes.";
+                return false;
+            }
+        }
+
+        auto roots = graph.rootIds;
+        auto nodes = graph.nodes;
+        auto edges = graph.edges;
+        auto diagnostics = graph.diagnostics;
+        std::sort(roots.begin(), roots.end());
+        std::sort(nodes.begin(), nodes.end(), [](const auto& left, const auto& right)
+        {
+            return left.id < right.id;
+        });
+        std::sort(edges.begin(), edges.end(), [](const auto& left, const auto& right)
+        {
+            if (left.sourceId != right.sourceId)
+                return left.sourceId < right.sourceId;
+            if (left.targetId != right.targetId)
+                return left.targetId < right.targetId;
+            return left.provenance < right.provenance;
+        });
+        std::sort(diagnostics.begin(), diagnostics.end(),
+            [](const auto& left, const auto& right)
+            {
+                if (left.code != right.code)
+                    return left.code < right.code;
+                if (left.sourceId != right.sourceId)
+                    return left.sourceId < right.sourceId;
+                if (left.path != right.path)
+                    return left.path < right.path;
+                return left.message < right.message;
+            });
+
+        nlohmann::json document;
+        document["schema"] = "renegade-dependency-graph";
+        document["version"] = 1;
+        document["roots"] = roots;
+        document["nodes"] = nlohmann::json::array();
+        for (const auto& node : nodes)
+        {
+            document["nodes"].push_back({
+                {"id", node.id},
+                {"path", node.projectRelativePath},
+                {"class", DependencyClassName(node.dependencyClass)},
+                {"requirement", requirementName(node.requirement)},
+                {"applicability", node.applicability},
+                {"provider", node.provider},
+                {"provider_version", node.providerVersion},
+                {"content_hash", node.contentHash},
+                {"runtime_support", node.runtimeSupport},
+            });
+        }
+        document["edges"] = nlohmann::json::array();
+        for (const auto& edge : edges)
+        {
+            document["edges"].push_back({
+                {"source", edge.sourceId},
+                {"target", edge.targetId},
+                {"provenance", edge.provenance},
+            });
+        }
+        document["diagnostics"] = nlohmann::json::array();
+        for (const auto& diagnostic : diagnostics)
+        {
+            document["diagnostics"].push_back({
+                {"code", diagnosticName(diagnostic.code)},
+                {"source", diagnostic.sourceId},
+                {"path", diagnostic.path},
+                {"message", diagnostic.message},
+            });
+        }
+        json = document.dump(2) + "\n";
+        error.clear();
+        return true;
     }
 }

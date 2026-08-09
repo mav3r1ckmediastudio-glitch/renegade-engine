@@ -3,7 +3,9 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace wi::scene
@@ -395,9 +397,9 @@ namespace renegade::bridge
         std::vector<LuaComputedDependencyReference> computedReferences_;
     };
 
-    // Gates 2-6 collector: owns graph-root admission and transactional provider
-    // dispatch. Gate 7 adds transitive traversal without changing this UI-free
-    // provider contract. Providers are borrowed and must outlive the collector.
+    // Gates 2-7 collector: owns graph admission, transactional provider
+    // dispatch and deterministic transitive traversal. Providers are borrowed
+    // and must outlive the collector.
     class DependencyCollector
     {
     public:
@@ -410,9 +412,13 @@ namespace renegade::bridge
             const DependencyRoot& root,
             std::string& error);
         [[nodiscard]] bool DiscoverRootDependencies(std::string& error);
+        [[nodiscard]] bool DiscoverTransitiveDependencies(std::string& error);
         [[nodiscard]] const DependencyGraph& Graph() const noexcept;
 
     private:
+        [[nodiscard]] bool DiscoverNodeDependencies(
+            const DependencyNode& source,
+            std::string& error);
         void AcceptCandidate(
             const DependencyNode& source,
             const IDependencyProvider& provider,
@@ -422,6 +428,7 @@ namespace renegade::bridge
         DependencyGraph graph_;
         DependencyPathRegistry pathRegistry_;
         std::map<std::string, const IDependencyProvider*> providers_;
+        std::set<std::pair<std::string, std::string>> discoveredProviderSources_;
     };
 
     // Resolves a declared dependency against projectRoot without requiring it
@@ -441,4 +448,11 @@ namespace renegade::bridge
         DependencyClass dependencyClass) noexcept;
     [[nodiscard]] bool TryParseDependencyClassName(
         const std::string& name, DependencyClass& dependencyClass) noexcept;
+
+    // Gate 7: stable, versioned UTF-8 JSON for LC01 and later packaging work.
+    // Serialization never reads, copies, cooks or modifies project content.
+    [[nodiscard]] bool SerializeDependencyGraph(
+        const DependencyGraph& graph,
+        std::string& json,
+        std::string& error);
 }
