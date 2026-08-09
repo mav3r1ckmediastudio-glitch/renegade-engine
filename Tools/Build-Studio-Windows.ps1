@@ -55,7 +55,8 @@ $result = [ordered]@{
         "RenegadeStudio",
         "RenegadeRuntime",
         "RenegadeBridgeTests",
-        "RenegadeDependencyProcessFixture"
+        "RenegadeDependencyProcessFixture",
+        "RenegadeAssetRegistryProcessFixture"
     )
     embeddedShaders = $true
     outputs = @()
@@ -83,6 +84,7 @@ try {
                 "--build", $buildRoot,
                 "--config", $currentConfiguration,
                 "--target", "RenegadeStudio", "RenegadeRuntime", "RenegadeBridgeTests",
+                "RenegadeAssetRegistryProcessFixture",
                 "--parallel"
             ) `
             -WorkingDirectory $repositoryRoot `
@@ -109,6 +111,9 @@ try {
         $dependencyProofExecutable = Join-Path `
             $buildRoot `
             "Tests\$currentConfiguration\RenegadeDependencyProcessFixture.exe"
+        $assetRegistryProofExecutable = Join-Path `
+            $buildRoot `
+            "Tests\$currentConfiguration\RenegadeAssetRegistryProcessFixture.exe"
 
         $packageRoot = Join-Path $ArtifactRoot "packages\RenegadeStudio-$currentConfiguration"
         New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
@@ -207,6 +212,98 @@ try {
             projectFiles = $proofFilesBefore
         }
 
+        # LC01 Gate 5: prove durable asset identity and provenance from the
+        # assembled package across independent process invocations and Project
+        # Open. The packaged fixture remains immutable; all controlled source
+        # edits and moves occur in a disposable artifact working copy.
+        $lc01ToolRoot = Join-Path $packageRoot "Tools"
+        $lc01FixtureRoot = Join-Path $packageRoot "Proof\LC01"
+        New-Item -ItemType Directory -Path $lc01ToolRoot -Force | Out-Null
+        New-Item -ItemType Directory -Path $lc01FixtureRoot -Force | Out-Null
+        $packagedAssetRegistryProof = Join-Path `
+            $lc01ToolRoot `
+            "RenegadeAssetRegistryProcessFixture.exe"
+        Copy-Item `
+            -Path $assetRegistryProofExecutable `
+            -Destination $packagedAssetRegistryProof `
+            -Force
+        Copy-Item `
+            -Path (Join-Path $repositoryRoot "Tests\fixtures\lc01\process-project\*") `
+            -Destination $lc01FixtureRoot `
+            -Recurse `
+            -Force
+
+        $lc01FixtureFilesBefore = & $getProofFileRecords -Root $lc01FixtureRoot
+        $lc01ProofRoot = Join-Path $ArtifactRoot "proof\$currentConfiguration\lc01"
+        $lc01WorkingRoot = Join-Path $lc01ProofRoot "working-project"
+        New-Item -ItemType Directory -Path $lc01WorkingRoot -Force | Out-Null
+        Copy-Item -Path (Join-Path $lc01FixtureRoot "*") `
+            -Destination $lc01WorkingRoot -Recurse -Force
+
+        $lc01InitEvidence = Join-Path $lc01ProofRoot "registry-init.json"
+        $lc01UpdateEvidence = Join-Path $lc01ProofRoot "registry-update.json"
+        $lc01MoveEvidence = Join-Path $lc01ProofRoot "registry-move-reopen.json"
+        $lc01VerifyEvidence = Join-Path $lc01ProofRoot "registry-verify-reopen.json"
+        $lc01LogRoot = Join-Path $ArtifactRoot "logs\$currentConfiguration\lc01"
+
+        Invoke-RenegadeLoggedCommand `
+            -FilePath $packagedAssetRegistryProof `
+            -ArgumentList @("init", $lc01WorkingRoot, $lc01InitEvidence) `
+            -WorkingDirectory $packageRoot `
+            -LogPath (Join-Path $lc01LogRoot "01-init.log")
+
+        $sourcePath = Join-Path $lc01WorkingRoot "Content\Source\source.asset"
+        [System.IO.File]::WriteAllText(
+            $sourcePath,
+            "lc01 source revision two`n",
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        Invoke-RenegadeLoggedCommand `
+            -FilePath $packagedAssetRegistryProof `
+            -ArgumentList @("update", $lc01WorkingRoot, $lc01UpdateEvidence) `
+            -WorkingDirectory $packageRoot `
+            -LogPath (Join-Path $lc01LogRoot "02-update.log")
+
+        $movedDirectory = Join-Path $lc01WorkingRoot "Content\Source\Moved"
+        New-Item -ItemType Directory -Path $movedDirectory -Force | Out-Null
+        Move-Item -Path $sourcePath `
+            -Destination (Join-Path $movedDirectory "source.asset") -Force
+        Invoke-RenegadeLoggedCommand `
+            -FilePath $packagedAssetRegistryProof `
+            -ArgumentList @("move-reopen", $lc01WorkingRoot, $lc01MoveEvidence) `
+            -WorkingDirectory $packageRoot `
+            -LogPath (Join-Path $lc01LogRoot "03-move-reopen.log")
+        Invoke-RenegadeLoggedCommand `
+            -FilePath $packagedAssetRegistryProof `
+            -ArgumentList @("verify-reopen", $lc01WorkingRoot, $lc01VerifyEvidence) `
+            -WorkingDirectory $packageRoot `
+            -LogPath (Join-Path $lc01LogRoot "04-verify-reopen.log")
+
+        $lc01MoveRecord = Get-RenegadeFileRecord -Path $lc01MoveEvidence
+        $lc01VerifyRecord = Get-RenegadeFileRecord -Path $lc01VerifyEvidence
+        if ($lc01MoveRecord.sha256 -ne $lc01VerifyRecord.sha256 -or
+            $lc01MoveRecord.bytes -ne $lc01VerifyRecord.bytes) {
+            throw "LC01 Gate 5 reopen registry evidence was not byte-identical."
+        }
+        $lc01FixtureFilesAfter = & $getProofFileRecords -Root $lc01FixtureRoot
+        if (($lc01FixtureFilesBefore | ConvertTo-Json -Depth 4 -Compress) -ne
+            ($lc01FixtureFilesAfter | ConvertTo-Json -Depth 4 -Compress)) {
+            throw "LC01 Gate 5 modified the immutable packaged fixture."
+        }
+        Write-Host (
+            "LC01_GATE5_REGISTRY_SHA256={0} BYTES={1}" -f
+                $lc01VerifyRecord.sha256,
+                $lc01VerifyRecord.bytes
+        )
+        $assetRegistryProofRecord = [ordered]@{
+            status = "PASS"
+            processRuns = 4
+            executable = Get-RenegadeFileRecord -Path $packagedAssetRegistryProof
+            finalRegistry = $lc01VerifyRecord
+            packagedFixtureFileCount = $lc01FixtureFilesBefore.Count
+            packagedFixtureFiles = $lc01FixtureFilesBefore
+        }
+
         # Test Level launches the real Runtime as a child process. Keep the
         # Runtime payload isolated under the Studio package so Studio can find
         # it without changing Runtime's own working-directory/content contract.
@@ -260,6 +357,7 @@ try {
             runtimePackage = Get-RenegadeFileRecord -Path $runtimePackageArchive
             bridgeTests = "PASS"
             dependencyProof = $dependencyProofRecord
+            assetRegistryProof = $assetRegistryProofRecord
         }
     }
 
