@@ -39,9 +39,14 @@ the Studio evidence package. Four independent invocations prove initial
 registry/provenance persistence, Project Open after source-content update,
 Project Open after moving that updated source, and byte-identical final reopen.
 All controlled mutations occur in an artifact-only working copy; the packaged
-fixture is SHA-256 checked before and after. Local syntax and formatting checks
-pass; authoritative Windows Debug/Release and baseline evidence remain pending.
-See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
+fixture is SHA-256 checked before and after. GitHub implementation head
+`c8bacea05e5aac0823bc5d304631d84c0a411c97` passed Studio run 165 with raw
+25/25 in Debug and Release. All four packaged phases passed in both and emitted
+the same final registry SHA-256
+`547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`
+(2,180 bytes). Baseline run 184 passed both configurations. Independent review
+and squash merge remain pending. See
+`docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 

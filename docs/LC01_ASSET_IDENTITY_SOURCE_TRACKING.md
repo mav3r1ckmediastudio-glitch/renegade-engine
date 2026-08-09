@@ -262,3 +262,15 @@ standalone dependency closure or begin LP06.
 8. Raw Debug and Release CTest totals, the packaged proof and both pinned-Wicked
    baseline jobs pass on the exact final head.
 9. Independent exact-head review and owner squash merge complete LC01.
+
+### Gate 5 candidate evidence
+
+GitHub implementation head `c8bacea05e5aac0823bc5d304631d84c0a411c97`
+passed Studio run 165 with raw 25/25 in Debug and Release. The `init`, `update`,
+`move-reopen` and `verify-reopen` package processes each reported PASS in both
+configurations. Debug and Release emitted the identical final canonical registry
+SHA-256
+`547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`
+at 2,180 bytes. Pinned-Wicked baseline run 184 passed Debug and Release.
+Gate 5 and LC01 remain unaccepted until the exact documentation-complete head
+passes fresh CI, receives independent review and is squash-merged by the owner.
