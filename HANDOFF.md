@@ -31,7 +31,7 @@ Gate 1 merged through PR #34 at `580e5a5`, the corrected Gate 2 merged through
 PR #36 at `489e33d`, and Gate 3 source-to-imported-product provenance merged
 through PR #37 at `c2ace926ff2486fd3b60e3717bdba6dc8d138217`.
 
-Gate 4 implementation commit `3de23df` adds schema-version-3 missing-asset
+Gate 4 GitHub implementation commit `0e5c00c` adds schema-version-3 missing-asset
 tombstones and identity recovery only when the evidence is unique in both
 directions. It preserves ID-keyed provenance across a move, keeps provenance
 valid while an endpoint is tombstoned, and reports ambiguous candidates without

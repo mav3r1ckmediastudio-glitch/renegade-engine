@@ -217,7 +217,7 @@ reimport, or change creator content.
 
 ### Gate 4 candidate evidence
 
-Implementation commit `3de23df` adds schema-version-3 recovery tombstones,
+GitHub implementation commit `0e5c00c` adds schema-version-3 recovery tombstones,
 bidirectionally unique move/reappearance matching, provenance survival for
 missing endpoints and deterministic recovery diagnostics. The focused local
 Linux harness passed unique move, genuine loss, tombstone reload, unique
