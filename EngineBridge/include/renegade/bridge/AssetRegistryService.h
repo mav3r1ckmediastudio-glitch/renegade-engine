@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/DependencyService.h"
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/ProjectDocumentTransaction.h"
 
 #include <cstdint>
 #include <functional>
@@ -10,6 +11,9 @@
 
 namespace renegade::bridge
 {
+    inline constexpr const char* AssetRegistryDocumentName =
+        "AssetRegistry.renegade-assets";
+
     struct AssetRecord
     {
         StableId assetId;
@@ -46,6 +50,14 @@ namespace renegade::bridge
 
     using AssetIdGenerator = std::function<StableId()>;
 
+    struct AssetRegistryPersistenceOptions
+    {
+        // Optional deterministic token and failure/interruption seam for
+        // tests. Production callers normally leave both empty.
+        std::string transactionId;
+        ProjectDocumentTransactionHook operationHook;
+    };
+
     // LC01 Gate 1 consumes LP05's accepted graph without touching project
     // content. Existing path-to-ID assignments are retained, content changes
     // are reported, and graph edges are projected onto stable asset IDs.
@@ -67,6 +79,24 @@ namespace renegade::bridge
         std::string& error);
     [[nodiscard]] bool DeserializeAssetRegistry(
         const std::string& json,
+        AssetRegistry& registry,
+        std::string& error);
+
+    // LC01 Gate 2: one authoritative registry document at the project root,
+    // committed through the shared project journal/rollback boundary. A
+    // later ProjectService::OpenProject() recovers interrupted writes from
+    // Intermediate/Transactions before activating the project.
+    [[nodiscard]] bool ResolveAssetRegistryDocumentPath(
+        const std::string& projectRoot,
+        std::string& documentPath,
+        std::string& error);
+    [[nodiscard]] ProjectDocumentTransactionResult WriteAssetRegistry(
+        const std::string& projectRoot,
+        const AssetRegistry& registry,
+        AssetRegistryPersistenceOptions options = {});
+    [[nodiscard]] bool ReadAssetRegistry(
+        const std::string& projectRoot,
+        const StableId& expectedProjectId,
         AssetRegistry& registry,
         std::string& error);
 }

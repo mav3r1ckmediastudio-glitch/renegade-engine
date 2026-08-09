@@ -4,9 +4,9 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Current main baseline:** `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`
+**Current main baseline:** `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`
 
-**Active branch:** `agent/lc01-gate1-asset-records`
+**Active branch:** `agent/lc01-gate2-registry-persistence`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
@@ -26,11 +26,11 @@ LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP
 
 LP05 — Representative Dependency Extraction is complete and accepted on `main`. Exact final head `8abb9fad959268ee00c32e046ede13d852883fa4` passed Studio run 144 and baseline run 150 in Debug and Release before independent project-owner review and squash merge through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
 
-LC01 — Asset Identity and Source Tracking is active on `agent/lc01-gate1-asset-records`. Gate 1 consumes the accepted LP05 graph into versioned project asset records with stable UUIDs, source hashes and dependency relationships. Implementation commit `54107a7cc66fd16c8b8f40d8e9e619bd2b7548e2` passed Studio run 146 with 24/24 tests in Debug and Release, including `RenegadeAssetRegistryTests`, and baseline run 153 in both configurations. Persistence, move recovery, reimport, cooking and UI integration remain outside Gate 1. Exact-final-head CI and independent review remain pending. See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
+LC01 — Asset Identity and Source Tracking is active on `agent/lc01-gate2-registry-persistence`. Gate 1 is accepted on `main`: exact final head `0cd63d844c655eecebaf3f7bf04fdacbad2d50ed` passed Studio run 147 and baseline run 154 in Debug and Release before independent project-owner review and squash merge through PR #34 at `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`. Gate 2 adds the fixed root-level `AssetRegistry.renegade-assets` document, canonical reload validation and journaled Project Open recovery; authoritative CI and independent review remain pending. See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 
-- Current main merge commit: `fec9b521884d1a8e9017b8bac574b0ef615ca6cd` (PR #33)
+- Current main merge commit: `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f` (PR #34)
 
 The four Windows PR checks completed successfully on the corrected PR #24 head:
 

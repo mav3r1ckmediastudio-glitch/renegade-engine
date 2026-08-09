@@ -266,8 +266,21 @@ Runtime-support nodes are not admitted into the project asset registry.
 
 The versioned `renegade-asset-registry` JSON format is deterministic and
 validates project ownership, unique IDs and paths, complete source metadata
-and referential integrity. Gate 1 serializes and reloads this contract but
-does not yet choose or mutate an authoritative on-disk project location.
+and referential integrity.
+
+LC01 Gate 2 fixes the authoritative document at project-root
+`AssetRegistry.renegade-assets`. `WriteAssetRegistry` serializes canonical
+bytes and commits them through `ProjectDocumentTransaction` with the project
+root as its containment boundary and `Intermediate/Transactions` as its
+journal directory. The staged validator reparses the file, confirms project
+ownership and requires both canonical and exact-requested bytes. Unchanged
+writes use the transaction's validated no-op path.
+
+`ReadAssetRegistry` rejects missing, cross-project and non-canonical documents.
+An interrupted registry write leaves the normal project transaction journal;
+`ProjectService::OpenProject` already recovers all such journals before it
+reads or activates the project, so registry persistence does not introduce a
+second recovery system.
 
 ### Tools
 
