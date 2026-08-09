@@ -448,6 +448,17 @@ namespace renegade::bridge
             "project.startup_flow");
         EmitPath(emit, document.startupScreen, DependencyClass::RuntimeScreenDocument,
             "project.startup_screen");
+        for (std::size_t index = 0; index < document.alwaysInclude.size(); ++index)
+        {
+            DependencyCandidate candidate = document.alwaysInclude[index];
+            if (candidate.declaredPath.empty())
+                continue;
+            candidate.requirement = DependencyRequirement::Required;
+            if (candidate.provenance.empty())
+                candidate.provenance =
+                    "project.always_include[" + std::to_string(index) + "]";
+            emit(candidate);
+        }
         error.clear();
         return true;
     }
@@ -721,5 +732,47 @@ namespace renegade::bridge
             }
         }
         graph_.edges.push_back({source.id, targetId, candidate.provenance});
+    }
+
+    namespace
+    {
+        constexpr std::array<std::pair<DependencyClass, const char*>, 13>
+            DependencyClassNames = {{
+                {DependencyClass::ProjectDocument, "project_document"},
+                {DependencyClass::StoryFlowDocument, "story_flow_document"},
+                {DependencyClass::RuntimeScreenDocument, "runtime_screen_document"},
+                {DependencyClass::Scene, "scene"},
+                {DependencyClass::ImportedContent, "imported_content"},
+                {DependencyClass::Texture, "texture"},
+                {DependencyClass::Audio, "audio"},
+                {DependencyClass::Video, "video"},
+                {DependencyClass::Font, "font"},
+                {DependencyClass::Script, "script"},
+                {DependencyClass::Data, "data"},
+                {DependencyClass::GeneratedData, "generated_data"},
+                {DependencyClass::RuntimeSupport, "runtime_support"},
+            }};
+    }
+
+    const char* DependencyClassName(const DependencyClass dependencyClass) noexcept
+    {
+        for (const auto& entry : DependencyClassNames)
+            if (entry.first == dependencyClass)
+                return entry.second;
+        return "";
+    }
+
+    bool TryParseDependencyClassName(
+        const std::string& name, DependencyClass& dependencyClass) noexcept
+    {
+        for (const auto& entry : DependencyClassNames)
+        {
+            if (name == entry.second)
+            {
+                dependencyClass = entry.first;
+                return true;
+            }
+        }
+        return false;
     }
 }

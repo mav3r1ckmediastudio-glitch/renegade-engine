@@ -201,6 +201,18 @@ namespace
         stream << "startup_flow = " << metadata.startupFlow << '\n';
         stream << "startup_screen_id = " << metadata.startupScreenId << '\n';
         stream << "startup_screen = " << metadata.startupScreen << '\n';
+        if (!metadata.alwaysInclude.empty())
+        {
+            stream << "\n[dependencies]\n";
+            stream << "always_include = ";
+            for (std::size_t index = 0; index < metadata.alwaysInclude.size(); ++index)
+            {
+                if (index != 0)
+                    stream << ",";
+                stream << metadata.alwaysInclude[index];
+            }
+            stream << '\n';
+        }
         const std::string text = stream.str();
         return std::vector<std::uint8_t>(text.begin(), text.end());
     }
@@ -217,7 +229,8 @@ namespace
             actual.startupFlowId == expected.startupFlowId &&
             actual.startupFlow == expected.startupFlow &&
             actual.startupScreenId == expected.startupScreenId &&
-            actual.startupScreen == expected.startupScreen;
+            actual.startupScreen == expected.startupScreen &&
+            actual.alwaysInclude == expected.alwaysInclude;
     }
 
     fs::path ProjectTransactionDirectory(const fs::path& root)
@@ -262,6 +275,25 @@ namespace renegade::bridge
             document.startupScene = metadata.startupScene;
             document.startupFlow = metadata.startupFlow;
             document.startupScreen = metadata.startupScreen;
+            document.alwaysInclude.clear();
+            document.alwaysInclude.reserve(metadata.alwaysInclude.size());
+            for (const auto& entry : metadata.alwaysInclude)
+            {
+                // ReadProject already validated this exact "class:path" shape
+                // before it ever reached ProjectMetadata; a malformed entry
+                // here would mean ReadProject's own contract was violated,
+                // not a recoverable per-entry condition, so this intentionally
+                // does not re-validate or silently skip.
+                const auto separator = entry.find(':');
+                DependencyCandidate candidate;
+                DependencyClass parsedClass{};
+                TryParseDependencyClassName(
+                    entry.substr(0, separator), parsedClass);
+                candidate.declaredPath = entry.substr(separator + 1);
+                candidate.dependencyClass = parsedClass;
+                candidate.requirement = DependencyRequirement::Required;
+                document.alwaysInclude.push_back(std::move(candidate));
+            }
             error.clear();
             return true;
         };
@@ -578,6 +610,28 @@ namespace renegade::bridge
                 return false;
             }
 
+            std::vector<std::string> alwaysInclude;
+            if (projectFile.HasSection("dependencies"))
+            {
+                const auto& dependencies = projectFile.GetSection("dependencies");
+                for (const auto& entry : dependencies.GetTextArray("always_include"))
+                {
+                    const auto separator = entry.find(':');
+                    renegade::bridge::DependencyClass parsedClass{};
+                    if (separator == std::string::npos ||
+                        !renegade::bridge::TryParseDependencyClassName(
+                            entry.substr(0, separator), parsedClass) ||
+                        !IsSafeRelativePath(
+                            fs::u8path(entry.substr(separator + 1))))
+                    {
+                        error = "The project descriptor contains an invalid "
+                            "always-include dependency declaration: " + entry;
+                        return false;
+                    }
+                    alwaysInclude.push_back(entry);
+                }
+            }
+
             const fs::path root = descriptor.parent_path();
             const fs::path startupPath = (root / startupScene).lexically_normal();
             if (requireStartupScene && !fs::is_regular_file(startupPath))
@@ -597,6 +651,7 @@ namespace renegade::bridge
             metadata.startupFlow = startupFlow.generic_u8string();
             metadata.startupScreenId = startupScreenId;
             metadata.startupScreen = startupScreen.generic_u8string();
+            metadata.alwaysInclude = std::move(alwaysInclude);
             error.clear();
             return true;
         }
@@ -714,6 +769,21 @@ namespace renegade::bridge
         {
             lastError_ = "Could not write an invalid startup Flow or Runtime screen reference.";
             return false;
+        }
+
+        for (const auto& entry : metadata.alwaysInclude)
+        {
+            const auto separator = entry.find(':');
+            DependencyClass parsedClass{};
+            if (separator == std::string::npos ||
+                !TryParseDependencyClassName(
+                    entry.substr(0, separator), parsedClass) ||
+                !IsSafeRelativePath(fs::u8path(entry.substr(separator + 1))))
+            {
+                lastError_ = "Could not write an invalid always-include "
+                    "dependency declaration: " + entry;
+                return false;
+            }
         }
 
         std::error_code pathError;

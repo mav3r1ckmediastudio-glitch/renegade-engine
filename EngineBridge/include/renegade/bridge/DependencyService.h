@@ -150,6 +150,17 @@ namespace renegade::bridge
         std::string startupScene;
         std::string startupFlow;
         std::string startupScreen;
+        // Gate 5: paths the project descriptor declares must remain in the
+        // dependency closure regardless of whether any scene, flow or screen
+        // document currently references them (e.g. a fallback texture or a
+        // required runtime font). Each entry carries its own declared class,
+        // matching every other typed provider in this file -- "always
+        // include" is a declared project-level fact about a specific kind of
+        // asset, never inferred from a path's extension. Each entry becomes
+        // its own graph root candidate with DependencyRequirement::Required,
+        // the same way startupScene/startupFlow/startupScreen already do;
+        // there is no separate provider type for this.
+        std::vector<DependencyCandidate> alwaysInclude;
     };
 
     struct StoryFlowDependencyDocument
@@ -309,4 +320,15 @@ namespace renegade::bridge
     [[nodiscard]] DependencyPathResult ResolveDependencyPath(
         const std::string& projectRoot,
         const std::string& declaredPath);
+
+    // Gate 5: a stable, lowercase snake_case textual name for each
+    // DependencyClass, used only where a class must be declared in a
+    // human-authored text format (the project descriptor's "always_include"
+    // entries). This is not a general string<->class inference mechanism;
+    // callers still declare a type, they simply declare it by name in a text
+    // file instead of by constructing an enum value directly in code.
+    [[nodiscard]] const char* DependencyClassName(
+        DependencyClass dependencyClass) noexcept;
+    [[nodiscard]] bool TryParseDependencyClassName(
+        const std::string& name, DependencyClass& dependencyClass) noexcept;
 }
