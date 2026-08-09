@@ -3,6 +3,7 @@
 #include <WickedEngine.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -681,24 +682,153 @@ int main()
                 return diagnostic.code == DependencyDiagnosticCode::OutsideProject;
             });
         if (outsideProjectCount == 0)
-        {
-            std::cerr << "DEBUG runtimeAbsoluteGrassPath=" << runtimeAbsoluteGrassPath << '\n';
-            std::cerr << "DEBUG diagnostics.size()=" << terrainGraph.diagnostics.size() << '\n';
-            for (const auto& diagnostic : terrainGraph.diagnostics)
-                std::cerr << "DEBUG diag code=" << static_cast<int>(diagnostic.code)
-                    << " path=" << diagnostic.path
-                    << " message=" << diagnostic.message << '\n';
-            std::cerr << "DEBUG nodes.size()=" << terrainGraph.nodes.size() << '\n';
-            for (const auto& node : terrainGraph.nodes)
-                std::cerr << "DEBUG node path=" << node.projectRelativePath << '\n';
             return Fail("runtime-absolute terrain material path was not "
                 "diagnosed as outside the project");
-        }
         // Only the scene root node itself; the rejected absolute texture
         // path must never have become a graph node.
         if (terrainGraph.nodes.size() != 1)
             return Fail("an outside-project terrain path incorrectly "
                 "became a dependency node");
+    }
+
+    // Gate 5 Imported content: a raw, un-imported .gltf/.glb source file
+    // declaring its own external buffer/image dependencies. This is
+    // distinct from ImportService, which bakes GLTF into an embedded scene
+    // and never persists the source's own external paths -- see
+    // GltfDependencyDocument's declaration for the full reasoning.
+    {
+        const auto gltfReader = MakeGltfDependencyReader();
+
+        // -- ASCII (.gltf): external buffer, one external image with a
+        // percent-encoded space, one bufferView-based image (embedded, must
+        // not become a dependency), one data-URI image (embedded, must not
+        // become a dependency), and a missing external buffer to prove a
+        // missing declared dependency is diagnosed, never a load failure.
+        const fs::path gltfPath = root / "Content/Models/Prop.gltf";
+        {
+            std::ofstream gltfFile(gltfPath);
+            gltfFile << R"({
+  "asset": { "version": "2.0" },
+  "buffers": [
+    { "uri": "Prop.bin", "byteLength": 4 },
+    { "uri": "Missing.bin", "byteLength": 4 }
+  ],
+  "images": [
+    { "uri": "albedo%20base.png" },
+    { "bufferView": 0 },
+    { "uri": "data:image/png;base64,AAAA" }
+  ]
+})";
+        }
+        std::ofstream(root / "Content/Models/Prop.bin") << "fixt";
+        std::ofstream(root / "Content/Models/albedo base.png") << "fixture";
+        // "Missing.bin" is intentionally never created.
+
+        GltfDependencyDocument directRead;
+        std::string gltfReadError;
+        if (!gltfReader(gltfPath.generic_u8string(), directRead, gltfReadError))
+            return Fail(("glTF reader rejected a well-formed fixture: " +
+                gltfReadError).c_str());
+        if (directRead.references.size() != 3)
+            return Fail("glTF reader did not emit exactly the three "
+                "external references (one missing buffer, one present "
+                "buffer, one present image)");
+        const bool sawDecodedImagePath = std::any_of(
+            directRead.references.begin(), directRead.references.end(),
+            [](const DependencyCandidate& candidate)
+            {
+                return candidate.declaredPath.find("albedo base.png") !=
+                    std::string::npos;
+            });
+        if (!sawDecodedImagePath)
+            return Fail("glTF reader did not percent-decode an image URI");
+        for (const auto& candidate : directRead.references)
+            if (candidate.declaredPath.find("data:") != std::string::npos)
+                return Fail("glTF reader emitted a data-URI as a file dependency");
+
+        std::string gltfError;
+        GltfDependencyProvider gltfProvider(gltfReader);
+        DependencyCollector gltfCollector(root.generic_u8string());
+        if (!gltfCollector.RegisterProvider(gltfProvider, gltfError) ||
+            !gltfCollector.AddRoot({"Content/Models/Prop.gltf",
+                DependencyClass::ImportedContent, DependencyRequirement::Required,
+                "fixture.gltf"}, gltfError) ||
+            !gltfCollector.DiscoverRootDependencies(gltfError))
+            return Fail(("Gate 5 glTF provider failed: " + gltfError).c_str());
+
+        const auto& gltfGraph = gltfCollector.Graph();
+        // Root + present buffer + present image = 3 nodes. The missing
+        // buffer still becomes a node (declared dependencies that don't
+        // exist are still real graph nodes, per every other provider's
+        // established behaviour), so 4 nodes total.
+        if (gltfGraph.nodes.size() != 4)
+            return Fail("glTF provider graph did not contain the expected "
+                "node count");
+        const auto missingBufferCount = std::count_if(
+            gltfGraph.diagnostics.begin(), gltfGraph.diagnostics.end(),
+            [](const DependencyDiagnostic& diagnostic)
+            {
+                return diagnostic.code == DependencyDiagnosticCode::Missing &&
+                    diagnostic.path.find("Missing.bin") != std::string::npos;
+            });
+        if (missingBufferCount != 1)
+            return Fail("glTF provider did not diagnose the missing "
+                "external buffer as Missing rather than failing outright");
+        const auto importedContentCount = std::count_if(
+            gltfGraph.nodes.begin(), gltfGraph.nodes.end(),
+            [](const DependencyNode& node)
+            {
+                return node.dependencyClass == DependencyClass::ImportedContent;
+            });
+        // The root itself plus the two declared buffers are all
+        // ImportedContent; the image is Texture.
+        if (importedContentCount != 3)
+            return Fail("glTF buffer references were not classified as "
+                "ImportedContent");
+
+        // -- GLB (binary container): the same JSON content, wrapped in a
+        // minimal valid GLB chunk container, to prove the header/chunk
+        // unwrapping path also works, not just the ASCII path.
+        const std::string glbJsonText =
+            R"({"asset":{"version":"2.0"},)"
+            R"("buffers":[{"uri":"Prop.bin","byteLength":4}],)"
+            R"("images":[{"uri":"albedo%20base.png"}]})";
+        std::string paddedJson = glbJsonText;
+        while (paddedJson.size() % 4 != 0)
+            paddedJson.push_back(' ');
+
+        const fs::path glbPath = root / "Content/Models/Prop.glb";
+        {
+            std::ofstream glbFile(glbPath, std::ios::binary);
+            const auto writeUint32 = [&glbFile](const std::uint32_t value)
+            {
+                const unsigned char bytes[4] = {
+                    static_cast<unsigned char>(value & 0xFF),
+                    static_cast<unsigned char>((value >> 8) & 0xFF),
+                    static_cast<unsigned char>((value >> 16) & 0xFF),
+                    static_cast<unsigned char>((value >> 24) & 0xFF),
+                };
+                glbFile.write(reinterpret_cast<const char*>(bytes), 4);
+            };
+            const std::uint32_t totalLength = static_cast<std::uint32_t>(
+                12 + 8 + paddedJson.size());
+            glbFile.write("glTF", 4);
+            writeUint32(2);
+            writeUint32(totalLength);
+            writeUint32(static_cast<std::uint32_t>(paddedJson.size()));
+            glbFile.write("JSON", 4);
+            glbFile.write(paddedJson.data(),
+                static_cast<std::streamsize>(paddedJson.size()));
+        }
+
+        GltfDependencyDocument glbRead;
+        std::string glbReadError;
+        if (!gltfReader(glbPath.generic_u8string(), glbRead, glbReadError))
+            return Fail(("glTF reader rejected a well-formed GLB fixture: " +
+                glbReadError).c_str());
+        if (glbRead.references.size() != 2)
+            return Fail("GLB reader did not emit the expected two "
+                "references from the unwrapped JSON chunk");
     }
 
     fs::remove_all(root, ignored);

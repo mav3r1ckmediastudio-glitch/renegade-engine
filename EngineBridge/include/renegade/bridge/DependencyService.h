@@ -270,6 +270,45 @@ namespace renegade::bridge
         DependencyCandidate candidate;
     };
 
+    // Gate 5: a raw, un-imported .gltf/.glb source file sitting in the
+    // project as its own dependency-bearing document. This is distinct from
+    // ImportService, which bakes GLTF content into an embedded Wicked scene
+    // at import time and never persists the source's own external resource
+    // paths -- once a WISCENE exists, Gate 4's typed walker already covers
+    // its baked-in resources. This provider covers the other case: the
+    // source file itself, before or independent of any import, declaring
+    // its own external buffer (.bin) and image dependencies per the glTF
+    // spec. It reads the glTF/GLB JSON structure directly (nlohmann::json,
+    // already vendored via WickedEngine/Editor/tiny_gltf.h and linked into
+    // this library through ModelImporter_GLTF.cpp) rather than using
+    // tinygltf's own Model-loading API, because that API treats a missing
+    // external .bin as a hard parse failure -- the opposite of this
+    // project's "missing declared dependency is a diagnostic, never a load
+    // failure" contract that every other provider follows via
+    // ResolveDependencyPath's own independent existence check.
+    struct GltfDependencyDocument
+    {
+        std::vector<DependencyCandidate> references;
+    };
+
+    using GltfDependencyReader = std::function<bool(
+        const std::string&, GltfDependencyDocument&, std::string&)>;
+
+    [[nodiscard]] GltfDependencyReader MakeGltfDependencyReader();
+
+    class GltfDependencyProvider final : public IDependencyProvider
+    {
+    public:
+        explicit GltfDependencyProvider(GltfDependencyReader reader);
+        [[nodiscard]] const char* Name() const noexcept override;
+        [[nodiscard]] std::uint32_t Version() const noexcept override;
+        [[nodiscard]] bool Supports(DependencyClass dependencyClass) const noexcept override;
+        [[nodiscard]] bool Discover(const DependencyProviderContext& context,
+            const DependencyCandidateSink& emit, std::string& error) const override;
+    private:
+        GltfDependencyReader reader_;
+    };
+
     class DeclaredReferenceDependencyProvider final : public IDependencyProvider
     {
     public:
