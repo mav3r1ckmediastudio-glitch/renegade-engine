@@ -143,6 +143,14 @@ Imported-source/BIN discovery, terrain/generated data and Always Include remain
 Gate 5. Lua source policy and computed-target diagnostics remain Gate 6.
 Transitive traversal and graph serialization remain Gate 7.
 
+Gate 4's remote implementation commit
+`3d888de02c97a83ada27ba4f3d17f8a75053fd53` passed the authoritative
+`Renegade Studio` GitHub Actions workflow run 126 in both Debug and Release.
+Each configuration passed the complete 23-test CTest suite, including the
+extended `RenegadeDependencyTests`. The separate pinned-Wicked baseline run 127
+also passed in Debug and Release. This is the accepted build/test proof because
+the project owner's local CPU is confirmed unstable under compilation load.
+
 ## Gate 2 correction — Windows Unicode path identity
 
 The original Gate 2 resolver used the filesystem-resolved spelling as graph
