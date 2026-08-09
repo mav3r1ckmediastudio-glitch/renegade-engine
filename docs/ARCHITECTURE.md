@@ -246,6 +246,14 @@ The serializer validates root and edge references, then emits versioned UTF-8
 JSON with independently sorted roots, nodes, edges and diagnostics. This is a
 read-only interchange format for LC01; it performs no copying or cooking.
 
+Gate 8 proves that boundary from the assembled Studio package rather than only
+from the build tree. A console-only proof executable and fixed representative
+mini-project ship under `Tools` and `Proof/LP05` in the evidence package. The
+Windows build invokes the packaged executable twice as separate processes,
+compares the graph files byte-for-byte and verifies SHA-256 records for every
+fixture input before and after. Outputs are written outside the project fixture.
+This is packaging of the proof harness, not asset cooking or game packaging.
+
 ### Tools
 
 Import, shader, packaging, migration, feature-inventory, and validation tools.

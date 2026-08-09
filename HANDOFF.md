@@ -4,9 +4,9 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Current main baseline:** `ba7d37b21c6c01740a648821127d293e0b4e8c83`
+**Current main baseline:** `8ef6250a4b8c3d33c498919cdf803eebf7669735`
 
-**Active branch:** `agent/lp05-gate7-closure`
+**Active branch:** `agent/lp05-gate8-packaged-proof`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
@@ -24,11 +24,11 @@ Temporary LP04 helper patch files may remain untracked. Do not use `git clean` a
 
 LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP04 accepted behaviour" below for the summary and `docs/LP04_TEST_LEVEL_ACCEPTANCE.md` for the full record.
 
-LP05 — Representative Dependency Extraction is active. Gates 1-6 are merged, independently reviewed and CI-proven. Gate 7 implements deterministic recursive closure, content hashes and versioned machine-readable JSON on `agent/lp05-gate7-closure`; authoritative CI and independent verification remain pending. See "LP05 progress" below and `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`.
+LP05 — Representative Dependency Extraction is at its final gate. Gates 1-7 are merged, independently reviewed and CI-proven. Gate 8 adds separate-process determinism and packaged read-only evidence on `agent/lp05-gate8-packaged-proof`; authoritative CI and independent verification remain pending. See "LP05 progress" below and `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 
-- Current main merge commit: `ba7d37b21c6c01740a648821127d293e0b4e8c83` (PR #31)
+- Current main merge commit: `8ef6250a4b8c3d33c498919cdf803eebf7669735` (PR #32)
 
 The four Windows PR checks completed successfully on the corrected PR #24 head:
 
@@ -131,7 +131,9 @@ Gate 5 final head `974abac4a39c91f7baf3ccc29cc14a5910e836a4` passed Renegade Stu
 
 The representative Lua fixture covers all five diagnostic codes in deterministic order: `OutsideProject`, `CaseCollision`, `Missing`, `Duplicate` and `UndeclaredComputedReference`. It proves duplicate/collision node reuse, source attribution, byte-identical Lua input and that a provider failure leaks neither candidates nor diagnostics. Implementation commit `eb25d46bdb967f82c136ee030b216c656a220d54` passed Renegade Studio run 138 in Debug and Release with 23/23 tests in each configuration; final head `30730cf4f397de730588a722d4dcd08b21f00619` passed Studio run 139 and pinned-Wicked baseline run 142 in both configurations. The project owner independently reviewed that head before squash-merging PR #31 at `ba7d37b21c6c01740a648821127d293e0b4e8c83`.
 
-**Gate 7 is implemented on `agent/lp05-gate7-closure`.** `DependencyCollector::DiscoverTransitiveDependencies` walks the dynamically growing graph once per `(node, provider)` pair, skips missing nodes, terminates safely across cycles and preserves transactional provider output. Existing files receive deterministic `fnv1a64` content hashes; missing nodes carry the explicit `missing` marker. `SerializeDependencyGraph` validates referential integrity and emits stable versioned UTF-8 JSON with sorted roots, nodes, edges and diagnostics. Tests connect the production Project, Story Flow, Runtime Screen, WISCENE and Lua provider types in one project → flow → scenes → Lua closure, then separately prove two cycles, a missing leaf, idempotent repeated traversal, stable serialization and invalid-edge rejection. Authoritative CI and independent verification remain pending. Gate 8 retains repeatability and packaged read-only proof.
+**Gate 7 is accepted on `main`.** `DependencyCollector::DiscoverTransitiveDependencies` walks the dynamically growing graph once per `(node, provider)` pair, skips missing nodes, terminates safely across cycles and preserves transactional provider output. Existing files receive deterministic `fnv1a64` content hashes; missing nodes carry the explicit `missing` marker. `SerializeDependencyGraph` validates referential integrity and emits stable versioned UTF-8 JSON with sorted roots, nodes, edges and diagnostics. Exact PR head `e3defa0e9348712ea50057386a571f13cfbce955` passed Studio run 141 with 23/23 tests in Debug and Release and baseline run 145 in both configurations. The project owner independently reviewed that head before squash-merging PR #32 at `8ef6250a4b8c3d33c498919cdf803eebf7669735`.
+
+**Gate 8 is implemented on `agent/lp05-gate8-packaged-proof`.** A console-only dependency proof executable and fixed mini-project are copied into every assembled Studio Debug/Release package. The build launches that packaged executable twice as separate processes, requires byte-identical graph JSON and compares SHA-256 records for every fixture file before and after extraction. The normal build-result evidence records process count, graph hash/size and the complete source-file inventory. Implementation commit `0cd5a649f03120f64e1153e493b7a85fecdda9d3` passed Studio run 143 with 23/23 tests plus two successful packaged proof processes in both Debug and Release; pinned-Wicked baseline run 148 passed both configurations. The final evidence head adds the graph hash directly to each job log for cross-configuration comparison. Gate 8 and LP05 remain unaccepted until exact-final-head CI and independent verification pass.
 
 ### LP05 architectural decision
 

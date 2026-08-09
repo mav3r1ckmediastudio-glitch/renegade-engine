@@ -10,7 +10,7 @@ Phase 3 established the Renegade Studio and Runtime foundations needed to move i
 
 LP04 is complete and accepted. Studio can launch the real standalone Runtime from the current live, unsaved scene through a disposable snapshot, wait for an explicit Runtime READY handshake, and STOP the Runtime cleanly without forcing an authoritative scene save.
 
-The next bounded milestone is **LP05 — Representative Dependency Extraction**. LP05 is an asset-pipeline foundation slice: establish a deterministic Renegade-owned dependency graph for representative project/runtime content before asset cooking, copying, packaging, or a full Content Browser workflow is attempted.
+The active bounded milestone is **LP05 Gate 8 — Packaged Repeatability and Read-Only Proof**. Gates 1-7 established the deterministic Renegade-owned dependency graph; Gate 8 must prove byte-identical separate-process output and unchanged project inputs from the assembled Debug/Release Studio packages before LP05 closes.
 
 LP05 must use a **Renegade-owned, read-only typed walker** over the pinned Wicked ECS/component structures. Do not modify Wicked source merely to expose its internal serializer resource-registration state.
 
@@ -85,15 +85,15 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-**LP05 — Representative Dependency Extraction**
+**LP05 Gate 8 — Packaged Repeatability and Read-Only Proof**
 
-Acceptance is bounded to dependency discovery and evidence. It must not silently expand into the full Content Browser, asset cooker, packaging pipeline or a Wicked source modification.
+Acceptance is bounded to executing the accepted dependency graph from the assembled Studio package twice per configuration, comparing byte-identical machine-readable output and proving every fixture input is unchanged. It must not silently expand into the full Content Browser, asset cooker, game packaging pipeline or a Wicked source modification.
 
 The architectural rule for WISCENE native-resource extraction is:
 
 > Renegade owns the extraction surface. Read the required Wicked component fields through the public/native scene and ECS structures, build Renegade-owned dependency records, and keep the pinned Wicked source untouched unless a later gate proves there is no viable external route.
 
-After LP05, continue the lifecycle in dependency order rather than jumping directly to broad UI work. Asset identity/source tracking and subsequent packaging/cooking work should consume the dependency model proved here.
+After LP05, continue with LC01 in dependency order rather than jumping directly to broad UI work. Asset identity/source tracking and subsequent packaging/cooking work should consume the dependency model proved here.
 
 ## Status rules
 

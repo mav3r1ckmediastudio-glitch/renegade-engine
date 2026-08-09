@@ -302,9 +302,37 @@ The Gate 7 fixture connects the production Project, Story Flow, Runtime Screen,
 WISCENE and Lua provider types in one project → Story Flow → two scenes → root
 Lua → nested Lua closure. A focused traversal fixture also proves scene and Lua
 cycles, a missing leaf, complete content hashes, idempotence, stable JSON and
-invalid-edge rejection. Gate 7 does not copy, cook or package content.
-Authoritative Debug/Release CI and independent verification remain pending;
-Gate 8 retains repeated-process and packaged read-only proof.
+invalid-edge rejection. Exact PR head
+`e3defa0e9348712ea50057386a571f13cfbce955` passed Studio run 141 with 23/23
+tests in Debug and Release and pinned-Wicked baseline run 145 in both
+configurations. The project owner independently reviewed that exact head before
+squash-merging PR #32 at `8ef6250a4b8c3d33c498919cdf803eebf7669735`.
+Gate 7 is accepted.
+
+## Gate 8 implementation boundary
+
+Gate 8 packages `RenegadeDependencyProcessFixture.exe` and a fixed representative
+mini-project into every assembled Studio Debug/Release artifact. The executable
+uses the accepted Gate 7 collector and serializer to produce the complete
+project → flow → scenes → scripts/resources closure, including cycles and a
+missing leaf. It writes only to an explicitly supplied output path outside the
+project root.
+
+`Build-Studio-Windows.ps1` launches the packaged executable twice as two real
+processes. It fails unless both versioned graph JSON files have identical byte
+lengths and SHA-256 hashes. It also records every packaged fixture file's
+relative path, size and SHA-256 before extraction and fails if the complete
+post-extraction inventory differs. The standard build-result JSON retains the
+process count, graph record and source inventory for independent inspection.
+
+This packages and executes the proof harness; it does not copy/cook project
+dependencies or build a game. Implementation commit
+`0cd5a649f03120f64e1153e493b7a85fecdda9d3` passed Studio run 143 with 23/23
+tests plus two successful packaged proof processes in both Debug and Release;
+pinned-Wicked baseline run 148 passed both configurations. The final evidence
+head prints the graph SHA-256 and byte count into each job log for direct
+Debug/Release comparison. Gate 8 and LP05 remain pending until exact-final-head
+CI and an independent reviewer accept the same commit.
 
 ## Gate 2 correction — Windows Unicode path identity
 
