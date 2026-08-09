@@ -282,9 +282,19 @@ An interrupted registry write leaves the normal project transaction journal;
 reads or activates the project, so registry persistence does not introduce a
 second recovery system.
 
+Transaction containment compares filesystem-resolved canonical identities,
+not only lexical path strings. This is required on Windows because one real
+directory can appear through both an 8.3 short name and its long name; recovery
+must accept those aliases without accepting a genuine escape or reparse-point
+redirect outside the project root.
+
 ### Tools
 
 Import, shader, packaging, migration, feature-inventory, and validation tools.
+Native Windows build commands are logged without placing the process inside a
+PowerShell output pipeline. The exit status is captured before output replay,
+and CI executes a deliberate non-zero child-process probe so test failures
+cannot be represented as successful build evidence.
 
 ## Core rules
 

@@ -4,15 +4,18 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Current main baseline:** `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`
+**Current main baseline:** `bdb1fb98fcebc8eca5b8fb143ea8eec0cae5ec9c`
 
-**Active branch:** `agent/lc01-gate2-registry-persistence`
+**Active branch:** `agent/lc01-gate2-corrective`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Critical local safety rule
 
-`Tools/Windows-Build.Common.ps1` contains an unrelated local modification and must not be staged, reset, reverted, stashed, cleaned or overwritten as part of lifecycle work.
+The project owner's clone contains an unrelated local modification to
+`Tools/Windows-Build.Common.ps1`. PR #36 necessarily changes the upstream copy
+to repair native exit-code propagation. Preserve the owner's local bytes before
+pulling and reconcile that file manually; do not reset, clean or discard them.
 
 Expected SHA-256:
 
@@ -26,11 +29,24 @@ LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP
 
 LP05 — Representative Dependency Extraction is complete and accepted on `main`. Exact final head `8abb9fad959268ee00c32e046ede13d852883fa4` passed Studio run 144 and baseline run 150 in Debug and Release before independent project-owner review and squash merge through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
 
-LC01 — Asset Identity and Source Tracking is active on `agent/lc01-gate2-registry-persistence`. Gate 1 is accepted on `main`: exact final head `0cd63d844c655eecebaf3f7bf04fdacbad2d50ed` passed Studio run 147 and baseline run 154 in Debug and Release before independent project-owner review and squash merge through PR #34 at `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`. Gate 2 adds the fixed root-level `AssetRegistry.renegade-assets` document, canonical reload validation and journaled Project Open recovery. Implementation commit `30dc1500c98be70b82a08696e8b04f5a396d0ad9` passed Studio run 149 with 25/25 tests in Debug and Release, including `RenegadeAssetRegistryPersistenceTests`, and baseline run 157 in both configurations. Exact-final-head CI and independent review remain pending. See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
+LC01 — Asset Identity and Source Tracking is active on
+`agent/lc01-gate2-corrective`. Gate 1 is accepted on `main`: exact final head
+`0cd63d844c655eecebaf3f7bf04fdacbad2d50ed` passed Studio run 147 and baseline
+run 154 before independent review and squash merge through PR #34 at
+`580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`. PR #35 added Gate 2 persistence
+and was squash-merged at `bdb1fb98fcebc8eca5b8fb143ea8eec0cae5ec9c`,
+but its acceptance was invalid: raw CTest output showed 24/25 with
+`RenegadeAssetRegistryPersistenceTests` failing while PowerShell incorrectly
+recorded PASS. Corrective PR #36 fixes both faults. Candidate head
+`09601bc0f281cadd61d859d2c37249839840d2bc` passed Studio run 156 with a real
+25/25 in Debug and Release, including registry recovery, the explicit native
+exit-code probe passed in both configurations, and baseline run 172 passed
+Debug and Release with Wicked unchanged. Independent exact-head review and
+squash merge remain pending. See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 
-- Current main merge commit: `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f` (PR #34)
+- Current main merge commit: `bdb1fb98fcebc8eca5b8fb143ea8eec0cae5ec9c` (PR #35; Gate 2 corrective PR #36 pending)
 
 The four Windows PR checks completed successfully on the corrected PR #24 head:
 

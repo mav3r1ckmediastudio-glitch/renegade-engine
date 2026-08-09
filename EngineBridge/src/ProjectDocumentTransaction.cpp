@@ -118,8 +118,22 @@ namespace
 
     bool IsPathWithinRoot(const fs::path& root, const fs::path& path)
     {
-        std::string rootKey = PathKey(root);
-        const std::string pathKey = PathKey(path);
+        // Compare resolved filesystem identities rather than only lexical
+        // spellings. Windows can return the same directory through an 8.3
+        // short path (for example RUNNER~1) and a long path (runneradmin).
+        // weakly_canonical() resolves the existing prefix while retaining a
+        // possibly absent transaction-artifact suffix.
+        std::error_code rootError;
+        std::error_code pathError;
+        const fs::path resolvedRoot = fs::weakly_canonical(root, rootError);
+        const fs::path resolvedPath = fs::weakly_canonical(path, pathError);
+        if (rootError || pathError)
+        {
+            return false;
+        }
+
+        std::string rootKey = PathKey(resolvedRoot);
+        const std::string pathKey = PathKey(resolvedPath);
         if (pathKey == rootKey)
         {
             return true;
@@ -1749,7 +1763,11 @@ namespace renegade::bridge
                             index,
                             "journal_document_outside_allowed_root",
                             "A recovered transaction document escapes its project root: " +
-                                path.generic_u8string());
+                                path.generic_u8string() +
+                                " (allowed root: " +
+                                allowedRoot.generic_u8string() +
+                                ", path key: " + PathKey(path) +
+                                ", root key: " + PathKey(allowedRoot) + ")");
                     }
                 }
             }

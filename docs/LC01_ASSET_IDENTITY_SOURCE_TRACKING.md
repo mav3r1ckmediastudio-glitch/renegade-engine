@@ -116,21 +116,37 @@ different project, or valid but non-canonical JSON, fails closed.
 7. Cross-project and non-canonical documents fail to load.
 8. Debug and Release CI pass with Wicked unchanged.
 
-Gate 2 remains unaccepted until exact-final-head CI and independent review
-both pass.
+Gate 2 remains unaccepted until corrective PR #36 receives independent review
+and is squash-merged.
 
 ### Gate 2 implementation evidence
 
-Implementation commit `30dc1500c98be70b82a08696e8b04f5a396d0ad9`
-passed Renegade Studio run 149 with 25/25 tests in Debug and Release.
-`RenegadeAssetRegistryPersistenceTests` passed in both configurations, and the
-Gate 1 registry suite remained green. Pinned-Wicked baseline run 157 passed
-Debug and Release with Wicked unchanged at
-`3a800b7134aafe58461093c8abb2e274d4e64033`.
+PR #35 was squash-merged at
+`bdb1fb98fcebc8eca5b8fb143ea8eec0cae5ec9c`, but its apparent green Studio
+checks were false positives. Raw CTest output recorded 24/25 in both Debug and
+Release: `RenegadeAssetRegistryPersistenceTests` failed because Windows exposed
+the same temporary project root once through its `RUNNER~1` 8.3 alias and once
+through the long `runneradmin` spelling. Lexical containment rejected the
+journal's own registry path, so Project Open could not roll it back.
 
-This proves the implementation commit. Gate 2 remains unaccepted until the
-documentation-complete exact final head passes CI and receives independent
-review.
+The shared PowerShell command runner also initialized a local
+`$LASTEXITCODE = 0` and piped the native process into `Tee-Object`. The native
+failure status did not replace that local value, allowing CTest's exit code 8
+to be recorded as PASS. Corrective PR #36 removes the native pipeline, captures
+output before replaying it, reads the native status without pre-shadowing it,
+and adds a Windows probe that must observe a deliberate exit code 23.
+
+Recovery containment now compares `weakly_canonical` filesystem identities.
+This accepts Windows short/long aliases of the same real directory, continues
+to reject paths outside the project, and also resolves existing reparse-point
+prefixes before comparison. Candidate head
+`09601bc0f281cadd61d859d2c37249839840d2bc` passed Studio run 156 with an
+explicit 25/25 in Debug and Release; the registry persistence test and the
+exit-code-23 probe passed in both. Baseline run 172 passed both configurations
+with Wicked unchanged at `3a800b7134aafe58461093c8abb2e274d4e64033`.
+
+Gate 2 remains unaccepted until independent review of the corrective final
+head and squash merge of PR #36.
 
 ### Gate 2 exclusions
 

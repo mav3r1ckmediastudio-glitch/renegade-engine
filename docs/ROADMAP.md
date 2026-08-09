@@ -14,7 +14,15 @@ LP05 is complete and accepted. Its deterministic Renegade-owned dependency graph
 
 LC01 Gate 1 is complete and accepted. Exact final head `0cd63d844c655eecebaf3f7bf04fdacbad2d50ed` passed Studio run 147 and baseline run 154 before squash merge through PR #34 at `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`.
 
-The active bounded milestone is **LC01 Gate 2 — Transactional Project Persistence**.
+PR #35 landed LC01 Gate 2 at `bdb1fb98`, but its acceptance was reopened after
+raw Debug and Release logs revealed a real 24/25 result hidden behind green
+jobs. Corrective PR #36 fixes Windows short/long path identity during recovery
+and makes native test-process failures propagate reliably into CI. Candidate
+head `09601bc0` passed a genuine 25/25 in Studio run 156 and both jobs in
+baseline run 172. Independent review and squash merge remain pending.
+
+The active bounded milestone remains **LC01 Gate 2 — Transactional Project
+Persistence corrective close-out**.
 
 ### LC01 Gate 2 target
 
@@ -85,9 +93,12 @@ The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
 
 ## Immediate next gate
 
-**LC01 Gate 2 — Transactional Project Persistence**
+**LC01 Gate 2 — Corrective review and merge**
 
-Acceptance is bounded to committing and reopening the canonical Gate 1 registry through the shared project transaction boundary, proving exact old-byte preservation on failure and automatic Project Open recovery after interruption.
+Acceptance is bounded to independently reviewing corrective PR #36 and
+squash-merging it only if the exact reviewed head retains genuine 25/25 Debug
+and Release Studio evidence plus both pinned-Wicked baseline passes. Gate 3
+does not begin before that correction is accepted on `main`.
 
 The architectural rule is:
 
