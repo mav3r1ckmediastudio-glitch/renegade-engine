@@ -215,12 +215,62 @@ reimport, or change creator content.
 7. No recovery operation reads or writes creator files.
 8. Debug and Release CI pass with Wicked unchanged.
 
-### Gate 4 candidate evidence
+### Gate 4 acceptance evidence
 
-GitHub implementation commit `0e5c00c` adds schema-version-3 recovery tombstones,
-bidirectionally unique move/reappearance matching, provenance survival for
-missing endpoints and deterministic recovery diagnostics. The focused local
-Linux harness passed unique move, genuine loss, tombstone reload, unique
-reappearance, one-to-many ambiguity and many-to-one ambiguity cases. This is
-candidate evidence only: Gate 4 remains unaccepted until the exact published
-head passes authoritative Windows Debug and Release CI and independent review.
+GitHub implementation commit `0e5c00c` added schema-version-3 recovery
+tombstones, bidirectionally unique move/reappearance matching, provenance
+survival for missing endpoints and deterministic recovery diagnostics. Exact
+final head `523f2ac655f891bb9fae979e46f04e85efffe557` passed Studio run 163
+with raw 25/25 in Debug and Release and baseline run 181 in both
+configurations. After independent review, PR #38 was squash-merged as
+`b45de5e369789697dba0fd4502677055b8105c1f`, completing Gate 4 acceptance.
+
+## Gate 5 — Packaged Source-Update/Reopen Proof and LC01 Close-out
+
+Gate 5 assembles the accepted LC01 services into a package-resident proof. A
+fixed mini-project and `RenegadeAssetRegistryProcessFixture.exe` ship inside
+the Studio evidence package. The build copies the fixture into a disposable
+artifact workspace, then launches four independent processes: initial registry
+and provenance commit, reopen after a controlled source-content update, reopen
+after moving that updated source, and a final unchanged reopen.
+
+Every process enters `ProjectService::OpenProject`, uses the production LP05
+collector and `AssetRegistryService` read/refresh/write paths, and emits
+canonical registry evidence outside the working project. The move must retain
+the source UUID; provenance must report the updated source as changed without
+retargeting it; the final two registry evidence files must be byte-identical.
+The immutable packaged fixture is hashed before and after.
+
+Gate 5 remains a proof and close-out gate. It does not invoke reimport, alter an
+imported product, mutate repository/package fixture inputs, add UI, cook/copy a
+standalone dependency closure or begin LP06.
+
+### Gate 5 acceptance
+
+1. The LC01 executable and fixed fixture run from assembled Debug and Release
+   packages, not only the build tree.
+2. Four separate process invocations cross real Project Open and durable
+   project-root registry boundaries.
+3. A controlled source update preserves its UUID and reports stale provenance.
+4. Moving the updated source preserves that same UUID without added/removed
+   identities or speculative relinking.
+5. A final unchanged reopen produces byte-identical canonical registry evidence.
+6. Packaged fixture SHA-256 records are identical before and after; only the
+   disposable working copy and evidence outputs change.
+7. Any child-process, identity, provenance, canonical-byte or fixture-integrity
+   failure propagates non-zero and fails the build.
+8. Raw Debug and Release CTest totals, the packaged proof and both pinned-Wicked
+   baseline jobs pass on the exact final head.
+9. Independent exact-head review and owner squash merge complete LC01.
+
+### Gate 5 candidate evidence
+
+GitHub implementation head `c8bacea05e5aac0823bc5d304631d84c0a411c97`
+passed Studio run 165 with raw 25/25 in Debug and Release. The `init`, `update`,
+`move-reopen` and `verify-reopen` package processes each reported PASS in both
+configurations. Debug and Release emitted the identical final canonical registry
+SHA-256
+`547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`
+at 2,180 bytes. Pinned-Wicked baseline run 184 passed Debug and Release.
+Gate 5 and LC01 remain unaccepted until the exact documentation-complete head
+passes fresh CI, receives independent review and is squash-merged by the owner.

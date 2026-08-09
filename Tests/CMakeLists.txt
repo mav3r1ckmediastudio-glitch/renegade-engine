@@ -74,6 +74,27 @@ set_target_properties(RenegadeDependencyProcessFixture PROPERTIES
 )
 add_dependencies(RenegadeBridgeTests RenegadeDependencyProcessFixture)
 
+# LC01 Gate 5 packaged cross-process source-update/reopen proof. The Windows
+# build copies this executable and its immutable fixture into the assembled
+# Studio package, runs each lifecycle phase in a disposable working copy, and
+# compares canonical registry evidence.
+add_executable(RenegadeAssetRegistryProcessFixture
+    AssetRegistryProcessFixture.cpp
+)
+target_link_libraries(
+    RenegadeAssetRegistryProcessFixture
+    PRIVATE
+        Renegade::EngineBridge
+)
+target_compile_options(RenegadeAssetRegistryProcessFixture
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+set_target_properties(RenegadeAssetRegistryProcessFixture PROPERTIES
+    FOLDER "Renegade/TestFixtures"
+)
+add_dependencies(RenegadeBridgeTests RenegadeAssetRegistryProcessFixture)
+
 add_executable(RenegadePrecipitationTests
     PrecipitationTests.cpp
 )

@@ -302,6 +302,14 @@ tombstones intact. Provenance remains keyed to the retained ID, so a unique
 move changes location without retargeting the import recipe. Refresh remains
 metadata-only and never moves, edits or imports creator files.
 
+LC01 Gate 5 packages a console proof beside a fixed mini-project. The Windows
+build copies that project into artifact-only working state and launches the
+proof as four independent processes around a controlled content update and
+move. Each invocation enters Project Open and uses the production dependency,
+registry and transaction services. Canonical registry evidence and immutable
+fixture hashes make the process boundary and non-mutation claim auditable; this
+is lifecycle proof packaging, not asset cooking or standalone-game packaging.
+
 ### Tools
 
 Import, shader, packaging, migration, feature-inventory, and validation tools.

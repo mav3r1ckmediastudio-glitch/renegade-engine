@@ -4,9 +4,9 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Current main baseline:** `c2ace926ff2486fd3b60e3717bdba6dc8d138217`
+**Current main baseline:** `b45de5e369789697dba0fd4502677055b8105c1f`
 
-**Active branch:** `agent/lc01-gate4-moved-missing-recovery`
+**Active branch:** `agent/lc01-gate5-packaged-reopen-proof`
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
@@ -26,25 +26,31 @@ LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP
 LP05 — Representative Dependency Extraction is complete and accepted on `main`. Exact final head `8abb9fad959268ee00c32e046ede13d852883fa4` passed Studio run 144 and baseline run 150 in Debug and Release before independent project-owner review and squash merge through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
 
 LC01 — Asset Identity and Source Tracking is active on
-`agent/lc01-gate4-moved-missing-recovery`. Gates 1-3 are accepted on `main`:
-Gate 1 merged through PR #34 at `580e5a5`, the corrected Gate 2 merged through
-PR #36 at `489e33d`, and Gate 3 source-to-imported-product provenance merged
-through PR #37 at `c2ace926ff2486fd3b60e3717bdba6dc8d138217`.
+`agent/lc01-gate5-packaged-reopen-proof`. Gates 1-4 are accepted on `main`:
+Gate 1 merged through PR #34 at `580e5a5`, corrected Gate 2 through PR #36 at
+`489e33d`, Gate 3 provenance through PR #37 at `c2ace926`, and Gate 4
+moved/missing recovery through PR #38 at
+`b45de5e369789697dba0fd4502677055b8105c1f`. Gate 4 exact head `523f2ac`
+passed raw 25/25 in Studio Debug and Release (run 163) and baseline run 181 in
+both configurations before independent review and squash merge.
 
-Gate 4 GitHub implementation commit `0e5c00c` adds schema-version-3 missing-asset
-tombstones and identity recovery only when the evidence is unique in both
-directions. It preserves ID-keyed provenance across a move, keeps provenance
-valid while an endpoint is tombstoned, and reports ambiguous candidates without
-speculative relinking. `RenegadeAssetRegistryTests` now covers unique move,
-genuine loss, byte-identical tombstone reload, unique reappearance, one old
-identity matching multiple candidates, and one candidate matching multiple old
-identities. An isolated Linux harness passed; authoritative Windows Debug and
-Release CI and independent review remain pending. See
+Gate 5 packages an LC01-specific process fixture and fixed mini-project into
+the Studio evidence package. Four independent invocations prove initial
+registry/provenance persistence, Project Open after source-content update,
+Project Open after moving that updated source, and byte-identical final reopen.
+All controlled mutations occur in an artifact-only working copy; the packaged
+fixture is SHA-256 checked before and after. GitHub implementation head
+`c8bacea05e5aac0823bc5d304631d84c0a411c97` passed Studio run 165 with raw
+25/25 in Debug and Release. All four packaged phases passed in both and emitted
+the same final registry SHA-256
+`547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`
+(2,180 bytes). Baseline run 184 passed both configurations. Independent review
+and squash merge remain pending. See
 `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
 
 PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
 
-- Current main merge commit: `c2ace926ff2486fd3b60e3717bdba6dc8d138217` (PR #37; LC01 Gate 3 accepted)
+- Current main merge commit: `b45de5e369789697dba0fd4502677055b8105c1f` (PR #38; LC01 Gate 4 accepted)
 
 The four Windows PR checks completed successfully on the corrected PR #24 head:
 
