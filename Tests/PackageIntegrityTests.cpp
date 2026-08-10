@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -128,9 +129,7 @@ namespace
             error);
     }
 
-    bool ReadFile(
-        const fs::path& path,
-        std::string& text)
+    bool ReadFile(const fs::path& path, std::string& text)
     {
         std::ifstream input(path, std::ios::binary);
         if (!input)
@@ -138,7 +137,7 @@ namespace
         text.assign(
             std::istreambuf_iterator<char>(input),
             std::istreambuf_iterator<char>());
-        return input.eof();
+        return !input.bad();
     }
 }
 
@@ -165,9 +164,7 @@ int main()
 
     WindowsGamePackageIntegrityResult valid;
     if (!ValidateWindowsGamePackage(
-            packageRoot.generic_u8string(),
-            valid,
-            error) ||
+            packageRoot.generic_u8string(), valid, error) ||
         !valid.succeeded ||
         valid.code != WindowsGamePackageIntegrityCode::Success ||
         valid.manifestFileCount != 3 ||
@@ -183,9 +180,7 @@ int main()
         return Fail(root, error);
     WindowsGamePackageIntegrityResult tampered;
     if (ValidateWindowsGamePackage(
-            packageRoot.generic_u8string(),
-            tampered,
-            error) ||
+            packageRoot.generic_u8string(), tampered, error) ||
         (tampered.code != WindowsGamePackageIntegrityCode::HashMismatch &&
          tampered.code != WindowsGamePackageIntegrityCode::SizeMismatch))
     {
@@ -197,12 +192,12 @@ int main()
     fs::remove(readme);
     WindowsGamePackageIntegrityResult missing;
     if (ValidateWindowsGamePackage(
-            packageRoot.generic_u8string(),
-            missing,
-            error) ||
+            packageRoot.generic_u8string(), missing, error) ||
         missing.code != WindowsGamePackageIntegrityCode::MissingFile)
     {
-        return Fail(root, "missing manifest file did not fail closed");
+        return Fail(root,
+            "missing manifest file did not fail closed as MISSING_FILE; got " +
+            std::string(WindowsGamePackageIntegrityCodeName(missing.code)));
     }
     if (!WriteFile(readme, "gate4\n", error))
         return Fail(root, error);
@@ -211,9 +206,7 @@ int main()
         return Fail(root, error);
     WindowsGamePackageIntegrityResult extra;
     if (ValidateWindowsGamePackage(
-            packageRoot.generic_u8string(),
-            extra,
-            error) ||
+            packageRoot.generic_u8string(), extra, error) ||
         extra.code != WindowsGamePackageIntegrityCode::UnexpectedFile)
     {
         return Fail(root, "unmanifested package file did not fail closed");
@@ -250,12 +243,11 @@ int main()
     }
     WindowsGamePackageIntegrityResult duplicate;
     if (ValidateWindowsGamePackage(
-            packageRoot.generic_u8string(),
-            duplicate,
-            error) ||
+            packageRoot.generic_u8string(), duplicate, error) ||
         duplicate.code != WindowsGamePackageIntegrityCode::DuplicatePath)
     {
-        return Fail(root, "Windows case-equivalent manifest collision was accepted");
+        return Fail(root,
+            "Windows case-equivalent manifest collision was accepted");
     }
 
     std::error_code ignored;
