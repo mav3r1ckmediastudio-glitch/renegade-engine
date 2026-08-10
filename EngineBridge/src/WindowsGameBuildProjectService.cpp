@@ -12,6 +12,57 @@ namespace renegade::bridge
     {
         namespace fs = std::filesystem;
 
+        // LP06 owner builds package only the LP05-reachable project closure,
+        // but Runtime resolves Story Flow Level scenes by their stable scene
+        // document IDs. Those IDs live in the Renegade-owned <scene>.rmeta
+        // sidecars rather than inside the Wicked WISCENE bytes. Keep this
+        // packaging prerequisite local to LP06 so the accepted LP05 extractor
+        // and its canonical evidence remain unchanged.
+        class SceneIdentityCompanionProvider final : public IDependencyProvider
+        {
+        public:
+            [[nodiscard]] const char* Name() const noexcept override
+            {
+                return "lp06-scene-identity-companion";
+            }
+
+            [[nodiscard]] std::uint32_t Version() const noexcept override
+            {
+                return 1;
+            }
+
+            [[nodiscard]] bool Supports(
+                const DependencyClass dependencyClass) const noexcept override
+            {
+                return dependencyClass == DependencyClass::Scene;
+            }
+
+            [[nodiscard]] bool Discover(
+                const DependencyProviderContext& context,
+                const DependencyCandidateSink& emit,
+                const DependencyDiagnosticSink&,
+                std::string& error) const override
+            {
+                if (context.source == nullptr ||
+                    context.source->projectRelativePath.empty())
+                {
+                    error =
+                        "LP06 scene identity companion provider requires a scene source node.";
+                    return false;
+                }
+
+                DependencyCandidate companion;
+                companion.declaredPath =
+                    context.source->projectRelativePath + ".rmeta";
+                companion.dependencyClass = DependencyClass::GeneratedData;
+                companion.requirement = DependencyRequirement::Required;
+                companion.provenance = "lp06.scene_identity_companion";
+                emit(companion);
+                error.clear();
+                return true;
+            }
+        };
+
         std::string TraceLine(const FlowStepResult& step)
         {
             if (step.previousNodeId.empty())
@@ -55,13 +106,15 @@ namespace renegade::bridge
                 MakeRuntimeScreenDependencyReader(project.projectId));
             WisceneDependencyProvider sceneProvider(MakeWisceneDependencyReader());
             GltfDependencyProvider gltfProvider(MakeGltfDependencyReader());
+            SceneIdentityCompanionProvider sceneIdentityProvider;
 
             DependencyCollector collector(project.rootPath);
             if (!collector.RegisterProvider(projectProvider, error) ||
                 !collector.RegisterProvider(flowProvider, error) ||
                 !collector.RegisterProvider(screenProvider, error) ||
                 !collector.RegisterProvider(sceneProvider, error) ||
-                !collector.RegisterProvider(gltfProvider, error))
+                !collector.RegisterProvider(gltfProvider, error) ||
+                !collector.RegisterProvider(sceneIdentityProvider, error))
             {
                 error = "Build Windows Game could not configure dependency discovery: " +
                     error;
