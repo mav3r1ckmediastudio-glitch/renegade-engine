@@ -150,22 +150,36 @@ int main()
 
     RuntimeBootstrapResult packaged = ResolveRuntimeLaunch(
         {}, executable.generic_u8string());
-    if (!packaged.succeeded ||
-        fs::path(packaged.projectDescriptorPath) !=
-            fs::weakly_canonical(descriptor))
+    if (!packaged.succeeded)
+    {
+        const std::string message = packaged.message;
+        fs::current_path(originalCwd);
+        fs::remove_all(root);
+        return Fail("zero-argument package launch was rejected: " + message);
+    }
+    std::error_code equivalentError;
+    const bool resolvedExpectedDescriptor = fs::equivalent(
+        fs::u8path(packaged.projectDescriptorPath),
+        descriptor,
+        equivalentError);
+    if (equivalentError || !resolvedExpectedDescriptor)
     {
         fs::current_path(originalCwd);
         fs::remove_all(root);
-        return Fail("zero-argument package launch did not resolve from executable root");
+        return Fail(
+            "zero-argument package launch resolved a different project file");
     }
     packaged = ResolveRuntimeProject(std::move(packaged));
     if (!packaged.succeeded ||
         packaged.project.projectId != ProjectId ||
         packaged.startupScenePath.empty())
     {
+        const std::string message = packaged.message;
         fs::current_path(originalCwd);
         fs::remove_all(root);
-        return Fail("resolved packaged project did not pass normal Runtime validation");
+        return Fail(
+            "resolved packaged project did not pass normal Runtime validation: " +
+            message);
     }
 
     RuntimeBootstrapResult explicitLaunch = ResolveRuntimeLaunch(
