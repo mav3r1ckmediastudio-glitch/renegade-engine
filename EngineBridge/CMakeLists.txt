@@ -6,6 +6,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/BuildService.h
     include/renegade/bridge/BuildStageService.h
     include/renegade/bridge/BuildVerificationService.h
+    include/renegade/bridge/WindowsGameBuildWorkflow.h
     include/renegade/bridge/PackageIntegrityService.h
     include/renegade/bridge/CommandService.h
     include/renegade/bridge/DependencyService.h
@@ -85,6 +86,7 @@ if(WIN32)
         src/BuildPromotionServiceInternal.h
         src/BuildVerificationService.cpp
         src/PackageIntegrityService.cpp
+        src/WindowsGameBuildWorkflow.cpp
     )
     target_link_libraries(RenegadeEngineBridge PRIVATE bcrypt)
 endif()
