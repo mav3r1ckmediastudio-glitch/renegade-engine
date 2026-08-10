@@ -1,6 +1,7 @@
 add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/AssetBrowserService.h
     include/renegade/bridge/AssetRegistryService.h
+    include/renegade/bridge/BuildIdentityService.h
     include/renegade/bridge/BuildService.h
     include/renegade/bridge/BuildStageService.h
     include/renegade/bridge/CommandService.h
@@ -25,6 +26,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/TestLevelSnapshotService.h
     src/AssetBrowserService.cpp
     src/AssetRegistryService.cpp
+    src/BuildIdentityService.cpp
     src/BuildService.cpp
     src/BuildStageService.cpp
     src/CommandService.cpp
@@ -70,6 +72,10 @@ target_link_libraries(RenegadeEngineBridge
     PUBLIC
         WickedEngine
 )
+
+if(WIN32)
+    target_link_libraries(RenegadeEngineBridge PRIVATE bcrypt)
+endif()
 
 set_target_properties(RenegadeEngineBridge PROPERTIES
     FOLDER "Renegade"
