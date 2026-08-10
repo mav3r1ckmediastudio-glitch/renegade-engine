@@ -1,6 +1,7 @@
 #include <wiArchive.h>
 #include <wiScene.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -43,19 +44,26 @@ int main(int argc, char** argv)
 {
     if (argc != 2)
     {
-        std::cerr << "Gate 4 scene fixture expects one output directory.\n";
-        return 2;
+        std::cerr << "Gate 4 scene fixture expects one output directory.\n"
+                  << std::flush;
+        std::_Exit(2);
     }
 
     const fs::path output = fs::absolute(fs::u8path(argv[1]));
     const fs::path scene = output / "Gate4SelfContained.wiscene";
     if (!WriteScene(scene, "LP06 Gate 4 Self-Contained Scene"))
     {
-        std::cerr << "Could not write Gate 4 self-contained WISCENE fixture.\n";
-        return 1;
+        std::cerr << "Could not write Gate 4 self-contained WISCENE fixture.\n"
+                  << std::flush;
+        std::_Exit(1);
     }
 
     std::cout << "GATE4_SCENE_PHASE=complete path="
               << scene.generic_u8string() << '\n' << std::flush;
-    return 0;
+
+    // Wicked registers process-lifetime teardown callbacks as part of its
+    // static runtime. This fixture has already closed and verified the only
+    // file it owns; bypass those unrelated teardown callbacks so a successful
+    // serializer proof cannot be stranded after main() has completed.
+    std::_Exit(0);
 }
