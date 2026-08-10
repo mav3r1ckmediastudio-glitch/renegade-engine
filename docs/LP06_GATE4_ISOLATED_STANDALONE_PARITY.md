@@ -20,6 +20,11 @@ Gate 4 does **not** create or replace
 or replace a previous successful final build, and does not claim final
 redistribution approval. Those remain Gate 5 responsibilities.
 
+Gate 4 also does not claim end-user audio-device coverage. Audio-device
+availability belongs to a later runtime/audio validation boundary. The full
+Release standalone smoke remains mandatory even when the hosted runner has no
+default audio endpoint.
+
 ## Production package integrity boundary
 
 `PackageIntegrityService` re-enumerates the loose package from
@@ -108,7 +113,7 @@ Gate 4 selects:
 
 Renegade does not copy arbitrary Visual C++ runtime DLLs from System32 and the
 Gate 4 package proof rejects app-local `vcruntime*`, `msvcp*`, `concrt*` or
-`ucrtbase.dll` at package root. The actual Runtime process must start
+`ucrtbase.dll` at package root. The actual Release Runtime process must start
 successfully on the authoritative GitHub Windows runner under that selected
 system prerequisite policy.
 
@@ -124,9 +129,25 @@ the named executable, matching the accepted Gates 1–3 package contract.
 
 ### DX12
 
-DX12 is the primary Gate 4 graphics path. The real packaged Runtime must create
-and run its Wicked graphics application and report the actual device tag as
-`DX12`; a package/bootstrap-only process is not sufficient for this proof.
+DX12 is the primary Gate 4 graphics path. The real packaged **Release** Runtime
+must create and run its Wicked graphics application and report the actual device
+tag as `DX12`; a package/bootstrap-only process is not sufficient for this
+proof.
+
+Debug remains a regression mirror, but the standard hosted Windows runner may
+have DX12 hardware while exposing no XAudio2 mastering endpoint. Pinned Wicked's
+Debug audio initialization asserts when `CreateMasteringVoice()` fails, while
+its Release build returns from audio initialization and continues. Gate 4 uses a
+small test-only XAudio2 probe before the Debug standalone smoke:
+
+- mastering endpoint available: run the same full real Debug standalone smoke;
+- mastering endpoint unavailable: emit
+  `GATE4_DEBUG_AUDIO_ENDPOINT_UNAVAILABLE` and mark only the Debug standalone
+  smoke as an explicit environment skip.
+
+That conditional skip does not alter Runtime production code, Wicked source, the
+Wicked pin, the Release executable, package-integrity validation or the Release
+standalone acceptance proof.
 
 ### Vulkan
 
@@ -174,31 +195,38 @@ The Gate 4 process proof additionally requires:
 
 ## Authoritative tests
 
-Gate 4 adds two CTest targets to the normal Studio CI dependency graph:
+Gate 4 adds three named CTest entries to the normal Studio CI suite:
 
 - `RenegadePackageIntegrityTests`
+- `RenegadeGate4SceneFixtureTests`
 - `RenegadeStandalonePackageTests`
 
-The expected suite count increases from 30 to **32 tests** in both Debug and
-Release. Release is the distribution-configuration proof; Debug runs the same
-process/integrity logic as a regression mirror. GitHub Actions Debug and Release
-remain authoritative because the owner machine has known CPU instability.
+The expected suite count increases from 30 to **33 tests** in both Debug and
+Release. Release is the mandatory distribution-configuration proof and must run
+the full real standalone package smoke. Debug is a regression mirror: it runs
+the same full smoke when the hosted runner exposes an XAudio2 mastering endpoint;
+otherwise only `RenegadeStandalonePackageTests` is explicitly skipped for that
+proved host limitation. The other 32 Debug tests must still pass.
 
-The existing LP05 and LC01 packaged hashes and the pinned Wicked baseline must
-remain unchanged.
+GitHub Actions Debug and Release remain authoritative build/test evidence because
+the owner machine has known CPU instability. The existing LP05 and LC01 packaged
+hashes and the pinned Wicked baseline must remain unchanged.
 
 ## Gate 4 acceptance
 
 Gate 4 is mergeable only when the exact PR head has:
 
-1. Studio Windows x64 Debug green with 32/32 CTest;
-2. Studio Windows x64 Release green with 32/32 CTest;
+1. Studio Windows x64 Debug with all non-audio-dependent tests green and either:
+   - 33/33 when the hosted runner exposes an XAudio2 mastering endpoint; or
+   - 32 passed plus one explicit
+     `GATE4_DEBUG_AUDIO_ENDPOINT_UNAVAILABLE` skip when it does not;
+2. Studio Windows x64 Release green with **33/33 CTest**, including the full real
+   `RenegadeStandalonePackageTests` DX12 smoke;
 3. pinned-Wicked Windows baseline Debug and Release green;
-4. real `RenegadeStandalonePackageTests` pass in both configurations;
-5. unchanged LP05 and LC01 packaged evidence hashes;
-6. unchanged Wicked submodule pin;
-7. independent review of the exact candidate head;
-8. no owner-visible promotion/final-build claim.
+4. unchanged LP05 and LC01 packaged evidence hashes;
+5. unchanged Wicked submodule pin;
+6. independent review of the exact candidate head;
+7. no owner-visible promotion/final-build claim.
 
 Gate 5 then owns safe rebuild failure injection, last-good preservation, atomic
 promotion, final closeout and owner-visible standalone acceptance.
