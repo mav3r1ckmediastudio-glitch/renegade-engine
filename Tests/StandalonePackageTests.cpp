@@ -67,12 +67,13 @@ namespace
         bytes.assign(
             std::istreambuf_iterator<char>(input),
             std::istreambuf_iterator<char>());
-        if (!input.eof())
+        if (input.bad())
         {
             error = "could not complete Gate 4 fixture read: " +
                 path.generic_u8string();
             return false;
         }
+        error.clear();
         return true;
     }
 
@@ -82,7 +83,8 @@ namespace
         std::string& error)
     {
         std::error_code ec;
-        fs::create_directories(path.parent_path(), ec);
+        if (!path.parent_path().empty())
+            fs::create_directories(path.parent_path(), ec);
         if (ec)
         {
             error = "could not create Gate 4 fixture directory";
@@ -103,6 +105,7 @@ namespace
                 path.generic_u8string();
             return false;
         }
+        error.clear();
         return true;
     }
 
@@ -178,11 +181,12 @@ namespace
         bytes.push_back(0xff);
         bytes.push_back(0xff);
         AppendDword(bytes, 0);
-
-        std::string text(
-            reinterpret_cast<const char*>(bytes.data()),
-            bytes.size());
-        return WriteFile(path, text, error);
+        return WriteFile(
+            path,
+            std::string(
+                reinterpret_cast<const char*>(bytes.data()),
+                bytes.size()),
+            error);
     }
 
     std::vector<WindowsPackageDocumentInput> Documents(
@@ -267,10 +271,7 @@ namespace
 
     std::wstring Quote(const std::string& value)
     {
-        std::wstring result = L"\"";
-        result += Utf8ToWide(value);
-        result += L"\"";
-        return result;
+        return L"\"" + Utf8ToWide(value) + L"\"";
     }
 
     bool RunProcess(
@@ -359,7 +360,7 @@ namespace
             if (!line.empty())
             {
                 const std::size_t equals = line.find('=');
-                if (equals == std::string::npos)
+                if (equals == std::string::npos || equals == 0)
                 {
                     error = "Runtime evidence contains malformed line";
                     return false;
@@ -370,6 +371,7 @@ namespace
                 break;
             begin = end + 1;
         }
+        error.clear();
         return true;
     }
 
@@ -384,10 +386,12 @@ namespace
                 continue;
             std::string name = iterator->path().filename().generic_u8string();
             std::transform(
-                name.begin(), name.end(), name.begin(),
-                [](const unsigned char c)
+                name.begin(),
+                name.end(),
+                name.begin(),
+                [](const unsigned char character)
                 {
-                    return static_cast<char>(std::tolower(c));
+                    return static_cast<char>(std::tolower(character));
                 });
             if (name == "ucrtbase.dll" ||
                 name.rfind("vcruntime", 0) == 0 ||
@@ -412,16 +416,13 @@ namespace
             error = "could not create package variant parent";
             return false;
         }
-        fs::copy(
-            source,
-            destination,
-            fs::copy_options::recursive,
-            ec);
+        fs::copy(source, destination, fs::copy_options::recursive, ec);
         if (ec)
         {
             error = "could not copy package variant: " + ec.message();
             return false;
         }
+        error.clear();
         return true;
     }
 }
@@ -497,16 +498,12 @@ int main(int argc, char** argv)
     std::map<std::string, std::string> sourceBytes;
     for (const SourceFile& source : sources)
     {
-        fs::path sourcePath;
-        if (source.path == "Content/Scenes/LevelOne.wiscene" ||
-            source.path == "Content/Scenes/LevelTwo.wiscene")
-        {
-            sourcePath = cubePath;
-        }
-        else
-        {
-            sourcePath = lp03Root / fs::u8path(source.path);
-        }
+        const bool isScene =
+            source.path == "Content/Scenes/LevelOne.wiscene" ||
+            source.path == "Content/Scenes/LevelTwo.wiscene";
+        const fs::path sourcePath = isScene
+            ? cubePath
+            : lp03Root / fs::u8path(source.path);
         std::string bytes;
         if (!CopyBytes(
                 sourcePath,
@@ -595,7 +592,8 @@ int main(int argc, char** argv)
         testAll.flowTerminalAction != FlowTerminalAction::CompleteGame ||
         testAll.flowTrace.size() != 4)
     {
-        return Fail(root, "explicit-project Test All flow did not reach Complete Game");
+        return Fail(root,
+            "explicit-project Test All flow did not reach Complete Game");
     }
     const std::vector<std::string> expectedTrace = testAll.flowTrace;
 
@@ -610,9 +608,11 @@ int main(int argc, char** argv)
     if (ec || fs::exists(projectRoot))
         return Fail(root, "could not remove source project before isolated launch");
     fs::create_directories(unrelatedCwd, ec);
+    if (ec)
+        return Fail(root, "could not create unrelated current directory");
     fs::create_directories(localAppData, ec);
     if (ec)
-        return Fail(root, "could not create isolated consumer directories");
+        return Fail(root, "could not create isolated LocalAppData directory");
 
     WindowsGamePackageIntegrityResult movedIntegrity;
     if (!ValidateWindowsGamePackage(
@@ -646,7 +646,8 @@ int main(int argc, char** argv)
             exitCode,
             error))
     {
-        return Fail(root, "real isolated DX12 packaged Runtime failed: " + error);
+        return Fail(root,
+            "real isolated DX12 packaged Runtime failed: " + error);
     }
     if (exitCode != 0)
     {
@@ -667,7 +668,8 @@ int main(int argc, char** argv)
     if (!RecordWindowsGameBuildVerification(
             verificationRequest, verified, error))
     {
-        return Fail(root, "Gate 4 rejected real Runtime evidence: " + error);
+        return Fail(root,
+            "Gate 4 rejected real Runtime evidence: " + error);
     }
     if (!verified.succeeded ||
         verified.runtimeEvidenceSha256.empty() ||
@@ -675,7 +677,8 @@ int main(int argc, char** argv)
         verified.packageManifestSha256.empty() ||
         fs::exists(fs::u8path(stage.finalOutputPath)))
     {
-        return Fail(root, "Gate 4 verification did not remain staged/unpromoted");
+        return Fail(root,
+            "Gate 4 verification did not remain staged/unpromoted");
     }
 
     std::string reportText;
@@ -686,7 +689,8 @@ int main(int argc, char** argv)
         reportText.find(WindowsVcRuntimePrerequisitePolicy) ==
             std::string::npos)
     {
-        return Fail(root, "Gate 4 build report did not record isolated smoke proof");
+        return Fail(root,
+            "Gate 4 build report did not record isolated smoke proof");
     }
 
     std::string packageManifestText;
@@ -704,12 +708,10 @@ int main(int argc, char** argv)
         reportText.find(repoText) != std::string::npos ||
         reportText.find(sourceText) != std::string::npos)
     {
-        return Fail(root, "Gate 4 normalized package evidence leaked repository/source paths");
+        return Fail(root,
+            "Gate 4 normalized package evidence leaked repository/source paths");
     }
 
-    // Vulkan behaviour is explicit but separate from the DX12 full-startup
-    // proof: a package-relative capability probe succeeds if the system loader
-    // is present, otherwise it returns the structured prerequisite code 31.
     if (!RunProcess(
             namedExecutable,
             {"vulkan", "--renegade-capability-probe"},
@@ -718,15 +720,18 @@ int main(int argc, char** argv)
             exitCode,
             error))
     {
-        return Fail(root, "Vulkan capability probe process failed: " + error);
+        return Fail(root,
+            "Vulkan capability probe process failed: " + error);
     }
-    if (exitCode != 0 && exitCode != static_cast<DWORD>(
+    if (exitCode != 0 &&
+        exitCode != static_cast<DWORD>(
             runtime::RuntimeBootstrapCode::GraphicsPrerequisiteMissing))
     {
         return Fail(root,
             "Vulkan capability probe returned unexpected code " +
             std::to_string(exitCode));
     }
+
     std::map<std::string, std::string> capabilityEvidence;
     if (!ReadEvidence(evidencePath, capabilityEvidence, error) ||
         capabilityEvidence["graphics_backend_requested"] != "Vulkan" ||
@@ -738,10 +743,6 @@ int main(int argc, char** argv)
         return Fail(root, "Vulkan capability evidence was not explicit");
     }
 
-    // Each corrupt variant launches the actual named Runtime in capability
-    // mode. Package integrity runs before graphics/device startup, so every
-    // variant must exit with PACKAGE_INTEGRITY_FAILED (30) and external
-    // structured evidence rather than reaching project or graphics code.
     const fs::path variantsRoot = root / "Corrupt Package Variants";
     const std::array<std::string, 3> variantNames = {
         "Tampered", "Missing", "Unmanifested"};
@@ -789,14 +790,17 @@ int main(int argc, char** argv)
                 exitCode,
                 error))
         {
-            return Fail(root, variantName + " package process failed: " + error);
+            return Fail(root,
+                variantName + " package process failed: " + error);
         }
         if (exitCode != static_cast<DWORD>(
                 runtime::RuntimeBootstrapCode::PackageIntegrityFailed))
         {
             return Fail(root,
-                variantName + " package did not fail with PACKAGE_INTEGRITY_FAILED");
+                variantName +
+                " package did not fail with PACKAGE_INTEGRITY_FAILED");
         }
+
         const fs::path failureEvidence =
             localAppData / "RenegadeEngine" / "unknown-package" /
             "Logs/RuntimeBootstrap.log";
@@ -806,7 +810,8 @@ int main(int argc, char** argv)
             failedEvidence["package_integrity"] != "FAIL")
         {
             return Fail(root,
-                variantName + " package did not emit clear integrity evidence");
+                variantName +
+                " package did not emit clear integrity evidence");
         }
     }
 
