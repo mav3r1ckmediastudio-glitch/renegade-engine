@@ -11,6 +11,29 @@ namespace renegade::bridge
     class StudioSession
     {
     public:
+        StudioSession() noexcept
+        {
+            current_ = this;
+        }
+
+        ~StudioSession()
+        {
+            if (current_ == this)
+            {
+                current_ = nullptr;
+            }
+        }
+
+        StudioSession(const StudioSession&) = delete;
+        StudioSession& operator=(const StudioSession&) = delete;
+        StudioSession(StudioSession&&) = delete;
+        StudioSession& operator=(StudioSession&&) = delete;
+
+        [[nodiscard]] static StudioSession* Current() noexcept
+        {
+            return current_;
+        }
+
         [[nodiscard]] SceneService& Scenes() noexcept
         {
             return scenes_;
@@ -72,6 +95,8 @@ namespace renegade::bridge
         }
 
     private:
+        inline static StudioSession* current_ = nullptr;
+
         ProjectService projects_;
         SceneService scenes_;
         SelectionService selection_;
