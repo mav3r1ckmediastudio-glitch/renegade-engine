@@ -49,6 +49,24 @@ set(RENEGADE_GATE4_SCENE
     "${RENEGADE_GATE4_SCENE_DIR}/Gate4SelfContained.wiscene"
 )
 
+add_executable(RenegadeGate4AudioProbe
+    "${CMAKE_CURRENT_LIST_DIR}/Gate4AudioProbe.cpp"
+)
+target_compile_definitions(
+    RenegadeGate4AudioProbe
+    PRIVATE
+        UNICODE
+        _UNICODE
+)
+target_compile_options(
+    RenegadeGate4AudioProbe
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+set_target_properties(RenegadeGate4AudioProbe PROPERTIES
+    FOLDER "Renegade/TestFixtures"
+)
+
 add_executable(RenegadeStandalonePackageTests
     "${CMAKE_CURRENT_LIST_DIR}/StandalonePackageTests.cpp"
 )
@@ -85,6 +103,7 @@ add_dependencies(
     RenegadeBridgeTests
     RenegadePackageIntegrityTests
     RenegadeGate4SceneFixture
+    RenegadeGate4AudioProbe
     RenegadeStandalonePackageTests
 )
 
@@ -105,14 +124,18 @@ set_tests_properties(
 )
 add_test(
     NAME RenegadeStandalonePackageTests
-    COMMAND RenegadeStandalonePackageTests
-        "$<TARGET_FILE:RenegadeRuntime>"
-        "$<TARGET_FILE_DIR:RenegadeRuntime>/dxcompiler.dll"
-        "${PROJECT_SOURCE_DIR}/Runtime/fixtures/LP03/Valid Screen"
-        "${RENEGADE_GATE4_SCENE}"
-        "${CMAKE_CURRENT_LIST_DIR}/fixtures/lp06_gate2"
-        "${PROJECT_SOURCE_DIR}"
-        "${PROJECT_SOURCE_DIR}/artifacts/studio/ci-$<CONFIG>/gate4-manual"
+    COMMAND ${CMAKE_COMMAND}
+        "-DCONFIGURATION=$<CONFIG>"
+        "-DAUDIO_PROBE=$<TARGET_FILE:RenegadeGate4AudioProbe>"
+        "-DSTANDALONE_TEST=$<TARGET_FILE:RenegadeStandalonePackageTests>"
+        "-DRUNTIME_EXE=$<TARGET_FILE:RenegadeRuntime>"
+        "-DDXCOMPILER_DLL=$<TARGET_FILE_DIR:RenegadeRuntime>/dxcompiler.dll"
+        "-DSCREEN_FIXTURE=${PROJECT_SOURCE_DIR}/Runtime/fixtures/LP03/Valid Screen"
+        "-DSCENE_FIXTURE=${RENEGADE_GATE4_SCENE}"
+        "-DGATE2_FIXTURE=${CMAKE_CURRENT_LIST_DIR}/fixtures/lp06_gate2"
+        "-DREPOSITORY_ROOT=${PROJECT_SOURCE_DIR}"
+        "-DMANUAL_EXPORT_ROOT=${PROJECT_SOURCE_DIR}/artifacts/studio/ci-$<CONFIG>/gate4-manual"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunGate4Standalone.cmake"
 )
 set_tests_properties(
     RenegadeStandalonePackageTests
@@ -120,5 +143,5 @@ set_tests_properties(
         TIMEOUT 420
         RUN_SERIAL TRUE
         FIXTURES_REQUIRED RenegadeGate4Scene
-        ENVIRONMENT "RENEGADE_GATE4_DIAGNOSTIC_ROOT=${PROJECT_SOURCE_DIR}/artifacts/studio/ci-$<CONFIG>/gate4-diagnostics"
+        SKIP_REGULAR_EXPRESSION "GATE4_DEBUG_AUDIO_ENDPOINT_UNAVAILABLE"
 )
