@@ -6,6 +6,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/BuildService.h
     include/renegade/bridge/BuildStageService.h
     include/renegade/bridge/BuildVerificationService.h
+    include/renegade/bridge/WindowsGameBuildProjectService.h
     include/renegade/bridge/WindowsGameBuildWorkflow.h
     include/renegade/bridge/PackageIntegrityService.h
     include/renegade/bridge/CommandService.h
@@ -52,6 +53,7 @@ add_library(RenegadeEngineBridge STATIC
     src/SceneDocumentService.cpp
     src/SelectionService.cpp
     src/TestLevelSnapshotService.cpp
+    src/WindowsGameBuildProjectService.cpp
 )
 
 # Wicked's format converter is self-contained even though upstream keeps it in
