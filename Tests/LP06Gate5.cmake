@@ -10,6 +10,11 @@ target_include_directories(
     RenegadeBuildPromotionTests
     PRIVATE
         "${PROJECT_SOURCE_DIR}/EngineBridge/src"
+        # json.hpp is the pinned nlohmann single-header copy shipped with the
+        # Wicked Editor sources. EngineBridge already consumes the same pinned
+        # header privately; expose that exact include directory to this test
+        # target rather than adding another JSON dependency or copying it.
+        "${PROJECT_SOURCE_DIR}/WickedEngine/Editor"
 )
 target_compile_definitions(
     RenegadeBuildPromotionTests
