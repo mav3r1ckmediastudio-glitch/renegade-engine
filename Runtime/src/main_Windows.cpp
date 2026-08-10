@@ -1,4 +1,5 @@
 #include "RuntimeApplication.h"
+#include "RuntimePackageBootstrap.h"
 
 #include <Windows.h>
 #include <shellapi.h>
@@ -121,6 +122,21 @@ namespace
 
         LocalFree(arguments);
         return result;
+    }
+
+    std::string ExecutablePathUtf8()
+    {
+        std::wstring executablePath(32768, L'\0');
+        const DWORD length = GetModuleFileNameW(
+            nullptr,
+            executablePath.data(),
+            static_cast<DWORD>(executablePath.size()));
+        if (length == 0 || length >= executablePath.size())
+        {
+            return {};
+        }
+        executablePath.resize(length);
+        return WideToUtf8(executablePath.c_str());
     }
 
     void SetExecutableWorkingDirectory()
@@ -278,14 +294,16 @@ int APIENTRY wWinMain(
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     wi::arguments::Parse(commandLine);
+    const std::string executablePath = ExecutablePathUtf8();
     SetExecutableWorkingDirectory();
 
     const auto processArguments = CollectProcessArguments();
     const std::wstring readyEventName = ReadyEventName(processArguments);
     const bool testLevelLaunch = !readyEventName.empty();
 
-    auto bootstrap = renegade::runtime::ParseRuntimeLaunchArguments(
-        processArguments);
+    auto bootstrap = renegade::runtime::ResolveRuntimeLaunch(
+        processArguments,
+        executablePath);
     bootstrap =
         renegade::runtime::ResolveRuntimeProject(std::move(bootstrap));
     if (!bootstrap.succeeded)
