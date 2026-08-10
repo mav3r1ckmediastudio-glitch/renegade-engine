@@ -1,6 +1,7 @@
 #include "RuntimePackageBootstrap.h"
 
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/PackageIntegrityService.h"
 #include "renegade/bridge/ProjectService.h"
 
 #include <algorithm>
@@ -29,10 +30,11 @@ namespace renegade::runtime
 
         RuntimeBootstrapResult RejectPackage(
             RuntimeBootstrapResult result,
+            const RuntimeBootstrapCode code,
             std::string message)
         {
             result.succeeded = false;
-            result.code = RuntimeBootstrapCode::InvalidArguments;
+            result.code = code;
             result.message = std::move(message);
             result.projectDescriptorPath.clear();
             result.project = {};
@@ -191,12 +193,15 @@ namespace renegade::runtime
             return result;
         }
 
+        result.packageRelativeLaunch = true;
+
         try
         {
             if (executablePath.empty())
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime could not resolve its executable path.");
             }
 
@@ -207,6 +212,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime executable path is missing or invalid.");
             }
 
@@ -216,8 +222,31 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime could not resolve its package root.");
             }
+            result.packageRootPath = packageRoot.generic_u8string();
+
+            bridge::WindowsGamePackageIntegrityResult integrity;
+            std::string integrityError;
+            if (!bridge::ValidateWindowsGamePackage(
+                    result.packageRootPath,
+                    integrity,
+                    integrityError))
+            {
+                result.packageIntegrityStatus = "FAIL";
+                result.packageIntegrityCode =
+                    bridge::WindowsGamePackageIntegrityCodeName(integrity.code);
+                return RejectPackage(
+                    std::move(result),
+                    RuntimeBootstrapCode::PackageIntegrityFailed,
+                    "Packaged Runtime integrity validation failed: " +
+                        integrityError);
+            }
+            result.packageIntegrityStatus = "PASS";
+            result.packageIntegrityCode =
+                bridge::WindowsGamePackageIntegrityCodeName(integrity.code);
+            result.packageManifestSha256 = integrity.packageManifestSha256;
 
             const fs::path manifestPath =
                 packageRoot / "GameData" / "project.manifest.json";
@@ -227,6 +256,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime project manifest escapes the package root.");
             }
 
@@ -236,6 +266,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     std::move(manifestError));
             }
 
@@ -247,6 +278,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime project manifest is not a Gate 3 "
                     "package-relative bootstrap manifest.");
             }
@@ -270,6 +302,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime project manifest is missing required "
                     "Gate 3 identity.");
             }
@@ -280,6 +313,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime executable identity does not match "
                     "GameData/project.manifest.json.");
             }
@@ -288,6 +322,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime project document path is unsafe.");
             }
 
@@ -301,6 +336,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime project document is missing, symlinked, "
                     "or outside the package root.");
             }
@@ -315,6 +351,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime rejected its project document: " +
                         projectError);
             }
@@ -322,6 +359,7 @@ namespace renegade::runtime
             {
                 return RejectPackage(
                     std::move(result),
+                    RuntimeBootstrapCode::InvalidArguments,
                     "Packaged Runtime project ID does not match the package "
                     "manifest.");
             }
@@ -337,6 +375,7 @@ namespace renegade::runtime
         {
             return RejectPackage(
                 std::move(result),
+                RuntimeBootstrapCode::InvalidArguments,
                 std::string("Packaged Runtime bootstrap failed: ") +
                     exception.what());
         }

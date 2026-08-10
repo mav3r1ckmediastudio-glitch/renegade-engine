@@ -4,6 +4,8 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/BuildIdentityService.h
     include/renegade/bridge/BuildService.h
     include/renegade/bridge/BuildStageService.h
+    include/renegade/bridge/BuildVerificationService.h
+    include/renegade/bridge/PackageIntegrityService.h
     include/renegade/bridge/CommandService.h
     include/renegade/bridge/DependencyService.h
     include/renegade/bridge/FlowService.h
@@ -74,6 +76,13 @@ target_link_libraries(RenegadeEngineBridge
 )
 
 if(WIN32)
+    # LP06 packaging is Windows-first. Keep its Win32/BCrypt implementation out
+    # of non-Windows EngineBridge configuration while retaining shared public
+    # contracts for the Windows Runtime and build pipeline.
+    target_sources(RenegadeEngineBridge PRIVATE
+        src/BuildVerificationService.cpp
+        src/PackageIntegrityService.cpp
+    )
     target_link_libraries(RenegadeEngineBridge PRIVATE bcrypt)
 endif()
 

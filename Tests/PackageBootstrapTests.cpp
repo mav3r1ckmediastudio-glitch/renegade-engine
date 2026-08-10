@@ -1,9 +1,12 @@
 #include "RuntimePackageBootstrap.h"
+#include "renegade/bridge/PackageIntegrityService.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -97,6 +100,82 @@ namespace
         text += "}";
         return text;
     }
+
+    bool RefreshPackageManifest(
+        const fs::path& packageRoot,
+        std::string& error)
+    {
+        struct FileRecord
+        {
+            std::string path;
+            renegade::bridge::WindowsGamePackageFileDigest digest;
+        };
+
+        std::vector<FileRecord> files;
+        std::error_code ec;
+        for (fs::recursive_directory_iterator iterator(packageRoot, ec), end;
+             !ec && iterator != end;
+             iterator.increment(ec))
+        {
+            if (iterator->is_directory())
+                continue;
+            const fs::path relative =
+                fs::relative(iterator->path(), packageRoot, ec);
+            if (ec)
+                break;
+            const std::string relativeText = relative.generic_u8string();
+            if (relativeText == "package-manifest.json")
+                continue;
+            FileRecord record;
+            record.path = relativeText;
+            if (!renegade::bridge::DigestWindowsGamePackageFile(
+                    fs::absolute(iterator->path()).generic_u8string(),
+                    record.digest,
+                    error))
+            {
+                return false;
+            }
+            files.push_back(std::move(record));
+        }
+        if (ec)
+        {
+            error = "could not enumerate package fixture";
+            return false;
+        }
+        std::sort(
+            files.begin(),
+            files.end(),
+            [](const FileRecord& left, const FileRecord& right)
+            {
+                return left.path < right.path;
+            });
+
+        std::ostringstream json;
+        json << "{\"format\":\"renegade-package-manifest\","
+             << "\"schema_version\":2,"
+             << "\"stage_only\":true,"
+             << "\"distribution_ready\":false,"
+             << "\"project_id\":\"" << ProjectId << "\","
+             << "\"game_name\":\"Proof Game\","
+             << "\"self_path\":\"package-manifest.json\","
+             << "\"self_sha256_excluded\":true,"
+             << "\"files\":[";
+        for (std::size_t index = 0; index < files.size(); ++index)
+        {
+            if (index != 0)
+                json << ',';
+            json << "{\"path\":\"" << files[index].path << "\","
+                 << "\"bytes\":" << files[index].digest.byteCount << ','
+                 << "\"sha256\":\"" << files[index].digest.sha256 << "\","
+                 << "\"class\":\"gate3-test\","
+                 << "\"provenance\":[\"repo:test-fixture\"]}";
+        }
+        json << "]}";
+        return WriteFile(
+            packageRoot / "package-manifest.json",
+            json.str(),
+            error);
+    }
 }
 
 int main()
@@ -124,6 +203,7 @@ int main()
         !WriteFile(descriptor, Project(ProjectId, "Packaged Project"), error) ||
         !WriteFile(scene, "scene=package\n", error) ||
         !WriteFile(manifest, Manifest("ProofGame.exe", ProjectId), error) ||
+        !RefreshPackageManifest(packageRoot, error) ||
         !WriteFile(
             explicitDescriptor,
             Project(ExplicitProjectId, "Explicit Project"),
@@ -157,6 +237,13 @@ int main()
         fs::remove_all(root);
         return Fail("zero-argument package launch was rejected: " + message);
     }
+    if (!packaged.packageRelativeLaunch ||
+        packaged.packageIntegrityStatus != "PASS")
+    {
+        fs::current_path(originalCwd);
+        fs::remove_all(root);
+        return Fail("zero-argument package launch did not prove package integrity");
+    }
     std::error_code equivalentError;
     const bool resolvedExpectedDescriptor = fs::equivalent(
         fs::u8path(packaged.projectDescriptorPath),
@@ -187,7 +274,8 @@ int main()
         executable.generic_u8string());
     explicitLaunch = ResolveRuntimeProject(std::move(explicitLaunch));
     if (!explicitLaunch.succeeded ||
-        explicitLaunch.project.projectId != ExplicitProjectId)
+        explicitLaunch.project.projectId != ExplicitProjectId ||
+        explicitLaunch.packageRelativeLaunch)
     {
         fs::current_path(originalCwd);
         fs::remove_all(root);
@@ -204,7 +292,8 @@ int main()
         return Fail("malformed explicit --project incorrectly fell back to package bootstrap");
     }
 
-    if (!WriteFile(manifest, Manifest("DifferentGame.exe", ProjectId), error))
+    if (!WriteFile(manifest, Manifest("DifferentGame.exe", ProjectId), error) ||
+        !RefreshPackageManifest(packageRoot, error))
     {
         fs::current_path(originalCwd);
         fs::remove_all(root);
@@ -220,7 +309,8 @@ int main()
     if (!WriteFile(
             manifest,
             Manifest("ProofGame.exe", ProjectId, "GameData/../outside.renegade"),
-            error))
+            error) ||
+        !RefreshPackageManifest(packageRoot, error))
     {
         fs::current_path(originalCwd);
         fs::remove_all(root);
@@ -236,7 +326,8 @@ int main()
     if (!WriteFile(
             manifest,
             Manifest("ProofGame.exe", ExplicitProjectId),
-            error))
+            error) ||
+        !RefreshPackageManifest(packageRoot, error))
     {
         fs::current_path(originalCwd);
         fs::remove_all(root);
@@ -252,7 +343,8 @@ int main()
     if (!WriteFile(
             manifest,
             Manifest("ProofGame.exe", ProjectId, "GameData/ProofGame.renegade", false),
-            error))
+            error) ||
+        !RefreshPackageManifest(packageRoot, error))
     {
         fs::current_path(originalCwd);
         fs::remove_all(root);

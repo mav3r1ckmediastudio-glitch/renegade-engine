@@ -1,6 +1,9 @@
 #include "RuntimeApplication.h"
 #include "RuntimePackageBootstrap.h"
 
+#include "renegade/bridge/BuildVerificationService.h"
+#include "wiBacklog.h"
+
 #include <Windows.h>
 #include <shellapi.h>
 
@@ -17,6 +20,10 @@ namespace
 
     constexpr const char* BootstrapLogPath = "Logs/RuntimeBootstrap.log";
     constexpr const char* ReadyEventArgument = "--renegade-ready-event=";
+    constexpr const char* SmokeAutoPlayArgument = "--renegade-smoke-autoplay";
+    constexpr const char* SmokeExitArgument = "--renegade-smoke-exit";
+    constexpr const char* CapabilityProbeArgument =
+        "--renegade-capability-probe";
     renegade::runtime::RuntimeApplication application;
 
     std::string WideToUtf8(const wchar_t* value)
@@ -98,6 +105,24 @@ namespace
             }
         }
         return {};
+    }
+
+    bool HasArgument(
+        const std::vector<std::string>& arguments,
+        const char* expected)
+    {
+        for (const std::string& argument : arguments)
+        {
+            if (argument == expected)
+                return true;
+        }
+        return false;
+    }
+
+    std::string RequestedGraphicsBackend(
+        const std::vector<std::string>& arguments)
+    {
+        return HasArgument(arguments, "vulkan") ? "Vulkan" : "DX12";
     }
 
     std::vector<std::string> CollectProcessArguments()
@@ -183,26 +208,117 @@ namespace
         return title;
     }
 
-    void WriteBootstrapEvidence(
+    std::string ActualGraphicsBackend()
+    {
+        const auto* device = wi::graphics::GetDevice();
+        if (device != nullptr &&
+            std::strcmp(device->GetTag(), "[Vulkan]") == 0)
+        {
+            return "Vulkan";
+        }
+        return device == nullptr ? std::string{} : "DX12";
+    }
+
+    std::string LocalAppDataUtf8()
+    {
+        const DWORD required = GetEnvironmentVariableW(
+            L"LOCALAPPDATA",
+            nullptr,
+            0);
+        if (required <= 1)
+            return {};
+        std::wstring value(static_cast<std::size_t>(required), L'\0');
+        const DWORD written = GetEnvironmentVariableW(
+            L"LOCALAPPDATA",
+            value.data(),
+            required);
+        if (written == 0 || written >= required)
+            return {};
+        value.resize(written);
+        return WideToUtf8(value.c_str());
+    }
+
+    std::string RuntimeEvidencePath(
         const renegade::runtime::RuntimeBootstrapResult& result)
     {
+        if (!result.packageRelativeLaunch)
+            return BootstrapLogPath;
+
+        const std::string localAppData = LocalAppDataUtf8();
+        if (localAppData.empty())
+            return {};
+
+        std::string identity = result.saveDataId;
+        if (identity.empty())
+            identity = result.project.projectId;
+        if (identity.empty())
+            identity = "unknown-package";
+
+        return (fs::u8path(localAppData) /
+            "RenegadeEngine" /
+            fs::u8path(identity) /
+            "Logs" /
+            "RuntimeBootstrap.log").generic_u8string();
+    }
+
+    bool ConfigurePackageRuntimeLogging(
+        const renegade::runtime::RuntimeBootstrapResult& result,
+        const std::string& evidencePath,
+        std::string& error)
+    {
+        if (!result.packageRelativeLaunch)
+        {
+            error.clear();
+            return true;
+        }
+        if (evidencePath.empty())
+        {
+            error = "LOCALAPPDATA is unavailable for packaged Runtime logging.";
+            return false;
+        }
+
+        const fs::path logDirectory =
+            fs::u8path(evidencePath).parent_path();
+        std::error_code ec;
+        fs::create_directories(logDirectory, ec);
+        if (ec)
+        {
+            error = "Could not create packaged Runtime log directory: " +
+                ec.message();
+            return false;
+        }
+
+        wi::backlog::SetLogFile(
+            (logDirectory / "WickedRuntime.log").generic_u8string());
+        error.clear();
+        return true;
+    }
+
+    void WriteBootstrapEvidence(
+        const renegade::runtime::RuntimeBootstrapResult& result,
+        const std::string& logPath)
+    {
+        if (logPath.empty())
+            return;
         std::string logError;
         const bool logged = renegade::runtime::WriteRuntimeBootstrapLog(
             result,
-            BootstrapLogPath,
+            logPath,
             logError);
         (void)logged;
     }
 
     int ReportBootstrapFailure(
         const renegade::runtime::RuntimeBootstrapResult& result,
+        const std::string& logPath,
         const bool showDialog = true)
     {
         std::string logError;
-        const bool logged = renegade::runtime::WriteRuntimeBootstrapLog(
-            result,
-            BootstrapLogPath,
-            logError);
+        const bool logged = !logPath.empty() &&
+            renegade::runtime::WriteRuntimeBootstrapLog(
+                result,
+                logPath,
+                logError);
 
         std::string message = result.message;
         message += "\n\nCode: ";
@@ -210,12 +326,14 @@ namespace
         if (logged)
         {
             message += "\nLog: ";
-            message += BootstrapLogPath;
+            message += logPath;
         }
         else
         {
             message += "\nLog error: ";
-            message += logError;
+            message += logPath.empty()
+                ? "LOCALAPPDATA is unavailable."
+                : logError;
         }
 
         if (showDialog)
@@ -229,6 +347,56 @@ namespace
         }
 
         return static_cast<int>(result.code);
+    }
+
+    bool VulkanLoaderAvailable()
+    {
+        const HMODULE loader = LoadLibraryExW(
+            L"vulkan-1.dll",
+            nullptr,
+            LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (loader == nullptr)
+            return false;
+        const bool available =
+            GetProcAddress(loader, "vkGetInstanceProcAddr") != nullptr;
+        FreeLibrary(loader);
+        return available;
+    }
+
+    int RunCapabilityProbe(
+        renegade::runtime::RuntimeBootstrapResult result)
+    {
+        const std::string logPath = RuntimeEvidencePath(result);
+        if (result.graphicsBackendRequested == "Vulkan")
+        {
+            if (VulkanLoaderAvailable())
+            {
+                result.succeeded = true;
+                result.code = renegade::runtime::RuntimeBootstrapCode::Success;
+                result.graphicsCapability = "VULKAN_LOADER_AVAILABLE";
+                result.message =
+                    "Vulkan capability probe found the system Vulkan loader and vkGetInstanceProcAddr.";
+                WriteBootstrapEvidence(result, logPath);
+                return 0;
+            }
+
+            result.succeeded = false;
+            result.code =
+                renegade::runtime::RuntimeBootstrapCode::GraphicsPrerequisiteMissing;
+            result.graphicsCapability = "VULKAN_LOADER_MISSING";
+            result.message =
+                "Vulkan capability probe could not load system vulkan-1.dll with vkGetInstanceProcAddr.";
+            WriteBootstrapEvidence(result, logPath);
+            return static_cast<int>(result.code);
+        }
+
+        result.succeeded = true;
+        result.code = renegade::runtime::RuntimeBootstrapCode::Success;
+        result.graphicsCapability = "DX12_SYSTEM_COMPONENT_DECLARED";
+        result.message =
+            "DX12 capability probe uses the Windows system Direct3D 12 prerequisite; full DX12 startup is proven by the Gate 4 smoke launch.";
+        WriteBootstrapEvidence(result, logPath);
+        return 0;
     }
 
     LRESULT CALLBACK RenegadeRuntimeWindowProc(
@@ -277,7 +445,7 @@ namespace
             return 0;
 
         case WM_DESTROY:
-            PostQuitMessage(0);
+            PostQuitMessage(application.ExitCode());
             return 0;
 
         default:
@@ -300,18 +468,55 @@ int APIENTRY wWinMain(
     const auto processArguments = CollectProcessArguments();
     const std::wstring readyEventName = ReadyEventName(processArguments);
     const bool testLevelLaunch = !readyEventName.empty();
+    const bool smokeAutoPlay =
+        HasArgument(processArguments, SmokeAutoPlayArgument);
+    const bool smokeExit =
+        HasArgument(processArguments, SmokeExitArgument);
+    const bool capabilityProbe =
+        HasArgument(processArguments, CapabilityProbeArgument);
 
     auto bootstrap = renegade::runtime::ResolveRuntimeLaunch(
         processArguments,
         executablePath);
+    bootstrap.graphicsBackendRequested =
+        RequestedGraphicsBackend(processArguments);
+    if (bootstrap.packageRelativeLaunch)
+    {
+        bootstrap.windowsPrerequisitePolicy =
+            renegade::bridge::WindowsVcRuntimePrerequisitePolicy;
+    }
     bootstrap =
         renegade::runtime::ResolveRuntimeProject(std::move(bootstrap));
+    const std::string evidencePath = RuntimeEvidencePath(bootstrap);
     if (!bootstrap.succeeded)
     {
-        return ReportBootstrapFailure(bootstrap, !testLevelLaunch);
+        return ReportBootstrapFailure(
+            bootstrap,
+            evidencePath,
+            !testLevelLaunch && !capabilityProbe);
     }
 
+    std::string runtimeLoggingError;
+    if (!ConfigurePackageRuntimeLogging(
+            bootstrap,
+            evidencePath,
+            runtimeLoggingError))
+    {
+        bootstrap.succeeded = false;
+        bootstrap.code =
+            renegade::runtime::RuntimeBootstrapCode::ProjectRejected;
+        bootstrap.message = runtimeLoggingError;
+        return ReportBootstrapFailure(
+            bootstrap,
+            evidencePath,
+            !testLevelLaunch && !capabilityProbe);
+    }
+
+    if (capabilityProbe)
+        return RunCapabilityProbe(std::move(bootstrap));
+
     application.SetBootstrapResult(bootstrap);
+    application.SetSmokeOptions(smokeAutoPlay, smokeExit);
 
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
@@ -369,7 +574,9 @@ int APIENTRY wWinMain(
             if (application.EvidenceRevision() != writtenEvidenceRevision)
             {
                 writtenEvidenceRevision = application.EvidenceRevision();
-                WriteBootstrapEvidence(application.StartupResult());
+                WriteBootstrapEvidence(
+                    application.StartupResult(),
+                    evidencePath);
             }
 
             if (!startupHandled && application.StartupFinished())
@@ -380,10 +587,16 @@ int APIENTRY wWinMain(
                 {
                     const int exitCode = ReportBootstrapFailure(
                         result,
+                        evidencePath,
                         !testLevelLaunch);
                     PostQuitMessage(exitCode);
                     continue;
                 }
+
+                const std::string actualBackend = ActualGraphicsBackend();
+                application.SetGraphicsRuntimeEvidence(
+                    actualBackend,
+                    actualBackend.empty() ? "DEVICE_MISSING" : "STARTED");
 
                 const std::wstring title =
                     GraphicsBackendTitle(result.project.name);
@@ -405,7 +618,10 @@ int APIENTRY wWinMain(
                             "Test Level Runtime could not open the Studio "
                             "readiness event.";
                         const int exitCode =
-                            ReportBootstrapFailure(failure, false);
+                            ReportBootstrapFailure(
+                                failure,
+                                evidencePath,
+                                false);
                         PostQuitMessage(exitCode);
                         continue;
                     }
@@ -422,7 +638,10 @@ int APIENTRY wWinMain(
                             "Test Level Runtime could not signal Studio that "
                             "startup completed.";
                         const int exitCode =
-                            ReportBootstrapFailure(failure, false);
+                            ReportBootstrapFailure(
+                                failure,
+                                evidencePath,
+                                false);
                         PostQuitMessage(exitCode);
                         continue;
                     }
@@ -431,6 +650,12 @@ int APIENTRY wWinMain(
 
             if (!quitWindowRequested && application.QuitRequested())
             {
+                // Smoke can reach completion in the same Run() that first
+                // exposes startup. Persist the post-device/action evidence
+                // immediately before the window is destroyed.
+                WriteBootstrapEvidence(
+                    application.StartupResult(),
+                    evidencePath);
                 quitWindowRequested = true;
                 DestroyWindow(window);
             }

@@ -145,7 +145,8 @@ namespace renegade::runtime
             else
             {
                 // Wicked still consumes graphics flags such as dx12/vulkan.
-                // Every unrelated argument is deliberately ignored here.
+                // Gate 4 smoke/capability switches are consumed by platform
+                // code and deliberately remain unrelated to project parsing.
                 continue;
             }
 
@@ -327,6 +328,10 @@ namespace renegade::runtime
             return "STARTUP_SCREEN_REJECTED";
         case RuntimeBootstrapCode::ScreenLoadFailed:
             return "SCREEN_LOAD_FAILED";
+        case RuntimeBootstrapCode::PackageIntegrityFailed:
+            return "PACKAGE_INTEGRITY_FAILED";
+        case RuntimeBootstrapCode::GraphicsPrerequisiteMissing:
+            return "GRAPHICS_PREREQUISITE_MISSING";
         default:
             return "UNKNOWN";
         }
@@ -354,11 +359,25 @@ namespace renegade::runtime
             }
 
             stream
-                << "schema=renegade-runtime-bootstrap-v1\n"
+                << "schema=renegade-runtime-bootstrap-v2\n"
                 << "status=" << (result.succeeded ? "PASS" : "FAIL") << '\n'
                 << "code=" << RuntimeBootstrapCodeName(result.code) << '\n'
                 << "exit_code=" << static_cast<int>(result.code) << '\n'
                 << "message=" << result.message << '\n'
+                << "package_relative_launch="
+                << (result.packageRelativeLaunch ? "true" : "false") << '\n'
+                << "package_root=" << result.packageRootPath << '\n'
+                << "package_integrity=" << result.packageIntegrityStatus << '\n'
+                << "package_integrity_code=" << result.packageIntegrityCode << '\n'
+                << "package_manifest_sha256=" << result.packageManifestSha256 << '\n'
+                << "graphics_backend_requested="
+                << result.graphicsBackendRequested << '\n'
+                << "graphics_backend=" << result.graphicsBackend << '\n'
+                << "graphics_capability=" << result.graphicsCapability << '\n'
+                << "windows_prerequisite_policy="
+                << result.windowsPrerequisitePolicy << '\n'
+                << "smoke_status=" << result.smokeStatus << '\n'
+                << "smoke_quit_reason=" << result.smokeQuitReason << '\n'
                 << "project_descriptor=" << result.projectDescriptorPath << '\n'
                 << "project_id=" << result.project.projectId << '\n'
                 << "project_name=" << result.project.name << '\n'
@@ -379,6 +398,8 @@ namespace renegade::runtime
                 << "screen_document_id=" << result.screenDocumentId << '\n'
                 << "screen_loaded=" << (result.screenLoaded ? "true" : "false")
                 << '\n'
+                << "screen_was_loaded="
+                << (result.screenWasLoaded ? "true" : "false") << '\n'
                 << "screen_focused_widget=" << result.screenFocusedWidgetId << '\n'
                 << "last_action_id=" << result.lastActionId << '\n'
                 << "last_action_widget=" << result.lastActionWidgetId << '\n'

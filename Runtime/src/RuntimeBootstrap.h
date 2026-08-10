@@ -24,6 +24,8 @@ namespace renegade::runtime
         FlowExecutionFailed = 27,
         StartupScreenRejected = 28,
         ScreenLoadFailed = 29,
+        PackageIntegrityFailed = 30,
+        GraphicsPrerequisiteMissing = 31,
     };
 
     struct RuntimeBootstrapResult
@@ -48,6 +50,7 @@ namespace renegade::runtime
         std::string screenDocumentId;
         std::string screenFocusedWidgetId;
         bool screenLoaded = false;
+        bool screenWasLoaded = false;
         std::string lastActionId;
         std::string lastActionWidgetId;
         std::string lastActionInput;
@@ -55,6 +58,22 @@ namespace renegade::runtime
         std::string lastActionMessage;
         std::uint64_t lastActionSequence = 0;
         std::size_t entityCount = 0;
+
+        // LP06 Gate 4 packaged-runtime evidence. Explicit --project/Test Level
+        // launches leave these empty so the accepted LP04 contract is not
+        // silently converted into a package launch.
+        bool packageRelativeLaunch = false;
+        std::string packageRootPath;
+        std::string saveDataId;
+        std::string packageIntegrityStatus;
+        std::string packageIntegrityCode;
+        std::string packageManifestSha256;
+        std::string graphicsBackendRequested;
+        std::string graphicsBackend;
+        std::string graphicsCapability;
+        std::string windowsPrerequisitePolicy;
+        std::string smokeStatus;
+        std::string smokeQuitReason;
     };
 
     // Parses the Renegade-owned launch contract from already tokenized
