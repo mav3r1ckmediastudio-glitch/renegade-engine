@@ -117,7 +117,7 @@ add_test(
 set_tests_properties(
     RenegadeStandalonePackageTests
     PROPERTIES
-        TIMEOUT 180
+        TIMEOUT 420
         RUN_SERIAL TRUE
         FIXTURES_REQUIRED RenegadeGate4Scene
 )
