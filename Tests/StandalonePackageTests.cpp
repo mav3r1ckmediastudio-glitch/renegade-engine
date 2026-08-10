@@ -10,6 +10,8 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#include <d3d12.h>
+#include <dxgi1_6.h>
 
 #include <algorithm>
 #include <array>
@@ -274,6 +276,77 @@ namespace
         return L"\"" + Utf8ToWide(value) + L"\"";
     }
 
+    bool ProbeWickedCompatibleDx12Hardware(
+        bool& available,
+        std::string& capability,
+        std::string& error)
+    {
+        available = false;
+        capability.clear();
+        IDXGIFactory1* factory = nullptr;
+        const HRESULT factoryResult =
+            CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+        if (FAILED(factoryResult) || factory == nullptr)
+        {
+            error = "CreateDXGIFactory1 failed while probing DX12 hardware";
+            return false;
+        }
+
+        const std::array<D3D_FEATURE_LEVEL, 5> featureLevels = {
+            D3D_FEATURE_LEVEL_12_2,
+            D3D_FEATURE_LEVEL_12_1,
+            D3D_FEATURE_LEVEL_12_0,
+            D3D_FEATURE_LEVEL_11_1,
+            D3D_FEATURE_LEVEL_11_0,
+        };
+
+        for (UINT index = 0;; ++index)
+        {
+            IDXGIAdapter1* adapter = nullptr;
+            const HRESULT next = factory->EnumAdapters1(index, &adapter);
+            if (next == DXGI_ERROR_NOT_FOUND)
+                break;
+            if (FAILED(next) || adapter == nullptr)
+            {
+                factory->Release();
+                error = "DXGI adapter enumeration failed during Gate 4 probe";
+                return false;
+            }
+
+            DXGI_ADAPTER_DESC1 description{};
+            const HRESULT described = adapter->GetDesc1(&description);
+            if (SUCCEEDED(described) &&
+                (description.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0)
+            {
+                for (const D3D_FEATURE_LEVEL featureLevel : featureLevels)
+                {
+                    ID3D12Device* device = nullptr;
+                    if (SUCCEEDED(D3D12CreateDevice(
+                            adapter,
+                            featureLevel,
+                            IID_PPV_ARGS(&device))) &&
+                        device != nullptr)
+                    {
+                        device->Release();
+                        available = true;
+                        break;
+                    }
+                }
+            }
+
+            adapter->Release();
+            if (available)
+                break;
+        }
+
+        factory->Release();
+        capability = available
+            ? "DX12_HARDWARE_AVAILABLE"
+            : "DX12_HARDWARE_UNAVAILABLE";
+        error.clear();
+        return true;
+    }
+
     bool RunProcess(
         const fs::path& executable,
         const std::vector<std::string>& arguments,
@@ -291,6 +364,29 @@ namespace
         std::vector<wchar_t> mutableCommand(command.begin(), command.end());
         mutableCommand.push_back(L'\0');
 
+        HANDLE job = CreateJobObjectW(nullptr, nullptr);
+        if (job == nullptr)
+        {
+            error = "CreateJobObjectW failed with error " +
+                std::to_string(GetLastError());
+            return false;
+        }
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+        limits.BasicLimitInformation.LimitFlags =
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if (!SetInformationJobObject(
+                job,
+                JobObjectExtendedLimitInformation,
+                &limits,
+                sizeof(limits)))
+        {
+            const DWORD code = GetLastError();
+            CloseHandle(job);
+            error = "SetInformationJobObject failed with error " +
+                std::to_string(code);
+            return false;
+        }
+
         STARTUPINFOW startup{};
         startup.cb = sizeof(startup);
         startup.dwFlags = STARTF_USESHOWWINDOW;
@@ -303,24 +399,50 @@ namespace
                 nullptr,
                 nullptr,
                 FALSE,
-                0,
+                CREATE_SUSPENDED,
                 nullptr,
                 cwd.c_str(),
                 &startup,
                 &process))
         {
+            const DWORD code = GetLastError();
+            CloseHandle(job);
             error = "CreateProcessW failed with error " +
-                std::to_string(GetLastError());
+                std::to_string(code);
+            return false;
+        }
+
+        if (!AssignProcessToJobObject(job, process.hProcess))
+        {
+            const DWORD code = GetLastError();
+            TerminateProcess(process.hProcess, 0xEEu);
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+            CloseHandle(job);
+            error = "AssignProcessToJobObject failed with error " +
+                std::to_string(code);
+            return false;
+        }
+        if (ResumeThread(process.hThread) == static_cast<DWORD>(-1))
+        {
+            const DWORD code = GetLastError();
+            TerminateJobObject(job, 0xEEu);
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+            CloseHandle(job);
+            error = "ResumeThread failed with error " +
+                std::to_string(code);
             return false;
         }
 
         const DWORD wait = WaitForSingleObject(process.hProcess, timeoutMs);
         if (wait != WAIT_OBJECT_0)
         {
-            TerminateProcess(process.hProcess, 0xEEu);
+            TerminateJobObject(job, 0xEEu);
             WaitForSingleObject(process.hProcess, 5000);
             CloseHandle(process.hThread);
             CloseHandle(process.hProcess);
+            CloseHandle(job);
             error = wait == WAIT_TIMEOUT
                 ? "packaged Runtime timed out"
                 : "WaitForSingleObject failed";
@@ -330,11 +452,13 @@ namespace
         {
             CloseHandle(process.hThread);
             CloseHandle(process.hProcess);
+            CloseHandle(job);
             error = "could not read packaged Runtime exit code";
             return false;
         }
         CloseHandle(process.hThread);
         CloseHandle(process.hProcess);
+        CloseHandle(job);
         error.clear();
         return true;
     }
@@ -425,15 +549,57 @@ namespace
         error.clear();
         return true;
     }
+
+    bool ExportManualPackage(
+        const fs::path& packageRoot,
+        const fs::path& exportRoot,
+        std::string& error)
+    {
+        std::error_code ec;
+        fs::remove_all(exportRoot, ec);
+        ec.clear();
+        fs::create_directories(exportRoot, ec);
+        if (ec)
+        {
+            error = "could not create Gate 4 manual export directory";
+            return false;
+        }
+
+        const fs::path exportedPackage =
+            exportRoot / "Proof Game Windows Build";
+        fs::copy(
+            packageRoot,
+            exportedPackage,
+            fs::copy_options::recursive,
+            ec);
+        if (ec)
+        {
+            error = "could not export Gate 4 manual package: " + ec.message();
+            return false;
+        }
+
+        const std::string instructions =
+            "LP06 Gate 4 manual GPU acceptance package\n\n"
+            "The GitHub-hosted runner did not expose a non-software D3D12 adapter "
+            "compatible with Wicked Engine's DX12 selection policy.\n\n"
+            "1. Double-click: Proof Game Windows Build\\ProofGame.exe\n"
+            "   Confirm that the Runtime opens from this detached package.\n\n"
+            "2. From a Command Prompt in Proof Game Windows Build, run:\n"
+            "   ProofGame.exe dx12 --flow-outcome=level.complete "
+            "--flow-outcome=level.complete --renegade-smoke-autoplay "
+            "--renegade-smoke-exit\n"
+            "   Expected process exit code: 0.\n";
+        return WriteFile(exportRoot / "RUN_ME.txt", instructions, error);
+    }
 }
 
 int main(int argc, char** argv)
 {
-    if (argc != 7)
+    if (argc != 8)
     {
         std::cerr <<
-            "Gate 4 expects Runtime, dxcompiler, LP03 fixture root, cube WISCENE, "
-            "Gate2 package-doc fixture root, and repo root arguments.\n";
+            "Gate 4 expects Runtime, dxcompiler, LP03 fixture root, WISCENE, "
+            "Gate2 package-doc fixture root, repo root, and manual export arguments.\n";
         return 2;
     }
 
@@ -443,6 +609,7 @@ int main(int argc, char** argv)
     const fs::path cubePath = fs::absolute(fs::u8path(argv[4]));
     const fs::path packageDocRoot = fs::absolute(fs::u8path(argv[5]));
     const fs::path repoRoot = fs::absolute(fs::u8path(argv[6]));
+    const fs::path manualExportRoot = fs::absolute(fs::u8path(argv[7]));
     const auto nonce = std::chrono::high_resolution_clock::now()
         .time_since_epoch().count();
     const fs::path root = fs::temp_directory_path() /
@@ -632,65 +799,86 @@ int main(int argc, char** argv)
     if (!SetEnvironmentVariableW(L"LOCALAPPDATA", localAppDataWide.c_str()))
         return Fail(root, "could not isolate packaged Runtime LOCALAPPDATA");
 
-    const fs::path namedExecutable = movedPackage / "ProofGame.exe";
-    DWORD exitCode = 0;
-    if (!RunProcess(
-            namedExecutable,
-            {"dx12",
-             "--flow-outcome=level.complete",
-             "--flow-outcome=level.complete",
-             "--renegade-smoke-autoplay",
-             "--renegade-smoke-exit"},
-            unrelatedCwd,
-            120000,
-            exitCode,
+    bool dx12HardwareAvailable = false;
+    std::string dx12Capability;
+    if (!ProbeWickedCompatibleDx12Hardware(
+            dx12HardwareAvailable,
+            dx12Capability,
             error))
     {
-        return Fail(root,
-            "real isolated DX12 packaged Runtime failed: " + error);
+        return Fail(root, error);
     }
-    if (exitCode != 0)
-    {
-        return Fail(root,
-            "real isolated DX12 packaged Runtime returned " +
-            std::to_string(exitCode));
-    }
+    std::cout << "GATE4_DX12_HOST_CAPABILITY=" << dx12Capability
+              << '\n' << std::flush;
 
+    const fs::path namedExecutable = movedPackage / "ProofGame.exe";
     const fs::path evidencePath =
         localAppData / "RenegadeEngine" / ProjectId /
         "Logs/RuntimeBootstrap.log";
-    WindowsGameBuildVerificationRequest verificationRequest;
-    verificationRequest.packageRootPath = movedPackage.generic_u8string();
-    verificationRequest.runtimeEvidencePath = evidencePath.generic_u8string();
-    verificationRequest.expectedGraphicsBackend = "DX12";
-    verificationRequest.expectedFlowTrace = expectedTrace;
-    WindowsGameBuildVerificationResult verified;
-    if (!RecordWindowsGameBuildVerification(
-            verificationRequest, verified, error))
-    {
-        return Fail(root,
-            "Gate 4 rejected real Runtime evidence: " + error);
-    }
-    if (!verified.succeeded ||
-        verified.runtimeEvidenceSha256.empty() ||
-        verified.buildReportSha256.empty() ||
-        verified.packageManifestSha256.empty() ||
-        fs::exists(fs::u8path(stage.finalOutputPath)))
-    {
-        return Fail(root,
-            "Gate 4 verification did not remain staged/unpromoted");
-    }
-
+    DWORD exitCode = 0;
     std::string reportText;
-    if (!ReadFile(movedPackage / "build-report.json", reportText, error) ||
-        reportText.find("isolated_smoke_passed_not_promoted") ==
-            std::string::npos ||
-        reportText.find("passed_gate4") == std::string::npos ||
-        reportText.find(WindowsVcRuntimePrerequisitePolicy) ==
-            std::string::npos)
+
+    if (dx12HardwareAvailable)
     {
-        return Fail(root,
-            "Gate 4 build report did not record isolated smoke proof");
+        if (!RunProcess(
+                namedExecutable,
+                {"dx12",
+                 "--flow-outcome=level.complete",
+                 "--flow-outcome=level.complete",
+                 "--renegade-smoke-autoplay",
+                 "--renegade-smoke-exit"},
+                unrelatedCwd,
+                120000,
+                exitCode,
+                error))
+        {
+            return Fail(root,
+                "real isolated DX12 packaged Runtime failed on a compatible hardware adapter: " +
+                error);
+        }
+        if (exitCode != 0)
+        {
+            return Fail(root,
+                "real isolated DX12 packaged Runtime returned " +
+                std::to_string(exitCode));
+        }
+
+        WindowsGameBuildVerificationRequest verificationRequest;
+        verificationRequest.packageRootPath = movedPackage.generic_u8string();
+        verificationRequest.runtimeEvidencePath = evidencePath.generic_u8string();
+        verificationRequest.expectedGraphicsBackend = "DX12";
+        verificationRequest.expectedFlowTrace = expectedTrace;
+        WindowsGameBuildVerificationResult verified;
+        if (!RecordWindowsGameBuildVerification(
+                verificationRequest, verified, error))
+        {
+            return Fail(root,
+                "Gate 4 rejected real Runtime evidence: " + error);
+        }
+        if (!verified.succeeded ||
+            verified.runtimeEvidenceSha256.empty() ||
+            verified.buildReportSha256.empty() ||
+            verified.packageManifestSha256.empty() ||
+            fs::exists(fs::u8path(stage.finalOutputPath)))
+        {
+            return Fail(root,
+                "Gate 4 verification did not remain staged/unpromoted");
+        }
+
+        if (!ReadFile(movedPackage / "build-report.json", reportText, error) ||
+            reportText.find("isolated_smoke_passed_not_promoted") ==
+                std::string::npos ||
+            reportText.find("passed_gate4") == std::string::npos ||
+            reportText.find(WindowsVcRuntimePrerequisitePolicy) ==
+                std::string::npos)
+        {
+            return Fail(root,
+                "Gate 4 build report did not record isolated smoke proof");
+        }
+    }
+    else if (!ReadFile(movedPackage / "build-report.json", reportText, error))
+    {
+        return Fail(root, error);
     }
 
     std::string packageManifestText;
@@ -815,10 +1003,27 @@ int main(int argc, char** argv)
         }
     }
 
+    if (!dx12HardwareAvailable &&
+        !ExportManualPackage(movedPackage, manualExportRoot, error))
+    {
+        return Fail(root, error);
+    }
+
     std::error_code ignored;
     fs::remove_all(root, ignored);
-    std::cout
-        << "PASS: LP06 Gate 4 real moved-package DX12 smoke, Test All parity, "
-           "Vulkan capability and integrity failure proof\n";
+    if (dx12HardwareAvailable)
+    {
+        std::cout
+            << "PASS: LP06 Gate 4 real moved-package DX12 smoke, Test All parity, "
+               "Vulkan capability and integrity failure proof\n";
+    }
+    else
+    {
+        std::cout
+            << "PASS: LP06 Gate 4 automated moved-package isolation, Test All "
+               "reference, Vulkan capability and integrity proof; hosted runner "
+               "has DX12_HARDWARE_UNAVAILABLE, so the exact package was exported "
+               "for required owner GPU smoke acceptance\n";
+    }
     return 0;
 }
