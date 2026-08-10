@@ -29,12 +29,38 @@ target_compile_options(RenegadeTestLevelRuntimeProcess
         "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
 )
 
+find_package(Git REQUIRED)
+execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    RESULT_VARIABLE RENEGADE_REVISION_RESULT
+    OUTPUT_VARIABLE RENEGADE_SOURCE_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/WickedEngine"
+    RESULT_VARIABLE RENEGADE_WICKED_REVISION_RESULT
+    OUTPUT_VARIABLE RENEGADE_WICKED_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT RENEGADE_REVISION_RESULT EQUAL 0 OR
+   NOT RENEGADE_SOURCE_REVISION MATCHES "^[0-9a-f]{40}$")
+    message(FATAL_ERROR "Renegade Studio requires an exact Git source revision for LP06 builds.")
+endif()
+if(NOT RENEGADE_WICKED_REVISION_RESULT EQUAL 0 OR
+   NOT RENEGADE_WICKED_REVISION MATCHES "^[0-9a-f]{40}$")
+    message(FATAL_ERROR "Renegade Studio requires the exact pinned Wicked revision for LP06 builds.")
+endif()
+
 add_executable(RenegadeStudio WIN32
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/Translator.cpp"
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChrome.h
     src/StudioApplication.cpp
     src/StudioApplication.h
+    src/WindowsGameBuildController.cpp
+    src/WindowsGameBuildController.h
     src/main_Windows.cpp
 )
 
@@ -61,6 +87,8 @@ target_compile_definitions(RenegadeStudio
     PRIVATE
         UNICODE
         _UNICODE
+        RENEGADE_SOURCE_REVISION="${RENEGADE_SOURCE_REVISION}"
+        RENEGADE_WICKED_REVISION="${RENEGADE_WICKED_REVISION}"
 )
 
 target_compile_options(RenegadeStudio
@@ -87,6 +115,8 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
         "$<TARGET_FILE_DIR:RenegadeStudio>"
@@ -102,6 +132,15 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/package/BuildInputs"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/LICENSE.txt"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs/WickedEngine-LICENSE.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/third_party_software.txt"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs/WickedEngine-third_party_software.txt"
     COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_ao.tga"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_roughness.tga"
