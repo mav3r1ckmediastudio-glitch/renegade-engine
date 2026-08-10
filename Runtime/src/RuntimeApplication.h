@@ -9,6 +9,7 @@
 #include "renegade/bridge/SceneService.h"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace renegade::runtime
@@ -27,9 +28,14 @@ namespace renegade::runtime
     {
     public:
         void SetBootstrapResult(RuntimeBootstrapResult result);
+        void SetSmokeOptions(bool autoPlay, bool exitOnComplete) noexcept;
+        void SetGraphicsRuntimeEvidence(
+            std::string actualBackend,
+            std::string capability);
         [[nodiscard]] bool StartupFinished() const noexcept;
         [[nodiscard]] const RuntimeBootstrapResult& StartupResult() const noexcept;
         [[nodiscard]] bool QuitRequested() const noexcept;
+        [[nodiscard]] int ExitCode() const noexcept;
         [[nodiscard]] std::uint64_t EvidenceRevision() const noexcept;
 
         void Initialize() override;
@@ -53,6 +59,9 @@ namespace renegade::runtime
         bool startupFinished_ = false;
         bool flowStarted_ = false;
         bool quitRequested_ = false;
+        bool smokeAutoPlay_ = false;
+        bool smokeExitOnComplete_ = false;
+        int exitCode_ = 0;
         std::uint64_t evidenceRevision_ = 0;
     };
 }

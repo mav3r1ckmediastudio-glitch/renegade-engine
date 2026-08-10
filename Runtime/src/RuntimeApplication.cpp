@@ -31,6 +31,23 @@ namespace renegade::runtime
         startupResult_ = std::move(result);
     }
 
+    void RuntimeApplication::SetSmokeOptions(
+        const bool autoPlay,
+        const bool exitOnComplete) noexcept
+    {
+        smokeAutoPlay_ = autoPlay;
+        smokeExitOnComplete_ = exitOnComplete;
+    }
+
+    void RuntimeApplication::SetGraphicsRuntimeEvidence(
+        std::string actualBackend,
+        std::string capability)
+    {
+        startupResult_.graphicsBackend = std::move(actualBackend);
+        startupResult_.graphicsCapability = std::move(capability);
+        ++evidenceRevision_;
+    }
+
     bool RuntimeApplication::StartupFinished() const noexcept
     {
         return startupFinished_;
@@ -44,6 +61,11 @@ namespace renegade::runtime
     bool RuntimeApplication::QuitRequested() const noexcept
     {
         return quitRequested_;
+    }
+
+    int RuntimeApplication::ExitCode() const noexcept
+    {
+        return exitCode_;
     }
 
     std::uint64_t RuntimeApplication::EvidenceRevision() const noexcept
@@ -85,11 +107,23 @@ namespace renegade::runtime
             startupResult_.succeeded = true;
             startupResult_.code = RuntimeBootstrapCode::Success;
             startupResult_.screenLoaded = true;
+            startupResult_.screenWasLoaded = true;
             startupResult_.message =
                 "Loaded project Runtime screen: " +
                 startupResult_.startupScreenPath;
             startupFinished_ = true;
             ++evidenceRevision_;
+
+            if (smokeAutoPlay_)
+            {
+                const auto* focused = screenController_.FocusedWidget();
+                QueueAction(RuntimeActionRequest{
+                    bridge::RuntimeScreenPlayAction,
+                    focused == nullptr ? std::string{} : focused->id,
+                    RuntimeInputSource::Test,
+                    1,
+                });
+            }
             return;
         }
 
@@ -294,6 +328,34 @@ namespace renegade::runtime
         const auto* focused = screenController_.FocusedWidget();
         startupResult_.screenFocusedWidgetId =
             focused == nullptr ? std::string{} : focused->id;
+
+        if (smokeAutoPlay_ &&
+            result.request.actionId == bridge::RuntimeScreenPlayAction)
+        {
+            const bool complete = result.succeeded &&
+                startupResult_.flowTerminalAction ==
+                    bridge::FlowTerminalAction::CompleteGame;
+            if (complete)
+            {
+                startupResult_.smokeStatus = "PASS";
+                startupResult_.smokeQuitReason = "smoke_complete";
+                exitCode_ = 0;
+                if (smokeExitOnComplete_)
+                    quitRequested_ = true;
+            }
+            else
+            {
+                startupResult_.smokeStatus = "FAIL";
+                startupResult_.smokeQuitReason = result.succeeded
+                    ? "flow_not_complete"
+                    : "play_action_failed";
+                exitCode_ = static_cast<int>(
+                    RuntimeBootstrapCode::FlowExecutionFailed);
+                if (smokeExitOnComplete_)
+                    quitRequested_ = true;
+            }
+        }
+
         ++evidenceRevision_;
     }
 }
