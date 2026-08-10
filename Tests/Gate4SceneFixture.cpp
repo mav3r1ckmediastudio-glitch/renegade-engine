@@ -16,14 +16,24 @@ namespace
         if (ec)
             return false;
 
+        std::cout << "GATE4_SCENE_PHASE=construct_scene\n" << std::flush;
         wi::scene::Scene scene;
         scene.Entity_CreateTransform(entityName);
 
+        std::cout << "GATE4_SCENE_PHASE=open_archive\n" << std::flush;
         wi::Archive archive(path.generic_u8string(), false, false);
         if (!archive.IsOpen())
             return false;
+
+        std::cout << "GATE4_SCENE_PHASE=serialize_begin\n" << std::flush;
         scene.Serialize(archive);
+        std::cout << "GATE4_SCENE_PHASE=serialize_end\n" << std::flush;
+
+        std::cout << "GATE4_SCENE_PHASE=save_begin\n" << std::flush;
         const bool saved = archive.SaveFile(path.generic_u8string());
+        std::cout << "GATE4_SCENE_PHASE=save_end saved="
+                  << (saved ? "true" : "false") << '\n' << std::flush;
+
         archive = wi::Archive();
         return saved && fs::is_regular_file(path, ec) && !ec;
     }
@@ -45,6 +55,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    std::cout << scene.generic_u8string() << '\n';
+    std::cout << "GATE4_SCENE_PHASE=complete path="
+              << scene.generic_u8string() << '\n' << std::flush;
     return 0;
 }
