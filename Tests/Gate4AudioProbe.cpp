@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <iostream>
 
+#pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "xaudio2.lib")
 
 namespace
