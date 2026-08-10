@@ -2,6 +2,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/AssetBrowserService.h
     include/renegade/bridge/AssetRegistryService.h
     include/renegade/bridge/BuildService.h
+    include/renegade/bridge/BuildStageService.h
     include/renegade/bridge/CommandService.h
     include/renegade/bridge/DependencyService.h
     include/renegade/bridge/FlowService.h
@@ -25,6 +26,7 @@ add_library(RenegadeEngineBridge STATIC
     src/AssetBrowserService.cpp
     src/AssetRegistryService.cpp
     src/BuildService.cpp
+    src/BuildStageService.cpp
     src/CommandService.cpp
     src/DependencyService.cpp
     src/FlowService.cpp
