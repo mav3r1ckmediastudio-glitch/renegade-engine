@@ -1,0 +1,9 @@
+DirectX Shader Compiler — LP06 third-party notice placeholder
+
+The shipped dxcompiler.dll incorporates upstream third-party components. The
+final redistribution gate must copy and verify the exact third-party notices
+applicable to the pinned binary that Renegade distributes.
+
+This LP06 owner-visible build remains distribution_ready=false. This file is a
+deliberate development-proof notice and is not a substitute for the final
+release notice inventory.
