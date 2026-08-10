@@ -3,10 +3,12 @@
 #include <wiInitializer.h>
 
 #include <array>
-#include <cstdlib>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <sstream>
+#include <stdlib.h>
 #include <string>
 #include <vector>
 
