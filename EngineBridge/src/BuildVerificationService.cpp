@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <string>
 #include <system_error>
@@ -25,8 +26,7 @@ namespace renegade::bridge
         {
             std::error_code ec;
             const fs::file_status status = fs::symlink_status(path, ec);
-            if (ec || fs::is_symlink(status) ||
-                !fs::is_regular_file(path, ec) || ec)
+            if (ec || fs::is_symlink(status) || !fs::is_regular_file(status))
             {
                 error = "Gate 4 evidence input is missing or symlinked: " +
                     path.generic_u8string();
@@ -42,12 +42,13 @@ namespace renegade::bridge
             text.assign(
                 std::istreambuf_iterator<char>(input),
                 std::istreambuf_iterator<char>());
-            if (!input.eof())
+            if (input.bad())
             {
                 error = "Gate 4 could not complete evidence read: " +
                     path.generic_u8string();
                 return false;
             }
+            error.clear();
             return true;
         }
 
@@ -58,8 +59,7 @@ namespace renegade::bridge
         {
             std::error_code ec;
             const fs::file_status status = fs::symlink_status(path, ec);
-            if (ec || fs::is_symlink(status) ||
-                !fs::is_regular_file(path, ec) || ec)
+            if (ec || fs::is_symlink(status) || !fs::is_regular_file(status))
             {
                 error = "Gate 4 refuses to rewrite missing or symlinked package metadata: " +
                     path.generic_u8string();
@@ -80,6 +80,7 @@ namespace renegade::bridge
                     path.generic_u8string();
                 return false;
             }
+            error.clear();
             return true;
         }
 
@@ -95,7 +96,8 @@ namespace renegade::bridge
                 const std::size_t end = text.find('\n', begin);
                 std::string line = text.substr(
                     begin,
-                    end == std::string::npos ? std::string::npos : end - begin);
+                    end == std::string::npos ?
+                        std::string::npos : end - begin);
                 if (!line.empty() && line.back() == '\r')
                     line.pop_back();
                 if (!line.empty())
@@ -117,10 +119,11 @@ namespace renegade::bridge
                     break;
                 begin = end + 1;
             }
+            error.clear();
             return true;
         }
 
-        bool Required(
+        bool Require(
             const std::map<std::string, std::string>& values,
             const std::string& key,
             const std::string& expected,
@@ -136,9 +139,7 @@ namespace renegade::bridge
             return true;
         }
 
-        bool IsWithin(
-            const fs::path& root,
-            const fs::path& candidate)
+        bool IsWithin(const fs::path& root, const fs::path& candidate)
         {
             std::error_code ec;
             const fs::path relative = fs::relative(candidate, root, ec);
@@ -153,9 +154,7 @@ namespace renegade::bridge
                 });
         }
 
-        bool ParseUnsigned(
-            const std::string& text,
-            std::size_t& value)
+        bool ParseUnsigned(const std::string& text, std::size_t& value)
         {
             if (text.empty() ||
                 !std::all_of(
@@ -234,23 +233,23 @@ namespace renegade::bridge
 
             std::map<std::string, std::string> evidence;
             if (!ParseEvidence(evidenceText, evidence, error) ||
-                !Required(evidence, "schema", "renegade-runtime-bootstrap-v2", error) ||
-                !Required(evidence, "status", "PASS", error) ||
-                !Required(evidence, "code", "SUCCESS", error) ||
-                !Required(evidence, "package_integrity", "PASS", error) ||
-                !Required(evidence, "screen_was_loaded", "true", error) ||
-                !Required(evidence, "graphics_backend_requested",
+                !Require(evidence, "schema", "renegade-runtime-bootstrap-v2", error) ||
+                !Require(evidence, "status", "PASS", error) ||
+                !Require(evidence, "code", "SUCCESS", error) ||
+                !Require(evidence, "package_integrity", "PASS", error) ||
+                !Require(evidence, "screen_was_loaded", "true", error) ||
+                !Require(evidence, "graphics_backend_requested",
                     request.expectedGraphicsBackend, error) ||
-                !Required(evidence, "graphics_backend",
+                !Require(evidence, "graphics_backend",
                     request.expectedGraphicsBackend, error) ||
-                !Required(evidence, "graphics_capability", "STARTED", error) ||
-                !Required(evidence, "windows_prerequisite_policy",
+                !Require(evidence, "graphics_capability", "STARTED", error) ||
+                !Require(evidence, "windows_prerequisite_policy",
                     request.windowsPrerequisitePolicy, error) ||
-                !Required(evidence, "smoke_status", "PASS", error) ||
-                !Required(evidence, "smoke_quit_reason", "smoke_complete", error) ||
-                !Required(evidence, "flow_terminal", "complete_game", error) ||
-                !Required(evidence, "last_action_id", "play", error) ||
-                !Required(evidence, "last_action_code", "success", error))
+                !Require(evidence, "smoke_status", "PASS", error) ||
+                !Require(evidence, "smoke_quit_reason", "smoke_complete", error) ||
+                !Require(evidence, "flow_terminal", "complete_game", error) ||
+                !Require(evidence, "last_action_id", "play", error) ||
+                !Require(evidence, "last_action_code", "success", error))
             {
                 return false;
             }
@@ -263,16 +262,23 @@ namespace renegade::bridge
                 error = "Gate 4 Runtime evidence is missing package/project root proof.";
                 return false;
             }
+
+            std::error_code packageError;
             const fs::path loggedPackageRoot = fs::weakly_canonical(
-                fs::u8path(packageRootEvidence->second), ec);
-            if (ec || !fs::equivalent(packageRoot, loggedPackageRoot, ec) || ec)
+                fs::u8path(packageRootEvidence->second), packageError);
+            std::error_code equivalentError;
+            if (packageError ||
+                !fs::equivalent(packageRoot, loggedPackageRoot, equivalentError) ||
+                equivalentError)
             {
                 error = "Gate 4 Runtime evidence came from a different package root.";
                 return false;
             }
+
+            std::error_code projectError;
             const fs::path loggedProjectRoot = fs::weakly_canonical(
-                fs::u8path(projectRootEvidence->second), ec);
-            if (ec || !IsWithin(packageRoot, loggedProjectRoot))
+                fs::u8path(projectRootEvidence->second), projectError);
+            if (projectError || !IsWithin(packageRoot, loggedProjectRoot))
             {
                 error = "Gate 4 Runtime project root was not contained by the package.";
                 return false;
