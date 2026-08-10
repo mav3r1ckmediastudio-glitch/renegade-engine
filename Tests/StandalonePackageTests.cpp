@@ -39,6 +39,11 @@ namespace
         "61111111-1111-4111-8111-111111111111";
     constexpr const char* SaveDataId =
         "69999999-9999-4999-8999-999999999999";
+#ifdef _DEBUG
+    constexpr DWORD Dx12SmokeTimeoutMs = 300000;
+#else
+    constexpr DWORD Dx12SmokeTimeoutMs = 120000;
+#endif
 
     struct SourceFile
     {
@@ -828,7 +833,7 @@ int main(int argc, char** argv)
                  "--renegade-smoke-autoplay",
                  "--renegade-smoke-exit"},
                 unrelatedCwd,
-                120000,
+                Dx12SmokeTimeoutMs,
                 exitCode,
                 error))
         {
