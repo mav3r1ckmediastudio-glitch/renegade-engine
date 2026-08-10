@@ -1,6 +1,6 @@
 # LP06 Gate 5 — Safe Rebuild, Promotion and Close-out
 
-Status: implementation contract for `agent/lp06-gate5-safe-promotion`.
+Status: implementation candidate on `agent/lp06-gate5-safe-promotion`.
 
 Authoritative base: `715bb23aad3bd1ec63cb9066db18a842b868caa5`
 (`Add LP06 Gate 4 isolated standalone parity (#43)`).
@@ -159,6 +159,29 @@ covers the implemented loose-package materialization boundary. If ZIP/archive
 output is added later, its own temporary-file and last-good preservation tests
 are required before it can become authoritative.
 
+## Transaction-layer proof before Studio integration
+
+Exact pre-UI orchestration head
+`3e33036b4304f0710b8a3abfc1eebcb4c510e778` established the safe-promotion
+and composed workflow baseline before the owner-facing Studio action was added:
+
+- Renegade Studio run 219 passed Windows Debug and Release;
+- all eight Gate 5 promotion/failure cases passed;
+- Debug retained only the already-accepted Gate 4 hosted-runner XAudio2 skip;
+- the normal suite remained 41 tests;
+- Windows baseline run 325 passed Debug and Release;
+- LP05 packaged graph SHA-256 remained
+  `23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384`
+  (4,681 bytes);
+- LC01 packaged registry SHA-256 remained
+  `547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`
+  (2,180 bytes); and
+- Wicked remained pinned at the exact revision above.
+
+That evidence proves the transaction/orchestration substrate. It does not by
+itself accept the later Studio integration; the final integrated head still
+requires its own authoritative Debug/Release and pinned-Wicked checks.
+
 ## Test and implementation discipline
 
 - Promotion remains UI-free in `EngineBridge`.
@@ -170,21 +193,60 @@ are required before it can become authoritative.
 - Do not perform file-by-file overwrite of the owner-visible final build.
 - Do not claim success merely because compilation succeeds.
 
-The Gate 5 transaction tests are expected to add eight explicit CTest entries,
-raising the normal Studio suite from 33 to **41 tests**. The existing Gate 4
-Debug XAudio2 environment skip remains exactly as accepted; Gate 5 must not
-broaden that skip.
+The Gate 5 transaction tests add eight explicit CTest entries, raising the
+normal Studio suite from 33 to **41 tests**. The existing Gate 4 Debug XAudio2
+environment skip remains exactly as accepted; Gate 5 must not broaden that skip.
 
-## Owner-visible Build Windows Game boundary
+## Owner-visible Build Windows Game implementation
 
-After the promotion transaction is proven, Gate 5 must wire the owner-approved
-**Build Windows Game** Studio action through the existing Renegade-owned build
-services rather than implementing build semantics in the UI. That action must
-produce the governed final path above from the active project and must surface
-clear success/failure evidence.
+The owner-approved **Build Windows Game** path is now implemented as a thin
+Studio adapter over Renegade-owned services rather than as build semantics in
+the chrome.
 
-The final owner acceptance is the actual named Release executable launched from
-the owner-visible final directory outside Studio/repository assumptions.
+The active-project preparation service:
+
+- rebuilds the current LP05 project dependency closure through the accepted
+  Project, Story Flow, Runtime Screen, WISCENE and glTF providers;
+- refreshes and transactionally persists the LC01 stable asset registry while
+  retaining existing import provenance;
+- does **not** import or reimport creator content; stale imported-product
+  provenance continues to fail closed in Gate 1 `BuildService`;
+- resolves the active startup Story Flow and computes the deterministic Test All
+  trace using the same `FlowInterpreter` contract as Runtime; and
+- currently requires the bounded LP06 representative route to advance Level
+  nodes through `level.complete` until `CompleteGame`, rather than guessing an
+  unsupported gameplay branch.
+
+The Release Studio action then composes the already-accepted LP06 services in
+order:
+
+1. Gate 1 deterministic build plan;
+2. Gate 2 unique loose staging;
+3. Gate 3 named executable identity and package-relative bootstrap;
+4. a detached real named-executable DX12 smoke from an unrelated temporary CWD,
+   with fresh Local AppData Runtime evidence required;
+5. Gate 4 exact verification against the computed Test All trace; and
+6. Gate 5 safe promotion to the owner-visible final directory.
+
+Studio resolves `RenegadeRuntime.exe` and `dxcompiler.dll` from its assembled
+package (or the equivalent Release build-tree locations during development),
+hashes them before planning, and supplies them as explicit Runtime-support
+inputs. The Studio package also carries the governed build-document inputs;
+Wicked's actual `LICENSE.txt` and `third_party_software.txt` are copied from the
+exact pinned submodule during the Studio build. Renegade and DXC development
+notice inputs deliberately state that the promoted LP06 output remains
+`distribution_ready=false`; final redistribution clearance remains a separate
+release/licensing gate.
+
+The BUILD menu exposes **BUILD WINDOWS GAME...** above the existing GLB/GLTF
+validation action. The build result is surfaced through the existing Output
+drawer with either the promoted final path or the exact failure reason. Debug
+Studio keeps the action fail-closed because the real owner-visible standalone
+claim is Release-only; Debug remains the regression mirror required by CI.
+
+The integrated Studio path is not accepted merely because it is present in the
+branch. It still requires authoritative exact-head CI, owner-visible execution,
+and owner acceptance below.
 
 ## Gate 5 / LP06 acceptance
 
