@@ -2,6 +2,7 @@
 #include "RuntimePackageBootstrap.h"
 
 #include "renegade/bridge/BuildVerificationService.h"
+#include "wiBacklog.h"
 
 #include <Windows.h>
 #include <shellapi.h>
@@ -260,6 +261,39 @@ namespace
             "RuntimeBootstrap.log").generic_u8string();
     }
 
+    bool ConfigurePackageRuntimeLogging(
+        const renegade::runtime::RuntimeBootstrapResult& result,
+        const std::string& evidencePath,
+        std::string& error)
+    {
+        if (!result.packageRelativeLaunch)
+        {
+            error.clear();
+            return true;
+        }
+        if (evidencePath.empty())
+        {
+            error = "LOCALAPPDATA is unavailable for packaged Runtime logging.";
+            return false;
+        }
+
+        const fs::path logDirectory =
+            fs::u8path(evidencePath).parent_path();
+        std::error_code ec;
+        fs::create_directories(logDirectory, ec);
+        if (ec)
+        {
+            error = "Could not create packaged Runtime log directory: " +
+                ec.message();
+            return false;
+        }
+
+        wi::backlog::SetLogFile(
+            (logDirectory / "WickedRuntime.log").generic_u8string());
+        error.clear();
+        return true;
+    }
+
     void WriteBootstrapEvidence(
         const renegade::runtime::RuntimeBootstrapResult& result,
         const std::string& logPath)
@@ -456,6 +490,22 @@ int APIENTRY wWinMain(
     const std::string evidencePath = RuntimeEvidencePath(bootstrap);
     if (!bootstrap.succeeded)
     {
+        return ReportBootstrapFailure(
+            bootstrap,
+            evidencePath,
+            !testLevelLaunch && !capabilityProbe);
+    }
+
+    std::string runtimeLoggingError;
+    if (!ConfigurePackageRuntimeLogging(
+            bootstrap,
+            evidencePath,
+            runtimeLoggingError))
+    {
+        bootstrap.succeeded = false;
+        bootstrap.code =
+            renegade::runtime::RuntimeBootstrapCode::ProjectRejected;
+        bootstrap.message = runtimeLoggingError;
         return ReportBootstrapFailure(
             bootstrap,
             evidencePath,
