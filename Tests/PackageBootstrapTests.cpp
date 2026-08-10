@@ -152,7 +152,7 @@ namespace
 
         std::ostringstream json;
         json << "{\"format\":\"renegade-package-manifest\","
-             << "\"schema_version\":1,"
+             << "\"schema_version\":2,"
              << "\"stage_only\":true,"
              << "\"distribution_ready\":false,"
              << "\"project_id\":\"" << ProjectId << "\","
