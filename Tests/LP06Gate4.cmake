@@ -120,4 +120,5 @@ set_tests_properties(
         TIMEOUT 420
         RUN_SERIAL TRUE
         FIXTURES_REQUIRED RenegadeGate4Scene
+        ENVIRONMENT "RENEGADE_GATE4_DIAGNOSTIC_ROOT=${PROJECT_SOURCE_DIR}/artifacts/studio/ci-$<CONFIG>/gate4-diagnostics"
 )
