@@ -755,9 +755,9 @@ namespace renegade::bridge
                 error = "Gate 3 could not read the governed .ico input.";
                 return false;
             }
-            std::vector<std::uint8_t> iconBytes(
+            std::vector<std::uint8_t> iconBytes{
                 std::istreambuf_iterator<char>(input),
-                std::istreambuf_iterator<char>());
+                std::istreambuf_iterator<char>{}};
             if (!input.eof() && input.fail())
             {
                 error = "Gate 3 could not read the governed .ico input.";
