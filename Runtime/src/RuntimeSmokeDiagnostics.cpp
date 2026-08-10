@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -245,9 +246,6 @@ namespace
         const fs::path root = *rootPointer;
         delete rootPointer;
 
-        // Let C/C++ dynamic initialization and wWinMain get underway before
-        // querying Wicked's atomic initializer state.
-        Sleep(2000);
         const ULONGLONG started = GetTickCount64();
 
         for (;;)
@@ -297,6 +295,25 @@ namespace
             std::error_code ec;
             fs::create_directories(root, ec);
             fs::remove(root / "RuntimeDiagnostic.log", ec);
+            fs::remove(root / "RuntimeAssertion.log", ec);
+
+#ifdef _MSC_VER
+            FILE* redirectedStderr = nullptr;
+            const fs::path assertionPath = root / "RuntimeAssertion.log";
+            if (_wfreopen_s(
+                    &redirectedStderr,
+                    assertionPath.c_str(),
+                    L"a",
+                    stderr) == 0)
+            {
+                setvbuf(stderr, nullptr, _IONBF, 0);
+                AppendDiagnostic(root, "phase=stderr_redirected");
+            }
+            else
+            {
+                AppendDiagnostic(root, "phase=stderr_redirect_failed");
+            }
+#endif
 
             // Hosted CI must never wait behind an OS/CRT modal error dialog.
             SetErrorMode(
@@ -311,12 +328,15 @@ namespace
                 nullptr);
 #ifdef _MSC_VER
             _set_error_mode(_OUT_TO_STDERR);
-            _set_abort_behavior(0, _WRITE_ABORT_MSG);
+            _set_abort_behavior(_WRITE_ABORT_MSG, _WRITE_ABORT_MSG);
 #endif
 #ifdef _DEBUG
-            _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
-            _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_DEBUG);
-            _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_DEBUG);
+            _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+            _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+            _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+            _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+            _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+            _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 #endif
 
             AppendDiagnostic(
