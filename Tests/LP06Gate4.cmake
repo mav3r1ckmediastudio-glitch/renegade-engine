@@ -56,6 +56,8 @@ target_link_libraries(
     RenegadeStandalonePackageTests
     PRIVATE
         Renegade::RuntimeBootstrap
+        d3d12
+        dxgi
 )
 target_compile_definitions(
     RenegadeStandalonePackageTests
@@ -110,6 +112,7 @@ add_test(
         "${RENEGADE_GATE4_SCENE}"
         "${CMAKE_CURRENT_LIST_DIR}/fixtures/lp06_gate2"
         "${PROJECT_SOURCE_DIR}"
+        "${PROJECT_SOURCE_DIR}/artifacts/studio/ci-$<CONFIG>/gate4-manual"
 )
 set_tests_properties(
     RenegadeStandalonePackageTests
