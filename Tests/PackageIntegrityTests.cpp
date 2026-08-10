@@ -104,7 +104,7 @@ namespace
 
         std::ostringstream json;
         json << "{\"format\":\"renegade-package-manifest\","
-             << "\"schema_version\":1,"
+             << "\"schema_version\":2,"
              << "\"stage_only\":true,"
              << "\"distribution_ready\":false,"
              << "\"project_id\":\"" << ProjectId << "\","
@@ -175,6 +175,34 @@ int main()
             ? "valid exact package was rejected"
             : error);
     }
+
+    std::string legacyManifest;
+    if (!ReadFile(packageRoot / "package-manifest.json", legacyManifest))
+        return Fail(root, "could not read manifest for schema downgrade fixture");
+    const std::string schemaTwo = "\"schema_version\":2";
+    const std::size_t schemaPosition = legacyManifest.find(schemaTwo);
+    if (schemaPosition == std::string::npos)
+        return Fail(root, "could not locate Gate 3 schema in manifest fixture");
+    legacyManifest.replace(
+        schemaPosition,
+        schemaTwo.size(),
+        "\"schema_version\":1");
+    if (!WriteFile(
+            packageRoot / "package-manifest.json",
+            legacyManifest,
+            error))
+    {
+        return Fail(root, error);
+    }
+    WindowsGamePackageIntegrityResult legacySchema;
+    if (ValidateWindowsGamePackage(
+            packageRoot.generic_u8string(), legacySchema, error) ||
+        legacySchema.code != WindowsGamePackageIntegrityCode::InvalidManifest)
+    {
+        return Fail(root, "pre-Gate-3 package schema was accepted");
+    }
+    if (!RefreshManifest(packageRoot, error))
+        return Fail(root, error);
 
     if (!WriteFile(content, "content-PROOF\n", error))
         return Fail(root, error);

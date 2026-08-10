@@ -453,7 +453,7 @@ namespace renegade::bridge
             if (!manifest.is_object() ||
                 manifest.value("format", std::string{}) !=
                     "renegade-package-manifest" ||
-                manifest.value("schema_version", 0) != 1 ||
+                manifest.value("schema_version", 0) != 2 ||
                 manifest.value("self_path", std::string{}) !=
                     "package-manifest.json" ||
                 manifest.value("self_sha256_excluded", false) != true ||
@@ -462,7 +462,7 @@ namespace renegade::bridge
                 result = Fail(
                     std::move(result),
                     WindowsGamePackageIntegrityCode::InvalidManifest,
-                    "Windows game package manifest does not match the accepted Gate 2/3 schema.",
+                    "Windows game package manifest does not match the accepted Gate 3 schema.",
                     error);
                 return false;
             }
