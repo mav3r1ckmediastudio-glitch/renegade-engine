@@ -33,6 +33,7 @@ set_target_properties(RenegadeRuntimeBootstrap PROPERTIES
 add_executable(RenegadeRuntime WIN32
     src/RuntimeApplication.cpp
     src/RuntimeApplication.h
+    src/RuntimeSmokeDiagnostics.cpp
     src/main_Windows.cpp
 )
 add_dependencies(RenegadeRuntime RenegadeTerrainSurfacePacker)
