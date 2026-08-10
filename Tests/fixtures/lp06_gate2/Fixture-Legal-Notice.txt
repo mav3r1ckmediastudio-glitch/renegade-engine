@@ -1,0 +1,5 @@
+LP06 Gate 2 TEST FIXTURE NOTICE ONLY.
+This placeholder is not the Renegade, Wicked Engine, DirectX Shader Compiler,
+or third-party redistribution licence text. Gate 2 uses it only to prove the
+version-controlled notice-input mechanism. Production distribution remains
+blocked until the real pinned notices and product licensing policy are supplied.
