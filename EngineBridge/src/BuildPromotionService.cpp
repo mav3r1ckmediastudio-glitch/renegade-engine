@@ -3,7 +3,6 @@
 #include "BuildPromotionServiceInternal.h"
 #include "renegade/bridge/PackageIntegrityService.h"
 
-#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -42,6 +41,60 @@ namespace renegade::bridge
                 TRUE) == CSTR_EQUAL;
         }
 
+        bool QueryExists(
+            const fs::path& path,
+            bool& exists,
+            std::string& error)
+        {
+            std::error_code ec;
+            exists = fs::exists(path, ec);
+            if (ec)
+            {
+                error = "Gate 5 could not inspect path state: " +
+                    path.generic_u8string() + " (" + ec.message() + ")";
+                return false;
+            }
+            error.clear();
+            return true;
+        }
+
+        bool RequireDeclaredDirectory(
+            const fs::path& path,
+            const bool mustExist,
+            std::string& error)
+        {
+            std::error_code ec;
+            const fs::file_status status = fs::symlink_status(path, ec);
+            if (ec)
+            {
+                error = "Gate 5 could not inspect declared directory: " +
+                    path.generic_u8string() + " (" + ec.message() + ")";
+                return false;
+            }
+
+            if (status.type() == fs::file_type::not_found)
+            {
+                if (!mustExist)
+                {
+                    error.clear();
+                    return true;
+                }
+                error = "Gate 5 declared directory is missing: " +
+                    path.generic_u8string();
+                return false;
+            }
+
+            if (fs::is_symlink(status) || !fs::is_directory(status))
+            {
+                error = "Gate 5 declared directory is symlinked or not a directory: " +
+                    path.generic_u8string();
+                return false;
+            }
+
+            error.clear();
+            return true;
+        }
+
         bool IsDirectoryNonSymlink(const fs::path& path)
         {
             std::error_code ec;
@@ -67,6 +120,7 @@ namespace renegade::bridge
                     path.generic_u8string();
                 return false;
             }
+
             try
             {
                 std::ifstream input(path, std::ios::binary);
@@ -80,11 +134,13 @@ namespace renegade::bridge
                     exception.what();
                 return false;
             }
+
             if (!value.is_object())
             {
                 error = "Gate 5 metadata root must be a JSON object.";
                 return false;
             }
+            error.clear();
             return true;
         }
 
@@ -99,6 +155,7 @@ namespace renegade::bridge
                     path.generic_u8string();
                 return false;
             }
+
             std::ofstream output(path, std::ios::binary | std::ios::trunc);
             if (!output)
             {
@@ -106,6 +163,7 @@ namespace renegade::bridge
                     path.generic_u8string();
                 return false;
             }
+
             const std::string text = value.dump();
             output.write(text.data(), static_cast<std::streamsize>(text.size()));
             output.close();
@@ -115,12 +173,16 @@ namespace renegade::bridge
                     path.generic_u8string();
                 return false;
             }
+            error.clear();
             return true;
         }
 
         bool Gate4ReportAccepted(const nlohmann::json& report)
         {
-            return report.value("status", std::string{}) == Gate4Status &&
+            return report.value("format", std::string{}) ==
+                    "renegade-build-report" &&
+                report.value("schema_version", 0) == 3 &&
+                report.value("status", std::string{}) == Gate4Status &&
                 report.value("stage_only", false) == true &&
                 report.value("distribution_ready", true) == false &&
                 report.value("smoke_test", std::string{}) == "passed_gate4" &&
@@ -132,9 +194,28 @@ namespace renegade::bridge
                     "not_attempted_gate4";
         }
 
+        bool Gate4ProjectManifestAccepted(const nlohmann::json& manifest)
+        {
+            return manifest.value("format", std::string{}) ==
+                    "renegade-project-package-manifest" &&
+                manifest.value("schema_version", 0) == 2 &&
+                manifest.value("stage_only", false) == true;
+        }
+
+        bool Gate4PackageManifestAccepted(const nlohmann::json& manifest)
+        {
+            return manifest.value("format", std::string{}) ==
+                    "renegade-package-manifest" &&
+                manifest.value("schema_version", 0) == 2 &&
+                manifest.value("stage_only", false) == true &&
+                manifest.value("distribution_ready", true) == false;
+        }
+
         bool Gate5ReportAccepted(const nlohmann::json& report)
         {
-            return report.value("status", std::string{}) == Gate5Status &&
+            return report.value("format", std::string{}) ==
+                    "renegade-build-report" &&
+                report.value("status", std::string{}) == Gate5Status &&
                 report.value("schema_version", 0) == 4 &&
                 report.value("stage_only", true) == false &&
                 report.value("distribution_ready", true) == false &&
@@ -212,12 +293,14 @@ namespace renegade::bridge
                 item["sha256"] = digest.sha256;
                 refreshed = true;
             }
+
             if (!refreshed)
             {
                 error = "Gate 5 package manifest lost required metadata record: " +
                     relativePath;
                 return false;
             }
+            error.clear();
             return true;
         }
 
@@ -256,22 +339,15 @@ namespace renegade::bridge
                     error = "Gate 5 prepared candidate metadata is internally inconsistent.";
                     return false;
                 }
+                error.clear();
                 return true;
             }
 
-            if (!Gate4ReportAccepted(buildReport))
+            if (!Gate4ReportAccepted(buildReport) ||
+                !Gate4ProjectManifestAccepted(projectManifest) ||
+                !Gate4PackageManifestAccepted(packageManifest))
             {
-                error = "Gate 5 candidate has not passed the accepted Gate 4 isolated smoke state.";
-                return false;
-            }
-            if (projectManifest.value("format", std::string{}) !=
-                    "renegade-project-package-manifest" ||
-                projectManifest.value("schema_version", 0) != 2 ||
-                packageManifest.value("format", std::string{}) !=
-                    "renegade-package-manifest" ||
-                packageManifest.value("schema_version", 0) != 2)
-            {
-                error = "Gate 5 candidate metadata does not match the accepted Gate 3/4 schemas.";
+                error = "Gate 5 candidate does not exactly match the accepted Gate 4 staged metadata state.";
                 return false;
             }
 
@@ -316,6 +392,7 @@ namespace renegade::bridge
             {
                 return false;
             }
+            error.clear();
             return true;
         }
 
@@ -324,8 +401,11 @@ namespace renegade::bridge
             WindowsGamePackageIntegrityResult& integrity,
             std::string& error)
         {
-            if (!ValidateWindowsGamePackage(root.generic_u8string(), integrity, error))
+            if (!ValidateWindowsGamePackage(
+                    root.generic_u8string(), integrity, error))
+            {
                 return false;
+            }
 
             nlohmann::json projectManifest;
             nlohmann::json buildReport;
@@ -350,6 +430,7 @@ namespace renegade::bridge
                 error = "Gate 5 build metadata does not describe a validated final-path candidate.";
                 return false;
             }
+            error.clear();
             return true;
         }
 
@@ -369,6 +450,7 @@ namespace renegade::bridge
                     to.generic_u8string();
                 return false;
             }
+            error.clear();
             return true;
         }
 
@@ -376,13 +458,23 @@ namespace renegade::bridge
         {
             std::error_code ec;
             fs::remove_all(path, ec);
-            if (ec || fs::exists(path))
+            if (ec)
             {
                 error = "Gate 5 could not retire rollback backup: " +
-                    path.generic_u8string() +
-                    (ec ? " (" + ec.message() + ")" : std::string{});
+                    path.generic_u8string() + " (" + ec.message() + ")";
                 return false;
             }
+
+            bool stillExists = false;
+            if (!QueryExists(path, stillExists, error))
+                return false;
+            if (stillExists)
+            {
+                error = "Gate 5 could not retire rollback backup: " +
+                    path.generic_u8string();
+                return false;
+            }
+            error.clear();
             return true;
         }
 
@@ -396,6 +488,7 @@ namespace renegade::bridge
         {
             if (!hook)
                 return true;
+
             std::string hookError;
             if (hook(
                     point,
@@ -406,6 +499,7 @@ namespace renegade::bridge
             {
                 return true;
             }
+
             error = hookError.empty()
                 ? "Gate 5 promotion was interrupted by the private test seam."
                 : std::move(hookError);
@@ -482,6 +576,39 @@ namespace renegade::bridge
                     return false;
                 }
 
+                std::string pathError;
+                if (!RequireDeclaredDirectory(
+                        candidateDeclared,
+                        true,
+                        pathError))
+                {
+                    SetFailure(
+                        result,
+                        WindowsGameBuildPromotionCode::CandidateRejected,
+                        pathError,
+                        error);
+                    return false;
+                }
+
+                bool finalDeclaredExists = false;
+                if (!QueryExists(
+                        finalDeclared,
+                        finalDeclaredExists,
+                        pathError) ||
+                    (finalDeclaredExists &&
+                     !RequireDeclaredDirectory(
+                         finalDeclared,
+                         true,
+                         pathError)))
+                {
+                    SetFailure(
+                        result,
+                        WindowsGameBuildPromotionCode::InvalidRequest,
+                        pathError,
+                        error);
+                    return false;
+                }
+
                 std::error_code ec;
                 const fs::path outputParent = fs::weakly_canonical(
                     finalDeclared.parent_path(), ec);
@@ -494,9 +621,11 @@ namespace renegade::bridge
                         error);
                     return false;
                 }
+
                 const fs::path finalOutput =
                     outputParent / finalDeclared.filename();
-                const fs::path stagingParent = outputParent / ".renegade-staging";
+                const fs::path stagingParent =
+                    outputParent / ".renegade-staging";
                 if (!IsDirectoryNonSymlink(stagingParent))
                 {
                     SetFailure(
@@ -514,13 +643,16 @@ namespace renegade::bridge
                     SetFailure(
                         result,
                         WindowsGameBuildPromotionCode::CandidateRejected,
-                        "Gate 5 candidate is missing or symlinked.",
+                        "Gate 5 candidate is missing, inaccessible or symlinked.",
                         error);
                     return false;
                 }
+
                 std::error_code parentError;
                 if (!fs::equivalent(
-                        candidate.parent_path(), stagingParent, parentError) ||
+                        candidate.parent_path(),
+                        stagingParent,
+                        parentError) ||
                     parentError)
                 {
                     SetFailure(
@@ -548,16 +680,27 @@ namespace renegade::bridge
                 result.finalOutputPath = finalOutput.generic_u8string();
                 result.rollbackPath = rollback.generic_u8string();
 
-                const bool rollbackExists = fs::exists(rollback, ec) && !ec;
-                const bool finalExists = fs::exists(finalOutput, ec) && !ec;
+                bool rollbackExists = false;
+                bool finalExists = false;
+                if (!QueryExists(rollback, rollbackExists, pathError) ||
+                    !QueryExists(finalOutput, finalExists, pathError))
+                {
+                    SetFailure(
+                        result,
+                        WindowsGameBuildPromotionCode::InvalidRequest,
+                        pathError,
+                        error);
+                    return false;
+                }
+
                 if (rollbackExists)
                 {
-                    if (!IsDirectoryNonSymlink(rollback))
+                    if (!RequireDeclaredDirectory(rollback, true, pathError))
                     {
                         SetFailure(
                             result,
                             WindowsGameBuildPromotionCode::StaleTransaction,
-                            "Gate 5 rollback path is not a valid directory.",
+                            pathError,
                             error);
                         return false;
                     }
@@ -581,7 +724,10 @@ namespace renegade::bridge
                     if (!finalExists)
                     {
                         std::string renameError;
-                        if (!RenameDirectory(rollback, finalOutput, renameError))
+                        if (!RenameDirectory(
+                                rollback,
+                                finalOutput,
+                                renameError))
                         {
                             SetFailure(
                                 result,
@@ -591,6 +737,7 @@ namespace renegade::bridge
                                 error);
                             return false;
                         }
+
                         result.previousBuildExisted = true;
                         result.previousBuildPreserved = true;
                         result.previousPackageManifestSha256 =
@@ -616,8 +763,10 @@ namespace renegade::bridge
                             error);
                         return false;
                     }
-                    if (currentFinalIntegrity.projectId != rollbackIntegrity.projectId ||
-                        currentFinalIntegrity.gameName != rollbackIntegrity.gameName)
+                    if (currentFinalIntegrity.projectId !=
+                            rollbackIntegrity.projectId ||
+                        currentFinalIntegrity.gameName !=
+                            rollbackIntegrity.gameName)
                     {
                         SetFailure(
                             result,
@@ -626,6 +775,7 @@ namespace renegade::bridge
                             error);
                         return false;
                     }
+
                     std::string cleanupError;
                     if (!RemoveTree(rollback, cleanupError))
                     {
@@ -636,6 +786,7 @@ namespace renegade::bridge
                             error);
                         return false;
                     }
+                    rollbackExists = false;
                 }
 
                 WindowsGamePackageIntegrityResult candidateIntegrity;
@@ -653,11 +804,48 @@ namespace renegade::bridge
                     return false;
                 }
 
-                const bool hasPrevious = fs::exists(finalOutput, ec) && !ec;
+                const fs::path expectedFinalFolder = fs::u8path(
+                    candidateIntegrity.gameName + " Windows Build");
+                if (!ComponentEqual(
+                        finalOutput.filename(),
+                        expectedFinalFolder))
+                {
+                    SetFailure(
+                        result,
+                        WindowsGameBuildPromotionCode::InvalidRequest,
+                        "Gate 5 final folder must match the governed '<Game Name> Windows Build' identity.",
+                        error);
+                    return false;
+                }
+
+                bool hasPrevious = false;
+                if (!QueryExists(finalOutput, hasPrevious, pathError))
+                {
+                    SetFailure(
+                        result,
+                        WindowsGameBuildPromotionCode::InvalidRequest,
+                        pathError,
+                        error);
+                    return false;
+                }
                 result.previousBuildExisted = hasPrevious;
+
                 WindowsGamePackageIntegrityResult previousIntegrity;
                 if (hasPrevious)
                 {
+                    if (!RequireDeclaredDirectory(
+                            finalOutput,
+                            true,
+                            pathError))
+                    {
+                        SetFailure(
+                            result,
+                            WindowsGameBuildPromotionCode::ExistingBuildRejected,
+                            pathError,
+                            error);
+                        return false;
+                    }
+
                     std::string previousError;
                     if (!ValidateGate5Build(
                             finalOutput,
@@ -672,8 +860,10 @@ namespace renegade::bridge
                             error);
                         return false;
                     }
-                    if (previousIntegrity.projectId != candidateIntegrity.projectId ||
-                        previousIntegrity.gameName != candidateIntegrity.gameName)
+                    if (previousIntegrity.projectId !=
+                            candidateIntegrity.projectId ||
+                        previousIntegrity.gameName !=
+                            candidateIntegrity.gameName)
                     {
                         SetFailure(
                             result,
@@ -682,11 +872,15 @@ namespace renegade::bridge
                             error);
                         return false;
                     }
+
                     result.previousPackageManifestSha256 =
                         previousIntegrity.packageManifestSha256;
 
                     std::string renameError;
-                    if (!RenameDirectory(finalOutput, rollback, renameError))
+                    if (!RenameDirectory(
+                            finalOutput,
+                            rollback,
+                            renameError))
                     {
                         result.previousBuildPreserved = true;
                         SetFailure(
@@ -708,7 +902,10 @@ namespace renegade::bridge
                             hookError))
                     {
                         std::string rollbackError;
-                        if (!RenameDirectory(rollback, finalOutput, rollbackError))
+                        if (!RenameDirectory(
+                                rollback,
+                                finalOutput,
+                                rollbackError))
                         {
                             SetFailure(
                                 result,
@@ -718,6 +915,7 @@ namespace renegade::bridge
                                 error);
                             return false;
                         }
+
                         result.previousBuildPreserved = true;
                         SetFailure(
                             result,
@@ -729,12 +927,18 @@ namespace renegade::bridge
                 }
 
                 std::string promoteError;
-                if (!RenameDirectory(candidate, finalOutput, promoteError))
+                if (!RenameDirectory(
+                        candidate,
+                        finalOutput,
+                        promoteError))
                 {
                     if (hasPrevious)
                     {
                         std::string rollbackError;
-                        if (!RenameDirectory(rollback, finalOutput, rollbackError))
+                        if (!RenameDirectory(
+                                rollback,
+                                finalOutput,
+                                rollbackError))
                         {
                             SetFailure(
                                 result,
@@ -746,6 +950,7 @@ namespace renegade::bridge
                         }
                         result.previousBuildPreserved = true;
                     }
+
                     SetFailure(
                         result,
                         WindowsGameBuildPromotionCode::PromotionFailed,
@@ -767,7 +972,10 @@ namespace renegade::bridge
                 WindowsGamePackageIntegrityResult finalIntegrity;
                 std::string finalError;
                 const bool finalValid = hookAllowsValidation &&
-                    ValidateGate5Build(finalOutput, finalIntegrity, finalError);
+                    ValidateGate5Build(
+                        finalOutput,
+                        finalIntegrity,
+                        finalError);
                 if (!finalValid)
                 {
                     if (finalError.empty())
@@ -791,7 +999,10 @@ namespace renegade::bridge
                     if (hasPrevious)
                     {
                         std::string rollbackError;
-                        if (!RenameDirectory(rollback, finalOutput, rollbackError))
+                        if (!RenameDirectory(
+                                rollback,
+                                finalOutput,
+                                rollbackError))
                         {
                             SetFailure(
                                 result,
