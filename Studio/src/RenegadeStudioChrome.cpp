@@ -1,4 +1,5 @@
 #include "RenegadeStudioChrome.h"
+#include "WindowsGameBuildController.h"
 
 #include <algorithm>
 #include <array>
@@ -1139,7 +1140,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 6> popupItemCounts = {
-                    5, 4, 5, 4, 1, 3};
+                    5, 4, 5, 4, 2, 3};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -1194,9 +1195,22 @@ namespace renegade::studio
                             SetActiveBottomTab(item == 2 ? 0 : 3, true);
                         }
                     }
-                    else if (activeMenu_ == 4 && item == 0)
+                    else if (activeMenu_ == 4 && item >= 0 && item < 2)
                     {
-                        invoke(Action::ValidateModelImport);
+                        if (item == 0)
+                        {
+                            statusText_ = "BUILDING WINDOWS GAME...";
+                            const WindowsGameBuildUiResult build =
+                                BuildActiveWindowsGame();
+                            statusText_ = build.succeeded
+                                ? "BUILD COMPLETE // " + build.finalOutputPath
+                                : "BUILD FAILED // " + build.message;
+                            SetActiveBottomTab(2, true);
+                        }
+                        else
+                        {
+                            invoke(Action::ValidateModelImport);
+                        }
                     }
                     else if (activeMenu_ == 5 && item >= 0 && item < 3)
                     {
@@ -2342,10 +2356,12 @@ namespace renegade::studio
             }
             else
             {
-                const char* message = activeBottomTab_ == 1
+                const std::string message = activeBottomTab_ == 1
                     ? "Console connected. No messages in this session."
                     : activeBottomTab_ == 2
-                        ? "Build output will appear here."
+                        ? (statusText_.empty()
+                            ? "Build output will appear here."
+                            : statusText_)
                         : "Runtime diagnostics are shown here when available.";
                 DrawText(
                     message,
@@ -2540,7 +2556,8 @@ namespace renegade::studio
             }
             else if (activeMenu_ == 4)
             {
-                items = {{"VALIDATE GLB/GLTF IMPORT...", true}};
+                items = {{"BUILD WINDOWS GAME...", true},
+                    {"VALIDATE GLB/GLTF IMPORT...", true}};
             }
             else
             {
