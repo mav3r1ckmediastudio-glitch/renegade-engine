@@ -40,58 +40,6 @@ namespace renegade::studio
         constexpr const char* DeveloperPublisher = "Maverick Media Studio";
         constexpr DWORD SmokeTimeoutMilliseconds = 120000;
 
-        std::string WideToUtf8(const std::wstring& value)
-        {
-            if (value.empty())
-                return {};
-            const int count = WideCharToMultiByte(
-                CP_UTF8,
-                0,
-                value.c_str(),
-                static_cast<int>(value.size()),
-                nullptr,
-                0,
-                nullptr,
-                nullptr);
-            if (count <= 0)
-                return {};
-            std::string result(static_cast<std::size_t>(count), '\0');
-            WideCharToMultiByte(
-                CP_UTF8,
-                0,
-                value.c_str(),
-                static_cast<int>(value.size()),
-                result.data(),
-                count,
-                nullptr,
-                nullptr);
-            return result;
-        }
-
-        std::wstring Utf8ToWide(const std::string& value)
-        {
-            if (value.empty())
-                return {};
-            const int count = MultiByteToWideChar(
-                CP_UTF8,
-                0,
-                value.c_str(),
-                static_cast<int>(value.size()),
-                nullptr,
-                0);
-            if (count <= 0)
-                return {};
-            std::wstring result(static_cast<std::size_t>(count), L'\0');
-            MultiByteToWideChar(
-                CP_UTF8,
-                0,
-                value.c_str(),
-                static_cast<int>(value.size()),
-                result.data(),
-                count);
-            return result;
-        }
-
         fs::path StudioDirectory()
         {
             std::wstring path(32768, L'\0');
@@ -371,9 +319,23 @@ namespace renegade::studio
                 return false;
             }
             std::error_code ec;
-            fs::remove(evidence, ec);
-            ec.clear();
+            const bool evidenceExists = fs::exists(evidence, ec);
+            if (ec)
+            {
+                error = "Build Windows Game smoke could not inspect prior Runtime evidence.";
+                return false;
+            }
+            if (evidenceExists)
+            {
+                const bool removed = fs::remove(evidence, ec);
+                if (ec || !removed)
+                {
+                    error = "Build Windows Game smoke could not remove stale Runtime evidence.";
+                    return false;
+                }
+            }
 
+            ec.clear();
             const fs::path workingDirectory = fs::temp_directory_path(ec) /
                 "RenegadeBuildSmoke" / fs::u8path(stagingId);
             if (ec)
@@ -431,13 +393,15 @@ namespace renegade::studio
                     &startup,
                     &process))
             {
+                const DWORD launchError = GetLastError();
                 CloseHandle(job);
                 error = "Build Windows Game smoke could not launch the staged named executable (Win32 " +
-                    std::to_string(GetLastError()) + ").";
+                    std::to_string(launchError) + ").";
                 return false;
             }
 
-            bool assigned = AssignProcessToJobObject(job, process.hProcess) != FALSE;
+            const bool assigned =
+                AssignProcessToJobObject(job, process.hProcess) != FALSE;
             if (!assigned)
             {
                 TerminateProcess(process.hProcess, 1);
@@ -467,13 +431,17 @@ namespace renegade::studio
             DWORD exitCode = 1;
             const bool readExit =
                 GetExitCodeProcess(process.hProcess, &exitCode) != FALSE;
+            const DWORD exitReadError = readExit ? ERROR_SUCCESS : GetLastError();
             CloseHandle(process.hThread);
             CloseHandle(process.hProcess);
             CloseHandle(job);
             if (!readExit || exitCode != 0)
             {
-                error = "Build Windows Game smoke Runtime exited with code " +
-                    std::to_string(readExit ? exitCode : GetLastError()) + ".";
+                error = readExit
+                    ? "Build Windows Game smoke Runtime exited with code " +
+                        std::to_string(exitCode) + "."
+                    : "Build Windows Game smoke could not read the Runtime exit code (Win32 " +
+                        std::to_string(exitReadError) + ").";
                 return false;
             }
             if (!IsRegularFile(evidence))
