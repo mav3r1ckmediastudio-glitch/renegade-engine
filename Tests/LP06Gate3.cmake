@@ -28,6 +28,7 @@ set_target_properties(RenegadeBuildExecutableTests PROPERTIES
 # second resource write can fail deterministically. BeginUpdateResourceW and
 # EndUpdateResourceW remain the real Win32 APIs, exercising the production
 # transaction/discard path without adding a runtime or public-API fault switch.
+# Expected CTest effect: Gate 3 increases the authoritative suite to 30 tests.
 add_executable(RenegadeBuildExecutableRollbackTests
     "${CMAKE_CURRENT_LIST_DIR}/BuildExecutableRollbackTests.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/BuildIdentityServiceFaultInjected.cpp"
