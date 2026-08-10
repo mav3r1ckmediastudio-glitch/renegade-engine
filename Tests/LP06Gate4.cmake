@@ -21,10 +21,11 @@ set_target_properties(RenegadePackageIntegrityTests PROPERTIES
     FOLDER "Renegade/Tests"
 )
 
-# Generate the Gate 4 level payload with Wicked's real scene serializer instead
-# of borrowing an upstream sample scene that can carry unrelated external
-# resource dependencies. The resulting archive is a genuine, self-contained
-# WISCENE and is used by both levels in the disposable package.
+# Build the Gate 4 scene serializer as a normal test fixture executable, but do
+# not run it as an MSBuild custom command. Run-time fixture generation belongs
+# under CTest so the serializer is bounded and reports a normal test failure
+# instead of being able to strand the entire build step until the workflow's
+# outer timeout.
 add_executable(RenegadeGate4SceneFixture
     "${CMAKE_CURRENT_LIST_DIR}/Gate4SceneFixture.cpp"
 )
@@ -46,21 +47,6 @@ set(RENEGADE_GATE4_SCENE_DIR
 )
 set(RENEGADE_GATE4_SCENE
     "${RENEGADE_GATE4_SCENE_DIR}/Gate4SelfContained.wiscene"
-)
-add_custom_command(
-    OUTPUT "${RENEGADE_GATE4_SCENE}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${RENEGADE_GATE4_SCENE_DIR}"
-    COMMAND "$<TARGET_FILE:RenegadeGate4SceneFixture>"
-            "${RENEGADE_GATE4_SCENE_DIR}"
-    DEPENDS RenegadeGate4SceneFixture
-    COMMENT "Generating LP06 Gate 4 self-contained Wicked scene"
-    VERBATIM
-)
-add_custom_target(RenegadeGate4SceneData
-    DEPENDS "${RENEGADE_GATE4_SCENE}"
-)
-set_target_properties(RenegadeGate4SceneData PROPERTIES
-    FOLDER "Renegade/TestFixtures"
 )
 
 add_executable(RenegadeStandalonePackageTests
@@ -88,21 +74,32 @@ set_target_properties(RenegadeStandalonePackageTests PROPERTIES
 add_dependencies(
     RenegadeStandalonePackageTests
     RenegadeRuntime
-    RenegadeGate4SceneData
 )
 
 # Studio CI explicitly builds RenegadeBridgeTests before running CTest. Keep
-# both Gate 4 proofs in that authoritative graph; the standalone test then
-# launches the real configuration-matched RenegadeRuntime target it depends on.
+# all Gate 4 executables in that authoritative graph, but keep scene generation
+# itself exclusively in the bounded CTest phase below.
 add_dependencies(
     RenegadeBridgeTests
     RenegadePackageIntegrityTests
+    RenegadeGate4SceneFixture
     RenegadeStandalonePackageTests
 )
 
 add_test(
     NAME RenegadePackageIntegrityTests
     COMMAND RenegadePackageIntegrityTests
+)
+add_test(
+    NAME RenegadeGate4SceneFixtureTests
+    COMMAND RenegadeGate4SceneFixture
+        "${RENEGADE_GATE4_SCENE_DIR}"
+)
+set_tests_properties(
+    RenegadeGate4SceneFixtureTests
+    PROPERTIES
+        TIMEOUT 30
+        FIXTURES_SETUP RenegadeGate4Scene
 )
 add_test(
     NAME RenegadeStandalonePackageTests
@@ -119,4 +116,5 @@ set_tests_properties(
     PROPERTIES
         TIMEOUT 180
         RUN_SERIAL TRUE
+        FIXTURES_REQUIRED RenegadeGate4Scene
 )
