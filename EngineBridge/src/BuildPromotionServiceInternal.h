@@ -3,7 +3,10 @@
 #include "renegade/bridge/BuildPromotionService.h"
 
 #include <functional>
+#include <iterator>
+#include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace renegade::bridge::detail
 {
