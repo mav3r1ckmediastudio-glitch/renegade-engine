@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -34,6 +33,14 @@ namespace renegade::bridge
             std::string sha256;
         };
 
+        enum class PathProbe
+        {
+            Clean,
+            Missing,
+            Symlink,
+            Error,
+        };
+
         WindowsGamePackageIntegrityResult Fail(
             WindowsGamePackageIntegrityResult result,
             const WindowsGamePackageIntegrityCode code,
@@ -45,6 +52,12 @@ namespace renegade::bridge
             result.message = std::move(message);
             error = result.message;
             return result;
+        }
+
+        bool IsMissingError(const std::error_code& error)
+        {
+            return error == std::errc::no_such_file_or_directory ||
+                error == std::errc::not_a_directory;
         }
 
         bool TryDecodeUtf8(const std::string& value, std::wstring& decoded)
@@ -132,9 +145,7 @@ namespace renegade::bridge
                     });
         }
 
-        bool ContainsPath(
-            const fs::path& root,
-            const fs::path& candidate)
+        bool ContainsPath(const fs::path& root, const fs::path& candidate)
         {
             auto rootPart = root.begin();
             auto candidatePart = candidate.begin();
@@ -151,43 +162,39 @@ namespace renegade::bridge
             return true;
         }
 
-        bool HasSymlinkComponent(
+        PathProbe ProbeRelativePath(
             const fs::path& root,
             const fs::path& relative,
-            std::string& offending)
+            std::string& offending,
+            std::string& detail)
         {
             fs::path cursor = root;
-            std::error_code ec;
             for (const fs::path& component : relative)
             {
                 cursor /= component;
+                std::error_code ec;
                 const fs::file_status status = fs::symlink_status(cursor, ec);
                 if (ec)
                 {
+                    if (IsMissingError(ec))
+                        return PathProbe::Missing;
+                    detail = ec.message();
                     offending = relative.generic_u8string();
-                    return true;
+                    return PathProbe::Error;
                 }
+                if (status.type() == fs::file_type::not_found)
+                    return PathProbe::Missing;
                 if (fs::is_symlink(status))
                 {
-                    offending = fs::relative(cursor, root, ec).generic_u8string();
-                    if (ec)
+                    std::error_code relativeError;
+                    offending = fs::relative(cursor, root, relativeError)
+                        .generic_u8string();
+                    if (relativeError)
                         offending = relative.generic_u8string();
-                    return true;
+                    return PathProbe::Symlink;
                 }
             }
-            return false;
-        }
-
-        std::string Hex(const std::vector<unsigned char>& bytes)
-        {
-            std::ostringstream stream;
-            stream << std::hex << std::setfill('0');
-            for (const unsigned char value : bytes)
-            {
-                stream << std::setw(2)
-                       << static_cast<unsigned int>(value);
-            }
-            return stream.str();
+            return PathProbe::Clean;
         }
 
         const ManifestFile* FindManifestFile(
@@ -203,6 +210,15 @@ namespace renegade::bridge
                 });
             return found == files.end() ? nullptr : &*found;
         }
+
+        std::string Hex(const std::vector<unsigned char>& bytes)
+        {
+            std::ostringstream stream;
+            stream << std::hex << std::setfill('0');
+            for (const unsigned char value : bytes)
+                stream << std::setw(2) << static_cast<unsigned int>(value);
+            return stream.str();
+        }
     }
 
     const char* WindowsGamePackageIntegrityCodeName(
@@ -210,30 +226,18 @@ namespace renegade::bridge
     {
         switch (code)
         {
-        case WindowsGamePackageIntegrityCode::Success:
-            return "SUCCESS";
-        case WindowsGamePackageIntegrityCode::InvalidRoot:
-            return "INVALID_ROOT";
-        case WindowsGamePackageIntegrityCode::MissingManifest:
-            return "MISSING_MANIFEST";
-        case WindowsGamePackageIntegrityCode::InvalidManifest:
-            return "INVALID_MANIFEST";
-        case WindowsGamePackageIntegrityCode::UnsafePath:
-            return "UNSAFE_PATH";
-        case WindowsGamePackageIntegrityCode::DuplicatePath:
-            return "DUPLICATE_PATH";
-        case WindowsGamePackageIntegrityCode::MissingFile:
-            return "MISSING_FILE";
-        case WindowsGamePackageIntegrityCode::SymlinkRejected:
-            return "SYMLINK_REJECTED";
-        case WindowsGamePackageIntegrityCode::SizeMismatch:
-            return "SIZE_MISMATCH";
-        case WindowsGamePackageIntegrityCode::HashMismatch:
-            return "HASH_MISMATCH";
-        case WindowsGamePackageIntegrityCode::UnexpectedFile:
-            return "UNEXPECTED_FILE";
-        default:
-            return "UNKNOWN";
+        case WindowsGamePackageIntegrityCode::Success: return "SUCCESS";
+        case WindowsGamePackageIntegrityCode::InvalidRoot: return "INVALID_ROOT";
+        case WindowsGamePackageIntegrityCode::MissingManifest: return "MISSING_MANIFEST";
+        case WindowsGamePackageIntegrityCode::InvalidManifest: return "INVALID_MANIFEST";
+        case WindowsGamePackageIntegrityCode::UnsafePath: return "UNSAFE_PATH";
+        case WindowsGamePackageIntegrityCode::DuplicatePath: return "DUPLICATE_PATH";
+        case WindowsGamePackageIntegrityCode::MissingFile: return "MISSING_FILE";
+        case WindowsGamePackageIntegrityCode::SymlinkRejected: return "SYMLINK_REJECTED";
+        case WindowsGamePackageIntegrityCode::SizeMismatch: return "SIZE_MISMATCH";
+        case WindowsGamePackageIntegrityCode::HashMismatch: return "HASH_MISMATCH";
+        case WindowsGamePackageIntegrityCode::UnexpectedFile: return "UNEXPECTED_FILE";
+        default: return "UNKNOWN";
         }
     }
 
@@ -244,15 +248,15 @@ namespace renegade::bridge
     {
         digest = {};
         const fs::path path = fs::u8path(absolutePath);
-        std::error_code ec;
         if (absolutePath.empty() || !path.is_absolute())
         {
             error = "Package digest path must be absolute.";
             return false;
         }
-        const fs::file_status linkStatus = fs::symlink_status(path, ec);
-        if (ec || fs::is_symlink(linkStatus) ||
-            !fs::is_regular_file(path, ec) || ec)
+
+        std::error_code ec;
+        const fs::file_status status = fs::symlink_status(path, ec);
+        if (ec || fs::is_symlink(status) || !fs::is_regular_file(status))
         {
             error = "Package digest input must be a regular non-symlink file: " +
                 path.generic_u8string();
@@ -338,7 +342,7 @@ namespace renegade::bridge
                 digest.byteCount += static_cast<std::uint64_t>(count);
             }
         }
-        if (!input.eof())
+        if (input.bad())
             success = false;
 
         if (success &&
@@ -382,11 +386,42 @@ namespace renegade::bridge
             }
             result.packageRootPath = root.generic_u8string();
 
-            const fs::path manifestPath = root / "package-manifest.json";
-            const fs::file_status manifestLinkStatus =
-                fs::symlink_status(manifestPath, ec);
-            if (ec || fs::is_symlink(manifestLinkStatus) ||
-                !fs::is_regular_file(manifestPath, ec) || ec)
+            const fs::path manifestRelative = "package-manifest.json";
+            std::string offending;
+            std::string detail;
+            const PathProbe manifestProbe = ProbeRelativePath(
+                root, manifestRelative, offending, detail);
+            if (manifestProbe == PathProbe::Symlink)
+            {
+                result = Fail(
+                    std::move(result),
+                    WindowsGamePackageIntegrityCode::SymlinkRejected,
+                    "Windows game package refuses symlinked content: " + offending,
+                    error);
+                return false;
+            }
+            if (manifestProbe == PathProbe::Missing)
+            {
+                result = Fail(
+                    std::move(result),
+                    WindowsGamePackageIntegrityCode::MissingManifest,
+                    "Windows game package is missing package-manifest.json.",
+                    error);
+                return false;
+            }
+            if (manifestProbe == PathProbe::Error)
+            {
+                result = Fail(
+                    std::move(result),
+                    WindowsGamePackageIntegrityCode::InvalidRoot,
+                    "Windows game package could not inspect package-manifest.json: " +
+                        detail,
+                    error);
+                return false;
+            }
+
+            const fs::path manifestPath = root / manifestRelative;
+            if (!fs::is_regular_file(manifestPath, ec) || ec)
             {
                 result = Fail(
                     std::move(result),
@@ -400,6 +435,8 @@ namespace renegade::bridge
             try
             {
                 std::ifstream input(manifestPath, std::ios::binary);
+                if (!input)
+                    throw std::runtime_error("could not open package manifest");
                 input >> manifest;
             }
             catch (const std::exception& exception)
@@ -464,9 +501,7 @@ namespace renegade::bridge
                 file.byteCount = item["bytes"].get<std::uint64_t>();
                 file.sha256 = item["sha256"].get<std::string>();
                 if (!IsSafeRelativePath(file.path) ||
-                    WindowsPathCaseEquivalent(
-                        file.path,
-                        "package-manifest.json"))
+                    WindowsPathCaseEquivalent(file.path, "package-manifest.json"))
                 {
                     result = Fail(
                         std::move(result),
@@ -503,19 +538,40 @@ namespace renegade::bridge
             for (const ManifestFile& file : files)
             {
                 const fs::path relative = fs::u8path(file.path);
-                std::string symlink;
-                if (HasSymlinkComponent(root, relative, symlink))
+                offending.clear();
+                detail.clear();
+                const PathProbe probe = ProbeRelativePath(
+                    root, relative, offending, detail);
+                if (probe == PathProbe::Symlink)
                 {
                     result = Fail(
                         std::move(result),
                         WindowsGamePackageIntegrityCode::SymlinkRejected,
-                        "Windows game package refuses symlinked content: " + symlink,
+                        "Windows game package refuses symlinked content: " + offending,
+                        error);
+                    return false;
+                }
+                if (probe == PathProbe::Missing)
+                {
+                    result = Fail(
+                        std::move(result),
+                        WindowsGamePackageIntegrityCode::MissingFile,
+                        "Windows game package is missing a manifest file: " + file.path,
+                        error);
+                    return false;
+                }
+                if (probe == PathProbe::Error)
+                {
+                    result = Fail(
+                        std::move(result),
+                        WindowsGamePackageIntegrityCode::MissingFile,
+                        "Windows game package could not inspect manifest file " +
+                            file.path + ": " + detail,
                         error);
                     return false;
                 }
 
-                const fs::path resolved =
-                    fs::weakly_canonical(root / relative, ec);
+                const fs::path resolved = fs::weakly_canonical(root / relative, ec);
                 if (ec || !ContainsPath(root, resolved) ||
                     !fs::is_regular_file(resolved, ec) || ec)
                 {
@@ -529,9 +585,7 @@ namespace renegade::bridge
 
                 WindowsGamePackageFileDigest digest;
                 if (!DigestWindowsGamePackageFile(
-                        resolved.generic_u8string(),
-                        digest,
-                        error))
+                        resolved.generic_u8string(), digest, error))
                 {
                     result = Fail(
                         std::move(result),
@@ -577,6 +631,7 @@ namespace renegade::bridge
                     error);
                 return false;
             }
+
             for (; iterator != end; iterator.increment(ec))
             {
                 if (ec)
@@ -588,10 +643,18 @@ namespace renegade::bridge
                         error);
                     return false;
                 }
-
                 const fs::file_status status =
                     fs::symlink_status(iterator->path(), ec);
-                if (ec || fs::is_symlink(status))
+                if (ec)
+                {
+                    result = Fail(
+                        std::move(result),
+                        WindowsGamePackageIntegrityCode::InvalidRoot,
+                        "Windows game package could not inspect an enumerated entry.",
+                        error);
+                    return false;
+                }
+                if (fs::is_symlink(status))
                 {
                     result = Fail(
                         std::move(result),
@@ -624,12 +687,8 @@ namespace renegade::bridge
                     return false;
                 }
                 const std::string relativeText = relative.generic_u8string();
-                if (WindowsPathCaseEquivalent(
-                        relativeText,
-                        "package-manifest.json"))
-                {
+                if (WindowsPathCaseEquivalent(relativeText, "package-manifest.json"))
                     continue;
-                }
                 if (FindManifestFile(files, relativeText) == nullptr)
                 {
                     result = Fail(
@@ -655,9 +714,7 @@ namespace renegade::bridge
 
             WindowsGamePackageFileDigest manifestDigest;
             if (!DigestWindowsGamePackageFile(
-                    manifestPath.generic_u8string(),
-                    manifestDigest,
-                    error))
+                    manifestPath.generic_u8string(), manifestDigest, error))
             {
                 result = Fail(
                     std::move(result),
@@ -669,7 +726,8 @@ namespace renegade::bridge
 
             result.succeeded = true;
             result.code = WindowsGamePackageIntegrityCode::Success;
-            result.message = "Windows game package matches package-manifest.json exactly.";
+            result.message =
+                "Windows game package matches package-manifest.json exactly.";
             result.packageManifestSha256 = std::move(manifestDigest.sha256);
             error.clear();
             return true;
