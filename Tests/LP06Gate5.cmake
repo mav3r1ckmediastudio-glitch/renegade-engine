@@ -89,15 +89,19 @@ foreach(RENEGADE_GATE5_CASE IN LISTS RENEGADE_GATE5_CASES)
     )
 endforeach()
 
+# Reuse Gate 4's deliberately GPU-free WISCENE fixture. The stock Wicked cube
+# scene can deserialize components that touch graphics resources immediately,
+# which is valid inside Studio but unsafe in this headless regression process.
 add_test(
     NAME RenegadeWindowsGameBuildProjectTests
     COMMAND RenegadeWindowsGameBuildProjectTests
         "${PROJECT_SOURCE_DIR}/Runtime/fixtures/LP03/Valid Screen"
-        "${PROJECT_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
+        "${RENEGADE_GATE4_SCENE}"
 )
 set_tests_properties(
     RenegadeWindowsGameBuildProjectTests
     PROPERTIES
         TIMEOUT 120
         RUN_SERIAL TRUE
+        FIXTURES_REQUIRED RenegadeGate4Scene
 )
