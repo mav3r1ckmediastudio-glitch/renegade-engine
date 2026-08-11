@@ -229,6 +229,11 @@ namespace renegade::bridge
                     error = "Stored reusable-model import recipe is not the canonical version-1 contract.";
                     return false;
                 }
+                if (!recipe.at("options").empty())
+                {
+                    error = "Stored reusable-model version-1 import options are unsupported.";
+                    return false;
+                }
                 const std::string token = recipe.at("source_format").get<std::string>();
                 if (!ParseSourceFormatToken(token, format) ||
                     !ImportService::IsModelSourceFormatSupported(format))
