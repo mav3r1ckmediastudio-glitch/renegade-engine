@@ -99,16 +99,52 @@ namespace renegade::bridge
         std::string error;
     };
 
-    // UI-independent Gate 3 project transaction. Conversion remains isolated
-    // through ImportService. The final .rasset, LC01 registry and Gate 2
-    // metadata documents are committed as one ProjectDocumentTransaction, so
-    // failure cannot expose a half-import or a registry pointing at bytes that
-    // were not accepted.
+    // Gate 4 is deliberately stable-ID driven. Callers identify the registered
+    // reusable product; the source path, product path, importer/backend,
+    // versions, format and settings are resolved from LC01 + the accepted
+    // .rasset manifest. No caller-supplied path or format can redirect reimport.
+    struct ReusableModelReimportRequest
+    {
+        std::string projectRoot;
+        StableId projectId;
+        StableId assetId;
+    };
+
+    struct ReusableModelReimportOptions
+    {
+        std::string transactionId;
+        ProjectDocumentTransactionHook operationHook;
+    };
+
+    struct ReusableModelReimportResult
+    {
+        bool succeeded = false;
+        StableId sourceAssetId;
+        StableId assetId;
+        std::string sourceProjectRelativePath;
+        std::string assetProjectRelativePath;
+        ImportedProductStatus statusBefore;
+        ImportResult import;
+        ModelDerivedMetadata modelMetadata;
+        std::string previousProductHash;
+        std::string productHash;
+        ProjectDocumentTransactionResult transaction;
+        std::string error;
+    };
+
+    // UI-independent reusable-asset lifecycle boundary. First import creates
+    // stable identity; Gate 4 reimport resolves and replays only the stored
+    // accepted recipe, retaining those IDs and transactionally replacing the
+    // last-good product only after conversion and validation succeed.
     class ReusableAssetService
     {
     public:
         [[nodiscard]] ReusableModelImportResult ImportModelAsset(
             const ReusableModelImportRequest& request,
             ReusableModelImportOptions options = {}) const;
+
+        [[nodiscard]] ReusableModelReimportResult ReimportModelAsset(
+            const ReusableModelReimportRequest& request,
+            ReusableModelReimportOptions options = {}) const;
     };
 }

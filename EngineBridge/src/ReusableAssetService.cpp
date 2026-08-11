@@ -204,6 +204,11 @@ namespace renegade::bridge
                     error = "Reusable model import settings must be a canonical JSON object.";
                     return {};
                 }
+                if (!options.empty())
+                {
+                    error = "Reusable model import version-1 settings do not support options.";
+                    return {};
+                }
                 nlohmann::json recipe;
                 recipe["options"] = options;
                 recipe["source_format"] = SourceFormatToken(format);
