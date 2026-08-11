@@ -24,32 +24,115 @@ assembled into a complete creator workflow:
   filesystem, but it does not yet project LC01 stable identity or provenance;
 - LP05 can determine the dependency closure;
 - LC01 owns stable project asset IDs, durable registry persistence,
-  source/product provenance and moved/missing recovery;
+  source/product provenance and moved/missing recovery; and
 - LP06 can build only the governed reachable project content and produce a safe
   standalone Windows build.
 
-LP07 connects those boundaries without inventing a second asset database or a
-second importer.
+LP07 connects those boundaries and expands Renegade's model-import surface around
+the importers already present in the pinned Wicked source. It must not invent a
+second asset database or casually add a parallel importer stack.
+
+## Product priority — FBX first
+
+FBX is the primary creator format for LP07, including **animated/skinned FBX**.
+The first end-to-end reusable asset acceptance must therefore be FBX-based; GLB
+or GLTF alone is no longer sufficient to close this programme.
+
+The exact pinned Wicked revision already contains `ImportModel_FBX()` in
+`Editor/ModelImporter_FBX.cpp`. That importer is based on the bundled `ufbx`
+loader and already converts important FBX structures into native Wicked scene
+components, including:
+
+- meshes and material subsets;
+- PBR/material texture references and embedded textures;
+- skin deformers and armatures;
+- up to eight bone influences per vertex;
+- morph/blend-shape data;
+- node hierarchy/transforms;
+- cameras and lights;
+- FBX animation stacks/takes baked into Wicked `AnimationComponent` and
+  `AnimationDataComponent` translation/rotation/scale channels; and
+- Mixamo-specific humanoid/animation-name handling.
+
+That existing Wicked converter is the first implementation route. Renegade should
+compile and call the converter through a UI-independent Renegade import service,
+just as the current bridge compiles only Wicked's GLTF converter without
+embedding the stock Wicked Editor application.
+
+## Model-format policy
+
+LP07 uses a format-priority model rather than promising every possible format at
+once.
+
+### P0 — release-blocking for LP07
+
+- **FBX** — static, skinned and animated. This is the primary owner workflow and
+  the principal packaged/manual acceptance format.
+
+### P1 — required supported alternatives
+
+- **GLTF / GLB** — retain and generalise the already-proven Renegade path.
+
+### P2 — bring through the common import service when the pinned Wicked seam is
+clean and evidence is available
+
+- **OBJ**;
+- **PLY**;
+- **VRM / VRMA**, subject to an exact pinned-source seam audit before claiming
+  Renegade support.
+
+A P2 format may land during LP07 without becoming a reason to delay the P0 FBX
+lifecycle if its upstream seam requires unrelated work.
+
+## External importer policy — ASSIMP is a fallback, not the default
+
+Renegade may evaluate an external importer library such as **Assimp** when a
+required format or required FBX feature cannot be represented reliably through
+Wicked's existing importer stack.
+
+Do **not** add Assimp merely to increase the extension count. Adding a second
+import stack creates real product costs: another dependency and notice set,
+additional build/package maintenance, duplicated FBX/GLTF behaviour, and a
+normalisation problem where the same conceptual material/armature/animation can
+arrive differently depending on which importer handled it.
+
+Before introducing Assimp or any other external importer, a bounded gate must
+record:
+
+1. the exact creator requirement Wicked/ufbx cannot satisfy;
+2. a representative failing source asset;
+3. the alternative library's proven output for that asset;
+4. how its data maps deterministically into native Wicked scene components;
+5. licence/notice and build/package implications; and
+6. why extending or adapting the existing Wicked-owned converter seam is not the
+   safer option.
+
+If such a gap is proven, the fallback must sit behind the same Renegade import
+contract so LC01 identity/provenance, reimport and LP06 packaging are importer-
+agnostic.
 
 ## Programme outcome
 
 A creator must be able to:
 
-1. explicitly import a GLB/GLTF into the project as a reusable Renegade asset;
-2. see the resulting product in the Asset Browser with stable identity and
+1. explicitly import an FBX into the project as a reusable Renegade asset;
+2. for an animated/skinned FBX, retain the armature/skinning/animation content in
+   the generated project product and through WISCENE reopen;
+3. see the resulting product in the Asset Browser with stable identity and
    source-health/provenance state;
-3. place that registered asset into one or more scenes repeatedly without
+4. place that registered asset into one or more scenes repeatedly without
    reconverting the original external source for each placement;
-4. detect that the registered source has changed;
-5. explicitly reimport using the recorded importer/settings while retaining the
+5. detect that the registered source has changed;
+6. explicitly reimport using the recorded importer/settings while retaining the
    stable source/product asset identities;
-6. survive a failed reimport with the previous successful product still
+7. survive a failed reimport with the previous successful product still
    authoritative;
-7. Save/Open and reopen the project with the same identities/references; and
-8. run **Build Windows Game** successfully with the updated reachable product.
+8. Save/Open and reopen the project with the same identities/references; and
+9. run **Build Windows Game** successfully with the updated reachable product.
 
 The programme is not complete until this path is proven in an assembled Release
-Studio and the resulting standalone Runtime.
+Studio and the resulting standalone Runtime. GLB/GLTF must remain functional as a
+regression/secondary format throughout.
 
 ## Architectural rules
 
@@ -59,12 +142,23 @@ LC01 `AssetRegistry.renegade-assets` remains authoritative for project asset IDs
 source/product provenance and recovery state. LP07 must not create a parallel
 UI-only asset ID or infer identity from filenames.
 
-### One governed import boundary
+### One Renegade import contract, multiple format adapters
 
-GLB/GLTF conversion continues through `ImportService`. LP07 may add a service
-that orchestrates project paths, transactions and LC01 registration around that
-conversion, but must not duplicate Wicked's importer or bury conversion logic in
-Studio UI code.
+`ImportService` becomes the Renegade-owned model-conversion boundary rather than
+remaining GLTF-shaped. Format-specific adapters may call the exact pinned Wicked
+converters, but Studio UI must not call `ImportModel_FBX`, `ImportModel_GLTF`, or
+other Wicked Editor functions directly.
+
+The common contract must return enough neutral evidence to validate the produced
+native Wicked scene, including at minimum mesh/material/armature/animation counts
+and a deterministic structural summary suitable for round-trip tests.
+
+### Animated FBX import is not animation authoring
+
+LP07 must preserve and prove imported animation data, clip/take identity and
+runtime usability. It does **not** build the later animation timeline, state
+machine, retargeting UI or gameplay animation controller. Those remain separate
+programmes once the asset itself can be trusted.
 
 ### Last-good product wins
 
@@ -98,7 +192,58 @@ LP07 does not invent a separate packaging list. Once an asset product is
 registered and referenced normally, LP05 determines reachability and LP06
 packages/builds that governed closure.
 
-## Gate 1 — Registry-backed asset catalogue
+## Gate 1 — Common model-import seam and FBX proof
+
+### Goal
+
+Generalise the current GLB/GLTF-specific Renegade import boundary and prove the
+pinned Wicked FBX converter before any creator-facing reusable-asset transaction
+is built on it.
+
+### Required behaviour
+
+- add a format-neutral model-import request/result contract in `ImportService`;
+- retain the established GLB/GLTF path through that contract;
+- compile/call the pinned Wicked FBX converter without linking or exposing the
+  stock Wicked Editor application;
+- classify supported extensions deterministically;
+- reject unsupported/mismatched formats explicitly;
+- keep conversion isolated from the active Studio scene;
+- produce a reusable WISCENE candidate and round-trip summary;
+- preserve source files byte-identically.
+
+### FBX acceptance fixtures
+
+At minimum the automated/packaged evidence set must contain:
+
+1. a static FBX mesh/material fixture;
+2. a skinned FBX fixture with armature/bone weights;
+3. an animated FBX fixture with at least one animation stack/take; and
+4. preferably a representative owner/Mixamo-style animated asset once licensing
+   permits it to be used as test evidence.
+
+The tests must prove the expected armature/animation data survives the
+FBX -> native Wicked scene -> WISCENE -> reopen path. A test that only proves
+`ImportModel_FBX()` returned without crashing is insufficient.
+
+### Gate 1 secondary-format assessment
+
+During this gate, audit the exact pinned seams for OBJ, PLY and VRM/VRMA and
+record which can safely join the same service without new third-party
+integration. This assessment must distinguish "Wicked Editor supports it" from
+"Renegade has actually compiled, tested and accepted it".
+
+### Gate 1 acceptance
+
+- FBX static import passes Debug/Release proof;
+- FBX skinned/animated import passes structural and WISCENE round-trip proof;
+- GLB/GLTF regression remains green;
+- no stock Wicked Editor UI is linked/exposed;
+- no creator source file is modified;
+- Wicked source and submodule pin remain unchanged;
+- authoritative Debug/Release and pinned-Wicked baselines pass.
+
+## Gate 2 — Registry-backed asset catalogue
 
 ### Goal
 
@@ -117,22 +262,21 @@ applicable:
 - whether it is an imported source, imported product or ordinary project asset;
 - importer/settings identity for registered imported products;
 - current provenance health: current, source changed, product changed, source
-  missing/moved or invalid;
+  missing/moved or invalid; and
 - dependency/reference summary when already available from accepted LP05/LC01
   data.
 
 Filesystem-only entries that have not yet entered the governed registry must be
 represented honestly as unregistered, not assigned temporary fake IDs.
 
-### Gate 1 exclusions
+### Gate 2 exclusions
 
-- no import or reimport;
-- no file writes;
+- no import or reimport transaction yet;
 - no scene placement changes;
 - no thumbnail generation;
-- no UI redesign beyond what is required later to consume the model.
+- no stock Wicked Content Browser UI.
 
-### Gate 1 acceptance
+### Gate 2 acceptance
 
 - deterministic catalogue output from a fixed project/registry fixture;
 - stable IDs survive reopen and moved-source recovery;
@@ -141,19 +285,20 @@ represented honestly as unregistered, not assigned temporary fake IDs.
 - existing `AssetBrowserService` containment/security behaviour is retained;
 - Debug/Release tests and pinned-Wicked baselines pass.
 
-## Gate 2 — Governed GLB/GLTF asset import transaction
+## Gate 3 — Governed reusable model-asset import transaction
 
 ### Goal
 
-Import a GLB/GLTF once into a reusable project-owned product rather than only
-placing a transient converted scene.
+Import a model once into a reusable project-owned product rather than only
+placing a transient converted scene. **FBX is the primary acceptance format.**
+GLB/GLTF uses the same transaction and remains required.
 
 ### Required behaviour
 
 A UI-free project asset import service should:
 
 1. validate the active project and requested project destination;
-2. call the existing `ImportService` isolated conversion path;
+2. dispatch through the accepted common `ImportService` format adapter;
 3. produce and round-trip validate the reusable WISCENE product;
 4. collect/refresh the relevant LP05/LC01 project state;
 5. register source-to-product provenance with explicit importer/settings schema;
@@ -163,26 +308,25 @@ A UI-free project asset import service should:
 
 The precise source-retention policy (project-owned source copy versus a governed
 project source entry) must be decided in this gate before implementation. No
-absolute machine-specific path may become the durable project identity.
+absolute machine-specific path may become durable project identity.
 
-### Gate 2 failure contract
+Importer identity must distinguish the format/backend/version sufficiently for a
+later reimport to reproduce the accepted recipe. A future Assimp-backed adapter,
+if ever approved, must therefore not masquerade as the Wicked/ufbx FBX recipe.
 
-Conversion failure, malformed source, output write failure, registry validation
-failure or transaction interruption must not destroy an earlier valid product
-or commit provenance that claims an import succeeded when it did not.
+### Gate 3 acceptance
 
-### Gate 2 acceptance
-
-- first import creates one stable governed source/product relationship;
+- first FBX import creates one stable governed source/product relationship;
+- animated FBX product retains its imported armature/animation data after
+  project reopen;
+- first GLB/GLTF import proves the same common transaction path;
 - reopen preserves exact IDs/settings/provenance;
-- external dependencies from `.gltf` remain governed by LP05 rather than being
-  silently omitted;
 - failed first import leaves no authoritative half-import;
 - failed replacement of an existing destination preserves previous product and
   registry bytes;
 - Wicked and its pin remain unchanged.
 
-## Gate 3 — Stable explicit reimport
+## Gate 4 — Stable explicit reimport
 
 ### Goal
 
@@ -200,20 +344,25 @@ changes.
 - unsuccessful reimport leaves the last-good product and provenance state
   authoritative;
 - moved-source identity recovery from LC01 is honoured rather than treated as a
-  brand-new source.
+  brand-new source; and
+- format/backend selection comes from the stored recipe, not from re-guessing the
+  extension at reimport time.
 
-### Gate 3 acceptance
+### Gate 4 acceptance
 
-A fixed fixture proves:
+A fixed FBX fixture proves:
 
 - source content update -> stale provenance;
 - explicit reimport -> same source/product IDs, new accepted hashes;
+- changed animation/geometry is represented in the new product evidence;
 - project reopen -> same IDs and current status;
 - injected/real conversion failure -> previous product byte-identical and still
-  usable;
+  usable; and
 - retry after correction succeeds without manual identity repair.
 
-## Gate 4 — Creator Asset Browser and repeated placement
+GLB/GLTF reimport remains a required regression case.
+
+## Gate 5 — Creator Asset Browser and repeated placement
 
 ### Goal
 
@@ -225,36 +374,38 @@ The Asset Browser must let the creator:
 
 - browse project folders and filter assets;
 - distinguish registered/unregistered/current/stale/missing states;
+- import an FBX or another accepted model format through Renegade-owned actions;
 - select a registered reusable model asset;
-- invoke explicit import/reimport through Renegade-owned actions;
-- place the registered product into the active scene repeatedly;
+- invoke explicit reimport;
+- place the registered product into the active scene repeatedly; and
 - see useful status/error output when a source is stale, missing or ambiguous.
 
-Repeated placement must load the registered project product, not reconvert the
-original GLB/GLTF every time.
+Repeated placement must load the registered project WISCENE product, not
+reconvert the original FBX/GLTF every time.
 
 Scene mutation remains command-backed. Each placement must Undo/Redo correctly
 and persist through Save/Open.
 
-### Gate 4 exclusions
+For an animated FBX, Gate 5 needs only enough creator feedback to prove that the
+registered product contains the expected animation(s). Full animation editing is
+still excluded.
 
-No stock Wicked Editor windows. No fake disabled controls implying unsupported
-FBX/OBJ/VRM behaviour. No automatic destructive reimport.
-
-### Gate 4 acceptance
+### Gate 5 acceptance
 
 Owner packaged Studio acceptance proves at minimum:
 
-- import one model;
+- import one representative animated/skinned FBX;
 - find/select it in the Asset Browser;
 - place it twice;
 - Undo/Redo a placement;
 - Save, close and reopen;
 - both retained placements resolve through the reusable project product;
-- update the source and observe stale state;
+- update the FBX source and observe stale state; and
 - explicit reimport clears stale state without changing stable IDs.
 
-## Gate 5 — Packaged lifecycle and standalone acceptance
+A GLB/GLTF import/placement regression must also remain functional.
+
+## Gate 6 — Packaged lifecycle and standalone acceptance
 
 ### Goal
 
@@ -263,53 +414,59 @@ boundary.
 
 ### Required proof
 
-Using a fixed owner-test project and representative GLB/GLTF asset:
+Using a fixed owner-test project and representative **animated/skinned FBX**:
 
 1. import the asset as a governed project product;
 2. place it in a scene and Save/Open;
-3. change the source in a controlled way;
-4. observe stale provenance;
-5. explicitly reimport;
-6. reopen and confirm stable identities/current provenance;
-7. run **BUILD > BUILD WINDOWS GAME...**;
-8. require LP05/LC01 canonical proofs and ordinary Studio tests to remain green;
-9. launch the promoted named executable directly from Explorer; and
-10. confirm Runtime uses the updated product.
+3. prove the expected imported armature/animation structure survived;
+4. change the source in a controlled way;
+5. observe stale provenance;
+6. explicitly reimport;
+7. reopen and confirm stable identities/current provenance;
+8. run **BUILD > BUILD WINDOWS GAME...**;
+9. require LP05/LC01 canonical proofs and ordinary Studio tests to remain green;
+10. launch the promoted named executable directly from Explorer; and
+11. confirm Runtime uses the updated product.
 
 A failed reimport/build scenario must also prove the prior successful product or
 standalone build remains authoritative at its respective boundary.
 
-### Gate 5 acceptance
+GLB/GLTF remains part of automated regression evidence but does not substitute
+for the FBX owner acceptance.
+
+### Gate 6 acceptance
 
 - authoritative Debug/Release CI on exact final head;
 - Release real standalone package smoke remains mandatory;
 - only already-accepted hosted capability skips may remain;
 - pinned-Wicked baseline passes;
-- owner-visible packaged Studio workflow passes;
+- owner-visible packaged Studio FBX workflow passes;
 - promoted named executable passes direct launch;
-- independent exact-head audit passes;
+- independent exact-head audit passes; and
 - owner explicitly accepts and squash-merges.
 
 ## Programme exclusions
 
-LP07 does **not** attempt to complete all Phase 4 asset classes. It deliberately
-excludes:
+LP07 does **not** attempt to complete every possible asset class or importer. It
+deliberately excludes:
 
-- FBX, OBJ, PLY, VRM/VRMA parity;
+- adding Assimp without a proven required capability gap;
+- DCC-format parity for dozens of rarely used formats merely to increase a
+  supported-extension count;
 - texture/audio/video/font-specific import editors;
 - universal thumbnails/previews;
 - background import queues/watchers;
-- animation clip/state-machine authoring;
+- animation clip editing/timeline/state-machine authoring;
 - character controller/physics authoring;
 - particles/effects;
 - Lua gameplay framework;
 - generic projectiles/magic;
-- multiplayer/network-service integration;
+- multiplayer/network-service integration; and
 - commercial release packaging/signing/encryption.
 
-Those are later programmes. LP07's job is to prove one complete, reusable model
-asset lifecycle end-to-end so those systems can consume a trustworthy asset
-foundation.
+LP07's job is to prove a trustworthy **FBX-first, multi-format model asset
+lifecycle** end-to-end. Broader formats can then be added behind the same common
+contract without destabilising identity, reimport or standalone packaging.
 
 ## Standing repository/safety rules
 
