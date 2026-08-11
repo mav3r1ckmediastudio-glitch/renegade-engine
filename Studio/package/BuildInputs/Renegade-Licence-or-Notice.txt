@@ -1,0 +1,11 @@
+Renegade Engine development-build notice
+
+Copyright Maverick Media Studio.
+
+A project-wide Renegade source licence has not yet been selected. Public
+repository visibility does not by itself grant reuse rights. This LP06 package
+is intentionally marked distribution_ready=false and must not be represented
+as commercially redistribution-ready until the repository release/licensing
+gate has inventoried shipped components and approved the final notice bundle.
+
+See the repository licensing policy for the authoritative release gate.

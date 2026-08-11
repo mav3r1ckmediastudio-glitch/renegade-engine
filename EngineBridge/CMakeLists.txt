@@ -2,9 +2,12 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/AssetBrowserService.h
     include/renegade/bridge/AssetRegistryService.h
     include/renegade/bridge/BuildIdentityService.h
+    include/renegade/bridge/BuildPromotionService.h
     include/renegade/bridge/BuildService.h
     include/renegade/bridge/BuildStageService.h
     include/renegade/bridge/BuildVerificationService.h
+    include/renegade/bridge/WindowsGameBuildProjectService.h
+    include/renegade/bridge/WindowsGameBuildWorkflow.h
     include/renegade/bridge/PackageIntegrityService.h
     include/renegade/bridge/CommandService.h
     include/renegade/bridge/DependencyService.h
@@ -50,6 +53,7 @@ add_library(RenegadeEngineBridge STATIC
     src/SceneDocumentService.cpp
     src/SelectionService.cpp
     src/TestLevelSnapshotService.cpp
+    src/WindowsGameBuildProjectService.cpp
 )
 
 # Wicked's format converter is self-contained even though upstream keeps it in
@@ -80,8 +84,11 @@ if(WIN32)
     # of non-Windows EngineBridge configuration while retaining shared public
     # contracts for the Windows Runtime and build pipeline.
     target_sources(RenegadeEngineBridge PRIVATE
+        src/BuildPromotionService.cpp
+        src/BuildPromotionServiceInternal.h
         src/BuildVerificationService.cpp
         src/PackageIntegrityService.cpp
+        src/WindowsGameBuildWorkflow.cpp
     )
     target_link_libraries(RenegadeEngineBridge PRIVATE bcrypt)
 endif()

@@ -129,6 +129,22 @@ try {
             -Destination $packageRoot `
             -Force
 
+        # Gate 5 owner builds consume the exact governed inputs emitted beside
+        # the compiled Studio, including pinned Wicked licence/notice files.
+        # Copy that resolved set over the source package placeholders so the
+        # assembled Studio remains self-contained outside the repository.
+        $studioBuildInputs = Join-Path $studioDirectory "BuildInputs"
+        if (-not (Test-Path $studioBuildInputs -PathType Container)) {
+            throw "LP06 Gate 5 Studio build inputs were not emitted by CMake."
+        }
+        $packageBuildInputs = Join-Path $packageRoot "BuildInputs"
+        New-Item -ItemType Directory -Path $packageBuildInputs -Force | Out-Null
+        Copy-Item `
+            -Path (Join-Path $studioBuildInputs "*") `
+            -Destination $packageBuildInputs `
+            -Recurse `
+            -Force
+
         # LP05 Gate 8: exercise dependency extraction from the assembled
         # package twice as separate processes. Graph outputs live outside the
         # fixture, and every fixture file is hashed before and after so a

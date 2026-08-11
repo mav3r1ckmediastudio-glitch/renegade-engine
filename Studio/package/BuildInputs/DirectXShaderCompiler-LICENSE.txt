@@ -1,0 +1,9 @@
+DirectX Shader Compiler — LP06 development-build notice
+
+The Windows standalone currently ships dxcompiler.dll as a governed Runtime
+support dependency. This file records that the component is Microsoft DirectX
+Shader Compiler and that its applicable upstream licence/notice obligations
+must be included and verified at the separate redistribution release gate.
+
+LP06 promotion does not set distribution_ready=true and this development proof
+must not be treated as final legal clearance for redistribution.
