@@ -50,10 +50,11 @@ The stored recipe is the selection authority. The existing `ImportService`
 extension contradicts the stored recipe fails closed rather than being silently
 reclassified to a different importer.
 
-Gate 4 version 1 has no creator-tunable conversion options. Its canonical
-`options` object must therefore be empty. A non-empty version-1 options object is
-an unsupported recipe and fails closed before converter dispatch; Gate 4 never
-preserves such values while pretending they were replayed.
+LP07 version 1 has no creator-tunable conversion options. Its canonical
+`options` object must therefore be empty. New imports reject non-empty v1
+settings before conversion, and reimport rejects any already-stored v1 recipe
+whose `options` object is non-empty before converter dispatch. The lifecycle
+therefore never preserves unsupported values while pretending they were replayed.
 
 ## Preconditions and fail-closed checks
 
@@ -106,8 +107,10 @@ last-good authoritative product.
 ## Gate 4 proof
 
 `RenegadeReusableAssetReimportRecipeTests` is a headless Debug/Release regression
-for the stored-recipe boundary. It constructs an otherwise valid registered
-version-1 imported product containing a canonical but non-empty `options` object
+for the version-1 recipe boundary. It first proves a new import with a canonical
+but non-empty settings object is rejected before graphics conversion or
+persistent product/registry creation. It then constructs an otherwise valid
+registered product containing a canonical but non-empty stored `options` object
 and proves explicit reimport rejects it before graphics conversion while leaving
 the authoritative `.rasset` and registry bytes unchanged.
 
