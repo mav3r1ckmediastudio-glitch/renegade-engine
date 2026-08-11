@@ -1,10 +1,13 @@
 # LP07 Gate 2 — Registry/metadata-backed asset catalogue
 
-Status: **implementation candidate; authoritative Windows CI pending**.
+Status: **implementation candidate; exact-head Windows CI passed; independent review pending**.
 
 Baseline main:
 `6c09a1450b17e7bef9341ed1e29dab7b31f2a30f`
 (`Add LP07 Gate 1 FBX import seam (#46)`).
+
+Implementation evidence head before this docs-only reconciliation:
+`004963c2e3984ca5440591d029b357ce716a9bc7`.
 
 Wicked remains pinned at:
 `3a800b7134aafe58461093c8abb2e274d4e64033`.
@@ -59,9 +62,9 @@ Keeping this as a separate document also preserves the accepted LC01 registry
 schema and canonical packaged registry evidence rather than silently changing
 `renegade-asset-registry` v3 during LP07.
 
-Creator tags are persisted as deterministic trimmed lower-case ASCII terms,
-sorted and deduplicated. Ordinary creators will edit them through Studio in
-Gate 5; direct text-file editing is not a supported workflow.
+Creator tags are persisted as deterministic trimmed terms with ASCII
+case-folding, sorted and deduplicated. Ordinary creators will edit them through
+Studio in Gate 5; direct text-file editing is not a supported workflow.
 
 Metadata commits use the existing `ProjectDocumentTransaction` journal,
 staging, validation, atomic replacement, rollback, and no-op behaviour.
@@ -154,6 +157,43 @@ fixture covers:
 The normal Gate 1 FBX proof, LP05 packaged graph proof, LC01 packaged registry
 proof, LP06 standalone tests, and pinned-Wicked baselines remain required
 regressions in Debug/Release CI.
+
+## Authoritative implementation-head CI
+
+Exact implementation/wiring head:
+`004963c2e3984ca5440591d029b357ce716a9bc7`.
+
+Renegade Studio run #264 (`31528737390`):
+
+- Debug: success; 43/43 applicable tests passed;
+- `RenegadeAssetCatalogueTests`: passed;
+- Release: success; 44/44 tests passed;
+- `RenegadeAssetCatalogueTests`: passed;
+- `RenegadeModelImportGraphicsProof`: passed;
+- `RenegadeStandalonePackageTests`: passed in Release;
+- the established hosted Debug standalone-audio capability skip remained the
+  only allowed Debug skip.
+
+Canonical regression evidence remained unchanged:
+
+- LP05 graph: 4,681 bytes, SHA-256
+  `23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384`;
+- LC01 registry: 2,180 bytes, SHA-256
+  `547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`.
+
+Windows baseline run #410 (`31528737377`):
+
+- Debug: success;
+- Release: success.
+
+The first PR head failed only at CMake configure because the Gate 2 test source
+was registered root-relative from an included CMake file. The corrective commit
+changed the source reference to `${CMAKE_CURRENT_LIST_DIR}/AssetCatalogueTests.cpp`;
+no production behaviour was altered by that fix.
+
+This evidence section is a documentation-only follow-up to the green
+implementation head. The final documentation head must also pass the ordinary
+required workflows before independent review.
 
 ## Explicit exclusions
 
