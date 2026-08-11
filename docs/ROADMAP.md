@@ -96,60 +96,97 @@ reimport execution**, followed by broader asset classes and polish.
 
 **LP07 — Reusable Project Asset Workflow**
 
-LP07 is the next bounded lifecycle programme. It starts from the proven
-GLB/GLTF path rather than trying to solve every Phase 4 asset class at once.
+LP07 is the next bounded lifecycle programme. It is now explicitly **FBX-first
+and multi-format**, because the primary creator asset workflow depends on FBX,
+including animated/skinned FBX.
+
+The exact pinned Wicked revision already contains a dedicated FBX converter based
+on its bundled `ufbx` loader. That converter maps meshes, materials/textures,
+armatures/skinning, morph data and FBX animation stacks/takes into native Wicked
+scene/animation components. Renegade should prove and expose that existing path
+through its own service boundary before considering another FBX stack.
+
+### LP07 format priority
+
+- **P0:** FBX — static, skinned and animated; owner/package acceptance format.
+- **P1:** GLTF/GLB — already proven foundation, retained as required regression
+  and supported alternative.
+- **P2:** OBJ and PLY through the common import service when the pinned Wicked
+  converter seams are proven clean; VRM/VRMA after an exact pinned-source seam
+  audit.
+- **Fallback only:** Assimp or another external importer when a concrete required
+  format/FBX feature is proven unsupported or unreliable through the Wicked
+  path. A second importer stack is not added merely to increase extension count.
 
 Target outcome:
 
-> A creator imports a GLB/GLTF once as a governed project asset, sees it in the
-> Renegade Asset Browser with stable identity/provenance status, places it into
-> scenes repeatedly without reconverting the external source, changes the
-> source, performs an explicit safe reimport that preserves asset identity, then
-> reopens and builds the project without broken references.
+> A creator imports an FBX once as a governed project asset, including preserving
+> skinned/animated content where present, sees it in the Renegade Asset Browser
+> with stable identity/provenance status, places it repeatedly without
+> reconverting the external source, changes the source, performs an explicit safe
+> reimport that preserves asset identity, then reopens and builds the project
+> without broken references. GLB/GLTF remains functional throughout.
 
 See `docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md` for the gate contract.
 
 ### LP07 gate map
 
-1. **Gate 1 — Registry-backed asset catalogue**
+1. **Gate 1 — Common model-import seam and FBX proof**
+   - generalise the current GLB/GLTF-shaped `ImportService` contract;
+   - compile/call the exact pinned Wicked FBX converter without exposing the
+     stock Wicked Editor;
+   - prove static FBX plus skinned/animated FBX through WISCENE round trip;
+   - retain GLB/GLTF regression proof;
+   - audit exact OBJ/PLY/VRM/VRMA seams and record what Renegade can safely expose.
+2. **Gate 2 — Registry-backed asset catalogue**
    - join the existing Asset Browser filesystem view with LC01 stable registry
      identity/provenance/status;
    - expose a UI-free catalogue model first;
    - no import or file mutation.
-2. **Gate 2 — Governed GLB/GLTF asset import transaction**
-   - use the existing `ImportService` isolated conversion/WISCENE round trip;
-   - commit a reusable project product and LC01 provenance only after successful
-     validation;
+3. **Gate 3 — Governed reusable model-asset import transaction**
+   - FBX is the primary acceptance format; GLB/GLTF shares the same transaction;
+   - commit a reusable WISCENE project product and LC01 provenance only after
+     successful conversion/round-trip validation;
    - failed import preserves the previous project/registry state.
-3. **Gate 3 — Stable reimport**
-   - explicitly re-run the registered importer/settings against a stale source;
+4. **Gate 4 — Stable explicit reimport**
+   - explicitly re-run the stored importer/backend/settings recipe against a
+     stale source;
    - preserve source/product asset IDs and last-good product on failure;
+   - animated FBX reimport must preserve/prove the expected animation structure;
    - no silent/background overwrite.
-4. **Gate 4 — Creator Asset Browser workflow**
+5. **Gate 5 — Creator Asset Browser workflow**
    - display stable asset type, identity and source health;
-   - browse/filter/select reusable model assets;
+   - import/browse/filter/select reusable assets;
    - place a registered model repeatedly through Renegade-owned commands;
-   - surface missing/moved/stale states rather than hiding them.
-5. **Gate 5 — Packaged lifecycle acceptance**
-   - import -> place -> Save/Open -> source update -> explicit reimport -> reopen;
+   - surface missing/moved/stale states and explicit reimport;
+   - owner acceptance uses a representative animated/skinned FBX.
+6. **Gate 6 — Packaged lifecycle acceptance**
+   - FBX import -> place -> Save/Open -> source update -> explicit reimport ->
+     reopen;
    - dependency closure and LC01 identity remain coherent;
    - Build Windows Game succeeds and the standalone Runtime uses the updated
-     asset;
+     product;
+   - GLB/GLTF remains a required regression path;
    - owner acceptance plus independent exact-head review.
 
 ### LP07 deliberate exclusions
 
-LP07 does not yet add FBX/OBJ/PLY/VRM import parity, texture/audio/video/font
-asset editors, thumbnails for every class, background import queues, animation
-state machines, physics authoring, particles, Lua gameplay or multiplayer.
-Those remain subsequent bounded Phase 4/5/6 programmes.
+LP07 does not add Assimp without a proven capability gap, promise dozens of DCC
+formats merely to increase extension count, or build texture/audio/video/font
+asset editors, universal thumbnails, background import queues, animation state
+machines/timelines, physics authoring, particles, Lua gameplay or multiplayer.
+
+Imported FBX animation data must survive and be usable; **animation authoring** is
+still a later bounded programme.
 
 ## After LP07
 
 Subject to LP07 acceptance, the likely order is:
 
-- broaden the asset pipeline beyond GLB/GLTF: textures, audio, video, scripts,
-  fonts and remaining Wicked-supported model formats;
+- broaden the asset pipeline beyond model assets: textures, audio, video,
+  scripts and fonts;
+- add any further high-value model formats behind the accepted common importer
+  contract, using external libraries only where justified by evidence;
 - previews/thumbnails, dependency/reference reporting and background jobs;
 - complete creator-facing materials/render/world exposure where gaps remain;
 - physics, character controller, input and audio gameplay foundations;
