@@ -1,200 +1,240 @@
-﻿# Renegade Engine — Current Handoff
+# Renegade Engine — Current Handoff
 
-**Date:** 2026-08-09
+**Date:** 2026-08-11
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Current main baseline:** `b45de5e369789697dba0fd4502677055b8105c1f`
+**Authoritative main baseline:**
+`48126f859b2f9b25a60182c4311cfc6c91d98436`
+(`Add LP06 Gate 5 safe rebuild and promotion (#44)`).
 
-**Active branch:** `agent/lc01-gate5-packaged-reopen-proof`
+**Documentation reconciliation branch:**
+`docs/lp06-closeout-lp07-roadmap`
 
-**Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
+**Wicked pin:**
+`3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Critical local safety rule
+## Critical owner-machine safety rules
 
-The project owner's clone contains an unrelated uncommitted modification to
-`Tools/Windows-Build.Common.ps1`: direct native Git calls use `git.exe` and
-check `$LASTEXITCODE`. It has already been reapplied cleanly over PR #36's
-shared command-runner hardening. Do not reset, restore, stage or discard it.
+The project owner's local clone contains an unrelated uncommitted modification
+to `Tools/Windows-Build.Common.ps1`. Direct native Git calls there use
+`git.exe` and check `$LASTEXITCODE` because Windows command resolution on the
+owner machine required that correction.
 
-Temporary LP04 helper patch files may remain untracked. Do not use `git clean` and do not use `git add .`.
+**Never reset, restore, stage, discard or overwrite that local modification.**
+
+Temporary/untracked LP04/other helper patch files may also exist locally.
+
+- Never use `git clean`.
+- Never use `git add .`.
+- Do not modify Wicked or move its submodule pin unless an explicit justified
+  core-patch decision is made.
+
+Owner machine context: Windows 10, 128 GB DDR4, known CPU instability with WHEA
+corrected machine-check history. Local `CL.exe`/Release failures have previously
+been proven hardware-related. GitHub CI Debug/Release is therefore the
+authoritative compiler/build proof when local hardware is suspect.
+
+Compilation is never sufficient behavioural proof. Creator-facing/runtime work
+requires the relevant CTest, packaged/runtime evidence and owner acceptance.
 
 ## Current truth
 
-LP04 — Unsaved Test Level Snapshot is complete and accepted on `main`. See "LP04 accepted behaviour" below for the summary and `docs/LP04_TEST_LEVEL_ACCEPTANCE.md` for the full record.
+### LP04 — Unsaved Test Level Snapshot
 
-LP05 — Representative Dependency Extraction is complete and accepted on `main`. Exact final head `8abb9fad959268ee00c32e046ede13d852883fa4` passed Studio run 144 and baseline run 150 in Debug and Release before independent project-owner review and squash merge through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
+**Complete and accepted.**
 
-LC01 — Asset Identity and Source Tracking is active on
-`agent/lc01-gate5-packaged-reopen-proof`. Gates 1-4 are accepted on `main`:
-Gate 1 merged through PR #34 at `580e5a5`, corrected Gate 2 through PR #36 at
-`489e33d`, Gate 3 provenance through PR #37 at `c2ace926`, and Gate 4
-moved/missing recovery through PR #38 at
-`b45de5e369789697dba0fd4502677055b8105c1f`. Gate 4 exact head `523f2ac`
-passed raw 25/25 in Studio Debug and Release (run 163) and baseline run 181 in
-both configurations before independent review and squash merge.
+Studio snapshots the current unsaved live scene, launches the real separate
+Runtime, waits for an explicit READY handshake, displays unsaved scene content
+and STOPs the Runtime cleanly without forcing an authoritative scene save.
 
-Gate 5 packages an LC01-specific process fixture and fixed mini-project into
-the Studio evidence package. Four independent invocations prove initial
-registry/provenance persistence, Project Open after source-content update,
-Project Open after moving that updated source, and byte-identical final reopen.
-All controlled mutations occur in an artifact-only working copy; the packaged
-fixture is SHA-256 checked before and after. GitHub implementation head
-`c8bacea05e5aac0823bc5d304631d84c0a411c97` passed Studio run 165 with raw
-25/25 in Debug and Release. All four packaged phases passed in both and emitted
-the same final registry SHA-256
-`547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`
-(2,180 bytes). Baseline run 184 passed both configurations. Independent review
-and squash merge remain pending. See
-`docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md`.
+### LP05 — Representative Dependency Extraction
 
-PR #24, `Run Studio checks on every pull request`, fixed the required-check deadlock for docs-only PRs by ensuring the Renegade Studio workflow runs on every pull request targeting `main` while retaining push-to-main path filtering.
+**Complete and accepted.**
 
-- Current main merge commit: `b45de5e369789697dba0fd4502677055b8105c1f` (PR #38; LC01 Gate 4 accepted)
+The production dependency system uses Renegade-owned UI-free providers across
+project documents, Story Flow, Runtime Screens, WISCENE public component data,
+glTF/GLB resources and explicit declared references. Lua is not scanned or
+executed for guessed file paths.
 
-The four Windows PR checks completed successfully on the corrected PR #24 head:
+Canonical packaged graph:
 
-- `Renegade Studio Windows x64 Debug`
-- `Renegade Studio Windows x64 Release`
-- `Windows x64 Debug`
-- `Windows x64 Release`
+- bytes: `4681`
+- SHA-256:
+  `23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384`
 
-LP05 lifecycle close-out is complete. Restoring the intended `main` branch protection remains a repository-administration follow-up and must not be represented as complete until verified on GitHub.
+### LC01 — Asset Identity and Source Tracking
 
-## LP04 accepted behaviour
+**Complete and accepted.**
 
-LP04 proves that Studio can run the real standalone Runtime from the editor's current unsaved scene state without first overwriting the authoritative WISCENE.
+PR #39 exact final head:
+`3d3e780b38792aec866cd19ce6638a8260ffff4f`
 
-Manual end-to-end acceptance on real Windows hardware proved:
+Squash merge:
+`01d790bda5acea0cdb6a7735557b12224c795a64`
 
-- Studio remained open with the authoring scene visible.
-- A newly imported crate remained an unsaved live-scene change.
-- PLAY created a disposable Test Level snapshot.
-- Studio launched the real `RenegadeRuntime.exe`.
-- Runtime reached the explicit READY handshake and Studio entered RUNNING.
-- Runtime displayed the unsaved imported crate.
-- No ordinary scene save was required to make that change appear in Runtime.
-- STOP terminated Runtime correctly.
-- Studio remained open and usable after STOP.
+Authoritative final CI:
 
-See:
+- Renegade Studio run 166: Debug/Release success;
+- Windows baseline run 185: Debug/Release success.
 
-- `docs/LP04_TEST_LEVEL_ACCEPTANCE.md`
-- `docs/LP04_GATE3B2_RUNTIME_HANDSHAKE_EVIDENCE.md`
+LC01 establishes:
 
-### LP04 gate summary
+- stable UUID project asset records;
+- transactional project-root `AssetRegistry.renegade-assets` persistence;
+- source-to-imported-product provenance;
+- explicit importer/settings schema and import-time hashes;
+- stale provenance reporting;
+- deterministic moved/missing source recovery without speculative relinking;
+- packaged multi-process source-update/move/reopen proof.
 
-**Gate 3A — process lifecycle**
+Canonical packaged registry:
 
-Established real Win32 process launch/observation, startup timeout handling, bootstrap failure observation, STOP/termination handling, snapshot cleanup and deterministic synthetic fixture coverage.
+- bytes: `2180`
+- SHA-256:
+  `547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`
 
-**Gate 3B1 — Runtime readiness**
+LC01 does **not** execute reimport or provide the creator-facing reusable asset
+workflow. That is the next programme.
 
-Runtime accepts a Renegade-owned `--renegade-ready-event=<name>` argument and signals it only after successful startup.
+### LP06 — Named Standalone Windows Build / Safe Rebuild
 
-**Gate 3B2 — real Runtime handshake**
+**Complete and accepted.**
 
-Executed twice on a real Windows GPU/DX12 device. Both runs reached Running, stopped successfully, cleaned the snapshot session and left no lingering Runtime process/window. The Debug suite remained 22/22.
+PR #44 corrected exact head:
+`99cfe1f74016bb6a53a4c35e020f6884099a52fd`
 
-The GitHub-hosted Runtime handshake probe cannot prove this path because the pinned Wicked adapter selection rejects the software/basic adapter available on the hosted runner. The probe remains a manual diagnostic. Wicked source is intentionally unchanged.
+Squash merge/current main:
+`48126f859b2f9b25a60182c4311cfc6c91d98436`
 
-**Gate 3B3 — Studio PLAY/STOP wiring**
+Authoritative final CI:
 
-PLAY snapshots the current scene, launches Runtime using Studio's backend, distinguishes STARTING from RUNNING, polls non-blockingly, exposes STOP correctly, discards unrelated editor actions while Test Level is active, and resolves Runtime relative to the Studio executable.
+- Renegade Studio run 239: Debug/Release success;
+- Windows baseline run 364: Debug/Release success;
+- Release: 42/42 CTests passed;
+- `RenegadeStandalonePackageTests`: passed;
+- `RenegadeWindowsGameBuildProjectTests`: passed;
+- all eight Gate 5 safe-promotion/failure scenarios passed;
+- Debug retained only the already-accepted Gate 4 hosted XAudio2 capability
+  skip;
+- LP05/LC01 canonical hashes remained unchanged;
+- Wicked pin remained unchanged.
 
-**Gate 3B4 — manual acceptance**
+LP06 provides:
 
-PASS. The real editor-to-Runtime workflow displayed a newly imported unsaved crate and returned control cleanly to Studio.
+- deterministic Windows build plan;
+- same-volume governed staging under `.renegade-staging`;
+- named game executable and package-relative startup;
+- exact project/runtime-support/package manifests and integrity validation;
+- required `dxcompiler.dll` beside the game executable;
+- detached Release DX12 smoke from an unrelated CWD;
+- Runtime Screen + PLAY + Story Flow Test All parity;
+- safe previous-build preservation, rollback and promotion;
+- Release Studio **BUILD > BUILD WINDOWS GAME...** integration;
+- final build under
+  `<Project>/Builds/Windows/<Game Name> Windows Build/`.
 
-### LP04 non-blocking follow-up
+#### LP06 owner finding and correction
 
-Runtime currently starts from its own fixed default camera rather than inheriting the current Studio viewport camera. This can make visual comparison awkward but does not affect snapshot correctness. Treat this as later Runtime/gameplay-camera work, not an LP04 defect.
+The first owner-visible build on superseded head
+`74dc4f67a76fe570655a7c02c3ceed58f969310b` failed closed with Runtime exit
+code 27. Package integrity, DX12 startup and Runtime Screen load had succeeded;
+PLAY failed because Runtime could not resolve the Story Flow Level One scene
+stable document ID.
+
+Root cause: reachable `.wiscene` files were packaged, but their Renegade-owned
+`.wiscene.rmeta` scene identity companions were absent from the owner-build
+closure. Gate 4's handcrafted fixture had included those sidecars and therefore
+masked the integration gap.
+
+Correction: `WindowsGameBuildProjectService` adds an LP06-only
+`SceneIdentityCompanionProvider`. Every reachable Scene emits its adjacent
+`.rmeta` as Required `GeneratedData` with
+`lp06.scene_identity_companion` provenance. The accepted LP05 canonical
+extractor/evidence remains unchanged.
+
+The new regression test proves sidecar graph nodes, provenance edges, LC01
+records and Windows build-plan files using Gate 4's GPU-free WISCENE fixture.
+
+Owner acceptance on the corrected Release artifact:
+
+- Studio reported **BUILD COMPLETE**;
+- promoted named standalone executable launched directly from Explorer;
+- no `--project` argument was supplied;
+- Runtime Screen loaded;
+- PLAY entered Level One successfully.
+
+Independent exact-head audit passed. Its sole standing note is the existing
+small `CreateProcessW` -> `AssignProcessToJobObject` race in the standalone
+smoke launcher; hardening with `CREATE_SUSPENDED`/assign/resume is a future
+non-blocking improvement and was not bundled into the accepted correction.
+
+LP06 promoted builds deliberately retain `distribution_ready=false`.
+Commercial redistribution, signing, installer/update policy and encryption are
+later release boundaries.
 
 ## Phase position
 
-The active roadmap is now **Phase 4 — Project and asset pipeline**.
+**Phase 4 — Project and asset pipeline remains active.**
 
-The master-plan outcome is that assets become repeatable project resources rather than ad-hoc file opens. Phase 4 still requires:
+The backend foundations are now much further advanced than the original Phase 4
+roadmap expected: stable IDs, source provenance, dependency extraction,
+moved/missing recovery and standalone asset collection/building already exist.
 
-- project-relative asset database and stable asset IDs;
-- Content Browser with folders, filters, previews and drag/drop;
-- repeatable import/reimport;
-- source-file tracking and import settings;
-- texture/audio/video/script/font handling;
-- thumbnails and dependency/reference reporting;
-- missing/moved asset recovery;
-- background import jobs and visible error reporting.
+The next missing product boundary is the creator-facing reusable asset workflow.
 
-Existing GLB/GLTF import and scene placement are valuable foundations but are not yet a reusable project asset system.
+## Next programme — LP07 Reusable Project Asset Workflow
 
-## LP05 progress — Representative Dependency Extraction
+Status: **planned; implementation has not started.**
 
-LP05 comes before broader asset identity/cooking/packaging work. Its purpose is to establish trustworthy, deterministic dependency discovery from representative Renegade/WISCENE content, producing Renegade-owned dependency/path records that later lifecycle slices can consume.
+Canonical design:
+`docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md`
 
-**Gates 1-3 are complete and merged** through PR #27 at `1c9fe841`. They establish the dependency-graph contract, canonical path/security layer, UI-free provider interface, and concrete project, Story Flow, Runtime Screen and declared-reference providers. Gate 2's path identity was corrected twice after initial landing — once for Windows Unicode/case identity, once for a filesystem-canonicalization leak in that same fix — both proven on real Windows Debug hardware.
+Target outcome:
 
-**Both Debug and Release are proven.** A separate, pre-existing Release-only `CL.exe` access-violation crash blocked Release proof across two earlier sessions; it was root-caused this session to local CPU hardware instability (corrected machine-check errors confirmed via Windows Event Viewer/WHEA history), not a toolchain or code defect. Release was verified sound on GitHub Actions instead: the `Renegade Studio` workflow passed 23/23 tests in both Debug and Release, `RenegadeDependencyTests` included, no crash.
+> import one GLB/GLTF -> create a stable reusable project asset -> browse it ->
+> place it repeatedly -> detect a source change -> explicitly reimport safely
+> while retaining IDs -> reopen -> Build Windows Game -> standalone Runtime uses
+> the updated product.
 
-Full technical detail for all of the above — the architectural decision, the gate-by-gate implementation boundaries, both Gate 2 corrections, and the complete Release crash investigation and resolution — is in `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md`.
+Gate map:
 
-**Gate 4 is implemented and GitHub CI-proven on `poc/lp05-gate4-wiscene-typed-walker`.** Remote implementation commit `3d888de02c97a83ada27ba4f3d17f8a75053fd53` passed Renegade Studio Debug and Release (23/23 tests in each configuration, `RenegadeDependencyTests` included) in workflow run 126; both pinned-Wicked baseline jobs also passed in run 127. It adds a Renegade-owned read-only WISCENE provider over the validated scene-open seam and walks public Material, Light, Environment Probe, Weather, Sound, Video and Script component resource fields. Tests cover all seven through the direct const-scene walker; the real headless WISCENE reader fixture covers the other six because Wicked's Environment Probe deserializer requires an initialized graphics device. Coverage includes typed provenance, repeated-read order, duplicates, missing resources, metadata exclusion and byte-identical source preservation. Wicked remains unchanged; serializer internals are not intercepted. Independent verification remains pending.
+1. registry-backed UI-free asset catalogue;
+2. governed GLB/GLTF reusable-asset import transaction;
+3. stable explicit reimport with last-good preservation;
+4. creator Asset Browser workflow and repeated command-backed placement;
+5. packaged Save/Open/reimport/standalone build acceptance.
 
-**Gate 5 is accepted on `main`.** PR #29 merged useful foundations but did not satisfy the repository-defined Gate 5 boundary. Corrective PR #30 was independently reviewed and merged at `1966d55a5bb9c4dfdcca222029e4aa10c48231d0`; implementation head `4707f77a61265dd70c309f4dcd1b857270a060b9` addresses those findings:
+LP07 deliberately does not expand into every Wicked asset format, physics,
+characters, animation state machines, particles, Lua gameplay, projectiles or
+multiplayer. Those come after one reusable model-asset lifecycle is proven
+end-to-end.
 
-- raw glTF/GLB discovery retains external buffer/image dependencies while recording material texture-slot and animation structure; GLB version/length are validated, data-URI scheme matching is case-insensitive, and non-glTF imported formats are ignored by this provider;
-- project-owned terrain material textures are normal WISCENE dependencies; Wicked-serialized terrain height samples, blend maps and heightmap-modifier bytes are recorded deterministically as embedded generated-data evidence owned by the scene rather than fake file nodes;
-- external generated artifacts can be declared explicitly as typed `generated_data` Always Include entries;
-- Always Include uses versioned indexed fields with percent-encoded paths, retains read compatibility with PR #29's short-lived comma-array format, rejects malformed declarations, and has a public active-project `SetAlwaysInclude` transaction seam covered through real create/write/read, failure preservation, dependency-adapter and graph projection tests, including filenames containing commas, spaces, `#` and `;`;
-- install-anchored terrain defaults outside the project remain an explicit `OutsideProject` diagnostic and do not silently enter the project graph. Packaging/runtime-support ownership remains outside LP05.
+## Existing foundations LP07 must reuse
 
-Gate 5 final head `974abac4a39c91f7baf3ccc29cc14a5910e836a4` passed Renegade Studio run 136 in Debug and Release with 23/23 tests in each configuration; pinned-Wicked baseline run 137 passed both configurations. The project owner independently reviewed that exact head before squash-merge, completing Gate 5 acceptance.
+- `ImportService::PrepareGltfAsset` / reusable WISCENE round-trip path;
+- `PlaceImportedModelCommand` for command-backed scene placement;
+- `AssetBrowserService` for safe project Content enumeration/classification;
+- LP05 dependency collection;
+- LC01 asset registry/provenance/recovery;
+- `ProjectDocumentTransaction`-style fail-closed persistence discipline;
+- LP06 Build Windows Game and package validation.
 
-**Gate 6 is accepted on `main`.** Implementation commit `eb25d46bdb967f82c136ee030b216c656a220d54` extends provider output so candidates and structured non-fatal diagnostics commit transactionally, then adds a typed `LuaDependencyPolicyProvider`. Explicit nested-script declarations become Script edges; explicitly recorded computed references without a declared target become `UndeclaredComputedReference` diagnostics. Lua source text is neither executed nor scanned for path-looking strings.
-
-The representative Lua fixture covers all five diagnostic codes in deterministic order: `OutsideProject`, `CaseCollision`, `Missing`, `Duplicate` and `UndeclaredComputedReference`. It proves duplicate/collision node reuse, source attribution, byte-identical Lua input and that a provider failure leaks neither candidates nor diagnostics. Implementation commit `eb25d46bdb967f82c136ee030b216c656a220d54` passed Renegade Studio run 138 in Debug and Release with 23/23 tests in each configuration; final head `30730cf4f397de730588a722d4dcd08b21f00619` passed Studio run 139 and pinned-Wicked baseline run 142 in both configurations. The project owner independently reviewed that head before squash-merging PR #31 at `ba7d37b21c6c01740a648821127d293e0b4e8c83`.
-
-**Gate 7 is accepted on `main`.** `DependencyCollector::DiscoverTransitiveDependencies` walks the dynamically growing graph once per `(node, provider)` pair, skips missing nodes, terminates safely across cycles and preserves transactional provider output. Existing files receive deterministic `fnv1a64` content hashes; missing nodes carry the explicit `missing` marker. `SerializeDependencyGraph` validates referential integrity and emits stable versioned UTF-8 JSON with sorted roots, nodes, edges and diagnostics. Exact PR head `e3defa0e9348712ea50057386a571f13cfbce955` passed Studio run 141 with 23/23 tests in Debug and Release and baseline run 145 in both configurations. The project owner independently reviewed that head before squash-merging PR #32 at `8ef6250a4b8c3d33c498919cdf803eebf7669735`.
-
-**Gate 8 and LP05 are accepted on `main`.** A console-only dependency proof executable and fixed mini-project are copied into every assembled Studio Debug/Release package. The build launches that packaged executable twice as separate processes, requires byte-identical graph JSON and compares SHA-256 records for every fixture file before and after extraction. Implementation commit `0cd5a649f03120f64e1153e493b7a85fecdda9d3` passed Studio run 143 and baseline run 148. Exact final head `8abb9fad959268ee00c32e046ede13d852883fa4` passed Studio run 144 with 23/23 tests in Debug and Release and baseline run 150 in both configurations. Debug and Release produced the identical 4,681-byte graph with SHA-256 `23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384`; all fixture source paths, sizes and hashes remained unchanged. The project owner independently reviewed that exact head before squash-merging PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
-
-### LP05 architectural decision
-
-For WISCENE native-resource extraction, use a **Renegade-owned, read-only typed walker** over the pinned Wicked scene/ECS component structures.
-
-Do **not** modify Wicked's serializer merely to expose its internal resource-registration state. Wicked source remains off-limits unless a later gate demonstrates that no viable Renegade-owned external route exists.
-
-Representative extraction should cover the resource-bearing native components needed by the gate, deduplicate paths deterministically, preserve provenance, and report deliberately missing/unresolved dependencies as structured evidence.
-
-## Existing foundations relevant to LP05/Phase 4
-
-Already established in merged work:
-
-- native Renegade Studio chrome over Wicked subsystems;
-- project-aware scene workflows;
-- protected Save/Open scene persistence;
-- command-backed Undo/Redo;
-- Environment, precipitation, sun/time-of-day and native ocean authoring;
-- Terrain Authoring V1;
-- native Light authoring and hierarchy markers;
-- Model Import V1 GLB/GLTF conversion and WISCENE round-trip proof;
-- imported-model scene placement and automatic scale correction;
-- stable UUID-v4 project/document/entity identity;
-- transactional Renegade-owned project/flow/screen document writes and recovery;
-- Runtime screens and stable action dispatch;
-- LP04 unsaved Test Level launch.
-
-These do not remove the need for stable **asset** IDs, source tracking, dependency extraction, reimport and a reusable Content Browser.
+Do not create parallel identity, dependency, importer or packaging systems.
 
 ## Repository rules
 
-- Do not edit Wicked or move its pin without an explicit, justified core-patch decision.
-- Do not claim behavioural success from compilation alone.
-- A visible or behavioural failure overrides green CI.
-- Persistent scene mutations belong behind Renegade-owned command/service boundaries and require Undo/Redo plus Save/Open evidence where applicable.
-- Keep lifecycle slices bounded and independently verifiable.
-- Do not touch `Tools/Windows-Build.Common.ps1`.
-- Do not use `git add .`.
-- Do not use `git clean`.
-- Hosted CI GPU limitations must be documented rather than worked around by altering Wicked.
-- At lifecycle close-out, restore the intended `main` branch protection once documentation and next-milestone state are settled.
-- If a local Release build crashes with an unexplained access violation, check Windows Event Viewer/WHEA for hardware-level corrected errors before assuming a toolchain or code regression — see the LP05 Release resolution in `docs/LP05_REPRESENTATIVE_DEPENDENCY_EXTRACTION.md` for the precedent.
+- Renegade Studio owns the UX; do not expose or embed stock Wicked Editor
+  windows.
+- UI code should call Renegade-owned services; persistent semantics stay out of
+  chrome callbacks.
+- Persistent scene mutations require command-backed Undo/Redo and Save/Open
+  evidence.
+- A visible/behavioural failure overrides green CI.
+- Hosted GPU/audio limitations are documented, not 'fixed' by modifying Wicked.
+- Wicked pin stays
+  `3a800b7134aafe58461093c8abb2e274d4e64033` until an explicit upstream/core
+  decision changes it.
+- Keep lifecycle slices bounded and independently auditable.
+- Do not merge an implementation gate without exact-head CI, owner acceptance
+  where behavioural/visual, and independent review.
