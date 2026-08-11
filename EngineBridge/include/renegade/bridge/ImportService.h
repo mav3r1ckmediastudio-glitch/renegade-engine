@@ -64,21 +64,23 @@ namespace renegade::bridge
 
     // Structural evidence that specifically covers the data a rigged or
     // animated FBX can lose even when a scene still contains the same number
-    // of top-level components. The fingerprint is built from stable component
-    // indices plus bone weights, inverse bind matrices, animation channels,
-    // samplers and keyframe payloads so it can be compared after WISCENE
-    // serialization/reload.
+    // of top-level components. The fingerprints are built from stable
+    // component indices, imported take/clip names, bone weights, inverse bind
+    // matrices, animation channels, samplers and keyframe payloads so identity
+    // as well as data can be compared after WISCENE serialization/reload.
     struct ImportedModelEvidence
     {
         std::size_t skinnedMeshes = 0;
         std::size_t primaryInfluenceVertices = 0;
         std::size_t secondaryInfluenceVertices = 0;
         std::size_t armatureBones = 0;
+        std::size_t namedAnimations = 0;
         std::size_t animationChannels = 0;
         std::size_t animationSamplers = 0;
         std::size_t animationData = 0;
         std::size_t animationKeyframes = 0;
         std::size_t animationValues = 0;
+        std::uint64_t animationNameFingerprint = 0;
         std::uint64_t rigAnimationFingerprint = 0;
 
         [[nodiscard]] bool operator==(
@@ -88,11 +90,13 @@ namespace renegade::bridge
                 primaryInfluenceVertices == other.primaryInfluenceVertices &&
                 secondaryInfluenceVertices == other.secondaryInfluenceVertices &&
                 armatureBones == other.armatureBones &&
+                namedAnimations == other.namedAnimations &&
                 animationChannels == other.animationChannels &&
                 animationSamplers == other.animationSamplers &&
                 animationData == other.animationData &&
                 animationKeyframes == other.animationKeyframes &&
                 animationValues == other.animationValues &&
+                animationNameFingerprint == other.animationNameFingerprint &&
                 rigAnimationFingerprint == other.rigAnimationFingerprint;
         }
     };
