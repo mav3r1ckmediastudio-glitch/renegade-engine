@@ -5,6 +5,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -61,6 +62,43 @@ namespace
         }
         std::cerr << "LP07 FBX PROOF FAIL // " << message << '\n';
         return false;
+    }
+
+    std::vector<std::string> CollectAnimationNames(const wi::scene::Scene& scene)
+    {
+        std::vector<std::string> names;
+        names.reserve(scene.animations.GetCount());
+        for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
+        {
+            const auto animationEntity = scene.animations.GetEntity(index);
+            const auto* name = scene.names.GetComponent(animationEntity);
+            if (name != nullptr && !name->name.empty())
+            {
+                names.push_back(name->name);
+            }
+        }
+        std::sort(names.begin(), names.end());
+        return names;
+    }
+
+    bool LoadSceneForNameProof(
+        const fs::path& path,
+        wi::scene::Scene& scene,
+        std::string& error)
+    {
+        wi::Archive archive(path.u8string(), true, false);
+        if (!archive.IsOpen())
+        {
+            error = "could not reopen WISCENE for animation-name proof";
+            return false;
+        }
+        scene.Serialize(archive);
+        if (archive.GetPos() != archive.GetSize())
+        {
+            error = "animation-name proof found trailing or incomplete WISCENE data";
+            return false;
+        }
+        return true;
     }
 
     bool RunImportCase(
@@ -128,6 +166,7 @@ namespace
             }
         }
 
+        std::vector<std::string> importedAnimationNames;
         if (requireAnimation)
         {
             if (!Require(preparedResult.imported.animations > 0,
@@ -142,6 +181,19 @@ namespace
                     std::string(label) + ": no animation keyframe times were imported") ||
                 !Require(preparedResult.importedEvidence.animationValues > 0,
                     std::string(label) + ": no animation keyframe values were imported"))
+            {
+                return false;
+            }
+
+            const auto* importedScene = prepared.PeekScene();
+            if (!Require(importedScene != nullptr,
+                    std::string(label) + ": prepared scene was unavailable for take-name proof"))
+            {
+                return false;
+            }
+            importedAnimationNames = CollectAnimationNames(*importedScene);
+            if (!Require(!importedAnimationNames.empty(),
+                    std::string(label) + ": animated FBX produced no named animation take/clip"))
             {
                 return false;
             }
@@ -162,6 +214,24 @@ namespace
             return false;
         }
 
+        if (requireAnimation)
+        {
+            wi::scene::Scene reopenedScene;
+            std::string reopenError;
+            if (!Require(LoadSceneForNameProof(destination, reopenedScene, reopenError),
+                    std::string(label) + ": " + reopenError))
+            {
+                return false;
+            }
+            const auto reloadedAnimationNames = CollectAnimationNames(reopenedScene);
+            if (!Require(reloadedAnimationNames == importedAnimationNames,
+                    std::string(label) +
+                        ": animation take/clip names changed after WISCENE reopen"))
+            {
+                return false;
+            }
+        }
+
         std::vector<char> sourceAfter;
         if (!Require(ReadBytes(source, sourceAfter),
                 std::string(label) + ": could not read source after import") ||
@@ -177,6 +247,7 @@ namespace
             << " materials=" << result.imported.materials
             << " armatures=" << result.imported.armatures
             << " animations=" << result.imported.animations
+            << " named_animations=" << importedAnimationNames.size()
             << " skinned_meshes=" << result.importedEvidence.skinnedMeshes
             << " bones=" << result.importedEvidence.armatureBones
             << " channels=" << result.importedEvidence.animationChannels
