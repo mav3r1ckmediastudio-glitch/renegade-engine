@@ -41,6 +41,7 @@ add_library(RenegadeEngineBridge STATIC
     src/IdentityService.cpp
     src/LightService.cpp
     src/ImportService.cpp
+    src/ImportServiceModel.cpp
     src/MaterialService.cpp
     src/CollisionService.cpp
     src/OceanService.cpp
@@ -56,11 +57,13 @@ add_library(RenegadeEngineBridge STATIC
     src/WindowsGameBuildProjectService.cpp
 )
 
-# Wicked's format converter is self-contained even though upstream keeps it in
-# the reference Editor directory. Compile only that converter into Renegade's
-# bridge; this does not enable or link the stock Wicked Editor application.
+# Wicked's format converters are self-contained even though upstream keeps
+# them in the reference Editor directory. Compile only the converter units
+# Renegade owns a bridge for; this does not enable or link the stock Wicked
+# Editor application or UI.
 target_sources(RenegadeEngineBridge PRIVATE
     ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_GLTF.cpp
+    ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_FBX.cpp
 )
 
 target_include_directories(RenegadeEngineBridge PRIVATE
