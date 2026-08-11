@@ -57,7 +57,9 @@ The Windows reference build and evidence workflow is documented in
 - **Native lights and materials foundation:** Renegade-owned service/command
   boundaries over Wicked components rather than stock Wicked Editor windows.
 - **Model import:** isolated GLB/GLTF conversion, scene placement, Undo/Redo,
-  Save/Open and automatic scale correction.
+  Save/Open and automatic scale correction. The pinned Wicked source also
+  contains dedicated FBX, OBJ and PLY model converters; Renegade has not yet
+  promoted those to accepted creator-facing import paths.
 - **Runtime lifecycle:** Runtime Screens, stable action dispatch, Story Flow and
   LP04 unsaved Test Level snapshots launched through the real Runtime process.
 - **LP05 dependency extraction:** deterministic project dependency closure with
@@ -72,15 +74,26 @@ The Windows reference build and evidence workflow is documented in
 ## What comes next
 
 The immediate programme is **LP07 — Reusable Project Asset Workflow**. Its goal
-is to turn the existing one-off model import path into a real reusable project
-asset workflow:
+is to turn model import into a real reusable project-asset workflow while also
+broadening Renegade's accepted model-format surface.
+
+**FBX is the P0 format for LP07, including skinned and animated FBX.** GLB/GLTF
+remains a required regression/secondary path. OBJ and PLY are planned behind the
+same common import contract where the pinned Wicked converter seams prove clean;
+VRM/VRMA receives an exact seam audit before Renegade claims support.
+
+Target lifecycle:
 
 **import once -> stable project asset -> browse -> place repeatedly -> detect a
 source change -> reimport safely -> reopen/build without broken identity.**
 
-LP07 deliberately starts with the already-proven GLB/GLTF path. Broader asset
-classes, advanced physics/gameplay, animation, particles, audio and scripting
-remain later bounded work rather than being mixed into this lifecycle slice.
+The exact pinned Wicked FBX importer already uses the bundled `ufbx` loader and
+converts meshes, materials/textures, armatures/skinning, morph data and animation
+stacks into native Wicked scene components. LP07 will first expose and prove that
+existing path through Renegade-owned services rather than adding a second FBX
+stack. External libraries such as Assimp remain an evidence-driven fallback only
+when a required format/FBX capability is proven missing.
+
 See [`docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md`](docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md).
 
 ## Product layers
