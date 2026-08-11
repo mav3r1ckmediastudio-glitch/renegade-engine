@@ -1,8 +1,32 @@
 # LP07 Gate 4 — stable explicit reimport.
 #
-# The real converter still creates GPU-backed Wicked resources, so the proof is
+# Recipe validation is headless and executes in both configurations. The real
+# converter still creates GPU-backed Wicked resources, so its graphics proof is
 # built in Debug and Release but hosted execution remains Release-only, matching
 # the accepted Gate 1/Gate 3 runner policy.
+add_executable(RenegadeReusableAssetReimportRecipeTests
+    ${CMAKE_CURRENT_LIST_DIR}/ReusableAssetReimportRecipeTests.cpp
+)
+
+target_link_libraries(
+    RenegadeReusableAssetReimportRecipeTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+set_target_properties(
+    RenegadeReusableAssetReimportRecipeTests
+    PROPERTIES FOLDER "Renegade/Tests"
+)
+
+add_test(
+    NAME RenegadeReusableAssetReimportRecipeTests
+    COMMAND RenegadeReusableAssetReimportRecipeTests
+)
+set_tests_properties(
+    RenegadeReusableAssetReimportRecipeTests
+    PROPERTIES TIMEOUT 60
+)
+
 add_executable(RenegadeReusableAssetReimportGraphicsProof
     ${CMAKE_CURRENT_LIST_DIR}/ReusableAssetReimportGraphicsProof.cpp
 )
@@ -26,11 +50,12 @@ set_target_properties(
     PROPERTIES FOLDER "Renegade/Tests"
 )
 
-# Studio CI builds RenegadeBridgeTests explicitly before CTest. Keep the Gate 4
-# proof in that build chain in both configurations even when Debug execution is
-# excluded on the hosted DX12 runner.
+# Studio CI builds RenegadeBridgeTests explicitly before CTest. Keep both Gate 4
+# targets in that build chain in both configurations even when Debug execution
+# of the graphics proof is excluded on the hosted DX12 runner.
 add_dependencies(
     RenegadeBridgeTests
+    RenegadeReusableAssetReimportRecipeTests
     RenegadeReusableAssetReimportGraphicsProof
 )
 
