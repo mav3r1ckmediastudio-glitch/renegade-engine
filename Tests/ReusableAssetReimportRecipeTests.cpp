@@ -1,5 +1,6 @@
 #include "renegade/bridge/ReusableAssetService.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -7,6 +8,7 @@
 #include <iterator>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -90,6 +92,24 @@ int main()
             "could not write source fixture"))
         return 1;
 
+    ReusableAssetService service;
+    ReusableModelImportRequest unsupportedImport;
+    unsupportedImport.projectRoot = root.generic_u8string();
+    unsupportedImport.projectId = ProjectId;
+    unsupportedImport.sourceProjectRelativePath = "SourceAssets/Models/fixture.fbx";
+    unsupportedImport.assetProjectRelativePath = "Content/Models/rejected.rasset";
+    unsupportedImport.settingsJson = "{\"unsupported\":true}";
+    const auto rejectedImport = service.ImportModelAsset(unsupportedImport);
+    if (!Require(!rejectedImport.succeeded &&
+            rejectedImport.error.find("version-1 settings do not support options") !=
+                std::string::npos,
+            "new import did not reject unsupported version-1 options before conversion: " +
+                rejectedImport.error) ||
+        !Require(!fs::exists(root / "Content" / "Models" / "rejected.rasset") &&
+            !fs::exists(root / AssetRegistryDocumentName),
+            "rejected new import created persistent product/registry state"))
+        return 1;
+
     ReusableModelAssetDocument asset;
     asset.manifest.projectId = ProjectId;
     asset.manifest.assetId = ProductId;
@@ -108,7 +128,7 @@ int main()
     std::vector<std::uint8_t> productBytes;
     if (!Require(SerializeReusableModelAssetDocument(
             asset, productBytes, error),
-            "could not create version-1 recipe fixture: " + error) ||
+            "could not create stored version-1 recipe fixture: " + error) ||
         !Require(WriteBytes(productPath, productBytes),
             "could not write product fixture"))
         return 1;
@@ -173,7 +193,6 @@ int main()
     request.projectRoot = root.generic_u8string();
     request.projectId = ProjectId;
     request.assetId = ProductId;
-    ReusableAssetService service;
     const auto result = service.ReimportModelAsset(request);
 
     std::vector<std::uint8_t> productAfter;
@@ -182,7 +201,7 @@ int main()
         Require(!result.succeeded,
             "non-empty version-1 recipe options unexpectedly reimported") &&
         Require(result.error.find("version-1 import options") != std::string::npos,
-            "non-empty version-1 recipe did not fail at the recipe boundary: " +
+            "stored version-1 recipe did not fail at the recipe boundary: " +
                 result.error) &&
         Require(ReadBytes(productPath, productAfter) &&
             ReadBytes(root / AssetRegistryDocumentName, registryAfter),
