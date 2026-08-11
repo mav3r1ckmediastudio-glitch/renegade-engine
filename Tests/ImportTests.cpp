@@ -17,6 +17,86 @@ int main()
 {
     renegade::bridge::ImportService imports;
 
+    // LP07 Gate 1 owns deterministic format classification separately from
+    // actual conversion. FBX and GLB/GLTF are enabled; the remaining formats
+    // are recognized so they fail explicitly rather than falling through to
+    // the wrong converter.
+    using renegade::bridge::ModelSourceFormat;
+    if (renegade::bridge::ImportService::ClassifyModelSourceFormat("Hero.FBX") !=
+            ModelSourceFormat::Fbx ||
+        renegade::bridge::ImportService::ClassifyModelSourceFormat("scene.gltf") !=
+            ModelSourceFormat::Gltf ||
+        renegade::bridge::ImportService::ClassifyModelSourceFormat("scene.GLB") !=
+            ModelSourceFormat::Glb ||
+        renegade::bridge::ImportService::ClassifyModelSourceFormat("mesh.obj") !=
+            ModelSourceFormat::Obj ||
+        renegade::bridge::ImportService::ClassifyModelSourceFormat("cloud.ply") !=
+            ModelSourceFormat::Ply ||
+        renegade::bridge::ImportService::ClassifyModelSourceFormat("avatar.vrm") !=
+            ModelSourceFormat::Vrm ||
+        renegade::bridge::ImportService::ClassifyModelSourceFormat("motion.vrma") !=
+            ModelSourceFormat::Vrma ||
+        renegade::bridge::ImportService::ClassifyModelSourceFormat("readme.txt") !=
+            ModelSourceFormat::Unknown)
+    {
+        return Fail("model source classification is not deterministic");
+    }
+
+    if (!renegade::bridge::ImportService::IsModelSourceFormatSupported(
+            ModelSourceFormat::Fbx) ||
+        !renegade::bridge::ImportService::IsModelSourceFormatSupported(
+            ModelSourceFormat::Gltf) ||
+        !renegade::bridge::ImportService::IsModelSourceFormatSupported(
+            ModelSourceFormat::Glb) ||
+        renegade::bridge::ImportService::IsModelSourceFormatSupported(
+            ModelSourceFormat::Obj) ||
+        renegade::bridge::ImportService::IsModelSourceFormatSupported(
+            ModelSourceFormat::Ply) ||
+        renegade::bridge::ImportService::IsModelSourceFormatSupported(
+            ModelSourceFormat::Vrm) ||
+        renegade::bridge::ImportService::IsModelSourceFormatSupported(
+            ModelSourceFormat::Vrma))
+    {
+        return Fail("LP07 Gate 1 format support boundary is incorrect");
+    }
+
+    {
+        renegade::bridge::ModelImportRequest mismatch;
+        mismatch.sourcePath = "hero.fbx";
+        mismatch.assetPath = "hero.wiscene";
+        mismatch.expectedFormat = ModelSourceFormat::Gltf;
+        const auto prepared = imports.PrepareModelAsset(mismatch);
+        if (prepared.IsReady() ||
+            prepared.Result().error.find("format mismatch") == std::string::npos)
+        {
+            return Fail("explicit model format mismatch did not fail before conversion");
+        }
+    }
+
+    {
+        renegade::bridge::ModelImportRequest unsupportedRequest;
+        unsupportedRequest.sourcePath = "mesh.obj";
+        unsupportedRequest.assetPath = "mesh.wiscene";
+        const auto prepared = imports.PrepareModelAsset(unsupportedRequest);
+        if (prepared.IsReady() ||
+            prepared.Result().error.find("not enabled") == std::string::npos)
+        {
+            return Fail("classified but unsupported model format did not fail explicitly");
+        }
+    }
+
+    {
+        renegade::bridge::ModelImportRequest wrongDestinationRequest;
+        wrongDestinationRequest.sourcePath = "hero.fbx";
+        wrongDestinationRequest.assetPath = "hero.asset";
+        const auto prepared = imports.PrepareModelAsset(wrongDestinationRequest);
+        if (prepared.IsReady() ||
+            prepared.Result().error.find(".wiscene") == std::string::npos)
+        {
+            return Fail("neutral model import destination validation did not fail clearly");
+        }
+    }
+
     const auto missing = imports.PrepareGltfAsset(
         "missing.glb",
         "missing.wiscene");
@@ -32,7 +112,7 @@ int main()
     if (unsupported.IsReady() ||
         unsupported.Result().error.find("only accepts") == std::string::npos)
     {
-        return Fail("unsupported format validation did not fail clearly");
+        return Fail("legacy GLTF compatibility surface stopped rejecting FBX");
     }
 
     const auto wrongDestination = imports.PrepareGltfAsset(
@@ -52,6 +132,67 @@ int main()
     if (summary.names != 1 || summary.transforms != 1 || summary.meshes != 0)
     {
         return Fail("scene structural summary is incorrect");
+    }
+
+    // The LP07 evidence summary covers the rig/animation payload that simple
+    // component counts cannot prove. This is deliberately synthetic and
+    // graphics-free; real FBX conversion is exercised by the graphics-backed
+    // Gate 1 proof rather than this headless harness.
+    {
+        wi::scene::Scene rigged;
+        const auto bone = wi::ecs::CreateEntity();
+        rigged.transforms.Create(bone);
+
+        const auto armatureEntity = wi::ecs::CreateEntity();
+        auto& armature = rigged.armatures.Create(armatureEntity);
+        armature.boneCollection.push_back(bone);
+        armature.inverseBindMatrices.push_back(XMFLOAT4X4(
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1));
+
+        const auto meshEntity = wi::ecs::CreateEntity();
+        auto& mesh = rigged.meshes.Create(meshEntity);
+        mesh.armatureID = armatureEntity;
+        mesh.vertex_boneindices.push_back(XMUINT4(0, 0, 0, 0));
+        mesh.vertex_boneweights.push_back(XMFLOAT4(1, 0, 0, 0));
+        mesh.vertex_boneindices2.push_back(XMUINT4(0, 0, 0, 0));
+        mesh.vertex_boneweights2.push_back(XMFLOAT4(0, 0, 0, 0));
+
+        const auto animationDataEntity = wi::ecs::CreateEntity();
+        auto& animationData = rigged.animation_datas.Create(animationDataEntity);
+        animationData.keyframe_times.push_back(0.0f);
+        animationData.keyframe_times.push_back(1.0f);
+        animationData.keyframe_data.push_back(0.0f);
+        animationData.keyframe_data.push_back(1.0f);
+
+        const auto animationEntity = wi::ecs::CreateEntity();
+        auto& animation = rigged.animations.Create(animationEntity);
+        wi::scene::AnimationComponent::AnimationChannel channel;
+        channel.path = wi::scene::AnimationComponent::AnimationChannel::Path::TRANSLATION;
+        channel.target = bone;
+        channel.samplerIndex = 0;
+        animation.channels.push_back(channel);
+        wi::scene::AnimationComponent::AnimationSampler sampler;
+        sampler.data = animationDataEntity;
+        animation.samplers.push_back(sampler);
+
+        const auto evidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(rigged);
+        if (evidence.skinnedMeshes != 1 ||
+            evidence.primaryInfluenceVertices != 1 ||
+            evidence.secondaryInfluenceVertices != 1 ||
+            evidence.armatureBones != 1 ||
+            evidence.animationChannels != 1 ||
+            evidence.animationSamplers != 1 ||
+            evidence.animationData != 1 ||
+            evidence.animationKeyframes != 2 ||
+            evidence.animationValues != 2 ||
+            evidence.rigAnimationFingerprint == 0)
+        {
+            return Fail("rig/animation evidence summary did not capture synthetic payload");
+        }
     }
 
     // ResolveScaleFactor: Original/Meters are always a no-op for a
@@ -91,8 +232,6 @@ int main()
             return Fail("Inches scale mode did not resolve to 0.0254");
         }
 
-        // An empty scene has no vertex data to normalize against; Automatic
-        // must fall back to a no-op rather than divide by zero.
         const float emptyAutomaticFactor = renegade::bridge::ImportService::
             ResolveScaleFactor(
                 renegade::bridge::ModelScaleMode::Automatic,
@@ -105,8 +244,6 @@ int main()
         wi::scene::Scene withMesh;
         const auto meshEntity = wi::ecs::CreateEntity();
         auto& mesh = withMesh.meshes.Create(meshEntity);
-        // A 20-unit cube: the largest extent (20) should normalize to the
-        // 2 m target extent, i.e. a 0.1x factor.
         mesh.vertex_positions.push_back(XMFLOAT3(-10.0f, -10.0f, -10.0f));
         mesh.vertex_positions.push_back(XMFLOAT3(10.0f, 10.0f, 10.0f));
         const float automaticFactor = renegade::bridge::ImportService::
@@ -123,6 +260,13 @@ int main()
     if (incomplete.succeeded || incomplete.error.find("not ready") == std::string::npos)
     {
         return Fail("unprepared WISCENE completion did not fail clearly");
+    }
+
+    const auto neutralIncomplete = imports.CompleteModelAsset({});
+    if (neutralIncomplete.succeeded ||
+        neutralIncomplete.error.find("not ready") == std::string::npos)
+    {
+        return Fail("unprepared neutral model completion did not fail clearly");
     }
 
     // PlaceImportedModelCommand: Execute merges a prepared scene into the
@@ -142,9 +286,6 @@ int main()
         prepared->names.Create(importedEntity) = "Imported Root";
         prepared->transforms.Create(importedEntity);
 
-        // Mirrors ModelImporter_GLTF.cpp: every imported animation entity is
-        // Component_Attach'd under the import root, and its AnimationComponent
-        // starts paused (LOOPED but not PLAYING) until something calls Play().
         const auto animationEntity = wi::ecs::CreateEntity();
         prepared->names.Create(animationEntity) = "Imported Animation";
         prepared->Component_Attach(animationEntity, importedEntity);
