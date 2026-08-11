@@ -33,8 +33,9 @@ versioned `.rasset` abstraction in LP07 Gate 3.
   accepted Wicked converter;
 - `SavePreparedModelAsset()` serializes and reopens the native Wicked scene and
   rejects structural or rig/animation evidence drift; and
-- the existing GLB/GLTF entry points remain compatibility wrappers over the
-  neutral implementation.
+- the existing GLB/GLTF entry points remain compatibility surfaces during Gate 1,
+  while the neutral contract independently accepts GLTF/GLB and dispatches them
+  to the same pinned Wicked converter.
 
 EngineBridge compiles only Wicked's standalone converter translation units used
 by Renegade. Gate 1 adds `Editor/ModelImporter_FBX.cpp` beside the already-used
@@ -69,6 +70,9 @@ therefore records deterministic imported/reloaded evidence for:
   inverse bind matrices, animation channels/samplers and keyframe payloads.
 
 The WISCENE round trip is rejected if the imported and reopened evidence differ.
+The real graphics proof additionally captures the literal named animation
+entities/takes/clips produced from the FBX and requires the exact sorted names to
+match after WISCENE reopen.
 
 ## Immutable real FBX fixtures
 
@@ -107,11 +111,14 @@ For the skinned/animated fixture it additionally requires:
 - animation components;
 - animation channels and samplers;
 - animation data;
-- keyframe times and values.
+- keyframe times and values; and
+- at least one named animation take/clip whose exact name survives WISCENE
+  serialization/reopen.
 
 Both imports are then serialized to WISCENE and reopened. Structural summary and
 rig/animation evidence must match exactly, the evidence fingerprint must remain
-non-zero, and the original FBX bytes must remain byte-identical.
+non-zero, named animation take/clip identity must remain unchanged, and the
+original FBX bytes must remain byte-identical.
 
 ### Authoritative Release evidence checkpoint
 

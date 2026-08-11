@@ -272,8 +272,11 @@ join the common service without new third-party integration. Distinguish
 
 ### Gate 1 acceptance
 
-- FBX static import Debug/Release proof passes;
-- FBX skinned/animated structural + WISCENE preservation proof passes;
+- Debug builds/links the real graphics-proof target and passes the
+  format-neutral/headless import contract tests;
+- Release executes the real static plus skinned/animated FBX graphics proof,
+  including structural, rig/animation and animation take/clip-name preservation
+  through WISCENE reopen;
 - GLB/GLTF regression stays green;
 - no source mutation;
 - no stock Wicked Editor UI;
