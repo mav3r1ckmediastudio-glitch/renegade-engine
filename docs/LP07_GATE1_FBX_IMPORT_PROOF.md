@@ -46,6 +46,11 @@ Accepted current backends:
 - FBX -> `wicked.ufbx`;
 - GLTF/GLB -> `wicked.gltf`.
 
+The exact pinned FBX converter sets `ufbx_load_opts::target_unit_meters = 1.0f`,
+so declared FBX units are normalized into metres by ufbx before Wicked creates
+the native scene. This avoids carrying a hidden FBX-centimetres assumption into
+the common Renegade model boundary.
+
 The source file is fingerprinted before conversion and the real graphics proof
 compares source bytes before and after import. The converter never treats the
 external source as a mutable project product.
@@ -157,6 +162,25 @@ Gate 1 therefore uses this evidence policy:
 
 The configuration restriction is local to `RenegadeModelImportGraphicsProof`;
 it does not broaden the existing hosted skip policy for unrelated tests.
+
+## Upstream converter error-surface limitation
+
+The pinned Wicked FBX and GLTF converter functions are legacy `void` APIs. On a
+low-level parse/read failure they call `wi::helper::messageBox()` internally
+before returning. Wicked exposes no message-box redirection/suppression callback
+at the pinned helper API.
+
+This does **not** mean Renegade links or exposes the stock Wicked Editor UI, and
+successful imports remain driven entirely through the Renegade service boundary.
+It does mean that the upstream converter seam is not yet suitable for a fully
+non-modal background import transaction on malformed input.
+
+Gate 1 records this explicitly rather than hiding it. Before LP07 Gate 3 makes
+model import a permanent creator-facing `.rasset` transaction, expected importer
+failures must be mediated into Renegade-owned structured/non-modal errors. If
+that cannot be achieved safely through an adapter around the pinned converters,
+a narrowly justified Wicked/core change must be proposed and reviewed before
+moving the submodule pin. No such Wicked change is included in Gate 1.
 
 ## Secondary-format seam assessment
 
