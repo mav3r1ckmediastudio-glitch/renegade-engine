@@ -2,6 +2,66 @@
 
 All notable user-facing changes are recorded here. Newest first.
 
+## Unreleased — Phase 4 project and asset pipeline
+
+### LP06 — standalone Windows game build lifecycle
+
+- Added **BUILD > BUILD WINDOWS GAME...** to Release Studio.
+- Added deterministic project-content/runtime-support planning, governed
+  same-volume staging, a named game executable, package-relative startup,
+  exact manifests/integrity validation, detached Release DX12 smoke and safe
+  last-good-build promotion/rollback.
+- Added Runtime Screen + Story Flow Test All parity before promotion.
+- Added owner-build scene identity companion packaging so every reachable
+  `.wiscene` carries its required Renegade `.wiscene.rmeta` stable-document
+  sidecar into the standalone project package.
+- Added a dedicated owner-build regression test and raised the normal suite to
+  42 CTests.
+- Corrected a headless test-fixture mistake by reusing Gate 4's GPU-free WISCENE
+  fixture rather than deserializing Wicked's stock cube scene without a graphics
+  device.
+- Final Release CI passed 42/42; the project owner produced **BUILD COMPLETE**,
+  launched the promoted named executable directly from Explorer, loaded the
+  Runtime Screen and entered Level One through PLAY.
+- LP06 was independently audited and squash-merged through PR #44 at
+  `48126f859b2f9b25a60182c4311cfc6c91d98436`.
+- Standalone output intentionally remains `distribution_ready=false`; commercial
+  redistribution/signing/installer policy is not yet complete.
+
+### LC01 — stable asset identity and source tracking
+
+- Added durable UUID project asset records over the accepted LP05 graph.
+- Added transactional project-root `AssetRegistry.renegade-assets` persistence
+  with journaled interruption recovery and canonical project/path validation.
+- Added source-to-imported-product provenance with versioned importer/settings
+  identity and import-time source/product hashes.
+- Added deterministic moved/missing recovery and ambiguity diagnostics without
+  silently moving files or reimporting content.
+- Added packaged four-process source-update/move/reopen proof. Final Debug and
+  Release registry evidence matched at SHA-256
+  `547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`.
+- LC01 was squash-merged through PR #39 at
+  `01d790bda5acea0cdb6a7735557b12224c795a64`.
+
+### LP05 — representative dependency extraction
+
+- Added a deterministic Renegade-owned dependency graph with canonical
+  project-relative path/security rules and transactional provider discovery.
+- Added project, Story Flow, Runtime Screen, WISCENE typed-resource, glTF/GLB
+  and explicit declared-reference providers plus Lua declared-reference policy.
+- Added transitive traversal, deterministic content hashes/JSON and packaged
+  separate-process proof.
+- Canonical Debug/Release graph remains 4,681 bytes with SHA-256
+  `23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384`.
+
+### LP04 — unsaved Test Level Runtime launch
+
+- Added disposable unsaved-scene snapshots, real separate Runtime launch,
+  explicit READY handshake and clean STOP/cleanup without forcing an
+  authoritative scene save.
+- Owner acceptance proved an unsaved imported model was visible in Runtime while
+  Studio remained open and usable.
+
 ## Unreleased — Phase 3 Studio foundation
 
 ### Project document transaction (LF02)
