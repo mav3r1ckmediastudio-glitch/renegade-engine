@@ -1,7 +1,7 @@
 #include "renegade/bridge/ImportService.h"
 
 #include <WickedEngine.h>
-#include <wiInitializer.h>
+#include <wiJobSystem.h>
 
 #include <Windows.h>
 
@@ -243,13 +243,19 @@ int main(int argc, char** argv)
         return 5;
     }
 
+    // The model converters require a real Wicked graphics device because mesh
+    // render data is created during conversion. They do not require unrelated
+    // runtime systems such as audio. Initialize the job system explicitly and
+    // let Application::SetWindow create the real DX12 device/swapchain without
+    // calling Application::Initialize(), which would start all Wicked systems
+    // and couples this proof to the hosted runner's XAudio2 capability.
+    wi::jobsystem::Initialize();
+
     int exitCode = 0;
     {
         wi::Application application;
         application.allow_hdr = false;
         application.SetWindow(window);
-        application.Initialize();
-        wi::initializer::WaitForInitializationsToFinish();
 
         if (!Require(wi::graphics::GetDevice() != nullptr,
                 "Wicked graphics device was not initialized"))
