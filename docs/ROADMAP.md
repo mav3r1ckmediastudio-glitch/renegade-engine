@@ -4,114 +4,196 @@
 
 **Phase 4 — Project and asset pipeline**
 
-**Outcome:** Assets become repeatable project resources rather than ad-hoc file opens.
+**Outcome:** assets become repeatable project resources rather than ad-hoc file
+opens.
 
-Phase 3 established the Renegade Studio and Runtime foundations needed to move into the asset pipeline: project/scene persistence, hierarchy and inspector workflows, undo/redo, environment and terrain authoring, native light authoring, model import and placement, stable project/document/entity identity, transactional Renegade-owned document writes, Runtime screens/flow, and the accepted LP04 Test Level workflow.
+The phase remains open, but several backend lifecycle foundations that the
+original roadmap expected later are now already complete. The current main
+baseline after LP06 is `48126f859b2f9b25a60182c4311cfc6c91d98436`.
 
-LP04 is complete and accepted. Studio can launch the real standalone Runtime from the current live, unsaved scene through a disposable snapshot, wait for an explicit Runtime READY handshake, and STOP the Runtime cleanly without forcing an authoritative scene save.
+## Accepted lifecycle foundations
 
-LP05 is complete and accepted. Its deterministic Renegade-owned dependency graph passed separate-process Debug/Release packaged proof at exact head `8abb9fad959268ee00c32e046ede13d852883fa4` and was squash-merged through PR #33 at `fec9b521884d1a8e9017b8bac574b0ef615ca6cd`.
+### LP04 — Unsaved Test Level Snapshot
 
-LC01 Gate 1 is complete and accepted. Exact final head `0cd63d844c655eecebaf3f7bf04fdacbad2d50ed` passed Studio run 147 and baseline run 154 before squash merge through PR #34 at `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`.
+Accepted. Studio can snapshot the current unsaved authoring scene, launch the
+real standalone Runtime, wait for the explicit READY handshake, display the
+unsaved content and STOP cleanly without overwriting the authoritative scene.
 
-PR #35 landed LC01 Gate 2 at `bdb1fb98`, but its acceptance was reopened after
-raw Debug and Release logs revealed a real 24/25 result hidden behind green
-jobs. Corrective PR #36 fixes Windows short/long path identity during recovery
-and makes native test-process failures propagate reliably into CI. Candidate
-head `09601bc0` passed a genuine 25/25 in Studio run 156 and both jobs in
-baseline run 172. Independent review and squash merge remain pending.
+### LP05 — Representative Dependency Extraction
 
-The active bounded milestone remains **LC01 Gate 2 — Transactional Project
-Persistence corrective close-out**.
+Accepted. Renegade owns a deterministic typed dependency graph across project,
+Story Flow, Runtime Screen, WISCENE, glTF and explicit declared-reference
+providers. Packaged Debug and Release proof produce the canonical 4,681-byte
+graph with SHA-256
+`23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384`.
 
-### LC01 Gate 2 target
+### LC01 — Asset Identity and Source Tracking
 
-LC01 Gate 2 should prove that Renegade can:
+Accepted through PR #39, squash merge
+`01d790bda5acea0cdb6a7735557b12224c795a64`. Exact final head
+`3d3e780b38792aec866cd19ce6638a8260ffff4f` passed Studio run 166 and
+Windows baseline run 185 in Debug and Release. LC01 establishes stable project
+asset IDs, transactional `AssetRegistry.renegade-assets` persistence,
+source-to-imported-product provenance/import settings and deterministic
+moved/missing recovery. Its canonical packaged registry is 2,180 bytes with
+SHA-256
+`547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`.
 
-- commit the canonical registry to `AssetRegistry.renegade-assets` at the project root;
-- reload it only for the owning project UUID;
-- treat unchanged writes as byte-preserving no-ops;
-- preserve exact previous bytes across validation and replacement failures;
-- retain a durable journal across simulated interruption;
-- recover that interruption automatically before Project Open;
-- reject substituted, cross-project and non-canonical registry documents;
-- leave the pinned Wicked source unchanged.
+LC01 deliberately does **not** execute reimport or provide creator-facing asset
+management UI.
 
-Gate 2 persists and recovers the accepted Gate 1 contract only. It does not yet define source/product import records, infer moved assets, run reimport, copy/cook content, build a game or alter the Content Browser UI.
+### LP06 — Named Standalone Windows Build and Safe Rebuild
 
-## Phase 4 deliverables
+Accepted through PR #44, squash merge
+`48126f859b2f9b25a60182c4311cfc6c91d98436`. Exact accepted PR head
+`99cfe1f74016bb6a53a4c35e020f6884099a52fd` passed Renegade Studio run
+239 and Windows baseline run 364 in Debug and Release. Release passed 42/42
+CTest entries including the real standalone package smoke and the owner-build
+scene-identity regression; Debug retained only the accepted Gate 4 hosted audio
+capability skip.
 
-The authoritative Phase 4 plan in `docs/MASTER_PLAN.md` remains:
+LP06 now provides:
 
-- Project-relative asset database and stable asset IDs.
-- Content browser with folders, filters, previews and drag/drop.
-- Import and reimport for WISCENE, OBJ, FBX, glTF/GLB, VRM/VRMA and PLY.
-- Texture, audio, video, script and font handling.
-- Import settings and source-file tracking.
-- Thumbnails and dependency/reference reporting.
-- Missing-asset and moved-asset recovery.
-- Background import jobs and visible error reports.
+- deterministic Windows build planning;
+- same-volume governed staging;
+- a named game executable with package-relative startup;
+- exact package integrity and runtime-support manifests;
+- detached Release DX12 smoke/Test All parity from an unrelated working folder;
+- safe last-good-build preservation, rollback and promotion;
+- **BUILD > BUILD WINDOWS GAME...** in Release Studio; and
+- direct owner launch of the promoted named executable without Studio or an
+  explicit `--project` argument.
 
-**Phase 4 exit gate:** a reference asset pack imports, survives source updates and reopens without broken references.
+The first owner build exposed a real missing scene-identity-sidecar integration
+bug. The corrected LP06-only scene companion provider packages reachable
+`<scene>.wiscene.rmeta` files without changing the accepted LP05 canonical
+graph. The corrected build completed successfully, the promoted executable
+launched directly from Explorer, and Runtime Screen -> PLAY -> Level One was
+accepted on owner hardware. Independent exact-head audit passed.
 
-## Completed foundations relevant to Phase 4
+LP06 output remains deliberately `distribution_ready=false`; commercial
+redistribution/signing/installer policy is a later release boundary.
 
-- Renegade Studio and standalone Runtime are separate applications.
-- Project Hub and project-aware scene workflows exist.
-- Scene Save/Open and protected scene-document behaviour are established.
-- Undo/Redo-backed authoring exists for transforms and multiple native systems.
-- Terrain Authoring V1 is accepted on packaged DX12 and Vulkan.
-- Native light creation/edit/delete workflow is accepted.
-- Model Import V1 conversion/round-trip proof is accepted.
-- Imported GLB/GLTF scene placement, Undo/Redo, Save/Open and automatic scale correction have been exercised on packaged DX12 and Vulkan.
-- Stable UUID-v4 identity exists for projects, Renegade documents and authored scene entities.
-- Renegade-owned project/flow/screen writes use transactional persistence and recovery.
-- Runtime screen and stable action-dispatch foundations exist.
-- LP04 Test Level unsaved-snapshot launch is accepted end-to-end on real Windows hardware.
+## Phase 4 position after LP06
 
-These foundations do **not** by themselves constitute the Phase 4 asset database, stable asset IDs, dependency graph, reimport system or Content Browser.
+The original Phase 4 deliverables were:
 
-## Phase plan
+- project-relative asset database and stable asset IDs;
+- Content Browser with folders, filters, previews and drag/drop;
+- import/reimport for supported model formats;
+- texture/audio/video/script/font handling;
+- import settings and source-file tracking;
+- thumbnails and dependency/reference reporting;
+- moved/missing asset recovery;
+- background import jobs and visible error reporting.
 
-| Phase | Duration | Outcome |
-|---|---:|---|
-| 0. Charter and baseline | 1 week | Traceable product target and pinned Wicked source |
-| 1. Reproducible build | 2–3 weeks | Wicked core, editor, tests and samples build reliably |
-| 2. Architecture/UI proof | 3–4 weeks | Branded editor shell proves viewport, save/reload, HDR, DPI and input |
-| 3. Studio foundation | 6–8 weeks | Dependable project, scene, hierarchy, inspector and undo workflows |
-| 4. Project and asset pipeline | 6–8 weeks | Repeatable import, reimport, IDs, dependencies and content browser |
-| 5. Scene/render exposure | 8–10 weeks | Core world and visual systems authorable in Renegade |
-| 6. Physics/audio/gameplay | 8–10 weeks | Small interactive packaged game |
-| 7. Advanced systems | 10–14 weeks | Animation, terrain, particles, fluids and specialist components |
-| 8. Scripting/runtime/export | 10–12 weeks | Lua workflow and repeatable standalone builds |
-| 9. Exposure audit/platforms | 8–10 weeks | Demonstrated coverage of the pinned Wicked baseline |
-| 10. Beta and V1 | 8–12 weeks | Hardened, documented, independently verified release |
+Stable asset IDs, durable registry persistence, source tracking, provenance,
+dependency extraction and backend moved/missing recovery are now established.
+What remains is primarily the **creator-facing reusable asset workflow and real
+reimport execution**, followed by broader asset classes and polish.
 
-Planning range: 16–21 months at approximately 12–18 focused hours per week.
+## Immediate next programme
 
-The full reasoning and milestone calendar are in `docs/MASTER_PLAN.md`.
+**LP07 — Reusable Project Asset Workflow**
 
-## Immediate next gate
+LP07 is the next bounded lifecycle programme. It starts from the proven
+GLB/GLTF path rather than trying to solve every Phase 4 asset class at once.
 
-**LC01 Gate 2 — Corrective review and merge**
+Target outcome:
 
-Acceptance is bounded to independently reviewing corrective PR #36 and
-squash-merging it only if the exact reviewed head retains genuine 25/25 Debug
-and Release Studio evidence plus both pinned-Wicked baseline passes. Gate 3
-does not begin before that correction is accepted on `main`.
+> A creator imports a GLB/GLTF once as a governed project asset, sees it in the
+> Renegade Asset Browser with stable identity/provenance status, places it into
+> scenes repeatedly without reconverting the external source, changes the
+> source, performs an explicit safe reimport that preserves asset identity, then
+> reopens and builds the project without broken references.
 
-The architectural rule is:
+See `docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md` for the gate contract.
 
-> Durable project metadata uses the same staged validation, containment, journal and rollback boundary as other Renegade-owned documents. Registry persistence must not invent a weaker write path.
+### LP07 gate map
 
-See `docs/LC01_ASSET_IDENTITY_SOURCE_TRACKING.md` for the contract, exclusions and evidence plan.
+1. **Gate 1 — Registry-backed asset catalogue**
+   - join the existing Asset Browser filesystem view with LC01 stable registry
+     identity/provenance/status;
+   - expose a UI-free catalogue model first;
+   - no import or file mutation.
+2. **Gate 2 — Governed GLB/GLTF asset import transaction**
+   - use the existing `ImportService` isolated conversion/WISCENE round trip;
+   - commit a reusable project product and LC01 provenance only after successful
+     validation;
+   - failed import preserves the previous project/registry state.
+3. **Gate 3 — Stable reimport**
+   - explicitly re-run the registered importer/settings against a stale source;
+   - preserve source/product asset IDs and last-good product on failure;
+   - no silent/background overwrite.
+4. **Gate 4 — Creator Asset Browser workflow**
+   - display stable asset type, identity and source health;
+   - browse/filter/select reusable model assets;
+   - place a registered model repeatedly through Renegade-owned commands;
+   - surface missing/moved/stale states rather than hiding them.
+5. **Gate 5 — Packaged lifecycle acceptance**
+   - import -> place -> Save/Open -> source update -> explicit reimport -> reopen;
+   - dependency closure and LC01 identity remain coherent;
+   - Build Windows Game succeeds and the standalone Runtime uses the updated
+     asset;
+   - owner acceptance plus independent exact-head review.
+
+### LP07 deliberate exclusions
+
+LP07 does not yet add FBX/OBJ/PLY/VRM import parity, texture/audio/video/font
+asset editors, thumbnails for every class, background import queues, animation
+state machines, physics authoring, particles, Lua gameplay or multiplayer.
+Those remain subsequent bounded Phase 4/5/6 programmes.
+
+## After LP07
+
+Subject to LP07 acceptance, the likely order is:
+
+- broaden the asset pipeline beyond GLB/GLTF: textures, audio, video, scripts,
+  fonts and remaining Wicked-supported model formats;
+- previews/thumbnails, dependency/reference reporting and background jobs;
+- complete creator-facing materials/render/world exposure where gaps remain;
+- physics, character controller, input and audio gameplay foundations;
+- animation/retargeting/IK workflows;
+- particles/effects and the generic projectile/magic framework;
+- scripting/gameplay framework and richer Runtime game-state/save systems;
+- later networking/multiplayer, specialist systems and distribution hardening.
+
+The ordering follows the master-plan rule that higher-level gameplay systems
+should consume reliable project assets and Runtime/build semantics rather than
+inventing parallel file-loading paths.
+
+## Master phase plan
+
+| Phase | Outcome | Current position |
+|---|---|---|
+| 0. Charter and baseline | Traceable target and pinned Wicked source | Complete |
+| 1. Reproducible build | Reliable Wicked/Renegade Windows build | Complete |
+| 2. Architecture/UI proof | Branded Studio/Runtime architecture proof | Complete |
+| 3. Studio foundation | Dependable project/scene/editor workflows | Substantially complete |
+| 4. Project and asset pipeline | Repeatable assets/import/reimport/content browser | **Active** |
+| 5. Scene/render exposure | Core visual/world systems authorable | Partially advanced early |
+| 6. Physics/audio/gameplay | Small interactive packaged game | Future |
+| 7. Advanced systems | Animation, particles and specialist systems | Future |
+| 8. Scripting/runtime/export | Lua/runtime/export maturity | Partially advanced early by LP04/LP06 |
+| 9. Exposure audit/platforms | Pinned-baseline coverage/performance/platform audit | Future |
+| 10. Beta and V1 | Hardened supportable release | Future |
+
+The original time ranges in `docs/MASTER_PLAN.md` remain planning guidance, not
+a promise. Work has intentionally crossed some original phase boundaries where
+a later lifecycle foundation was required to prove an earlier system safely.
 
 ## Status rules
 
-- A phase or lifecycle slice completes only with a runnable increment and updated handoff/evidence.
+- A lifecycle gate completes only with a runnable increment and updated evidence.
 - Compilation alone is not behavioural proof.
-- Visual and behavioural failures override automated success.
-- Persistent authored mutations require Undo/Redo and Save/Open evidence where applicable.
-- Hosted CI limitations must be recorded rather than disguised as product passes or failures.
-- Wicked remains pinned; do not modify Wicked source without an explicit, justified core-patch decision.
-- New Wicked features enter the feature matrix at controlled sync points; they do not silently expand an active gate.
+- Visual/behavioural failure overrides green CI.
+- Persistent creator mutations require Undo/Redo and Save/Open evidence where
+  applicable.
+- Hosted CI limitations are recorded, not disguised by weakening Wicked or the
+  product contract.
+- Wicked remains pinned; modify it only through an explicit justified core-patch
+  decision.
+- New Wicked features enter through controlled roadmap/matrix review rather than
+  silently expanding an active gate.
+- Owner-visible standalone build success is not equivalent to commercial
+  redistribution approval.
