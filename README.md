@@ -2,36 +2,31 @@
 
 Renegade is the working title for a Windows-first game engine and authoring
 environment built on [Wicked Engine](https://github.com/turanszkij/WickedEngine).
-Wicked provides the rendering and low-level engine foundation; Renegade will
-provide its own editor, project system, asset workflow, runtime, user experience,
-documentation, and release process.
+Wicked provides the renderer, ECS, physics integration and low-level engine
+foundation; Renegade owns its Studio editor, project and asset workflows,
+runtime/player, build lifecycle, UX, documentation and higher-level gameplay
+framework.
 
-> **Status:** Phase 3 — Studio foundation. Phase 2 passed on the project
-> owner's Windows GPU. The holographic Project Hub, workspace, and generated
-> Proving Ground run on Windows. Viewport selection, navigation, Inspector
-> transforms, gizmos, duplicate/delete, save, and Undo/Redo have passed
-> packaged DX12 testing. Renegade now draws its own infinite shader grid, and
-> a curated Environment inspector authors sky, fog, volumetric clouds, and
-> cloud shadows through undoable commands — both accepted on packaged DX12 and
-> Vulkan. Terrain Authoring V1 creates the standard 1,716 x 1,716 m native
-> terrain, sculpts across chunk seams, and preserves all 169 sculpted chunks
-> through packaged DX12 and Vulkan Save/Open round trips. Native Light
-> Authoring—including creation, surface placement, inspector editing,
-> editor-only markers and grouped hierarchy discovery—has passed packaged DX12
-> and Vulkan acceptance and is merged. Model Import V1 Gate 1 now provides an
-> isolated Wicked GLB/GLTF-to-WISCENE conversion boundary; its authoritative
-> packaged GPU round trip can now be invoked from **BUILD > VALIDATE GLB/GLTF
-> IMPORT...** and remains pending owner verification. The visible importer, Asset Browser
-> registry and Material UI are not built. This repository is not yet a usable
-> game engine release.
+> **Status:** Phase 4 — Project and asset pipeline. Renegade Studio and the
+> standalone Runtime are separate applications. Project/scene persistence,
+> Undo/Redo, environment, terrain, native lights, GLB/GLTF import and placement,
+> Runtime Screens/Story Flow, unsaved Test Level launch, deterministic dependency
+> extraction, stable asset identity/source provenance and safe standalone Windows
+> builds are all established foundations. LP06 is accepted and merged: Studio's
+> **BUILD > BUILD WINDOWS GAME...** action can produce a named Release executable,
+> smoke-test the staged package on DX12, validate its exact contents and safely
+> promote it without destroying the previous successful build. The project owner
+> then launched the promoted executable directly from Explorer and confirmed the
+> Runtime screen and Story Flow entered Level One successfully. Renegade is still
+> a development project, not a distribution-ready v1 game engine.
 
-## Baseline
+## Current baseline
 
+- Main baseline after LP06: `48126f859b2f9b25a60182c4311cfc6c91d98436`
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
 - Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
-- Snapshot date: `2026-07-29`
-- Initial release target: Windows x64 with DirectX 12
+- Initial target: Windows x64 / DirectX 12
 - Development cross-check: Vulkan on Windows
 
 Wicked Engine is included as a pinned Git submodule at `/WickedEngine`. Clone
@@ -51,35 +46,79 @@ git submodule update --init --recursive
 The Windows reference build and evidence workflow is documented in
 [`docs/BUILD_WINDOWS.md`](docs/BUILD_WINDOWS.md).
 
+## What is already proven
+
+- **Studio foundation:** custom Renegade chrome over Wicked subsystems, Project
+  Hub, hierarchy/selection, transform gizmos, Inspector workflows, Save/Open and
+  command-backed Undo/Redo.
+- **World authoring:** environment, precipitation, sun/time-of-day foundations,
+  native FFT ocean and Terrain Authoring V1, including packaged DX12/Vulkan
+  persistence proof.
+- **Native lights and materials foundation:** Renegade-owned service/command
+  boundaries over Wicked components rather than stock Wicked Editor windows.
+- **Model import:** isolated GLB/GLTF conversion, scene placement, Undo/Redo,
+  Save/Open and automatic scale correction.
+- **Runtime lifecycle:** Runtime Screens, stable action dispatch, Story Flow and
+  LP04 unsaved Test Level snapshots launched through the real Runtime process.
+- **LP05 dependency extraction:** deterministic project dependency closure with
+  typed providers and packaged separate-process proof.
+- **LC01 asset identity/source tracking:** durable stable asset IDs, transactional
+  registry persistence, import provenance and deterministic moved/missing source
+  recovery.
+- **LP06 standalone build lifecycle:** deterministic plan, staging, named
+  executable, package integrity, isolated DX12 smoke, safe rollback/promotion and
+  owner-visible Build Windows Game integration.
+
+## What comes next
+
+The immediate programme is **LP07 — Reusable Project Asset Workflow**. Its goal
+is to turn the existing one-off model import path into a real reusable project
+asset workflow:
+
+**import once -> stable project asset -> browse -> place repeatedly -> detect a
+source change -> reimport safely -> reopen/build without broken identity.**
+
+LP07 deliberately starts with the already-proven GLB/GLTF path. Broader asset
+classes, advanced physics/gameplay, animation, particles, audio and scripting
+remain later bounded work rather than being mixed into this lifecycle slice.
+See [`docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md`](docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md).
+
 ## Product layers
 
 | Path | Responsibility |
 |---|---|
 | `/WickedEngine` | Pinned upstream engine foundation |
-| `/Studio` | Renegade editor application |
-| `/EngineBridge` | Stable services and adapters around Wicked APIs |
+| `/Studio` | Renegade editor application and owned UX |
+| `/EngineBridge` | Stable Renegade services/adapters around Wicked APIs |
 | `/Runtime` | Standalone game/player executable |
-| `/Tools` | Import, shader, packaging, and validation tools |
+| `/Tools` | Import, shader, packaging and validation tools |
 | `/Templates` | Starter projects and examples |
-| `/Tests` | Automated, integration, visual, and sample-project tests |
-| `/docs` | Canonical plan, architecture, roadmap, and verification records |
+| `/Tests` | Automated, integration, packaged and sample-project tests |
+| `/docs` | Canonical plan, architecture, roadmap and verification records |
 | `/assets` | Renegade-owned editor assets |
 
 The original Wicked Editor remains available inside the submodule as a parity
-reference. It is not the planned Renegade editor.
+reference. It is not the Renegade editor and is not embedded as Renegade UI.
 
 ## Start here
 
 1. Read [`docs/PROJECT_CHARTER.md`](docs/PROJECT_CHARTER.md).
 2. Read [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md).
 3. Check [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`HANDOFF.md`](HANDOFF.md).
-4. Follow [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
-   Claude, or human handovers.
-5. Do not claim feature parity without updating
-   [`docs/FEATURE_MATRIX.csv`](docs/FEATURE_MATRIX.csv) and recording evidence.
+4. For the latest completed lifecycle proof, read
+   [`docs/LP06_GATE5_SAFE_PROMOTION_CLOSEOUT.md`](docs/LP06_GATE5_SAFE_PROMOTION_CLOSEOUT.md).
+5. For the next programme, read
+   [`docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md`](docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md).
+6. Follow [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
+   Claude or human handovers.
+7. Do not claim feature parity from compilation alone; update
+   [`docs/FEATURE_MATRIX.csv`](docs/FEATURE_MATRIX.csv) and record behavioural
+   evidence for creator-facing work.
 
-## Licensing
+## Licensing and distribution
 
 Wicked Engine is MIT licensed and retains its original copyright and licence.
-Renegade's own project-wide licence has not yet been selected. See
+Renegade's own project-wide licence has not yet been selected. LP06's promoted
+standalone output deliberately remains `distribution_ready=false`; it is an
+owner-visible engineering build, not commercial redistribution clearance. See
 [`docs/LICENSING.md`](docs/LICENSING.md) before redistributing any build.
