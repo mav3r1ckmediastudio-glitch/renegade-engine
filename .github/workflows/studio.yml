@@ -59,6 +59,40 @@ jobs:
         shell: pwsh
         run: ./Tools/Test-Windows-LoggedCommand.ps1
 
+      - name: Stage LP07 pinned FBX proof fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixtureRoot = 'Tests/Fixtures/LP07'
+          New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
+
+          $upstreamCommit = 'fcc5d6ba444cfd3eb80677dba5e37e493941abe5'
+          $fixtures = @(
+            @{
+              Name = 'maya_cube_6100_ascii.fbx'
+              Blob = 'b0aa64ea2361060b4f9bc4cd4e7bd0f730b6f7d8'
+            },
+            @{
+              Name = 'maya_transformed_skin_7700_ascii.fbx'
+              Blob = '683b74cf082e5adab645082c73dd221e0ff7f281'
+            }
+          )
+
+          foreach ($fixture in $fixtures) {
+            $path = Join-Path $fixtureRoot $fixture.Name
+            $uri = "https://raw.githubusercontent.com/ufbx/ufbx/$upstreamCommit/data/$($fixture.Name)"
+            Invoke-WebRequest -Uri $uri -OutFile $path
+
+            $actualBlob = (& git.exe hash-object -- $path).Trim()
+            if ($LASTEXITCODE -ne 0) {
+              throw "git hash-object failed for $path"
+            }
+            if ($actualBlob -ne $fixture.Blob) {
+              throw "LP07 fixture integrity failure for $($fixture.Name): expected $($fixture.Blob), got $actualBlob"
+            }
+            Write-Host "LP07 fixture verified: $($fixture.Name) // git-blob=$actualBlob"
+          }
+
       - name: Build Renegade Studio
         shell: pwsh
         run: >-
