@@ -17,6 +17,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/IdentityService.h
     include/renegade/bridge/LightService.h
     include/renegade/bridge/ImportService.h
+    include/renegade/bridge/ModelImporterFailureAdapter.h
     include/renegade/bridge/ReusableAssetService.h
     include/renegade/bridge/MaterialService.h
     include/renegade/bridge/CollisionService.h
@@ -45,6 +46,7 @@ add_library(RenegadeEngineBridge STATIC
     src/LightService.cpp
     src/ImportService.cpp
     src/ImportServiceModel.cpp
+    src/ModelImporterFailureAdapter.cpp
     src/ReusableAssetService.cpp
     src/MaterialService.cpp
     src/CollisionService.cpp
@@ -68,6 +70,19 @@ add_library(RenegadeEngineBridge STATIC
 target_sources(RenegadeEngineBridge PRIVATE
     ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_GLTF.cpp
     ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_FBX.cpp
+)
+
+# Gate 1 explicitly required malformed importer failures to become non-modal
+# before Gate 3's permanent creator-facing transaction. Redirect only the
+# legacy messageBox token inside the two converter translation units Renegade
+# compiles. Wicked's actual helper and every other Wicked translation unit stay
+# untouched. On parse/read failure the converters call the Renegade adapter,
+# return with an empty scene, and ImportService produces its structured failure.
+set_source_files_properties(
+    ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_GLTF.cpp
+    ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_FBX.cpp
+    PROPERTIES
+        COMPILE_DEFINITIONS "messageBox=RenegadeImporterMessageBox"
 )
 
 target_include_directories(RenegadeEngineBridge PRIVATE
