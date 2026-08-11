@@ -69,9 +69,9 @@ if(EXISTS "${LP07_STATIC_FBX_FIXTURE}" AND
             "${LP07_STATIC_FBX_FIXTURE}"
             "${LP07_SKINNED_ANIMATED_FBX_FIXTURE}"
             "${CMAKE_BINARY_DIR}/lp07-fbx-proof-output"
+        CONFIGURATIONS Release
     )
     set_tests_properties(RenegadeModelImportGraphicsProof PROPERTIES
-        CONFIGURATIONS Release
         TIMEOUT 180
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeModelImportGraphicsProof>"
     )
