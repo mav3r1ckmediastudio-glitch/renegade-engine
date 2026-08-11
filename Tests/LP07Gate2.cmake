@@ -1,5 +1,5 @@
 add_executable(RenegadeAssetCatalogueTests
-    AssetCatalogueTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/AssetCatalogueTests.cpp
 )
 
 target_link_libraries(
