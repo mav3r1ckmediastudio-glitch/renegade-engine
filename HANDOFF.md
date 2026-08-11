@@ -190,29 +190,66 @@ Status: **planned; implementation has not started.**
 Canonical design:
 `docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md`
 
+### Owner format priority
+
+**FBX is P0 for LP07, including skinned and animated FBX.** The owner reports
+that the overwhelming majority of real project assets are FBX/animated FBX, so a
+GLB/GLTF-only lifecycle would not satisfy the intended creator workflow.
+
+The exact Wicked pin already includes a dedicated `ImportModel_FBX()` converter
+based on bundled `ufbx`. Exact-source review confirms conversion of meshes,
+materials/textures, armatures/skinning, up to eight bone influences, morph data,
+node hierarchy, FBX animation stacks/takes and baked translation/rotation/scale
+animation into native Wicked components. Mixamo-specific handling also exists.
+
+Therefore the implementation order is **Wicked/ufbx first**. Do not add Assimp
+or another parallel importer merely to increase extension count. An external
+importer is permitted only after a bounded capability-gap proof demonstrates a
+required format or FBX feature that the pinned Wicked path cannot represent
+reliably.
+
+### LP07 format priority
+
+- P0: FBX static/skinned/animated — primary owner/manual/package acceptance.
+- P1: GLTF/GLB — required supported alternative and regression path.
+- P2: OBJ/PLY through the common Renegade import contract when the pinned Wicked
+  seams are proven clean; VRM/VRMA after exact seam audit.
+- External fallback: Assimp or another library only after evidence-driven gap
+  analysis, with licence/notices/build/normalisation consequences recorded.
+
 Target outcome:
 
-> import one GLB/GLTF -> create a stable reusable project asset -> browse it ->
-> place it repeatedly -> detect a source change -> explicitly reimport safely
-> while retaining IDs -> reopen -> Build Windows Game -> standalone Runtime uses
-> the updated product.
+> import one animated/skinned FBX -> create a stable reusable project asset ->
+> browse it -> place it repeatedly -> detect a source change -> explicitly
+> reimport safely while retaining IDs -> reopen -> Build Windows Game ->
+> standalone Runtime uses the updated product.
+
+GLB/GLTF must remain functional throughout.
 
 Gate map:
 
-1. registry-backed UI-free asset catalogue;
-2. governed GLB/GLTF reusable-asset import transaction;
-3. stable explicit reimport with last-good preservation;
-4. creator Asset Browser workflow and repeated command-backed placement;
-5. packaged Save/Open/reimport/standalone build acceptance.
+1. common format-neutral model-import seam + pinned Wicked FBX static/skinned/
+   animated WISCENE round-trip proof; GLB/GLTF regression and OBJ/PLY/VRM seam
+   assessment;
+2. registry-backed UI-free asset catalogue;
+3. governed reusable model-asset import transaction, FBX primary and GLB/GLTF
+   required;
+4. stable explicit reimport with last-good preservation and stored
+   importer/backend/settings recipe;
+5. creator Asset Browser workflow and repeated command-backed placement, owner
+   acceptance using representative animated/skinned FBX;
+6. packaged Save/Open/reimport/Build Windows Game/standalone acceptance using
+   FBX, with GLB/GLTF regression retained.
 
-LP07 deliberately does not expand into every Wicked asset format, physics,
-characters, animation state machines, particles, Lua gameplay, projectiles or
-multiplayer. Those come after one reusable model-asset lifecycle is proven
-end-to-end.
+Imported FBX animation data must survive and be usable, but LP07 does not build
+animation timelines, state machines, retargeting UI or gameplay animation
+controllers. Those remain later programmes.
 
 ## Existing foundations LP07 must reuse
 
-- `ImportService::PrepareGltfAsset` / reusable WISCENE round-trip path;
+- current `ImportService` GLB/GLTF isolated conversion/WISCENE round-trip path;
+- pinned Wicked `ImportModel_FBX()` and other exact converter seams only through
+  a Renegade-owned format-neutral import service;
 - `PlaceImportedModelCommand` for command-backed scene placement;
 - `AssetBrowserService` for safe project Content enumeration/classification;
 - LP05 dependency collection;
