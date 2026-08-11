@@ -132,10 +132,71 @@ namespace renegade::bridge
         std::string error;
     };
 
+    // Gate 5 placement is stable-ID driven for the same reason reimport is.
+    // The creator selects a registered product; its path is resolved from
+    // LC01 and its embedded WISCENE payload is loaded without consulting or
+    // converting the original FBX/GLTF source.
+    struct ReusableModelPlacementRequest
+    {
+        std::string projectRoot;
+        StableId projectId;
+        StableId assetId;
+    };
+
+    struct ReusableModelPlacementResult
+    {
+        bool succeeded = false;
+        StableId sourceAssetId;
+        StableId assetId;
+        std::string assetProjectRelativePath;
+        ImportedSceneSummary sceneSummary;
+        ImportedModelEvidence modelEvidence;
+        std::string error;
+    };
+
+    class PreparedReusableModelPlacement
+    {
+    public:
+        PreparedReusableModelPlacement() = default;
+        PreparedReusableModelPlacement(PreparedReusableModelPlacement&&) noexcept = default;
+        PreparedReusableModelPlacement& operator=(PreparedReusableModelPlacement&&) noexcept = default;
+        PreparedReusableModelPlacement(const PreparedReusableModelPlacement&) = delete;
+        PreparedReusableModelPlacement& operator=(const PreparedReusableModelPlacement&) = delete;
+
+        [[nodiscard]] bool IsReady() const noexcept
+        {
+            return scene_.IsValid() && result_.succeeded && result_.error.empty();
+        }
+
+        [[nodiscard]] const ReusableModelPlacementResult& Result() const noexcept
+        {
+            return result_;
+        }
+
+        [[nodiscard]] const wi::scene::Scene* PeekScene() const noexcept
+        {
+            return scene_.IsValid() ? scene_.get() : nullptr;
+        }
+
+        [[nodiscard]] wi::allocator::shared_ptr<wi::scene::Scene>
+        ReleaseScene() noexcept
+        {
+            return std::move(scene_);
+        }
+
+    private:
+        friend class ReusableAssetService;
+
+        wi::allocator::shared_ptr<wi::scene::Scene> scene_;
+        ReusableModelPlacementResult result_;
+    };
+
     // UI-independent reusable-asset lifecycle boundary. First import creates
     // stable identity; Gate 4 reimport resolves and replays only the stored
     // accepted recipe, retaining those IDs and transactionally replacing the
-    // last-good product only after conversion and validation succeed.
+    // last-good product only after conversion and validation succeed. Gate 5
+    // placement resolves that same stable product and deserializes its accepted
+    // payload without invoking a format converter.
     class ReusableAssetService
     {
     public:
@@ -146,5 +207,8 @@ namespace renegade::bridge
         [[nodiscard]] ReusableModelReimportResult ReimportModelAsset(
             const ReusableModelReimportRequest& request,
             ReusableModelReimportOptions options = {}) const;
+
+        [[nodiscard]] PreparedReusableModelPlacement PrepareModelAssetPlacement(
+            const ReusableModelPlacementRequest& request) const;
     };
 }
