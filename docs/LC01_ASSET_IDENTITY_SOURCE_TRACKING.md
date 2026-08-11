@@ -1,10 +1,26 @@
 # LC01 — Asset Identity and Source Tracking
 
+Status: **ACCEPTED AND MERGED**.
+
+Exact final PR head:
+`3d3e780b38792aec866cd19ce6638a8260ffff4f`
+
+Squash merge:
+`01d790bda5acea0cdb6a7735557b12224c795a64`
+(`Add packaged LC01 source reopen proof (#39)`).
+
+Wicked remained pinned at
+`3a800b7134aafe58461093c8abb2e274d4e64033`.
+
 ## Outcome
 
 LC01 turns LP05's read-only dependency closure into durable Renegade asset
 identity and source-tracking state. Paths answer where content currently is;
 UUIDs answer which asset it is.
+
+LC01 deliberately stops before creator-facing import/reimport execution. Its
+output is the durable identity/provenance foundation consumed by the later
+reusable asset workflow.
 
 ## Gate map
 
@@ -16,261 +32,142 @@ UUIDs answer which asset it is.
 
 ## Gate 1 — Stable Asset Record Contract
 
-Gate 1 introduces a UI-free `AssetRegistryService` that consumes an accepted
-`DependencyGraph` and produces a versioned `AssetRegistry`.
+Accepted through PR #34, squash merge `580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`.
 
-Each project asset record contains:
+`AssetRegistryService` consumes an accepted LP05 dependency graph and produces a
+versioned project asset registry. Each project-owned record carries:
 
-- a UUID-v4 asset ID;
-- the originating LP05 node ID and canonical project-relative path;
-- dependency class, requirement and platform applicability;
-- owning provider name/version and current content hash;
-- root and source-availability state;
+- UUID-v4 asset ID;
+- LP05 node identity and canonical project-relative path;
+- dependency class/requirement/platform applicability;
+- provider name/version and current content hash;
+- root/source-availability state; and
 - dependency relationships expressed as stable asset IDs.
 
-Refreshing an existing registry preserves an asset ID when its canonical path
-is unchanged. It reports added, changed and removed asset IDs, including
-content-hash changes and closure changes. The serialized JSON is sorted and
-must round-trip byte-identically.
+Runtime-support nodes remain outside the project asset-ID space. Missing project
+sources remain explicit unavailable records rather than being silently repaired.
 
-Runtime-support nodes belong to the engine/build pipeline and do not receive
-project asset IDs. Missing project sources remain explicit records with
-`source_available: false`; Gate 1 does not create, repair or remove files.
-
-## Gate 1 exclusions
-
-Gate 1 deliberately does not:
-
-- select or write the authoritative registry path in a real project;
-- infer that a newly seen path is a moved old asset;
-- retain removed records as recovery tombstones;
-- define source-to-imported-product or import-settings records;
-- execute import or reimport;
-- copy, cook or package assets;
-- change the existing Content Browser UI;
-- modify Wicked or its pin.
-
-Those behaviours require the identity contract to pass first and will be
-split into later bounded LC01 gates.
-
-## Gate 1 acceptance
-
-1. A representative LP05 graph becomes one record per project-owned node.
-2. Runtime-support nodes are excluded.
-3. Graph edges including cycles resolve to stable asset IDs without dangling
-   references.
-4. Missing sources remain explicit and unavailable.
-5. An unchanged refresh preserves every asset ID and serialized byte.
-6. Changed, added and removed graph content is reported accurately.
-7. Cross-project registries, invalid IDs, duplicate paths and invalid
-   relationships fail closed.
-8. Debug and Release CI pass with Wicked pinned at
-   `3a800b7134aafe58461093c8abb2e274d4e64033`.
-
-Gate 1 is accepted.
-
-## Implementation evidence
-
-Implementation commit `54107a7cc66fd16c8b8f40d8e9e619bd2b7548e2`
-passed Renegade Studio run 146 with 24/24 tests in Debug and Release.
-`RenegadeAssetRegistryTests` passed in both configurations. The existing LP05
-packaged proof also remained green with two processes and unchanged fixture
-inputs in each configuration. Pinned-Wicked baseline run 153 passed Debug and
-Release, and Wicked remained at
-`3a800b7134aafe58461093c8abb2e274d4e64033`.
-
-Exact final head `0cd63d844c655eecebaf3f7bf04fdacbad2d50ed`
-passed Studio run 147 and baseline run 154 in Debug and Release. The project
-owner independently reviewed that exact head before squash-merging PR #34 at
-`580e5a5289e35b9bc60929a5b0c3cec6aaec0b2f`, completing Gate 1 acceptance.
+Unchanged refresh preserves IDs and deterministic serialized bytes.
 
 ## Gate 2 — Transactional Project Persistence
 
-Gate 2 makes the registry a real project document. Its fixed authoritative
-location is `AssetRegistry.renegade-assets` at the project root. It does not
-live in `Content`, because it is metadata rather than a creator asset; it does
-not live in `Saved` or `Intermediate`, because it is durable project state.
+Accepted through corrective PR #36, squash merge
+`489e33d`.
 
-Writes serialize the validated Gate 1 model, stage and validate the exact
-requested canonical bytes, then commit through `ProjectDocumentTransaction`.
-The shared journal lives under `Intermediate/Transactions`, stays inside the
-project containment boundary and is automatically recovered before
-`ProjectService::OpenProject` activates a project.
+The authoritative registry is:
 
-Reads require the expected project UUID, the supported schema, complete
-referential integrity and canonical byte ordering. A valid registry for a
-different project, or valid but non-canonical JSON, fails closed.
+`<Project Root>/AssetRegistry.renegade-assets`
 
-### Gate 2 acceptance
+Registry writes use the same fail-closed project-document transaction discipline
+as other Renegade-owned documents: staged validation, exact-byte checks,
+previous-state preservation, journaled interruption recovery and canonical
+project ownership/containment validation.
 
-1. A valid registry commits to the fixed project-root document and reloads
-   byte-identically.
-2. Rewriting unchanged state is a successful byte-preserving no-op.
-3. Invalid in-memory state cannot create or replace the document.
-4. A different valid staged registry cannot be substituted for the requested
-   write.
-5. A forced replacement failure preserves the exact previous bytes and leaves
-   no recovery debris.
-6. An interruption after replacement retains a durable journal; the next
-   Project Open restores the exact previous registry and cleans all artifacts.
-7. Cross-project and non-canonical documents fail to load.
-8. Debug and Release CI pass with Wicked unchanged.
+A false-green result in the first Gate 2 landing reopened acceptance. The
+corrective gate fixed Windows short/long path identity during recovery and made
+native child-test failure propagation authoritative. The corrected gate passed a
+genuine full Debug/Release test result before acceptance.
 
-Corrective PR #36 was independently reviewed and squash-merged as
-`489e33dfe5aa34756e94304c508f9cf2adc9265d`, completing Gate 2 acceptance.
+## Gate 3 — Source-to-Imported-Product Provenance
 
-### Gate 2 implementation evidence
+Accepted through PR #37, squash merge `c2ace926ff2486fd3b60e3717bdba6dc8d138217`.
 
-PR #35 was squash-merged at
-`bdb1fb98fcebc8eca5b8fb143ea8eec0cae5ec9c`, but its apparent green Studio
-checks were false positives. Raw CTest output recorded 24/25 in both Debug and
-Release: `RenegadeAssetRegistryPersistenceTests` failed because Windows exposed
-the same temporary project root once through its `RUNNER~1` 8.3 alias and once
-through the long `runneradmin` spelling. Lexical containment rejected the
-journal's own registry path, so Project Open could not roll it back.
+LC01 provenance connects stable source asset IDs to stable imported product IDs
+and records:
 
-The shared PowerShell command runner also initialized a local
-`$LASTEXITCODE = 0` and piped the native process into `Tee-Object`. The native
-failure status did not replace that local value, allowing CTest's exit code 8
-to be recorded as PASS. Corrective PR #36 removes the native pipeline, captures
-output before replaying it, reads the native status without pre-shadowing it,
-and adds a Windows probe that must observe a deliberate exit code 23.
+- importer identity/version;
+- settings schema version;
+- canonical settings JSON;
+- source hash observed at successful import; and
+- product hash observed at successful import.
 
-Recovery containment now compares `weakly_canonical` filesystem identities.
-This accepts Windows short/long aliases of the same real directory, continues
-to reject paths outside the project, and also resolves existing reparse-point
-prefixes before comparison. Candidate head
-`09601bc0f281cadd61d859d2c37249839840d2bc` passed Studio run 156 with an
-explicit 25/25 in Debug and Release; the registry persistence test and the
-exit-code-23 probe passed in both. Baseline run 172 passed both configurations
-with Wicked unchanged at `3a800b7134aafe58461093c8abb2e274d4e64033`.
+A source may produce multiple products; a product has at most one authoritative
+source/import recipe.
 
-Corrective PR #36 was independently reviewed and squash-merged as
-`489e33dfe5aa34756e94304c508f9cf2adc9265d`, completing Gate 2 acceptance.
-
-### Gate 2 exclusions
-
-Gate 2 does not define source/product pairings or import settings, infer moved
-assets, retain recovery tombstones, execute reimport, cook/package content or
-change Studio UI. Those remain Gates 3-5.
-
-## Gate 3 — Source-to-Imported-Product Tracking
-
-Gate 3 extends the durable registry with import provenance.  A provenance
-record connects one stable source asset ID to one stable imported product ID,
-and records the importer identity/version, a versioned settings schema and
-canonical settings JSON, plus the exact source and product hashes observed at
-the successful import boundary. A source can produce multiple products; a
-product can have only one authoritative source/import recipe.
-
-Existing version-1 registries remain readable and byte-preserving while they
-contain no provenance. Registering the first provenance record upgrades that
-registry to version 2 through the existing transactional write path.
-
-This is metadata only. Gate 3 does not invoke Wicked's importer, write a
-source file, trigger reimport, decide that a changed source should overwrite a
-product, or add creator-facing UI. It gives those later workflows a reliable,
-versioned contract instead of asking them to infer provenance from paths.
-
-### Gate 3 acceptance
-
-1. Provenance uses stable asset IDs, never absolute paths.
-2. A source can own multiple products; each product has at most one recipe.
-3. Importer and settings schema versions are explicit and non-zero.
-4. Settings are canonical JSON objects and registry serialization is
-   byte-deterministic.
-5. Provenance captures the current available hashes when registered; later
-   source/product changes and missing endpoints are reported without changing
-   any file.
-6. Self-links, dangling IDs, duplicate product ownership, malformed settings
-   and stale registration snapshots fail closed without modifying the registry.
-7. An unchanged LP05 refresh retains valid provenance exactly; a refresh that
-   removes an endpoint fails rather than silently retargeting it.
-8. Debug and Release CI pass with Wicked unchanged.
+This gate records metadata only. It does not invoke an importer, overwrite a
+product or silently reimport stale content.
 
 ## Gate 4 — Moved and Missing Asset Recovery
 
-Gate 4 preserves an asset's UUID when a source changes project-relative path
-only where the evidence is unique. The registry retains a compact last-known
-tombstone for a genuinely absent asset. A later candidate may reclaim that ID
-only when its content hash and immutable dependency/provider classification
-produce one unambiguous match.
+Accepted through PR #38, squash merge
+`b45de5e369789697dba0fd4502677055b8105c1f`.
 
-Ambiguous candidates never relink automatically. They remain distinct new
-assets and receive an explicit recovery diagnostic for the future Renegade UI.
-Gate 4 does not move files, edit scenes, rewrite import settings, invoke
-reimport, or change creator content.
+A stable asset UUID may follow a moved/reappearing source only where the recovery
+evidence is bidirectionally unique. Genuine loss creates a deterministic
+last-known tombstone. Ambiguous matches never auto-relink.
 
-### Gate 4 acceptance
+Provenance relationships retain their stable IDs across a uniquely recovered
+move. Recovery reads/refreshes metadata; it does not move creator files or
+trigger import.
 
-1. A single unique rename preserves the original asset ID and dependencies.
-2. A genuine loss creates a deterministic tombstone with its last-known
-   identity evidence.
-3. A later unique reappearance restores the tombstoned ID and removes only
-   that tombstone.
-4. Equal hashes or classifications that make the match non-unique never
-   auto-recover; the ambiguity is reported explicitly.
-5. Provenance relationships retain their IDs across a recovered move.
-6. Tombstones and recovery outcomes serialize/reload deterministically.
-7. No recovery operation reads or writes creator files.
-8. Debug and Release CI pass with Wicked unchanged.
+## Gate 5 — Packaged Source-Update/Reopen Proof
 
-### Gate 4 acceptance evidence
+Accepted through PR #39.
 
-GitHub implementation commit `0e5c00c` added schema-version-3 recovery
-tombstones, bidirectionally unique move/reappearance matching, provenance
-survival for missing endpoints and deterministic recovery diagnostics. Exact
-final head `523f2ac655f891bb9fae979e46f04e85efffe557` passed Studio run 163
-with raw 25/25 in Debug and Release and baseline run 181 in both
-configurations. After independent review, PR #38 was squash-merged as
-`b45de5e369789697dba0fd4502677055b8105c1f`, completing Gate 4 acceptance.
+A fixed mini-project and `RenegadeAssetRegistryProcessFixture.exe` are exercised
+from assembled Debug/Release Studio evidence packages. A disposable artifact
+working copy crosses four independent process boundaries:
 
-## Gate 5 — Packaged Source-Update/Reopen Proof and LC01 Close-out
+1. initial registry/provenance commit;
+2. Project Open after a controlled source-content update;
+3. Project Open after moving that updated source; and
+4. final unchanged reopen.
 
-Gate 5 assembles the accepted LC01 services into a package-resident proof. A
-fixed mini-project and `RenegadeAssetRegistryProcessFixture.exe` ship inside
-the Studio evidence package. The build copies the fixture into a disposable
-artifact workspace, then launches four independent processes: initial registry
-and provenance commit, reopen after a controlled source-content update, reopen
-after moving that updated source, and a final unchanged reopen.
+The proof requires:
 
-Every process enters `ProjectService::OpenProject`, uses the production LP05
-collector and `AssetRegistryService` read/refresh/write paths, and emits
-canonical registry evidence outside the working project. The move must retain
-the source UUID; provenance must report the updated source as changed without
-retargeting it; the final two registry evidence files must be byte-identical.
-The immutable packaged fixture is hashed before and after.
+- stable source UUID through update and move;
+- stale provenance after source-content change;
+- moved-source recovery without speculative relinking;
+- byte-identical final canonical registry evidence on unchanged reopen;
+- immutable packaged fixture hashes before and after; and
+- non-zero propagation for any identity/provenance/recovery/fixture failure.
 
-Gate 5 remains a proof and close-out gate. It does not invoke reimport, alter an
-imported product, mutate repository/package fixture inputs, add UI, cook/copy a
-standalone dependency closure or begin LP06.
+## Final authoritative evidence
 
-### Gate 5 acceptance
+Exact final head:
+`3d3e780b38792aec866cd19ce6638a8260ffff4f`
 
-1. The LC01 executable and fixed fixture run from assembled Debug and Release
-   packages, not only the build tree.
-2. Four separate process invocations cross real Project Open and durable
-   project-root registry boundaries.
-3. A controlled source update preserves its UUID and reports stale provenance.
-4. Moving the updated source preserves that same UUID without added/removed
-   identities or speculative relinking.
-5. A final unchanged reopen produces byte-identical canonical registry evidence.
-6. Packaged fixture SHA-256 records are identical before and after; only the
-   disposable working copy and evidence outputs change.
-7. Any child-process, identity, provenance, canonical-byte or fixture-integrity
-   failure propagates non-zero and fails the build.
-8. Raw Debug and Release CTest totals, the packaged proof and both pinned-Wicked
-   baseline jobs pass on the exact final head.
-9. Independent exact-head review and owner squash merge complete LC01.
+- Renegade Studio run **166**: Debug/Release SUCCESS.
+- Windows baseline run **185**: Debug/Release SUCCESS.
+- All four packaged lifecycle phases passed in both configurations.
+- Final Debug and Release canonical registry evidence matched exactly.
 
-### Gate 5 candidate evidence
+Canonical registry:
 
-GitHub implementation head `c8bacea05e5aac0823bc5d304631d84c0a411c97`
-passed Studio run 165 with raw 25/25 in Debug and Release. The `init`, `update`,
-`move-reopen` and `verify-reopen` package processes each reported PASS in both
-configurations. Debug and Release emitted the identical final canonical registry
-SHA-256
-`547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`
-at 2,180 bytes. Pinned-Wicked baseline run 184 passed Debug and Release.
-Gate 5 and LC01 remain unaccepted until the exact documentation-complete head
-passes fresh CI, receives independent review and is squash-merged by the owner.
+- bytes: `2,180`;
+- SHA-256:
+  `547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`.
+
+Independent exact-head review completed before the owner squash-merged PR #39.
+
+## What LC01 now guarantees
+
+- project assets have stable UUID identity independent of current path;
+- the project-root registry is durable and transactionally recoverable;
+- imports can record a durable source/product recipe without absolute-path
+  identity;
+- later source/product changes are observable as provenance state rather than
+  silently rewritten;
+- uniquely moved/missing sources can retain identity deterministically; and
+- these behaviours survive packaged multi-process Project Open/reopen proof.
+
+## What LC01 intentionally does not do
+
+LC01 does not:
+
+- execute first import or reimport;
+- copy/cook creator content as a general asset pipeline;
+- overwrite a stale imported product automatically;
+- provide a creator-facing registry/provenance UI;
+- make the existing filesystem Asset Browser registry-backed;
+- create thumbnails/previews;
+- package a standalone game; or
+- modify Wicked.
+
+Those are downstream responsibilities. LP07 — Reusable Project Asset Workflow
+is the next bounded programme that consumes LC01 to provide an actual creator
+import/browse/reimport lifecycle.
+
+## Final verdict
+
+**LC01: COMPLETE AND ACCEPTED.**
