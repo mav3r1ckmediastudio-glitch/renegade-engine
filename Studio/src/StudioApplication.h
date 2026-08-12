@@ -506,7 +506,7 @@ namespace renegade::studio
         RenegadeComboBox importScaleModeCombo_;
         RenegadeButton importScaleApplyButton_;
         RenegadeButton importScaleDismissButton_;
-        RenegadeStudioChrome studioChrome_;
+        CreatorAssetStudioChrome studioChrome_;
         TestLevelRuntimeProcess testLevelRuntime_;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;
