@@ -1,6 +1,7 @@
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
 
 #include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/ReusableAssetDependencyService.h"
 
 #include <filesystem>
 #include <sstream>
@@ -107,6 +108,7 @@ namespace renegade::bridge
             WisceneDependencyProvider sceneProvider(MakeWisceneDependencyReader());
             GltfDependencyProvider gltfProvider(MakeGltfDependencyReader());
             SceneIdentityCompanionProvider sceneIdentityProvider;
+            ReusableAssetDependencyProvider reusableAssetProvider(project.projectId);
 
             DependencyCollector collector(project.rootPath);
             if (!collector.RegisterProvider(projectProvider, error) ||
@@ -114,7 +116,8 @@ namespace renegade::bridge
                 !collector.RegisterProvider(screenProvider, error) ||
                 !collector.RegisterProvider(sceneProvider, error) ||
                 !collector.RegisterProvider(gltfProvider, error) ||
-                !collector.RegisterProvider(sceneIdentityProvider, error))
+                !collector.RegisterProvider(sceneIdentityProvider, error) ||
+                !collector.RegisterProvider(reusableAssetProvider, error))
             {
                 error = "Build Windows Game could not configure dependency discovery: " +
                     error;
