@@ -74,10 +74,6 @@ namespace renegade::studio
         std::function<void(float)> valueCommitted_;
     };
 
-    // Renegade-owned rendering for the Studio shell. Wicked supplies the
-    // canvas and command list, but no stock wiGUI control draws this chrome.
-    // Interactive components can be migrated onto this visual foundation one
-    // bounded slice at a time after the product owner accepts the proof.
     class RenegadeStudioChrome final : public wi::gui::Widget
     {
     public:
@@ -189,6 +185,7 @@ namespace renegade::studio
         [[nodiscard]] float HierarchyWidth() const noexcept;
         [[nodiscard]] float InspectorWidth() const noexcept;
         [[nodiscard]] float DrawerHeight() const noexcept;
+        [[nodiscard]] int ActiveBottomTab() const noexcept { return activeBottomTab_; }
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
 
         void Update(const wi::Canvas& canvas, float dt) override;
