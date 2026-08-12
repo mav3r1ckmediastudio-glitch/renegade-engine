@@ -265,6 +265,7 @@ namespace renegade::bridge
         if (category == "textures") return AssetType::Texture;
         if (category == "audio") return AssetType::Audio;
         if (category == "video") return AssetType::Video;
+        if (category == "fonts") return AssetType::Font;
         if (category == "vegetation") return AssetType::Vegetation;
         if (category == "characters") return AssetType::Character;
         if (category == "player") return AssetType::Player;
@@ -292,14 +293,17 @@ namespace renegade::bridge
         {
             return AssetType::Texture;
         }
-        if (extension == ".wav" || extension == ".ogg" ||
-            extension == ".mp3")
+        if (extension == ".wav" || extension == ".ogg")
         {
             return AssetType::Audio;
         }
         if (extension == ".mp4" || extension == ".h264")
         {
             return AssetType::Video;
+        }
+        if (extension == ".ttf")
+        {
+            return AssetType::Font;
         }
         if (extension == ".lua")
         {
@@ -324,6 +328,7 @@ namespace renegade::bridge
         case AssetType::Texture: return "TEXTURE";
         case AssetType::Audio: return "AUDIO";
         case AssetType::Video: return "VIDEO";
+        case AssetType::Font: return "FONT";
         case AssetType::Vegetation: return "VEGETATION";
         case AssetType::Character: return "CHARACTER";
         case AssetType::Player: return "PLAYER";
