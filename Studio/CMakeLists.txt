@@ -60,6 +60,7 @@ endif()
 add_executable(RenegadeStudio WIN32
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/Translator.cpp"
     src/RenegadeStudioChrome.cpp
+    src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h
     src/StudioApplication.cpp
     src/StudioApplication.h
