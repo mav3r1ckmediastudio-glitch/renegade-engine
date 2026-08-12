@@ -9,6 +9,9 @@
 
 #include <WickedEngine.h>
 
+#include "renegade/bridge/AssetCatalogueService.h"
+#include "renegade/bridge/CreatorAssetWorkflowService.h"
+
 namespace renegade::studio
 {
     class RenegadeTextInputField final : public wi::gui::TextInputField
@@ -211,6 +214,23 @@ namespace renegade::studio
             float inspectorX,
             wi::graphics::CommandList cmd) const;
 
+        void CreateCreatorAssetControls();
+        void LayoutCreatorAssetControls();
+        void UpdateCreatorAssetControls(
+            const wi::Canvas& canvas,
+            float dt);
+        void RenderCreatorAssetControls(
+            const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const;
+        void RefreshCreatorAssetBrowser();
+        bool SelectCreatorAsset(const std::string& relativePath);
+        void ImportCreatorModel();
+        void PlaceSelectedCreatorAsset();
+        void ReimportSelectedCreatorAsset();
+        void SaveSelectedCreatorTags();
+        [[nodiscard]] bridge::AssetCatalogueQuery CreatorAssetQuery() const;
+        [[nodiscard]] std::vector<std::string> CreatorTagInput() const;
+
         float width_ = 1920.0f;
         float height_ = 1080.0f;
         float hierarchyWidth_ = 320.0f;
@@ -262,5 +282,17 @@ namespace renegade::studio
         std::function<void(const std::string&)>
             assetBrowserItemSelected_;
         std::function<void(float, float, float, bool)> layoutChanged_;
+
+        bridge::CreatorAssetWorkflowService creatorAssetWorkflow_;
+        bridge::AssetCatalogue creatorAssetCatalogue_;
+        bridge::StableId creatorSelectedAssetId_;
+        std::string creatorSelectedAssetPath_;
+        bool creatorAssetRefreshPending_ = true;
+        std::string creatorAssetLastSearch_;
+        int creatorAssetStateFilter_ = 0;
+        int creatorAssetFormatFilter_ = 0;
+        int creatorAssetRigFilter_ = 0;
+        RenegadeTextInputField creatorAssetSearch_;
+        RenegadeTextInputField creatorAssetTags_;
     };
 }
