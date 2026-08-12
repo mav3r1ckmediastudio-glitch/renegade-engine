@@ -123,7 +123,11 @@ namespace renegade::bridge
 
     const char* ReusableAssetDependencyProvider::Name() const noexcept
     {
-        return "lp07-reusable-asset";
+        // Gate 3 established this provider identity on the durable product
+        // record. Reaching that same product from a saved scene must not cause
+        // a build-time LC01 refresh to relabel it and invalidate Gate 4's
+        // source/product relationship guard.
+        return "lp07.rasset";
     }
 
     std::uint32_t ReusableAssetDependencyProvider::Version() const noexcept
