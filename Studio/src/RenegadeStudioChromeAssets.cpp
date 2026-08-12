@@ -309,7 +309,7 @@ namespace renegade::studio
         const float tagsWidth = flexible - searchWidth;
 
         float x = left;
-        const auto place = [&x, y](wi::gui::Widget& widget, const float width)
+        const auto place = [&x, y, gap](wi::gui::Widget& widget, const float width)
         {
             widget.SetPos(XMFLOAT2(x, y));
             widget.SetSize(XMFLOAT2(width, 25.0f));
@@ -599,52 +599,62 @@ namespace renegade::studio
                         wi::jobsystem::IsBusy(creatorAssetWorkload_))
                         return;
 
-                    const std::string projectRoot = current->Projects().CurrentProject().rootPath;
-                    const bridge::StableId projectId = current->Projects().CurrentProject().projectId;
-                    auto imported = std::make_shared<bridge::CreatorModelImportResult>();
-                    auto prepared = std::make_shared<bridge::PreparedReusableModelPlacement>();
+                    struct ImportWorkState
+                    {
+                        std::string projectRoot;
+                        bridge::StableId projectId;
+                        std::string sourcePath;
+                        bridge::CreatorModelImportResult imported;
+                        bridge::PreparedReusableModelPlacement prepared;
+                    };
+
+                    auto state = std::make_shared<ImportWorkState>();
+                    state->projectRoot = current->Projects().CurrentProject().rootPath;
+                    state->projectId = current->Projects().CurrentProject().projectId;
+                    state->sourcePath = sourcePath;
                     SetStatusText("IMPORT ASSET // RETAIN + CONVERT // " +
                         fs::u8path(sourcePath).filename().generic_u8string());
 
                     wi::jobsystem::Execute(creatorAssetWorkload_,
-                        [this, projectRoot, projectId, sourcePath, imported, prepared](
-                            wi::jobsystem::JobArgs)
+                        [this, state](wi::jobsystem::JobArgs)
                         {
                             bridge::CreatorAssetWorkflowService workflow;
-                            *imported = workflow.ImportModel(projectRoot, projectId, sourcePath);
-                            if (imported->succeeded)
+                            state->imported = workflow.ImportModel(
+                                state->projectRoot, state->projectId, state->sourcePath);
+                            if (state->imported.succeeded)
                             {
-                                *prepared = workflow.PrepareModelPlacement(
-                                    projectRoot, projectId, imported->asset.assetId);
+                                state->prepared = workflow.PrepareModelPlacement(
+                                    state->projectRoot, state->projectId,
+                                    state->imported.asset.assetId);
                             }
                             wi::eventhandler::Subscribe_Once(
                                 wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                                [this, imported, prepared](std::uint64_t)
+                                [this, state](std::uint64_t)
                                 {
                                     creatorAssetRefreshPending_ = true;
-                                    if (!imported->succeeded)
+                                    if (!state->imported.succeeded)
                                     {
                                         SetStatusText("IMPORT ASSET // FAILED");
                                         wi::helper::messageBox(
                                             "Could not create the reusable project asset.\n\nReason: " +
-                                                imported->error,
+                                                state->imported.error,
                                             "Import Project Asset");
                                         return;
                                     }
-                                    creatorSelectedAssetId_ = imported->asset.assetId;
-                                    creatorSelectedAssetPath_ = imported->assetProjectRelativePath;
-                                    if (!prepared->IsReady())
+                                    creatorSelectedAssetId_ = state->imported.asset.assetId;
+                                    creatorSelectedAssetPath_ = state->imported.assetProjectRelativePath;
+                                    if (!state->prepared.IsReady())
                                     {
                                         SetStatusText("IMPORT ASSET // CREATED // PLACEMENT FAILED");
                                         wi::helper::messageBox(
                                             "The .rasset was created, but its payload could not be prepared for placement.\n\nReason: " +
-                                                prepared->Result().error,
+                                                state->prepared.Result().error,
                                             "Import Project Asset");
                                         return;
                                     }
                                     PlacePreparedCreatorAsset(
-                                        std::move(*prepared),
-                                        fs::u8path(imported->assetProjectRelativePath)
+                                        std::move(state->prepared),
+                                        fs::u8path(state->imported.assetProjectRelativePath)
                                             .filename().generic_u8string());
                                 });
                         });
@@ -710,25 +720,34 @@ namespace renegade::studio
             wi::jobsystem::IsBusy(creatorAssetWorkload_))
             return;
 
-        const std::string projectRoot = session->Projects().CurrentProject().rootPath;
-        const bridge::StableId projectId = session->Projects().CurrentProject().projectId;
-        const bridge::StableId assetId = creatorSelectedAssetId_;
-        auto result = std::make_shared<bridge::ReusableModelReimportResult>();
+        struct ReimportWorkState
+        {
+            std::string projectRoot;
+            bridge::StableId projectId;
+            bridge::StableId assetId;
+            bridge::ReusableModelReimportResult result;
+        };
+
+        auto state = std::make_shared<ReimportWorkState>();
+        state->projectRoot = session->Projects().CurrentProject().rootPath;
+        state->projectId = session->Projects().CurrentProject().projectId;
+        state->assetId = creatorSelectedAssetId_;
         SetStatusText("REIMPORT ASSET // REFRESH + REPLAY RECIPE");
 
         wi::jobsystem::Execute(creatorAssetWorkload_,
-            [this, projectRoot, projectId, assetId, result](wi::jobsystem::JobArgs)
+            [this, state](wi::jobsystem::JobArgs)
             {
                 bridge::CreatorAssetWorkflowService workflow;
-                *result = workflow.ReimportModel(projectRoot, projectId, assetId);
+                state->result = workflow.ReimportModel(
+                    state->projectRoot, state->projectId, state->assetId);
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, result](std::uint64_t)
+                    [this, state](std::uint64_t)
                     {
                         creatorAssetRefreshPending_ = true;
-                        if (!result->succeeded)
+                        if (!state->result.succeeded)
                         {
-                            SetStatusText("REIMPORT ASSET // FAILED // " + result->error);
+                            SetStatusText("REIMPORT ASSET // FAILED // " + state->result.error);
                             return;
                         }
                         SetStatusText("REIMPORT ASSET // CURRENT // SAME STABLE ID");
