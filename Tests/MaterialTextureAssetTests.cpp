@@ -1,7 +1,10 @@
 #include "renegade/bridge/AssetRegistryService.h"
+#include "renegade/bridge/CreatorAssetActionPolicy.h"
+#include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -92,6 +95,29 @@ int main()
 {
     using namespace renegade::bridge;
 
+    AssetCatalogueEntry modelPolicy;
+    modelPolicy.registered = true;
+    modelPolicy.assetId = "82222222-2222-4222-8222-222222222222";
+    modelPolicy.importedProduct = true;
+    modelPolicy.productAvailable = true;
+    modelPolicy.sourceFormat = "FBX";
+    Require(CanPlaceCreatorModelAsset(modelPolicy) &&
+            CanReimportCreatorModelAsset(modelPolicy),
+        "available LP07 model should remain placeable and reimportable");
+    modelPolicy.productAvailable = false;
+    Require(!CanPlaceCreatorModelAsset(modelPolicy) &&
+            CanReimportCreatorModelAsset(modelPolicy),
+        "missing LP07 product must remain reimportable for recovery");
+    AssetCatalogueEntry texturePolicy = modelPolicy;
+    texturePolicy.sourceFormat = "png";
+    texturePolicy.productAvailable = true;
+    Require(!CanPlaceCreatorModelAsset(texturePolicy) &&
+            !CanReimportCreatorModelAsset(texturePolicy),
+        "LP08 texture must never enter the LP07 model place/reimport policy");
+    texturePolicy.productAvailable = false;
+    Require(!CanReimportCreatorModelAsset(texturePolicy),
+        "missing LP08 texture must remain excluded from Gate 3 model reimport");
+
     const fs::path root = fs::temp_directory_path() /
         "renegade-lp08-gate3-material-texture";
     const fs::path externalRoot = fs::temp_directory_path() /
@@ -128,8 +154,26 @@ int main()
             root / fs::u8path(imported.assetProjectRelativePath)),
         "creator texture import did not create the governed .rasset");
 
-    PreparedMaterialTextureAsset prepared;
+    CreatorAssetWorkflowService catalogueWorkflow;
+    AssetCatalogue catalogue;
     std::string error;
+    Require(catalogueWorkflow.BuildCatalogue(
+            root.generic_u8string(), ProjectId, catalogue, error),
+        "creator catalogue failed after texture import: " + error);
+    Require(creator.EnrichTextureCatalogue(
+            root.generic_u8string(), ProjectId, catalogue, error),
+        "texture catalogue metadata enrichment failed: " + error);
+    AssetCatalogueQuery pngQuery;
+    pngQuery.sourceFormat = "png";
+    const auto pngMatches = QueryAssetCatalogue(catalogue, pngQuery);
+    Require(std::any_of(pngMatches.begin(), pngMatches.end(),
+            [&imported](const AssetCatalogueEntry& entry)
+            {
+                return entry.assetId == imported.assetId;
+            }),
+        "Studio PNG format filter cannot find the governed texture product");
+
+    PreparedMaterialTextureAsset prepared;
     Require(PrepareMaterialTextureAsset(
             root.generic_u8string(), ProjectId, imported.assetId,
             prepared, error),
@@ -153,13 +197,12 @@ int main()
     CommandService commands;
     auto command = std::make_unique<SetMaterialBaseColorTextureAssetCommand>(
         scene, materialEntity, prepared, FakeLoader);
-    auto* commandView = command.get();
     Require(commands.Execute(std::move(command)),
-        "stable texture assignment command failed: " + commandView->Error());
+        "stable texture assignment command failed");
     Require(baseColor.name.empty() && baseColor.resource.IsValid() &&
             baseColor.uvset == 2,
         "base-colour assignment did not use in-memory governed payload or preserve UV set");
-    const auto* metadata = scene.metadatas.GetComponent(materialEntity);
+    auto* metadata = scene.metadatas.GetComponent(materialEntity);
     Require(metadata != nullptr &&
             metadata->int_values.get(
                 MaterialTextureAssetBindingVersionMetadataKey) ==
@@ -170,10 +213,18 @@ int main()
     Require(commands.IsDirty() && commands.UndoCount() == 1,
         "texture assignment did not enter normal creator command history");
 
+    metadata->string_values.set("audit.unrelated", "preserve-me");
     Require(commands.Undo(), "texture assignment Undo failed");
+    metadata = scene.metadatas.GetComponent(materialEntity);
     Require(baseColor.name == "authored/before.png" && baseColor.uvset == 2 &&
-            scene.metadatas.GetComponent(materialEntity) == nullptr,
-        "texture assignment Undo did not restore exact prior material/metadata state");
+            metadata != nullptr &&
+            metadata->string_values.has("audit.unrelated") &&
+            metadata->string_values.get("audit.unrelated") == "preserve-me" &&
+            !metadata->string_values.has(
+                MaterialBaseColorTextureAssetIdMetadataKey) &&
+            !metadata->int_values.has(
+                MaterialTextureAssetBindingVersionMetadataKey),
+        "texture assignment Undo did not preserve unrelated metadata");
     Require(commands.Redo(), "texture assignment Redo failed");
     Require(baseColor.name.empty() && baseColor.resource.IsValid(),
         "texture assignment Redo did not restore governed texture state");
@@ -235,6 +286,33 @@ int main()
             secondRestore.restored == 0,
         "material texture restore is not idempotent once the resource is live");
 
+    wi::scene::Scene partial;
+    const wi::ecs::Entity badMaterialEntity = wi::ecs::CreateEntity();
+    partial.materials.Create(badMaterialEntity);
+    auto& badMetadata = partial.metadatas.Create(badMaterialEntity);
+    badMetadata.int_values.set(
+        MaterialTextureAssetBindingVersionMetadataKey,
+        MaterialTextureAssetBindingVersion);
+    badMetadata.string_values.set(
+        MaterialBaseColorTextureAssetIdMetadataKey,
+        "83333333-3333-4333-8333-333333333333");
+    const wi::ecs::Entity goodMaterialEntity = wi::ecs::CreateEntity();
+    partial.materials.Create(goodMaterialEntity);
+    auto& goodMetadata = partial.metadatas.Create(goodMaterialEntity);
+    goodMetadata.int_values.set(
+        MaterialTextureAssetBindingVersionMetadataKey,
+        MaterialTextureAssetBindingVersion);
+    goodMetadata.string_values.set(
+        MaterialBaseColorTextureAssetIdMetadataKey,
+        imported.assetId);
+    const auto partialRestore = RestoreMaterialTextureBindings(
+        partial, root.generic_u8string(), ProjectId, FakeLoader);
+    Require(!partialRestore.succeeded && partialRestore.discovered == 2 &&
+            partialRestore.restored == 1 && !partialRestore.error.empty() &&
+            partial.materials.GetComponent(goodMaterialEntity)->textures[
+                wi::scene::MaterialComponent::BASECOLORMAP].resource.IsValid(),
+        "one corrupt texture binding prevented a later valid binding from restoring");
+
     fs::remove_all(root, ec);
     fs::remove_all(externalRoot, ec);
     if (failures != 0)
@@ -243,6 +321,6 @@ int main()
                   << failures << " checks failed\n";
         return 1;
     }
-    std::cout << "LP08 GATE 3 MATERIAL TEXTURE PASS // stable_id save_open undo_redo\n";
+    std::cout << "LP08 GATE 3 MATERIAL TEXTURE PASS // stable_id save_open undo_redo audit_regressions\n";
     return 0;
 }
