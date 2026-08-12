@@ -3,20 +3,17 @@
 #include <WickedEngine.h>
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <set>
 #include <sstream>
-#include <system_error>
 
 namespace
 {
     namespace fs = std::filesystem;
     using renegade::bridge::ResourceClass;
-    using renegade::bridge::ResourceFormatCapability;
     using renegade::bridge::ResourceSourceFormat;
 
     std::string Upper(std::string value)
@@ -389,9 +386,9 @@ namespace renegade::bridge
                 result.error = "Could not open resource source for inspection.";
                 return result;
             }
-            std::vector<std::uint8_t> bytes(
+            const std::vector<std::uint8_t> bytes{
                 std::istreambuf_iterator<char>(stream),
-                std::istreambuf_iterator<char>());
+                std::istreambuf_iterator<char>()};
             result.byteCount = bytes.size();
             if (bytes.empty())
             {
