@@ -44,7 +44,8 @@ namespace
 
     void WriteText(const fs::path& path, const std::string& text)
     {
-        WriteBytes(path, {text.begin(), text.end()});
+        WriteBytes(path,
+            std::vector<std::uint8_t>(text.begin(), text.end()));
     }
 
     std::vector<std::uint8_t> ReadBytes(const fs::path& path)
@@ -297,22 +298,25 @@ int main()
     Require(currentEntry != nullptr && currentEntry->state == AssetCatalogueState::Current,
         "PNG did not return CURRENT after successful reimport");
 
-    // A malformed candidate must fail before commit and preserve the exact
-    // accepted product/provenance/metadata bytes.
+    // A malformed candidate must fail before commit. LC01 is allowed to record
+    // that the source changed; reimport itself must not mutate the refreshed
+    // registry, accepted product, provenance snapshot or resource metadata.
     const auto lastGoodProduct = ReadBytes(pngProductPath);
-    const std::string lastGoodRegistry = ReadText(root / AssetRegistryDocumentName);
     const std::string lastGoodMetadata =
         ReadText(root / ResourceAssetMetadataDocumentName);
     WriteBytes(root / fs::u8path(png.sourcePath), {1,2,3,4});
     Require(RefreshCatalogue(root, catalogue, error),
         "catalogue refresh before malformed PNG proof failed: " + error);
+    const std::string staleRegistryBeforeMalformedReplay =
+        ReadText(root / AssetRegistryDocumentName);
     const auto malformed = Reimport(root, importedPng.assetId);
     Require(!malformed.succeeded,
         "malformed PNG candidate unexpectedly replaced last-good product");
     Require(ReadBytes(pngProductPath) == lastGoodProduct &&
-            ReadText(root / AssetRegistryDocumentName) == lastGoodRegistry &&
+            ReadText(root / AssetRegistryDocumentName) ==
+                staleRegistryBeforeMalformedReplay &&
             ReadText(root / ResourceAssetMetadataDocumentName) == lastGoodMetadata,
-        "malformed reimport changed last-good governed state");
+        "malformed reimport changed refreshed registry or last-good governed state");
 
     // Restore the accepted source, then prove a fault after physical product
     // replacement rolls every document back byte-for-byte.
