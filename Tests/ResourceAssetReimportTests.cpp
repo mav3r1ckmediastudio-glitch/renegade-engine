@@ -9,6 +9,7 @@
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -254,7 +255,6 @@ int main()
     const auto firstProductBytes = ReadBytes(pngProductPath);
     WriteBytes(root / fs::u8path(png.sourcePath), png.second);
 
-    // The service deliberately does not absorb an edit that LC01 has not seen.
     const auto unrefreshedReplay = Reimport(root, importedPng.assetId);
     Require(!unrefreshedReplay.succeeded &&
             unrefreshedReplay.error.find("refresh LC01 state before reimport") !=
@@ -318,8 +318,6 @@ int main()
     Require(currentEntry != nullptr && currentEntry->state == AssetCatalogueState::Current,
         "PNG did not return CURRENT after successful reimport");
 
-    // Malformed candidate: LC01 may record the source edit, but reimport must
-    // leave product/provenance/metadata at their last-good accepted state.
     const auto lastGoodProduct = ReadBytes(pngProductPath);
     const std::string lastGoodMetadata =
         ReadText(root / ResourceAssetMetadataDocumentName);
@@ -337,7 +335,6 @@ int main()
             ReadText(root / ResourceAssetMetadataDocumentName) == lastGoodMetadata,
         "malformed reimport changed refreshed registry or last-good governed state");
 
-    // Fault after physical product replacement must restore all last-good docs.
     WriteBytes(root / fs::u8path(png.sourcePath), png.second);
     Require(RefreshCatalogue(root, catalogue, error),
         "catalogue refresh after restoring PNG failed: " + error);
@@ -375,7 +372,6 @@ int main()
             ReadText(root / ResourceAssetMetadataDocumentName) == rollbackMetadataBefore,
         "fault-injected reimport did not restore exact last-good documents");
 
-    // Return to the accepted snapshot before move/missing recovery.
     WriteBytes(root / fs::u8path(png.sourcePath), png.second);
     Require(RefreshCatalogue(root, catalogue, error),
         "catalogue refresh before move recovery failed: " + error);
@@ -430,9 +426,6 @@ int main()
                 "SourceAssets/Textures/proof_recovered.png",
         "LC01 did not recover the original stable source ID at its new path");
 
-    // Mainstream Gate-4 recovery case: delete only the governed product. LC01
-    // owns its tombstone and provenance, so explicit reimport recreates it at
-    // the last-known path with the same stable product identity.
     fs::remove(movedProduct, ec);
     Require(RefreshCatalogue(root, catalogue, error),
         "catalogue refresh after missing product failed: " + error);
@@ -453,6 +446,42 @@ int main()
                 "Content/Textures/proof_moved.rasset" &&
             productTombstone->contentHash == movedReplay.productHash,
         "missing product did not retain the accepted LC01 tombstone/hash");
+
+    const std::string missingRegistryBeforeRecovery =
+        ReadText(root / AssetRegistryDocumentName);
+    const std::string missingMetadataBeforeRecovery =
+        ReadText(root / ResourceAssetMetadataDocumentName);
+    ResourceAssetReimportOptions missingFault;
+    missingFault.transactionId = "lp08-gate4-missing-product-rollback";
+    missingFault.operationHook = [](
+        const ProjectDocumentTransactionStage stage,
+        const std::size_t documentIndex,
+        const std::string&,
+        std::string& hookError)
+    {
+        if (stage == ProjectDocumentTransactionStage::AfterReplace &&
+            documentIndex == 0)
+        {
+            hookError = "intentional Gate 4 missing-product rollback proof";
+            return ProjectDocumentTransactionHookAction::Fail;
+        }
+        return ProjectDocumentTransactionHookAction::Continue;
+    };
+    const auto failedRecovery = Reimport(
+        root, importedPng.assetId, std::move(missingFault));
+    Require(!failedRecovery.succeeded && failedRecovery.transaction.rolledBack,
+        "fault-injected missing-product recreation did not report rollback");
+    Require(!fs::exists(movedProduct) &&
+            ReadText(root / AssetRegistryDocumentName) ==
+                missingRegistryBeforeRecovery &&
+            ReadText(root / ResourceAssetMetadataDocumentName) ==
+                missingMetadataBeforeRecovery,
+        "failed missing-product recreation did not restore tombstone-era state");
+    Require(ReadAssetRegistry(
+            root.generic_u8string(), ProjectId, recoveredRegistry, error) &&
+            FindMissing(recoveredRegistry, importedPng.assetId) != nullptr &&
+            FindRecord(recoveredRegistry, importedPng.assetId) == nullptr,
+        "failed missing-product recreation did not preserve LC01 tombstone identity");
 
     const auto recoveredProductReplay = Reimport(root, importedPng.assetId);
     Require(recoveredProductReplay.succeeded &&
@@ -482,8 +511,6 @@ int main()
             FindMissing(recoveredRegistry, importedPng.assetId) == nullptr,
         "product regeneration did not restore active stable identity/remove tombstone");
 
-    // Common non-model classes use the same stable-ID transaction. Include both
-    // accepted audio formats and both accepted video formats, not just one class.
     std::vector<Fixture> generic = {
         {ResourceClass::Audio, ResourceSourceFormat::Wav,
          "SourceAssets/Audio/proof.wav", "Content/Audio/proof.rasset",
@@ -573,6 +600,6 @@ int main()
                   << failures << " checks failed\n";
         return 1;
     }
-    std::cout << "LP08 GATE 4 RESOURCE REIMPORT PASS // stale stable_id last_good missing_product_recovery moved_missing texture_refresh multi_resource\n";
+    std::cout << "LP08 GATE 4 RESOURCE REIMPORT PASS // stale stable_id last_good missing_product_recovery recovery_rollback moved_missing texture_refresh multi_resource\n";
     return 0;
 }
