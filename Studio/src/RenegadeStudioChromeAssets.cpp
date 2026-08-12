@@ -1,6 +1,7 @@
 #include "RenegadeStudioChrome.h"
 
 #include "renegade/bridge/ImportService.h"
+#include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/StudioSession.h"
 
 #include <algorithm>
@@ -673,10 +674,12 @@ namespace renegade::studio
         const wi::scene::Scene* preparedScene = prepared.PeekScene();
         const float scale = bridge::ImportService::ResolveScaleFactor(
             bridge::ModelScaleMode::Automatic, *preparedScene);
+        const bridge::StableId assetId = prepared.Result().assetId;
         const XMFLOAT3 position(
             static_cast<float>(creatorPlacementSerial_) * 2.0f, 0.0f, 0.0f);
-        auto command = std::make_unique<bridge::PlaceImportedModelCommand>(
-            session->Scenes().GetScene(), prepared.ReleaseScene(), position, scale);
+        auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
+            session->Scenes().GetScene(), prepared.ReleaseScene(), assetId,
+            position, scale);
         auto* raw = command.get();
         if (!session->Commands().Execute(std::move(command)))
         {
@@ -691,7 +694,7 @@ namespace renegade::studio
         RefreshCreatorHierarchyRows();
         creatorAssetRefreshPending_ = true;
         SetStatusText("PLACE ASSET // " + label +
-            " // RASSET PAYLOAD // NO SOURCE RECONVERSION");
+            " // STABLE RASSET INSTANCE // NO SOURCE RECONVERSION");
     }
 
     void CreatorAssetStudioChrome::PlaceSelectedCreatorAsset()

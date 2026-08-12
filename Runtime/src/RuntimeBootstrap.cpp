@@ -293,6 +293,16 @@ namespace renegade::runtime
                     scenes.LastError());
         }
 
+        std::string refreshError;
+        if (!RefreshRuntimeReusableAssets(scenes, result, refreshError))
+        {
+            return Fail(
+                std::move(result),
+                RuntimeBootstrapCode::SceneLoadFailed,
+                "Could not refresh packaged reusable assets in startup scene: " +
+                    refreshError);
+        }
+
         result.entityCount = scenes.EntityCount();
         result.succeeded = true;
         result.code = RuntimeBootstrapCode::Success;
@@ -407,12 +417,24 @@ namespace renegade::runtime
                 << "last_action_code=" << result.lastActionCode << '\n'
                 << "last_action_message=" << result.lastActionMessage << '\n'
                 << "last_action_sequence=" << result.lastActionSequence << '\n'
-                << "entity_count=" << result.entityCount << '\n';
+                << "entity_count=" << result.entityCount << '\n'
+                << "reusable_asset_instances_discovered="
+                << result.reusableAssetInstancesDiscovered << '\n'
+                << "reusable_asset_instances_refreshed="
+                << result.reusableAssetInstancesRefreshed << '\n'
+                << "reusable_asset_refresh_trace_count="
+                << result.reusableAssetRefreshTrace.size() << '\n';
 
             for (std::size_t index = 0; index < result.flowTrace.size(); ++index)
             {
                 stream << "flow_trace_" << index << '='
                        << result.flowTrace[index] << '\n';
+            }
+            for (std::size_t index = 0;
+                index < result.reusableAssetRefreshTrace.size(); ++index)
+            {
+                stream << "reusable_asset_refresh_" << index << '='
+                       << result.reusableAssetRefreshTrace[index] << '\n';
             }
 
             if (!stream)

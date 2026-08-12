@@ -74,6 +74,14 @@ namespace renegade::runtime
         std::string windowsPrerequisitePolicy;
         std::string smokeStatus;
         std::string smokeQuitReason;
+
+        // LP07 Gate 6 packaged-runtime evidence. The scene stores durable
+        // reusable asset IDs on authored wrapper entities; a package-relative
+        // launch resolves those IDs through GameData/content-manifest.json and
+        // replaces only their child payloads from the packaged current .rasset.
+        std::size_t reusableAssetInstancesDiscovered = 0;
+        std::size_t reusableAssetInstancesRefreshed = 0;
+        std::vector<std::string> reusableAssetRefreshTrace;
     };
 
     // Parses the Renegade-owned launch contract from already tokenized
@@ -88,6 +96,14 @@ namespace renegade::runtime
     // project root.
     [[nodiscard]] RuntimeBootstrapResult ResolveRuntimeProject(
         RuntimeBootstrapResult result);
+
+    // Gate 6 post-load package refresh. Explicit --project/Test Level launches
+    // are unchanged; package-relative launches resolve and refresh every saved
+    // reusable asset instance from the already integrity-validated package.
+    [[nodiscard]] bool RefreshRuntimeReusableAssets(
+        bridge::SceneService& scenes,
+        RuntimeBootstrapResult& result,
+        std::string& error);
 
     // Loads the already resolved WISCENE through the shared SceneService and
     // converts its diagnostic into the same structured startup result.

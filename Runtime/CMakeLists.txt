@@ -5,6 +5,7 @@ add_library(RenegadeRuntimeBootstrap STATIC
     src/RuntimeBootstrap.h
     src/RuntimeFlow.cpp
     src/RuntimeFlow.h
+    src/RuntimeReusableAssets.cpp
     src/RuntimeScreen.cpp
     src/RuntimeScreen.h
 )

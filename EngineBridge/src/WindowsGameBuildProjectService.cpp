@@ -1,7 +1,9 @@
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
 
 #include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/ReusableAssetDependencyService.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <sstream>
 #include <utility>
@@ -63,6 +65,179 @@ namespace renegade::bridge
             }
         };
 
+        const AssetRecord* FindAssetRecord(
+            const AssetRegistry& registry,
+            const StableId& assetId)
+        {
+            const auto found = std::find_if(
+                registry.records.begin(), registry.records.end(),
+                [&assetId](const AssetRecord& record)
+                {
+                    return record.assetId == assetId;
+                });
+            return found == registry.records.end() ? nullptr : &*found;
+        }
+
+        const MissingAssetRecord* FindMissingAssetRecord(
+            const AssetRegistry& registry,
+            const StableId& assetId)
+        {
+            const auto found = std::find_if(
+                registry.missingAssets.begin(), registry.missingAssets.end(),
+                [&assetId](const MissingAssetRecord& record)
+                {
+                    return record.assetId == assetId;
+                });
+            return found == registry.missingAssets.end() ? nullptr : &*found;
+        }
+
+        bool GraphContainsPath(
+            const DependencyGraph& graph,
+            const std::string& projectRelativePath)
+        {
+            return std::any_of(
+                graph.nodes.begin(), graph.nodes.end(),
+                [&projectRelativePath](const DependencyNode& node)
+                {
+                    return node.projectRelativePath == projectRelativePath;
+                });
+        }
+
+        // An imported source is provenance authority, not Runtime content. A
+        // normal LP05 closure therefore (correctly) does not reach the retained
+        // SourceAssets FBX/GLTF. LC01 freshness still needs the source's current
+        // hash, otherwise RefreshAssetRegistry would tombstone it and every
+        // reachable .rasset would look source-unavailable to BuildService.
+        //
+        // Add only the source records for imported products that the already-
+        // discovered Runtime graph actually reaches. Do it after transitive
+        // discovery has finished: the editor-only source node is hashed and
+        // retained by LC01, but no source-side glTF buffer/image references can
+        // become Runtime package dependencies. BuildService excludes the node
+        // itself because its requirement remains EditorOnly.
+        bool AddImportedSourceFreshnessRoots(
+            const ProjectMetadata& project,
+            DependencyCollector& collector,
+            std::string& error)
+        {
+            std::string registryPath;
+            if (!ResolveAssetRegistryDocumentPath(
+                    project.rootPath, registryPath, error))
+            {
+                error =
+                    "Build Windows Game could not resolve LC01 while preparing imported-source freshness: " +
+                    error;
+                return false;
+            }
+
+            std::error_code ec;
+            const fs::path path = fs::u8path(registryPath);
+            if (!fs::exists(path, ec))
+            {
+                if (ec)
+                {
+                    error =
+                        "Build Windows Game could not inspect LC01 while preparing imported-source freshness.";
+                    return false;
+                }
+                error.clear();
+                return true;
+            }
+            if (!fs::is_regular_file(path, ec) || ec)
+            {
+                error =
+                    "Build Windows Game found an invalid LC01 path while preparing imported-source freshness.";
+                return false;
+            }
+
+            AssetRegistry registry;
+            if (!ReadAssetRegistry(
+                    project.rootPath, project.projectId, registry, error))
+            {
+                error =
+                    "Build Windows Game rejected LC01 while preparing imported-source freshness: " +
+                    error;
+                return false;
+            }
+
+            const DependencyGraph runtimeGraph = collector.Graph();
+            for (const ImportedProductRecord& imported : registry.importedProducts)
+            {
+                const AssetRecord* product =
+                    FindAssetRecord(registry, imported.productAssetId);
+                if (product == nullptr ||
+                    !GraphContainsPath(runtimeGraph, product->projectRelativePath))
+                {
+                    continue;
+                }
+
+                std::string sourcePath;
+                DependencyClass sourceClass = DependencyClass::ImportedContent;
+                DependencyRequirement sourceRequirement =
+                    DependencyRequirement::EditorOnly;
+                std::string sourceProvider;
+                std::uint32_t sourceProviderVersion = 0;
+
+                if (const AssetRecord* source =
+                        FindAssetRecord(registry, imported.sourceAssetId))
+                {
+                    sourcePath = source->projectRelativePath;
+                    sourceClass = source->dependencyClass;
+                    sourceRequirement = source->requirement;
+                    sourceProvider = source->provider;
+                    sourceProviderVersion = source->providerVersion;
+                }
+                else if (const MissingAssetRecord* source =
+                            FindMissingAssetRecord(registry, imported.sourceAssetId))
+                {
+                    sourcePath = source->lastKnownPath;
+                    sourceClass = source->dependencyClass;
+                    sourceRequirement = source->requirement;
+                    sourceProvider = source->provider;
+                    sourceProviderVersion = source->providerVersion;
+                }
+                else
+                {
+                    error =
+                        "Build Windows Game could not resolve authoritative import source stable ID: " +
+                        imported.sourceAssetId;
+                    return false;
+                }
+
+                if (sourcePath.empty() ||
+                    sourceClass != DependencyClass::ImportedContent ||
+                    sourceRequirement != DependencyRequirement::EditorOnly ||
+                    sourceProvider.empty() || sourceProviderVersion != 1)
+                {
+                    error =
+                        "Build Windows Game found unsupported imported-source tracking state for: " +
+                        imported.sourceAssetId;
+                    return false;
+                }
+                if (GraphContainsPath(collector.Graph(), sourcePath))
+                    continue;
+
+                DependencyRoot sourceRoot;
+                sourceRoot.declaredPath = sourcePath;
+                sourceRoot.dependencyClass = sourceClass;
+                sourceRoot.requirement = DependencyRequirement::EditorOnly;
+                // DependencyRoot v1 records provider version 1. Preserve the
+                // authoritative Gate 3 provider token so LC01 retains/recover
+                // identity rather than rewriting source provenance at build.
+                sourceRoot.provenance = sourceProvider;
+                if (!collector.AddRoot(sourceRoot, error))
+                {
+                    error =
+                        "Build Windows Game could not add imported-source freshness root '" +
+                        sourcePath + "': " + error;
+                    return false;
+                }
+            }
+
+            error.clear();
+            return true;
+        }
+
         std::string TraceLine(const FlowStepResult& step)
         {
             if (step.previousNodeId.empty())
@@ -107,6 +282,7 @@ namespace renegade::bridge
             WisceneDependencyProvider sceneProvider(MakeWisceneDependencyReader());
             GltfDependencyProvider gltfProvider(MakeGltfDependencyReader());
             SceneIdentityCompanionProvider sceneIdentityProvider;
+            ReusableAssetDependencyProvider reusableAssetProvider(project.projectId);
 
             DependencyCollector collector(project.rootPath);
             if (!collector.RegisterProvider(projectProvider, error) ||
@@ -114,7 +290,8 @@ namespace renegade::bridge
                 !collector.RegisterProvider(screenProvider, error) ||
                 !collector.RegisterProvider(sceneProvider, error) ||
                 !collector.RegisterProvider(gltfProvider, error) ||
-                !collector.RegisterProvider(sceneIdentityProvider, error))
+                !collector.RegisterProvider(sceneIdentityProvider, error) ||
+                !collector.RegisterProvider(reusableAssetProvider, error))
             {
                 error = "Build Windows Game could not configure dependency discovery: " +
                     error;
@@ -133,6 +310,8 @@ namespace renegade::bridge
                 error = "Build Windows Game dependency discovery failed: " + error;
                 return false;
             }
+            if (!AddImportedSourceFreshnessRoots(project, collector, error))
+                return false;
 
             graph = collector.Graph();
             error.clear();
