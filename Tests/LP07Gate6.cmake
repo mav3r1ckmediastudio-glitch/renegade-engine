@@ -194,7 +194,7 @@ if(EXISTS "${LP07_GATE6_STATIC_FBX_FIXTURE}" AND
             WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeReusableAssetPackageAcceptance>"
     )
 else()
-    message(STATUS
-        "LP07 Gate 6 package acceptance not registered: required immutable fixtures are not staged."
+    message(FATAL_ERROR
+        "LP07 Gate 6 package acceptance requires all immutable fixtures; refusing to configure without the proof inputs."
     )
 endif()
