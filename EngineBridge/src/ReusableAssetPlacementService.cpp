@@ -1,6 +1,7 @@
 #include "renegade/bridge/ReusableAssetService.h"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
