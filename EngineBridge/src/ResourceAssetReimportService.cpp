@@ -787,6 +787,8 @@ namespace renegade::bridge
         result.productHash = HashBytes(replacementBytes);
 
         AssetRegistry candidate = registry;
+        if (recoveringMissingProduct)
+            candidate.records.reserve(candidate.records.size() + 1);
         AssetRecord* candidateSource =
             FindRecord(candidate, acceptedProvenance.sourceAssetId);
         ImportedProductRecord* candidateProvenance =
