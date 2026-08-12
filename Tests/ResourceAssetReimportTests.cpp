@@ -44,22 +44,21 @@ namespace
 
     void WriteText(const fs::path& path, const std::string& text)
     {
-        WriteBytes(path,
-            std::vector<std::uint8_t>(text.begin(), text.end()));
+        WriteBytes(path, std::vector<std::uint8_t>(text.begin(), text.end()));
     }
 
     std::vector<std::uint8_t> ReadBytes(const fs::path& path)
     {
         std::ifstream stream(path, std::ios::binary);
-        return {
+        return std::vector<std::uint8_t>(
             std::istreambuf_iterator<char>(stream),
-            std::istreambuf_iterator<char>()};
+            std::istreambuf_iterator<char>());
     }
 
     std::string ReadText(const fs::path& path)
     {
         const auto bytes = ReadBytes(path);
-        return {bytes.begin(), bytes.end()};
+        return std::string(bytes.begin(), bytes.end());
     }
 
     bool WriteEmptyRegistry(const fs::path& root)
@@ -140,6 +139,17 @@ namespace
             [&assetId](const AssetRecord& record)
             { return record.assetId == assetId; });
         return found == registry.records.end() ? nullptr : &*found;
+    }
+
+    const MissingAssetRecord* FindMissing(
+        const AssetRegistry& registry,
+        const StableId& assetId)
+    {
+        const auto found = std::find_if(
+            registry.missingAssets.begin(), registry.missingAssets.end(),
+            [&assetId](const MissingAssetRecord& record)
+            { return record.assetId == assetId; });
+        return found == registry.missingAssets.end() ? nullptr : &*found;
     }
 
     const ImportedProductRecord* FindProvenance(
@@ -230,7 +240,8 @@ int main()
     scene.materials.Create(materialEntity);
     std::vector<std::uint8_t> initialLoaded;
     MaterialTextureResourceLoader initialLoader =
-        [&initialLoaded](const PreparedMaterialTextureAsset& value, std::string& loadError)
+        [&initialLoaded](const PreparedMaterialTextureAsset& value,
+            std::string& loadError)
         {
             return FakeLoaderCapture(value, loadError, initialLoaded);
         };
@@ -242,6 +253,14 @@ int main()
     const fs::path pngProductPath = root / fs::u8path(png.productPath);
     const auto firstProductBytes = ReadBytes(pngProductPath);
     WriteBytes(root / fs::u8path(png.sourcePath), png.second);
+
+    // The service deliberately does not absorb an edit that LC01 has not seen.
+    const auto unrefreshedReplay = Reimport(root, importedPng.assetId);
+    Require(!unrefreshedReplay.succeeded &&
+            unrefreshedReplay.error.find("refresh LC01 state before reimport") !=
+                std::string::npos &&
+            ReadBytes(pngProductPath) == firstProductBytes,
+        "direct reimport did not enforce the documented LC01 freshness precondition");
 
     AssetCatalogue catalogue;
     Require(RefreshCatalogue(root, catalogue, error),
@@ -255,7 +274,7 @@ int main()
         "stale detection overwrote the last-good PNG product");
 
     const auto reimportedPng = Reimport(root, importedPng.assetId);
-    Require(reimportedPng.succeeded,
+    Require(reimportedPng.succeeded && !reimportedPng.recoveredMissingProduct,
         "PNG explicit reimport failed: " + reimportedPng.error);
     Require(reimportedPng.assetId == importedPng.assetId &&
             reimportedPng.sourceAssetId == importedPng.sourceAssetId &&
@@ -275,7 +294,8 @@ int main()
 
     std::vector<std::uint8_t> refreshedLoaded;
     MaterialTextureResourceLoader refreshLoader =
-        [&refreshedLoaded](const PreparedMaterialTextureAsset& value, std::string& loadError)
+        [&refreshedLoaded](const PreparedMaterialTextureAsset& value,
+            std::string& loadError)
         {
             return FakeLoaderCapture(value, loadError, refreshedLoaded);
         };
@@ -298,9 +318,8 @@ int main()
     Require(currentEntry != nullptr && currentEntry->state == AssetCatalogueState::Current,
         "PNG did not return CURRENT after successful reimport");
 
-    // A malformed candidate must fail before commit. LC01 is allowed to record
-    // that the source changed; reimport itself must not mutate the refreshed
-    // registry, accepted product, provenance snapshot or resource metadata.
+    // Malformed candidate: LC01 may record the source edit, but reimport must
+    // leave product/provenance/metadata at their last-good accepted state.
     const auto lastGoodProduct = ReadBytes(pngProductPath);
     const std::string lastGoodMetadata =
         ReadText(root / ResourceAssetMetadataDocumentName);
@@ -318,13 +337,12 @@ int main()
             ReadText(root / ResourceAssetMetadataDocumentName) == lastGoodMetadata,
         "malformed reimport changed refreshed registry or last-good governed state");
 
-    // Restore the accepted source, then prove a fault after physical product
-    // replacement rolls every document back byte-for-byte.
+    // Fault after physical product replacement must restore all last-good docs.
     WriteBytes(root / fs::u8path(png.sourcePath), png.second);
     Require(RefreshCatalogue(root, catalogue, error),
         "catalogue refresh after restoring PNG failed: " + error);
     auto thirdPng = png.second;
-    thirdPng[19] = 6; // width 6, still a signature-valid Gate-1 PNG fixture.
+    thirdPng[19] = 6;
     WriteBytes(root / fs::u8path(png.sourcePath), thirdPng);
     Require(RefreshCatalogue(root, catalogue, error),
         "catalogue refresh before rollback proof failed: " + error);
@@ -357,7 +375,7 @@ int main()
             ReadText(root / ResourceAssetMetadataDocumentName) == rollbackMetadataBefore,
         "fault-injected reimport did not restore exact last-good documents");
 
-    // Return to the accepted source snapshot before moved/missing recovery.
+    // Return to the accepted snapshot before move/missing recovery.
     WriteBytes(root / fs::u8path(png.sourcePath), png.second);
     Require(RefreshCatalogue(root, catalogue, error),
         "catalogue refresh before move recovery failed: " + error);
@@ -391,8 +409,9 @@ int main()
     const auto* missingSourceEntry = FindEntry(catalogue, importedPng.assetId);
     Require(missingSourceEntry != nullptr &&
             missingSourceEntry->state == AssetCatalogueState::Missing &&
+            !missingSourceEntry->sourceAvailable &&
             !CanReimportCreatorResourceAsset(*missingSourceEntry),
-        "missing governed source did not block resource reimport in creator policy");
+        "missing governed source did not block resource reimport");
     const auto missingSourceReplay = Reimport(root, importedPng.assetId);
     Require(!missingSourceReplay.succeeded && ReadBytes(movedProduct) == movedLastGood,
         "missing source reimport changed last-good product");
@@ -411,30 +430,57 @@ int main()
                 "SourceAssets/Textures/proof_recovered.png",
         "LC01 did not recover the original stable source ID at its new path");
 
+    // Mainstream Gate-4 recovery case: delete only the governed product. LC01
+    // owns its tombstone and provenance, so explicit reimport recreates it at
+    // the last-known path with the same stable product identity.
     fs::remove(movedProduct, ec);
     Require(RefreshCatalogue(root, catalogue, error),
         "catalogue refresh after missing product failed: " + error);
     const auto* missingProductEntry = FindEntry(catalogue, importedPng.assetId);
     Require(missingProductEntry != nullptr &&
             missingProductEntry->state == AssetCatalogueState::Missing &&
-            !CanReimportCreatorResourceAsset(*missingProductEntry),
-        "missing governed product did not block resource reimport");
-    const auto missingProductReplay = Reimport(root, importedPng.assetId);
-    Require(!missingProductReplay.succeeded,
-        "missing last-good product unexpectedly reimported");
-
-    WriteBytes(root / "Content/Textures/proof_recovered.rasset", movedLastGood);
-    Require(RefreshCatalogue(root, catalogue, error),
-        "catalogue refresh after product recovery failed: " + error);
+            missingProductEntry->sourceAvailable &&
+            !missingProductEntry->productAvailable &&
+            CanReimportCreatorResourceAsset(*missingProductEntry),
+        "missing governed product with intact source was not recoverable");
     Require(ReadAssetRegistry(
             root.generic_u8string(), ProjectId, recoveredRegistry, error),
-        "could not reopen registry after product recovery: " + error);
+        "could not reopen missing-product registry: " + error);
+    const auto* productTombstone = FindMissing(
+        recoveredRegistry, importedPng.assetId);
+    Require(productTombstone != nullptr &&
+            productTombstone->lastKnownPath ==
+                "Content/Textures/proof_moved.rasset" &&
+            productTombstone->contentHash == movedReplay.productHash,
+        "missing product did not retain the accepted LC01 tombstone/hash");
+
+    const auto recoveredProductReplay = Reimport(root, importedPng.assetId);
+    Require(recoveredProductReplay.succeeded &&
+            recoveredProductReplay.recoveredMissingProduct &&
+            recoveredProductReplay.assetId == importedPng.assetId &&
+            recoveredProductReplay.sourceAssetId == importedPng.sourceAssetId &&
+            !recoveredProductReplay.statusBefore.productAvailable &&
+            recoveredProductReplay.assetProjectRelativePath ==
+                "Content/Textures/proof_moved.rasset",
+        "missing product was not regenerated through stable-ID reimport: " +
+            recoveredProductReplay.error);
+    Require(fs::is_regular_file(movedProduct),
+        "missing product reimport did not recreate the tombstone destination");
+    ResourceAssetDocument recoveredProductDocument;
+    Require(ReadResourceAssetDocument(
+            movedProduct.generic_u8string(), recoveredProductDocument, error) &&
+            recoveredProductDocument.payload == png.second,
+        "recovered product did not contain the retained source payload: " + error);
+    Require(ReadAssetRegistry(
+            root.generic_u8string(), ProjectId, recoveredRegistry, error),
+        "could not reopen registry after product regeneration: " + error);
     const auto* recoveredProductRecord =
         FindRecord(recoveredRegistry, importedPng.assetId);
     Require(recoveredProductRecord != nullptr &&
             recoveredProductRecord->projectRelativePath ==
-                "Content/Textures/proof_recovered.rasset",
-        "LC01 did not recover original stable product ID at its new path");
+                "Content/Textures/proof_moved.rasset" &&
+            FindMissing(recoveredRegistry, importedPng.assetId) == nullptr,
+        "product regeneration did not restore active stable identity/remove tombstone");
 
     // Common non-model classes use the same stable-ID transaction. Include both
     // accepted audio formats and both accepted video formats, not just one class.
@@ -527,6 +573,6 @@ int main()
                   << failures << " checks failed\n";
         return 1;
     }
-    std::cout << "LP08 GATE 4 RESOURCE REIMPORT PASS // stale stable_id last_good moved_missing texture_refresh multi_resource\n";
+    std::cout << "LP08 GATE 4 RESOURCE REIMPORT PASS // stale stable_id last_good missing_product_recovery moved_missing texture_refresh multi_resource\n";
     return 0;
 }
