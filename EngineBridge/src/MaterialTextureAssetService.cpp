@@ -296,13 +296,27 @@ namespace renegade::bridge
         if (!loader)
             loader = LoadPreparedMaterialTextureAsset;
 
+        std::size_t failureCount = 0;
+        std::string firstFailure;
+        const auto recordFailure = [&failureCount, &firstFailure](
+            const MaterialTextureBindingRecord& binding,
+            const std::string& detail)
+        {
+            ++failureCount;
+            if (firstFailure.empty())
+            {
+                firstFailure = binding.baseColorTextureAssetId + ": " + detail;
+            }
+        };
+
         for (const auto& binding : bindings)
         {
             auto* material = scene.materials.GetComponent(binding.materialEntity);
             if (material == nullptr)
             {
-                result.error = "A persisted texture binding lost its material target.";
-                return result;
+                recordFailure(binding,
+                    "persisted texture binding lost its material target");
+                continue;
             }
             auto& texture = material->textures[
                 wi::scene::MaterialComponent::BASECOLORMAP];
@@ -310,15 +324,30 @@ namespace renegade::bridge
                 continue;
 
             PreparedMaterialTextureAsset prepared;
+            std::string bindingError;
             if (!PrepareMaterialTextureAsset(
                     projectRoot, projectId, binding.baseColorTextureAssetId,
-                    prepared, result.error))
-                return result;
+                    prepared, bindingError))
+            {
+                recordFailure(binding, bindingError);
+                continue;
+            }
             if (!ApplyBinding(
                     scene, binding.materialEntity, prepared, loader,
-                    result.error))
-                return result;
+                    bindingError))
+            {
+                recordFailure(binding, bindingError);
+                continue;
+            }
             ++result.restored;
+        }
+
+        if (failureCount != 0)
+        {
+            result.error = std::to_string(failureCount) +
+                " governed material texture binding(s) could not be restored. First failure: " +
+                firstFailure;
+            return result;
         }
         result.succeeded = true;
         result.error.clear();
@@ -420,7 +449,20 @@ namespace renegade::bridge
 
         if (!hadMetadata_)
         {
-            scene_->metadatas.Remove(materialEntity_);
+            auto* metadata = scene_->metadatas.GetComponent(materialEntity_);
+            if (metadata == nullptr)
+                return;
+            metadata->int_values.erase(
+                MaterialTextureAssetBindingVersionMetadataKey);
+            metadata->string_values.erase(
+                MaterialBaseColorTextureAssetIdMetadataKey);
+            if (metadata->bool_values.names.empty() &&
+                metadata->int_values.names.empty() &&
+                metadata->float_values.names.empty() &&
+                metadata->string_values.names.empty())
+            {
+                scene_->metadatas.Remove(materialEntity_);
+            }
             return;
         }
         auto* metadata = scene_->metadatas.GetComponent(materialEntity_);
