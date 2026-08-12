@@ -162,15 +162,53 @@ namespace renegade::bridge
         std::string error;
     };
 
-    // UI-independent first-import transaction for the non-model resource
-    // classes proven in LP08 Gate 1. The retained source remains editor-only;
-    // the governed .rasset product, LC01 provenance and derived catalogue
-    // metadata are committed atomically. Reimport is deliberately Gate 4.
+    // Gate 4 is stable-ID driven. Callers identify the governed product only;
+    // LC01 provenance and the accepted .rasset manifest resolve the retained
+    // source, product path, class, format, importer and version-1 recipe.
+    struct ResourceAssetReimportRequest
+    {
+        std::string projectRoot;
+        StableId projectId;
+        StableId assetId;
+    };
+
+    struct ResourceAssetReimportOptions
+    {
+        std::string transactionId;
+        ProjectDocumentTransactionHook operationHook;
+    };
+
+    struct ResourceAssetReimportResult
+    {
+        bool succeeded = false;
+        StableId sourceAssetId;
+        StableId assetId;
+        ResourceClass resourceClass = ResourceClass::Unknown;
+        ResourceSourceFormat sourceFormat = ResourceSourceFormat::Unknown;
+        std::string sourceProjectRelativePath;
+        std::string assetProjectRelativePath;
+        ImportedProductStatus statusBefore;
+        std::string previousProductHash;
+        std::string sourceHash;
+        std::string productHash;
+        ResourceAssetDerivedMetadata derived;
+        ProjectDocumentTransactionResult transaction;
+        std::string error;
+    };
+
+    // UI-independent governed-resource lifecycle boundary. First import creates
+    // stable identity; Gate 4 reimport resolves and replays only the stored
+    // accepted recipe, retaining source/product IDs and transactionally
+    // replacing the last-good product only after candidate validation succeeds.
     class ResourceAssetService
     {
     public:
         [[nodiscard]] ResourceAssetImportResult ImportResourceAsset(
             const ResourceAssetImportRequest& request,
             ResourceAssetImportOptions options = {}) const;
+
+        [[nodiscard]] ResourceAssetReimportResult ReimportResourceAsset(
+            const ResourceAssetReimportRequest& request,
+            ResourceAssetReimportOptions options = {}) const;
     };
 }
