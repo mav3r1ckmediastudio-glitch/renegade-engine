@@ -18,6 +18,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/IdentityService.h
     include/renegade/bridge/LightService.h
     include/renegade/bridge/ImportService.h
+    include/renegade/bridge/ResourceImportService.h
     include/renegade/bridge/ModelImporterFailureAdapter.h
     include/renegade/bridge/ReusableAssetService.h
     include/renegade/bridge/ReusableAssetInstanceService.h
@@ -51,6 +52,7 @@ add_library(RenegadeEngineBridge STATIC
     src/LightService.cpp
     src/ImportService.cpp
     src/ImportServiceModel.cpp
+    src/ResourceImportService.cpp
     src/ModelImporterFailureAdapter.cpp
     src/ReusableAssetService.cpp
     src/ReusableAssetReimportService.cpp
