@@ -109,23 +109,28 @@ int main()
         const std::string& path,
         std::string& hookError)
     {
-        if (stage != ProjectDocumentTransactionStage::AfterReplace ||
-            fs::u8path(path).lexically_normal() != product.lexically_normal())
+        if (stage != ProjectDocumentTransactionStage::AfterReplace)
         {
             return ProjectDocumentTransactionHookAction::Continue;
         }
 
-        observedProductAfterReplace = fs::is_regular_file(product);
-        if (!observedProductAfterReplace)
+        std::error_code existsError;
+        if (!fs::is_regular_file(product, existsError) || existsError)
         {
-            hookError =
-                "Gate 2 rollback hook reached product AfterReplace before the product existed.";
+            return ProjectDocumentTransactionHookAction::Continue;
         }
-        else
+
+        std::error_code equivalentError;
+        const bool isProduct = fs::equivalent(
+            fs::u8path(path), product, equivalentError);
+        if (equivalentError || !isProduct)
         {
-            hookError =
-                "intentional Gate 2 failure after governed product replacement";
+            return ProjectDocumentTransactionHookAction::Continue;
         }
+
+        observedProductAfterReplace = true;
+        hookError =
+            "intentional Gate 2 failure after governed product replacement";
         return ProjectDocumentTransactionHookAction::Fail;
     };
 
