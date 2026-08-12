@@ -63,9 +63,9 @@ namespace
             return;
         }
 
-        const std::string text(
+        const std::string text{
             std::istreambuf_iterator<char>(input),
-            std::istreambuf_iterator<char>());
+            std::istreambuf_iterator<char>()};
         std::cerr
             << "LP07 GATE 6 BUILD DIAGNOSTIC // runtime_evidence_begin\n"
             << text
