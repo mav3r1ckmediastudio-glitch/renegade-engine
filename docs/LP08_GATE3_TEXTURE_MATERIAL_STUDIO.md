@@ -80,10 +80,11 @@ The existing Assets drawer is extended rather than replaced:
 - assigning an already-live identical governed texture is a visible no-op rather than a failed command;
 - texture reimport is deliberately disabled until Gate 4;
 - LP07 model reimport remains enabled for registered imported models even when their governed product is unavailable, preserving reimport as the recovery action;
-- existing creator tags and catalogue search continue to work by stable asset identity; and
-- Gate-2 resource metadata is overlaid by stable product ID so texture source-format filters are truthful for the supported image formats.
+- existing creator tags and catalogue search continue to work by stable asset identity;
+- Gate-2 resource metadata is overlaid by stable product ID so texture source-format filters are truthful for the supported image formats; and
+- texture metadata enrichment is fail-open: unreadable or missing resource metadata never withholds the rest of the Asset Browser. Affected governed texture entries remain visible, are marked `Invalid`, lose their untrusted format label, and a warning is returned to the caller.
 
-LP07 `sourceFormat` remains reliable for accepted model records: import retains the original source filename under `SourceAssets/Models/...`, and catalogue projection derives the product format from that active or tombstoned source path. Gate 3 therefore does not need to infer model type from the `.rasset` extension.
+LP07 `sourceFormat` remains reliable for accepted model records without a persisted `sourceFormat` field: import retains the original source filename under `SourceAssets/Models/...`, and catalogue projection reconstructs the product format from that active source path or the missing-source tombstone's `lastKnownPath`. Gate 3 therefore does not infer model type from the `.rasset` extension and does not have a legacy-empty persisted format field to migrate.
 
 ## Acceptance proof
 
@@ -94,6 +95,7 @@ LP07 `sourceFormat` remains reliable for accepted model records: import retains 
 - LP07 action policy: an available model is placeable/reimportable, a missing model product is not placeable but remains reimportable, and textures never enter the model reimport path;
 - external PNG staging retains exact source bytes and creates a governed `.rasset` with stable source/product IDs;
 - texture catalogue metadata enrichment makes the PNG source-format filter find the governed product;
+- removing the governed texture's resource-metadata record does not blank or shrink the catalogue: the texture remains visible as `Invalid`, its untrusted format is cleared, and enrichment reports a warning;
 - the material preparation seam resolves the texture by stable LC01 product identity and preserves exact payload bytes;
 - a test loader creates a non-GPU Wicked `Resource` from the payload so command semantics remain headless;
 - base-colour assignment leaves `TextureMap::name` empty and preserves the existing UV set;
@@ -123,7 +125,9 @@ The first independent audit at `3ce3a551bb5bb77eed125635e702ec6f56a87d4e` found 
 
 The same repair pass also addresses the two medium findings instead of deferring them: creator texture destination allocation is bounded, and material texture restore continues after per-binding failures. Minor findings were addressed where safe: unrelated metadata survives Undo, same-texture assignment is a creator-visible no-op, the committed/unverifiable result contract is documented, and retained-source destination races report distinctly.
 
-The first audit also asked whether LP07 `sourceFormat` is reliable. The answer is yes for accepted LP07 imports because the retained source path preserves the original FBX/GLTF/GLB extension and catalogue projection reads that path even when represented by a missing-asset tombstone.
+The second audit identified one new medium creator-experience issue in the enrichment introduced by those repairs: one missing texture metadata record could fail the entire Asset Browser refresh. Gate 3 now makes enrichment fail-open, leaves bad textures visible as `Invalid`, and proves that the catalogue remains usable.
+
+The audits also asked whether LP07 `sourceFormat` is reliable. The answer is yes for accepted LP07 imports because the catalogue reconstructs format from the retained source record path (or its tombstoned last-known path); there is no persisted legacy `sourceFormat` field whose empty value could silently disable model actions.
 
 ## Gate 2 audit items carried forward
 
