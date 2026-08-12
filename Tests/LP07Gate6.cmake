@@ -139,6 +139,9 @@ set(LP07_GATE6_ANIMATED_FBX_FIXTURE
 set(LP07_GATE6_LP03_FIXTURE
     "${CMAKE_SOURCE_DIR}/Runtime/fixtures/LP03/Valid Screen"
 )
+set(LP07_GATE6_DERIVED_LP03_FIXTURE
+    "${CMAKE_BINARY_DIR}/lp07-gate6-story-flow-fixture"
+)
 set(LP07_GATE6_PACKAGE_DOCS
     "${CMAKE_SOURCE_DIR}/Tests/fixtures/lp06_gate2"
 )
@@ -147,6 +150,28 @@ if(EXISTS "${LP07_GATE6_STATIC_FBX_FIXTURE}" AND
    EXISTS "${LP07_GATE6_ANIMATED_FBX_FIXTURE}" AND
    EXISTS "${LP07_GATE6_LP03_FIXTURE}" AND
    EXISTS "${LP07_GATE6_PACKAGE_DOCS}")
+    # The immutable LP03 fixture intentionally carries scene identity sidecars
+    # but not the WISCENE payloads. Gate 6 creates LevelOne itself with the
+    # reusable asset. Derive a disposable fixture and supply a separately
+    # proven self-contained WISCENE as LevelTwo so the Story Flow is complete
+    # before the stale-product freshness assertion is exercised.
+    add_test(
+        NAME RenegadeReusableAssetPackageFixture
+        COMMAND ${CMAKE_COMMAND}
+            "-DINPUT_FIXTURE=${LP07_GATE6_LP03_FIXTURE}"
+            "-DLEVEL_TWO_SCENE=${RENEGADE_GATE4_SCENE}"
+            "-DOUTPUT_FIXTURE=${LP07_GATE6_DERIVED_LP03_FIXTURE}"
+            -P "${CMAKE_CURRENT_LIST_DIR}/PrepareLP07Gate6Fixture.cmake"
+        CONFIGURATIONS Release
+    )
+    set_tests_properties(
+        RenegadeReusableAssetPackageFixture
+        PROPERTIES
+            TIMEOUT 60
+            FIXTURES_REQUIRED RenegadeGate4Scene
+            FIXTURES_SETUP RenegadeLP07Gate6StoryFlow
+    )
+
     add_test(
         NAME RenegadeReusableAssetPackageAcceptance
         COMMAND RenegadeReusableAssetPackageAcceptance
@@ -154,7 +179,7 @@ if(EXISTS "${LP07_GATE6_STATIC_FBX_FIXTURE}" AND
             "${LP07_GATE6_ANIMATED_FBX_FIXTURE}"
             "$<TARGET_FILE:RenegadeRuntime>"
             "$<TARGET_FILE_DIR:RenegadeRuntime>/dxcompiler.dll"
-            "${LP07_GATE6_LP03_FIXTURE}"
+            "${LP07_GATE6_DERIVED_LP03_FIXTURE}"
             "${LP07_GATE6_PACKAGE_DOCS}"
             "${LP07_GATE6_RENEGADE_REVISION}"
             "${LP07_GATE6_WICKED_REVISION}"
@@ -165,6 +190,7 @@ if(EXISTS "${LP07_GATE6_STATIC_FBX_FIXTURE}" AND
         PROPERTIES
             TIMEOUT 900
             RUN_SERIAL TRUE
+            FIXTURES_REQUIRED RenegadeLP07Gate6StoryFlow
             WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeReusableAssetPackageAcceptance>"
     )
 else()
