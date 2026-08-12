@@ -30,6 +30,16 @@ namespace renegade::bridge
             lower(static_cast<unsigned char>(value[3])) == 'f';
     }
 
+    inline bool IsCreatorGovernedResourceClass(
+        const DependencyClass dependencyClass) noexcept
+    {
+        return dependencyClass == DependencyClass::Texture ||
+            dependencyClass == DependencyClass::Audio ||
+            dependencyClass == DependencyClass::Script ||
+            dependencyClass == DependencyClass::Video ||
+            dependencyClass == DependencyClass::Font;
+    }
+
     // Placement requires a live imported model product. Reimport deliberately
     // does not: a missing governed product is one of the states reimport must
     // be able to recover from.
@@ -47,5 +57,24 @@ namespace renegade::bridge
         return entry.registered && IsValidStableId(entry.assetId) &&
             entry.importedProduct &&
             IsCreatorModelSourceFormat(entry.sourceFormat);
+    }
+
+    // Gate 4 resource reimport requires both the authoritative source and the
+    // last-good governed product to remain active. Missing/Invalid states need
+    // LC01 recovery or repair first; Current/Stale/Moved are safe explicit
+    // reimport inputs because stable identity and the last-good bytes remain.
+    inline bool CanReimportCreatorResourceAsset(
+        const AssetCatalogueEntry& entry) noexcept
+    {
+        const bool eligibleState =
+            entry.state == AssetCatalogueState::Current ||
+            entry.state == AssetCatalogueState::Stale ||
+            entry.state == AssetCatalogueState::Moved;
+        return entry.registered && IsValidStableId(entry.assetId) &&
+            entry.importedProduct && entry.sourceAvailable &&
+            entry.productAvailable &&
+            entry.importer == "wicked.resourcemanager" &&
+            IsCreatorGovernedResourceClass(entry.dependencyClass) &&
+            eligibleState;
     }
 }
