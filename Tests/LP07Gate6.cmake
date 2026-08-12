@@ -50,7 +50,7 @@ set_target_properties(
 )
 
 add_executable(RenegadeReusableAssetPackageAcceptance
-    ${CMAKE_CURRENT_LIST_DIR}/ReusableAssetPackageAcceptance.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ReusableAssetPackageAcceptanceDiagnostic.cpp
 )
 
 target_link_libraries(
