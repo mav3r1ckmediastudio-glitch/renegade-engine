@@ -228,6 +228,10 @@ namespace renegade::studio
         void PlaceSelectedCreatorAsset();
         void ReimportSelectedCreatorAsset();
         void SaveSelectedCreatorTags();
+        void PlacePreparedCreatorAsset(
+            bridge::PreparedReusableModelPlacement prepared,
+            const std::string& label);
+        void RefreshCreatorHierarchyRows();
         [[nodiscard]] bridge::AssetCatalogueQuery CreatorAssetQuery() const;
         [[nodiscard]] std::vector<std::string> CreatorTagInput() const;
 
@@ -288,11 +292,21 @@ namespace renegade::studio
         bridge::StableId creatorSelectedAssetId_;
         std::string creatorSelectedAssetPath_;
         bool creatorAssetRefreshPending_ = true;
+        bool creatorAssetControlConsumed_ = false;
         std::string creatorAssetLastSearch_;
         int creatorAssetStateFilter_ = 0;
         int creatorAssetFormatFilter_ = 0;
         int creatorAssetRigFilter_ = 0;
+        std::uint32_t creatorPlacementSerial_ = 0;
+        wi::jobsystem::context creatorAssetWorkload_;
         RenegadeTextInputField creatorAssetSearch_;
         RenegadeTextInputField creatorAssetTags_;
+        RenegadeComboBox creatorAssetStateCombo_;
+        RenegadeComboBox creatorAssetFormatCombo_;
+        RenegadeComboBox creatorAssetRigCombo_;
+        RenegadeButton creatorAssetImportButton_;
+        RenegadeButton creatorAssetPlaceButton_;
+        RenegadeButton creatorAssetReimportButton_;
+        RenegadeButton creatorAssetSaveTagsButton_;
     };
 }
