@@ -11,10 +11,6 @@ namespace renegade::runtime
         RuntimeBootstrapResult& result,
         std::string& error)
     {
-        result.reusableAssetInstancesDiscovered = 0;
-        result.reusableAssetInstancesRefreshed = 0;
-        result.reusableAssetRefreshTrace.clear();
-
         // Studio Test Level and other explicit --project launches continue to
         // consume their already-authored scene exactly as before. Gate 6 only
         // changes the integrity-validated LP06 package-relative launch path.
@@ -35,11 +31,16 @@ namespace renegade::runtime
             return false;
         }
 
-        result.reusableAssetInstancesDiscovered =
+        // Story Flow can load multiple Level scenes during one Runtime session.
+        // Keep cumulative evidence so a reusable asset refreshed in an earlier
+        // Level remains visible in the final bootstrap log even when later
+        // Levels contain no reusable instances.
+        result.reusableAssetInstancesDiscovered +=
             refresh.discoveredInstanceCount;
-        result.reusableAssetInstancesRefreshed =
+        result.reusableAssetInstancesRefreshed +=
             refresh.refreshedInstanceCount;
-        result.reusableAssetRefreshTrace.reserve(refresh.records.size());
+        result.reusableAssetRefreshTrace.reserve(
+            result.reusableAssetRefreshTrace.size() + refresh.records.size());
         for (const auto& record : refresh.records)
         {
             std::ostringstream trace;
