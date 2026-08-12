@@ -154,6 +154,17 @@ namespace
         return found == registry.records.end() ? nullptr : &*found;
     }
 
+    const MissingAssetRecord* FindMissingRecord(
+        const AssetRegistry& registry,
+        const StableId& assetId)
+    {
+        const auto found = std::find_if(
+            registry.missingAssets.begin(), registry.missingAssets.end(),
+            [&assetId](const MissingAssetRecord& record)
+            { return record.assetId == assetId; });
+        return found == registry.missingAssets.end() ? nullptr : &*found;
+    }
+
     const ImportedProductRecord* FindProvenance(
         const AssetRegistry& registry,
         const StableId& assetId)
@@ -212,40 +223,6 @@ namespace
         case ResourceClass::Video: return "Content/Video";
         case ResourceClass::Font: return "Content/Fonts";
         default: return {};
-        }
-    }
-
-    const char* ResourceClassToken(const ResourceClass resourceClass)
-    {
-        switch (resourceClass)
-        {
-        case ResourceClass::Texture: return "texture";
-        case ResourceClass::Audio: return "audio";
-        case ResourceClass::Script: return "script";
-        case ResourceClass::Video: return "video";
-        case ResourceClass::Font: return "font";
-        default: return "unknown";
-        }
-    }
-
-    const char* ResourceFormatToken(const ResourceSourceFormat format)
-    {
-        switch (format)
-        {
-        case ResourceSourceFormat::Jpg: return "jpg";
-        case ResourceSourceFormat::Jpeg: return "jpeg";
-        case ResourceSourceFormat::Png: return "png";
-        case ResourceSourceFormat::Bmp: return "bmp";
-        case ResourceSourceFormat::Dds: return "dds";
-        case ResourceSourceFormat::Tga: return "tga";
-        case ResourceSourceFormat::Hdr: return "hdr";
-        case ResourceSourceFormat::Wav: return "wav";
-        case ResourceSourceFormat::Ogg: return "ogg";
-        case ResourceSourceFormat::Lua: return "lua";
-        case ResourceSourceFormat::Mp4: return "mp4";
-        case ResourceSourceFormat::H264: return "h264";
-        case ResourceSourceFormat::Ttf: return "ttf";
-        default: return "unknown";
         }
     }
 
@@ -557,39 +534,72 @@ namespace renegade::bridge
             static_cast<const AssetRegistry&>(registry), acceptedProvenance.sourceAssetId);
         const AssetRecord* productRecord = FindRecord(
             static_cast<const AssetRegistry&>(registry), request.assetId);
+        const MissingAssetRecord* missingProduct = FindMissingRecord(
+            registry, request.assetId);
         if (sourceRecord == nullptr)
         {
             result.error =
                 "Resource reimport source is missing; recover its LC01 stable ID first.";
             return result;
         }
-        if (productRecord == nullptr)
+        if (productRecord == nullptr && missingProduct == nullptr)
         {
             result.error =
-                "Resource product is missing; last-good bytes cannot be replaced safely.";
+                "Resource product identity is neither active nor recoverable in LC01.";
             return result;
         }
+        const bool recoveringMissingProduct = productRecord == nullptr;
         result.sourceProjectRelativePath = sourceRecord->projectRelativePath;
-        result.assetProjectRelativePath = productRecord->projectRelativePath;
-        result.previousProductHash = productRecord->contentHash;
+        result.assetProjectRelativePath = recoveringMissingProduct
+            ? missingProduct->lastKnownPath
+            : productRecord->projectRelativePath;
+        result.previousProductHash = recoveringMissingProduct
+            ? missingProduct->contentHash
+            : productRecord->contentHash;
+
+        if (sourceRecord->dependencyClass != DependencyClass::ImportedContent ||
+            sourceRecord->requirement != DependencyRequirement::EditorOnly ||
+            sourceRecord->provider != "lp08.source_asset" ||
+            sourceRecord->providerVersion != 1)
+        {
+            result.error =
+                "Registered resource source is not the accepted LP08 retained-source relationship.";
+            return result;
+        }
+
+        const DependencyClass trackedProductClass = recoveringMissingProduct
+            ? missingProduct->dependencyClass
+            : productRecord->dependencyClass;
+        const DependencyRequirement trackedProductRequirement = recoveringMissingProduct
+            ? missingProduct->requirement
+            : productRecord->requirement;
+        const std::string& trackedProductProvider = recoveringMissingProduct
+            ? missingProduct->provider
+            : productRecord->provider;
+        const std::uint32_t trackedProductProviderVersion = recoveringMissingProduct
+            ? missingProduct->providerVersion
+            : productRecord->providerVersion;
+        if (trackedProductClass != ResourceDependencyClass(resourceClass) ||
+            trackedProductRequirement != DependencyRequirement::Required ||
+            trackedProductProvider != "lp08.rasset" ||
+            trackedProductProviderVersion != 1)
+        {
+            result.error =
+                "Registered resource product identity is not the accepted LP08 governed relationship.";
+            return result;
+        }
+        if (recoveringMissingProduct &&
+            missingProduct->contentHash != acceptedProvenance.productContentHashAtImport)
+        {
+            result.error =
+                "Missing resource tombstone does not match the accepted last-good provenance hash.";
+            return result;
+        }
 
         const fs::path sourceRelative =
             fs::u8path(sourceRecord->projectRelativePath).lexically_normal();
         const fs::path productRelative =
-            fs::u8path(productRecord->projectRelativePath).lexically_normal();
-        if (sourceRecord->dependencyClass != DependencyClass::ImportedContent ||
-            sourceRecord->requirement != DependencyRequirement::EditorOnly ||
-            sourceRecord->provider != "lp08.source_asset" ||
-            sourceRecord->providerVersion != 1 ||
-            productRecord->dependencyClass != ResourceDependencyClass(resourceClass) ||
-            productRecord->requirement != DependencyRequirement::Required ||
-            productRecord->provider != "lp08.rasset" ||
-            productRecord->providerVersion != 1)
-        {
-            result.error =
-                "Registered source/product records are not the accepted LP08 resource relationship.";
-            return result;
-        }
+            fs::u8path(result.assetProjectRelativePath).lexically_normal();
         if (!IsSafeProjectRelativePath(sourceRelative) ||
             !IsSafeProjectRelativePath(productRelative) ||
             !PathStartsWith(sourceRelative, SourcePrefix(resourceClass)) ||
@@ -625,13 +635,46 @@ namespace renegade::bridge
                 "Resource reimport source is unavailable or resolves outside SourceAssets.";
             return result;
         }
-        const fs::path productPath = fs::weakly_canonical(root / productRelative, ec);
-        if (ec || !fs::is_regular_file(productPath, ec) || ec ||
-            !IsWithin(productPath, contentRoot))
+
+        fs::path productPath;
+        if (!recoveringMissingProduct)
         {
-            result.error =
-                "Resource last-good product is unavailable or resolves outside Content.";
-            return result;
+            productPath = fs::weakly_canonical(root / productRelative, ec);
+            if (ec || !fs::is_regular_file(productPath, ec) || ec ||
+                !IsWithin(productPath, contentRoot))
+            {
+                result.error =
+                    "Resource last-good product is unavailable or resolves outside Content.";
+                return result;
+            }
+        }
+        else
+        {
+            const fs::path requestedProductPath = root / productRelative;
+            ec.clear();
+            const bool destinationExists = fs::exists(requestedProductPath, ec);
+            if (ec)
+            {
+                result.error =
+                    "Could not inspect the missing resource product destination.";
+                return result;
+            }
+            if (destinationExists)
+            {
+                result.error =
+                    "Missing resource recovery destination is occupied; refresh LC01 before reimport.";
+                return result;
+            }
+            const fs::path productParent = fs::weakly_canonical(
+                requestedProductPath.parent_path(), ec);
+            if (ec || !fs::is_directory(productParent, ec) || ec ||
+                !IsWithin(productParent, contentRoot))
+            {
+                result.error =
+                    "Missing resource recovery destination is outside project Content.";
+                return result;
+            }
+            productPath = productParent / requestedProductPath.filename();
         }
 
         if (!GetImportedProductStatus(
@@ -642,10 +685,17 @@ namespace renegade::bridge
             result.error = "Resource source is unavailable; recover it before reimport.";
             return result;
         }
-        if (!result.statusBefore.productAvailable || result.statusBefore.productChanged)
+        if (!recoveringMissingProduct &&
+            (!result.statusBefore.productAvailable || result.statusBefore.productChanged))
         {
             result.error =
                 "Resource last-good product is missing or changed outside the governed transaction.";
+            return result;
+        }
+        if (recoveringMissingProduct && result.statusBefore.productAvailable)
+        {
+            result.error =
+                "LC01 reports the recovery product as available; refresh state before reimport.";
             return result;
         }
 
@@ -676,40 +726,57 @@ namespace renegade::bridge
             return result;
         }
 
-        std::vector<std::uint8_t> existingProductBytes;
-        if (!ReadBytes(productPath, existingProductBytes, result.error))
-            return result;
-        const std::string existingProductHash = HashBytes(existingProductBytes);
-        if (existingProductHash != productRecord->contentHash ||
-            existingProductHash != acceptedProvenance.productContentHashAtImport)
+        ResourceAssetDocument replacement;
+        if (!recoveringMissingProduct)
         {
-            result.error =
-                "Resource last-good product bytes do not match LC01 provenance.";
-            return result;
-        }
+            std::vector<std::uint8_t> existingProductBytes;
+            if (!ReadBytes(productPath, existingProductBytes, result.error))
+                return result;
+            const std::string existingProductHash = HashBytes(existingProductBytes);
+            if (existingProductHash != productRecord->contentHash ||
+                existingProductHash != acceptedProvenance.productContentHashAtImport)
+            {
+                result.error =
+                    "Resource last-good product bytes do not match LC01 provenance.";
+                return result;
+            }
 
-        ResourceAssetDocument existingProduct;
-        if (!DeserializeResourceAssetDocument(
-                existingProductBytes, existingProduct, result.error))
-            return result;
-        if (existingProduct.manifest.projectId != request.projectId ||
-            existingProduct.manifest.assetId != request.assetId ||
-            existingProduct.manifest.sourceAssetId != acceptedProvenance.sourceAssetId ||
-            existingProduct.manifest.resourceClass != resourceClass ||
-            existingProduct.manifest.sourceFormat != sourceFormat ||
-            existingProduct.manifest.importer != acceptedProvenance.importer ||
-            existingProduct.manifest.importerVersion != acceptedProvenance.importerVersion ||
-            existingProduct.manifest.settingsSchema != acceptedProvenance.settingsSchema ||
-            existingProduct.manifest.settingsVersion != acceptedProvenance.settingsVersion ||
-            existingProduct.manifest.settingsJson != acceptedProvenance.settingsJson)
+            ResourceAssetDocument existingProduct;
+            if (!DeserializeResourceAssetDocument(
+                    existingProductBytes, existingProduct, result.error))
+                return result;
+            if (existingProduct.manifest.projectId != request.projectId ||
+                existingProduct.manifest.assetId != request.assetId ||
+                existingProduct.manifest.sourceAssetId != acceptedProvenance.sourceAssetId ||
+                existingProduct.manifest.resourceClass != resourceClass ||
+                existingProduct.manifest.sourceFormat != sourceFormat ||
+                existingProduct.manifest.importer != acceptedProvenance.importer ||
+                existingProduct.manifest.importerVersion != acceptedProvenance.importerVersion ||
+                existingProduct.manifest.settingsSchema != acceptedProvenance.settingsSchema ||
+                existingProduct.manifest.settingsVersion != acceptedProvenance.settingsVersion ||
+                existingProduct.manifest.settingsJson != acceptedProvenance.settingsJson)
+            {
+                result.error =
+                    "Resource last-good .rasset manifest contradicts LC01 provenance/recipe.";
+                return result;
+            }
+            replacement = std::move(existingProduct);
+        }
+        else
         {
-            result.error =
-                "Resource last-good .rasset manifest contradicts LC01 provenance/recipe.";
-            return result;
+            replacement.manifest.projectId = request.projectId;
+            replacement.manifest.assetId = request.assetId;
+            replacement.manifest.sourceAssetId = acceptedProvenance.sourceAssetId;
+            replacement.manifest.resourceClass = resourceClass;
+            replacement.manifest.sourceFormat = sourceFormat;
+            replacement.manifest.importer = acceptedProvenance.importer;
+            replacement.manifest.importerVersion = acceptedProvenance.importerVersion;
+            replacement.manifest.settingsSchema = acceptedProvenance.settingsSchema;
+            replacement.manifest.settingsVersion = acceptedProvenance.settingsVersion;
+            replacement.manifest.settingsJson = acceptedProvenance.settingsJson;
         }
 
         result.derived = DeriveMetadata(resourceClass, sourceFormat, payload);
-        ResourceAssetDocument replacement = existingProduct;
         replacement.payload = payload;
         replacement.manifest.payloadHash = result.sourceHash;
         replacement.manifest.derived = result.derived;
@@ -722,20 +789,57 @@ namespace renegade::bridge
         AssetRegistry candidate = registry;
         AssetRecord* candidateSource =
             FindRecord(candidate, acceptedProvenance.sourceAssetId);
-        AssetRecord* candidateProduct = FindRecord(candidate, request.assetId);
         ImportedProductRecord* candidateProvenance =
             FindProvenance(candidate, request.assetId);
-        if (candidateSource == nullptr || candidateProduct == nullptr ||
-            candidateProvenance == nullptr)
+        if (candidateSource == nullptr || candidateProvenance == nullptr)
         {
             result.error =
                 "Resource identity/provenance disappeared while preparing reimport.";
             return result;
         }
-        candidateProduct->contentHash = result.productHash;
+
+        if (!recoveringMissingProduct)
+        {
+            AssetRecord* candidateProduct = FindRecord(candidate, request.assetId);
+            if (candidateProduct == nullptr)
+            {
+                result.error =
+                    "Resource product identity disappeared while preparing reimport.";
+                return result;
+            }
+            candidateProduct->contentHash = result.productHash;
+        }
+        else
+        {
+            const MissingAssetRecord tombstone = *missingProduct;
+            candidate.missingAssets.erase(std::remove_if(
+                candidate.missingAssets.begin(), candidate.missingAssets.end(),
+                [&request](const MissingAssetRecord& record)
+                { return record.assetId == request.assetId; }),
+                candidate.missingAssets.end());
+
+            AssetRecord restoredProduct;
+            restoredProduct.assetId = request.assetId;
+            restoredProduct.dependencyNodeId = "lp08.rasset:" + request.assetId;
+            restoredProduct.projectRelativePath = tombstone.lastKnownPath;
+            restoredProduct.dependencyClass = tombstone.dependencyClass;
+            restoredProduct.requirement = tombstone.requirement;
+            restoredProduct.applicability = tombstone.applicability;
+            restoredProduct.provider = tombstone.provider;
+            restoredProduct.providerVersion = tombstone.providerVersion;
+            restoredProduct.contentHash = result.productHash;
+            restoredProduct.sourceAvailable = true;
+            candidate.records.push_back(std::move(restoredProduct));
+            candidate.schemaVersion = AssetRegistry::CurrentSchemaVersion;
+        }
+
         candidateProvenance->sourceContentHashAtImport = result.sourceHash;
         candidateProvenance->productContentHashAtImport = result.productHash;
+        const AssetRecord* candidateProduct = FindRecord(
+            static_cast<const AssetRegistry&>(candidate), request.assetId);
         if (candidateSource->contentHash != result.sourceHash ||
+            candidateProduct == nullptr ||
+            candidateProduct->contentHash != result.productHash ||
             !ValidateAssetRegistry(candidate, result.error))
         {
             if (result.error.empty())
@@ -767,10 +871,16 @@ namespace renegade::bridge
         const StableId expectedProjectId = request.projectId;
         const StableId expectedAssetId = request.assetId;
         const StableId expectedSourceId = acceptedProvenance.sourceAssetId;
+        const std::string expectedImporter = acceptedProvenance.importer;
+        const std::uint32_t expectedImporterVersion = acceptedProvenance.importerVersion;
+        const std::string expectedSettingsSchema = acceptedProvenance.settingsSchema;
+        const std::uint32_t expectedSettingsVersion = acceptedProvenance.settingsVersion;
         const std::string expectedRecipe = acceptedProvenance.settingsJson;
         productWrite.validator = [sourcePath, payload, replacementBytes,
             expectedProjectId, expectedAssetId, expectedSourceId,
-            resourceClass, sourceFormat, expectedRecipe](
+            resourceClass, sourceFormat, expectedImporter,
+            expectedImporterVersion, expectedSettingsSchema,
+            expectedSettingsVersion, expectedRecipe](
             const std::string& stagedPath, std::string& error)
         {
             std::vector<std::uint8_t> currentSource;
@@ -797,6 +907,10 @@ namespace renegade::bridge
                 parsed.manifest.sourceAssetId != expectedSourceId ||
                 parsed.manifest.resourceClass != resourceClass ||
                 parsed.manifest.sourceFormat != sourceFormat ||
+                parsed.manifest.importer != expectedImporter ||
+                parsed.manifest.importerVersion != expectedImporterVersion ||
+                parsed.manifest.settingsSchema != expectedSettingsSchema ||
+                parsed.manifest.settingsVersion != expectedSettingsVersion ||
                 parsed.manifest.settingsJson != expectedRecipe ||
                 parsed.payload != payload)
             {
@@ -847,14 +961,26 @@ namespace renegade::bridge
         }
         const ImportedProductRecord* reopenedProvenance =
             FindProvenance(reopenedRegistry, request.assetId);
-        const AssetRecord* reopenedRecord =
-            FindRecord(static_cast<const AssetRegistry&>(reopenedRegistry), request.assetId);
+        const AssetRecord* reopenedRecord = FindRecord(
+            static_cast<const AssetRegistry&>(reopenedRegistry), request.assetId);
+        const MissingAssetRecord* reopenedMissing =
+            FindMissingRecord(reopenedRegistry, request.assetId);
         const ResourceAssetMetadataRecord* reopenedMetadataRecord =
             FindMetadata(reopenedMetadata, request.assetId);
-        if (reopenedProduct.manifest.assetId != request.assetId ||
+        if (reopenedProduct.manifest.projectId != request.projectId ||
+            reopenedProduct.manifest.assetId != request.assetId ||
             reopenedProduct.manifest.sourceAssetId != result.sourceAssetId ||
+            reopenedProduct.manifest.resourceClass != resourceClass ||
+            reopenedProduct.manifest.sourceFormat != sourceFormat ||
+            reopenedProduct.manifest.importer != acceptedProvenance.importer ||
+            reopenedProduct.manifest.importerVersion != acceptedProvenance.importerVersion ||
+            reopenedProduct.manifest.settingsSchema != acceptedProvenance.settingsSchema ||
+            reopenedProduct.manifest.settingsVersion != acceptedProvenance.settingsVersion ||
+            reopenedProduct.manifest.settingsJson != acceptedProvenance.settingsJson ||
             reopenedProduct.payload != payload ||
-            reopenedRecord == nullptr || reopenedRecord->contentHash != result.productHash ||
+            reopenedRecord == nullptr || reopenedMissing != nullptr ||
+            reopenedRecord->projectRelativePath != result.assetProjectRelativePath ||
+            reopenedRecord->contentHash != result.productHash ||
             reopenedProvenance == nullptr ||
             reopenedProvenance->sourceAssetId != result.sourceAssetId ||
             reopenedProvenance->sourceContentHashAtImport != result.sourceHash ||
@@ -869,6 +995,7 @@ namespace renegade::bridge
             return result;
         }
 
+        result.recoveredMissingProduct = recoveringMissingProduct;
         result.succeeded = true;
         result.error.clear();
         return result;
