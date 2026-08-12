@@ -90,10 +90,10 @@ namespace renegade::bridge
 
         fs::path retainedSource;
         fs::path governedProduct;
-        std::string candidateStem;
-        for (std::uint32_t index = 1; ; ++index)
+        bool uniqueDestinationFound = false;
+        for (std::uint32_t index = 1; index <= MaximumNameAttempts; ++index)
         {
-            candidateStem = index == 1
+            const std::string candidateStem = index == 1
                 ? stem
                 : stem + "_" + std::to_string(index);
             retainedSource = sourceDirectory /
@@ -108,12 +108,27 @@ namespace renegade::bridge
             if (ec)
                 return Failure("Could not inspect the governed texture destination.");
             if (!sourceExists && !productExists)
+            {
+                uniqueDestinationFound = true;
                 break;
+            }
+        }
+        if (!uniqueDestinationFound)
+        {
+            return Failure(
+                "Could not allocate a unique texture name after 1024 attempts.");
         }
 
         fs::copy_file(external, retainedSource, fs::copy_options::none, ec);
         if (ec)
+        {
+            if (ec == std::make_error_code(std::errc::file_exists))
+            {
+                return Failure(
+                    "The retained texture destination became occupied during import; retry the import.");
+            }
             return Failure("Could not retain the original texture source: " + ec.message());
+        }
 
         CreatorTextureImportResult result;
         result.sourceFormat = format;
@@ -151,5 +166,48 @@ namespace renegade::bridge
         result.committed = true;
         result.error.clear();
         return result;
+    }
+
+    bool CreatorTextureWorkflowService::EnrichTextureCatalogue(
+        const std::string& projectRoot,
+        const StableId& projectId,
+        AssetCatalogue& catalogue,
+        std::string& error) const
+    {
+        ResourceAssetMetadataDocument metadata;
+        if (!ReadResourceAssetMetadata(
+                projectRoot, projectId, metadata, error))
+            return false;
+
+        for (auto& entry : catalogue.entries)
+        {
+            if (!entry.registered || !entry.importedProduct ||
+                entry.dependencyClass != DependencyClass::Texture ||
+                !IsValidStableId(entry.assetId))
+            {
+                continue;
+            }
+
+            const auto found = std::find_if(
+                metadata.records.begin(), metadata.records.end(),
+                [&entry](const ResourceAssetMetadataRecord& record)
+                {
+                    return record.assetId == entry.assetId;
+                });
+            if (found == metadata.records.end() ||
+                found->resourceClass != ResourceClass::Texture ||
+                found->sourceFormat == ResourceSourceFormat::Unknown)
+            {
+                error =
+                    "Registered governed texture is missing accepted resource metadata: " +
+                    entry.assetId;
+                return false;
+            }
+            entry.sourceFormat = LowerAscii(
+                ResourceSourceFormatLabel(found->sourceFormat));
+        }
+
+        error.clear();
+        return true;
     }
 }
