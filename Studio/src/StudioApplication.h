@@ -82,9 +82,6 @@ namespace renegade::studio
             DismissImportScale,
         };
 
-        // Mirrors RenegadeGridCB in Studio/shaders/RenegadeGridPS.hlsl.
-        // Every member is 16-byte aligned, so HLSL constant buffer packing
-        // matches this layout member for member.
         struct GridConstants
         {
             XMFLOAT4X4 viewProjection;
@@ -332,12 +329,6 @@ namespace renegade::studio
         void BeginOpenScene(const std::string& scenePath);
         void CompleteOpenScene(bridge::PreparedSceneOpen prepared);
         void AdoptOpenedSceneCamera();
-        // Fallback used by AdoptOpenedSceneCamera() when the opened
-        // document has no authored camera. Recenters the editor camera
-        // over the terrain's own saved chunk position so Wicked's
-        // camera-distance chunk streaming does not evict the
-        // just-loaded, correctly-deserialized terrain chunks on the
-        // next frame. No-ops if the scene has no terrain.
         void AdoptOpenedSceneTerrainFallbackCamera(
             const wi::scene::Scene& openedScene);
         void OpenProjectDescriptor(const std::string& descriptorPath);
@@ -515,7 +506,7 @@ namespace renegade::studio
         RenegadeComboBox importScaleModeCombo_;
         RenegadeButton importScaleApplyButton_;
         RenegadeButton importScaleDismissButton_;
-        RenegadeStudioChrome studioChrome_;
+        CreatorAssetStudioChrome studioChrome_;
         TestLevelRuntimeProcess testLevelRuntime_;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;

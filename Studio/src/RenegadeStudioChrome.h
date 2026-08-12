@@ -9,6 +9,9 @@
 
 #include <WickedEngine.h>
 
+#include "renegade/bridge/AssetCatalogueService.h"
+#include "renegade/bridge/CreatorAssetWorkflowService.h"
+
 namespace renegade::studio
 {
     class RenegadeTextInputField final : public wi::gui::TextInputField
@@ -74,11 +77,7 @@ namespace renegade::studio
         std::function<void(float)> valueCommitted_;
     };
 
-    // Renegade-owned rendering for the Studio shell. Wicked supplies the
-    // canvas and command list, but no stock wiGUI control draws this chrome.
-    // Interactive components can be migrated onto this visual foundation one
-    // bounded slice at a time after the product owner accepts the proof.
-    class RenegadeStudioChrome final : public wi::gui::Widget
+    class RenegadeStudioChrome : public wi::gui::Widget
     {
     public:
         enum class HierarchyCategory : std::uint8_t
@@ -189,6 +188,7 @@ namespace renegade::studio
         [[nodiscard]] float HierarchyWidth() const noexcept;
         [[nodiscard]] float InspectorWidth() const noexcept;
         [[nodiscard]] float DrawerHeight() const noexcept;
+        [[nodiscard]] int ActiveBottomTab() const noexcept { return activeBottomTab_; }
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
 
         void Update(const wi::Canvas& canvas, float dt) override;
@@ -265,5 +265,84 @@ namespace renegade::studio
         std::function<void(const std::string&)>
             assetBrowserItemSelected_;
         std::function<void(float, float, float, bool)> layoutChanged_;
+    };
+
+    // LP07 Gate 5 overlays the creator Asset Browser lifecycle on Renegade's
+    // existing custom chrome. The base chrome remains the rendering/interaction
+    // authority for the rest of Studio; this subtype only intercepts the
+    // existing Import Model and asset-card callbacks and adds creator controls
+    // inside the already-owned Assets drawer.
+    class CreatorAssetStudioChrome final : public RenegadeStudioChrome
+    {
+    public:
+        void Create();
+        void SetLayout(float width, float height);
+        void SetAssetBrowserData(
+            std::vector<AssetFolderRow> folders,
+            std::vector<AssetCard> assets,
+            std::string currentPath);
+        void SetActiveBottomTab(int tab, bool notify = false);
+        void OnAction(std::function<void(Action)> callback);
+        void OnAssetBrowserItemSelected(
+            std::function<void(const std::string&)> callback);
+        [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
+
+        void Update(const wi::Canvas& canvas, float dt) override;
+        void Render(
+            const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const override;
+        const char* GetWidgetTypeName() const override
+        {
+            return "CreatorAssetStudioChrome";
+        }
+
+    private:
+        void CreateCreatorAssetControls();
+        void LayoutCreatorAssetControls();
+        void UpdateCreatorAssetControls(
+            const wi::Canvas& canvas,
+            float dt);
+        void RenderCreatorAssetControls(
+            const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const;
+        void RefreshCreatorAssetBrowser();
+        bool SelectCreatorAsset(const std::string& relativePath);
+        void ImportCreatorModel();
+        void PlaceSelectedCreatorAsset();
+        void ReimportSelectedCreatorAsset();
+        void SaveSelectedCreatorTags();
+        void PlacePreparedCreatorAsset(
+            bridge::PreparedReusableModelPlacement prepared,
+            const std::string& label);
+        void RefreshCreatorHierarchyRows();
+        [[nodiscard]] bridge::AssetCatalogueQuery CreatorAssetQuery() const;
+        [[nodiscard]] std::vector<std::string> CreatorTagInput() const;
+
+        bridge::CreatorAssetWorkflowService creatorAssetWorkflow_;
+        bridge::AssetCatalogue creatorAssetCatalogue_;
+        bridge::StableId creatorSelectedAssetId_;
+        std::string creatorSelectedAssetPath_;
+        bool creatorAssetRefreshPending_ = true;
+        bool creatorAssetControlConsumed_ = false;
+        std::string creatorAssetLastSearch_;
+        int creatorAssetStateFilter_ = 0;
+        int creatorAssetFormatFilter_ = 0;
+        int creatorAssetRigFilter_ = 0;
+        std::uint32_t creatorPlacementSerial_ = 0;
+        wi::jobsystem::context creatorAssetWorkload_;
+        RenegadeTextInputField creatorAssetSearch_;
+        RenegadeTextInputField creatorAssetTags_;
+        RenegadeComboBox creatorAssetStateCombo_;
+        RenegadeComboBox creatorAssetFormatCombo_;
+        RenegadeComboBox creatorAssetRigCombo_;
+        RenegadeButton creatorAssetImportButton_;
+        RenegadeButton creatorAssetPlaceButton_;
+        RenegadeButton creatorAssetReimportButton_;
+        RenegadeButton creatorAssetSaveTagsButton_;
+        float creatorLayoutWidth_ = 1920.0f;
+        float creatorLayoutHeight_ = 1080.0f;
+        std::vector<AssetFolderRow> creatorFilesystemFolders_;
+        std::vector<AssetCard> creatorFilesystemAssets_;
+        std::string creatorCurrentPath_ = "Content";
     };
 }

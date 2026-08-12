@@ -11,6 +11,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/WindowsGameBuildWorkflow.h
     include/renegade/bridge/PackageIntegrityService.h
     include/renegade/bridge/CommandService.h
+    include/renegade/bridge/CreatorAssetWorkflowService.h
     include/renegade/bridge/DependencyService.h
     include/renegade/bridge/FlowService.h
     include/renegade/bridge/ScreenService.h
@@ -39,6 +40,7 @@ add_library(RenegadeEngineBridge STATIC
     src/BuildService.cpp
     src/BuildStageService.cpp
     src/CommandService.cpp
+    src/CreatorAssetWorkflowService.cpp
     src/DependencyService.cpp
     src/FlowService.cpp
     src/ScreenService.cpp
@@ -49,6 +51,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ModelImporterFailureAdapter.cpp
     src/ReusableAssetService.cpp
     src/ReusableAssetReimportService.cpp
+    src/ReusableAssetPlacementService.cpp
     src/MaterialService.cpp
     src/CollisionService.cpp
     src/OceanService.cpp
