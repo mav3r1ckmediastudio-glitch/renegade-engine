@@ -185,14 +185,12 @@ namespace renegade::bridge
             return prepared;
         }
 
-        const AssetRecord* sourceRecord = FindRecordById(
-            registry, provenance->sourceAssetId);
-        if (sourceRecord == nullptr)
-        {
-            result.error =
-                "Registered reusable model product has no authoritative source identity.";
-            return prepared;
-        }
+        // Placement deliberately does not require the source record to be
+        // active or its source file to exist. LC01 provenance and the RAsset
+        // manifest already bind the accepted product to its stable source ID.
+        // A creator can therefore keep placing the last-good reusable product
+        // while its original FBX/GLTF source is missing and repair/reimport it
+        // later through the explicit stale/missing workflow.
 
         const fs::path contentRoot = fs::weakly_canonical(root / "Content", ec);
         if (ec || !fs::is_directory(contentRoot, ec) || ec)
