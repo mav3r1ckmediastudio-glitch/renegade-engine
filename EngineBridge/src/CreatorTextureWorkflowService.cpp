@@ -27,6 +27,13 @@ namespace
         result.error = std::move(error);
         return result;
     }
+
+    bool IsGovernedTextureEntry(const AssetCatalogueEntry& entry)
+    {
+        return entry.registered && entry.importedProduct &&
+            entry.dependencyClass == DependencyClass::Texture &&
+            IsValidStableId(entry.assetId);
+    }
 }
 
 namespace renegade::bridge
@@ -172,21 +179,36 @@ namespace renegade::bridge
         const std::string& projectRoot,
         const StableId& projectId,
         AssetCatalogue& catalogue,
-        std::string& error) const
+        std::string& warning) const
     {
+        warning.clear();
         ResourceAssetMetadataDocument metadata;
+        std::string metadataError;
         if (!ReadResourceAssetMetadata(
-                projectRoot, projectId, metadata, error))
-            return false;
+                projectRoot, projectId, metadata, metadataError))
+        {
+            std::size_t affected = 0;
+            for (auto& entry : catalogue.entries)
+            {
+                if (!IsGovernedTextureEntry(entry))
+                    continue;
+                entry.state = AssetCatalogueState::Invalid;
+                entry.sourceFormat.clear();
+                ++affected;
+            }
+            warning = "Texture resource metadata could not be read; " +
+                std::to_string(affected) +
+                " governed texture(s) were left visible as INVALID. " +
+                metadataError;
+            return true;
+        }
 
+        std::size_t failureCount = 0;
+        StableId firstFailure;
         for (auto& entry : catalogue.entries)
         {
-            if (!entry.registered || !entry.importedProduct ||
-                entry.dependencyClass != DependencyClass::Texture ||
-                !IsValidStableId(entry.assetId))
-            {
+            if (!IsGovernedTextureEntry(entry))
                 continue;
-            }
 
             const auto found = std::find_if(
                 metadata.records.begin(), metadata.records.end(),
@@ -198,16 +220,23 @@ namespace renegade::bridge
                 found->resourceClass != ResourceClass::Texture ||
                 found->sourceFormat == ResourceSourceFormat::Unknown)
             {
-                error =
-                    "Registered governed texture is missing accepted resource metadata: " +
-                    entry.assetId;
-                return false;
+                entry.state = AssetCatalogueState::Invalid;
+                entry.sourceFormat.clear();
+                ++failureCount;
+                if (firstFailure.empty())
+                    firstFailure = entry.assetId;
+                continue;
             }
             entry.sourceFormat = LowerAscii(
                 ResourceSourceFormatLabel(found->sourceFormat));
         }
 
-        error.clear();
+        if (failureCount != 0)
+        {
+            warning = std::to_string(failureCount) +
+                " governed texture(s) are missing accepted resource metadata and remain visible as INVALID. First asset: " +
+                firstFailure;
+        }
         return true;
     }
 }
