@@ -11,6 +11,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/WindowsGameBuildWorkflow.h
     include/renegade/bridge/PackageIntegrityService.h
     include/renegade/bridge/CommandService.h
+    include/renegade/bridge/CreatorAssetActionPolicy.h
     include/renegade/bridge/CreatorAssetWorkflowService.h
     include/renegade/bridge/CreatorTextureWorkflowService.h
     include/renegade/bridge/DependencyService.h
