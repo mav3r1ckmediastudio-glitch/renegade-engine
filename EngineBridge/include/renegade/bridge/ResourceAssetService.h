@@ -39,6 +39,12 @@ namespace renegade::bridge
                 height == other.height &&
                 mipCount == other.mipCount;
         }
+
+        [[nodiscard]] bool operator!=(
+            const ResourceAssetDerivedMetadata& other) const noexcept
+        {
+            return !(*this == other);
+        }
     };
 
     struct ResourceAssetManifest
