@@ -11,8 +11,6 @@
 
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/AssetBrowserService.h"
-#include "renegade/bridge/AssetCatalogueService.h"
-#include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/LightService.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
@@ -80,9 +78,6 @@ namespace renegade::studio
             ReloadTerrainMaterial,
             ValidateModelImport,
             ImportModel,
-            PlaceSelectedAsset,
-            ReimportSelectedAsset,
-            SaveSelectedAssetTags,
             ApplyImportScale,
             DismissImportScale,
         };
@@ -266,18 +261,7 @@ namespace renegade::studio
         void ImportModel();
         void RunModelImportPlacement(const std::string& sourcePath);
         void CompleteModelImportPlacement(
-            bridge::CreatorModelImportResult imported,
-            bridge::PreparedReusableModelPlacement prepared,
-            const std::string& sourceFileName);
-        void PlaceSelectedAsset();
-        void ReimportSelectedAsset();
-        void SaveSelectedAssetTags();
-        void CompleteReusableAssetPlacement(
-            bridge::PreparedReusableModelPlacement prepared,
-            const std::string& assetLabel,
-            bool showScalePanel);
-        void RefreshAssetActionState();
-        [[nodiscard]] bridge::AssetCatalogueQuery BuildAssetCatalogueQuery() const;
+            bridge::PreparedModelImport prepared);
         void CreateImportScalePanel();
         void ShowImportScalePanel(
             wi::ecs::Entity entity,
@@ -497,21 +481,8 @@ namespace renegade::studio
         wi::gui::Window contentPanel_;
         wi::gui::Label contentLabel_;
         wi::gui::Label contentPlaceholder_;
-        RenegadeTextInputField assetSearchInput_;
-        RenegadeComboBox assetStateFilter_;
-        RenegadeComboBox assetFormatFilter_;
-        RenegadeComboBox assetRigFilter_;
-        RenegadeTextInputField assetTagsInput_;
-        RenegadeButton assetPlaceButton_;
-        RenegadeButton assetReimportButton_;
-        RenegadeButton assetSaveTagsButton_;
         bridge::AssetBrowserService assetBrowserService_;
-        bridge::CreatorAssetWorkflowService creatorAssetWorkflow_;
-        bridge::AssetCatalogue assetCatalogue_;
-        bridge::StableId selectedAssetId_;
-        std::string selectedAssetPath_;
         std::string assetBrowserCurrentFolder_ = "Content";
-        bool assetBrowserQueryDirty_ = false;
         wi::gui::Window projectHubPanel_;
         wi::gui::Label hubBrandLabel_;
         wi::gui::Label hubTitleLabel_;
