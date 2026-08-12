@@ -44,12 +44,16 @@ namespace renegade::bridge
 
         // Gate 3 keeps the generic LP07 catalogue contract unchanged, but the
         // creator Assets drawer needs resource-derived format truth for texture
-        // filtering. Overlay the accepted Gate 2 resource metadata onto texture
-        // catalogue entries by stable product ID.
+        // filtering. Overlay accepted Gate 2 resource metadata by stable product
+        // ID. Enrichment is deliberately fail-open: unreadable/missing texture
+        // metadata marks affected texture entries Invalid and reports a warning,
+        // but never withholds otherwise-usable models or healthy resources from
+        // the creator catalogue. A true return means the catalogue remains safe
+        // to present; warning may still be non-empty.
         [[nodiscard]] bool EnrichTextureCatalogue(
             const std::string& projectRoot,
             const StableId& projectId,
             AssetCatalogue& catalogue,
-            std::string& error) const;
+            std::string& warning) const;
     };
 }
