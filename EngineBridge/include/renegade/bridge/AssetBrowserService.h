@@ -16,6 +16,7 @@ namespace renegade::bridge
         Texture,
         Audio,
         Video,
+        Font,
         Vegetation,
         Character,
         Player,
