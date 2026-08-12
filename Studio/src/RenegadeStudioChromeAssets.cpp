@@ -1,6 +1,10 @@
 #include "RenegadeStudioChrome.h"
 
+#include "renegade/bridge/CreatorTextureWorkflowService.h"
 #include "renegade/bridge/ImportService.h"
+#include "renegade/bridge/MaterialService.h"
+#include "renegade/bridge/MaterialTextureAssetService.h"
+#include "renegade/bridge/ResourceImportService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/StudioSession.h"
 
@@ -26,6 +30,24 @@ namespace
                 return static_cast<char>(std::toupper(c));
             });
         return value;
+    }
+
+    std::string LowerAscii(std::string value)
+    {
+        std::transform(value.begin(), value.end(), value.begin(),
+            [](const unsigned char c)
+            {
+                return c >= 'A' && c <= 'Z'
+                    ? static_cast<char>(c + ('a' - 'A'))
+                    : static_cast<char>(c);
+            });
+        return value;
+    }
+
+    bool IsModelSourceFormat(const std::string& value)
+    {
+        const std::string format = LowerAscii(value);
+        return format == "fbx" || format == "gltf" || format == "glb";
     }
 
     std::string Trim(std::string value)
@@ -158,6 +180,25 @@ namespace renegade::studio
     void CreatorAssetStudioChrome::Update(const wi::Canvas& canvas, const float dt)
     {
         RenegadeStudioChrome::Update(canvas, dt);
+
+        // Wicked serializes material texture filenames, while Renegade owns
+        // governed resource identity. Gate 3 stores the stable texture ID in
+        // WISCENE metadata and rehydrates its .rasset payload directly through
+        // wi::resourcemanager after scene load. This call is idempotent once
+        // the material has a live in-memory resource.
+        auto* session = bridge::StudioSession::Current();
+        if (session != nullptr && session->Projects().HasProject())
+        {
+            const auto& project = session->Projects().CurrentProject();
+            const auto restored = bridge::RestoreMaterialTextureBindings(
+                session->Scenes().GetScene(), project.rootPath, project.projectId);
+            if (restored.succeeded && restored.restored > 0)
+            {
+                SetStatusText("TEXTURE BINDING // RESTORED " +
+                    std::to_string(restored.restored) + " GOVERNED MATERIAL TEXTURE");
+            }
+        }
+
         UpdateCreatorAssetControls(canvas, dt);
     }
 
@@ -214,6 +255,13 @@ namespace renegade::studio
         creatorAssetFormatCombo_.AddItem("FBX", 1);
         creatorAssetFormatCombo_.AddItem("GLTF", 2);
         creatorAssetFormatCombo_.AddItem("GLB", 3);
+        creatorAssetFormatCombo_.AddItem("PNG", 4);
+        creatorAssetFormatCombo_.AddItem("JPG", 5);
+        creatorAssetFormatCombo_.AddItem("JPEG", 6);
+        creatorAssetFormatCombo_.AddItem("DDS", 7);
+        creatorAssetFormatCombo_.AddItem("TGA", 8);
+        creatorAssetFormatCombo_.AddItem("BMP", 9);
+        creatorAssetFormatCombo_.AddItem("HDR", 10);
         creatorAssetFormatCombo_.SetSelectedWithoutCallback(0);
         creatorAssetFormatCombo_.OnSelect([this](const wi::gui::EventArgs& args)
         {
@@ -222,7 +270,7 @@ namespace renegade::studio
         });
 
         creatorAssetRigCombo_.Create("Creator Asset Rig Filter");
-        creatorAssetRigCombo_.AddItem("MODEL", 0);
+        creatorAssetRigCombo_.AddItem("RIG", 0);
         creatorAssetRigCombo_.AddItem("SKINNED", 1);
         creatorAssetRigCombo_.AddItem("ANIMATED", 2);
         creatorAssetRigCombo_.AddItem("STATIC", 3);
@@ -233,19 +281,19 @@ namespace renegade::studio
             creatorAssetRefreshPending_ = true;
         });
 
-        creatorAssetImportButton_.Create("Creator Import Model");
+        creatorAssetImportButton_.Create("Creator Import Asset");
         creatorAssetImportButton_.SetText("IMPORT");
         creatorAssetImportButton_.SetTooltip(
-            "Retain FBX/GLTF/GLB source, create a governed .rasset and place it.");
+            "Import a reusable FBX/GLTF/GLB model or governed image texture into this project.");
         creatorAssetImportButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             ImportCreatorModel();
         });
 
-        creatorAssetPlaceButton_.Create("Creator Place Asset");
+        creatorAssetPlaceButton_.Create("Creator Asset Action");
         creatorAssetPlaceButton_.SetText("PLACE");
         creatorAssetPlaceButton_.SetTooltip(
-            "Place the selected registered .rasset without reconverting its source.");
+            "Place the selected registered model .rasset without reconverting its source.");
         creatorAssetPlaceButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             PlaceSelectedCreatorAsset();
@@ -254,7 +302,7 @@ namespace renegade::studio
         creatorAssetReimportButton_.Create("Creator Reimport Asset");
         creatorAssetReimportButton_.SetText("REIMPORT");
         creatorAssetReimportButton_.SetTooltip(
-            "Refresh LC01 state and replay the selected asset's accepted import recipe.");
+            "Refresh LC01 state and replay the selected model asset's accepted import recipe.");
         creatorAssetReimportButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             ReimportSelectedCreatorAsset();
@@ -300,7 +348,7 @@ namespace renegade::studio
         constexpr float formatWidth = 58.0f;
         constexpr float rigWidth = 70.0f;
         constexpr float importWidth = 52.0f;
-        constexpr float placeWidth = 48.0f;
+        constexpr float placeWidth = 78.0f;
         constexpr float reimportWidth = 64.0f;
         constexpr float saveWidth = 68.0f;
         constexpr float fixed = stateWidth + formatWidth + rigWidth +
@@ -345,6 +393,13 @@ namespace renegade::studio
         case 1: query.sourceFormat = "fbx"; break;
         case 2: query.sourceFormat = "gltf"; break;
         case 3: query.sourceFormat = "glb"; break;
+        case 4: query.sourceFormat = "png"; break;
+        case 5: query.sourceFormat = "jpg"; break;
+        case 6: query.sourceFormat = "jpeg"; break;
+        case 7: query.sourceFormat = "dds"; break;
+        case 8: query.sourceFormat = "tga"; break;
+        case 9: query.sourceFormat = "bmp"; break;
+        case 10: query.sourceFormat = "hdr"; break;
         default: break;
         }
         switch (creatorAssetRigFilter_)
@@ -408,11 +463,39 @@ namespace renegade::studio
             });
         const bool registered = selected != creatorAssetCatalogue_.entries.end() &&
             selected->registered && bridge::IsValidStableId(selected->assetId);
-        const bool placeable = registered && selected->importedProduct &&
+        const bool modelProduct = registered && selected->importedProduct &&
+            selected->productAvailable && IsModelSourceFormat(selected->sourceFormat);
+        const bool textureProduct = registered && selected->importedProduct &&
             selected->productAvailable &&
-            fs::u8path(selected->projectRelativePath).extension() == ".rasset";
-        creatorAssetPlaceButton_.SetEnabled(placeable);
-        creatorAssetReimportButton_.SetEnabled(registered && selected->importedProduct);
+            selected->dependencyClass == bridge::DependencyClass::Texture;
+
+        bool textureAssignable = false;
+        if (textureProduct && selected->state == bridge::AssetCatalogueState::Current)
+        {
+            auto* session = bridge::StudioSession::Current();
+            if (session != nullptr && session->Selection().HasSelection())
+            {
+                textureAssignable = bridge::ResolveEditableMaterialEntity(
+                    session->Scenes().GetScene(),
+                    session->Selection().SelectedEntity()) != wi::ecs::INVALID_ENTITY;
+            }
+        }
+        if (textureProduct)
+        {
+            creatorAssetPlaceButton_.SetText("ASSIGN BASE");
+            creatorAssetPlaceButton_.SetTooltip(
+                "Assign the selected governed texture to the base-colour slot of the selected object's one editable material.");
+        }
+        else
+        {
+            creatorAssetPlaceButton_.SetText("PLACE");
+            creatorAssetPlaceButton_.SetTooltip(
+                "Place the selected registered model .rasset without reconverting its source.");
+        }
+        creatorAssetPlaceButton_.SetEnabled(modelProduct || textureAssignable);
+        // Resource reimport is Gate 4. Keep the already-accepted LP07 model
+        // reimport path available without pretending texture reimport exists.
+        creatorAssetReimportButton_.SetEnabled(modelProduct);
         creatorAssetSaveTagsButton_.SetEnabled(registered);
 
         creatorAssetImportButton_.Update(canvas, dt);
@@ -505,6 +588,8 @@ namespace renegade::studio
             card.typeLabel = UpperAscii(bridge::AssetCatalogueStateLabel(entry.state));
             if (!entry.sourceFormat.empty())
                 card.typeLabel += " / " + UpperAscii(entry.sourceFormat);
+            if (entry.dependencyClass == bridge::DependencyClass::Texture)
+                card.typeLabel += " / TEXTURE";
             if (entry.model.known && entry.model.skinned)
                 card.typeLabel += " / SKIN";
             if (entry.model.known && entry.model.animated)
@@ -556,6 +641,8 @@ namespace renegade::studio
                << UpperAscii(bridge::AssetCatalogueStateLabel(found->state));
         if (!found->sourceFormat.empty())
             status << " // " << UpperAscii(found->sourceFormat);
+        if (found->dependencyClass == bridge::DependencyClass::Texture)
+            status << " // GOVERNED TEXTURE";
         if (found->model.known)
         {
             status << " // MESH " << found->model.meshCount
@@ -577,7 +664,7 @@ namespace renegade::studio
         if (session == nullptr || !session->Projects().HasProject())
         {
             wi::helper::messageBox(
-                "Open or create a Renegade project before importing a model.",
+                "Open or create a Renegade project before importing an asset.",
                 "Import Project Asset");
             return;
         }
@@ -586,8 +673,11 @@ namespace renegade::studio
 
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "FBX/GLTF/GLB model to import as a reusable project asset";
-        params.extensions = {"fbx", "gltf", "glb"};
+        params.description =
+            "Reusable model or governed texture to import into this project";
+        params.extensions = {
+            "fbx", "gltf", "glb",
+            "jpg", "jpeg", "png", "bmp", "dds", "tga", "hdr"};
         wi::helper::FileDialog(params, [this](const std::string& sourcePath)
         {
             wi::eventhandler::Subscribe_Once(
@@ -599,6 +689,73 @@ namespace renegade::studio
                         !current->Projects().HasProject() ||
                         wi::jobsystem::IsBusy(creatorAssetWorkload_))
                         return;
+
+                    const bridge::ResourceSourceFormat resourceFormat =
+                        bridge::DetectResourceSourceFormat(sourcePath);
+                    const bool isTexture =
+                        resourceFormat != bridge::ResourceSourceFormat::Unknown &&
+                        bridge::ClassifyResourceSourceFormat(resourceFormat) ==
+                            bridge::ResourceClass::Texture;
+                    if (isTexture)
+                    {
+                        struct TextureImportWorkState
+                        {
+                            std::string projectRoot;
+                            bridge::StableId projectId;
+                            std::string sourcePath;
+                            bridge::CreatorTextureImportResult imported;
+                        };
+
+                        auto state = std::make_shared<TextureImportWorkState>();
+                        state->projectRoot = current->Projects().CurrentProject().rootPath;
+                        state->projectId = current->Projects().CurrentProject().projectId;
+                        state->sourcePath = sourcePath;
+                        SetStatusText("IMPORT TEXTURE // RETAIN + REGISTER // " +
+                            fs::u8path(sourcePath).filename().generic_u8string());
+
+                        wi::jobsystem::Execute(creatorAssetWorkload_,
+                            [this, state](wi::jobsystem::JobArgs)
+                            {
+                                bridge::CreatorTextureWorkflowService workflow;
+                                state->imported = workflow.ImportTexture(
+                                    state->projectRoot, state->projectId,
+                                    state->sourcePath);
+                                wi::eventhandler::Subscribe_Once(
+                                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                                    [this, state](std::uint64_t)
+                                    {
+                                        creatorAssetRefreshPending_ = true;
+                                        if (!state->imported.succeeded)
+                                        {
+                                            if (state->imported.committed)
+                                            {
+                                                SetStatusText(
+                                                    "IMPORT TEXTURE // COMMITTED // VERIFY FAILED");
+                                                wi::helper::messageBox(
+                                                    "The governed texture transaction committed, but post-commit verification failed. Refresh the project before retrying.\n\nReason: " +
+                                                        state->imported.error,
+                                                    "Import Project Texture");
+                                            }
+                                            else
+                                            {
+                                                SetStatusText("IMPORT TEXTURE // FAILED");
+                                                wi::helper::messageBox(
+                                                    "Could not create the governed project texture.\n\nReason: " +
+                                                        state->imported.error,
+                                                    "Import Project Texture");
+                                            }
+                                            return;
+                                        }
+                                        creatorSelectedAssetId_ =
+                                            state->imported.assetId;
+                                        creatorSelectedAssetPath_ =
+                                            state->imported.assetProjectRelativePath;
+                                        SetStatusText(
+                                            "IMPORT TEXTURE // CURRENT // SELECT OBJECT + ASSIGN BASE");
+                                    });
+                            });
+                        return;
+                    }
 
                     struct ImportWorkState
                     {
@@ -703,6 +860,62 @@ namespace renegade::studio
         if (session == nullptr || !session->Projects().HasProject() ||
             !bridge::IsValidStableId(creatorSelectedAssetId_))
             return;
+
+        const auto selected = std::find_if(
+            creatorAssetCatalogue_.entries.begin(), creatorAssetCatalogue_.entries.end(),
+            [this](const bridge::AssetCatalogueEntry& entry)
+            {
+                return entry.assetId == creatorSelectedAssetId_;
+            });
+        if (selected != creatorAssetCatalogue_.entries.end() &&
+            selected->dependencyClass == bridge::DependencyClass::Texture)
+        {
+            if (selected->state != bridge::AssetCatalogueState::Current ||
+                !selected->productAvailable)
+            {
+                SetStatusText("ASSIGN BASE // TEXTURE IS NOT CURRENT");
+                return;
+            }
+            if (!session->Selection().HasSelection())
+            {
+                SetStatusText("ASSIGN BASE // SELECT AN OBJECT WITH ONE EDITABLE MATERIAL");
+                return;
+            }
+            const wi::ecs::Entity materialEntity =
+                bridge::ResolveEditableMaterialEntity(
+                    session->Scenes().GetScene(),
+                    session->Selection().SelectedEntity());
+            if (materialEntity == wi::ecs::INVALID_ENTITY)
+            {
+                SetStatusText("ASSIGN BASE // MATERIAL TARGET IS MISSING OR AMBIGUOUS");
+                return;
+            }
+
+            const auto& project = session->Projects().CurrentProject();
+            bridge::PreparedMaterialTextureAsset prepared;
+            std::string error;
+            if (!bridge::PrepareMaterialTextureAsset(
+                    project.rootPath, project.projectId,
+                    creatorSelectedAssetId_, prepared, error))
+            {
+                SetStatusText("ASSIGN BASE // PREPARE FAILED // " + error);
+                return;
+            }
+            auto command =
+                std::make_unique<bridge::SetMaterialBaseColorTextureAssetCommand>(
+                    session->Scenes().GetScene(), materialEntity,
+                    std::move(prepared));
+            if (!session->Commands().Execute(std::move(command)))
+            {
+                SetStatusText("ASSIGN BASE // FAILED");
+                return;
+            }
+            SetSceneDirty(session->Commands().IsDirty());
+            SetStatusText("ASSIGN BASE // GOVERNED TEXTURE // STABLE ID " +
+                creatorSelectedAssetId_);
+            return;
+        }
+
         const auto& project = session->Projects().CurrentProject();
         auto prepared = creatorAssetWorkflow_.PrepareModelPlacement(
             project.rootPath, project.projectId, creatorSelectedAssetId_);
@@ -722,6 +935,19 @@ namespace renegade::studio
             !bridge::IsValidStableId(creatorSelectedAssetId_) ||
             wi::jobsystem::IsBusy(creatorAssetWorkload_))
             return;
+
+        const auto selected = std::find_if(
+            creatorAssetCatalogue_.entries.begin(), creatorAssetCatalogue_.entries.end(),
+            [this](const bridge::AssetCatalogueEntry& entry)
+            {
+                return entry.assetId == creatorSelectedAssetId_;
+            });
+        if (selected != creatorAssetCatalogue_.entries.end() &&
+            selected->dependencyClass == bridge::DependencyClass::Texture)
+        {
+            SetStatusText("REIMPORT TEXTURE // LP08 GATE 4");
+            return;
+        }
 
         struct ReimportWorkState
         {
