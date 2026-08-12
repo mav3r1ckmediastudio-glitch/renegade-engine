@@ -87,6 +87,27 @@ namespace
         }
         return Lower(left.name) < Lower(right.name);
     }
+
+    bool IsResourceCategory(const std::string& category)
+    {
+        return category == "textures" ||
+            category == "audio" ||
+            category == "video" ||
+            category == "fonts" ||
+            category == "scripts";
+    }
+
+    renegade::bridge::AssetType ResourceCategoryType(
+        const std::string& category)
+    {
+        using renegade::bridge::AssetType;
+        if (category == "textures") return AssetType::Texture;
+        if (category == "audio") return AssetType::Audio;
+        if (category == "video") return AssetType::Video;
+        if (category == "fonts") return AssetType::Font;
+        if (category == "scripts") return AssetType::Script;
+        return AssetType::Unknown;
+    }
 }
 
 namespace renegade::bridge
@@ -257,35 +278,12 @@ namespace renegade::bridge
     AssetType AssetBrowserService::Classify(
         const std::string& projectRelativePath) noexcept
     {
-        const std::string category = ContentCategory(projectRelativePath);
-        if (category == "scenes") return AssetType::Scene;
-        if (category == "models") return AssetType::Model;
-        if (category == "prefabs") return AssetType::Prefab;
-        if (category == "materials") return AssetType::Material;
-        if (category == "textures") return AssetType::Texture;
-        if (category == "audio") return AssetType::Audio;
-        if (category == "video") return AssetType::Video;
-        if (category == "fonts") return AssetType::Font;
-        if (category == "vegetation") return AssetType::Vegetation;
-        if (category == "characters") return AssetType::Character;
-        if (category == "player") return AssetType::Player;
-        if (category == "weapons") return AssetType::Weapon;
-        if (category == "projectiles") return AssetType::Projectile;
-        if (category == "particles") return AssetType::Particle;
-        if (category == "scripts") return AssetType::Script;
-        if (category == "ui") return AssetType::UserInterface;
-        if (category == "data") return AssetType::Data;
-        if (category == "generated") return AssetType::Generated;
-
         const std::string extension = Lower(
             fs::u8path(projectRelativePath).extension().u8string());
-        if (extension == ".wiscene") return AssetType::Scene;
-        if (extension == ".glb" || extension == ".gltf" ||
-            extension == ".fbx" || extension == ".obj" ||
-            extension == ".ply" || extension == ".vrm")
-        {
-            return AssetType::Model;
-        }
+
+        // LP08 resource support is extension/capability driven. A file does not
+        // become a supported texture/audio/video/script/font merely because it
+        // was dropped into a similarly named Content folder.
         if (extension == ".png" || extension == ".jpg" ||
             extension == ".jpeg" || extension == ".dds" ||
             extension == ".tga" || extension == ".bmp" ||
@@ -308,6 +306,39 @@ namespace renegade::bridge
         if (extension == ".lua")
         {
             return AssetType::Script;
+        }
+
+        const std::string category = ContentCategory(projectRelativePath);
+        if (IsResourceCategory(category))
+        {
+            // Governed products use .rasset and may be projected by their
+            // canonical resource folder until catalogue metadata owns the type.
+            // Any other unrecognised extension remains honestly unsupported.
+            return extension == ".rasset"
+                ? ResourceCategoryType(category)
+                : AssetType::Unknown;
+        }
+
+        if (category == "scenes") return AssetType::Scene;
+        if (category == "models") return AssetType::Model;
+        if (category == "prefabs") return AssetType::Prefab;
+        if (category == "materials") return AssetType::Material;
+        if (category == "vegetation") return AssetType::Vegetation;
+        if (category == "characters") return AssetType::Character;
+        if (category == "player") return AssetType::Player;
+        if (category == "weapons") return AssetType::Weapon;
+        if (category == "projectiles") return AssetType::Projectile;
+        if (category == "particles") return AssetType::Particle;
+        if (category == "ui") return AssetType::UserInterface;
+        if (category == "data") return AssetType::Data;
+        if (category == "generated") return AssetType::Generated;
+
+        if (extension == ".wiscene") return AssetType::Scene;
+        if (extension == ".glb" || extension == ".gltf" ||
+            extension == ".fbx" || extension == ".obj" ||
+            extension == ".ply" || extension == ".vrm")
+        {
+            return AssetType::Model;
         }
         if (extension == ".ini" || extension == ".material")
         {
