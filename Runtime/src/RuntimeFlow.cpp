@@ -117,6 +117,13 @@ namespace renegade::runtime
                 scenes.LastError();
             return false;
         }
+        if (!RefreshRuntimeReusableAssets(scenes, bootstrap, error))
+        {
+            error =
+                "Could not refresh packaged reusable assets in Story Flow Level scene: " +
+                error;
+            return false;
+        }
 
         bootstrap.startupScenePath = scenePath;
         bootstrap.entityCount = scenes.EntityCount();
