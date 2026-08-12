@@ -1,5 +1,6 @@
 #include "RenegadeStudioChrome.h"
 
+#include "renegade/bridge/CreatorAssetActionPolicy.h"
 #include "renegade/bridge/CreatorTextureWorkflowService.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/MaterialService.h"
@@ -30,24 +31,6 @@ namespace
                 return static_cast<char>(std::toupper(c));
             });
         return value;
-    }
-
-    std::string LowerAscii(std::string value)
-    {
-        std::transform(value.begin(), value.end(), value.begin(),
-            [](const unsigned char c)
-            {
-                return c >= 'A' && c <= 'Z'
-                    ? static_cast<char>(c + ('a' - 'A'))
-                    : static_cast<char>(c);
-            });
-        return value;
-    }
-
-    bool IsModelSourceFormat(const std::string& value)
-    {
-        const std::string format = LowerAscii(value);
-        return format == "fbx" || format == "gltf" || format == "glb";
     }
 
     std::string Trim(std::string value)
@@ -463,8 +446,10 @@ namespace renegade::studio
             });
         const bool registered = selected != creatorAssetCatalogue_.entries.end() &&
             selected->registered && bridge::IsValidStableId(selected->assetId);
-        const bool modelProduct = registered && selected->importedProduct &&
-            selected->productAvailable && IsModelSourceFormat(selected->sourceFormat);
+        const bool modelProduct = registered &&
+            bridge::CanPlaceCreatorModelAsset(*selected);
+        const bool modelReimportable = registered &&
+            bridge::CanReimportCreatorModelAsset(*selected);
         const bool textureProduct = registered && selected->importedProduct &&
             selected->productAvailable &&
             selected->dependencyClass == bridge::DependencyClass::Texture;
@@ -494,8 +479,8 @@ namespace renegade::studio
         }
         creatorAssetPlaceButton_.SetEnabled(modelProduct || textureAssignable);
         // Resource reimport is Gate 4. Keep the already-accepted LP07 model
-        // reimport path available without pretending texture reimport exists.
-        creatorAssetReimportButton_.SetEnabled(modelProduct);
+        // reimport path available even when its governed product is missing.
+        creatorAssetReimportButton_.SetEnabled(modelReimportable);
         creatorAssetSaveTagsButton_.SetEnabled(registered);
 
         creatorAssetImportButton_.Update(canvas, dt);
@@ -561,6 +546,13 @@ namespace renegade::studio
                 project.rootPath, project.projectId, catalogue, error))
         {
             SetStatusText("ASSET BROWSER // REFRESH FAILED // " + error);
+            return;
+        }
+        bridge::CreatorTextureWorkflowService textureWorkflow;
+        if (!textureWorkflow.EnrichTextureCatalogue(
+                project.rootPath, project.projectId, catalogue, error))
+        {
+            SetStatusText("ASSET BROWSER // TEXTURE METADATA FAILED // " + error);
             return;
         }
         creatorAssetCatalogue_ = std::move(catalogue);
@@ -888,6 +880,25 @@ namespace renegade::studio
             if (materialEntity == wi::ecs::INVALID_ENTITY)
             {
                 SetStatusText("ASSIGN BASE // MATERIAL TARGET IS MISSING OR AMBIGUOUS");
+                return;
+            }
+
+            const auto* material = session->Scenes().GetScene().materials.GetComponent(
+                materialEntity);
+            const auto* metadata = session->Scenes().GetScene().metadatas.GetComponent(
+                materialEntity);
+            if (material != nullptr && metadata != nullptr &&
+                metadata->string_values.has(
+                    bridge::MaterialBaseColorTextureAssetIdMetadataKey) &&
+                metadata->string_values.get(
+                    bridge::MaterialBaseColorTextureAssetIdMetadataKey) ==
+                    creatorSelectedAssetId_ &&
+                material->textures[
+                    wi::scene::MaterialComponent::BASECOLORMAP].resource.IsValid() &&
+                material->textures[
+                    wi::scene::MaterialComponent::BASECOLORMAP].name.empty())
+            {
+                SetStatusText("ASSIGN BASE // ALREADY ASSIGNED // NO CHANGE");
                 return;
             }
 
