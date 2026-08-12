@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -101,6 +102,8 @@ int main()
         "Asset Browser should classify TTF as font");
     Require(AssetBrowserService::Classify("Content/a.mp3") == AssetType::Unknown,
         "Asset Browser must not advertise unsupported MP3 by extension");
+    Require(AssetBrowserService::Classify("Content/Audio/a.mp3") == AssetType::Unknown,
+        "Audio folder naming must not resurrect unsupported MP3 support");
     Require(std::string(AssetBrowserService::TypeLabel(AssetType::Font)) == "FONT",
         "Asset Browser should expose a FONT label");
 
