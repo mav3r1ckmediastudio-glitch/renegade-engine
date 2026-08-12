@@ -10,7 +10,6 @@
 #include <iomanip>
 #include <iterator>
 #include <limits>
-#include <map>
 #include <set>
 #include <sstream>
 #include <system_error>
@@ -23,9 +22,10 @@ namespace
     namespace fs = std::filesystem;
     using namespace renegade::bridge;
 
-    constexpr std::array<std::uint8_t, 8> ResourceAssetMagic = {
+    constexpr std::array<std::uint8_t, 8> RAssetMagic = {
         'R', 'A', 'S', 'S', 'E', 'T', '0', '1'};
-    constexpr std::uint64_t MaximumManifestBytes = 1024ull * 1024ull;
+    constexpr std::uint32_t MaximumManifestBytes = 1024u * 1024u;
+    constexpr std::size_t RAssetHeaderBytes = 8u + 4u + 8u;
 
     std::string LowerAscii(std::string value)
     {
@@ -162,7 +162,6 @@ namespace
         case ResourceClass::Script: return "script";
         case ResourceClass::Video: return "video";
         case ResourceClass::Font: return "font";
-        case ResourceClass::Unknown:
         default: return "unknown";
         }
     }
@@ -201,7 +200,6 @@ namespace
         case ResourceSourceFormat::Mp4: return "mp4";
         case ResourceSourceFormat::H264: return "h264";
         case ResourceSourceFormat::Ttf: return "ttf";
-        case ResourceSourceFormat::Unknown:
         default: return "unknown";
         }
     }
@@ -231,7 +229,6 @@ namespace
         case ResourceClass::Script: return DependencyClass::Script;
         case ResourceClass::Video: return DependencyClass::Video;
         case ResourceClass::Font: return DependencyClass::Font;
-        case ResourceClass::Unknown:
         default: return DependencyClass::Data;
         }
     }
@@ -240,12 +237,11 @@ namespace
     {
         switch (resourceClass)
         {
-        case ResourceClass::Texture: return fs::path("SourceAssets/Textures");
-        case ResourceClass::Audio: return fs::path("SourceAssets/Audio");
-        case ResourceClass::Script: return fs::path("SourceAssets/Scripts");
-        case ResourceClass::Video: return fs::path("SourceAssets/Video");
-        case ResourceClass::Font: return fs::path("SourceAssets/Fonts");
-        case ResourceClass::Unknown:
+        case ResourceClass::Texture: return "SourceAssets/Textures";
+        case ResourceClass::Audio: return "SourceAssets/Audio";
+        case ResourceClass::Script: return "SourceAssets/Scripts";
+        case ResourceClass::Video: return "SourceAssets/Video";
+        case ResourceClass::Font: return "SourceAssets/Fonts";
         default: return {};
         }
     }
@@ -254,12 +250,11 @@ namespace
     {
         switch (resourceClass)
         {
-        case ResourceClass::Texture: return fs::path("Content/Textures");
-        case ResourceClass::Audio: return fs::path("Content/Audio");
-        case ResourceClass::Script: return fs::path("Content/Scripts");
-        case ResourceClass::Video: return fs::path("Content/Video");
-        case ResourceClass::Font: return fs::path("Content/Fonts");
-        case ResourceClass::Unknown:
+        case ResourceClass::Texture: return "Content/Textures";
+        case ResourceClass::Audio: return "Content/Audio";
+        case ResourceClass::Script: return "Content/Scripts";
+        case ResourceClass::Video: return "Content/Video";
+        case ResourceClass::Font: return "Content/Fonts";
         default: return {};
         }
     }
@@ -280,7 +275,7 @@ namespace
         try
         {
             const auto parsed = nlohmann::json::parse(settingsJson);
-            return parsed.is_object() && parsed.empty() && parsed.dump() == "{}";
+            return parsed.is_object() && parsed.empty() && parsed.dump() == settingsJson;
         }
         catch (const nlohmann::json::exception&)
         {
@@ -320,8 +315,7 @@ namespace
                 return false;
             }
         }
-        else if (metadata.width != 0 || metadata.height != 0 ||
-            metadata.mipCount != 0)
+        else if (metadata.width != 0 || metadata.height != 0 || metadata.mipCount != 0)
         {
             error = "Resource dimensions must be zero when dimensions are unknown.";
             return false;
@@ -369,30 +363,30 @@ namespace
             metadata.height = ReadBigEndian32(bytes, 20);
             metadata.mipCount = 1;
             metadata.dimensionsKnown = metadata.width > 0 && metadata.height > 0;
-            if (!metadata.dimensionsKnown)
-            {
-                metadata.width = 0;
-                metadata.height = 0;
-                metadata.mipCount = 0;
-            }
         }
         else if (format == ResourceSourceFormat::Dds && bytes.size() >= 32 &&
-            bytes[0] == 'D' && bytes[1] == 'D' && bytes[2] == 'S' &&
-            bytes[3] == ' ')
+            bytes[0] == 'D' && bytes[1] == 'D' && bytes[2] == 'S' && bytes[3] == ' ')
         {
             metadata.height = ReadLittleEndian32(bytes, 12);
             metadata.width = ReadLittleEndian32(bytes, 16);
-            metadata.mipCount = std::max<std::uint32_t>(1,
-                ReadLittleEndian32(bytes, 28));
+            metadata.mipCount = std::max<std::uint32_t>(1, ReadLittleEndian32(bytes, 28));
             metadata.dimensionsKnown = metadata.width > 0 && metadata.height > 0;
-            if (!metadata.dimensionsKnown)
-            {
-                metadata.width = 0;
-                metadata.height = 0;
-                metadata.mipCount = 0;
-            }
+        }
+        if (!metadata.dimensionsKnown)
+        {
+            metadata.width = 0;
+            metadata.height = 0;
+            metadata.mipCount = 0;
         }
         return metadata;
+    }
+
+    void AppendU32(std::vector<std::uint8_t>& bytes, const std::uint32_t value)
+    {
+        bytes.push_back(static_cast<std::uint8_t>(value & 0xffu));
+        bytes.push_back(static_cast<std::uint8_t>((value >> 8) & 0xffu));
+        bytes.push_back(static_cast<std::uint8_t>((value >> 16) & 0xffu));
+        bytes.push_back(static_cast<std::uint8_t>((value >> 24) & 0xffu));
     }
 
     void AppendU64(std::vector<std::uint8_t>& bytes, const std::uint64_t value)
@@ -401,17 +395,24 @@ namespace
             bytes.push_back(static_cast<std::uint8_t>((value >> shift) & 0xffu));
     }
 
-    bool ReadU64(
+    std::uint32_t ReadU32(
         const std::vector<std::uint8_t>& bytes,
-        std::size_t& offset,
-        std::uint64_t& value)
+        const std::size_t offset)
     {
-        if (offset > bytes.size() || bytes.size() - offset < 8)
-            return false;
-        value = 0;
+        return static_cast<std::uint32_t>(bytes[offset]) |
+            (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+            (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
+            (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+    }
+
+    std::uint64_t ReadU64(
+        const std::vector<std::uint8_t>& bytes,
+        const std::size_t offset)
+    {
+        std::uint64_t value = 0;
         for (unsigned shift = 0; shift < 64; shift += 8)
-            value |= static_cast<std::uint64_t>(bytes[offset++]) << shift;
-        return true;
+            value |= static_cast<std::uint64_t>(bytes[offset + shift / 8]) << shift;
+        return value;
     }
 
     template<typename T>
@@ -434,8 +435,7 @@ namespace
         }
         catch (const nlohmann::json::exception&)
         {
-            error = std::string("Resource asset metadata field '") + name +
-                "' has the wrong type.";
+            error = std::string("Resource asset metadata field '") + name + "' has the wrong type.";
             return false;
         }
     }
@@ -469,24 +469,8 @@ namespace
         return true;
     }
 
-    bool SerializeManifest(
-        const ResourceAssetManifest& manifest,
-        std::string& json,
-        std::string& error)
+    std::string SerializeManifest(const ResourceAssetManifest& manifest)
     {
-        ResourceAssetDocument validationDocument;
-        validationDocument.manifest = manifest;
-        validationDocument.payload.resize(
-            static_cast<std::size_t>(manifest.derived.byteCount), 0);
-        // Manifest serialization itself deliberately doesn't call full document
-        // validation because payload hash validation needs the real bytes.
-        if (!IsValidStableId(manifest.projectId) ||
-            !IsValidStableId(manifest.assetId) ||
-            !IsValidStableId(manifest.sourceAssetId))
-        {
-            error = "Resource asset manifest contains an invalid stable ID.";
-            return false;
-        }
         nlohmann::json root;
         root["asset_id"] = manifest.assetId;
         root["derived"] = DerivedJson(manifest.derived);
@@ -498,71 +482,60 @@ namespace
         root["project_id"] = manifest.projectId;
         root["resource_class"] = ResourceClassToken(manifest.resourceClass);
         root["schema_version"] = manifest.schemaVersion;
-        root["settings"] = manifest.settingsJson;
+        root["settings"] = nlohmann::json::parse(manifest.settingsJson);
         root["settings_schema"] = manifest.settingsSchema;
         root["settings_version"] = manifest.settingsVersion;
         root["source_asset_id"] = manifest.sourceAssetId;
         root["source_format"] = ResourceFormatToken(manifest.sourceFormat);
-        json = root.dump();
-        error.clear();
-        return true;
+        return root.dump();
     }
 
     bool ParseManifest(
-        const std::string& json,
+        const std::string& text,
         ResourceAssetManifest& manifest,
         std::string& error)
     {
         manifest = {};
         try
         {
-            const nlohmann::json root = nlohmann::json::parse(json);
-            std::string resourceClass;
-            std::string sourceFormat;
-            nlohmann::json derived;
-            if (!root.is_object() ||
-                !RequiredField(root, "asset_id", manifest.assetId, error) ||
-                !RequiredField(root, "derived", derived, error) ||
-                !RequiredField(root, "format", manifest.formatIdentifier, error) ||
-                !RequiredField(root, "importer", manifest.importer, error) ||
-                !RequiredField(root, "importer_version", manifest.importerVersion, error) ||
-                !RequiredField(root, "payload_format", manifest.payloadFormat, error) ||
-                !RequiredField(root, "payload_hash", manifest.payloadHash, error) ||
-                !RequiredField(root, "project_id", manifest.projectId, error) ||
-                !RequiredField(root, "resource_class", resourceClass, error) ||
-                !RequiredField(root, "schema_version", manifest.schemaVersion, error) ||
-                !RequiredField(root, "settings", manifest.settingsJson, error) ||
-                !RequiredField(root, "settings_schema", manifest.settingsSchema, error) ||
-                !RequiredField(root, "settings_version", manifest.settingsVersion, error) ||
-                !RequiredField(root, "source_asset_id", manifest.sourceAssetId, error) ||
-                !RequiredField(root, "source_format", sourceFormat, error) ||
-                !ParseDerivedJson(derived, manifest.derived, error))
+            const nlohmann::json root = nlohmann::json::parse(text);
+            if (!root.is_object() || root.dump() != text)
             {
+                error = "Resource .rasset manifest is not canonical JSON.";
                 return false;
             }
-            if (!ParseResourceClassToken(resourceClass, manifest.resourceClass) ||
+            manifest.assetId = root.at("asset_id").get<std::string>();
+            const auto derived = root.at("derived");
+            manifest.formatIdentifier = root.at("format").get<std::string>();
+            manifest.importer = root.at("importer").get<std::string>();
+            manifest.importerVersion = root.at("importer_version").get<std::uint32_t>();
+            manifest.payloadFormat = root.at("payload_format").get<std::string>();
+            manifest.payloadHash = root.at("payload_hash").get<std::string>();
+            manifest.projectId = root.at("project_id").get<std::string>();
+            const std::string resourceClass = root.at("resource_class").get<std::string>();
+            manifest.schemaVersion = root.at("schema_version").get<std::uint32_t>();
+            manifest.settingsJson = root.at("settings").dump();
+            manifest.settingsSchema = root.at("settings_schema").get<std::string>();
+            manifest.settingsVersion = root.at("settings_version").get<std::uint32_t>();
+            manifest.sourceAssetId = root.at("source_asset_id").get<std::string>();
+            const std::string sourceFormat = root.at("source_format").get<std::string>();
+            if (!ParseDerivedJson(derived, manifest.derived, error) ||
+                !ParseResourceClassToken(resourceClass, manifest.resourceClass) ||
                 !ParseResourceFormatToken(sourceFormat, manifest.sourceFormat))
             {
-                error = "Resource asset manifest contains an unsupported resource class or source format.";
+                if (error.empty())
+                    error = "Resource .rasset contains an unsupported class or format.";
                 return false;
             }
-            std::string canonical;
-            if (!SerializeManifest(manifest, canonical, error))
-                return false;
-            if (canonical != json)
-            {
-                error = "Resource asset manifest is not canonical.";
-                return false;
-            }
-            error.clear();
-            return true;
         }
-        catch (const nlohmann::json::exception& exception)
+        catch (const nlohmann::json::exception&)
         {
-            error = std::string("Could not parse resource asset manifest: ") +
-                exception.what();
+            error = "Resource .rasset manifest is malformed or missing required fields.";
+            manifest = {};
             return false;
         }
+        error.clear();
+        return true;
     }
 
     bool MetadataRecordLess(
@@ -577,23 +550,21 @@ namespace
         ResourceAssetMetadataRecord record,
         std::string& error)
     {
-        const auto found = std::find_if(document.records.begin(),
-            document.records.end(), [&record](const auto& existing)
+        const auto found = std::find_if(document.records.begin(), document.records.end(),
+            [&record](const ResourceAssetMetadataRecord& existing)
             { return existing.assetId == record.assetId; });
         if (found == document.records.end())
             document.records.push_back(std::move(record));
         else
             *found = std::move(record);
-        std::sort(document.records.begin(), document.records.end(),
-            MetadataRecordLess);
+        std::sort(document.records.begin(), document.records.end(), MetadataRecordLess);
         return ValidateResourceAssetMetadata(document, error);
     }
 
     bool ContainsAssetId(const AssetRegistry& registry, const StableId& assetId)
     {
         return std::any_of(registry.records.begin(), registry.records.end(),
-            [&assetId](const AssetRecord& record)
-            { return record.assetId == assetId; }) ||
+            [&assetId](const AssetRecord& record) { return record.assetId == assetId; }) ||
             std::any_of(registry.missingAssets.begin(), registry.missingAssets.end(),
                 [&assetId](const MissingAssetRecord& record)
                 { return record.assetId == assetId; });
@@ -614,25 +585,23 @@ namespace
                 return true;
             }
         }
-        error = "Asset ID generator did not provide a unique valid stable ID.";
         assetId.clear();
+        error = "Asset ID generator did not provide a unique valid stable ID.";
         return false;
     }
 
-    const AssetRecord* FindRecordByPath(
-        const AssetRegistry& registry,
-        const std::string& path)
+    const AssetRecord* FindRecordByPath(const AssetRegistry& registry, const std::string& path)
     {
-        const auto found = std::find_if(registry.records.begin(),
-            registry.records.end(), [&path](const AssetRecord& record)
+        const auto found = std::find_if(registry.records.begin(), registry.records.end(),
+            [&path](const AssetRecord& record)
             { return record.projectRelativePath == path; });
         return found == registry.records.end() ? nullptr : &*found;
     }
 
     bool HasMissingPath(const AssetRegistry& registry, const std::string& path)
     {
-        return std::any_of(registry.missingAssets.begin(),
-            registry.missingAssets.end(), [&path](const MissingAssetRecord& record)
+        return std::any_of(registry.missingAssets.begin(), registry.missingAssets.end(),
+            [&path](const MissingAssetRecord& record)
             { return record.lastKnownPath == path; });
     }
 
@@ -674,8 +643,7 @@ namespace renegade::bridge
         }
         if (manifest.resourceClass == ResourceClass::Unknown ||
             manifest.sourceFormat == ResourceSourceFormat::Unknown ||
-            ClassifyResourceSourceFormat(manifest.sourceFormat) !=
-                manifest.resourceClass)
+            ClassifyResourceSourceFormat(manifest.sourceFormat) != manifest.resourceClass)
         {
             error = "Resource .rasset source format does not match its resource class.";
             return false;
@@ -689,23 +657,19 @@ namespace renegade::bridge
             error = "Resource .rasset contains an unsupported version-1 import contract.";
             return false;
         }
-        if (manifest.settingsJson !=
-            CanonicalRecipe(manifest.resourceClass, manifest.sourceFormat))
+        if (manifest.settingsJson != CanonicalRecipe(manifest.resourceClass, manifest.sourceFormat))
         {
             error = "Resource .rasset import recipe is not the canonical version-1 recipe.";
             return false;
         }
-        if (document.payload.empty() ||
-            manifest.payloadHash != HashBytes(document.payload))
+        if (document.payload.empty() || manifest.payloadHash != HashBytes(document.payload))
         {
             error = "Resource .rasset payload is empty or its hash does not match.";
             return false;
         }
-        if (!ValidateDerivedMetadata(
-                manifest.derived, manifest.resourceClass, error))
+        if (!ValidateDerivedMetadata(manifest.derived, manifest.resourceClass, error))
             return false;
-        if (!manifest.derived.known ||
-            manifest.derived.byteCount != document.payload.size())
+        if (!manifest.derived.known || manifest.derived.byteCount != document.payload.size())
         {
             error = "Resource .rasset derived byte count does not match its payload.";
             return false;
@@ -722,21 +686,34 @@ namespace renegade::bridge
         bytes.clear();
         if (!ValidateResourceAssetDocument(document, error))
             return false;
-        std::string manifestJson;
-        if (!SerializeManifest(document.manifest, manifestJson, error))
-            return false;
-        if (manifestJson.size() > MaximumManifestBytes)
+        std::string manifest;
+        try
         {
-            error = "Resource .rasset manifest exceeds the supported size.";
+            manifest = SerializeManifest(document.manifest);
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            error = "Resource .rasset manifest settings are not valid JSON.";
             return false;
         }
-        bytes.reserve(ResourceAssetMagic.size() + 16 + manifestJson.size() +
-            document.payload.size());
-        bytes.insert(bytes.end(), ResourceAssetMagic.begin(),
-            ResourceAssetMagic.end());
-        AppendU64(bytes, static_cast<std::uint64_t>(manifestJson.size()));
+        if (manifest.empty() || manifest.size() > MaximumManifestBytes ||
+            manifest.size() > (std::numeric_limits<std::uint32_t>::max)())
+        {
+            error = "Resource .rasset manifest is too large.";
+            return false;
+        }
+        const std::uint64_t total = static_cast<std::uint64_t>(RAssetHeaderBytes) +
+            manifest.size() + document.payload.size();
+        if (total > (std::numeric_limits<std::size_t>::max)())
+        {
+            error = "Resource .rasset container is too large for this platform.";
+            return false;
+        }
+        bytes.reserve(static_cast<std::size_t>(total));
+        bytes.insert(bytes.end(), RAssetMagic.begin(), RAssetMagic.end());
+        AppendU32(bytes, static_cast<std::uint32_t>(manifest.size()));
         AppendU64(bytes, static_cast<std::uint64_t>(document.payload.size()));
-        bytes.insert(bytes.end(), manifestJson.begin(), manifestJson.end());
+        bytes.insert(bytes.end(), manifest.begin(), manifest.end());
         bytes.insert(bytes.end(), document.payload.begin(), document.payload.end());
         error.clear();
         return true;
@@ -748,49 +725,33 @@ namespace renegade::bridge
         std::string& error)
     {
         document = {};
-        if (bytes.size() < ResourceAssetMagic.size() + 16 ||
-            !std::equal(ResourceAssetMagic.begin(), ResourceAssetMagic.end(),
-                bytes.begin()))
+        if (bytes.size() < RAssetHeaderBytes ||
+            !std::equal(RAssetMagic.begin(), RAssetMagic.end(), bytes.begin()))
         {
-            error = "Resource .rasset header is invalid.";
+            error = "File is not a version-1 Renegade RAsset container.";
             return false;
         }
-        std::size_t offset = ResourceAssetMagic.size();
-        std::uint64_t manifestLength = 0;
-        std::uint64_t payloadLength = 0;
-        if (!ReadU64(bytes, offset, manifestLength) ||
-            !ReadU64(bytes, offset, payloadLength) ||
-            manifestLength > MaximumManifestBytes ||
-            manifestLength > std::numeric_limits<std::size_t>::max() ||
-            payloadLength > std::numeric_limits<std::size_t>::max())
+        const std::uint32_t manifestBytes = ReadU32(bytes, 8u);
+        const std::uint64_t payloadBytes = ReadU64(bytes, 12u);
+        if (manifestBytes == 0 || manifestBytes > MaximumManifestBytes || payloadBytes == 0)
         {
-            error = "Resource .rasset lengths are invalid.";
+            error = "Resource RAsset declares invalid manifest or payload lengths.";
             return false;
         }
-        const std::size_t manifestSize = static_cast<std::size_t>(manifestLength);
-        const std::size_t payloadSize = static_cast<std::size_t>(payloadLength);
-        if (offset > bytes.size() || manifestSize > bytes.size() - offset)
+        const std::uint64_t expected = static_cast<std::uint64_t>(RAssetHeaderBytes) +
+            manifestBytes + payloadBytes;
+        if (expected != bytes.size())
         {
-            error = "Resource .rasset manifest is truncated.";
+            error = "Resource RAsset container length does not match its header.";
             return false;
         }
-        const std::size_t payloadOffset = offset + manifestSize;
-        if (payloadOffset > bytes.size() || payloadSize != bytes.size() - payloadOffset)
-        {
-            error = "Resource .rasset payload length does not match the container.";
+        const auto manifestStart = bytes.begin() +
+            static_cast<std::ptrdiff_t>(RAssetHeaderBytes);
+        const auto payloadStart = manifestStart + manifestBytes;
+        const std::string manifestText(manifestStart, payloadStart);
+        if (!ParseManifest(manifestText, document.manifest, error))
             return false;
-        }
-        const std::string manifestJson(
-            bytes.begin() + static_cast<std::ptrdiff_t>(offset),
-            bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset));
-        if (!ParseManifest(manifestJson, document.manifest, error))
-        {
-            document = {};
-            return false;
-        }
-        document.payload.assign(
-            bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset),
-            bytes.end());
+        document.payload.assign(payloadStart, bytes.end());
         if (!ValidateResourceAssetDocument(document, error))
         {
             document = {};
@@ -819,8 +780,7 @@ namespace renegade::bridge
         std::string& error)
     {
         if (document.formatIdentifier != "renegade-resource-asset-metadata" ||
-            document.schemaVersion !=
-                ResourceAssetMetadataDocument::CurrentSchemaVersion ||
+            document.schemaVersion != ResourceAssetMetadataDocument::CurrentSchemaVersion ||
             !IsValidStableId(document.projectId))
         {
             error = "Unsupported or invalid resource asset metadata document.";
@@ -829,19 +789,16 @@ namespace renegade::bridge
         std::set<StableId> ids;
         for (const auto& record : document.records)
         {
-            if (!IsValidStableId(record.assetId) ||
-                !ids.insert(record.assetId).second ||
+            if (!IsValidStableId(record.assetId) || !ids.insert(record.assetId).second ||
                 record.resourceClass == ResourceClass::Unknown ||
                 record.sourceFormat == ResourceSourceFormat::Unknown ||
-                ClassifyResourceSourceFormat(record.sourceFormat) !=
-                    record.resourceClass ||
+                ClassifyResourceSourceFormat(record.sourceFormat) != record.resourceClass ||
                 !record.derived.known)
             {
                 error = "Resource asset metadata contains an invalid record.";
                 return false;
             }
-            if (!ValidateDerivedMetadata(
-                    record.derived, record.resourceClass, error))
+            if (!ValidateDerivedMetadata(record.derived, record.resourceClass, error))
                 return false;
         }
         error.clear();
@@ -884,7 +841,7 @@ namespace renegade::bridge
         document = {};
         try
         {
-            const auto root = nlohmann::json::parse(json);
+            const nlohmann::json root = nlohmann::json::parse(json);
             if (!root.is_object() ||
                 !RequiredField(root, "project_id", document.projectId, error) ||
                 !RequiredField(root, "schema", document.formatIdentifier, error) ||
@@ -898,16 +855,12 @@ namespace renegade::bridge
             }
             for (const auto& value : *assets)
             {
-                if (!value.is_object())
-                {
-                    error = "Resource asset metadata record is not an object.";
-                    return false;
-                }
                 ResourceAssetMetadataRecord record;
                 std::string resourceClass;
                 std::string sourceFormat;
                 nlohmann::json derived;
-                if (!RequiredField(value, "asset_id", record.assetId, error) ||
+                if (!value.is_object() ||
+                    !RequiredField(value, "asset_id", record.assetId, error) ||
                     !RequiredField(value, "derived", derived, error) ||
                     !RequiredField(value, "resource_class", resourceClass, error) ||
                     !RequiredField(value, "source_format", sourceFormat, error) ||
@@ -921,31 +874,27 @@ namespace renegade::bridge
                 }
                 document.records.push_back(std::move(record));
             }
-            std::sort(document.records.begin(), document.records.end(),
-                MetadataRecordLess);
+            std::sort(document.records.begin(), document.records.end(), MetadataRecordLess);
             if (!ValidateResourceAssetMetadata(document, error))
             {
                 document = {};
                 return false;
             }
             std::string canonical;
-            if (!SerializeResourceAssetMetadata(document, canonical, error) ||
-                canonical != json)
+            if (!SerializeResourceAssetMetadata(document, canonical, error) || canonical != json)
             {
                 document = {};
-                if (error.empty())
-                    error = "Resource asset metadata document is not canonical.";
+                if (error.empty()) error = "Resource asset metadata document is not canonical.";
                 return false;
             }
-            error.clear();
-            return true;
         }
         catch (const nlohmann::json::exception& exception)
         {
-            error = std::string("Could not parse resource asset metadata JSON: ") +
-                exception.what();
+            error = std::string("Could not parse resource asset metadata JSON: ") + exception.what();
             return false;
         }
+        error.clear();
+        return true;
     }
 
     bool ReadResourceAssetMetadata(
@@ -1006,38 +955,29 @@ namespace renegade::bridge
         result.assetProjectRelativePath = request.assetProjectRelativePath;
 
         if (!IsValidStableId(request.projectId))
-            return ImportFailure(std::move(result),
-                "Resource asset import requires a valid project ID.");
+            return ImportFailure(std::move(result), "Resource asset import requires a valid project ID.");
         if (!options.generateId)
-            return ImportFailure(std::move(result),
-                "Resource asset import requires an asset ID generator.");
+            return ImportFailure(std::move(result), "Resource asset import requires an asset ID generator.");
         if (!ValidateV1SettingsInput(request.settingsJson))
             return ImportFailure(std::move(result),
-                "LP08 resource import version 1 accepts only an empty options object.");
+                "LP08 resource import version 1 accepts only an empty canonical options object.");
 
         fs::path root;
         std::string error;
         if (!ResolveProjectRoot(request.projectRoot, root, error))
             return ImportFailure(std::move(result), std::move(error));
 
-        const fs::path sourceRelative =
-            fs::u8path(request.sourceProjectRelativePath).lexically_normal();
-        const fs::path productRelative =
-            fs::u8path(request.assetProjectRelativePath).lexically_normal();
-        if (!IsSafeProjectRelativePath(sourceRelative) ||
-            !IsSafeProjectRelativePath(productRelative))
-        {
+        const fs::path sourceRelative = fs::u8path(request.sourceProjectRelativePath).lexically_normal();
+        const fs::path productRelative = fs::u8path(request.assetProjectRelativePath).lexically_normal();
+        if (!IsSafeProjectRelativePath(sourceRelative) || !IsSafeProjectRelativePath(productRelative))
             return ImportFailure(std::move(result),
                 "Resource source and product paths must be safe project-relative paths.");
-        }
 
         ResourceSourceInspectionRequest inspectionRequest;
         inspectionRequest.projectRoot = root.generic_u8string();
-        inspectionRequest.sourceProjectRelativePath =
-            sourceRelative.generic_u8string();
+        inspectionRequest.sourceProjectRelativePath = sourceRelative.generic_u8string();
         inspectionRequest.expectedFormat = request.expectedFormat;
-        const ResourceSourceInspectionResult inspection =
-            InspectResourceSource(inspectionRequest);
+        const ResourceSourceInspectionResult inspection = InspectResourceSource(inspectionRequest);
         if (!inspection.succeeded)
             return ImportFailure(std::move(result), inspection.error);
         result.resourceClass = inspection.resourceClass;
@@ -1052,8 +992,7 @@ namespace renegade::bridge
             return ImportFailure(std::move(result),
                 "Resource source/product paths do not match the canonical resource class folders.");
         }
-        if (LowerAscii(productRelative.extension().u8string()) !=
-                ResourceAssetExtension ||
+        if (LowerAscii(productRelative.extension().u8string()) != ResourceAssetExtension ||
             AssetBrowserService::Classify(productRelative.generic_u8string()) !=
                 ResourceClassAssetType(result.resourceClass))
         {
@@ -1062,8 +1001,7 @@ namespace renegade::bridge
         }
 
         std::error_code pathError;
-        const fs::path sourcePath = fs::weakly_canonical(
-            root / sourceRelative, pathError);
+        const fs::path sourcePath = fs::weakly_canonical(root / sourceRelative, pathError);
         if (pathError || !fs::is_regular_file(sourcePath, pathError) || pathError ||
             !IsWithin(sourcePath, root))
         {
@@ -1081,24 +1019,19 @@ namespace renegade::bridge
         }
         const fs::path productPath = productParent / productRelative.filename();
         if (fs::exists(productPath, pathError) || pathError)
-        {
             return ImportFailure(std::move(result),
                 "Resource product destination already exists; first import will not overwrite it.");
-        }
 
         std::vector<std::uint8_t> payload;
         if (!ReadFileBytes(sourcePath, payload, error) || payload.empty())
             return ImportFailure(std::move(result), std::move(error));
         result.sourceHash = HashBytes(payload);
-        result.derived = DeriveMetadata(
-            result.resourceClass, result.sourceFormat, payload);
-        if (!ValidateDerivedMetadata(
-                result.derived, result.resourceClass, error))
+        result.derived = DeriveMetadata(result.resourceClass, result.sourceFormat, payload);
+        if (!ValidateDerivedMetadata(result.derived, result.resourceClass, error))
             return ImportFailure(std::move(result), std::move(error));
 
         AssetRegistry registry;
-        if (!ReadAssetRegistry(root.generic_u8string(), request.projectId,
-                registry, error))
+        if (!ReadAssetRegistry(root.generic_u8string(), request.projectId, registry, error))
             return ImportFailure(std::move(result), std::move(error));
         if (HasMissingPath(registry, sourceRelative.generic_u8string()) ||
             HasMissingPath(registry, productRelative.generic_u8string()))
@@ -1107,20 +1040,16 @@ namespace renegade::bridge
                 "Resource import path collides with LC01 recovery state; refresh/recover the project first.");
         }
         if (FindRecordByPath(registry, productRelative.generic_u8string()) != nullptr)
-        {
-            return ImportFailure(std::move(result),
-                "Resource product path already has LC01 identity.");
-        }
+            return ImportFailure(std::move(result), "Resource product path already has LC01 identity.");
 
         AssetRegistry candidate = registry;
-        const AssetRecord* existingSource = FindRecordByPath(
-            registry, sourceRelative.generic_u8string());
+        const AssetRecord* existingSource = FindRecordByPath(registry, sourceRelative.generic_u8string());
         if (existingSource != nullptr)
         {
-            if (!existingSource->sourceAvailable ||
-                existingSource->contentHash != result.sourceHash ||
+            if (!existingSource->sourceAvailable || existingSource->contentHash != result.sourceHash ||
                 existingSource->dependencyClass != DependencyClass::ImportedContent ||
-                existingSource->requirement != DependencyRequirement::EditorOnly)
+                existingSource->requirement != DependencyRequirement::EditorOnly ||
+                existingSource->provider != "lp08.source_asset" || existingSource->providerVersion != 1)
             {
                 return ImportFailure(std::move(result),
                     "Existing LC01 source identity does not match this retained resource source.");
@@ -1129,8 +1058,7 @@ namespace renegade::bridge
         }
         else
         {
-            if (!GenerateUniqueAssetId(candidate, options.generateId,
-                    result.sourceAssetId, error))
+            if (!GenerateUniqueAssetId(candidate, options.generateId, result.sourceAssetId, error))
                 return ImportFailure(std::move(result), std::move(error));
             AssetRecord sourceRecord;
             sourceRecord.assetId = result.sourceAssetId;
@@ -1145,8 +1073,7 @@ namespace renegade::bridge
             candidate.records.push_back(std::move(sourceRecord));
         }
 
-        if (!GenerateUniqueAssetId(candidate, options.generateId,
-                result.assetId, error))
+        if (!GenerateUniqueAssetId(candidate, options.generateId, result.assetId, error))
             return ImportFailure(std::move(result), std::move(error));
 
         ResourceAssetDocument product;
@@ -1155,8 +1082,7 @@ namespace renegade::bridge
         product.manifest.sourceAssetId = result.sourceAssetId;
         product.manifest.resourceClass = result.resourceClass;
         product.manifest.sourceFormat = result.sourceFormat;
-        product.manifest.settingsJson = CanonicalRecipe(
-            result.resourceClass, result.sourceFormat);
+        product.manifest.settingsJson = CanonicalRecipe(result.resourceClass, result.sourceFormat);
         product.manifest.payloadHash = result.sourceHash;
         product.manifest.derived = result.derived;
         product.payload = payload;
@@ -1191,14 +1117,12 @@ namespace renegade::bridge
         provenance.productContentHashAtImport = result.productHash;
         auto importedProducts = candidate.importedProducts;
         importedProducts.push_back(std::move(provenance));
-        if (!SetImportedProductRecords(candidate,
-                std::move(importedProducts), error) ||
+        if (!SetImportedProductRecords(candidate, std::move(importedProducts), error) ||
             !ValidateAssetRegistry(candidate, error))
             return ImportFailure(std::move(result), std::move(error));
 
         ResourceAssetMetadataDocument metadata;
-        if (!ReadResourceAssetMetadata(root.generic_u8string(), request.projectId,
-                metadata, error))
+        if (!ReadResourceAssetMetadata(root.generic_u8string(), request.projectId, metadata, error))
             return ImportFailure(std::move(result), std::move(error));
         ResourceAssetMetadataRecord metadataRecord;
         metadataRecord.assetId = result.assetId;
@@ -1215,8 +1139,7 @@ namespace renegade::bridge
             return ImportFailure(std::move(result), std::move(error));
 
         std::string registryPath;
-        if (!ResolveAssetRegistryDocumentPath(
-                root.generic_u8string(), registryPath, error))
+        if (!ResolveAssetRegistryDocumentPath(root.generic_u8string(), registryPath, error))
             return ImportFailure(std::move(result), std::move(error));
         const fs::path metadataPath = root / ResourceAssetMetadataDocumentName;
 
@@ -1228,24 +1151,20 @@ namespace renegade::bridge
         const StableId expectedProjectId = request.projectId;
         const StableId expectedAssetId = result.assetId;
         const StableId expectedSourceAssetId = result.sourceAssetId;
-        productWrite.validator = [expectedProductBytes, expectedPayload,
-            sourcePath, expectedProjectId, expectedAssetId, expectedSourceAssetId](
+        productWrite.validator = [expectedProductBytes, expectedPayload, sourcePath,
+            expectedProjectId, expectedAssetId, expectedSourceAssetId](
             const std::string& stagedPath, std::string& validationError)
         {
             std::vector<std::uint8_t> currentSource;
-            if (!ReadFileBytes(sourcePath, currentSource, validationError) ||
-                currentSource != expectedPayload)
+            if (!ReadFileBytes(sourcePath, currentSource, validationError) || currentSource != expectedPayload)
             {
-                if (validationError.empty())
-                    validationError = "Retained resource source changed during import.";
+                if (validationError.empty()) validationError = "Retained resource source changed during import.";
                 return false;
             }
             std::vector<std::uint8_t> staged;
-            if (!ReadFileBytes(fs::u8path(stagedPath), staged, validationError) ||
-                staged != expectedProductBytes)
+            if (!ReadFileBytes(fs::u8path(stagedPath), staged, validationError) || staged != expectedProductBytes)
             {
-                if (validationError.empty())
-                    validationError = "Staged resource .rasset does not match requested bytes.";
+                if (validationError.empty()) validationError = "Staged resource .rasset does not match requested bytes.";
                 return false;
             }
             ResourceAssetDocument parsed;
@@ -1253,10 +1172,9 @@ namespace renegade::bridge
                 return false;
             if (parsed.manifest.projectId != expectedProjectId ||
                 parsed.manifest.assetId != expectedAssetId ||
-                parsed.manifest.sourceAssetId != expectedSourceAssetId ||
-                parsed.payload != expectedPayload)
+                parsed.manifest.sourceAssetId != expectedSourceAssetId || parsed.payload != expectedPayload)
             {
-                validationError = "Staged resource .rasset identity or payload differs from the accepted import.";
+                validationError = "Staged resource .rasset identity or payload differs from accepted import.";
                 return false;
             }
             validationError.clear();
@@ -1271,23 +1189,19 @@ namespace renegade::bridge
             const std::string& stagedPath, std::string& validationError)
         {
             std::vector<std::uint8_t> bytes;
-            if (!ReadFileBytes(fs::u8path(stagedPath), bytes, validationError))
-                return false;
+            if (!ReadFileBytes(fs::u8path(stagedPath), bytes, validationError)) return false;
             const std::string staged(bytes.begin(), bytes.end());
             AssetRegistry parsed;
-            if (!DeserializeAssetRegistry(staged, parsed, validationError) ||
-                parsed.projectId != expectedProjectId)
+            if (!DeserializeAssetRegistry(staged, parsed, validationError) || parsed.projectId != expectedProjectId)
             {
-                if (validationError.empty())
-                    validationError = "Staged asset registry belongs to another project.";
+                if (validationError.empty()) validationError = "Staged asset registry belongs to another project.";
                 return false;
             }
             std::string canonical;
             if (!SerializeAssetRegistry(parsed, canonical, validationError) ||
                 canonical != staged || staged != expectedRegistryJson)
             {
-                if (validationError.empty())
-                    validationError = "Staged asset registry is not canonical requested state.";
+                if (validationError.empty()) validationError = "Staged asset registry is not canonical requested state.";
                 return false;
             }
             validationError.clear();
@@ -1302,16 +1216,13 @@ namespace renegade::bridge
             const std::string& stagedPath, std::string& validationError)
         {
             std::vector<std::uint8_t> bytes;
-            if (!ReadFileBytes(fs::u8path(stagedPath), bytes, validationError))
-                return false;
+            if (!ReadFileBytes(fs::u8path(stagedPath), bytes, validationError)) return false;
             const std::string staged(bytes.begin(), bytes.end());
             ResourceAssetMetadataDocument parsed;
-            if (!DeserializeResourceAssetMetadata(
-                    staged, parsed, validationError) ||
+            if (!DeserializeResourceAssetMetadata(staged, parsed, validationError) ||
                 parsed.projectId != expectedProjectId)
             {
-                if (validationError.empty())
-                    validationError = "Staged resource metadata belongs to another project.";
+                if (validationError.empty()) validationError = "Staged resource metadata belongs to another project.";
                 return false;
             }
             if (staged != expectedMetadataJson)
@@ -1325,16 +1236,13 @@ namespace renegade::bridge
 
         ProjectDocumentTransactionOptions transactionOptions;
         transactionOptions.transactionId = std::move(options.transactionId);
-        transactionOptions.journalDirectory =
-            (root / "Intermediate/Transactions").generic_u8string();
+        transactionOptions.journalDirectory = (root / "Intermediate/Transactions").generic_u8string();
         transactionOptions.allowedRoot = root.generic_u8string();
         transactionOptions.operationHook = std::move(options.operationHook);
         ProjectDocumentTransaction transaction;
         result.transaction = transaction.Execute({
-            std::move(productWrite),
-            std::move(registryWrite),
-            std::move(metadataWrite),
-        }, std::move(transactionOptions));
+            std::move(productWrite), std::move(registryWrite), std::move(metadataWrite)},
+            std::move(transactionOptions));
         if (!result.transaction.success || !result.transaction.committed)
         {
             result.error = result.transaction.message.empty()
@@ -1346,34 +1254,26 @@ namespace renegade::bridge
         ResourceAssetDocument reopenedProduct;
         AssetRegistry reopenedRegistry;
         ResourceAssetMetadataDocument reopenedMetadata;
-        if (!ReadResourceAssetDocument(productPath.generic_u8string(),
-                reopenedProduct, error) ||
-            !ReadAssetRegistry(root.generic_u8string(), request.projectId,
-                reopenedRegistry, error) ||
-            !ReadResourceAssetMetadata(root.generic_u8string(), request.projectId,
-                reopenedMetadata, error))
+        if (!ReadResourceAssetDocument(productPath.generic_u8string(), reopenedProduct, error) ||
+            !ReadAssetRegistry(root.generic_u8string(), request.projectId, reopenedRegistry, error) ||
+            !ReadResourceAssetMetadata(root.generic_u8string(), request.projectId, reopenedMetadata, error))
         {
             result.error = "Committed resource asset did not reopen: " + error;
             return result;
         }
-        const auto reopenedMetadataRecord = std::find_if(
-            reopenedMetadata.records.begin(), reopenedMetadata.records.end(),
+        const auto metadataFound = std::find_if(reopenedMetadata.records.begin(), reopenedMetadata.records.end(),
             [&result](const ResourceAssetMetadataRecord& record)
             { return record.assetId == result.assetId; });
-        const auto reopenedProvenance = std::find_if(
-            reopenedRegistry.importedProducts.begin(),
-            reopenedRegistry.importedProducts.end(),
-            [&result](const ImportedProductRecord& record)
+        const auto provenanceFound = std::find_if(reopenedRegistry.importedProducts.begin(),
+            reopenedRegistry.importedProducts.end(), [&result](const ImportedProductRecord& record)
             { return record.productAssetId == result.assetId; });
         if (reopenedProduct.manifest.assetId != result.assetId ||
             reopenedProduct.manifest.sourceAssetId != result.sourceAssetId ||
-            reopenedProduct.payload != payload ||
-            reopenedMetadataRecord == reopenedMetadata.records.end() ||
-            reopenedMetadataRecord->derived != result.derived ||
-            reopenedProvenance == reopenedRegistry.importedProducts.end() ||
-            reopenedProvenance->sourceAssetId != result.sourceAssetId ||
-            reopenedProvenance->sourceContentHashAtImport != result.sourceHash ||
-            reopenedProvenance->productContentHashAtImport != result.productHash)
+            reopenedProduct.payload != payload || metadataFound == reopenedMetadata.records.end() ||
+            metadataFound->derived != result.derived || provenanceFound == reopenedRegistry.importedProducts.end() ||
+            provenanceFound->sourceAssetId != result.sourceAssetId ||
+            provenanceFound->sourceContentHashAtImport != result.sourceHash ||
+            provenanceFound->productContentHashAtImport != result.productHash)
         {
             result.error = "Committed resource asset reopen evidence is inconsistent.";
             return result;
