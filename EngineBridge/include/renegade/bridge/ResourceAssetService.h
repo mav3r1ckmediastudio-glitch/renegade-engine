@@ -163,8 +163,14 @@ namespace renegade::bridge
     };
 
     // Gate 4 is stable-ID driven. Callers identify the governed product only;
-    // LC01 provenance and the accepted .rasset manifest resolve the retained
+    // LC01 provenance and the accepted registry state resolve the retained
     // source, product path, class, format, importer and version-1 recipe.
+    //
+    // IMPORTANT: callers must refresh LC01 from disk before invoking reimport.
+    // The source AssetRecord content hash is deliberately required to describe
+    // the bytes being replayed; ReimportResourceAsset will not silently absorb
+    // an edit that LC01 has not observed. A missing product is recoverable when
+    // its retained source is active and LC01 still owns the product tombstone.
     struct ResourceAssetReimportRequest
     {
         std::string projectRoot;
@@ -181,6 +187,7 @@ namespace renegade::bridge
     struct ResourceAssetReimportResult
     {
         bool succeeded = false;
+        bool recoveredMissingProduct = false;
         StableId sourceAssetId;
         StableId assetId;
         ResourceClass resourceClass = ResourceClass::Unknown;
@@ -198,8 +205,10 @@ namespace renegade::bridge
 
     // UI-independent governed-resource lifecycle boundary. First import creates
     // stable identity; Gate 4 reimport resolves and replays only the stored
-    // accepted recipe, retaining source/product IDs and transactionally
-    // replacing the last-good product only after candidate validation succeeds.
+    // accepted recipe, retaining source/product IDs. An active product is
+    // replaced only after last-good validation; a deleted product can be
+    // recreated from its LC01 tombstone plus intact retained source. Product,
+    // registry and resource metadata always commit through one transaction.
     class ResourceAssetService
     {
     public:
