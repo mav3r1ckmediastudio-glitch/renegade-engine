@@ -1,6 +1,6 @@
 # LP07 — Reusable Project Asset Workflow
 
-Status: **implementation active; Gate 1 is in draft PR #46**.
+Status: **Gates 1–5 accepted and merged; Gate 6 implementation and acceptance proof are complete in PR #51. Final exact-head CI, independent audit, owner acceptance and merge remain required.**
 
 Authoritative starting main baseline:
 `defb8b55832e84be8bbf238531f8a5110d129e06`
@@ -11,6 +11,9 @@ Wicked remains pinned at
 
 Architectural authority for the public asset/content model:
 `docs/adr/0004-renegade-asset-model-and-managed-metadata.md`.
+
+Gate 6 implementation/acceptance detail is recorded in
+`docs/LP07_GATE6_PACKAGED_RUNTIME_ACCEPTANCE.md`.
 
 ## Why LP07 is next
 
@@ -478,6 +481,13 @@ standalone build remains authoritative at its respective boundary.
 - promoted named executable direct launch passes;
 - independent exact-head audit passes; and
 - owner explicitly accepts/merges.
+
+Gate 6 now implements the required stable scene wrapper, LP05/LC01 dependency
+projection, editor-only source freshness, LP06 packaging, package-relative
+Runtime `.rasset` refresh, last-good failure preservation, and direct named
+executable proof. See `docs/LP07_GATE6_PACKAGED_RUNTIME_ACCEPTANCE.md` for the
+implementation and test contract. Only the final exact-head process gates above
+remain before merge.
 
 ## Programme exclusions
 
