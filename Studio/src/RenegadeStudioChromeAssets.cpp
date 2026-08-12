@@ -80,7 +80,97 @@ namespace
 
 namespace renegade::studio
 {
-    void RenegadeStudioChrome::CreateCreatorAssetControls()
+    void CreatorAssetStudioChrome::Create()
+    {
+        RenegadeStudioChrome::Create();
+        CreateCreatorAssetControls();
+        creatorAssetRefreshPending_ = true;
+    }
+
+    void CreatorAssetStudioChrome::SetLayout(
+        const float width,
+        const float height)
+    {
+        creatorLayoutWidth_ = width;
+        creatorLayoutHeight_ = height;
+        RenegadeStudioChrome::SetLayout(width, height);
+        LayoutCreatorAssetControls();
+    }
+
+    void CreatorAssetStudioChrome::SetAssetBrowserData(
+        std::vector<AssetFolderRow> folders,
+        std::vector<AssetCard> assets,
+        std::string currentPath)
+    {
+        creatorFilesystemFolders_ = folders;
+        creatorFilesystemAssets_ = assets;
+        creatorCurrentPath_ = currentPath;
+        RenegadeStudioChrome::SetAssetBrowserData(
+            std::move(folders), std::move(assets), std::move(currentPath));
+        creatorAssetRefreshPending_ = true;
+    }
+
+    void CreatorAssetStudioChrome::SetActiveBottomTab(
+        const int tab,
+        const bool notify)
+    {
+        RenegadeStudioChrome::SetActiveBottomTab(tab, notify);
+        if (tab == 0)
+            creatorAssetRefreshPending_ = true;
+    }
+
+    void CreatorAssetStudioChrome::OnAction(
+        std::function<void(Action)> callback)
+    {
+        RenegadeStudioChrome::OnAction(
+            [this, callback = std::move(callback)](const Action action) mutable
+            {
+                if (action == Action::ImportModel)
+                {
+                    ImportCreatorModel();
+                    return;
+                }
+                if (callback)
+                    callback(action);
+            });
+    }
+
+    void CreatorAssetStudioChrome::OnAssetBrowserItemSelected(
+        std::function<void(const std::string&)> callback)
+    {
+        RenegadeStudioChrome::OnAssetBrowserItemSelected(
+            [this, callback = std::move(callback)](const std::string& path) mutable
+            {
+                if (SelectCreatorAsset(path))
+                    return;
+                if (callback)
+                    callback(path);
+            });
+    }
+
+    bool CreatorAssetStudioChrome::ConsumedPointerThisFrame() const noexcept
+    {
+        return creatorAssetControlConsumed_ ||
+            RenegadeStudioChrome::ConsumedPointerThisFrame();
+    }
+
+    void CreatorAssetStudioChrome::Update(
+        const wi::Canvas& canvas,
+        const float dt)
+    {
+        RenegadeStudioChrome::Update(canvas, dt);
+        UpdateCreatorAssetControls(canvas, dt);
+    }
+
+    void CreatorAssetStudioChrome::Render(
+        const wi::Canvas& canvas,
+        const wi::graphics::CommandList cmd) const
+    {
+        RenegadeStudioChrome::Render(canvas, cmd);
+        RenderCreatorAssetControls(canvas, cmd);
+    }
+
+    void CreatorAssetStudioChrome::CreateCreatorAssetControls()
     {
         creatorAssetSearch_.Create("Creator Asset Search");
         creatorAssetSearch_.SetDescription("⌕  ");
@@ -107,12 +197,12 @@ namespace renegade::studio
         creatorAssetTags_.SetCancelInputEnabled(false);
 
         creatorAssetStateCombo_.Create("Creator Asset State Filter");
-        creatorAssetStateCombo_.AddItem("ALL STATES", 0);
+        creatorAssetStateCombo_.AddItem("ALL", 0);
         creatorAssetStateCombo_.AddItem("CURRENT", 1);
         creatorAssetStateCombo_.AddItem("STALE", 2);
         creatorAssetStateCombo_.AddItem("MISSING", 3);
         creatorAssetStateCombo_.AddItem("MOVED", 4);
-        creatorAssetStateCombo_.AddItem("UNREGISTERED", 5);
+        creatorAssetStateCombo_.AddItem("UNREG", 5);
         creatorAssetStateCombo_.SetSelectedWithoutCallback(0);
         creatorAssetStateCombo_.OnSelect([this](const wi::gui::EventArgs& args)
         {
@@ -121,7 +211,7 @@ namespace renegade::studio
         });
 
         creatorAssetFormatCombo_.Create("Creator Asset Format Filter");
-        creatorAssetFormatCombo_.AddItem("ALL FORMAT", 0);
+        creatorAssetFormatCombo_.AddItem("FORMAT", 0);
         creatorAssetFormatCombo_.AddItem("FBX", 1);
         creatorAssetFormatCombo_.AddItem("GLTF", 2);
         creatorAssetFormatCombo_.AddItem("GLB", 3);
@@ -133,7 +223,7 @@ namespace renegade::studio
         });
 
         creatorAssetRigCombo_.Create("Creator Asset Rig Filter");
-        creatorAssetRigCombo_.AddItem("ALL MODELS", 0);
+        creatorAssetRigCombo_.AddItem("MODEL", 0);
         creatorAssetRigCombo_.AddItem("SKINNED", 1);
         creatorAssetRigCombo_.AddItem("ANIMATED", 2);
         creatorAssetRigCombo_.AddItem("STATIC", 3);
@@ -197,64 +287,60 @@ namespace renegade::studio
         LayoutCreatorAssetControls();
     }
 
-    void RenegadeStudioChrome::LayoutCreatorAssetControls()
+    void CreatorAssetStudioChrome::LayoutCreatorAssetControls()
     {
-        const float inspectorX = width_ - inspectorWidth_;
-        const float browserWidth = inspectorX - hierarchyWidth_;
-        const float bottomTabsTop = height_ - BottomTabsHeight - StatusBarHeight;
-        const float drawerTop = bottomTabsTop - drawerHeight_;
-        const float firstRowY = drawerTop + 45.0f;
-        const float secondRowY = drawerTop + 76.0f;
+        const float left = HierarchyWidth() + 13.0f;
+        const float right = creatorLayoutWidth_ - InspectorWidth() - 13.0f;
+        const float available = std::max(0.0f, right - left);
+        const float bottomTabsTop =
+            creatorLayoutHeight_ - BottomTabsHeight - StatusBarHeight;
+        const float drawerTop = bottomTabsTop - DrawerHeight();
+        const float y = drawerTop + 45.0f;
 
-        float x = hierarchyWidth_ + 45.0f;
-        creatorAssetStateCombo_.SetPos(XMFLOAT2(x, firstRowY));
-        creatorAssetStateCombo_.SetSize(XMFLOAT2(86.0f, 25.0f));
-        x += 91.0f;
-        creatorAssetFormatCombo_.SetPos(XMFLOAT2(x, firstRowY));
-        creatorAssetFormatCombo_.SetSize(XMFLOAT2(75.0f, 25.0f));
-        x += 80.0f;
-        creatorAssetRigCombo_.SetPos(XMFLOAT2(x, firstRowY));
-        creatorAssetRigCombo_.SetSize(XMFLOAT2(86.0f, 25.0f));
-        x += 94.0f;
+        constexpr float gap = 4.0f;
+        constexpr float stateWidth = 70.0f;
+        constexpr float formatWidth = 58.0f;
+        constexpr float rigWidth = 70.0f;
+        constexpr float importWidth = 52.0f;
+        constexpr float placeWidth = 48.0f;
+        constexpr float reimportWidth = 64.0f;
+        constexpr float saveWidth = 68.0f;
+        constexpr float fixed = stateWidth + formatWidth + rigWidth +
+            importWidth + placeWidth + reimportWidth + saveWidth + gap * 8.0f;
+        const float flexible = std::max(160.0f, available - fixed);
+        const float searchWidth = flexible * 0.5f;
+        const float tagsWidth = flexible - searchWidth;
 
-        const float searchRight = inspectorX - 13.0f;
-        const float searchX = std::min(searchRight - 105.0f, x);
-        creatorAssetSearch_.SetPos(XMFLOAT2(searchX, firstRowY));
-        creatorAssetSearch_.SetSize(XMFLOAT2(
-            std::max(105.0f, searchRight - searchX), 25.0f));
-
-        const float right = inspectorX - 13.0f;
-        constexpr float gap = 5.0f;
-        constexpr float saveWidth = 78.0f;
-        constexpr float reimportWidth = 72.0f;
-        constexpr float placeWidth = 58.0f;
-        constexpr float importWidth = 60.0f;
-        float actionX = right -
-            (saveWidth + reimportWidth + placeWidth + importWidth + gap * 3.0f);
-
-        creatorAssetImportButton_.SetPos(XMFLOAT2(actionX, secondRowY));
+        float x = left;
+        creatorAssetStateCombo_.SetPos(XMFLOAT2(x, y));
+        creatorAssetStateCombo_.SetSize(XMFLOAT2(stateWidth, 25.0f));
+        x += stateWidth + gap;
+        creatorAssetFormatCombo_.SetPos(XMFLOAT2(x, y));
+        creatorAssetFormatCombo_.SetSize(XMFLOAT2(formatWidth, 25.0f));
+        x += formatWidth + gap;
+        creatorAssetRigCombo_.SetPos(XMFLOAT2(x, y));
+        creatorAssetRigCombo_.SetSize(XMFLOAT2(rigWidth, 25.0f));
+        x += rigWidth + gap;
+        creatorAssetSearch_.SetPos(XMFLOAT2(x, y));
+        creatorAssetSearch_.SetSize(XMFLOAT2(searchWidth, 25.0f));
+        x += searchWidth + gap;
+        creatorAssetTags_.SetPos(XMFLOAT2(x, y));
+        creatorAssetTags_.SetSize(XMFLOAT2(tagsWidth, 25.0f));
+        x += tagsWidth + gap;
+        creatorAssetImportButton_.SetPos(XMFLOAT2(x, y));
         creatorAssetImportButton_.SetSize(XMFLOAT2(importWidth, 25.0f));
-        actionX += importWidth + gap;
-        creatorAssetPlaceButton_.SetPos(XMFLOAT2(actionX, secondRowY));
+        x += importWidth + gap;
+        creatorAssetPlaceButton_.SetPos(XMFLOAT2(x, y));
         creatorAssetPlaceButton_.SetSize(XMFLOAT2(placeWidth, 25.0f));
-        actionX += placeWidth + gap;
-        creatorAssetReimportButton_.SetPos(XMFLOAT2(actionX, secondRowY));
+        x += placeWidth + gap;
+        creatorAssetReimportButton_.SetPos(XMFLOAT2(x, y));
         creatorAssetReimportButton_.SetSize(XMFLOAT2(reimportWidth, 25.0f));
-        actionX += reimportWidth + gap;
-        creatorAssetSaveTagsButton_.SetPos(XMFLOAT2(actionX, secondRowY));
+        x += reimportWidth + gap;
+        creatorAssetSaveTagsButton_.SetPos(XMFLOAT2(x, y));
         creatorAssetSaveTagsButton_.SetSize(XMFLOAT2(saveWidth, 25.0f));
-
-        const float tagsX = hierarchyWidth_ + 13.0f;
-        const float tagsRight = right -
-            (saveWidth + reimportWidth + placeWidth + importWidth + gap * 3.0f) - 7.0f;
-        creatorAssetTags_.SetPos(XMFLOAT2(tagsX, secondRowY));
-        creatorAssetTags_.SetSize(XMFLOAT2(
-            std::max(82.0f, tagsRight - tagsX), 25.0f));
-
-        (void)browserWidth;
     }
 
-    bridge::AssetCatalogueQuery RenegadeStudioChrome::CreatorAssetQuery() const
+    bridge::AssetCatalogueQuery CreatorAssetStudioChrome::CreatorAssetQuery() const
     {
         bridge::AssetCatalogueQuery query;
         query.text = creatorAssetSearch_.GetText();
@@ -284,7 +370,7 @@ namespace renegade::studio
         return query;
     }
 
-    std::vector<std::string> RenegadeStudioChrome::CreatorTagInput() const
+    std::vector<std::string> CreatorAssetStudioChrome::CreatorTagInput() const
     {
         std::vector<std::string> tags;
         std::stringstream stream(creatorAssetTags_.GetText());
@@ -298,12 +384,12 @@ namespace renegade::studio
         return tags;
     }
 
-    void RenegadeStudioChrome::UpdateCreatorAssetControls(
+    void CreatorAssetStudioChrome::UpdateCreatorAssetControls(
         const wi::Canvas& canvas,
         const float dt)
     {
         creatorAssetControlConsumed_ = false;
-        const bool visible = activeBottomTab_ == 0;
+        const bool visible = ActiveBottomTab() == 0;
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorAssetSearch_),
             static_cast<wi::gui::Widget*>(&creatorAssetTags_),
@@ -335,13 +421,15 @@ namespace renegade::studio
                 return !creatorSelectedAssetPath_.empty() &&
                     entry.projectRelativePath == creatorSelectedAssetPath_;
             });
-        const bool selectedRegistered = selected != creatorAssetCatalogue_.entries.end() &&
+        const bool selectedRegistered =
+            selected != creatorAssetCatalogue_.entries.end() &&
             selected->registered && bridge::IsValidStableId(selected->assetId);
-        const bool selectedReusable = selectedRegistered && selected->importedProduct &&
-            selected->productAvailable &&
+        const bool selectedReusable = selectedRegistered &&
+            selected->importedProduct && selected->productAvailable &&
             fs::u8path(selected->projectRelativePath).extension() == ".rasset";
         creatorAssetPlaceButton_.SetEnabled(selectedReusable);
-        creatorAssetReimportButton_.SetEnabled(selectedRegistered && selected->importedProduct);
+        creatorAssetReimportButton_.SetEnabled(
+            selectedRegistered && selected->importedProduct);
         creatorAssetSaveTagsButton_.SetEnabled(selectedRegistered);
 
         creatorAssetImportButton_.Update(canvas, dt);
@@ -374,11 +462,11 @@ namespace renegade::studio
         }
     }
 
-    void RenegadeStudioChrome::RenderCreatorAssetControls(
+    void CreatorAssetStudioChrome::RenderCreatorAssetControls(
         const wi::Canvas& canvas,
         const wi::graphics::CommandList cmd) const
     {
-        if (activeBottomTab_ != 0)
+        if (ActiveBottomTab() != 0)
             return;
         creatorAssetSearch_.Render(canvas, cmd);
         creatorAssetTags_.Render(canvas, cmd);
@@ -391,7 +479,7 @@ namespace renegade::studio
         creatorAssetSaveTagsButton_.Render(canvas, cmd);
     }
 
-    void RenegadeStudioChrome::RefreshCreatorAssetBrowser()
+    void CreatorAssetStudioChrome::RefreshCreatorAssetBrowser()
     {
         creatorAssetRefreshPending_ = false;
         auto* session = bridge::StudioSession::Current();
@@ -399,7 +487,7 @@ namespace renegade::studio
         {
             creatorAssetCatalogue_ = {};
             creatorSelectedAssetId_.clear();
-            statusText_ = "ASSET BROWSER // OPEN A PROJECT";
+            SetStatusText("ASSET BROWSER // OPEN A PROJECT");
             return;
         }
 
@@ -409,26 +497,29 @@ namespace renegade::studio
         if (!creatorAssetWorkflow_.BuildCatalogue(
                 project.rootPath, project.projectId, catalogue, error))
         {
-            statusText_ = "ASSET BROWSER // REFRESH FAILED // " + error;
+            SetStatusText("ASSET BROWSER // REFRESH FAILED // " + error);
             return;
         }
         creatorAssetCatalogue_ = std::move(catalogue);
-
-        std::vector<AssetCard> cards;
-        for (const auto& existing : assetBrowserAssets_)
-        {
-            if (existing.directory)
-                cards.push_back(existing);
-        }
 
         const bridge::AssetCatalogueQuery query = CreatorAssetQuery();
         const auto matches = bridge::QueryAssetCatalogue(
             creatorAssetCatalogue_, query);
         const bool globalSearch = !query.text.empty();
+
+        std::vector<AssetCard> cards;
+        if (!globalSearch)
+        {
+            for (const auto& existing : creatorFilesystemAssets_)
+            {
+                if (existing.directory)
+                    cards.push_back(existing);
+            }
+        }
         for (const auto& entry : matches)
         {
             if (!globalSearch && ParentPath(entry.projectRelativePath) !=
-                    fs::u8path(assetBrowserCurrentPath_)
+                    fs::u8path(creatorCurrentPath_)
                         .lexically_normal().generic_u8string())
                 continue;
 
@@ -446,9 +537,8 @@ namespace renegade::studio
             cards.push_back(std::move(card));
         }
 
-        assetBrowserAssets_ = std::move(cards);
-        assetBrowserAssetScrollRow_ = 0;
-        assetBrowserSelectedPath_ = creatorSelectedAssetPath_;
+        RenegadeStudioChrome::SetAssetBrowserData(
+            creatorFilesystemFolders_, std::move(cards), creatorCurrentPath_);
 
         const auto selected = std::find_if(
             creatorAssetCatalogue_.entries.begin(),
@@ -461,7 +551,6 @@ namespace renegade::studio
         {
             creatorSelectedAssetId_.clear();
             creatorSelectedAssetPath_.clear();
-            assetBrowserSelectedPath_.clear();
             creatorAssetTags_.SetValue("");
         }
         else
@@ -469,12 +558,12 @@ namespace renegade::studio
             creatorSelectedAssetId_ = selected->assetId;
         }
 
-        statusText_ = "ASSET BROWSER // " +
+        SetStatusText("ASSET BROWSER // " +
             std::to_string(matches.size()) + " CATALOGUE MATCHES // " +
-            (globalSearch ? std::string("ALL CONTENT") : assetBrowserCurrentPath_);
+            (globalSearch ? std::string("ALL CONTENT") : creatorCurrentPath_));
     }
 
-    bool RenegadeStudioChrome::SelectCreatorAsset(
+    bool CreatorAssetStudioChrome::SelectCreatorAsset(
         const std::string& relativePath)
     {
         const auto found = std::find_if(
@@ -489,7 +578,6 @@ namespace renegade::studio
 
         creatorSelectedAssetPath_ = found->projectRelativePath;
         creatorSelectedAssetId_ = found->assetId;
-        assetBrowserSelectedPath_ = found->projectRelativePath;
         creatorAssetTags_.SetValue(JoinTags(found->creatorTags));
 
         std::ostringstream status;
@@ -502,17 +590,17 @@ namespace renegade::studio
             status << " // MESH " << found->model.meshCount
                    << " MAT " << found->model.materialCount
                    << " BONE " << found->model.boneCount
-                   << " ANIM " << found->model.animationCount;
+                   << " ANIM " << found->model.animationClipCount;
             if (found->model.skinned) status << " // SKINNED";
             if (found->model.animated) status << " // ANIMATED";
         }
         if (!found->creatorTags.empty())
             status << " // TAGS " << JoinTags(found->creatorTags);
-        statusText_ = status.str();
+        SetStatusText(status.str());
         return true;
     }
 
-    void RenegadeStudioChrome::ImportCreatorModel()
+    void CreatorAssetStudioChrome::ImportCreatorModel()
     {
         auto* session = bridge::StudioSession::Current();
         if (session == nullptr || !session->Projects().HasProject())
@@ -545,19 +633,18 @@ namespace renegade::studio
                     if (sourcePath.empty())
                         return;
                     auto* current = bridge::StudioSession::Current();
-                    if (current == nullptr || !current->Projects().HasProject())
-                        return;
-                    if (wi::jobsystem::IsBusy(creatorAssetWorkload_))
+                    if (current == nullptr || !current->Projects().HasProject() ||
+                        wi::jobsystem::IsBusy(creatorAssetWorkload_))
                         return;
 
                     const auto project = current->Projects().CurrentProject();
-                    statusText_ = "IMPORT ASSET // RETAIN + CONVERT // " +
-                        fs::u8path(sourcePath).filename().generic_u8string();
+                    SetStatusText("IMPORT ASSET // RETAIN + CONVERT // " +
+                        fs::u8path(sourcePath).filename().generic_u8string());
                     auto imported = std::make_shared<bridge::CreatorModelImportResult>();
                     auto prepared = std::make_shared<bridge::PreparedReusableModelPlacement>();
                     wi::jobsystem::Execute(
                         creatorAssetWorkload_,
-                        [project, sourcePath, imported, prepared](wi::jobsystem::JobArgs)
+                        [this, project, sourcePath, imported, prepared](wi::jobsystem::JobArgs)
                         {
                             bridge::CreatorAssetWorkflowService workflow;
                             *imported = workflow.ImportModel(
@@ -569,46 +656,44 @@ namespace renegade::studio
                                     project.projectId,
                                     imported->asset.assetId);
                             }
-                        });
-                    wi::jobsystem::Execute(creatorAssetWorkload_,
-                        [](wi::jobsystem::JobArgs) {});
-                    wi::jobsystem::Wait(creatorAssetWorkload_);
-                    wi::eventhandler::Subscribe_Once(
-                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                        [this, imported, prepared](std::uint64_t)
-                        {
-                            creatorAssetRefreshPending_ = true;
-                            if (!imported->succeeded)
-                            {
-                                statusText_ = "IMPORT ASSET // FAILED";
-                                wi::helper::messageBox(
-                                    "Could not create the reusable project asset.\n\nReason: " +
-                                        imported->error,
-                                    "Import Project Asset");
-                                return;
-                            }
-                            creatorSelectedAssetId_ = imported->asset.assetId;
-                            creatorSelectedAssetPath_ = imported->assetProjectRelativePath;
-                            assetBrowserCurrentPath_ = "Content/Models";
-                            if (!prepared->IsReady())
-                            {
-                                statusText_ = "IMPORT ASSET // CREATED // PLACEMENT FAILED";
-                                wi::helper::messageBox(
-                                    "The .rasset was created, but its accepted payload could not be prepared for placement.\n\nReason: " +
-                                        prepared->Result().error,
-                                    "Import Project Asset");
-                                return;
-                            }
-                            PlacePreparedCreatorAsset(
-                                std::move(*prepared),
-                                fs::u8path(imported->assetProjectRelativePath)
-                                    .filename().generic_u8string());
+                            wi::eventhandler::Subscribe_Once(
+                                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                                [this, imported, prepared](std::uint64_t)
+                                {
+                                    creatorAssetRefreshPending_ = true;
+                                    if (!imported->succeeded)
+                                    {
+                                        SetStatusText("IMPORT ASSET // FAILED");
+                                        wi::helper::messageBox(
+                                            "Could not create the reusable project asset.\n\nReason: " +
+                                                imported->error,
+                                            "Import Project Asset");
+                                        return;
+                                    }
+                                    creatorSelectedAssetId_ = imported->asset.assetId;
+                                    creatorSelectedAssetPath_ =
+                                        imported->assetProjectRelativePath;
+                                    if (!prepared->IsReady())
+                                    {
+                                        SetStatusText(
+                                            "IMPORT ASSET // CREATED // PLACEMENT FAILED");
+                                        wi::helper::messageBox(
+                                            "The .rasset was created, but its accepted payload could not be prepared for placement.\n\nReason: " +
+                                                prepared->Result().error,
+                                            "Import Project Asset");
+                                        return;
+                                    }
+                                    PlacePreparedCreatorAsset(
+                                        std::move(*prepared),
+                                        fs::u8path(imported->assetProjectRelativePath)
+                                            .filename().generic_u8string());
+                                });
                         });
                 });
         });
     }
 
-    void RenegadeStudioChrome::PlacePreparedCreatorAsset(
+    void CreatorAssetStudioChrome::PlacePreparedCreatorAsset(
         bridge::PreparedReusableModelPlacement prepared,
         const std::string& label)
     {
@@ -635,7 +720,7 @@ namespace renegade::studio
         auto* placed = command.get();
         if (!session->Commands().Execute(std::move(command)))
         {
-            statusText_ = "PLACE ASSET // FAILED";
+            SetStatusText("PLACE ASSET // FAILED");
             wi::helper::messageBox(
                 "The registered .rasset produced no placeable entity.",
                 "Place Project Asset");
@@ -643,15 +728,15 @@ namespace renegade::studio
         }
         ++creatorPlacementSerial_;
         session->Selection().Select(placed->PlacedEntity());
-        sceneDirty_ = session->Commands().IsDirty();
-        selectionName_ = label;
+        SetSceneDirty(session->Commands().IsDirty());
+        SetSelectionName(label);
         RefreshCreatorHierarchyRows();
         creatorAssetRefreshPending_ = true;
-        statusText_ = "PLACE ASSET // " + label +
-            " // RASSET PAYLOAD // NO SOURCE RECONVERSION";
+        SetStatusText("PLACE ASSET // " + label +
+            " // RASSET PAYLOAD // NO SOURCE RECONVERSION");
     }
 
-    void RenegadeStudioChrome::PlaceSelectedCreatorAsset()
+    void CreatorAssetStudioChrome::PlaceSelectedCreatorAsset()
     {
         auto* session = bridge::StudioSession::Current();
         if (session == nullptr || !session->Projects().HasProject() ||
@@ -662,7 +747,7 @@ namespace renegade::studio
             project.rootPath, project.projectId, creatorSelectedAssetId_);
         if (!prepared.IsReady())
         {
-            statusText_ = "PLACE ASSET // FAILED";
+            SetStatusText("PLACE ASSET // FAILED");
             wi::helper::messageBox(
                 "Could not prepare the selected reusable asset.\n\nReason: " +
                     prepared.Result().error,
@@ -674,7 +759,7 @@ namespace renegade::studio
             fs::u8path(creatorSelectedAssetPath_).filename().generic_u8string());
     }
 
-    void RenegadeStudioChrome::ReimportSelectedCreatorAsset()
+    void CreatorAssetStudioChrome::ReimportSelectedCreatorAsset()
     {
         auto* session = bridge::StudioSession::Current();
         if (session == nullptr || !session->Projects().HasProject() ||
@@ -691,37 +776,35 @@ namespace renegade::studio
         const auto project = session->Projects().CurrentProject();
         const bridge::StableId assetId = creatorSelectedAssetId_;
         auto result = std::make_shared<bridge::ReusableModelReimportResult>();
-        statusText_ = "REIMPORT ASSET // REFRESH + REPLAY RECIPE";
+        SetStatusText("REIMPORT ASSET // REFRESH + REPLAY RECIPE");
         wi::jobsystem::Execute(
             creatorAssetWorkload_,
-            [project, assetId, result](wi::jobsystem::JobArgs)
+            [this, project, assetId, result](wi::jobsystem::JobArgs)
             {
                 bridge::CreatorAssetWorkflowService workflow;
                 *result = workflow.ReimportModel(
                     project.rootPath, project.projectId, assetId);
-            });
-        wi::jobsystem::Execute(creatorAssetWorkload_,
-            [](wi::jobsystem::JobArgs) {});
-        wi::jobsystem::Wait(creatorAssetWorkload_);
-        wi::eventhandler::Subscribe_Once(
-            wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-            [this, result](std::uint64_t)
-            {
-                creatorAssetRefreshPending_ = true;
-                if (!result->succeeded)
-                {
-                    statusText_ = "REIMPORT ASSET // FAILED";
-                    wi::helper::messageBox(
-                        "The selected asset was not replaced. The previous last-good .rasset remains authoritative.\n\nReason: " +
-                            result->error,
-                        "Reimport Project Asset");
-                    return;
-                }
-                statusText_ = "REIMPORT ASSET // CURRENT // SAME STABLE ID";
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, result](std::uint64_t)
+                    {
+                        creatorAssetRefreshPending_ = true;
+                        if (!result->succeeded)
+                        {
+                            SetStatusText("REIMPORT ASSET // FAILED");
+                            wi::helper::messageBox(
+                                "The selected asset was not replaced. The previous last-good .rasset remains authoritative.\n\nReason: " +
+                                    result->error,
+                                "Reimport Project Asset");
+                            return;
+                        }
+                        SetStatusText(
+                            "REIMPORT ASSET // CURRENT // SAME STABLE ID");
+                    });
             });
     }
 
-    void RenegadeStudioChrome::SaveSelectedCreatorTags()
+    void CreatorAssetStudioChrome::SaveSelectedCreatorTags()
     {
         auto* session = bridge::StudioSession::Current();
         if (session == nullptr || !session->Projects().HasProject() ||
@@ -736,17 +819,17 @@ namespace renegade::studio
                 CreatorTagInput(),
                 error))
         {
-            statusText_ = "SAVE TAGS // FAILED";
+            SetStatusText("SAVE TAGS // FAILED");
             wi::helper::messageBox(
                 "Could not save creator asset tags.\n\nReason: " + error,
                 "Asset Tags");
             return;
         }
         creatorAssetRefreshPending_ = true;
-        statusText_ = "SAVE TAGS // COMMITTED";
+        SetStatusText("SAVE TAGS // COMMITTED");
     }
 
-    void RenegadeStudioChrome::RefreshCreatorHierarchyRows()
+    void CreatorAssetStudioChrome::RefreshCreatorHierarchyRows()
     {
         auto* session = bridge::StudioSession::Current();
         if (session == nullptr)
