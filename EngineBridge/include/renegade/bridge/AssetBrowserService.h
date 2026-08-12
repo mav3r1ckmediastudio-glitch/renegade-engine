@@ -27,6 +27,7 @@ namespace renegade::bridge
         Data,
         Generated,
         Unknown,
+        Font,
     };
 
     struct AssetFolderEntry
