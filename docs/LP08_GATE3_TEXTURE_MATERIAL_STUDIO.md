@@ -21,11 +21,14 @@ Models retain the accepted LP07 creator path. The existing Assets drawer remains
 - validates an active project and supported texture format;
 - enforces a 512 MiB creator-import ceiling before copying/reading the source;
 - creates class-correct `SourceAssets/Textures` and `Content/Textures` folders when needed;
-- allocates collision-free retained-source and `.rasset` names;
+- allocates collision-free retained-source and `.rasset` names with a bounded 1024-attempt ceiling;
+- reports a destination-race collision distinctly instead of disguising it as a generic copy failure;
 - copies the external image byte-for-byte into the project;
 - delegates governed product/LC01/resource-metadata creation to the accepted Gate 2 `ResourceAssetService` transaction;
 - removes the newly retained source when the Gate 2 transaction fails before commit; and
 - preserves the retained source and reports `committed=true` when the transaction committed but post-commit verification reports failure, so Studio never tells the creator that nothing changed after a committed mutation.
+
+`CreatorTextureImportResult::succeeded` and `committed` are deliberately separate. `committed=true && succeeded=false` means persistent project state may already exist and the caller must refresh/inspect rather than blindly retry.
 
 This is deliberately a Studio staging boundary, not a second resource importer.
 
@@ -55,11 +58,13 @@ Normal, surface/ORM, emissive, displacement, occlusion and other texture slots a
 - any previous Gate-3 binding version value; and
 - any previous stable base-colour texture ID.
 
-Undo restores that exact prior state. Redo reapplies the governed stable-ID binding.
+Undo restores that exact prior state. If the material had no metadata before Execute but another system adds unrelated metadata before Undo, Gate 3 erases only its own two keys and removes the component only when it is otherwise empty. Redo reapplies the governed stable-ID binding.
 
 ### Save / Open
 
 WISCENE serialization persists the Renegade metadata stable ID, not a source path. After load, `RestoreMaterialTextureBindings()` inspects material metadata, resolves each stable ID back through LC01 to its governed `.rasset`, and recreates the live Wicked texture from in-memory payload bytes. Already-live bindings are skipped, making Studio's rehydration call idempotent.
+
+A corrupt or missing governed texture no longer aborts the entire restore pass. Gate 3 continues through later bindings, restores every valid texture it can, and returns a collective failure summary when one or more bindings failed.
 
 The existing Creator Asset Studio chrome invokes that restore seam during normal update after a project/scene is active. This is a Studio Save/Open proof; packaged Runtime dependency closure remains Gate 5.
 
@@ -72,9 +77,13 @@ The existing Assets drawer is extended rather than replaced:
 - texture import creates/selects a governed project texture but does not silently assign it;
 - selecting a registered current texture changes the existing action button from `PLACE` to `ASSIGN BASE`;
 - `ASSIGN BASE` enables only when the current scene selection resolves through `ResolveEditableMaterialEntity()` to one unambiguous non-terrain material;
+- assigning an already-live identical governed texture is a visible no-op rather than a failed command;
 - texture reimport is deliberately disabled until Gate 4;
+- LP07 model reimport remains enabled for registered imported models even when their governed product is unavailable, preserving reimport as the recovery action;
 - existing creator tags and catalogue search continue to work by stable asset identity; and
-- texture source-format filters are added for the supported image formats.
+- Gate-2 resource metadata is overlaid by stable product ID so texture source-format filters are truthful for the supported image formats.
+
+LP07 `sourceFormat` remains reliable for accepted model records: import retains the original source filename under `SourceAssets/Models/...`, and catalogue projection derives the product format from that active or tombstoned source path. Gate 3 therefore does not need to infer model type from the `.rasset` extension.
 
 ## Acceptance proof
 
@@ -82,15 +91,19 @@ The existing Assets drawer is extended rather than replaced:
 
 `RenegadeMaterialTextureAssetTests` runs in Debug and Release and proves:
 
+- LP07 action policy: an available model is placeable/reimportable, a missing model product is not placeable but remains reimportable, and textures never enter the model reimport path;
 - external PNG staging retains exact source bytes and creates a governed `.rasset` with stable source/product IDs;
+- texture catalogue metadata enrichment makes the PNG source-format filter find the governed product;
 - the material preparation seam resolves the texture by stable LC01 product identity and preserves exact payload bytes;
 - a test loader creates a non-GPU Wicked `Resource` from the payload so command semantics remain headless;
 - base-colour assignment leaves `TextureMap::name` empty and preserves the existing UV set;
 - persistent version + stable-ID metadata is attached to the material entity;
 - normal `CommandService` dirty/Undo/Redo behavior applies;
+- unrelated metadata added between Execute and Undo survives;
 - WISCENE Save/Open preserves the stable texture ID while not serializing a fake external image path;
-- restore rehydrates the resource from the governed `.rasset`; and
-- a second restore is a no-op once the live resource exists.
+- restore rehydrates the resource from the governed `.rasset`;
+- a second restore is a no-op once the live resource exists; and
+- one missing/corrupt binding does not prevent a later valid binding from restoring.
 
 ### Release-only graphics
 
@@ -104,6 +117,14 @@ The existing Assets drawer is extended rather than replaced:
 
 Both tests have explicit CTest timeouts. No external test fixture is required; the representative 1x1 PNG is immutable test data embedded in the acceptance executables.
 
+## Independent audit repair pass
+
+The first independent audit at `3ce3a551bb5bb77eed125635e702ec6f56a87d4e` found one blocker: Studio had reused the model placement predicate for reimport, accidentally disabling LP07 model recovery when `productAvailable == false`. The repair separates placeability from reimportability and adds headless policy coverage.
+
+The same repair pass also addresses the two medium findings instead of deferring them: creator texture destination allocation is bounded, and material texture restore continues after per-binding failures. Minor findings were addressed where safe: unrelated metadata survives Undo, same-texture assignment is a creator-visible no-op, the committed/unverifiable result contract is documented, and retained-source destination races report distinctly.
+
+The first audit also asked whether LP07 `sourceFormat` is reliable. The answer is yes for accepted LP07 imports because the retained source path preserves the original FBX/GLTF/GLB extension and catalogue projection reads that path even when represented by a missing-asset tombstone.
+
 ## Gate 2 audit items carried forward
 
 Gate 3 acts on two prior nonblocking findings without rewriting accepted Gate 2:
@@ -113,7 +134,7 @@ Gate 3 acts on two prior nonblocking findings without rewriting accepted Gate 2:
 
 Still intentionally unresolved programme items:
 
-- FNV-1a64 remains the existing integrity/freshness hash convention. Before Gate 5 lets resource hashes drive packaged Runtime freshness, LP08 must explicitly decide whether integrity-not-security is the contract or migrate to a collision-resistant hash.
+- FNV-1a64 remains the existing integrity/freshness hash convention. Gate 3 now also uses the payload hash as part of the live Wicked resource cache key, so a collision has a concrete wrong-resource/wrong-pixels failure mode rather than only an abstract provenance risk. Before Gate 5 lets packaged Runtime resolve these keys, LP08 must explicitly decide whether to migrate to a collision-resistant hash.
 - Windows path containment comparisons still follow the existing filesystem-component behavior; reconcile with LP05's ordinal case-folding rule in a deliberate path-identity change, not as an incidental Gate-3 edit.
 
 ## Explicit exclusions
