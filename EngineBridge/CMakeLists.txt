@@ -12,6 +12,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/PackageIntegrityService.h
     include/renegade/bridge/CommandService.h
     include/renegade/bridge/CreatorAssetWorkflowService.h
+    include/renegade/bridge/CreatorTextureWorkflowService.h
     include/renegade/bridge/DependencyService.h
     include/renegade/bridge/FlowService.h
     include/renegade/bridge/ScreenService.h
@@ -26,6 +27,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/ReusableAssetDependencyService.h
     include/renegade/bridge/ReusableAssetRuntimeService.h
     include/renegade/bridge/MaterialService.h
+    include/renegade/bridge/MaterialTextureAssetService.h
     include/renegade/bridge/CollisionService.h
     include/renegade/bridge/OceanService.h
     include/renegade/bridge/PrecipitationService.h
@@ -46,6 +48,7 @@ add_library(RenegadeEngineBridge STATIC
     src/BuildStageService.cpp
     src/CommandService.cpp
     src/CreatorAssetWorkflowService.cpp
+    src/CreatorTextureWorkflowService.cpp
     src/DependencyService.cpp
     src/FlowService.cpp
     src/ScreenService.cpp
@@ -63,6 +66,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ReusableAssetDependencyService.cpp
     src/ReusableAssetRuntimeService.cpp
     src/MaterialService.cpp
+    src/MaterialTextureAssetService.cpp
     src/CollisionService.cpp
     src/OceanService.cpp
     src/PrecipitationService.cpp
