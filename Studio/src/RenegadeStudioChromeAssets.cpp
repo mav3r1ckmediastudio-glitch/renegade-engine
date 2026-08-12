@@ -549,12 +549,9 @@ namespace renegade::studio
             return;
         }
         bridge::CreatorTextureWorkflowService textureWorkflow;
-        if (!textureWorkflow.EnrichTextureCatalogue(
-                project.rootPath, project.projectId, catalogue, error))
-        {
-            SetStatusText("ASSET BROWSER // TEXTURE METADATA FAILED // " + error);
-            return;
-        }
+        std::string textureWarning;
+        (void)textureWorkflow.EnrichTextureCatalogue(
+            project.rootPath, project.projectId, catalogue, textureWarning);
         creatorAssetCatalogue_ = std::move(catalogue);
 
         const auto query = CreatorAssetQuery();
@@ -608,9 +605,17 @@ namespace renegade::studio
             creatorSelectedAssetId_ = selected->assetId;
         }
 
-        SetStatusText("ASSET BROWSER // " + std::to_string(matches.size()) +
-            " CATALOGUE MATCHES // " +
-            (globalSearch ? std::string("ALL CONTENT") : creatorCurrentPath_));
+        if (!textureWarning.empty())
+        {
+            SetStatusText("ASSET BROWSER // TEXTURE METADATA WARNING // " +
+                textureWarning);
+        }
+        else
+        {
+            SetStatusText("ASSET BROWSER // " + std::to_string(matches.size()) +
+                " CATALOGUE MATCHES // " +
+                (globalSearch ? std::string("ALL CONTENT") : creatorCurrentPath_));
+        }
     }
 
     bool CreatorAssetStudioChrome::SelectCreatorAsset(const std::string& relativePath)
