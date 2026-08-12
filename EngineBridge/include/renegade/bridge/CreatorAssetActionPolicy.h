@@ -2,20 +2,32 @@
 
 #include "renegade/bridge/AssetCatalogueService.h"
 
-#include <algorithm>
-#include <cctype>
 #include <string>
 
 namespace renegade::bridge
 {
-    inline bool IsCreatorModelSourceFormat(std::string value)
+    inline bool IsCreatorModelSourceFormat(
+        const std::string& value) noexcept
     {
-        std::transform(value.begin(), value.end(), value.begin(),
-            [](const unsigned char character)
-            {
-                return static_cast<char>(std::tolower(character));
-            });
-        return value == "fbx" || value == "gltf" || value == "glb";
+        const auto lower = [](const unsigned char character) noexcept
+        {
+            return character >= 'A' && character <= 'Z'
+                ? static_cast<char>(character + ('a' - 'A'))
+                : static_cast<char>(character);
+        };
+        if (value.size() == 3)
+        {
+            const char a = lower(static_cast<unsigned char>(value[0]));
+            const char b = lower(static_cast<unsigned char>(value[1]));
+            const char c = lower(static_cast<unsigned char>(value[2]));
+            return (a == 'f' && b == 'b' && c == 'x') ||
+                (a == 'g' && b == 'l' && c == 'b');
+        }
+        return value.size() == 4 &&
+            lower(static_cast<unsigned char>(value[0])) == 'g' &&
+            lower(static_cast<unsigned char>(value[1])) == 'l' &&
+            lower(static_cast<unsigned char>(value[2])) == 't' &&
+            lower(static_cast<unsigned char>(value[3])) == 'f';
     }
 
     // Placement requires a live imported model product. Reimport deliberately
