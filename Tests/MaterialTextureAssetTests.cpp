@@ -173,6 +173,53 @@ int main()
             }),
         "Studio PNG format filter cannot find the governed texture product");
 
+    ResourceAssetMetadataDocument degradedMetadata;
+    Require(ReadResourceAssetMetadata(
+            root.generic_u8string(), ProjectId, degradedMetadata, error),
+        "could not read Gate 2 resource metadata for degradation proof: " + error);
+    degradedMetadata.records.erase(
+        std::remove_if(degradedMetadata.records.begin(), degradedMetadata.records.end(),
+            [&imported](const ResourceAssetMetadataRecord& record)
+            {
+                return record.assetId == imported.assetId;
+            }),
+        degradedMetadata.records.end());
+    std::string degradedJson;
+    Require(SerializeResourceAssetMetadata(
+            degradedMetadata, degradedJson, error),
+        "could not serialize degraded resource metadata: " + error);
+    {
+        std::ofstream stream(root / ResourceAssetMetadataDocumentName,
+            std::ios::binary | std::ios::trunc);
+        stream << degradedJson;
+        Require(static_cast<bool>(stream),
+            "could not persist degraded resource metadata proof fixture");
+    }
+    AssetCatalogue degradedCatalogue;
+    Require(catalogueWorkflow.BuildCatalogue(
+            root.generic_u8string(), ProjectId, degradedCatalogue, error),
+        "creator catalogue failed before degraded enrichment: " + error);
+    const std::size_t catalogueEntriesBeforeDegradedEnrichment =
+        degradedCatalogue.entries.size();
+    std::string enrichmentWarning;
+    Require(creator.EnrichTextureCatalogue(
+            root.generic_u8string(), ProjectId,
+            degradedCatalogue, enrichmentWarning),
+        "degraded texture metadata must not make catalogue unusable");
+    const auto degradedTexture = std::find_if(
+        degradedCatalogue.entries.begin(), degradedCatalogue.entries.end(),
+        [&imported](const AssetCatalogueEntry& entry)
+        {
+            return entry.assetId == imported.assetId;
+        });
+    Require(degradedCatalogue.entries.size() ==
+            catalogueEntriesBeforeDegradedEnrichment &&
+            degradedTexture != degradedCatalogue.entries.end() &&
+            degradedTexture->state == AssetCatalogueState::Invalid &&
+            degradedTexture->sourceFormat.empty() &&
+            !enrichmentWarning.empty(),
+        "missing texture metadata blanked or hid the catalogue instead of flagging the texture INVALID");
+
     PreparedMaterialTextureAsset prepared;
     Require(PrepareMaterialTextureAsset(
             root.generic_u8string(), ProjectId, imported.assetId,
