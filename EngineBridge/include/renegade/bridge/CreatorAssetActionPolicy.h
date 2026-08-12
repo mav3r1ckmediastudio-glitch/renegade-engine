@@ -59,22 +59,24 @@ namespace renegade::bridge
             IsCreatorModelSourceFormat(entry.sourceFormat);
     }
 
-    // Gate 4 resource reimport requires both the authoritative source and the
-    // last-good governed product to remain active. Missing/Invalid states need
-    // LC01 recovery or repair first; Current/Stale/Moved are safe explicit
-    // reimport inputs because stable identity and the last-good bytes remain.
+    // Gate 4 resource reimport always requires an active retained source. An
+    // active Current/Stale/Moved product can be replaced after last-good
+    // validation; a Missing product can be regenerated when LC01 retains its
+    // tombstone and the source is still available. Invalid products remain
+    // blocked because reimport must not overwrite untrusted on-disk bytes.
     inline bool CanReimportCreatorResourceAsset(
         const AssetCatalogueEntry& entry) noexcept
     {
-        const bool eligibleState =
-            entry.state == AssetCatalogueState::Current ||
-            entry.state == AssetCatalogueState::Stale ||
-            entry.state == AssetCatalogueState::Moved;
+        const bool activeProductState = entry.productAvailable &&
+            (entry.state == AssetCatalogueState::Current ||
+             entry.state == AssetCatalogueState::Stale ||
+             entry.state == AssetCatalogueState::Moved);
+        const bool recoverableMissingProduct = !entry.productAvailable &&
+            entry.state == AssetCatalogueState::Missing;
         return entry.registered && IsValidStableId(entry.assetId) &&
             entry.importedProduct && entry.sourceAvailable &&
-            entry.productAvailable &&
             entry.importer == "wicked.resourcemanager" &&
             IsCreatorGovernedResourceClass(entry.dependencyClass) &&
-            eligibleState;
+            (activeProductState || recoverableMissingProduct);
     }
 }
