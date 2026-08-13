@@ -1,6 +1,8 @@
 #include "StudioApplication.h"
 
 #include "renegade/bridge/TestLevelSnapshotService.h"
+#include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/ReusableAssetInstanceService.h"
 
 #include <algorithm>
 #include <chrono>
@@ -6273,7 +6275,8 @@ namespace renegade::studio
 
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "GLB/GLTF model to import into the scene";
+        params.description = "FBX/GLTF/GLB model to prepare in the Import Model workspace";
+        params.extensions.push_back("fbx");
         params.extensions.push_back("glb");
         params.extensions.push_back("gltf");
         wi::helper::FileDialog(
@@ -6306,36 +6309,150 @@ namespace renegade::studio
     }
 
     void StudioRenderPath::RunModelImportPlacement(
-        const std::string& sourcePath)
+    const std::string& sourcePath)
+{
+    if (session_ == nullptr || sourcePath.empty() ||
+        !session_->Projects().HasProject())
     {
-        if (session_ == nullptr || sourcePath.empty())
-        {
-            return;
-        }
-
-        const fs::path projectRoot =
-            fs::u8path(session_->Projects().CurrentProject().rootPath);
-        const fs::path source = fs::u8path(sourcePath);
-        const fs::path assetPath =
-            AllocateImportedModelAssetPath(projectRoot, source);
-        const std::string assetPathString = assetPath.generic_u8string();
-
-        wi::jobsystem::Execute(
-            modelImportWorkload_,
-            [this, sourcePath, assetPathString](wi::jobsystem::JobArgs)
-            {
-                auto prepared = std::make_shared<bridge::PreparedModelImport>(
-                    bridge::ImportService().PrepareGltfAsset(
-                        sourcePath,
-                        assetPathString));
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, prepared](uint64_t)
-                    {
-                        CompleteModelImportPlacement(std::move(*prepared));
-                    });
-            });
+        return;
     }
+
+    struct GuidedModelImportState
+    {
+        std::string projectRoot;
+        bridge::StableId projectId;
+        std::string sourcePath;
+        bridge::CreatorModelImportResult imported;
+        bridge::PreparedReusableModelPlacement prepared;
+    };
+
+    auto state = std::make_shared<GuidedModelImportState>();
+    const auto& project = session_->Projects().CurrentProject();
+    state->projectRoot = project.rootPath;
+    state->projectId = project.projectId;
+    state->sourcePath = sourcePath;
+
+    // Conversion, retained-source capture and governed .rasset
+    // creation stay off the UI thread. This is the same LP07
+    // lifecycle used by the Asset Browser; the guided Studio route
+    // no longer creates a parallel legacy .wiscene product.
+    wi::jobsystem::Execute(
+        modelImportWorkload_,
+        [this, state](wi::jobsystem::JobArgs)
+        {
+            bridge::CreatorAssetWorkflowService workflow;
+            state->imported = workflow.ImportModel(
+                state->projectRoot,
+                state->projectId,
+                state->sourcePath);
+            if (state->imported.succeeded)
+            {
+                state->prepared = workflow.PrepareModelPlacement(
+                    state->projectRoot,
+                    state->projectId,
+                    state->imported.asset.assetId);
+            }
+
+            wi::eventhandler::Subscribe_Once(
+                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, state](std::uint64_t)
+                {
+                    if (session_ == nullptr ||
+                        !session_->Projects().HasProject() ||
+                        session_->Projects().CurrentProject().projectId !=
+                            state->projectId)
+                    {
+                        studioChrome_.SetStatusText(
+                            "IMPORT MODEL // PROJECT CHANGED");
+                        return;
+                    }
+
+                    if (!state->imported.succeeded)
+                    {
+                        studioChrome_.SetStatusText(
+                            "IMPORT MODEL // GOVERNED IMPORT FAILED");
+                        wi::helper::messageBox(
+                            "Could not create the governed reusable model.\n\nReason: " +
+                                state->imported.error,
+                            "Import Model");
+                        return;
+                    }
+                    if (!state->prepared.IsReady())
+                    {
+                        studioChrome_.SetStatusText(
+                            "IMPORT MODEL // PREVIEW PREPARE FAILED");
+                        wi::helper::messageBox(
+                            "The governed asset was created, but Renegade could not prepare it for the Import Model workspace.\n\nReason: " +
+                                state->prepared.Result().error,
+                            "Import Model");
+                        return;
+                    }
+
+                    const wi::scene::Scene* preparedScene =
+                        state->prepared.PeekScene();
+                    const float scaleFactor = preparedScene != nullptr
+                        ? bridge::ImportService::ResolveScaleFactor(
+                            bridge::ModelScaleMode::Automatic,
+                            *preparedScene)
+                        : 1.0f;
+
+                    XMFLOAT3 position(0.0f, 0.0f, 0.0f);
+                    if (camera != nullptr)
+                    {
+                        position = camera->Eye;
+                        position.x += camera->At.x * 5.0f;
+                        position.y += camera->At.y * 5.0f;
+                        position.z += camera->At.z * 5.0f;
+                    }
+
+                    ClearSelectionOutline();
+                    auto command =
+                        std::make_unique<bridge::PlaceReusableModelCommand>(
+                            session_->Scenes().GetScene(),
+                            state->prepared.ReleaseScene(),
+                            state->imported.asset.assetId,
+                            position,
+                            scaleFactor);
+                    auto* placed = command.get();
+                    if (!session_->Commands().Execute(std::move(command)))
+                    {
+                        studioChrome_.SetStatusText(
+                            "IMPORT MODEL // PLACE FAILED");
+                        SyncSelectionOutline();
+                        return;
+                    }
+
+                    session_->Selection().Select(placed->PlacedEntity());
+                    RefreshHierarchy();
+                    RefreshInspector();
+                    RefreshStatus();
+                    assetBrowserCurrentFolder_ = "Content/Models";
+                    RefreshAssetBrowser();
+
+                    const fs::path source = fs::u8path(state->sourcePath);
+                    std::ostringstream scaleReadout;
+                    scaleReadout.precision(3);
+                    scaleReadout << std::fixed << scaleFactor;
+                    studioChrome_.SetStatusText(
+                        "IMPORT MODEL // GOVERNED RASSET + PLACED // " +
+                        fs::u8path(state->imported.assetProjectRelativePath)
+                            .filename().u8string() +
+                        " // AUTO SCALE x" + scaleReadout.str());
+
+                    // Restore the creator-facing import workspace
+                    // that LP07 accidentally bypassed. The placed
+                    // reusable-instance root remains selected, so
+                    // normal MOVE / ROTATE / SCALE controls and the
+                    // dedicated scale-unit picker operate on the
+                    // governed instance rather than a throwaway
+                    // direct-import entity.
+                    ShowImportScalePanel(
+                        placed->PlacedEntity(),
+                        scaleFactor,
+                        source.filename().u8string());
+                });
+        });
+}
 
     void StudioRenderPath::CompleteModelImportPlacement(
         bridge::PreparedModelImport prepared)

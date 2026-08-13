@@ -129,14 +129,13 @@ namespace renegade::studio
 
     void CreatorAssetStudioChrome::OnAction(std::function<void(Action)> callback)
     {
+        // ADD > IMPORT MODEL belongs to StudioApplication's guided
+        // creator workflow. LP07 previously intercepted this action
+        // here and auto-imported/placed the model, bypassing the
+        // dedicated import workspace entirely.
         RenegadeStudioChrome::OnAction(
-            [this, callback = std::move(callback)](const Action action) mutable
+            [callback = std::move(callback)](const Action action) mutable
             {
-                if (action == Action::ImportModel)
-                {
-                    ImportCreatorModel();
-                    return;
-                }
                 if (callback)
                     callback(action);
             });
