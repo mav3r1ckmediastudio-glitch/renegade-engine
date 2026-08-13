@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <vector>
 
@@ -246,7 +247,6 @@ namespace renegade::bridge
                 material.textures[wi::scene::MaterialComponent::OCCLUSIONMAP].name,
                 stems, "_ao", result.error);
             if (!result.error.empty()) return result;
-
             fs::path roughness = ChooseTexture(
                 choice(&CreatorMaterialSourceOverride::roughness), directory,
                 {}, stems, "_roughness", result.error);
@@ -256,20 +256,20 @@ namespace renegade::bridge
                 {}, stems, "_metalness", result.error);
             if (!result.error.empty()) return result;
 
-            bool generatedSurface = false;
+            bool surfaceWasGenerated = false;
             if (surface.empty() &&
                 (!roughness.empty() || !metalness.empty() || !occlusion.empty()))
             {
                 const fs::path generatedDirectory =
                     fs::u8path(request.projectRoot) /
                     "Intermediate" / "GeneratedMaterials";
-                const fs::path generatedSurface = generatedDirectory /
+                const fs::path generatedSurfacePath = generatedDirectory /
                     fs::u8path(modelStem + "_mat" + std::to_string(index) + "_surface.png");
                 CreatorSurfaceBuildRequest surfaceRequest;
                 surfaceRequest.roughnessPath = roughness.generic_u8string();
                 surfaceRequest.metalnessPath = metalness.generic_u8string();
                 surfaceRequest.occlusionPath = occlusion.generic_u8string();
-                surfaceRequest.outputPath = generatedSurface.generic_u8string();
+                surfaceRequest.outputPath = generatedSurfacePath.generic_u8string();
                 const auto built = BuildCreatorSurfaceMap(surfaceRequest);
                 if (!built.succeeded)
                 {
@@ -277,8 +277,8 @@ namespace renegade::bridge
                         materialName + "': " + built.error;
                     return result;
                 }
-                surface = generatedSurface;
-                generatedSurface = true;
+                surface = generatedSurfacePath;
+                surfaceWasGenerated = true;
                 ++result.generatedSurfaceMaps;
             }
 
@@ -304,7 +304,7 @@ namespace renegade::bridge
             // AO is already packed into R when Renegade generated the Surface.
             // A separately supplied Surface can still coexist with an explicit
             // Wicked occlusion map, matching the source asset's authored intent.
-            if (!generatedSurface)
+            if (!surfaceWasGenerated)
             {
                 recipe.occlusionAssetId = GovernTexture(
                     occlusion, request.projectRoot, request.projectId, governedByPath,
