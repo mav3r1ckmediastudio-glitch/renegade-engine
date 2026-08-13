@@ -20,6 +20,10 @@ world-bounds dimension presets and a dynamic preview-only 1.82 m male reference.
 The follow-up preview framing fix replaces the fixed close camera with a
 bounds-fitted 32-degree lens; owner screenshots showed severe perspective
 exaggeration in the importer while the committed mesh remained correct.
+Those screenshots also exposed the primary preview-only rendering defect: the
+temporary stage was at world Y=100000, where float transform precision is only
+about 7.8 mm. The stage now remains beyond the normal far plane at Y=2048 while
+preserving sub-millimetre precision; source mesh data is never rewritten.
 
 GitHub CI remains authoritative because the owner CPU is confirmed unstable.
 Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and

@@ -274,7 +274,13 @@ namespace
     }
 
 
-    constexpr float CreatorImportStageHeight = 100000.0f;
+    // Keep the temporary preview beyond the normal camera's 1000 m far plane
+    // so the authored level remains invisible, but do not push it to 100 km.
+    // At Y=100000 a 32-bit transform has roughly 7.8 mm granularity, which
+    // visibly quantizes detailed character geometry and normals even though
+    // the source mesh is intact. Y=2048 keeps sub-millimetre precision while
+    // retaining render isolation from the authored scene at the origin.
+    constexpr float CreatorImportStageHeight = 2048.0f;
     constexpr float CreatorImportPreviewFov = 32.0f * XM_PI / 180.0f;
 
     struct CreatorModelImportWorkspaceState

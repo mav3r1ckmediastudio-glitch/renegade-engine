@@ -23,6 +23,8 @@ Preview lighting is editor-only and never enters the model product or level. The
 
 The initial preview camera is also derived from those measured, scaled bounds. It uses a neutral 32-degree perspective lens and a bounding-sphere fit instead of a fixed close camera position, preventing character heads, hands or boots from acquiring exaggerated near-camera proportions. The creator's previous editor lens and transform are restored on commit or cancel.
 
+The temporary stage is positioned beyond the normal editor camera's far plane, but remains close enough to the world origin to preserve sub-millimetre 32-bit transform precision. This avoids preview-only vertex/normal quantization; it does not modify or repair source mesh data.
+
 ## Persistence
 Creator material choices are persisted using governed LP08 texture stable IDs inside the LP07 reusable-model creator recipe. Base Color, Normal, Surface, Emissive and AO bindings survive reimport through that recipe. Invalid stable IDs, duplicate material indices, invalid animation ranges and unknown recipe fields are rejected.
 
