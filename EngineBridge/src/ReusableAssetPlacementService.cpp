@@ -240,19 +240,47 @@ namespace renegade::bridge
             return prepared;
         }
 
-        // Gate 3 serialized the embedded Wicked payload from this same project
-        // working directory. Recreate that location so relative resource paths
-        // inside the WISCENE are resolved exactly as they were at import time.
-        const fs::path importDirectory = root / "Intermediate" / "Imports";
-        fs::create_directories(importDirectory, ec);
+        // WISCENE material resources can retain relative paths from the model
+        // import. For retained glTF sources, sidecar images/buffers live beside
+        // the retained source under SourceAssets. Rehydrate the payload from
+        // that same directory whenever the retained source is available so
+        // Wicked resolves those relative paths against the correct base. This
+        // fixes the creator-facing geometry-without-textures failure. If the
+        // source is unavailable, preserve the accepted source-independent
+        // placement fallback used by the lifecycle tests.
+        fs::path placementDirectory = root / "Intermediate" / "Imports";
+        const AssetRecord* sourceRecord = FindRecordById(
+            registry, provenance->sourceAssetId);
+        if (sourceRecord != nullptr && sourceRecord->sourceAvailable &&
+            !sourceRecord->projectRelativePath.empty())
+        {
+            const fs::path sourceRoot = fs::weakly_canonical(root / "SourceAssets", ec);
+            if (!ec && fs::is_directory(sourceRoot, ec) && !ec)
+            {
+                const fs::path retainedSource = fs::weakly_canonical(
+                    root / fs::u8path(sourceRecord->projectRelativePath), ec);
+                if (!ec && fs::is_regular_file(retainedSource, ec) && !ec &&
+                    IsWithin(retainedSource, sourceRoot))
+                {
+                    placementDirectory = retainedSource.parent_path();
+                }
+                ec.clear();
+            }
+            else
+            {
+                ec.clear();
+            }
+        }
+
+        fs::create_directories(placementDirectory, ec);
         if (ec)
         {
             result.error =
                 "Could not create reusable placement working directory: " + ec.message();
             return prepared;
         }
-        const fs::path stagedPayload =
-            importDirectory / fs::u8path(request.assetId + ".placement.wiscene");
+        const fs::path stagedPayload = placementDirectory /
+            fs::u8path(".renegade-" + request.assetId + ".placement.wiscene");
         fs::remove(stagedPayload, ec);
         ec.clear();
 
