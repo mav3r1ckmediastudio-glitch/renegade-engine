@@ -59,12 +59,11 @@ namespace renegade::bridge
             IsCreatorModelSourceFormat(entry.sourceFormat);
     }
 
-    // Gate 4 resource reimport requires a live retained source for an active
-    // product. A product tombstone does not project the separate source record's
-    // availability through AssetCatalogueEntry::sourceAvailable, so Missing
-    // product recovery is offered from durable imported provenance and the
-    // backend remains authoritative for validating the retained source before
-    // any mutation. Invalid active products remain blocked.
+    // Gate 4 resource reimport requires a live retained source. Creator
+    // catalogue refresh projects that source state even when the governed
+    // product itself is represented only by an LC01 tombstone, so Studio can
+    // truthfully offer missing-product recovery without relying on backend
+    // failure as its action policy. Invalid active products remain blocked.
     inline bool CanReimportCreatorResourceAsset(
         const AssetCatalogueEntry& entry) noexcept
     {
@@ -73,7 +72,8 @@ namespace renegade::bridge
             (entry.state == AssetCatalogueState::Current ||
              entry.state == AssetCatalogueState::Stale ||
              entry.state == AssetCatalogueState::Moved);
-        const bool recoverableMissingProduct = !entry.productAvailable &&
+        const bool recoverableMissingProduct = entry.sourceAvailable &&
+            !entry.productAvailable &&
             entry.state == AssetCatalogueState::Missing;
         return entry.registered && IsValidStableId(entry.assetId) &&
             entry.importedProduct &&
