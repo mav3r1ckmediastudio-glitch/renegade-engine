@@ -56,18 +56,9 @@ namespace renegade::bridge
     {
         std::string sourcePath;
         std::string assetPath;
-
-        // Unknown means infer from the source extension. A non-Unknown value
-        // is an explicit contract and must agree with the extension.
         ModelSourceFormat expectedFormat = ModelSourceFormat::Unknown;
     };
 
-    // Structural evidence that specifically covers the data a rigged or
-    // animated FBX can lose even when a scene still contains the same number
-    // of top-level components. The fingerprint is built from stable component
-    // indices plus bone weights, inverse bind matrices, animation channels,
-    // samplers and keyframe payloads so it can be compared after WISCENE
-    // serialization/reload.
     struct ImportedModelEvidence
     {
         std::size_t skinnedMeshes = 0;
@@ -113,9 +104,6 @@ namespace renegade::bridge
         ImportedModelEvidence reloadedEvidence;
     };
 
-    // Move-only result of the model conversion phase. Conversion can run on
-    // Wicked's job system, but WISCENE serialization must be completed at the
-    // engine thread-safe point, matching the upstream Editor's save path.
     class PreparedModelImport
     {
     public:
@@ -140,9 +128,6 @@ namespace renegade::bridge
             return scene_.IsValid() ? scene_.get() : nullptr;
         }
 
-        // Creator import recipes are applied after Wicked conversion but before
-        // WISCENE serialization. Keep ownership inside PreparedModelImport so
-        // the normal validation/save path still proves the edited scene.
         [[nodiscard]] wi::scene::Scene* PeekMutableScene() noexcept
         {
             return scene_.IsValid() ? scene_.get() : nullptr;
@@ -156,7 +141,6 @@ namespace renegade::bridge
 
     private:
         friend class ImportService;
-
         wi::allocator::shared_ptr<wi::scene::Scene> scene_;
         ImportResult result_;
     };
@@ -170,15 +154,18 @@ namespace renegade::bridge
         Automatic,
     };
 
-    // UI-independent conversion boundary. Gate 1 supports FBX through the
-    // pinned Wicked/ufbx converter and GLB/GLTF through Wicked's native glTF
-    // converter. Other formats can be classified without being silently
-    // accepted. Conversion always occurs in an isolated Wicked scene.
     class ImportService
     {
     public:
         [[nodiscard]] PreparedModelImport PrepareModelAsset(
             const ModelImportRequest& request) const;
+
+        // Recompute the structural/rig evidence after a creator import recipe
+        // mutates the isolated converted scene, before the normal round-trip
+        // serializer proof is run.
+        [[nodiscard]] bool RefreshPreparedModelEvidence(
+            PreparedModelImport& prepared,
+            std::string& error) const;
 
         [[nodiscard]] ImportResult CompleteModelAsset(
             PreparedModelImport prepared) const;
@@ -188,31 +175,22 @@ namespace renegade::bridge
 
         [[nodiscard]] static ModelSourceFormat ClassifyModelSourceFormat(
             const std::string& sourcePath) noexcept;
-
         [[nodiscard]] static bool IsModelSourceFormatSupported(
             ModelSourceFormat format) noexcept;
-
         [[nodiscard]] static const char* ModelSourceFormatName(
             ModelSourceFormat format) noexcept;
-
         [[nodiscard]] static ImportedModelEvidence SummarizeModelEvidence(
             const wi::scene::Scene& scene) noexcept;
 
-        // Compatibility surface retained while Studio's existing GLB/GLTF
-        // workflow is migrated onto the neutral contract in later LP07 gates.
         [[nodiscard]] PreparedModelImport PrepareGltfAsset(
             const std::string& sourcePath,
             const std::string& assetPath) const;
-
         [[nodiscard]] ImportResult CompleteGltfAsset(
             PreparedModelImport prepared) const;
-
         [[nodiscard]] ImportResult SavePreparedGltfAsset(
             PreparedModelImport& prepared) const;
-
         [[nodiscard]] static ImportedSceneSummary Summarize(
             const wi::scene::Scene& scene) noexcept;
-
         [[nodiscard]] static float ResolveScaleFactor(
             ModelScaleMode mode,
             const wi::scene::Scene& preparedScene) noexcept;
@@ -229,7 +207,6 @@ namespace renegade::bridge
 
         bool Execute() override;
         void Undo() override;
-
         [[nodiscard]] wi::ecs::Entity PlacedEntity() const noexcept;
 
     private:
