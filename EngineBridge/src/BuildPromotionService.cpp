@@ -439,19 +439,37 @@ namespace renegade::bridge
             const fs::path& to,
             std::string& error)
         {
-            if (!MoveFileExW(
-                    from.c_str(),
-                    to.c_str(),
-                    MOVEFILE_WRITE_THROUGH))
+            constexpr DWORD RetryDelayMilliseconds = 100;
+            constexpr unsigned int MaximumAttempts = 50;
+            DWORD code = ERROR_SUCCESS;
+            for (unsigned int attempt = 1; attempt <= MaximumAttempts; ++attempt)
             {
-                error = "Windows directory rename failed (error " +
-                    std::to_string(GetLastError()) + "): " +
-                    from.generic_u8string() + " -> " +
-                    to.generic_u8string();
-                return false;
+                if (MoveFileExW(
+                        from.c_str(),
+                        to.c_str(),
+                        MOVEFILE_WRITE_THROUGH))
+                {
+                    error.clear();
+                    return true;
+                }
+
+                code = GetLastError();
+                const bool transient = code == ERROR_ACCESS_DENIED ||
+                    code == ERROR_SHARING_VIOLATION ||
+                    code == ERROR_LOCK_VIOLATION;
+                if (!transient || attempt == MaximumAttempts)
+                {
+                    error = "Windows directory rename failed (error " +
+                        std::to_string(code) + ", attempts " +
+                        std::to_string(attempt) + "): " +
+                        from.generic_u8string() + " -> " +
+                        to.generic_u8string();
+                    return false;
+                }
+                Sleep(RetryDelayMilliseconds);
             }
-            error.clear();
-            return true;
+            error = "Windows directory rename exhausted its retry policy.";
+            return false;
         }
 
         bool RemoveTree(const fs::path& path, std::string& error)

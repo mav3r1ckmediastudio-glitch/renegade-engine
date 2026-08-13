@@ -69,6 +69,7 @@ set(RENEGADE_GATE5_CASES
     incomplete
     failed-smoke
     locked
+    transient-lock
     interrupted
     post-move-validation
     stale-recovery

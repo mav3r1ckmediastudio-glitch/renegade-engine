@@ -167,6 +167,13 @@ persists material scalar values in the reusable-model recipe. No-Surface
 materials default to a neutral dielectric (roughness 0.75, metalness 0.0,
 reflectance 0.04). This prevents preview and final placement from drifting.
 
+Gate 5 package promotion remains an atomic same-volume directory transaction.
+On Windows, only access-denied, sharing-violation and lock-violation rename
+results receive a bounded retry window (50 attempts at 100 ms) to allow Runtime
+descendants or scanners to release package handles. Permanent locks still fail
+closed with candidate evidence retained and any previous valid build restored;
+all non-transient rename errors fail immediately.
+
 Terrain sculpting treats Wicked's streamed chunks as views into one canonical
 integer height grid. Neighbouring 67x67 chunk meshes deliberately duplicate
 their shared edge and corner vertices; a sculpt edit is therefore calculated
