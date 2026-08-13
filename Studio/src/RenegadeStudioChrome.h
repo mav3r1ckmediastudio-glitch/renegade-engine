@@ -59,6 +59,7 @@ namespace renegade::studio
         void OnDragStarted(std::function<void(float)> callback);
         void OnValuePreview(std::function<void(float)> callback);
         void OnValueCommitted(std::function<void(float)> callback);
+        void SetCreatorStyle(bool enabled) { creatorStyle_ = enabled; }
         void Update(const wi::Canvas& canvas, float dt) override;
         void Render(
             const wi::Canvas& canvas,
@@ -72,6 +73,7 @@ namespace renegade::studio
         std::string label_;
         float valueBeforeUpdate_ = 0.0f;
         bool dragging_ = false;
+        bool creatorStyle_ = false;
         std::function<void(float)> dragStarted_;
         std::function<void(float)> valuePreview_;
         std::function<void(float)> valueCommitted_;
@@ -103,6 +105,7 @@ namespace renegade::studio
         std::array<wi::Resource, SlotCount> resources_;
         std::array<std::string, SlotCount> paths_;
         std::size_t selectedSlot_ = 0;
+        std::size_t hoveredSlot_ = SlotCount;
         std::function<void(std::size_t)> slotSelected_;
         std::function<void(std::size_t)> browseRequested_;
     };

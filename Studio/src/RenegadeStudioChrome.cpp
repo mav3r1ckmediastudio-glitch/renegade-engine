@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <filesystem>
 #include <iterator>
 #include <utility>
 
@@ -481,6 +482,16 @@ namespace renegade::studio
             return;
         }
 
+        // The taller labelled treatment belongs only to the dedicated model
+        // importer. The normal Studio inspector was designed around Wicked's
+        // compact native slider geometry; drawing the importer rail there
+        // caused controls to overlap every following absolute-layout row.
+        if (!creatorStyle_)
+        {
+            Slider::Render(canvas, cmd);
+            return;
+        }
+
         ApplyScissor(canvas, scissorRect, cmd);
         const XMFLOAT2 inputPos = valueInputField.GetPos();
         const XMFLOAT2 inputSize = valueInputField.GetSize();
@@ -593,8 +604,8 @@ namespace renegade::studio
         const float dt)
     {
         Widget::Update(canvas, dt);
-        if (!IsVisible() || !IsEnabled() ||
-            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        hoveredSlot_ = SlotCount;
+        if (!IsVisible() || !IsEnabled())
         {
             return;
         }
@@ -608,6 +619,14 @@ namespace renegade::studio
         const std::size_t index = std::min(
             SlotCount - 1,
             static_cast<std::size_t>((pointer.y - translation.y) / rowHeight));
+        hoveredSlot_ = index;
+        SetTooltip(paths_[index].empty()
+            ? std::string("No texture assigned")
+            : paths_[index]);
+        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            return;
+        }
         selectedSlot_ = index;
         if (slotSelected_)
         {
@@ -644,7 +663,9 @@ namespace renegade::studio
                 scale.x,
                 rowHeight - 3.0f,
                 wi::Color(6, 10, 12, 255),
-                index == selectedSlot_ ? Forge : Border,
+                index == selectedSlot_
+                    ? Forge
+                    : index == hoveredSlot_ ? HoverEdge : Border,
                 cmd);
             DrawText(
                 labels[index],
@@ -688,8 +709,21 @@ namespace renegade::studio
                 Surface0,
                 BorderSoft,
                 cmd);
+            std::string displayedPath = "<NONE>";
+            if (!paths_[index].empty())
+            {
+                const std::filesystem::path path =
+                    std::filesystem::u8path(paths_[index]);
+                const std::string filename = path.filename().generic_u8string();
+                const std::string parent = path.parent_path().filename().generic_u8string();
+                displayedPath = parent.empty() ? filename : parent + "/" + filename;
+                if (displayedPath.size() > 42)
+                {
+                    displayedPath = "..." + displayedPath.substr(displayedPath.size() - 39);
+                }
+            }
             DrawText(
-                Ellipsize(paths_[index].empty() ? "<NONE>" : paths_[index], 42),
+                displayedPath,
                 pathX + 5.0f,
                 y + 20.0f,
                 8,

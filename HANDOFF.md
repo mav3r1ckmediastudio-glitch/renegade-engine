@@ -51,12 +51,18 @@ cache identity for changed Surface sources and PBR values.
 The Material section also restores the missing visual inspection surface with a
 MAX-style vertical map list. Base, Normal, packed Surface, Roughness, Metalness,
 AO and Emissive each own a labeled thumbnail/path/browse row. The active slot
-uses the normal Studio accent border, while PBR scalar controls live on their
-own adjacent importer section so neither map rows nor numeric controls overlap.
-All continuous creator sliders now use one deliberate visual treatment: an
+uses the normal Studio accent border. Paths preserve the filename tail and
+expose the full value on hover/in the editable field; the material selector
+adds mesh/subset usage and the Base Color filename. PBR scalar controls now
+follow the maps in the same scrollable material workspace.
+All continuous creator-import sliders now use one deliberate visual treatment: an
 opaque recessed rail, orange filled range and layered diamond handle, with the
 numeric textbox retained for exact input. Animation clip start/end remain
-numeric-only as explicitly requested.
+numeric-only as explicitly requested. The custom renderer is importer-only;
+ordinary Inspector, Environment and Terrain sliders retain their compact
+native geometry. The right-docked importer uses the available screen height,
+keeps commit/cancel fixed, and scrolls long sections. The neutral 1.82 m male
+now includes a visible 0.00-to-1.82 m ruler and separate model-height readout.
 
 GitHub CI remains authoritative because the owner CPU is confirmed unstable.
 Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and

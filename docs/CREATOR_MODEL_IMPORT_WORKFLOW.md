@@ -36,10 +36,12 @@ Each material exposes roughness, metalness, reflectance, normal strength, AO str
 
 The selected material displays a MAX-style vertical map list for Base Color,
 Normal, packed Surface, Roughness, Metalness, AO and Emissive. Every map owns a
-labeled thumbnail, path and browse row; selecting a row synchronizes the
-existing path and Remove controls. PBR scalar controls live in a separate
-adjacent importer section so the complete map list remains readable. A missing
-map is shown explicitly rather than borrowing a different slot's image.
+labeled thumbnail, filename-tail path and browse row; hover and the editable
+path field expose the complete source path. The material selector identifies
+the mesh/subset using the material and includes its Base Color filename when
+available, rather than exposing only anonymous `Material.00x` labels. PBR
+scalar controls follow the map rows in the same scrollable material workspace.
+A missing map is shown explicitly rather than borrowing another slot's image.
 
 Preview lighting is editor-only and never enters the model product or level. The creator can adjust intensity, horizontal direction, elevation and ambient brightness, use Neutral/Outdoor/Dark presets, or reset to neutral. A toggleable neutral male reference is drawn at exactly 1.82 m beside the model. It is never parented to the import, never inherits its transform, and its side offset follows the current world-space preview bounds plus fixed clearance.
 
@@ -52,9 +54,13 @@ opaque dark blue/black panels, consistent white text, restrained grey focus
 treatment and no cyan or translucent glass chrome. Headings, readouts and
 controls share the same surface treatment rather than using pale label slabs.
 
-The importer task workspace is docked eight pixels from the application right edge rather than positioned inside the ordinary editor viewport. This returns the previously unused right-side space to the model preview and makes the panel read as owned workspace chrome instead of a floating popup.
+The importer task workspace is docked eight pixels from the application right edge and uses the available application height rather than being positioned inside the ordinary editor viewport. Long sections scroll while Import & Place and Cancel remain docked. This returns previously unused space to the model preview and makes the panel read as owned workspace chrome instead of a floating popup.
 
-The 1.82 m reference is derived directly from the measured source bounds and current root transform rather than waiting for live render AABBs. It is placed on the unobstructed left side of the preview, clear of the task panel, and uses a neutral grey material. Its draw transform explicitly includes the active preview camera view-projection matrix, as required by Wicked's dummy visualizer.
+The 1.82 m reference is derived directly from the measured source bounds and current root transform rather than waiting for live render AABBs. It is placed on the unobstructed left side of the preview, clear of the task panel, and uses a neutral dark silhouette plus a capped world-space 0.00 m-to-1.82 m ruler matching the original creator reference intent. The panel reports the imported model's independently measured height, so a short Automatic result cannot be mistaken for an oversized ruler. Its draw transform explicitly includes the active preview camera view-projection matrix, as required by Wicked's dummy visualizer.
+
+The taller orange-range slider renderer is importer-only. Existing Studio
+Inspector, Environment and Terrain controls retain Wicked's compact native
+slider renderer because those workspaces use denser absolute row layouts.
 
 ## Persistence
 Creator material choices are persisted using governed LP08 texture stable IDs inside the LP07 reusable-model creator recipe. Base Color, Normal, Surface, Emissive and AO bindings survive reimport through that recipe. Invalid stable IDs, duplicate material indices, invalid animation ranges and unknown recipe fields are rejected.

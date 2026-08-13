@@ -383,6 +383,144 @@ namespace
         return name != nullptr && !name->name.empty() ? name->name : fallback;
     }
 
+    std::vector<std::string> CreatorImportMaterialUsages(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity materialEntity)
+    {
+        std::vector<std::string> usages;
+        for (std::size_t meshIndex = 0;
+            meshIndex < scene.meshes.GetCount();
+            ++meshIndex)
+        {
+            const auto meshEntity = scene.meshes.GetEntity(meshIndex);
+            const auto& mesh = scene.meshes[meshIndex];
+            for (const auto& subset : mesh.subsets)
+            {
+                if (subset.materialID != materialEntity)
+                    continue;
+                std::string usage = CreatorImportEntityName(
+                    scene,
+                    meshEntity,
+                    "Mesh " + std::to_string(meshIndex + 1));
+                if (!subset.surfaceName.empty() && subset.surfaceName != usage)
+                    usage += " / " + subset.surfaceName;
+                if (std::find(usages.begin(), usages.end(), usage) == usages.end())
+                    usages.push_back(std::move(usage));
+            }
+        }
+        return usages;
+    }
+
+    std::string CreatorImportMaterialDisplayName(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity materialEntity,
+        const std::size_t index)
+    {
+        std::string result = CreatorImportEntityName(
+            scene,
+            materialEntity,
+            "Material " + std::to_string(index + 1));
+        const auto usages = CreatorImportMaterialUsages(scene, materialEntity);
+        if (!usages.empty())
+            result += " // " + usages.front();
+        if (const auto* material = scene.materials.GetComponent(materialEntity))
+        {
+            const auto& base = material->textures[
+                wi::scene::MaterialComponent::BASECOLORMAP].name;
+            if (!base.empty())
+                result += " // " + fs::u8path(base).filename().generic_u8string();
+        }
+        return result;
+    }
+
+    void UpdateCreatorImportScaleReferenceLabel()
+    {
+        std::ostringstream label;
+        label << "SHOW MALE + 0.00 M TO 1.82 M RULER";
+        if (creatorModelImporter.sourceBounds.valid)
+        {
+            const float modelHeight = std::abs(
+                creatorModelImporter.sourceBounds.maximum.y -
+                creatorModelImporter.sourceBounds.minimum.y) *
+                std::abs(creatorModelImporter.scale.y);
+            label << "   //   MODEL HEIGHT " << std::fixed
+                << std::setprecision(2) << modelHeight << " M";
+        }
+        creatorImportMannequinVisible.SetText(label.str());
+    }
+
+    bool CreatorImportWorldBounds(XMFLOAT3& minimum, XMFLOAT3& maximum)
+    {
+        auto* session = renegade::bridge::StudioSession::Current();
+        if (session == nullptr || !creatorModelImporter.sourceBounds.valid)
+            return false;
+        const auto& scene = session->Scenes().GetScene();
+        const auto* root = scene.transforms.GetComponent(
+            creatorModelImporter.previewRoot);
+        if (root == nullptr)
+            return false;
+
+        minimum = XMFLOAT3(FLT_MAX, FLT_MAX, FLT_MAX);
+        maximum = XMFLOAT3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+        const auto& bounds = creatorModelImporter.sourceBounds;
+        const XMMATRIX world = XMLoadFloat4x4(&root->world);
+        for (const float x : {bounds.minimum.x, bounds.maximum.x})
+        for (const float y : {bounds.minimum.y, bounds.maximum.y})
+        for (const float z : {bounds.minimum.z, bounds.maximum.z})
+        {
+            XMFLOAT3 corner;
+            XMStoreFloat3(
+                &corner,
+                XMVector3TransformCoord(XMVectorSet(x, y, z, 1.0f), world));
+            minimum.x = std::min(minimum.x, corner.x);
+            minimum.y = std::min(minimum.y, corner.y);
+            minimum.z = std::min(minimum.z, corner.z);
+            maximum.x = std::max(maximum.x, corner.x);
+            maximum.y = std::max(maximum.y, corner.y);
+            maximum.z = std::max(maximum.z, corner.z);
+        }
+        return true;
+    }
+
+    void QueueCreatorImportScaleRuler()
+    {
+        if (!creatorModelImporter.active ||
+            !creatorModelImporter.mannequinVisible)
+            return;
+        XMFLOAT3 minimum;
+        XMFLOAT3 maximum;
+        if (!CreatorImportWorldBounds(minimum, maximum))
+            return;
+
+        constexpr float ReferenceHeight = 1.82f;
+        constexpr float ReferenceHalfWidth = 0.23f;
+        constexpr float Clearance = 0.45f;
+        constexpr float RulerGap = 0.36f;
+        constexpr float CapHalfWidth = 0.10f;
+        const float mannequinX = minimum.x - Clearance - ReferenceHalfWidth;
+        const float rulerX = mannequinX - ReferenceHalfWidth - RulerGap;
+        const float z = (minimum.z + maximum.z) * 0.5f;
+        const XMFLOAT4 color(0.94f, 0.94f, 0.92f, 0.95f);
+        const auto line = [color](const XMFLOAT3& start, const XMFLOAT3& end)
+        {
+            wi::renderer::RenderableLine ruler;
+            ruler.start = start;
+            ruler.end = end;
+            ruler.color_start = color;
+            ruler.color_end = color;
+            wi::renderer::DrawLine(ruler, true);
+        };
+        line(
+            XMFLOAT3(rulerX, CreatorImportStageHeight, z),
+            XMFLOAT3(rulerX, CreatorImportStageHeight + ReferenceHeight, z));
+        line(
+            XMFLOAT3(rulerX - CapHalfWidth, CreatorImportStageHeight, z),
+            XMFLOAT3(rulerX + CapHalfWidth, CreatorImportStageHeight, z));
+        line(
+            XMFLOAT3(rulerX - CapHalfWidth, CreatorImportStageHeight + ReferenceHeight, z),
+            XMFLOAT3(rulerX + CapHalfWidth, CreatorImportStageHeight + ReferenceHeight, z));
+    }
+
     void ApplyCreatorImportPreviewTransform()
     {
         auto* session = renegade::bridge::StudioSession::Current();
@@ -405,6 +543,7 @@ namespace
         transform->scale_local = creatorModelImporter.scale;
         transform->SetDirty();
         transform->UpdateTransform();
+        UpdateCreatorImportScaleReferenceLabel();
     }
 
     void ApplyCreatorImportPreviewLighting()
@@ -516,6 +655,7 @@ namespace
         if (creatorModelImporter.materialEntities.empty())
         {
             creatorImportTexturePath.SetValue("");
+            creatorImportTexturePath.SetTooltip("No texture source selected");
             return;
         }
         const std::uint32_t materialIndex = static_cast<std::uint32_t>(
@@ -528,6 +668,8 @@ namespace
         if (found == creatorModelImporter.materialOverrides.end())
         {
             creatorImportTexturePath.SetValue("<AUTO // imported binding or filename suffix>");
+            creatorImportTexturePath.SetTooltip(
+                "Automatic: use the imported binding or a detected filename suffix");
             return;
         }
         const renegade::bridge::CreatorTextureSourceChoice* choice = nullptr;
@@ -542,11 +684,21 @@ namespace
         default: choice = &found->emissive; break;
         }
         if (!choice->overridden)
+        {
             creatorImportTexturePath.SetValue("<AUTO // imported binding or filename suffix>");
+            creatorImportTexturePath.SetTooltip(
+                "Automatic: use the imported binding or a detected filename suffix");
+        }
         else if (choice->path.empty())
+        {
             creatorImportTexturePath.SetValue("<REMOVED>");
+            creatorImportTexturePath.SetTooltip("Texture slot explicitly removed");
+        }
         else
+        {
             creatorImportTexturePath.SetValue(choice->path);
+            creatorImportTexturePath.SetTooltip(choice->path);
+        }
     }
 
     void ApplyCreatorPreviewTextureChoice(const std::string& path)
@@ -705,7 +857,18 @@ namespace
         creatorImportTexturePreviews.SetSelectedSlot(creatorImportTextureSlot);
 
         std::ostringstream out;
-        out << "R " << material->roughness
+        const auto usages = CreatorImportMaterialUsages(scene, entity);
+        out << CreatorImportEntityName(
+                scene,
+                entity,
+                "Material " + std::to_string(creatorModelImporter.selectedMaterial + 1));
+        if (!usages.empty())
+        {
+            out << "\nUSED BY: " << usages.front();
+            if (usages.size() > 1)
+                out << "  (+" << (usages.size() - 1) << " MORE)";
+        }
+        out << "\nR " << material->roughness
             << "  M " << material->metalness
             << "  Refl " << material->reflectance;
         creatorImportMaterialReadout.SetText(out.str());
@@ -1065,51 +1228,26 @@ namespace renegade::studio
         DrawEditorGrid(cmd);
         if (drawMannequin)
         {
-            const auto& previewScene = session_->Scenes().GetScene();
-            if (creatorModelImporter.sourceBounds.valid)
+            XMFLOAT3 minimum;
+            XMFLOAT3 maximum;
+            if (CreatorImportWorldBounds(minimum, maximum))
             {
-                const auto& bounds = creatorModelImporter.sourceBounds;
-                const auto* root = previewScene.transforms.GetComponent(
-                    creatorModelImporter.previewRoot);
-                if (root != nullptr)
-                {
-                    XMFLOAT3 minimum(FLT_MAX, FLT_MAX, FLT_MAX);
-                    XMFLOAT3 maximum(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-                    const XMMATRIX world = XMLoadFloat4x4(&root->world);
-                    for (const float x : {bounds.minimum.x, bounds.maximum.x})
-                    for (const float y : {bounds.minimum.y, bounds.maximum.y})
-                    for (const float z : {bounds.minimum.z, bounds.maximum.z})
-                    {
-                        XMFLOAT3 corner;
-                        XMStoreFloat3(
-                            &corner,
-                            XMVector3TransformCoord(XMVectorSet(x, y, z, 1.0f), world));
-                        minimum.x = std::min(minimum.x, corner.x);
-                        minimum.y = std::min(minimum.y, corner.y);
-                        minimum.z = std::min(minimum.z, corner.z);
-                        maximum.x = std::max(maximum.x, corner.x);
-                        maximum.y = std::max(maximum.y, corner.y);
-                        maximum.z = std::max(maximum.z, corner.z);
-                    }
-
-                    constexpr float SourceMaleHeight = 1.89113f;
-                    constexpr float ReferenceHeight = 1.82f;
-                    constexpr float ReferenceHalfWidth = 0.23f;
-                    constexpr float Clearance = 0.45f;
-                    const float scale = ReferenceHeight / SourceMaleHeight;
-                    // The task panel occupies the right side of the importer,
-                    // so keep the reference on the unobstructed left side.
-                    const float x = minimum.x - Clearance - ReferenceHalfWidth;
-                    const float z = (minimum.z + maximum.z) * 0.5f;
-                    const XMMATRIX matrix = XMMatrixScaling(scale, scale, scale) *
-                        XMMatrixTranslation(x, CreatorImportStageHeight, z) *
-                        camera->GetViewProjection();
-                    dummy::draw_male(
-                        matrix,
-                        XMFLOAT4(0.78f, 0.78f, 0.76f, 0.82f),
-                        true,
-                        cmd);
-                }
+                constexpr float SourceMaleHeight = 1.891132f;
+                constexpr float ReferenceHeight = 1.82f;
+                constexpr float ReferenceHalfWidth = 0.23f;
+                constexpr float Clearance = 0.45f;
+                const float scale = ReferenceHeight / SourceMaleHeight;
+                // Keep the neutral silhouette on the unobstructed left side.
+                const float x = minimum.x - Clearance - ReferenceHalfWidth;
+                const float z = (minimum.z + maximum.z) * 0.5f;
+                const XMMATRIX matrix = XMMatrixScaling(scale, scale, scale) *
+                    XMMatrixTranslation(x, CreatorImportStageHeight, z) *
+                    camera->GetViewProjection();
+                dummy::draw_male(
+                    matrix,
+                    XMFLOAT4(0.16f, 0.17f, 0.18f, 0.96f),
+                    true,
+                    cmd);
             }
         }
         device->RenderPassEnd(cmd);
@@ -2846,13 +2984,14 @@ namespace renegade::studio
         creatorImportHelpLabel.SetFitTextEnabled(true);
 
         creatorImportSectionCombo.Create("Importer Section");
-        for (const char* section : {"ASSET", "TRANSFORM & SCALE", "MATERIAL MAPS", "PBR VALUES", "LIGHTING & SCALE REFERENCE", "ANIMATION"})
+        for (const char* section : {"ASSET", "TRANSFORM & SCALE", "MATERIALS // MAPS + PBR", "LIGHTING & SCALE REFERENCE", "ANIMATION"})
             creatorImportSectionCombo.AddItem(section);
         creatorImportSectionCombo.SetSelectedWithoutCallback(0);
         creatorImportSectionCombo.OnSelect([this](const wi::gui::EventArgs& args)
         {
             creatorModelImporter.workspaceSection = static_cast<std::size_t>(
                 std::max(0, args.iValue));
+            importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
             RefreshCreatorImportWorkspaceSection();
         });
 
@@ -2889,6 +3028,7 @@ namespace renegade::studio
             const int axis)
         {
             field.Create(minimum, maximum, initial, 2000.0f, name, label);
+            field.SetCreatorStyle(true);
             field.OnValuePreview([rotation, axis](const float value)
             {
                 XMFLOAT3& target = rotation
@@ -2910,6 +3050,7 @@ namespace renegade::studio
         const auto createScaleSlider = [](RenegadeSlider& field, const char* name, const char* label, const int axis)
         {
             field.Create(0.001f, 10.0f, 1.0f, 10000.0f, name, label);
+            field.SetCreatorStyle(true);
             field.OnValuePreview([axis](const float value)
             {
                 if (creatorModelImporter.scaleLinked)
@@ -3074,6 +3215,7 @@ namespace renegade::studio
             float renegade::bridge::CreatorMaterialSourceOverride::* member)
         {
             slider.Create(minimum, maximum, 0.0f, 1000.0f, name, label);
+            slider.SetCreatorStyle(true);
             slider.OnValuePreview([member](const float value)
             {
                 if (!creatorModelImporter.active ||
@@ -3103,6 +3245,7 @@ namespace renegade::studio
             const float maximum, float* value)
         {
             slider.Create(minimum, maximum, *value, 1000.0f, name, label);
+            slider.SetCreatorStyle(true);
             slider.OnValuePreview([value](const float next)
             {
                 *value = next;
@@ -3307,13 +3450,22 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
-            static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
-            static_cast<wi::gui::Widget*>(&importScaleDismissButton_)})
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout)})
         {
             widget->SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(widget);
         }
+        // Commit controls stay docked while the selected workspace section
+        // scrolls independently. This prevents long material/PBR content
+        // from pushing the only exit controls off-screen.
+        importScaleApplyButton_.SetShadowRadius(0.0f);
+        importScaleDismissButton_.SetShadowRadius(0.0f);
+        importScalePanel_.AddWidget(
+            &importScaleApplyButton_,
+            wi::gui::Window::AttachmentOptions::NONE);
+        importScalePanel_.AddWidget(
+            &importScaleDismissButton_,
+            wi::gui::Window::AttachmentOptions::NONE);
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
     }
@@ -3454,6 +3606,19 @@ namespace renegade::studio
         inspectorPanel_.scrollbar_vertical.SetColor(
             wi::Color(210, 91, 29, 255),
             wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
+        importScalePanel_.scrollbar_vertical.SetTheme(scrollbarTheme);
+        importScalePanel_.scrollbar_vertical.SetColor(
+            wi::Color(12, 18, 22, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
+        importScalePanel_.scrollbar_vertical.SetColor(
+            wi::Color(38, 52, 61, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_INACTIVE);
+        importScalePanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
+        importScalePanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
     }
 
     void StudioRenderPath::Update(const float dt)
@@ -3477,6 +3642,8 @@ namespace renegade::studio
         {
             return;
         }
+
+        QueueCreatorImportScaleRuler();
 
         if (testLevelRuntime_.IsActive())
         {
@@ -3937,13 +4104,14 @@ namespace renegade::studio
         // is why the panel is taller than its visible idle content and the
         // buttons sit well below the combo rather than immediately under
         // it.
-        const float importScalePanelWidth = 440.0f;
-        const float importScalePanelHeight = std::min(850.0f, std::max(690.0f, height - 36.0f));
+        const float importScalePanelWidth = std::min(500.0f, std::max(440.0f, width * 0.32f));
+        const float importScalePanelTop = 8.0f;
+        const float importScalePanelHeight = std::max(320.0f, height - 16.0f);
         // GGMAX-style task workspace: keep the preview unobstructed and dock
         // the importer controls down the right side of the preview viewport.
         importScalePanel_.SetPos(XMFLOAT2(
             std::max(8.0f, width - importScalePanelWidth - 8.0f),
-            viewportBounds_.y + 12.0f));
+            importScalePanelTop));
         importScalePanel_.SetSize(XMFLOAT2(
             importScalePanelWidth,
             importScalePanelHeight));
@@ -3969,52 +4137,58 @@ namespace renegade::studio
             widget.SetPos(XMFLOAT2(12.0f, rowY));
             widget.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
         };
-        layoutFullRow(creatorImportPositionX, 210.0f);
-        layoutFullRow(creatorImportPositionY, 242.0f);
-        layoutFullRow(creatorImportPositionZ, 274.0f);
-        layoutFullRow(creatorImportRotationX, 314.0f);
-        layoutFullRow(creatorImportRotationY, 346.0f);
-        layoutFullRow(creatorImportRotationZ, 378.0f);
-        layoutFullRow(creatorImportScaleX, 418.0f);
-        layoutFullRow(creatorImportScaleY, 450.0f);
-        layoutFullRow(creatorImportScaleZ, 482.0f);
-        layoutFullRow(creatorImportScaleLinked, 518.0f);
-        layoutFullRow(creatorImportDimensionPreset, 554.0f);
-        layoutFullRow(importScaleModeCombo_, 590.0f);
+        const auto layoutSliderRow = [importScalePanelWidth](
+            wi::gui::Widget& widget, const float rowY)
+        {
+            widget.SetPos(XMFLOAT2(12.0f, rowY));
+            widget.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+        };
+        layoutSliderRow(creatorImportPositionX, 210.0f);
+        layoutSliderRow(creatorImportPositionY, 248.0f);
+        layoutSliderRow(creatorImportPositionZ, 286.0f);
+        layoutSliderRow(creatorImportRotationX, 330.0f);
+        layoutSliderRow(creatorImportRotationY, 368.0f);
+        layoutSliderRow(creatorImportRotationZ, 406.0f);
+        layoutSliderRow(creatorImportScaleX, 450.0f);
+        layoutSliderRow(creatorImportScaleY, 488.0f);
+        layoutSliderRow(creatorImportScaleZ, 526.0f);
+        layoutFullRow(creatorImportScaleLinked, 566.0f);
+        layoutFullRow(creatorImportDimensionPreset, 602.0f);
+        layoutFullRow(importScaleModeCombo_, 638.0f);
 
         creatorImportMaterialLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
         creatorImportMaterialLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
         creatorImportMaterialCombo.SetPos(XMFLOAT2(12.0f, 210.0f));
         creatorImportMaterialCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
         creatorImportMaterialReadout.SetPos(XMFLOAT2(12.0f, 242.0f));
-        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        creatorImportTexturePreviews.SetPos(XMFLOAT2(12.0f, 274.0f));
-        creatorImportTexturePreviews.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 322.0f));
-        creatorImportTextureHelp.SetPos(XMFLOAT2(12.0f, 600.0f));
+        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 56.0f));
+        creatorImportTexturePreviews.SetPos(XMFLOAT2(12.0f, 302.0f));
+        creatorImportTexturePreviews.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 280.0f));
+        creatorImportTextureHelp.SetPos(XMFLOAT2(12.0f, 586.0f));
         creatorImportTextureHelp.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 20.0f));
-        creatorImportTextureSlotCombo.SetPos(XMFLOAT2(12.0f, 624.0f));
+        creatorImportTextureSlotCombo.SetPos(XMFLOAT2(12.0f, 610.0f));
         creatorImportTextureSlotCombo.SetSize(XMFLOAT2(150.0f, 28.0f));
-        creatorImportTexturePath.SetPos(XMFLOAT2(166.0f, 624.0f));
+        creatorImportTexturePath.SetPos(XMFLOAT2(166.0f, 610.0f));
         creatorImportTexturePath.SetSize(XMFLOAT2(importScalePanelWidth - 178.0f, 28.0f));
-        creatorImportTextureBrowse.SetPos(XMFLOAT2(12.0f, 656.0f));
+        creatorImportTextureBrowse.SetPos(XMFLOAT2(12.0f, 642.0f));
         creatorImportTextureBrowse.SetSize(XMFLOAT2(120.0f, 28.0f));
-        creatorImportTextureClear.SetPos(XMFLOAT2(136.0f, 656.0f));
+        creatorImportTextureClear.SetPos(XMFLOAT2(136.0f, 642.0f));
         creatorImportTextureClear.SetSize(XMFLOAT2(100.0f, 28.0f));
-        creatorImportMaterialScalarLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
+        creatorImportMaterialScalarLabel.SetPos(XMFLOAT2(12.0f, 682.0f));
         creatorImportMaterialScalarLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 20.0f));
-        layoutFullRow(creatorImportRoughness, 214.0f);
-        layoutFullRow(creatorImportMetalness, 246.0f);
-        layoutFullRow(creatorImportReflectance, 278.0f);
-        layoutFullRow(creatorImportNormalStrength, 310.0f);
-        layoutFullRow(creatorImportAoStrength, 342.0f);
-        layoutFullRow(creatorImportEmissiveStrength, 374.0f);
+        layoutSliderRow(creatorImportRoughness, 710.0f);
+        layoutSliderRow(creatorImportMetalness, 748.0f);
+        layoutSliderRow(creatorImportReflectance, 786.0f);
+        layoutSliderRow(creatorImportNormalStrength, 824.0f);
+        layoutSliderRow(creatorImportAoStrength, 862.0f);
+        layoutSliderRow(creatorImportEmissiveStrength, 900.0f);
 
         creatorImportLightingLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
         creatorImportLightingLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
-        layoutFullRow(creatorImportLightIntensity, 214.0f);
-        layoutFullRow(creatorImportLightAzimuth, 250.0f);
-        layoutFullRow(creatorImportLightElevation, 286.0f);
-        layoutFullRow(creatorImportAmbientBrightness, 322.0f);
+        layoutSliderRow(creatorImportLightIntensity, 214.0f);
+        layoutSliderRow(creatorImportLightAzimuth, 254.0f);
+        layoutSliderRow(creatorImportLightElevation, 294.0f);
+        layoutSliderRow(creatorImportAmbientBrightness, 334.0f);
         layoutFullRow(creatorImportLightingPreset, 366.0f);
         layoutFullRow(creatorImportLightingReset, 402.0f);
         layoutFullRow(creatorImportMannequinVisible, 446.0f);
@@ -4037,7 +4211,7 @@ namespace renegade::studio
         creatorImportAnimationDelete.SetSize(XMFLOAT2(120.0f, 28.0f));
         creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 354.0f));
         creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
-        const float commitY = std::min(importScalePanelHeight - 46.0f, 764.0f);
+        const float commitY = importScalePanelHeight - 46.0f;
         importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, commitY));
         importScaleApplyButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.64f, 34.0f));
         importScaleDismissButton_.SetPos(XMFLOAT2(20.0f + (importScalePanelWidth - 32.0f) * 0.64f, commitY));
@@ -7647,7 +7821,7 @@ namespace renegade::studio
         {
             const auto entityId = creatorModelImporter.materialEntities[index];
             creatorImportMaterialCombo.AddItem(
-                CreatorImportEntityName(scene, entityId, "Material " + std::to_string(index + 1)),
+                CreatorImportMaterialDisplayName(scene, entityId, index),
                 static_cast<std::uint64_t>(index));
         }
         if (!creatorModelImporter.materialEntities.empty())
@@ -7669,7 +7843,9 @@ namespace renegade::studio
         creatorImportAmbientBrightness.SetValue(creatorModelImporter.ambientBrightness);
         creatorImportLightingPreset.SetSelectedWithoutCallback(0);
         creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
+        UpdateCreatorImportScaleReferenceLabel();
         importScalePanel_.SetVisible(true);
+        importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
         RefreshCreatorImportWorkspaceSection();
     }
 
@@ -7752,10 +7928,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportTextureSlotCombo),
             static_cast<wi::gui::Widget*>(&creatorImportTexturePath),
             static_cast<wi::gui::Widget*>(&creatorImportTextureBrowse),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureClear)})
-            widget->SetVisible(section == 2);
-
-        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&creatorImportTextureClear),
             static_cast<wi::gui::Widget*>(&creatorImportMaterialScalarLabel),
             static_cast<wi::gui::Widget*>(&creatorImportRoughness),
             static_cast<wi::gui::Widget*>(&creatorImportMetalness),
@@ -7763,7 +7936,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportNormalStrength),
             static_cast<wi::gui::Widget*>(&creatorImportAoStrength),
             static_cast<wi::gui::Widget*>(&creatorImportEmissiveStrength)})
-            widget->SetVisible(section == 3);
+            widget->SetVisible(section == 2);
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportLightingLabel),
@@ -7774,7 +7947,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportLightingPreset),
             static_cast<wi::gui::Widget*>(&creatorImportLightingReset),
             static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible)})
-            widget->SetVisible(section == 4);
+            widget->SetVisible(section == 3);
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
@@ -7786,7 +7959,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout)})
-            widget->SetVisible(section == 5);
+            widget->SetVisible(section == 4);
     }
 
     void StudioRenderPath::ApplyImportScaleMode(
