@@ -48,8 +48,6 @@ namespace renegade::bridge
 
     const char* ResourceAssetDependencyProvider::Name() const noexcept
     {
-        // This deliberately matches the durable provider identity created by
-        // LP08 first import. LC01 refresh must not relabel a reached product.
         return "lp08.rasset";
     }
 
@@ -123,13 +121,13 @@ namespace renegade::bridge
         std::set<StableId> emittedAssets;
         for (const auto& binding : bindings)
         {
-            if (!emittedAssets.insert(binding.baseColorTextureAssetId).second)
+            if (!emittedAssets.insert(binding.textureAssetId).second)
                 continue;
 
             const AssetRecord* product =
-                FindAssetById(registry, binding.baseColorTextureAssetId);
+                FindAssetById(registry, binding.textureAssetId);
             const ImportedProductRecord* provenance =
-                FindImportedProduct(registry, binding.baseColorTextureAssetId);
+                FindImportedProduct(registry, binding.textureAssetId);
             if (product == nullptr || provenance == nullptr ||
                 product->dependencyClass != DependencyClass::Texture ||
                 product->requirement != DependencyRequirement::Required ||
@@ -143,7 +141,7 @@ namespace renegade::bridge
             {
                 error =
                     "Governed material texture stable ID does not resolve to an available authoritative LP08 .rasset product in LC01: " +
-                    binding.baseColorTextureAssetId;
+                    binding.textureAssetId;
                 return false;
             }
 
@@ -152,8 +150,9 @@ namespace renegade::bridge
             candidate.dependencyClass = DependencyClass::Texture;
             candidate.requirement = DependencyRequirement::Required;
             candidate.provenance =
-                "lp08.material_texture_binding:" +
-                binding.baseColorTextureAssetId;
+                std::string("lp08.material_texture_binding.") +
+                MaterialTextureSlotLabel(binding.slot) + ":" +
+                binding.textureAssetId;
             emit(candidate);
         }
 
