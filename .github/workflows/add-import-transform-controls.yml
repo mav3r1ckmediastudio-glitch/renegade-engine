@@ -1,0 +1,22 @@
+name: Add importer transform controls
+on:
+  push:
+    branches: [agent/creator-workflow-repair]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[import-transform-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/creator-workflow-repair
+          fetch-depth: 0
+      - run: python .github/add_import_transform_controls.py
+      - run: |
+          git config user.name "renegade-recovery-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add Studio/src/StudioApplication.cpp
+          git commit -m "Add importer position and rotation controls [import-transform-applied]"
+          git push origin HEAD:agent/creator-workflow-repair
