@@ -101,9 +101,9 @@ int main()
     unsupportedImport.settingsJson = "{\"unsupported\":true}";
     const auto rejectedImport = service.ImportModelAsset(unsupportedImport);
     if (!Require(!rejectedImport.succeeded &&
-            rejectedImport.error.find("version-1 settings do not support options") !=
+            rejectedImport.error.find("unsupported key: unsupported") !=
                 std::string::npos,
-            "new import did not reject unsupported version-1 options before conversion: " +
+            "new import did not reject an unknown creator-option key before conversion: " +
                 rejectedImport.error) ||
         !Require(!fs::exists(root / "Content" / "Models" / "rejected.rasset") &&
             !fs::exists(root / AssetRegistryDocumentName),
@@ -199,9 +199,9 @@ int main()
     std::vector<std::uint8_t> registryAfter;
     const bool passed =
         Require(!result.succeeded,
-            "non-empty version-1 recipe options unexpectedly reimported") &&
-        Require(result.error.find("version-1 import options") != std::string::npos,
-            "stored version-1 recipe did not fail at the recipe boundary: " +
+            "stored recipe with an unknown creator-option key unexpectedly reimported") &&
+        Require(result.error.find("unsupported key: unsupported") != std::string::npos,
+            "stored creator recipe did not reject the unknown key at the recipe boundary: " +
                 result.error) &&
         Require(ReadBytes(productPath, productAfter) &&
             ReadBytes(root / AssetRegistryDocumentName, registryAfter),
