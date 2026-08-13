@@ -140,6 +140,14 @@ namespace renegade::bridge
             return scene_.IsValid() ? scene_.get() : nullptr;
         }
 
+        // Creator import recipes are applied after Wicked conversion but before
+        // WISCENE serialization. Keep ownership inside PreparedModelImport so
+        // the normal validation/save path still proves the edited scene.
+        [[nodiscard]] wi::scene::Scene* PeekMutableScene() noexcept
+        {
+            return scene_.IsValid() ? scene_.get() : nullptr;
+        }
+
         [[nodiscard]] wi::allocator::shared_ptr<wi::scene::Scene>
         ReleaseScene() noexcept
         {
