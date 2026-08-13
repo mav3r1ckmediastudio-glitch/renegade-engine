@@ -17,11 +17,10 @@ namespace renegade::bridge
         std::string error;
     };
 
-    // Gate 5 creator-facing orchestration. This service does not own Studio UI
-    // and does not bypass LC01/LP07 services: it stages an external source into
-    // project-owned SourceAssets, projects current disk state through LC01,
-    // delegates import/reimport/placement to ReusableAssetService and persists
-    // creator-owned catalogue tags through AssetCatalogueService.
+    // Creator-facing orchestration. This service does not own Studio UI and
+    // does not bypass LC01/LP07/LP08 services: it stages external sources into
+    // project-owned SourceAssets, delegates governed import/reimport/placement,
+    // and persists creator-owned catalogue state.
     class CreatorAssetWorkflowService
     {
     public:
@@ -40,7 +39,8 @@ namespace renegade::bridge
         [[nodiscard]] CreatorModelImportResult ImportModel(
             const std::string& projectRoot,
             const StableId& projectId,
-            const std::string& externalSourcePath) const;
+            const std::string& externalSourcePath,
+            const std::string& settingsJson = "{}") const;
 
         [[nodiscard]] ReusableModelReimportResult ReimportModel(
             const std::string& projectRoot,
