@@ -8,7 +8,14 @@ PR #57 restores Renegade Studio's guided creator model-import workflow. Importin
 
 The source filename seeds an editable asset name. The creator can also choose a canonical project destination below `Content`; the workflow rejects traversal, destinations outside Content, and an explicit name that is already occupied.
 
-Position, rotation and scale use slider-plus-number controls. XYZ scale is linked by default and can be unlocked. Real-dimension presets derive their factor from measured model height rather than fixed multipliers. The preset list includes 0.50 m small prop, the canonical 1.82 m human height, 2.04 m doorway and 3.00 m large prop, while source-size and unit conversion options remain available.
+Position, rotation and scale use slider-plus-number controls. Continuous sliders
+share a recessed neutral rail, orange filled range and high-contrast diamond
+handle; the numeric field remains available for exact entry. Animation range
+boundaries remain numeric fields rather than sliders. XYZ scale is linked by
+default and can be unlocked. Real-dimension presets derive their factor from
+measured model height rather than fixed multipliers. The preset list includes
+0.50 m small prop, the canonical 1.82 m human height, 2.04 m doorway and 3.00 m
+large prop, while source-size and unit conversion options remain available.
 
 ## Material resolution
 Each imported material is handled independently. Texture sources resolve in this order: an existing imported material binding, a recognised filename suffix beside the model, then an explicit creator replacement or removal.

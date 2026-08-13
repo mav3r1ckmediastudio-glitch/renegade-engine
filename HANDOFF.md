@@ -53,6 +53,10 @@ MAX-style vertical map list. Base, Normal, packed Surface, Roughness, Metalness,
 AO and Emissive each own a labeled thumbnail/path/browse row. The active slot
 uses the normal Studio accent border, while PBR scalar controls live on their
 own adjacent importer section so neither map rows nor numeric controls overlap.
+All continuous creator sliders now use one deliberate visual treatment: an
+opaque recessed rail, orange filled range and layered diamond handle, with the
+numeric textbox retained for exact input. Animation clip start/end remain
+numeric-only as explicitly requested.
 
 GitHub CI remains authoritative because the owner CPU is confirmed unstable.
 Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and

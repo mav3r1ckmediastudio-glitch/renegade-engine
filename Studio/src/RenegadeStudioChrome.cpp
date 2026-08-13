@@ -131,6 +131,43 @@ namespace
         DrawRect(x + 1.0f, y + 1.0f, width - 2.0f, height - 2.0f, fill, cmd);
     }
 
+    void DrawRoundedRect(
+        const float x,
+        const float y,
+        const float width,
+        const float height,
+        const float radius,
+        const wi::Color color,
+        const wi::graphics::CommandList cmd)
+    {
+        wi::image::Params params(x, y, width, height, color);
+        params.blendFlag = wi::enums::BLENDMODE_ALPHA;
+        params.enableCornerRounding();
+        for (auto& corner : params.corners_rounding)
+        {
+            corner.radius = radius;
+            corner.segments = 8;
+        }
+        wi::image::Draw(nullptr, params, cmd);
+    }
+
+    void DrawDiamond(
+        const float x,
+        const float y,
+        const float size,
+        const wi::Color color,
+        const wi::graphics::CommandList cmd)
+    {
+        wi::image::Params params;
+        params.pos = XMFLOAT3(x, y, 0.0f);
+        params.siz = XMFLOAT2(size, size);
+        params.pivot = XMFLOAT2(0.5f, 0.5f);
+        params.rotation = XM_PIDIV4;
+        params.color = color;
+        params.blendFlag = wi::enums::BLENDMODE_ALPHA;
+        wi::image::Draw(nullptr, params, cmd);
+    }
+
     std::string Ellipsize(std::string value, const std::size_t maximum)
     {
         if (value.size() <= maximum)
@@ -451,7 +488,7 @@ namespace renegade::studio
         const float trackWidth = std::max(
             24.0f,
             inputPos.x - trackX - 9.0f);
-        const float trackY = translation.y + scale.y - 6.0f;
+        const float trackY = translation.y + scale.y - 9.0f;
         const float normalized = end > start
             ? std::clamp((value - start) / (end - start), 0.0f, 1.0f)
             : 0.0f;
@@ -465,22 +502,30 @@ namespace renegade::studio
             cmd,
             0.2f,
             0.18f);
-        DrawRect(trackX, trackY, trackWidth, 4.0f, Border, cmd);
-        DrawRect(
+        DrawRoundedRect(
+            trackX,
+            trackY,
+            trackWidth,
+            6.0f,
+            3.0f,
+            BorderSoft,
+            cmd);
+        DrawRoundedRect(
             trackX,
             trackY,
             trackWidth * normalized,
-            4.0f,
+            6.0f,
+            3.0f,
             Forge,
             cmd);
         const float knobX = trackX + trackWidth * normalized;
-        DrawRect(
-            knobX - 3.0f,
-            translation.y + scale.y - 13.0f,
-            6.0f,
-            12.0f,
-            state == wi::gui::ACTIVE ? TextStrong : Forge,
-            cmd);
+        const float knobY = trackY + 3.0f;
+        DrawDiamond(knobX + 1.0f, knobY + 2.0f, 18.0f,
+            wi::Color(0, 0, 0, 100), cmd);
+        DrawDiamond(knobX, knobY, 16.0f,
+            state == wi::gui::ACTIVE ? TextStrong : TextSecondary, cmd);
+        DrawDiamond(knobX, knobY, 9.0f, Forge, cmd);
+        DrawDiamond(knobX, knobY, 3.5f, TextStrong, cmd);
 
         const wi::Color inputBorder =
             valueInputField.GetState() == wi::gui::ACTIVE
