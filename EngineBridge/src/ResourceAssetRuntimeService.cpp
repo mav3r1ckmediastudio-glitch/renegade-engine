@@ -1,10 +1,12 @@
 #include "renegade/bridge/ResourceAssetRuntimeService.h"
 
+#include "renegade/bridge/ResourceAssetCacheIdentityService.h"
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
-#include <set>
 #include <utility>
 
 #include "json.hpp"
@@ -135,30 +137,6 @@ namespace renegade::bridge
             }
             error.clear();
             return true;
-        }
-
-        std::string ExtensionForFormat(const ResourceSourceFormat format)
-        {
-            for (const auto& capability : GetSupportedResourceFormats())
-            {
-                if (capability.format == format)
-                    return capability.extension;
-            }
-            return {};
-        }
-
-        std::string LogicalResourceName(
-            const StableId& assetId,
-            std::string hash,
-            const ResourceSourceFormat format)
-        {
-            hash.erase(std::remove(hash.begin(), hash.end(), ':'), hash.end());
-            std::replace(hash.begin(), hash.end(), '/', '_');
-            std::replace(hash.begin(), hash.end(), '\\', '_');
-            const std::string extension = ExtensionForFormat(format);
-            return extension.empty()
-                ? std::string{}
-                : "renegade_runtime_" + assetId + "_" + hash + extension;
         }
     }
 
@@ -308,14 +286,15 @@ namespace renegade::bridge
                 packaged.packagedAssetPath;
             loaded.prepared.sourceFormat = packaged.sourceFormat;
             loaded.prepared.payloadHash = packaged.payloadHash;
-            loaded.prepared.logicalResourceName = LogicalResourceName(
-                packaged.assetId, packaged.payloadHash,
-                packaged.sourceFormat);
             loaded.prepared.payload = std::move(packaged.payload);
-            if (loaded.prepared.logicalResourceName.empty())
+            if (!BuildResourcePayloadCacheName(
+                    "renegade_runtime_",
+                    loaded.prepared.assetId,
+                    loaded.prepared.sourceFormat,
+                    loaded.prepared.payload,
+                    loaded.prepared.logicalResourceName,
+                    error))
             {
-                error =
-                    "Packaged governed texture format cannot be handed to Wicked.";
                 return false;
             }
             loaded.resource = loader(loaded.prepared, error);
