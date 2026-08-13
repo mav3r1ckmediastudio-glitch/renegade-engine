@@ -59,22 +59,24 @@ namespace renegade::bridge
             IsCreatorModelSourceFormat(entry.sourceFormat);
     }
 
-    // Gate 4 resource reimport always requires an active retained source. An
-    // active Current/Stale/Moved product can be replaced after last-good
-    // validation; a Missing product can be regenerated when LC01 retains its
-    // tombstone and the source is still available. Invalid products remain
-    // blocked because reimport must not overwrite untrusted on-disk bytes.
+    // Gate 4 resource reimport requires a live retained source for an active
+    // product. A product tombstone does not project the separate source record's
+    // availability through AssetCatalogueEntry::sourceAvailable, so Missing
+    // product recovery is offered from durable imported provenance and the
+    // backend remains authoritative for validating the retained source before
+    // any mutation. Invalid active products remain blocked.
     inline bool CanReimportCreatorResourceAsset(
         const AssetCatalogueEntry& entry) noexcept
     {
-        const bool activeProductState = entry.productAvailable &&
+        const bool activeProductState = entry.sourceAvailable &&
+            entry.productAvailable &&
             (entry.state == AssetCatalogueState::Current ||
              entry.state == AssetCatalogueState::Stale ||
              entry.state == AssetCatalogueState::Moved);
         const bool recoverableMissingProduct = !entry.productAvailable &&
             entry.state == AssetCatalogueState::Missing;
         return entry.registered && IsValidStableId(entry.assetId) &&
-            entry.importedProduct && entry.sourceAvailable &&
+            entry.importedProduct &&
             entry.importer == "wicked.resourcemanager" &&
             IsCreatorGovernedResourceClass(entry.dependencyClass) &&
             (activeProductState || recoverableMissingProduct);
