@@ -56,6 +56,7 @@ add_library(RenegadeEngineBridge STATIC
     src/CommandService.cpp
     src/CreatorAssetWorkflowService.cpp
     src/CreatorModelImportRecipe.cpp
+    src/CreatorModelMaterialDetectionService.cpp
     src/CreatorModelMaterialPreparationService.cpp
     src/CreatorSurfaceBuilderService.cpp
     src/CreatorTextureWorkflowService.cpp
