@@ -1,0 +1,23 @@
+name: Apply creator recovery UI patch
+on:
+  push:
+    branches: [agent/creator-workflow-repair]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[creator-ui-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/creator-workflow-repair
+          fetch-depth: 0
+      - run: python .github/creator_recovery_ui_patch.py
+      - run: |
+          git config user.name "renegade-recovery-bot"
+          git config user.email "actions@users.noreply.github.com"
+          rm -f .github/creator_recovery_ui_patch.py .github/workflows/creator-recovery-recipe-patch.yml
+          git add -A
+          git commit -m "Wire editable creator model importer [creator-ui-applied]"
+          git push origin HEAD:agent/creator-workflow-repair
