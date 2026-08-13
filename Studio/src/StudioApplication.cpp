@@ -1,8912 +1,1709 @@
-#include "StudioApplication.h"
-
-#include "renegade/bridge/TestLevelSnapshotService.h"
-#include "renegade/bridge/CreatorAssetWorkflowService.h"
-#include "renegade/bridge/CreatorModelImportRecipe.h"
-#include "renegade/bridge/CreatorModelMaterialPreparationService.h"
-#include "renegade/bridge/ReusableAssetInstanceService.h"
-#include "DummyVisualizer.h"
-
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <cfloat>
-#include <filesystem>
-#include <iomanip>
-#include <memory>
-#include <sstream>
-#include <utility>
-
-namespace
-{
-    namespace fs = std::filesystem;
-    constexpr std::uint8_t SelectionStencilReference = 0x0F;
-    constexpr wi::Color HologramIdle = wi::Color(12, 16, 19, 248);
-    constexpr wi::Color HologramFocus = wi::Color(26, 31, 35, 255);
-    constexpr wi::Color HologramActive = wi::Color(38, 43, 47, 255);
-    constexpr wi::Color HologramText = wi::Color(244, 239, 233, 255);
-    constexpr wi::Color HologramMuted = wi::Color(178, 178, 176, 255);
-    constexpr wi::Color HologramBorder = wi::Color(38, 52, 61, 255);
-    constexpr wi::Color HologramPanel = wi::Color(8, 11, 13, 252);
-    constexpr wi::Color HologramSelected = wi::Color(44, 35, 29, 255);
-    constexpr wi::Color WarningAmber = wi::Color(255, 150, 40, 255);
-    constexpr int LayoutPreferenceBits = 10;
-
-    XMFLOAT4 RotationFromTo(
-        const XMFLOAT3& source,
-        const XMFLOAT3& target) noexcept
-    {
-        const XMVECTOR sourceVector = XMLoadFloat3(&source);
-        const XMVECTOR targetVector = XMLoadFloat3(&target);
-        if (XMVectorGetX(XMVector3LengthSq(sourceVector)) < 0.0001f ||
-            XMVectorGetX(XMVector3LengthSq(targetVector)) < 0.0001f)
-        {
-            return XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-        }
-        const XMVECTOR from = XMVector3Normalize(sourceVector);
-        const XMVECTOR to = XMVector3Normalize(targetVector);
-        const float dot = XMVectorGetX(XMVector3Dot(from, to));
-        if (dot >= 0.9999f)
-        {
-            return XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-        }
-        if (dot <= -0.9999f)
-        {
-            XMVECTOR axis = XMVector3Cross(from, XMVectorSet(1, 0, 0, 0));
-            if (XMVectorGetX(XMVector3LengthSq(axis)) < 0.0001f)
-            {
-                axis = XMVector3Cross(from, XMVectorSet(0, 0, 1, 0));
-            }
-            XMFLOAT4 rotation;
-            XMStoreFloat4(
-                &rotation,
-                XMQuaternionRotationAxis(XMVector3Normalize(axis), XM_PI));
-            return rotation;
-        }
-
-        const XMVECTOR axis = XMVector3Cross(from, to);
-        XMFLOAT4 rotation;
-        XMStoreFloat4(
-            &rotation,
-            XMQuaternionNormalize(XMVectorSet(
-                XMVectorGetX(axis),
-                XMVectorGetY(axis),
-                XMVectorGetZ(axis),
-                1.0f + dot)));
-        return rotation;
-    }
-
-    const char* PlacementLightName(
-        const wi::scene::LightComponent::LightType type) noexcept
-    {
-        switch (type)
-        {
-        case wi::scene::LightComponent::SPOT:
-            return "SPOT";
-        case wi::scene::LightComponent::RECTANGLE:
-            return "RECTANGLE";
-        case wi::scene::LightComponent::DIRECTIONAL:
-            return "DIRECTIONAL";
-        case wi::scene::LightComponent::POINT:
-        default:
-            return "POINT";
-        }
-    }
-
-    renegade::studio::RenegadeStudioChrome::HierarchyCategory
-    ToHierarchyCategory(
-        const renegade::bridge::SceneEntityCategory category) noexcept
-    {
-        using BridgeCategory = renegade::bridge::SceneEntityCategory;
-        using ChromeCategory =
-            renegade::studio::RenegadeStudioChrome::HierarchyCategory;
-        switch (category)
-        {
-        case BridgeCategory::Lights:
-            return ChromeCategory::Lights;
-        case BridgeCategory::Models:
-            return ChromeCategory::Models;
-        case BridgeCategory::Characters:
-            return ChromeCategory::Characters;
-        case BridgeCategory::Cameras:
-            return ChromeCategory::Cameras;
-        case BridgeCategory::Terrain:
-            return ChromeCategory::Terrain;
-        case BridgeCategory::Effects:
-            return ChromeCategory::Effects;
-        case BridgeCategory::Audio:
-            return ChromeCategory::Audio;
-        case BridgeCategory::Other:
-        default:
-            return ChromeCategory::Other;
-        }
-    }
-
-    void DrawEditorLine(
-        const XMFLOAT2& start,
-        const XMFLOAT2& end,
-        const XMFLOAT4& color)
-    {
-        wi::renderer::RenderableLine2D line;
-        line.start = start;
-        line.end = end;
-        line.color_start = color;
-        line.color_end = color;
-        wi::renderer::DrawLine(line);
-    }
-
-    int ReadLayoutPreference(
-        const renegade::bridge::ProjectService& projects,
-        const std::string& key,
-        const int fallback)
-    {
-        int value = 0;
-        for (int bit = 0; bit < LayoutPreferenceBits; ++bit)
-        {
-            if (projects.GetEditorPreference(
-                    key + "_bit_" + std::to_string(bit),
-                    false))
-            {
-                value |= 1 << bit;
-            }
-        }
-        return value > 0 ? value : fallback;
-    }
-
-    void WriteLayoutPreference(
-        renegade::bridge::ProjectService& projects,
-        const std::string& key,
-        const int value)
-    {
-        for (int bit = 0; bit < LayoutPreferenceBits; ++bit)
-        {
-            projects.SetEditorPreference(
-                key + "_bit_" + std::to_string(bit),
-                (value & (1 << bit)) != 0);
-        }
-    }
-
-    fs::path AllocateImportedModelAssetPath(
-        const fs::path& projectRoot,
-        const fs::path& source)
-    {
-        const fs::path contentDirectory =
-            projectRoot / "Content" / "Models";
-        const fs::path sourceDirectory =
-            projectRoot / "SourceAssets" / "Models";
-        std::error_code ignored;
-        fs::create_directories(contentDirectory, ignored);
-        ignored.clear();
-        fs::create_directories(sourceDirectory, ignored);
-
-        std::string stem = source.stem().u8string();
-        if (stem.empty())
-        {
-            stem = "ImportedModel";
-        }
-
-        for (std::uint32_t index = 1; ; ++index)
-        {
-            const std::string candidateStem = index == 1
-                ? stem
-                : stem + "_" + std::to_string(index);
-            const fs::path assetPath =
-                contentDirectory / fs::u8path(candidateStem + ".wiscene");
-            const fs::path sourceSnapshot =
-                sourceDirectory / fs::u8path(candidateStem);
-            if (!fs::exists(assetPath) && !fs::exists(sourceSnapshot))
-            {
-                return assetPath;
-            }
-        }
-    }
-
-    bool CopyOriginalModelSource(
-        const fs::path& source,
-        const fs::path& projectRoot,
-        const fs::path& assetPath,
-        std::string& error)
-    {
-        if (!fs::is_regular_file(source))
-        {
-            error = "The selected source model no longer exists: " +
-                source.generic_u8string();
-            return false;
-        }
-
-        const fs::path snapshotDirectory =
-            projectRoot / "SourceAssets" / "Models" / assetPath.stem();
-        std::error_code copyError;
-        fs::create_directories(snapshotDirectory, copyError);
-        if (copyError)
-        {
-            error = "Could not create the model source snapshot folder: " +
-                copyError.message();
-            return false;
-        }
-
-        fs::copy_file(
-            source,
-            snapshotDirectory / source.filename(),
-            fs::copy_options::overwrite_existing,
-            copyError);
-        if (copyError)
-        {
-            std::error_code ignored;
-            fs::remove_all(snapshotDirectory, ignored);
-            error = "Could not copy the original model into SourceAssets: " +
-                copyError.message();
-            return false;
-        }
-
-        // Preserve the common same-stem binary sidecar for external GLTF.
-        if (wi::helper::toUpper(source.extension().u8string()) == ".GLTF")
-        {
-            for (const char* extension : {".bin", ".BIN"})
-            {
-                const fs::path sidecar = source.parent_path() /
-                    fs::u8path(source.stem().u8string() + extension);
-                if (!fs::is_regular_file(sidecar))
-                {
-                    continue;
-                }
-                copyError.clear();
-                fs::copy_file(
-                    sidecar,
-                    snapshotDirectory / sidecar.filename(),
-                    fs::copy_options::overwrite_existing,
-                    copyError);
-                if (copyError)
-                {
-                    std::error_code ignored;
-                    fs::remove_all(snapshotDirectory, ignored);
-                    error =
-                        "Could not copy the GLTF binary sidecar into "
-                        "SourceAssets: " +
-                        copyError.message();
-                    return false;
-                }
-                break;
-            }
-        }
-
-        error.clear();
-        return true;
-    }
-
-
-    // Keep the temporary preview beyond the normal camera's 1000 m far plane
-    // so the authored level remains invisible, but do not push it to 100 km.
-    // At Y=100000 a 32-bit transform has roughly 7.8 mm granularity, which
-    // visibly quantizes detailed character geometry and normals even though
-    // the source mesh is intact. Y=2048 keeps sub-millimetre precision while
-    // retaining render isolation from the authored scene at the origin.
-    constexpr float CreatorImportStageHeight = 2048.0f;
-    constexpr float CreatorImportPreviewFov = 32.0f * XM_PI / 180.0f;
-
-    struct CreatorModelImportWorkspaceState
-    {
-        bool active = false;
-        bool committing = false;
-        std::string sourcePath;
-        std::size_t undoBaseline = 0;
-        wi::ecs::Entity previewRoot = wi::ecs::INVALID_ENTITY;
-        wi::ecs::Entity previewLight = wi::ecs::INVALID_ENTITY;
-        wi::scene::TransformComponent cameraBefore;
-        float cameraFovBefore = XM_PIDIV4;
-        bool cameraCaptured = false;
-        float automaticScale = 1.0f;
-        renegade::bridge::ModelBounds sourceBounds;
-        renegade::bridge::ImportedSceneSummary summary;
-        renegade::bridge::ImportedModelEvidence evidence;
-        std::vector<wi::ecs::Entity> materialEntities;
-        std::vector<wi::ecs::Entity> animationEntities;
-        std::vector<renegade::bridge::CreatorMaterialSourceOverride> materialOverrides;
-        std::vector<renegade::bridge::CreatorAnimationImportRecipe> animationRecipe;
-        std::size_t selectedMaterial = 0;
-        std::size_t selectedAnimation = 0;
-        XMFLOAT3 positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
-        XMFLOAT3 rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
-        XMFLOAT3 scale = XMFLOAT3(1.0f, 1.0f, 1.0f);
-        bool scaleLinked = true;
-        std::string assetName;
-        std::string destinationFolder = "Content/Models";
-        float lightIntensity = 4.0f;
-        float lightAzimuth = -35.0f;
-        float lightElevation = 35.0f;
-        float ambientBrightness = 0.35f;
-        XMFLOAT3 ambientBefore = {};
-        wi::ecs::Entity weatherEntity = wi::ecs::INVALID_ENTITY;
-        bool ambientCaptured = false;
-        bool mannequinVisible = true;
-        std::size_t workspaceSection = 0;
-    };
-
-    CreatorModelImportWorkspaceState creatorModelImporter;
-    renegade::studio::RenegadeComboBox creatorImportMaterialCombo;
-    renegade::studio::RenegadeComboBox creatorImportAnimationCombo;
-    wi::gui::Label creatorImportMaterialLabel;
-    wi::gui::Label creatorImportMaterialReadout;
-    wi::gui::Label creatorImportTextureHelp;
-    renegade::studio::RenegadeComboBox creatorImportTextureSlotCombo;
-    renegade::studio::RenegadeTextInputField creatorImportTexturePath;
-    renegade::studio::RenegadeButton creatorImportTextureBrowse;
-    renegade::studio::RenegadeButton creatorImportTextureClear;
-    std::size_t creatorImportTextureSlot = 0;
-    wi::gui::Label creatorImportAnimationLabel;
-    renegade::studio::RenegadeTextInputField creatorImportAnimationName;
-    renegade::studio::RenegadeTextInputField creatorImportAnimationStart;
-    renegade::studio::RenegadeTextInputField creatorImportAnimationEnd;
-    renegade::studio::RenegadeComboBox creatorImportAnimationEnabled;
-    renegade::studio::RenegadeButton creatorImportAnimationAdd;
-    renegade::studio::RenegadeButton creatorImportAnimationDelete;
-    wi::gui::Label creatorImportAnimationReadout;
-    wi::gui::Label creatorImportTransformLabel;
-    renegade::studio::RenegadeComboBox creatorImportSectionCombo;
-    renegade::studio::RenegadeTextInputField creatorImportAssetName;
-    renegade::studio::RenegadeTextInputField creatorImportDestination;
-    renegade::studio::RenegadeSlider creatorImportPositionX;
-    renegade::studio::RenegadeSlider creatorImportPositionY;
-    renegade::studio::RenegadeSlider creatorImportPositionZ;
-    renegade::studio::RenegadeSlider creatorImportRotationX;
-    renegade::studio::RenegadeSlider creatorImportRotationY;
-    renegade::studio::RenegadeSlider creatorImportRotationZ;
-    renegade::studio::RenegadeSlider creatorImportScaleX;
-    renegade::studio::RenegadeSlider creatorImportScaleY;
-    renegade::studio::RenegadeSlider creatorImportScaleZ;
-    renegade::studio::RenegadeCheckBox creatorImportScaleLinked;
-    renegade::studio::RenegadeComboBox creatorImportDimensionPreset;
-    wi::gui::Label creatorImportMaterialScalarLabel;
-    renegade::studio::RenegadeSlider creatorImportRoughness;
-    renegade::studio::RenegadeSlider creatorImportMetalness;
-    renegade::studio::RenegadeSlider creatorImportReflectance;
-    renegade::studio::RenegadeSlider creatorImportNormalStrength;
-    renegade::studio::RenegadeSlider creatorImportAoStrength;
-    renegade::studio::RenegadeSlider creatorImportEmissiveStrength;
-    wi::gui::Label creatorImportLightingLabel;
-    renegade::studio::RenegadeSlider creatorImportLightIntensity;
-    renegade::studio::RenegadeSlider creatorImportLightAzimuth;
-    renegade::studio::RenegadeSlider creatorImportLightElevation;
-    renegade::studio::RenegadeSlider creatorImportAmbientBrightness;
-    renegade::studio::RenegadeComboBox creatorImportLightingPreset;
-    renegade::studio::RenegadeButton creatorImportLightingReset;
-    renegade::studio::RenegadeCheckBox creatorImportMannequinVisible;
-    wi::gui::Label creatorImportHelpLabel;
-
-    std::string CreatorImportEntityName(
-        const wi::scene::Scene& scene,
-        const wi::ecs::Entity entity,
-        const std::string& fallback)
-    {
-        const auto* name = scene.names.GetComponent(entity);
-        return name != nullptr && !name->name.empty() ? name->name : fallback;
-    }
-
-    void ApplyCreatorImportPreviewTransform()
-    {
-        auto* session = renegade::bridge::StudioSession::Current();
-        if (session == nullptr || !creatorModelImporter.active ||
-            creatorModelImporter.previewRoot == wi::ecs::INVALID_ENTITY)
-            return;
-        auto& scene = session->Scenes().GetScene();
-        auto* transform = scene.transforms.GetComponent(creatorModelImporter.previewRoot);
-        if (transform == nullptr)
-            return;
-        transform->translation_local = XMFLOAT3(
-            creatorModelImporter.positionOffset.x,
-            CreatorImportStageHeight + creatorModelImporter.positionOffset.y,
-            creatorModelImporter.positionOffset.z);
-        XMVECTOR q = XMQuaternionRotationRollPitchYaw(
-            XMConvertToRadians(creatorModelImporter.rotationDegrees.x),
-            XMConvertToRadians(creatorModelImporter.rotationDegrees.y),
-            XMConvertToRadians(creatorModelImporter.rotationDegrees.z));
-        XMStoreFloat4(&transform->rotation_local, q);
-        transform->scale_local = creatorModelImporter.scale;
-        transform->SetDirty();
-        transform->UpdateTransform();
-    }
-
-    void ApplyCreatorImportPreviewLighting()
-    {
-        auto* session = renegade::bridge::StudioSession::Current();
-        if (session == nullptr || !creatorModelImporter.active)
-            return;
-        auto& scene = session->Scenes().GetScene();
-        if (auto* light = scene.lights.GetComponent(creatorModelImporter.previewLight))
-        {
-            light->intensity = creatorModelImporter.lightIntensity;
-        }
-        if (auto* transform = scene.transforms.GetComponent(creatorModelImporter.previewLight))
-        {
-            const XMVECTOR rotation = XMQuaternionRotationRollPitchYaw(
-                XMConvertToRadians(-creatorModelImporter.lightElevation),
-                XMConvertToRadians(creatorModelImporter.lightAzimuth),
-                0.0f);
-            XMStoreFloat4(&transform->rotation_local, rotation);
-            transform->SetDirty();
-            transform->UpdateTransform();
-        }
-        const XMFLOAT3 ambient(
-            creatorModelImporter.ambientBrightness,
-            creatorModelImporter.ambientBrightness,
-            creatorModelImporter.ambientBrightness);
-        scene.weather.ambient = ambient;
-        if (auto* weather = scene.weathers.GetComponent(creatorModelImporter.weatherEntity))
-            weather->ambient = ambient;
-    }
-
-    void RestoreCreatorImportPreviewEnvironment()
-    {
-        auto* session = renegade::bridge::StudioSession::Current();
-        if (session == nullptr || !creatorModelImporter.ambientCaptured)
-            return;
-        auto& scene = session->Scenes().GetScene();
-        scene.weather.ambient = creatorModelImporter.ambientBefore;
-        if (auto* weather = scene.weathers.GetComponent(creatorModelImporter.weatherEntity))
-            weather->ambient = creatorModelImporter.ambientBefore;
-    }
-
-    renegade::bridge::CreatorMaterialSourceOverride& EnsureCreatorMaterialOverride()
-    {
-        const std::uint32_t materialIndex = static_cast<std::uint32_t>(
-            creatorModelImporter.selectedMaterial);
-        auto found = std::find_if(
-            creatorModelImporter.materialOverrides.begin(),
-            creatorModelImporter.materialOverrides.end(),
-            [materialIndex](const renegade::bridge::CreatorMaterialSourceOverride& value)
-            { return value.materialIndex == materialIndex; });
-        if (found == creatorModelImporter.materialOverrides.end())
-        {
-            renegade::bridge::CreatorMaterialSourceOverride created;
-            created.materialIndex = materialIndex;
-            creatorModelImporter.materialOverrides.push_back(std::move(created));
-            return creatorModelImporter.materialOverrides.back();
-        }
-        return *found;
-    }
-
-    renegade::bridge::CreatorTextureSourceChoice& SelectedCreatorTextureChoice()
-    {
-        auto& material = EnsureCreatorMaterialOverride();
-        switch (creatorImportTextureSlot)
-        {
-        case 0: return material.baseColor;
-        case 1: return material.normal;
-        case 2: return material.surface;
-        case 3: return material.roughness;
-        case 4: return material.metalness;
-        case 5: return material.occlusion;
-        default: return material.emissive;
-        }
-    }
-
-    void ApplyDetectedCreatorPreviewMaterials()
-    {
-        auto* session = renegade::bridge::StudioSession::Current();
-        if (session == nullptr || !session->Projects().HasProject())
-            return;
-        auto& scene = session->Scenes().GetScene();
-        std::string error;
-        const fs::path output = fs::u8path(
-            session->Projects().CurrentProject().rootPath) /
-            "Intermediate" / "PreviewMaterials";
-        if (!renegade::bridge::ApplyCreatorModelMaterialPreview(
-                scene,
-                creatorModelImporter.sourcePath,
-                output.generic_u8string(),
-                creatorModelImporter.materialOverrides,
-                creatorModelImporter.materialEntities,
-                error))
-        {
-            wi::backlog::post(
-                "Renegade creator material preview: " + error,
-                wi::backlog::LogLevel::Warning);
-        }
-    }
-
-    void RefreshCreatorImportTextureEditor()
-    {
-        if (creatorModelImporter.materialEntities.empty())
-        {
-            creatorImportTexturePath.SetValue("");
-            return;
-        }
-        const std::uint32_t materialIndex = static_cast<std::uint32_t>(
-            creatorModelImporter.selectedMaterial);
-        const auto found = std::find_if(
-            creatorModelImporter.materialOverrides.begin(),
-            creatorModelImporter.materialOverrides.end(),
-            [materialIndex](const renegade::bridge::CreatorMaterialSourceOverride& value)
-            { return value.materialIndex == materialIndex; });
-        if (found == creatorModelImporter.materialOverrides.end())
-        {
-            creatorImportTexturePath.SetValue("<AUTO // imported binding or filename suffix>");
-            return;
-        }
-        const renegade::bridge::CreatorTextureSourceChoice* choice = nullptr;
-        switch (creatorImportTextureSlot)
-        {
-        case 0: choice = &found->baseColor; break;
-        case 1: choice = &found->normal; break;
-        case 2: choice = &found->surface; break;
-        case 3: choice = &found->roughness; break;
-        case 4: choice = &found->metalness; break;
-        case 5: choice = &found->occlusion; break;
-        default: choice = &found->emissive; break;
-        }
-        if (!choice->overridden)
-            creatorImportTexturePath.SetValue("<AUTO // imported binding or filename suffix>");
-        else if (choice->path.empty())
-            creatorImportTexturePath.SetValue("<REMOVED>");
-        else
-            creatorImportTexturePath.SetValue(choice->path);
-    }
-
-    void ApplyCreatorPreviewTextureChoice(const std::string& path)
-    {
-        auto* session = renegade::bridge::StudioSession::Current();
-        if (session == nullptr || creatorModelImporter.materialEntities.empty())
-            return;
-        (void)path;
-        ApplyDetectedCreatorPreviewMaterials();
-    }
-
-    void OpenCreatorImportTextureBrowser()
-    {
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Texture source for the selected imported material slot";
-        for (const char* extension : {"png", "jpg", "jpeg", "tga", "bmp", "dds", "hdr"})
-            params.extensions.push_back(extension);
-        wi::helper::FileDialog(params, [](const std::string& path)
-        {
-            wi::eventhandler::Subscribe_Once(
-                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                [path](std::uint64_t)
-                {
-                    if (path.empty() || !creatorModelImporter.active)
-                        return;
-                    auto& choice = SelectedCreatorTextureChoice();
-                    choice.overridden = true;
-                    choice.path = path;
-                    ApplyCreatorPreviewTextureChoice(path);
-                    RefreshCreatorImportTextureEditor();
-                    RefreshCreatorImportMaterialReadout();
-                });
-        });
-    }
-
-    void RefreshCreatorImportAnimationEditor()
-    {
-        if (creatorModelImporter.animationRecipe.empty())
-        {
-            creatorImportAnimationName.SetValue("");
-            creatorImportAnimationStart.SetValue(0.0f);
-            creatorImportAnimationEnd.SetValue(0.0f);
-            creatorImportAnimationEnabled.SetSelectedWithoutCallback(-1);
-            creatorImportAnimationReadout.SetText("No animation actions detected.");
-            return;
-        }
-        creatorModelImporter.selectedAnimation = std::min(
-            creatorModelImporter.selectedAnimation,
-            creatorModelImporter.animationRecipe.size() - 1);
-        const auto& clip = creatorModelImporter.animationRecipe[
-            creatorModelImporter.selectedAnimation];
-        creatorImportAnimationName.SetValue(clip.name);
-        creatorImportAnimationStart.SetValue(clip.start);
-        creatorImportAnimationEnd.SetValue(clip.end);
-        creatorImportAnimationEnabled.SetSelectedWithoutCallback(clip.enabled ? 0 : 1);
-        std::ostringstream out;
-        out.precision(3);
-        out << std::fixed << "Source action " << clip.sourceAnimationIndex + 1
-            << " // " << clip.start << " - " << clip.end
-            << " // " << (clip.enabled ? "INCLUDED" : "EXCLUDED");
-        creatorImportAnimationReadout.SetText(out.str());
-    }
-
-    void RebuildCreatorImportAnimationCombo()
-    {
-        creatorImportAnimationCombo.ClearItems();
-        for (std::size_t index = 0; index < creatorModelImporter.animationRecipe.size(); ++index)
-        {
-            const auto& clip = creatorModelImporter.animationRecipe[index];
-            creatorImportAnimationCombo.AddItem(
-                clip.name.empty() ? "Animation " + std::to_string(index + 1) : clip.name,
-                static_cast<std::uint64_t>(index));
-        }
-        if (!creatorModelImporter.animationRecipe.empty())
-        {
-            creatorModelImporter.selectedAnimation = std::min(
-                creatorModelImporter.selectedAnimation,
-                creatorModelImporter.animationRecipe.size() - 1);
-            creatorImportAnimationCombo.SetSelectedWithoutCallback(
-                static_cast<int>(creatorModelImporter.selectedAnimation));
-        }
-        RefreshCreatorImportAnimationEditor();
-    }
-
-    void RefreshCreatorImportMaterialReadout()
-    {
-        auto* session = renegade::bridge::StudioSession::Current();
-        if (session == nullptr || creatorModelImporter.materialEntities.empty())
-        {
-            creatorImportMaterialReadout.SetText("No imported materials detected.");
-            return;
-        }
-        creatorModelImporter.selectedMaterial = std::min(
-            creatorModelImporter.selectedMaterial,
-            creatorModelImporter.materialEntities.size() - 1);
-        auto& scene = session->Scenes().GetScene();
-        const auto entity = creatorModelImporter.materialEntities[
-            creatorModelImporter.selectedMaterial];
-        const auto* material = scene.materials.GetComponent(entity);
-        if (material == nullptr)
-        {
-            creatorImportMaterialReadout.SetText("Selected material is unavailable.");
-            return;
-        }
-        const auto textureName = [material](const int slot)
-        {
-            const auto& texture = material->textures[slot];
-            if (texture.name.empty())
-                return std::string("<none>");
-            return fs::u8path(texture.name).filename().generic_u8string();
-        };
-        std::ostringstream out;
-        out << "Base: " << textureName(wi::scene::MaterialComponent::BASECOLORMAP)
-            << "\nNormal: " << textureName(wi::scene::MaterialComponent::NORMALMAP)
-            << "\nSurface: " << textureName(wi::scene::MaterialComponent::SURFACEMAP)
-            << "\nEmissive: " << textureName(wi::scene::MaterialComponent::EMISSIVEMAP)
-            << "\nAO: " << textureName(wi::scene::MaterialComponent::OCCLUSIONMAP)
-            << "\nR " << material->roughness
-            << "  M " << material->metalness
-            << "  Refl " << material->reflectance;
-        creatorImportMaterialReadout.SetText(out.str());
-    }
-
-    void RefreshCreatorImportMaterialScalars()
-    {
-        if (creatorModelImporter.materialOverrides.empty())
-            return;
-        auto& material = EnsureCreatorMaterialOverride();
-        creatorImportRoughness.SetValue(material.roughnessValue);
-        creatorImportMetalness.SetValue(material.metalnessValue);
-        creatorImportReflectance.SetValue(material.reflectanceValue);
-        creatorImportNormalStrength.SetValue(material.normalStrengthValue);
-        creatorImportAoStrength.SetValue(material.aoStrengthValue);
-        creatorImportEmissiveStrength.SetValue(material.emissiveStrengthValue);
-    }
-
-    void RefreshCreatorImportAnimationReadout()
-    {
-        auto* session = renegade::bridge::StudioSession::Current();
-        if (session == nullptr || creatorModelImporter.animationEntities.empty())
-        {
-            creatorImportAnimationReadout.SetText("No animation actions detected.");
-            return;
-        }
-        creatorModelImporter.selectedAnimation = std::min(
-            creatorModelImporter.selectedAnimation,
-            creatorModelImporter.animationEntities.size() - 1);
-        auto& scene = session->Scenes().GetScene();
-        const auto entity = creatorModelImporter.animationEntities[
-            creatorModelImporter.selectedAnimation];
-        const auto* animation = scene.animations.GetComponent(entity);
-        if (animation == nullptr)
-        {
-            creatorImportAnimationReadout.SetText("Selected animation is unavailable.");
-            return;
-        }
-        std::ostringstream out;
-        out.precision(3);
-        out << std::fixed
-            << "Start: " << animation->start
-            << "   End: " << animation->end
-            << "   Duration: " << std::max(0.0f, animation->end - animation->start)
-            << "\nChannels: " << animation->channels.size()
-            << "   Samplers: " << animation->samplers.size();
-        creatorImportAnimationReadout.SetText(out.str());
-    }
-
-}
-
-namespace renegade::studio
-{
-    void StudioRenderPath::BindSession(bridge::StudioSession& session) noexcept
-    {
-        session_ = &session;
-        scene = &session.Scenes().GetScene();
-    }
-
-    void StudioRenderPath::BindDiagnostics(
-        wi::Application::InfoDisplayer& diagnostics) noexcept
-    {
-        diagnostics_ = &diagnostics;
-    }
-
-    void StudioRenderPath::Load()
-    {
-        setSSREnabled(false);
-        setReflectionsEnabled(true);
-        setFXAAEnabled(false);
-        setBloomEnabled(true);
-        setBloomThreshold(1.35f);
-
-        // Ambient occlusion grounds the deck props against the terrain, and
-        // volumetric lights are what make the scene's fog react to lighting
-        // instead of reading as a flat screen-space overlay.
-        setAO(AO::AO_MSAO);
-        setAOPower(1.4f);
-        setVolumeLightsEnabled(true);
-
-        // Fixed exposure. Eye adaption would make the viewport brightness
-        // depend on where the creator points the camera, which is not
-        // acceptable for a colour-accurate authoring viewport.
-        setEyeAdaptionEnabled(false);
-        setExposure(1.0f);
-
-        // Renegade draws its own grid. Wicked's stock helper is a fixed 20x20
-        // unit line list whose adaptive path is gated behind gridHelper2D -
-        // which rotates the grid into the vertical plane - and whose axis line
-        // colours are hardcoded. It stays off permanently.
-        wi::renderer::SetToDrawGridHelper(false);
-        LoadGridResources();
-
-        // The generated Proving Ground is composed around the world origin so
-        // that it shares the grid helper's footprint.
-        const XMVECTOR eye = XMVectorSet(13.0f, 7.6f, -16.5f, 1.0f);
-        const XMVECTOR at = XMVectorSet(0.0f, 1.8f, 0.0f, 1.0f);
-        const XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-        const XMMATRIX view = XMMatrixLookAtLH(eye, at, up);
-        editorCameraTransform_.ClearTransform();
-        editorCameraTransform_.MatrixTransform(
-            XMMatrixInverse(nullptr, view));
-        editorCameraTransform_.UpdateTransform();
-        camera->TransformCamera(editorCameraTransform_);
-        camera->UpdateCamera();
-
-        CreateWorkspaceShell();
-        CreateProjectHub();
-        CreateImportScalePanel();
-        ApplyRenegadeTheme();
-
-        gizmo_.translate_snap = 0.1f;
-        gizmo_.rotate_snap = 15.0f / 180.0f * XM_PI;
-        gizmo_.scale_snap = 0.1f;
-
-        // Translator sizes itself as distance-to-camera * 0.05 * tool_scale,
-        // so tool_scale is a direct screen-space multiplier. The default of
-        // 1.0 dominated the viewport. Thinner arms and slightly reduced
-        // opacity match the restrained-glow direction; negative axes are
-        // darkened hard so the gizmo reads as a projected instrument rather
-        // than a solid object.
-        gizmo_.tool_scale = 0.60f;
-        gizmo_.tool_thickness = 0.70f;
-        gizmo_.tool_opacity = 0.85f;
-        gizmo_.tool_darken_negative_axes = 0.35f;
-
-        SetTransformTool(TransformTool::Translate);
-
-        // Restore the creator's saved grid preference. This is Renegade's
-        // first persisted editor preference; camera speed and layout should
-        // follow the same route rather than inventing a second one.
-        if (session_ != nullptr)
-        {
-            gridVisible_ =
-                session_->Projects().GetEditorPreference("grid_visible", true);
-        }
-        gridToggleButton_.SetText(gridVisible_ ? "GRID ON" : "GRID OFF");
-        studioChrome_.SetGridVisible(gridVisible_);
-
-        if (session_ != nullptr)
-        {
-            for (int index = 0; index < 4; ++index)
-            {
-                if (session_->Projects().GetEditorPreference(
-                        "drawer_tab_" + std::to_string(index),
-                        index == 0))
-                {
-                    lastDrawerTab_ = index;
-                    break;
-                }
-            }
-            const bool drawerOpen =
-                session_->Projects().GetEditorPreference(
-                    "drawer_open",
-                    false);
-            studioChrome_.SetActiveBottomTab(
-                drawerOpen ? lastDrawerTab_ : -1);
-
-            auto& projects = session_->Projects();
-            if (projects.GetEditorPreference(
-                    "workspace_layout_saved",
-                    false))
-            {
-                studioChrome_.SetPanelSizes(
-                    static_cast<float>(ReadLayoutPreference(
-                        projects,
-                        "hierarchy_width",
-                        static_cast<int>(studioChrome_.HierarchyWidth()))),
-                    static_cast<float>(ReadLayoutPreference(
-                        projects,
-                        "inspector_width",
-                        static_cast<int>(studioChrome_.InspectorWidth()))),
-                    static_cast<float>(ReadLayoutPreference(
-                        projects,
-                        "drawer_height",
-                        static_cast<int>(studioChrome_.DrawerHeight()))));
-            }
-        }
-
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-        RefreshProjectHub();
-        RefreshAssetBrowser();
-        SetProjectHubVisible(true);
-
-        RenderPath3D::Load();
-    }
-
-    void StudioRenderPath::LoadGridResources()
-    {
-        auto* device = wi::graphics::GetDevice();
-        if (device == nullptr)
-        {
-            return;
-        }
-
-        // Renegade owns these shaders, so they are not in Wicked's shader dump
-        // and must be compiled from source shipped beside the executable. This
-        // is the same approach Wicked's own Example_ImGui sample uses: point
-        // the shader source path at the working directory just long enough to
-        // resolve them, then restore it so Wicked's own shaders are unaffected.
-        const std::string previousSourcePath =
-            wi::renderer::GetShaderSourcePath();
-        wi::renderer::SetShaderSourcePath(
-            wi::helper::GetCurrentPath() + "/Content/shaders/");
-
-        const bool vertexLoaded = wi::renderer::LoadShader(
-            wi::graphics::ShaderStage::VS,
-            gridVertexShader_,
-            "RenegadeGridVS.cso");
-        const bool pixelLoaded = wi::renderer::LoadShader(
-            wi::graphics::ShaderStage::PS,
-            gridPixelShader_,
-            "RenegadeGridPS.cso");
-
-        wi::renderer::SetShaderSourcePath(previousSourcePath);
-
-        if (!vertexLoaded || !pixelLoaded ||
-            !gridVertexShader_.IsValid() || !gridPixelShader_.IsValid())
-        {
-            // A missing grid is a visual downgrade, not a failure worth
-            // taking the editor down for. Everything downstream checks
-            // gridPipeline_ before drawing.
-            wi::backlog::post(
-                "Renegade: the editor grid shaders could not be loaded. "
-                "The viewport will render without a grid.",
-                wi::backlog::LogLevel::Warning);
-            return;
-        }
-
-        wi::graphics::PipelineStateDesc description;
-        description.vs = &gridVertexShader_;
-        description.ps = &gridPixelShader_;
-        description.rs = wi::renderer::GetRasterizerState(
-            wi::enums::RSTYPE_DOUBLESIDED);
-        // Depth read with no write. The pixel shader writes SV_Depth from the
-        // ground intersection, so the hardware test occludes the grid behind
-        // scene geometry without this pass ever sampling the depth buffer.
-        description.dss = wi::renderer::GetDepthStencilState(
-            wi::enums::DSSTYPE_DEPTHREAD);
-        description.bs = wi::renderer::GetBlendState(
-            wi::enums::BSTYPE_PREMULTIPLIED);
-        description.pt = wi::graphics::PrimitiveTopology::TRIANGLELIST;
-
-        if (!device->CreatePipelineState(&description, &gridPipeline_))
-        {
-            wi::backlog::post(
-                "Renegade: the editor grid pipeline could not be created. "
-                "The viewport will render without a grid.",
-                wi::backlog::LogLevel::Warning);
-        }
-    }
-
-    void StudioRenderPath::DrawEditorGrid(
-        const wi::graphics::CommandList cmd) const
-    {
-        if (!gridVisible_ || projectHubVisible_ ||
-            !gridPipeline_.IsValid() || camera == nullptr)
-        {
-            return;
-        }
-
-        auto* device = wi::graphics::GetDevice();
-        device->EventBegin("Renegade Editor Grid", cmd);
-
-        const XMMATRIX viewProjection = camera->GetViewProjection();
-
-        GridConstants constants = {};
-        XMStoreFloat4x4(&constants.viewProjection, viewProjection);
-        XMStoreFloat4x4(
-            &constants.inverseViewProjection,
-            XMMatrixInverse(nullptr, viewProjection));
-        // w is the grid plane height. The generated deck's top surface is at
-        // exactly y = 0, so a grid drawn at y = 0 is coplanar with it and
-        // loses the GREATER depth test. 2 cm is invisible at any working
-        // camera distance and is the same trick Wicked's own helper uses.
-        constants.cameraPosition = XMFLOAT4(
-            camera->Eye.x,
-            camera->Eye.y,
-            camera->Eye.z,
-            creatorModelImporter.active ? CreatorImportStageHeight + 0.02f : 0.02f);
-
-        // Ice-blue is the approved interaction colour. Unlike Wicked's helper,
-        // every line including the two axes is Renegade's to choose.
-        constants.minorColor = XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
-        constants.majorColor = XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
-        constants.axisColorX = XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
-        constants.axisColorZ = XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
-
-        // Fade start/end, base spacing, master opacity. The fade window keeps
-        // the horizon from turning into an aliased smear.
-        constants.params = XMFLOAT4(60.0f, 320.0f, 1.0f, 1.0f);
-
-        device->BindPipelineState(&gridPipeline_, cmd);
-        device->BindDynamicConstantBuffer(constants, 0, cmd);
-        device->Draw(3, 0, cmd);
-
-        device->EventEnd(cmd);
-    }
-
-    void StudioRenderPath::RenderTransparents(
-        const wi::graphics::CommandList cmd) const
-    {
-        RenderPath3D::RenderTransparents(cmd);
-
-        const bool drawMannequin = creatorModelImporter.active &&
-            creatorModelImporter.mannequinVisible && session_ != nullptr;
-        if ((!gridVisible_ || !gridPipeline_.IsValid()) && !drawMannequin)
-        {
-            return;
-        }
-        if (projectHubVisible_ || camera == nullptr)
-        {
-            return;
-        }
-
-        // Wicked ends every render pass before RenderTransparents() returns.
-        // Open an explicit pass over the main colour and depth attachments so
-        // the grid is valid on both DX12 and Vulkan. Match Wicked's own
-        // transparent-pass attachment setup, including an MSAA resolve.
-        auto* device = wi::graphics::GetDevice();
-        wi::graphics::RenderPassImage attachments[3] = {};
-        std::uint32_t attachmentCount = 0;
-        attachments[attachmentCount++] =
-            wi::graphics::RenderPassImage::RenderTarget(
-                &rtMain_render,
-                wi::graphics::RenderPassImage::LoadOp::LOAD);
-        if (getMSAASampleCount() > 1)
-        {
-            attachments[attachmentCount++] =
-                wi::graphics::RenderPassImage::Resolve(&rtMain);
-        }
-        attachments[attachmentCount++] =
-            wi::graphics::RenderPassImage::DepthStencil(
-                &depthBuffer_Main,
-                wi::graphics::RenderPassImage::LoadOp::LOAD,
-                wi::graphics::RenderPassImage::StoreOp::STORE,
-                wi::graphics::ResourceState::DEPTHSTENCIL,
-                wi::graphics::ResourceState::DEPTHSTENCIL,
-                wi::graphics::ResourceState::DEPTHSTENCIL);
-
-        device->RenderPassBegin(attachments, attachmentCount, cmd);
-
-        wi::graphics::Viewport viewport;
-        viewport.width =
-            static_cast<float>(depthBuffer_Main.GetDesc().width);
-        viewport.height =
-            static_cast<float>(depthBuffer_Main.GetDesc().height);
-        viewport.min_depth = 0.0f;
-        viewport.max_depth = 1.0f;
-        device->BindViewports(1, &viewport, cmd);
-
-        const wi::graphics::Rect scissor = GetScissorInternalResolution();
-        device->BindScissorRects(1, &scissor, cmd);
-
-        DrawEditorGrid(cmd);
-        if (drawMannequin)
-        {
-            const auto& previewScene = session_->Scenes().GetScene();
-            if (creatorModelImporter.sourceBounds.valid)
-            {
-                const auto& bounds = creatorModelImporter.sourceBounds;
-                const auto* root = previewScene.transforms.GetComponent(
-                    creatorModelImporter.previewRoot);
-                if (root != nullptr)
-                {
-                    XMFLOAT3 minimum(FLT_MAX, FLT_MAX, FLT_MAX);
-                    XMFLOAT3 maximum(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-                    const XMMATRIX world = XMLoadFloat4x4(&root->world);
-                    for (const float x : {bounds.minimum.x, bounds.maximum.x})
-                    for (const float y : {bounds.minimum.y, bounds.maximum.y})
-                    for (const float z : {bounds.minimum.z, bounds.maximum.z})
-                    {
-                        XMFLOAT3 corner;
-                        XMStoreFloat3(
-                            &corner,
-                            XMVector3TransformCoord(XMVectorSet(x, y, z, 1.0f), world));
-                        minimum.x = std::min(minimum.x, corner.x);
-                        minimum.y = std::min(minimum.y, corner.y);
-                        minimum.z = std::min(minimum.z, corner.z);
-                        maximum.x = std::max(maximum.x, corner.x);
-                        maximum.y = std::max(maximum.y, corner.y);
-                        maximum.z = std::max(maximum.z, corner.z);
-                    }
-
-                    constexpr float SourceMaleHeight = 1.89113f;
-                    constexpr float ReferenceHeight = 1.82f;
-                    constexpr float Clearance = 0.45f;
-                    const float scale = ReferenceHeight / SourceMaleHeight;
-                    // The task panel occupies the right side of the importer,
-                    // so keep the reference on the unobstructed left side.
-                    const float x = minimum.x - Clearance;
-                    const float z = (minimum.z + maximum.z) * 0.5f;
-                    const XMMATRIX matrix = XMMatrixScaling(scale, scale, scale) *
-                        XMMatrixTranslation(x, CreatorImportStageHeight, z);
-                    dummy::draw_male(
-                        matrix,
-                        XMFLOAT4(0.78f, 0.78f, 0.76f, 0.82f),
-                        true,
-                        cmd);
-                }
-            }
-        }
-        device->RenderPassEnd(cmd);
-    }
-
-    void StudioRenderPath::SetGridVisible(const bool visible)
-    {
-        gridVisible_ = visible;
-        gridToggleButton_.SetText(visible ? "GRID ON" : "GRID OFF");
-        studioChrome_.SetGridVisible(visible);
-
-        if (session_ != nullptr)
-        {
-            session_->Projects().SetEditorPreference("grid_visible", visible);
-        }
-    }
-
-    void StudioRenderPath::DeleteGPUResources()
-    {
-        selectionOutlineMask_ = {};
-        selectionOutlineMaskMsaa_ = {};
-        RenderPath3D::DeleteGPUResources();
-    }
-
-    void StudioRenderPath::ResizeBuffers()
-    {
-        RenderPath3D::ResizeBuffers();
-
-        const auto* depthStencil = GetDepthStencil();
-        if (depthStencil == nullptr)
-        {
-            return;
-        }
-
-        auto* device = wi::graphics::GetDevice();
-        const XMUINT2 resolution = GetInternalResolution();
-        wi::graphics::TextureDesc description;
-        description.width = resolution.x;
-        description.height = resolution.y;
-        description.format = wi::graphics::Format::R8_UNORM;
-        description.bind_flags =
-            wi::graphics::BindFlag::RENDER_TARGET |
-            wi::graphics::BindFlag::SHADER_RESOURCE;
-
-        if (getMSAASampleCount() > 1)
-        {
-            description.sample_count = getMSAASampleCount();
-            description.bind_flags = wi::graphics::BindFlag::RENDER_TARGET;
-            if (device->CreateTexture(
-                    &description,
-                    nullptr,
-                    &selectionOutlineMaskMsaa_))
-            {
-                device->SetName(
-                    &selectionOutlineMaskMsaa_,
-                    "renegade.selectionOutlineMaskMsaa");
-            }
-            description.sample_count = 1;
-            description.bind_flags =
-                wi::graphics::BindFlag::RENDER_TARGET |
-                wi::graphics::BindFlag::SHADER_RESOURCE;
-        }
-
-        if (device->CreateTexture(
-                &description,
-                nullptr,
-                &selectionOutlineMask_))
-        {
-            device->SetName(
-                &selectionOutlineMask_,
-                "renegade.selectionOutlineMask");
-        }
-    }
-
-    void StudioRenderPath::Render() const
-    {
-        RenderPath3D::Render();
-
-        const auto* depthStencil = GetDepthStencil();
-        if (projectHubVisible_ ||
-            outlinedEntity_ == wi::ecs::INVALID_ENTITY ||
-            depthStencil == nullptr ||
-            !selectionOutlineMask_.IsValid())
-        {
-            return;
-        }
-
-        auto* device = wi::graphics::GetDevice();
-        const auto commandList = device->BeginCommandList();
-        device->EventBegin("Renegade Selection Outline Mask", commandList);
-
-        if (selectionOutlineMaskMsaa_.IsValid())
-        {
-            const wi::graphics::RenderPassImage renderPass[] = {
-                wi::graphics::RenderPassImage::RenderTarget(
-                    &selectionOutlineMaskMsaa_,
-                    wi::graphics::RenderPassImage::LoadOp::CLEAR,
-                    wi::graphics::RenderPassImage::StoreOp::DONTCARE),
-                wi::graphics::RenderPassImage::Resolve(
-                    &selectionOutlineMask_),
-                wi::graphics::RenderPassImage::DepthStencil(
-                    depthStencil,
-                    wi::graphics::RenderPassImage::LoadOp::LOAD,
-                    wi::graphics::RenderPassImage::StoreOp::STORE),
-            };
-            device->RenderPassBegin(
-                renderPass,
-                arraysize(renderPass),
-                commandList);
-        }
-        else
-        {
-            const wi::graphics::RenderPassImage renderPass[] = {
-                wi::graphics::RenderPassImage::RenderTarget(
-                    &selectionOutlineMask_,
-                    wi::graphics::RenderPassImage::LoadOp::CLEAR),
-                wi::graphics::RenderPassImage::DepthStencil(
-                    depthStencil,
-                    wi::graphics::RenderPassImage::LoadOp::LOAD,
-                    wi::graphics::RenderPassImage::StoreOp::STORE),
-            };
-            device->RenderPassBegin(
-                renderPass,
-                arraysize(renderPass),
-                commandList);
-        }
-
-        wi::graphics::Viewport viewport;
-        viewport.width =
-            static_cast<float>(selectionOutlineMask_.GetDesc().width);
-        viewport.height =
-            static_cast<float>(selectionOutlineMask_.GetDesc().height);
-        device->BindViewports(1, &viewport, commandList);
-
-        wi::image::Params mask;
-        mask.enableFullScreen();
-        mask.stencilComp = wi::image::STENCILMODE::STENCILMODE_EQUAL;
-        mask.stencilRefMode = wi::image::STENCILREFMODE_USER;
-        mask.stencilRef = SelectionStencilReference;
-        wi::image::Draw(nullptr, mask, commandList);
-
-        device->RenderPassEnd(commandList);
-        device->EventEnd(commandList);
-    }
-
-    void StudioRenderPath::CreateWorkspaceShell()
-    {
-        toolbarPanel_.Create(
-            "Renegade Command Bar",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        toolbarPanel_.SetShadowRadius(8.0f);
-        GetGUI().AddWidget(&toolbarPanel_);
-
-        workspaceTitle_.Create("Renegade Workspace Title");
-        workspaceTitle_.SetText("RENEGADE STUDIO // PROVING GROUND");
-        // Size 19 overflowed the 300px slot and clipped mid-word. Fit-text
-        // also keeps long project names inside the label rather than running
-        // them under the tool buttons.
-        workspaceTitle_.font.params.size = 16;
-        workspaceTitle_.SetFitTextEnabled(true);
-        workspaceTitle_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        toolbarPanel_.AddWidget(&workspaceTitle_);
-
-        const auto createToolButton = [this](
-            wi::gui::Button& button,
-            const char* name,
-            const char* text,
-            const char* tooltip,
-            const EditorAction action)
-        {
-            button.Create(name);
-            button.SetText(text);
-            button.SetTooltip(tooltip);
-            button.SetAngularHighlightWidth(4.0f);
-            button.OnClick([this, action](const wi::gui::EventArgs&)
-            {
-                pendingAction_ = action;
-            });
-            toolbarPanel_.AddWidget(&button);
-        };
-        createToolButton(
-            translateToolButton_,
-            "Translate Tool",
-            "MOVE [W]",
-            "Translate the selected entity",
-            EditorAction::TranslateTool);
-        createToolButton(
-            rotateToolButton_,
-            "Rotate Tool",
-            "ROTATE [E]",
-            "Rotate the selected entity",
-            EditorAction::RotateTool);
-        createToolButton(
-            scaleToolButton_,
-            "Scale Tool",
-            "SCALE [R]",
-            "Scale the selected entity",
-            EditorAction::ScaleTool);
-
-        projectHubButton_.Create("Open Project Hub");
-        gridToggleButton_.Create("Grid Toggle");
-        gridToggleButton_.SetText("GRID ON");
-        gridToggleButton_.SetTooltip(
-            "Show or hide the editor grid [G]. The grid is never saved into a "
-            "scene.");
-        gridToggleButton_.OnClick([this](wi::gui::EventArgs)
-        {
-            pendingAction_ = EditorAction::ToggleGrid;
-        });
-        toolbarPanel_.AddWidget(&gridToggleButton_);
-
-        projectHubButton_.SetText("PROJECTS");
-        projectHubButton_.SetTooltip("Return to the Renegade Project Hub");
-        projectHubButton_.SetAngularHighlightWidth(4.0f);
-        projectHubButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            ReturnToProjectHub();
-        });
-        toolbarPanel_.AddWidget(&projectHubButton_);
-
-        statusLabel_.Create("Renegade Studio Status");
-        statusLabel_.SetSize(XMFLOAT2(720.0f, 22.0f));
-        statusLabel_.font.params.size = 14;
-        statusLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        toolbarPanel_.AddWidget(&statusLabel_);
-
-        hierarchyPanel_.Create(
-            "World Outliner",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        hierarchyPanel_.SetShadowRadius(8.0f);
-        GetGUI().AddWidget(&hierarchyPanel_);
-
-        hierarchyLabel_.Create("Scene Hierarchy");
-        hierarchyLabel_.SetText("WORLD // HIERARCHY");
-        hierarchyLabel_.font.params.size = 16;
-        hierarchyLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        hierarchyPanel_.AddWidget(&hierarchyLabel_);
-
-        hierarchyTree_.Create("Renegade Hierarchy");
-        hierarchyTree_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            if (session_ == nullptr)
-            {
-                return;
-            }
-            session_->Selection().Select(
-                static_cast<wi::ecs::Entity>(args.userdata));
-            SetEnvironmentWorkspaceActive(false);
-            SetTerrainWorkspaceActive(false);
-            RefreshInspector();
-            RefreshStatus();
-        });
-        hierarchyPanel_.AddWidget(&hierarchyTree_);
-
-        hierarchySearch_.Create("Hierarchy Search");
-        hierarchySearch_.SetDescription("âŒ•  ");
-        hierarchySearch_.SetValue("");
-        hierarchySearch_.SetPlaceholder("SEARCH SCENE...");
-        hierarchySearch_.SetTooltip("Filter the visible scene hierarchy");
-        hierarchySearch_.SetCancelInputEnabled(false);
-        hierarchySearch_.OnInput([this](const wi::gui::EventArgs& args)
-        {
-            studioChrome_.SetHierarchyFilter(args.sValue);
-        });
-        hierarchySearch_.OnInputAccepted(
-            [this](const wi::gui::EventArgs& args)
-        {
-            studioChrome_.SetHierarchyFilter(args.sValue);
-        });
-        GetGUI().AddWidget(&hierarchySearch_);
-
-        inspectorPanel_.Create(
-            "Inspector",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        inspectorPanel_.SetShadowRadius(0.0f);
-        inspectorPanel_.SetColor(wi::Color::Transparent());
-        inspectorPanel_.SetColor(
-            wi::Color(8, 11, 13, 255),
-            wi::gui::WIDGET_ID_WINDOW_BASE);
-        GetGUI().AddWidget(&inspectorPanel_);
-
-        inspectorLabel_.Create("Transform Inspector");
-        inspectorLabel_.SetText("TRANSFORM // SELECT AN ENTITY");
-        inspectorLabel_.font.params.size = 16;
-        inspectorLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        inspectorLabel_.SetColor(wi::Color::Transparent());
-        inspectorPanel_.AddWidget(&inspectorLabel_);
-
-        const auto createSectionLabel = [this](
-            wi::gui::Label& label,
-            const char* name,
-            const char* text)
-        {
-            label.Create(name);
-            label.SetText(text);
-            label.font.params.size = 13;
-            label.font.params.color = HologramMuted;
-            label.font.params.h_align = wi::font::WIFALIGN_LEFT;
-            label.SetColor(wi::Color::Transparent());
-            inspectorPanel_.AddWidget(&label);
-        };
-        createSectionLabel(
-            positionLabel_,
-            "Position Section",
-            "POSITION");
-        createSectionLabel(
-            rotationLabel_,
-            "Rotation Section",
-            "ROTATION // DEGREES");
-        createSectionLabel(
-            scaleLabel_,
-            "Scale Section",
-            "SCALE");
-
-        const auto createTransformInput = [this](
-            wi::gui::TextInputField& input,
-            const char* name,
-            const char* description,
-            const TransformTool tool,
-            const int axis)
-        {
-            input.Create(name);
-            input.SetDescription(description);
-            input.SetValue(0.0f);
-            input.SetSize(XMFLOAT2(90.0f, 28.0f));
-            input.OnInputAccepted(
-                [this, tool, axis](const wi::gui::EventArgs& args)
-            {
-                ApplySelectedTransformValue(tool, axis, args.fValue);
-            });
-            inspectorPanel_.AddWidget(&input);
-        };
-        createTransformInput(
-            translationX_,
-            "Translation X",
-            "X: ",
-            TransformTool::Translate,
-            0);
-        createTransformInput(
-            translationY_,
-            "Translation Y",
-            "Y: ",
-            TransformTool::Translate,
-            1);
-        createTransformInput(
-            translationZ_,
-            "Translation Z",
-            "Z: ",
-            TransformTool::Translate,
-            2);
-        createTransformInput(
-            rotationX_,
-            "Rotation X",
-            "X: ",
-            TransformTool::Rotate,
-            0);
-        createTransformInput(
-            rotationY_,
-            "Rotation Y",
-            "Y: ",
-            TransformTool::Rotate,
-            1);
-        createTransformInput(
-            rotationZ_,
-            "Rotation Z",
-            "Z: ",
-            TransformTool::Rotate,
-            2);
-        createTransformInput(
-            scaleX_,
-            "Scale X",
-            "X: ",
-            TransformTool::Scale,
-            0);
-        createTransformInput(
-            scaleY_,
-            "Scale Y",
-            "Y: ",
-            TransformTool::Scale,
-            1);
-        createTransformInput(
-            scaleZ_,
-            "Scale Z",
-            "Z: ",
-            TransformTool::Scale,
-            2);
-
-        createSectionLabel(
-            lightLabel_,
-            "Light Section",
-            "LIGHT // NATIVE WICKED");
-        lightType_.Create("Light Type");
-        lightType_.AddItem(
-            "DIRECTIONAL",
-            static_cast<std::uint64_t>(
-                wi::scene::LightComponent::DIRECTIONAL));
-        lightType_.AddItem(
-            "POINT",
-            static_cast<std::uint64_t>(wi::scene::LightComponent::POINT));
-        lightType_.AddItem(
-            "SPOT",
-            static_cast<std::uint64_t>(wi::scene::LightComponent::SPOT));
-        lightType_.AddItem(
-            "RECTANGLE",
-            static_cast<std::uint64_t>(wi::scene::LightComponent::RECTANGLE));
-        lightType_.SetTooltip(
-            "Wicked's four native light types. Type-specific shape controls "
-            "appear below.");
-        lightType_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            ApplySelectedLightType(
-                static_cast<wi::scene::LightComponent::LightType>(
-                    args.userdata));
-        });
-        inspectorPanel_.AddWidget(&lightType_);
-
-        const auto createLightSlider = [this](
-            RenegadeSlider& input,
-            const char* name,
-            const char* label,
-            const char* tooltip,
-            const LightField field,
-            const float minimum,
-            const float maximum,
-            const float steps)
-        {
-            input.Create(minimum, maximum, 0.0f, steps, name, label);
-            input.SetTooltip(tooltip);
-            input.OnDragStarted([this, field](const float)
-            {
-                BeginLightSlider(field);
-            });
-            input.OnValuePreview([this, field](const float value)
-            {
-                PreviewLightSlider(field, value);
-            });
-            input.OnValueCommitted([this, field](const float value)
-            {
-                CommitLightSlider(field, value);
-            });
-            inspectorPanel_.AddWidget(&input);
-        };
-        createLightSlider(
-            lightColorRed_,
-            "Light Color Red",
-            "COLOUR // RED",
-            "Red channel of the native light colour.",
-            LightField::ColorRed,
-            0.0f,
-            1.0f,
-            255.0f);
-        createLightSlider(
-            lightColorGreen_,
-            "Light Color Green",
-            "COLOUR // GREEN",
-            "Green channel of the native light colour.",
-            LightField::ColorGreen,
-            0.0f,
-            1.0f,
-            255.0f);
-        createLightSlider(
-            lightColorBlue_,
-            "Light Color Blue",
-            "COLOUR // BLUE",
-            "Blue channel of the native light colour.",
-            LightField::ColorBlue,
-            0.0f,
-            1.0f,
-            255.0f);
-        createLightSlider(
-            lightIntensity_,
-            "Light Intensity",
-            "INTENSITY",
-            "Brightness in Wicked's native physical units for this type.",
-            LightField::Intensity,
-            0.0f,
-            2000.0f,
-            20000.0f);
-        createLightSlider(
-            lightRange_,
-            "Light Range",
-            "RANGE",
-            "Maximum influence distance. Directional lights are scene-wide.",
-            LightField::Range,
-            0.0f,
-            1000.0f,
-            10000.0f);
-        createLightSlider(
-            lightOuterCone_,
-            "Light Outer Cone",
-            "SPOT // OUTER CONE",
-            "Outer spotlight cone angle in degrees.",
-            LightField::OuterCone,
-            0.1f,
-            89.9f,
-            898.0f);
-        createLightSlider(
-            lightInnerCone_,
-            "Light Inner Cone",
-            "SPOT // INNER CONE",
-            "Inner spotlight cone angle; it cannot exceed the outer cone.",
-            LightField::InnerCone,
-            0.0f,
-            89.9f,
-            899.0f);
-        createLightSlider(
-            lightRadius_,
-            "Light Radius",
-            "SOURCE // RADIUS",
-            "Physical source radius; also controls directional shadow softness.",
-            LightField::Radius,
-            0.0f,
-            10.0f,
-            1000.0f);
-        createLightSlider(
-            lightLength_,
-            "Light Length Or Width",
-            "SOURCE // LENGTH / WIDTH",
-            "Point capsule length, or rectangle width.",
-            LightField::Length,
-            0.0f,
-            100.0f,
-            2000.0f);
-        createLightSlider(
-            lightHeight_,
-            "Light Height",
-            "SOURCE // HEIGHT",
-            "Rectangle light height.",
-            LightField::Height,
-            0.0f,
-            100.0f,
-            2000.0f);
-
-        lightCastShadow_.Create("Cast shadows: ");
-        lightCastShadow_.SetTooltip(
-            "Render native Wicked shadows from this light.");
-        lightCastShadow_.OnClick([this](const wi::gui::EventArgs& args)
-        {
-            ApplySelectedLightToggle(LightToggle::CastShadow, args.bValue);
-        });
-        inspectorPanel_.AddWidget(&lightCastShadow_);
-
-        lightVolumetrics_.Create("Volumetric beam: ");
-        lightVolumetrics_.SetTooltip(
-            "Enable Wicked's real shadow-aware volumetric light scattering.");
-        lightVolumetrics_.OnClick([this](const wi::gui::EventArgs& args)
-        {
-            ApplySelectedLightToggle(LightToggle::Volumetrics, args.bValue);
-        });
-        inspectorPanel_.AddWidget(&lightVolumetrics_);
-        createLightSlider(
-            lightVolumetricBoost_,
-            "Light Volumetric Boost",
-            "VOLUMETRIC // BOOST",
-            "Increase this light's contribution to volumetric fog.",
-            LightField::VolumetricBoost,
-            0.0f,
-            10.0f,
-            1000.0f);
-
-        createSectionLabel(
-            environmentSkyLabel_,
-            "Environment Sky Section",
-            "SKY // ATMOSPHERE");
-        environmentPreset_.Create("Environment Preset");
-        environmentPreset_.AddItem("CUSTOM", 0);
-        environmentPreset_.AddItem("CLEAR", 1);
-        environmentPreset_.AddItem("SCATTERED", 2);
-        environmentPreset_.AddItem("OVERCAST", 3);
-        environmentPreset_.AddItem("STORM", 4);
-        environmentPreset_.SetTooltip(
-            "Apply a curated starting point. Every preset is a single "
-            "Undo/Redo command.");
-        environmentPreset_.OnSelect(
-            [this](const wi::gui::EventArgs& args)
-        {
-            if (args.userdata != 0)
-            {
-                ApplyWeatherPreset(static_cast<int>(args.userdata));
-            }
-        });
-        inspectorPanel_.AddWidget(&environmentPreset_);
-
-        skyMode_.Create("Sky Mode");
-        skyMode_.AddItem(
-            "REALISTIC SKY",
-            static_cast<std::uint64_t>(
-                bridge::WeatherState::SkyMode::Realistic));
-        skyMode_.AddItem(
-            "REALISTIC + CLOUDS",
-            static_cast<std::uint64_t>(
-                bridge::WeatherState::SkyMode::RealisticWithClouds));
-        skyMode_.AddItem(
-            "SKYBOX TEXTURE",
-            static_cast<std::uint64_t>(
-                bridge::WeatherState::SkyMode::Skybox));
-        skyMode_.SetTooltip(
-            "Choose Wicked's physical atmosphere, volumetric clouds, or the "
-            "weather component's existing skybox texture.");
-        skyMode_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            ApplySelectedSkyMode(
-                static_cast<bridge::WeatherState::SkyMode>(args.userdata));
-        });
-        inspectorPanel_.AddWidget(&skyMode_);
-
-        const auto createWeatherToggle = [this](
-            wi::gui::CheckBox& input,
-            const char* name,
-            const char* tooltip,
-            const WeatherToggle toggle)
-        {
-            input.Create(name);
-            input.SetTooltip(tooltip);
-            input.OnClick([this, toggle](const wi::gui::EventArgs& args)
-            {
-                ApplySelectedWeatherToggle(toggle, args.bValue);
-            });
-            inspectorPanel_.AddWidget(&input);
-        };
-        createWeatherToggle(
-            aerialPerspective_,
-            "Aerial perspective: ",
-            "Apply atmospheric scattering to scene geometry.",
-            WeatherToggle::AerialPerspective);
-
-        const auto createWeatherSlider = [this](
-            RenegadeSlider& input,
-            const char* name,
-            const char* label,
-            const char* tooltip,
-            const WeatherField field,
-            const float minimum,
-            const float maximum,
-            const float steps)
-        {
-            input.Create(
-                minimum,
-                maximum,
-                0.0f,
-                steps,
-                name,
-                label);
-            input.SetTooltip(tooltip);
-            input.OnDragStarted([this, field](const float)
-            {
-                BeginWeatherSlider(field);
-            });
-            input.OnValuePreview([this, field](const float value)
-            {
-                PreviewWeatherSlider(field, value);
-            });
-            input.OnValueCommitted([this, field](const float value)
-            {
-                CommitWeatherSlider(field, value);
-            });
-            inspectorPanel_.AddWidget(&input);
-        };
-        createWeatherSlider(
-            skyExposure_,
-            "Sky Exposure",
-            "EXPOSURE",
-            "Brightness of the physical sky.",
-            WeatherField::SkyExposure,
-            0.0f,
-            4.0f,
-            400.0f);
-        createWeatherSlider(
-            ambientIntensity_,
-            "Ambient Intensity",
-            "AMBIENT",
-            "Neutral intensity applied while preserving the authored hue.",
-            WeatherField::AmbientIntensity,
-            0.0f,
-            2.0f,
-            400.0f);
-
-        createSectionLabel(
-            environmentFogLabel_,
-            "Environment Fog Section",
-            "FOG // HEIGHT LAYER");
-        createWeatherSlider(
-            fogStart_,
-            "Fog Start",
-            "START",
-            "Distance from the camera before fog begins.",
-            WeatherField::FogStart,
-            0.0f,
-            500.0f,
-            500.0f);
-        createWeatherSlider(
-            fogDensity_,
-            "Fog Density",
-            "DENSITY",
-            "Overall atmospheric fog density.",
-            WeatherField::FogDensity,
-            0.0f,
-            0.1f,
-            1000.0f);
-        createWeatherToggle(
-            heightFog_,
-            "Height fog: ",
-            "Restrict fog vertically between the authored heights.",
-            WeatherToggle::HeightFog);
-        createWeatherSlider(
-            fogHeightStart_,
-            "Fog Height Start",
-            "BASE",
-            "Lower height of the fog layer.",
-            WeatherField::FogHeightStart,
-            -100.0f,
-            100.0f,
-            400.0f);
-        createWeatherSlider(
-            fogHeightEnd_,
-            "Fog Height End",
-            "TOP",
-            "Upper height of the fog layer.",
-            WeatherField::FogHeightEnd,
-            -100.0f,
-            200.0f,
-            600.0f);
-
-        createSectionLabel(
-            environmentCloudLabel_,
-            "Environment Cloud Section",
-            "VOLUMETRIC CLOUDS");
-        createWeatherSlider(
-            cloudCoverage_,
-            "Cloud Coverage",
-            "COVERAGE",
-            "Primary cloud-layer coverage amount.",
-            WeatherField::CloudCoverage,
-            0.0f,
-            1.0f,
-            100.0f);
-        createWeatherSlider(
-            cloudStartHeight_,
-            "Cloud Start Height",
-            "BASE",
-            "Altitude where the volumetric cloud volume begins.",
-            WeatherField::CloudStartHeight,
-            100.0f,
-            10000.0f,
-            990.0f);
-        createWeatherSlider(
-            cloudThickness_,
-            "Cloud Thickness",
-            "DEPTH",
-            "Vertical depth of the volumetric cloud volume.",
-            WeatherField::CloudThickness,
-            100.0f,
-            10000.0f,
-            990.0f);
-        createWeatherToggle(
-            cloudsCastShadow_,
-            "Cloud shadows: ",
-            "Allow volumetric clouds to cast moving shadows on the world.",
-            WeatherToggle::CloudsCastShadow);
-
-        createSectionLabel(
-            precipitationLabel_,
-            "Environment Precipitation Section",
-            "PRECIPITATION // NATIVE PARTICLES");
-
-        precipitationMode_.Create("Precipitation Mode");
-        precipitationMode_.AddItem(
-            "OFF",
-            static_cast<std::uint64_t>(bridge::PrecipitationMode::None));
-        precipitationMode_.AddItem(
-            "RAIN",
-            static_cast<std::uint64_t>(bridge::PrecipitationMode::Rain));
-        precipitationMode_.AddItem(
-            "SNOW",
-            static_cast<std::uint64_t>(bridge::PrecipitationMode::Snow));
-        precipitationMode_.SetTooltip(
-            "Rain uses Wicked's native precipitation renderer. Snow uses a "
-            "Renegade-authored slow flake profile over the same GPU emitter.");
-        precipitationMode_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            ApplyPrecipitationMode(
-                static_cast<bridge::PrecipitationMode>(args.userdata));
-        });
-        inspectorPanel_.AddWidget(&precipitationMode_);
-
-        const auto createPrecipitationSlider = [this](
-            RenegadeSlider& input,
-            const char* name,
-            const char* label,
-            const char* tooltip,
-            const PrecipitationField field,
-            const float minimum,
-            const float maximum,
-            const float steps)
-        {
-            input.Create(minimum, maximum, 0.0f, steps, name, label);
-            input.SetTooltip(tooltip);
-            input.OnDragStarted([this, field](const float)
-            {
-                BeginPrecipitationSlider(field);
-            });
-            input.OnValuePreview([this, field](const float value)
-            {
-                PreviewPrecipitationSlider(field, value);
-            });
-            input.OnValueCommitted([this, field](const float value)
-            {
-                CommitPrecipitationSlider(field, value);
-            });
-            inspectorPanel_.AddWidget(&input);
-        };
-        createPrecipitationSlider(
-            precipitationIntensity_,
-            "Precipitation Intensity",
-            "INTENSITY",
-            "Particle density. Zero disables precipitation.",
-            PrecipitationField::Intensity,
-            0.0f,
-            1.0f,
-            200.0f);
-        createPrecipitationSlider(
-            precipitationFallSpeed_,
-            "Precipitation Fall Speed",
-            "FALL SPEED",
-            "Downward particle speed; snow profiles start much slower.",
-            PrecipitationField::FallSpeed,
-            0.01f,
-            2.0f,
-            400.0f);
-        createPrecipitationSlider(
-            precipitationParticleScale_,
-            "Precipitation Particle Scale",
-            "PARTICLE SIZE",
-            "Rendered particle size.",
-            PrecipitationField::ParticleScale,
-            0.005f,
-            0.1f,
-            400.0f);
-        createPrecipitationSlider(
-            precipitationWindAzimuth_,
-            "Precipitation Wind Azimuth",
-            "WIND DIRECTION",
-            "Horizontal wind direction in degrees.",
-            PrecipitationField::WindAzimuth,
-            -180.0f,
-            180.0f,
-            360.0f);
-        createPrecipitationSlider(
-            precipitationWindSpeed_,
-            "Precipitation Wind Speed",
-            "WIND SPEED",
-            "Horizontal wind strength applied to precipitation.",
-            PrecipitationField::WindSpeed,
-            0.0f,
-            20.0f,
-            400.0f);
-        createPrecipitationSlider(
-            precipitationTurbulence_,
-            "Precipitation Turbulence",
-            "TURBULENCE",
-            "Random particle drift; higher values create snow flurries.",
-            PrecipitationField::Turbulence,
-            0.0f,
-            20.0f,
-            400.0f);
-
-        createSectionLabel(
-            sunLabel_,
-            "Environment Sun Section",
-            "SUN // TIME OF DAY");
-        sunPreset_.Create("Sun Preset");
-        sunPreset_.AddItem("CUSTOM", 0);
-        sunPreset_.AddItem(
-            "DAWN",
-            static_cast<std::uint64_t>(bridge::SunPreset::Dawn) + 1u);
-        sunPreset_.AddItem(
-            "MIDDAY",
-            static_cast<std::uint64_t>(bridge::SunPreset::Midday) + 1u);
-        sunPreset_.AddItem(
-            "GOLDEN HOUR",
-            static_cast<std::uint64_t>(bridge::SunPreset::GoldenHour) + 1u);
-        sunPreset_.AddItem(
-            "DUSK",
-            static_cast<std::uint64_t>(bridge::SunPreset::Dusk) + 1u);
-        sunPreset_.AddItem(
-            "MIDNIGHT",
-            static_cast<std::uint64_t>(bridge::SunPreset::Midnight) + 1u);
-        sunPreset_.SetTooltip(
-            "Move the serialized scene sun to a curated time of day.");
-        sunPreset_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            if (args.userdata > 0)
-            {
-                ApplySunPreset(static_cast<bridge::SunPreset>(
-                    args.userdata - 1u));
-            }
-        });
-        inspectorPanel_.AddWidget(&sunPreset_);
-
-        const auto createSunSlider = [this](
-            RenegadeSlider& input,
-            const char* name,
-            const char* label,
-            const char* tooltip,
-            const SunField field,
-            const float minimum,
-            const float maximum,
-            const float steps)
-        {
-            input.Create(minimum, maximum, 0.0f, steps, name, label);
-            input.SetTooltip(tooltip);
-            input.OnDragStarted([this, field](const float)
-            {
-                BeginSunSlider(field);
-            });
-            input.OnValuePreview([this, field](const float value)
-            {
-                PreviewSunSlider(field, value);
-            });
-            input.OnValueCommitted([this, field](const float value)
-            {
-                CommitSunSlider(field, value);
-            });
-            inspectorPanel_.AddWidget(&input);
-        };
-        createSunSlider(
-            sunTime_,
-            "Sun Time",
-            "TIME // HOURS",
-            "Time from 00:00 to 24:00. The value box accepts direct input.",
-            SunField::Time,
-            0.0f,
-            24.0f,
-            288.0f);
-        createSunSlider(
-            sunAzimuth_,
-            "Sun Azimuth",
-            "AZIMUTH",
-            "Horizontal sun direction in degrees.",
-            SunField::Azimuth,
-            -180.0f,
-            180.0f,
-            360.0f);
-        createSunSlider(
-            sunElevation_,
-            "Sun Elevation",
-            "ELEVATION",
-            "Sun height above or below the horizon in degrees.",
-            SunField::Elevation,
-            -90.0f,
-            90.0f,
-            360.0f);
-
-        sunPreviewSpeed_.Create(
-            0.001f,
-            24.0f,
-            0.100f,
-            23999.0f,
-            "Sun Preview Speed",
-            "PREVIEW HOURS / SEC");
-        sunPreviewSpeed_.SetTooltip(
-            "Editor-only preview speed from 0.001 to 24.000 hours per "
-            "second. It is not written to the scene.");
-        sunPreviewSpeed_.OnValuePreview([this](const float value)
-        {
-            sunPreviewSpeedHoursPerSecond_ = value;
-        });
-        sunPreviewSpeed_.OnValueCommitted([this](const float value)
-        {
-            sunPreviewSpeedHoursPerSecond_ = value;
-        });
-        inspectorPanel_.AddWidget(&sunPreviewSpeed_);
-
-        sunPlayButton_.Create("Play Sun Preview");
-        sunPlayButton_.SetText("PLAY DAY");
-        sunPlayButton_.SetTooltip(
-            "Preview the 24-hour path. Pausing commits one Undo step.");
-        sunPlayButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::StartSunPreview;
-        });
-        inspectorPanel_.AddWidget(&sunPlayButton_);
-
-        sunPauseButton_.Create("Pause Sun Preview");
-        sunPauseButton_.SetText("PAUSE");
-        sunPauseButton_.SetTooltip(
-            "Pause the preview and commit its final time as one Undo step.");
-        sunPauseButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::PauseSunPreview;
-        });
-        inspectorPanel_.AddWidget(&sunPauseButton_);
-
-        createSectionLabel(
-            oceanLabel_,
-            "Environment Ocean Section",
-            "OCEAN // NATIVE FFT");
-        oceanEnabled_.Create("Ocean enabled: ");
-        oceanEnabled_.SetTooltip(
-            "Enable Wicked's infinite camera-relative FFT ocean surface.");
-        oceanEnabled_.OnClick([this](const wi::gui::EventArgs& args)
-        {
-            pendingOceanEnabled_ = args.bValue;
-            pendingAction_ = EditorAction::SetOceanEnabled;
-        });
-        inspectorPanel_.AddWidget(&oceanEnabled_);
-
-        oceanPreset_.Create("Ocean Preset");
-        oceanPreset_.AddItem("CUSTOM", 0);
-        oceanPreset_.AddItem(
-            "CALM",
-            static_cast<std::uint64_t>(bridge::OceanPreset::Calm) + 1u);
-        oceanPreset_.AddItem(
-            "COASTAL",
-            static_cast<std::uint64_t>(bridge::OceanPreset::Coastal) + 1u);
-        oceanPreset_.AddItem(
-            "STORM",
-            static_cast<std::uint64_t>(bridge::OceanPreset::Storm) + 1u);
-        oceanPreset_.AddItem(
-            "ALIEN",
-            static_cast<std::uint64_t>(bridge::OceanPreset::Alien) + 1u);
-        oceanPreset_.SetTooltip(
-            "Apply a complete native-ocean starting point as one Undo step.");
-        oceanPreset_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            if (args.userdata > 0)
-            {
-                pendingOceanPreset_ = static_cast<bridge::OceanPreset>(
-                    args.userdata - 1u);
-                pendingAction_ = EditorAction::ApplyOceanPreset;
-            }
-        });
-        inspectorPanel_.AddWidget(&oceanPreset_);
-
-        oceanResolution_.Create("Ocean FFT Resolution");
-        oceanResolution_.AddItem("64 // LOW", 64);
-        oceanResolution_.AddItem("128", 128);
-        oceanResolution_.AddItem("256", 256);
-        oceanResolution_.AddItem("512 // DEFAULT", 512);
-        oceanResolution_.AddItem("1024 // EXPENSIVE", 1024);
-        oceanResolution_.SetTooltip(
-            "FFT displacement-map dimension. 1024 can be expensive and "
-            "recreates the native simulation resources.");
-        oceanResolution_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            pendingOceanResolution_ = static_cast<int>(args.userdata);
-            pendingAction_ = EditorAction::SetOceanResolution;
-        });
-        inspectorPanel_.AddWidget(&oceanResolution_);
-
-        const auto createOceanSlider = [this](
-            RenegadeSlider& input,
-            const char* name,
-            const char* label,
-            const char* tooltip,
-            const OceanField field,
-            const float minimum,
-            const float maximum,
-            const float steps)
-        {
-            input.Create(minimum, maximum, 0.0f, steps, name, label);
-            input.SetTooltip(tooltip);
-            input.OnDragStarted([this, field](const float)
-            {
-                BeginOceanSlider(field);
-            });
-            input.OnValuePreview([this, field](const float value)
-            {
-                PreviewOceanSlider(field, value);
-            });
-            input.OnValueCommitted([this, field](const float value)
-            {
-                CommitOceanSlider(field, value);
-            });
-            inspectorPanel_.AddWidget(&input);
-        };
-        createOceanSlider(oceanWaterHeight_, "Ocean Water Height", "LEVEL",
-            "World-space ocean height.", OceanField::WaterHeight,
-            -100.0f, 100.0f, 800.0f);
-        createOceanSlider(oceanPatchLength_, "Ocean Patch Length", "PATCH SIZE",
-            "FFT tiling scale; changing it recreates the simulation.",
-            OceanField::PatchLength, 1.0f, 1000.0f, 999.0f);
-        createOceanSlider(oceanWaveAmplitude_, "Ocean Wave Amplitude", "WAVE AMPLITUDE",
-            "Transverse wave energy; changing it recreates the simulation.",
-            OceanField::WaveAmplitude, 0.0f, 1000.0f, 1000.0f);
-        createOceanSlider(oceanChoppyScale_, "Ocean Choppy Scale", "CHOPPINESS",
-            "Longitudinal wave displacement.", OceanField::ChoppyScale,
-            0.0f, 10.0f, 1000.0f);
-        createOceanSlider(oceanTimeScale_, "Ocean Time Scale", "SIMULATION SPEED",
-            "Speed of FFT wave evolution.", OceanField::TimeScale,
-            0.0f, 4.0f, 4000.0f);
-        createOceanSlider(oceanWindAzimuth_, "Ocean Wind Azimuth", "WIND DIRECTION",
-            "Ocean-specific horizontal wind direction in degrees.",
-            OceanField::WindAzimuth, -180.0f, 180.0f, 720.0f);
-        createOceanSlider(oceanWindSpeed_, "Ocean Wind Speed", "WIND SPEED",
-            "Ocean spectrum wind speed; changing it recreates the simulation.",
-            OceanField::WindSpeed, 0.0f, 1200.0f, 1200.0f);
-        createOceanSlider(oceanWindDependency_, "Ocean Wind Dependency", "WIND DEPENDENCY",
-            "Smaller values strengthen alignment with wind direction.",
-            OceanField::WindDependency, 0.0f, 1.0f, 1000.0f);
-        createOceanSlider(oceanSurfaceDetail_, "Ocean Surface Detail", "SURFACE DETAIL",
-            "Geometry detail from 1 to 10; high values cost GPU time.",
-            OceanField::SurfaceDetail, 1.0f, 10.0f, 9.0f);
-        createOceanSlider(oceanDisplacementTolerance_,
-            "Ocean Displacement Tolerance", "EDGE TOLERANCE",
-            "Reduces screen-edge glitches from large waves at a detail cost.",
-            OceanField::DisplacementTolerance, 1.0f, 10.0f, 900.0f);
-        createOceanSlider(oceanWaterRed_, "Ocean Water Red", "WATER RED",
-            "Native water surface red channel.", OceanField::WaterRed,
-            0.0f, 1.0f, 1000.0f);
-        createOceanSlider(oceanWaterGreen_, "Ocean Water Green", "WATER GREEN",
-            "Native water surface green channel.", OceanField::WaterGreen,
-            0.0f, 1.0f, 1000.0f);
-        createOceanSlider(oceanWaterBlue_, "Ocean Water Blue", "WATER BLUE",
-            "Native water surface blue channel.", OceanField::WaterBlue,
-            0.0f, 1.0f, 1000.0f);
-        createOceanSlider(oceanWaterOpacity_, "Ocean Water Opacity", "WATER OPACITY",
-            "Native water surface alpha.", OceanField::WaterOpacity,
-            0.0f, 1.0f, 1000.0f);
-        createOceanSlider(oceanExtinctionRed_, "Ocean Extinction Red", "DEPTH RED",
-            "Native absorption/extinction red channel.",
-            OceanField::ExtinctionRed, 0.0f, 1.0f, 1000.0f);
-        createOceanSlider(oceanExtinctionGreen_, "Ocean Extinction Green", "DEPTH GREEN",
-            "Native absorption/extinction green channel.",
-            OceanField::ExtinctionGreen, 0.0f, 1.0f, 1000.0f);
-        createOceanSlider(oceanExtinctionBlue_, "Ocean Extinction Blue", "DEPTH BLUE",
-            "Native absorption/extinction blue channel.",
-            OceanField::ExtinctionBlue, 0.0f, 1.0f, 1000.0f);
-
-        createSectionLabel(
-            terrainLabel_,
-            "Terrain Section",
-            "TERRAIN // GENERATION");
-        createTerrainButton_.Create("Create Native Terrain");
-        createTerrainButton_.SetText("CREATE TERRAIN");
-        createTerrainButton_.SetTooltip(
-            "Create and select one native streamed terrain component");
-        createTerrainButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::CreateTerrain;
-        });
-        inspectorPanel_.AddWidget(&createTerrainButton_);
-
-        const auto createTerrainSlider = [this](
-            RenegadeSlider& input,
-            const char* name,
-            const char* label,
-            const char* tooltip,
-            const TerrainField field,
-            const float minimum,
-            const float maximum,
-            const float steps)
-        {
-            input.Create(minimum, maximum, 0.0f, steps, name, label);
-            input.SetTooltip(tooltip);
-            input.OnDragStarted([this, field](const float)
-            {
-                BeginTerrainSlider(field);
-            });
-            input.OnValuePreview([this, field](const float value)
-            {
-                PreviewTerrainSlider(field, value);
-            });
-            input.OnValueCommitted([this, field](const float value)
-            {
-                CommitTerrainSlider(field, value);
-            });
-            inspectorPanel_.AddWidget(&input);
-        };
-        createTerrainSlider(terrainVisibleRadius_, "Terrain Visible Radius",
-            "VISIBLE CHUNKS", "Generated chunk radius around the terrain origin.",
-            TerrainField::VisibleChunkRadius, 1.0f, 16.0f, 15.0f);
-        createTerrainSlider(terrainChunkScale_, "Terrain Chunk Scale",
-            "CHUNK SCALE", "World scale of each streamed terrain chunk.",
-            TerrainField::ChunkScale, 0.25f, 16.0f, 1575.0f);
-        createTerrainSlider(terrainMinimumHeight_, "Terrain Minimum Height",
-            "MIN HEIGHT", "Lowest generated terrain elevation.",
-            TerrainField::MinimumHeight, -2000.0f, 1999.0f, 3999.0f);
-        createTerrainSlider(terrainMaximumHeight_, "Terrain Maximum Height",
-            "MAX HEIGHT", "Highest generated terrain elevation.",
-            TerrainField::MaximumHeight, -1999.0f, 2000.0f, 3999.0f);
-        createTerrainSlider(terrainLowAltitudeBlend_, "Terrain Rock Slope",
-            "ROCK ON SLOPES", "Steepness required before rock appears; lower values put rock on gentler slopes.",
-            TerrainField::LowAltitudeBlend, 0.0f, 1.0f, 1000.0f);
-        createTerrainSlider(terrainBaseBlend_, "Terrain Low Height",
-            "LOW-GROUND MATERIAL", "How far the low-ground material reaches up from minimum height.",
-            TerrainField::BaseBlend, 0.0f, 1.0f, 1000.0f);
-        createTerrainSlider(terrainSlopeBlend_, "Terrain High Height",
-            "HIGH-GROUND MATERIAL", "How far the high-ground material reaches down from maximum height.",
-            TerrainField::SlopeBlend, 0.0f, 1.0f, 1000.0f);
-        createTerrainSlider(terrainLodBias_, "Terrain LOD Bias",
-            "LOD BIAS", "Terrain detail bias; zero is the safe default.",
-            TerrainField::LodBias, -4.0f, 4.0f, 800.0f);
-
-        createSectionLabel(
-            terrainMaterialLabel_,
-            "Terrain Material Section",
-            "MATERIAL // DEFAULT GRASS");
-        terrainMaterialPreset_.Create("Terrain Material Preset");
-        terrainMaterialPreset_.AddItem("CUSTOM", 0u);
-        terrainMaterialPreset_.AddItem(
-            "MEADOW // 8X",
-            static_cast<std::uint64_t>(
-                bridge::TerrainMaterialPreset::Meadow) + 1u);
-        terrainMaterialPreset_.AddItem(
-            "COARSE GRASS // 12X",
-            static_cast<std::uint64_t>(
-                bridge::TerrainMaterialPreset::CoarseGrass) + 1u);
-        terrainMaterialPreset_.AddItem(
-            "FINE GROUND COVER // 16X",
-            static_cast<std::uint64_t>(
-                bridge::TerrainMaterialPreset::FineGroundCover) + 1u);
-        terrainMaterialPreset_.SetTooltip(
-            "Change grass density live without regenerating texture files.");
-        terrainMaterialPreset_.OnSelect(
-            [this](const wi::gui::EventArgs& args)
-        {
-            if (args.userdata > 0u)
-            {
-                pendingTerrainMaterialPreset_ =
-                    static_cast<bridge::TerrainMaterialPreset>(
-                        args.userdata - 1u);
-                pendingAction_ = EditorAction::ApplyTerrainMaterialPreset;
-            }
-        });
-        inspectorPanel_.AddWidget(&terrainMaterialPreset_);
-
-        terrainTextureScale_.Create(
-            1.0f,
-            bridge::DefaultGrassPackedTileCount,
-            bridge::DefaultGrassTextureScale,
-            31.0f,
-            "Terrain Texture Scale",
-            "TEXTURE SCALE");
-        terrainTextureScale_.SetTooltip(
-            "Visible grass repeats. Updates live and is stored in WISCENE.");
-        terrainTextureScale_.OnDragStarted([this](const float)
-        {
-            BeginTerrainTextureScale();
-        });
-        terrainTextureScale_.OnValuePreview([this](const float value)
-        {
-            PreviewTerrainTextureScale(value);
-        });
-        terrainTextureScale_.OnValueCommitted([this](const float value)
-        {
-            CommitTerrainTextureScale(value);
-        });
-        inspectorPanel_.AddWidget(&terrainTextureScale_);
-
-        terrainApplyDefaultGrassButton_.Create("Apply Default Grass");
-        terrainApplyDefaultGrassButton_.SetText("APPLY DEFAULT");
-        terrainApplyDefaultGrassButton_.SetTooltip(
-            "Assign the bundled grass to all four terrain material regions.");
-        terrainApplyDefaultGrassButton_.OnClick(
-            [this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::ApplyDefaultGrass;
-        });
-        inspectorPanel_.AddWidget(&terrainApplyDefaultGrassButton_);
-
-        terrainReloadMaterialButton_.Create("Reload Terrain Material");
-        terrainReloadMaterialButton_.SetText("RELOAD FILES");
-        terrainReloadMaterialButton_.SetTooltip(
-            "Reload changed bundled texture files without rebuilding Studio.");
-        terrainReloadMaterialButton_.OnClick(
-            [this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::ReloadTerrainMaterial;
-        });
-        inspectorPanel_.AddWidget(&terrainReloadMaterialButton_);
-
-        createSectionLabel(terrainSculptLabel_, "Terrain Sculpt Section", "SCULPT // VIEWPORT BRUSH");
-        terrainSculptMode_.Create("Terrain Sculpt Mode");
-        terrainSculptMode_.AddItem("RAISE", static_cast<std::uint64_t>(bridge::TerrainSculptMode::Raise));
-        terrainSculptMode_.AddItem("LOWER", static_cast<std::uint64_t>(bridge::TerrainSculptMode::Lower));
-        terrainSculptMode_.AddItem("SMOOTH", static_cast<std::uint64_t>(bridge::TerrainSculptMode::Smooth));
-        terrainSculptMode_.AddItem("FLATTEN", static_cast<std::uint64_t>(bridge::TerrainSculptMode::Flatten));
-        terrainSculptMode_.SetTooltip("Choose how dragging the left mouse button changes terrain.");
-        terrainSculptMode_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            terrainSculptModeValue_ = static_cast<bridge::TerrainSculptMode>(args.userdata);
-        });
-        inspectorPanel_.AddWidget(&terrainSculptMode_);
-        const auto createBrushSlider = [this](RenegadeSlider& slider, const char* name,
-            const char* label, const char* tooltip, float minimum, float maximum,
-            float value, float steps, float* target)
-        {
-            slider.Create(minimum, maximum, value, steps, name, label);
-            slider.SetTooltip(tooltip);
-            const auto update = [this, target](const float value)
-            {
-                *target = value;
-                std::ostringstream brush;
-                brush << "BRUSH // SIZE " << std::fixed
-                      << std::setprecision(0) << terrainBrushRadiusValue_
-                      << " // STRENGTH " << std::setprecision(2)
-                      << terrainBrushStrengthValue_;
-                terrainBrushReadout_.SetText(brush.str());
-            };
-            slider.OnValuePreview(update);
-            slider.OnValueCommitted(update);
-            inspectorPanel_.AddWidget(&slider);
-        };
-        createBrushSlider(terrainBrushRadius_, "Terrain Brush Radius", "BRUSH SIZE",
-            "Radius of the brush in world units.", 1.0f, 100.0f, 12.0f, 990.0f, &terrainBrushRadiusValue_);
-        createBrushSlider(terrainBrushStrength_, "Terrain Brush Strength", "STRENGTH",
-            "Height change applied while dragging.", 0.05f, 5.0f, 1.0f, 990.0f, &terrainBrushStrengthValue_);
-        createBrushSlider(terrainBrushFalloff_, "Terrain Brush Falloff", "FALLOFF",
-            "Zero is soft; one concentrates the effect at the centre.", 0.0f, 1.0f, 0.55f, 1000.0f, &terrainBrushFalloffValue_);
-
-        terrainBrushReadout_.Create("Terrain Brush Readout");
-        terrainBrushReadout_.SetText("BRUSH // SIZE 12 // STRENGTH 1.00");
-        inspectorPanel_.AddWidget(&terrainBrushReadout_);
-        terrainStrokeDiagnostic_.Create("Terrain Stroke Diagnostic");
-        terrainStrokeDiagnostic_.SetText("LAST STROKE // READY");
-        inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);
-
-        focusButton_.Create("Focus Selected");
-        focusButton_.SetText("FOCUS [F]");
-        focusButton_.SetTooltip("Frame the selected entity in the viewport");
-        focusButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::FocusSelection;
-        });
-        inspectorPanel_.AddWidget(&focusButton_);
-
-        duplicateButton_.Create("Duplicate Selected");
-        duplicateButton_.SetText("DUPLICATE");
-        duplicateButton_.SetTooltip("Duplicate selected entity (Ctrl+D)");
-        duplicateButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::DuplicateSelection;
-        });
-        inspectorPanel_.AddWidget(&duplicateButton_);
-
-        deleteButton_.Create("Delete Selected");
-        deleteButton_.SetText("DELETE");
-        deleteButton_.SetTooltip("Delete selected entity (Delete)");
-        deleteButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::DeleteSelection;
-        });
-        inspectorPanel_.AddWidget(&deleteButton_);
-
-        undoButton_.Create("Undo Transform");
-        undoButton_.SetText("UNDO");
-        undoButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
-        undoButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::Undo;
-        });
-        inspectorPanel_.AddWidget(&undoButton_);
-
-        redoButton_.Create("Redo Transform");
-        redoButton_.SetText("REDO");
-        redoButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
-        redoButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::Redo;
-        });
-        inspectorPanel_.AddWidget(&redoButton_);
-
-        saveButton_.Create("Save Scene");
-        saveButton_.SetText("SAVE");
-        saveButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
-        saveButton_.SetTooltip("Save the current scene (Ctrl+S)");
-        saveButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::SaveScene;
-        });
-        inspectorPanel_.AddWidget(&saveButton_);
-
-        saveAsButton_.Create("Save Scene As");
-        saveAsButton_.SetText("SAVE AS...");
-        saveAsButton_.SetSize(XMFLOAT2(112.0f, 28.0f));
-        saveAsButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::SaveSceneAs;
-        });
-        inspectorPanel_.AddWidget(&saveAsButton_);
-
-        reopenButton_.Create("Reopen Scene");
-        reopenButton_.SetText("REOPEN");
-        reopenButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
-        reopenButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::ReopenScene;
-        });
-        inspectorPanel_.AddWidget(&reopenButton_);
-
-        contentPanel_.Create(
-            "Content Browser",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        contentPanel_.SetShadowRadius(8.0f);
-        GetGUI().AddWidget(&contentPanel_);
-
-        contentLabel_.Create("Content Browser Title");
-        contentLabel_.SetText("CONTENT // PROJECT ASSETS");
-        contentLabel_.font.params.size = 16;
-        contentLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        contentPanel_.AddWidget(&contentLabel_);
-
-        contentPlaceholder_.Create("Content Browser Placeholder");
-        contentPlaceholder_.SetText(
-            "No assets imported yet.\n\n"
-            "Asset import and the project-aware browser are not built. Until "
-            "they are, scenes are authored from the generated Proving Ground "
-            "and edited in the viewport.");
-        contentPlaceholder_.SetFitTextEnabled(true);
-        contentPlaceholder_.font.params.color = HologramMuted;
-        contentPlaceholder_.font.params.size = 14;
-        contentPanel_.AddWidget(&contentPlaceholder_);
-
-        // The proof slice is a Renegade-owned renderer. It is added after the
-        // legacy widgets so it sits behind future interactive components in
-        // wiGUI's back-to-front render order. The legacy workspace panels are
-        // hidden by SetProjectHubVisible(); they are retained temporarily as
-        // a behavioural reference, not used as the finished presentation.
-        studioChrome_.Create();
-        studioChrome_.OnHierarchySelected(
-            [this](const std::uint64_t entity)
-        {
-            if (session_ == nullptr)
-            {
-                return;
-            }
-            session_->Selection().Select(
-                static_cast<wi::ecs::Entity>(entity));
-            SetEnvironmentWorkspaceActive(false);
-            SetTerrainWorkspaceActive(false);
-            RefreshHierarchy();
-            RefreshInspector();
-            RefreshStatus();
-        });
-        studioChrome_.OnToolSelected([this](const int tool)
-        {
-            pendingAction_ = tool == 0
-                ? EditorAction::SelectTool
-                : tool == 1
-                    ? EditorAction::TranslateTool
-                    : tool == 2
-                        ? EditorAction::RotateTool
-                        : EditorAction::ScaleTool;
-        });
-        studioChrome_.OnAction(
-            [this](const RenegadeStudioChrome::Action action)
-        {
-            switch (action)
-            {
-            case RenegadeStudioChrome::Action::ProjectHub:
-                pendingAction_ = EditorAction::ProjectHub;
-                break;
-            case RenegadeStudioChrome::Action::OpenScene:
-                pendingAction_ = EditorAction::OpenScene;
-                break;
-            case RenegadeStudioChrome::Action::Save:
-                pendingAction_ = EditorAction::SaveScene;
-                break;
-            case RenegadeStudioChrome::Action::SaveAs:
-                pendingAction_ = EditorAction::SaveSceneAs;
-                break;
-            case RenegadeStudioChrome::Action::Reopen:
-                pendingAction_ = EditorAction::ReopenScene;
-                break;
-            case RenegadeStudioChrome::Action::Undo:
-                pendingAction_ = EditorAction::Undo;
-                break;
-            case RenegadeStudioChrome::Action::Redo:
-                pendingAction_ = EditorAction::Redo;
-                break;
-            case RenegadeStudioChrome::Action::Duplicate:
-                pendingAction_ = EditorAction::DuplicateSelection;
-                break;
-            case RenegadeStudioChrome::Action::Delete:
-                pendingAction_ = EditorAction::DeleteSelection;
-                break;
-            case RenegadeStudioChrome::Action::CreatePointLight:
-                pendingLightType_ = wi::scene::LightComponent::POINT;
-                pendingAction_ = EditorAction::CreateLight;
-                break;
-            case RenegadeStudioChrome::Action::CreateSpotLight:
-                pendingLightType_ = wi::scene::LightComponent::SPOT;
-                pendingAction_ = EditorAction::CreateLight;
-                break;
-            case RenegadeStudioChrome::Action::CreateDirectionalLight:
-                pendingLightType_ = wi::scene::LightComponent::DIRECTIONAL;
-                pendingAction_ = EditorAction::CreateLight;
-                break;
-            case RenegadeStudioChrome::Action::CreateRectangleLight:
-                pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
-                pendingAction_ = EditorAction::CreateLight;
-                break;
-            case RenegadeStudioChrome::Action::Focus:
-                pendingAction_ = EditorAction::FocusSelection;
-                break;
-            case RenegadeStudioChrome::Action::ToggleGrid:
-                pendingAction_ = EditorAction::ToggleGrid;
-                break;
-            case RenegadeStudioChrome::Action::EnvironmentWorkspace:
-                pendingAction_ = EditorAction::OpenEnvironmentWorkspace;
-                break;
-            case RenegadeStudioChrome::Action::TerrainWorkspace:
-                pendingAction_ = EditorAction::OpenTerrainWorkspace;
-                break;
-            case RenegadeStudioChrome::Action::SceneWorkspace:
-                pendingAction_ = EditorAction::OpenSceneWorkspace;
-                break;
-            case RenegadeStudioChrome::Action::TestLevelPlay:
-                pendingAction_ = EditorAction::StartTestLevel;
-                break;
-            case RenegadeStudioChrome::Action::TestLevelStop:
-                pendingAction_ = EditorAction::StopTestLevel;
-                break;
-            case RenegadeStudioChrome::Action::ValidateModelImport:
-                pendingAction_ = EditorAction::ValidateModelImport;
-                break;
-            case RenegadeStudioChrome::Action::ImportModel:
-                pendingAction_ = EditorAction::ImportModel;
-                break;
-            }
-        });
-        studioChrome_.OnDrawerChanged([this](const int tab)
-        {
-            if (tab >= 0)
-            {
-                lastDrawerTab_ = tab;
-            }
-            if (tab == 0)
-            {
-                RefreshAssetBrowser();
-            }
-            if (session_ == nullptr)
-            {
-                return;
-            }
-            auto& projects = session_->Projects();
-            projects.SetEditorPreference("drawer_open", tab >= 0);
-            for (int index = 0; index < 4; ++index)
-            {
-                projects.SetEditorPreference(
-                    "drawer_tab_" + std::to_string(index),
-                    lastDrawerTab_ == index);
-            }
-        });
-        studioChrome_.OnAssetBrowserFolderSelected(
-            [this](const std::string& relativePath)
-        {
-            SelectAssetBrowserFolder(relativePath);
-        });
-        studioChrome_.OnAssetBrowserItemSelected(
-            [this](const std::string& relativePath)
-        {
-            SelectAssetBrowserItem(relativePath);
-        });
-        studioChrome_.OnLayoutChanged(
-            [this](
-                const float hierarchyWidth,
-                const float inspectorWidth,
-                const float drawerHeight,
-                const bool finished)
-        {
-            workspaceLayoutDirty_ = true;
-            if (!finished || session_ == nullptr)
-            {
-                return;
-            }
-
-            // ProjectService currently exposes durable boolean preferences.
-            // Encode the three bounded pixel dimensions without bypassing the
-            // service or leaking editor layout into project/scene data.
-            auto& projects = session_->Projects();
-            WriteLayoutPreference(
-                projects,
-                "hierarchy_width",
-                static_cast<int>(std::round(hierarchyWidth)));
-            WriteLayoutPreference(
-                projects,
-                "inspector_width",
-                static_cast<int>(std::round(inspectorWidth)));
-            WriteLayoutPreference(
-                projects,
-                "drawer_height",
-                static_cast<int>(std::round(drawerHeight)));
-            projects.SetEditorPreference("workspace_layout_saved", true);
-        });
-        GetGUI().AddWidget(&studioChrome_);
-    }
-
-    void StudioRenderPath::CreateProjectHub()
-    {
-        projectHubPanel_.Create(
-            "Renegade Project Hub",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        projectHubPanel_.SetShadowRadius(12.0f);
-        GetGUI().AddWidget(&projectHubPanel_);
-
-        hubBrandLabel_.Create("Renegade Hub Brand");
-        hubBrandLabel_.SetText("RENEGADE // IDENTITY ACCEPTED");
-        hubBrandLabel_.font.params.size = 14;
-        hubBrandLabel_.font.params.color = HologramMuted;
-        hubBrandLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        projectHubPanel_.AddWidget(&hubBrandLabel_);
-
-        hubTitleLabel_.Create("Renegade Project Hub Title");
-        hubTitleLabel_.SetText("PROJECT HUB");
-        hubTitleLabel_.font.params.size = 34;
-        hubTitleLabel_.font.params.bolden = 0.25f;
-        hubTitleLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        projectHubPanel_.AddWidget(&hubTitleLabel_);
-
-        hubSubtitleLabel_.Create("Renegade Project Hub Subtitle");
-        hubSubtitleLabel_.SetText(
-            "Create a new world, open an existing .renegade project, "
-            "or resume a recent operation.");
-        hubSubtitleLabel_.font.params.size = 16;
-        hubSubtitleLabel_.font.params.color = HologramMuted;
-        hubSubtitleLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        projectHubPanel_.AddWidget(&hubSubtitleLabel_);
-
-        projectNameInput_.Create("New Project Name");
-        projectNameInput_.SetDescription("PROJECT NAME: ");
-        projectNameInput_.SetText("New Renegade Project");
-        projectNameInput_.SetCancelInputEnabled(false);
-        projectHubPanel_.AddWidget(&projectNameInput_);
-
-        createProjectButton_.Create("Create Renegade Project");
-        createProjectButton_.SetText("CREATE PROJECT");
-        createProjectButton_.SetTooltip(
-            "Choose a parent folder and create a project from the Proving Ground");
-        createProjectButton_.SetAngularHighlightWidth(5.0f);
-        createProjectButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            CreateProject();
-        });
-        projectHubPanel_.AddWidget(&createProjectButton_);
-
-        openProjectButton_.Create("Open Renegade Project");
-        openProjectButton_.SetText("OPEN PROJECT...");
-        openProjectButton_.SetAngularHighlightWidth(5.0f);
-        openProjectButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            OpenProject();
-        });
-        projectHubPanel_.AddWidget(&openProjectButton_);
-
-        openSceneButton_.Create("Open Renegade Scene");
-        openSceneButton_.SetText("OPEN SCENE...");
-        openSceneButton_.SetTooltip(
-            "Open an existing Wicked scene (.wiscene) in Renegade Studio");
-        openSceneButton_.SetAngularHighlightWidth(5.0f);
-        openSceneButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            OpenScene();
-        });
-        projectHubPanel_.AddWidget(&openSceneButton_);
-
-        recentProjectsLabel_.Create("Recent Projects");
-        recentProjectsLabel_.SetText("RECENT OPERATIONS");
-        recentProjectsLabel_.font.params.size = 17;
-        recentProjectsLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        projectHubPanel_.AddWidget(&recentProjectsLabel_);
-
-        for (std::size_t index = 0; index < recentProjectButtons_.size(); ++index)
-        {
-            auto& button = recentProjectButtons_[index];
-            button.Create("Recent Project " + std::to_string(index));
-            button.SetText("");
-            button.SetAngularHighlightWidth(4.0f);
-            button.font.params.h_align = wi::font::WIFALIGN_LEFT;
-            button.font.params.v_align = wi::font::WIFALIGN_TOP;
-            button.OnClick([this, index](const wi::gui::EventArgs&)
-            {
-                SelectRecentProject(index);
-            });
-            projectHubPanel_.AddWidget(&button);
-        }
-
-        selectedProjectLabel_.Create("Selected Project");
-        selectedProjectLabel_.SetText("SELECT A PROJECT CARD");
-        selectedProjectLabel_.SetFitTextEnabled(true);
-        selectedProjectLabel_.font.params.size = 17;
-        selectedProjectLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        projectHubPanel_.AddWidget(&selectedProjectLabel_);
-
-        launchProjectButton_.Create("Launch Selected Project");
-        launchProjectButton_.SetText("LAUNCH PROJECT");
-        launchProjectButton_.SetAngularHighlightWidth(5.0f);
-        launchProjectButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            OpenSelectedRecentProject();
-        });
-        projectHubPanel_.AddWidget(&launchProjectButton_);
-
-        continueProjectButton_.Create("Continue Current Project");
-        continueProjectButton_.SetText("RETURN TO CURRENT PROJECT");
-        continueProjectButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            SetProjectHubVisible(false);
-        });
-        projectHubPanel_.AddWidget(&continueProjectButton_);
-
-        hubMessageLabel_.Create("Project Hub Message");
-        hubMessageLabel_.SetText("SYSTEM READY // PROJECT SERVICES ONLINE");
-        hubMessageLabel_.SetFitTextEnabled(true);
-        hubMessageLabel_.font.params.size = 14;
-        hubMessageLabel_.font.params.color = HologramMuted;
-        hubMessageLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
-        projectHubPanel_.AddWidget(&hubMessageLabel_);
-    }
-
-    // A small, self-contained popup rather than a new row wedged into the
-    // Inspector's Transform section: the Inspector's layout is a long chain
-    // of hardcoded absolute pixel positions (see ResizeLayout), and
-    // inserting a row there would mean renumbering every row below it with
-    // no way to verify the result short of a packaged build. This window
-    // owns its own position/size in ResizeLayout instead, independent of
-    // that chain, and only appears right after ADD > IMPORT MODEL... places
-    // a model.
-    void StudioRenderPath::CreateImportScalePanel()
-    {
-        importScalePanel_.Create(
-            "Model Import Workspace",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        // Register the importer as a real Studio GUI window before attaching
-        // children. Window::AddWidget inherits the parent's enabled/visible
-        // state, so hiding it first makes the controls unreachable.
-        GetGUI().AddWidget(&importScalePanel_);
-
-        importScaleTitleLabel_.Create("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
-        importScaleReadoutLabel_.Create("");
-        creatorImportHelpLabel.Create(
-            "The model is temporary. The project is unchanged until IMPORT & PLACE is pressed.");
-        creatorImportHelpLabel.SetFitTextEnabled(true);
-
-        creatorImportSectionCombo.Create("Importer Section");
-        for (const char* section : {"ASSET", "TRANSFORM & SCALE", "MATERIAL", "LIGHTING & SCALE REFERENCE", "ANIMATION"})
-            creatorImportSectionCombo.AddItem(section);
-        creatorImportSectionCombo.SetSelectedWithoutCallback(0);
-        creatorImportSectionCombo.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            creatorModelImporter.workspaceSection = static_cast<std::size_t>(
-                std::max(0, args.iValue));
-            RefreshCreatorImportWorkspaceSection();
-        });
-
-        creatorImportAssetName.Create("Creator Asset Name");
-        creatorImportAssetName.SetPlaceholder("ASSET NAME");
-        creatorImportAssetName.OnInput([](const wi::gui::EventArgs& args)
-        {
-            creatorModelImporter.assetName = args.sValue;
-        });
-        creatorImportAssetName.OnInputAccepted([](const wi::gui::EventArgs& args)
-        {
-            creatorModelImporter.assetName = args.sValue;
-        });
-        creatorImportDestination.Create("Creator Asset Destination");
-        creatorImportDestination.SetPlaceholder("Content/Models");
-        creatorImportDestination.OnInput([](const wi::gui::EventArgs& args)
-        {
-            creatorModelImporter.destinationFolder = args.sValue;
-        });
-        creatorImportDestination.OnInputAccepted([](const wi::gui::EventArgs& args)
-        {
-            creatorModelImporter.destinationFolder = args.sValue;
-        });
-
-        creatorImportTransformLabel.Create("TRANSFORM // PREVIEW");
-        const auto createImportTransformSlider = [](
-            RenegadeSlider& field,
-            const char* name,
-            const char* label,
-            const float minimum,
-            const float maximum,
-            const float initial,
-            const bool rotation,
-            const int axis)
-        {
-            field.Create(minimum, maximum, initial, 2000.0f, name, label);
-            field.OnValuePreview([rotation, axis](const float value)
-            {
-                XMFLOAT3& target = rotation
-                    ? creatorModelImporter.rotationDegrees
-                    : creatorModelImporter.positionOffset;
-                if (axis == 0) target.x = value;
-                if (axis == 1) target.y = value;
-                if (axis == 2) target.z = value;
-                ApplyCreatorImportPreviewTransform();
-            });
-        };
-        createImportTransformSlider(creatorImportPositionX, "Import Position X", "POSITION X", -100.0f, 100.0f, 0.0f, false, 0);
-        createImportTransformSlider(creatorImportPositionY, "Import Position Y", "POSITION Y", -100.0f, 100.0f, 0.0f, false, 1);
-        createImportTransformSlider(creatorImportPositionZ, "Import Position Z", "POSITION Z", -100.0f, 100.0f, 0.0f, false, 2);
-        createImportTransformSlider(creatorImportRotationX, "Import Rotation X", "ROTATION X", -180.0f, 180.0f, 0.0f, true, 0);
-        createImportTransformSlider(creatorImportRotationY, "Import Rotation Y", "ROTATION Y", -180.0f, 180.0f, 0.0f, true, 1);
-        createImportTransformSlider(creatorImportRotationZ, "Import Rotation Z", "ROTATION Z", -180.0f, 180.0f, 0.0f, true, 2);
-
-        const auto createScaleSlider = [](RenegadeSlider& field, const char* name, const char* label, const int axis)
-        {
-            field.Create(0.001f, 10.0f, 1.0f, 10000.0f, name, label);
-            field.OnValuePreview([axis](const float value)
-            {
-                if (creatorModelImporter.scaleLinked)
-                {
-                    creatorModelImporter.scale = XMFLOAT3(value, value, value);
-                    creatorImportScaleX.SetValue(value);
-                    creatorImportScaleY.SetValue(value);
-                    creatorImportScaleZ.SetValue(value);
-                }
-                else
-                {
-                    if (axis == 0) creatorModelImporter.scale.x = value;
-                    if (axis == 1) creatorModelImporter.scale.y = value;
-                    if (axis == 2) creatorModelImporter.scale.z = value;
-                }
-                ApplyCreatorImportPreviewTransform();
-            });
-        };
-        createScaleSlider(creatorImportScaleX, "Import Scale X", "SCALE X", 0);
-        createScaleSlider(creatorImportScaleY, "Import Scale Y", "SCALE Y", 1);
-        createScaleSlider(creatorImportScaleZ, "Import Scale Z", "SCALE Z", 2);
-        creatorImportScaleLinked.Create("Linked Import Scale");
-        creatorImportScaleLinked.SetText("LINK XYZ SCALE");
-        creatorImportScaleLinked.SetCheck(true);
-        creatorImportScaleLinked.OnClick([](const wi::gui::EventArgs& args)
-        {
-            creatorModelImporter.scaleLinked = args.bValue;
-        });
-
-        creatorImportDimensionPreset.Create("Real World Size Preset");
-        creatorImportDimensionPreset.AddItem("SOURCE SIZE");
-        creatorImportDimensionPreset.AddItem("SMALL PROP // 0.50 M HIGH");
-        creatorImportDimensionPreset.AddItem("HUMAN // 1.82 M HIGH");
-        creatorImportDimensionPreset.AddItem("DOOR // 2.04 M HIGH");
-        creatorImportDimensionPreset.AddItem("LARGE PROP // 3.00 M HIGH");
-        creatorImportDimensionPreset.OnSelect([](const wi::gui::EventArgs& args)
-        {
-            const float sourceHeight = creatorModelImporter.sourceBounds.valid
-                ? creatorModelImporter.sourceBounds.maximum.y - creatorModelImporter.sourceBounds.minimum.y
-                : 0.0f;
-            const float targets[] = {0.0f, 0.50f, 1.82f, 2.04f, 3.0f};
-            const int selected = std::clamp(args.iValue, 0, 4);
-            const float factor = selected == 0 || sourceHeight <= 0.0001f
-                ? 1.0f : targets[selected] / sourceHeight;
-            creatorModelImporter.scale = XMFLOAT3(factor, factor, factor);
-            creatorImportScaleX.SetValue(factor);
-            creatorImportScaleY.SetValue(factor);
-            creatorImportScaleZ.SetValue(factor);
-            ApplyCreatorImportPreviewTransform();
-        });
-
-        importScaleModeCombo_.Create("Scale Mode");
-        importScaleModeCombo_.AddItem(
-            "AUTOMATIC",
-            static_cast<std::uint64_t>(bridge::ModelScaleMode::Automatic));
-        importScaleModeCombo_.AddItem(
-            "ORIGINAL / METRES",
-            static_cast<std::uint64_t>(bridge::ModelScaleMode::Original));
-        importScaleModeCombo_.AddItem(
-            "CENTIMETRES",
-            static_cast<std::uint64_t>(bridge::ModelScaleMode::Centimeters));
-        importScaleModeCombo_.AddItem(
-            "INCHES",
-            static_cast<std::uint64_t>(bridge::ModelScaleMode::Inches));
-        importScaleModeCombo_.SetSelectedWithoutCallback(0);
-        importScaleModeCombo_.OnSelect([this](const wi::gui::EventArgs& args)
-        {
-            if (session_ == nullptr || !creatorModelImporter.active)
-                return;
-            const auto mode = static_cast<bridge::ModelScaleMode>(args.userdata);
-            pendingImportScaleMode_ = mode;
-            const float factor = mode == bridge::ModelScaleMode::Automatic
-                ? creatorModelImporter.automaticScale
-                : mode == bridge::ModelScaleMode::Centimeters ? 0.01f
-                : mode == bridge::ModelScaleMode::Inches ? 0.0254f
-                : 1.0f;
-            creatorModelImporter.scale = XMFLOAT3(factor, factor, factor);
-            creatorImportScaleX.SetValue(factor);
-            creatorImportScaleY.SetValue(factor);
-            creatorImportScaleZ.SetValue(factor);
-            ApplyCreatorImportPreviewTransform();
-            importScaleAppliedFactor_ = factor;
-        });
-
-        creatorImportMaterialLabel.Create("MATERIALS // DETECTED MAPS");
-        creatorImportMaterialCombo.Create("Material Slot");
-        creatorImportMaterialCombo.OnSelect([](const wi::gui::EventArgs& args)
-        {
-            creatorModelImporter.selectedMaterial =
-                static_cast<std::size_t>(args.userdata);
-            RefreshCreatorImportMaterialReadout();
-            RefreshCreatorImportTextureEditor();
-            RefreshCreatorImportMaterialScalars();
-        });
-        creatorImportMaterialReadout.Create("");
-        creatorImportMaterialReadout.SetFitTextEnabled(true);
-        creatorImportTextureHelp.Create("TEXTURE SLOT // AUTO-DETECT, REPLACE OR REMOVE");
-        creatorImportTextureSlotCombo.Create("Texture Slot");
-        for (const char* name : {"BASE COLOR", "NORMAL", "SURFACE (PACKED)", "ROUGHNESS", "METALNESS", "AO", "EMISSIVE"})
-            creatorImportTextureSlotCombo.AddItem(name);
-        creatorImportTextureSlotCombo.SetSelectedWithoutCallback(0);
-        creatorImportTextureSlotCombo.OnSelect([](const wi::gui::EventArgs& args)
-        {
-            creatorImportTextureSlot = static_cast<std::size_t>(std::max(0, args.iValue));
-            RefreshCreatorImportTextureEditor();
-        });
-        creatorImportTexturePath.Create("Texture Source Path");
-        creatorImportTexturePath.SetPlaceholder("AUTO-DETECT");
-        creatorImportTexturePath.OnInputAccepted([](const wi::gui::EventArgs& args)
-        {
-            if (!creatorModelImporter.active) return;
-            auto& choice = SelectedCreatorTextureChoice();
-            choice.overridden = true;
-            choice.path = args.sValue;
-            ApplyCreatorPreviewTextureChoice(choice.path);
-            RefreshCreatorImportTextureEditor();
-            RefreshCreatorImportMaterialReadout();
-        });
-        creatorImportTextureBrowse.Create("Browse Imported Material Texture");
-        creatorImportTextureBrowse.SetText("BROWSE...");
-        creatorImportTextureBrowse.OnClick([](const wi::gui::EventArgs&)
-        {
-            OpenCreatorImportTextureBrowser();
-        });
-        creatorImportTextureClear.Create("Clear Imported Material Texture");
-        creatorImportTextureClear.SetText("REMOVE");
-        creatorImportTextureClear.OnClick([](const wi::gui::EventArgs&)
-        {
-            if (!creatorModelImporter.active) return;
-            auto& choice = SelectedCreatorTextureChoice();
-            choice.overridden = true;
-            choice.path.clear();
-            ApplyCreatorPreviewTextureChoice({});
-            RefreshCreatorImportTextureEditor();
-            RefreshCreatorImportMaterialReadout();
-        });
-
-        creatorImportMaterialScalarLabel.Create("PBR VALUES // PREVIEW = COMMIT");
-        const auto createMaterialScalar = [](
-            RenegadeSlider& slider,
-            const char* name,
-            const char* label,
-            const float minimum,
-            const float maximum,
-            float renegade::bridge::CreatorMaterialSourceOverride::* member)
-        {
-            slider.Create(minimum, maximum, 0.0f, 1000.0f, name, label);
-            slider.OnValuePreview([member](const float value)
-            {
-                if (!creatorModelImporter.active ||
-                    creatorModelImporter.materialEntities.empty())
-                    return;
-                EnsureCreatorMaterialOverride().*member = value;
-                ApplyDetectedCreatorPreviewMaterials();
-                RefreshCreatorImportMaterialReadout();
-            });
-        };
-        createMaterialScalar(creatorImportRoughness, "Import Roughness", "ROUGHNESS", 0.0f, 1.0f,
-            &renegade::bridge::CreatorMaterialSourceOverride::roughnessValue);
-        createMaterialScalar(creatorImportMetalness, "Import Metalness", "METALNESS", 0.0f, 1.0f,
-            &renegade::bridge::CreatorMaterialSourceOverride::metalnessValue);
-        createMaterialScalar(creatorImportReflectance, "Import Reflectance", "REFLECTANCE", 0.0f, 1.0f,
-            &renegade::bridge::CreatorMaterialSourceOverride::reflectanceValue);
-        createMaterialScalar(creatorImportNormalStrength, "Import Normal Strength", "NORMAL STRENGTH", 0.0f, 4.0f,
-            &renegade::bridge::CreatorMaterialSourceOverride::normalStrengthValue);
-        createMaterialScalar(creatorImportAoStrength, "Import AO Strength", "AO STRENGTH", 0.0f, 1.0f,
-            &renegade::bridge::CreatorMaterialSourceOverride::aoStrengthValue);
-        createMaterialScalar(creatorImportEmissiveStrength, "Import Emissive Strength", "EMISSIVE STRENGTH", 0.0f, 20.0f,
-            &renegade::bridge::CreatorMaterialSourceOverride::emissiveStrengthValue);
-
-        creatorImportLightingLabel.Create("PREVIEW LIGHTING // NEVER SAVED");
-        const auto createLightingSlider = [](RenegadeSlider& slider,
-            const char* name, const char* label, const float minimum,
-            const float maximum, float* value)
-        {
-            slider.Create(minimum, maximum, *value, 1000.0f, name, label);
-            slider.OnValuePreview([value](const float next)
-            {
-                *value = next;
-                ApplyCreatorImportPreviewLighting();
-            });
-        };
-        createLightingSlider(creatorImportLightIntensity, "Preview Light Intensity", "LIGHT INTENSITY", 0.0f, 20.0f, &creatorModelImporter.lightIntensity);
-        createLightingSlider(creatorImportLightAzimuth, "Preview Light Azimuth", "HORIZONTAL DIRECTION", -180.0f, 180.0f, &creatorModelImporter.lightAzimuth);
-        createLightingSlider(creatorImportLightElevation, "Preview Light Elevation", "ELEVATION", -10.0f, 90.0f, &creatorModelImporter.lightElevation);
-        createLightingSlider(creatorImportAmbientBrightness, "Preview Ambient Brightness", "AMBIENT BRIGHTNESS", 0.0f, 2.0f, &creatorModelImporter.ambientBrightness);
-        creatorImportLightingPreset.Create("Preview Lighting Preset");
-        creatorImportLightingPreset.AddItem("NEUTRAL");
-        creatorImportLightingPreset.AddItem("OUTDOOR");
-        creatorImportLightingPreset.AddItem("DARK");
-        creatorImportLightingReset.Create("Reset Neutral Preview Lighting");
-        creatorImportLightingReset.SetText("RESET NEUTRAL LIGHTING");
-        creatorImportMannequinVisible.Create("Human Scale Reference");
-        creatorImportMannequinVisible.SetText("SHOW 1.82 M MALE REFERENCE");
-        creatorImportMannequinVisible.SetCheck(true);
-        creatorImportMannequinVisible.OnClick([](const wi::gui::EventArgs& args)
-        {
-            creatorModelImporter.mannequinVisible = args.bValue;
-        });
-
-        const auto applyLightingPreset = [](const int preset)
-        {
-            if (preset == 1)
-            {
-                creatorModelImporter.lightIntensity = 7.0f;
-                creatorModelImporter.lightAzimuth = -45.0f;
-                creatorModelImporter.lightElevation = 50.0f;
-                creatorModelImporter.ambientBrightness = 0.55f;
-            }
-            else if (preset == 2)
-            {
-                creatorModelImporter.lightIntensity = 1.5f;
-                creatorModelImporter.lightAzimuth = 25.0f;
-                creatorModelImporter.lightElevation = 20.0f;
-                creatorModelImporter.ambientBrightness = 0.08f;
-            }
-            else
-            {
-                creatorModelImporter.lightIntensity = 4.0f;
-                creatorModelImporter.lightAzimuth = -35.0f;
-                creatorModelImporter.lightElevation = 35.0f;
-                creatorModelImporter.ambientBrightness = 0.35f;
-            }
-            creatorImportLightIntensity.SetValue(creatorModelImporter.lightIntensity);
-            creatorImportLightAzimuth.SetValue(creatorModelImporter.lightAzimuth);
-            creatorImportLightElevation.SetValue(creatorModelImporter.lightElevation);
-            creatorImportAmbientBrightness.SetValue(creatorModelImporter.ambientBrightness);
-            ApplyCreatorImportPreviewLighting();
-        };
-        creatorImportLightingPreset.OnSelect([applyLightingPreset](const wi::gui::EventArgs& args)
-        {
-            applyLightingPreset(args.iValue);
-        });
-        creatorImportLightingReset.OnClick([applyLightingPreset](const wi::gui::EventArgs&)
-        {
-            creatorImportLightingPreset.SetSelectedWithoutCallback(0);
-            applyLightingPreset(0);
-        });
-
-        creatorImportAnimationLabel.Create("ANIMATIONS // EDITABLE CLIPS");
-        creatorImportAnimationCombo.Create("Animation Action");
-        creatorImportAnimationCombo.OnSelect([](const wi::gui::EventArgs& args)
-        {
-            creatorModelImporter.selectedAnimation =
-                static_cast<std::size_t>(args.userdata);
-            RefreshCreatorImportAnimationEditor();
-        });
-        creatorImportAnimationName.Create("Animation Clip Name");
-        creatorImportAnimationName.SetPlaceholder("CLIP NAME");
-        creatorImportAnimationName.OnInputAccepted([](const wi::gui::EventArgs& args)
-        {
-            if (creatorModelImporter.animationRecipe.empty()) return;
-            creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation].name = args.sValue;
-            RebuildCreatorImportAnimationCombo();
-        });
-        creatorImportAnimationStart.Create("Animation Start");
-        creatorImportAnimationStart.SetDescription("START: ");
-        creatorImportAnimationStart.OnInputAccepted([](const wi::gui::EventArgs& args)
-        {
-            if (creatorModelImporter.animationRecipe.empty()) return;
-            auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
-            clip.start = std::min(args.fValue, clip.end);
-            RefreshCreatorImportAnimationEditor();
-        });
-        creatorImportAnimationEnd.Create("Animation End");
-        creatorImportAnimationEnd.SetDescription("END: ");
-        creatorImportAnimationEnd.OnInputAccepted([](const wi::gui::EventArgs& args)
-        {
-            if (creatorModelImporter.animationRecipe.empty()) return;
-            auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
-            clip.end = std::max(args.fValue, clip.start);
-            RefreshCreatorImportAnimationEditor();
-        });
-        creatorImportAnimationEnabled.Create("Animation Included");
-        creatorImportAnimationEnabled.AddItem("INCLUDE");
-        creatorImportAnimationEnabled.AddItem("EXCLUDE");
-        creatorImportAnimationEnabled.OnSelect([](const wi::gui::EventArgs& args)
-        {
-            if (creatorModelImporter.animationRecipe.empty()) return;
-            creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation].enabled = args.iValue == 0;
-            RefreshCreatorImportAnimationEditor();
-        });
-        creatorImportAnimationAdd.Create("Add Animation Clip");
-        creatorImportAnimationAdd.SetText("ADD CLIP");
-        creatorImportAnimationAdd.OnClick([](const wi::gui::EventArgs&)
-        {
-            if (creatorModelImporter.animationRecipe.empty()) return;
-            auto clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
-            clip.name = clip.name.empty()
-                ? "Clip " + std::to_string(creatorModelImporter.animationRecipe.size() + 1)
-                : clip.name + " Copy";
-            creatorModelImporter.animationRecipe.push_back(std::move(clip));
-            creatorModelImporter.selectedAnimation = creatorModelImporter.animationRecipe.size() - 1;
-            RebuildCreatorImportAnimationCombo();
-        });
-        creatorImportAnimationDelete.Create("Delete Animation Clip");
-        creatorImportAnimationDelete.SetText("DELETE CLIP");
-        creatorImportAnimationDelete.OnClick([](const wi::gui::EventArgs&)
-        {
-            if (creatorModelImporter.animationRecipe.empty()) return;
-            creatorModelImporter.animationRecipe.erase(
-                creatorModelImporter.animationRecipe.begin() +
-                static_cast<std::ptrdiff_t>(creatorModelImporter.selectedAnimation));
-            if (creatorModelImporter.selectedAnimation > 0)
-                --creatorModelImporter.selectedAnimation;
-            RebuildCreatorImportAnimationCombo();
-        });
-        creatorImportAnimationReadout.Create("");
-        creatorImportAnimationReadout.SetFitTextEnabled(true);
-
-        importScaleApplyButton_.Create("Import Model Commit");
-        importScaleApplyButton_.SetText("IMPORT & PLACE");
-        importScaleApplyButton_.SetTooltip(
-            "Commit the governed reusable asset, then place the configured instance back in the real level.");
-        importScaleApplyButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::ApplyImportScale;
-        });
-
-        importScaleDismissButton_.Create("Cancel Model Import");
-        importScaleDismissButton_.SetText("CANCEL");
-        importScaleDismissButton_.SetTooltip(
-            "Discard the temporary preview and return to the level without importing anything.");
-        importScaleDismissButton_.OnClick([this](const wi::gui::EventArgs&)
-        {
-            pendingAction_ = EditorAction::DismissImportScale;
-        });
-
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&importScaleTitleLabel_),
-            static_cast<wi::gui::Widget*>(&importScaleReadoutLabel_),
-            static_cast<wi::gui::Widget*>(&creatorImportHelpLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportSectionCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportAssetName),
-            static_cast<wi::gui::Widget*>(&creatorImportDestination),
-            static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionX),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionY),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionZ),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationX),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationY),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationZ),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleX),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleY),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleZ),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleLinked),
-            static_cast<wi::gui::Widget*>(&creatorImportDimensionPreset),
-            static_cast<wi::gui::Widget*>(&importScaleModeCombo_),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialReadout),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureHelp),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureSlotCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportTexturePath),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureBrowse),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureClear),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialScalarLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportRoughness),
-            static_cast<wi::gui::Widget*>(&creatorImportMetalness),
-            static_cast<wi::gui::Widget*>(&creatorImportReflectance),
-            static_cast<wi::gui::Widget*>(&creatorImportNormalStrength),
-            static_cast<wi::gui::Widget*>(&creatorImportAoStrength),
-            static_cast<wi::gui::Widget*>(&creatorImportEmissiveStrength),
-            static_cast<wi::gui::Widget*>(&creatorImportLightingLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportLightIntensity),
-            static_cast<wi::gui::Widget*>(&creatorImportLightAzimuth),
-            static_cast<wi::gui::Widget*>(&creatorImportLightElevation),
-            static_cast<wi::gui::Widget*>(&creatorImportAmbientBrightness),
-            static_cast<wi::gui::Widget*>(&creatorImportLightingPreset),
-            static_cast<wi::gui::Widget*>(&creatorImportLightingReset),
-            static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
-            static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
-            static_cast<wi::gui::Widget*>(&importScaleDismissButton_)})
-        {
-            widget->SetShadowRadius(0.0f);
-            importScalePanel_.AddWidget(widget);
-        }
-        // Hide only after all child controls have inherited an enabled parent.
-        importScalePanel_.SetVisible(false);
-    }
-
-    void StudioRenderPath::ApplyRenegadeTheme()
-    {
-        wi::gui::Theme theme;
-        theme.image.background = true;
-        theme.image.blendFlag = wi::enums::BLENDMODE_ALPHA;
-        theme.image.corner_rounding = false;
-        for (auto& corner : theme.image.corners_rounding)
-        {
-            corner.radius = 0.0f;
-        }
-        theme.font.color = HologramText;
-        theme.font.shadow_color = wi::Color::Transparent();
-        theme.shadow = 0.0f;
-        theme.shadow_color = wi::Color::Transparent();
-        theme.shadow_highlight = false;
-        theme.shadow_highlight_color = XMFLOAT3(0.0f, 0.0f, 0.0f);
-        theme.shadow_highlight_spread = 0.0f;
-        theme.tooltipImage = theme.image;
-        theme.tooltipImage.color = HologramIdle;
-        theme.tooltipFont = theme.font;
-        theme.tooltip_shadow_color = wi::Color::Transparent();
-
-        auto& gui = GetGUI();
-        gui.SetTheme(theme);
-        gui.SetColor(HologramIdle, wi::gui::IDLE);
-        gui.SetColor(HologramFocus, wi::gui::FOCUS);
-        gui.SetColor(HologramActive, wi::gui::ACTIVE);
-        gui.SetColor(HologramFocus, wi::gui::DEACTIVATING);
-        gui.SetColor(HologramPanel, wi::gui::WIDGET_ID_WINDOW_BASE);
-        gui.SetColor(
-            wi::Color(7, 10, 12, 255),
-            wi::gui::WIDGET_ID_TEXTINPUTFIELD_IDLE);
-        gui.SetColor(
-            HologramFocus,
-            wi::gui::WIDGET_ID_TEXTINPUTFIELD_FOCUS);
-        gui.SetColor(
-            HologramActive,
-            wi::gui::WIDGET_ID_TEXTINPUTFIELD_ACTIVE);
-        gui.SetColor(
-            wi::Color(2, 12, 20, 245),
-            wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
-        gui.SetColor(
-            HologramFocus,
-            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
-        gui.SetColor(
-            HologramActive,
-            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
-
-        projectHubPanel_.SetColor(
-            wi::Color(2, 9, 16, 232),
-            wi::gui::WIDGET_ID_WINDOW_BASE);
-
-        // The global Project Hub theme is intentionally not the workspace
-        // theme. Reassert the owned Inspector host after the global pass so
-        // Wicked cannot repaint its rounded cyan window or section pills.
-        inspectorPanel_.SetColor(wi::Color::Transparent());
-        inspectorPanel_.SetColor(
-            wi::Color(8, 11, 13, 255),
-            wi::gui::WIDGET_ID_WINDOW_BASE);
-        inspectorPanel_.SetShadowRadius(0.0f);
-
-        // Same reassertion as inspectorPanel_ above -- the Import Scale
-        // popup is a separate wi::gui::Window and does not inherit
-        // inspectorPanel_'s per-instance override, only the global theme.
-        importScalePanel_.SetColor(wi::Color::Transparent());
-        importScalePanel_.SetColor(
-            wi::Color(8, 11, 13, 255),
-            wi::gui::WIDGET_ID_WINDOW_BASE);
-
-        const auto ownLabel = [](wi::gui::Label& label)
-        {
-            label.SetColor(wi::Color::Transparent());
-            label.SetShadowRadius(0.0f);
-            label.font.params.color = wi::Color(244, 239, 233, 255);
-            label.font.params.bolden = 0.12f;
-            label.font.params.shadowColor = wi::Color::Transparent();
-        };
-        ownLabel(inspectorLabel_);
-        ownLabel(positionLabel_);
-        ownLabel(rotationLabel_);
-        ownLabel(scaleLabel_);
-        ownLabel(lightLabel_);
-        ownLabel(environmentSkyLabel_);
-        ownLabel(environmentFogLabel_);
-        ownLabel(environmentCloudLabel_);
-        ownLabel(precipitationLabel_);
-        ownLabel(sunLabel_);
-        ownLabel(oceanLabel_);
-        ownLabel(importScaleTitleLabel_);
-        ownLabel(importScaleReadoutLabel_);
-        ownLabel(workspaceTitle_);
-        ownLabel(statusLabel_);
-        ownLabel(hierarchyLabel_);
-        ownLabel(terrainLabel_);
-        ownLabel(terrainMaterialLabel_);
-        ownLabel(terrainSculptLabel_);
-        ownLabel(terrainBrushReadout_);
-        ownLabel(terrainStrokeDiagnostic_);
-        ownLabel(contentLabel_);
-        ownLabel(contentPlaceholder_);
-        ownLabel(hubBrandLabel_);
-        ownLabel(hubTitleLabel_);
-        ownLabel(hubSubtitleLabel_);
-        ownLabel(recentProjectsLabel_);
-        ownLabel(selectedProjectLabel_);
-        ownLabel(hubMessageLabel_);
-        ownLabel(creatorImportMaterialLabel);
-        ownLabel(creatorImportMaterialReadout);
-        ownLabel(creatorImportTextureHelp);
-        ownLabel(creatorImportAnimationLabel);
-        ownLabel(creatorImportAnimationReadout);
-        ownLabel(creatorImportTransformLabel);
-        ownLabel(creatorImportMaterialScalarLabel);
-        ownLabel(creatorImportLightingLabel);
-        ownLabel(creatorImportHelpLabel);
-
-        wi::gui::Theme scrollbarTheme = theme;
-        scrollbarTheme.image.corner_rounding = false;
-        for (auto& corner : scrollbarTheme.image.corners_rounding)
-        {
-            corner.radius = 0.0f;
-        }
-        scrollbarTheme.shadow = 0.0f;
-        inspectorPanel_.scrollbar_vertical.SetTheme(scrollbarTheme);
-        inspectorPanel_.scrollbar_vertical.SetColor(
-            wi::Color(12, 18, 22, 255),
-            wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
-        inspectorPanel_.scrollbar_vertical.SetColor(
-            wi::Color(38, 52, 61, 255),
-            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_INACTIVE);
-        inspectorPanel_.scrollbar_vertical.SetColor(
-            wi::Color(210, 91, 29, 255),
-            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
-        inspectorPanel_.scrollbar_vertical.SetColor(
-            wi::Color(210, 91, 29, 255),
-            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
-    }
-
-    void StudioRenderPath::Update(const float dt)
-    {
-        PollTestLevel();
-
-        // Scene deserialization runs on Wicked's job system. Keep the current
-        // document visible but immutable until its prepared replacement is
-        // committed at EVENT_THREAD_SAFE_POINT. This check intentionally
-        // precedes RenderPath3D::Update(), because wiGUI callbacks can author
-        // scene changes from inside the base update.
-        if (sceneOpenInProgress_)
-        {
-            pendingAction_ = EditorAction::None;
-            return;
-        }
-
-        RenderPath3D::Update(dt);
-
-        if (session_ == nullptr || projectHubVisible_)
-        {
-            return;
-        }
-
-        if (testLevelRuntime_.IsActive())
-        {
-            // StopTestLevel is the only editor action that must still take
-            // effect while Runtime is active - without this, clicking STOP
-            // queues pendingAction_ but this function returns below before
-            // ever reaching the pendingAction_ dispatch further down, so the
-            // click would have no effect until Runtime happened to exit on
-            // its own. Any other action requested during an active session
-            // is discarded rather than silently deferred until Runtime
-            // exits and then firing unexpectedly.
-            if (pendingAction_ == EditorAction::StopTestLevel)
-            {
-                ProcessPendingAction();
-                return;
-            }
-            pendingAction_ = EditorAction::None;
-
-            const auto state = testLevelRuntime_.LastResult().state;
-            statusLabel_.SetText(
-                state == TestLevelProcessState::Running
-                    ? "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT"
-                    : "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
-            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
-            studioChrome_.SetStatusText(statusLabel_.GetText());
-            return;
-        }
-
-        if (workspaceLayoutDirty_)
-        {
-            workspaceLayoutDirty_ = false;
-            ResizeLayout();
-        }
-
-        viewportBounds_ = studioChrome_.ViewportBounds();
-        const XMFLOAT4 pointer = wi::input::GetPointer();
-        const bool lightIconConsumed = HandleLightSceneIcons(pointer);
-
-        if (sunPreviewPlaying_)
-        {
-            bridge::SetSunTime(
-                sunPreviewCurrent_,
-                sunPreviewCurrent_.timeHours +
-                    dt * sunPreviewSpeedHoursPerSecond_);
-            bridge::ApplySun(
-                session_->Scenes().GetScene(),
-                EditableWeatherEntity(),
-                sunPreviewCurrent_);
-            sunTime_.SetValue(sunPreviewCurrent_.timeHours);
-            sunAzimuth_.SetValue(sunPreviewCurrent_.azimuthDegrees);
-            sunElevation_.SetValue(sunPreviewCurrent_.elevationDegrees);
-        }
-
-        HandleEditorShortcuts();
-
-        // wiGUI invokes OnClick while Button::Update is still active. Apply
-        // editor actions only after the complete GUI update has returned.
-        if (pendingAction_ != EditorAction::None)
-        {
-            ProcessPendingAction();
-            return;
-        }
-
-        // The Renegade-owned shell uses deliberate hit regions rather than
-        // stock Wicked widgets. Never let a chrome click fall through into
-        // scene selection, gizmo manipulation, or camera navigation.
-        if (studioChrome_.ConsumedPointerThisFrame())
-        {
-            return;
-        }
-
-        if (lightIconConsumed)
-        {
-            return;
-        }
-
-        if (gizmoEntity_ != session_->Selection().SelectedEntity())
-        {
-            SyncGizmoSelection();
-            SyncSelectionOutline();
-        }
-
-        if (HandleLightPlacement(pointer))
-        {
-            return;
-        }
-
-        HandleViewportNavigation(dt, pointer);
-
-        if (GetGUI().HasFocus() && !gizmoDragActive_)
-        {
-            return;
-        }
-
-        if (gizmoEntity_ != wi::ecs::INVALID_ENTITY &&
-            !flyCameraActive_)
-        {
-            gizmo_.Update(*camera, pointer, *this);
-        }
-
-        if (HandleTerrainSculpt(pointer))
-        {
-            return;
-        }
-        if (HandleViewportSelection(pointer))
-        {
-            return;
-        }
-
-        if (gizmoEntity_ == wi::ecs::INVALID_ENTITY ||
-            flyCameraActive_)
-        {
-            return;
-        }
-
-        if (gizmo_.IsDragStarted())
-        {
-            gizmoDragActive_ = true;
-        }
-
-        if (gizmo_.IsDragEnded())
-        {
-            gizmoDragActive_ = false;
-            auto* transform =
-                session_->Scenes().GetScene().transforms.GetComponent(gizmoEntity_);
-            if (transform == nullptr)
-            {
-                return;
-            }
-
-            const auto transformAfter = bridge::CaptureTransform(*transform);
-            transform->translation_local =
-                gizmoTransformBefore_.translation;
-            transform->rotation_local =
-                gizmoTransformBefore_.rotation;
-            transform->scale_local =
-                gizmoTransformBefore_.scale;
-            transform->SetDirty();
-            transform->UpdateTransform();
-
-            session_->Commands().Execute(
-                std::make_unique<bridge::SetTransformCommand>(
-                    session_->Scenes().GetScene(),
-                    gizmoEntity_,
-                    gizmoTransformBefore_,
-                    transformAfter));
-            gizmoTransformBefore_ = transformAfter;
-            RefreshInspector();
-            RefreshStatus();
-        }
-    }
-
-    void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
-    {
-        RenderPath3D::Compose(cmd);
-
-        auto* device = wi::graphics::GetDevice();
-        const wi::graphics::Rect viewportScissor = {
-            static_cast<std::int32_t>(
-                LogicalToPhysical(viewportBounds_.x)),
-            static_cast<std::int32_t>(
-                LogicalToPhysical(viewportBounds_.y)),
-            static_cast<std::int32_t>(
-                LogicalToPhysical(viewportBounds_.z)),
-            static_cast<std::int32_t>(
-                LogicalToPhysical(viewportBounds_.w)),
-        };
-        device->BindScissorRects(1, &viewportScissor, cmd);
-
-        if (!projectHubVisible_ &&
-            outlinedEntity_ != wi::ecs::INVALID_ENTITY &&
-            selectionOutlineMask_.IsValid())
-        {
-            wi::renderer::BindCommonResources(cmd);
-            // Thickness was 2.0, double Wicked's default, which read as a
-            // heavy halo rather than a projected edge. 1.0 is one pixel.
-            wi::renderer::Postprocess_Outline(
-                selectionOutlineMask_,
-                cmd,
-                0.1f,
-                1.0f,
-                XMFLOAT4(0.30f, 0.86f, 1.0f, 0.90f));
-        }
-
-        if (!projectHubVisible_ && gizmoEntity_ != wi::ecs::INVALID_ENTITY)
-        {
-            gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
-        }
-
-        const wi::graphics::Rect fullScissor = {
-            0,
-            0,
-            static_cast<std::int32_t>(GetPhysicalWidth()),
-            static_cast<std::int32_t>(GetPhysicalHeight()),
-        };
-        device->BindScissorRects(1, &fullScissor, cmd);
-    }
-
-    void StudioRenderPath::ResizeLayout()
-    {
-        RenderPath3D::ResizeLayout();
-
-        const float width = GetLogicalWidth();
-        const float height = GetLogicalHeight();
-        studioChrome_.SetLayout(width, height);
-        const float toolbarHeight = 54.0f;
-        const float leftWidth = projectHubVisible_
-            ? std::clamp(width * 0.2f, 250.0f, 310.0f)
-            : studioChrome_.HierarchyWidth();
-        const float rightWidth = projectHubVisible_
-            ? std::clamp(width * 0.22f, 290.0f, 350.0f)
-            : studioChrome_.InspectorWidth();
-        const float bottomHeight = projectHubVisible_
-            ? std::clamp(height * 0.22f, 160.0f, 220.0f)
-            : studioChrome_.DrawerHeight();
-
-        viewportBounds_ = projectHubVisible_
-            ? XMFLOAT4(
-                leftWidth + 16.0f,
-                toolbarHeight + 16.0f,
-                width - rightWidth - 16.0f,
-                height - bottomHeight - 16.0f)
-            : studioChrome_.ViewportBounds();
-
-        toolbarPanel_.SetPos(XMFLOAT2(8.0f, 8.0f));
-        toolbarPanel_.SetSize(XMFLOAT2(width - 16.0f, toolbarHeight));
-        workspaceTitle_.SetPos(XMFLOAT2(14.0f, 12.0f));
-        workspaceTitle_.SetSize(XMFLOAT2(300.0f, 30.0f));
-        translateToolButton_.SetPos(XMFLOAT2(314.0f, 9.0f));
-        translateToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
-        rotateToolButton_.SetPos(XMFLOAT2(414.0f, 9.0f));
-        rotateToolButton_.SetSize(XMFLOAT2(100.0f, 30.0f));
-        scaleToolButton_.SetPos(XMFLOAT2(522.0f, 9.0f));
-        scaleToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
-        gridToggleButton_.SetPos(XMFLOAT2(630.0f, 9.0f));
-        gridToggleButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
-        projectHubButton_.SetPos(XMFLOAT2(width - 132.0f, 9.0f));
-        projectHubButton_.SetSize(XMFLOAT2(108.0f, 30.0f));
-        statusLabel_.SetPos(XMFLOAT2(736.0f, 14.0f));
-        statusLabel_.SetSize(XMFLOAT2(
-            std::max(120.0f, width - 890.0f),
-            24.0f));
-
-        hierarchyPanel_.SetPos(XMFLOAT2(8.0f, toolbarHeight + 16.0f));
-        hierarchyPanel_.SetSize(XMFLOAT2(
-            leftWidth,
-            height - toolbarHeight - 24.0f));
-        hierarchyLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
-        hierarchyLabel_.SetSize(XMFLOAT2(leftWidth - 24.0f, 28.0f));
-        hierarchyTree_.SetPos(XMFLOAT2(10.0f, 44.0f));
-        hierarchyTree_.SetSize(XMFLOAT2(
-            leftWidth - 20.0f,
-            height - toolbarHeight - 82.0f));
-        hierarchySearch_.SetPos(XMFLOAT2(12.0f, 117.0f));
-        hierarchySearch_.SetSize(XMFLOAT2(leftWidth - 24.0f, 31.0f));
-
-        inspectorPanel_.SetPos(XMFLOAT2(
-            projectHubVisible_ ? width - rightWidth - 8.0f : width - rightWidth,
-            projectHubVisible_ ? toolbarHeight + 16.0f : 64.0f));
-        inspectorPanel_.SetSize(XMFLOAT2(
-            rightWidth,
-            projectHubVisible_
-                ? height - toolbarHeight - 24.0f
-                : height - 64.0f - 28.0f));
-        inspectorLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
-        inspectorLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 28.0f));
-        const float fieldGap = 8.0f;
-        const float fieldWidth = (rightWidth - 40.0f) / 3.0f;
-        const auto positionInputRow = [&](
-            wi::gui::TextInputField& x,
-            wi::gui::TextInputField& y,
-            wi::gui::TextInputField& z,
-            const float rowY)
-        {
-            x.SetPos(XMFLOAT2(12.0f, rowY));
-            y.SetPos(XMFLOAT2(12.0f + fieldWidth + fieldGap, rowY));
-            z.SetPos(XMFLOAT2(
-                12.0f + (fieldWidth + fieldGap) * 2.0f,
-                rowY));
-            x.SetSize(XMFLOAT2(fieldWidth, 28.0f));
-            y.SetSize(XMFLOAT2(fieldWidth, 28.0f));
-            z.SetSize(XMFLOAT2(fieldWidth, 28.0f));
-        };
-        positionLabel_.SetPos(XMFLOAT2(12.0f, 44.0f));
-        positionLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
-        positionInputRow(
-            translationX_,
-            translationY_,
-            translationZ_,
-            64.0f);
-        rotationLabel_.SetPos(XMFLOAT2(12.0f, 104.0f));
-        rotationLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
-        positionInputRow(rotationX_, rotationY_, rotationZ_, 124.0f);
-        scaleLabel_.SetPos(XMFLOAT2(12.0f, 164.0f));
-        scaleLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
-        positionInputRow(scaleX_, scaleY_, scaleZ_, 184.0f);
-
-        const float environmentFieldWidth = rightWidth - 24.0f;
-        const auto positionEnvironmentWidget =
-            [environmentFieldWidth](
-                wi::gui::Widget& widget,
-                const float rowY,
-                const float height = 28.0f)
-        {
-            widget.SetPos(XMFLOAT2(12.0f, rowY));
-            widget.SetSize(XMFLOAT2(environmentFieldWidth, height));
-        };
-        positionEnvironmentWidget(lightLabel_, 224.0f, 20.0f);
-        positionEnvironmentWidget(lightType_, 244.0f);
-        positionEnvironmentWidget(lightColorRed_, 278.0f);
-        positionEnvironmentWidget(lightColorGreen_, 312.0f);
-        positionEnvironmentWidget(lightColorBlue_, 346.0f);
-        positionEnvironmentWidget(lightIntensity_, 380.0f);
-        positionEnvironmentWidget(lightRange_, 414.0f);
-        positionEnvironmentWidget(lightOuterCone_, 448.0f);
-        positionEnvironmentWidget(lightInnerCone_, 482.0f);
-        positionEnvironmentWidget(lightRadius_, 516.0f);
-        positionEnvironmentWidget(lightLength_, 550.0f);
-        positionEnvironmentWidget(lightHeight_, 584.0f);
-        positionEnvironmentWidget(lightCastShadow_, 618.0f);
-        positionEnvironmentWidget(lightVolumetrics_, 650.0f);
-        positionEnvironmentWidget(lightVolumetricBoost_, 682.0f);
-        positionEnvironmentWidget(environmentSkyLabel_, 44.0f, 20.0f);
-        positionEnvironmentWidget(environmentPreset_, 64.0f);
-        positionEnvironmentWidget(skyMode_, 98.0f);
-        positionEnvironmentWidget(aerialPerspective_, 132.0f);
-        positionEnvironmentWidget(skyExposure_, 164.0f);
-        positionEnvironmentWidget(ambientIntensity_, 198.0f);
-        positionEnvironmentWidget(environmentFogLabel_, 232.0f, 20.0f);
-        positionEnvironmentWidget(fogStart_, 252.0f);
-        positionEnvironmentWidget(fogDensity_, 286.0f);
-        positionEnvironmentWidget(heightFog_, 320.0f);
-        positionEnvironmentWidget(fogHeightStart_, 352.0f);
-        positionEnvironmentWidget(fogHeightEnd_, 386.0f);
-        positionEnvironmentWidget(environmentCloudLabel_, 420.0f, 20.0f);
-        positionEnvironmentWidget(cloudCoverage_, 440.0f);
-        positionEnvironmentWidget(cloudStartHeight_, 474.0f);
-        positionEnvironmentWidget(cloudThickness_, 508.0f);
-        positionEnvironmentWidget(cloudsCastShadow_, 542.0f);
-        positionEnvironmentWidget(precipitationLabel_, 576.0f, 20.0f);
-        positionEnvironmentWidget(precipitationMode_, 596.0f);
-        positionEnvironmentWidget(precipitationIntensity_, 630.0f);
-        positionEnvironmentWidget(precipitationFallSpeed_, 664.0f);
-        positionEnvironmentWidget(precipitationParticleScale_, 698.0f);
-        positionEnvironmentWidget(precipitationWindAzimuth_, 732.0f);
-        positionEnvironmentWidget(precipitationWindSpeed_, 766.0f);
-        positionEnvironmentWidget(precipitationTurbulence_, 800.0f);
-        positionEnvironmentWidget(sunLabel_, 834.0f, 20.0f);
-        positionEnvironmentWidget(sunPreset_, 854.0f);
-        positionEnvironmentWidget(sunTime_, 888.0f);
-        positionEnvironmentWidget(sunAzimuth_, 922.0f);
-        positionEnvironmentWidget(sunElevation_, 956.0f);
-        positionEnvironmentWidget(sunPreviewSpeed_, 990.0f);
-        sunPlayButton_.SetPos(XMFLOAT2(12.0f, 1024.0f));
-        sunPauseButton_.SetPos(XMFLOAT2(
-            20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
-            1024.0f));
-        sunPlayButton_.SetSize(XMFLOAT2(
-            (environmentFieldWidth - 8.0f) * 0.5f,
-            28.0f));
-        sunPauseButton_.SetSize(XMFLOAT2(
-            (environmentFieldWidth - 8.0f) * 0.5f,
-            28.0f));
-        positionEnvironmentWidget(oceanLabel_, 1060.0f, 20.0f);
-        positionEnvironmentWidget(oceanEnabled_, 1080.0f);
-        positionEnvironmentWidget(oceanPreset_, 1114.0f);
-        positionEnvironmentWidget(oceanResolution_, 1148.0f);
-        positionEnvironmentWidget(oceanWaterHeight_, 1182.0f);
-        positionEnvironmentWidget(oceanPatchLength_, 1216.0f);
-        positionEnvironmentWidget(oceanWaveAmplitude_, 1250.0f);
-        positionEnvironmentWidget(oceanChoppyScale_, 1284.0f);
-        positionEnvironmentWidget(oceanTimeScale_, 1318.0f);
-        positionEnvironmentWidget(oceanWindAzimuth_, 1352.0f);
-        positionEnvironmentWidget(oceanWindSpeed_, 1386.0f);
-        positionEnvironmentWidget(oceanWindDependency_, 1420.0f);
-        positionEnvironmentWidget(oceanSurfaceDetail_, 1454.0f);
-        positionEnvironmentWidget(oceanDisplacementTolerance_, 1488.0f);
-        positionEnvironmentWidget(oceanWaterRed_, 1522.0f);
-        positionEnvironmentWidget(oceanWaterGreen_, 1556.0f);
-        positionEnvironmentWidget(oceanWaterBlue_, 1590.0f);
-        positionEnvironmentWidget(oceanWaterOpacity_, 1624.0f);
-        positionEnvironmentWidget(oceanExtinctionRed_, 1658.0f);
-        positionEnvironmentWidget(oceanExtinctionGreen_, 1692.0f);
-        positionEnvironmentWidget(oceanExtinctionBlue_, 1726.0f);
-
-        positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);
-        positionEnvironmentWidget(createTerrainButton_, 64.0f);
-        positionEnvironmentWidget(terrainVisibleRadius_, 64.0f);
-        positionEnvironmentWidget(terrainChunkScale_, 98.0f);
-        positionEnvironmentWidget(terrainMinimumHeight_, 132.0f);
-        positionEnvironmentWidget(terrainMaximumHeight_, 166.0f);
-        positionEnvironmentWidget(terrainLowAltitudeBlend_, 200.0f);
-        positionEnvironmentWidget(terrainBaseBlend_, 234.0f);
-        positionEnvironmentWidget(terrainSlopeBlend_, 268.0f);
-        positionEnvironmentWidget(terrainLodBias_, 302.0f);
-        positionEnvironmentWidget(terrainMaterialLabel_, 346.0f, 20.0f);
-        positionEnvironmentWidget(terrainMaterialPreset_, 366.0f);
-        positionEnvironmentWidget(terrainTextureScale_, 400.0f);
-        terrainApplyDefaultGrassButton_.SetPos(XMFLOAT2(12.0f, 434.0f));
-        terrainReloadMaterialButton_.SetPos(XMFLOAT2(
-            20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
-            434.0f));
-        terrainApplyDefaultGrassButton_.SetSize(XMFLOAT2(
-            (environmentFieldWidth - 8.0f) * 0.5f,
-            28.0f));
-        terrainReloadMaterialButton_.SetSize(XMFLOAT2(
-            (environmentFieldWidth - 8.0f) * 0.5f,
-            28.0f));
-        positionEnvironmentWidget(terrainSculptLabel_, 476.0f, 20.0f);
-        positionEnvironmentWidget(terrainSculptMode_, 496.0f);
-        positionEnvironmentWidget(terrainBrushRadius_, 530.0f);
-        positionEnvironmentWidget(terrainBrushStrength_, 564.0f);
-        positionEnvironmentWidget(terrainBrushFalloff_, 598.0f);
-        positionEnvironmentWidget(terrainBrushReadout_, 632.0f, 20.0f);
-        positionEnvironmentWidget(terrainStrokeDiagnostic_, 652.0f, 20.0f);
-
-        const bool environmentSelected =
-            environmentWorkspaceActive_;
-        const bool terrainSelected = terrainWorkspaceActive_;
-        const bool lightSelected =
-            session_ != nullptr && !environmentSelected && !terrainSelected &&
-            session_->Scenes().GetScene().lights.Contains(
-                session_->Selection().SelectedEntity());
-        LayoutInspectorActions(
-            environmentSelected,
-            terrainSelected,
-            lightSelected);
-
-        contentPanel_.SetPos(XMFLOAT2(
-            leftWidth + 16.0f,
-            height - bottomHeight - 8.0f));
-        contentPanel_.SetSize(XMFLOAT2(
-            width - leftWidth - rightWidth - 32.0f,
-            bottomHeight));
-        contentLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
-        contentLabel_.SetSize(XMFLOAT2(
-            contentPanel_.GetSize().x - 24.0f,
-            28.0f));
-        contentPlaceholder_.SetPos(XMFLOAT2(12.0f, 50.0f));
-        contentPlaceholder_.SetSize(XMFLOAT2(
-            contentPanel_.GetSize().x - 24.0f,
-            bottomHeight - 62.0f));
-
-        // Positioned independently of the Inspector's hardcoded column
-        // (see CreateImportScalePanel). Import mode owns the screen, so this
-        // is a right-docked task panel rather than a popup floating inside the
-        // editor viewport.
-        //
-        // wi::gui::Window::Render scissor-clips every child widget to the
-        // window's own rectangle (widget->parent->scissorRect), including a
-        // ComboBox's dropdown list when it opens -- Wicked's auto-flip
-        // logic in ComboBox::GetDropOffset only checks against the full
-        // canvas height, not the parent window's bounds, so it never
-        // triggers here. The panel must itself be tall enough to contain
-        // the combo's fully open dropdown (its own 28px row plus three
-        // 28px items, ~112px) or the options render clipped to invisible,
-        // unselectable, even though the combo logic itself is fine. This
-        // is why the panel is taller than its visible idle content and the
-        // buttons sit well below the combo rather than immediately under
-        // it.
-        const float importScalePanelWidth = 440.0f;
-        const float importScalePanelHeight = std::min(850.0f, std::max(690.0f, height - 36.0f));
-        // GGMAX-style task workspace: keep the preview unobstructed and dock
-        // the importer controls down the right side of the preview viewport.
-        importScalePanel_.SetPos(XMFLOAT2(
-            std::max(8.0f, width - importScalePanelWidth - 8.0f),
-            viewportBounds_.y + 12.0f));
-        importScalePanel_.SetSize(XMFLOAT2(
-            importScalePanelWidth,
-            importScalePanelHeight));
-        importScaleTitleLabel_.SetPos(XMFLOAT2(12.0f, 8.0f));
-        importScaleTitleLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 24.0f));
-        importScaleReadoutLabel_.SetPos(XMFLOAT2(12.0f, 36.0f));
-        importScaleReadoutLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 64.0f));
-        creatorImportHelpLabel.SetPos(XMFLOAT2(12.0f, 100.0f));
-        creatorImportHelpLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
-        creatorImportSectionCombo.SetPos(XMFLOAT2(12.0f, 146.0f));
-        creatorImportSectionCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-
-        creatorImportAssetName.SetPos(XMFLOAT2(12.0f, 190.0f));
-        creatorImportAssetName.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 32.0f));
-        creatorImportDestination.SetPos(XMFLOAT2(12.0f, 230.0f));
-        creatorImportDestination.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 32.0f));
-
-        creatorImportTransformLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
-        creatorImportTransformLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
-        const auto layoutFullRow = [importScalePanelWidth](
-            wi::gui::Widget& widget, const float rowY)
-        {
-            widget.SetPos(XMFLOAT2(12.0f, rowY));
-            widget.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        };
-        layoutFullRow(creatorImportPositionX, 210.0f);
-        layoutFullRow(creatorImportPositionY, 242.0f);
-        layoutFullRow(creatorImportPositionZ, 274.0f);
-        layoutFullRow(creatorImportRotationX, 314.0f);
-        layoutFullRow(creatorImportRotationY, 346.0f);
-        layoutFullRow(creatorImportRotationZ, 378.0f);
-        layoutFullRow(creatorImportScaleX, 418.0f);
-        layoutFullRow(creatorImportScaleY, 450.0f);
-        layoutFullRow(creatorImportScaleZ, 482.0f);
-        layoutFullRow(creatorImportScaleLinked, 518.0f);
-        layoutFullRow(creatorImportDimensionPreset, 554.0f);
-        layoutFullRow(importScaleModeCombo_, 590.0f);
-
-        creatorImportMaterialLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
-        creatorImportMaterialLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
-        creatorImportMaterialCombo.SetPos(XMFLOAT2(12.0f, 210.0f));
-        creatorImportMaterialCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        creatorImportMaterialReadout.SetPos(XMFLOAT2(12.0f, 242.0f));
-        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 86.0f));
-        creatorImportTextureHelp.SetPos(XMFLOAT2(12.0f, 332.0f));
-        creatorImportTextureHelp.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 20.0f));
-        creatorImportTextureSlotCombo.SetPos(XMFLOAT2(12.0f, 356.0f));
-        creatorImportTextureSlotCombo.SetSize(XMFLOAT2(150.0f, 28.0f));
-        creatorImportTexturePath.SetPos(XMFLOAT2(166.0f, 356.0f));
-        creatorImportTexturePath.SetSize(XMFLOAT2(importScalePanelWidth - 178.0f, 28.0f));
-        creatorImportTextureBrowse.SetPos(XMFLOAT2(12.0f, 388.0f));
-        creatorImportTextureBrowse.SetSize(XMFLOAT2(120.0f, 28.0f));
-        creatorImportTextureClear.SetPos(XMFLOAT2(136.0f, 388.0f));
-        creatorImportTextureClear.SetSize(XMFLOAT2(100.0f, 28.0f));
-        creatorImportMaterialScalarLabel.SetPos(XMFLOAT2(12.0f, 424.0f));
-        creatorImportMaterialScalarLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 20.0f));
-        layoutFullRow(creatorImportRoughness, 448.0f);
-        layoutFullRow(creatorImportMetalness, 480.0f);
-        layoutFullRow(creatorImportReflectance, 512.0f);
-        layoutFullRow(creatorImportNormalStrength, 544.0f);
-        layoutFullRow(creatorImportAoStrength, 576.0f);
-        layoutFullRow(creatorImportEmissiveStrength, 608.0f);
-
-        creatorImportLightingLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
-        creatorImportLightingLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
-        layoutFullRow(creatorImportLightIntensity, 214.0f);
-        layoutFullRow(creatorImportLightAzimuth, 250.0f);
-        layoutFullRow(creatorImportLightElevation, 286.0f);
-        layoutFullRow(creatorImportAmbientBrightness, 322.0f);
-        layoutFullRow(creatorImportLightingPreset, 366.0f);
-        layoutFullRow(creatorImportLightingReset, 402.0f);
-        layoutFullRow(creatorImportMannequinVisible, 446.0f);
-
-        creatorImportAnimationLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
-        creatorImportAnimationLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
-        creatorImportAnimationCombo.SetPos(XMFLOAT2(12.0f, 210.0f));
-        creatorImportAnimationCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        creatorImportAnimationName.SetPos(XMFLOAT2(12.0f, 246.0f));
-        creatorImportAnimationName.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        creatorImportAnimationStart.SetPos(XMFLOAT2(12.0f, 282.0f));
-        creatorImportAnimationStart.SetSize(XMFLOAT2(120.0f, 28.0f));
-        creatorImportAnimationEnd.SetPos(XMFLOAT2(136.0f, 282.0f));
-        creatorImportAnimationEnd.SetSize(XMFLOAT2(120.0f, 28.0f));
-        creatorImportAnimationEnabled.SetPos(XMFLOAT2(260.0f, 282.0f));
-        creatorImportAnimationEnabled.SetSize(XMFLOAT2(importScalePanelWidth - 272.0f, 28.0f));
-        creatorImportAnimationAdd.SetPos(XMFLOAT2(12.0f, 318.0f));
-        creatorImportAnimationAdd.SetSize(XMFLOAT2(110.0f, 28.0f));
-        creatorImportAnimationDelete.SetPos(XMFLOAT2(126.0f, 318.0f));
-        creatorImportAnimationDelete.SetSize(XMFLOAT2(120.0f, 28.0f));
-        creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 354.0f));
-        creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
-        const float commitY = std::min(importScalePanelHeight - 46.0f, 764.0f);
-        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, commitY));
-        importScaleApplyButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.64f, 34.0f));
-        importScaleDismissButton_.SetPos(XMFLOAT2(20.0f + (importScalePanelWidth - 32.0f) * 0.64f, commitY));
-        importScaleDismissButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.36f, 34.0f));
-
-        projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
-        projectHubPanel_.SetSize(XMFLOAT2(width - 24.0f, height - 24.0f));
-        hubBrandLabel_.SetPos(XMFLOAT2(38.0f, 24.0f));
-        hubBrandLabel_.SetSize(XMFLOAT2(500.0f, 24.0f));
-        hubTitleLabel_.SetPos(XMFLOAT2(38.0f, 58.0f));
-        hubTitleLabel_.SetSize(XMFLOAT2(500.0f, 48.0f));
-        hubSubtitleLabel_.SetPos(XMFLOAT2(40.0f, 112.0f));
-        hubSubtitleLabel_.SetSize(XMFLOAT2(width - 100.0f, 30.0f));
-
-        projectNameInput_.SetPos(XMFLOAT2(40.0f, 160.0f));
-        projectNameInput_.SetSize(XMFLOAT2(330.0f, 32.0f));
-        createProjectButton_.SetPos(XMFLOAT2(388.0f, 160.0f));
-        createProjectButton_.SetSize(XMFLOAT2(170.0f, 32.0f));
-        openProjectButton_.SetPos(XMFLOAT2(570.0f, 160.0f));
-        openProjectButton_.SetSize(XMFLOAT2(170.0f, 32.0f));
-        openSceneButton_.SetPos(XMFLOAT2(752.0f, 160.0f));
-        openSceneButton_.SetSize(XMFLOAT2(170.0f, 32.0f));
-
-        recentProjectsLabel_.SetPos(XMFLOAT2(40.0f, 218.0f));
-        recentProjectsLabel_.SetSize(XMFLOAT2(500.0f, 28.0f));
-
-        const float previewX = std::max(820.0f, width * 0.64f);
-        const float cardsWidth = std::max(620.0f, previewX - 70.0f);
-        const float cardWidth = (cardsWidth - 18.0f) * 0.5f;
-        constexpr float cardHeight = 76.0f;
-        for (std::size_t index = 0; index < recentProjectButtons_.size(); ++index)
-        {
-            const float x =
-                40.0f + static_cast<float>(index % 2) * (cardWidth + 18.0f);
-            const float y =
-                254.0f + static_cast<float>(index / 2) * (cardHeight + 14.0f);
-            recentProjectButtons_[index].SetPos(XMFLOAT2(x, y));
-            recentProjectButtons_[index].SetSize(
-                XMFLOAT2(cardWidth, cardHeight));
-            recentProjectButtons_[index].font.params.h_wrap =
-                cardWidth - 20.0f;
-        }
-
-        selectedProjectLabel_.SetPos(XMFLOAT2(previewX, 254.0f));
-        selectedProjectLabel_.SetSize(XMFLOAT2(
-            std::max(260.0f, width - previewX - 50.0f),
-            140.0f));
-        launchProjectButton_.SetPos(XMFLOAT2(previewX, 410.0f));
-        launchProjectButton_.SetSize(XMFLOAT2(240.0f, 42.0f));
-        continueProjectButton_.SetPos(XMFLOAT2(previewX, 466.0f));
-        continueProjectButton_.SetSize(XMFLOAT2(240.0f, 36.0f));
-
-        hubMessageLabel_.SetPos(XMFLOAT2(40.0f, height - 74.0f));
-        hubMessageLabel_.SetSize(XMFLOAT2(width - 90.0f, 38.0f));
-
-        if (diagnostics_ != nullptr)
-        {
-            diagnostics_->rect.left = static_cast<std::int32_t>(
-                LogicalToPhysical(viewportBounds_.x + 10.0f));
-            diagnostics_->rect.top = static_cast<std::int32_t>(
-                LogicalToPhysical(viewportBounds_.y + 10.0f));
-            diagnostics_->rect.right = static_cast<std::int32_t>(
-                LogicalToPhysical(viewportBounds_.z));
-            diagnostics_->rect.bottom = static_cast<std::int32_t>(
-                LogicalToPhysical(viewportBounds_.w));
-        }
-    }
-
-    void StudioRenderPath::RefreshStatus()
-    {
-        if (session_ == nullptr)
-        {
-            statusLabel_.SetText("ENGINEBRIDGE SESSION UNAVAILABLE");
-            return;
-        }
-
-        const auto& scenes = session_->Scenes();
-        if (sceneOpenInProgress_)
-        {
-            const std::string openingName = wi::helper::GetFileNameFromPath(
-                openingScenePath_);
-            statusLabel_.SetText("OPENING SCENE // " + openingName);
-            studioChrome_.SetStatusText(statusLabel_.GetText());
-            return;
-        }
-        if (!scenes.LastError().empty())
-        {
-            statusLabel_.SetText("SCENE ERROR // " + scenes.LastError());
-            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
-            studioChrome_.SetStatusText(statusLabel_.GetText());
-            return;
-        }
-
-        if (!session_->Documents().LastWarning().empty())
-        {
-            statusLabel_.SetText(
-                "SCENE WARNING // " + session_->Documents().LastWarning());
-            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
-            studioChrome_.SetStatusText(statusLabel_.GetText());
-            return;
-        }
-
-        if (lightPlacementActive_)
-        {
-            statusLabel_.SetText(
-                std::string("PLACE ") +
-                PlacementLightName(lightPlacementType_) +
-                " LIGHT // LEFT CLICK SURFACE // ESC OR RIGHT CLICK CANCEL");
-            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
-            studioChrome_.SetStatusText(statusLabel_.GetText());
-            return;
-        }
-
-        const std::string projectName = session_->Projects().HasProject()
-            ? session_->Projects().CurrentProject().name
-            : "PROVING GROUND";
-        const char* transformTool = gizmo_.isRotator
-            ? "ROTATE"
-            : gizmo_.isScalator
-                ? "SCALE"
-                : "MOVE";
-        statusLabel_.SetText(
-            projectName + " // " +
-            std::to_string(scenes.ListEntities().size()) +
-            " ITEMS // " +
-            transformTool +
-            " // UNDO " +
-            std::to_string(session_->Commands().UndoCount()) +
-            " // REDO " +
-            std::to_string(session_->Commands().RedoCount()));
-        std::string sceneName = projectName;
-        if (!scenes.CurrentPath().empty())
-        {
-            sceneName = wi::helper::RemoveExtension(
-                wi::helper::GetFileNameFromPath(scenes.CurrentPath()));
-        }
-        studioChrome_.SetSceneName(sceneName);
-        studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
-        studioChrome_.SetStatusText(statusLabel_.GetText());
-    }
-
-    void StudioRenderPath::RefreshHierarchy()
-    {
-        hierarchyTree_.ClearItems();
-        std::vector<RenegadeStudioChrome::HierarchyRow> chromeRows;
-        if (session_ == nullptr)
-        {
-            studioChrome_.SetHierarchyRows({});
-            return;
-        }
-
-        const auto selected = session_->Selection().SelectedEntity();
-        const auto weatherEntity = session_->Scenes().WeatherEntity();
-        for (const auto& entity : session_->Scenes().ListEntities())
-        {
-            if (entity.entity == weatherEntity)
-            {
-                continue;
-            }
-            wi::gui::TreeList::Item item;
-            item.name = entity.name;
-            item.level = entity.depth;
-            item.userdata = entity.entity;
-            item.open = true;
-            item.selected = entity.entity == selected;
-            hierarchyTree_.AddItem(item);
-            chromeRows.push_back({
-                entity.name,
-                entity.depth,
-                entity.entity == selected,
-                static_cast<std::uint64_t>(entity.entity),
-                ToHierarchyCategory(entity.category),
-            });
-        }
-        studioChrome_.SetHierarchyRows(std::move(chromeRows));
-    }
-
-    void StudioRenderPath::LayoutInspectorActions(
-        const bool environment,
-        const bool terrain,
-        const bool light)
-    {
-        const float width = inspectorPanel_.GetSize().x;
-        constexpr float gap = 8.0f;
-        const float threeButtonWidth = (width - 40.0f) / 3.0f;
-        const float twoButtonWidth = (width - 32.0f) / 2.0f;
-        const float actionStart = environment
-            ? std::max(1772.0f, inspectorPanel_.GetSize().y - 82.0f)
-            : terrain
-                ? 726.0f
-                : light
-                    ? 726.0f
-                    : 230.0f;
-        const float historyRow = environment
-            ? actionStart
-            : actionStart + 40.0f;
-        const float saveRow = historyRow + 40.0f;
-
-        focusButton_.SetPos(XMFLOAT2(12.0f, actionStart));
-        duplicateButton_.SetPos(XMFLOAT2(
-            12.0f + threeButtonWidth + gap,
-            actionStart));
-        deleteButton_.SetPos(XMFLOAT2(
-            12.0f + (threeButtonWidth + gap) * 2.0f,
-            actionStart));
-        focusButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        duplicateButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        deleteButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-
-        undoButton_.SetPos(XMFLOAT2(12.0f, historyRow));
-        redoButton_.SetPos(XMFLOAT2(
-            20.0f + twoButtonWidth,
-            historyRow));
-        undoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
-        redoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
-
-        saveButton_.SetPos(XMFLOAT2(12.0f, saveRow));
-        saveAsButton_.SetPos(XMFLOAT2(
-            12.0f + threeButtonWidth + gap,
-            saveRow));
-        reopenButton_.SetPos(XMFLOAT2(
-            12.0f + (threeButtonWidth + gap) * 2.0f,
-            saveRow));
-        saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-        reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
-    }
-
-    void StudioRenderPath::RefreshInspector()
-    {
-        const bool hasSession = session_ != nullptr;
-        const auto selectedEntity = hasSession
-            ? session_->Selection().SelectedEntity()
-            : wi::ecs::INVALID_ENTITY;
-        const auto terrainWorkspaceEntity =
-            hasSession && terrainWorkspaceActive_ &&
-            session_->Scenes().GetScene().terrains.GetCount() > 0
-            ? session_->Scenes().GetScene().terrains.GetEntity(0)
-            : wi::ecs::INVALID_ENTITY;
-        const auto entity = environmentWorkspaceActive_
-            ? EditableWeatherEntity()
-            : terrainWorkspaceActive_
-                ? terrainWorkspaceEntity
-                : selectedEntity;
-        auto* transform = hasSession
-            ? session_->Scenes().GetScene().transforms.GetComponent(
-                environmentWorkspaceActive_ || terrainWorkspaceActive_
-                    ? wi::ecs::INVALID_ENTITY
-                    : selectedEntity)
-            : nullptr;
-        auto* weather = hasSession
-            ? session_->Scenes().GetScene().weathers.GetComponent(entity)
-            : nullptr;
-        auto* terrain = hasSession && !environmentWorkspaceActive_
-            ? session_->Scenes().GetScene().terrains.GetComponent(entity)
-            : nullptr;
-        auto* light = hasSession && !environmentWorkspaceActive_ &&
-            !terrainWorkspaceActive_
-            ? session_->Scenes().GetScene().lights.GetComponent(entity)
-            : nullptr;
-        SyncSelectionOutline();
-
-        const bool hasTransform = transform != nullptr;
-        const bool hasWeather = weather != nullptr;
-        const bool hasTerrain = terrain != nullptr;
-        const bool hasLight = light != nullptr;
-        if (hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
-            !environmentWorkspaceActive_ && !terrainWorkspaceActive_)
-        {
-            const auto* selectedName =
-                session_->Scenes().GetScene().names.GetComponent(
-                    selectedEntity);
-            studioChrome_.SetSelectionName(
-                selectedName != nullptr ? selectedName->name : std::string{});
-        }
-        else
-        {
-            studioChrome_.SetSelectionName({});
-        }
-        LayoutInspectorActions(hasWeather, hasTerrain, hasLight);
-        const auto setTransformVisible = [this, hasWeather, hasTerrain](wi::gui::Widget& widget)
-        {
-            widget.SetVisible(!environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !hasWeather && !hasTerrain);
-        };
-        setTransformVisible(positionLabel_);
-        setTransformVisible(rotationLabel_);
-        setTransformVisible(scaleLabel_);
-        setTransformVisible(translationX_);
-        setTransformVisible(translationY_);
-        setTransformVisible(translationZ_);
-        setTransformVisible(rotationX_);
-        setTransformVisible(rotationY_);
-        setTransformVisible(rotationZ_);
-        setTransformVisible(scaleX_);
-        setTransformVisible(scaleY_);
-        setTransformVisible(scaleZ_);
-
-        const auto setLightVisible = [hasLight](wi::gui::Widget& widget)
-        {
-            widget.SetVisible(hasLight);
-        };
-        setLightVisible(lightLabel_);
-        setLightVisible(lightType_);
-        setLightVisible(lightColorRed_);
-        setLightVisible(lightColorGreen_);
-        setLightVisible(lightColorBlue_);
-        setLightVisible(lightIntensity_);
-        setLightVisible(lightRange_);
-        setLightVisible(lightOuterCone_);
-        setLightVisible(lightInnerCone_);
-        setLightVisible(lightRadius_);
-        setLightVisible(lightLength_);
-        setLightVisible(lightHeight_);
-        setLightVisible(lightCastShadow_);
-        setLightVisible(lightVolumetrics_);
-        setLightVisible(lightVolumetricBoost_);
-
-        const auto setEnvironmentVisible =
-            [hasWeather](wi::gui::Widget& widget)
-        {
-            widget.SetVisible(hasWeather);
-        };
-        setEnvironmentVisible(environmentSkyLabel_);
-        setEnvironmentVisible(environmentPreset_);
-        setEnvironmentVisible(skyMode_);
-        setEnvironmentVisible(aerialPerspective_);
-        setEnvironmentVisible(skyExposure_);
-        setEnvironmentVisible(ambientIntensity_);
-        setEnvironmentVisible(environmentFogLabel_);
-        setEnvironmentVisible(fogStart_);
-        setEnvironmentVisible(fogDensity_);
-        setEnvironmentVisible(heightFog_);
-        setEnvironmentVisible(fogHeightStart_);
-        setEnvironmentVisible(fogHeightEnd_);
-        setEnvironmentVisible(environmentCloudLabel_);
-        setEnvironmentVisible(cloudCoverage_);
-        setEnvironmentVisible(cloudStartHeight_);
-        setEnvironmentVisible(cloudThickness_);
-        setEnvironmentVisible(cloudsCastShadow_);
-        setEnvironmentVisible(precipitationLabel_);
-        setEnvironmentVisible(precipitationMode_);
-        setEnvironmentVisible(precipitationIntensity_);
-        setEnvironmentVisible(precipitationFallSpeed_);
-        setEnvironmentVisible(precipitationParticleScale_);
-        setEnvironmentVisible(precipitationWindAzimuth_);
-        setEnvironmentVisible(precipitationWindSpeed_);
-        setEnvironmentVisible(precipitationTurbulence_);
-        setEnvironmentVisible(sunLabel_);
-        setEnvironmentVisible(sunPreset_);
-        setEnvironmentVisible(sunTime_);
-        setEnvironmentVisible(sunAzimuth_);
-        setEnvironmentVisible(sunElevation_);
-        setEnvironmentVisible(sunPreviewSpeed_);
-        setEnvironmentVisible(sunPlayButton_);
-        setEnvironmentVisible(sunPauseButton_);
-        setEnvironmentVisible(oceanLabel_);
-        setEnvironmentVisible(oceanEnabled_);
-        setEnvironmentVisible(oceanPreset_);
-        setEnvironmentVisible(oceanResolution_);
-        setEnvironmentVisible(oceanWaterHeight_);
-        setEnvironmentVisible(oceanPatchLength_);
-        setEnvironmentVisible(oceanWaveAmplitude_);
-        setEnvironmentVisible(oceanChoppyScale_);
-        setEnvironmentVisible(oceanTimeScale_);
-        setEnvironmentVisible(oceanWindAzimuth_);
-        setEnvironmentVisible(oceanWindSpeed_);
-        setEnvironmentVisible(oceanWindDependency_);
-        setEnvironmentVisible(oceanSurfaceDetail_);
-        setEnvironmentVisible(oceanDisplacementTolerance_);
-        setEnvironmentVisible(oceanWaterRed_);
-        setEnvironmentVisible(oceanWaterGreen_);
-        setEnvironmentVisible(oceanWaterBlue_);
-        setEnvironmentVisible(oceanWaterOpacity_);
-        setEnvironmentVisible(oceanExtinctionRed_);
-        setEnvironmentVisible(oceanExtinctionGreen_);
-        setEnvironmentVisible(oceanExtinctionBlue_);
-
-        const auto setTerrainVisible = [this, hasTerrain](wi::gui::Widget& widget)
-        {
-            widget.SetVisible(terrainWorkspaceActive_ && hasTerrain);
-        };
-        terrainLabel_.SetVisible(
-            terrainWorkspaceActive_);
-        createTerrainButton_.SetVisible(
-            hasSession && terrainWorkspaceActive_ && !hasTerrain);
-        setTerrainVisible(terrainVisibleRadius_);
-        setTerrainVisible(terrainChunkScale_);
-        setTerrainVisible(terrainMinimumHeight_);
-        setTerrainVisible(terrainMaximumHeight_);
-        setTerrainVisible(terrainLowAltitudeBlend_);
-        setTerrainVisible(terrainBaseBlend_);
-        setTerrainVisible(terrainSlopeBlend_);
-        setTerrainVisible(terrainLodBias_);
-        setTerrainVisible(terrainMaterialLabel_);
-        setTerrainVisible(terrainMaterialPreset_);
-        setTerrainVisible(terrainTextureScale_);
-        setTerrainVisible(terrainApplyDefaultGrassButton_);
-        setTerrainVisible(terrainReloadMaterialButton_);
-        setTerrainVisible(terrainSculptLabel_);
-        setTerrainVisible(terrainSculptMode_);
-        setTerrainVisible(terrainBrushRadius_);
-        setTerrainVisible(terrainBrushStrength_);
-        setTerrainVisible(terrainBrushFalloff_);
-        setTerrainVisible(terrainBrushReadout_);
-        setTerrainVisible(terrainStrokeDiagnostic_);
-
-        translationX_.SetEnabled(hasTransform);
-        translationY_.SetEnabled(hasTransform);
-        translationZ_.SetEnabled(hasTransform);
-        rotationX_.SetEnabled(hasTransform);
-        rotationY_.SetEnabled(hasTransform);
-        rotationZ_.SetEnabled(hasTransform);
-        scaleX_.SetEnabled(hasTransform);
-        scaleY_.SetEnabled(hasTransform);
-        scaleZ_.SetEnabled(hasTransform);
-        focusButton_.SetEnabled(hasTransform);
-        duplicateButton_.SetEnabled(hasTransform);
-        deleteButton_.SetEnabled(hasTransform);
-        focusButton_.SetVisible(!hasWeather);
-        duplicateButton_.SetVisible(!hasWeather);
-        deleteButton_.SetVisible(!hasWeather);
-        duplicateButton_.SetEnabled(hasTransform && !hasTerrain);
-        undoButton_.SetEnabled(hasSession && session_->Commands().CanUndo());
-        redoButton_.SetEnabled(hasSession && session_->Commands().CanRedo());
-        saveButton_.SetEnabled(
-            hasSession && !session_->Scenes().CurrentPath().empty());
-        saveAsButton_.SetEnabled(hasSession);
-        reopenButton_.SetEnabled(
-            hasSession && !session_->Scenes().CurrentPath().empty());
-
-        if (hasWeather)
-        {
-            const auto* name =
-                session_->Scenes().GetScene().names.GetComponent(entity);
-            inspectorLabel_.SetText(
-                environmentWorkspaceActive_
-                    ? "ENVIRONMENT // SCENE WEATHER"
-                    : "ENVIRONMENT // " +
-                        (name != nullptr && !name->name.empty()
-                            ? name->name
-                            : "ENTITY " + std::to_string(entity)));
-
-            const auto state = bridge::CaptureWeather(*weather);
-            environmentPreset_.SetSelectedWithoutCallback(0);
-            skyMode_.SetSelectedByUserdataWithoutCallback(
-                static_cast<std::uint64_t>(state.skyMode));
-            aerialPerspective_.SetCheck(state.aerialPerspective);
-            skyExposure_.SetValue(state.skyExposure);
-            ambientIntensity_.SetValue(state.ambientIntensity);
-            fogStart_.SetValue(state.fogStart);
-            fogDensity_.SetValue(state.fogDensity);
-            heightFog_.SetCheck(state.heightFog);
-            fogHeightStart_.SetValue(state.fogHeightStart);
-            fogHeightEnd_.SetValue(state.fogHeightEnd);
-            cloudCoverage_.SetValue(state.cloudCoverage);
-            cloudStartHeight_.SetValue(state.cloudStartHeight);
-            cloudThickness_.SetValue(state.cloudThickness);
-            cloudsCastShadow_.SetCheck(state.cloudsCastShadow);
-
-            const auto precipitation =
-                bridge::CapturePrecipitation(*weather);
-            precipitationMode_.SetSelectedByUserdataWithoutCallback(
-                static_cast<std::uint64_t>(precipitation.mode));
-            precipitationIntensity_.SetValue(precipitation.intensity);
-            precipitationFallSpeed_.SetValue(precipitation.fallSpeed);
-            precipitationParticleScale_.SetValue(
-                precipitation.particleScale);
-            precipitationWindAzimuth_.SetValue(
-                precipitation.windAzimuthDegrees);
-            precipitationWindSpeed_.SetValue(precipitation.windSpeed);
-            precipitationTurbulence_.SetValue(precipitation.turbulence);
-
-            const auto sun = bridge::CaptureSun(
-                session_->Scenes().GetScene(),
-                entity);
-            sunPreset_.SetSelectedWithoutCallback(0);
-            sunTime_.SetValue(sun.timeHours);
-            sunAzimuth_.SetValue(sun.azimuthDegrees);
-            sunElevation_.SetValue(sun.elevationDegrees);
-            sunPreviewSpeed_.SetValue(sunPreviewSpeedHoursPerSecond_);
-            sunPlayButton_.SetEnabled(!sunPreviewPlaying_);
-            sunPauseButton_.SetEnabled(sunPreviewPlaying_);
-
-            const auto ocean = bridge::CaptureOcean(*weather);
-            oceanEnabled_.SetCheck(ocean.enabled);
-            oceanPreset_.SetSelectedWithoutCallback(0);
-            oceanResolution_.SetSelectedByUserdataWithoutCallback(
-                static_cast<std::uint64_t>(
-                    ocean.displacementMapDimension));
-            oceanWaterHeight_.SetValue(ocean.waterHeight);
-            oceanPatchLength_.SetValue(ocean.patchLength);
-            oceanWaveAmplitude_.SetValue(ocean.waveAmplitude);
-            oceanChoppyScale_.SetValue(ocean.choppyScale);
-            oceanTimeScale_.SetValue(ocean.timeScale);
-            oceanWindAzimuth_.SetValue(ocean.windAzimuthDegrees);
-            oceanWindSpeed_.SetValue(ocean.windSpeed);
-            oceanWindDependency_.SetValue(ocean.windDependency);
-            oceanSurfaceDetail_.SetValue(
-                static_cast<float>(ocean.surfaceDetail));
-            oceanDisplacementTolerance_.SetValue(
-                ocean.surfaceDisplacementTolerance);
-            oceanWaterRed_.SetValue(ocean.waterColor.x);
-            oceanWaterGreen_.SetValue(ocean.waterColor.y);
-            oceanWaterBlue_.SetValue(ocean.waterColor.z);
-            oceanWaterOpacity_.SetValue(ocean.waterColor.w);
-            oceanExtinctionRed_.SetValue(ocean.extinctionColor.x);
-            oceanExtinctionGreen_.SetValue(ocean.extinctionColor.y);
-            oceanExtinctionBlue_.SetValue(ocean.extinctionColor.z);
-
-            oceanResolution_.SetEnabled(ocean.enabled);
-            oceanWaterHeight_.SetEnabled(ocean.enabled);
-            oceanPatchLength_.SetEnabled(ocean.enabled);
-            oceanWaveAmplitude_.SetEnabled(ocean.enabled);
-            oceanChoppyScale_.SetEnabled(ocean.enabled);
-            oceanTimeScale_.SetEnabled(ocean.enabled);
-            oceanWindAzimuth_.SetEnabled(ocean.enabled);
-            oceanWindSpeed_.SetEnabled(ocean.enabled);
-            oceanWindDependency_.SetEnabled(ocean.enabled);
-            oceanSurfaceDetail_.SetEnabled(ocean.enabled);
-            oceanDisplacementTolerance_.SetEnabled(ocean.enabled);
-            oceanWaterRed_.SetEnabled(ocean.enabled);
-            oceanWaterGreen_.SetEnabled(ocean.enabled);
-            oceanWaterBlue_.SetEnabled(ocean.enabled);
-            oceanWaterOpacity_.SetEnabled(ocean.enabled);
-            oceanExtinctionRed_.SetEnabled(ocean.enabled);
-            oceanExtinctionGreen_.SetEnabled(ocean.enabled);
-            oceanExtinctionBlue_.SetEnabled(ocean.enabled);
-
-            const bool physicalSky =
-                state.skyMode != bridge::WeatherState::SkyMode::Skybox;
-            const bool volumetricClouds =
-                state.skyMode ==
-                bridge::WeatherState::SkyMode::RealisticWithClouds;
-            aerialPerspective_.SetEnabled(physicalSky);
-            cloudCoverage_.SetEnabled(volumetricClouds);
-            cloudStartHeight_.SetEnabled(volumetricClouds);
-            cloudThickness_.SetEnabled(volumetricClouds);
-            cloudsCastShadow_.SetEnabled(volumetricClouds);
-            fogHeightStart_.SetEnabled(state.heightFog);
-            fogHeightEnd_.SetEnabled(state.heightFog);
-            const bool precipitationEnabled = precipitation.mode !=
-                bridge::PrecipitationMode::None;
-            precipitationIntensity_.SetEnabled(precipitationEnabled);
-            precipitationFallSpeed_.SetEnabled(precipitationEnabled);
-            precipitationParticleScale_.SetEnabled(precipitationEnabled);
-            precipitationWindAzimuth_.SetEnabled(precipitationEnabled);
-            precipitationWindSpeed_.SetEnabled(precipitationEnabled);
-            precipitationTurbulence_.SetEnabled(precipitationEnabled);
-            SyncGizmoSelection();
-            return;
-        }
-
-        if (hasTerrain)
-        {
-            const auto* name =
-                session_->Scenes().GetScene().names.GetComponent(entity);
-            inspectorLabel_.SetText(
-                "TERRAIN // " +
-                (name != nullptr && !name->name.empty()
-                    ? name->name
-                    : "ENTITY " + std::to_string(entity)));
-            const auto state = bridge::CaptureTerrain(*terrain);
-            terrainVisibleRadius_.SetValue(
-                static_cast<float>(state.visibleChunkRadius));
-            terrainChunkScale_.SetValue(state.chunkScale);
-            terrainMinimumHeight_.SetValue(state.minimumHeight);
-            terrainMaximumHeight_.SetValue(state.maximumHeight);
-            terrainLowAltitudeBlend_.SetValue(state.lowAltitudeBlend);
-            terrainBaseBlend_.SetValue(state.baseBlend);
-            terrainSlopeBlend_.SetValue(state.slopeBlend);
-            terrainLodBias_.SetValue(state.lodBias);
-            const float textureScale = bridge::CaptureTerrainTextureScale(
-                session_->Scenes().GetScene(),
-                *terrain);
-            terrainTextureScale_.SetValue(textureScale);
-            int materialPreset = 0;
-            for (int presetIndex = 0; presetIndex < 3; ++presetIndex)
-            {
-                const auto preset = static_cast<bridge::TerrainMaterialPreset>(
-                    presetIndex);
-                if (std::abs(
-                        textureScale -
-                        bridge::MakeTerrainMaterialPreset(preset)) < 0.01f)
-                {
-                    materialPreset = presetIndex + 1;
-                    break;
-                }
-            }
-            terrainMaterialPreset_.SetSelectedWithoutCallback(materialPreset);
-            std::ostringstream brush;
-            brush << "BRUSH // SIZE " << std::fixed << std::setprecision(0)
-                  << terrainBrushRadiusValue_ << " // STRENGTH "
-                  << std::setprecision(2) << terrainBrushStrengthValue_;
-            terrainBrushReadout_.SetText(brush.str());
-            SyncGizmoSelection();
-            return;
-        }
-
-        if (hasLight)
-        {
-            const auto* name =
-                session_->Scenes().GetScene().names.GetComponent(entity);
-            inspectorLabel_.SetText(
-                "LIGHT // " +
-                (name != nullptr && !name->name.empty()
-                    ? name->name
-                    : "ENTITY " + std::to_string(entity)));
-            const auto state = bridge::CaptureLight(*light);
-            lightType_.SetSelectedByUserdataWithoutCallback(
-                static_cast<std::uint64_t>(state.type));
-            lightColorRed_.SetValue(state.color.x);
-            lightColorGreen_.SetValue(state.color.y);
-            lightColorBlue_.SetValue(state.color.z);
-            lightIntensity_.SetValue(state.intensity);
-            lightRange_.SetValue(state.range);
-            lightOuterCone_.SetValue(state.outerConeDegrees);
-            lightInnerCone_.SetValue(state.innerConeDegrees);
-            lightRadius_.SetValue(state.radius);
-            lightLength_.SetValue(state.length);
-            lightHeight_.SetValue(state.height);
-            lightCastShadow_.SetCheck(state.castShadow);
-            lightVolumetrics_.SetCheck(state.volumetrics);
-            lightVolumetricBoost_.SetValue(state.volumetricBoost);
-
-            const bool directional = state.type ==
-                wi::scene::LightComponent::DIRECTIONAL;
-            const bool point = state.type ==
-                wi::scene::LightComponent::POINT;
-            const bool spot = state.type ==
-                wi::scene::LightComponent::SPOT;
-            const bool rectangle = state.type ==
-                wi::scene::LightComponent::RECTANGLE;
-            lightRange_.SetEnabled(!directional);
-            lightOuterCone_.SetVisible(spot);
-            lightInnerCone_.SetVisible(spot);
-            lightRadius_.SetVisible(directional || point || spot);
-            lightLength_.SetVisible(point || rectangle);
-            lightHeight_.SetVisible(rectangle);
-            lightVolumetricBoost_.SetEnabled(state.volumetrics);
-        }
-
-        if (!hasTransform)
-        {
-            if (!hasLight)
-            {
-                inspectorLabel_.SetText(terrainWorkspaceActive_
-                    ? "TERRAIN // CREATE OR EDIT LANDSCAPE"
-                    : "TRANSFORM // SELECT AN ENTITY");
-            }
-            translationX_.SetValue(0.0f);
-            translationY_.SetValue(0.0f);
-            translationZ_.SetValue(0.0f);
-            rotationX_.SetValue(0.0f);
-            rotationY_.SetValue(0.0f);
-            rotationZ_.SetValue(0.0f);
-            scaleX_.SetValue(1.0f);
-            scaleY_.SetValue(1.0f);
-            scaleZ_.SetValue(1.0f);
-            return;
-        }
-
-        const auto* name =
-            session_->Scenes().GetScene().names.GetComponent(entity);
-        if (!hasLight)
-        {
-            inspectorLabel_.SetText(
-                "TRANSFORM // " +
-                (name != nullptr && !name->name.empty()
-                    ? name->name
-                    : "ENTITY " + std::to_string(entity)));
-        }
-        translationX_.SetValue(transform->translation_local.x);
-        translationY_.SetValue(transform->translation_local.y);
-        translationZ_.SetValue(transform->translation_local.z);
-        const auto rotation =
-            wi::math::QuaternionToRollPitchYaw(transform->rotation_local);
-        rotationX_.SetValue(rotation.x / XM_PI * 180.0f);
-        rotationY_.SetValue(rotation.y / XM_PI * 180.0f);
-        rotationZ_.SetValue(rotation.z / XM_PI * 180.0f);
-        scaleX_.SetValue(transform->scale_local.x);
-        scaleY_.SetValue(transform->scale_local.y);
-        scaleZ_.SetValue(transform->scale_local.z);
-        SyncGizmoSelection();
-    }
-
-    void StudioRenderPath::HandleEditorShortcuts()
-    {
-        if (projectHubVisible_ ||
-            flyCameraActive_ ||
-            GetGUI().IsTyping() ||
-            pendingAction_ != EditorAction::None ||
-            gizmoDragActive_ ||
-            weatherSliderActive_ ||
-            precipitationSliderActive_ ||
-            sunSliderActive_ ||
-            oceanSliderActive_ ||
-            lightSliderActive_ ||
-            lightPlacementActive_ ||
-            terrainSliderActive_ ||
-            terrainTextureScaleActive_ ||
-            terrainStrokeActive_)
-        {
-            return;
-        }
-
-        const auto key = [](const char value)
-        {
-            return static_cast<wi::input::BUTTON>(value);
-        };
-        const bool control =
-            wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL) ||
-            wi::input::Down(wi::input::KEYBOARD_BUTTON_RCONTROL);
-        const bool shift =
-            wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
-            wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT);
-
-        if (control && wi::input::Press(key('Z')))
-        {
-            pendingAction_ = EditorAction::Undo;
-        }
-        else if (control && wi::input::Press(key('Y')))
-        {
-            pendingAction_ = EditorAction::Redo;
-        }
-        else if (control && wi::input::Press(key('D')))
-        {
-            pendingAction_ = EditorAction::DuplicateSelection;
-        }
-        else if (control && wi::input::Press(key('S')))
-        {
-            pendingAction_ = shift
-                ? EditorAction::SaveSceneAs
-                : EditorAction::SaveScene;
-        }
-        else if (wi::input::Press(wi::input::KEYBOARD_BUTTON_DELETE))
-        {
-            pendingAction_ = EditorAction::DeleteSelection;
-        }
-        else if (wi::input::Press(key('F')))
-        {
-            pendingAction_ = EditorAction::FocusSelection;
-        }
-        else if (wi::input::Press(key('W')))
-        {
-            pendingAction_ = EditorAction::TranslateTool;
-        }
-        else if (wi::input::Press(key('E')))
-        {
-            pendingAction_ = EditorAction::RotateTool;
-        }
-        else if (wi::input::Press(key('R')))
-        {
-            pendingAction_ = EditorAction::ScaleTool;
-        }
-        else if (wi::input::Press(key('G')))
-        {
-            pendingAction_ = EditorAction::ToggleGrid;
-        }
-    }
-
-    bool StudioRenderPath::IsSelectedEntityValid() const
-    {
-        return session_ != nullptr &&
-            session_->Selection().HasSelection() &&
-            session_->Scenes().ContainsEntity(
-                session_->Selection().SelectedEntity());
-    }
-
-    void StudioRenderPath::ProcessPendingAction()
-    {
-        if (session_ == nullptr)
-        {
-            pendingAction_ = EditorAction::None;
-            return;
-        }
-
-        const EditorAction action = pendingAction_;
-        pendingAction_ = EditorAction::None;
-        if (lightPlacementActive_ && action != EditorAction::CreateLight)
-        {
-            CancelLightPlacement();
-        }
-        switch (action)
-        {
-        case EditorAction::Undo:
-        case EditorAction::Redo:
-        {
-            StopSunPreview(true);
-            ClearSelectionOutline();
-            const bool changed = action == EditorAction::Undo
-                ? session_->Commands().Undo()
-                : session_->Commands().Redo();
-            if (changed)
-            {
-                if (session_->Selection().HasSelection() &&
-                    !IsSelectedEntityValid())
-                {
-                    session_->Selection().Clear();
-                }
-                RefreshHierarchy();
-                RefreshInspector();
-                RefreshStatus();
-            }
-            else
-            {
-                SyncSelectionOutline();
-            }
-            break;
-        }
-        case EditorAction::FocusSelection:
-            FocusSelection();
-            break;
-        case EditorAction::DuplicateSelection:
-            DuplicateSelection();
-            break;
-        case EditorAction::DeleteSelection:
-            DeleteSelection();
-            break;
-        case EditorAction::CreateLight:
-            CreateLight(pendingLightType_);
-            break;
-        case EditorAction::OpenScene:
-            OpenScene();
-            break;
-        case EditorAction::SaveScene:
-            SaveScene();
-            break;
-        case EditorAction::SaveSceneAs:
-            SaveSceneAs();
-            break;
-        case EditorAction::ReopenScene:
-            ReopenScene();
-            break;
-        case EditorAction::ProjectHub:
-            ReturnToProjectHub();
-            break;
-        case EditorAction::SelectTool:
-            SetEnvironmentWorkspaceActive(false);
-            SetTerrainWorkspaceActive(false);
-            SetTransformTool(TransformTool::Select);
-            break;
-        case EditorAction::TranslateTool:
-            SetEnvironmentWorkspaceActive(false);
-            SetTerrainWorkspaceActive(false);
-            SetTransformTool(TransformTool::Translate);
-            break;
-        case EditorAction::RotateTool:
-            SetEnvironmentWorkspaceActive(false);
-            SetTerrainWorkspaceActive(false);
-            SetTransformTool(TransformTool::Rotate);
-            break;
-        case EditorAction::ScaleTool:
-            SetEnvironmentWorkspaceActive(false);
-            SetTerrainWorkspaceActive(false);
-            SetTransformTool(TransformTool::Scale);
-            break;
-        case EditorAction::ToggleGrid:
-            SetGridVisible(!gridVisible_);
-            break;
-        case EditorAction::OpenEnvironmentWorkspace:
-            SetEnvironmentWorkspaceActive(true);
-            break;
-        case EditorAction::OpenTerrainWorkspace:
-            SetTerrainWorkspaceActive(true);
-            break;
-        case EditorAction::OpenSceneWorkspace:
-            SetEnvironmentWorkspaceActive(false);
-            SetTerrainWorkspaceActive(false);
-            break;
-        case EditorAction::StartTestLevel:
-            StartTestLevel();
-            break;
-        case EditorAction::StopTestLevel:
-            StopTestLevel();
-            break;
-        case EditorAction::StartSunPreview:
-            StartSunPreview();
-            break;
-        case EditorAction::PauseSunPreview:
-            StopSunPreview(true);
-            break;
-        case EditorAction::SetOceanEnabled:
-            ApplyOceanEnabled(pendingOceanEnabled_);
-            break;
-        case EditorAction::SetOceanResolution:
-            ApplyOceanResolution(pendingOceanResolution_);
-            break;
-        case EditorAction::ApplyOceanPreset:
-            ApplyOceanPreset(pendingOceanPreset_);
-            break;
-        case EditorAction::CreateTerrain:
-            CreateTerrain();
-            break;
-        case EditorAction::ApplyTerrainMaterialPreset:
-            ApplyTerrainMaterialPreset(pendingTerrainMaterialPreset_);
-            break;
-        case EditorAction::ApplyDefaultGrass:
-            ApplyDefaultGrass();
-            break;
-        case EditorAction::ReloadTerrainMaterial:
-            ReloadTerrainMaterial();
-            break;
-        case EditorAction::ValidateModelImport:
-            ValidateModelImport();
-            break;
-        case EditorAction::ImportModel:
-            ImportModel();
-            break;
-        case EditorAction::ApplyImportScale:
-            ApplyImportScaleMode(pendingImportScaleMode_);
-            break;
-        case EditorAction::DismissImportScale:
-            DismissImportScalePanel();
-            break;
-        case EditorAction::None:
-        default:
-            break;
-        }
-    }
-
-    void StudioRenderPath::SetTransformTool(const TransformTool tool)
-    {
-        gizmo_.isTranslator = tool == TransformTool::Translate;
-        gizmo_.isRotator = tool == TransformTool::Rotate;
-        gizmo_.isScalator = tool == TransformTool::Scale;
-
-        translateToolButton_.SetColor(
-            gizmo_.isTranslator ? HologramSelected : HologramIdle,
-            wi::gui::IDLE);
-        rotateToolButton_.SetColor(
-            gizmo_.isRotator ? HologramSelected : HologramIdle,
-            wi::gui::IDLE);
-        scaleToolButton_.SetColor(
-            gizmo_.isScalator ? HologramSelected : HologramIdle,
-            wi::gui::IDLE);
-        studioChrome_.SetActiveTool(
-            tool == TransformTool::Select
-                ? 0
-                : tool == TransformTool::Translate
-                ? 1
-                : tool == TransformTool::Rotate
-                    ? 2
-                    : 3);
-        SyncGizmoSelection();
-        RefreshStatus();
-    }
-
-    wi::ecs::Entity StudioRenderPath::EditableWeatherEntity() const noexcept
-    {
-        if (session_ == nullptr)
-        {
-            return wi::ecs::INVALID_ENTITY;
-        }
-        if (environmentWorkspaceActive_)
-        {
-            return session_->Scenes().WeatherEntity();
-        }
-        const auto selected = session_->Selection().SelectedEntity();
-        return session_->Scenes().GetScene().weathers.Contains(selected)
-            ? selected
-            : wi::ecs::INVALID_ENTITY;
-    }
-
-    void StudioRenderPath::SetEnvironmentWorkspaceActive(const bool active)
-    {
-        if (!active && sunPreviewPlaying_)
-        {
-            StopSunPreview(true);
-        }
-        environmentWorkspaceActive_ = active && session_ != nullptr &&
-            session_->Scenes().WeatherEntity() != wi::ecs::INVALID_ENTITY;
-        if (environmentWorkspaceActive_)
-        {
-            terrainWorkspaceActive_ = false;
-        }
-        studioChrome_.SetEnvironmentWorkspaceActive(
-            environmentWorkspaceActive_);
-        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
-        ClearSelectionOutline();
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::SetTerrainWorkspaceActive(const bool active)
-    {
-        if (sunPreviewPlaying_)
-        {
-            StopSunPreview(true);
-        }
-        terrainWorkspaceActive_ = active && session_ != nullptr;
-        if (terrainWorkspaceActive_)
-        {
-            environmentWorkspaceActive_ = false;
-        }
-        studioChrome_.SetEnvironmentWorkspaceActive(environmentWorkspaceActive_);
-        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
-        if (terrainWorkspaceActive_ &&
-            session_->Scenes().GetScene().terrains.GetCount() > 0)
-        {
-            session_->Selection().Select(
-                session_->Scenes().GetScene().terrains.GetEntity(0));
-        }
-        ClearSelectionOutline();
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::FocusSelection()
-    {
-        if (!IsSelectedEntityValid())
-        {
-            return;
-        }
-
-        const auto entity = session_->Selection().SelectedEntity();
-        auto& scene = session_->Scenes().GetScene();
-        scene.Update(0.0f);
-        const auto* transform = scene.transforms.GetComponent(entity);
-        if (transform == nullptr)
-        {
-            return;
-        }
-
-        XMVECTOR center = transform->GetPositionV();
-        float distance = 5.0f;
-        if (scene.objects.Contains(entity))
-        {
-            const auto index = scene.objects.GetIndex(entity);
-            if (index < scene.aabb_objects.size())
-            {
-                const auto& bounds = scene.aabb_objects[index];
-                const XMFLOAT3 boundsCenter = bounds.getCenter();
-                center = XMLoadFloat3(&boundsCenter);
-                distance = std::max(2.5f, bounds.getRadius() * 2.5f);
-            }
-        }
-
-        const XMVECTOR forward = XMVector3Normalize(camera->GetAt());
-        const XMVECTOR eye = center - forward * distance;
-        const XMMATRIX view = XMMatrixLookAtLH(
-            eye,
-            center,
-            camera->GetUp());
-        editorCameraTransform_.ClearTransform();
-        editorCameraTransform_.MatrixTransform(
-            XMMatrixInverse(nullptr, view));
-        editorCameraTransform_.UpdateTransform();
-        camera->TransformCamera(editorCameraTransform_);
-        camera->UpdateCamera();
-    }
-
-    void StudioRenderPath::DuplicateSelection()
-    {
-        if (!IsSelectedEntityValid())
-        {
-            return;
-        }
-
-        const auto entity = session_->Selection().SelectedEntity();
-        ClearSelectionOutline();
-        auto command = std::make_unique<bridge::DuplicateEntityCommand>(
-            session_->Scenes().GetScene(),
-            entity);
-        auto* duplicateCommand = command.get();
-        if (!session_->Commands().Execute(std::move(command)))
-        {
-            SyncSelectionOutline();
-            return;
-        }
-
-        session_->Selection().Select(
-            duplicateCommand->DuplicatedEntity());
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::DeleteSelection()
-    {
-        if (!IsSelectedEntityValid())
-        {
-            return;
-        }
-
-        const auto entity = session_->Selection().SelectedEntity();
-        ClearSelectionOutline();
-        if (!session_->Commands().Execute(
-                std::make_unique<bridge::DeleteEntityCommand>(
-                    session_->Scenes().GetScene(),
-                    entity)))
-        {
-            SyncSelectionOutline();
-            return;
-        }
-
-        session_->Selection().Clear();
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::CreateLight(
-        const wi::scene::LightComponent::LightType type)
-    {
-        if (session_ == nullptr || camera == nullptr)
-        {
-            return;
-        }
-
-        StopSunPreview(true);
-        SetEnvironmentWorkspaceActive(false);
-        SetTerrainWorkspaceActive(false);
-
-        lightPlacementActive_ = false;
-        if (type != wi::scene::LightComponent::DIRECTIONAL)
-        {
-            lightPlacementType_ = type;
-            lightPlacementActive_ = true;
-            ClearSelectionOutline();
-            RefreshStatus();
-            return;
-        }
-
-        XMFLOAT3 position = camera->Eye;
-        position.x += camera->At.x * 5.0f;
-        position.y += camera->At.y * 5.0f;
-        position.z += camera->At.z * 5.0f;
-
-        PlaceLight(type, position);
-    }
-
-    void StudioRenderPath::PlaceLight(
-        const wi::scene::LightComponent::LightType type,
-        const XMFLOAT3& position,
-        const XMFLOAT4& rotation)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        ClearSelectionOutline();
-        auto command = std::make_unique<bridge::CreateLightCommand>(
-            session_->Scenes().GetScene(),
-            type,
-            position,
-            rotation);
-        auto* createCommand = command.get();
-        if (!session_->Commands().Execute(std::move(command)))
-        {
-            SyncSelectionOutline();
-            return;
-        }
-
-        lightPlacementActive_ = false;
-        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-        session_->Selection().Select(createCommand->CreatedEntity());
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::CancelLightPlacement()
-    {
-        if (!lightPlacementActive_)
-        {
-            return;
-        }
-        lightPlacementActive_ = false;
-        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-        RefreshStatus();
-    }
-
-    bool StudioRenderPath::HandleLightPlacement(const XMFLOAT4& pointer)
-    {
-        if (!lightPlacementActive_ || session_ == nullptr)
-        {
-            return false;
-        }
-
-        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
-            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
-        {
-            CancelLightPlacement();
-            return true;
-        }
-
-        if (flyCameraActive_ || GetGUI().HasFocus() ||
-            !IsPointerOverViewport(pointer))
-        {
-            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-            return false;
-        }
-
-        const auto ray = wi::renderer::GetPickRay(
-            static_cast<long>(pointer.x),
-            static_cast<long>(pointer.y),
-            *this,
-            *camera);
-        const auto picked = wi::scene::Pick(
-            ray,
-            wi::enums::FILTER_OBJECT_ALL,
-            ~0u,
-            session_->Scenes().GetScene());
-        if (picked.entity == wi::ecs::INVALID_ENTITY)
-        {
-            wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
-            return true;
-        }
-
-        wi::input::SetCursor(wi::input::CURSOR_CROSS);
-        wi::renderer::DrawSphere(
-            wi::primitive::Sphere(picked.position, 0.18f),
-            XMFLOAT4(0.20f, 0.92f, 1.0f, 0.90f),
-            false);
-        wi::renderer::RenderableLine normal;
-        normal.start = picked.position;
-        XMStoreFloat3(
-            &normal.end,
-            XMLoadFloat3(&picked.position) +
-                XMLoadFloat3(&picked.normal) * 0.8f);
-        normal.color_start = XMFLOAT4(0.20f, 0.92f, 1.0f, 0.95f);
-        normal.color_end = XMFLOAT4(1.0f, 0.55f, 0.15f, 0.95f);
-        wi::renderer::DrawLine(normal, false);
-
-        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
-        {
-            return true;
-        }
-
-        XMFLOAT4 rotation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-        if (lightPlacementType_ == wi::scene::LightComponent::SPOT)
-        {
-            rotation = RotationFromTo(XMFLOAT3(0, 1, 0), picked.normal);
-        }
-        else if (lightPlacementType_ == wi::scene::LightComponent::RECTANGLE)
-        {
-            rotation = RotationFromTo(XMFLOAT3(0, 0, -1), picked.normal);
-        }
-        PlaceLight(lightPlacementType_, picked.position, rotation);
-        return true;
-    }
-
-    bool StudioRenderPath::ProjectEditorPoint(
-        const XMFLOAT3& world,
-        XMFLOAT2& screen) const noexcept
-    {
-        if (camera == nullptr)
-        {
-            return false;
-        }
-        const XMVECTOR clip = XMVector4Transform(
-            XMVectorSet(world.x, world.y, world.z, 1.0f),
-            camera->GetViewProjection());
-        const float w = XMVectorGetW(clip);
-        if (w <= 0.001f)
-        {
-            return false;
-        }
-        const XMVECTOR ndc = clip / w;
-        const float z = XMVectorGetZ(ndc);
-        if (z < 0.0f || z > 1.0f)
-        {
-            return false;
-        }
-        screen.x = (XMVectorGetX(ndc) * 0.5f + 0.5f) * GetLogicalWidth();
-        screen.y = (-XMVectorGetY(ndc) * 0.5f + 0.5f) * GetLogicalHeight();
-        return IsPointerOverViewport(XMFLOAT4(screen.x, screen.y, 0, 0));
-    }
-
-    bool StudioRenderPath::HandleLightSceneIcons(
-        const XMFLOAT4& pointer)
-    {
-        if (session_ == nullptr || camera == nullptr || projectHubVisible_)
-        {
-            return false;
-        }
-
-        auto& scene = session_->Scenes().GetScene();
-        const auto selected = session_->Selection().SelectedEntity();
-        wi::ecs::Entity hit = wi::ecs::INVALID_ENTITY;
-        float bestDistanceSquared = 22.0f * 22.0f;
-        const bool canSelect = !lightPlacementActive_ &&
-            !flyCameraActive_ && !GetGUI().HasFocus() &&
-            !gizmo_.IsInteracting() &&
-            IsPointerOverViewport(pointer) &&
-            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
-
-        for (std::size_t index = 0; index < scene.lights.GetCount(); ++index)
-        {
-            const auto entity = scene.lights.GetEntity(index);
-            const auto& light = scene.lights[index];
-            if (!session_->Scenes().IsHierarchyVisible(entity))
-            {
-                continue;
-            }
-            const auto* transform = scene.transforms.GetComponent(entity);
-            if (transform == nullptr)
-            {
-                continue;
-            }
-
-            const XMFLOAT3 position = transform->GetPosition();
-            XMFLOAT2 center;
-            if (!ProjectEditorPoint(position, center))
-            {
-                continue;
-            }
-            const float dx = pointer.x - center.x;
-            const float dy = pointer.y - center.y;
-            const float distanceSquared = dx * dx + dy * dy;
-            const bool hovered = distanceSquared <= 22.0f * 22.0f;
-            const XMFLOAT4 color = entity == selected
-                ? XMFLOAT4(1.0f, 0.55f, 0.15f, 1.0f)
-                : hovered
-                    ? XMFLOAT4(0.58f, 0.95f, 1.0f, 1.0f)
-                    : XMFLOAT4(0.20f, 0.84f, 1.0f, 0.92f);
-
-            const auto drawCircle = [&](const float radius)
-            {
-                constexpr int Segments = 16;
-                for (int segment = 0; segment < Segments; ++segment)
-                {
-                    const float angle0 = static_cast<float>(segment) /
-                        static_cast<float>(Segments) * XM_2PI;
-                    const float angle1 = static_cast<float>(segment + 1) /
-                        static_cast<float>(Segments) * XM_2PI;
-                    DrawEditorLine(
-                        XMFLOAT2(center.x + std::cos(angle0) * radius,
-                            center.y + std::sin(angle0) * radius),
-                        XMFLOAT2(center.x + std::cos(angle1) * radius,
-                            center.y + std::sin(angle1) * radius),
-                        color);
-                }
-            };
-
-            XMFLOAT3 directionTarget = position;
-            directionTarget.x += light.direction.x;
-            directionTarget.y += light.direction.y;
-            directionTarget.z += light.direction.z;
-            XMFLOAT2 projectedDirection;
-            XMFLOAT2 arrow = XMFLOAT2(0.0f, 1.0f);
-            if (ProjectEditorPoint(directionTarget, projectedDirection))
-            {
-                arrow = XMFLOAT2(
-                    projectedDirection.x - center.x,
-                    projectedDirection.y - center.y);
-                const float length = std::sqrt(
-                    arrow.x * arrow.x + arrow.y * arrow.y);
-                if (length > 0.001f)
-                {
-                    arrow.x /= length;
-                    arrow.y /= length;
-                }
-            }
-            const XMFLOAT2 perpendicular = XMFLOAT2(-arrow.y, arrow.x);
-
-            switch (light.GetType())
-            {
-            case wi::scene::LightComponent::POINT:
-                drawCircle(7.0f);
-                for (int rayIndex = 0; rayIndex < 4; ++rayIndex)
-                {
-                    const float angle =
-                        static_cast<float>(rayIndex) * XM_PIDIV2;
-                    DrawEditorLine(
-                        XMFLOAT2(center.x + std::cos(angle) * 10.0f,
-                            center.y + std::sin(angle) * 10.0f),
-                        XMFLOAT2(center.x + std::cos(angle) * 15.0f,
-                            center.y + std::sin(angle) * 15.0f),
-                        color);
-                }
-                break;
-            case wi::scene::LightComponent::SPOT:
-            {
-                const XMFLOAT2 tip = XMFLOAT2(
-                    center.x + arrow.x * 15.0f,
-                    center.y + arrow.y * 15.0f);
-                const XMFLOAT2 baseLeft = XMFLOAT2(
-                    center.x - arrow.x * 7.0f + perpendicular.x * 8.0f,
-                    center.y - arrow.y * 7.0f + perpendicular.y * 8.0f);
-                const XMFLOAT2 baseRight = XMFLOAT2(
-                    center.x - arrow.x * 7.0f - perpendicular.x * 8.0f,
-                    center.y - arrow.y * 7.0f - perpendicular.y * 8.0f);
-                DrawEditorLine(baseLeft, baseRight, color);
-                DrawEditorLine(baseLeft, tip, color);
-                DrawEditorLine(baseRight, tip, color);
-                DrawEditorLine(center, tip, color);
-                break;
-            }
-            case wi::scene::LightComponent::RECTANGLE:
-            {
-                constexpr float HalfWidth = 10.0f;
-                constexpr float HalfHeight = 7.0f;
-                const XMFLOAT2 topLeft(
-                    center.x - HalfWidth,
-                    center.y - HalfHeight);
-                const XMFLOAT2 topRight(
-                    center.x + HalfWidth,
-                    center.y - HalfHeight);
-                const XMFLOAT2 bottomLeft(
-                    center.x - HalfWidth,
-                    center.y + HalfHeight);
-                const XMFLOAT2 bottomRight(
-                    center.x + HalfWidth,
-                    center.y + HalfHeight);
-                DrawEditorLine(topLeft, topRight, color);
-                DrawEditorLine(topRight, bottomRight, color);
-                DrawEditorLine(bottomRight, bottomLeft, color);
-                DrawEditorLine(bottomLeft, topLeft, color);
-                DrawEditorLine(topLeft, bottomRight, color);
-                DrawEditorLine(topRight, bottomLeft, color);
-                break;
-            }
-            case wi::scene::LightComponent::DIRECTIONAL:
-            default:
-                drawCircle(8.0f);
-                for (int rayIndex = 0; rayIndex < 8; ++rayIndex)
-                {
-                    const float angle =
-                        static_cast<float>(rayIndex) / 8.0f * XM_2PI;
-                    DrawEditorLine(
-                        XMFLOAT2(center.x + std::cos(angle) * 11.0f,
-                            center.y + std::sin(angle) * 11.0f),
-                        XMFLOAT2(center.x + std::cos(angle) * 16.0f,
-                            center.y + std::sin(angle) * 16.0f),
-                        color);
-                }
-                break;
-            }
-
-            if (light.GetType() != wi::scene::LightComponent::POINT)
-            {
-                const XMFLOAT2 arrowEnd = XMFLOAT2(
-                    center.x + arrow.x * 22.0f,
-                    center.y + arrow.y * 22.0f);
-                DrawEditorLine(center, arrowEnd, color);
-                DrawEditorLine(
-                    arrowEnd,
-                    XMFLOAT2(
-                        arrowEnd.x - arrow.x * 6.0f + perpendicular.x * 4.0f,
-                        arrowEnd.y - arrow.y * 6.0f + perpendicular.y * 4.0f),
-                    color);
-                DrawEditorLine(
-                    arrowEnd,
-                    XMFLOAT2(
-                        arrowEnd.x - arrow.x * 6.0f - perpendicular.x * 4.0f,
-                        arrowEnd.y - arrow.y * 6.0f - perpendicular.y * 4.0f),
-                    color);
-            }
-
-            if (canSelect && hovered && distanceSquared < bestDistanceSquared)
-            {
-                bestDistanceSquared = distanceSquared;
-                hit = entity;
-            }
-        }
-
-        if (hit == wi::ecs::INVALID_ENTITY)
-        {
-            return false;
-        }
-        SetEnvironmentWorkspaceActive(false);
-        SetTerrainWorkspaceActive(false);
-        session_->Selection().Select(hit);
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-        return true;
-    }
-
-    bool StudioRenderPath::IsPointerOverViewport(
-        const XMFLOAT4& pointer) const noexcept
-    {
-        return pointer.x >= viewportBounds_.x &&
-            pointer.x < viewportBounds_.z &&
-            pointer.y >= viewportBounds_.y &&
-            pointer.y < viewportBounds_.w;
-    }
-
-    void StudioRenderPath::HandleViewportNavigation(
-        const float dt,
-        const XMFLOAT4& pointer)
-    {
-        const bool pointerOverViewport = IsPointerOverViewport(pointer);
-        if (!flyCameraActive_ &&
-            pointerOverViewport &&
-            !GetGUI().HasFocus() &&
-            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
-        {
-            flyCameraActive_ = true;
-            cameraPointerAnchor_ = pointer;
-        }
-
-        if (flyCameraActive_ &&
-            !wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT))
-        {
-            flyCameraActive_ = false;
-            wi::input::HidePointer(false);
-            return;
-        }
-
-        if (pointerOverViewport && !GetGUI().HasFocus())
-        {
-            if (pointer.z > 0.1f)
-            {
-                cameraMoveSpeed_ = std::min(
-                    100.0f,
-                    cameraMoveSpeed_ * 1.25f);
-            }
-            else if (pointer.z < -0.1f)
-            {
-                cameraMoveSpeed_ = std::max(
-                    0.1f,
-                    cameraMoveSpeed_ / 1.25f);
-            }
-        }
-
-        if (!flyCameraActive_)
-        {
-            return;
-        }
-
-        const auto& mouse = wi::input::GetMouseState();
-        constexpr float lookSensitivity = 0.0017f;
-        const float yaw = mouse.delta_position.x * lookSensitivity;
-        const float pitch = mouse.delta_position.y * lookSensitivity;
-
-        XMVECTOR movement = XMVectorZero();
-        const auto key = [](const char value)
-        {
-            return static_cast<wi::input::BUTTON>(value);
-        };
-        if (wi::input::Down(key('W')))
-        {
-            movement += XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-        }
-        if (wi::input::Down(key('S')))
-        {
-            movement += XMVectorSet(0.0f, 0.0f, -1.0f, 0.0f);
-        }
-        if (wi::input::Down(key('A')))
-        {
-            movement += XMVectorSet(-1.0f, 0.0f, 0.0f, 0.0f);
-        }
-        if (wi::input::Down(key('D')))
-        {
-            movement += XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
-        }
-        if (wi::input::Down(key('Q')))
-        {
-            movement += XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f);
-        }
-        if (wi::input::Down(key('E')))
-        {
-            movement += XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-        }
-
-        const float movementLength =
-            XMVectorGetX(XMVector3LengthSq(movement));
-        if (movementLength > 0.0f)
-        {
-            movement = XMVector3Normalize(movement);
-            const float speedMultiplier =
-                wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT)
-                ? 4.0f
-                : 1.0f;
-            movement *=
-                cameraMoveSpeed_ *
-                speedMultiplier *
-                std::min(dt, 0.1f);
-            const XMMATRIX cameraRotation = XMMatrixRotationQuaternion(
-                XMLoadFloat4(&editorCameraTransform_.rotation_local));
-            editorCameraTransform_.Translate(
-                XMVector3TransformNormal(movement, cameraRotation));
-        }
-
-        if (yaw != 0.0f || pitch != 0.0f)
-        {
-            editorCameraTransform_.RotateRollPitchYaw(
-                XMFLOAT3(pitch, yaw, 0.0f));
-        }
-
-        if (movementLength > 0.0f || yaw != 0.0f || pitch != 0.0f)
-        {
-            editorCameraTransform_.UpdateTransform();
-            camera->TransformCamera(editorCameraTransform_);
-            camera->UpdateCamera();
-        }
-
-        wi::input::SetPointer(cameraPointerAnchor_);
-        wi::input::HidePointer(true);
-    }
-
-    bool StudioRenderPath::HandleTerrainSculpt(const XMFLOAT4& pointer)
-    {
-        if (!terrainWorkspaceActive_ || session_ == nullptr || flyCameraActive_ ||
-            GetGUI().HasFocus() || !IsPointerOverViewport(pointer) ||
-            session_->Scenes().GetScene().terrains.GetCount() == 0)
-        {
-            return false;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        const auto terrainEntity = scene.terrains.GetEntity(0);
-        auto* terrain = scene.terrains.GetComponent(terrainEntity);
-        if (terrain == nullptr) return false;
-        const auto ray = wi::renderer::GetPickRay(static_cast<long>(pointer.x),
-            static_cast<long>(pointer.y), *this, *camera);
-        const auto picked = wi::scene::Pick(ray, wi::enums::FILTER_TERRAIN, ~0u, scene);
-        if (picked.entity != wi::ecs::INVALID_ENTITY)
-        {
-            wi::renderer::DrawSphere(wi::primitive::Sphere(picked.position,
-                terrainBrushRadiusValue_), XMFLOAT4(0.20f, 0.92f, 1.0f, 0.22f), true);
-        }
-        if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) &&
-            picked.entity != wi::ecs::INVALID_ENTITY)
-        {
-            terrainStrokeActive_ = true;
-            terrainStrokeChanged_ = false;
-            terrainStrokeEntity_ = terrainEntity;
-            terrainStrokeBefore_ = bridge::CaptureTerrainSculpt(scene, *terrain);
-            terrainFlattenHeight_ = picked.position.y;
-        }
-        if (terrainStrokeActive_ && wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) &&
-            picked.entity != wi::ecs::INVALID_ENTITY)
-        {
-            terrainStrokeChanged_ |= bridge::SculptTerrain(scene, *terrain,
-                picked.position, terrainBrushRadiusValue_,
-                terrainBrushStrengthValue_ * 0.12f, terrainBrushFalloffValue_,
-                terrainSculptModeValue_, terrainFlattenHeight_);
-            return true;
-        }
-        if (terrainStrokeActive_ && wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
-        {
-            terrainStrokeActive_ = false;
-            if (terrainStrokeChanged_)
-            {
-                const auto finishStarted =
-                    std::chrono::steady_clock::now();
-                auto after = bridge::CaptureTerrainSculpt(scene, *terrain);
-                const std::size_t affectedChunks =
-                    bridge::RetainChangedTerrainSculpt(
-                        terrainStrokeBefore_,
-                        after);
-                if (affectedChunks > 0)
-                {
-                    bridge::RefreshTerrainSculptPhysics(
-                        scene,
-                        *terrain,
-                        after);
-                    session_->Commands().RecordExecuted(
-                        std::make_unique<bridge::SculptTerrainCommand>(
-                            scene,
-                            terrainStrokeEntity_,
-                            std::move(terrainStrokeBefore_),
-                            std::move(after)));
-                }
-                const auto elapsed = std::chrono::duration_cast<
-                    std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - finishStarted);
-                terrainStrokeDiagnostic_.SetText(
-                    "LAST STROKE // " +
-                    std::to_string(affectedChunks) +
-                    " TILES // " +
-                    std::to_string(elapsed.count()) +
-                    " MS");
-                RefreshStatus();
-            }
-            return true;
-        }
-        return false;
-    }
-
-    bool StudioRenderPath::HandleViewportSelection(
-        const XMFLOAT4& pointer)
-    {
-        if (session_ == nullptr ||
-            flyCameraActive_ ||
-            GetGUI().HasFocus() ||
-            !IsPointerOverViewport(pointer) ||
-            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) ||
-            gizmo_.IsInteracting())
-        {
-            return false;
-        }
-
-        const auto pickRay = wi::renderer::GetPickRay(
-            static_cast<long>(pointer.x),
-            static_cast<long>(pointer.y),
-            *this,
-            *camera);
-        const auto picked = wi::scene::Pick(
-            pickRay,
-            wi::enums::FILTER_OBJECT_ALL,
-            ~0u,
-            session_->Scenes().GetScene());
-        const auto current = session_->Selection().SelectedEntity();
-        if (picked.entity == current && !environmentWorkspaceActive_)
-        {
-            return false;
-        }
-
-        environmentWorkspaceActive_ = false;
-        studioChrome_.SetEnvironmentWorkspaceActive(false);
-        terrainWorkspaceActive_ = false;
-        studioChrome_.SetTerrainWorkspaceActive(false);
-
-        if (picked.entity == wi::ecs::INVALID_ENTITY ||
-            !session_->Scenes().IsHierarchyVisible(picked.entity))
-        {
-            session_->Selection().Clear();
-        }
-        else
-        {
-            session_->Selection().Select(picked.entity);
-        }
-
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-        return true;
-    }
-
-    void StudioRenderPath::RefreshProjectHub()
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        const auto& projects = session_->Projects().RecentProjects();
-        for (std::size_t index = 0; index < recentProjectButtons_.size(); ++index)
-        {
-            auto& button = recentProjectButtons_[index];
-            const bool hasProject = index < projects.size();
-            button.SetVisible(hasProject);
-            if (!hasProject)
-            {
-                continue;
-            }
-
-            button.SetText(
-                projects[index].name + "\n" +
-                projects[index].descriptorPath);
-            button.SetColor(
-                static_cast<int>(index) == selectedRecentProject_
-                    ? HologramSelected
-                    : HologramIdle,
-                wi::gui::IDLE);
-        }
-
-        if (selectedRecentProject_ < 0 ||
-            static_cast<std::size_t>(selectedRecentProject_) >= projects.size())
-        {
-            selectedRecentProject_ = -1;
-            selectedProjectLabel_.SetText(
-                projects.empty()
-                    ? "NO RECENT PROJECTS\n\nCreate a project to initialise "
-                      "the Renegade workspace."
-                    : "SELECT A PROJECT CARD\n\nThe selected project details "
-                      "and launch control appear here.");
-        }
-        else
-        {
-            const auto& selected =
-                projects[static_cast<std::size_t>(selectedRecentProject_)];
-            selectedProjectLabel_.SetText(
-                selected.name + "\n\n" +
-                selected.descriptorPath +
-                "\n\nFORMAT // RENEGADE PROJECT V1");
-        }
-
-        launchProjectButton_.SetEnabled(selectedRecentProject_ >= 0);
-        continueProjectButton_.SetVisible(session_->Projects().HasProject());
-        if (session_->Projects().HasProject())
-        {
-            continueProjectButton_.SetText(
-                "RETURN TO " +
-                session_->Projects().CurrentProject().name);
-        }
-    }
-
-    void StudioRenderPath::ApplySelectedTransformValue(
-        const TransformTool tool,
-        const int axis,
-        const float value)
-    {
-        if (environmentWorkspaceActive_ || session_ == nullptr ||
-            !session_->Selection().HasSelection())
-        {
-            return;
-        }
-
-        const auto entity = session_->Selection().SelectedEntity();
-        auto* transform =
-            session_->Scenes().GetScene().transforms.GetComponent(entity);
-        if (transform == nullptr)
-        {
-            return;
-        }
-
-        auto next = bridge::CaptureTransform(*transform);
-        if (tool == TransformTool::Translate)
-        {
-            if (axis == 0)
-            {
-                next.translation.x = value;
-            }
-            else if (axis == 1)
-            {
-                next.translation.y = value;
-            }
-            else
-            {
-                next.translation.z = value;
-            }
-        }
-        else if (tool == TransformTool::Rotate)
-        {
-            auto rotation =
-                wi::math::QuaternionToRollPitchYaw(transform->rotation_local);
-            const float radians = value / 180.0f * XM_PI;
-            if (axis == 0)
-            {
-                rotation.x = radians;
-            }
-            else if (axis == 1)
-            {
-                rotation.y = radians;
-            }
-            else
-            {
-                rotation.z = radians;
-            }
-            XMStoreFloat4(
-                &next.rotation,
-                XMQuaternionNormalize(
-                    XMQuaternionRotationRollPitchYaw(
-                        rotation.x,
-                        rotation.y,
-                        rotation.z)));
-        }
-        else
-        {
-            if (axis == 0)
-            {
-                next.scale.x = value;
-            }
-            else if (axis == 1)
-            {
-                next.scale.y = value;
-            }
-            else
-            {
-                next.scale.z = value;
-            }
-        }
-
-        session_->Commands().Execute(
-            std::make_unique<bridge::SetTransformCommand>(
-                session_->Scenes().GetScene(),
-                entity,
-                next));
-        SetTransformTool(tool);
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    bool StudioRenderPath::CommitSelectedWeather(
-        const bridge::WeatherState& weather)
-    {
-        if (session_ == nullptr)
-        {
-            return false;
-        }
-
-        const auto entity = EditableWeatherEntity();
-        if (entity == wi::ecs::INVALID_ENTITY)
-        {
-            return false;
-        }
-        const bool changed = session_->Commands().Execute(
-            std::make_unique<bridge::SetWeatherCommand>(
-                session_->Scenes().GetScene(),
-                entity,
-                weather));
-        RefreshInspector();
-        RefreshStatus();
-        return changed;
-    }
-
-    void StudioRenderPath::SetWeatherFieldValue(
-        bridge::WeatherState& weather,
-        const WeatherField field,
-        const float value) noexcept
-    {
-        switch (field)
-        {
-        case WeatherField::SkyExposure:
-            weather.skyExposure = std::clamp(value, 0.0f, 8.0f);
-            break;
-        case WeatherField::AmbientIntensity:
-            weather.ambientIntensity = std::clamp(value, 0.0f, 8.0f);
-            break;
-        case WeatherField::FogStart:
-            weather.fogStart = std::clamp(value, 0.0f, 100000.0f);
-            break;
-        case WeatherField::FogDensity:
-            weather.fogDensity = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case WeatherField::FogHeightStart:
-            weather.fogHeightStart =
-                std::clamp(value, -100000.0f, 100000.0f);
-            break;
-        case WeatherField::FogHeightEnd:
-            weather.fogHeightEnd =
-                std::clamp(value, -100000.0f, 100000.0f);
-            break;
-        case WeatherField::CloudCoverage:
-            weather.cloudCoverage = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case WeatherField::CloudStartHeight:
-            weather.cloudStartHeight =
-                std::clamp(value, 0.0f, 50000.0f);
-            break;
-        case WeatherField::CloudThickness:
-            weather.cloudThickness =
-                std::clamp(value, 1.0f, 50000.0f);
-            break;
-        }
-    }
-
-    void StudioRenderPath::BeginWeatherSlider(const WeatherField field)
-    {
-        weatherSliderActive_ = false;
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        const auto* component =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (component == nullptr)
-        {
-            return;
-        }
-        weatherSliderActive_ = true;
-        weatherSliderField_ = field;
-        weatherSliderEntity_ = entity;
-        weatherSliderBefore_ = bridge::CaptureWeather(*component);
-        weatherSliderAfter_ = weatherSliderBefore_;
-    }
-
-    void StudioRenderPath::PreviewWeatherSlider(
-        const WeatherField field,
-        const float value)
-    {
-        if (!weatherSliderActive_ || weatherSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        auto* component = scene.weathers.GetComponent(weatherSliderEntity_);
-        if (component == nullptr)
-        {
-            weatherSliderActive_ = false;
-            return;
-        }
-        weatherSliderAfter_ = weatherSliderBefore_;
-        SetWeatherFieldValue(weatherSliderAfter_, field, value);
-        bridge::ApplyWeather(*component, weatherSliderAfter_);
-        if (scene.weathers.GetCount() > 0 &&
-            scene.weathers.GetEntity(0) == weatherSliderEntity_)
-        {
-            scene.weather = *component;
-        }
-    }
-
-    void StudioRenderPath::CommitWeatherSlider(
-        const WeatherField field,
-        const float value)
-    {
-        if (!weatherSliderActive_ || weatherSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        auto* component = scene.weathers.GetComponent(weatherSliderEntity_);
-        if (component == nullptr)
-        {
-            weatherSliderActive_ = false;
-            return;
-        }
-
-        SetWeatherFieldValue(weatherSliderAfter_, field, value);
-        bridge::ApplyWeather(*component, weatherSliderBefore_);
-        if (scene.weathers.GetCount() > 0 &&
-            scene.weathers.GetEntity(0) == weatherSliderEntity_)
-        {
-            scene.weather = *component;
-        }
-        session_->Commands().Execute(
-            std::make_unique<bridge::SetWeatherCommand>(
-                scene,
-                weatherSliderEntity_,
-                weatherSliderBefore_,
-                weatherSliderAfter_));
-        weatherSliderActive_ = false;
-        weatherSliderEntity_ = wi::ecs::INVALID_ENTITY;
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::ApplySelectedWeatherToggle(
-        const WeatherToggle toggle,
-        const bool value)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        const auto entity = EditableWeatherEntity();
-        const auto* component =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (component == nullptr)
-        {
-            return;
-        }
-
-        auto next = bridge::CaptureWeather(*component);
-        switch (toggle)
-        {
-        case WeatherToggle::AerialPerspective:
-            next.aerialPerspective = value;
-            break;
-        case WeatherToggle::HeightFog:
-            next.heightFog = value;
-            break;
-        case WeatherToggle::CloudsCastShadow:
-            next.cloudsCastShadow = value;
-            break;
-        }
-        CommitSelectedWeather(next);
-    }
-
-    void StudioRenderPath::ApplySelectedSkyMode(
-        const bridge::WeatherState::SkyMode mode)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        const auto entity = EditableWeatherEntity();
-        const auto* component =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (component == nullptr)
-        {
-            return;
-        }
-
-        auto next = bridge::CaptureWeather(*component);
-        next.skyMode = mode;
-        CommitSelectedWeather(next);
-    }
-
-    void StudioRenderPath::ApplyWeatherPreset(const int preset)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        const auto entity = EditableWeatherEntity();
-        const auto* component =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (component == nullptr)
-        {
-            return;
-        }
-
-        const auto current = bridge::CaptureWeather(*component);
-        bridge::WeatherPreset selectedPreset;
-        switch (preset)
-        {
-        case 1:
-            selectedPreset = bridge::WeatherPreset::Clear;
-            break;
-        case 2:
-            selectedPreset = bridge::WeatherPreset::Scattered;
-            break;
-        case 3:
-            selectedPreset = bridge::WeatherPreset::Overcast;
-            break;
-        case 4:
-            selectedPreset = bridge::WeatherPreset::Storm;
-            break;
-        default:
-            return;
-        }
-        CommitSelectedWeather(
-            bridge::MakeWeatherPreset(current, selectedPreset));
-    }
-
-    bool StudioRenderPath::CommitPrecipitation(
-        const bridge::PrecipitationState& precipitation)
-    {
-        if (session_ == nullptr)
-        {
-            return false;
-        }
-        const auto entity = EditableWeatherEntity();
-        if (entity == wi::ecs::INVALID_ENTITY)
-        {
-            return false;
-        }
-        const bool changed = session_->Commands().Execute(
-            std::make_unique<bridge::SetPrecipitationCommand>(
-                session_->Scenes().GetScene(),
-                entity,
-                precipitation));
-        RefreshInspector();
-        RefreshStatus();
-        return changed;
-    }
-
-    void StudioRenderPath::ApplyPrecipitationMode(
-        const bridge::PrecipitationMode mode)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        const auto* component =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (component == nullptr)
-        {
-            return;
-        }
-        CommitPrecipitation(bridge::MakePrecipitationProfile(
-            bridge::CapturePrecipitation(*component),
-            mode));
-    }
-
-    void StudioRenderPath::SetPrecipitationFieldValue(
-        bridge::PrecipitationState& precipitation,
-        const PrecipitationField field,
-        const float value) noexcept
-    {
-        switch (field)
-        {
-        case PrecipitationField::Intensity:
-            precipitation.intensity = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case PrecipitationField::FallSpeed:
-            precipitation.fallSpeed = std::clamp(value, 0.01f, 2.0f);
-            break;
-        case PrecipitationField::ParticleScale:
-            precipitation.particleScale =
-                std::clamp(value, 0.005f, 0.1f);
-            break;
-        case PrecipitationField::WindAzimuth:
-            precipitation.windAzimuthDegrees =
-                std::clamp(value, -180.0f, 180.0f);
-            break;
-        case PrecipitationField::WindSpeed:
-            precipitation.windSpeed = std::clamp(value, 0.0f, 50.0f);
-            break;
-        case PrecipitationField::Turbulence:
-            precipitation.turbulence = std::clamp(value, 0.0f, 20.0f);
-            break;
-        }
-    }
-
-    void StudioRenderPath::BeginPrecipitationSlider(
-        const PrecipitationField field)
-    {
-        precipitationSliderActive_ = false;
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        const auto* component =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (component == nullptr)
-        {
-            return;
-        }
-        precipitationSliderActive_ = true;
-        precipitationSliderField_ = field;
-        precipitationSliderEntity_ = entity;
-        precipitationSliderBefore_ =
-            bridge::CapturePrecipitation(*component);
-        precipitationSliderAfter_ = precipitationSliderBefore_;
-    }
-
-    void StudioRenderPath::PreviewPrecipitationSlider(
-        const PrecipitationField field,
-        const float value)
-    {
-        if (!precipitationSliderActive_ ||
-            precipitationSliderField_ != field || session_ == nullptr)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        auto* component =
-            scene.weathers.GetComponent(precipitationSliderEntity_);
-        if (component == nullptr)
-        {
-            precipitationSliderActive_ = false;
-            return;
-        }
-        precipitationSliderAfter_ = precipitationSliderBefore_;
-        SetPrecipitationFieldValue(precipitationSliderAfter_, field, value);
-        bridge::ApplyPrecipitation(*component, precipitationSliderAfter_);
-        if (scene.weathers.GetCount() > 0 &&
-            scene.weathers.GetEntity(0) == precipitationSliderEntity_)
-        {
-            scene.weather = *component;
-        }
-    }
-
-    void StudioRenderPath::CommitPrecipitationSlider(
-        const PrecipitationField field,
-        const float value)
-    {
-        if (!precipitationSliderActive_ ||
-            precipitationSliderField_ != field || session_ == nullptr)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        auto* component =
-            scene.weathers.GetComponent(precipitationSliderEntity_);
-        if (component == nullptr)
-        {
-            precipitationSliderActive_ = false;
-            return;
-        }
-        SetPrecipitationFieldValue(precipitationSliderAfter_, field, value);
-        bridge::ApplyPrecipitation(*component, precipitationSliderBefore_);
-        if (scene.weathers.GetCount() > 0 &&
-            scene.weathers.GetEntity(0) == precipitationSliderEntity_)
-        {
-            scene.weather = *component;
-        }
-        session_->Commands().Execute(
-            std::make_unique<bridge::SetPrecipitationCommand>(
-                scene,
-                precipitationSliderEntity_,
-                precipitationSliderBefore_,
-                precipitationSliderAfter_));
-        precipitationSliderActive_ = false;
-        precipitationSliderEntity_ = wi::ecs::INVALID_ENTITY;
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    bool StudioRenderPath::CommitSun(const bridge::SunState& sun)
-    {
-        if (session_ == nullptr)
-        {
-            return false;
-        }
-        const auto entity = EditableWeatherEntity();
-        if (entity == wi::ecs::INVALID_ENTITY)
-        {
-            return false;
-        }
-        const bool changed = session_->Commands().Execute(
-            std::make_unique<bridge::SetSunCommand>(
-                session_->Scenes().GetScene(),
-                entity,
-                sun));
-        RefreshInspector();
-        RefreshStatus();
-        return changed;
-    }
-
-    void StudioRenderPath::ApplySunPreset(const bridge::SunPreset preset)
-    {
-        StopSunPreview(true);
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        const auto current = bridge::CaptureSun(
-            session_->Scenes().GetScene(),
-            entity);
-        CommitSun(bridge::MakeSunPreset(current, preset));
-    }
-
-    void StudioRenderPath::SetSunFieldValue(
-        bridge::SunState& sun,
-        const SunField field,
-        const float value) noexcept
-    {
-        switch (field)
-        {
-        case SunField::Time:
-            bridge::SetSunTime(sun, value);
-            break;
-        case SunField::Azimuth:
-            bridge::SetSunAzimuth(sun, value);
-            break;
-        case SunField::Elevation:
-            bridge::SetSunElevation(sun, value);
-            break;
-        }
-    }
-
-    void StudioRenderPath::BeginSunSlider(const SunField field)
-    {
-        StopSunPreview(true);
-        sunSliderActive_ = false;
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        if (entity == wi::ecs::INVALID_ENTITY)
-        {
-            return;
-        }
-        sunSliderActive_ = true;
-        sunSliderField_ = field;
-        sunSliderBefore_ = bridge::CaptureSun(
-            session_->Scenes().GetScene(),
-            entity);
-        sunSliderAfter_ = sunSliderBefore_;
-    }
-
-    void StudioRenderPath::PreviewSunSlider(
-        const SunField field,
-        const float value)
-    {
-        if (!sunSliderActive_ || sunSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        sunSliderAfter_ = sunSliderBefore_;
-        SetSunFieldValue(sunSliderAfter_, field, value);
-        bridge::ApplySun(
-            session_->Scenes().GetScene(),
-            EditableWeatherEntity(),
-            sunSliderAfter_);
-    }
-
-    void StudioRenderPath::CommitSunSlider(
-        const SunField field,
-        const float value)
-    {
-        if (!sunSliderActive_ || sunSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        SetSunFieldValue(sunSliderAfter_, field, value);
-        auto& scene = session_->Scenes().GetScene();
-        const auto entity = EditableWeatherEntity();
-        bridge::ApplySun(scene, entity, sunSliderBefore_);
-        session_->Commands().Execute(
-            std::make_unique<bridge::SetSunCommand>(
-                scene,
-                entity,
-                sunSliderBefore_,
-                sunSliderAfter_));
-        sunSliderActive_ = false;
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::StartSunPreview()
-    {
-        if (sunPreviewPlaying_ || session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        if (entity == wi::ecs::INVALID_ENTITY)
-        {
-            return;
-        }
-        sunPreviewBefore_ = bridge::CaptureSun(
-            session_->Scenes().GetScene(),
-            entity);
-        sunPreviewCurrent_ = sunPreviewBefore_;
-        sunPreviewPlaying_ = true;
-        sunPlayButton_.SetEnabled(false);
-        sunPauseButton_.SetEnabled(true);
-    }
-
-    void StudioRenderPath::StopSunPreview(const bool commit)
-    {
-        if (!sunPreviewPlaying_ || session_ == nullptr)
-        {
-            return;
-        }
-        sunPreviewPlaying_ = false;
-        auto& scene = session_->Scenes().GetScene();
-        const auto entity = EditableWeatherEntity();
-        bridge::ApplySun(scene, entity, sunPreviewBefore_);
-        if (commit)
-        {
-            session_->Commands().Execute(
-                std::make_unique<bridge::SetSunCommand>(
-                    scene,
-                    entity,
-                    sunPreviewBefore_,
-                    sunPreviewCurrent_));
-        }
-        sunPlayButton_.SetEnabled(true);
-        sunPauseButton_.SetEnabled(false);
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    bool StudioRenderPath::CommitOcean(const bridge::OceanState& ocean)
-    {
-        if (session_ == nullptr)
-        {
-            return false;
-        }
-        const auto entity = EditableWeatherEntity();
-        if (entity == wi::ecs::INVALID_ENTITY)
-        {
-            return false;
-        }
-        const bool changed = session_->Commands().Execute(
-            std::make_unique<bridge::SetOceanCommand>(
-                session_->Scenes().GetScene(),
-                entity,
-                ocean));
-        RefreshInspector();
-        RefreshStatus();
-        return changed;
-    }
-
-    void StudioRenderPath::ApplyOceanEnabled(const bool enabled)
-    {
-        StopSunPreview(true);
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        const auto* weather =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (weather == nullptr)
-        {
-            return;
-        }
-        auto ocean = bridge::CaptureOcean(*weather);
-        ocean.enabled = enabled;
-        CommitOcean(ocean);
-    }
-
-    void StudioRenderPath::ApplyOceanResolution(const int dimension)
-    {
-        StopSunPreview(true);
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        const auto* weather =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (weather == nullptr)
-        {
-            return;
-        }
-        auto ocean = bridge::CaptureOcean(*weather);
-        ocean.displacementMapDimension = dimension;
-        CommitOcean(ocean);
-    }
-
-    void StudioRenderPath::ApplyOceanPreset(const bridge::OceanPreset preset)
-    {
-        StopSunPreview(true);
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        const auto* weather =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (weather == nullptr)
-        {
-            return;
-        }
-        CommitOcean(bridge::MakeOceanPreset(
-            bridge::CaptureOcean(*weather),
-            preset));
-    }
-
-    void StudioRenderPath::SetOceanFieldValue(
-        bridge::OceanState& ocean,
-        const OceanField field,
-        const float value) noexcept
-    {
-        switch (field)
-        {
-        case OceanField::PatchLength:
-            ocean.patchLength = std::clamp(value, 1.0f, 2000.0f);
-            break;
-        case OceanField::TimeScale:
-            ocean.timeScale = std::clamp(value, 0.0f, 4.0f);
-            break;
-        case OceanField::WaveAmplitude:
-            ocean.waveAmplitude = std::clamp(value, 0.0f, 2000.0f);
-            break;
-        case OceanField::WindAzimuth:
-            ocean.windAzimuthDegrees =
-                std::clamp(value, -180.0f, 180.0f);
-            break;
-        case OceanField::WindSpeed:
-            ocean.windSpeed = std::clamp(value, 0.0f, 2000.0f);
-            break;
-        case OceanField::WindDependency:
-            ocean.windDependency = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case OceanField::ChoppyScale:
-            ocean.choppyScale = std::clamp(value, 0.0f, 10.0f);
-            break;
-        case OceanField::WaterRed:
-            ocean.waterColor.x = std::clamp(value, 0.0f, 4.0f);
-            break;
-        case OceanField::WaterGreen:
-            ocean.waterColor.y = std::clamp(value, 0.0f, 4.0f);
-            break;
-        case OceanField::WaterBlue:
-            ocean.waterColor.z = std::clamp(value, 0.0f, 4.0f);
-            break;
-        case OceanField::WaterOpacity:
-            ocean.waterColor.w = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case OceanField::ExtinctionRed:
-            ocean.extinctionColor.x = std::clamp(value, 0.0f, 4.0f);
-            break;
-        case OceanField::ExtinctionGreen:
-            ocean.extinctionColor.y = std::clamp(value, 0.0f, 4.0f);
-            break;
-        case OceanField::ExtinctionBlue:
-            ocean.extinctionColor.z = std::clamp(value, 0.0f, 4.0f);
-            break;
-        case OceanField::WaterHeight:
-            ocean.waterHeight = std::clamp(value, -1000.0f, 1000.0f);
-            break;
-        case OceanField::SurfaceDetail:
-            ocean.surfaceDetail = static_cast<std::uint32_t>(
-                std::clamp(std::lround(value), 1l, 10l));
-            break;
-        case OceanField::DisplacementTolerance:
-            ocean.surfaceDisplacementTolerance =
-                std::clamp(value, 1.0f, 10.0f);
-            break;
-        }
-    }
-
-    void StudioRenderPath::BeginOceanSlider(const OceanField field)
-    {
-        StopSunPreview(true);
-        oceanSliderActive_ = false;
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = EditableWeatherEntity();
-        const auto* weather =
-            session_->Scenes().GetScene().weathers.GetComponent(entity);
-        if (weather == nullptr)
-        {
-            return;
-        }
-        oceanSliderActive_ = true;
-        oceanSliderField_ = field;
-        oceanSliderEntity_ = entity;
-        oceanSliderBefore_ = bridge::CaptureOcean(*weather);
-        oceanSliderAfter_ = oceanSliderBefore_;
-    }
-
-    void StudioRenderPath::PreviewOceanSlider(
-        const OceanField field,
-        const float value)
-    {
-        if (!oceanSliderActive_ || oceanSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        oceanSliderAfter_ = oceanSliderBefore_;
-        SetOceanFieldValue(oceanSliderAfter_, field, value);
-        bridge::ApplyOcean(
-            session_->Scenes().GetScene(),
-            oceanSliderEntity_,
-            oceanSliderAfter_);
-    }
-
-    void StudioRenderPath::CommitOceanSlider(
-        const OceanField field,
-        const float value)
-    {
-        if (!oceanSliderActive_ || oceanSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        SetOceanFieldValue(oceanSliderAfter_, field, value);
-        auto& scene = session_->Scenes().GetScene();
-        bridge::ApplyOcean(scene, oceanSliderEntity_, oceanSliderBefore_);
-        session_->Commands().Execute(
-            std::make_unique<bridge::SetOceanCommand>(
-                scene,
-                oceanSliderEntity_,
-                oceanSliderBefore_,
-                oceanSliderAfter_));
-        oceanSliderActive_ = false;
-        oceanSliderEntity_ = wi::ecs::INVALID_ENTITY;
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    bool StudioRenderPath::CommitSelectedLight(
-        const bridge::LightState& light)
-    {
-        if (session_ == nullptr)
-        {
-            return false;
-        }
-        const auto entity = session_->Selection().SelectedEntity();
-        auto& scene = session_->Scenes().GetScene();
-        if (!scene.lights.Contains(entity))
-        {
-            return false;
-        }
-        const bool changed = session_->Commands().Execute(
-            std::make_unique<bridge::SetLightCommand>(
-                scene,
-                entity,
-                light));
-        RefreshInspector();
-        RefreshStatus();
-        return changed;
-    }
-
-    void StudioRenderPath::ApplySelectedLightType(
-        const wi::scene::LightComponent::LightType type)
-    {
-        StopSunPreview(true);
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = session_->Selection().SelectedEntity();
-        const auto* light =
-            session_->Scenes().GetScene().lights.GetComponent(entity);
-        if (light == nullptr)
-        {
-            return;
-        }
-        auto state = bridge::CaptureLight(*light);
-        state.type = type;
-        CommitSelectedLight(state);
-    }
-
-    void StudioRenderPath::ApplySelectedLightToggle(
-        const LightToggle toggle,
-        const bool value)
-    {
-        StopSunPreview(true);
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = session_->Selection().SelectedEntity();
-        const auto* light =
-            session_->Scenes().GetScene().lights.GetComponent(entity);
-        if (light == nullptr)
-        {
-            return;
-        }
-        auto state = bridge::CaptureLight(*light);
-        switch (toggle)
-        {
-        case LightToggle::CastShadow:
-            state.castShadow = value;
-            break;
-        case LightToggle::Volumetrics:
-            state.volumetrics = value;
-            break;
-        }
-        CommitSelectedLight(state);
-    }
-
-    void StudioRenderPath::SetLightFieldValue(
-        bridge::LightState& light,
-        const LightField field,
-        const float value) noexcept
-    {
-        switch (field)
-        {
-        case LightField::ColorRed:
-            light.color.x = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case LightField::ColorGreen:
-            light.color.y = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case LightField::ColorBlue:
-            light.color.z = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case LightField::Intensity:
-            light.intensity = std::clamp(value, 0.0f, 100000.0f);
-            break;
-        case LightField::Range:
-            light.range = std::clamp(value, 0.0f, 100000.0f);
-            break;
-        case LightField::OuterCone:
-            light.outerConeDegrees = std::clamp(value, 0.1f, 89.9f);
-            light.innerConeDegrees = std::min(
-                light.innerConeDegrees,
-                light.outerConeDegrees);
-            break;
-        case LightField::InnerCone:
-            light.innerConeDegrees = std::clamp(
-                value,
-                0.0f,
-                light.outerConeDegrees);
-            break;
-        case LightField::Radius:
-            light.radius = std::clamp(value, 0.0f, 100000.0f);
-            break;
-        case LightField::Length:
-            light.length = std::clamp(value, 0.0f, 100000.0f);
-            break;
-        case LightField::Height:
-            light.height = std::clamp(value, 0.0f, 100000.0f);
-            break;
-        case LightField::VolumetricBoost:
-            light.volumetricBoost = std::clamp(value, 0.0f, 10.0f);
-            break;
-        }
-    }
-
-    void StudioRenderPath::BeginLightSlider(const LightField field)
-    {
-        StopSunPreview(true);
-        lightSliderActive_ = false;
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = session_->Selection().SelectedEntity();
-        const auto* light =
-            session_->Scenes().GetScene().lights.GetComponent(entity);
-        if (light == nullptr)
-        {
-            return;
-        }
-        lightSliderActive_ = true;
-        lightSliderField_ = field;
-        lightSliderEntity_ = entity;
-        lightSliderBefore_ = bridge::CaptureLight(*light);
-        lightSliderAfter_ = lightSliderBefore_;
-    }
-
-    void StudioRenderPath::PreviewLightSlider(
-        const LightField field,
-        const float value)
-    {
-        if (!lightSliderActive_ || lightSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        auto* light = session_->Scenes().GetScene().lights.GetComponent(
-            lightSliderEntity_);
-        if (light == nullptr)
-        {
-            return;
-        }
-        lightSliderAfter_ = lightSliderBefore_;
-        SetLightFieldValue(lightSliderAfter_, field, value);
-        bridge::ApplyLight(*light, lightSliderAfter_);
-    }
-
-    void StudioRenderPath::CommitLightSlider(
-        const LightField field,
-        const float value)
-    {
-        if (!lightSliderActive_ || lightSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        SetLightFieldValue(lightSliderAfter_, field, value);
-        auto& scene = session_->Scenes().GetScene();
-        auto* light = scene.lights.GetComponent(lightSliderEntity_);
-        if (light != nullptr)
-        {
-            bridge::ApplyLight(*light, lightSliderBefore_);
-            session_->Commands().Execute(
-                std::make_unique<bridge::SetLightCommand>(
-                    scene,
-                    lightSliderEntity_,
-                    lightSliderBefore_,
-                    lightSliderAfter_));
-        }
-        lightSliderActive_ = false;
-        lightSliderEntity_ = wi::ecs::INVALID_ENTITY;
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::CreateTerrain()
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        if (scene.terrains.GetCount() > 0)
-        {
-            session_->Selection().Select(scene.terrains.GetEntity(0));
-            RefreshHierarchy();
-            RefreshInspector();
-            return;
-        }
-        auto command = std::make_unique<bridge::CreateTerrainCommand>(
-            scene,
-            bridge::TerrainState{},
-            "Terrain");
-        auto* createCommand = command.get();
-        if (!session_->Commands().Execute(std::move(command)))
-        {
-            return;
-        }
-        session_->Selection().Select(createCommand->CreatedEntity());
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    bool StudioRenderPath::CommitTerrain(const bridge::TerrainState& terrain)
-    {
-        if (session_ == nullptr)
-        {
-            return false;
-        }
-        const auto entity = session_->Selection().SelectedEntity();
-        auto& scene = session_->Scenes().GetScene();
-        if (!scene.terrains.Contains(entity))
-        {
-            return false;
-        }
-        const bool changed = session_->Commands().Execute(
-            std::make_unique<bridge::SetTerrainCommand>(
-                scene,
-                entity,
-                terrain));
-        RefreshInspector();
-        RefreshStatus();
-        return changed;
-    }
-
-    void StudioRenderPath::SetTerrainFieldValue(
-        bridge::TerrainState& terrain,
-        const TerrainField field,
-        const float value) noexcept
-    {
-        switch (field)
-        {
-        case TerrainField::VisibleChunkRadius:
-            terrain.visibleChunkRadius = static_cast<int>(
-                std::clamp(std::lround(value), 1l, 16l));
-            break;
-        case TerrainField::ChunkScale:
-            terrain.chunkScale = std::clamp(value, 0.25f, 16.0f);
-            break;
-        case TerrainField::MinimumHeight:
-            terrain.minimumHeight = std::clamp(value, -2000.0f, 1999.0f);
-            break;
-        case TerrainField::MaximumHeight:
-            terrain.maximumHeight = std::clamp(value, -1999.0f, 2000.0f);
-            break;
-        case TerrainField::LowAltitudeBlend:
-            terrain.lowAltitudeBlend = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case TerrainField::BaseBlend:
-            terrain.baseBlend = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case TerrainField::SlopeBlend:
-            terrain.slopeBlend = std::clamp(value, 0.0f, 1.0f);
-            break;
-        case TerrainField::LodBias:
-            terrain.lodBias = std::clamp(value, -4.0f, 4.0f);
-            break;
-        }
-    }
-
-    void StudioRenderPath::BeginTerrainSlider(const TerrainField field)
-    {
-        terrainSliderActive_ = false;
-        if (session_ == nullptr)
-        {
-            return;
-        }
-        const auto entity = session_->Selection().SelectedEntity();
-        const auto* terrain =
-            session_->Scenes().GetScene().terrains.GetComponent(entity);
-        if (terrain == nullptr)
-        {
-            return;
-        }
-        terrainSliderActive_ = true;
-        terrainSliderField_ = field;
-        terrainSliderEntity_ = entity;
-        terrainSliderBefore_ = bridge::CaptureTerrain(*terrain);
-        terrainSliderAfter_ = terrainSliderBefore_;
-    }
-
-    void StudioRenderPath::PreviewTerrainSlider(
-        const TerrainField field,
-        const float value)
-    {
-        if (!terrainSliderActive_ || terrainSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        auto* terrain = session_->Scenes().GetScene().terrains.GetComponent(
-            terrainSliderEntity_);
-        if (terrain == nullptr)
-        {
-            return;
-        }
-        terrainSliderAfter_ = terrainSliderBefore_;
-        SetTerrainFieldValue(terrainSliderAfter_, field, value);
-        bridge::ApplyTerrain(*terrain, terrainSliderAfter_, false);
-    }
-
-    void StudioRenderPath::CommitTerrainSlider(
-        const TerrainField field,
-        const float value)
-    {
-        if (!terrainSliderActive_ || terrainSliderField_ != field ||
-            session_ == nullptr)
-        {
-            return;
-        }
-        SetTerrainFieldValue(terrainSliderAfter_, field, value);
-        auto& scene = session_->Scenes().GetScene();
-        auto* terrain = scene.terrains.GetComponent(terrainSliderEntity_);
-        if (terrain != nullptr)
-        {
-            bridge::ApplyTerrain(*terrain, terrainSliderBefore_, false);
-            session_->Commands().Execute(
-                std::make_unique<bridge::SetTerrainCommand>(
-                    scene,
-                    terrainSliderEntity_,
-                    terrainSliderBefore_,
-                    terrainSliderAfter_));
-        }
-        terrainSliderActive_ = false;
-        terrainSliderEntity_ = wi::ecs::INVALID_ENTITY;
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::ApplyTerrainMaterialPreset(
-        const bridge::TerrainMaterialPreset preset)
-    {
-        if (session_ == nullptr ||
-            session_->Scenes().GetScene().terrains.GetCount() == 0)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        const auto entity = scene.terrains.GetEntity(0);
-        const auto* terrain = scene.terrains.GetComponent(entity);
-        if (terrain == nullptr)
-        {
-            return;
-        }
-        auto before = bridge::CaptureTerrainMaterial(scene, *terrain);
-        auto after = before;
-        bridge::SetTerrainTextureScale(
-            after,
-            bridge::MakeTerrainMaterialPreset(preset));
-        session_->Commands().Execute(
-            std::make_unique<bridge::SetTerrainMaterialCommand>(
-                scene,
-                entity,
-                std::move(before),
-                std::move(after)));
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::BeginTerrainTextureScale()
-    {
-        terrainTextureScaleActive_ = false;
-        if (session_ == nullptr ||
-            session_->Scenes().GetScene().terrains.GetCount() == 0)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        terrainMaterialEntity_ = scene.terrains.GetEntity(0);
-        const auto* terrain = scene.terrains.GetComponent(
-            terrainMaterialEntity_);
-        if (terrain == nullptr)
-        {
-            terrainMaterialEntity_ = wi::ecs::INVALID_ENTITY;
-            return;
-        }
-        terrainMaterialBefore_ = bridge::CaptureTerrainMaterial(scene, *terrain);
-        terrainMaterialAfter_ = terrainMaterialBefore_;
-        terrainTextureScaleActive_ = true;
-    }
-
-    void StudioRenderPath::PreviewTerrainTextureScale(const float value)
-    {
-        if (!terrainTextureScaleActive_ || session_ == nullptr)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        auto* terrain = scene.terrains.GetComponent(terrainMaterialEntity_);
-        if (terrain == nullptr)
-        {
-            return;
-        }
-        terrainMaterialAfter_ = terrainMaterialBefore_;
-        bridge::SetTerrainTextureScale(terrainMaterialAfter_, value);
-        bridge::ApplyTerrainMaterial(
-            scene,
-            *terrain,
-            terrainMaterialAfter_,
-            true);
-    }
-
-    void StudioRenderPath::CommitTerrainTextureScale(const float value)
-    {
-        if (!terrainTextureScaleActive_ || session_ == nullptr)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        auto* terrain = scene.terrains.GetComponent(terrainMaterialEntity_);
-        if (terrain != nullptr)
-        {
-            bridge::SetTerrainTextureScale(terrainMaterialAfter_, value);
-            const float before = terrainMaterialBefore_.slots[0].texMulAdd.x;
-            const float after = terrainMaterialAfter_.slots[0].texMulAdd.x;
-            if (std::abs(before - after) > 0.00001f)
-            {
-                bridge::ApplyTerrainMaterial(
-                    scene,
-                    *terrain,
-                    terrainMaterialAfter_,
-                    true);
-                session_->Commands().RecordExecuted(
-                    std::make_unique<bridge::SetTerrainMaterialCommand>(
-                        scene,
-                        terrainMaterialEntity_,
-                        std::move(terrainMaterialBefore_),
-                        std::move(terrainMaterialAfter_)));
-            }
-        }
-        terrainTextureScaleActive_ = false;
-        terrainMaterialEntity_ = wi::ecs::INVALID_ENTITY;
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::ApplyDefaultGrass()
-    {
-        if (session_ == nullptr ||
-            session_->Scenes().GetScene().terrains.GetCount() == 0)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        const auto entity = scene.terrains.GetEntity(0);
-        const auto* terrain = scene.terrains.GetComponent(entity);
-        if (terrain == nullptr)
-        {
-            return;
-        }
-        auto before = bridge::CaptureTerrainMaterial(scene, *terrain);
-        auto after = bridge::MakeDefaultGrassMaterial(
-            bridge::DefaultGrassTextureScale);
-        session_->Commands().Execute(
-            std::make_unique<bridge::SetTerrainMaterialCommand>(
-                scene,
-                entity,
-                std::move(before),
-                std::move(after)));
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::ReloadTerrainMaterial()
-    {
-        if (session_ == nullptr ||
-            session_->Scenes().GetScene().terrains.GetCount() == 0)
-        {
-            return;
-        }
-        auto& scene = session_->Scenes().GetScene();
-        auto* terrain = scene.terrains.GetComponent(
-            scene.terrains.GetEntity(0));
-        if (terrain != nullptr)
-        {
-            bridge::ReloadDefaultTerrainMaterial(scene, *terrain);
-            terrainStrokeDiagnostic_.SetText("MATERIAL // FILES RELOADED");
-        }
-        RefreshInspector();
-        RefreshStatus();
-    }
-
-    void StudioRenderPath::ValidateModelImport()
-    {
-        if (session_ == nullptr ||
-            session_->Projects().CurrentProject().rootPath.empty())
-        {
-            wi::helper::messageBox(
-                "Open or create a Renegade project before running the model import proof.",
-                "Model Import Gate 1");
-            return;
-        }
-
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "GLB/GLTF model for Gate 1 validation";
-        params.extensions.push_back("glb");
-        params.extensions.push_back("gltf");
-        wi::helper::FileDialog(
-            params,
-            [this](const std::string& sourcePath)
-            {
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, sourcePath](uint64_t)
-                    {
-                        if (sourcePath.empty())
-                        {
-                            return;
-                        }
-                        if (wi::jobsystem::IsBusy(modelImportWorkload_))
-                        {
-                            wi::helper::messageBox(
-                                "A model import validation is already running.",
-                                "Model Import Gate 1");
-                            return;
-                        }
-
-                        const fs::path source = fs::u8path(sourcePath);
-                        studioChrome_.SetStatusText(
-                            "MODEL IMPORT PROOF // RUNNING // " +
-                            source.filename().u8string());
-                        RunModelImportProof(sourcePath);
-                    });
-            });
-    }
-
-    void StudioRenderPath::RunModelImportProof(const std::string& sourcePath)
-    {
-        if (session_ == nullptr || sourcePath.empty())
-        {
-            return;
-        }
-
-        const fs::path outputDirectory =
-            fs::u8path(session_->Projects().CurrentProject().rootPath) /
-            "Saved" / "Validation" / "ModelImport";
-        const fs::path source = fs::u8path(sourcePath);
-        const fs::path assetPath =
-            outputDirectory / fs::u8path(source.stem().u8string() + ".wiscene");
-
-        const std::string destinationPath = assetPath.generic_u8string();
-        wi::jobsystem::Execute(
-            modelImportWorkload_,
-            [this, sourcePath, destinationPath](wi::jobsystem::JobArgs)
-            {
-                auto prepared = std::make_shared<bridge::PreparedModelImport>(
-                    bridge::ImportService().PrepareGltfAsset(
-                        sourcePath,
-                        destinationPath));
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, prepared](uint64_t)
-                    {
-                        auto result = bridge::ImportService().CompleteGltfAsset(
-                            std::move(*prepared));
-                        PresentModelImportProof(result);
-                    });
-            });
-    }
-
-    void StudioRenderPath::PresentModelImportProof(
-        const bridge::ImportResult& result)
-    {
-        const auto* device = wi::graphics::GetDevice();
-        const std::string renderer = device != nullptr &&
-                device->GetShaderFormat() == wi::graphics::ShaderFormat::SPIRV
-            ? "VULKAN"
-            : "DX12";
-        std::ostringstream report;
-        report << (result.succeeded ? "PASS" : "FAIL")
-            << " // MODEL IMPORT V1 GATE 1\n\n"
-            << "Renderer: " << renderer << '\n'
-            << "Source: " << result.sourcePath << '\n'
-            << "WISCENE: " << result.assetPath << "\n\n";
-        if (result.succeeded)
-        {
-            report << "Objects: " << result.reloaded.objects << '\n'
-                << "Meshes: " << result.reloaded.meshes << '\n'
-                << "Materials: " << result.reloaded.materials << '\n'
-                << "Texture references: "
-                << result.reloaded.textureReferences << '\n'
-                << "Transforms: " << result.reloaded.transforms << '\n'
-                << "Hierarchy links: " << result.reloaded.hierarchy << '\n'
-                << "Armatures: " << result.reloaded.armatures << '\n'
-                << "Animations: " << result.reloaded.animations << "\n\n"
-                << "The isolated imported scene survived WISCENE save and reload unchanged.";
-        }
-        else
-        {
-            report << "Reason: " << result.error;
-        }
-
-        studioChrome_.SetStatusText(
-            std::string("MODEL IMPORT PROOF // ") +
-            (result.succeeded ? "PASS // " : "FAIL // ") + renderer);
-        wi::helper::messageBox(report.str(), "Model Import Gate 1");
-    }
-
-    void StudioRenderPath::ImportModel()
-    {
-        if (session_ == nullptr ||
-            session_->Projects().CurrentProject().rootPath.empty())
-        {
-            wi::helper::messageBox(
-                "Open or create a Renegade project before importing a model.",
-                "Import Model");
-            return;
-        }
-
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "FBX/GLTF/GLB model to prepare in the Import Model workspace";
-        params.extensions.push_back("fbx");
-        params.extensions.push_back("glb");
-        params.extensions.push_back("gltf");
-        wi::helper::FileDialog(
-            params,
-            [this](const std::string& sourcePath)
-            {
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, sourcePath](uint64_t)
-                    {
-                        if (sourcePath.empty())
-                        {
-                            return;
-                        }
-                        if (wi::jobsystem::IsBusy(modelImportWorkload_))
-                        {
-                            wi::helper::messageBox(
-                                "A model import is already running.",
-                                "Import Model");
-                            return;
-                        }
-
-                        const fs::path source = fs::u8path(sourcePath);
-                        studioChrome_.SetStatusText(
-                            "IMPORT MODEL // CONVERTING // " +
-                            source.filename().u8string());
-                        RunModelImportPlacement(sourcePath);
-                    });
-            });
-    }
-
-    void StudioRenderPath::RunModelImportPlacement(
-        const std::string& sourcePath)
-    {
-        if (session_ == nullptr || sourcePath.empty() ||
-            !session_->Projects().HasProject() || creatorModelImporter.active ||
-            creatorModelImporter.committing)
-        {
-            return;
-        }
-
-        struct PreviewPrepareState
-        {
-            std::string sourcePath;
-            std::string projectRoot;
-            bridge::PreparedModelImport prepared;
-        };
-        auto state = std::make_shared<PreviewPrepareState>();
-        state->sourcePath = sourcePath;
-        state->projectRoot = session_->Projects().CurrentProject().rootPath;
-
-        wi::jobsystem::Execute(modelImportWorkload_,
-            [this, state](wi::jobsystem::JobArgs)
-            {
-                const fs::path previewDirectory =
-                    fs::u8path(state->projectRoot) / "Intermediate" / "Imports";
-                std::error_code ec;
-                fs::create_directories(previewDirectory, ec);
-                bridge::ModelImportRequest request;
-                request.sourcePath = state->sourcePath;
-                request.assetPath = (previewDirectory / ".creator-preview.wiscene")
-                    .generic_u8string();
-                request.expectedFormat = bridge::ImportService::ClassifyModelSourceFormat(
-                    state->sourcePath);
-                state->prepared = bridge::ImportService().PrepareModelAsset(request);
-
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, state](std::uint64_t)
-                    {
-                        if (session_ == nullptr || !state->prepared.IsReady())
-                        {
-                            const std::string error = state->prepared.Result().error.empty()
-                                ? "Renegade could not prepare a visible preview."
-                                : state->prepared.Result().error;
-                            studioChrome_.SetStatusText("IMPORT MODEL // PREVIEW FAILED");
-                            wi::helper::messageBox(error, "Import Model");
-                            return;
-                        }
-
-                        auto& liveScene = session_->Scenes().GetScene();
-                        const auto* isolated = state->prepared.PeekScene();
-                        creatorModelImporter = {};
-                        creatorModelImporter.active = true;
-                        creatorModelImporter.sourcePath = state->sourcePath;
-                        creatorModelImporter.undoBaseline = session_->Commands().UndoCount();
-                        creatorModelImporter.cameraBefore = editorCameraTransform_;
-                        creatorModelImporter.cameraFovBefore = camera->fov;
-                        creatorModelImporter.cameraCaptured = true;
-                        creatorModelImporter.summary = bridge::ImportService::Summarize(*isolated);
-                        creatorModelImporter.evidence = bridge::ImportService::SummarizeModelEvidence(*isolated);
-                        creatorModelImporter.sourceBounds = bridge::ImportService::MeasureModelBounds(*isolated);
-                        creatorModelImporter.automaticScale = bridge::ImportService::ResolveScaleFactor(
-                            bridge::ModelScaleMode::Automatic, *isolated);
-                        creatorModelImporter.scale = XMFLOAT3(
-                            creatorModelImporter.automaticScale,
-                            creatorModelImporter.automaticScale,
-                            creatorModelImporter.automaticScale);
-                        creatorModelImporter.assetName = fs::u8path(state->sourcePath)
-                            .stem().generic_u8string();
-                        creatorModelImporter.destinationFolder = "Content/Models";
-                        const auto detectedMaterials = bridge::DetectCreatorModelMaterials(
-                            *isolated, state->sourcePath);
-                        if (detectedMaterials.succeeded)
-                            creatorModelImporter.materialOverrides = detectedMaterials.materials;
-
-                        const std::size_t materialStart = liveScene.materials.GetCount();
-                        const std::size_t animationStart = liveScene.animations.GetCount();
-
-                        auto place = std::make_unique<bridge::PlaceImportedModelCommand>(
-                            liveScene,
-                            state->prepared.ReleaseScene(),
-                            XMFLOAT3(0.0f, CreatorImportStageHeight, 0.0f),
-                            creatorModelImporter.automaticScale);
-                        auto* placed = place.get();
-                        if (!session_->Commands().Execute(std::move(place)))
-                        {
-                            creatorModelImporter = {};
-                            studioChrome_.SetStatusText("IMPORT MODEL // PREVIEW PLACE FAILED");
-                            return;
-                        }
-                        creatorModelImporter.previewRoot = placed->PlacedEntity();
-
-                        for (std::size_t index = materialStart; index < liveScene.materials.GetCount(); ++index)
-                            creatorModelImporter.materialEntities.push_back(liveScene.materials.GetEntity(index));
-                        ApplyDetectedCreatorPreviewMaterials();
-                        for (std::size_t index = animationStart; index < liveScene.animations.GetCount(); ++index)
-                        {
-                            const auto entity = liveScene.animations.GetEntity(index);
-                            creatorModelImporter.animationEntities.push_back(entity);
-                            const auto* animation = liveScene.animations.GetComponent(entity);
-                            if (animation != nullptr)
-                            {
-                                bridge::CreatorAnimationImportRecipe clip;
-                                clip.sourceAnimationIndex = static_cast<std::uint32_t>(index - animationStart);
-                                clip.name = CreatorImportEntityName(
-                                    liveScene, entity, "Animation " + std::to_string(index - animationStart + 1));
-                                clip.start = animation->start;
-                                clip.end = animation->end;
-                                clip.enabled = true;
-                                creatorModelImporter.animationRecipe.push_back(std::move(clip));
-                            }
-                        }
-
-                        creatorModelImporter.weatherEntity = session_->Scenes().WeatherEntity();
-                        creatorModelImporter.ambientBefore = liveScene.weather.ambient;
-                        creatorModelImporter.ambientCaptured = true;
-                        if (const auto* weather = liveScene.weathers.GetComponent(
-                                creatorModelImporter.weatherEntity))
-                        {
-                            creatorModelImporter.ambientBefore = weather->ambient;
-                        }
-
-                        auto light = std::make_unique<bridge::CreateLightCommand>(
-                            liveScene,
-                            wi::scene::LightComponent::DIRECTIONAL,
-                            XMFLOAT3(0.0f, CreatorImportStageHeight + 4.0f, 0.0f));
-                        auto* lightRaw = light.get();
-                        if (session_->Commands().Execute(std::move(light)))
-                        {
-                            creatorModelImporter.previewLight = lightRaw->CreatedEntity();
-                            auto lightState = bridge::MakeNewLightState(wi::scene::LightComponent::DIRECTIONAL);
-                            lightState.intensity = creatorModelImporter.lightIntensity;
-                            lightState.castShadow = false;
-                            session_->Commands().Execute(
-                                std::make_unique<bridge::SetLightCommand>(
-                                    liveScene, creatorModelImporter.previewLight, lightState));
-                        }
-                        ApplyCreatorImportPreviewLighting();
-
-                        FrameCreatorImportPreviewCamera();
-
-                        session_->Selection().Select(creatorModelImporter.previewRoot);
-                        RefreshHierarchy();
-                        RefreshInspector();
-                        studioChrome_.SetVisible(false);
-                        inspectorPanel_.SetVisible(false);
-                        hierarchySearch_.SetVisible(false);
-                        ShowImportScalePanel(
-                            creatorModelImporter.previewRoot,
-                            creatorModelImporter.automaticScale,
-                            fs::u8path(state->sourcePath).filename().generic_u8string());
-                    });
-            });
-    }
-
-    void StudioRenderPath::CompleteModelImportPlacement(
-        bridge::PreparedModelImport prepared)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        if (!prepared.IsReady())
-        {
-            studioChrome_.SetStatusText("IMPORT MODEL // FAILED");
-            wi::helper::messageBox(
-                "Could not import the model.\n\nReason: " +
-                    prepared.Result().error,
-                "Import Model");
-            return;
-        }
-
-        const std::string sourcePath = prepared.Result().sourcePath;
-        const bridge::ImportResult savedAsset =
-            bridge::ImportService().SavePreparedGltfAsset(prepared);
-        if (!savedAsset.succeeded)
-        {
-            studioChrome_.SetStatusText("IMPORT MODEL // ASSET SAVE FAILED");
-            wi::helper::messageBox(
-                "The model converted, but its reusable project asset could "
-                "not be saved.\n\nReason: " + savedAsset.error,
-                "Import Model");
-            return;
-        }
-
-        const fs::path projectRoot =
-            fs::u8path(session_->Projects().CurrentProject().rootPath);
-        const fs::path savedAssetPath = fs::u8path(savedAsset.assetPath);
-        std::string sourceCopyError;
-        if (!CopyOriginalModelSource(
-                fs::u8path(sourcePath),
-                projectRoot,
-                savedAssetPath,
-                sourceCopyError))
-        {
-            std::error_code ignored;
-            fs::remove(savedAssetPath, ignored);
-            studioChrome_.SetStatusText(
-                "IMPORT MODEL // SOURCE SNAPSHOT FAILED");
-            wi::helper::messageBox(
-                "The converted asset was not registered because Renegade "
-                "could not preserve its selected source file.\n\nReason: " +
-                    sourceCopyError,
-                "Import Model");
-            return;
-        }
-
-        XMFLOAT3 position(0.0f, 0.0f, 0.0f);
-        if (camera != nullptr)
-        {
-            position = camera->Eye;
-            position.x += camera->At.x * 5.0f;
-            position.y += camera->At.y * 5.0f;
-            position.z += camera->At.z * 5.0f;
-        }
-
-        // Resolve Automatic scale against the still-isolated prepared scene
-        // before ReleaseScene() hands it to the command -- once merged, its
-        // meshes are indistinguishable from every other mesh already in the
-        // active scene. This is the default correction for arbitrary
-        // downloaded/authored models with an unknown source unit (the
-        // "imports VERY large" case); it is a non-destructive uniform Scale
-        // on the import root, never baked into vertex data, so it can be
-        // freely edited or reset afterward like any other transform.
-        float scaleFactor = 1.0f;
-        if (const auto* preparedScene = prepared.PeekScene())
-        {
-            scaleFactor = bridge::ImportService::ResolveScaleFactor(
-                bridge::ModelScaleMode::Automatic,
-                *preparedScene);
-        }
-
-        ClearSelectionOutline();
-        auto command = std::make_unique<bridge::PlaceImportedModelCommand>(
-            session_->Scenes().GetScene(),
-            prepared.ReleaseScene(),
-            position,
-            scaleFactor);
-        auto* placeCommand = command.get();
-        if (!session_->Commands().Execute(std::move(command)))
-        {
-            studioChrome_.SetStatusText("IMPORT MODEL // FAILED");
-            wi::helper::messageBox(
-                "The converted model produced no placeable entity.",
-                "Import Model");
-            SyncSelectionOutline();
-            return;
-        }
-
-        session_->Selection().Select(placeCommand->PlacedEntity());
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-
-        assetBrowserCurrentFolder_ = "Content/Models";
-        RefreshAssetBrowser();
-
-        const fs::path source = fs::u8path(sourcePath);
-        std::ostringstream scaleReadout;
-        scaleReadout.precision(3);
-        scaleReadout << std::fixed << scaleFactor;
-        studioChrome_.SetStatusText(
-            "IMPORT MODEL // ASSET SAVED + PLACED // " +
-            savedAssetPath.filename().u8string() +
-            " // AUTO SCALE x" + scaleReadout.str());
-
-        ShowImportScalePanel(
-            placeCommand->PlacedEntity(),
-            scaleFactor,
-            source.filename().u8string());
-    }
-
-    void StudioRenderPath::ShowImportScalePanel(
-        const wi::ecs::Entity entity,
-        const float appliedScaleFactor,
-        const std::string& sourceFileName)
-    {
-        importScaleTargetEntity_ = entity;
-        importScaleAppliedFactor_ = appliedScaleFactor;
-        pendingImportScaleMode_ = bridge::ModelScaleMode::Automatic;
-
-        std::ostringstream readout;
-        readout << sourceFileName
-            << "\nMeshes: " << creatorModelImporter.summary.meshes
-            << "   Materials: " << creatorModelImporter.summary.materials
-            << "   Textures: " << creatorModelImporter.summary.textureReferences
-            << "\nAnimations: " << creatorModelImporter.summary.animations
-            << "   Bones: " << creatorModelImporter.evidence.armatureBones;
-        importScaleReadoutLabel_.SetText(readout.str());
-        importScaleModeCombo_.SetSelectedWithoutCallback(0);
-        creatorModelImporter.workspaceSection = 0;
-        creatorImportSectionCombo.SetSelectedWithoutCallback(0);
-        creatorImportAssetName.SetValue(creatorModelImporter.assetName);
-        creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
-        creatorModelImporter.positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
-        creatorModelImporter.rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
-        creatorImportPositionX.SetValue(0.0f);
-        creatorImportPositionY.SetValue(0.0f);
-        creatorImportPositionZ.SetValue(0.0f);
-        creatorImportRotationX.SetValue(0.0f);
-        creatorImportRotationY.SetValue(0.0f);
-        creatorImportRotationZ.SetValue(0.0f);
-        creatorImportScaleX.SetValue(creatorModelImporter.scale.x);
-        creatorImportScaleY.SetValue(creatorModelImporter.scale.y);
-        creatorImportScaleZ.SetValue(creatorModelImporter.scale.z);
-        creatorImportScaleLinked.SetCheck(creatorModelImporter.scaleLinked);
-        creatorImportDimensionPreset.SetSelectedWithoutCallback(-1);
-
-        creatorImportMaterialCombo.ClearItems();
-        auto& scene = session_->Scenes().GetScene();
-        for (std::size_t index = 0; index < creatorModelImporter.materialEntities.size(); ++index)
-        {
-            const auto entityId = creatorModelImporter.materialEntities[index];
-            creatorImportMaterialCombo.AddItem(
-                CreatorImportEntityName(scene, entityId, "Material " + std::to_string(index + 1)),
-                static_cast<std::uint64_t>(index));
-        }
-        if (!creatorModelImporter.materialEntities.empty())
-        {
-            creatorImportMaterialCombo.SetSelectedWithoutCallback(0);
-            creatorModelImporter.selectedMaterial = 0;
-        }
-        RefreshCreatorImportMaterialReadout();
-        RefreshCreatorImportMaterialScalars();
-        creatorImportTextureSlot = 0;
-        creatorImportTextureSlotCombo.SetSelectedWithoutCallback(0);
-        RefreshCreatorImportTextureEditor();
-
-        creatorModelImporter.selectedAnimation = 0;
-        RebuildCreatorImportAnimationCombo();
-        creatorImportLightIntensity.SetValue(creatorModelImporter.lightIntensity);
-        creatorImportLightAzimuth.SetValue(creatorModelImporter.lightAzimuth);
-        creatorImportLightElevation.SetValue(creatorModelImporter.lightElevation);
-        creatorImportAmbientBrightness.SetValue(creatorModelImporter.ambientBrightness);
-        creatorImportLightingPreset.SetSelectedWithoutCallback(0);
-        creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
-        importScalePanel_.SetVisible(true);
-        RefreshCreatorImportWorkspaceSection();
-    }
-
-    void StudioRenderPath::FrameCreatorImportPreviewCamera()
-    {
-        if (!creatorModelImporter.active || !creatorModelImporter.sourceBounds.valid)
-            return;
-
-        const auto& bounds = creatorModelImporter.sourceBounds;
-        const XMFLOAT3 scale = creatorModelImporter.scale;
-        const XMFLOAT3 center(
-            (bounds.minimum.x + bounds.maximum.x) * 0.5f * scale.x,
-            CreatorImportStageHeight +
-                (bounds.minimum.y + bounds.maximum.y) * 0.5f * scale.y,
-            (bounds.minimum.z + bounds.maximum.z) * 0.5f * scale.z);
-        const XMFLOAT3 extents(
-            std::abs(bounds.maximum.x - bounds.minimum.x) * scale.x,
-            std::abs(bounds.maximum.y - bounds.minimum.y) * scale.y,
-            std::abs(bounds.maximum.z - bounds.minimum.z) * scale.z);
-        const float radius = std::max(
-            0.25f,
-            0.5f * std::sqrt(
-                extents.x * extents.x +
-                extents.y * extents.y +
-                extents.z * extents.z));
-
-        // A longer, neutral preview lens avoids the exaggerated near/far
-        // proportions produced by the editor camera when it is placed close
-        // to a character. Distance follows the measured, scaled bounds so a
-        // boot, head or large prop cannot accidentally fill the near plane.
-        camera->fov = CreatorImportPreviewFov;
-        const float distance = std::max(
-            2.5f,
-            radius / std::sin(CreatorImportPreviewFov * 0.5f) * 1.2f);
-        const XMVECTOR target = XMLoadFloat3(&center);
-        const XMVECTOR viewDirection = XMVector3Normalize(
-            XMVectorSet(0.32f, 0.12f, -1.0f, 0.0f));
-        const XMVECTOR eye = target + viewDirection * distance;
-        const XMMATRIX view = XMMatrixLookAtLH(
-            eye, target, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
-        editorCameraTransform_.ClearTransform();
-        editorCameraTransform_.MatrixTransform(XMMatrixInverse(nullptr, view));
-        editorCameraTransform_.UpdateTransform();
-        camera->TransformCamera(editorCameraTransform_);
-        camera->UpdateCamera();
-    }
-
-    void StudioRenderPath::RefreshCreatorImportWorkspaceSection()
-    {
-        const std::size_t section = creatorModelImporter.workspaceSection;
-        const auto show = [section](wi::gui::Widget& widget, const std::size_t owner)
-        {
-            widget.SetVisible(section == owner);
-        };
-        show(creatorImportAssetName, 0);
-        show(creatorImportDestination, 0);
-
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionX),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionY),
-            static_cast<wi::gui::Widget*>(&creatorImportPositionZ),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationX),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationY),
-            static_cast<wi::gui::Widget*>(&creatorImportRotationZ),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleX),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleY),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleZ),
-            static_cast<wi::gui::Widget*>(&creatorImportScaleLinked),
-            static_cast<wi::gui::Widget*>(&creatorImportDimensionPreset),
-            static_cast<wi::gui::Widget*>(&importScaleModeCombo_)})
-            widget->SetVisible(section == 1);
-
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialReadout),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureHelp),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureSlotCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportTexturePath),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureBrowse),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureClear),
-            static_cast<wi::gui::Widget*>(&creatorImportMaterialScalarLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportRoughness),
-            static_cast<wi::gui::Widget*>(&creatorImportMetalness),
-            static_cast<wi::gui::Widget*>(&creatorImportReflectance),
-            static_cast<wi::gui::Widget*>(&creatorImportNormalStrength),
-            static_cast<wi::gui::Widget*>(&creatorImportAoStrength),
-            static_cast<wi::gui::Widget*>(&creatorImportEmissiveStrength)})
-            widget->SetVisible(section == 2);
-
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportLightingLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportLightIntensity),
-            static_cast<wi::gui::Widget*>(&creatorImportLightAzimuth),
-            static_cast<wi::gui::Widget*>(&creatorImportLightElevation),
-            static_cast<wi::gui::Widget*>(&creatorImportAmbientBrightness),
-            static_cast<wi::gui::Widget*>(&creatorImportLightingPreset),
-            static_cast<wi::gui::Widget*>(&creatorImportLightingReset),
-            static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible)})
-            widget->SetVisible(section == 3);
-
-        for (wi::gui::Widget* widget : {
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationCombo),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout)})
-            widget->SetVisible(section == 4);
-    }
-
-    void StudioRenderPath::ApplyImportScaleMode(
-        const bridge::ModelScaleMode mode)
-    {
-        if (session_ == nullptr || !creatorModelImporter.active || creatorModelImporter.committing)
-            return;
-
-        auto& liveScene = session_->Scenes().GetScene();
-        auto* previewTransform = liveScene.transforms.GetComponent(creatorModelImporter.previewRoot);
-        if (previewTransform == nullptr)
-        {
-            DismissImportScalePanel();
-            return;
-        }
-
-        const bridge::TransformState preview = bridge::CaptureTransform(*previewTransform);
-        const XMFLOAT3 previewOffset(
-            preview.translation.x,
-            preview.translation.y - CreatorImportStageHeight,
-            preview.translation.z);
-        const std::string sourcePath = creatorModelImporter.sourcePath;
-        const auto cameraBefore = creatorModelImporter.cameraBefore;
-        const auto materialOverrides = creatorModelImporter.materialOverrides;
-        const auto animationRecipe = creatorModelImporter.animationRecipe;
-        const std::string assetName = creatorModelImporter.assetName;
-        const std::string destinationFolder = creatorModelImporter.destinationFolder;
-        creatorModelImporter.committing = true;
-
-        RestoreCreatorImportPreviewEnvironment();
-        while (session_->Commands().UndoCount() > creatorModelImporter.undoBaseline)
-        {
-            if (!session_->Commands().Undo())
-                break;
-        }
-        importScalePanel_.SetVisible(false);
-        studioChrome_.SetVisible(true);
-        inspectorPanel_.SetVisible(true);
-        hierarchySearch_.SetVisible(true);
-        editorCameraTransform_ = cameraBefore;
-        editorCameraTransform_.UpdateTransform();
-        camera->fov = creatorModelImporter.cameraFovBefore;
-        camera->TransformCamera(editorCameraTransform_);
-        camera->UpdateCamera();
-        ClearSelectionOutline();
-        session_->Selection().Clear();
-        RefreshHierarchy();
-        RefreshInspector();
-
-        struct GovernedCommitState
-        {
-            std::string projectRoot;
-            bridge::StableId projectId;
-            std::string sourcePath;
-            XMFLOAT3 position;
-            XMFLOAT4 rotation;
-            XMFLOAT3 scale = XMFLOAT3(1.0f, 1.0f, 1.0f);
-            std::string assetName;
-            std::string destinationFolder;
-            std::vector<bridge::CreatorMaterialSourceOverride> materialOverrides;
-            std::vector<bridge::CreatorAnimationImportRecipe> animationRecipe;
-            std::string settingsJson = "{}";
-            bridge::CreatorModelImportResult imported;
-            bridge::PreparedReusableModelPlacement prepared;
-        };
-        auto state = std::make_shared<GovernedCommitState>();
-        const auto& project = session_->Projects().CurrentProject();
-        state->projectRoot = project.rootPath;
-        state->projectId = project.projectId;
-        state->sourcePath = sourcePath;
-        const XMFLOAT3 cameraPosition = cameraBefore.GetPosition();
-        const XMFLOAT3 cameraForward = cameraBefore.GetForward();
-        state->position = XMFLOAT3(
-            cameraPosition.x + cameraForward.x * 5.0f + previewOffset.x,
-            cameraPosition.y + cameraForward.y * 5.0f + previewOffset.y,
-            cameraPosition.z + cameraForward.z * 5.0f + previewOffset.z);
-        state->rotation = preview.rotation;
-        state->scale = preview.scale;
-        state->assetName = assetName;
-        state->destinationFolder = destinationFolder;
-        state->materialOverrides = materialOverrides;
-        state->animationRecipe = animationRecipe;
-        studioChrome_.SetStatusText("IMPORT MODEL // COMMITTING GOVERNED ASSET");
-
-        wi::jobsystem::Execute(modelImportWorkload_,
-            [this, state](wi::jobsystem::JobArgs)
-            {
-                const fs::path previewDirectory =
-                    fs::u8path(state->projectRoot) / "Intermediate" / "Imports";
-                std::error_code ec;
-                fs::create_directories(previewDirectory, ec);
-                bridge::ModelImportRequest modelRequest;
-                modelRequest.sourcePath = state->sourcePath;
-                modelRequest.assetPath = (previewDirectory / ".creator-commit.wiscene").generic_u8string();
-                modelRequest.expectedFormat = bridge::ImportService::ClassifyModelSourceFormat(state->sourcePath);
-                auto converted = bridge::ImportService().PrepareModelAsset(modelRequest);
-                if (converted.IsReady())
-                {
-                    bridge::CreatorModelMaterialPreparationRequest materialRequest;
-                    materialRequest.preparedScene = converted.PeekScene();
-                    materialRequest.projectRoot = state->projectRoot;
-                    materialRequest.projectId = state->projectId;
-                    materialRequest.modelSourcePath = state->sourcePath;
-                    materialRequest.overrides = state->materialOverrides;
-                    auto materials = bridge::PrepareCreatorModelMaterials(materialRequest);
-                    if (materials.succeeded)
-                    {
-                        materials.recipe.animations = state->animationRecipe;
-                        std::string recipeError;
-                        if (!bridge::SerializeCreatorModelImportOptions(
-                                materials.recipe, state->settingsJson, recipeError))
-                        {
-                            state->imported.error = recipeError;
-                        }
-                    }
-                    else
-                    {
-                        state->imported.error = materials.error;
-                    }
-                }
-                else
-                {
-                    state->imported.error = converted.Result().error;
-                }
-
-                bridge::CreatorAssetWorkflowService workflow;
-                if (state->imported.error.empty())
-                    state->imported = workflow.ImportModel(
-                        state->projectRoot, state->projectId, state->sourcePath,
-                        state->settingsJson, state->assetName,
-                        state->destinationFolder);
-                if (state->imported.succeeded)
-                    state->prepared = workflow.PrepareModelPlacement(
-                        state->projectRoot, state->projectId, state->imported.asset.assetId);
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, state](std::uint64_t)
-                    {
-                        creatorModelImporter = {};
-                        if (!state->imported.succeeded || !state->prepared.IsReady())
-                        {
-                            studioChrome_.SetStatusText("IMPORT MODEL // COMMIT FAILED");
-                            const std::string reason = !state->imported.succeeded
-                                ? state->imported.error : state->prepared.Result().error;
-                            wi::helper::messageBox(
-                                "The preview was discarded safely, but the governed asset could not be committed.\n\nReason: " + reason,
-                                "Import Model");
-                            return;
-                        }
-
-                        auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
-                            session_->Scenes().GetScene(), state->prepared.ReleaseScene(),
-                            state->imported.asset.assetId, state->position, state->scale.x);
-                        auto* placed = command.get();
-                        if (!session_->Commands().Execute(std::move(command)))
-                        {
-                            studioChrome_.SetStatusText("IMPORT MODEL // ASSET COMMITTED // PLACE FAILED");
-                            return;
-                        }
-                        auto& scene = session_->Scenes().GetScene();
-                        auto* transform = scene.transforms.GetComponent(placed->PlacedEntity());
-                        if (transform != nullptr)
-                        {
-                            auto finalTransform = bridge::CaptureTransform(*transform);
-                            finalTransform.rotation = state->rotation;
-                            finalTransform.scale = state->scale;
-                            session_->Commands().Execute(
-                                std::make_unique<bridge::SetTransformCommand>(
-                                    scene, placed->PlacedEntity(), finalTransform));
-                        }
-                        session_->Selection().Select(placed->PlacedEntity());
-                        RefreshHierarchy();
-                        RefreshInspector();
-                        RefreshStatus();
-                        assetBrowserCurrentFolder_ = "Content/Models";
-                        RefreshAssetBrowser();
-                        studioChrome_.SetStatusText(
-                            "IMPORT MODEL // GOVERNED ASSET READY // " +
-                            fs::u8path(state->imported.assetProjectRelativePath).filename().generic_u8string());
-                    });
-            });
-    }
-
-    void StudioRenderPath::DismissImportScalePanel()
-    {
-        importScalePanel_.SetVisible(false);
-        if (session_ != nullptr && creatorModelImporter.active)
-        {
-            RestoreCreatorImportPreviewEnvironment();
-            while (session_->Commands().UndoCount() > creatorModelImporter.undoBaseline)
-            {
-                if (!session_->Commands().Undo())
-                    break;
-            }
-            if (creatorModelImporter.cameraCaptured)
-            {
-                editorCameraTransform_ = creatorModelImporter.cameraBefore;
-                editorCameraTransform_.UpdateTransform();
-                camera->fov = creatorModelImporter.cameraFovBefore;
-                camera->TransformCamera(editorCameraTransform_);
-                camera->UpdateCamera();
-            }
-            session_->Selection().Clear();
-            ClearSelectionOutline();
-            RefreshHierarchy();
-            RefreshInspector();
-            RefreshStatus();
-        }
-        creatorModelImporter = {};
-        importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
-        studioChrome_.SetVisible(true);
-        inspectorPanel_.SetVisible(true);
-        hierarchySearch_.SetVisible(true);
-        studioChrome_.SetStatusText("IMPORT MODEL // CANCELLED // PROJECT UNCHANGED");
-    }
-
-    std::string StudioRenderPath::ResolveTestLevelRuntimePath() const
-    {
-        // fs::current_path() is not reliable here: common Windows file-open
-        // dialogs (Open Project, Open Scene, etc.) are documented to change
-        // the calling process's working directory as a side effect, and
-        // once that happens every candidate below silently resolves against
-        // the wrong root - RenegadeRuntime.exe still exists exactly where
-        // it always did, but this lookup would no longer find it. Anchor to
-        // this process's own executable path instead, which cannot drift.
-        wchar_t modulePath[MAX_PATH] = {};
-        if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) == 0)
-        {
-            return {};
-        }
-        const fs::path workingDirectory = fs::path(modulePath).parent_path();
-
-        std::vector<fs::path> candidates = {
-            workingDirectory / "Runtime" / "RenegadeRuntime.exe",
-            workingDirectory / "RenegadeRuntime.exe",
-        };
-
-        const fs::path configuration = workingDirectory.filename();
-        const fs::path buildRoot = workingDirectory.parent_path().parent_path();
-        if (!configuration.empty() && !buildRoot.empty())
-        {
-            candidates.push_back(
-                buildRoot / "Runtime" / configuration / "RenegadeRuntime.exe");
-        }
-
-        for (const auto& candidate : candidates)
-        {
-            std::error_code pathError;
-            if (fs::is_regular_file(candidate, pathError) && !pathError)
-            {
-                return candidate.lexically_normal().generic_u8string();
-            }
-        }
-        return {};
-    }
-
-    std::string StudioRenderPath::TestLevelBackendArgument() const
-    {
-        const auto* device = wi::graphics::GetDevice();
-        if (device != nullptr && std::string(device->GetTag()) == "[Vulkan]")
-        {
-            return "vulkan";
-        }
-        return "dx12";
-    }
-
-    void StudioRenderPath::StartTestLevel()
-    {
-        if (session_ == nullptr || !session_->Projects().HasProject())
-        {
-            wi::helper::messageBox(
-                "Open or create a Renegade project before starting Test Level.",
-                "Test Level");
-            return;
-        }
-        if (testLevelRuntime_.IsActive())
-        {
-            return;
-        }
-
-        bridge::TestLevelSnapshotService snapshotService(
-            session_->Scenes(),
-            session_->Commands());
-        bridge::TestLevelSnapshot snapshot;
-        std::string error;
-        ClearSelectionOutline();
-        const bool snapshotCreated = snapshotService.Create(
-            session_->Projects().CurrentProject(),
-            snapshot,
-            error);
-        SyncSelectionOutline();
-        if (!snapshotCreated)
-        {
-            studioChrome_.SetTestLevelState(
-                RenegadeStudioChrome::TestLevelState::Idle);
-            studioChrome_.SetStatusText("TEST LEVEL // SNAPSHOT FAILED");
-            wi::helper::messageBox(
-                "Renegade could not create the Test Level snapshot.\n\n" +
-                    error,
-                "Test Level");
-            return;
-        }
-
-        const std::string runtimePath = ResolveTestLevelRuntimePath();
-        if (runtimePath.empty())
-        {
-            std::string cleanupError;
-            snapshotService.Cleanup(snapshot, cleanupError);
-            studioChrome_.SetTestLevelState(
-                RenegadeStudioChrome::TestLevelState::Idle);
-            studioChrome_.SetStatusText("TEST LEVEL // RUNTIME NOT FOUND");
-
-            std::string message =
-                "RenegadeRuntime.exe was not found beside this Studio build.";
-            if (!cleanupError.empty())
-            {
-                message += "\n\nSnapshot cleanup warning: " + cleanupError;
-            }
-            wi::helper::messageBox(message, "Test Level");
-            return;
-        }
-
-        TestLevelLaunchOptions options;
-        options.executablePath = runtimePath;
-        options.workingDirectory =
-            fs::u8path(runtimePath).parent_path().generic_u8string();
-        options.arguments = {
-            TestLevelBackendArgument(),
-            "--project",
-            snapshot.descriptorPath,
-        };
-        options.startupTimeout = std::chrono::milliseconds(60000);
-
-        if (!testLevelRuntime_.Launch(
-                std::move(options),
-                std::move(snapshot),
-                error))
-        {
-            studioChrome_.SetTestLevelState(
-                RenegadeStudioChrome::TestLevelState::Idle);
-            studioChrome_.SetStatusText("TEST LEVEL // LAUNCH FAILED");
-            wi::helper::messageBox(
-                "Renegade could not launch Test Level.\n\n" + error,
-                "Test Level");
-            return;
-        }
-
-        studioChrome_.SetTestLevelState(
-            RenegadeStudioChrome::TestLevelState::Starting);
-        studioChrome_.SetStatusText(
-            "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
-    }
-
-    void StudioRenderPath::PollTestLevel()
-    {
-        if (!testLevelRuntime_.IsActive())
-        {
-            return;
-        }
-
-        const TestLevelProcessResult result = testLevelRuntime_.Poll();
-        if (result.state == TestLevelProcessState::Running)
-        {
-            studioChrome_.SetTestLevelState(
-                RenegadeStudioChrome::TestLevelState::Running);
-            studioChrome_.SetStatusText(
-                "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT");
-            return;
-        }
-        if (!result.finished)
-        {
-            studioChrome_.SetTestLevelState(
-                RenegadeStudioChrome::TestLevelState::Starting);
-            return;
-        }
-
-        studioChrome_.SetTestLevelState(
-            RenegadeStudioChrome::TestLevelState::Idle);
-        if (result.succeeded)
-        {
-            studioChrome_.SetStatusText("TEST LEVEL // COMPLETED");
-            return;
-        }
-
-        studioChrome_.SetStatusText("TEST LEVEL // FAILED");
-        std::string message = result.message.empty()
-            ? "The Test Level Runtime stopped before it became ready."
-            : result.message;
-        if (!result.warning.empty())
-        {
-            message += "\n\nWarning: " + result.warning;
-        }
-        wi::helper::messageBox(message, "Test Level");
-    }
-
-    void StudioRenderPath::StopTestLevel()
-    {
-        if (!testLevelRuntime_.IsActive())
-        {
-            studioChrome_.SetTestLevelState(
-                RenegadeStudioChrome::TestLevelState::Idle);
-            return;
-        }
-
-        const TestLevelProcessResult result = testLevelRuntime_.Stop();
-        studioChrome_.SetTestLevelState(
-            RenegadeStudioChrome::TestLevelState::Idle);
-        studioChrome_.SetStatusText(
-            result.cleanupSucceeded
-                ? "TEST LEVEL // STOPPED // SNAPSHOT CLEAN"
-                : "TEST LEVEL // STOPPED // CLEANUP WARNING");
-        if (!result.warning.empty())
-        {
-            wi::helper::messageBox(result.warning, "Test Level");
-        }
-    }
-
-    void StudioRenderPath::RefreshAssetBrowser()
-    {
-        std::vector<RenegadeStudioChrome::AssetFolderRow> folders;
-        std::vector<RenegadeStudioChrome::AssetCard> assets;
-
-        if (session_ == nullptr || !session_->Projects().HasProject())
-        {
-            studioChrome_.SetAssetBrowserData(
-                std::move(folders),
-                std::move(assets),
-                "NO PROJECT");
-            return;
-        }
-
-        const auto snapshot = assetBrowserService_.Scan(
-            session_->Projects().CurrentProject().rootPath,
-            assetBrowserCurrentFolder_);
-        if (!snapshot.succeeded)
-        {
-            studioChrome_.SetAssetBrowserData(
-                std::move(folders),
-                std::move(assets),
-                "CONTENT UNAVAILABLE");
-            studioChrome_.SetStatusText(
-                "ASSET BROWSER // " + snapshot.error);
-            return;
-        }
-
-        assetBrowserCurrentFolder_ = snapshot.currentFolder;
-        folders.reserve(snapshot.folders.size());
-        for (const auto& folder : snapshot.folders)
-        {
-            RenegadeStudioChrome::AssetFolderRow row;
-            row.name = folder.name;
-            row.relativePath = folder.projectRelativePath;
-            row.depth = static_cast<int>(folder.depth);
-            row.selected = folder.selected;
-            folders.push_back(std::move(row));
-        }
-
-        assets.reserve(snapshot.assets.size());
-        for (const auto& asset : snapshot.assets)
-        {
-            RenegadeStudioChrome::AssetCard card;
-            card.name = asset.name;
-            card.relativePath = asset.projectRelativePath;
-            card.typeLabel =
-                bridge::AssetBrowserService::TypeLabel(asset.type);
-            card.directory = asset.directory;
-            assets.push_back(std::move(card));
-        }
-
-        studioChrome_.SetAssetBrowserData(
-            std::move(folders),
-            std::move(assets),
-            snapshot.currentFolder);
-        studioChrome_.SetStatusText(
-            "ASSET BROWSER // " + snapshot.currentFolder);
-    }
-
-    void StudioRenderPath::SelectAssetBrowserFolder(
-        const std::string& relativePath)
-    {
-        if (relativePath.empty())
-        {
-            return;
-        }
-        assetBrowserCurrentFolder_ = relativePath;
-        RefreshAssetBrowser();
-    }
-
-    void StudioRenderPath::SelectAssetBrowserItem(
-        const std::string& relativePath)
-    {
-        if (session_ == nullptr || relativePath.empty())
-        {
-            return;
-        }
-
-        const fs::path absolute =
-            fs::u8path(session_->Projects().CurrentProject().rootPath) /
-            fs::u8path(relativePath);
-        if (fs::is_directory(absolute))
-        {
-            SelectAssetBrowserFolder(relativePath);
-            return;
-        }
-
-        // V1 deliberately stops at real project browsing and selection.
-        // Type-specific open/place/apply and drag payloads are the next slice.
-        studioChrome_.SetStatusText(
-            "ASSET SELECTED // " + relativePath);
-    }
-
-    void StudioRenderPath::CreateProject()
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        const std::string projectName = projectNameInput_.GetText();
-        const std::string parentDirectory = wi::helper::FolderDialog(
-            "Select the folder that will contain the new Renegade project.");
-        if (parentDirectory.empty())
-        {
-            return;
-        }
-
-        wi::eventhandler::Subscribe_Once(
-            wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-            [this, parentDirectory, projectName](uint64_t)
-            {
-                if (!session_->Projects().CreateProject(
-                        parentDirectory,
-                        projectName,
-                        "Content/ProvingGround.wiscene"))
-                {
-                    hubMessageLabel_.font.params.color = WarningAmber;
-                    hubMessageLabel_.SetText(
-                        "PROJECT CREATE FAILED // " +
-                        session_->Projects().LastError());
-                    return;
-                }
-
-                ClearSelectionOutline();
-                if (!session_->LoadScene(session_->Projects().StartupScenePath()))
-                {
-                    hubMessageLabel_.font.params.color = WarningAmber;
-                    hubMessageLabel_.SetText(
-                        "PROJECT SCENE FAILED // " +
-                        session_->Scenes().LastError());
-                    return;
-                }
-
-                workspaceTitle_.SetText(
-                    "RENEGADE STUDIO // " +
-                    session_->Projects().CurrentProject().name);
-                hubMessageLabel_.font.params.color = HologramMuted;
-                hubMessageLabel_.SetText(
-                    "PROJECT CREATED // " +
-                    session_->Projects().CurrentProject().descriptorPath);
-                selectedRecentProject_ = -1;
-                RefreshProjectHub();
-                SetProjectHubVisible(false);
-            });
-    }
-
-    void StudioRenderPath::OpenProject()
-    {
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Renegade Project (.renegade)";
-        params.extensions.push_back("renegade");
-        wi::helper::FileDialog(
-            params,
-            [this](const std::string& descriptorPath)
-            {
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, descriptorPath](uint64_t)
-                    {
-                        OpenProjectDescriptor(descriptorPath);
-                    });
-            });
-    }
-
-    void StudioRenderPath::RequestSceneReplacement(
-        std::function<void()> continuation)
-    {
-        if (session_ == nullptr || !continuation)
-        {
-            return;
-        }
-
-        // A running preview is a real pending scene edit. Commit it first so
-        // the dirty-state question includes what the creator can currently
-        // see in the viewport.
-        StopSunPreview(true);
-        if (!session_->Commands().IsDirty())
-        {
-            continuation();
-            return;
-        }
-
-        const std::string currentPath = session_->Scenes().CurrentPath();
-        const std::string sceneName = currentPath.empty()
-            ? "the current scene"
-            : "\"" + wi::helper::GetFileNameFromPath(currentPath) + "\"";
-        const auto result = wi::helper::messageBoxCustom(
-            "Do you want to save changes to " + sceneName + "?",
-            "Unsaved changes",
-            "YesNoCancel");
-        if (result == wi::helper::MessageBoxResult::No ||
-            result == wi::helper::MessageBoxResult::OK)
-        {
-            continuation();
-            return;
-        }
-        if (result != wi::helper::MessageBoxResult::Yes)
-        {
-            return;
-        }
-        if (currentPath.empty())
-        {
-            SaveSceneAs(
-                [continuation = std::move(continuation)](const bool saved)
-                {
-                    if (saved)
-                    {
-                        continuation();
-                    }
-                });
-            return;
-        }
-
-        ClearSelectionOutline();
-        const bool saved = session_->SaveScene(currentPath);
-        SyncSelectionOutline();
-        RefreshStatus();
-        RefreshInspector();
-        if (saved)
-        {
-            continuation();
-        }
-    }
-
-    void StudioRenderPath::OpenScene()
-    {
-        if (session_ == nullptr || sceneOpenInProgress_)
-        {
-            return;
-        }
-
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::OPEN;
-        params.description = "Renegade Scene (.wiscene)";
-        params.extensions.push_back("wiscene");
-        wi::helper::FileDialog(
-            params,
-            [this](const std::string& scenePath)
-            {
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, scenePath](uint64_t)
-                    {
-                        RequestSceneReplacement(
-                            [this, scenePath]()
-                            {
-                                BeginOpenScene(scenePath);
-                            });
-                    });
-            });
-    }
-
-    void StudioRenderPath::BeginOpenScene(const std::string& scenePath)
-    {
-        if (session_ == nullptr || sceneOpenInProgress_)
-        {
-            return;
-        }
-
-        sceneOpenInProgress_ = true;
-        openingScenePath_ = scenePath;
-        sceneOpenWorkload_.priority = wi::jobsystem::Priority::Low;
-        if (projectHubVisible_)
-        {
-            hubMessageLabel_.font.params.color = HologramMuted;
-            hubMessageLabel_.SetText(
-                "SCENE OPENING // " +
-                wi::helper::GetFileNameFromPath(scenePath));
-        }
-        RefreshStatus();
-
-        auto prepared = std::make_shared<bridge::PreparedSceneOpen>();
-        wi::jobsystem::Execute(
-            sceneOpenWorkload_,
-            [this, scenePath, prepared](wi::jobsystem::JobArgs)
-            {
-                *prepared = session_->Documents().PrepareOpen(scenePath);
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, prepared](uint64_t)
-                    {
-                        CompleteOpenScene(std::move(*prepared));
-                    });
-            });
-    }
-
-    void StudioRenderPath::CompleteOpenScene(
-        bridge::PreparedSceneOpen prepared)
-    {
-        sceneOpenInProgress_ = false;
-        openingScenePath_.clear();
-
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        ClearSelectionOutline();
-        if (!session_->Documents().CommitPreparedOpen(std::move(prepared)))
-        {
-            SyncSelectionOutline();
-            if (projectHubVisible_)
-            {
-                hubMessageLabel_.font.params.color = WarningAmber;
-                hubMessageLabel_.SetText(
-                    "SCENE OPEN FAILED // " +
-                    session_->Scenes().LastError());
-            }
-            RefreshStatus();
-            RefreshInspector();
-            return;
-        }
-
-        AdoptOpenedSceneCamera();
-        SetEnvironmentWorkspaceActive(false);
-        SetTerrainWorkspaceActive(false);
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-        SetProjectHubVisible(false);
-    }
-
-    void StudioRenderPath::AdoptOpenedSceneCamera()
-    {
-        if (session_ == nullptr || camera == nullptr)
-        {
-            return;
-        }
-
-        const auto cameraEntity = session_->Documents().LastOpenedCamera();
-        const auto& openedScene = session_->Scenes().GetScene();
-        const auto* openedCamera =
-            openedScene.cameras.GetComponent(cameraEntity);
-        if (openedCamera == nullptr)
-        {
-            // No authored camera in the opened document (common for
-            // terrain-only scenes that were never given an explicit
-            // Camera entity). Wicked's terrain chunk streaming
-            // (wi::terrain::Terrain::Generation_Update, run every real
-            // frame from RenderPath3D::Update) evicts and permanently
-            // discards any chunk whose distance from the *current*
-            // editor camera exceeds its removal radius. Leaving the
-            // camera wherever it happened to be from the previous
-            // document means a freshly opened terrain scene has its
-            // just-loaded, correctly-deserialized chunks evicted and
-            // silently replaced with fresh procedural generation before
-            // the user ever sees them - which reads as "the terrain
-            // didn't save" even though the archive round-trip was
-            // correct. Recenter over the terrain's own saved chunk
-            // position instead of leaving the stale camera in place.
-            AdoptOpenedSceneTerrainFallbackCamera(openedScene);
-            return;
-        }
-
-        camera->Eye = openedCamera->Eye;
-        camera->At = openedCamera->At;
-        camera->Up = openedCamera->Up;
-        camera->fov = openedCamera->fov;
-        camera->zNearP = openedCamera->zNearP;
-        camera->zFarP = openedCamera->zFarP;
-        camera->focal_length = openedCamera->focal_length;
-        camera->aperture_size = openedCamera->aperture_size;
-        camera->aperture_shape = openedCamera->aperture_shape;
-        camera->width = static_cast<float>(GetInternalResolution().x);
-        camera->height = static_cast<float>(GetInternalResolution().y);
-
-        const auto* openedTransform =
-            openedScene.transforms.GetComponent(cameraEntity);
-        if (openedTransform != nullptr)
-        {
-            editorCameraTransform_ = *openedTransform;
-            camera->TransformCamera(editorCameraTransform_);
-        }
-        camera->UpdateCamera();
-    }
-
-    void StudioRenderPath::AdoptOpenedSceneTerrainFallbackCamera(
-        const wi::scene::Scene& openedScene)
-    {
-        if (camera == nullptr || openedScene.terrains.GetCount() == 0)
-        {
-            return;
-        }
-
-        const wi::terrain::Terrain& terrain = openedScene.terrains[0];
-        if (terrain.chunks.empty())
-        {
-            return;
-        }
-
-        // Prefer the chunk at the terrain's own saved center; fall back
-        // to whichever loaded chunk is closest to it if that exact
-        // coordinate was not generated/saved.
-        auto best = terrain.chunks.find(terrain.center_chunk);
-        if (best == terrain.chunks.end())
-        {
-            best = terrain.chunks.begin();
-            int bestDist =
-                std::max(
-                    std::abs(terrain.center_chunk.x - best->first.x),
-                    std::abs(terrain.center_chunk.z - best->first.z));
-            for (auto it = terrain.chunks.begin();
-                 it != terrain.chunks.end();
-                 ++it)
-            {
-                const int dist = std::max(
-                    std::abs(terrain.center_chunk.x - it->first.x),
-                    std::abs(terrain.center_chunk.z - it->first.z));
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    best = it;
-                }
-            }
-        }
-        if (best == terrain.chunks.end())
-        {
-            return;
-        }
-
-        const XMFLOAT3 targetPosition = best->second.sphere.center;
-        const float radius = std::max(best->second.sphere.radius, 1.0f);
-        const XMVECTOR at = XMLoadFloat3(&targetPosition);
-        const XMVECTOR eye =
-            at +
-            XMVectorSet(0.0f, radius * 1.5f, -radius * 2.5f, 0.0f);
-        const XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-        const XMMATRIX view = XMMatrixLookAtLH(eye, at, up);
-        editorCameraTransform_.ClearTransform();
-        editorCameraTransform_.MatrixTransform(
-            XMMatrixInverse(nullptr, view));
-        editorCameraTransform_.UpdateTransform();
-        camera->TransformCamera(editorCameraTransform_);
-        camera->width = static_cast<float>(GetInternalResolution().x);
-        camera->height = static_cast<float>(GetInternalResolution().y);
-        camera->UpdateCamera();
-    }
-
-    void StudioRenderPath::OpenProjectDescriptor(
-        const std::string& descriptorPath)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        if (!session_->Projects().OpenProject(descriptorPath))
-        {
-            hubMessageLabel_.font.params.color = WarningAmber;
-            hubMessageLabel_.SetText(
-                "PROJECT OPEN FAILED // " +
-                session_->Projects().LastError());
-            return;
-        }
-        ClearSelectionOutline();
-        if (!session_->LoadScene(session_->Projects().StartupScenePath()))
-        {
-            hubMessageLabel_.font.params.color = WarningAmber;
-            hubMessageLabel_.SetText(
-                "PROJECT SCENE FAILED // " +
-                session_->Scenes().LastError());
-            return;
-        }
-
-        workspaceTitle_.SetText(
-            "RENEGADE STUDIO // " +
-            session_->Projects().CurrentProject().name);
-        hubMessageLabel_.font.params.color = HologramMuted;
-        hubMessageLabel_.SetText(
-            "PROJECT ONLINE // " +
-            session_->Projects().CurrentProject().descriptorPath);
-        selectedRecentProject_ = -1;
-        RefreshProjectHub();
-        SetProjectHubVisible(false);
-    }
-
-    void StudioRenderPath::OpenSelectedRecentProject()
-    {
-        if (session_ == nullptr || selectedRecentProject_ < 0)
-        {
-            return;
-        }
-
-        const auto& recent = session_->Projects().RecentProjects();
-        const auto index = static_cast<std::size_t>(selectedRecentProject_);
-        if (index >= recent.size())
-        {
-            return;
-        }
-
-        OpenProjectDescriptor(recent[index].descriptorPath);
-    }
-
-    void StudioRenderPath::ReturnToProjectHub()
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        RequestSceneReplacement(
-            [this]()
-            {
-                selectedRecentProject_ = -1;
-                hubMessageLabel_.font.params.color = HologramMuted;
-                hubMessageLabel_.SetText(
-                    "PROJECT HUB ONLINE // SELECT AN OPERATION");
-                RefreshProjectHub();
-                SetProjectHubVisible(true);
-            });
-    }
-
-    void StudioRenderPath::SelectRecentProject(const std::size_t index)
-    {
-        if (session_ == nullptr ||
-            index >= session_->Projects().RecentProjects().size())
-        {
-            return;
-        }
-
-        selectedRecentProject_ = static_cast<int>(index);
-        RefreshProjectHub();
-    }
-
-    void StudioRenderPath::SetProjectHubVisible(const bool visible)
-    {
-        if (visible && flyCameraActive_)
-        {
-            flyCameraActive_ = false;
-            wi::input::HidePointer(false);
-        }
-
-        projectHubVisible_ = visible;
-        projectHubPanel_.SetVisible(visible);
-        // Stock workspace surfaces stay hidden. RenegadeStudioChrome owns the
-        // shell, while the opaque Inspector host schedules the functional
-        // controls rendered by Renegade subclasses.
-        toolbarPanel_.SetVisible(false);
-        hierarchyPanel_.SetVisible(false);
-        inspectorPanel_.SetVisible(!visible);
-        hierarchySearch_.SetVisible(!visible);
-        contentPanel_.SetVisible(false);
-        studioChrome_.SetVisible(!visible);
-
-        // The stock overlay collides with Renegade's owned shell. Live FPS is
-        // rendered by RenegadeStudioChrome's status bar instead and therefore
-        // hides automatically with the rest of the workspace on Project Hub.
-        if (diagnostics_ != nullptr)
-        {
-            diagnostics_->active = false;
-        }
-
-        if (!visible)
-        {
-            RefreshHierarchy();
-            RefreshInspector();
-            RefreshStatus();
-        }
-    }
-
-    void StudioRenderPath::SyncGizmoSelection()
-    {
-        gizmo_.selected.clear();
-        gizmo_.selectedEntitiesNonRecursive.clear();
-        gizmoEntity_ = wi::ecs::INVALID_ENTITY;
-        gizmoDragActive_ = false;
-
-        if (environmentWorkspaceActive_ || session_ == nullptr ||
-            !session_->Selection().HasSelection())
-        {
-            return;
-        }
-
-        const auto entity = session_->Selection().SelectedEntity();
-        auto& scene = session_->Scenes().GetScene();
-        const auto* transform = scene.transforms.GetComponent(entity);
-        if (transform == nullptr)
-        {
-            return;
-        }
-
-        wi::scene::PickResult selected;
-        selected.entity = entity;
-        gizmo_.scene = &scene;
-        gizmo_.selected.push_back(selected);
-        gizmo_.selectedEntitiesNonRecursive.push_back(entity);
-        gizmo_.PreTranslate();
-        gizmoEntity_ = entity;
-        gizmoTransformBefore_ = bridge::CaptureTransform(*transform);
-    }
-
-    void StudioRenderPath::ClearSelectionOutline() noexcept
-    {
-        if (session_ != nullptr &&
-            outlinedEntity_ != wi::ecs::INVALID_ENTITY)
-        {
-            auto* object = session_->Scenes()
-                .GetScene()
-                .objects
-                .GetComponent(outlinedEntity_);
-            if (object != nullptr)
-            {
-                object->SetUserStencilRef(
-                    outlinedEntityPreviousStencil_);
-            }
-        }
-
-        outlinedEntity_ = wi::ecs::INVALID_ENTITY;
-        outlinedEntityPreviousStencil_ = 0;
-    }
-
-    void StudioRenderPath::SyncSelectionOutline()
-    {
-        if (environmentWorkspaceActive_)
-        {
-            ClearSelectionOutline();
-            return;
-        }
-        const auto selected = session_ != nullptr
-            ? session_->Selection().SelectedEntity()
-            : wi::ecs::INVALID_ENTITY;
-        if (selected == outlinedEntity_)
-        {
-            return;
-        }
-
-        ClearSelectionOutline();
-        if (session_ == nullptr ||
-            selected == wi::ecs::INVALID_ENTITY)
-        {
-            return;
-        }
-
-        auto* object =
-            session_->Scenes().GetScene().objects.GetComponent(selected);
-        if (object == nullptr)
-        {
-            return;
-        }
-
-        outlinedEntity_ = selected;
-        outlinedEntityPreviousStencil_ = object->userStencilRef;
-        object->SetUserStencilRef(SelectionStencilReference);
-    }
-
-    void StudioRenderPath::SaveScene()
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        const std::string scenePath = session_->Scenes().CurrentPath();
-        if (scenePath.empty())
-        {
-            SaveSceneAs();
-            return;
-        }
-
-        StopSunPreview(true);
-        ClearSelectionOutline();
-        session_->SaveScene(scenePath);
-        SyncSelectionOutline();
-        RefreshStatus();
-        RefreshInspector();
-    }
-
-    void StudioRenderPath::SaveSceneAs(
-        std::function<void(bool)> completion)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        StopSunPreview(true);
-
-        wi::helper::FileDialogParams params;
-        params.type = wi::helper::FileDialogParams::SAVE;
-        params.description = "Renegade Scene (.wiscene)";
-        params.extensions.push_back("wiscene");
-        wi::helper::FileDialog(
-            params,
-            [this, completion](const std::string& selectedPath)
-            {
-                const std::string scenePath =
-                    wi::helper::ForceExtension(selectedPath, "wiscene");
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, scenePath, completion](uint64_t)
-                    {
-                        ClearSelectionOutline();
-                        const bool saved = session_->SaveScene(scenePath);
-                        SyncSelectionOutline();
-                        RefreshStatus();
-                        RefreshInspector();
-                        if (completion)
-                        {
-                            completion(saved);
-                        }
-                    });
-            },
-            [completion]()
-            {
-                if (completion)
-                {
-                    completion(false);
-                }
-            });
-    }
-
-    void StudioRenderPath::ReopenScene()
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        const std::string scenePath = session_->Scenes().CurrentPath();
-        if (scenePath.empty())
-        {
-            session_->ReloadScene();
-            RefreshStatus();
-            return;
-        }
-
-        RequestSceneReplacement(
-            [this, scenePath]()
-            {
-                BeginOpenScene(scenePath);
-            });
-    }
-
-    void StudioApplication::SetStartupScene(std::string filePath)
-    {
-        if (!filePath.empty())
-        {
-            startupScene_ = std::move(filePath);
-        }
-    }
-
-    void StudioApplication::PrepareProvingGround()
-    {
-        if (wi::helper::FileExists(startupScene_) &&
-            session_.LoadScene(startupScene_))
-        {
-            return;
-        }
-
-        session_.Scenes().CreateProvingGround();
-        session_.SaveScene(startupScene_);
-    }
-
-    void StudioApplication::Initialize()
-    {
-        wi::Application::Initialize();
-
-        infoDisplay.active = true;
-        infoDisplay.watermark = false;
-        infoDisplay.device_name = false;
-        infoDisplay.resolution = false;
-        infoDisplay.logical_size = false;
-        infoDisplay.colorspace = false;
-        infoDisplay.fpsinfo = false;
-        infoDisplay.size = 14;
-
-        session_.Projects().Initialize("Saved/RenegadeStudio.ini");
-        PrepareProvingGround();
-
-        renderer_.BindSession(session_);
-        renderer_.BindDiagnostics(infoDisplay);
-        renderer_.init(canvas);
-        renderer_.Load();
-        ActivatePath(&renderer_);
-    }
-}
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×^üóTèµ©hºÚn¶X§zÍHÚ[˜ÛYH”ÝY[Ð\XØ][Û‹š‚‚ˆÚ[˜ÛYHœ™[™YØYKØœšYÙKÕ\Ý]™[Û˜\ÚÝÙ\šXÙKš‚ˆÚ[˜ÛYHœ™[™YØYKØœšYÙKÐÜ™X]Ü\ÜÙ]ÛÜšÙ›ÝÔÙ\šXÙKš‚ˆÚ[˜ÛYHœ™[™YØYKØœšYÙKÐÜ™X]Ü“[Ù[[\Ü™XÚ\Kš‚ˆÚ[˜ÛYHœ™[™YØYKØœšYÙKÐÜ™X]Ü“[Ù[X]\šX[™\\˜][Û”Ù\šXÙKš‚ˆÚ[˜ÛYHœ™[™YØYKØœšYÙKÔ™]\ØX›P\ÜÙ][œÝ[˜ÙTÙ\šXÙKš‚ˆÚ[˜ÛYH‘[[^Uš\ÝX[^™\‹š‚‚ˆÚ[˜ÛYH[ÛÜš]O‚ˆÚ[˜ÛYHÚ›Û›Ï‚ˆÚ[˜ÛYHÛX]‚ˆÚ[˜ÛYHÙ›Ø]‚ˆÚ[˜ÛYHš[\Þ\Ý[O‚ˆÚ[˜ÛYH[ÛX[š\‚ˆÚ[˜ÛYHY[[ÜžO‚ˆÚ[˜ÛYHÜÝ™X[O‚ˆÚ[˜ÛYH][]O‚‚›˜[Y\ÜXÙBžÂˆ˜[Y\ÜXÙHœÈHÝŽ™š[\Þ\Ý[NÂˆÛÛœÝ^ˆÝŽZ[ÝÙ[XÝ[Û”Ý[˜Ú[™Y™\™[˜ÙHHŽÂˆÛÛœÝ^ˆÚNŽÛÛÜˆÛÙÜ˜[RYHHÚNŽÛÛÜŠL‹M‹NK
+NÂˆÛÛœÝ^ˆÚNŽÛÛÜˆÛÙÜ˜[Q›ØÝ\ÈHÚNŽÛÛÜŠ‹ÌKÍKMJNÂˆÛÛœÝ^ˆÚNŽÛÛÜˆÛÙÜ˜[PXÝ]™HHÚNŽÛÛÜŠÎËËMJNÂˆÛÛœÝ^ˆÚNŽÛÛÜˆÛÙÜ˜[U^HÚNŽÛÛÜŠŒÎKŒÌËMJNÂˆÛÛœÝ^ˆÚNŽÛÛÜˆÛÙÜ˜[S]]YHÚNŽÛÛÜŠMÎMÎMÍ‹MJNÂˆÛÛœÝ^ˆÚNŽÛÛÜˆÛÙÜ˜[P›Ü™\ˆHÚNŽÛÛÜŠÎL‹ŒKMJNÂˆÛÛœÝ^ˆÚNŽÛÛÜˆÛÙÜ˜[T[™[HÚNŽÛÛÜŠLKLËLŠNÂˆÛÛœÝ^ˆÚNŽÛÛÜˆÛÙÜ˜[TÙ[XÝYHÚNŽÛÛÜŠÍKŽKMJNÂˆÛÛœÝ^ˆÚNŽÛÛÜˆØ\›š[™Ð[X™\ˆHÚNŽÛÛÜŠMKMLMJNÂˆÛÛœÝ^ˆ[^[Ý]™Y™\™[˜ÙPš]ÈHLÂ‚ˆQ“ÐU›Ý][Û‘œ›ÛUÊˆÛÛœÝQ“ÐUÉˆÛÝ\˜ÙKˆÛÛœÝQ“ÐUÉˆ\™Ù]
+H›Ù^Ù\ˆÂˆÛÛœÝU‘PÕÔˆÛÝ\˜ÙU™XÝÜˆHSØY›Ø]Ê	œÛÝ\˜ÙJNÂˆÛÛœÝU‘PÕÔˆ\™Ù]™XÝÜˆHSØY›Ø]Ê	\™Ù]
+NÂˆYˆ
+U™XÝÜ‘Ù]
+U™XÝÜŒÓ[™ÝÜJÛÝ\˜ÙU™XÝÜŠJHŒYˆˆU™XÝÜ‘Ù]
+U™XÝÜŒÓ[™ÝÜJ\™Ù]™XÝÜŠJHŒYŠBˆÂˆ™]\›ˆQ“ÐU
+Œ‹Œ‹Œ‹KŒŠNÂˆBˆÛÛœÝU‘PÕÔˆœ›ÛHHU™XÝÜŒÓ›Ü›X[^™JÛÝ\˜ÙU™XÝÜŠNÂˆÛÛœÝU‘PÕÔˆÈHU™XÝÜŒÓ›Ü›X[^™J\™Ù]™XÝÜŠNÂˆÛÛœÝ›Ø]ÝHU™XÝÜ‘Ù]
+U™XÝÜŒÑÝ
+œ›ÛKÊJNÂˆYˆ
+ÝHŽNNNYŠBˆÂˆ™]\›ˆQ“ÐU
+Œ‹Œ‹Œ‹KŒŠNÂˆBˆYˆ
+ÝHLŽNNNYŠBˆÂˆU‘PÕÔˆ^\ÈHU™XÝÜŒÐÜ›ÜÜÊœ›ÛKU™XÝÜ”Ù]
+K
+JNÂˆYˆ
+U™XÝÜ‘Ù]
+U™XÝÜŒÓ[™ÝÜJ^\ÊJHŒYŠBˆÂˆ^\ÈHU™XÝÜŒÐÜ›ÜÜÊœ›ÛKU™XÝÜ”Ù]
+K
+JNÂˆBˆQ“ÐU›Ý][ÛŽÂˆTÝÜ™Q›Ø]
+ˆ	œ›Ý][Û‹ˆT]X]\›š[Û”›Ý][Û^\ÊU™XÝÜŒÓ›Ü›X[^™J^\ÊKWÔJJNÂˆ™]\›ˆ›Ý][ÛŽÂˆB‚ˆÛÛœÝU‘PÕÔˆ^\ÈHU™XÝÜŒÐÜ›ÜÜÊœ›ÛKÊNÂˆQ“ÐU›Ý][ÛŽÂˆTÝÜ™Q›Ø]
+ˆ	œ›Ý][Û‹ˆT]X]\›š[Û“›Ü›X[^™JU™XÝÜ”Ù]
+ˆU™XÝÜ‘Ù]
+^\ÊKˆU™XÝÜ‘Ù]J^\ÊKˆU™XÝÜ‘Ù]Š^\ÊKˆKŒˆ
+ÈÝ
+JJNÂˆ™]\›ˆ›Ý][ÛŽÂˆB‚ˆÛÛœÝÚ\ŠˆXÙ[Y[YÚ˜[YJˆÛÛœÝÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž“YÚ\H\JH›Ù^Ù\ˆÂˆÝÚ]Ú
+\JBˆÂˆØ\ÙHÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž”ÔÕ‚ˆ™]\›ˆ”ÔÕŽÂˆØ\ÙHÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž”‘PÕS‘ÓN‚ˆ™]\›ˆ”‘PÕS‘ÓHŽÂˆØ\ÙHÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž‘T‘PÕSÓS‚ˆ™]\›ˆ‘T‘PÕSÓSŽÂˆØ\ÙHÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž”ÒS•‚ˆY˜][‚ˆ™]\›ˆ”ÒS•ŽÂˆBˆB‚ˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÝY[ÐÚ›ÛYNŽ’Y\˜\˜ÚPØ]YÛÜžBˆÒY\˜\˜ÚPØ]YÛÜžJˆÛÛœÝ™[™YØYNŽ˜œšYÙNŽ”ØÙ[™Q[]PØ]YÛÜžHØ]YÛÜžJH›Ù^Ù\ˆÂˆ\Ú[™ÈœšYÙPØ]YÛÜžHH™[™YØYNŽ˜œšYÙNŽ”ØÙ[™Q[]PØ]YÛÜžNÂˆ\Ú[™ÈÚ›ÛYPØ]YÛÜžHBˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÝY[ÐÚ›ÛYNŽ’Y\˜\˜ÚPØ]YÛÜžNÂˆÝÚ]Ú
+Ø]YÛÜžJBˆÂˆØ\ÙHœšYÙPØ]YÛÜžNŽ“YÚÎ‚ˆ™]\›ˆÚ›ÛYPØ]YÛÜžNŽ“YÚÎÂˆØ\ÙHœšYÙPØ]YÛÜžNŽ“[Ù[Î‚ˆ™]\›ˆÚ›ÛYPØ]YÛÜžNŽ“[Ù[ÎÂˆØ\ÙHœšYÙPØ]YÛÜžNŽÚ\˜XÝ\œÎ‚ˆ™]\›ˆÚ›ÛYPØ]YÛÜžNŽÚ\˜XÝ\œÎÂˆØ\ÙHœšYÙPØ]YÛÜžNŽØ[Y\˜\Î‚ˆ™]\›ˆÚ›ÛYPØ]YÛÜžNŽØ[Y\˜\ÎÂˆØ\ÙHœšYÙPØ]YÛÜžNŽ•\œ˜Z[Ž‚ˆ™]\›ˆÚ›ÛYPØ]YÛÜžNŽ•\œ˜Z[ŽÂˆØ\ÙHœšYÙPØ]YÛÜžNŽ‘Y™™XÝÎ‚ˆ™]\›ˆÚ›ÛYPØ]YÛÜžNŽ‘Y™™XÝÎÂˆØ\ÙHœšYÙPØ]YÛÜžNŽ]Y[Î‚ˆ™]\›ˆÚ›ÛYPØ]YÛÜžNŽ]Y[ÎÂˆØ\ÙHœšYÙPØ]YÛÜžNŽ“Ý\Ž‚ˆY˜][‚ˆ™]\›ˆÚ›ÛYPØ]YÛÜžNŽ“Ý\ŽÂˆBˆB‚ˆ›ÚY˜]ÑY]Ü“[™JˆÛÛœÝQ“ÐU‰ˆÝ\ˆÛÛœÝQ“ÐU‰ˆ[™ˆÛÛœÝQ“ÐU	ˆÛÛÜŠBˆÂˆÚNŽœ™[™\™\ŽŽ”™[™\˜X›S[™L‘[™NÂˆ[™KœÝ\HÝ\Âˆ[™K™[™H[™Âˆ[™K˜ÛÛÜ—ÜÝ\HÛÛÜŽÂˆ[™K˜ÛÛÜ—Ù[™HÛÛÜŽÂˆÚNŽœ™[™\™\ŽŽ‘˜]Ó[™J[™JNÂˆB‚ˆ[™XY^[Ý]™Y™\™[˜ÙJˆÛÛœÝ™[™YØYNŽ˜œšYÙNŽ”›Ú™XÝÙ\šXÙIˆ›Ú™XÝËˆÛÛœÝÝŽœÝš[™ÉˆÙ^KˆÛÛœÝ[˜[˜XÚÊBˆÂˆ[˜[YHHÂˆ›Üˆ
+[š]HÈš]^[Ý]™Y™\™[˜ÙPš]ÎÈ
+ÊØš]
+BˆÂˆYˆ
+›Ú™XÝË‘Ù]Y]Ü”™Y™\™[˜ÙJˆÙ^H
+È—Øš]Èˆ
+ÈÝŽ×ÜÝš[™Êš]
+Kˆ˜[ÙJJBˆÂˆ˜[YHHHš]ÂˆBˆBˆ™]\›ˆ˜[YHˆÈ˜[YHˆ˜[˜XÚÎÂˆB‚ˆ›ÚYÜš]S^[Ý]™Y™\™[˜ÙJˆ™[™YØYNŽ˜œšYÙNŽ”›Ú™XÝÙ\šXÙIˆ›Ú™XÝËˆÛÛœÝÝŽœÝš[™ÉˆÙ^KˆÛÛœÝ[˜[YJBˆÂˆ›Üˆ
+[š]HÈš]^[Ý]™Y™\™[˜ÙPš]ÎÈ
+ÊØš]
+BˆÂˆ›Ú™XÝË”Ù]Y]Ü”™Y™\™[˜ÙJˆÙ^H
+È—Øš]Èˆ
+ÈÝŽ×ÜÝš[™Êš]
+Kˆ
+˜[YH	ˆ
+Hš]
+JHOH
+NÂˆBˆB‚ˆœÎŽœ][ØØ]R[\ÜY[Ù[\ÜÙ]]
+ˆÛÛœÝœÎŽœ]	ˆ›Ú™XÝ›ÛÝˆÛÛœÝœÎŽœ]	ˆÛÝ\˜ÙJBˆÂˆÛÛœÝœÎŽœ]ÛÛ[\™XÝÜžHBˆ›Ú™XÝ›ÛÝÈÛÛ[ˆÈ“[Ù[ÈŽÂˆÛÛœÝœÎŽœ]ÛÝ\˜ÙQ\™XÝÜžHBˆ›Ú™XÝ›ÛÝÈ”ÛÝ\˜ÙP\ÜÙ]ÈˆÈ“[Ù[ÈŽÂˆÝŽ™\œ›Ü—ØÛÙHYÛ›Ü™YÂˆœÎŽ˜Ü™X]WÙ\™XÝÜšY\ÊÛÛ[\™XÝÜžKYÛ›Ü™Y
+NÂˆYÛ›Ü™Y˜ÛX\Š
+NÂˆœÎŽ˜Ü™X]WÙ\™XÝÜšY\ÊÛÝ\˜ÙQ\™XÝÜžKYÛ›Ü™Y
+NÂ‚ˆÝŽœÝš[™ÈÝ[HHÛÝ\˜ÙKœÝ[J
+KNÝš[™Ê
+NÂˆYˆ
+Ý[K™[\J
+JBˆÂˆÝ[HH’[\ÜY[Ù[ŽÂˆB‚ˆ›Üˆ
+ÝŽZ[Ì—Ý[™^HNÈÈ
+ÊÚ[™^
+BˆÂˆÛÛœÝÝŽœÝš[™ÈØ[™Y]TÝ[HH[™^OHBˆÈÝ[BˆˆÝ[H
+È—Èˆ
+ÈÝŽ×ÜÝš[™Ê[™^
+NÂˆÛÛœÝœÎŽœ]\ÜÙ]]BˆÛÛ[\™XÝÜžHÈœÎŽN]
+Ø[™Y]TÝ[H
+È‹Ú\ØÙ[™HŠNÂˆÛÛœÝœÎŽœ]ÛÝ\˜ÙTÛ˜\ÚÝBˆÛÝ\˜ÙQ\™XÝÜžHÈœÎŽN]
+Ø[™Y]TÝ[JNÂˆYˆ
+YœÎŽ™^\ÝÊ\ÜÙ]]
+H	‰ˆYœÎŽ™^\ÝÊÛÝ\˜ÙTÛ˜\ÚÝ
+JBˆÂˆ™]\›ˆ\ÜÙ]]ÂˆBˆBˆB‚ˆ›ÛÛÛÜSÜšYÚ[˜[[Ù[ÛÝ\˜ÙJˆÛÛœÝœÎŽœ]	ˆÛÝ\˜ÙKˆÛÛœÝœÎŽœ]	ˆ›Ú™XÝ›ÛÝˆÛÛœÝœÎŽœ]	ˆ\ÜÙ]]ˆÝŽœÝš[™Éˆ\œ›ÜŠBˆÂˆYˆ
+YœÎŽš\×Ü™YÝ[\—Ùš[JÛÝ\˜ÙJJBˆÂˆ\œ›ÜˆH•HÙ[XÝYÛÝ\˜ÙH[Ù[›ÈÛ™Ù\ˆ^\ÝÎˆˆ
+ÂˆÛÝ\˜ÙK™Ù[™\šX×ÝNÝš[™Ê
+NÂˆ™]\›ˆ˜[ÙNÂˆB‚ˆÛÛœÝœÎŽœ]Û˜\ÚÝ\™XÝÜžHBˆ›Ú™XÝ›ÛÝÈ”ÛÝ\˜ÙP\ÜÙ]ÈˆÈ“[Ù[ÈˆÈ\ÜÙ]]œÝ[J
+NÂˆÝŽ™\œ›Ü—ØÛÙHÛÜQ\œ›ÜŽÂˆœÎŽ˜Ü™X]WÙ\™XÝÜšY\ÊÛ˜\ÚÝ\™XÝÜžKÛÜQ\œ›ÜŠNÂˆYˆ
+ÛÜQ\œ›ÜŠBˆÂˆ\œ›ÜˆHÛÝ[›ÝÜ™X]HH[Ù[ÛÝ\˜ÙHÛ˜\ÚÝ›Û\Žˆˆ
+ÂˆÛÜQ\œ›Ü‹›Y\ÜØYÙJ
+NÂˆ™]\›ˆ˜[ÙNÂˆB‚ˆœÎŽ˜ÛÜWÙš[JˆÛÝ\˜ÙKˆÛ˜\ÚÝ\™XÝÜžHÈÛÝ\˜ÙK™š[[˜[YJ
+KˆœÎŽ˜ÛÜWÛÜ[ÛœÎŽ›Ý™\Üš]WÙ^\Ý[™ËˆÛÜQ\œ›ÜŠNÂˆYˆ
+ÛÜQ\œ›ÜŠBˆÂˆÝŽ™\œ›Ü—ØÛÙHYÛ›Ü™YÂˆœÎŽœ™[[Ý™WØ[
+Û˜\ÚÝ\™XÝÜžKYÛ›Ü™Y
+NÂˆ\œ›ÜˆHÛÝ[›ÝÛÜHHÜšYÚ[˜[[Ù[[ÈÛÝ\˜ÙP\ÜÙ]Îˆˆ
+ÂˆÛÜQ\œ›Ü‹›Y\ÜØYÙJ
+NÂˆ™]\›ˆ˜[ÙNÂˆB‚ˆËÈ™\Ù\™HHÛÛ[[ÛˆØ[YK\Ý[Hš[˜\žHÚYXØ\ˆ›Üˆ^\›˜[Ó‹‚ˆYˆ
+ÚNŽš[\ŽŽÕ\\ŠÛÝ\˜ÙK™^[œÚ[ÛŠ
+KNÝš[™Ê
+JHOH‹‘ÓˆŠBˆÂˆ›Üˆ
+ÛÛœÝÚ\Šˆ^[œÚ[ÛˆˆÈ‹˜š[ˆ‹‹’SˆŸJBˆÂˆÛÛœÝœÎŽœ]ÚYXØ\ˆHÛÝ\˜ÙKœ\™[Ü]
+
+HÂˆœÎŽN]
+ÛÝ\˜ÙKœÝ[J
+KNÝš[™Ê
+H
+È^[œÚ[ÛŠNÂˆYˆ
+YœÎŽš\×Ü™YÝ[\—Ùš[JÚYXØ\ŠJBˆÂˆÛÛ[YNÂˆBˆÛÜQ\œ›Ü‹˜ÛX\Š
+NÂˆœÎŽ˜ÛÜWÙš[JˆÚYXØ\‹ˆÛ˜\ÚÝ\™XÝÜžHÈÚYXØ\‹™š[[˜[YJ
+KˆœÎŽ˜ÛÜWÛÜ[ÛœÎŽ›Ý™\Üš]WÙ^\Ý[™ËˆÛÜQ\œ›ÜŠNÂˆYˆ
+ÛÜQ\œ›ÜŠBˆÂˆÝŽ™\œ›Ü—ØÛÙHYÛ›Ü™YÂˆœÎŽœ™[[Ý™WØ[
+Û˜\ÚÝ\™XÝÜžKYÛ›Ü™Y
+NÂˆ\œ›ÜˆBˆÛÝ[›ÝÛÜHHÓˆš[˜\žHÚYXØ\ˆ[È‚ˆ”ÛÝ\˜ÙP\ÜÙ]Îˆˆ
+ÂˆÛÜQ\œ›Ü‹›Y\ÜØYÙJ
+NÂˆ™]\›ˆ˜[ÙNÂˆBˆœ™XZÎÂˆBˆB‚ˆ\œ›Ü‹˜ÛX\Š
+NÂˆ™]\›ˆYNÂˆB‚‚ˆËÈÙY\H[\Ü˜\žH™]šY]È™^[Û™H›Ü›X[Ø[Y\˜IÜÈLH˜\ˆ[™BˆËÈÛÈH]]Ü™Y]™[™[XZ[œÈ[š\ÚX›K]È›Ý\Ú]ÈLÛK‚ˆËÈ]OLLHÌ‹Xš]˜[œÙ›Ü›H\È›ÝYÚHËŽ[HÜ˜[[\š]KÚXÚˆËÈš\ÚX›H]X[^™\È]Z[YÚ\˜XÝ\ˆÙ[ÛY]žH[™›Ü›X[È]™[ˆÝYÚˆËÈHÛÝ\˜ÙHY\Ú\È[XÝˆOLŒÙY\ÈÝX‹[Z[[Y]™H™XÚ\Ú[ÛˆÚ[BˆËÈ™]Z[š[™È™[™\ˆ\ÛÛ][Ûˆœ›ÛHH]]Ü™YØÙ[™H]HÜšYÚ[‹‚ˆÛÛœÝ^ˆ›Ø]Ü™X]Ü’[\ÜÝYÙRZYÚHŒŒŽÂˆÛÛœÝ^ˆ›Ø]Ü™X]Ü’[\Ü™]šY]Ñ›ÝˆHÌ‹Œˆ
+ˆWÔHÈNŒŽÂ‚ˆÝXÝÜ™X]Ü“[Ù[[\ÜÛÜšÜÜXÙTÝ]BˆÂˆ›ÛÛXÝ]™HH˜[ÙNÂˆ›ÛÛÛÛ[Z][™ÈH˜[ÙNÂˆÝŽœÝš[™ÈÛÝ\˜ÙT]ÂˆÝŽœÚ^™WÝ[™Ð˜\Ù[[™HHÂˆÚNŽ™XÜÎŽ‘[]H™]šY]Ô›ÛÝHÚNŽ™XÜÎŽ’S•SQÑS•UNÂˆÚNŽ™XÜÎŽ‘[]H™]šY]ÓYÚHÚNŽ™XÜÎŽ’S•SQÑS•UNÂˆÚNŽœØÙ[™NŽ•˜[œÙ›Ü›PÛÛ\Û™[Ø[Y\˜P™Y›Ü™NÂˆ›Ø]Ø[Y\˜Q›Ý™Y›Ü™HHWÔQUÂˆ›ÛÛØ[Y\˜PØ\\™YH˜[ÙNÂˆ›Ø]]]ÛX]XÔØØ[HHKŒŽÂˆ™[™YØYNŽ˜œšYÙNŽ“[Ù[›Ý[™ÈÛÝ\˜ÙP›Ý[™ÎÂˆ™[™YØYNŽ˜œšYÙNŽ’[\ÜYØÙ[™TÝ[[X\žHÝ[[X\žNÂˆ™[™YØYNŽ˜œšYÙNŽ’[\ÜY[Ù[]šY[˜ÙH]šY[˜ÙNÂˆÝŽ™XÝÜÚNŽ™XÜÎŽ‘[]OˆX]\šX[[]Y\ÎÂˆÝŽ™XÝÜÚNŽ™XÜÎŽ‘[]Oˆ[š[X][Û‘[]Y\ÎÂˆÝŽ™XÝÜ™[™YØYNŽ˜œšYÙNŽÜ™X]Ü“X]\šX[ÛÝ\˜ÙSÝ™\œšYOˆX]\šX[Ý™\œšY\ÎÂˆÝŽ™XÝÜ™[™YØYNŽ˜œšYÙNŽÜ™X]Ü[š[X][Û’[\Ü™XÚ\Oˆ[š[X][Û”™XÚ\NÂˆÝŽœÚ^™WÝÙ[XÝYX]\šX[HÂˆÝŽœÚ^™WÝÙ[XÝY[š[X][ÛˆHÂˆQ“ÐUÈÜÚ][Û“Ù™œÙ]HQ“ÐUÊŒ‹Œ‹ŒŠNÂˆQ“ÐUÈ›Ý][Û‘YÜ™Y\ÈHQ“ÐUÊŒ‹Œ‹ŒŠNÂˆQ“ÐUÈØØ[HHQ“ÐUÊKŒ‹KŒ‹KŒŠNÂˆ›ÛÛØØ[S[šÙYHYNÂˆÝŽœÝš[™È\ÜÙ]˜[YNÂˆÝŽœÝš[™È\Ý[˜][Û‘›Û\ˆHÛÛ[Ó[Ù[ÈŽÂˆ›Ø]YÚ[[œÚ]HHŒŽÂˆ›Ø]YÚ^š[]]HLÍKŒŽÂˆ›Ø]YÚ[]˜][ÛˆHÍKŒŽÂˆ›Ø][XšY[œšYÚ™\ÜÈHŒÍYŽÂˆQ“ÐUÈ[XšY[™Y›Ü™HHßNÂˆÚNŽ™XÜÎŽ‘[]HÙX]\‘[]HHÚNŽ™XÜÎŽ’S•SQÑS•UNÂˆ›ÛÛ[XšY[Ø\\™YH˜[ÙNÂˆ›ÛÛX[›™\]Z[•š\ÚX›HHYNÂˆÝŽœÚ^™WÝÛÜšÜÜXÙTÙXÝ[ÛˆHÂˆNÂ‚ˆÜ™X]Ü“[Ù[[\ÜÛÜšÜÜXÙTÝ]HÜ™X]Ü“[Ù[[\Ü\ŽÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYPÛÛX›Ð›ÞÜ™X]Ü’[\ÜX]\šX[ÛÛX›ÎÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYPÛÛX›Ð›ÞÜ™X]Ü’[\Ü[š[X][ÛÛÛX›ÎÂˆÚNŽ™ÝZNŽ“X™[Ü™X]Ü’[\ÜX]\šX[X™[ÂˆÚNŽ™ÝZNŽ“X™[Ü™X]Ü’[\ÜX]\šX[™XYÝ]ÂˆÚNŽ™ÝZNŽ“X™[Ü™X]Ü’[\Ü^\™R[Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYPÛÛX›Ð›ÞÜ™X]Ü’[\Ü^\™TÛÝÛÛX›ÎÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYU^[œ]šY[Ü™X]Ü’[\Ü^\™T]Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYP]ÛˆÜ™X]Ü’[\Ü^\™Pœ›ÝÜÙNÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYP]ÛˆÜ™X]Ü’[\Ü^\™PÛX\ŽÂˆÝŽœÚ^™WÝÜ™X]Ü’[\Ü^\™TÛÝHÂˆÚNŽ™ÝZNŽ“X™[Ü™X]Ü’[\Ü[š[X][Û“X™[Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYU^[œ]šY[Ü™X]Ü’[\Ü[š[X][Û“˜[YNÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYU^[œ]šY[Ü™X]Ü’[\Ü[š[X][Û”Ý\Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYU^[œ]šY[Ü™X]Ü’[\Ü[š[X][Û‘[™Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYPÛÛX›Ð›ÞÜ™X]Ü’[\Ü[š[X][Û‘[˜X›YÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYP]ÛˆÜ™X]Ü’[\Ü[š[X][ÛYÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYP]ÛˆÜ™X]Ü’[\Ü[š[X][Û‘[]NÂˆÚNŽ™ÝZNŽ“X™[Ü™X]Ü’[\Ü[š[X][Û”™XYÝ]ÂˆÚNŽ™ÝZNŽ“X™[Ü™X]Ü’[\Ü˜[œÙ›Ü›SX™[Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYPÛÛX›Ð›ÞÜ™X]Ü’[\ÜÙXÝ[ÛÛÛX›ÎÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYU^[œ]šY[Ü™X]Ü’[\Ü\ÜÙ]˜[YNÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYU^[œ]šY[Ü™X]Ü’[\Ü\Ý[˜][ÛŽÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜÜÚ][Û–Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜÜÚ][Û–NÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜÜÚ][Û–ŽÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\Ü›Ý][Û–Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\Ü›Ý][Û–NÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\Ü›Ý][Û–ŽÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜØØ[VÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜØØ[VNÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜØØ[VŽÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYPÚXÚÐ›ÞÜ™X]Ü’[\ÜØØ[S[šÙYÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYPÛÛX›Ð›ÞÜ™X]Ü’[\Ü[Y[œÚ[Û”™\Ù]ÂˆÚNŽ™ÝZNŽ“X™[Ü™X]Ü’[\ÜX]\šX[ØØ[\“X™[Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\Ü›ÝYÚ™\ÜÎÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜY][™\ÜÎÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\Ü™Y›XÝ[˜ÙNÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\Ü›Ü›X[Ý™[™ÝÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\Ü[ÔÝ™[™ÝÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\Ü[Z\ÜÚ]™TÝ™[™ÝÂˆÚNŽ™ÝZNŽ“X™[Ü™X]Ü’[\ÜYÚ[™ÓX™[Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜYÚ[[œÚ]NÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜYÚ^š[]]Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\ÜYÚ[]˜][ÛŽÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYTÛY\ˆÜ™X]Ü’[\Ü[XšY[œšYÚ™\ÜÎÂˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYPÛÛX›Ð›ÞÜ™X]Ü’[\ÜYÚ[™Ô™\Ù]Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYP]ÛˆÜ™X]Ü’[\ÜYÚ[™Ô™\Ù]Âˆ™[™YØYNŽœÝY[ÎŽ”™[™YØYPÚXÚÐ›ÞÜ™X]Ü’[\ÜX[›™\]Z[•š\ÚX›NÂˆÚNŽ™ÝZNŽ“X™[Ü™X]Ü’[\Ü[X™[Â‚ˆÝŽœÝš[™ÈÜ™X]Ü’[\Ü[]S˜[YJˆÛÛœÝÚNŽœØÙ[™NŽ”ØÙ[™IˆØÙ[™KˆÛÛœÝÚNŽ™XÜÎŽ‘[]H[]KˆÛÛœÝÝŽœÝš[™Éˆ˜[˜XÚÊBˆÂˆÛÛœÝ]]Êˆ˜[YHHØÙ[™K›˜[Y\Ë‘Ù]ÛÛ\Û™[
+[]JNÂˆ™]\›ˆ˜[YHOH[ˆ	‰ˆ[˜[YKO›˜[YK™[\J
+HÈ˜[YKO›˜[YHˆ˜[˜XÚÎÂˆB‚ˆ›ÚY\PÜ™X]Ü’[\Ü™]šY]Õ˜[œÙ›Ü›J
+BˆÂˆ]]ÊˆÙ\ÜÚ[ÛˆH™[™YØYNŽ˜œšYÙNŽ”ÝY[ÔÙ\ÜÚ[ÛŽŽÝ\œ™[
+
+NÂˆYˆ
+Ù\ÜÚ[ÛˆOH[ˆXÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™HˆÜ™X]Ü“[Ù[[\Ü\‹œ™]šY]Ô›ÛÝOHÚNŽ™XÜÎŽ’S•SQÑS•UJBˆ™]\›ŽÂˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û‹O”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆ]]Êˆ˜[œÙ›Ü›HHØÙ[™K˜[œÙ›Ü›\Ë‘Ù]ÛÛ\Û™[
+Ü™X]Ü“[Ù[[\Ü\‹œ™]šY]Ô›ÛÝ
+NÂˆYˆ
+˜[œÙ›Ü›HOH[ŠBˆ™]\›ŽÂˆ˜[œÙ›Ü›KO˜[œÛ][Û—ÛØØ[HQ“ÐUÊˆÜ™X]Ü“[Ù[[\Ü\‹œÜÚ][Û“Ù™œÙ]žˆÜ™X]Ü’[\ÜÝYÙRZYÚ
+ÈÜ™X]Ü“[Ù[[\Ü\‹œÜÚ][Û“Ù™œÙ]žKˆÜ™X]Ü“[Ù[[\Ü\‹œÜÚ][Û“Ù™œÙ]žŠNÂˆU‘PÕÔˆHHT]X]\›š[Û”›Ý][Û”›Û]ÚX]ÊˆPÛÛ™\Ô˜YX[œÊÜ™X]Ü“[Ù[[\Ü\‹œ›Ý][Û‘YÜ™Y\Ëž
+KˆPÛÛ™\Ô˜YX[œÊÜ™X]Ü“[Ù[[\Ü\‹œ›Ý][Û‘YÜ™Y\ËžJKˆPÛÛ™\Ô˜YX[œÊÜ™X]Ü“[Ù[[\Ü\‹œ›Ý][Û‘YÜ™Y\ËžŠJNÂˆTÝÜ™Q›Ø]
+	˜[œÙ›Ü›KOœ›Ý][Û—ÛØØ[JNÂˆ˜[œÙ›Ü›KOœØØ[WÛØØ[HÜ™X]Ü“[Ù[[\Ü\‹œØØ[NÂˆ˜[œÙ›Ü›KO”Ù]\J
+NÂˆ˜[œÙ›Ü›KO•\]U˜[œÙ›Ü›J
+NÂˆB‚ˆ›ÚY\PÜ™X]Ü’[\Ü™]šY]ÓYÚ[™Ê
+BˆÂˆ]]ÊˆÙ\ÜÚ[ÛˆH™[™YØYNŽ˜œšYÙNŽ”ÝY[ÔÙ\ÜÚ[ÛŽŽÝ\œ™[
+
+NÂˆYˆ
+Ù\ÜÚ[ÛˆOH[ˆXÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™JBˆ™]\›ŽÂˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û‹O”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆYˆ
+]]ÊˆYÚHØÙ[™K›YÚË‘Ù]ÛÛ\Û™[
+Ü™X]Ü“[Ù[[\Ü\‹œ™]šY]ÓYÚ
+JBˆÂˆYÚOš[[œÚ]HHÜ™X]Ü“[Ù[[\Ü\‹›YÚ[[œÚ]NÂˆBˆYˆ
+]]Êˆ˜[œÙ›Ü›HHØÙ[™K˜[œÙ›Ü›\Ë‘Ù]ÛÛ\Û™[
+Ü™X]Ü“[Ù[[\Ü\‹œ™]šY]ÓYÚ
+JBˆÂˆÛÛœÝU‘PÕÔˆ›Ý][ÛˆHT]X]\›š[Û”›Ý][Û”›Û]ÚX]ÊˆPÛÛ™\Ô˜YX[œÊXÜ™X]Ü“[Ù[[\Ü\‹›YÚ[]˜][ÛŠKˆPÛÛ™\Ô˜YX[œÊÜ™X]Ü“[Ù[[\Ü\‹›YÚ^š[]]
+KˆŒŠNÂˆTÝÜ™Q›Ø]
+	˜[œÙ›Ü›KOœ›Ý][Û—ÛØØ[›Ý][ÛŠNÂˆ˜[œÙ›Ü›KO”Ù]\J
+NÂˆ˜[œÙ›Ü›KO•\]U˜[œÙ›Ü›J
+NÂˆBˆÛÛœÝQ“ÐUÈ[XšY[
+ˆÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[œšYÚ™\ÜËˆÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[œšYÚ™\ÜËˆÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[œšYÚ™\ÜÊNÂˆØÙ[™KÙX]\‹˜[XšY[H[XšY[ÂˆYˆ
+]]ÊˆÙX]\ˆHØÙ[™KÙX]\œË‘Ù]ÛÛ\Û™[
+Ü™X]Ü“[Ù[[\Ü\‹ÙX]\‘[]JJBˆÙX]\‹O˜[XšY[H[XšY[ÂˆB‚ˆ›ÚY™\ÝÜ™PÜ™X]Ü’[\Ü™]šY]Ñ[š\›Û›Y[
+
+BˆÂˆ]]ÊˆÙ\ÜÚ[ÛˆH™[™YØYNŽ˜œšYÙNŽ”ÝY[ÔÙ\ÜÚ[ÛŽŽÝ\œ™[
+
+NÂˆYˆ
+Ù\ÜÚ[ÛˆOH[ˆXÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[Ø\\™Y
+Bˆ™]\›ŽÂˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û‹O”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆØÙ[™KÙX]\‹˜[XšY[HÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[™Y›Ü™NÂˆYˆ
+]]ÊˆÙX]\ˆHØÙ[™KÙX]\œË‘Ù]ÛÛ\Û™[
+Ü™X]Ü“[Ù[[\Ü\‹ÙX]\‘[]JJBˆÙX]\‹O˜[XšY[HÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[™Y›Ü™NÂˆB‚ˆ™[™YØYNŽ˜œšYÙNŽÜ™X]Ü“X]\šX[ÛÝ\˜ÙSÝ™\œšYIˆ[œÝ\™PÜ™X]Ü“X]\šX[Ý™\œšYJ
+BˆÂˆÛÛœÝÝŽZ[Ì—ÝX]\šX[[™^HÝ]X×ØØ\ÝÝŽZ[Ì—ÝŠˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝYX]\šX[
+NÂˆ]]È›Ý[™HÝŽ™š[™ÚYŠˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\Ë˜™YÚ[Š
+KˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\Ë™[™
+
+KˆÛX]\šX[[™^JÛÛœÝ™[™YØYNŽ˜œšYÙNŽÜ™X]Ü“X]\šX[ÛÝ\˜ÙSÝ™\œšYIˆ˜[YJBˆÈ™]\›ˆ˜[YK›X]\šX[[™^OHX]\šX[[™^ÈJNÂˆYˆ
+›Ý[™OHÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\Ë™[™
+
+JBˆÂˆ™[™YØYNŽ˜œšYÙNŽÜ™X]Ü“X]\šX[ÛÝ\˜ÙSÝ™\œšYHÜ™X]YÂˆÜ™X]Y›X]\šX[[™^HX]\šX[[™^ÂˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\Ëœ\ÚØ˜XÚÊÝŽ›[Ý™JÜ™X]Y
+JNÂˆ™]\›ˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\Ë˜˜XÚÊ
+NÂˆBˆ™]\›ˆ
+™›Ý[™ÂˆB‚ˆ™[™YØYNŽ˜œšYÙNŽÜ™X]Ü•^\™TÛÝ\˜ÙPÚÚXÙIˆÙ[XÝYÜ™X]Ü•^\™PÚÚXÙJ
+BˆÂˆ]]ÉˆX]\šX[H[œÝ\™PÜ™X]Ü“X]\šX[Ý™\œšYJ
+NÂˆÝÚ]Ú
+Ü™X]Ü’[\Ü^\™TÛÝ
+BˆÂˆØ\ÙHˆ™]\›ˆX]\šX[˜˜\ÙPÛÛÜŽÂˆØ\ÙHNˆ™]\›ˆX]\šX[››Ü›X[ÂˆØ\ÙHŽˆ™]\›ˆX]\šX[œÝ\™˜XÙNÂˆØ\ÙHÎˆ™]\›ˆX]\šX[œ›ÝYÚ™\ÜÎÂˆØ\ÙHˆ™]\›ˆX]\šX[›Y][™\ÜÎÂˆØ\ÙHNˆ™]\›ˆX]\šX[›ØØÛ\Ú[ÛŽÂˆY˜][ˆ™]\›ˆX]\šX[™[Z\ÜÚ]™NÂˆBˆB‚ˆ›ÚY\Q]XÝYÜ™X]Ü”™]šY]ÓX]\šX[Ê
+BˆÂˆ]]ÊˆÙ\ÜÚ[ÛˆH™[™YØYNŽ˜œšYÙNŽ”ÝY[ÔÙ\ÜÚ[ÛŽŽÝ\œ™[
+
+NÂˆYˆ
+Ù\ÜÚ[ÛˆOH[ˆ\Ù\ÜÚ[Û‹O”›Ú™XÝÊ
+K’\Ô›Ú™XÝ
+
+JBˆ™]\›ŽÂˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û‹O”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆÝŽœÝš[™È\œ›ÜŽÂˆÛÛœÝœÎŽœ]Ý]]HœÎŽN]
+ˆÙ\ÜÚ[Û‹O”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+Kœ›ÛÝ]
+HÂˆ’[\›YYX]HˆÈ”™]šY]ÓX]\šX[ÈŽÂˆYˆ
+\™[™YØYNŽ˜œšYÙNŽ\PÜ™X]Ü“[Ù[X]\šX[™]šY]ÊˆØÙ[™KˆÜ™X]Ü“[Ù[[\Ü\‹œÛÝ\˜ÙT]ˆÝ]]™Ù[™\šX×ÝNÝš[™Ê
+KˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\ËˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\Ëˆ\œ›ÜŠJBˆÂˆÜ™X]Ü’[\Ü^\™R[”Ù]^
+ˆ•VT‘H‘U’QUÈT”“ÔˆËÈˆ
+È\œ›ÜŠNÂˆÚNŽ˜˜XÚÛÙÎŽœÜÝ
+ˆ”™[™YØYHÜ™X]ÜˆX]\šX[™]šY]Îˆˆ
+È\œ›Ü‹ˆÚNŽ˜˜XÚÛÙÎŽ“ÙÓ]™[Ž•Ø\›š[™ÊNÂˆ™]\›ŽÂˆBˆÜ™X]Ü’[\Ü^\™R[”Ù]^
+ˆ•VT‘HÓÕËÈUUËQUPÕ‘TPÑHÔˆ‘SSÕ‘HŠNÂˆB‚ˆ›ÚY™Yœ™\ÚÜ™X]Ü’[\Ü^\™QY]ÜŠ
+BˆÂˆYˆ
+Ü™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\Ë™[\J
+JBˆÂˆÜ™X]Ü’[\Ü^\™T]”Ù]˜[YJˆŠNÂˆ™]\›ŽÂˆBˆÛÛœÝÝŽZ[Ì—ÝX]\šX[[™^HÝ]X×ØØ\ÝÝŽZ[Ì—ÝŠˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝYX]\šX[
+NÂˆÛÛœÝ]]È›Ý[™HÝŽ™š[™ÚYŠˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\Ë˜™YÚ[Š
+KˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\Ë™[™
+
+KˆÛX]\šX[[™^JÛÛœÝ™[™YØYNŽ˜œšYÙNŽÜ™X]Ü“X]\šX[ÛÝ\˜ÙSÝ™\œšYIˆ˜[YJBˆÈ™]\›ˆ˜[YK›X]\šX[[™^OHX]\šX[[™^ÈJNÂˆYˆ
+›Ý[™OHÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\Ë™[™
+
+JBˆÂˆÜ™X]Ü’[\Ü^\™T]”Ù]˜[YJUUÈËÈ[\ÜYš[™[™ÈÜˆš[[˜[YHÝY™š^ˆŠNÂˆ™]\›ŽÂˆBˆÛÛœÝ™[™YØYNŽ˜œšYÙNŽÜ™X]Ü•^\™TÛÝ\˜ÙPÚÚXÙJˆÚÚXÙHH[ŽÂˆÝÚ]Ú
+Ü™X]Ü’[\Ü^\™TÛÝ
+BˆÂˆØ\ÙHˆÚÚXÙHH	™›Ý[™O˜˜\ÙPÛÛÜŽÈœ™XZÎÂˆØ\ÙHNˆÚÚXÙHH	™›Ý[™O››Ü›X[Èœ™XZÎÂˆØ\ÙHŽˆÚÚXÙHH	™›Ý[™OœÝ\™˜XÙNÈœ™XZÎÂˆØ\ÙHÎˆÚÚXÙHH	™›Ý[™Oœ›ÝYÚ™\ÜÎÈœ™XZÎÂˆØ\ÙHˆÚÚXÙHH	™›Ý[™O›Y][™\ÜÎÈœ™XZÎÂˆØ\ÙHNˆÚÚXÙHH	™›Ý[™O›ØØÛ\Ú[ÛŽÈœ™XZÎÂˆY˜][ˆÚÚXÙHH	™›Ý[™O™[Z\ÜÚ]™NÈœ™XZÎÂˆBˆYˆ
+XÚÚXÙKO›Ý™\œšY[ŠBˆÜ™X]Ü’[\Ü^\™T]”Ù]˜[YJUUÈËÈ[\ÜYš[™[™ÈÜˆš[[˜[YHÝY™š^ˆŠNÂˆ[ÙHYˆ
+ÚÚXÙKOœ]™[\J
+JBˆÜ™X]Ü’[\Ü^\™T]”Ù]˜[YJ‘SSÕ‘QˆŠNÂˆ[ÙBˆÜ™X]Ü’[\Ü^\™T]”Ù]˜[YJÚÚXÙKOœ]
+NÂˆB‚ˆ›ÚY\PÜ™X]Ü”™]šY]Õ^\™PÚÚXÙJÛÛœÝÝŽœÝš[™Éˆ]
+BˆÂˆ]]ÊˆÙ\ÜÚ[ÛˆH™[™YØYNŽ˜œšYÙNŽ”ÝY[ÔÙ\ÜÚ[ÛŽŽÝ\œ™[
+
+NÂˆYˆ
+Ù\ÜÚ[ÛˆOH[ˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\Ë™[\J
+JBˆ™]\›ŽÂˆ
+›ÚY
+\]Âˆ\Q]XÝYÜ™X]Ü”™]šY]ÓX]\šX[Ê
+NÂˆB‚ˆ›ÚYÜ[Ü™X]Ü’[\Ü^\™Pœ›ÝÜÙ\Š
+BˆÂˆÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\È\˜[\ÎÂˆ\˜[\Ë\HHÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\ÎŽ“ÔSŽÂˆ\˜[\Ë™\ØÜš\[ÛˆH•^\™HÛÝ\˜ÙH›ÜˆHÙ[XÝY[\ÜYX]\šX[ÛÝŽÂˆ›Üˆ
+ÛÛœÝÚ\Šˆ^[œÚ[ÛˆˆÈœ™È‹šœÈ‹šœYÈ‹ØH‹˜›\‹™È‹šˆŸJBˆ\˜[\Ë™^[œÚ[ÛœËœ\ÚØ˜XÚÊ^[œÚ[ÛŠNÂˆÚNŽš[\ŽŽ‘š[QX[ÙÊ\˜[\Ë×JÛÛœÝÝŽœÝš[™Éˆ]
+BˆÂˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÜ]JÝŽZ[Ý
+BˆÂˆYˆ
+]™[\J
+HXÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™JBˆ™]\›ŽÂˆ]]ÉˆÚÚXÙHHÙ[XÝYÜ™X]Ü•^\™PÚÚXÙJ
+NÂˆÚÚXÙK›Ý™\œšY[ˆHYNÂˆÚÚXÙKœ]H]Âˆ\PÜ™X]Ü”™]šY]Õ^\™PÚÚXÙJ]
+NÂˆ™Yœ™\ÚÜ™X]Ü’[\Ü^\™QY]ÜŠ
+NÂˆ™Yœ™\ÚÜ™X]Ü’[\ÜX]\šX[™XYÝ]
+
+NÂˆJNÂˆJNÂˆB‚ˆ›ÚY™Yœ™\ÚÜ™X]Ü’[\Ü[š[X][Û‘Y]ÜŠ
+BˆÂˆYˆ
+Ü™X]Ü“[Ù[[\Ü\‹˜[š[X][Û”™XÚ\K™[\J
+JBˆÂˆÜ™X]Ü’[\Ü[š[X][Û“˜[YK”Ù]˜[YJˆŠNÂˆÜ™X]Ü’[\Ü[š[X][Û”Ý\”Ù]˜[YJŒŠNÂˆÜ™X]Ü’[\Ü[š[X][Û‘[™”Ù]˜[YJŒŠNÂˆÜ™X]Ü’[\Ü[š[X][Û‘[˜X›Y”Ù]Ù[XÝYÚ]Ý]Ø[˜XÚÊLJNÂˆÜ™X]Ü’[\Ü[š[X][Û”™XYÝ]”Ù]^
+“›È[š[X][ÛˆXÝ[ÛœÈ]XÝYˆŠNÂˆ™]\›ŽÂˆBˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][ÛˆHÝŽ›Z[ŠˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][Û‹ˆÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û”™XÚ\KœÚ^™J
+HHJNÂˆÛÛœÝ]]ÉˆÛ\HÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û”™XÚ\VÂˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][Û—NÂˆÜ™X]Ü’[\Ü[š[X][Û“˜[YK”Ù]˜[YJÛ\›˜[YJNÂˆÜ™X]Ü’[\Ü[š[X][Û”Ý\”Ù]˜[YJÛ\œÝ\
+NÂˆÜ™X]Ü’[\Ü[š[X][Û‘[™”Ù]˜[YJÛ\™[™
+NÂˆÜ™X]Ü’[\Ü[š[X][Û‘[˜X›Y”Ù]Ù[XÝYÚ]Ý]Ø[˜XÚÊÛ\™[˜X›YÈˆJNÂˆÝŽ›ÜÝš[™ÜÝ™X[HÝ]ÂˆÝ]œ™XÚ\Ú[ÛŠÊNÂˆÝ]ÝŽ™š^Y”ÛÝ\˜ÙHXÝ[ÛˆˆÛ\œÛÝ\˜ÙP[š[X][Û’[™^
+ÈBˆˆËÈˆÛ\œÝ\ˆHˆÛ\™[™ˆˆËÈˆ
+Û\™[˜X›YÈ’SÓQQˆˆ‘VÓQQŠNÂˆÜ™X]Ü’[\Ü[š[X][Û”™XYÝ]”Ù]^
+Ý]œÝŠ
+JNÂˆB‚ˆ›ÚY™XZ[Ü™X]Ü’[\Ü[š[X][ÛÛÛX›Ê
+BˆÂˆÜ™X]Ü’[\Ü[š[X][ÛÛÛX›ËÛX\’][\Ê
+NÂˆ›Üˆ
+ÝŽœÚ^™WÝ[™^HÈ[™^Ü™X]Ü“[Ù[[\Ü\‹˜[š[X][Û”™XÚ\KœÚ^™J
+NÈ
+ÊÚ[™^
+BˆÂˆÛÛœÝ]]ÉˆÛ\HÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û”™XÚ\VÚ[™^NÂˆÜ™X]Ü’[\Ü[š[X][ÛÛÛX›ËY][JˆÛ\›˜[YK™[\J
+HÈ[š[X][Ûˆˆ
+ÈÝŽ×ÜÝš[™Ê[™^
+ÈJHˆÛ\›˜[YKˆÝ]X×ØØ\ÝÝŽZ[ÝŠ[™^
+JNÂˆBˆYˆ
+XÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û”™XÚ\K™[\J
+JBˆÂˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][ÛˆHÝŽ›Z[ŠˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][Û‹ˆÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û”™XÚ\KœÚ^™J
+HHJNÂˆÜ™X]Ü’[\Ü[š[X][ÛÛÛX›Ë”Ù]Ù[XÝYÚ]Ý]Ø[˜XÚÊˆÝ]X×ØØ\Ý[ŠÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][ÛŠJNÂˆBˆ™Yœ™\ÚÜ™X]Ü’[\Ü[š[X][Û‘Y]ÜŠ
+NÂˆB‚ˆ›ÚY™Yœ™\ÚÜ™X]Ü’[\ÜX]\šX[™XYÝ]
+
+BˆÂˆ]]ÊˆÙ\ÜÚ[ÛˆH™[™YØYNŽ˜œšYÙNŽ”ÝY[ÔÙ\ÜÚ[ÛŽŽÝ\œ™[
+
+NÂˆYˆ
+Ù\ÜÚ[ÛˆOH[ˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\Ë™[\J
+JBˆÂˆÜ™X]Ü’[\ÜX]\šX[™XYÝ]”Ù]^
+“›È[\ÜYX]\šX[È]XÝYˆŠNÂˆ™]\›ŽÂˆBˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝYX]\šX[HÝŽ›Z[ŠˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝYX]\šX[ˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\ËœÚ^™J
+HHJNÂˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û‹O”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆÛÛœÝ]]È[]HHÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\ÖÂˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝYX]\šX[NÂˆÛÛœÝ]]ÊˆX]\šX[HØÙ[™K›X]\šX[Ë‘Ù]ÛÛ\Û™[
+[]JNÂˆYˆ
+X]\šX[OH[ŠBˆÂˆÜ™X]Ü’[\ÜX]\šX[™XYÝ]”Ù]^
+”Ù[XÝYX]\šX[\È[˜]˜Z[X›KˆŠNÂˆ™]\›ŽÂˆBˆÛÛœÝ]]È^\™S˜[YHHÛX]\šX[JÛÛœÝ[ÛÝ
+BˆÂˆÛÛœÝ]]Éˆ^\™HHX]\šX[O^\™\ÖÜÛÝNÂˆYˆ
+^\™K›˜[YK™[\J
+JBˆ™]\›ˆÝŽœÝš[™Ê›Û™OˆŠNÂˆ™]\›ˆœÎŽN]
+^\™K›˜[YJK™š[[˜[YJ
+K™Ù[™\šX×ÝNÝš[™Ê
+NÂˆNÂˆÝŽ›ÜÝš[™ÜÝ™X[HÝ]ÂˆÝ]˜\ÙNˆˆ^\™S˜[YJÚNŽœØÙ[™NŽ“X]\šX[ÛÛ\Û™[ŽTÑPÓÓÔ“PT
+Bˆ—“›Ü›X[ˆˆ^\™S˜[YJÚNŽœØÙ[™NŽ“X]\šX[ÛÛ\Û™[Ž““Ô“PSPT
+Bˆ—”Ý\™˜XÙNˆˆ^\™S˜[YJÚNŽœØÙ[™NŽ“X]\šX[ÛÛ\Û™[Ž”ÕT‘PÑSPT
+Bˆ—‘[Z\ÜÚ]™Nˆˆ^\™S˜[YJÚNŽœØÙ[™NŽ“X]\šX[ÛÛ\Û™[Ž‘SRTÔÒU‘SPT
+Bˆ—SÎˆˆ^\™S˜[YJÚNŽœØÙ[™NŽ“X]\šX[ÛÛ\Û™[Ž“ÐÐÓTÒSÓ“PT
+Bˆ—”ˆˆX]\šX[Oœ›ÝYÚ™\ÜÂˆˆHˆX]\šX[O›Y][™\ÜÂˆˆ™Y›ˆX]\šX[Oœ™Y›XÝ[˜ÙNÂˆÜ™X]Ü’[\ÜX]\šX[™XYÝ]”Ù]^
+Ý]œÝŠ
+JNÂˆB‚ˆ›ÚY™Yœ™\ÚÜ™X]Ü’[\ÜX]\šX[ØØ[\œÊ
+BˆÂˆYˆ
+Ü™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\Ë™[\J
+JBˆ™]\›ŽÂˆ]]ÉˆX]\šX[H[œÝ\™PÜ™X]Ü“X]\šX[Ý™\œšYJ
+NÂˆÜ™X]Ü’[\Ü›ÝYÚ™\ÜË”Ù]˜[YJX]\šX[œ›ÝYÚ™\ÜÕ˜[YJNÂˆÜ™X]Ü’[\ÜY][™\ÜË”Ù]˜[YJX]\šX[›Y][™\ÜÕ˜[YJNÂˆÜ™X]Ü’[\Ü™Y›XÝ[˜ÙK”Ù]˜[YJX]\šX[œ™Y›XÝ[˜ÙU˜[YJNÂˆÜ™X]Ü’[\Ü›Ü›X[Ý™[™Ý”Ù]˜[YJX]\šX[››Ü›X[Ý™[™Ý˜[YJNÂˆÜ™X]Ü’[\Ü[ÔÝ™[™Ý”Ù]˜[YJX]\šX[˜[ÔÝ™[™Ý˜[YJNÂˆÜ™X]Ü’[\Ü[Z\ÜÚ]™TÝ™[™Ý”Ù]˜[YJX]\šX[™[Z\ÜÚ]™TÝ™[™Ý˜[YJNÂˆB‚ˆ›ÚY™Yœ™\ÚÜ™X]Ü’[\Ü[š[X][Û”™XYÝ]
+
+BˆÂˆ]]ÊˆÙ\ÜÚ[ÛˆH™[™YØYNŽ˜œšYÙNŽ”ÝY[ÔÙ\ÜÚ[ÛŽŽÝ\œ™[
+
+NÂˆYˆ
+Ù\ÜÚ[ÛˆOH[ˆÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û‘[]Y\Ë™[\J
+JBˆÂˆÜ™X]Ü’[\Ü[š[X][Û”™XYÝ]”Ù]^
+“›È[š[X][ÛˆXÝ[ÛœÈ]XÝYˆŠNÂˆ™]\›ŽÂˆBˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][ÛˆHÝŽ›Z[ŠˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][Û‹ˆÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û‘[]Y\ËœÚ^™J
+HHJNÂˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û‹O”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆÛÛœÝ]]È[]HHÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û‘[]Y\ÖÂˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][Û—NÂˆÛÛœÝ]]Êˆ[š[X][ÛˆHØÙ[™K˜[š[X][ÛœË‘Ù]ÛÛ\Û™[
+[]JNÂˆYˆ
+[š[X][ÛˆOH[ŠBˆÂˆÜ™X]Ü’[\Ü[š[X][Û”™XYÝ]”Ù]^
+”Ù[XÝY[š[X][Ûˆ\È[˜]˜Z[X›KˆŠNÂˆ™]\›ŽÂˆBˆÝŽ›ÜÝš[™ÜÝ™X[HÝ]ÂˆÝ]œ™XÚ\Ú[ÛŠÊNÂˆÝ]ÝŽ™š^Yˆ”Ý\ˆˆ[š[X][Û‹OœÝ\ˆˆ[™ˆˆ[š[X][Û‹O™[™ˆˆ\˜][ÛŽˆˆÝŽ›X^
+Œ‹[š[X][Û‹O™[™H[š[X][Û‹OœÝ\
+Bˆ—Ú[›™[Îˆˆ[š[X][Û‹O˜Ú[›™[ËœÚ^™J
+BˆˆØ[\\œÎˆˆ[š[X][Û‹OœØ[\\œËœÚ^™J
+NÂˆÜ™X]Ü’[\Ü[š[X][Û”™XYÝ]”Ù]^
+Ý]œÝŠ
+JNÂˆB‚ŸB‚›˜[Y\ÜXÙH™[™YØYNŽœÝY[ÂžÂˆ›ÚYÝY[Ô™[™\”]Žš[™Ù\ÜÚ[ÛŠœšYÙNŽ”ÝY[ÔÙ\ÜÚ[Û‰ˆÙ\ÜÚ[ÛŠH›Ù^Ù\ˆÂˆÙ\ÜÚ[Û—ÈH	œÙ\ÜÚ[ÛŽÂˆØÙ[™HH	œÙ\ÜÚ[Û‹”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Žš[™XYÛ›ÜÝXÜÊˆÚNŽ\XØ][ÛŽŽ’[™›Ñ\Ü^Y\‰ˆXYÛ›ÜÝXÜÊH›Ù^Ù\ˆÂˆXYÛ›ÜÝXÜ×ÈH	™XYÛ›ÜÝXÜÎÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž“ØY
+
+BˆÂˆÙ]ÔÔ‘[˜X›Y
+˜[ÙJNÂˆÙ]™Y›XÝ[ÛœÑ[˜X›Y
+YJNÂˆÙ]–PQ[˜X›Y
+˜[ÙJNÂˆÙ]›ÛÛQ[˜X›Y
+YJNÂˆÙ]›ÛÛU™\ÚÛ
+KŒÍYŠNÂ‚ˆËÈ[XšY[ØØÛ\Ú[ÛˆÜ›Ý[™ÈHXÚÈ›ÜÈYØZ[œÝH\œ˜Z[‹[™ˆËÈ›Û[Y]šXÈYÚÈ\™HÚ]XZÙHHØÙ[™IÜÈ›ÙÈ™XXÝÈYÚ[™ÂˆËÈ[œÝXYÙˆ™XY[™È\ÈH›]ØÜ™Y[‹\ÜXÙHÝ™\›^K‚ˆÙ]SÊSÎŽS×ÓTÐSÊNÂˆÙ]SÔÝÙ\ŠKŠNÂˆÙ]›Û[YSYÚÑ[˜X›Y
+YJNÂ‚ˆËÈš^Y^ÜÝ\™Kˆ^YHY\[ÛˆÛÝ[XZÙHHšY]ÜÜœšYÚ™\ÜÂˆËÈ\[™ÛˆÚ\™HHÜ™X]ÜˆÚ[ÈHØ[Y\˜KÚXÚ\È›ÝˆËÈXØÙ\X›H›ÜˆHÛÛÝ\‹XXØÝ\˜]H]]Üš[™ÈšY]ÜÜ‚ˆÙ]^YPY\[Û‘[˜X›Y
+˜[ÙJNÂˆÙ]^ÜÝ\™JKŒŠNÂ‚ˆËÈ™[™YØYH˜]ÜÈ]ÈÝÛˆÜšYˆÚXÚÙY	ÜÈÝØÚÈ[\ˆ\ÈHš^YŒŒˆËÈ[š][™H\ÝÚÜÙHY\]™H]\ÈØ]Y™Z[™ÜšY[\Œ‘BˆËÈÚXÚ›Ý]\ÈHÜšY[ÈH™\XØ[[™HH[™ÚÜÙH^\È[™BˆËÈÛÛÝ\œÈ\™H\™ÛÙYˆ]Ý^\ÈÙ™ˆ\›X[™[K‚ˆÚNŽœ™[™\™\ŽŽ”Ù]Ñ˜]ÑÜšY[\Š˜[ÙJNÂˆØYÜšY™\ÛÝ\˜Ù\Ê
+NÂ‚ˆËÈHÙ[™\˜]Y›Ýš[™ÈÜ›Ý[™\ÈÛÛ\ÜÙY\›Ý[™HÛÜ›ÜšYÚ[ˆÛÂˆËÈ]]Ú\™\ÈHÜšY[\‰ÜÈ›ÛÝš[‚ˆÛÛœÝU‘PÕÔˆ^YHHU™XÝÜ”Ù]
+LËŒ‹Ë™‹LM‹Y‹KŒŠNÂˆÛÛœÝU‘PÕÔˆ]HU™XÝÜ”Ù]
+Œ‹KŽ‹Œ‹KŒŠNÂˆÛÛœÝU‘PÕÔˆ\HU™XÝÜ”Ù]
+Œ‹KŒ‹Œ‹ŒŠNÂˆÛÛœÝSPU’VšY]ÈHSX]š^ÛÚÐ]
+^YK]\
+NÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WËÛX\•˜[œÙ›Ü›J
+NÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WË“X]š^˜[œÙ›Ü›JˆSX]š^[™\œÙJ[‹šY]ÊJNÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WË•\]U˜[œÙ›Ü›J
+NÂˆØ[Y\˜KO•˜[œÙ›Ü›PØ[Y\˜JY]ÜØ[Y\˜U˜[œÙ›Ü›WÊNÂˆØ[Y\˜KO•\]PØ[Y\˜J
+NÂ‚ˆÜ™X]UÛÜšÜÜXÙTÚ[
+
+NÂˆÜ™X]T›Ú™XÝXŠ
+NÂˆÜ™X]R[\ÜØØ[T[™[
+
+NÂˆ\T™[™YØYU[YJ
+NÂ‚ˆÚ^›[×Ë˜[œÛ]WÜÛ˜\HŒYŽÂˆÚ^›[×Ëœ›Ý]WÜÛ˜\HMKŒˆÈNŒˆ
+ˆWÔNÂˆÚ^›[×ËœØØ[WÜÛ˜\HŒYŽÂ‚ˆËÈ˜[œÛ]ÜˆÚ^™\È]Ù[ˆ\È\Ý[˜ÙK]ËXØ[Y\˜H
+ˆŒH
+ˆÛÛÜØØ[KˆËÈÛÈÛÛÜØØ[H\ÈH\™XÝØÜ™Y[‹\ÜXÙH][\Y\‹ˆHY˜][Ù‚ˆËÈKŒÛZ[˜]YHšY]ÜÜˆ[›™\ˆ\›\È[™ÛYÚH™YXÙYˆËÈÜXÚ]HX]ÚH™\Ý˜Z[™YYÛÝÈ\™XÝ[ÛŽÈ™YØ]]™H^\È\™BˆËÈ\šÙ[™Y\™ÛÈHÚ^›[È™XYÈ\ÈH›Ú™XÝY[œÝ[Y[˜]\‚ˆËÈ[ˆHÛÛYØš™XÝ‚ˆÚ^›[×ËÛÛÜØØ[HHŒŽÂˆÚ^›[×ËÛÛÝXÚÛ™\ÜÈHÌŽÂˆÚ^›[×ËÛÛÛÜXÚ]HHŽYŽÂˆÚ^›[×ËÛÛÙ\šÙ[—Û™YØ]]™WØ^\ÈHŒÍYŽÂ‚ˆÙ]˜[œÙ›Ü›UÛÛ
+˜[œÙ›Ü›UÛÛŽ•˜[œÛ]JNÂ‚ˆËÈ™\ÝÜ™HHÜ™X]Ü‰ÜÈØ]™YÜšY™Y™\™[˜ÙKˆ\È\È™[™YØYIÜÂˆËÈš\œÝ\œÚ\ÝYY]Üˆ™Y™\™[˜ÙNÈØ[Y\˜HÜYY[™^[Ý]ÚÝ[ˆËÈ›ÛÝÈHØ[YH›Ý]H˜]\ˆ[ˆ[™[[™ÈHÙXÛÛ™Û™K‚ˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆÜšYš\ÚX›WÈBˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+K‘Ù]Y]Ü”™Y™\™[˜ÙJ™ÜšYÝš\ÚX›H‹YJNÂˆBˆÜšYÙÙÛP]Û—Ë”Ù]^
+ÜšYš\ÚX›WÈÈ‘Ô’QÓˆˆˆ‘Ô’QÑ‘ˆŠNÂˆÝY[ÐÚ›ÛYWË”Ù]ÜšYš\ÚX›JÜšYš\ÚX›WÊNÂ‚ˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ›Üˆ
+[[™^HÈ[™^È
+ÊÚ[™^
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ËO”›Ú™XÝÊ
+K‘Ù]Y]Ü”™Y™\™[˜ÙJˆ™˜]Ù\—ÝX—Èˆ
+ÈÝŽ×ÜÝš[™Ê[™^
+Kˆ[™^OH
+JBˆÂˆ\Ý˜]Ù\•X—ÈH[™^Âˆœ™XZÎÂˆBˆBˆÛÛœÝ›ÛÛ˜]Ù\“Ü[ˆBˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+K‘Ù]Y]Ü”™Y™\™[˜ÙJˆ™˜]Ù\—ÛÜ[ˆ‹ˆ˜[ÙJNÂˆÝY[ÐÚ›ÛYWË”Ù]XÝ]™P›ÝÛUXŠˆ˜]Ù\“Ü[ˆÈ\Ý˜]Ù\•X—ÈˆLJNÂ‚ˆ]]Éˆ›Ú™XÝÈHÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+NÂˆYˆ
+›Ú™XÝË‘Ù]Y]Ü”™Y™\™[˜ÙJˆÛÜšÜÜXÙWÛ^[Ý]ÜØ]™Y‹ˆ˜[ÙJJBˆÂˆÝY[ÐÚ›ÛYWË”Ù][™[Ú^™\ÊˆÝ]X×ØØ\Ý›Ø]Š™XY^[Ý]™Y™\™[˜ÙJˆ›Ú™XÝËˆšY\˜\˜ÚWÝÚY‹ˆÝ]X×ØØ\Ý[ŠÝY[ÐÚ›ÛYWË’Y\˜\˜ÚUÚY
+
+JJJKˆÝ]X×ØØ\Ý›Ø]Š™XY^[Ý]™Y™\™[˜ÙJˆ›Ú™XÝËˆš[œÜXÝÜ—ÝÚY‹ˆÝ]X×ØØ\Ý[ŠÝY[ÐÚ›ÛYWË’[œÜXÝÜ•ÚY
+
+JJJKˆÝ]X×ØØ\Ý›Ø]Š™XY^[Ý]™Y™\™[˜ÙJˆ›Ú™XÝËˆ™˜]Ù\—ÚZYÚ‹ˆÝ]X×ØØ\Ý[ŠÝY[ÐÚ›ÛYWË‘˜]Ù\’ZYÚ
+
+JJJJNÂˆBˆB‚ˆ™Yœ™\ÚY\˜\˜ÚJ
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆ™Yœ™\Ú›Ú™XÝXŠ
+NÂˆ™Yœ™\Ú\ÜÙ]œ›ÝÜÙ\Š
+NÂˆÙ]›Ú™XÝX•š\ÚX›JYJNÂ‚ˆ™[™\”]ÑŽ“ØY
+
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž“ØYÜšY™\ÛÝ\˜Ù\Ê
+BˆÂˆ]]Êˆ]šXÙHHÚNŽ™Ü˜\XÜÎŽ‘Ù]]šXÙJ
+NÂˆYˆ
+]šXÙHOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆËÈ™[™YØYHÝÛœÈ\ÙHÚY\œËÛÈ^H\™H›Ý[ˆÚXÚÙY	ÜÈÚY\ˆ[\ˆËÈ[™]\Ý™HÛÛ\[Yœ›ÛHÛÝ\˜ÙHÚ\Y™\ÚYHH^XÝ]X›Kˆ\ÂˆËÈ\ÈHØ[YH\›ØXÚÚXÚÙY	ÜÈÝÛˆ^[\WÒ[QÝZHØ[\H\Ù\ÎˆÚ[ˆËÈHÚY\ˆÛÝ\˜ÙH]]HÛÜšÚ[™È\™XÝÜžH\ÝÛ™È[›ÝYÚÂˆËÈ™\ÛÛ™H[K[ˆ™\ÝÜ™H]ÛÈÚXÚÙY	ÜÈÝÛˆÚY\œÈ\™H[˜Y™™XÝY‚ˆÛÛœÝÝŽœÝš[™È™]š[Ý\ÔÛÝ\˜ÙT]BˆÚNŽœ™[™\™\ŽŽ‘Ù]ÚY\”ÛÝ\˜ÙT]
+
+NÂˆÚNŽœ™[™\™\ŽŽ”Ù]ÚY\”ÛÝ\˜ÙT]
+ˆÚNŽš[\ŽŽ‘Ù]Ý\œ™[]
+
+H
+È‹ÐÛÛ[ÜÚY\œËÈŠNÂ‚ˆÛÛœÝ›ÛÛ™\^ØYYHÚNŽœ™[™\™\ŽŽ“ØYÚY\ŠˆÚNŽ™Ü˜\XÜÎŽ”ÚY\”ÝYÙNŽ•”ËˆÜšY™\^ÚY\—Ëˆ”™[™YØYQÜšY”Ë˜ÜÛÈŠNÂˆÛÛœÝ›ÛÛ^[ØYYHÚNŽœ™[™\™\ŽŽ“ØYÚY\ŠˆÚNŽ™Ü˜\XÜÎŽ”ÚY\”ÝYÙNŽ”ËˆÜšY^[ÚY\—Ëˆ”™[™YØYQÜšYË˜ÜÛÈŠNÂ‚ˆÚNŽœ™[™\™\ŽŽ”Ù]ÚY\”ÛÝ\˜ÙT]
+™]š[Ý\ÔÛÝ\˜ÙT]
+NÂ‚ˆYˆ
+]™\^ØYY\^[ØYYˆYÜšY™\^ÚY\—Ë’\Õ˜[Y
+
+HYÜšY^[ÚY\—Ë’\Õ˜[Y
+
+JBˆÂˆËÈHZ\ÜÚ[™ÈÜšY\ÈHš\ÝX[ÝÛ™Ü˜YK›ÝH˜Z[\™HÛÜˆËÈZÚ[™ÈHY]ÜˆÝÛˆ›Ü‹ˆ]™\ž][™ÈÝÛœÝ™X[HÚXÚÜÂˆËÈÜšY\[[™WÈ™Y›Ü™H˜]Ú[™Ë‚ˆÚNŽ˜˜XÚÛÙÎŽœÜÝ
+ˆ”™[™YØYNˆHY]ÜˆÜšYÚY\œÈÛÝ[›Ý™HØYYˆ‚ˆ•HšY]ÜÜÚ[™[™\ˆÚ]Ý]HÜšYˆ‹ˆÚNŽ˜˜XÚÛÙÎŽ“ÙÓ]™[Ž•Ø\›š[™ÊNÂˆ™]\›ŽÂˆB‚ˆÚNŽ™Ü˜\XÜÎŽ”\[[™TÝ]Q\ØÈ\ØÜš\[ÛŽÂˆ\ØÜš\[Û‹œÈH	™ÜšY™\^ÚY\—ÎÂˆ\ØÜš\[Û‹œÈH	™ÜšY^[ÚY\—ÎÂˆ\ØÜš\[Û‹œœÈHÚNŽœ™[™\™\ŽŽ‘Ù]˜\Ý\š^™\”Ý]JˆÚNŽ™[[\ÎŽ””ÕTWÑÕP“TÒQQ
+NÂˆËÈ\™XYÚ]›ÈÜš]KˆH^[ÚY\ˆÜš]\ÈÕ—Ñ\œ›ÛHBˆËÈÜ›Ý[™[\œÙXÝ[Û‹ÛÈH\™Ø\™H\ÝØØÛY\ÈHÜšY™Z[™ˆËÈØÙ[™HÙ[ÛY]žHÚ]Ý]\È\ÜÈ]™\ˆØ[\[™ÈH\Y™™\‹‚ˆ\ØÜš\[Û‹™ÜÈHÚNŽœ™[™\™\ŽŽ‘Ù]\Ý[˜Ú[Ý]JˆÚNŽ™[[\ÎŽ‘ÔÕTWÑT‘PQ
+NÂˆ\ØÜš\[Û‹˜œÈHÚNŽœ™[™\™\ŽŽ‘Ù]›[™Ý]JˆÚNŽ™[[\ÎŽ”ÕTWÔ‘SUSTQQ
+NÂˆ\ØÜš\[Û‹œHÚNŽ™Ü˜\XÜÎŽ”š[Z]]™UÜÛÙÞNŽ•’PS‘ÓSTÕÂ‚ˆYˆ
+Y]šXÙKOÜ™X]T\[[™TÝ]J	™\ØÜš\[Û‹	™ÜšY\[[™WÊJBˆÂˆÚNŽ˜˜XÚÛÙÎŽœÜÝ
+ˆ”™[™YØYNˆHY]ÜˆÜšY\[[™HÛÝ[›Ý™HÜ™X]Yˆ‚ˆ•HšY]ÜÜÚ[™[™\ˆÚ]Ý]HÜšYˆ‹ˆÚNŽ˜˜XÚÛÙÎŽ“ÙÓ]™[Ž•Ø\›š[™ÊNÂˆBˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž‘˜]ÑY]Ü‘ÜšY
+ˆÛÛœÝÚNŽ™Ü˜\XÜÎŽÛÛ[X[™\ÝÛY
+HÛÛœÝˆÂˆYˆ
+YÜšYš\ÚX›WÈ›Ú™XÝX•š\ÚX›WÈˆYÜšY\[[™WË’\Õ˜[Y
+
+HØ[Y\˜HOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆ]]Êˆ]šXÙHHÚNŽ™Ü˜\XÜÎŽ‘Ù]]šXÙJ
+NÂˆ]šXÙKO‘]™[™YÚ[Š”™[™YØYHY]ÜˆÜšY‹ÛY
+NÂ‚ˆÛÛœÝSPU’VšY]Ô›Ú™XÝ[ÛˆHØ[Y\˜KO‘Ù]šY]Ô›Ú™XÝ[ÛŠ
+NÂ‚ˆÜšYÛÛœÝ[ÈÛÛœÝ[ÈHßNÂˆTÝÜ™Q›Ø]
+	˜ÛÛœÝ[ËšY]Ô›Ú™XÝ[Û‹šY]Ô›Ú™XÝ[ÛŠNÂˆTÝÜ™Q›Ø]
+ˆ	˜ÛÛœÝ[Ëš[™\œÙUšY]Ô›Ú™XÝ[Û‹ˆSX]š^[™\œÙJ[‹šY]Ô›Ú™XÝ[ÛŠJNÂˆËÈÈ\ÈHÜšY[™HZYÚˆHÙ[™\˜]YXÚÉÜÈÜÝ\™˜XÙH\È]ˆËÈ^XÝHHHÛÈHÜšY˜]Ûˆ]HH\ÈÛÜ[˜\ˆÚ]][™ˆËÈÜÙ\ÈHÔ‘PUTˆ\\ÝˆˆÛH\È[š\ÚX›H][žHÛÜšÚ[™ÂˆËÈØ[Y\˜H\Ý[˜ÙH[™\ÈHØ[YHšXÚÈÚXÚÙY	ÜÈÝÛˆ[\ˆ\Ù\Ë‚ˆÛÛœÝ[Ë˜Ø[Y\˜TÜÚ][ÛˆHQ“ÐU
+ˆØ[Y\˜KO‘^YKžˆØ[Y\˜KO‘^YKžKˆØ[Y\˜KO‘^YKž‹ˆÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™HÈÜ™X]Ü’[\ÜÝYÙRZYÚ
+ÈŒ™ˆˆŒ™ŠNÂ‚ˆËÈXÙKX›YH\ÈH\›Ý™Y[\˜XÝ[ÛˆÛÛÝ\‹ˆ[›ZÙHÚXÚÙY	ÜÈ[\‹ˆËÈ]™\žH[™H[˜ÛY[™ÈHÛÈ^\È\È™[™YØYIÜÈÈÚÛÜÙK‚ˆÛÛœÝ[Ë›Z[›ÜÛÛÜˆHQ“ÐU
+ŒÍ™‹Ž‹KŒ‹ŒŽŠNÂˆÛÛœÝ[Ë›XZ›ÜÛÛÜˆHQ“ÐU
+™‹ŽL‹KŒ‹LŠNÂˆÛÛœÝ[Ë˜^\ÐÛÛÜ–HQ“ÐU
+KŒ‹™‹Œ™‹ÌŠNÂˆÛÛœÝ[Ë˜^\ÐÛÛÜ–ˆHQ“ÐU
+ŒÌ‹Î‹KŒ‹ÌŠNÂ‚ˆËÈ˜YHÝ\Ù[™˜\ÙHÜXÚ[™ËX\Ý\ˆÜXÚ]KˆH˜YHÚ[™ÝÈÙY\ÂˆËÈHÜš^›Ûˆœ›ÛH\›š[™È[È[ˆ[X\ÙYÛYX\‹‚ˆÛÛœÝ[Ëœ\˜[\ÈHQ“ÐU
+ŒŒ‹ÌŒŒ‹KŒ‹KŒŠNÂ‚ˆ]šXÙKOš[™\[[™TÝ]J	™ÜšY\[[™WËÛY
+NÂˆ]šXÙKOš[™[˜[ZXÐÛÛœÝ[Y™™\ŠÛÛœÝ[ËÛY
+NÂˆ]šXÙKO‘˜]ÊËÛY
+NÂ‚ˆ]šXÙKO‘]™[[™
+ÛY
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™[™\•˜[œÜ\™[ÊˆÛÛœÝÚNŽ™Ü˜\XÜÎŽÛÛ[X[™\ÝÛY
+HÛÛœÝˆÂˆ™[™\”]ÑŽ”™[™\•˜[œÜ\™[ÊÛY
+NÂ‚ˆÛÛœÝ›ÛÛ˜]ÓX[›™\]Z[ˆHÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™H	‰‚ˆÜ™X]Ü“[Ù[[\Ü\‹›X[›™\]Z[•š\ÚX›H	‰ˆÙ\ÜÚ[Û—ÈOH[ŽÂˆYˆ
+
+YÜšYš\ÚX›WÈYÜšY\[[™WË’\Õ˜[Y
+
+JH	‰ˆY˜]ÓX[›™\]Z[ŠBˆÂˆ™]\›ŽÂˆBˆYˆ
+›Ú™XÝX•š\ÚX›WÈØ[Y\˜HOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆËÈÚXÚÙY[™È]™\žH™[™\ˆ\ÜÈ™Y›Ü™H™[™\•˜[œÜ\™[Ê
+H™]\›œË‚ˆËÈÜ[ˆ[ˆ^XÚ]\ÜÈÝ™\ˆHXZ[ˆÛÛÝ\ˆ[™\]XÚY[ÈÛÂˆËÈHÜšY\È˜[YÛˆ›ÝLˆ[™[Ø[‹ˆX]ÚÚXÚÙY	ÜÈÝÛ‚ˆËÈ˜[œÜ\™[\\ÜÈ]XÚY[Ù]\[˜ÛY[™È[ˆTÐPH™\ÛÛ™K‚ˆ]]Êˆ]šXÙHHÚNŽ™Ü˜\XÜÎŽ‘Ù]]šXÙJ
+NÂˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙH]XÚY[ÖÌ×HHßNÂˆÝŽZ[Ì—Ý]XÚY[ÛÝ[HÂˆ]XÚY[ÖØ]XÚY[ÛÝ[
+Ê×HBˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ”™[™\•\™Ù]
+ˆ	œXZ[—Ü™[™\‹ˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ“ØYÜŽ“ÐQ
+NÂˆYˆ
+Ù]TÐPTØ[\PÛÝ[
+
+HˆJBˆÂˆ]XÚY[ÖØ]XÚY[ÛÝ[
+Ê×HBˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ”™\ÛÛ™J	œXZ[ŠNÂˆBˆ]XÚY[ÖØ]XÚY[ÛÝ[
+Ê×HBˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ‘\Ý[˜Ú[
+ˆ	™\Y™™\—ÓXZ[‹ˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ“ØYÜŽ“ÐQˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ”ÝÜ™SÜŽ”ÕÔ‘KˆÚNŽ™Ü˜\XÜÎŽ”™\ÛÝ\˜ÙTÝ]NŽ‘TÕSÒSˆÚNŽ™Ü˜\XÜÎŽ”™\ÛÝ\˜ÙTÝ]NŽ‘TÕSÒSˆÚNŽ™Ü˜\XÜÎŽ”™\ÛÝ\˜ÙTÝ]NŽ‘TÕSÒS
+NÂ‚ˆ]šXÙKO”™[™\”\ÜÐ™YÚ[Š]XÚY[Ë]XÚY[ÛÝ[ÛY
+NÂ‚ˆÚNŽ™Ü˜\XÜÎŽ•šY]ÜÜšY]ÜÜÂˆšY]ÜÜÚYBˆÝ]X×ØØ\Ý›Ø]Š\Y™™\—ÓXZ[‹‘Ù]\ØÊ
+KÚY
+NÂˆšY]ÜÜšZYÚBˆÝ]X×ØØ\Ý›Ø]Š\Y™™\—ÓXZ[‹‘Ù]\ØÊ
+KšZYÚ
+NÂˆšY]ÜÜ›Z[—Ù\HŒŽÂˆšY]ÜÜ›X^Ù\HKŒŽÂˆ]šXÙKOš[™šY]ÜÜÊK	šY]ÜÜÛY
+NÂ‚ˆÛÛœÝÚNŽ™Ü˜\XÜÎŽ”™XÝØÚ\ÜÛÜˆHÙ]ØÚ\ÜÛÜ’[\›˜[™\ÛÛ][ÛŠ
+NÂˆ]šXÙKOš[™ØÚ\ÜÛÜ”™XÝÊK	œØÚ\ÜÛÜ‹ÛY
+NÂ‚ˆ˜]ÑY]Ü‘ÜšY
+ÛY
+NÂˆYˆ
+˜]ÓX[›™\]Z[ŠBˆÂˆÛÛœÝ]]Éˆ™]šY]ÔØÙ[™HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆYˆ
+Ü™X]Ü“[Ù[[\Ü\‹œÛÝ\˜ÙP›Ý[™Ë˜[Y
+BˆÂˆÛÛœÝ]]Éˆ›Ý[™ÈHÜ™X]Ü“[Ù[[\Ü\‹œÛÝ\˜ÙP›Ý[™ÎÂˆÛÛœÝ]]Êˆ›ÛÝH™]šY]ÔØÙ[™K˜[œÙ›Ü›\Ë‘Ù]ÛÛ\Û™[
+ˆÜ™X]Ü“[Ù[[\Ü\‹œ™]šY]Ô›ÛÝ
+NÂˆYˆ
+›ÛÝOH[ŠBˆÂˆQ“ÐUÈZ[š[][J“ÓPV“ÓPV“ÓPV
+NÂˆQ“ÐUÈX^[][JQ“ÓPVQ“ÓPVQ“ÓPV
+NÂˆÛÛœÝSPU’VÛÜ›HSØY›Ø]
+	œ›ÛÝOÛÜ›
+NÂˆ›Üˆ
+ÛÛœÝ›Ø]ˆØ›Ý[™Ë›Z[š[][Kž›Ý[™Ë›X^[][KžJBˆ›Üˆ
+ÛÛœÝ›Ø]HˆØ›Ý[™Ë›Z[š[][KžK›Ý[™Ë›X^[][Kž_JBˆ›Üˆ
+ÛÛœÝ›Ø]ˆˆØ›Ý[™Ë›Z[š[][Kž‹›Ý[™Ë›X^[][KžŸJBˆÂˆQ“ÐUÈÛÜ›™\ŽÂˆTÝÜ™Q›Ø]Êˆ	˜ÛÜ›™\‹ˆU™XÝÜŒÕ˜[œÙ›Ü›PÛÛÜ™
+U™XÝÜ”Ù]
+K‹KŒŠKÛÜ›
+JNÂˆZ[š[][KžHÝŽ›Z[ŠZ[š[][KžÛÜ›™\‹ž
+NÂˆZ[š[][KžHHÝŽ›Z[ŠZ[š[][KžKÛÜ›™\‹žJNÂˆZ[š[][KžˆHÝŽ›Z[ŠZ[š[][Kž‹ÛÜ›™\‹žŠNÂˆX^[][KžHÝŽ›X^
+X^[][KžÛÜ›™\‹ž
+NÂˆX^[][KžHHÝŽ›X^
+X^[][KžKÛÜ›™\‹žJNÂˆX^[][KžˆHÝŽ›X^
+X^[][Kž‹ÛÜ›™\‹žŠNÂˆB‚ˆÛÛœÝ^ˆ›Ø]ÛÝ\˜ÙSX[RZYÚHKŽLLLÙŽÂˆÛÛœÝ^ˆ›Ø]™Y™\™[˜ÙRZYÚHKŽ™ŽÂˆÛÛœÝ^ˆ›Ø]™Y™\™[˜ÙR[•ÚYHŒŒÙŽÂˆÛÛœÝ^ˆ›Ø]ÛX\˜[˜ÙHHYŽÂˆÛÛœÝ›Ø]ØØ[HH™Y™\™[˜ÙRZYÚÈÛÝ\˜ÙSX[RZYÚÂˆËÈH\ÚÈ[™[ØØÝ\Y\ÈHšYÚÚYHÙˆH[\Ü\‹ˆËÈÛÈÙY\H™Y™\™[˜ÙHÛˆH[›ØœÝXÝYYÚYK‚ˆÛÛœÝ›Ø]HZ[š[][KžHÛX\˜[˜ÙHH™Y™\™[˜ÙR[•ÚYÂˆÛÛœÝ›Ø]ˆH
+Z[š[][Kžˆ
+ÈX^[][KžŠH
+ˆYŽÂˆÛÛœÝSPU’VX]š^HSX]š^ØØ[[™ÊØØ[KØØ[KØØ[JH
+‚ˆSX]š^˜[œÛ][ÛŠÜ™X]Ü’[\ÜÝYÙRZYÚŠH
+‚ˆØ[Y\˜KO‘Ù]šY]Ô›Ú™XÝ[ÛŠ
+NÂˆ[[^NŽ™˜]×ÛX[JˆX]š^ˆQ“ÐU
+Î‹Î‹Í™‹Ž™ŠKˆYKˆÛY
+NÂˆBˆBˆBˆ]šXÙKO”™[™\”\ÜÑ[™
+ÛY
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Ù]ÜšYš\ÚX›JÛÛœÝ›ÛÛš\ÚX›JBˆÂˆÜšYš\ÚX›WÈHš\ÚX›NÂˆÜšYÙÙÛP]Û—Ë”Ù]^
+š\ÚX›HÈ‘Ô’QÓˆˆˆ‘Ô’QÑ‘ˆŠNÂˆÝY[ÐÚ›ÛYWË”Ù]ÜšYš\ÚX›Jš\ÚX›JNÂ‚ˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+K”Ù]Y]Ü”™Y™\™[˜ÙJ™ÜšYÝš\ÚX›H‹š\ÚX›JNÂˆBˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž‘[]QÔT™\ÛÝ\˜Ù\Ê
+BˆÂˆÙ[XÝ[Û“Ý][™SX\Ú×ÈHßNÂˆÙ[XÝ[Û“Ý][™SX\ÚÓ\ØXWÈHßNÂˆ™[™\”]ÑŽ‘[]QÔT™\ÛÝ\˜Ù\Ê
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™\Ú^™PY™™\œÊ
+BˆÂˆ™[™\”]ÑŽ”™\Ú^™PY™™\œÊ
+NÂ‚ˆÛÛœÝ]]Êˆ\Ý[˜Ú[HÙ]\Ý[˜Ú[
+
+NÂˆYˆ
+\Ý[˜Ú[OH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆ]]Êˆ]šXÙHHÚNŽ™Ü˜\XÜÎŽ‘Ù]]šXÙJ
+NÂˆÛÛœÝURS•ˆ™\ÛÛ][ÛˆHÙ][\›˜[™\ÛÛ][ÛŠ
+NÂˆÚNŽ™Ü˜\XÜÎŽ•^\™Q\ØÈ\ØÜš\[ÛŽÂˆ\ØÜš\[Û‹ÚYH™\ÛÛ][Û‹žÂˆ\ØÜš\[Û‹šZYÚH™\ÛÛ][Û‹žNÂˆ\ØÜš\[Û‹™›Ü›X]HÚNŽ™Ü˜\XÜÎŽ‘›Ü›X]Ž”ŽÕS“Ô“NÂˆ\ØÜš\[Û‹˜š[™Ù›YÜÈBˆÚNŽ™Ü˜\XÜÎŽš[™›YÎŽ”‘S‘T—ÕT‘ÑUˆÚNŽ™Ü˜\XÜÎŽš[™›YÎŽ”ÒQT—Ô‘TÓÕTÑNÂ‚ˆYˆ
+Ù]TÐPTØ[\PÛÝ[
+
+HˆJBˆÂˆ\ØÜš\[Û‹œØ[\WØÛÝ[HÙ]TÐPTØ[\PÛÝ[
+
+NÂˆ\ØÜš\[Û‹˜š[™Ù›YÜÈHÚNŽ™Ü˜\XÜÎŽš[™›YÎŽ”‘S‘T—ÕT‘ÑUÂˆYˆ
+]šXÙKOÜ™X]U^\™Jˆ	™\ØÜš\[Û‹ˆ[‹ˆ	œÙ[XÝ[Û“Ý][™SX\ÚÓ\ØXWÊJBˆÂˆ]šXÙKO”Ù]˜[YJˆ	œÙ[XÝ[Û“Ý][™SX\ÚÓ\ØXWËˆœ™[™YØYKœÙ[XÝ[Û“Ý][™SX\ÚÓ\ØXHŠNÂˆBˆ\ØÜš\[Û‹œØ[\WØÛÝ[HNÂˆ\ØÜš\[Û‹˜š[™Ù›YÜÈBˆÚNŽ™Ü˜\XÜÎŽš[™›YÎŽ”‘S‘T—ÕT‘ÑUˆÚNŽ™Ü˜\XÜÎŽš[™›YÎŽ”ÒQT—Ô‘TÓÕTÑNÂˆB‚ˆYˆ
+]šXÙKOÜ™X]U^\™Jˆ	™\ØÜš\[Û‹ˆ[‹ˆ	œÙ[XÝ[Û“Ý][™SX\Ú×ÊJBˆÂˆ]šXÙKO”Ù]˜[YJˆ	œÙ[XÝ[Û“Ý][™SX\Ú×Ëˆœ™[™YØYKœÙ[XÝ[Û“Ý][™SX\ÚÈŠNÂˆBˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™[™\Š
+HÛÛœÝˆÂˆ™[™\”]ÑŽ”™[™\Š
+NÂ‚ˆÛÛœÝ]]Êˆ\Ý[˜Ú[HÙ]\Ý[˜Ú[
+
+NÂˆYˆ
+›Ú™XÝX•š\ÚX›WÈˆÝ][™Y[]WÈOHÚNŽ™XÜÎŽ’S•SQÑS•UHˆ\Ý[˜Ú[OH[ˆˆ\Ù[XÝ[Û“Ý][™SX\Ú×Ë’\Õ˜[Y
+
+JBˆÂˆ™]\›ŽÂˆB‚ˆ]]Êˆ]šXÙHHÚNŽ™Ü˜\XÜÎŽ‘Ù]]šXÙJ
+NÂˆÛÛœÝ]]ÈÛÛ[X[™\ÝH]šXÙKO™YÚ[ÛÛ[X[™\Ý
+
+NÂˆ]šXÙKO‘]™[™YÚ[Š”™[™YØYHÙ[XÝ[ÛˆÝ][™HX\ÚÈ‹ÛÛ[X[™\Ý
+NÂ‚ˆYˆ
+Ù[XÝ[Û“Ý][™SX\ÚÓ\ØXWË’\Õ˜[Y
+
+JBˆÂˆÛÛœÝÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙH™[™\”\ÜÖ×HHÂˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ”™[™\•\™Ù]
+ˆ	œÙ[XÝ[Û“Ý][™SX\ÚÓ\ØXWËˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ“ØYÜŽÓPT‹ˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ”ÝÜ™SÜŽ‘Ó•ÐT‘JKˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ”™\ÛÛ™Jˆ	œÙ[XÝ[Û“Ý][™SX\Ú×ÊKˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ‘\Ý[˜Ú[
+ˆ\Ý[˜Ú[ˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ“ØYÜŽ“ÐQˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ”ÝÜ™SÜŽ”ÕÔ‘JKˆNÂˆ]šXÙKO”™[™\”\ÜÐ™YÚ[Šˆ™[™\”\ÜËˆ\œ˜^\Ú^™J™[™\”\ÜÊKˆÛÛ[X[™\Ý
+NÂˆBˆ[ÙBˆÂˆÛÛœÝÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙH™[™\”\ÜÖ×HHÂˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ”™[™\•\™Ù]
+ˆ	œÙ[XÝ[Û“Ý][™SX\Ú×ËˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ“ØYÜŽÓPTŠKˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ‘\Ý[˜Ú[
+ˆ\Ý[˜Ú[ˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ“ØYÜŽ“ÐQˆÚNŽ™Ü˜\XÜÎŽ”™[™\”\ÜÒ[XYÙNŽ”ÝÜ™SÜŽ”ÕÔ‘JKˆNÂˆ]šXÙKO”™[™\”\ÜÐ™YÚ[Šˆ™[™\”\ÜËˆ\œ˜^\Ú^™J™[™\”\ÜÊKˆÛÛ[X[™\Ý
+NÂˆB‚ˆÚNŽ™Ü˜\XÜÎŽ•šY]ÜÜšY]ÜÜÂˆšY]ÜÜÚYBˆÝ]X×ØØ\Ý›Ø]ŠÙ[XÝ[Û“Ý][™SX\Ú×Ë‘Ù]\ØÊ
+KÚY
+NÂˆšY]ÜÜšZYÚBˆÝ]X×ØØ\Ý›Ø]ŠÙ[XÝ[Û“Ý][™SX\Ú×Ë‘Ù]\ØÊ
+KšZYÚ
+NÂˆ]šXÙKOš[™šY]ÜÜÊK	šY]ÜÜÛÛ[X[™\Ý
+NÂ‚ˆÚNŽš[XYÙNŽ”\˜[\ÈX\ÚÎÂˆX\ÚË™[˜X›Q[ØÜ™Y[Š
+NÂˆX\ÚËœÝ[˜Ú[ÛÛ\HÚNŽš[XYÙNŽ”ÕSÒSSÑNŽ”ÕSÒSSÑWÑTUPSÂˆX\ÚËœÝ[˜Ú[™Y“[ÙHHÚNŽš[XYÙNŽ”ÕSÒS‘Q“SÑWÕTÑTŽÂˆX\ÚËœÝ[˜Ú[™YˆHÙ[XÝ[Û”Ý[˜Ú[™Y™\™[˜ÙNÂˆÚNŽš[XYÙNŽ‘˜]Ê[‹X\ÚËÛÛ[X[™\Ý
+NÂ‚ˆ]šXÙKO”™[™\”\ÜÑ[™
+ÛÛ[X[™\Ý
+NÂˆ]šXÙKO‘]™[[™
+ÛÛ[X[™\Ý
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]ŽÜ™X]UÛÜšÜÜXÙTÚ[
+
+BˆÂˆÛÛ˜\”[™[ËÜ™X]Jˆ”™[™YØYHÛÛ[X[™˜\ˆ‹ˆÚNŽ™ÝZNŽ•Ú[™ÝÎŽ•Ú[™ÝÐÛÛ›ÛÎŽ‘TÐP“WÕUWÐTŠNÂˆÛÛ˜\”[™[Ë”Ù]ÚYÝÔ˜Y]\ÊŒŠNÂˆÙ]ÕRJ
+KYÚYÙ]
+	ÛÛ˜\”[™[ÊNÂ‚ˆÛÜšÜÜXÙU]WËÜ™X]J”™[™YØYHÛÜšÜÜXÙH]HŠNÂˆÛÜšÜÜXÙU]WË”Ù]^
+”‘S‘QÐQHÕQSÈËÈ“Õ’S‘ÈÔ“ÕS‘ŠNÂˆËÈÚ^™HNHÝ™\™›ÝÙYHÌÛÝ[™Û\YZY]ÛÜ™ˆš]]^ˆËÈ[ÛÈÙY\ÈÛ™È›Ú™XÝ˜[Y\È[œÚYHHX™[˜]\ˆ[ˆ[›š[™ÂˆËÈ[H[™\ˆHÛÛ]ÛœË‚ˆÛÜšÜÜXÙU]WË™›Ûœ\˜[\ËœÚ^™HHMŽÂˆÛÜšÜÜXÙU]WË”Ù]š]^[˜X›Y
+YJNÂˆÛÜšÜÜXÙU]WË™›Ûœ\˜[\ËšØ[YÛˆHÚNŽ™›ÛŽ•ÒQSQÓ—ÓQ•ÂˆÛÛ˜\”[™[ËYÚYÙ]
+	ÛÜšÜÜXÙU]WÊNÂ‚ˆÛÛœÝ]]ÈÜ™X]UÛÛ]ÛˆHÝ\×JˆÚNŽ™ÝZNŽ]Û‰ˆ]Û‹ˆÛÛœÝÚ\Šˆ˜[YKˆÛÛœÝÚ\Šˆ^ˆÛÛœÝÚ\ŠˆÛÛ\ˆÛÛœÝY]ÜXÝ[ÛˆXÝ[ÛŠBˆÂˆ]Û‹Ü™X]J˜[YJNÂˆ]Û‹”Ù]^
+^
+NÂˆ]Û‹”Ù]ÛÛ\
+ÛÛ\
+NÂˆ]Û‹”Ù][™Ý[\’YÚYÚÚY
+ŒŠNÂˆ]Û‹“ÛÛXÚÊÝ\ËXÝ[Û—JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉŠBˆÂˆ[™[™ÐXÝ[Û—ÈHXÝ[ÛŽÂˆJNÂˆÛÛ˜\”[™[ËYÚYÙ]
+	˜]ÛŠNÂˆNÂˆÜ™X]UÛÛ]ÛŠˆ˜[œÛ]UÛÛ]Û—Ëˆ•˜[œÛ]HÛÛ‹ˆ“SÕ‘HÕ×H‹ˆ•˜[œÛ]HHÙ[XÝY[]H‹ˆY]ÜXÝ[ÛŽŽ•˜[œÛ]UÛÛ
+NÂˆÜ™X]UÛÛ]ÛŠˆ›Ý]UÛÛ]Û—Ëˆ”›Ý]HÛÛ‹ˆ”“ÕUHÑWH‹ˆ”›Ý]HHÙ[XÝY[]H‹ˆY]ÜXÝ[ÛŽŽ”›Ý]UÛÛ
+NÂˆÜ™X]UÛÛ]ÛŠˆØØ[UÛÛ]Û—Ëˆ”ØØ[HÛÛ‹ˆ”ÐÐSHÔ—H‹ˆ”ØØ[HHÙ[XÝY[]H‹ˆY]ÜXÝ[ÛŽŽ”ØØ[UÛÛ
+NÂ‚ˆ›Ú™XÝX]Û—ËÜ™X]J“Ü[ˆ›Ú™XÝXˆŠNÂˆÜšYÙÙÛP]Û—ËÜ™X]J‘ÜšYÙÙÛHŠNÂˆÜšYÙÙÛP]Û—Ë”Ù]^
+‘Ô’QÓˆŠNÂˆÜšYÙÙÛP]Û—Ë”Ù]ÛÛ\
+ˆ”ÚÝÈÜˆYHHY]ÜˆÜšYÑ×KˆHÜšY\È™]™\ˆØ]™Y[ÈH‚ˆœØÙ[™KˆŠNÂˆÜšYÙÙÛP]Û—Ë“ÛÛXÚÊÝ\×JÚNŽ™ÝZNŽ‘]™[\™ÜÊBˆÂˆ[™[™ÐXÝ[Û—ÈHY]ÜXÝ[ÛŽŽ•ÙÙÛQÜšYÂˆJNÂˆÛÛ˜\”[™[ËYÚYÙ]
+	™ÜšYÙÙÛP]Û—ÊNÂ‚ˆ›Ú™XÝX]Û—Ë”Ù]^
+”“Ò‘PÕÈŠNÂˆ›Ú™XÝX]Û—Ë”Ù]ÛÛ\
+”™]\›ˆÈH™[™YØYH›Ú™XÝXˆŠNÂˆ›Ú™XÝX]Û—Ë”Ù][™Ý[\’YÚYÚÚY
+ŒŠNÂˆ›Ú™XÝX]Û—Ë“ÛÛXÚÊÝ\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉŠBˆÂˆ™]\›•Ô›Ú™XÝXŠ
+NÂˆJNÂˆÛÛ˜\”[™[ËYÚYÙ]
+	œ›Ú™XÝX]Û—ÊNÂ‚ˆÝ]\ÓX™[ËÜ™X]J”™[™YØYHÝY[ÈÝ]\ÈŠNÂˆÝ]\ÓX™[Ë”Ù]Ú^™JQ“ÐUŠÌŒŒ‹Œ‹ŒŠJNÂˆÝ]\ÓX™[Ë™›Ûœ\˜[\ËœÚ^™HHMÂˆÝ]\ÓX™[Ë™›Ûœ\˜[\ËšØ[YÛˆHÚNŽ™›ÛŽ•ÒQSQÓ—ÓQ•ÂˆÛÛ˜\”[™[ËYÚYÙ]
+	œÝ]\ÓX™[ÊNÂ‚ˆY\˜\˜ÚT[™[ËÜ™X]Jˆ•ÛÜ›Ý][™\ˆ‹ˆÚNŽ™ÝZNŽ•Ú[™ÝÎŽ•Ú[™ÝÐÛÛ›ÛÎŽ‘TÐP“WÕUWÐTŠNÂˆY\˜\˜ÚT[™[Ë”Ù]ÚYÝÔ˜Y]\ÊŒŠNÂˆÙ]ÕRJ
+KYÚYÙ]
+	šY\˜\˜ÚT[™[ÊNÂ‚ˆY\˜\˜ÚSX™[ËÜ™X]J”ØÙ[™HY\˜\˜ÚHŠNÂˆY\˜\˜ÚSX™[Ë”Ù]^
+•ÓÔ“ËÈQTTÒHŠNÂˆY\˜\˜ÚSX™[Ë™›Ûœ\˜[\ËœÚ^™HHMŽÂˆY\˜\˜ÚSX™[Ë™›Ûœ\˜[\ËšØ[YÛˆHÚNŽ™›ÛŽ•ÒQSQÓ—ÓQ•ÂˆY\˜\˜ÚT[™[ËYÚYÙ]
+	šY\˜\˜ÚSX™[ÊNÂ‚ˆY\˜\˜ÚU™YWËÜ™X]J”™[™YØYHY\˜\˜ÚHŠNÂˆY\˜\˜ÚU™YWË“Û”Ù[XÝ
+Ý\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ™]\›ŽÂˆBˆÙ\ÜÚ[Û—ËO”Ù[XÝ[ÛŠ
+K”Ù[XÝ
+ˆÝ]X×ØØ\ÝÚNŽ™XÜÎŽ‘[]OŠ\™ÜË\Ù\™]JJNÂˆÙ][š\›Û›Y[ÛÜšÜÜXÙPXÝ]™J˜[ÙJNÂˆÙ]\œ˜Z[•ÛÜšÜÜXÙPXÝ]™J˜[ÙJNÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆJNÂˆY\˜\˜ÚT[™[ËYÚYÙ]
+	šY\˜\˜ÚU™YWÊNÂ‚ˆY\˜\˜ÚTÙX\˜ÚËÜ™X]J’Y\˜\˜ÚHÙX\˜ÚŠNÂˆY\˜\˜ÚTÙX\˜ÚË”Ù]\ØÜš\[ÛŠ¸£%HŠNÂˆY\˜\˜ÚTÙX\˜ÚË”Ù]˜[YJˆŠNÂˆY\˜\˜ÚTÙX\˜ÚË”Ù]XÙZÛ\Š”ÑPTÒÐÑS‘K‹‹ˆŠNÂˆY\˜\˜ÚTÙX\˜ÚË”Ù]ÛÛ\
+‘š[\ˆHš\ÚX›HØÙ[™HY\˜\˜ÚHŠNÂˆY\˜\˜ÚTÙX\˜ÚË”Ù]Ø[˜Ù[[œ][˜X›Y
+˜[ÙJNÂˆY\˜\˜ÚTÙX\˜ÚË“Û’[œ]
+Ý\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆÝY[ÐÚ›ÛYWË”Ù]Y\˜\˜ÚQš[\Š\™ÜËœÕ˜[YJNÂˆJNÂˆY\˜\˜ÚTÙX\˜ÚË“Û’[œ]XØÙ\Y
+ˆÝ\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆÝY[ÐÚ›ÛYWË”Ù]Y\˜\˜ÚQš[\Š\™ÜËœÕ˜[YJNÂˆJNÂˆÙ]ÕRJ
+KYÚYÙ]
+	šY\˜\˜ÚTÙX\˜ÚÊNÂ‚ˆ[œÜXÝÜ”[™[ËÜ™X]Jˆ’[œÜXÝÜˆ‹ˆÚNŽ™ÝZNŽ•Ú[™ÝÎŽ•Ú[™ÝÐÛÛ›ÛÎŽ‘TÐP“WÕUWÐTŠNÂˆ[œÜXÝÜ”[™[Ë”Ù]ÚYÝÔ˜Y]\ÊŒŠNÂˆ[œÜXÝÜ”[™[Ë”Ù]ÛÛÜŠÚNŽÛÛÜŽŽ•˜[œÜ\™[
+
+JNÂˆ[œÜXÝÜ”[™[Ë”Ù]ÛÛÜŠˆÚNŽÛÛÜŠLKLËMJKˆÚNŽ™ÝZNŽ•ÒQÑUÒQÕÒS‘Õ×ÐTÑJNÂˆÙ]ÕRJ
+KYÚYÙ]
+	š[œÜXÝÜ”[™[ÊNÂ‚ˆ[œÜXÝÜ“X™[ËÜ™X]J•˜[œÙ›Ü›H[œÜXÝÜˆŠNÂˆ[œÜXÝÜ“X™[Ë”Ù]^
+•S”Ñ“Ô“HËÈÑSPÕSˆS•UHŠNÂˆ[œÜXÝÜ“X™[Ë™›Ûœ\˜[\ËœÚ^™HHMŽÂˆ[œÜXÝÜ“X™[Ë™›Ûœ\˜[\ËšØ[YÛˆHÚNŽ™›ÛŽ•ÒQSQÓ—ÓQ•Âˆ[œÜXÝÜ“X™[Ë”Ù]ÛÛÜŠÚNŽÛÛÜŽŽ•˜[œÜ\™[
+
+JNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	š[œÜXÝÜ“X™[ÊNÂ‚ˆÛÛœÝ]]ÈÜ™X]TÙXÝ[Û“X™[HÝ\×JˆÚNŽ™ÝZNŽ“X™[	ˆX™[ˆÛÛœÝÚ\Šˆ˜[YKˆÛÛœÝÚ\Šˆ^
+BˆÂˆX™[Ü™X]J˜[YJNÂˆX™[”Ù]^
+^
+NÂˆX™[™›Ûœ\˜[\ËœÚ^™HHLÎÂˆX™[™›Ûœ\˜[\Ë˜ÛÛÜˆHÛÙÜ˜[S]]YÂˆX™[™›Ûœ\˜[\ËšØ[YÛˆHÚNŽ™›ÛŽ•ÒQSQÓ—ÓQ•ÂˆX™[”Ù]ÛÛÜŠÚNŽÛÛÜŽŽ•˜[œÜ\™[
+
+JNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	›X™[
+NÂˆNÂˆÜ™X]TÙXÝ[Û“X™[
+ˆÜÚ][Û“X™[Ëˆ”ÜÚ][ÛˆÙXÝ[Ûˆ‹ˆ”ÔÒUSÓˆŠNÂˆÜ™X]TÙXÝ[Û“X™[
+ˆ›Ý][Û“X™[Ëˆ”›Ý][ÛˆÙXÝ[Ûˆ‹ˆ”“ÕUSÓˆËÈQÔ‘QTÈŠNÂˆÜ™X]TÙXÝ[Û“X™[
+ˆØØ[SX™[Ëˆ”ØØ[HÙXÝ[Ûˆ‹ˆ”ÐÐSHŠNÂ‚ˆÛÛœÝ]]ÈÜ™X]U˜[œÙ›Ü›R[œ]HÝ\×JˆÚNŽ™ÝZNŽ•^[œ]šY[	ˆ[œ]ˆÛÛœÝÚ\Šˆ˜[YKˆÛÛœÝÚ\Šˆ\ØÜš\[Û‹ˆÛÛœÝ˜[œÙ›Ü›UÛÛÛÛˆÛÛœÝ[^\ÊBˆÂˆ[œ]Ü™X]J˜[YJNÂˆ[œ]”Ù]\ØÜš\[ÛŠ\ØÜš\[ÛŠNÂˆ[œ]”Ù]˜[YJŒŠNÂˆ[œ]”Ù]Ú^™JQ“ÐUŠLŒ‹ŽŒŠJNÂˆ[œ]“Û’[œ]XØÙ\Y
+ˆÝ\ËÛÛ^\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆ\TÙ[XÝY˜[œÙ›Ü›U˜[YJÛÛ^\Ë\™ÜË™•˜[YJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	š[œ]
+NÂˆNÂˆÜ™X]U˜[œÙ›Ü›R[œ]
+ˆ˜[œÛ][Û–Ëˆ•˜[œÛ][Ûˆ‹ˆ–ˆ‹ˆ˜[œÙ›Ü›UÛÛŽ•˜[œÛ]Kˆ
+NÂˆÜ™X]U˜[œÙ›Ü›R[œ]
+ˆ˜[œÛ][Û–WËˆ•˜[œÛ][ÛˆH‹ˆ–Nˆ‹ˆ˜[œÙ›Ü›UÛÛŽ•˜[œÛ]KˆJNÂˆÜ™X]U˜[œÙ›Ü›R[œ]
+ˆ˜[œÛ][Û–—Ëˆ•˜[œÛ][Ûˆˆ‹ˆ–Žˆ‹ˆ˜[œÙ›Ü›UÛÛŽ•˜[œÛ]KˆŠNÂˆÜ™X]U˜[œÙ›Ü›R[œ]
+ˆ›Ý][Û–Ëˆ”›Ý][Ûˆ‹ˆ–ˆ‹ˆ˜[œÙ›Ü›UÛÛŽ”›Ý]Kˆ
+NÂˆÜ™X]U˜[œÙ›Ü›R[œ]
+ˆ›Ý][Û–WËˆ”›Ý][ÛˆH‹ˆ–Nˆ‹ˆ˜[œÙ›Ü›UÛÛŽ”›Ý]KˆJNÂˆÜ™X]U˜[œÙ›Ü›R[œ]
+ˆ›Ý][Û–—Ëˆ”›Ý][Ûˆˆ‹ˆ–Žˆ‹ˆ˜[œÙ›Ü›UÛÛŽ”›Ý]KˆŠNÂˆÜ™X]U˜[œÙ›Ü›R[œ]
+ˆØØ[VËˆ”ØØ[H‹ˆ–ˆ‹ˆ˜[œÙ›Ü›UÛÛŽ”ØØ[Kˆ
+NÂˆÜ™X]U˜[œÙ›Ü›R[œ]
+ˆØØ[VWËˆ”ØØ[HH‹ˆ–Nˆ‹ˆ˜[œÙ›Ü›UÛÛŽ”ØØ[KˆJNÂˆÜ™X]U˜[œÙ›Ü›R[œ]
+ˆØØ[V—Ëˆ”ØØ[Hˆ‹ˆ–Žˆ‹ˆ˜[œÙ›Ü›UÛÛŽ”ØØ[KˆŠNÂ‚ˆÜ™X]TÙXÝ[Û“X™[
+ˆYÚX™[Ëˆ“YÚÙXÝ[Ûˆ‹ˆ“QÒËÈUU‘HÒPÒÑQŠNÂˆYÚ\WËÜ™X]J“YÚ\HŠNÂˆYÚ\WËY][Jˆ‘T‘PÕSÓS‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠˆÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž‘T‘PÕSÓS
+JNÂˆYÚ\WËY][Jˆ”ÒS•‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž”ÒS•
+JNÂˆYÚ\WËY][Jˆ”ÔÕ‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž”ÔÕ
+JNÂˆYÚ\WËY][Jˆ”‘PÕS‘ÓH‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž”‘PÕS‘ÓJJNÂˆYÚ\WË”Ù]ÛÛ\
+ˆ•ÚXÚÙY	ÜÈ›Ý\ˆ˜]]™HYÚ\\Ëˆ\K\ÜXÚYšXÈÚ\HÛÛ›ÛÈ‚ˆ˜\X\ˆ™[ÝËˆŠNÂˆYÚ\WË“Û”Ù[XÝ
+Ý\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆ\TÙ[XÝYYÚ\JˆÝ]X×ØØ\ÝÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž“YÚ\OŠˆ\™ÜË\Ù\™]JJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	›YÚ\WÊNÂ‚ˆÛÛœÝ]]ÈÜ™X]SYÚÛY\ˆHÝ\×Jˆ™[™YØYTÛY\‰ˆ[œ]ˆÛÛœÝÚ\Šˆ˜[YKˆÛÛœÝÚ\ŠˆX™[ˆÛÛœÝÚ\ŠˆÛÛ\ˆÛÛœÝYÚšY[šY[ˆÛÛœÝ›Ø]Z[š[][KˆÛÛœÝ›Ø]X^[][KˆÛÛœÝ›Ø]Ý\ÊBˆÂˆ[œ]Ü™X]JZ[š[][KX^[][KŒ‹Ý\Ë˜[YKX™[
+NÂˆ[œ]”Ù]ÛÛ\
+ÛÛ\
+NÂˆ[œ]“Û‘˜YÔÝ\Y
+Ý\ËšY[JÛÛœÝ›Ø]
+BˆÂˆ™YÚ[“YÚÛY\ŠšY[
+NÂˆJNÂˆ[œ]“Û•˜[YT™]šY]ÊÝ\ËšY[JÛÛœÝ›Ø]˜[YJBˆÂˆ™]šY]ÓYÚÛY\ŠšY[˜[YJNÂˆJNÂˆ[œ]“Û•˜[YPÛÛ[Z]Y
+Ý\ËšY[JÛÛœÝ›Ø]˜[YJBˆÂˆÛÛ[Z]YÚÛY\ŠšY[˜[YJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	š[œ]
+NÂˆNÂˆÜ™X]SYÚÛY\ŠˆYÚÛÛÜ”™YËˆ“YÚÛÛÜˆ™Y‹ˆÓÓÕTˆËÈ‘Q‹ˆ”™YÚ[›™[ÙˆH˜]]™HYÚÛÛÝ\‹ˆ‹ˆYÚšY[ŽÛÛÜ”™YˆŒ‹ˆKŒ‹ˆMKŒŠNÂˆÜ™X]SYÚÛY\ŠˆYÚÛÛÜ‘Ü™Y[—Ëˆ“YÚÛÛÜˆÜ™Y[ˆ‹ˆÓÓÕTˆËÈÔ‘QSˆ‹ˆ‘Ü™Y[ˆÚ[›™[ÙˆH˜]]™HYÚÛÛÝ\‹ˆ‹ˆYÚšY[ŽÛÛÜ‘Ü™Y[‹ˆŒ‹ˆKŒ‹ˆMKŒŠNÂˆÜ™X]SYÚÛY\ŠˆYÚÛÛÜ›YWËˆ“YÚÛÛÜˆ›YH‹ˆÓÓÕTˆËÈ“QH‹ˆ›YHÚ[›™[ÙˆH˜]]™HYÚÛÛÝ\‹ˆ‹ˆYÚšY[ŽÛÛÜ›YKˆŒ‹ˆKŒ‹ˆMKŒŠNÂˆÜ™X]SYÚÛY\ŠˆYÚ[[œÚ]WËˆ“YÚ[[œÚ]H‹ˆ’S•S”ÒUH‹ˆœšYÚ™\ÜÈ[ˆÚXÚÙY	ÜÈ˜]]™H\ÚXØ[[š]È›Üˆ\È\Kˆ‹ˆYÚšY[Ž’[[œÚ]KˆŒ‹ˆŒŒ‹ˆŒŒŠNÂˆÜ™X]SYÚÛY\ŠˆYÚ˜[™ÙWËˆ“YÚ˜[™ÙH‹ˆ”S‘ÑH‹ˆ“X^[][H[™›Y[˜ÙH\Ý[˜ÙKˆ\™XÝ[Û˜[YÚÈ\™HØÙ[™K]ÚYKˆ‹ˆYÚšY[Ž”˜[™ÙKˆŒ‹ˆLŒ‹ˆLŒŠNÂˆÜ™X]SYÚÛY\ŠˆYÚÝ]\ÛÛ™WËˆ“YÚÝ]\ˆÛÛ™H‹ˆ”ÔÕËÈÕUTˆÓÓ‘H‹ˆ“Ý]\ˆÜÝYÚÛÛ™H[™ÛH[ˆYÜ™Y\Ëˆ‹ˆYÚšY[Ž“Ý]\ÛÛ™KˆŒY‹ˆKŽY‹ˆNŒŠNÂˆÜ™X]SYÚÛY\ŠˆYÚ[›™\ÛÛ™WËˆ“YÚ[›™\ˆÛÛ™H‹ˆ”ÔÕËÈS“‘TˆÓÓ‘H‹ˆ’[›™\ˆÜÝYÚÛÛ™H[™ÛNÈ]Ø[››Ý^ÙYYHÝ]\ˆÛÛ™Kˆ‹ˆYÚšY[Ž’[›™\ÛÛ™KˆŒ‹ˆKŽY‹ˆNKŒŠNÂˆÜ™X]SYÚÛY\ŠˆYÚ˜Y]\×Ëˆ“YÚ˜Y]\È‹ˆ”ÓÕTÑHËÈQUTÈ‹ˆ”\ÚXØ[ÛÝ\˜ÙH˜Y]\ÎÈ[ÛÈÛÛ›ÛÈ\™XÝ[Û˜[ÚYÝÈÛÙ™\ÜËˆ‹ˆYÚšY[Ž”˜Y]\ËˆŒ‹ˆLŒ‹ˆLŒŠNÂˆÜ™X]SYÚÛY\ŠˆYÚ[™ÝËˆ“YÚ[™ÝÜˆÚY‹ˆ”ÓÕTÑHËÈS‘ÕÈÒQ‹ˆ”Ú[Ø\Ý[H[™ÝÜˆ™XÝ[™ÛHÚYˆ‹ˆYÚšY[Ž“[™ÝˆŒ‹ˆLŒ‹ˆŒŒŠNÂˆÜ™X]SYÚÛY\ŠˆYÚZYÚËˆ“YÚZYÚ‹ˆ”ÓÕTÑHËÈRQÒ‹ˆ”™XÝ[™ÛHYÚZYÚˆ‹ˆYÚšY[Ž’ZYÚˆŒ‹ˆLŒ‹ˆŒŒŠNÂ‚ˆYÚØ\ÝÚYÝ×ËÜ™X]JØ\ÝÚYÝÜÎˆŠNÂˆYÚØ\ÝÚYÝ×Ë”Ù]ÛÛ\
+ˆ”™[™\ˆ˜]]™HÚXÚÙYÚYÝÜÈœ›ÛH\ÈYÚˆŠNÂˆYÚØ\ÝÚYÝ×Ë“ÛÛXÚÊÝ\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆ\TÙ[XÝYYÚÙÙÛJYÚÙÙÛNŽØ\ÝÚYÝË\™ÜË˜•˜[YJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	›YÚØ\ÝÚYÝ×ÊNÂ‚ˆYÚ›Û[Y]šXÜ×ËÜ™X]J•›Û[Y]šXÈ™X[NˆŠNÂˆYÚ›Û[Y]šXÜ×Ë”Ù]ÛÛ\
+ˆ‘[˜X›HÚXÚÙY	ÜÈ™X[ÚYÝËX]Ø\™H›Û[Y]šXÈYÚØØ]\š[™ËˆŠNÂˆYÚ›Û[Y]šXÜ×Ë“ÛÛXÚÊÝ\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆ\TÙ[XÝYYÚÙÙÛJYÚÙÙÛNŽ•›Û[Y]šXÜË\™ÜË˜•˜[YJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	›YÚ›Û[Y]šXÜ×ÊNÂˆÜ™X]SYÚÛY\ŠˆYÚ›Û[Y]šXÐ›ÛÜÝËˆ“YÚ›Û[Y]šXÈ›ÛÜÝ‹ˆ•“ÓSQU’PÈËÈ“ÓÔÕ‹ˆ’[˜Ü™X\ÙH\ÈYÚ	ÜÈÛÛšX][ÛˆÈ›Û[Y]šXÈ›ÙËˆ‹ˆYÚšY[Ž•›Û[Y]šXÐ›ÛÜÝˆŒ‹ˆLŒ‹ˆLŒŠNÂ‚ˆÜ™X]TÙXÝ[Û“X™[
+ˆ[š\›Û›Y[ÚÞSX™[Ëˆ‘[š\›Û›Y[ÚÞHÙXÝ[Ûˆ‹ˆ”ÒÖHËÈUSÔÔT‘HŠNÂˆ[š\›Û›Y[™\Ù]ËÜ™X]J‘[š\›Û›Y[™\Ù]ŠNÂˆ[š\›Û›Y[™\Ù]ËY][JÕTÕÓH‹
+NÂˆ[š\›Û›Y[™\Ù]ËY][JÓPTˆ‹JNÂˆ[š\›Û›Y[™\Ù]ËY][J”ÐÐUT‘Q‹ŠNÂˆ[š\›Û›Y[™\Ù]ËY][J“Õ‘TÐTÕ‹ÊNÂˆ[š\›Û›Y[™\Ù]ËY][J”ÕÔ“H‹
+NÂˆ[š\›Û›Y[™\Ù]Ë”Ù]ÛÛ\
+ˆ\HHÝ\˜]YÝ\[™ÈÚ[ˆ]™\žH™\Ù]\ÈHÚ[™ÛH‚ˆ•[™ËÔ™YÈÛÛ[X[™ˆŠNÂˆ[š\›Û›Y[™\Ù]Ë“Û”Ù[XÝ
+ˆÝ\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆYˆ
+\™ÜË\Ù\™]HOH
+BˆÂˆ\UÙX]\”™\Ù]
+Ý]X×ØØ\Ý[Š\™ÜË\Ù\™]JJNÂˆBˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	™[š\›Û›Y[™\Ù]ÊNÂ‚ˆÚÞS[ÙWËÜ™X]J”ÚÞH[ÙHŠNÂˆÚÞS[ÙWËY][Jˆ”‘PSTÕPÈÒÖH‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠˆœšYÙNŽ•ÙX]\”Ý]NŽ”ÚÞS[ÙNŽ”™X[\ÝXÊJNÂˆÚÞS[ÙWËY][Jˆ”‘PSTÕPÈ
+ÈÓÕQÈ‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠˆœšYÙNŽ•ÙX]\”Ý]NŽ”ÚÞS[ÙNŽ”™X[\ÝXÕÚ]ÛÝYÊJNÂˆÚÞS[ÙWËY][Jˆ”ÒÖP“ÖVT‘H‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠˆœšYÙNŽ•ÙX]\”Ý]NŽ”ÚÞS[ÙNŽ”ÚÞX›Þ
+JNÂˆÚÞS[ÙWË”Ù]ÛÛ\
+ˆÚÛÜÙHÚXÚÙY	ÜÈ\ÚXØ[][ÜÜ\™K›Û[Y]šXÈÛÝYËÜˆH‚ˆÙX]\ˆÛÛ\Û™[	ÜÈ^\Ý[™ÈÚÞX›Þ^\™KˆŠNÂˆÚÞS[ÙWË“Û”Ù[XÝ
+Ý\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆ\TÙ[XÝYÚÞS[ÙJˆÝ]X×ØØ\ÝœšYÙNŽ•ÙX]\”Ý]NŽ”ÚÞS[ÙOŠ\™ÜË\Ù\™]JJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	œÚÞS[ÙWÊNÂ‚ˆÛÛœÝ]]ÈÜ™X]UÙX]\•ÙÙÛHHÝ\×JˆÚNŽ™ÝZNŽÚXÚÐ›Þ	ˆ[œ]ˆÛÛœÝÚ\Šˆ˜[YKˆÛÛœÝÚ\ŠˆÛÛ\ˆÛÛœÝÙX]\•ÙÙÛHÙÙÛJBˆÂˆ[œ]Ü™X]J˜[YJNÂˆ[œ]”Ù]ÛÛ\
+ÛÛ\
+NÂˆ[œ]“ÛÛXÚÊÝ\ËÙÙÛWJÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆ\TÙ[XÝYÙX]\•ÙÙÛJÙÙÛK\™ÜË˜•˜[YJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	š[œ]
+NÂˆNÂˆÜ™X]UÙX]\•ÙÙÛJˆY\šX[\œÜXÝ]™WËˆY\šX[\œÜXÝ]™Nˆ‹ˆ\H][ÜÜ\šXÈØØ]\š[™ÈÈØÙ[™HÙ[ÛY]žKˆ‹ˆÙX]\•ÙÙÛNŽY\šX[\œÜXÝ]™JNÂ‚ˆÛÛœÝ]]ÈÜ™X]UÙX]\”ÛY\ˆHÝ\×Jˆ™[™YØYTÛY\‰ˆ[œ]ˆÛÛœÝÚ\Šˆ˜[YKˆÛÛœÝÚ\ŠˆX™[ˆÛÛœÝÚ\ŠˆÛÛ\ˆÛÛœÝÙX]\‘šY[šY[ˆÛÛœÝ›Ø]Z[š[][KˆÛÛœÝ›Ø]X^[][KˆÛÛœÝ›Ø]Ý\ÊBˆÂˆ[œ]Ü™X]JˆZ[š[][KˆX^[][KˆŒ‹ˆÝ\Ëˆ˜[YKˆX™[
+NÂˆ[œ]”Ù]ÛÛ\
+ÛÛ\
+NÂˆ[œ]“Û‘˜YÔÝ\Y
+Ý\ËšY[JÛÛœÝ›Ø]
+BˆÂˆ™YÚ[•ÙX]\”ÛY\ŠšY[
+NÂˆJNÂˆ[œ]“Û•˜[YT™]šY]ÊÝ\ËšY[JÛÛœÝ›Ø]˜[YJBˆÂˆ™]šY]ÕÙX]\”ÛY\ŠšY[˜[YJNÂˆJNÂˆ[œ]“Û•˜[YPÛÛ[Z]Y
+Ý\ËšY[JÛÛœÝ›Ø]˜[YJBˆÂˆÛÛ[Z]ÙX]\”ÛY\ŠšY[˜[YJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	š[œ]
+NÂˆNÂˆÜ™X]UÙX]\”ÛY\ŠˆÚÞQ^ÜÝ\™WËˆ”ÚÞH^ÜÝ\™H‹ˆ‘VÔÕT‘H‹ˆœšYÚ™\ÜÈÙˆH\ÚXØ[ÚÞKˆ‹ˆÙX]\‘šY[Ž”ÚÞQ^ÜÝ\™KˆŒ‹ˆŒ‹ˆŒŠNÂˆÜ™X]UÙX]\”ÛY\Šˆ[XšY[[[œÚ]WËˆ[XšY[[[œÚ]H‹ˆSP’QS•‹ˆ“™]]˜[[[œÚ]H\YYÚ[H™\Ù\š[™ÈH]]Ü™YYKˆ‹ˆÙX]\‘šY[Ž[XšY[[[œÚ]KˆŒ‹ˆ‹Œ‹ˆŒŠNÂ‚ˆÜ™X]TÙXÝ[Û“X™[
+ˆ[š\›Û›Y[›ÙÓX™[Ëˆ‘[š\›Û›Y[›ÙÈÙXÝ[Ûˆ‹ˆ‘“ÑÈËÈRQÒVQTˆŠNÂˆÜ™X]UÙX]\”ÛY\Šˆ›ÙÔÝ\Ëˆ‘›ÙÈÝ\‹ˆ”ÕT•‹ˆ‘\Ý[˜ÙHœ›ÛHHØ[Y\˜H™Y›Ü™H›ÙÈ™YÚ[œËˆ‹ˆÙX]\‘šY[Ž‘›ÙÔÝ\ˆŒ‹ˆLŒ‹ˆLŒŠNÂˆÜ™X]UÙX]\”ÛY\Šˆ›ÙÑ[œÚ]WËˆ‘›ÙÈ[œÚ]H‹ˆ‘S”ÒUH‹ˆ“Ý™\˜[][ÜÜ\šXÈ›ÙÈ[œÚ]Kˆ‹ˆÙX]\‘šY[Ž‘›ÙÑ[œÚ]KˆŒ‹ˆŒY‹ˆLŒŠNÂˆÜ™X]UÙX]\•ÙÙÛJˆZYÚ›Ù×Ëˆ’ZYÚ›ÙÎˆ‹ˆ”™\ÝšXÝ›ÙÈ™\XØ[H™]ÙY[ˆH]]Ü™YZYÚËˆ‹ˆÙX]\•ÙÙÛNŽ’ZYÚ›ÙÊNÂˆÜ™X]UÙX]\”ÛY\Šˆ›ÙÒZYÚÝ\Ëˆ‘›ÙÈZYÚÝ\‹ˆTÑH‹ˆ“ÝÙ\ˆZYÚÙˆH›ÙÈ^Y\‹ˆ‹ˆÙX]\‘šY[Ž‘›ÙÒZYÚÝ\ˆLLŒ‹ˆLŒ‹ˆŒŠNÂˆÜ™X]UÙX]\”ÛY\Šˆ›ÙÒZYÚ[™Ëˆ‘›ÙÈZYÚ[™‹ˆ•Ô‹ˆ•\\ˆZYÚÙˆH›ÙÈ^Y\‹ˆ‹ˆÙX]\‘šY[Ž‘›ÙÒZYÚ[™ˆLLŒ‹ˆŒŒ‹ˆŒŒŠNÂ‚ˆÜ™X]TÙXÝ[Û“X™[
+ˆ[š\›Û›Y[ÛÝYX™[Ëˆ‘[š\›Û›Y[ÛÝYÙXÝ[Ûˆ‹ˆ•“ÓSQU’PÈÓÕQÈŠNÂˆÜ™X]UÙX]\”ÛY\ŠˆÛÝYÛÝ™\˜YÙWËˆÛÝYÛÝ™\˜YÙH‹ˆÓÕ‘TQÑH‹ˆ”š[X\žHÛÝY[^Y\ˆÛÝ™\˜YÙH[[Ý[ˆ‹ˆÙX]\‘šY[ŽÛÝYÛÝ™\˜YÙKˆŒ‹ˆKŒ‹ˆLŒŠNÂˆÜ™X]UÙX]\”ÛY\ŠˆÛÝYÝ\ZYÚËˆÛÝYÝ\ZYÚ‹ˆTÑH‹ˆ[]YHÚ\™HH›Û[Y]šXÈÛÝY›Û[YH™YÚ[œËˆ‹ˆÙX]\‘šY[ŽÛÝYÝ\ZYÚˆLŒ‹ˆLŒ‹ˆNLŒŠNÂˆÜ™X]UÙX]\”ÛY\ŠˆÛÝYXÚÛ™\Ü×ËˆÛÝYXÚÛ™\ÜÈ‹ˆ‘T‹ˆ•™\XØ[\ÙˆH›Û[Y]šXÈÛÝY›Û[YKˆ‹ˆÙX]\‘šY[ŽÛÝYXÚÛ™\ÜËˆLŒ‹ˆLŒ‹ˆNLŒŠNÂˆÜ™X]UÙX]\•ÙÙÛJˆÛÝYÐØ\ÝÚYÝ×ËˆÛÝYÚYÝÜÎˆ‹ˆ[ÝÈ›Û[Y]šXÈÛÝYÈÈØ\Ý[Ýš[™ÈÚYÝÜÈÛˆHÛÜ›ˆ‹ˆÙX]\•ÙÙÛNŽÛÝYÐØ\ÝÚYÝÊNÂ‚ˆÜ™X]TÙXÝ[Û“X™[
+ˆ™XÚ\]][Û“X™[Ëˆ‘[š\›Û›Y[™XÚ\]][ÛˆÙXÝ[Ûˆ‹ˆ”‘PÒTUUSÓˆËÈUU‘HT•PÓTÈŠNÂ‚ˆ™XÚ\]][Û“[ÙWËÜ™X]J”™XÚ\]][Ûˆ[ÙHŠNÂˆ™XÚ\]][Û“[ÙWËY][Jˆ“Ñ‘ˆ‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠœšYÙNŽ”™XÚ\]][Û“[ÙNŽ“›Û™JJNÂˆ™XÚ\]][Û“[ÙWËY][Jˆ”RSˆ‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠœšYÙNŽ”™XÚ\]][Û“[ÙNŽ”˜Z[ŠJNÂˆ™XÚ\]][Û“[ÙWËY][Jˆ”Ó“ÕÈ‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠœšYÙNŽ”™XÚ\]][Û“[ÙNŽ”Û›ÝÊJNÂˆ™XÚ\]][Û“[ÙWË”Ù]ÛÛ\
+ˆ”˜Z[ˆ\Ù\ÈÚXÚÙY	ÜÈ˜]]™H™XÚ\]][Ûˆ™[™\™\‹ˆÛ›ÝÈ\Ù\ÈH‚ˆ”™[™YØYKX]]Ü™YÛÝÈ›ZÙH›Ùš[HÝ™\ˆHØ[YHÔH[Z]\‹ˆŠNÂˆ™XÚ\]][Û“[ÙWË“Û”Ù[XÝ
+Ý\×JÛÛœÝÚNŽ™ÝZNŽ‘]™[\™ÜÉˆ\™ÜÊBˆÂˆ\T™XÚ\]][Û“[ÙJˆÝ]X×ØØ\ÝœšYÙNŽ”™XÚ\]][Û“[ÙOŠ\™ÜË\Ù\™]JJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	œ™XÚ\]][Û“[ÙWÊNÂ‚ˆÛÛœÝ]]ÈÜ™X]T™XÚ\]][Û”ÛY\ˆHÝ\×Jˆ™[™YØYTÛY\‰ˆ[œ]ˆÛÛœÝÚ\Šˆ˜[YKˆÛÛœÝÚ\ŠˆX™[ˆÛÛœÝÚ\ŠˆÛÛ\ˆÛÛœÝ™XÚ\]][Û‘šY[šY[ˆÛÛœÝ›Ø]Z[š[][KˆÛÛœÝ›Ø]X^[][KˆÛÛœÝ›Ø]Ý\ÊBˆÂˆ[œ]Ü™X]JZ[š[][KX^[][KŒ‹Ý\Ë˜[YKX™[
+NÂˆ[œ]”Ù]ÛÛ\
+ÛÛ\
+NÂˆ[œ]“Û‘˜YÔÝ\Y
+Ý\ËšY[JÛÛœÝ›Ø]
+BˆÂˆ™YÚ[”™XÚ\]][Û”ÛY\ŠšY[
+NÂˆJNÂˆ[œ]“Û•˜[YT™]šY]ÊÝ\ËšY[JÛÛœÝ›Ø]˜[YJBˆÂˆ™]šY]Ô™XÚ\]][Û”ÛY\ŠšY[˜[YJNÂˆJNÂˆ[œ]“Û•˜[YPÛÛ[Z]Y
+Ý\ËšY[JÛÛœÝ›Ø]˜[YJBˆÂˆÛÛ[Z]™XÚ\]][Û”ÛY\ŠšY[˜[YJNÂˆJNÂˆ[œÜXÝÜ”[™[ËYÚYÙ]
+	š[œ]
+NÂˆNÂˆÜ™X]T™XÚ\]][Û”ÛY\Šˆ™XÚ\]][Û’[[œÚ]WËˆ”™XÚ\]][Ûˆ[[œÚ]H‹ˆ’S•S”ÒUH‹ˆ”\XÛH[œÚ]Kˆ™\›È\ØX›\È™XÚ\]][Û‹ˆ‹ˆ™XÚ\]][Û‘šY[Ž’[[œÚ]KˆŒ‹ˆKŒ‹ˆŒŒŠNÂˆÜ™X]T™XÚ\]][Û”ÛY\Šˆ™XÚ\]][Û‘˜[ÜYYËˆ”™XÚ\]][Ûˆ˜[ÜYY‹ˆ‘SÔQQ‹ˆ‘ÝÛØ\™\XÛHÜYYÈÛ›ÝÈ›Ùš[\ÈÝ\]XÚÛÝÙ\‹ˆ‹ˆ™XÚ\]][Û‘šY[Ž‘˜[ÜYYˆŒY‹ˆ‹Œ‹ˆŒŠNÂˆÜ™X]T™XÚ\]][Û”ÛY\Šˆ™XÚ\]][Û”\XÛTØØ[WËˆ”™XÚ\]][Ûˆ\XÛHØØ[H‹ˆ”T•PÓHÒV‘H‹ˆ”™[™\™Y\XÛHÚ^™Kˆ‹ˆ™XÚ\]][Û‘šY[Ž”\XÛTØØ[KˆŒY‹ˆŒY‹ˆŒŠNÂˆÜ™X]T™XÚ\]][Û”ÛY\Šˆ™XÚ\]][Û•Ú[™^š[]]Ëˆ”™XÚ\]][ÛˆÚ[™^š[]]‹ˆ•ÒS‘T‘PÕSÓˆ‹ˆ’Üš^›Û[Ú[™\™XÝ[Ûˆ[ˆYÜ™Y\Ëˆ‹ˆ™XÚ\]][Û‘šY[Ž•Ú[™^š[]]ˆLNŒ‹ˆNŒ‹ˆÍŒŒŠNÂˆÜ™X]T™XÚ\]][Û”ÛY\Šˆ™XÚ\]][Û•Ú[™ÜYYËˆ”™XÚ\]][ÛˆÚ[™ÜYY‹ˆ•ÒS‘ÔQQ‹ˆ’Üš^›Û[Ú[™Ý™[™Ý\YYÈ™XÚ\]][Û‹ˆ‹ˆ™XÚ\]][Û‘šY[Ž•Ú[™ÜYYˆŒ‹ˆŒŒ‹ˆŒŠNÂˆÜ™X]T™XÚ\]][Û”ÛY\Šˆ™XÚ\]][Û•\˜[[˜ÙWËˆ”™XÚ\]][Ûˆ\˜[[˜ÙH‹ˆ•T•SSÑH‹ˆ”˜[™ÛH\XÛHšYÈYÚ\ˆ˜[Y\ÈÜ™X]HÛ›ÝÈ›\œšY\Ëˆ‹ˆ™XÚ\]][Û‘šY[Ž•\˜[[˜ÙKˆŒ‹ˆŒŒ‹ˆŒŠNÂ‚ˆÜ™X]TÙXÝ[Û“X™[
+ˆÝ[“X™[Ëˆ‘[š\›Û›Y[Ý[ˆÙXÝ[Ûˆ‹ˆ”ÕSˆËÈSQHÑˆVHŠNÂˆÝ[”™\Ù]ËÜ™X]J”Ý[ˆ™\Ù]ŠNÂˆÝ[”™\Ù]ËY][JÕTÕÓH‹
+NÂˆÝ[”™\Ù]ËY][Jˆ‘UÓˆ‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠœšYÙNŽ”Ý[”™\Ù]Ž‘]ÛŠH
+È]JNÂˆÝ[”™\Ù]ËY][Jˆ“RQVH‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠœšYÙNŽ”Ý[”™\Ù]Ž“ZY^JH
+È]JNÂˆÝ[”™\Ù]ËY][Jˆ‘ÓÓSˆÕTˆ‹ˆÝ]X×ØØ\ÝÝŽZ[ÝŠœšYÙNŽ”Ý[”™\Ù]Ž‘ÛÛ[’Ý\ŠH
+È]JNÂˆÝ[”™\Ù]ËY][Jˆ‘TÒÈ‹ˆ:ïÏ5¶‰žËkºwµçXœšYÙNŽ\U\œ˜Z[“X]\šX[
+ˆØÙ[™Kˆ
+\œ˜Z[‹ˆ\œ˜Z[“X]\šX[Y\—ËˆYJNÂˆÙ\ÜÚ[Û—ËOÛÛ[X[™Ê
+K”™XÛÜ™^XÝ]Y
+ˆÝŽ›XZÙWÝ[š\]YOœšYÙNŽ”Ù]\œ˜Z[“X]\šX[ÛÛ[X[™ŠˆØÙ[™Kˆ\œ˜Z[“X]\šX[[]WËˆÝŽ›[Ý™J\œ˜Z[“X]\šX[™Y›Ü™WÊKˆÝŽ›[Ý™J\œ˜Z[“X]\šX[Y\—ÊJJNÂˆBˆBˆ\œ˜Z[•^\™TØØ[PXÝ]™WÈH˜[ÙNÂˆ\œ˜Z[“X]\šX[[]WÈHÚNŽ™XÜÎŽ’S•SQÑS•UNÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž\QY˜][Ü˜\ÜÊ
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆˆÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+K\œ˜Z[œË‘Ù]ÛÝ[
+
+HOH
+BˆÂˆ™]\›ŽÂˆBˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆÛÛœÝ]]È[]HHØÙ[™K\œ˜Z[œË‘Ù][]J
+NÂˆÛÛœÝ]]Êˆ\œ˜Z[ˆHØÙ[™K\œ˜Z[œË‘Ù]ÛÛ\Û™[
+[]JNÂˆYˆ
+\œ˜Z[ˆOH[ŠBˆÂˆ™]\›ŽÂˆBˆ]]È™Y›Ü™HHœšYÙNŽØ\\™U\œ˜Z[“X]\šX[
+ØÙ[™K
+\œ˜Z[ŠNÂˆ]]ÈY\ˆHœšYÙNŽ“XZÙQY˜][Ü˜\ÜÓX]\šX[
+ˆœšYÙNŽ‘Y˜][Ü˜\ÜÕ^\™TØØ[JNÂˆÙ\ÜÚ[Û—ËOÛÛ[X[™Ê
+K‘^XÝ]JˆÝŽ›XZÙWÝ[š\]YOœšYÙNŽ”Ù]\œ˜Z[“X]\šX[ÛÛ[X[™ŠˆØÙ[™Kˆ[]KˆÝŽ›[Ý™J™Y›Ü™JKˆÝŽ›[Ý™JY\ŠJJNÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™[ØY\œ˜Z[“X]\šX[
+
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆˆÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+K\œ˜Z[œË‘Ù]ÛÝ[
+
+HOH
+BˆÂˆ™]\›ŽÂˆBˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆ]]Êˆ\œ˜Z[ˆHØÙ[™K\œ˜Z[œË‘Ù]ÛÛ\Û™[
+ˆØÙ[™K\œ˜Z[œË‘Ù][]J
+JNÂˆYˆ
+\œ˜Z[ˆOH[ŠBˆÂˆœšYÙNŽ”™[ØYY˜][\œ˜Z[“X]\šX[
+ØÙ[™K
+\œ˜Z[ŠNÂˆ\œ˜Z[”Ý›ÚÙQXYÛ›ÜÝX×Ë”Ù]^
+“PUT’PSËÈ’STÈ‘SÐQQŠNÂˆBˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž•˜[Y]S[Ù[[\Ü
+
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+Kœ›ÛÝ]™[\J
+JBˆÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆ“Ü[ˆÜˆÜ™X]HH™[™YØYH›Ú™XÝ™Y›Ü™H[›š[™ÈH[Ù[[\Ü›ÛÙ‹ˆ‹ˆ“[Ù[[\ÜØ]HHŠNÂˆ™]\›ŽÂˆB‚ˆÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\È\˜[\ÎÂˆ\˜[\Ë\HHÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\ÎŽ“ÔSŽÂˆ\˜[\Ë™\ØÜš\[ÛˆH‘Ó‹ÑÓˆ[Ù[›ÜˆØ]HH˜[Y][ÛˆŽÂˆ\˜[\Ë™^[œÚ[ÛœËœ\ÚØ˜XÚÊ™ÛˆŠNÂˆ\˜[\Ë™^[œÚ[ÛœËœ\ÚØ˜XÚÊ™ÛˆŠNÂˆÚNŽš[\ŽŽ‘š[QX[ÙÊˆ\˜[\ËˆÝ\×JÛÛœÝÝŽœÝš[™ÉˆÛÝ\˜ÙT]
+BˆÂˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\ËÛÝ\˜ÙT]JZ[Ý
+BˆÂˆYˆ
+ÛÝ\˜ÙT]™[\J
+JBˆÂˆ™]\›ŽÂˆBˆYˆ
+ÚNŽš›ØœÞ\Ý[NŽ’\Ð\ÞJ[Ù[[\ÜÛÜšÛØYÊJBˆÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆH[Ù[[\Ü˜[Y][Ûˆ\È[™XYH[›š[™Ëˆ‹ˆ“[Ù[[\ÜØ]HHŠNÂˆ™]\›ŽÂˆB‚ˆÛÛœÝœÎŽœ]ÛÝ\˜ÙHHœÎŽN]
+ÛÝ\˜ÙT]
+NÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆ“SÑSSTÔ•“ÓÑˆËÈ•S“’S‘ÈËÈˆ
+ÂˆÛÝ\˜ÙK™š[[˜[YJ
+KNÝš[™Ê
+JNÂˆ[“[Ù[[\Ü›ÛÙŠÛÝ\˜ÙT]
+NÂˆJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”[“[Ù[[\Ü›ÛÙŠÛÛœÝÝŽœÝš[™ÉˆÛÝ\˜ÙT]
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆÛÝ\˜ÙT]™[\J
+JBˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝœÎŽœ]Ý]]\™XÝÜžHBˆœÎŽN]
+Ù\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+Kœ›ÛÝ]
+HÂˆ”Ø]™YˆÈ•˜[Y][ÛˆˆÈ“[Ù[[\ÜŽÂˆÛÛœÝœÎŽœ]ÛÝ\˜ÙHHœÎŽN]
+ÛÝ\˜ÙT]
+NÂˆÛÛœÝœÎŽœ]\ÜÙ]]BˆÝ]]\™XÝÜžHÈœÎŽN]
+ÛÝ\˜ÙKœÝ[J
+KNÝš[™Ê
+H
+È‹Ú\ØÙ[™HŠNÂ‚ˆÛÛœÝÝŽœÝš[™È\Ý[˜][Û”]H\ÜÙ]]™Ù[™\šX×ÝNÝš[™Ê
+NÂˆÚNŽš›ØœÞ\Ý[NŽ‘^XÝ]Jˆ[Ù[[\ÜÛÜšÛØYËˆÝ\ËÛÝ\˜ÙT]\Ý[˜][Û”]JÚNŽš›ØœÞ\Ý[NŽ’›Ø\™ÜÊBˆÂˆ]]È™\\™YHÝŽ›XZÙWÜÚ\™YœšYÙNŽ”™\\™Y[Ù[[\ÜŠˆœšYÙNŽ’[\ÜÙ\šXÙJ
+K”™\\™QÛ\ÜÙ]
+ˆÛÝ\˜ÙT]ˆ\Ý[˜][Û”]
+JNÂˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\Ë™\\™YJZ[Ý
+BˆÂˆ]]È™\Ý[HœšYÙNŽ’[\ÜÙ\šXÙJ
+KÛÛ\]QÛ\ÜÙ]
+ˆÝŽ›[Ý™J
+œ™\\™Y
+JNÂˆ™\Ù[[Ù[[\Ü›ÛÙŠ™\Ý[
+NÂˆJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™\Ù[[Ù[[\Ü›ÛÙŠˆÛÛœÝœšYÙNŽ’[\Ü™\Ý[	ˆ™\Ý[
+BˆÂˆÛÛœÝ]]Êˆ]šXÙHHÚNŽ™Ü˜\XÜÎŽ‘Ù]]šXÙJ
+NÂˆÛÛœÝÝŽœÝš[™È™[™\™\ˆH]šXÙHOH[ˆ	‰‚ˆ]šXÙKO‘Ù]ÚY\‘›Ü›X]
+
+HOHÚNŽ™Ü˜\XÜÎŽ”ÚY\‘›Ü›X]Ž”ÔT•‚ˆÈ••SÐSˆ‚ˆˆ‘LˆŽÂˆÝŽ›ÜÝš[™ÜÝ™X[H™\ÜÂˆ™\Ü
+™\Ý[œÝXØÙYYYÈ”TÔÈˆˆ‘RSŠBˆˆËÈSÑSSTÔ•ŒHÐUHW—ˆ‚ˆ”™[™\™\Žˆˆ™[™\™\ˆ	×‰Âˆ”ÛÝ\˜ÙNˆˆ™\Ý[œÛÝ\˜ÙT]	×‰Âˆ•ÒTÐÑS‘Nˆˆ™\Ý[˜\ÜÙ]]——ˆŽÂˆYˆ
+™\Ý[œÝXØÙYYY
+BˆÂˆ™\Ü“Øš™XÝÎˆˆ™\Ý[œ™[ØYY›Øš™XÝÈ	×‰Âˆ“Y\Ú\Îˆˆ™\Ý[œ™[ØYY›Y\Ú\È	×‰Âˆ“X]\šX[Îˆˆ™\Ý[œ™[ØYY›X]\šX[È	×‰Âˆ•^\™H™Y™\™[˜Ù\Îˆ‚ˆ™\Ý[œ™[ØYY^\™T™Y™\™[˜Ù\È	×‰Âˆ•˜[œÙ›Ü›\Îˆˆ™\Ý[œ™[ØYY˜[œÙ›Ü›\È	×‰Âˆ’Y\˜\˜ÚH[šÜÎˆˆ™\Ý[œ™[ØYYšY\˜\˜ÚH	×‰Âˆ\›X]\™\Îˆˆ™\Ý[œ™[ØYY˜\›X]\™\È	×‰Âˆ[š[X][ÛœÎˆˆ™\Ý[œ™[ØYY˜[š[X][ÛœÈ——ˆ‚ˆ•H\ÛÛ]Y[\ÜYØÙ[™HÝ\š]™YÒTÐÑS‘HØ]™H[™™[ØY[˜Ú[™ÙYˆŽÂˆBˆ[ÙBˆÂˆ™\Ü”™X\ÛÛŽˆˆ™\Ý[™\œ›ÜŽÂˆB‚ˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆÝŽœÝš[™Ê“SÑSSTÔ•“ÓÑˆËÈŠH
+Âˆ
+™\Ý[œÝXØÙYYYÈ”TÔÈËÈˆˆ‘RSËÈŠH
+È™[™\™\ŠNÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+™\ÜœÝŠ
+K“[Ù[[\ÜØ]HHŠNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž’[\Ü[Ù[
+
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+Kœ›ÛÝ]™[\J
+JBˆÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆ“Ü[ˆÜˆÜ™X]HH™[™YØYH›Ú™XÝ™Y›Ü™H[\Ü[™ÈH[Ù[ˆ‹ˆ’[\Ü[Ù[ŠNÂˆ™]\›ŽÂˆB‚ˆÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\È\˜[\ÎÂˆ\˜[\Ë\HHÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\ÎŽ“ÔSŽÂˆ\˜[\Ë™\ØÜš\[ÛˆH‘–ÑÓ‹ÑÓˆ[Ù[È™\\™H[ˆH[\Ü[Ù[ÛÜšÜÜXÙHŽÂˆ\˜[\Ë™^[œÚ[ÛœËœ\ÚØ˜XÚÊ™˜žŠNÂˆ\˜[\Ë™^[œÚ[ÛœËœ\ÚØ˜XÚÊ™ÛˆŠNÂˆ\˜[\Ë™^[œÚ[ÛœËœ\ÚØ˜XÚÊ™ÛˆŠNÂˆÚNŽš[\ŽŽ‘š[QX[ÙÊˆ\˜[\ËˆÝ\×JÛÛœÝÝŽœÝš[™ÉˆÛÝ\˜ÙT]
+BˆÂˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\ËÛÝ\˜ÙT]JZ[Ý
+BˆÂˆYˆ
+ÛÝ\˜ÙT]™[\J
+JBˆÂˆ™]\›ŽÂˆBˆYˆ
+ÚNŽš›ØœÞ\Ý[NŽ’\Ð\ÞJ[Ù[[\ÜÛÜšÛØYÊJBˆÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆH[Ù[[\Ü\È[™XYH[›š[™Ëˆ‹ˆ’[\Ü[Ù[ŠNÂˆ™]\›ŽÂˆB‚ˆÛÛœÝœÎŽœ]ÛÝ\˜ÙHHœÎŽN]
+ÛÝ\˜ÙT]
+NÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆ’STÔ•SÑSËÈÓÓ•‘T•S‘ÈËÈˆ
+ÂˆÛÝ\˜ÙK™š[[˜[YJ
+KNÝš[™Ê
+JNÂˆ[“[Ù[[\ÜXÙ[Y[
+ÛÝ\˜ÙT]
+NÂˆJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”[“[Ù[[\ÜXÙ[Y[
+ˆÛÛœÝÝŽœÝš[™ÉˆÛÝ\˜ÙT]
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆÛÝ\˜ÙT]™[\J
+Hˆ\Ù\ÜÚ[Û—ËO”›Ú™XÝÊ
+K’\Ô›Ú™XÝ
+
+HÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™HˆÜ™X]Ü“[Ù[[\Ü\‹˜ÛÛ[Z][™ÊBˆÂˆ™]\›ŽÂˆB‚ˆÝXÝ™]šY]Ô™\\™TÝ]BˆÂˆÝŽœÝš[™ÈÛÝ\˜ÙT]ÂˆÝŽœÝš[™È›Ú™XÝ›ÛÝÂˆœšYÙNŽ”™\\™Y[Ù[[\Ü™\\™YÂˆNÂˆ]]ÈÝ]HHÝŽ›XZÙWÜÚ\™Y™]šY]Ô™\\™TÝ]OŠ
+NÂˆÝ]KOœÛÝ\˜ÙT]HÛÝ\˜ÙT]ÂˆÝ]KOœ›Ú™XÝ›ÛÝHÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+Kœ›ÛÝ]Â‚ˆÚNŽš›ØœÞ\Ý[NŽ‘^XÝ]J[Ù[[\ÜÛÜšÛØYËˆÝ\ËÝ]WJÚNŽš›ØœÞ\Ý[NŽ’›Ø\™ÜÊBˆÂˆÛÛœÝœÎŽœ]™]šY]Ñ\™XÝÜžHBˆœÎŽN]
+Ý]KOœ›Ú™XÝ›ÛÝ
+HÈ’[\›YYX]HˆÈ’[\ÜÈŽÂˆÝŽ™\œ›Ü—ØÛÙHXÎÂˆœÎŽ˜Ü™X]WÙ\™XÝÜšY\Ê™]šY]Ñ\™XÝÜžKXÊNÂˆœšYÙNŽ“[Ù[[\Ü™\]Y\Ý™\]Y\ÝÂˆ™\]Y\ÝœÛÝ\˜ÙT]HÝ]KOœÛÝ\˜ÙT]Âˆ™\]Y\Ý˜\ÜÙ]]H
+™]šY]Ñ\™XÝÜžHÈ‹˜Ü™X]Ü‹\™]šY]ËÚ\ØÙ[™HŠBˆ™Ù[™\šX×ÝNÝš[™Ê
+NÂˆ™\]Y\Ý™^XÝY›Ü›X]HœšYÙNŽ’[\ÜÙ\šXÙNŽÛ\ÜÚYžS[Ù[ÛÝ\˜ÙQ›Ü›X]
+ˆÝ]KOœÛÝ\˜ÙT]
+NÂˆÝ]KOœ™\\™YHœšYÙNŽ’[\ÜÙ\šXÙJ
+K”™\\™S[Ù[\ÜÙ]
+™\]Y\Ý
+NÂ‚ˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\ËÝ]WJÝŽZ[Ý
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆ\Ý]KOœ™\\™Y’\Ô™XYJ
+JBˆÂˆÛÛœÝÝŽœÝš[™È\œ›ÜˆHÝ]KOœ™\\™Y”™\Ý[
+
+K™\œ›Ü‹™[\J
+BˆÈ”™[™YØYHÛÝ[›Ý™\\™HHš\ÚX›H™]šY]Ëˆ‚ˆˆÝ]KOœ™\\™Y”™\Ý[
+
+K™\œ›ÜŽÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+’STÔ•SÑSËÈ‘U’QUÈRSQŠNÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+\œ›Ü‹’[\Ü[Ù[ŠNÂˆ™]\›ŽÂˆB‚ˆ]]Éˆ]™TØÙ[™HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆÛÛœÝ]]Êˆ\ÛÛ]YHÝ]KOœ™\\™Y”YZÔØÙ[™J
+NÂˆÜ™X]Ü“[Ù[[\Ü\ˆHßNÂˆÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™HHYNÂˆÜ™X]Ü“[Ù[[\Ü\‹œÛÝ\˜ÙT]HÝ]KOœÛÝ\˜ÙT]ÂˆÜ™X]Ü“[Ù[[\Ü\‹[™Ð˜\Ù[[™HHÙ\ÜÚ[Û—ËOÛÛ[X[™Ê
+K•[™ÐÛÝ[
+
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹˜Ø[Y\˜P™Y›Ü™HHY]ÜØ[Y\˜U˜[œÙ›Ü›WÎÂˆÜ™X]Ü“[Ù[[\Ü\‹˜Ø[Y\˜Q›Ý™Y›Ü™HHØ[Y\˜KO™›ÝŽÂˆÜ™X]Ü“[Ù[[\Ü\‹˜Ø[Y\˜PØ\\™YHYNÂˆÜ™X]Ü“[Ù[[\Ü\‹œÝ[[X\žHHœšYÙNŽ’[\ÜÙ\šXÙNŽ”Ý[[X\š^™J
+š\ÛÛ]Y
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹™]šY[˜ÙHHœšYÙNŽ’[\ÜÙ\šXÙNŽ”Ý[[X\š^™S[Ù[]šY[˜ÙJ
+š\ÛÛ]Y
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹œÛÝ\˜ÙP›Ý[™ÈHœšYÙNŽ’[\ÜÙ\šXÙNŽ“YX\Ý\™S[Ù[›Ý[™Ê
+š\ÛÛ]Y
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹˜]]ÛX]XÔØØ[HHœšYÙNŽ’[\ÜÙ\šXÙNŽ”™\ÛÛ™TØØ[Q˜XÝÜŠˆœšYÙNŽ“[Ù[ØØ[S[ÙNŽ]]ÛX]XË
+š\ÛÛ]Y
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹œØØ[HHQ“ÐUÊˆÜ™X]Ü“[Ù[[\Ü\‹˜]]ÛX]XÔØØ[KˆÜ™X]Ü“[Ù[[\Ü\‹˜]]ÛX]XÔØØ[KˆÜ™X]Ü“[Ù[[\Ü\‹˜]]ÛX]XÔØØ[JNÂˆÜ™X]Ü“[Ù[[\Ü\‹˜\ÜÙ]˜[YHHœÎŽN]
+Ý]KOœÛÝ\˜ÙT]
+BˆœÝ[J
+K™Ù[™\šX×ÝNÝš[™Ê
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹™\Ý[˜][Û‘›Û\ˆHÛÛ[Ó[Ù[ÈŽÂˆÛÛœÝ]]È]XÝYX]\šX[ÈHœšYÙNŽ‘]XÝÜ™X]Ü“[Ù[X]\šX[Êˆ
+š\ÛÛ]YÝ]KOœÛÝ\˜ÙT]
+NÂˆYˆ
+]XÝYX]\šX[ËœÝXØÙYYY
+BˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\ÈH]XÝYX]\šX[Ë›X]\šX[ÎÂ‚ˆÛÛœÝÝŽœÚ^™WÝX]\šX[Ý\H]™TØÙ[™K›X]\šX[Ë‘Ù]ÛÝ[
+
+NÂˆÛÛœÝÝŽœÚ^™WÝ[š[X][Û”Ý\H]™TØÙ[™K˜[š[X][ÛœË‘Ù]ÛÝ[
+
+NÂ‚ˆ]]ÈXÙHHÝŽ›XZÙWÝ[š\]YOœšYÙNŽ”XÙR[\ÜY[Ù[ÛÛ[X[™Šˆ]™TØÙ[™KˆÝ]KOœ™\\™Y”™[X\ÙTØÙ[™J
+KˆQ“ÐUÊŒ‹Ü™X]Ü’[\ÜÝYÙRZYÚŒŠKˆÜ™X]Ü“[Ù[[\Ü\‹˜]]ÛX]XÔØØ[JNÂˆ]]ÊˆXÙYHXÙK™Ù]
+
+NÂˆYˆ
+\Ù\ÜÚ[Û—ËOÛÛ[X[™Ê
+K‘^XÝ]JÝŽ›[Ý™JXÙJJJBˆÂˆÜ™X]Ü“[Ù[[\Ü\ˆHßNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+’STÔ•SÑSËÈ‘U’QUÈPÑHRSQŠNÂˆ™]\›ŽÂˆBˆÜ™X]Ü“[Ù[[\Ü\‹œ™]šY]Ô›ÛÝHXÙYO”XÙY[]J
+NÂ‚ˆ›Üˆ
+ÝŽœÚ^™WÝ[™^HX]\šX[Ý\È[™^]™TØÙ[™K›X]\šX[Ë‘Ù]ÛÝ[
+
+NÈ
+ÊÚ[™^
+BˆÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\Ëœ\ÚØ˜XÚÊ]™TØÙ[™K›X]\šX[Ë‘Ù][]J[™^
+JNÂˆ\Q]XÝYÜ™X]Ü”™]šY]ÓX]\šX[Ê
+NÂˆ›Üˆ
+ÝŽœÚ^™WÝ[™^H[š[X][Û”Ý\È[™^]™TØÙ[™K˜[š[X][ÛœË‘Ù]ÛÝ[
+
+NÈ
+ÊÚ[™^
+BˆÂˆÛÛœÝ]]È[]HH]™TØÙ[™K˜[š[X][ÛœË‘Ù][]J[™^
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û‘[]Y\Ëœ\ÚØ˜XÚÊ[]JNÂˆÛÛœÝ]]Êˆ[š[X][ÛˆH]™TØÙ[™K˜[š[X][ÛœË‘Ù]ÛÛ\Û™[
+[]JNÂˆYˆ
+[š[X][ÛˆOH[ŠBˆÂˆœšYÙNŽÜ™X]Ü[š[X][Û’[\Ü™XÚ\HÛ\ÂˆÛ\œÛÝ\˜ÙP[š[X][Û’[™^HÝ]X×ØØ\ÝÝŽZ[Ì—ÝŠ[™^H[š[X][Û”Ý\
+NÂˆÛ\›˜[YHHÜ™X]Ü’[\Ü[]S˜[YJˆ]™TØÙ[™K[]K[š[X][Ûˆˆ
+ÈÝŽ×ÜÝš[™Ê[™^H[š[X][Û”Ý\
+ÈJJNÂˆÛ\œÝ\H[š[X][Û‹OœÝ\ÂˆÛ\™[™H[š[X][Û‹O™[™ÂˆÛ\™[˜X›YHYNÂˆÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û”™XÚ\Kœ\ÚØ˜XÚÊÝŽ›[Ý™JÛ\
+JNÂˆBˆB‚ˆÜ™X]Ü“[Ù[[\Ü\‹ÙX]\‘[]HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K•ÙX]\‘[]J
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[™Y›Ü™HH]™TØÙ[™KÙX]\‹˜[XšY[ÂˆÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[Ø\\™YHYNÂˆYˆ
+ÛÛœÝ]]ÊˆÙX]\ˆH]™TØÙ[™KÙX]\œË‘Ù]ÛÛ\Û™[
+ˆÜ™X]Ü“[Ù[[\Ü\‹ÙX]\‘[]JJBˆÂˆÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[™Y›Ü™HHÙX]\‹O˜[XšY[ÂˆB‚ˆ]]ÈYÚHÝŽ›XZÙWÝ[š\]YOœšYÙNŽÜ™X]SYÚÛÛ[X[™Šˆ]™TØÙ[™KˆÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž‘T‘PÕSÓSˆQ“ÐUÊŒ‹Ü™X]Ü’[\ÜÝYÙRZYÚ
+ÈŒ‹ŒŠJNÂˆ]]ÊˆYÚ˜]ÈHYÚ™Ù]
+
+NÂˆYˆ
+Ù\ÜÚ[Û—ËOÛÛ[X[™Ê
+K‘^XÝ]JÝŽ›[Ý™JYÚ
+JJBˆÂˆÜ™X]Ü“[Ù[[\Ü\‹œ™]šY]ÓYÚHYÚ˜]ËOÜ™X]Y[]J
+NÂˆ]]ÈYÚÝ]HHœšYÙNŽ“XZÙS™]ÓYÚÝ]JÚNŽœØÙ[™NŽ“YÚÛÛ\Û™[Ž‘T‘PÕSÓS
+NÂˆYÚÝ]Kš[[œÚ]HHÜ™X]Ü“[Ù[[\Ü\‹›YÚ[[œÚ]NÂˆYÚÝ]K˜Ø\ÝÚYÝÈH˜[ÙNÂˆÙ\ÜÚ[Û—ËOÛÛ[X[™Ê
+K‘^XÝ]JˆÝŽ›XZÙWÝ[š\]YOœšYÙNŽ”Ù]YÚÛÛ[X[™Šˆ]™TØÙ[™KÜ™X]Ü“[Ù[[\Ü\‹œ™]šY]ÓYÚYÚÝ]JJNÂˆBˆ\PÜ™X]Ü’[\Ü™]šY]ÓYÚ[™Ê
+NÂ‚ˆœ˜[YPÜ™X]Ü’[\Ü™]šY]ÐØ[Y\˜J
+NÂ‚ˆÙ\ÜÚ[Û—ËO”Ù[XÝ[ÛŠ
+K”Ù[XÝ
+Ü™X]Ü“[Ù[[\Ü\‹œ™]šY]Ô›ÛÝ
+NÂˆ™Yœ™\ÚY\˜\˜ÚJ
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆÝY[ÐÚ›ÛYWË”Ù]š\ÚX›J˜[ÙJNÂˆ[œÜXÝÜ”[™[Ë”Ù]š\ÚX›J˜[ÙJNÂˆY\˜\˜ÚTÙX\˜ÚË”Ù]š\ÚX›J˜[ÙJNÂˆÚÝÒ[\ÜØØ[T[™[
+ˆÜ™X]Ü“[Ù[[\Ü\‹œ™]šY]Ô›ÛÝˆÜ™X]Ü“[Ù[[\Ü\‹˜]]ÛX]XÔØØ[KˆœÎŽN]
+Ý]KOœÛÝ\˜ÙT]
+K™š[[˜[YJ
+K™Ù[™\šX×ÝNÝš[™Ê
+JNÂˆJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]ŽÛÛ\]S[Ù[[\ÜXÙ[Y[
+ˆœšYÙNŽ”™\\™Y[Ù[[\Ü™\\™Y
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆYˆ
+\™\\™Y’\Ô™XYJ
+JBˆÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+’STÔ•SÑSËÈRSQŠNÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆÛÝ[›Ý[\ÜH[Ù[——”™X\ÛÛŽˆˆ
+Âˆ™\\™Y”™\Ý[
+
+K™\œ›Ü‹ˆ’[\Ü[Ù[ŠNÂˆ™]\›ŽÂˆB‚ˆÛÛœÝÝŽœÝš[™ÈÛÝ\˜ÙT]H™\\™Y”™\Ý[
+
+KœÛÝ\˜ÙT]ÂˆÛÛœÝœšYÙNŽ’[\Ü™\Ý[Ø]™Y\ÜÙ]BˆœšYÙNŽ’[\ÜÙ\šXÙJ
+K”Ø]™T™\\™YÛ\ÜÙ]
+™\\™Y
+NÂˆYˆ
+\Ø]™Y\ÜÙ]œÝXØÙYYY
+BˆÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+’STÔ•SÑSËÈTÔÑUÐU‘HRSQŠNÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆ•H[Ù[ÛÛ™\Y]]È™]\ØX›H›Ú™XÝ\ÜÙ]ÛÝ[‚ˆ››Ý™HØ]™Y——”™X\ÛÛŽˆˆ
+ÈØ]™Y\ÜÙ]™\œ›Ü‹ˆ’[\Ü[Ù[ŠNÂˆ™]\›ŽÂˆB‚ˆÛÛœÝœÎŽœ]›Ú™XÝ›ÛÝBˆœÎŽN]
+Ù\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+Kœ›ÛÝ]
+NÂˆÛÛœÝœÎŽœ]Ø]™Y\ÜÙ]]HœÎŽN]
+Ø]™Y\ÜÙ]˜\ÜÙ]]
+NÂˆÝŽœÝš[™ÈÛÝ\˜ÙPÛÜQ\œ›ÜŽÂˆYˆ
+PÛÜSÜšYÚ[˜[[Ù[ÛÝ\˜ÙJˆœÎŽN]
+ÛÝ\˜ÙT]
+Kˆ›Ú™XÝ›ÛÝˆØ]™Y\ÜÙ]]ˆÛÝ\˜ÙPÛÜQ\œ›ÜŠJBˆÂˆÝŽ™\œ›Ü—ØÛÙHYÛ›Ü™YÂˆœÎŽœ™[[Ý™JØ]™Y\ÜÙ]]YÛ›Ü™Y
+NÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆ’STÔ•SÑSËÈÓÕTÑHÓTÒÕRSQŠNÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆ•HÛÛ™\Y\ÜÙ]Ø\È›Ý™YÚ\Ý\™Y™XØ]\ÙH™[™YØYH‚ˆ˜ÛÝ[›Ý™\Ù\™H]ÈÙ[XÝYÛÝ\˜ÙHš[K——”™X\ÛÛŽˆˆ
+ÂˆÛÝ\˜ÙPÛÜQ\œ›Ü‹ˆ’[\Ü[Ù[ŠNÂˆ™]\›ŽÂˆB‚ˆQ“ÐUÈÜÚ][ÛŠŒ‹Œ‹ŒŠNÂˆYˆ
+Ø[Y\˜HOH[ŠBˆÂˆÜÚ][ÛˆHØ[Y\˜KO‘^YNÂˆÜÚ][Û‹ž
+ÏHØ[Y\˜KO]ž
+ˆKŒŽÂˆÜÚ][Û‹žH
+ÏHØ[Y\˜KO]žH
+ˆKŒŽÂˆÜÚ][Û‹žˆ
+ÏHØ[Y\˜KO]žˆ
+ˆKŒŽÂˆB‚ˆËÈ™\ÛÛ™H]]ÛX]XÈØØ[HYØZ[œÝHÝ[Z\ÛÛ]Y™\\™YØÙ[™BˆËÈ™Y›Ü™H™[X\ÙTØÙ[™J
+H[™È]ÈHÛÛ[X[™KHÛ˜ÙHY\™ÙY]ÂˆËÈY\Ú\È\™H[™\Ý[™ÝZ\ÚX›Hœ›ÛH]™\žHÝ\ˆY\Ú[™XYH[ˆBˆËÈXÝ]™HØÙ[™Kˆ\È\ÈHY˜][ÛÜœ™XÝ[Ûˆ›Üˆ\˜š]˜\žBˆËÈÝÛ›ØYYØ]]Ü™Y[Ù[ÈÚ][ˆ[šÛ›ÝÛˆÛÝ\˜ÙH[š]
+BˆËÈš[\ÜÈ‘T–H\™ÙHˆØ\ÙJNÈ]\ÈH›Û‹Y\ÝXÝ]™H[šY›Ü›HØØ[BˆËÈÛˆH[\Ü›ÛÝ™]™\ˆ˜ZÙY[È™\^]KÛÈ]Ø[ˆ™BˆËÈœ™Y[HY]YÜˆ™\Ù]Y\Ø\™ZÙH[žHÝ\ˆ˜[œÙ›Ü›K‚ˆ›Ø]ØØ[Q˜XÝÜˆHKŒŽÂˆYˆ
+ÛÛœÝ]]Êˆ™\\™YØÙ[™HH™\\™Y”YZÔØÙ[™J
+JBˆÂˆØØ[Q˜XÝÜˆHœšYÙNŽ’[\ÜÙ\šXÙNŽ”™\ÛÛ™TØØ[Q˜XÝÜŠˆœšYÙNŽ“[Ù[ØØ[S[ÙNŽ]]ÛX]XËˆ
+œ™\\™YØÙ[™JNÂˆB‚ˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆ]]ÈÛÛ[X[™HÝŽ›XZÙWÝ[š\]YOœšYÙNŽ”XÙR[\ÜY[Ù[ÛÛ[X[™ŠˆÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+Kˆ™\\™Y”™[X\ÙTØÙ[™J
+KˆÜÚ][Û‹ˆØØ[Q˜XÝÜŠNÂˆ]]ÊˆXÙPÛÛ[X[™HÛÛ[X[™™Ù]
+
+NÂˆYˆ
+\Ù\ÜÚ[Û—ËOÛÛ[X[™Ê
+K‘^XÝ]JÝŽ›[Ý™JÛÛ[X[™
+JJBˆÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+’STÔ•SÑSËÈRSQŠNÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆ•HÛÛ™\Y[Ù[›ÙXÙY›ÈXÙXX›H[]Kˆ‹ˆ’[\Ü[Ù[ŠNÂˆÞ[˜ÔÙ[XÝ[Û“Ý][™J
+NÂˆ™]\›ŽÂˆB‚ˆÙ\ÜÚ[Û—ËO”Ù[XÝ[ÛŠ
+K”Ù[XÝ
+XÙPÛÛ[X[™O”XÙY[]J
+JNÂˆ™Yœ™\ÚY\˜\˜ÚJ
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂ‚ˆ\ÜÙ]œ›ÝÜÙ\Ý\œ™[›Û\—ÈHÛÛ[Ó[Ù[ÈŽÂˆ™Yœ™\Ú\ÜÙ]œ›ÝÜÙ\Š
+NÂ‚ˆÛÛœÝœÎŽœ]ÛÝ\˜ÙHHœÎŽN]
+ÛÝ\˜ÙT]
+NÂˆÝŽ›ÜÝš[™ÜÝ™X[HØØ[T™XYÝ]ÂˆØØ[T™XYÝ]œ™XÚ\Ú[ÛŠÊNÂˆØØ[T™XYÝ]ÝŽ™š^YØØ[Q˜XÝÜŽÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆ’STÔ•SÑSËÈTÔÑUÐU‘Q
+ÈPÑQËÈˆ
+ÂˆØ]™Y\ÜÙ]]™š[[˜[YJ
+KNÝš[™Ê
+H
+ÂˆˆËÈUUÈÐÐSHˆ
+ÈØØ[T™XYÝ]œÝŠ
+JNÂ‚ˆÚÝÒ[\ÜØØ[T[™[
+ˆXÙPÛÛ[X[™O”XÙY[]J
+KˆØØ[Q˜XÝÜ‹ˆÛÝ\˜ÙK™š[[˜[YJ
+KNÝš[™Ê
+JNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”ÚÝÒ[\ÜØØ[T[™[
+ˆÛÛœÝÚNŽ™XÜÎŽ‘[]H[]KˆÛÛœÝ›Ø]\YYØØ[Q˜XÝÜ‹ˆÛÛœÝÝŽœÝš[™ÉˆÛÝ\˜ÙQš[S˜[YJBˆÂˆ[\ÜØØ[U\™Ù][]WÈH[]NÂˆ[\ÜØØ[P\YY˜XÝÜ—ÈH\YYØØ[Q˜XÝÜŽÂˆ[™[™Ò[\ÜØØ[S[ÙWÈHœšYÙNŽ“[Ù[ØØ[S[ÙNŽ]]ÛX]XÎÂ‚ˆÝŽ›ÜÝš[™ÜÝ™X[H™XYÝ]Âˆ™XYÝ]ÛÝ\˜ÙQš[S˜[YBˆ—“Y\Ú\ÎˆˆÜ™X]Ü“[Ù[[\Ü\‹œÝ[[X\žK›Y\Ú\ÂˆˆX]\šX[ÎˆˆÜ™X]Ü“[Ù[[\Ü\‹œÝ[[X\žK›X]\šX[Âˆˆ^\™\ÎˆˆÜ™X]Ü“[Ù[[\Ü\‹œÝ[[X\žK^\™T™Y™\™[˜Ù\Âˆ—[š[X][ÛœÎˆˆÜ™X]Ü“[Ù[[\Ü\‹œÝ[[X\žK˜[š[X][ÛœÂˆˆ›Û™\ÎˆˆÜ™X]Ü“[Ù[[\Ü\‹™]šY[˜ÙK˜\›X]\™P›Û™\ÎÂˆ[\ÜØØ[T™XYÝ]X™[Ë”Ù]^
+™XYÝ]œÝŠ
+JNÂˆ[\ÜØØ[S[ÙPÛÛX›×Ë”Ù]Ù[XÝYÚ]Ý]Ø[˜XÚÊ
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹ÛÜšÜÜXÙTÙXÝ[ÛˆHÂˆÜ™X]Ü’[\ÜÙXÝ[ÛÛÛX›Ë”Ù]Ù[XÝYÚ]Ý]Ø[˜XÚÊ
+NÂˆÜ™X]Ü’[\Ü\ÜÙ]˜[YK”Ù]˜[YJÜ™X]Ü“[Ù[[\Ü\‹˜\ÜÙ]˜[YJNÂˆÜ™X]Ü’[\Ü\Ý[˜][Û‹”Ù]˜[YJÜ™X]Ü“[Ù[[\Ü\‹™\Ý[˜][Û‘›Û\ŠNÂˆÜ™X]Ü“[Ù[[\Ü\‹œÜÚ][Û“Ù™œÙ]HQ“ÐUÊŒ‹Œ‹ŒŠNÂˆÜ™X]Ü“[Ù[[\Ü\‹œ›Ý][Û‘YÜ™Y\ÈHQ“ÐUÊŒ‹Œ‹ŒŠNÂˆÜ™X]Ü’[\ÜÜÚ][Û–”Ù]˜[YJŒŠNÂˆÜ™X]Ü’[\ÜÜÚ][Û–K”Ù]˜[YJŒŠNÂˆÜ™X]Ü’[\ÜÜÚ][Û–‹”Ù]˜[YJŒŠNÂˆÜ™X]Ü’[\Ü›Ý][Û–”Ù]˜[YJŒŠNÂˆÜ™X]Ü’[\Ü›Ý][Û–K”Ù]˜[YJŒŠNÂˆÜ™X]Ü’[\Ü›Ý][Û–‹”Ù]˜[YJŒŠNÂˆÜ™X]Ü’[\ÜØØ[V”Ù]˜[YJÜ™X]Ü“[Ù[[\Ü\‹œØØ[Kž
+NÂˆÜ™X]Ü’[\ÜØØ[VK”Ù]˜[YJÜ™X]Ü“[Ù[[\Ü\‹œØØ[KžJNÂˆÜ™X]Ü’[\ÜØØ[V‹”Ù]˜[YJÜ™X]Ü“[Ù[[\Ü\‹œØØ[KžŠNÂˆÜ™X]Ü’[\ÜØØ[S[šÙY”Ù]ÚXÚÊÜ™X]Ü“[Ù[[\Ü\‹œØØ[S[šÙY
+NÂˆÜ™X]Ü’[\Ü[Y[œÚ[Û”™\Ù]”Ù]Ù[XÝYÚ]Ý]Ø[˜XÚÊLJNÂ‚ˆÜ™X]Ü’[\ÜX]\šX[ÛÛX›ËÛX\’][\Ê
+NÂˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆ›Üˆ
+ÝŽœÚ^™WÝ[™^HÈ[™^Ü™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\ËœÚ^™J
+NÈ
+ÊÚ[™^
+BˆÂˆÛÛœÝ]]È[]RYHÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\ÖÚ[™^NÂˆÜ™X]Ü’[\ÜX]\šX[ÛÛX›ËY][JˆÜ™X]Ü’[\Ü[]S˜[YJØÙ[™K[]RY“X]\šX[ˆ
+ÈÝŽ×ÜÝš[™Ê[™^
+ÈJJKˆÝ]X×ØØ\ÝÝŽZ[ÝŠ[™^
+JNÂˆBˆYˆ
+XÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[[]Y\Ë™[\J
+JBˆÂˆÜ™X]Ü’[\ÜX]\šX[ÛÛX›Ë”Ù]Ù[XÝYÚ]Ý]Ø[˜XÚÊ
+NÂˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝYX]\šX[HÂˆBˆ™Yœ™\ÚÜ™X]Ü’[\ÜX]\šX[™XYÝ]
+
+NÂˆ™Yœ™\ÚÜ™X]Ü’[\ÜX]\šX[ØØ[\œÊ
+NÂˆÜ™X]Ü’[\Ü^\™TÛÝHÂˆÜ™X]Ü’[\Ü^\™TÛÝÛÛX›Ë”Ù]Ù[XÝYÚ]Ý]Ø[˜XÚÊ
+NÂˆ™Yœ™\ÚÜ™X]Ü’[\Ü^\™QY]ÜŠ
+NÂ‚ˆÜ™X]Ü“[Ù[[\Ü\‹œÙ[XÝY[š[X][ÛˆHÂˆ™XZ[Ü™X]Ü’[\Ü[š[X][ÛÛÛX›Ê
+NÂˆÜ™X]Ü’[\ÜYÚ[[œÚ]K”Ù]˜[YJÜ™X]Ü“[Ù[[\Ü\‹›YÚ[[œÚ]JNÂˆÜ™X]Ü’[\ÜYÚ^š[]]”Ù]˜[YJÜ™X]Ü“[Ù[[\Ü\‹›YÚ^š[]]
+NÂˆÜ™X]Ü’[\ÜYÚ[]˜][Û‹”Ù]˜[YJÜ™X]Ü“[Ù[[\Ü\‹›YÚ[]˜][ÛŠNÂˆÜ™X]Ü’[\Ü[XšY[œšYÚ™\ÜË”Ù]˜[YJÜ™X]Ü“[Ù[[\Ü\‹˜[XšY[œšYÚ™\ÜÊNÂˆÜ™X]Ü’[\ÜYÚ[™Ô™\Ù]”Ù]Ù[XÝYÚ]Ý]Ø[˜XÚÊ
+NÂˆÜ™X]Ü’[\ÜX[›™\]Z[•š\ÚX›K”Ù]ÚXÚÊÜ™X]Ü“[Ù[[\Ü\‹›X[›™\]Z[•š\ÚX›JNÂˆ[\ÜØØ[T[™[Ë”Ù]š\ÚX›JYJNÂˆ™Yœ™\ÚÜ™X]Ü’[\ÜÛÜšÜÜXÙTÙXÝ[ÛŠ
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž‘œ˜[YPÜ™X]Ü’[\Ü™]šY]ÐØ[Y\˜J
+BˆÂˆYˆ
+XÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™HXÜ™X]Ü“[Ù[[\Ü\‹œÛÝ\˜ÙP›Ý[™Ë˜[Y
+Bˆ™]\›ŽÂ‚ˆÛÛœÝ]]Éˆ›Ý[™ÈHÜ™X]Ü“[Ù[[\Ü\‹œÛÝ\˜ÙP›Ý[™ÎÂˆÛÛœÝQ“ÐUÈØØ[HHÜ™X]Ü“[Ù[[\Ü\‹œØØ[NÂˆÛÛœÝQ“ÐUÈÙ[\Šˆ
+›Ý[™Ë›Z[š[][Kž
+È›Ý[™Ë›X^[][Kž
+H
+ˆYˆ
+ˆØØ[KžˆÜ™X]Ü’[\ÜÝYÙRZYÚ
+Âˆ
+›Ý[™Ë›Z[š[][KžH
+È›Ý[™Ë›X^[][KžJH
+ˆYˆ
+ˆØØ[KžKˆ
+›Ý[™Ë›Z[š[][Kžˆ
+È›Ý[™Ë›X^[][KžŠH
+ˆYˆ
+ˆØØ[KžŠNÂˆÛÛœÝQ“ÐUÈ^[ÊˆÝŽ˜XœÊ›Ý[™Ë›X^[][KžH›Ý[™Ë›Z[š[][Kž
+H
+ˆØØ[KžˆÝŽ˜XœÊ›Ý[™Ë›X^[][KžHH›Ý[™Ë›Z[š[][KžJH
+ˆØØ[KžKˆÝŽ˜XœÊ›Ý[™Ë›X^[][KžˆH›Ý[™Ë›Z[š[][KžŠH
+ˆØØ[KžŠNÂˆÛÛœÝ›Ø]˜Y]\ÈHÝŽ›X^
+ˆŒY‹ˆYˆ
+ˆÝŽœÜ\
+ˆ^[Ëž
+ˆ^[Ëž
+Âˆ^[ËžH
+ˆ^[ËžH
+Âˆ^[Ëžˆ
+ˆ^[ËžŠJNÂ‚ˆËÈHÛ™Ù\‹™]]˜[™]šY]È[œÈ]›ÚYÈH^YÙÙ\˜]Y™X\‹Ù˜\‚ˆËÈ›ÜÜ[ÛœÈ›ÙXÙYžHHY]ÜˆØ[Y\˜HÚ[ˆ]\ÈXÙYÛÜÙBˆËÈÈHÚ\˜XÝ\‹ˆ\Ý[˜ÙH›ÛÝÜÈHYX\Ý\™YØØ[Y›Ý[™ÈÛÈBˆËÈ›ÛÝXYÜˆ\™ÙH›ÜØ[››ÝXØÚY[[Hš[H™X\ˆ[™K‚ˆØ[Y\˜KO™›ÝˆHÜ™X]Ü’[\Ü™]šY]Ñ›ÝŽÂˆÛÛœÝ›Ø]\Ý[˜ÙHHÝŽ›X^
+ˆ‹Y‹ˆ˜Y]\ÈÈÝŽœÚ[ŠÜ™X]Ü’[\Ü™]šY]Ñ›Ýˆ
+ˆYŠH
+ˆKŒ™ŠNÂˆÛÛœÝU‘PÕÔˆ\™Ù]HSØY›Ø]Ê	˜Ù[\ŠNÂˆÛÛœÝU‘PÕÔˆšY]Ñ\™XÝ[ÛˆHU™XÝÜŒÓ›Ü›X[^™JˆU™XÝÜ”Ù]
+ŒÌ™‹ŒL™‹LKŒ‹ŒŠJNÂˆÛÛœÝU‘PÕÔˆ^YHH\™Ù]
+ÈšY]Ñ\™XÝ[Ûˆ
+ˆ\Ý[˜ÙNÂˆÛÛœÝSPU’VšY]ÈHSX]š^ÛÚÐ]
+ˆ^YK\™Ù]U™XÝÜ”Ù]
+Œ‹KŒ‹Œ‹ŒŠJNÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WËÛX\•˜[œÙ›Ü›J
+NÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WË“X]š^˜[œÙ›Ü›JSX]š^[™\œÙJ[‹šY]ÊJNÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WË•\]U˜[œÙ›Ü›J
+NÂˆØ[Y\˜KO•˜[œÙ›Ü›PØ[Y\˜JY]ÜØ[Y\˜U˜[œÙ›Ü›WÊNÂˆØ[Y\˜KO•\]PØ[Y\˜J
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™Yœ™\ÚÜ™X]Ü’[\ÜÛÜšÜÜXÙTÙXÝ[ÛŠ
+BˆÂˆÛÛœÝÝŽœÚ^™WÝÙXÝ[ÛˆHÜ™X]Ü“[Ù[[\Ü\‹ÛÜšÜÜXÙTÙXÝ[ÛŽÂˆÛÛœÝ]]ÈÚÝÈHÜÙXÝ[Û—JÚNŽ™ÝZNŽ•ÚYÙ]	ˆÚYÙ]ÛÛœÝÝŽœÚ^™WÝÝÛ™\ŠBˆÂˆÚYÙ]”Ù]š\ÚX›JÙXÝ[ÛˆOHÝÛ™\ŠNÂˆNÂˆÚÝÊÜ™X]Ü’[\Ü\ÜÙ]˜[YK
+NÂˆÚÝÊÜ™X]Ü’[\Ü\Ý[˜][Û‹
+NÂ‚ˆ›Üˆ
+ÚNŽ™ÝZNŽ•ÚYÙ]
+ˆÚYÙ]ˆÂˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü˜[œÙ›Ü›SX™[
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜÜÚ][Û–
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜÜÚ][Û–JKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜÜÚ][Û–ŠKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü›Ý][Û–
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü›Ý][Û–JKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü›Ý][Û–ŠKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜØØ[V
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜØØ[VJKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜØØ[VŠKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜØØ[S[šÙY
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[Y[œÚ[Û”™\Ù]
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	š[\ÜØØ[S[ÙPÛÛX›×Ê_JBˆÚYÙ]O”Ù]š\ÚX›JÙXÝ[ÛˆOHJNÂ‚ˆ›Üˆ
+ÚNŽ™ÝZNŽ•ÚYÙ]
+ˆÚYÙ]ˆÂˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜX]\šX[X™[
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜX]\šX[ÛÛX›ÊKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜX]\šX[™XYÝ]
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü^\™R[
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü^\™TÛÝÛÛX›ÊKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü^\™T]
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü^\™Pœ›ÝÜÙJKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü^\™PÛX\ŠKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜX]\šX[ØØ[\“X™[
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü›ÝYÚ™\ÜÊKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜY][™\ÜÊKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü™Y›XÝ[˜ÙJKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü›Ü›X[Ý™[™Ý
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[ÔÝ™[™Ý
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[Z\ÜÚ]™TÝ™[™Ý
+_JBˆÚYÙ]O”Ù]š\ÚX›JÙXÝ[ÛˆOHŠNÂ‚ˆ›Üˆ
+ÚNŽ™ÝZNŽ•ÚYÙ]
+ˆÚYÙ]ˆÂˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜYÚ[™ÓX™[
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜYÚ[[œÚ]JKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜYÚ^š[]]
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜYÚ[]˜][ÛŠKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[XšY[œšYÚ™\ÜÊKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜYÚ[™Ô™\Ù]
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜYÚ[™Ô™\Ù]
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\ÜX[›™\]Z[•š\ÚX›J_JBˆÚYÙ]O”Ù]š\ÚX›JÙXÝ[ÛˆOHÊNÂ‚ˆ›Üˆ
+ÚNŽ™ÝZNŽ•ÚYÙ]
+ˆÚYÙ]ˆÂˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[š[X][Û“X™[
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[š[X][ÛÛÛX›ÊKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[š[X][Û“˜[YJKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[š[X][Û”Ý\
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[š[X][Û‘[™
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[š[X][Û‘[˜X›Y
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[š[X][ÛY
+KˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[š[X][Û‘[]JKˆÝ]X×ØØ\ÝÚNŽ™ÝZNŽ•ÚYÙ]
+Š	˜Ü™X]Ü’[\Ü[š[X][Û”™XYÝ]
+_JBˆÚYÙ]O”Ù]š\ÚX›JÙXÝ[ÛˆOH
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž\R[\ÜØØ[S[ÙJˆÛÛœÝœšYÙNŽ“[Ù[ØØ[S[ÙH[ÙJBˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆXÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™HÜ™X]Ü“[Ù[[\Ü\‹˜ÛÛ[Z][™ÊBˆ™]\›ŽÂ‚ˆ]]Éˆ]™TØÙ[™HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆ]]Êˆ™]šY]Õ˜[œÙ›Ü›HH]™TØÙ[™K˜[œÙ›Ü›\Ë‘Ù]ÛÛ\Û™[
+Ü™X]Ü“[Ù[[\Ü\‹œ™]šY]Ô›ÛÝ
+NÂˆYˆ
+™]šY]Õ˜[œÙ›Ü›HOH[ŠBˆÂˆ\ÛZ\ÜÒ[\ÜØØ[T[™[
+
+NÂˆ™]\›ŽÂˆB‚ˆÛÛœÝœšYÙNŽ•˜[œÙ›Ü›TÝ]H™]šY]ÈHœšYÙNŽØ\\™U˜[œÙ›Ü›J
+œ™]šY]Õ˜[œÙ›Ü›JNÂˆÛÛœÝQ“ÐUÈ™]šY]ÓÙ™œÙ]
+ˆ™]šY]Ë˜[œÛ][Û‹žˆ™]šY]Ë˜[œÛ][Û‹žHHÜ™X]Ü’[\ÜÝYÙRZYÚˆ™]šY]Ë˜[œÛ][Û‹žŠNÂˆÛÛœÝÝŽœÝš[™ÈÛÝ\˜ÙT]HÜ™X]Ü“[Ù[[\Ü\‹œÛÝ\˜ÙT]ÂˆÛÛœÝ]]ÈØ[Y\˜P™Y›Ü™HHÜ™X]Ü“[Ù[[\Ü\‹˜Ø[Y\˜P™Y›Ü™NÂˆÛÛœÝ]]ÈX]\šX[Ý™\œšY\ÈHÜ™X]Ü“[Ù[[\Ü\‹›X]\šX[Ý™\œšY\ÎÂˆÛÛœÝ]]È[š[X][Û”™XÚ\HHÜ™X]Ü“[Ù[[\Ü\‹˜[š[X][Û”™XÚ\NÂˆÛÛœÝÝŽœÝš[™È\ÜÙ]˜[YHHÜ™X]Ü“[Ù[[\Ü\‹˜\ÜÙ]˜[YNÂˆÛÛœÝÝŽœÝš[™È\Ý[˜][Û‘›Û\ˆHÜ™X]Ü“[Ù[[\Ü\‹™\Ý[˜][Û‘›Û\ŽÂˆÜ™X]Ü“[Ù[[\Ü\‹˜ÛÛ[Z][™ÈHYNÂ‚ˆ™\ÝÜ™PÜ™X]Ü’[\Ü™]šY]Ñ[š\›Û›Y[
+
+NÂˆÚ[H
+Ù\ÜÚ[Û—ËOÛÛ[X[™Ê
+K•[™ÐÛÝ[
+
+HˆÜ™X]Ü“[Ù[[\Ü\‹[™Ð˜\Ù[[™JBˆÂˆYˆ
+\Ù\ÜÚ[Û—ËOÛÛ[X[™Ê
+K•[™Ê
+JBˆœ™XZÎÂˆBˆ[\ÜØØ[T[™[Ë”Ù]š\ÚX›J˜[ÙJNÂˆÝY[ÐÚ›ÛYWË”Ù]š\ÚX›JYJNÂˆ[œÜXÝÜ”[™[Ë”Ù]š\ÚX›JYJNÂˆY\˜\˜ÚTÙX\˜ÚË”Ù]š\ÚX›JYJNÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WÈHØ[Y\˜P™Y›Ü™NÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WË•\]U˜[œÙ›Ü›J
+NÂˆØ[Y\˜KO™›ÝˆHÜ™X]Ü“[Ù[[\Ü\‹˜Ø[Y\˜Q›Ý™Y›Ü™NÂˆØ[Y\˜KO•˜[œÙ›Ü›PØ[Y\˜JY]ÜØ[Y\˜U˜[œÙ›Ü›WÊNÂˆØ[Y\˜KO•\]PØ[Y\˜J
+NÂˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆÙ\ÜÚ[Û—ËO”Ù[XÝ[ÛŠ
+KÛX\Š
+NÂˆ™Yœ™\ÚY\˜\˜ÚJ
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂ‚ˆÝXÝÛÝ™\›™YÛÛ[Z]Ý]BˆÂˆÝŽœÝš[™È›Ú™XÝ›ÛÝÂˆœšYÙNŽ”ÝX›RY›Ú™XÝYÂˆÝŽœÝš[™ÈÛÝ\˜ÙT]ÂˆQ“ÐUÈÜÚ][ÛŽÂˆQ“ÐU›Ý][ÛŽÂˆQ“ÐUÈØØ[HHQ“ÐUÊKŒ‹KŒ‹KŒŠNÂˆÝŽœÝš[™È\ÜÙ]˜[YNÂˆÝŽœÝš[™È\Ý[˜][Û‘›Û\ŽÂˆÝŽ™XÝÜœšYÙNŽÜ™X]Ü“X]\šX[ÛÝ\˜ÙSÝ™\œšYOˆX]\šX[Ý™\œšY\ÎÂˆÝŽ™XÝÜœšYÙNŽÜ™X]Ü[š[X][Û’[\Ü™XÚ\Oˆ[š[X][Û”™XÚ\NÂˆÝŽœÝš[™ÈÙ][™ÜÒœÛÛˆHžßHŽÂˆœšYÙNŽÜ™X]Ü“[Ù[[\Ü™\Ý[[\ÜYÂˆœšYÙNŽ”™\\™Y™]\ØX›S[Ù[XÙ[Y[™\\™YÂˆNÂˆ]]ÈÝ]HHÝŽ›XZÙWÜÚ\™YÛÝ™\›™YÛÛ[Z]Ý]OŠ
+NÂˆÛÛœÝ]]Éˆ›Ú™XÝHÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+NÂˆÝ]KOœ›Ú™XÝ›ÛÝH›Ú™XÝœ›ÛÝ]ÂˆÝ]KOœ›Ú™XÝYH›Ú™XÝœ›Ú™XÝYÂˆÝ]KOœÛÝ\˜ÙT]HÛÝ\˜ÙT]ÂˆÛÛœÝQ“ÐUÈØ[Y\˜TÜÚ][ÛˆHØ[Y\˜P™Y›Ü™K‘Ù]ÜÚ][ÛŠ
+NÂˆÛÛœÝQ“ÐUÈØ[Y\˜Q›ÜØ\™HØ[Y\˜P™Y›Ü™K‘Ù]›ÜØ\™
+
+NÂˆÝ]KOœÜÚ][ÛˆHQ“ÐUÊˆØ[Y\˜TÜÚ][Û‹ž
+ÈØ[Y\˜Q›ÜØ\™ž
+ˆKŒˆ
+È™]šY]ÓÙ™œÙ]žˆØ[Y\˜TÜÚ][Û‹žH
+ÈØ[Y\˜Q›ÜØ\™žH
+ˆKŒˆ
+È™]šY]ÓÙ™œÙ]žKˆØ[Y\˜TÜÚ][Û‹žˆ
+ÈØ[Y\˜Q›ÜØ\™žˆ
+ˆKŒˆ
+È™]šY]ÓÙ™œÙ]žŠNÂˆÝ]KOœ›Ý][ÛˆH™]šY]Ëœ›Ý][ÛŽÂˆÝ]KOœØØ[HH™]šY]ËœØØ[NÂˆÝ]KO˜\ÜÙ]˜[YHH\ÜÙ]˜[YNÂˆÝ]KO™\Ý[˜][Û‘›Û\ˆH\Ý[˜][Û‘›Û\ŽÂˆÝ]KO›X]\šX[Ý™\œšY\ÈHX]\šX[Ý™\œšY\ÎÂˆÝ]KO˜[š[X][Û”™XÚ\HH[š[X][Û”™XÚ\NÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+’STÔ•SÑSËÈÓÓSRUS‘ÈÓÕ‘T“‘QTÔÑUŠNÂ‚ˆÚNŽš›ØœÞ\Ý[NŽ‘^XÝ]J[Ù[[\ÜÛÜšÛØYËˆÝ\ËÝ]WJÚNŽš›ØœÞ\Ý[NŽ’›Ø\™ÜÊBˆÂˆÛÛœÝœÎŽœ]™]šY]Ñ\™XÝÜžHBˆœÎŽN]
+Ý]KOœ›Ú™XÝ›ÛÝ
+HÈ’[\›YYX]HˆÈ’[\ÜÈŽÂˆÝŽ™\œ›Ü—ØÛÙHXÎÂˆœÎŽ˜Ü™X]WÙ\™XÝÜšY\Ê™]šY]Ñ\™XÝÜžKXÊNÂˆœšYÙNŽ“[Ù[[\Ü™\]Y\Ý[Ù[™\]Y\ÝÂˆ[Ù[™\]Y\ÝœÛÝ\˜ÙT]HÝ]KOœÛÝ\˜ÙT]Âˆ[Ù[™\]Y\Ý˜\ÜÙ]]H
+™]šY]Ñ\™XÝÜžHÈ‹˜Ü™X]Ü‹XÛÛ[Z]Ú\ØÙ[™HŠK™Ù[™\šX×ÝNÝš[™Ê
+NÂˆ[Ù[™\]Y\Ý™^XÝY›Ü›X]HœšYÙNŽ’[\ÜÙ\šXÙNŽÛ\ÜÚYžS[Ù[ÛÝ\˜ÙQ›Ü›X]
+Ý]KOœÛÝ\˜ÙT]
+NÂˆ]]ÈÛÛ™\YHœšYÙNŽ’[\ÜÙ\šXÙJ
+K”™\\™S[Ù[\ÜÙ]
+[Ù[™\]Y\Ý
+NÂˆYˆ
+ÛÛ™\Y’\Ô™XYJ
+JBˆÂˆœšYÙNŽÜ™X]Ü“[Ù[X]\šX[™\\˜][Û”™\]Y\ÝX]\šX[™\]Y\ÝÂˆX]\šX[™\]Y\Ýœ™\\™YØÙ[™HHÛÛ™\Y”YZÔØÙ[™J
+NÂˆX]\šX[™\]Y\Ýœ›Ú™XÝ›ÛÝHÝ]KOœ›Ú™XÝ›ÛÝÂˆX]\šX[™\]Y\Ýœ›Ú™XÝYHÝ]KOœ›Ú™XÝYÂˆX]\šX[™\]Y\Ý›[Ù[ÛÝ\˜ÙT]HÝ]KOœÛÝ\˜ÙT]ÂˆX]\šX[™\]Y\Ý›Ý™\œšY\ÈHÝ]KO›X]\šX[Ý™\œšY\ÎÂˆ]]ÈX]\šX[ÈHœšYÙNŽ”™\\™PÜ™X]Ü“[Ù[X]\šX[ÊX]\šX[™\]Y\Ý
+NÂˆYˆ
+X]\šX[ËœÝXØÙYYY
+BˆÂˆX]\šX[Ëœ™XÚ\K˜[š[X][ÛœÈHÝ]KO˜[š[X][Û”™XÚ\NÂˆÝŽœÝš[™È™XÚ\Q\œ›ÜŽÂˆYˆ
+XœšYÙNŽ”Ù\šX[^™PÜ™X]Ü“[Ù[[\ÜÜ[ÛœÊˆX]\šX[Ëœ™XÚ\KÝ]KOœÙ][™ÜÒœÛÛ‹™XÚ\Q\œ›ÜŠJBˆÂˆÝ]KOš[\ÜY™\œ›ÜˆH™XÚ\Q\œ›ÜŽÂˆBˆBˆ[ÙBˆÂˆÝ]KOš[\ÜY™\œ›ÜˆHX]\šX[Ë™\œ›ÜŽÂˆBˆBˆ[ÙBˆÂˆÝ]KOš[\ÜY™\œ›ÜˆHÛÛ™\Y”™\Ý[
+
+K™\œ›ÜŽÂˆB‚ˆœšYÙNŽÜ™X]Ü\ÜÙ]ÛÜšÙ›ÝÔÙ\šXÙHÛÜšÙ›ÝÎÂˆYˆ
+Ý]KOš[\ÜY™\œ›Ü‹™[\J
+JBˆÝ]KOš[\ÜYHÛÜšÙ›ÝË’[\Ü[Ù[
+ˆÝ]KOœ›Ú™XÝ›ÛÝÝ]KOœ›Ú™XÝYÝ]KOœÛÝ\˜ÙT]ˆÝ]KOœÙ][™ÜÒœÛÛ‹Ý]KO˜\ÜÙ]˜[YKˆÝ]KO™\Ý[˜][Û‘›Û\ŠNÂˆYˆ
+Ý]KOš[\ÜYœÝXØÙYYY
+BˆÝ]KOœ™\\™YHÛÜšÙ›ÝË”™\\™S[Ù[XÙ[Y[
+ˆÝ]KOœ›Ú™XÝ›ÛÝÝ]KOœ›Ú™XÝYÝ]KOš[\ÜY˜\ÜÙ]˜\ÜÙ]Y
+NÂˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\ËÝ]WJÝŽZ[Ý
+BˆÂˆÜ™X]Ü“[Ù[[\Ü\ˆHßNÂˆYˆ
+\Ý]KOš[\ÜYœÝXØÙYYY\Ý]KOœ™\\™Y’\Ô™XYJ
+JBˆÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+’STÔ•SÑSËÈÓÓSRURSQŠNÂˆÛÛœÝÝŽœÝš[™È™X\ÛÛˆH\Ý]KOš[\ÜYœÝXØÙYYYˆÈÝ]KOš[\ÜY™\œ›ÜˆˆÝ]KOœ™\\™Y”™\Ý[
+
+K™\œ›ÜŽÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆ•H™]šY]ÈØ\È\ØØ\™YØY™[K]HÛÝ™\›™Y\ÜÙ]ÛÝ[›Ý™HÛÛ[Z]Y——”™X\ÛÛŽˆˆ
+È™X\ÛÛ‹ˆ’[\Ü[Ù[ŠNÂˆ™]\›ŽÂˆB‚ˆ]]ÈÛÛ[X[™HÝŽ›XZÙWÝ[š\]YOœšYÙNŽ”XÙT™]\ØX›S[Ù[ÛÛ[X[™ŠˆÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+KÝ]KOœ™\\™Y”™[X\ÙTØÙ[™J
+KˆÝ]KOš[\ÜY˜\ÜÙ]˜\ÜÙ]YÝ]KOœÜÚ][Û‹Ý]KOœØØ[Kž
+NÂˆ]]ÊˆXÙYHÛÛ[X[™™Ù]
+
+NÂˆYˆ
+\Ù\ÜÚ[Û—ËOÛÛ[X[™Ê
+K‘^XÝ]JÝŽ›[Ý™JÛÛ[X[™
+JJBˆÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+’STÔ•SÑSËÈTÔÑUÓÓSRUQËÈPÑHRSQŠNÂˆ™]\›ŽÂˆBˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆ]]Êˆ˜[œÙ›Ü›HHØÙ[™K˜[œÙ›Ü›\Ë‘Ù]ÛÛ\Û™[
+XÙYO”XÙY[]J
+JNÂˆYˆ
+˜[œÙ›Ü›HOH[ŠBˆÂˆ]]Èš[˜[˜[œÙ›Ü›HHœšYÙNŽØ\\™U˜[œÙ›Ü›J
+˜[œÙ›Ü›JNÂˆš[˜[˜[œÙ›Ü›Kœ›Ý][ÛˆHÝ]KOœ›Ý][ÛŽÂˆš[˜[˜[œÙ›Ü›KœØØ[HHÝ]KOœØØ[NÂˆÙ\ÜÚ[Û—ËOÛÛ[X[™Ê
+K‘^XÝ]JˆÝŽ›XZÙWÝ[š\]YOœšYÙNŽ”Ù]˜[œÙ›Ü›PÛÛ[X[™ŠˆØÙ[™KXÙYO”XÙY[]J
+Kš[˜[˜[œÙ›Ü›JJNÂˆBˆÙ\ÜÚ[Û—ËO”Ù[XÝ[ÛŠ
+K”Ù[XÝ
+XÙYO”XÙY[]J
+JNÂˆ™Yœ™\ÚY\˜\˜ÚJ
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆ\ÜÙ]œ›ÝÜÙ\Ý\œ™[›Û\—ÈHÛÛ[Ó[Ù[ÈŽÂˆ™Yœ™\Ú\ÜÙ]œ›ÝÜÙ\Š
+NÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆ’STÔ•SÑSËÈÓÕ‘T“‘QTÔÑU‘PQHËÈˆ
+ÂˆœÎŽN]
+Ý]KOš[\ÜY˜\ÜÙ]›Ú™XÝ™[]]™T]
+K™š[[˜[YJ
+K™Ù[™\šX×ÝNÝš[™Ê
+JNÂˆJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž‘\ÛZ\ÜÒ[\ÜØØ[T[™[
+
+BˆÂˆ[\ÜØØ[T[™[Ë”Ù]š\ÚX›J˜[ÙJNÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆ	‰ˆÜ™X]Ü“[Ù[[\Ü\‹˜XÝ]™JBˆÂˆ™\ÝÜ™PÜ™X]Ü’[\Ü™]šY]Ñ[š\›Û›Y[
+
+NÂˆÚ[H
+Ù\ÜÚ[Û—ËOÛÛ[X[™Ê
+K•[™ÐÛÝ[
+
+HˆÜ™X]Ü“[Ù[[\Ü\‹[™Ð˜\Ù[[™JBˆÂˆYˆ
+\Ù\ÜÚ[Û—ËOÛÛ[X[™Ê
+K•[™Ê
+JBˆœ™XZÎÂˆBˆYˆ
+Ü™X]Ü“[Ù[[\Ü\‹˜Ø[Y\˜PØ\\™Y
+BˆÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WÈHÜ™X]Ü“[Ù[[\Ü\‹˜Ø[Y\˜P™Y›Ü™NÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WË•\]U˜[œÙ›Ü›J
+NÂˆØ[Y\˜KO™›ÝˆHÜ™X]Ü“[Ù[[\Ü\‹˜Ø[Y\˜Q›Ý™Y›Ü™NÂˆØ[Y\˜KO•˜[œÙ›Ü›PØ[Y\˜JY]ÜØ[Y\˜U˜[œÙ›Ü›WÊNÂˆØ[Y\˜KO•\]PØ[Y\˜J
+NÂˆBˆÙ\ÜÚ[Û—ËO”Ù[XÝ[ÛŠ
+KÛX\Š
+NÂˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆ™Yœ™\ÚY\˜\˜ÚJ
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆBˆÜ™X]Ü“[Ù[[\Ü\ˆHßNÂˆ[\ÜØØ[U\™Ù][]WÈHÚNŽ™XÜÎŽ’S•SQÑS•UNÂˆÝY[ÐÚ›ÛYWË”Ù]š\ÚX›JYJNÂˆ[œÜXÝÜ”[™[Ë”Ù]š\ÚX›JYJNÂˆY\˜\˜ÚTÙX\˜ÚË”Ù]š\ÚX›JYJNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+’STÔ•SÑSËÈÐSÑSQËÈ“Ò‘PÕSÒS‘ÑQŠNÂˆB‚ˆÝŽœÝš[™ÈÝY[Ô™[™\”]Ž”™\ÛÛ™U\Ý]™[[[YT]
+
+HÛÛœÝˆÂˆËÈœÎŽ˜Ý\œ™[Ü]
+
+H\È›Ý™[XX›H\™NˆÛÛ[[ÛˆÚ[™ÝÜÈš[K[Ü[‚ˆËÈX[ÙÜÈ
+Ü[ˆ›Ú™XÝÜ[ˆØÙ[™K]ËŠH\™HØÝ[Y[YÈÚ[™ÙBˆËÈHØ[[™È›ØÙ\ÜÉÜÈÛÜšÚ[™È\™XÝÜžH\ÈHÚYHY™™XÝ[™ˆËÈÛ˜ÙH]\[œÈ]™\žHØ[™Y]H™[ÝÈÚ[[H™\ÛÛ™\ÈYØZ[œÝˆËÈHÜ›Û™È›ÛÝH™[™YØYT[[YK™^HÝ[^\ÝÈ^XÝHÚ\™BˆËÈ][Ø^\ÈY]\ÈÛÚÝ\ÛÝ[›ÈÛ™Ù\ˆš[™]ˆ[˜ÚÜˆÂˆËÈ\È›ØÙ\ÜÉÜÈÝÛˆ^XÝ]X›H][œÝXYÚXÚØ[››ÝšY‚ˆØÚ\—Ý[Ù[T]ÓPVÔUHHßNÂˆYˆ
+Ù][Ù[Qš[S˜[YUÊ[‹[Ù[T]PVÔU
+HOH
+BˆÂˆ™]\›ˆßNÂˆBˆÛÛœÝœÎŽœ]ÛÜšÚ[™Ñ\™XÝÜžHHœÎŽœ]
+[Ù[T]
+Kœ\™[Ü]
+
+NÂ‚ˆÝŽ™XÝÜœÎŽœ]ˆØ[™Y]\ÈHÂˆÛÜšÚ[™Ñ\™XÝÜžHÈ”[[YHˆÈ”™[™YØYT[[YK™^H‹ˆÛÜšÚ[™Ñ\™XÝÜžHÈ”™[™YØYT[[YK™^H‹ˆNÂ‚ˆÛÛœÝœÎŽœ]ÛÛ™šYÝ\˜][ÛˆHÛÜšÚ[™Ñ\™XÝÜžK™š[[˜[YJ
+NÂˆÛÛœÝœÎŽœ]Z[›ÛÝHÛÜšÚ[™Ñ\™XÝÜžKœ\™[Ü]
+
+Kœ\™[Ü]
+
+NÂˆYˆ
+XÛÛ™šYÝ\˜][Û‹™[\J
+H	‰ˆXZ[›ÛÝ™[\J
+JBˆÂˆØ[™Y]\Ëœ\ÚØ˜XÚÊˆZ[›ÛÝÈ”[[YHˆÈÛÛ™šYÝ\˜][ÛˆÈ”™[™YØYT[[YK™^HŠNÂˆB‚ˆ›Üˆ
+ÛÛœÝ]]ÉˆØ[™Y]HˆØ[™Y]\ÊBˆÂˆÝŽ™\œ›Ü—ØÛÙH]\œ›ÜŽÂˆYˆ
+œÎŽš\×Ü™YÝ[\—Ùš[JØ[™Y]K]\œ›ÜŠH	‰ˆ\]\œ›ÜŠBˆÂˆ™]\›ˆØ[™Y]K›^XØ[WÛ›Ü›X[
+
+K™Ù[™\šX×ÝNÝš[™Ê
+NÂˆBˆBˆ™]\›ˆßNÂˆB‚ˆÝŽœÝš[™ÈÝY[Ô™[™\”]Ž•\Ý]™[˜XÚÙ[™\™Ý[Y[
+
+HÛÛœÝˆÂˆÛÛœÝ]]Êˆ]šXÙHHÚNŽ™Ü˜\XÜÎŽ‘Ù]]šXÙJ
+NÂˆYˆ
+]šXÙHOH[ˆ	‰ˆÝŽœÝš[™Ê]šXÙKO‘Ù]YÊ
+JHOH–Õ[Ø[—HŠBˆÂˆ™]\›ˆ[Ø[ˆŽÂˆBˆ™]\›ˆ™LˆŽÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Ý\\Ý]™[
+
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆ\Ù\ÜÚ[Û—ËO”›Ú™XÝÊ
+K’\Ô›Ú™XÝ
+
+JBˆÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆ“Ü[ˆÜˆÜ™X]HH™[™YØYH›Ú™XÝ™Y›Ü™HÝ\[™È\Ý]™[ˆ‹ˆ•\Ý]™[ŠNÂˆ™]\›ŽÂˆBˆYˆ
+\Ý]™[[[YWË’\ÐXÝ]™J
+JBˆÂˆ™]\›ŽÂˆB‚ˆœšYÙNŽ•\Ý]™[Û˜\ÚÝÙ\šXÙHÛ˜\ÚÝÙ\šXÙJˆÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+KˆÙ\ÜÚ[Û—ËOÛÛ[X[™Ê
+JNÂˆœšYÙNŽ•\Ý]™[Û˜\ÚÝÛ˜\ÚÝÂˆÝŽœÝš[™È\œ›ÜŽÂˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆÛÛœÝ›ÛÛÛ˜\ÚÝÜ™X]YHÛ˜\ÚÝÙ\šXÙKÜ™X]JˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+KˆÛ˜\ÚÝˆ\œ›ÜŠNÂˆÞ[˜ÔÙ[XÝ[Û“Ý][™J
+NÂˆYˆ
+\Û˜\ÚÝÜ™X]Y
+BˆÂˆÝY[ÐÚ›ÛYWË”Ù]\Ý]™[Ý]Jˆ™[™YØYTÝY[ÐÚ›ÛYNŽ•\Ý]™[Ý]NŽ’YJNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+•TÕU‘SËÈÓTÒÕRSQŠNÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆ”™[™YØYHÛÝ[›ÝÜ™X]HH\Ý]™[Û˜\ÚÝ——ˆˆ
+Âˆ\œ›Ü‹ˆ•\Ý]™[ŠNÂˆ™]\›ŽÂˆB‚ˆÛÛœÝÝŽœÝš[™È[[YT]H™\ÛÛ™U\Ý]™[[[YT]
+
+NÂˆYˆ
+[[YT]™[\J
+JBˆÂˆÝŽœÝš[™ÈÛX[\\œ›ÜŽÂˆÛ˜\ÚÝÙ\šXÙKÛX[\
+Û˜\ÚÝÛX[\\œ›ÜŠNÂˆÝY[ÐÚ›ÛYWË”Ù]\Ý]™[Ý]Jˆ™[™YØYTÝY[ÐÚ›ÛYNŽ•\Ý]™[Ý]NŽ’YJNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+•TÕU‘SËÈ•S•SQH“Õ“ÕS‘ŠNÂ‚ˆÝŽœÝš[™ÈY\ÜØYÙHBˆ”™[™YØYT[[YK™^HØ\È›Ý›Ý[™™\ÚYH\ÈÝY[ÈZ[ˆŽÂˆYˆ
+XÛX[\\œ›Ü‹™[\J
+JBˆÂˆY\ÜØYÙH
+ÏH——”Û˜\ÚÝÛX[\Ø\›š[™Îˆˆ
+ÈÛX[\\œ›ÜŽÂˆBˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+Y\ÜØYÙK•\Ý]™[ŠNÂˆ™]\›ŽÂˆB‚ˆ\Ý]™[][˜ÚÜ[ÛœÈÜ[ÛœÎÂˆÜ[ÛœË™^XÝ]X›T]H[[YT]ÂˆÜ[ÛœËÛÜšÚ[™Ñ\™XÝÜžHBˆœÎŽN]
+[[YT]
+Kœ\™[Ü]
+
+K™Ù[™\šX×ÝNÝš[™Ê
+NÂˆÜ[ÛœË˜\™Ý[Y[ÈHÂˆ\Ý]™[˜XÚÙ[™\™Ý[Y[
+
+Kˆ‹K\›Ú™XÝ‹ˆÛ˜\ÚÝ™\ØÜš\Ü”]ˆNÂˆÜ[ÛœËœÝ\\[Y[Ý]HÝŽ˜Ú›Û›ÎŽ›Z[\ÙXÛÛ™ÊŒ
+NÂ‚ˆYˆ
+]\Ý]™[[[YWË“][˜Ú
+ˆÝŽ›[Ý™JÜ[ÛœÊKˆÝŽ›[Ý™JÛ˜\ÚÝ
+Kˆ\œ›ÜŠJBˆÂˆÝY[ÐÚ›ÛYWË”Ù]\Ý]™[Ý]Jˆ™[™YØYTÝY[ÐÚ›ÛYNŽ•\Ý]™[Ý]NŽ’YJNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+•TÕU‘SËÈUSÒRSQŠNÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+ˆ”™[™YØYHÛÝ[›Ý][˜Ú\Ý]™[——ˆˆ
+È\œ›Ü‹ˆ•\Ý]™[ŠNÂˆ™]\›ŽÂˆB‚ˆÝY[ÐÚ›ÛYWË”Ù]\Ý]™[Ý]Jˆ™[™YØYTÝY[ÐÚ›ÛYNŽ•\Ý]™[Ý]NŽ”Ý\[™ÊNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆ•TÕU‘SËÈÕT•S‘ÈËÈS”ÐU‘QÓTÒÕŠNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Û\Ý]™[
+
+BˆÂˆYˆ
+]\Ý]™[[[YWË’\ÐXÝ]™J
+JBˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝ\Ý]™[›ØÙ\ÜÔ™\Ý[™\Ý[H\Ý]™[[[YWË”Û
+
+NÂˆYˆ
+™\Ý[œÝ]HOH\Ý]™[›ØÙ\ÜÔÝ]NŽ”[›š[™ÊBˆÂˆÝY[ÐÚ›ÛYWË”Ù]\Ý]™[Ý]Jˆ™[™YØYTÝY[ÐÚ›ÛYNŽ•\Ý]™[Ý]NŽ”[›š[™ÊNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆ•TÕU‘SËÈ•S“’S‘ÈËÈS”ÐU‘QÓTÒÕŠNÂˆ™]\›ŽÂˆBˆYˆ
+\™\Ý[™š[š\ÚY
+BˆÂˆÝY[ÐÚ›ÛYWË”Ù]\Ý]™[Ý]Jˆ™[™YØYTÝY[ÐÚ›ÛYNŽ•\Ý]™[Ý]NŽ”Ý\[™ÊNÂˆ™]\›ŽÂˆB‚ˆÝY[ÐÚ›ÛYWË”Ù]\Ý]™[Ý]Jˆ™[™YØYTÝY[ÐÚ›ÛYNŽ•\Ý]™[Ý]NŽ’YJNÂˆYˆ
+™\Ý[œÝXØÙYYY
+BˆÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+•TÕU‘SËÈÓÓTUQŠNÂˆ™]\›ŽÂˆB‚ˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+•TÕU‘SËÈRSQŠNÂˆÝŽœÝš[™ÈY\ÜØYÙHH™\Ý[›Y\ÜØYÙK™[\J
+BˆÈ•H\Ý]™[[[YHÝÜY™Y›Ü™H]™XØ[YH™XYKˆ‚ˆˆ™\Ý[›Y\ÜØYÙNÂˆYˆ
+\™\Ý[Ø\›š[™Ë™[\J
+JBˆÂˆY\ÜØYÙH
+ÏH——•Ø\›š[™Îˆˆ
+È™\Ý[Ø\›š[™ÎÂˆBˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+Y\ÜØYÙK•\Ý]™[ŠNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”ÝÜ\Ý]™[
+
+BˆÂˆYˆ
+]\Ý]™[[[YWË’\ÐXÝ]™J
+JBˆÂˆÝY[ÐÚ›ÛYWË”Ù]\Ý]™[Ý]Jˆ™[™YØYTÝY[ÐÚ›ÛYNŽ•\Ý]™[Ý]NŽ’YJNÂˆ™]\›ŽÂˆB‚ˆÛÛœÝ\Ý]™[›ØÙ\ÜÔ™\Ý[™\Ý[H\Ý]™[[[YWË”ÝÜ
+
+NÂˆÝY[ÐÚ›ÛYWË”Ù]\Ý]™[Ý]Jˆ™[™YØYTÝY[ÐÚ›ÛYNŽ•\Ý]™[Ý]NŽ’YJNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆ™\Ý[˜ÛX[\ÝXØÙYYYˆÈ•TÕU‘SËÈÕÔQËÈÓTÒÕÓPSˆ‚ˆˆ•TÕU‘SËÈÕÔQËÈÓPS•TÐT“’S‘ÈŠNÂˆYˆ
+\™\Ý[Ø\›š[™Ë™[\J
+JBˆÂˆÚNŽš[\ŽŽ›Y\ÜØYÙP›Þ
+™\Ý[Ø\›š[™Ë•\Ý]™[ŠNÂˆBˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™Yœ™\Ú\ÜÙ]œ›ÝÜÙ\Š
+BˆÂˆÝŽ™XÝÜ™[™YØYTÝY[ÐÚ›ÛYNŽ\ÜÙ]›Û\”›ÝÏˆ›Û\œÎÂˆÝŽ™XÝÜ™[™YØYTÝY[ÐÚ›ÛYNŽ\ÜÙ]Ø\™ˆ\ÜÙ]ÎÂ‚ˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆ\Ù\ÜÚ[Û—ËO”›Ú™XÝÊ
+K’\Ô›Ú™XÝ
+
+JBˆÂˆÝY[ÐÚ›ÛYWË”Ù]\ÜÙ]œ›ÝÜÙ\‘]JˆÝŽ›[Ý™J›Û\œÊKˆÝŽ›[Ý™J\ÜÙ]ÊKˆ““È“Ò‘PÕŠNÂˆ™]\›ŽÂˆB‚ˆÛÛœÝ]]ÈÛ˜\ÚÝH\ÜÙ]œ›ÝÜÙ\”Ù\šXÙWË”ØØ[ŠˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+Kœ›ÛÝ]ˆ\ÜÙ]œ›ÝÜÙ\Ý\œ™[›Û\—ÊNÂˆYˆ
+\Û˜\ÚÝœÝXØÙYYY
+BˆÂˆÝY[ÐÚ›ÛYWË”Ù]\ÜÙ]œ›ÝÜÙ\‘]JˆÝŽ›[Ý™J›Û\œÊKˆÝŽ›[Ý™J\ÜÙ]ÊKˆÓÓ•S•SURSP“HŠNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆTÔÑU”“ÕÔÑTˆËÈˆ
+ÈÛ˜\ÚÝ™\œ›ÜŠNÂˆ™]\›ŽÂˆB‚ˆ\ÜÙ]œ›ÝÜÙ\Ý\œ™[›Û\—ÈHÛ˜\ÚÝ˜Ý\œ™[›Û\ŽÂˆ›Û\œËœ™\Ù\™JÛ˜\ÚÝ™›Û\œËœÚ^™J
+JNÂˆ›Üˆ
+ÛÛœÝ]]Éˆ›Û\ˆˆÛ˜\ÚÝ™›Û\œÊBˆÂˆ™[™YØYTÝY[ÐÚ›ÛYNŽ\ÜÙ]›Û\”›ÝÈ›ÝÎÂˆ›ÝË›˜[YHH›Û\‹›˜[YNÂˆ›ÝËœ™[]]™T]H›Û\‹œ›Ú™XÝ™[]]™T]Âˆ›ÝË™\HÝ]X×ØØ\Ý[Š›Û\‹™\
+NÂˆ›ÝËœÙ[XÝYH›Û\‹œÙ[XÝYÂˆ›Û\œËœ\ÚØ˜XÚÊÝŽ›[Ý™J›ÝÊJNÂˆB‚ˆ\ÜÙ]Ëœ™\Ù\™JÛ˜\ÚÝ˜\ÜÙ]ËœÚ^™J
+JNÂˆ›Üˆ
+ÛÛœÝ]]Éˆ\ÜÙ]ˆÛ˜\ÚÝ˜\ÜÙ]ÊBˆÂˆ™[™YØYTÝY[ÐÚ›ÛYNŽ\ÜÙ]Ø\™Ø\™ÂˆØ\™›˜[YHH\ÜÙ]›˜[YNÂˆØ\™œ™[]]™T]H\ÜÙ]œ›Ú™XÝ™[]]™T]ÂˆØ\™\SX™[BˆœšYÙNŽ\ÜÙ]œ›ÝÜÙ\”Ù\šXÙNŽ•\SX™[
+\ÜÙ]\JNÂˆØ\™™\™XÝÜžHH\ÜÙ]™\™XÝÜžNÂˆ\ÜÙ]Ëœ\ÚØ˜XÚÊÝŽ›[Ý™JØ\™
+JNÂˆB‚ˆÝY[ÐÚ›ÛYWË”Ù]\ÜÙ]œ›ÝÜÙ\‘]JˆÝŽ›[Ý™J›Û\œÊKˆÝŽ›[Ý™J\ÜÙ]ÊKˆÛ˜\ÚÝ˜Ý\œ™[›Û\ŠNÂˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆTÔÑU”“ÕÔÑTˆËÈˆ
+ÈÛ˜\ÚÝ˜Ý\œ™[›Û\ŠNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Ù[XÝ\ÜÙ]œ›ÝÜÙ\‘›Û\ŠˆÛÛœÝÝŽœÝš[™Éˆ™[]]™T]
+BˆÂˆYˆ
+™[]]™T]™[\J
+JBˆÂˆ™]\›ŽÂˆBˆ\ÜÙ]œ›ÝÜÙ\Ý\œ™[›Û\—ÈH™[]]™T]Âˆ™Yœ™\Ú\ÜÙ]œ›ÝÜÙ\Š
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Ù[XÝ\ÜÙ]œ›ÝÜÙ\’][JˆÛÛœÝÝŽœÝš[™Éˆ™[]]™T]
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆ™[]]™T]™[\J
+JBˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝœÎŽœ]XœÛÛ]HBˆœÎŽN]
+Ù\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+Kœ›ÛÝ]
+HÂˆœÎŽN]
+™[]]™T]
+NÂˆYˆ
+œÎŽš\×Ù\™XÝÜžJXœÛÛ]JJBˆÂˆÙ[XÝ\ÜÙ]œ›ÝÜÙ\‘›Û\Š™[]]™T]
+NÂˆ™]\›ŽÂˆB‚ˆËÈŒH[X™\˜][HÝÜÈ]™X[›Ú™XÝœ›ÝÜÚ[™È[™Ù[XÝ[Û‹‚ˆËÈ\K\ÜXÚYšXÈÜ[‹ÜXÙKØ\H[™˜YÈ^[ØYÈ\™HH™^ÛXÙK‚ˆÝY[ÐÚ›ÛYWË”Ù]Ý]\Õ^
+ˆTÔÑUÑSPÕQËÈˆ
+È™[]]™T]
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]ŽÜ™X]T›Ú™XÝ
+
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝÝŽœÝš[™È›Ú™XÝ˜[YHH›Ú™XÝ˜[YR[œ]Ë‘Ù]^
+
+NÂˆÛÛœÝÝŽœÝš[™È\™[\™XÝÜžHHÚNŽš[\ŽŽ‘›Û\‘X[ÙÊˆ”Ù[XÝH›Û\ˆ]Ú[ÛÛZ[ˆH™]È™[™YØYH›Ú™XÝˆŠNÂˆYˆ
+\™[\™XÝÜžK™[\J
+JBˆÂˆ™]\›ŽÂˆB‚ˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\Ë\™[\™XÝÜžK›Ú™XÝ˜[YWJZ[Ý
+BˆÂˆYˆ
+\Ù\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÜ™X]T›Ú™XÝ
+ˆ\™[\™XÝÜžKˆ›Ú™XÝ˜[YKˆÛÛ[Ô›Ýš[™ÑÜ›Ý[™Ú\ØÙ[™HŠJBˆÂˆX“Y\ÜØYÙSX™[Ë™›Ûœ\˜[\Ë˜ÛÛÜˆHØ\›š[™Ð[X™\ŽÂˆX“Y\ÜØYÙSX™[Ë”Ù]^
+ˆ”“Ò‘PÕÔ‘PUHRSQËÈˆ
+ÂˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+K“\Ý\œ›ÜŠ
+JNÂˆ™]\›ŽÂˆB‚ˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆYˆ
+\Ù\ÜÚ[Û—ËO“ØYØÙ[™JÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+K”Ý\\ØÙ[™T]
+
+JJBˆÂˆX“Y\ÜØYÙSX™[Ë™›Ûœ\˜[\Ë˜ÛÛÜˆHØ\›š[™Ð[X™\ŽÂˆX“Y\ÜØYÙSX™[Ë”Ù]^
+ˆ”“Ò‘PÕÐÑS‘HRSQËÈˆ
+ÂˆÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K“\Ý\œ›ÜŠ
+JNÂˆ™]\›ŽÂˆB‚ˆÛÜšÜÜXÙU]WË”Ù]^
+ˆ”‘S‘QÐQHÕQSÈËÈˆ
+ÂˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+K›˜[YJNÂˆX“Y\ÜØYÙSX™[Ë™›Ûœ\˜[\Ë˜ÛÛÜˆHÛÙÜ˜[S]]YÂˆX“Y\ÜØYÙSX™[Ë”Ù]^
+ˆ”“Ò‘PÕÔ‘PUQËÈˆ
+ÂˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+K™\ØÜš\Ü”]
+NÂˆÙ[XÝY™XÙ[›Ú™XÝÈHLNÂˆ™Yœ™\Ú›Ú™XÝXŠ
+NÂˆÙ]›Ú™XÝX•š\ÚX›J˜[ÙJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž“Ü[”›Ú™XÝ
+
+BˆÂˆÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\È\˜[\ÎÂˆ\˜[\Ë\HHÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\ÎŽ“ÔSŽÂˆ\˜[\Ë™\ØÜš\[ÛˆH”™[™YØYH›Ú™XÝ
+œ™[™YØYJHŽÂˆ\˜[\Ë™^[œÚ[ÛœËœ\ÚØ˜XÚÊœ™[™YØYHŠNÂˆÚNŽš[\ŽŽ‘š[QX[ÙÊˆ\˜[\ËˆÝ\×JÛÛœÝÝŽœÝš[™Éˆ\ØÜš\Ü”]
+BˆÂˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\Ë\ØÜš\Ü”]JZ[Ý
+BˆÂˆÜ[”›Ú™XÝ\ØÜš\ÜŠ\ØÜš\Ü”]
+NÂˆJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™\]Y\ÝØÙ[™T™\XÙ[Y[
+ˆÝŽ™[˜Ý[Û›ÚY
+
+OˆÛÛ[X][ÛŠBˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆXÛÛ[X][ÛŠBˆÂˆ™]\›ŽÂˆB‚ˆËÈH[›š[™È™]šY]È\ÈH™X[[™[™ÈØÙ[™HY]ˆÛÛ[Z]]š\œÝÛÂˆËÈH\K\Ý]H]Y\Ý[Ûˆ[˜ÛY\ÈÚ]HÜ™X]ÜˆØ[ˆÝ\œ™[BˆËÈÙYH[ˆHšY]ÜÜ‚ˆÝÜÝ[”™]šY]ÊYJNÂˆYˆ
+\Ù\ÜÚ[Û—ËOÛÛ[X[™Ê
+K’\Ñ\J
+JBˆÂˆÛÛ[X][ÛŠ
+NÂˆ™]\›ŽÂˆB‚ˆÛÛœÝÝŽœÝš[™ÈÝ\œ™[]HÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+KÝ\œ™[]
+
+NÂˆÛÛœÝÝŽœÝš[™ÈØÙ[™S˜[YHHÝ\œ™[]™[\J
+BˆÈHÝ\œ™[ØÙ[™H‚ˆˆ—ˆˆ
+ÈÚNŽš[\ŽŽ‘Ù]š[S˜[YQœ›ÛT]
+Ý\œ™[]
+H
+È—ˆŽÂˆÛÛœÝ]]È™\Ý[HÚNŽš[\ŽŽ›Y\ÜØYÙP›ÞÝ\ÝÛJˆ‘È[ÝHØ[ÈØ]™HÚ[™Ù\ÈÈˆ
+ÈØÙ[™S˜[YH
+ÈÈ‹ˆ•[œØ]™YÚ[™Ù\È‹ˆ–Y\Ó›ÐØ[˜Ù[ŠNÂˆYˆ
+™\Ý[OHÚNŽš[\ŽŽ“Y\ÜØYÙP›Þ™\Ý[Ž“›Èˆ™\Ý[OHÚNŽš[\ŽŽ“Y\ÜØYÙP›Þ™\Ý[Ž“ÒÊBˆÂˆÛÛ[X][ÛŠ
+NÂˆ™]\›ŽÂˆBˆYˆ
+™\Ý[OHÚNŽš[\ŽŽ“Y\ÜØYÙP›Þ™\Ý[Ž–Y\ÊBˆÂˆ™]\›ŽÂˆBˆYˆ
+Ý\œ™[]™[\J
+JBˆÂˆØ]™TØÙ[™P\ÊˆØÛÛ[X][ÛˆHÝŽ›[Ý™JÛÛ[X][ÛŠWJÛÛœÝ›ÛÛØ]™Y
+BˆÂˆYˆ
+Ø]™Y
+BˆÂˆÛÛ[X][ÛŠ
+NÂˆBˆJNÂˆ™]\›ŽÂˆB‚ˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆÛÛœÝ›ÛÛØ]™YHÙ\ÜÚ[Û—ËO”Ø]™TØÙ[™JÝ\œ™[]
+NÂˆÞ[˜ÔÙ[XÝ[Û“Ý][™J
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆYˆ
+Ø]™Y
+BˆÂˆÛÛ[X][ÛŠ
+NÂˆBˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž“Ü[”ØÙ[™J
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆØÙ[™SÜ[’[”›ÙÜ™\Ü×ÊBˆÂˆ™]\›ŽÂˆB‚ˆÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\È\˜[\ÎÂˆ\˜[\Ë\HHÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\ÎŽ“ÔSŽÂˆ\˜[\Ë™\ØÜš\[ÛˆH”™[™YØYHØÙ[™H
+Ú\ØÙ[™JHŽÂˆ\˜[\Ë™^[œÚ[ÛœËœ\ÚØ˜XÚÊÚ\ØÙ[™HŠNÂˆÚNŽš[\ŽŽ‘š[QX[ÙÊˆ\˜[\ËˆÝ\×JÛÛœÝÝŽœÝš[™ÉˆØÙ[™T]
+BˆÂˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\ËØÙ[™T]JZ[Ý
+BˆÂˆ™\]Y\ÝØÙ[™T™\XÙ[Y[
+ˆÝ\ËØÙ[™T]J
+BˆÂˆ™YÚ[“Ü[”ØÙ[™JØÙ[™T]
+NÂˆJNÂˆJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž™YÚ[“Ü[”ØÙ[™JÛÛœÝÝŽœÝš[™ÉˆØÙ[™T]
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆØÙ[™SÜ[’[”›ÙÜ™\Ü×ÊBˆÂˆ™]\›ŽÂˆB‚ˆØÙ[™SÜ[’[”›ÙÜ™\Ü×ÈHYNÂˆÜ[š[™ÔØÙ[™T]ÈHØÙ[™T]ÂˆØÙ[™SÜ[•ÛÜšÛØYËœš[Üš]HHÚNŽš›ØœÞ\Ý[NŽ”š[Üš]NŽ“ÝÎÂˆYˆ
+›Ú™XÝX•š\ÚX›WÊBˆÂˆX“Y\ÜØYÙSX™[Ë™›Ûœ\˜[\Ë˜ÛÛÜˆHÛÙÜ˜[S]]YÂˆX“Y\ÜØYÙSX™[Ë”Ù]^
+ˆ”ÐÑS‘HÔS’S‘ÈËÈˆ
+ÂˆÚNŽš[\ŽŽ‘Ù]š[S˜[YQœ›ÛT]
+ØÙ[™T]
+JNÂˆBˆ™Yœ™\ÚÝ]\Ê
+NÂ‚ˆ]]È™\\™YHÝŽ›XZÙWÜÚ\™YœšYÙNŽ”™\\™YØÙ[™SÜ[Š
+NÂˆÚNŽš›ØœÞ\Ý[NŽ‘^XÝ]JˆØÙ[™SÜ[•ÛÜšÛØYËˆÝ\ËØÙ[™T]™\\™YJÚNŽš›ØœÞ\Ý[NŽ’›Ø\™ÜÊBˆÂˆ
+œ™\\™YHÙ\ÜÚ[Û—ËO‘ØÝ[Y[Ê
+K”™\\™SÜ[ŠØÙ[™T]
+NÂˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\Ë™\\™YJZ[Ý
+BˆÂˆÛÛ\]SÜ[”ØÙ[™JÝŽ›[Ý™J
+œ™\\™Y
+JNÂˆJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]ŽÛÛ\]SÜ[”ØÙ[™JˆœšYÙNŽ”™\\™YØÙ[™SÜ[ˆ™\\™Y
+BˆÂˆØÙ[™SÜ[’[”›ÙÜ™\Ü×ÈH˜[ÙNÂˆÜ[š[™ÔØÙ[™T]Ë˜ÛX\Š
+NÂ‚ˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆYˆ
+\Ù\ÜÚ[Û—ËO‘ØÝ[Y[Ê
+KÛÛ[Z]™\\™YÜ[ŠÝŽ›[Ý™J™\\™Y
+JJBˆÂˆÞ[˜ÔÙ[XÝ[Û“Ý][™J
+NÂˆYˆ
+›Ú™XÝX•š\ÚX›WÊBˆÂˆX“Y\ÜØYÙSX™[Ë™›Ûœ\˜[\Ë˜ÛÛÜˆHØ\›š[™Ð[X™\ŽÂˆX“Y\ÜØYÙSX™[Ë”Ù]^
+ˆ”ÐÑS‘HÔSˆRSQËÈˆ
+ÂˆÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K“\Ý\œ›ÜŠ
+JNÂˆBˆ™Yœ™\ÚÝ]\Ê
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™]\›ŽÂˆB‚ˆYÜÜ[™YØÙ[™PØ[Y\˜J
+NÂˆÙ][š\›Û›Y[ÛÜšÜÜXÙPXÝ]™J˜[ÙJNÂˆÙ]\œ˜Z[•ÛÜšÜÜXÙPXÝ]™J˜[ÙJNÂˆ™Yœ™\ÚY\˜\˜ÚJ
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆÙ]›Ú™XÝX•š\ÚX›J˜[ÙJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]ŽYÜÜ[™YØÙ[™PØ[Y\˜J
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆØ[Y\˜HOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝ]]ÈØ[Y\˜Q[]HHÙ\ÜÚ[Û—ËO‘ØÝ[Y[Ê
+K“\ÝÜ[™YØ[Y\˜J
+NÂˆÛÛœÝ]]ÉˆÜ[™YØÙ[™HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆÛÛœÝ]]ÊˆÜ[™YØ[Y\˜HBˆÜ[™YØÙ[™K˜Ø[Y\˜\Ë‘Ù]ÛÛ\Û™[
+Ø[Y\˜Q[]JNÂˆYˆ
+Ü[™YØ[Y\˜HOH[ŠBˆÂˆËÈ›È]]Ü™YØ[Y\˜H[ˆHÜ[™YØÝ[Y[
+ÛÛ[[Ûˆ›Ü‚ˆËÈ\œ˜Z[‹[Û›HØÙ[™\È]Ù\™H™]™\ˆÚ]™[ˆ[ˆ^XÚ]ˆËÈØ[Y\˜H[]JKˆÚXÚÙY	ÜÈ\œ˜Z[ˆÚ[šÈÝ™X[Z[™ÂˆËÈ
+ÚNŽ\œ˜Z[ŽŽ•\œ˜Z[ŽŽ‘Ù[™\˜][Û—Õ\]K[ˆ]™\žH™X[ˆËÈœ˜[YHœ›ÛH™[™\”]ÑŽ•\]JH]šXÝÈ[™\›X[™[BˆËÈ\ØØ\™È[žHÚ[šÈÚÜÙH\Ý[˜ÙHœ›ÛHH
+˜Ý\œ™[
+‚ˆËÈY]ÜˆØ[Y\˜H^ÙYYÈ]È™[[Ý˜[˜Y]\ËˆX]š[™ÈBˆËÈØ[Y\˜HÚ\™]™\ˆ]\[™YÈ™Hœ›ÛHH™]š[Ý\ÂˆËÈØÝ[Y[YX[œÈHœ™\ÚHÜ[™Y\œ˜Z[ˆØÙ[™H\È]ÂˆËÈ\Ý[ØYYÛÜœ™XÝKY\Ù\šX[^™YÚ[šÜÈ]šXÝY[™ˆËÈÚ[[H™\XÙYÚ]œ™\Ú›ØÙY\˜[Ù[™\˜][Ûˆ™Y›Ü™BˆËÈH\Ù\ˆ]™\ˆÙY\È[HHÚXÚ™XYÈ\ÈH\œ˜Z[‚ˆËÈY‰ÝØ]™Hˆ]™[ˆÝYÚH\˜Ú]™H›Ý[™]š\Ø\ÂˆËÈÛÜœ™XÝˆ™XÙ[\ˆÝ™\ˆH\œ˜Z[‰ÜÈÝÛˆØ]™YÚ[šÂˆËÈÜÚ][Ûˆ[œÝXYÙˆX]š[™ÈHÝ[HØ[Y\˜H[ˆXÙK‚ˆYÜÜ[™YØÙ[™U\œ˜Z[‘˜[˜XÚÐØ[Y\˜JÜ[™YØÙ[™JNÂˆ™]\›ŽÂˆB‚ˆØ[Y\˜KO‘^YHHÜ[™YØ[Y\˜KO‘^YNÂˆØ[Y\˜KO]HÜ[™YØ[Y\˜KO]ÂˆØ[Y\˜KO•\HÜ[™YØ[Y\˜KO•\ÂˆØ[Y\˜KO™›ÝˆHÜ[™YØ[Y\˜KO™›ÝŽÂˆØ[Y\˜KOž“™X\”HÜ[™YØ[Y\˜KOž“™X\”ÂˆØ[Y\˜KOž‘˜\”HÜ[™YØ[Y\˜KOž‘˜\”ÂˆØ[Y\˜KO™›ØØ[Û[™ÝHÜ[™YØ[Y\˜KO™›ØØ[Û[™ÝÂˆØ[Y\˜KO˜\\\™WÜÚ^™HHÜ[™YØ[Y\˜KO˜\\\™WÜÚ^™NÂˆØ[Y\˜KO˜\\\™WÜÚ\HHÜ[™YØ[Y\˜KO˜\\\™WÜÚ\NÂˆØ[Y\˜KOÚYHÝ]X×ØØ\Ý›Ø]ŠÙ][\›˜[™\ÛÛ][ÛŠ
+Kž
+NÂˆØ[Y\˜KOšZYÚHÝ]X×ØØ\Ý›Ø]ŠÙ][\›˜[™\ÛÛ][ÛŠ
+KžJNÂ‚ˆÛÛœÝ]]ÊˆÜ[™Y˜[œÙ›Ü›HBˆÜ[™YØÙ[™K˜[œÙ›Ü›\Ë‘Ù]ÛÛ\Û™[
+Ø[Y\˜Q[]JNÂˆYˆ
+Ü[™Y˜[œÙ›Ü›HOH[ŠBˆÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WÈH
+›Ü[™Y˜[œÙ›Ü›NÂˆØ[Y\˜KO•˜[œÙ›Ü›PØ[Y\˜JY]ÜØ[Y\˜U˜[œÙ›Ü›WÊNÂˆBˆØ[Y\˜KO•\]PØ[Y\˜J
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]ŽYÜÜ[™YØÙ[™U\œ˜Z[‘˜[˜XÚÐØ[Y\˜JˆÛÛœÝÚNŽœØÙ[™NŽ”ØÙ[™IˆÜ[™YØÙ[™JBˆÂˆYˆ
+Ø[Y\˜HOH[ˆÜ[™YØÙ[™K\œ˜Z[œË‘Ù]ÛÝ[
+
+HOH
+BˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝÚNŽ\œ˜Z[ŽŽ•\œ˜Z[‰ˆ\œ˜Z[ˆHÜ[™YØÙ[™K\œ˜Z[œÖÌNÂˆYˆ
+\œ˜Z[‹˜Ú[šÜË™[\J
+JBˆÂˆ™]\›ŽÂˆB‚ˆËÈ™Y™\ˆHÚ[šÈ]H\œ˜Z[‰ÜÈÝÛˆØ]™YÙ[\ŽÈ˜[˜XÚÂˆËÈÈÚXÚ]™\ˆØYYÚ[šÈ\ÈÛÜÙ\ÝÈ]Yˆ]^XÝˆËÈÛÛÜ™[˜]HØ\È›ÝÙ[™\˜]YÜØ]™Y‚ˆ]]È™\ÝH\œ˜Z[‹˜Ú[šÜË™š[™
+\œ˜Z[‹˜Ù[\—ØÚ[šÊNÂˆYˆ
+™\ÝOH\œ˜Z[‹˜Ú[šÜË™[™
+
+JBˆÂˆ™\ÝH\œ˜Z[‹˜Ú[šÜË˜™YÚ[Š
+NÂˆ[™\Ý\ÝBˆÝŽ›X^
+ˆÝŽ˜XœÊ\œ˜Z[‹˜Ù[\—ØÚ[šËžH™\ÝO™š\œÝž
+KˆÝŽ˜XœÊ\œ˜Z[‹˜Ù[\—ØÚ[šËžˆH™\ÝO™š\œÝžŠJNÂˆ›Üˆ
+]]È]H\œ˜Z[‹˜Ú[šÜË˜™YÚ[Š
+NÂˆ]OH\œ˜Z[‹˜Ú[šÜË™[™
+
+NÂˆ
+ÊÚ]
+BˆÂˆÛÛœÝ[\ÝHÝŽ›X^
+ˆÝŽ˜XœÊ\œ˜Z[‹˜Ù[\—ØÚ[šËžH]O™š\œÝž
+KˆÝŽ˜XœÊ\œ˜Z[‹˜Ù[\—ØÚ[šËžˆH]O™š\œÝžŠJNÂˆYˆ
+\Ý™\Ý\Ý
+BˆÂˆ™\Ý\ÝH\ÝÂˆ™\ÝH]ÂˆBˆBˆBˆYˆ
+™\ÝOH\œ˜Z[‹˜Ú[šÜË™[™
+
+JBˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝQ“ÐUÈ\™Ù]ÜÚ][ÛˆH™\ÝOœÙXÛÛ™œÜ\™K˜Ù[\ŽÂˆÛÛœÝ›Ø]˜Y]\ÈHÝŽ›X^
+™\ÝOœÙXÛÛ™œÜ\™Kœ˜Y]\ËKŒŠNÂˆÛÛœÝU‘PÕÔˆ]HSØY›Ø]Ê	\™Ù]ÜÚ][ÛŠNÂˆÛÛœÝU‘PÕÔˆ^YHBˆ]
+ÂˆU™XÝÜ”Ù]
+Œ‹˜Y]\È
+ˆKY‹\˜Y]\È
+ˆ‹Y‹ŒŠNÂˆÛÛœÝU‘PÕÔˆ\HU™XÝÜ”Ù]
+Œ‹KŒ‹Œ‹ŒŠNÂˆÛÛœÝSPU’VšY]ÈHSX]š^ÛÚÐ]
+^YK]\
+NÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WËÛX\•˜[œÙ›Ü›J
+NÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WË“X]š^˜[œÙ›Ü›JˆSX]š^[™\œÙJ[‹šY]ÊJNÂˆY]ÜØ[Y\˜U˜[œÙ›Ü›WË•\]U˜[œÙ›Ü›J
+NÂˆØ[Y\˜KO•˜[œÙ›Ü›PØ[Y\˜JY]ÜØ[Y\˜U˜[œÙ›Ü›WÊNÂˆØ[Y\˜KOÚYHÝ]X×ØØ\Ý›Ø]ŠÙ][\›˜[™\ÛÛ][ÛŠ
+Kž
+NÂˆØ[Y\˜KOšZYÚHÝ]X×ØØ\Ý›Ø]ŠÙ][\›˜[™\ÛÛ][ÛŠ
+KžJNÂˆØ[Y\˜KO•\]PØ[Y\˜J
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž“Ü[”›Ú™XÝ\ØÜš\ÜŠˆÛÛœÝÝŽœÝš[™Éˆ\ØÜš\Ü”]
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆYˆ
+\Ù\ÜÚ[Û—ËO”›Ú™XÝÊ
+K“Ü[”›Ú™XÝ
+\ØÜš\Ü”]
+JBˆÂˆX“Y\ÜØYÙSX™[Ë™›Ûœ\˜[\Ë˜ÛÛÜˆHØ\›š[™Ð[X™\ŽÂˆX“Y\ÜØYÙSX™[Ë”Ù]^
+ˆ”“Ò‘PÕÔSˆRSQËÈˆ
+ÂˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+K“\Ý\œ›ÜŠ
+JNÂˆ™]\›ŽÂˆBˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆYˆ
+\Ù\ÜÚ[Û—ËO“ØYØÙ[™JÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+K”Ý\\ØÙ[™T]
+
+JJBˆÂˆX“Y\ÜØYÙSX™[Ë™›Ûœ\˜[\Ë˜ÛÛÜˆHØ\›š[™Ð[X™\ŽÂˆX“Y\ÜØYÙSX™[Ë”Ù]^
+ˆ”“Ò‘PÕÐÑS‘HRSQËÈˆ
+ÂˆÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K“\Ý\œ›ÜŠ
+JNÂˆ™]\›ŽÂˆB‚ˆÛÜšÜÜXÙU]WË”Ù]^
+ˆ”‘S‘QÐQHÕQSÈËÈˆ
+ÂˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+K›˜[YJNÂˆX“Y\ÜØYÙSX™[Ë™›Ûœ\˜[\Ë˜ÛÛÜˆHÛÙÜ˜[S]]YÂˆX“Y\ÜØYÙSX™[Ë”Ù]^
+ˆ”“Ò‘PÕÓ“S‘HËÈˆ
+ÂˆÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+KÝ\œ™[›Ú™XÝ
+
+K™\ØÜš\Ü”]
+NÂˆÙ[XÝY™XÙ[›Ú™XÝÈHLNÂˆ™Yœ™\Ú›Ú™XÝXŠ
+NÂˆÙ]›Ú™XÝX•š\ÚX›J˜[ÙJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž“Ü[”Ù[XÝY™XÙ[›Ú™XÝ
+
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆÙ[XÝY™XÙ[›Ú™XÝÈ
+BˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝ]]Éˆ™XÙ[HÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+K”™XÙ[›Ú™XÝÊ
+NÂˆÛÛœÝ]]È[™^HÝ]X×ØØ\ÝÝŽœÚ^™WÝŠÙ[XÝY™XÙ[›Ú™XÝÊNÂˆYˆ
+[™^H™XÙ[œÚ^™J
+JBˆÂˆ™]\›ŽÂˆB‚ˆÜ[”›Ú™XÝ\ØÜš\ÜŠ™XÙ[Ú[™^K™\ØÜš\Ü”]
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™]\›•Ô›Ú™XÝXŠ
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆ™\]Y\ÝØÙ[™T™\XÙ[Y[
+ˆÝ\×J
+BˆÂˆÙ[XÝY™XÙ[›Ú™XÝÈHLNÂˆX“Y\ÜØYÙSX™[Ë™›Ûœ\˜[\Ë˜ÛÛÜˆHÛÙÜ˜[S]]YÂˆX“Y\ÜØYÙSX™[Ë”Ù]^
+ˆ”“Ò‘PÕPˆÓ“S‘HËÈÑSPÕSˆÔTUSÓˆŠNÂˆ™Yœ™\Ú›Ú™XÝXŠ
+NÂˆÙ]›Ú™XÝX•š\ÚX›JYJNÂˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Ù[XÝ™XÙ[›Ú™XÝ
+ÛÛœÝÝŽœÚ^™WÝ[™^
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆˆ[™^HÙ\ÜÚ[Û—ËO”›Ú™XÝÊ
+K”™XÙ[›Ú™XÝÊ
+KœÚ^™J
+JBˆÂˆ™]\›ŽÂˆB‚ˆÙ[XÝY™XÙ[›Ú™XÝÈHÝ]X×ØØ\Ý[Š[™^
+NÂˆ™Yœ™\Ú›Ú™XÝXŠ
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Ù]›Ú™XÝX•š\ÚX›JÛÛœÝ›ÛÛš\ÚX›JBˆÂˆYˆ
+š\ÚX›H	‰ˆ›PØ[Y\˜PXÝ]™WÊBˆÂˆ›PØ[Y\˜PXÝ]™WÈH˜[ÙNÂˆÚNŽš[œ]Ž’YTÚ[\Š˜[ÙJNÂˆB‚ˆ›Ú™XÝX•š\ÚX›WÈHš\ÚX›NÂˆ›Ú™XÝX”[™[Ë”Ù]š\ÚX›Jš\ÚX›JNÂˆËÈÝØÚÈÛÜšÜÜXÙHÝ\™˜XÙ\ÈÝ^HY[‹ˆ™[™YØYTÝY[ÐÚ›ÛYHÝÛœÈBˆËÈÚ[Ú[HHÜ\]YH[œÜXÝÜˆÜÝØÚY[\ÈH[˜Ý[Û˜[ˆËÈÛÛ›ÛÈ™[™\™YžH™[™YØYHÝX˜Û\ÜÙ\Ë‚ˆÛÛ˜\”[™[Ë”Ù]š\ÚX›J˜[ÙJNÂˆY\˜\˜ÚT[™[Ë”Ù]š\ÚX›J˜[ÙJNÂˆ[œÜXÝÜ”[™[Ë”Ù]š\ÚX›J]š\ÚX›JNÂˆY\˜\˜ÚTÙX\˜ÚË”Ù]š\ÚX›J]š\ÚX›JNÂˆÛÛ[[™[Ë”Ù]š\ÚX›J˜[ÙJNÂˆÝY[ÐÚ›ÛYWË”Ù]š\ÚX›J]š\ÚX›JNÂ‚ˆËÈHÝØÚÈÝ™\›^HÛÛY\ÈÚ]™[™YØYIÜÈÝÛ™YÚ[ˆ]™H”È\ÂˆËÈ™[™\™YžH™[™YØYTÝY[ÐÚ›ÛYIÜÈÝ]\È˜\ˆ[œÝXY[™\™Y›Ü™BˆËÈY\È]]ÛX]XØ[HÚ]H™\ÝÙˆHÛÜšÜÜXÙHÛˆ›Ú™XÝX‹‚ˆYˆ
+XYÛ›ÜÝXÜ×ÈOH[ŠBˆÂˆXYÛ›ÜÝXÜ×ËO˜XÝ]™HH˜[ÙNÂˆB‚ˆYˆ
+]š\ÚX›JBˆÂˆ™Yœ™\ÚY\˜\˜ÚJ
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆBˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Þ[˜ÑÚ^›[ÔÙ[XÝ[ÛŠ
+BˆÂˆÚ^›[×ËœÙ[XÝY˜ÛX\Š
+NÂˆÚ^›[×ËœÙ[XÝY[]Y\Ó›Û”™XÝ\œÚ]™K˜ÛX\Š
+NÂˆÚ^›[Ñ[]WÈHÚNŽ™XÜÎŽ’S•SQÑS•UNÂˆÚ^›[Ñ˜YÐXÝ]™WÈH˜[ÙNÂ‚ˆYˆ
+[š\›Û›Y[ÛÜšÜÜXÙPXÝ]™WÈÙ\ÜÚ[Û—ÈOH[ˆˆ\Ù\ÜÚ[Û—ËO”Ù[XÝ[ÛŠ
+K’\ÔÙ[XÝ[ÛŠ
+JBˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝ]]È[]HHÙ\ÜÚ[Û—ËO”Ù[XÝ[ÛŠ
+K”Ù[XÝY[]J
+NÂˆ]]ÉˆØÙ[™HHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+NÂˆÛÛœÝ]]Êˆ˜[œÙ›Ü›HHØÙ[™K˜[œÙ›Ü›\Ë‘Ù]ÛÛ\Û™[
+[]JNÂˆYˆ
+˜[œÙ›Ü›HOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆÚNŽœØÙ[™NŽ”XÚÔ™\Ý[Ù[XÝYÂˆÙ[XÝY™[]HH[]NÂˆÚ^›[×ËœØÙ[™HH	œØÙ[™NÂˆÚ^›[×ËœÙ[XÝYœ\ÚØ˜XÚÊÙ[XÝY
+NÂˆÚ^›[×ËœÙ[XÝY[]Y\Ó›Û”™XÝ\œÚ]™Kœ\ÚØ˜XÚÊ[]JNÂˆÚ^›[×Ë”™U˜[œÛ]J
+NÂˆÚ^›[Ñ[]WÈH[]NÂˆÚ^›[Õ˜[œÙ›Ü›P™Y›Ü™WÈHœšYÙNŽØ\\™U˜[œÙ›Ü›J
+˜[œÙ›Ü›JNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]ŽÛX\”Ù[XÝ[Û“Ý][™J
+H›Ù^Ù\ˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆ	‰‚ˆÝ][™Y[]WÈOHÚNŽ™XÜÎŽ’S•SQÑS•UJBˆÂˆ]]ÊˆØš™XÝHÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+Bˆ‘Ù]ØÙ[™J
+Bˆ›Øš™XÝÂˆ‘Ù]ÛÛ\Û™[
+Ý][™Y[]WÊNÂˆYˆ
+Øš™XÝOH[ŠBˆÂˆØš™XÝO”Ù]\Ù\”Ý[˜Ú[™YŠˆÝ][™Y[]T™]š[Ý\ÔÝ[˜Ú[ÊNÂˆBˆB‚ˆÝ][™Y[]WÈHÚNŽ™XÜÎŽ’S•SQÑS•UNÂˆÝ][™Y[]T™]š[Ý\ÔÝ[˜Ú[ÈHÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Þ[˜ÔÙ[XÝ[Û“Ý][™J
+BˆÂˆYˆ
+[š\›Û›Y[ÛÜšÜÜXÙPXÝ]™WÊBˆÂˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆ™]\›ŽÂˆBˆÛÛœÝ]]ÈÙ[XÝYHÙ\ÜÚ[Û—ÈOH[‚ˆÈÙ\ÜÚ[Û—ËO”Ù[XÝ[ÛŠ
+K”Ù[XÝY[]J
+BˆˆÚNŽ™XÜÎŽ’S•SQÑS•UNÂˆYˆ
+Ù[XÝYOHÝ][™Y[]WÊBˆÂˆ™]\›ŽÂˆB‚ˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ˆˆÙ[XÝYOHÚNŽ™XÜÎŽ’S•SQÑS•UJBˆÂˆ™]\›ŽÂˆB‚ˆ]]ÊˆØš™XÝBˆÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+K‘Ù]ØÙ[™J
+K›Øš™XÝË‘Ù]ÛÛ\Û™[
+Ù[XÝY
+NÂˆYˆ
+Øš™XÝOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆÝ][™Y[]WÈHÙ[XÝYÂˆÝ][™Y[]T™]š[Ý\ÔÝ[˜Ú[ÈHØš™XÝO\Ù\”Ý[˜Ú[™YŽÂˆØš™XÝO”Ù]\Ù\”Ý[˜Ú[™YŠÙ[XÝ[Û”Ý[˜Ú[™Y™\™[˜ÙJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Ø]™TØÙ[™J
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝÝŽœÝš[™ÈØÙ[™T]HÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+KÝ\œ™[]
+
+NÂˆYˆ
+ØÙ[™T]™[\J
+JBˆÂˆØ]™TØÙ[™P\Ê
+NÂˆ™]\›ŽÂˆB‚ˆÝÜÝ[”™]šY]ÊYJNÂˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆÙ\ÜÚ[Û—ËO”Ø]™TØÙ[™JØÙ[™T]
+NÂˆÞ[˜ÔÙ[XÝ[Û“Ý][™J
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”Ø]™TØÙ[™P\ÊˆÝŽ™[˜Ý[Û›ÚY
+›ÛÛ
+OˆÛÛ\][ÛŠBˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆÝÜÝ[”™]šY]ÊYJNÂ‚ˆÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\È\˜[\ÎÂˆ\˜[\Ë\HHÚNŽš[\ŽŽ‘š[QX[ÙÔ\˜[\ÎŽ”ÐU‘NÂˆ\˜[\Ë™\ØÜš\[ÛˆH”™[™YØYHØÙ[™H
+Ú\ØÙ[™JHŽÂˆ\˜[\Ë™^[œÚ[ÛœËœ\ÚØ˜XÚÊÚ\ØÙ[™HŠNÂˆÚNŽš[\ŽŽ‘š[QX[ÙÊˆ\˜[\ËˆÝ\ËÛÛ\][Û—JÛÛœÝÝŽœÝš[™ÉˆÙ[XÝY]
+BˆÂˆÛÛœÝÝŽœÝš[™ÈØÙ[™T]BˆÚNŽš[\ŽŽ‘›Ü˜ÙQ^[œÚ[ÛŠÙ[XÝY]Ú\ØÙ[™HŠNÂˆÚNŽ™]™[[™\ŽŽ”ÝXœØÜšX™WÓÛ˜ÙJˆÚNŽ™]™[[™\ŽŽ‘U‘S•Õ‘PQÔÐQ‘WÔÒS•ˆÝ\ËØÙ[™T]ÛÛ\][Û—JZ[Ý
+BˆÂˆÛX\”Ù[XÝ[Û“Ý][™J
+NÂˆÛÛœÝ›ÛÛØ]™YHÙ\ÜÚ[Û—ËO”Ø]™TØÙ[™JØÙ[™T]
+NÂˆÞ[˜ÔÙ[XÝ[Û“Ý][™J
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆ™Yœ™\Ú[œÜXÝÜŠ
+NÂˆYˆ
+ÛÛ\][ÛŠBˆÂˆÛÛ\][ÛŠØ]™Y
+NÂˆBˆJNÂˆKˆØÛÛ\][Û—J
+BˆÂˆYˆ
+ÛÛ\][ÛŠBˆÂˆÛÛ\][ÛŠ˜[ÙJNÂˆBˆJNÂˆB‚ˆ›ÚYÝY[Ô™[™\”]Ž”™[Ü[”ØÙ[™J
+BˆÂˆYˆ
+Ù\ÜÚ[Û—ÈOH[ŠBˆÂˆ™]\›ŽÂˆB‚ˆÛÛœÝÝŽœÝš[™ÈØÙ[™T]HÙ\ÜÚ[Û—ËO”ØÙ[™\Ê
+KÝ\œ™[]
+
+NÂˆYˆ
+ØÙ[™T]™[\J
+JBˆÂˆÙ\ÜÚ[Û—ËO”™[ØYØÙ[™J
+NÂˆ™Yœ™\ÚÝ]\Ê
+NÂˆ™]\›ŽÂˆB‚ˆ™\]Y\ÝØÙ[™T™\XÙ[Y[
+ˆÝ\ËØÙ[™T]J
+BˆÂˆ™YÚ[“Ü[”ØÙ[™JØÙ[™T]
+NÂˆJNÂˆB‚ˆ›ÚYÝY[Ð\XØ][ÛŽŽ”Ù]Ý\\ØÙ[™JÝŽœÝš[™Èš[T]
+BˆÂˆYˆ
+Yš[T]™[\J
+JBˆÂˆÝ\\ØÙ[™WÈHÝŽ›[Ý™Jš[T]
+NÂˆBˆB‚ˆ›ÚYÝY[Ð\XØ][ÛŽŽ”™\\™T›Ýš[™ÑÜ›Ý[™
+
+BˆÂˆYˆ
+ÚNŽš[\ŽŽ‘š[Q^\ÝÊÝ\\ØÙ[™WÊH	‰‚ˆÙ\ÜÚ[Û—Ë“ØYØÙ[™JÝ\\ØÙ[™WÊJBˆÂˆ™]\›ŽÂˆB‚ˆÙ\ÜÚ[Û—Ë”ØÙ[™\Ê
+KÜ™X]T›Ýš[™ÑÜ›Ý[™
+
+NÂˆÙ\ÜÚ[Û—Ë”Ø]™TØÙ[™JÝ\\ØÙ[™WÊNÂˆB‚ˆ›ÚYÝY[Ð\XØ][ÛŽŽ’[š]X[^™J
+BˆÂˆÚNŽ\XØ][ÛŽŽ’[š]X[^™J
+NÂ‚ˆ[™›Ñ\Ü^K˜XÝ]™HHYNÂˆ[™›Ñ\Ü^KØ]\›X\šÈH˜[ÙNÂˆ[™›Ñ\Ü^K™]šXÙWÛ˜[YHH˜[ÙNÂˆ[™›Ñ\Ü^Kœ™\ÛÛ][ÛˆH˜[ÙNÂˆ[™›Ñ\Ü^K›ÙÚXØ[ÜÚ^™HH˜[ÙNÂˆ[™›Ñ\Ü^K˜ÛÛÜœÜXÙHH˜[ÙNÂˆ[™›Ñ\Ü^K™œÚ[™›ÈH˜[ÙNÂˆ[™›Ñ\Ü^KœÚ^™HHMÂ‚ˆÙ\ÜÚ[Û—Ë”›Ú™XÝÊ
+K’[š]X[^™J”Ø]™YÔ™[™YØYTÝY[Ëš[šHŠNÂˆ™\\™T›Ýš[™ÑÜ›Ý[™
+
+NÂ‚ˆ™[™\™\—Ëš[™Ù\ÜÚ[ÛŠÙ\ÜÚ[Û—ÊNÂˆ™[™\™\—Ëš[™XYÛ›ÜÝXÜÊ[™›Ñ\Ü^JNÂˆ™[™\™\—Ëš[š]
+Ø[˜\ÊNÂˆ™[™\™\—Ë“ØY
+
+NÂˆXÝ]˜]T]
+	œ™[™\™\—ÊNÂˆBŸB

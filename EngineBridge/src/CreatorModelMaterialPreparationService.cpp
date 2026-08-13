@@ -7,8 +7,10 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <iomanip>
 #include <limits>
 #include <map>
+#include <sstream>
 #include <vector>
 
 namespace renegade::bridge
@@ -173,6 +175,70 @@ namespace renegade::bridge
                 path = FindSuffixTexture(modelDirectory, stems, suffix);
             return path;
         }
+
+        std::string BuildPreviewSurfaceRevision(
+            const fs::path& surface,
+            const fs::path& roughness,
+            const fs::path& metalness,
+            const fs::path& occlusion,
+            const CreatorMaterialSourceOverride& settings)
+        {
+            // Wicked caches resources by filename. A creator-selected Surface
+            // replacement must therefore produce a new preview filename, or
+            // Load() will return the previous GPU resource even though the
+            // source picker and material recipe both contain the new path.
+            std::uint64_t hash = 14695981039346656037ull;
+            const auto append = [&hash](const std::string& value)
+            {
+                for (const unsigned char byte : value)
+                {
+                    hash ^= byte;
+                    hash *= 1099511628211ull;
+                }
+                hash ^= 0xffu;
+                hash *= 1099511628211ull;
+            };
+            const auto appendPath = [&append](const fs::path& path)
+            {
+                append(path.generic_u8string());
+                if (path.empty())
+                    return;
+                std::error_code ec;
+                const auto size = fs::file_size(path, ec);
+                append(ec ? std::string("missing") : std::to_string(size));
+                ec.clear();
+                const auto stamp = fs::last_write_time(path, ec);
+                append(ec ? std::string("unstamped")
+                    : std::to_string(stamp.time_since_epoch().count()));
+            };
+            appendPath(surface);
+            appendPath(roughness);
+            appendPath(metalness);
+            appendPath(occlusion);
+            append(std::to_string(settings.roughnessValue));
+            append(std::to_string(settings.metalnessValue));
+            append(std::to_string(settings.reflectanceValue));
+            append(std::to_string(settings.aoStrengthValue));
+
+            std::ostringstream out;
+            out << std::hex << std::setw(16) << std::setfill('0') << hash;
+            return out.str();
+        }
+    }
+
+    std::string CreatorMaterialPreviewSurfaceRevision(
+        const std::string& surfacePath,
+        const std::string& roughnessPath,
+        const std::string& metalnessPath,
+        const std::string& occlusionPath,
+        const CreatorMaterialSourceOverride& settings)
+    {
+        return BuildPreviewSurfaceRevision(
+            fs::u8path(surfacePath),
+            fs::u8path(roughnessPath),
+            fs::u8path(metalnessPath),
+            fs::u8path(occlusionPath),
+            settings);
     }
 
     bool ApplyCreatorModelMaterialPreview(
@@ -264,16 +330,15 @@ namespace renegade::bridge
                 request.roughnessPath = roughness.generic_u8string();
                 request.metalnessPath = metalness.generic_u8string();
                 request.occlusionPath = occlusion.generic_u8string();
-                const auto key = [](const float value)
-                {
-                    return static_cast<int>(std::clamp(value, 0.0f, 100.0f) * 1000.0f + 0.5f);
-                };
                 request.outputPath = (outputDirectory / fs::u8path(
-                    modelStem + "_mat" + std::to_string(index) + "_r" +
-                    std::to_string(key(creator->roughnessValue)) + "_m" +
-                    std::to_string(key(creator->metalnessValue)) + "_f" +
-                    std::to_string(key(creator->reflectanceValue)) + "_ao" +
-                    std::to_string(key(creator->aoStrengthValue)) + "_surface.png"))
+                    modelStem + "_mat" + std::to_string(index) + "_" +
+                    CreatorMaterialPreviewSurfaceRevision(
+                        surface.generic_u8string(),
+                        roughness.generic_u8string(),
+                        metalness.generic_u8string(),
+                        occlusion.generic_u8string(),
+                        *creator) +
+                    "_surface.png"))
                     .generic_u8string();
                 const auto toByte = [](const float value)
                 {
@@ -295,7 +360,7 @@ namespace renegade::bridge
                 occlusion.clear();
             }
 
-            const auto applyTexture = [material](
+            const auto applyTexture = [material, &error](
                 const CreatorTextureSourceChoice& selected,
                 const fs::path& path,
                 const int slot)
@@ -309,26 +374,36 @@ namespace renegade::bridge
                         texture.resource = {};
                         material->SetDirty();
                     }
-                    return;
+                    return true;
                 }
                 wi::Resource resource = wi::resourcemanager::Load(
-                    path.generic_u8string());
+                    path.generic_u8string(),
+                    material->GetTextureSlotResourceFlags(
+                        static_cast<wi::scene::MaterialComponent::TEXTURESLOT>(slot)));
                 if (!resource.IsValid())
-                    return;
+                {
+                    error = "Could not load creator-selected preview texture: " +
+                        path.generic_u8string();
+                    return false;
+                }
                 texture.name = path.generic_u8string();
                 texture.resource = std::move(resource);
                 material->SetDirty();
+                return true;
             };
-            applyTexture(creator->baseColor, baseColor,
-                wi::scene::MaterialComponent::BASECOLORMAP);
-            applyTexture(creator->normal, normal,
-                wi::scene::MaterialComponent::NORMALMAP);
-            applyTexture(creator->surface, surface,
-                wi::scene::MaterialComponent::SURFACEMAP);
-            applyTexture(creator->emissive, emissive,
-                wi::scene::MaterialComponent::EMISSIVEMAP);
-            applyTexture(creator->occlusion, occlusion,
-                wi::scene::MaterialComponent::OCCLUSIONMAP);
+            if (!applyTexture(creator->baseColor, baseColor,
+                    wi::scene::MaterialComponent::BASECOLORMAP) ||
+                !applyTexture(creator->normal, normal,
+                    wi::scene::MaterialComponent::NORMALMAP) ||
+                !applyTexture(creator->surface, surface,
+                    wi::scene::MaterialComponent::SURFACEMAP) ||
+                !applyTexture(creator->emissive, emissive,
+                    wi::scene::MaterialComponent::EMISSIVEMAP) ||
+                !applyTexture(creator->occlusion, occlusion,
+                    wi::scene::MaterialComponent::OCCLUSIONMAP))
+            {
+                return false;
+            }
 
             material->SetRoughness(std::clamp(creator->roughnessValue, 0.0f, 1.0f));
             material->SetMetalness(std::clamp(creator->metalnessValue, 0.0f, 1.0f));

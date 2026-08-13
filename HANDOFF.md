@@ -25,10 +25,14 @@ temporary stage was at world Y=100000, where float transform precision is only
 about 7.8 mm. The stage now remains beyond the normal far plane at Y=2048 while
 preserving sub-millimetre precision; source mesh data is never rewritten.
 Owner visual acceptance also rejected the remaining global hologram styling.
-Studio now uses square dark surfaces, consistent white type and neutral grey
-focus borders across all shared UX, including every importer heading/readout.
-The 1.82 m reference no longer depends on a live render AABB and is deliberately
-placed left of the asset so the importer task panel cannot obscure it.
+Studio now retains the established panel geometry and typography while using
+dark surfaces, consistent white type and neutral grey focus treatment instead
+of cyan. A follow-up owner screenshot caught unreadable overlap in the Material
+section; its six-line readout now owns sufficient height and every following
+control is laid out below it. The 1.82 m reference no longer depends on a live
+render AABB, is deliberately placed left of the asset so the importer task panel
+cannot obscure it, and now supplies the view-projection transform required by
+Wicked's dummy renderer instead of submitting world coordinates as clip space.
 The importer task panel is now docked eight pixels from the application right
 edge instead of using the hidden ordinary-editor viewport boundary.
 Two consecutive exact-head Release runs exposed the same Windows access-denied
@@ -37,6 +41,13 @@ now retries only access-denied/sharing/lock rename errors for a bounded five
 seconds; all other errors still fail immediately, and permanent locks retain
 the previous fail-closed transaction behavior. A real transient directory-lock
 regression complements the existing permanent-lock rejection proof.
+Creator-selected Surface replacements also receive a source/scalar-derived
+preview cache identity. This prevents Wicked's filename-keyed resource cache
+from retaining the previous GPU texture after the picker records a new file.
+Preview texture loads now use the native slot flags (including normal-map
+handling) and report a visible Material-section error instead of failing
+silently. `RenegadeReusableAssetReimportRecipeTests` covers distinct preview
+cache identity for changed Surface sources and PBR values.
 
 GitHub CI remains authoritative because the owner CPU is confirmed unstable.
 Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and

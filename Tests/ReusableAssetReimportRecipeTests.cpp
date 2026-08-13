@@ -341,6 +341,38 @@ namespace
                 corruptResult.error.find("Could not decode PBR source image") != std::string::npos,
                 "Surface Builder did not fail closed on corrupt source image");
     }
+
+    bool TestCreatorPreviewSurfaceCacheIdentity(const fs::path& root)
+    {
+        using namespace renegade::bridge;
+
+        const fs::path first = root / "preview-first.pgm";
+        const fs::path second = root / "preview-second.pgm";
+        if (!WritePgm(first, 1, 1, {32}) ||
+            !WritePgm(second, 1, 1, {224}))
+        {
+            return Require(false,
+                "could not create preview Surface cache fixtures");
+        }
+
+        CreatorMaterialSourceOverride settings;
+        const std::string firstRevision =
+            CreatorMaterialPreviewSurfaceRevision(
+                first.generic_u8string(), {}, {}, {}, settings);
+        const std::string secondRevision =
+            CreatorMaterialPreviewSurfaceRevision(
+                second.generic_u8string(), {}, {}, {}, settings);
+        settings.roughnessValue = 0.25f;
+        const std::string scalarRevision =
+            CreatorMaterialPreviewSurfaceRevision(
+                second.generic_u8string(), {}, {}, {}, settings);
+
+        return Require(!firstRevision.empty() &&
+                firstRevision != secondRevision,
+                "a replacement Surface source reused the cached preview identity") &&
+            Require(secondRevision != scalarRevision,
+                "changed PBR values reused the cached preview Surface identity");
+    }
 }
 
 int main()
@@ -365,7 +397,8 @@ int main()
 
     if (!TestCreatorRecipeContract() ||
         !TestCreatorMaterialDetection(hardeningRoot) ||
-        !TestCreatorSurfaceBuilder(hardeningRoot))
+        !TestCreatorSurfaceBuilder(hardeningRoot) ||
+        !TestCreatorPreviewSurfaceCacheIdentity(hardeningRoot))
     {
         fs::remove_all(root, ec);
         return 1;

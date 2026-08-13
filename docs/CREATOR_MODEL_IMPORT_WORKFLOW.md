@@ -17,6 +17,14 @@ Recognised suffixes are `_color`, `_normal`, `_surface`, `_roughness`, `_metalne
 
 The Wicked Surface layout used by Renegade is R=AO, G=roughness, B=metalness, A=reflectance. Preview and commit use the same bridge-level material resolution contract, including generated Surface packing. A supplied Surface map is normalized through that packer so its channels and creator scalar choices cannot diverge between preview and the committed product. Missing Surface data uses a neutral non-metal fallback: roughness 0.75, metalness 0.0 and reflectance 0.04. The generated reflectance channel is therefore 10/255 by default, not full-white 255. Component images with different dimensions or corrupt image data are rejected rather than silently altered.
 
+Generated preview Surface filenames include the resolved source identity, file
+state and PBR scalar inputs. Wicked caches GPU resources by filename, so this
+cache identity is required for a newly browsed Surface map to replace the old
+preview immediately. Texture preview loading uses Wicked's native per-slot
+flags, including normal-map handling, and a decode/load failure is shown in the
+Material section rather than leaving the picker path changed with no visible
+effect.
+
 Each material exposes roughness, metalness, reflectance, normal strength, AO strength and emissive strength with slider-plus-number controls. These values are stored in the creator recipe and replayed during reimport.
 
 Preview lighting is editor-only and never enters the model product or level. The creator can adjust intensity, horizontal direction, elevation and ambient brightness, use Neutral/Outdoor/Dark presets, or reset to neutral. A toggleable neutral male reference is drawn at exactly 1.82 m beside the model. It is never parented to the import, never inherits its transform, and its side offset follows the current world-space preview bounds plus fixed clearance.
@@ -25,11 +33,15 @@ The initial preview camera is also derived from those measured, scaled bounds. I
 
 The temporary stage is positioned beyond the normal editor camera's far plane, but remains close enough to the world origin to preserve sub-millimetre 32-bit transform precision. This avoids preview-only vertex/normal quantization; it does not modify or repair source mesh data.
 
-Studio uses one neutral visual system across the importer and ordinary editor: square dark panels, white text, restrained grey borders and no cyan focus shadows or heading pills. Importer headings and readouts explicitly inherit that treatment so their borders cannot overlap adjacent controls.
+Studio uses one neutral visual system across the importer and ordinary editor:
+the established dark panel geometry and typography, white text, restrained grey
+focus treatment and no cyan chrome. The Material readout reserves enough height
+for every detected-map and scalar line, and subsequent texture/PBR controls are
+positioned below it rather than overlapping its text.
 
 The importer task workspace is docked eight pixels from the application right edge rather than positioned inside the ordinary editor viewport. This returns the previously unused right-side space to the model preview and makes the panel read as owned workspace chrome instead of a floating popup.
 
-The 1.82 m reference is derived directly from the measured source bounds and current root transform rather than waiting for live render AABBs. It is placed on the unobstructed left side of the preview, clear of the task panel, and uses a neutral grey material so the visibility toggle has an immediate, reliable result.
+The 1.82 m reference is derived directly from the measured source bounds and current root transform rather than waiting for live render AABBs. It is placed on the unobstructed left side of the preview, clear of the task panel, and uses a neutral grey material. Its draw transform explicitly includes the active preview camera view-projection matrix, as required by Wicked's dummy visualizer.
 
 ## Persistence
 Creator material choices are persisted using governed LP08 texture stable IDs inside the LP07 reusable-model creator recipe. Base Color, Normal, Surface, Emissive and AO bindings survive reimport through that recipe. Invalid stable IDs, duplicate material indices, invalid animation ranges and unknown recipe fields are rejected.
@@ -48,7 +60,7 @@ PR #57 preserves the previously established model/resource lifecycle guarantees:
 This PR does not yet include automatic PBR derivation from a single colour image, final collision-authoring UX, a separate import-to-assets-only action, or source-frame-number conversion.
 
 ## Automated acceptance
-`RenegadeReusableAssetReimportRecipeTests` now covers supported recipe and PBR scalar round-trip, invalid recipe rejection, multi-material texture discovery and precedence, neutral no-Surface fallback, exact Surface channel packing (including neutral reflectance) and defaults, dimension mismatch and corrupt-input rejection, plus authoritative-byte preservation after rejected reimport. `RenegadeImportTests` covers bounds measurement and real-height preset scaling.
+`RenegadeReusableAssetReimportRecipeTests` now covers supported recipe and PBR scalar round-trip, invalid recipe rejection, multi-material texture discovery and precedence, neutral no-Surface fallback, exact Surface channel packing (including neutral reflectance) and defaults, dimension mismatch and corrupt-input rejection, distinct preview cache identity for changed Surface sources/PBR values, plus authoritative-byte preservation after rejected reimport. `RenegadeImportTests` covers bounds measurement and real-height preset scaling.
 
 Existing LP07/LP08 tests continue to cover reusable-model conversion, placement, resource lifecycle, package closure, cache identity and Runtime behaviour.
 

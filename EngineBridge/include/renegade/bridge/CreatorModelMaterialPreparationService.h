@@ -86,6 +86,16 @@ namespace renegade::bridge
     [[nodiscard]] CreatorModelMaterialPreparationResult PrepareCreatorModelMaterials(
         const CreatorModelMaterialPreparationRequest& request);
 
+    // Produces the cache identity used for a generated preview Surface map.
+    // Source identity and scalar inputs are included because Wicked caches GPU
+    // resources by filename; changing either must yield a different filename.
+    [[nodiscard]] std::string CreatorMaterialPreviewSurfaceRevision(
+        const std::string& surfacePath,
+        const std::string& roughnessPath,
+        const std::string& metalnessPath,
+        const std::string& occlusionPath,
+        const CreatorMaterialSourceOverride& settings);
+
     // Applies creator-visible material choices to the temporary converted
     // scene without creating governed assets. This is the preview half of the
     // same material contract used by PrepareCreatorModelMaterials at commit.
