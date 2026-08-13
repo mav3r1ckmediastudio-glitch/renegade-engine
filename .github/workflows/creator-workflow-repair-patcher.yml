@@ -1,0 +1,249 @@
+name: Creator workflow repair patcher
+
+on:
+  push:
+    branches:
+      - agent/creator-workflow-repair
+    paths:
+      - .github/workflows/creator-workflow-repair-patcher.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/creator-workflow-repair
+          fetch-depth: 0
+
+      - name: Restore guided Import Model route onto governed assets
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          chrome = Path('Studio/src/RenegadeStudioChromeAssets.cpp')
+          text = chrome.read_text(encoding='utf-8')
+          old = '''    void CreatorAssetStudioChrome::OnAction(std::function<void(Action)> callback)
+              {
+                  RenegadeStudioChrome::OnAction(
+                      [this, callback = std::move(callback)](const Action action) mutable
+                      {
+                          if (action == Action::ImportModel)
+                          {
+                              ImportCreatorModel();
+                              return;
+                          }
+                          if (callback)
+                              callback(action);
+                      });
+              }
+          '''
+          new = '''    void CreatorAssetStudioChrome::OnAction(std::function<void(Action)> callback)
+              {
+                  // ADD > IMPORT MODEL belongs to StudioApplication's guided
+                  // creator workflow. LP07 previously intercepted this action
+                  // here and auto-imported/placed the model, bypassing the
+                  // dedicated import workspace entirely.
+                  RenegadeStudioChrome::OnAction(
+                      [callback = std::move(callback)](const Action action) mutable
+                      {
+                          if (callback)
+                              callback(action);
+                      });
+              }
+          '''
+          if old not in text:
+              raise SystemExit('Creator chrome ImportModel interception pattern not found')
+          chrome.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          app = Path('Studio/src/StudioApplication.cpp')
+          text = app.read_text(encoding='utf-8')
+          include_anchor = '#include "renegade/bridge/TestLevelSnapshotService.h"\n'
+          include_replacement = '''#include "renegade/bridge/TestLevelSnapshotService.h"
+          #include "renegade/bridge/CreatorAssetWorkflowService.h"
+          #include "renegade/bridge/ReusableAssetInstanceService.h"
+          '''
+          if include_anchor not in text:
+              raise SystemExit('StudioApplication include anchor not found')
+          text = text.replace(include_anchor, include_replacement, 1)
+
+          old_picker = '''        params.description = "GLB/GLTF model to import into the scene";
+                  params.extensions.push_back("glb");
+                  params.extensions.push_back("gltf");
+          '''
+          new_picker = '''        params.description = "FBX/GLTF/GLB model to prepare in the Import Model workspace";
+                  params.extensions.push_back("fbx");
+                  params.extensions.push_back("glb");
+                  params.extensions.push_back("gltf");
+          '''
+          if old_picker not in text:
+              raise SystemExit('Import Model picker pattern not found')
+          text = text.replace(old_picker, new_picker, 1)
+
+          start = text.find('    void StudioRenderPath::RunModelImportPlacement(\n')
+          end = text.find('    void StudioRenderPath::CompleteModelImportPlacement(\n', start)
+          if start < 0 or end < 0:
+              raise SystemExit('RunModelImportPlacement function boundaries not found')
+
+          replacement = r'''    void StudioRenderPath::RunModelImportPlacement(
+              const std::string& sourcePath)
+          {
+              if (session_ == nullptr || sourcePath.empty() ||
+                  !session_->Projects().HasProject())
+              {
+                  return;
+              }
+
+              struct GuidedModelImportState
+              {
+                  std::string projectRoot;
+                  bridge::StableId projectId;
+                  std::string sourcePath;
+                  bridge::CreatorModelImportResult imported;
+                  bridge::PreparedReusableModelPlacement prepared;
+              };
+
+              auto state = std::make_shared<GuidedModelImportState>();
+              const auto& project = session_->Projects().CurrentProject();
+              state->projectRoot = project.rootPath;
+              state->projectId = project.projectId;
+              state->sourcePath = sourcePath;
+
+              // Conversion, retained-source capture and governed .rasset
+              // creation stay off the UI thread. This is the same LP07
+              // lifecycle used by the Asset Browser; the guided Studio route
+              // no longer creates a parallel legacy .wiscene product.
+              wi::jobsystem::Execute(
+                  modelImportWorkload_,
+                  [this, state](wi::jobsystem::JobArgs)
+                  {
+                      bridge::CreatorAssetWorkflowService workflow;
+                      state->imported = workflow.ImportModel(
+                          state->projectRoot,
+                          state->projectId,
+                          state->sourcePath);
+                      if (state->imported.succeeded)
+                      {
+                          state->prepared = workflow.PrepareModelPlacement(
+                              state->projectRoot,
+                              state->projectId,
+                              state->imported.asset.assetId);
+                      }
+
+                      wi::eventhandler::Subscribe_Once(
+                          wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                          [this, state](std::uint64_t)
+                          {
+                              if (session_ == nullptr ||
+                                  !session_->Projects().HasProject() ||
+                                  session_->Projects().CurrentProject().projectId !=
+                                      state->projectId)
+                              {
+                                  studioChrome_.SetStatusText(
+                                      "IMPORT MODEL // PROJECT CHANGED");
+                                  return;
+                              }
+
+                              if (!state->imported.succeeded)
+                              {
+                                  studioChrome_.SetStatusText(
+                                      "IMPORT MODEL // GOVERNED IMPORT FAILED");
+                                  wi::helper::messageBox(
+                                      "Could not create the governed reusable model.\n\nReason: " +
+                                          state->imported.error,
+                                      "Import Model");
+                                  return;
+                              }
+                              if (!state->prepared.IsReady())
+                              {
+                                  studioChrome_.SetStatusText(
+                                      "IMPORT MODEL // PREVIEW PREPARE FAILED");
+                                  wi::helper::messageBox(
+                                      "The governed asset was created, but Renegade could not prepare it for the Import Model workspace.\n\nReason: " +
+                                          state->prepared.Result().error,
+                                      "Import Model");
+                                  return;
+                              }
+
+                              const wi::scene::Scene* preparedScene =
+                                  state->prepared.PeekScene();
+                              const float scaleFactor = preparedScene != nullptr
+                                  ? bridge::ImportService::ResolveScaleFactor(
+                                      bridge::ModelScaleMode::Automatic,
+                                      *preparedScene)
+                                  : 1.0f;
+
+                              XMFLOAT3 position(0.0f, 0.0f, 0.0f);
+                              if (camera != nullptr)
+                              {
+                                  position = camera->Eye;
+                                  position.x += camera->At.x * 5.0f;
+                                  position.y += camera->At.y * 5.0f;
+                                  position.z += camera->At.z * 5.0f;
+                              }
+
+                              ClearSelectionOutline();
+                              auto command =
+                                  std::make_unique<bridge::PlaceReusableModelCommand>(
+                                      session_->Scenes().GetScene(),
+                                      state->prepared.ReleaseScene(),
+                                      state->imported.asset.assetId,
+                                      position,
+                                      scaleFactor);
+                              auto* placed = command.get();
+                              if (!session_->Commands().Execute(std::move(command)))
+                              {
+                                  studioChrome_.SetStatusText(
+                                      "IMPORT MODEL // PLACE FAILED");
+                                  SyncSelectionOutline();
+                                  return;
+                              }
+
+                              session_->Selection().Select(placed->PlacedEntity());
+                              RefreshHierarchy();
+                              RefreshInspector();
+                              RefreshStatus();
+                              assetBrowserCurrentFolder_ = "Content/Models";
+                              RefreshAssetBrowser();
+
+                              const fs::path source = fs::u8path(state->sourcePath);
+                              std::ostringstream scaleReadout;
+                              scaleReadout.precision(3);
+                              scaleReadout << std::fixed << scaleFactor;
+                              studioChrome_.SetStatusText(
+                                  "IMPORT MODEL // GOVERNED RASSET + PLACED // " +
+                                  fs::u8path(state->imported.assetProjectRelativePath)
+                                      .filename().u8string() +
+                                  " // AUTO SCALE x" + scaleReadout.str());
+
+                              // Restore the creator-facing import workspace
+                              // that LP07 accidentally bypassed. The placed
+                              // reusable-instance root remains selected, so
+                              // normal MOVE / ROTATE / SCALE controls and the
+                              // dedicated scale-unit picker operate on the
+                              // governed instance rather than a throwaway
+                              // direct-import entity.
+                              ShowImportScalePanel(
+                                  placed->PlacedEntity(),
+                                  scaleFactor,
+                                  source.filename().u8string());
+                          });
+                  });
+          }
+
+          '''
+          text = text[:start] + replacement + text[end:]
+          app.write_text(text, encoding='utf-8')
+
+      - name: Commit repair
+        shell: bash
+        run: |
+          git config user.name "Renegade Repair Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add Studio/src/RenegadeStudioChromeAssets.cpp Studio/src/StudioApplication.cpp
+          git commit -m "Restore governed Import Model creator workspace"
+          git push origin HEAD:agent/creator-workflow-repair
