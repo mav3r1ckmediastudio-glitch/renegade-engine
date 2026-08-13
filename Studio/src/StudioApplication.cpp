@@ -1268,7 +1268,7 @@ namespace renegade::studio
             {
                 constexpr float ReferenceHeight = 1.82f;
                 constexpr float ReferenceWidth =
-                    ReferenceHeight * (544.0f / 1495.0f);
+                    ReferenceHeight * (200.0f / 574.0f);
                 constexpr float ReferenceHalfWidth = ReferenceWidth * 0.5f;
                 constexpr float Clearance = 0.45f;
                 const float x = minimum.x - Clearance - ReferenceHalfWidth;
@@ -1281,7 +1281,7 @@ namespace renegade::studio
                 image.siz = XMFLOAT2(ReferenceWidth, ReferenceHeight);
                 image.pivot = XMFLOAT2(0.5f, 1.0f);
                 image.color = XMFLOAT4(0.82f, 0.84f, 0.85f, 0.92f);
-                image.enableDrawRect(XMFLOAT4(240.0f, 16.0f, 544.0f, 1495.0f));
+                image.enableDrawRect(XMFLOAT4(0.0f, 3.0f, 200.0f, 574.0f));
                 image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
                 image.blendFlag = wi::enums::BLENDMODE_ALPHA;
                 image.customRotation = &rotation;
