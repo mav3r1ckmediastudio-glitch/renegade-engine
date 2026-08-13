@@ -27,7 +27,7 @@ namespace renegade::bridge
         std::vector<MaterialTextureBindingRecord> matching;
         for (const auto& binding : bindings)
         {
-            if (binding.baseColorTextureAssetId == textureAssetId)
+            if (binding.textureAssetId == textureAssetId)
                 matching.push_back(binding);
         }
         result.discovered = matching.size();
@@ -58,25 +58,20 @@ namespace renegade::bridge
                 continue;
             }
 
-            std::string loadError;
-            wi::Resource resource = loader(prepared, loadError);
-            if (!resource.IsValid())
+            std::string bindingError;
+            if (!ApplyPreparedMaterialTextureAsset(
+                    scene, binding.materialEntity, binding.slot,
+                    prepared, loader, bindingError))
             {
                 ++failures;
                 if (firstFailure.empty())
                 {
-                    firstFailure = loadError.empty()
+                    firstFailure = bindingError.empty()
                         ? "Wicked did not create a valid refreshed resource"
-                        : loadError;
+                        : bindingError;
                 }
                 continue;
             }
-
-            auto& texture = material->textures[
-                wi::scene::MaterialComponent::BASECOLORMAP];
-            texture.name.clear();
-            texture.resource = std::move(resource);
-            material->SetDirty();
             ++result.restored;
         }
 
