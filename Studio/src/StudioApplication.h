@@ -20,6 +20,14 @@
 #include "RenegadeStudioChrome.h"
 #include "TestLevelRuntimeProcess.h"
 
+// StudioApplication.cpp defines this helper in its global unnamed namespace.
+// Declare it here so earlier creator-import callbacks can call it before the
+// definition appears later in the translation unit.
+namespace
+{
+    void RefreshCreatorImportMaterialReadout();
+}
+
 namespace renegade::studio
 {
     class StudioRenderPath final : public wi::RenderPath3D
