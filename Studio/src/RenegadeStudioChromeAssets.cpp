@@ -49,8 +49,6 @@ namespace
 
     std::string InputValue(const renegade::studio::RenegadeTextInputField& input)
     {
-        // Wicked's TextInputField::GetValue() is non-const even though reading
-        // the accepted input does not mutate creator workflow state.
         return const_cast<renegade::studio::RenegadeTextInputField&>(input).GetValue();
     }
 
@@ -165,11 +163,6 @@ namespace renegade::studio
     {
         RenegadeStudioChrome::Update(canvas, dt);
 
-        // Wicked serializes material texture filenames, while Renegade owns
-        // governed resource identity. Gate 3 stores the stable texture ID in
-        // WISCENE metadata and rehydrates its .rasset payload directly through
-        // wi::resourcemanager after scene load. This call is idempotent once
-        // the material has a live in-memory resource.
         auto* session = bridge::StudioSession::Current();
         if (session != nullptr && session->Projects().HasProject())
         {
@@ -266,9 +259,9 @@ namespace renegade::studio
         });
 
         creatorAssetImportButton_.Create("Creator Import Asset");
-        creatorAssetImportButton_.SetText("IMPORT");
+        creatorAssetImportButton_.SetText("IMPORT ASSET");
         creatorAssetImportButton_.SetTooltip(
-            "Import a reusable FBX/GLTF/GLB model or governed image texture into this project.");
+            "Import a reusable FBX/GLTF/GLB model or a governed image texture into this project.");
         creatorAssetImportButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             ImportCreatorModel();
@@ -325,38 +318,54 @@ namespace renegade::studio
         const float available = std::max(0.0f, right - left);
         const float drawerTop = creatorLayoutHeight_ - BottomTabsHeight -
             StatusBarHeight - DrawerHeight();
-        const float y = drawerTop + 45.0f;
 
         constexpr float gap = 4.0f;
         constexpr float stateWidth = 70.0f;
         constexpr float formatWidth = 58.0f;
         constexpr float rigWidth = 70.0f;
-        constexpr float importWidth = 52.0f;
-        constexpr float placeWidth = 78.0f;
-        constexpr float reimportWidth = 64.0f;
-        constexpr float saveWidth = 68.0f;
-        constexpr float fixed = stateWidth + formatWidth + rigWidth +
-            importWidth + placeWidth + reimportWidth + saveWidth + gap * 8.0f;
+        constexpr float importWidth = 92.0f;
+        constexpr float placeWidth = 92.0f;
+        constexpr float reimportWidth = 82.0f;
+        constexpr float saveWidth = 76.0f;
+
+        // Keep the creator actions in the drawer header, away from the legacy
+        // breadcrumb / LOCAL CONTENT toolbar. The previous single-row layout
+        // put these controls underneath that toolbar at common 16:9 sizes,
+        // leaving the backend workflow effectively unreachable to creators.
+        const float actionY = drawerTop + 8.0f;
+        float actionX = right -
+            (importWidth + placeWidth + reimportWidth + saveWidth + gap * 3.0f);
+        const auto placeAction = [&actionX, actionY, gap](
+            wi::gui::Widget& widget, const float width)
+        {
+            widget.SetPos(XMFLOAT2(actionX, actionY));
+            widget.SetSize(XMFLOAT2(width, 25.0f));
+            actionX += width + gap;
+        };
+        placeAction(creatorAssetImportButton_, importWidth);
+        placeAction(creatorAssetPlaceButton_, placeWidth);
+        placeAction(creatorAssetReimportButton_, reimportWidth);
+        placeAction(creatorAssetSaveTagsButton_, saveWidth);
+
+        const float filterY = drawerTop + 45.0f;
+        const float fixed = stateWidth + formatWidth + rigWidth + gap * 4.0f;
         const float flexible = std::max(160.0f, available - fixed);
         const float searchWidth = flexible * 0.5f;
         const float tagsWidth = flexible - searchWidth;
 
         float x = left;
-        const auto place = [&x, y, gap](wi::gui::Widget& widget, const float width)
+        const auto placeFilter = [&x, filterY, gap](
+            wi::gui::Widget& widget, const float width)
         {
-            widget.SetPos(XMFLOAT2(x, y));
+            widget.SetPos(XMFLOAT2(x, filterY));
             widget.SetSize(XMFLOAT2(width, 25.0f));
             x += width + gap;
         };
-        place(creatorAssetStateCombo_, stateWidth);
-        place(creatorAssetFormatCombo_, formatWidth);
-        place(creatorAssetRigCombo_, rigWidth);
-        place(creatorAssetSearch_, searchWidth);
-        place(creatorAssetTags_, tagsWidth);
-        place(creatorAssetImportButton_, importWidth);
-        place(creatorAssetPlaceButton_, placeWidth);
-        place(creatorAssetReimportButton_, reimportWidth);
-        place(creatorAssetSaveTagsButton_, saveWidth);
+        placeFilter(creatorAssetStateCombo_, stateWidth);
+        placeFilter(creatorAssetFormatCombo_, formatWidth);
+        placeFilter(creatorAssetRigCombo_, rigWidth);
+        placeFilter(creatorAssetSearch_, searchWidth);
+        placeFilter(creatorAssetTags_, tagsWidth);
     }
 
     bridge::AssetCatalogueQuery CreatorAssetStudioChrome::CreatorAssetQuery() const
