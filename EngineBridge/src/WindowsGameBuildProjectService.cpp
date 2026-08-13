@@ -1,6 +1,7 @@
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
 
 #include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/ResourceAssetDependencyService.h"
 #include "renegade/bridge/ReusableAssetDependencyService.h"
 
 #include <algorithm>
@@ -105,16 +106,14 @@ namespace renegade::bridge
 
         // An imported source is provenance authority, not Runtime content. A
         // normal LP05 closure therefore (correctly) does not reach the retained
-        // SourceAssets FBX/GLTF. LC01 freshness still needs the source's current
+        // SourceAssets input. LC01 freshness still needs the source's current
         // hash, otherwise RefreshAssetRegistry would tombstone it and every
         // reachable .rasset would look source-unavailable to BuildService.
         //
         // Add only the source records for imported products that the already-
         // discovered Runtime graph actually reaches. Do it after transitive
         // discovery has finished: the editor-only source node is hashed and
-        // retained by LC01, but no source-side glTF buffer/image references can
-        // become Runtime package dependencies. BuildService excludes the node
-        // itself because its requirement remains EditorOnly.
+        // retained by LC01, but cannot become a Runtime package dependency.
         bool AddImportedSourceFreshnessRoots(
             const ProjectMetadata& project,
             DependencyCollector& collector,
@@ -221,9 +220,6 @@ namespace renegade::bridge
                 sourceRoot.declaredPath = sourcePath;
                 sourceRoot.dependencyClass = sourceClass;
                 sourceRoot.requirement = DependencyRequirement::EditorOnly;
-                // DependencyRoot v1 records provider version 1. Preserve the
-                // authoritative Gate 3 provider token so LC01 retains/recover
-                // identity rather than rewriting source provenance at build.
                 sourceRoot.provenance = sourceProvider;
                 if (!collector.AddRoot(sourceRoot, error))
                 {
@@ -283,6 +279,7 @@ namespace renegade::bridge
             GltfDependencyProvider gltfProvider(MakeGltfDependencyReader());
             SceneIdentityCompanionProvider sceneIdentityProvider;
             ReusableAssetDependencyProvider reusableAssetProvider(project.projectId);
+            ResourceAssetDependencyProvider resourceAssetProvider(project.projectId);
 
             DependencyCollector collector(project.rootPath);
             if (!collector.RegisterProvider(projectProvider, error) ||
@@ -291,7 +288,8 @@ namespace renegade::bridge
                 !collector.RegisterProvider(sceneProvider, error) ||
                 !collector.RegisterProvider(gltfProvider, error) ||
                 !collector.RegisterProvider(sceneIdentityProvider, error) ||
-                !collector.RegisterProvider(reusableAssetProvider, error))
+                !collector.RegisterProvider(reusableAssetProvider, error) ||
+                !collector.RegisterProvider(resourceAssetProvider, error))
             {
                 error = "Build Windows Game could not configure dependency discovery: " +
                     error;
