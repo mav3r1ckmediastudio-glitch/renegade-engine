@@ -2403,7 +2403,10 @@ namespace renegade::studio
         importScalePanel_.Create(
             "Model Import Workspace",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        importScalePanel_.SetVisible(false);
+        // Register the importer as a real Studio GUI window before attaching
+        // children. Window::AddWidget inherits the parent's enabled/visible
+        // state, so hiding it first makes the controls unreachable.
+        GetGUI().AddWidget(&importScalePanel_);
 
         importScaleTitleLabel_.Create("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
         importScaleReadoutLabel_.Create("");
@@ -2506,6 +2509,8 @@ namespace renegade::studio
             widget->SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(widget);
         }
+        // Hide only after all child controls have inherited an enabled parent.
+        importScalePanel_.SetVisible(false);
     }
 
     void StudioRenderPath::ApplyRenegadeTheme()
@@ -3103,11 +3108,13 @@ namespace renegade::studio
         // it.
         const float importScalePanelWidth = 390.0f;
         const float importScalePanelHeight = 690.0f;
+        // GGMAX-style task workspace: keep the preview unobstructed and dock
+        // the importer controls down the right side of the preview viewport.
         importScalePanel_.SetPos(XMFLOAT2(
-            viewportBounds_.x +
-                (viewportBounds_.z - viewportBounds_.x) * 0.5f -
-                importScalePanelWidth * 0.5f,
-            viewportBounds_.y + 24.0f));
+            std::max(
+                viewportBounds_.x + 12.0f,
+                viewportBounds_.z - importScalePanelWidth - 12.0f),
+            viewportBounds_.y + 12.0f));
         importScalePanel_.SetSize(XMFLOAT2(
             importScalePanelWidth,
             importScalePanelHeight));
