@@ -290,6 +290,8 @@ namespace
         std::vector<wi::ecs::Entity> animationEntities;
         std::size_t selectedMaterial = 0;
         std::size_t selectedAnimation = 0;
+        XMFLOAT3 positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        XMFLOAT3 rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
     };
 
     CreatorModelImportWorkspaceState creatorModelImporter;
@@ -300,6 +302,12 @@ namespace
     wi::gui::Label creatorImportAnimationLabel;
     wi::gui::Label creatorImportAnimationReadout;
     wi::gui::Label creatorImportTransformLabel;
+    renegade::studio::RenegadeTextInputField creatorImportPositionX;
+    renegade::studio::RenegadeTextInputField creatorImportPositionY;
+    renegade::studio::RenegadeTextInputField creatorImportPositionZ;
+    renegade::studio::RenegadeTextInputField creatorImportRotationX;
+    renegade::studio::RenegadeTextInputField creatorImportRotationY;
+    renegade::studio::RenegadeTextInputField creatorImportRotationZ;
     wi::gui::Label creatorImportHelpLabel;
 
     std::string CreatorImportEntityName(
@@ -309,6 +317,31 @@ namespace
     {
         const auto* name = scene.names.GetComponent(entity);
         return name != nullptr && !name->name.empty() ? name->name : fallback;
+    }
+
+    void ApplyCreatorImportPreviewTransform()
+    {
+        auto* session = renegade::bridge::StudioSession::Current();
+        if (session == nullptr || !creatorModelImporter.active ||
+            creatorModelImporter.previewRoot == wi::ecs::INVALID_ENTITY)
+            return;
+        auto& scene = session->Scenes().GetScene();
+        auto* transform = scene.transforms.GetComponent(creatorModelImporter.previewRoot);
+        if (transform == nullptr)
+            return;
+        auto next = renegade::bridge::CaptureTransform(*transform);
+        next.translation = XMFLOAT3(
+            creatorModelImporter.positionOffset.x,
+            CreatorImportStageHeight + creatorModelImporter.positionOffset.y,
+            creatorModelImporter.positionOffset.z);
+        XMVECTOR q = XMQuaternionRotationRollPitchYaw(
+            XMConvertToRadians(creatorModelImporter.rotationDegrees.x),
+            XMConvertToRadians(creatorModelImporter.rotationDegrees.y),
+            XMConvertToRadians(creatorModelImporter.rotationDegrees.z));
+        XMStoreFloat4(&next.rotation, q);
+        session->Commands().Execute(
+            std::make_unique<renegade::bridge::SetTransformCommand>(
+                scene, creatorModelImporter.previewRoot, next));
     }
 
     void RefreshCreatorImportMaterialReadout()
@@ -2415,6 +2448,40 @@ namespace renegade::studio
         creatorImportHelpLabel.SetFitTextEnabled(true);
 
         creatorImportTransformLabel.Create("TRANSFORM // PREVIEW");
+        const auto createImportTransformField = [](
+            RenegadeTextInputField& field,
+            const char* name,
+            const char* description,
+            const bool rotation,
+            const int axis)
+        {
+            field.Create(name);
+            field.SetDescription(description);
+            field.SetValue(0.0f);
+            field.OnInputAccepted([rotation, axis](const wi::gui::EventArgs& args)
+            {
+                XMFLOAT3& target = rotation
+                    ? creatorModelImporter.rotationDegrees
+                    : creatorModelImporter.positionOffset;
+                if (axis == 0) target.x = args.fValue;
+                if (axis == 1) target.y = args.fValue;
+                if (axis == 2) target.z = args.fValue;
+                ApplyCreatorImportPreviewTransform();
+            });
+        };
+        createImportTransformField(
+            creatorImportPositionX, "Import Position X", "POS X: ", false, 0);
+        createImportTransformField(
+            creatorImportPositionY, "Import Position Y", "POS Y: ", false, 1);
+        createImportTransformField(
+            creatorImportPositionZ, "Import Position Z", "POS Z: ", false, 2);
+        createImportTransformField(
+            creatorImportRotationX, "Import Rotation X", "ROT X: ", true, 0);
+        createImportTransformField(
+            creatorImportRotationY, "Import Rotation Y", "ROT Y: ", true, 1);
+        createImportTransformField(
+            creatorImportRotationZ, "Import Rotation Z", "ROT Z: ", true, 2);
+
         importScaleModeCombo_.Create("Scale Mode");
         importScaleModeCombo_.AddItem(
             "AUTOMATIC",
@@ -2496,6 +2563,12 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&importScaleReadoutLabel_),
             static_cast<wi::gui::Widget*>(&creatorImportHelpLabel),
             static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
+            static_cast<wi::gui::Widget*>(&creatorImportPositionX),
+            static_cast<wi::gui::Widget*>(&creatorImportPositionY),
+            static_cast<wi::gui::Widget*>(&creatorImportPositionZ),
+            static_cast<wi::gui::Widget*>(&creatorImportRotationX),
+            static_cast<wi::gui::Widget*>(&creatorImportRotationY),
+            static_cast<wi::gui::Widget*>(&creatorImportRotationZ),
             static_cast<wi::gui::Widget*>(&importScaleModeCombo_),
             static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
             static_cast<wi::gui::Widget*>(&creatorImportMaterialCombo),
@@ -3126,20 +3199,41 @@ namespace renegade::studio
         creatorImportHelpLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 50.0f));
         creatorImportTransformLabel.SetPos(XMFLOAT2(12.0f, 160.0f));
         creatorImportTransformLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
-        importScaleModeCombo_.SetPos(XMFLOAT2(12.0f, 186.0f));
+        const float transformGap = 4.0f;
+        const float transformWidth =
+            (importScalePanelWidth - 24.0f - transformGap * 2.0f) / 3.0f;
+        const auto layoutTransformRow = [transformWidth, transformGap](
+            wi::gui::Widget& x, wi::gui::Widget& y, wi::gui::Widget& z,
+            const float rowY)
+        {
+            x.SetPos(XMFLOAT2(12.0f, rowY));
+            y.SetPos(XMFLOAT2(12.0f + transformWidth + transformGap, rowY));
+            z.SetPos(XMFLOAT2(
+                12.0f + (transformWidth + transformGap) * 2.0f, rowY));
+            x.SetSize(XMFLOAT2(transformWidth, 28.0f));
+            y.SetSize(XMFLOAT2(transformWidth, 28.0f));
+            z.SetSize(XMFLOAT2(transformWidth, 28.0f));
+        };
+        layoutTransformRow(
+            creatorImportPositionX, creatorImportPositionY,
+            creatorImportPositionZ, 186.0f);
+        layoutTransformRow(
+            creatorImportRotationX, creatorImportRotationY,
+            creatorImportRotationZ, 220.0f);
+        importScaleModeCombo_.SetPos(XMFLOAT2(12.0f, 254.0f));
         importScaleModeCombo_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        creatorImportMaterialLabel.SetPos(XMFLOAT2(12.0f, 232.0f));
+        creatorImportMaterialLabel.SetPos(XMFLOAT2(12.0f, 300.0f));
         creatorImportMaterialLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
-        creatorImportMaterialCombo.SetPos(XMFLOAT2(12.0f, 258.0f));
+        creatorImportMaterialCombo.SetPos(XMFLOAT2(12.0f, 326.0f));
         creatorImportMaterialCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        creatorImportMaterialReadout.SetPos(XMFLOAT2(12.0f, 292.0f));
-        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 112.0f));
-        creatorImportAnimationLabel.SetPos(XMFLOAT2(12.0f, 420.0f));
+        creatorImportMaterialReadout.SetPos(XMFLOAT2(12.0f, 360.0f));
+        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 104.0f));
+        creatorImportAnimationLabel.SetPos(XMFLOAT2(12.0f, 478.0f));
         creatorImportAnimationLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
-        creatorImportAnimationCombo.SetPos(XMFLOAT2(12.0f, 446.0f));
+        creatorImportAnimationCombo.SetPos(XMFLOAT2(12.0f, 504.0f));
         creatorImportAnimationCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 480.0f));
-        creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 76.0f));
+        creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 538.0f));
+        creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 70.0f));
         importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 624.0f));
         importScaleApplyButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.64f, 34.0f));
         importScaleDismissButton_.SetPos(XMFLOAT2(20.0f + (importScalePanelWidth - 32.0f) * 0.64f, 624.0f));
@@ -6691,6 +6785,14 @@ namespace renegade::studio
             << "   Bones: " << creatorModelImporter.evidence.armatureBones;
         importScaleReadoutLabel_.SetText(readout.str());
         importScaleModeCombo_.SetSelectedWithoutCallback(0);
+        creatorModelImporter.positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        creatorModelImporter.rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        creatorImportPositionX.SetValue(0.0f);
+        creatorImportPositionY.SetValue(0.0f);
+        creatorImportPositionZ.SetValue(0.0f);
+        creatorImportRotationX.SetValue(0.0f);
+        creatorImportRotationY.SetValue(0.0f);
+        creatorImportRotationZ.SetValue(0.0f);
 
         creatorImportMaterialCombo.ClearItems();
         auto& scene = session_->Scenes().GetScene();
