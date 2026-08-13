@@ -46,6 +46,33 @@ namespace renegade::bridge
                 object[key] = value;
         }
 
+        bool ReadScalar(
+            const nlohmann::json& object,
+            const char* key,
+            float& value,
+            const float minimum,
+            const float maximum,
+            std::string& error)
+        {
+            if (!object.contains(key))
+                return true;
+            if (!object.at(key).is_number())
+            {
+                error = std::string("Creator material recipe '") + key +
+                    "' must be numeric.";
+                return false;
+            }
+            const float candidate = object.at(key).get<float>();
+            if (!std::isfinite(candidate) || candidate < minimum || candidate > maximum)
+            {
+                error = std::string("Creator material recipe '") + key +
+                    "' is outside its supported range.";
+                return false;
+            }
+            value = candidate;
+            return true;
+        }
+
         bool ApplyTexture(
             wi::scene::Scene& scene,
             const wi::ecs::Entity materialEntity,
@@ -115,6 +142,10 @@ namespace renegade::bridge
                     }
                     CreatorMaterialImportRecipe material;
                     material.materialIndex = item.at("material_index").get<std::uint32_t>();
+                    material.hasScalarSettings = item.contains("roughness") ||
+                        item.contains("metalness") || item.contains("reflectance") ||
+                        item.contains("normal_strength") || item.contains("ao_strength") ||
+                        item.contains("emissive_strength");
                     if (!materialIndices.insert(material.materialIndex).second)
                     {
                         error = "Creator model recipe contains duplicate material_index values.";
@@ -125,7 +156,10 @@ namespace renegade::bridge
                         const std::string& key = iterator.key();
                         if (key != "material_index" && key != "base_color_asset_id" &&
                             key != "normal_asset_id" && key != "surface_asset_id" &&
-                            key != "emissive_asset_id" && key != "occlusion_asset_id")
+                            key != "emissive_asset_id" && key != "occlusion_asset_id" &&
+                            key != "roughness" && key != "metalness" &&
+                            key != "reflectance" && key != "normal_strength" &&
+                            key != "ao_strength" && key != "emissive_strength")
                         {
                             error = "Creator material recipe contains an unsupported key: " + key;
                             return false;
@@ -140,7 +174,13 @@ namespace renegade::bridge
                         !ReadOptionalStableId(item, "emissive_asset_id",
                             material.emissiveAssetId, error) ||
                         !ReadOptionalStableId(item, "occlusion_asset_id",
-                            material.occlusionAssetId, error))
+                            material.occlusionAssetId, error) ||
+                        !ReadScalar(item, "roughness", material.roughness, 0.0f, 1.0f, error) ||
+                        !ReadScalar(item, "metalness", material.metalness, 0.0f, 1.0f, error) ||
+                        !ReadScalar(item, "reflectance", material.reflectance, 0.0f, 1.0f, error) ||
+                        !ReadScalar(item, "normal_strength", material.normalStrength, 0.0f, 4.0f, error) ||
+                        !ReadScalar(item, "ao_strength", material.aoStrength, 0.0f, 1.0f, error) ||
+                        !ReadScalar(item, "emissive_strength", material.emissiveStrength, 0.0f, 100.0f, error))
                         return false;
                     recipe.materials.push_back(std::move(material));
                 }
@@ -217,6 +257,15 @@ namespace renegade::bridge
                 WriteOptionalStableId(item, "surface_asset_id", material.surfaceAssetId);
                 WriteOptionalStableId(item, "emissive_asset_id", material.emissiveAssetId);
                 WriteOptionalStableId(item, "occlusion_asset_id", material.occlusionAssetId);
+                if (material.hasScalarSettings)
+                {
+                    item["roughness"] = std::clamp(material.roughness, 0.0f, 1.0f);
+                    item["metalness"] = std::clamp(material.metalness, 0.0f, 1.0f);
+                    item["reflectance"] = std::clamp(material.reflectance, 0.0f, 1.0f);
+                    item["normal_strength"] = std::clamp(material.normalStrength, 0.0f, 4.0f);
+                    item["ao_strength"] = std::clamp(material.aoStrength, 0.0f, 1.0f);
+                    item["emissive_strength"] = std::clamp(material.emissiveStrength, 0.0f, 100.0f);
+                }
                 materials.push_back(std::move(item));
             }
             root["materials"] = std::move(materials);
@@ -276,6 +325,20 @@ namespace renegade::bridge
             }
             const wi::ecs::Entity materialEntity =
                 scene.materials.GetEntity(materialRecipe.materialIndex);
+            auto* material = scene.materials.GetComponent(materialEntity);
+            if (material == nullptr)
+            {
+                error = "Creator material recipe target disappeared during import.";
+                return false;
+            }
+            if (materialRecipe.hasScalarSettings)
+            {
+                material->SetRoughness(materialRecipe.roughness);
+                material->SetMetalness(materialRecipe.metalness);
+                material->SetReflectance(materialRecipe.reflectance);
+                material->SetNormalMapStrength(materialRecipe.normalStrength);
+                material->SetEmissiveStrength(materialRecipe.emissiveStrength);
+            }
             if (!ApplyTexture(scene, materialEntity, MaterialTextureSlot::BaseColor,
                     materialRecipe.baseColorAssetId, projectRoot, projectId, error) ||
                 !ApplyTexture(scene, materialEntity, MaterialTextureSlot::Normal,

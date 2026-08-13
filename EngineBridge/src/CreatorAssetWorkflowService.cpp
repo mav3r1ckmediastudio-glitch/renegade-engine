@@ -93,6 +93,47 @@ namespace renegade::bridge
             return value;
         }
 
+        bool ResolveCreatorDestination(
+            const fs::path& root,
+            const std::string& destinationFolder,
+            fs::path& destination,
+            std::string& error)
+        {
+            const fs::path requested = fs::u8path(destinationFolder).lexically_normal();
+            if (requested.empty() || requested.is_absolute() ||
+                requested.generic_u8string() != destinationFolder ||
+                requested.begin() == requested.end() ||
+                requested.begin()->generic_u8string() != "Content")
+            {
+                error = "Creator model destination must be a canonical project folder below Content.";
+                return false;
+            }
+            for (const auto& part : requested)
+            {
+                if (part == "." || part == "..")
+                {
+                    error = "Creator model destination cannot traverse outside Content.";
+                    return false;
+                }
+            }
+            std::error_code ec;
+            fs::create_directories(root / requested, ec);
+            if (ec)
+            {
+                error = "Could not create creator model destination: " + ec.message();
+                return false;
+            }
+            const fs::path contentRoot = fs::weakly_canonical(root / "Content", ec);
+            destination = fs::weakly_canonical(root / requested, ec);
+            if (ec || !IsWithin(destination, contentRoot))
+            {
+                error = "Creator model destination resolves outside project Content.";
+                return false;
+            }
+            error.clear();
+            return true;
+        }
+
         std::string HashStream(std::istream& stream)
         {
             std::uint64_t hash = FnvOffset;
@@ -573,7 +614,9 @@ namespace renegade::bridge
         const std::string& projectRoot,
         const StableId& projectId,
         const std::string& externalSourcePath,
-        const std::string& settingsJson) const
+        const std::string& settingsJson,
+        const std::string& assetName,
+        const std::string& destinationFolder) const
     {
         CreatorModelImportResult result;
         if (!IsValidStableId(projectId))
@@ -601,17 +644,21 @@ namespace renegade::bridge
             return result;
         }
 
-        const fs::path contentModels = root / "Content" / "Models";
+        fs::path contentModels;
+        if (!ResolveCreatorDestination(root, destinationFolder,
+                contentModels, result.error))
+            return result;
         const fs::path sourceModels = root / "SourceAssets" / "Models";
-        fs::create_directories(contentModels, ec);
-        if (!ec) fs::create_directories(sourceModels, ec);
+        fs::create_directories(sourceModels, ec);
         if (ec)
         {
             result.error = "Could not create project model folders: " + ec.message();
             return result;
         }
 
-        const std::string baseStem = SanitizeStem(source.stem().generic_u8string());
+        const bool explicitName = !assetName.empty();
+        const std::string baseStem = SanitizeStem(explicitName
+            ? assetName : source.stem().generic_u8string());
         std::string candidateStem = baseStem;
         fs::path snapshotDirectory;
         fs::path assetPath;
@@ -636,6 +683,11 @@ namespace renegade::bridge
             }
             if (!snapshotExists && !assetExists)
                 break;
+            if (explicitName)
+            {
+                result.error = "The selected creator asset name is already in use in the destination folder.";
+                return result;
+            }
         }
 
         fs::create_directories(snapshotDirectory, ec);

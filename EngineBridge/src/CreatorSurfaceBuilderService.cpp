@@ -40,17 +40,37 @@ namespace renegade::bridge
             return true;
         }
 
+        bool LoadRgba(const std::string& path, Image& image, std::string& error)
+        {
+            image = {};
+            if (path.empty())
+                return true;
+            int channels = 0;
+            unsigned char* pixels = stbi_load(
+                path.c_str(), &image.width, &image.height, &channels, 4);
+            if (pixels == nullptr || image.width <= 0 || image.height <= 0)
+            {
+                error = "Could not decode PBR source image: " + path;
+                if (const char* reason = stbi_failure_reason(); reason != nullptr)
+                    error += " (" + std::string(reason) + ")";
+                return false;
+            }
+            image.pixels.reset(pixels);
+            return true;
+        }
+
         bool ResolveDimensions(
             const Image& roughness,
             const Image& metalness,
             const Image& occlusion,
+            const Image& surface,
             int& width,
             int& height,
             std::string& error)
         {
             width = 0;
             height = 0;
-            for (const Image* image : {&roughness, &metalness, &occlusion})
+            for (const Image* image : {&roughness, &metalness, &occlusion, &surface})
             {
                 if (!image->pixels)
                     continue;
@@ -68,19 +88,12 @@ namespace renegade::bridge
             }
             if (width <= 0 || height <= 0)
             {
-                error = "Surface Builder requires at least one roughness, metalness or AO source map.";
+                error = "Surface Builder requires a Surface, roughness, metalness or AO source map.";
                 return false;
             }
             return true;
         }
 
-        unsigned char SampleOrDefault(
-            const Image& image,
-            const std::size_t index,
-            const std::uint8_t fallback)
-        {
-            return image.pixels ? image.pixels.get()[index] : fallback;
-        }
     }
 
     CreatorSurfaceBuildResult BuildCreatorSurfaceMap(
@@ -96,14 +109,17 @@ namespace renegade::bridge
         Image roughness;
         Image metalness;
         Image occlusion;
+        Image surface;
         if (!LoadGray(request.roughnessPath, roughness, result.error) ||
             !LoadGray(request.metalnessPath, metalness, result.error) ||
-            !LoadGray(request.occlusionPath, occlusion, result.error))
+            !LoadGray(request.occlusionPath, occlusion, result.error) ||
+            !LoadRgba(request.surfacePath, surface, result.error))
             return result;
 
         int width = 0;
         int height = 0;
-        if (!ResolveDimensions(roughness, metalness, occlusion, width, height, result.error))
+        if (!ResolveDimensions(roughness, metalness, occlusion, surface,
+                width, height, result.error))
             return result;
 
         const std::uint64_t pixelCount64 =
@@ -117,12 +133,25 @@ namespace renegade::bridge
         std::vector<unsigned char> rgba(pixelCount * 4u);
         for (std::size_t index = 0; index < pixelCount; ++index)
         {
-            rgba[index * 4u + 0u] = SampleOrDefault(
-                occlusion, index, request.defaultOcclusion);
-            rgba[index * 4u + 1u] = SampleOrDefault(
-                roughness, index, request.defaultRoughness);
-            rgba[index * 4u + 2u] = SampleOrDefault(
-                metalness, index, request.defaultMetalness);
+            const auto surfaceChannel = [&surface, index](
+                const std::size_t channel, const std::uint8_t fallback)
+            {
+                return surface.pixels
+                    ? surface.pixels.get()[index * 4u + channel]
+                    : fallback;
+            };
+            const float ao = static_cast<float>(occlusion.pixels
+                ? occlusion.pixels.get()[index]
+                : surfaceChannel(0u, request.defaultOcclusion));
+            const float aoStrength = std::clamp(request.aoStrength, 0.0f, 1.0f);
+            rgba[index * 4u + 0u] = static_cast<unsigned char>(std::clamp(
+                255.0f + (ao - 255.0f) * aoStrength, 0.0f, 255.0f));
+            rgba[index * 4u + 1u] = roughness.pixels
+                ? roughness.pixels.get()[index]
+                : surfaceChannel(1u, request.defaultRoughness);
+            rgba[index * 4u + 2u] = metalness.pixels
+                ? metalness.pixels.get()[index]
+                : surfaceChannel(2u, request.defaultMetalness);
             rgba[index * 4u + 3u] = request.reflectance;
         }
 

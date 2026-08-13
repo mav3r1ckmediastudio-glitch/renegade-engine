@@ -254,6 +254,18 @@ int main()
         {
             return Fail("Automatic scale mode did not normalize the largest mesh extent");
         }
+        const auto measured = renegade::bridge::ImportService::MeasureModelBounds(
+            withMesh);
+        if (!measured.valid || measured.Extents().y != 20.0f)
+        {
+            return Fail("model bounds did not retain the actual source height");
+        }
+        const float humanFactor = renegade::bridge::ImportService::
+            ResolveScaleFactorForTargetHeight(1.82f, withMesh);
+        if (std::abs(humanFactor - 0.091f) > 0.0001f)
+        {
+            return Fail("1.82 m scale preset did not derive from actual model height");
+        }
     }
 
     const auto incomplete = imports.CompleteGltfAsset({});

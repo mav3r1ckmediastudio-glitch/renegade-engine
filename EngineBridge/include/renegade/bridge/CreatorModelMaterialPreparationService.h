@@ -27,6 +27,16 @@ namespace renegade::bridge
         CreatorTextureSourceChoice metalness;
         CreatorTextureSourceChoice occlusion;
         CreatorTextureSourceChoice emissive;
+        // These values are always explicit. Detection seeds them from the
+        // imported material, with a neutral non-metal fallback when no
+        // authored Surface data exists. Preview and commit consume the same
+        // values so accepting an import cannot change its appearance.
+        float roughnessValue = 0.75f;
+        float metalnessValue = 0.0f;
+        float reflectanceValue = 0.04f;
+        float normalStrengthValue = 1.0f;
+        float aoStrengthValue = 1.0f;
+        float emissiveStrengthValue = 0.0f;
     };
 
     struct CreatorModelMaterialDetectionResult
@@ -75,4 +85,15 @@ namespace renegade::bridge
     // the final creator acceptance/commit phase, never the temporary preview.
     [[nodiscard]] CreatorModelMaterialPreparationResult PrepareCreatorModelMaterials(
         const CreatorModelMaterialPreparationRequest& request);
+
+    // Applies creator-visible material choices to the temporary converted
+    // scene without creating governed assets. This is the preview half of the
+    // same material contract used by PrepareCreatorModelMaterials at commit.
+    [[nodiscard]] bool ApplyCreatorModelMaterialPreview(
+        wi::scene::Scene& scene,
+        const std::string& modelSourcePath,
+        const std::string& previewOutputDirectory,
+        const std::vector<CreatorMaterialSourceOverride>& overrides,
+        const std::vector<wi::ecs::Entity>& materialEntities,
+        std::string& error);
 }

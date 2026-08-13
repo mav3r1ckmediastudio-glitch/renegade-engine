@@ -40,7 +40,9 @@ namespace renegade::bridge
             const std::string& projectRoot,
             const StableId& projectId,
             const std::string& externalSourcePath,
-            const std::string& settingsJson = "{}") const;
+            const std::string& settingsJson = "{}",
+            const std::string& assetName = {},
+            const std::string& destinationFolder = "Content/Models") const;
 
         [[nodiscard]] ReusableModelReimportResult ReimportModel(
             const std::string& projectRoot,

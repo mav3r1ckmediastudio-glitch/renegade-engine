@@ -154,6 +154,22 @@ namespace renegade::bridge
         Automatic,
     };
 
+    struct ModelBounds
+    {
+        bool valid = false;
+        XMFLOAT3 minimum = {};
+        XMFLOAT3 maximum = {};
+
+        [[nodiscard]] XMFLOAT3 Extents() const noexcept
+        {
+            return valid
+                ? XMFLOAT3(maximum.x - minimum.x,
+                    maximum.y - minimum.y,
+                    maximum.z - minimum.z)
+                : XMFLOAT3{};
+        }
+    };
+
     class ImportService
     {
     public:
@@ -193,6 +209,11 @@ namespace renegade::bridge
             const wi::scene::Scene& scene) noexcept;
         [[nodiscard]] static float ResolveScaleFactor(
             ModelScaleMode mode,
+            const wi::scene::Scene& preparedScene) noexcept;
+        [[nodiscard]] static ModelBounds MeasureModelBounds(
+            const wi::scene::Scene& preparedScene) noexcept;
+        [[nodiscard]] static float ResolveScaleFactorForTargetHeight(
+            float targetHeightMeters,
             const wi::scene::Scene& preparedScene) noexcept;
     };
 

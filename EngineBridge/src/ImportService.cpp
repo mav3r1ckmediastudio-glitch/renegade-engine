@@ -1,6 +1,7 @@
 #include "renegade/bridge/ImportService.h"
 
 #include <algorithm>
+#include <cmath>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -28,12 +29,37 @@ namespace
     // and not accounted for if a model's nodes carry large relative offsets
     // or their own per-node scale. Only valid against the still-isolated
     // scene PrepareGltfAsset produces.
-    float ComputeAutomaticScaleFactor(
+    renegade::bridge::ModelBounds ComputeModelBounds(
         const wi::scene::Scene& scene) noexcept
     {
-        bool any = false;
-        XMFLOAT3 boundsMin(0.0f, 0.0f, 0.0f);
-        XMFLOAT3 boundsMax(0.0f, 0.0f, 0.0f);
+        renegade::bridge::ModelBounds result;
+        // Importers update their isolated scene before returning, so Wicked's
+        // object AABBs already include node hierarchy transforms. Prefer that
+        // world-space evidence; synthetic/headless tests without an Update()
+        // still fall back to raw mesh vertices below.
+        const std::size_t objectBounds = std::min(
+            scene.objects.GetCount(), scene.aabb_objects.size());
+        for (std::size_t index = 0; index < objectBounds; ++index)
+        {
+            const auto& bounds = scene.aabb_objects[index];
+            if (!result.valid)
+            {
+                result.minimum = bounds._min;
+                result.maximum = bounds._max;
+                result.valid = true;
+            }
+            else
+            {
+                result.minimum.x = std::min(result.minimum.x, bounds._min.x);
+                result.minimum.y = std::min(result.minimum.y, bounds._min.y);
+                result.minimum.z = std::min(result.minimum.z, bounds._min.z);
+                result.maximum.x = std::max(result.maximum.x, bounds._max.x);
+                result.maximum.y = std::max(result.maximum.y, bounds._max.y);
+                result.maximum.z = std::max(result.maximum.z, bounds._max.z);
+            }
+        }
+        if (result.valid)
+            return result;
         for (std::size_t meshIndex = 0;
             meshIndex < scene.meshes.GetCount();
             ++meshIndex)
@@ -41,30 +67,36 @@ namespace
             const auto& mesh = scene.meshes[meshIndex];
             for (const auto& position : mesh.vertex_positions)
             {
-                if (!any)
+                if (!result.valid)
                 {
-                    boundsMin = position;
-                    boundsMax = position;
-                    any = true;
+                    result.minimum = position;
+                    result.maximum = position;
+                    result.valid = true;
                     continue;
                 }
-                boundsMin.x = std::min(boundsMin.x, position.x);
-                boundsMin.y = std::min(boundsMin.y, position.y);
-                boundsMin.z = std::min(boundsMin.z, position.z);
-                boundsMax.x = std::max(boundsMax.x, position.x);
-                boundsMax.y = std::max(boundsMax.y, position.y);
-                boundsMax.z = std::max(boundsMax.z, position.z);
+                result.minimum.x = std::min(result.minimum.x, position.x);
+                result.minimum.y = std::min(result.minimum.y, position.y);
+                result.minimum.z = std::min(result.minimum.z, position.z);
+                result.maximum.x = std::max(result.maximum.x, position.x);
+                result.maximum.y = std::max(result.maximum.y, position.y);
+                result.maximum.z = std::max(result.maximum.z, position.z);
             }
         }
 
-        if (!any)
-        {
-            return 1.0f;
-        }
+        return result;
+    }
 
-        const float extentX = boundsMax.x - boundsMin.x;
-        const float extentY = boundsMax.y - boundsMin.y;
-        const float extentZ = boundsMax.z - boundsMin.z;
+    float ComputeAutomaticScaleFactor(
+        const wi::scene::Scene& scene) noexcept
+    {
+        const auto bounds = ComputeModelBounds(scene);
+        if (!bounds.valid)
+            return 1.0f;
+
+        const XMFLOAT3 extents = bounds.Extents();
+        const float extentX = extents.x;
+        const float extentY = extents.y;
+        const float extentZ = extents.z;
         const float largestExtent =
             std::max(extentX, std::max(extentY, extentZ));
         if (largestExtent <= 0.0001f)
@@ -601,6 +633,24 @@ namespace renegade::bridge
             default:
                 return 1.0f;
         }
+    }
+
+    ModelBounds ImportService::MeasureModelBounds(
+        const wi::scene::Scene& preparedScene) noexcept
+    {
+        return ComputeModelBounds(preparedScene);
+    }
+
+    float ImportService::ResolveScaleFactorForTargetHeight(
+        const float targetHeightMeters,
+        const wi::scene::Scene& preparedScene) noexcept
+    {
+        const auto bounds = ComputeModelBounds(preparedScene);
+        if (!bounds.valid || !std::isfinite(targetHeightMeters) ||
+            targetHeightMeters <= 0.0f)
+            return 1.0f;
+        const float height = bounds.maximum.y - bounds.minimum.y;
+        return height > 0.0001f ? targetHeightMeters / height : 1.0f;
     }
 
     PlaceImportedModelCommand::PlaceImportedModelCommand(

@@ -175,6 +175,173 @@ namespace renegade::bridge
         }
     }
 
+    bool ApplyCreatorModelMaterialPreview(
+        wi::scene::Scene& scene,
+        const std::string& modelSourcePath,
+        const std::string& previewOutputDirectory,
+        const std::vector<CreatorMaterialSourceOverride>& overrides,
+        const std::vector<wi::ecs::Entity>& materialEntities,
+        std::string& error)
+    {
+        std::error_code ec;
+        const fs::path model = fs::weakly_canonical(
+            fs::u8path(modelSourcePath), ec);
+        if (ec || !fs::is_regular_file(model, ec) || ec)
+        {
+            error = "Material preview source is unavailable.";
+            return false;
+        }
+        const fs::path directory = model.parent_path();
+        const fs::path outputDirectory = fs::u8path(previewOutputDirectory);
+        const std::string modelStem = SanitizeStem(model.stem().generic_u8string());
+
+        const std::size_t materialCount = materialEntities.empty()
+            ? scene.materials.GetCount()
+            : materialEntities.size();
+        for (std::size_t index = 0; index < materialCount; ++index)
+        {
+            const auto entity = materialEntities.empty()
+                ? scene.materials.GetEntity(index)
+                : index < materialEntities.size()
+                    ? materialEntities[index]
+                    : wi::ecs::INVALID_ENTITY;
+            auto* material = scene.materials.GetComponent(entity);
+            if (material == nullptr)
+                continue;
+            const auto* name = scene.names.GetComponent(entity);
+            const std::string materialName = name != nullptr && !name->name.empty()
+                ? name->name : "Material_" + std::to_string(index + 1);
+            const auto stems = CandidateStems(materialName, modelStem);
+            const auto* creator = FindOverride(
+                overrides, static_cast<std::uint32_t>(index));
+            if (creator == nullptr)
+                continue;
+
+            auto choice = [creator](const CreatorTextureSourceChoice CreatorMaterialSourceOverride::* member)
+                -> const CreatorTextureSourceChoice*
+            {
+                return &(creator->*member);
+            };
+            fs::path baseColor = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::baseColor), directory,
+                material->textures[wi::scene::MaterialComponent::BASECOLORMAP].name,
+                stems, "_color", error);
+            if (!error.empty()) return false;
+            fs::path normal = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::normal), directory,
+                material->textures[wi::scene::MaterialComponent::NORMALMAP].name,
+                stems, "_normal", error);
+            if (!error.empty()) return false;
+            fs::path surface = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::surface), directory,
+                material->textures[wi::scene::MaterialComponent::SURFACEMAP].name,
+                stems, "_surface", error);
+            if (!error.empty()) return false;
+            fs::path emissive = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::emissive), directory,
+                material->textures[wi::scene::MaterialComponent::EMISSIVEMAP].name,
+                stems, "_emissive", error);
+            if (!error.empty()) return false;
+            fs::path occlusion = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::occlusion), directory,
+                material->textures[wi::scene::MaterialComponent::OCCLUSIONMAP].name,
+                stems, "_ao", error);
+            if (!error.empty()) return false;
+            fs::path roughness = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::roughness), directory,
+                {}, stems, "_roughness", error);
+            if (!error.empty()) return false;
+            fs::path metalness = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::metalness), directory,
+                {}, stems, "_metalness", error);
+            if (!error.empty()) return false;
+
+            if (!surface.empty() || !roughness.empty() ||
+                !metalness.empty() || !occlusion.empty())
+            {
+                CreatorSurfaceBuildRequest request;
+                request.surfacePath = surface.generic_u8string();
+                request.roughnessPath = roughness.generic_u8string();
+                request.metalnessPath = metalness.generic_u8string();
+                request.occlusionPath = occlusion.generic_u8string();
+                const auto key = [](const float value)
+                {
+                    return static_cast<int>(std::clamp(value, 0.0f, 100.0f) * 1000.0f + 0.5f);
+                };
+                request.outputPath = (outputDirectory / fs::u8path(
+                    modelStem + "_mat" + std::to_string(index) + "_r" +
+                    std::to_string(key(creator->roughnessValue)) + "_m" +
+                    std::to_string(key(creator->metalnessValue)) + "_f" +
+                    std::to_string(key(creator->reflectanceValue)) + "_ao" +
+                    std::to_string(key(creator->aoStrengthValue)) + "_surface.png"))
+                    .generic_u8string();
+                const auto toByte = [](const float value)
+                {
+                    return static_cast<std::uint8_t>(std::clamp(
+                        value, 0.0f, 1.0f) * 255.0f + 0.5f);
+                };
+                request.defaultRoughness = toByte(creator->roughnessValue);
+                request.defaultMetalness = toByte(creator->metalnessValue);
+                request.reflectance = toByte(creator->reflectanceValue);
+                request.aoStrength = creator->aoStrengthValue;
+                const auto built = BuildCreatorSurfaceMap(request);
+                if (!built.succeeded)
+                {
+                    error = built.error;
+                    return false;
+                }
+                surface = fs::u8path(built.outputPath);
+                // AO is now represented by the packed Surface R channel.
+                occlusion.clear();
+            }
+
+            const auto applyTexture = [material](
+                const CreatorTextureSourceChoice& selected,
+                const fs::path& path,
+                const int slot)
+            {
+                auto& texture = material->textures[slot];
+                if (path.empty())
+                {
+                    if (selected.overridden)
+                    {
+                        texture.name.clear();
+                        texture.resource = {};
+                        material->SetDirty();
+                    }
+                    return;
+                }
+                wi::Resource resource = wi::resourcemanager::Load(
+                    path.generic_u8string());
+                if (!resource.IsValid())
+                    return;
+                texture.name = path.generic_u8string();
+                texture.resource = std::move(resource);
+                material->SetDirty();
+            };
+            applyTexture(creator->baseColor, baseColor,
+                wi::scene::MaterialComponent::BASECOLORMAP);
+            applyTexture(creator->normal, normal,
+                wi::scene::MaterialComponent::NORMALMAP);
+            applyTexture(creator->surface, surface,
+                wi::scene::MaterialComponent::SURFACEMAP);
+            applyTexture(creator->emissive, emissive,
+                wi::scene::MaterialComponent::EMISSIVEMAP);
+            applyTexture(creator->occlusion, occlusion,
+                wi::scene::MaterialComponent::OCCLUSIONMAP);
+
+            material->SetRoughness(std::clamp(creator->roughnessValue, 0.0f, 1.0f));
+            material->SetMetalness(std::clamp(creator->metalnessValue, 0.0f, 1.0f));
+            material->SetReflectance(std::clamp(creator->reflectanceValue, 0.0f, 1.0f));
+            material->SetNormalMapStrength(std::clamp(
+                creator->normalStrengthValue, 0.0f, 4.0f));
+            material->SetEmissiveStrength(std::clamp(
+                creator->emissiveStrengthValue, 0.0f, 100.0f));
+        }
+        error.clear();
+        return true;
+    }
+
     CreatorModelMaterialPreparationResult PrepareCreatorModelMaterials(
         const CreatorModelMaterialPreparationRequest& request)
     {
@@ -257,8 +424,8 @@ namespace renegade::bridge
             if (!result.error.empty()) return result;
 
             bool surfaceWasGenerated = false;
-            if (surface.empty() &&
-                (!roughness.empty() || !metalness.empty() || !occlusion.empty()))
+            if (!surface.empty() || !roughness.empty() ||
+                !metalness.empty() || !occlusion.empty())
             {
                 const fs::path generatedDirectory =
                     fs::u8path(request.projectRoot) /
@@ -266,10 +433,24 @@ namespace renegade::bridge
                 const fs::path generatedSurfacePath = generatedDirectory /
                     fs::u8path(modelStem + "_mat" + std::to_string(index) + "_surface.png");
                 CreatorSurfaceBuildRequest surfaceRequest;
+                surfaceRequest.surfacePath = surface.generic_u8string();
                 surfaceRequest.roughnessPath = roughness.generic_u8string();
                 surfaceRequest.metalnessPath = metalness.generic_u8string();
                 surfaceRequest.occlusionPath = occlusion.generic_u8string();
                 surfaceRequest.outputPath = generatedSurfacePath.generic_u8string();
+                const auto toByte = [](const float value)
+                {
+                    return static_cast<std::uint8_t>(std::clamp(
+                        value, 0.0f, 1.0f) * 255.0f + 0.5f);
+                };
+                surfaceRequest.defaultRoughness = toByte(
+                    creator == nullptr ? 0.75f : creator->roughnessValue);
+                surfaceRequest.defaultMetalness = toByte(
+                    creator == nullptr ? 0.0f : creator->metalnessValue);
+                surfaceRequest.reflectance = toByte(
+                    creator == nullptr ? 0.04f : creator->reflectanceValue);
+                surfaceRequest.aoStrength = creator == nullptr
+                    ? 1.0f : creator->aoStrengthValue;
                 const auto built = BuildCreatorSurfaceMap(surfaceRequest);
                 if (!built.succeeded)
                 {
@@ -284,6 +465,24 @@ namespace renegade::bridge
 
             CreatorMaterialImportRecipe recipe;
             recipe.materialIndex = materialIndex;
+            recipe.hasScalarSettings = true;
+            recipe.roughness = creator == nullptr
+                ? std::clamp(material.roughness, 0.0f, 1.0f)
+                : std::clamp(creator->roughnessValue, 0.0f, 1.0f);
+            recipe.metalness = creator == nullptr
+                ? std::clamp(material.metalness, 0.0f, 1.0f)
+                : std::clamp(creator->metalnessValue, 0.0f, 1.0f);
+            recipe.reflectance = creator == nullptr
+                ? std::clamp(material.reflectance, 0.0f, 1.0f)
+                : std::clamp(creator->reflectanceValue, 0.0f, 1.0f);
+            recipe.normalStrength = creator == nullptr
+                ? std::clamp(material.normalMapStrength, 0.0f, 4.0f)
+                : std::clamp(creator->normalStrengthValue, 0.0f, 4.0f);
+            recipe.aoStrength = creator == nullptr
+                ? 1.0f : std::clamp(creator->aoStrengthValue, 0.0f, 1.0f);
+            recipe.emissiveStrength = creator == nullptr
+                ? std::clamp(material.GetEmissiveStrength(), 0.0f, 100.0f)
+                : std::clamp(creator->emissiveStrengthValue, 0.0f, 100.0f);
             recipe.baseColorAssetId = GovernTexture(
                 baseColor, request.projectRoot, request.projectId, governedByPath,
                 result.governedTextures, result.error);
@@ -312,12 +511,7 @@ namespace renegade::bridge
                 if (!result.error.empty()) return result;
             }
 
-            if (!recipe.baseColorAssetId.empty() || !recipe.normalAssetId.empty() ||
-                !recipe.surfaceAssetId.empty() || !recipe.emissiveAssetId.empty() ||
-                !recipe.occlusionAssetId.empty())
-            {
-                result.recipe.materials.push_back(std::move(recipe));
-            }
+            result.recipe.materials.push_back(std::move(recipe));
         }
 
         result.succeeded = true;

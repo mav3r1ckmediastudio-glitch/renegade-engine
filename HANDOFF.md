@@ -1,6 +1,27 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-11
+**Date:** 2026-08-13
+
+## Active creator recovery — PR #57
+
+PR #57 (`agent/creator-workflow-repair`) remains Draft. The last independently
+accepted pre-recovery head was `e5d4fed6ae8852562dbb0bfe75e60283967ef50f`,
+with Studio and baseline Debug/Release green and 65/65 CTests passing. Owner
+Release testing then exposed acceptance-scope usability/material failures, so
+that head must not be merged.
+
+The recovery work keeps the importer as the active programme. Do not begin a
+new backend milestone until exact-head CI/audit and owner manual acceptance pass.
+The recovery unifies preview/commit material application, corrects the generated
+Surface reflectance default from full-white to neutral dielectric, persists PBR
+scalars, adds editable asset name/destination, importer-owned chrome,
+slider-plus-number transform/material/lighting controls, linked scale,
+world-bounds dimension presets and a dynamic preview-only 1.82 m male reference.
+
+GitHub CI remains authoritative because the owner CPU is confirmed unstable.
+Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and
+character import; preview/final parity; save/reopen; and packaged textured
+Runtime output. PR #57 must remain Draft until all of that passes.
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 

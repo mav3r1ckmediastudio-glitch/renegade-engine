@@ -106,6 +106,13 @@ namespace
         material.surfaceAssetId = TextureC;
         material.emissiveAssetId = TextureD;
         material.occlusionAssetId = TextureE;
+        material.hasScalarSettings = true;
+        material.roughness = 0.82f;
+        material.metalness = 0.07f;
+        material.reflectance = 0.04f;
+        material.normalStrength = 1.25f;
+        material.aoStrength = 0.65f;
+        material.emissiveStrength = 2.5f;
         recipe.materials.push_back(material);
 
         CreatorAnimationImportRecipe walk;
@@ -140,7 +147,14 @@ namespace
                 decoded.materials[0].normalAssetId == TextureB &&
                 decoded.materials[0].surfaceAssetId == TextureC &&
                 decoded.materials[0].emissiveAssetId == TextureD &&
-                decoded.materials[0].occlusionAssetId == TextureE,
+                decoded.materials[0].occlusionAssetId == TextureE &&
+                decoded.materials[0].hasScalarSettings &&
+                decoded.materials[0].roughness == 0.82f &&
+                decoded.materials[0].metalness == 0.07f &&
+                decoded.materials[0].reflectance == 0.04f &&
+                decoded.materials[0].normalStrength == 1.25f &&
+                decoded.materials[0].aoStrength == 0.65f &&
+                decoded.materials[0].emissiveStrength == 2.5f,
                 "creator material stable IDs did not round-trip") ||
             !Require(decoded.animations[0].name == "Walk" &&
                 decoded.animations[0].start == 2.0f &&
@@ -197,8 +211,15 @@ namespace
         scene.materials.Create(trimEntity);
         scene.names.Create(trimEntity).name = "Trim";
 
+        const auto plainEntity = wi::ecs::CreateEntity();
+        auto& plain = scene.materials.Create(plainEntity);
+        plain.roughness = 0.05f;
+        plain.metalness = 1.0f;
+        plain.reflectance = 1.0f;
+        scene.names.Create(plainEntity).name = "Plain";
+
         const auto detected = DetectCreatorModelMaterials(scene, source.generic_u8string());
-        if (!Require(detected.succeeded && detected.materials.size() == 2,
+        if (!Require(detected.succeeded && detected.materials.size() == 3,
                 "multi-material suffix detection failed: " + detected.error))
             return false;
 
@@ -218,7 +239,11 @@ namespace
                 "_emissive suffix was not detected") &&
             Require(trimDetected.surface.overridden &&
                 fs::u8path(trimDetected.surface.path).filename() == "Trim_surface.png",
-                "per-material supplied Surface map was not detected independently");
+                "per-material supplied Surface map was not detected independently") &&
+            Require(detected.materials[2].roughnessValue == 0.75f &&
+                detected.materials[2].metalnessValue == 0.0f &&
+                detected.materials[2].reflectanceValue == 0.04f,
+                "no-Surface material did not receive neutral dielectric fallback values");
     }
 
     bool TestCreatorSurfaceBuilder(const fs::path& root)
@@ -275,6 +300,21 @@ namespace
             stbi_image_free(pixels);
         if (!Require(defaultsCorrect,
                 "Surface Builder missing-channel defaults were not deterministic"))
+            return false;
+
+        CreatorSurfaceBuildRequest neutral;
+        neutral.roughnessPath = roughness.generic_u8string();
+        neutral.outputPath = (root / "surface-neutral.png").generic_u8string();
+        const auto neutralBuilt = BuildCreatorSurfaceMap(neutral);
+        if (!Require(neutralBuilt.succeeded,
+                "Surface Builder rejected neutral dielectric defaults: " + neutralBuilt.error))
+            return false;
+        pixels = stbi_load(neutral.outputPath.c_str(), &width, &height, &channels, 4);
+        const bool neutralReflectance = pixels != nullptr && pixels[3] == 10;
+        if (pixels != nullptr)
+            stbi_image_free(pixels);
+        if (!Require(neutralReflectance,
+                "Surface Builder defaulted reflectance to a glossy full-white channel"))
             return false;
 
         const fs::path mismatched = root / "mismatch.pgm";

@@ -156,6 +156,20 @@ namespace renegade::bridge
                 DetectionFindSuffix(directory, stems, "_roughness"));
             detected.metalness = DetectionChoice(
                 DetectionFindSuffix(directory, stems, "_metalness"));
+            const bool hasAuthoredSurface = detected.surface.overridden ||
+                detected.roughness.overridden || detected.metalness.overridden ||
+                detected.occlusion.overridden;
+            detected.roughnessValue = std::clamp(
+                hasAuthoredSurface ? material.roughness : 0.75f, 0.0f, 1.0f);
+            detected.metalnessValue = std::clamp(
+                hasAuthoredSurface ? material.metalness : 0.0f, 0.0f, 1.0f);
+            detected.reflectanceValue = std::clamp(
+                hasAuthoredSurface ? material.reflectance : 0.04f, 0.0f, 1.0f);
+            detected.normalStrengthValue = std::clamp(
+                material.normalMapStrength, 0.0f, 4.0f);
+            detected.aoStrengthValue = 1.0f;
+            detected.emissiveStrengthValue = std::clamp(
+                material.GetEmissiveStrength(), 0.0f, 100.0f);
             result.materials.push_back(std::move(detected));
         }
 

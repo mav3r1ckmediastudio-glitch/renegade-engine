@@ -277,6 +277,7 @@ namespace renegade::studio
             const std::string& sourceFileName);
         void ApplyImportScaleMode(bridge::ModelScaleMode mode);
         void DismissImportScalePanel();
+        void RefreshCreatorImportWorkspaceSection();
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,

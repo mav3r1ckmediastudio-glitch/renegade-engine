@@ -16,6 +16,13 @@ namespace renegade::bridge
         StableId surfaceAssetId;
         StableId emissiveAssetId;
         StableId occlusionAssetId;
+        bool hasScalarSettings = false;
+        float roughness = 0.75f;
+        float metalness = 0.0f;
+        float reflectance = 0.04f;
+        float normalStrength = 1.0f;
+        float aoStrength = 1.0f;
+        float emissiveStrength = 0.0f;
     };
 
     struct CreatorAnimationImportRecipe

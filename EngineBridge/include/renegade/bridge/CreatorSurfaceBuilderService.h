@@ -12,12 +12,19 @@ namespace renegade::bridge
         std::string roughnessPath;
         std::string metalnessPath;
         std::string occlusionPath;
+        // Optional existing Wicked packed Surface map. Separate component
+        // maps override its R/G/B channels; otherwise those channels are
+        // preserved while creator scalar defaults/strengths are applied.
+        std::string surfacePath;
         std::string outputPath;
 
         std::uint8_t defaultRoughness = 128;
         std::uint8_t defaultMetalness = 0;
         std::uint8_t defaultOcclusion = 255;
-        std::uint8_t reflectance = 255;
+        // Wicked's ordinary dielectric reflectance is approximately 0.04,
+        // not full white. 10/255 keeps generated fallback surfaces neutral.
+        std::uint8_t reflectance = 10;
+        float aoStrength = 1.0f;
     };
 
     struct CreatorSurfaceBuildResult
