@@ -29,6 +29,16 @@ namespace renegade::bridge
         CreatorTextureSourceChoice emissive;
     };
 
+    struct CreatorModelMaterialDetectionResult
+    {
+        bool succeeded = false;
+        // Resolved creator-visible source choices. A detected path is emitted
+        // as an explicit choice so Studio can display/preview exactly what the
+        // final commit will use without creating any governed project assets.
+        std::vector<CreatorMaterialSourceOverride> materials;
+        std::string error;
+    };
+
     struct CreatorModelMaterialPreparationRequest
     {
         const wi::scene::Scene* preparedScene = nullptr;
@@ -46,6 +56,14 @@ namespace renegade::bridge
         std::size_t generatedSurfaceMaps = 0;
         std::string error;
     };
+
+    // Read-only discovery for the importer preview. Existing model bindings are
+    // preferred, then Renegade/MAX-style filename suffixes are searched:
+    // _color, _normal, _surface, _roughness, _metalness, _ao, _emissive.
+    // This never writes SourceAssets, Content, the registry, or generated maps.
+    [[nodiscard]] CreatorModelMaterialDetectionResult DetectCreatorModelMaterials(
+        const wi::scene::Scene& preparedScene,
+        const std::string& modelSourcePath);
 
     // Converts a prepared Wicked model's creator-facing material references
     // into governed LP08 texture assets and a persistent LP07 model recipe.
