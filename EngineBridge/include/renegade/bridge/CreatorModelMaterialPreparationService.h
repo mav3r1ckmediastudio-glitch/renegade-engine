@@ -54,7 +54,7 @@ namespace renegade::bridge
     // removes that slot. A supplied Surface map is preferred; otherwise
     // roughness/metalness/AO are packed into Wicked's native surface layout.
     // This function mutates project asset state and therefore belongs only to
-    // the final commit phase, never the temporary preview phase.
+    // the final creator acceptance/commit phase, never the temporary preview.
     [[nodiscard]] CreatorModelMaterialPreparationResult PrepareCreatorModelMaterials(
         const CreatorModelMaterialPreparationRequest& request);
 }
