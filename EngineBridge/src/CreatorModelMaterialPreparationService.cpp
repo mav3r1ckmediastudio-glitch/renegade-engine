@@ -8,8 +8,7 @@
 #include <array>
 #include <filesystem>
 #include <map>
-#include <set>
-#include <sstream>
+#include <vector>
 
 namespace renegade::bridge
 {
@@ -50,14 +49,14 @@ namespace renegade::bridge
                 ClassifyResourceSourceFormat(format) == ResourceClass::Texture;
         }
 
-        fs::path ResolveDeclaredTexture(
+        fs::path ResolveTexturePath(
             const fs::path& modelDirectory,
-            const std::string& declared)
+            const std::string& value)
         {
-            if (declared.empty())
+            if (value.empty())
                 return {};
             std::error_code ec;
-            fs::path path = fs::u8path(declared);
+            fs::path path = fs::u8path(value);
             if (!path.is_absolute())
                 path = modelDirectory / path;
             path = fs::weakly_canonical(path, ec);
@@ -71,8 +70,9 @@ namespace renegade::bridge
             const std::vector<std::string>& stems,
             const std::string& suffix)
         {
-            static const std::array<const char*, 8> extensions = {
-                ".png", ".jpg", ".jpeg", ".tga", ".bmp", ".dds", ".hdr", ".PNG"
+            static const std::array<const char*, 14> extensions = {
+                ".png", ".PNG", ".jpg", ".JPG", ".jpeg", ".JPEG", ".tga",
+                ".TGA", ".bmp", ".BMP", ".dds", ".DDS", ".hdr", ".HDR"
             };
             std::error_code ec;
             for (const auto& stem : stems)
@@ -81,9 +81,13 @@ namespace renegade::bridge
                     continue;
                 for (const char* extension : extensions)
                 {
-                    fs::path candidate = directory / fs::u8path(stem + suffix + extension);
-                    if (fs::is_regular_file(candidate, ec) && !ec && SupportedTextureFile(candidate))
+                    const fs::path candidate =
+                        directory / fs::u8path(stem + suffix + extension);
+                    if (fs::is_regular_file(candidate, ec) && !ec &&
+                        SupportedTextureFile(candidate))
+                    {
                         return fs::weakly_canonical(candidate, ec);
+                    }
                     ec.clear();
                 }
             }
@@ -111,7 +115,7 @@ namespace renegade::bridge
             if (!imported.succeeded || !IsValidStableId(imported.assetId))
             {
                 error = imported.error.empty()
-                    ? "Could not govern detected material texture: " + source.generic_u8string()
+                    ? "Could not govern material texture: " + source.generic_u8string()
                     : imported.error;
                 return {};
             }
@@ -132,23 +136,58 @@ namespace renegade::bridge
                 stems.push_back(modelStem);
             return stems;
         }
+
+        const CreatorMaterialSourceOverride* FindOverride(
+            const std::vector<CreatorMaterialSourceOverride>& overrides,
+            const std::uint32_t materialIndex)
+        {
+            const auto found = std::find_if(overrides.begin(), overrides.end(),
+                [materialIndex](const CreatorMaterialSourceOverride& value)
+                { return value.materialIndex == materialIndex; });
+            return found == overrides.end() ? nullptr : &*found;
+        }
+
+        fs::path ChooseTexture(
+            const CreatorTextureSourceChoice* creatorChoice,
+            const fs::path& modelDirectory,
+            const std::string& declared,
+            const std::vector<std::string>& stems,
+            const std::string& suffix,
+            std::string& error)
+        {
+            if (creatorChoice != nullptr && creatorChoice->overridden)
+            {
+                if (creatorChoice->path.empty())
+                    return {};
+                fs::path chosen = ResolveTexturePath(modelDirectory, creatorChoice->path);
+                if (chosen.empty())
+                {
+                    error = "Creator-selected texture is unavailable or unsupported: " +
+                        creatorChoice->path;
+                }
+                return chosen;
+            }
+            fs::path path = ResolveTexturePath(modelDirectory, declared);
+            if (path.empty())
+                path = FindSuffixTexture(modelDirectory, stems, suffix);
+            return path;
+        }
     }
 
     CreatorModelMaterialPreparationResult PrepareCreatorModelMaterials(
-        const wi::scene::Scene& preparedScene,
-        const std::string& projectRoot,
-        const StableId& projectId,
-        const std::string& modelSourcePath)
+        const CreatorModelMaterialPreparationRequest& request)
     {
         CreatorModelMaterialPreparationResult result;
-        if (projectRoot.empty() || !IsValidStableId(projectId) || modelSourcePath.empty())
+        if (request.preparedScene == nullptr || request.projectRoot.empty() ||
+            !IsValidStableId(request.projectId) || request.modelSourcePath.empty())
         {
-            result.error = "Model material preparation requires an active project and model source.";
+            result.error = "Model material preparation requires a prepared scene, active project and model source.";
             return result;
         }
 
         std::error_code ec;
-        const fs::path model = fs::weakly_canonical(fs::u8path(modelSourcePath), ec);
+        const fs::path model = fs::weakly_canonical(
+            fs::u8path(request.modelSourcePath), ec);
         if (ec || !fs::is_regular_file(model, ec) || ec)
         {
             result.error = "Model material preparation source is unavailable.";
@@ -157,52 +196,81 @@ namespace renegade::bridge
         const fs::path directory = model.parent_path();
         const std::string modelStem = SanitizeStem(model.stem().generic_u8string());
         std::map<std::string, StableId> governedByPath;
+        const wi::scene::Scene& preparedScene = *request.preparedScene;
 
         for (std::size_t index = 0; index < preparedScene.materials.GetCount(); ++index)
         {
+            if (index > (std::numeric_limits<std::uint32_t>::max)())
+            {
+                result.error = "Imported model has more materials than the creator recipe supports.";
+                return result;
+            }
+            const std::uint32_t materialIndex = static_cast<std::uint32_t>(index);
             const auto materialEntity = preparedScene.materials.GetEntity(index);
             const auto& material = preparedScene.materials[index];
             const auto* name = preparedScene.names.GetComponent(materialEntity);
             const std::string materialName = name != nullptr && !name->name.empty()
                 ? name->name : "Material_" + std::to_string(index + 1);
             const auto stems = CandidateStems(materialName, modelStem);
+            const CreatorMaterialSourceOverride* creator =
+                FindOverride(request.overrides, materialIndex);
 
-            CreatorMaterialImportRecipe recipe;
-            recipe.materialIndex = static_cast<std::uint32_t>(index);
-
-            auto choose = [&](const int slot, const std::string& suffix)
+            auto choice = [creator](const CreatorTextureSourceChoice CreatorMaterialSourceOverride::* member)
+                -> const CreatorTextureSourceChoice*
             {
-                fs::path path = ResolveDeclaredTexture(directory, material.textures[slot].name);
-                if (path.empty())
-                    path = FindSuffixTexture(directory, stems, suffix);
-                return path;
+                return creator == nullptr ? nullptr : &(creator->*member);
             };
 
-            const fs::path baseColor = choose(
-                wi::scene::MaterialComponent::BASECOLORMAP, "_color");
-            const fs::path normal = choose(
-                wi::scene::MaterialComponent::NORMALMAP, "_normal");
-            fs::path surface = choose(
-                wi::scene::MaterialComponent::SURFACEMAP, "_surface");
-            const fs::path emissive = choose(
-                wi::scene::MaterialComponent::EMISSIVEMAP, "_emissive");
-            fs::path occlusion = choose(
-                wi::scene::MaterialComponent::OCCLUSIONMAP, "_ao");
+            fs::path baseColor = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::baseColor), directory,
+                material.textures[wi::scene::MaterialComponent::BASECOLORMAP].name,
+                stems, "_color", result.error);
+            if (!result.error.empty()) return result;
+            fs::path normal = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::normal), directory,
+                material.textures[wi::scene::MaterialComponent::NORMALMAP].name,
+                stems, "_normal", result.error);
+            if (!result.error.empty()) return result;
+            fs::path surface = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::surface), directory,
+                material.textures[wi::scene::MaterialComponent::SURFACEMAP].name,
+                stems, "_surface", result.error);
+            if (!result.error.empty()) return result;
+            fs::path emissive = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::emissive), directory,
+                material.textures[wi::scene::MaterialComponent::EMISSIVEMAP].name,
+                stems, "_emissive", result.error);
+            if (!result.error.empty()) return result;
+            fs::path occlusion = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::occlusion), directory,
+                material.textures[wi::scene::MaterialComponent::OCCLUSIONMAP].name,
+                stems, "_ao", result.error);
+            if (!result.error.empty()) return result;
 
-            const fs::path roughness = FindSuffixTexture(directory, stems, "_roughness");
-            const fs::path metalness = FindSuffixTexture(directory, stems, "_metalness");
-            if (surface.empty() && (!roughness.empty() || !metalness.empty() || !occlusion.empty()))
+            fs::path roughness = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::roughness), directory,
+                {}, stems, "_roughness", result.error);
+            if (!result.error.empty()) return result;
+            fs::path metalness = ChooseTexture(
+                choice(&CreatorMaterialSourceOverride::metalness), directory,
+                {}, stems, "_metalness", result.error);
+            if (!result.error.empty()) return result;
+
+            bool generatedSurface = false;
+            if (surface.empty() &&
+                (!roughness.empty() || !metalness.empty() || !occlusion.empty()))
             {
                 const fs::path generatedDirectory =
-                    fs::u8path(projectRoot) / "Intermediate" / "GeneratedMaterials";
+                    fs::u8path(request.projectRoot) /
+                    "Intermediate" / "GeneratedMaterials";
                 const fs::path generatedSurface = generatedDirectory /
                     fs::u8path(modelStem + "_mat" + std::to_string(index) + "_surface.png");
-                CreatorSurfaceBuildRequest request;
-                request.roughnessPath = roughness.generic_u8string();
-                request.metalnessPath = metalness.generic_u8string();
-                request.occlusionPath = occlusion.generic_u8string();
-                request.outputPath = generatedSurface.generic_u8string();
-                const auto built = BuildCreatorSurfaceMap(request);
+                CreatorSurfaceBuildRequest surfaceRequest;
+                surfaceRequest.roughnessPath = roughness.generic_u8string();
+                surfaceRequest.metalnessPath = metalness.generic_u8string();
+                surfaceRequest.occlusionPath = occlusion.generic_u8string();
+                surfaceRequest.outputPath = generatedSurface.generic_u8string();
+                const auto built = BuildCreatorSurfaceMap(surfaceRequest);
                 if (!built.succeeded)
                 {
                     result.error = "Could not build Wicked surface map for material '" +
@@ -210,33 +278,36 @@ namespace renegade::bridge
                     return result;
                 }
                 surface = generatedSurface;
+                generatedSurface = true;
                 ++result.generatedSurfaceMaps;
             }
 
+            CreatorMaterialImportRecipe recipe;
+            recipe.materialIndex = materialIndex;
             recipe.baseColorAssetId = GovernTexture(
-                baseColor, projectRoot, projectId, governedByPath,
+                baseColor, request.projectRoot, request.projectId, governedByPath,
                 result.governedTextures, result.error);
             if (!result.error.empty()) return result;
             recipe.normalAssetId = GovernTexture(
-                normal, projectRoot, projectId, governedByPath,
+                normal, request.projectRoot, request.projectId, governedByPath,
                 result.governedTextures, result.error);
             if (!result.error.empty()) return result;
             recipe.surfaceAssetId = GovernTexture(
-                surface, projectRoot, projectId, governedByPath,
+                surface, request.projectRoot, request.projectId, governedByPath,
                 result.governedTextures, result.error);
             if (!result.error.empty()) return result;
             recipe.emissiveAssetId = GovernTexture(
-                emissive, projectRoot, projectId, governedByPath,
+                emissive, request.projectRoot, request.projectId, governedByPath,
                 result.governedTextures, result.error);
             if (!result.error.empty()) return result;
 
-            // When a packed surface was generated from AO, AO is already in R.
-            // Keep a separate Wicked occlusion binding only when the source asset
-            // explicitly declared one and no generated surface consumed it.
-            if (surface.empty() || result.generatedSurfaceMaps == 0)
+            // AO is already packed into R when Renegade generated the Surface.
+            // A separately supplied Surface can still coexist with an explicit
+            // Wicked occlusion map, matching the source asset's authored intent.
+            if (!generatedSurface)
             {
                 recipe.occlusionAssetId = GovernTexture(
-                    occlusion, projectRoot, projectId, governedByPath,
+                    occlusion, request.projectRoot, request.projectId, governedByPath,
                     result.governedTextures, result.error);
                 if (!result.error.empty()) return result;
             }
