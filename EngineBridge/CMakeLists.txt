@@ -14,6 +14,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/CreatorAssetActionPolicy.h
     include/renegade/bridge/CreatorAssetWorkflowService.h
     include/renegade/bridge/CreatorModelImportRecipe.h
+    include/renegade/bridge/CreatorModelMaterialPreparationService.h
     include/renegade/bridge/CreatorSurfaceBuilderService.h
     include/renegade/bridge/CreatorTextureWorkflowService.h
     include/renegade/bridge/DependencyService.h
@@ -55,6 +56,7 @@ add_library(RenegadeEngineBridge STATIC
     src/CommandService.cpp
     src/CreatorAssetWorkflowService.cpp
     src/CreatorModelImportRecipe.cpp
+    src/CreatorModelMaterialPreparationService.cpp
     src/CreatorSurfaceBuilderService.cpp
     src/CreatorTextureWorkflowService.cpp
     src/DependencyService.cpp
