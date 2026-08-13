@@ -2,6 +2,8 @@
 
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "renegade/bridge/CreatorModelMaterialPreparationService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 
 #include <algorithm>
@@ -288,6 +290,8 @@ namespace
         renegade::bridge::ImportedModelEvidence evidence;
         std::vector<wi::ecs::Entity> materialEntities;
         std::vector<wi::ecs::Entity> animationEntities;
+        std::vector<renegade::bridge::CreatorMaterialSourceOverride> materialOverrides;
+        std::vector<renegade::bridge::CreatorAnimationImportRecipe> animationRecipe;
         std::size_t selectedMaterial = 0;
         std::size_t selectedAnimation = 0;
         XMFLOAT3 positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
@@ -299,7 +303,19 @@ namespace
     renegade::studio::RenegadeComboBox creatorImportAnimationCombo;
     wi::gui::Label creatorImportMaterialLabel;
     wi::gui::Label creatorImportMaterialReadout;
+    wi::gui::Label creatorImportTextureHelp;
+    renegade::studio::RenegadeComboBox creatorImportTextureSlotCombo;
+    renegade::studio::RenegadeTextInputField creatorImportTexturePath;
+    renegade::studio::RenegadeButton creatorImportTextureBrowse;
+    renegade::studio::RenegadeButton creatorImportTextureClear;
+    std::size_t creatorImportTextureSlot = 0;
     wi::gui::Label creatorImportAnimationLabel;
+    renegade::studio::RenegadeTextInputField creatorImportAnimationName;
+    renegade::studio::RenegadeTextInputField creatorImportAnimationStart;
+    renegade::studio::RenegadeTextInputField creatorImportAnimationEnd;
+    renegade::studio::RenegadeComboBox creatorImportAnimationEnabled;
+    renegade::studio::RenegadeButton creatorImportAnimationAdd;
+    renegade::studio::RenegadeButton creatorImportAnimationDelete;
     wi::gui::Label creatorImportAnimationReadout;
     wi::gui::Label creatorImportTransformLabel;
     renegade::studio::RenegadeTextInputField creatorImportPositionX;
@@ -342,6 +358,191 @@ namespace
         session->Commands().Execute(
             std::make_unique<renegade::bridge::SetTransformCommand>(
                 scene, creatorModelImporter.previewRoot, next));
+    }
+
+    renegade::bridge::CreatorMaterialSourceOverride& EnsureCreatorMaterialOverride()
+    {
+        const std::uint32_t materialIndex = static_cast<std::uint32_t>(
+            creatorModelImporter.selectedMaterial);
+        auto found = std::find_if(
+            creatorModelImporter.materialOverrides.begin(),
+            creatorModelImporter.materialOverrides.end(),
+            [materialIndex](const renegade::bridge::CreatorMaterialSourceOverride& value)
+            { return value.materialIndex == materialIndex; });
+        if (found == creatorModelImporter.materialOverrides.end())
+        {
+            renegade::bridge::CreatorMaterialSourceOverride created;
+            created.materialIndex = materialIndex;
+            creatorModelImporter.materialOverrides.push_back(std::move(created));
+            return creatorModelImporter.materialOverrides.back();
+        }
+        return *found;
+    }
+
+    renegade::bridge::CreatorTextureSourceChoice& SelectedCreatorTextureChoice()
+    {
+        auto& material = EnsureCreatorMaterialOverride();
+        switch (creatorImportTextureSlot)
+        {
+        case 0: return material.baseColor;
+        case 1: return material.normal;
+        case 2: return material.surface;
+        case 3: return material.roughness;
+        case 4: return material.metalness;
+        case 5: return material.occlusion;
+        default: return material.emissive;
+        }
+    }
+
+    void RefreshCreatorImportTextureEditor()
+    {
+        if (creatorModelImporter.materialEntities.empty())
+        {
+            creatorImportTexturePath.SetValue("");
+            return;
+        }
+        const std::uint32_t materialIndex = static_cast<std::uint32_t>(
+            creatorModelImporter.selectedMaterial);
+        const auto found = std::find_if(
+            creatorModelImporter.materialOverrides.begin(),
+            creatorModelImporter.materialOverrides.end(),
+            [materialIndex](const renegade::bridge::CreatorMaterialSourceOverride& value)
+            { return value.materialIndex == materialIndex; });
+        if (found == creatorModelImporter.materialOverrides.end())
+        {
+            creatorImportTexturePath.SetValue("<AUTO // imported binding or filename suffix>");
+            return;
+        }
+        const renegade::bridge::CreatorTextureSourceChoice* choice = nullptr;
+        switch (creatorImportTextureSlot)
+        {
+        case 0: choice = &found->baseColor; break;
+        case 1: choice = &found->normal; break;
+        case 2: choice = &found->surface; break;
+        case 3: choice = &found->roughness; break;
+        case 4: choice = &found->metalness; break;
+        case 5: choice = &found->occlusion; break;
+        default: choice = &found->emissive; break;
+        }
+        if (!choice->overridden)
+            creatorImportTexturePath.SetValue("<AUTO // imported binding or filename suffix>");
+        else if (choice->path.empty())
+            creatorImportTexturePath.SetValue("<REMOVED>");
+        else
+            creatorImportTexturePath.SetValue(choice->path);
+    }
+
+    void ApplyCreatorPreviewTextureChoice(const std::string& path)
+    {
+        auto* session = renegade::bridge::StudioSession::Current();
+        if (session == nullptr || creatorModelImporter.materialEntities.empty())
+            return;
+        auto& scene = session->Scenes().GetScene();
+        const auto entity = creatorModelImporter.materialEntities[
+            creatorModelImporter.selectedMaterial];
+        auto* material = scene.materials.GetComponent(entity);
+        if (material == nullptr)
+            return;
+        int wickedSlot = -1;
+        switch (creatorImportTextureSlot)
+        {
+        case 0: wickedSlot = wi::scene::MaterialComponent::BASECOLORMAP; break;
+        case 1: wickedSlot = wi::scene::MaterialComponent::NORMALMAP; break;
+        case 2: wickedSlot = wi::scene::MaterialComponent::SURFACEMAP; break;
+        case 5: wickedSlot = wi::scene::MaterialComponent::OCCLUSIONMAP; break;
+        case 6: wickedSlot = wi::scene::MaterialComponent::EMISSIVEMAP; break;
+        default: break;
+        }
+        if (wickedSlot < 0)
+            return; // roughness/metalness are packed into Surface at commit.
+        auto& texture = material->textures[wickedSlot];
+        if (path.empty())
+        {
+            texture.name.clear();
+            texture.resource = {};
+            material->SetDirty();
+            return;
+        }
+        wi::Resource resource = wi::resourcemanager::Load(path);
+        if (!resource.IsValid())
+            return;
+        texture.name = path;
+        texture.resource = std::move(resource);
+        material->SetDirty();
+    }
+
+    void OpenCreatorImportTextureBrowser()
+    {
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Texture source for the selected imported material slot";
+        for (const char* extension : {"png", "jpg", "jpeg", "tga", "bmp", "dds", "hdr"})
+            params.extensions.push_back(extension);
+        wi::helper::FileDialog(params, [](const std::string& path)
+        {
+            wi::eventhandler::Subscribe_Once(
+                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [path](std::uint64_t)
+                {
+                    if (path.empty() || !creatorModelImporter.active)
+                        return;
+                    auto& choice = SelectedCreatorTextureChoice();
+                    choice.overridden = true;
+                    choice.path = path;
+                    ApplyCreatorPreviewTextureChoice(path);
+                    RefreshCreatorImportTextureEditor();
+                    RefreshCreatorImportMaterialReadout();
+                });
+        });
+    }
+
+    void RefreshCreatorImportAnimationEditor()
+    {
+        if (creatorModelImporter.animationRecipe.empty())
+        {
+            creatorImportAnimationName.SetValue("");
+            creatorImportAnimationStart.SetValue(0.0f);
+            creatorImportAnimationEnd.SetValue(0.0f);
+            creatorImportAnimationEnabled.SetSelectedWithoutCallback(-1);
+            creatorImportAnimationReadout.SetText("No animation actions detected.");
+            return;
+        }
+        creatorModelImporter.selectedAnimation = std::min(
+            creatorModelImporter.selectedAnimation,
+            creatorModelImporter.animationRecipe.size() - 1);
+        const auto& clip = creatorModelImporter.animationRecipe[
+            creatorModelImporter.selectedAnimation];
+        creatorImportAnimationName.SetValue(clip.name);
+        creatorImportAnimationStart.SetValue(clip.start);
+        creatorImportAnimationEnd.SetValue(clip.end);
+        creatorImportAnimationEnabled.SetSelectedWithoutCallback(clip.enabled ? 0 : 1);
+        std::ostringstream out;
+        out.precision(3);
+        out << std::fixed << "Source action " << clip.sourceAnimationIndex + 1
+            << " // " << clip.start << " - " << clip.end
+            << " // " << (clip.enabled ? "INCLUDED" : "EXCLUDED");
+        creatorImportAnimationReadout.SetText(out.str());
+    }
+
+    void RebuildCreatorImportAnimationCombo()
+    {
+        creatorImportAnimationCombo.ClearItems();
+        for (std::size_t index = 0; index < creatorModelImporter.animationRecipe.size(); ++index)
+        {
+            const auto& clip = creatorModelImporter.animationRecipe[index];
+            creatorImportAnimationCombo.AddItem(
+                clip.name.empty() ? "Animation " + std::to_string(index + 1) : clip.name,
+                static_cast<std::uint64_t>(index));
+        }
+        if (!creatorModelImporter.animationRecipe.empty())
+        {
+            creatorModelImporter.selectedAnimation = std::min(
+                creatorModelImporter.selectedAnimation,
+                creatorModelImporter.animationRecipe.size() - 1);
+            creatorImportAnimationCombo.SetSelectedWithoutCallback(
+                static_cast<int>(creatorModelImporter.selectedAnimation));
+        }
+        RefreshCreatorImportAnimationEditor();
     }
 
     void RefreshCreatorImportMaterialReadout()
@@ -2525,17 +2726,118 @@ namespace renegade::studio
             creatorModelImporter.selectedMaterial =
                 static_cast<std::size_t>(args.userdata);
             RefreshCreatorImportMaterialReadout();
+            RefreshCreatorImportTextureEditor();
         });
         creatorImportMaterialReadout.Create("");
         creatorImportMaterialReadout.SetFitTextEnabled(true);
+        creatorImportTextureHelp.Create("TEXTURE SLOT // AUTO-DETECT, REPLACE OR REMOVE");
+        creatorImportTextureSlotCombo.Create("Texture Slot");
+        for (const char* name : {"BASE COLOR", "NORMAL", "SURFACE (PACKED)", "ROUGHNESS", "METALNESS", "AO", "EMISSIVE"})
+            creatorImportTextureSlotCombo.AddItem(name);
+        creatorImportTextureSlotCombo.SetSelectedWithoutCallback(0);
+        creatorImportTextureSlotCombo.OnSelect([](const wi::gui::EventArgs& args)
+        {
+            creatorImportTextureSlot = static_cast<std::size_t>(std::max(0, args.iValue));
+            RefreshCreatorImportTextureEditor();
+        });
+        creatorImportTexturePath.Create("Texture Source Path");
+        creatorImportTexturePath.SetPlaceholder("AUTO-DETECT");
+        creatorImportTexturePath.OnInputAccepted([](const wi::gui::EventArgs& args)
+        {
+            if (!creatorModelImporter.active) return;
+            auto& choice = SelectedCreatorTextureChoice();
+            choice.overridden = true;
+            choice.path = args.sValue;
+            ApplyCreatorPreviewTextureChoice(choice.path);
+            RefreshCreatorImportTextureEditor();
+            RefreshCreatorImportMaterialReadout();
+        });
+        creatorImportTextureBrowse.Create("Browse Imported Material Texture");
+        creatorImportTextureBrowse.SetText("BROWSE...");
+        creatorImportTextureBrowse.OnClick([](const wi::gui::EventArgs&)
+        {
+            OpenCreatorImportTextureBrowser();
+        });
+        creatorImportTextureClear.Create("Clear Imported Material Texture");
+        creatorImportTextureClear.SetText("REMOVE");
+        creatorImportTextureClear.OnClick([](const wi::gui::EventArgs&)
+        {
+            if (!creatorModelImporter.active) return;
+            auto& choice = SelectedCreatorTextureChoice();
+            choice.overridden = true;
+            choice.path.clear();
+            ApplyCreatorPreviewTextureChoice({});
+            RefreshCreatorImportTextureEditor();
+            RefreshCreatorImportMaterialReadout();
+        });
 
-        creatorImportAnimationLabel.Create("ANIMATIONS // SOURCE ACTIONS");
+        creatorImportAnimationLabel.Create("ANIMATIONS // EDITABLE CLIPS");
         creatorImportAnimationCombo.Create("Animation Action");
         creatorImportAnimationCombo.OnSelect([](const wi::gui::EventArgs& args)
         {
             creatorModelImporter.selectedAnimation =
                 static_cast<std::size_t>(args.userdata);
-            RefreshCreatorImportAnimationReadout();
+            RefreshCreatorImportAnimationEditor();
+        });
+        creatorImportAnimationName.Create("Animation Clip Name");
+        creatorImportAnimationName.SetPlaceholder("CLIP NAME");
+        creatorImportAnimationName.OnInputAccepted([](const wi::gui::EventArgs& args)
+        {
+            if (creatorModelImporter.animationRecipe.empty()) return;
+            creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation].name = args.sValue;
+            RebuildCreatorImportAnimationCombo();
+        });
+        creatorImportAnimationStart.Create("Animation Start");
+        creatorImportAnimationStart.SetDescription("START: ");
+        creatorImportAnimationStart.OnInputAccepted([](const wi::gui::EventArgs& args)
+        {
+            if (creatorModelImporter.animationRecipe.empty()) return;
+            auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
+            clip.start = std::min(args.fValue, clip.end);
+            RefreshCreatorImportAnimationEditor();
+        });
+        creatorImportAnimationEnd.Create("Animation End");
+        creatorImportAnimationEnd.SetDescription("END: ");
+        creatorImportAnimationEnd.OnInputAccepted([](const wi::gui::EventArgs& args)
+        {
+            if (creatorModelImporter.animationRecipe.empty()) return;
+            auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
+            clip.end = std::max(args.fValue, clip.start);
+            RefreshCreatorImportAnimationEditor();
+        });
+        creatorImportAnimationEnabled.Create("Animation Included");
+        creatorImportAnimationEnabled.AddItem("INCLUDE");
+        creatorImportAnimationEnabled.AddItem("EXCLUDE");
+        creatorImportAnimationEnabled.OnSelect([](const wi::gui::EventArgs& args)
+        {
+            if (creatorModelImporter.animationRecipe.empty()) return;
+            creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation].enabled = args.iValue == 0;
+            RefreshCreatorImportAnimationEditor();
+        });
+        creatorImportAnimationAdd.Create("Add Animation Clip");
+        creatorImportAnimationAdd.SetText("ADD CLIP");
+        creatorImportAnimationAdd.OnClick([](const wi::gui::EventArgs&)
+        {
+            if (creatorModelImporter.animationRecipe.empty()) return;
+            auto clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
+            clip.name = clip.name.empty()
+                ? "Clip " + std::to_string(creatorModelImporter.animationRecipe.size() + 1)
+                : clip.name + " Copy";
+            creatorModelImporter.animationRecipe.push_back(std::move(clip));
+            creatorModelImporter.selectedAnimation = creatorModelImporter.animationRecipe.size() - 1;
+            RebuildCreatorImportAnimationCombo();
+        });
+        creatorImportAnimationDelete.Create("Delete Animation Clip");
+        creatorImportAnimationDelete.SetText("DELETE CLIP");
+        creatorImportAnimationDelete.OnClick([](const wi::gui::EventArgs&)
+        {
+            if (creatorModelImporter.animationRecipe.empty()) return;
+            creatorModelImporter.animationRecipe.erase(
+                creatorModelImporter.animationRecipe.begin() +
+                static_cast<std::ptrdiff_t>(creatorModelImporter.selectedAnimation));
+            if (creatorModelImporter.selectedAnimation > 0)
+                --creatorModelImporter.selectedAnimation;
+            RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationReadout.Create("");
         creatorImportAnimationReadout.SetFitTextEnabled(true);
@@ -2573,8 +2875,19 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
             static_cast<wi::gui::Widget*>(&creatorImportMaterialCombo),
             static_cast<wi::gui::Widget*>(&creatorImportMaterialReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportTextureHelp),
+            static_cast<wi::gui::Widget*>(&creatorImportTextureSlotCombo),
+            static_cast<wi::gui::Widget*>(&creatorImportTexturePath),
+            static_cast<wi::gui::Widget*>(&creatorImportTextureBrowse),
+            static_cast<wi::gui::Widget*>(&creatorImportTextureClear),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationCombo),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
             static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
             static_cast<wi::gui::Widget*>(&importScaleDismissButton_)})
@@ -3179,8 +3492,8 @@ namespace renegade::studio
         // is why the panel is taller than its visible idle content and the
         // buttons sit well below the combo rather than immediately under
         // it.
-        const float importScalePanelWidth = 390.0f;
-        const float importScalePanelHeight = 690.0f;
+        const float importScalePanelWidth = 440.0f;
+        const float importScalePanelHeight = std::min(850.0f, std::max(690.0f, height - 36.0f));
         // GGMAX-style task workspace: keep the preview unobstructed and dock
         // the importer controls down the right side of the preview viewport.
         importScalePanel_.SetPos(XMFLOAT2(
@@ -3227,16 +3540,39 @@ namespace renegade::studio
         creatorImportMaterialCombo.SetPos(XMFLOAT2(12.0f, 326.0f));
         creatorImportMaterialCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
         creatorImportMaterialReadout.SetPos(XMFLOAT2(12.0f, 360.0f));
-        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 104.0f));
-        creatorImportAnimationLabel.SetPos(XMFLOAT2(12.0f, 478.0f));
+        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 94.0f));
+        creatorImportTextureHelp.SetPos(XMFLOAT2(12.0f, 458.0f));
+        creatorImportTextureHelp.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 20.0f));
+        creatorImportTextureSlotCombo.SetPos(XMFLOAT2(12.0f, 482.0f));
+        creatorImportTextureSlotCombo.SetSize(XMFLOAT2(150.0f, 28.0f));
+        creatorImportTexturePath.SetPos(XMFLOAT2(166.0f, 482.0f));
+        creatorImportTexturePath.SetSize(XMFLOAT2(importScalePanelWidth - 178.0f, 28.0f));
+        creatorImportTextureBrowse.SetPos(XMFLOAT2(12.0f, 514.0f));
+        creatorImportTextureBrowse.SetSize(XMFLOAT2(120.0f, 28.0f));
+        creatorImportTextureClear.SetPos(XMFLOAT2(136.0f, 514.0f));
+        creatorImportTextureClear.SetSize(XMFLOAT2(100.0f, 28.0f));
+        creatorImportAnimationLabel.SetPos(XMFLOAT2(12.0f, 554.0f));
         creatorImportAnimationLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
-        creatorImportAnimationCombo.SetPos(XMFLOAT2(12.0f, 504.0f));
+        creatorImportAnimationCombo.SetPos(XMFLOAT2(12.0f, 580.0f));
         creatorImportAnimationCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 538.0f));
-        creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 70.0f));
-        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 624.0f));
+        creatorImportAnimationName.SetPos(XMFLOAT2(12.0f, 612.0f));
+        creatorImportAnimationName.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        creatorImportAnimationStart.SetPos(XMFLOAT2(12.0f, 644.0f));
+        creatorImportAnimationStart.SetSize(XMFLOAT2(120.0f, 28.0f));
+        creatorImportAnimationEnd.SetPos(XMFLOAT2(136.0f, 644.0f));
+        creatorImportAnimationEnd.SetSize(XMFLOAT2(120.0f, 28.0f));
+        creatorImportAnimationEnabled.SetPos(XMFLOAT2(260.0f, 644.0f));
+        creatorImportAnimationEnabled.SetSize(XMFLOAT2(importScalePanelWidth - 272.0f, 28.0f));
+        creatorImportAnimationAdd.SetPos(XMFLOAT2(12.0f, 676.0f));
+        creatorImportAnimationAdd.SetSize(XMFLOAT2(110.0f, 28.0f));
+        creatorImportAnimationDelete.SetPos(XMFLOAT2(126.0f, 676.0f));
+        creatorImportAnimationDelete.SetSize(XMFLOAT2(120.0f, 28.0f));
+        creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 708.0f));
+        creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
+        const float commitY = std::min(importScalePanelHeight - 46.0f, 764.0f);
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, commitY));
         importScaleApplyButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.64f, 34.0f));
-        importScaleDismissButton_.SetPos(XMFLOAT2(20.0f + (importScalePanelWidth - 32.0f) * 0.64f, 624.0f));
+        importScaleDismissButton_.SetPos(XMFLOAT2(20.0f + (importScalePanelWidth - 32.0f) * 0.64f, commitY));
         importScaleDismissButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.36f, 34.0f));
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
@@ -6610,7 +6946,22 @@ namespace renegade::studio
                         for (std::size_t index = materialStart; index < liveScene.materials.GetCount(); ++index)
                             creatorModelImporter.materialEntities.push_back(liveScene.materials.GetEntity(index));
                         for (std::size_t index = animationStart; index < liveScene.animations.GetCount(); ++index)
-                            creatorModelImporter.animationEntities.push_back(liveScene.animations.GetEntity(index));
+                        {
+                            const auto entity = liveScene.animations.GetEntity(index);
+                            creatorModelImporter.animationEntities.push_back(entity);
+                            const auto* animation = liveScene.animations.GetComponent(entity);
+                            if (animation != nullptr)
+                            {
+                                bridge::CreatorAnimationImportRecipe clip;
+                                clip.sourceAnimationIndex = static_cast<std::uint32_t>(index - animationStart);
+                                clip.name = CreatorImportEntityName(
+                                    liveScene, entity, "Animation " + std::to_string(index - animationStart + 1));
+                                clip.start = animation->start;
+                                clip.end = animation->end;
+                                clip.enabled = true;
+                                creatorModelImporter.animationRecipe.push_back(std::move(clip));
+                            }
+                        }
 
                         auto light = std::make_unique<bridge::CreateLightCommand>(
                             liveScene,
@@ -6809,21 +7160,12 @@ namespace renegade::studio
             creatorModelImporter.selectedMaterial = 0;
         }
         RefreshCreatorImportMaterialReadout();
+        creatorImportTextureSlot = 0;
+        creatorImportTextureSlotCombo.SetSelectedWithoutCallback(0);
+        RefreshCreatorImportTextureEditor();
 
-        creatorImportAnimationCombo.ClearItems();
-        for (std::size_t index = 0; index < creatorModelImporter.animationEntities.size(); ++index)
-        {
-            const auto entityId = creatorModelImporter.animationEntities[index];
-            creatorImportAnimationCombo.AddItem(
-                CreatorImportEntityName(scene, entityId, "Animation " + std::to_string(index + 1)),
-                static_cast<std::uint64_t>(index));
-        }
-        if (!creatorModelImporter.animationEntities.empty())
-        {
-            creatorImportAnimationCombo.SetSelectedWithoutCallback(0);
-            creatorModelImporter.selectedAnimation = 0;
-        }
-        RefreshCreatorImportAnimationReadout();
+        creatorModelImporter.selectedAnimation = 0;
+        RebuildCreatorImportAnimationCombo();
         importScalePanel_.SetVisible(true);
     }
 
@@ -6848,6 +7190,8 @@ namespace renegade::studio
             preview.translation.z);
         const std::string sourcePath = creatorModelImporter.sourcePath;
         const auto cameraBefore = creatorModelImporter.cameraBefore;
+        const auto materialOverrides = creatorModelImporter.materialOverrides;
+        const auto animationRecipe = creatorModelImporter.animationRecipe;
         creatorModelImporter.committing = true;
 
         while (session_->Commands().UndoCount() > creatorModelImporter.undoBaseline)
@@ -6874,6 +7218,9 @@ namespace renegade::studio
             XMFLOAT3 position;
             XMFLOAT4 rotation;
             float scale = 1.0f;
+            std::vector<bridge::CreatorMaterialSourceOverride> materialOverrides;
+            std::vector<bridge::CreatorAnimationImportRecipe> animationRecipe;
+            std::string settingsJson = "{}";
             bridge::CreatorModelImportResult imported;
             bridge::PreparedReusableModelPlacement prepared;
         };
@@ -6890,13 +7237,55 @@ namespace renegade::studio
             cameraPosition.z + cameraForward.z * 5.0f + previewOffset.z);
         state->rotation = preview.rotation;
         state->scale = preview.scale.x;
+        state->materialOverrides = materialOverrides;
+        state->animationRecipe = animationRecipe;
         studioChrome_.SetStatusText("IMPORT MODEL // COMMITTING GOVERNED ASSET");
 
         wi::jobsystem::Execute(modelImportWorkload_,
             [this, state](wi::jobsystem::JobArgs)
             {
+                const fs::path previewDirectory =
+                    fs::u8path(state->projectRoot) / "Intermediate" / "Imports";
+                std::error_code ec;
+                fs::create_directories(previewDirectory, ec);
+                bridge::ModelImportRequest modelRequest;
+                modelRequest.sourcePath = state->sourcePath;
+                modelRequest.assetPath = (previewDirectory / ".creator-commit.wiscene").generic_u8string();
+                modelRequest.expectedFormat = bridge::ImportService::ClassifyModelSourceFormat(state->sourcePath);
+                auto converted = bridge::ImportService().PrepareModelAsset(modelRequest);
+                if (converted.IsReady())
+                {
+                    bridge::CreatorModelMaterialPreparationRequest materialRequest;
+                    materialRequest.preparedScene = converted.PeekScene();
+                    materialRequest.projectRoot = state->projectRoot;
+                    materialRequest.projectId = state->projectId;
+                    materialRequest.modelSourcePath = state->sourcePath;
+                    materialRequest.overrides = state->materialOverrides;
+                    auto materials = bridge::PrepareCreatorModelMaterials(materialRequest);
+                    if (materials.succeeded)
+                    {
+                        materials.recipe.animations = state->animationRecipe;
+                        std::string recipeError;
+                        if (!bridge::SerializeCreatorModelImportOptions(
+                                materials.recipe, state->settingsJson, recipeError))
+                        {
+                            state->imported.error = recipeError;
+                        }
+                    }
+                    else
+                    {
+                        state->imported.error = materials.error;
+                    }
+                }
+                else
+                {
+                    state->imported.error = converted.Result().error;
+                }
+
                 bridge::CreatorAssetWorkflowService workflow;
-                state->imported = workflow.ImportModel(state->projectRoot, state->projectId, state->sourcePath);
+                if (state->imported.error.empty())
+                    state->imported = workflow.ImportModel(
+                        state->projectRoot, state->projectId, state->sourcePath, state->settingsJson);
                 if (state->imported.succeeded)
                     state->prepared = workflow.PrepareModelPlacement(
                         state->projectRoot, state->projectId, state->imported.asset.assetId);
