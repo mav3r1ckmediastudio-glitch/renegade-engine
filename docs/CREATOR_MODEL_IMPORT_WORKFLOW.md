@@ -21,6 +21,8 @@ Each material exposes roughness, metalness, reflectance, normal strength, AO str
 
 Preview lighting is editor-only and never enters the model product or level. The creator can adjust intensity, horizontal direction, elevation and ambient brightness, use Neutral/Outdoor/Dark presets, or reset to neutral. A toggleable neutral male reference is drawn at exactly 1.82 m beside the model. It is never parented to the import, never inherits its transform, and its side offset follows the current world-space preview bounds plus fixed clearance.
 
+The initial preview camera is also derived from those measured, scaled bounds. It uses a neutral 32-degree perspective lens and a bounding-sphere fit instead of a fixed close camera position, preventing character heads, hands or boots from acquiring exaggerated near-camera proportions. The creator's previous editor lens and transform are restored on commit or cancel.
+
 ## Persistence
 Creator material choices are persisted using governed LP08 texture stable IDs inside the LP07 reusable-model creator recipe. Base Color, Normal, Surface, Emissive and AO bindings survive reimport through that recipe. Invalid stable IDs, duplicate material indices, invalid animation ranges and unknown recipe fields are rejected.
 

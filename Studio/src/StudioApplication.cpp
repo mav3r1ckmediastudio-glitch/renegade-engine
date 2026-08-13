@@ -275,6 +275,7 @@ namespace
 
 
     constexpr float CreatorImportStageHeight = 100000.0f;
+    constexpr float CreatorImportPreviewFov = 32.0f * XM_PI / 180.0f;
 
     struct CreatorModelImportWorkspaceState
     {
@@ -285,6 +286,7 @@ namespace
         wi::ecs::Entity previewRoot = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity previewLight = wi::ecs::INVALID_ENTITY;
         wi::scene::TransformComponent cameraBefore;
+        float cameraFovBefore = XM_PIDIV4;
         bool cameraCaptured = false;
         float automaticScale = 1.0f;
         renegade::bridge::ModelBounds sourceBounds;
@@ -7289,6 +7291,7 @@ namespace renegade::studio
                         creatorModelImporter.sourcePath = state->sourcePath;
                         creatorModelImporter.undoBaseline = session_->Commands().UndoCount();
                         creatorModelImporter.cameraBefore = editorCameraTransform_;
+                        creatorModelImporter.cameraFovBefore = camera->fov;
                         creatorModelImporter.cameraCaptured = true;
                         creatorModelImporter.summary = bridge::ImportService::Summarize(*isolated);
                         creatorModelImporter.evidence = bridge::ImportService::SummarizeModelEvidence(*isolated);
@@ -7371,14 +7374,7 @@ namespace renegade::studio
                         }
                         ApplyCreatorImportPreviewLighting();
 
-                        const XMVECTOR eye = XMVectorSet(4.0f, CreatorImportStageHeight + 2.6f, -6.0f, 1.0f);
-                        const XMVECTOR at = XMVectorSet(0.0f, CreatorImportStageHeight + 1.0f, 0.0f, 1.0f);
-                        const XMMATRIX view = XMMatrixLookAtLH(eye, at, XMVectorSet(0, 1, 0, 0));
-                        editorCameraTransform_.ClearTransform();
-                        editorCameraTransform_.MatrixTransform(XMMatrixInverse(nullptr, view));
-                        editorCameraTransform_.UpdateTransform();
-                        camera->TransformCamera(editorCameraTransform_);
-                        camera->UpdateCamera();
+                        FrameCreatorImportPreviewCamera();
 
                         session_->Selection().Select(creatorModelImporter.previewRoot);
                         RefreshHierarchy();
@@ -7580,6 +7576,50 @@ namespace renegade::studio
         RefreshCreatorImportWorkspaceSection();
     }
 
+    void StudioRenderPath::FrameCreatorImportPreviewCamera()
+    {
+        if (!creatorModelImporter.active || !creatorModelImporter.sourceBounds.valid)
+            return;
+
+        const auto& bounds = creatorModelImporter.sourceBounds;
+        const XMFLOAT3 scale = creatorModelImporter.scale;
+        const XMFLOAT3 center(
+            (bounds.minimum.x + bounds.maximum.x) * 0.5f * scale.x,
+            CreatorImportStageHeight +
+                (bounds.minimum.y + bounds.maximum.y) * 0.5f * scale.y,
+            (bounds.minimum.z + bounds.maximum.z) * 0.5f * scale.z);
+        const XMFLOAT3 extents(
+            std::abs(bounds.maximum.x - bounds.minimum.x) * scale.x,
+            std::abs(bounds.maximum.y - bounds.minimum.y) * scale.y,
+            std::abs(bounds.maximum.z - bounds.minimum.z) * scale.z);
+        const float radius = std::max(
+            0.25f,
+            0.5f * std::sqrt(
+                extents.x * extents.x +
+                extents.y * extents.y +
+                extents.z * extents.z));
+
+        // A longer, neutral preview lens avoids the exaggerated near/far
+        // proportions produced by the editor camera when it is placed close
+        // to a character. Distance follows the measured, scaled bounds so a
+        // boot, head or large prop cannot accidentally fill the near plane.
+        camera->fov = CreatorImportPreviewFov;
+        const float distance = std::max(
+            2.5f,
+            radius / std::sin(CreatorImportPreviewFov * 0.5f) * 1.2f);
+        const XMVECTOR target = XMLoadFloat3(&center);
+        const XMVECTOR viewDirection = XMVector3Normalize(
+            XMVectorSet(0.32f, 0.12f, -1.0f, 0.0f));
+        const XMVECTOR eye = target + viewDirection * distance;
+        const XMMATRIX view = XMMatrixLookAtLH(
+            eye, target, XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+        editorCameraTransform_.ClearTransform();
+        editorCameraTransform_.MatrixTransform(XMMatrixInverse(nullptr, view));
+        editorCameraTransform_.UpdateTransform();
+        camera->TransformCamera(editorCameraTransform_);
+        camera->UpdateCamera();
+    }
+
     void StudioRenderPath::RefreshCreatorImportWorkspaceSection()
     {
         const std::size_t section = creatorModelImporter.workspaceSection;
@@ -7687,6 +7727,7 @@ namespace renegade::studio
         hierarchySearch_.SetVisible(true);
         editorCameraTransform_ = cameraBefore;
         editorCameraTransform_.UpdateTransform();
+        camera->fov = creatorModelImporter.cameraFovBefore;
         camera->TransformCamera(editorCameraTransform_);
         camera->UpdateCamera();
         ClearSelectionOutline();
@@ -7843,6 +7884,7 @@ namespace renegade::studio
             {
                 editorCameraTransform_ = creatorModelImporter.cameraBefore;
                 editorCameraTransform_.UpdateTransform();
+                camera->fov = creatorModelImporter.cameraFovBefore;
                 camera->TransformCamera(editorCameraTransform_);
                 camera->UpdateCamera();
             }

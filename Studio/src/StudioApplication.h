@@ -275,6 +275,7 @@ namespace renegade::studio
             wi::ecs::Entity entity,
             float appliedScaleFactor,
             const std::string& sourceFileName);
+        void FrameCreatorImportPreviewCamera();
         void ApplyImportScaleMode(bridge::ModelScaleMode mode);
         void DismissImportScalePanel();
         void RefreshCreatorImportWorkspaceSection();

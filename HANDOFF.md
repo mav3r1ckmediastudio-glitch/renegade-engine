@@ -17,6 +17,9 @@ Surface reflectance default from full-white to neutral dielectric, persists PBR
 scalars, adds editable asset name/destination, importer-owned chrome,
 slider-plus-number transform/material/lighting controls, linked scale,
 world-bounds dimension presets and a dynamic preview-only 1.82 m male reference.
+The follow-up preview framing fix replaces the fixed close camera with a
+bounds-fitted 32-degree lens; owner screenshots showed severe perspective
+exaggeration in the importer while the committed mesh remained correct.
 
 GitHub CI remains authoritative because the owner CPU is confirmed unstable.
 Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and
