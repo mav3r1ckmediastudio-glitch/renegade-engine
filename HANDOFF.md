@@ -24,6 +24,13 @@ Those screenshots also exposed the primary preview-only rendering defect: the
 temporary stage was at world Y=100000, where float transform precision is only
 about 7.8 mm. The stage now remains beyond the normal far plane at Y=2048 while
 preserving sub-millimetre precision; source mesh data is never rewritten.
+Owner visual acceptance also rejected the remaining global hologram styling.
+Studio now uses square dark surfaces, consistent white type and neutral grey
+focus borders across all shared UX, including every importer heading/readout.
+The 1.82 m reference no longer depends on a live render AABB and is deliberately
+placed left of the asset so the importer task panel cannot obscure it.
+The importer task panel is now docked eight pixels from the application right
+edge instead of using the hidden ordinary-editor viewport boundary.
 
 GitHub CI remains authoritative because the owner CPU is confirmed unstable.
 Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and

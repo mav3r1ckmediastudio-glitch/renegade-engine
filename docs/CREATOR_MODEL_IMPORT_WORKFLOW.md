@@ -25,6 +25,12 @@ The initial preview camera is also derived from those measured, scaled bounds. I
 
 The temporary stage is positioned beyond the normal editor camera's far plane, but remains close enough to the world origin to preserve sub-millimetre 32-bit transform precision. This avoids preview-only vertex/normal quantization; it does not modify or repair source mesh data.
 
+Studio uses one neutral visual system across the importer and ordinary editor: square dark panels, white text, restrained grey borders and no cyan focus shadows or heading pills. Importer headings and readouts explicitly inherit that treatment so their borders cannot overlap adjacent controls.
+
+The importer task workspace is docked eight pixels from the application right edge rather than positioned inside the ordinary editor viewport. This returns the previously unused right-side space to the model preview and makes the panel read as owned workspace chrome instead of a floating popup.
+
+The 1.82 m reference is derived directly from the measured source bounds and current root transform rather than waiting for live render AABBs. It is placed on the unobstructed left side of the preview, clear of the task panel, and uses a neutral grey material so the visibility toggle has an immediate, reliable result.
+
 ## Persistence
 Creator material choices are persisted using governed LP08 texture stable IDs inside the LP07 reusable-model creator recipe. Base Color, Normal, Surface, Emissive and AO bindings survive reimport through that recipe. Invalid stable IDs, duplicate material indices, invalid animation ranges and unknown recipe fields are rejected.
 

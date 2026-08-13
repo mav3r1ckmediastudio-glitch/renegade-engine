@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cfloat>
 #include <filesystem>
 #include <iomanip>
 #include <memory>
@@ -20,14 +21,14 @@ namespace
 {
     namespace fs = std::filesystem;
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
-    constexpr wi::Color HologramIdle = wi::Color(8, 30, 42, 224);
-    constexpr wi::Color HologramFocus = wi::Color(0, 126, 164, 238);
-    constexpr wi::Color HologramActive = wi::Color(92, 232, 255, 255);
-    constexpr wi::Color HologramText = wi::Color(196, 244, 255, 255);
-    constexpr wi::Color HologramMuted = wi::Color(102, 166, 181, 255);
-    constexpr wi::Color HologramBorder = wi::Color(0, 183, 224, 150);
-    constexpr wi::Color HologramPanel = wi::Color(3, 12, 20, 236);
-    constexpr wi::Color HologramSelected = wi::Color(0, 102, 138, 245);
+    constexpr wi::Color HologramIdle = wi::Color(12, 16, 19, 248);
+    constexpr wi::Color HologramFocus = wi::Color(26, 31, 35, 255);
+    constexpr wi::Color HologramActive = wi::Color(38, 43, 47, 255);
+    constexpr wi::Color HologramText = wi::Color(244, 239, 233, 255);
+    constexpr wi::Color HologramMuted = wi::Color(178, 178, 176, 255);
+    constexpr wi::Color HologramBorder = wi::Color(38, 52, 61, 255);
+    constexpr wi::Color HologramPanel = wi::Color(8, 11, 13, 252);
+    constexpr wi::Color HologramSelected = wi::Color(44, 35, 29, 255);
     constexpr wi::Color WarningAmber = wi::Color(255, 150, 40, 255);
     constexpr int LayoutPreferenceBits = 10;
 
@@ -1018,51 +1019,48 @@ namespace renegade::studio
         if (drawMannequin)
         {
             const auto& previewScene = session_->Scenes().GetScene();
-            bool found = false;
-            XMFLOAT3 minimum = {};
-            XMFLOAT3 maximum = {};
-            const std::size_t count = std::min(
-                previewScene.objects.GetCount(),
-                previewScene.aabb_objects.size());
-            for (std::size_t index = 0; index < count; ++index)
+            if (creatorModelImporter.sourceBounds.valid)
             {
-                const auto entity = previewScene.objects.GetEntity(index);
-                if (entity != creatorModelImporter.previewRoot &&
-                    !previewScene.Entity_IsDescendant(
-                        entity, creatorModelImporter.previewRoot))
-                    continue;
-                const auto& bounds = previewScene.aabb_objects[index];
-                if (!found)
+                const auto& bounds = creatorModelImporter.sourceBounds;
+                const auto* root = previewScene.transforms.GetComponent(
+                    creatorModelImporter.previewRoot);
+                if (root != nullptr)
                 {
-                    minimum = bounds._min;
-                    maximum = bounds._max;
-                    found = true;
+                    XMFLOAT3 minimum(FLT_MAX, FLT_MAX, FLT_MAX);
+                    XMFLOAT3 maximum(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+                    const XMMATRIX world = XMLoadFloat4x4(&root->world);
+                    for (const float x : {bounds.minimum.x, bounds.maximum.x})
+                    for (const float y : {bounds.minimum.y, bounds.maximum.y})
+                    for (const float z : {bounds.minimum.z, bounds.maximum.z})
+                    {
+                        XMFLOAT3 corner;
+                        XMStoreFloat3(
+                            &corner,
+                            XMVector3TransformCoord(XMVectorSet(x, y, z, 1.0f), world));
+                        minimum.x = std::min(minimum.x, corner.x);
+                        minimum.y = std::min(minimum.y, corner.y);
+                        minimum.z = std::min(minimum.z, corner.z);
+                        maximum.x = std::max(maximum.x, corner.x);
+                        maximum.y = std::max(maximum.y, corner.y);
+                        maximum.z = std::max(maximum.z, corner.z);
+                    }
+
+                    constexpr float SourceMaleHeight = 1.89113f;
+                    constexpr float ReferenceHeight = 1.82f;
+                    constexpr float Clearance = 0.45f;
+                    const float scale = ReferenceHeight / SourceMaleHeight;
+                    // The task panel occupies the right side of the importer,
+                    // so keep the reference on the unobstructed left side.
+                    const float x = minimum.x - Clearance;
+                    const float z = (minimum.z + maximum.z) * 0.5f;
+                    const XMMATRIX matrix = XMMatrixScaling(scale, scale, scale) *
+                        XMMatrixTranslation(x, CreatorImportStageHeight, z);
+                    dummy::draw_male(
+                        matrix,
+                        XMFLOAT4(0.78f, 0.78f, 0.76f, 0.82f),
+                        true,
+                        cmd);
                 }
-                else
-                {
-                    minimum.x = std::min(minimum.x, bounds._min.x);
-                    minimum.y = std::min(minimum.y, bounds._min.y);
-                    minimum.z = std::min(minimum.z, bounds._min.z);
-                    maximum.x = std::max(maximum.x, bounds._max.x);
-                    maximum.y = std::max(maximum.y, bounds._max.y);
-                    maximum.z = std::max(maximum.z, bounds._max.z);
-                }
-            }
-            if (found)
-            {
-                constexpr float SourceMaleHeight = 1.89113f;
-                constexpr float ReferenceHeight = 1.82f;
-                constexpr float Clearance = 0.45f;
-                const float scale = ReferenceHeight / SourceMaleHeight;
-                const float x = maximum.x + Clearance;
-                const float z = (minimum.z + maximum.z) * 0.5f;
-                const XMMATRIX matrix = XMMatrixScaling(scale, scale, scale) *
-                    XMMatrixTranslation(x, CreatorImportStageHeight, z);
-                dummy::draw_male(
-                    matrix,
-                    XMFLOAT4(0.30f, 0.82f, 1.0f, 0.42f),
-                    true,
-                    cmd);
             }
         }
         device->RenderPassEnd(cmd);
@@ -3258,22 +3256,22 @@ namespace renegade::studio
         wi::gui::Theme theme;
         theme.image.background = true;
         theme.image.blendFlag = wi::enums::BLENDMODE_ALPHA;
-        theme.image.corner_rounding = true;
+        theme.image.corner_rounding = false;
         for (auto& corner : theme.image.corners_rounding)
         {
-            corner.radius = 7.0f;
+            corner.radius = 0.0f;
         }
         theme.font.color = HologramText;
-        theme.font.shadow_color = wi::Color(0, 0, 0, 220);
-        theme.shadow = 3.0f;
-        theme.shadow_color = HologramBorder;
-        theme.shadow_highlight = true;
-        theme.shadow_highlight_color = XMFLOAT3(0.0f, 0.72f, 1.0f);
-        theme.shadow_highlight_spread = 0.35f;
+        theme.font.shadow_color = wi::Color::Transparent();
+        theme.shadow = 0.0f;
+        theme.shadow_color = wi::Color::Transparent();
+        theme.shadow_highlight = false;
+        theme.shadow_highlight_color = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        theme.shadow_highlight_spread = 0.0f;
         theme.tooltipImage = theme.image;
         theme.tooltipImage.color = HologramIdle;
         theme.tooltipFont = theme.font;
-        theme.tooltip_shadow_color = HologramBorder;
+        theme.tooltip_shadow_color = wi::Color::Transparent();
 
         auto& gui = GetGUI();
         gui.SetTheme(theme);
@@ -3283,7 +3281,7 @@ namespace renegade::studio
         gui.SetColor(HologramFocus, wi::gui::DEACTIVATING);
         gui.SetColor(HologramPanel, wi::gui::WIDGET_ID_WINDOW_BASE);
         gui.SetColor(
-            wi::Color(4, 18, 28, 245),
+            wi::Color(7, 10, 12, 255),
             wi::gui::WIDGET_ID_TEXTINPUTFIELD_IDLE);
         gui.SetColor(
             HologramFocus,
@@ -3327,7 +3325,7 @@ namespace renegade::studio
             label.SetColor(wi::Color::Transparent());
             label.SetShadowRadius(0.0f);
             label.font.params.color = wi::Color(244, 239, 233, 255);
-            label.font.params.bolden = 0.18f;
+            label.font.params.bolden = 0.12f;
             label.font.params.shadowColor = wi::Color::Transparent();
         };
         ownLabel(inspectorLabel_);
@@ -3343,6 +3341,31 @@ namespace renegade::studio
         ownLabel(oceanLabel_);
         ownLabel(importScaleTitleLabel_);
         ownLabel(importScaleReadoutLabel_);
+        ownLabel(workspaceTitle_);
+        ownLabel(statusLabel_);
+        ownLabel(hierarchyLabel_);
+        ownLabel(terrainLabel_);
+        ownLabel(terrainMaterialLabel_);
+        ownLabel(terrainSculptLabel_);
+        ownLabel(terrainBrushReadout_);
+        ownLabel(terrainStrokeDiagnostic_);
+        ownLabel(contentLabel_);
+        ownLabel(contentPlaceholder_);
+        ownLabel(hubBrandLabel_);
+        ownLabel(hubTitleLabel_);
+        ownLabel(hubSubtitleLabel_);
+        ownLabel(recentProjectsLabel_);
+        ownLabel(selectedProjectLabel_);
+        ownLabel(hubMessageLabel_);
+        ownLabel(creatorImportMaterialLabel);
+        ownLabel(creatorImportMaterialReadout);
+        ownLabel(creatorImportTextureHelp);
+        ownLabel(creatorImportAnimationLabel);
+        ownLabel(creatorImportAnimationReadout);
+        ownLabel(creatorImportTransformLabel);
+        ownLabel(creatorImportMaterialScalarLabel);
+        ownLabel(creatorImportLightingLabel);
+        ownLabel(creatorImportHelpLabel);
 
         wi::gui::Theme scrollbarTheme = theme;
         scrollbarTheme.image.corner_rounding = false;
@@ -3831,8 +3854,9 @@ namespace renegade::studio
             bottomHeight - 62.0f));
 
         // Positioned independently of the Inspector's hardcoded column
-        // (see CreateImportScalePanel) -- a small popup centered over the
-        // viewport rather than a row inside that fragile layout chain.
+        // (see CreateImportScalePanel). Import mode owns the screen, so this
+        // is a right-docked task panel rather than a popup floating inside the
+        // editor viewport.
         //
         // wi::gui::Window::Render scissor-clips every child widget to the
         // window's own rectangle (widget->parent->scissorRect), including a
@@ -3851,9 +3875,7 @@ namespace renegade::studio
         // GGMAX-style task workspace: keep the preview unobstructed and dock
         // the importer controls down the right side of the preview viewport.
         importScalePanel_.SetPos(XMFLOAT2(
-            std::max(
-                viewportBounds_.x + 12.0f,
-                viewportBounds_.z - importScalePanelWidth - 12.0f),
+            std::max(8.0f, width - importScalePanelWidth - 8.0f),
             viewportBounds_.y + 12.0f));
         importScalePanel_.SetSize(XMFLOAT2(
             importScalePanelWidth,

@@ -79,7 +79,7 @@ namespace
     constexpr wi::Color TextSecondary = wi::Color(235, 233, 229, 255);
     constexpr wi::Color Muted = wi::Color(142, 151, 156, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
-    constexpr wi::Color TechCyan = wi::Color(56, 183, 215, 255);
+    constexpr wi::Color HoverEdge = wi::Color(72, 78, 82, 255);
     constexpr wi::Color Success = wi::Color(76, 195, 138, 255);
 
     void DrawRect(
@@ -173,7 +173,7 @@ namespace renegade::studio
         }
         const wi::Color edge = state == wi::gui::ACTIVE
             ? Forge
-            : state == wi::gui::FOCUS ? TechCyan : Border;
+            : state == wi::gui::FOCUS ? HoverEdge : Border;
         DrawBorderedRect(
             translation.x,
             translation.y,
@@ -273,7 +273,7 @@ namespace renegade::studio
             box,
             box,
             wi::Color(6, 10, 12, 255),
-            state == wi::gui::FOCUS ? TechCyan : Border,
+            state == wi::gui::FOCUS ? HoverEdge : Border,
             cmd);
         if (checked)
         {
@@ -349,7 +349,7 @@ namespace renegade::studio
                 scale.x,
                 scale.y,
                 index == hovered ? Surface2 : Surface0,
-                index == hovered ? TechCyan : BorderSoft,
+                index == hovered ? HoverEdge : BorderSoft,
                 cmd);
             DrawText(
                 items[static_cast<std::size_t>(index)].name,
@@ -486,7 +486,7 @@ namespace renegade::studio
             valueInputField.GetState() == wi::gui::ACTIVE
                 ? Forge
                 : valueInputField.GetState() == wi::gui::FOCUS
-                    ? TechCyan
+                    ? HoverEdge
                     : Border;
         DrawBorderedRect(
             inputPos.x,
@@ -1770,7 +1770,7 @@ namespace renegade::studio
                 x + 12.0f,
                 y + 15.0f,
                 8,
-                asset.directory ? TechCyan : Forge,
+                asset.directory ? TextStrong : Forge,
                 cmd,
                 0.4f,
                 0.16f);
@@ -2633,7 +2633,7 @@ namespace renegade::studio
             width_ - 285.0f,
             statusTop + 9.0f,
             9,
-            TechCyan,
+            TextSecondary,
             cmd,
             0.9f);
     }
