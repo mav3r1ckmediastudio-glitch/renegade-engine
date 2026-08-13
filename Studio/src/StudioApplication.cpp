@@ -394,6 +394,42 @@ namespace
         }
     }
 
+    void ApplyDetectedCreatorPreviewMaterials()
+    {
+        auto* session = renegade::bridge::StudioSession::Current();
+        if (session == nullptr)
+            return;
+        auto& scene = session->Scenes().GetScene();
+        for (const auto& detected : creatorModelImporter.materialOverrides)
+        {
+            if (detected.materialIndex >= creatorModelImporter.materialEntities.size())
+                continue;
+            auto* material = scene.materials.GetComponent(
+                creatorModelImporter.materialEntities[detected.materialIndex]);
+            if (material == nullptr)
+                continue;
+            const auto apply = [material](
+                const renegade::bridge::CreatorTextureSourceChoice& choice,
+                const int slot)
+            {
+                if (!choice.overridden || choice.path.empty())
+                    return;
+                wi::Resource resource = wi::resourcemanager::Load(choice.path);
+                if (!resource.IsValid())
+                    return;
+                auto& texture = material->textures[slot];
+                texture.name = choice.path;
+                texture.resource = std::move(resource);
+                material->SetDirty();
+            };
+            apply(detected.baseColor, wi::scene::MaterialComponent::BASECOLORMAP);
+            apply(detected.normal, wi::scene::MaterialComponent::NORMALMAP);
+            apply(detected.surface, wi::scene::MaterialComponent::SURFACEMAP);
+            apply(detected.occlusion, wi::scene::MaterialComponent::OCCLUSIONMAP);
+            apply(detected.emissive, wi::scene::MaterialComponent::EMISSIVEMAP);
+        }
+    }
+
     void RefreshCreatorImportTextureEditor()
     {
         if (creatorModelImporter.materialEntities.empty())
@@ -6925,6 +6961,10 @@ namespace renegade::studio
                         creatorModelImporter.evidence = bridge::ImportService::SummarizeModelEvidence(*isolated);
                         creatorModelImporter.automaticScale = bridge::ImportService::ResolveScaleFactor(
                             bridge::ModelScaleMode::Automatic, *isolated);
+                        const auto detectedMaterials = bridge::DetectCreatorModelMaterials(
+                            *isolated, state->sourcePath);
+                        if (detectedMaterials.succeeded)
+                            creatorModelImporter.materialOverrides = detectedMaterials.materials;
 
                         const std::size_t materialStart = liveScene.materials.GetCount();
                         const std::size_t animationStart = liveScene.animations.GetCount();
@@ -6945,6 +6985,7 @@ namespace renegade::studio
 
                         for (std::size_t index = materialStart; index < liveScene.materials.GetCount(); ++index)
                             creatorModelImporter.materialEntities.push_back(liveScene.materials.GetEntity(index));
+                        ApplyDetectedCreatorPreviewMaterials();
                         for (std::size_t index = animationStart; index < liveScene.animations.GetCount(); ++index)
                         {
                             const auto entity = liveScene.animations.GetEntity(index);
