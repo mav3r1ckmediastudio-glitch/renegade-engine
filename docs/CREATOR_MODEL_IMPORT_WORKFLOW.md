@@ -32,7 +32,7 @@ flags, including normal-map handling, and a decode/load failure is shown in the
 Material section rather than leaving the picker path changed with no visible
 effect.
 
-Each material exposes roughness, metalness, reflectance, normal strength, AO strength and emissive strength with slider-plus-number controls. These values are stored in the creator recipe and replayed during reimport.
+Each material exposes roughness, metalness, reflectance, normal strength, AO strength and emissive strength with slider-plus-number controls. These values are stored in the creator recipe and replayed during reimport. Slider interaction updates the live material and stored override without synchronously rebuilding Surface PNGs on every drag or release; authoritative Surface packing occurs during Import & Place.
 
 The selected material displays a MAX-style vertical map list for Base Color,
 Normal, packed Surface, Roughness, Metalness, AO and Emissive. Every map owns a
@@ -56,7 +56,7 @@ controls share the same surface treatment rather than using pale label slabs.
 
 The importer task workspace is docked eight pixels from the application right edge and uses the available application height rather than being positioned inside the ordinary editor viewport. Long sections scroll while Import & Place and Cancel remain docked. This returns previously unused space to the model preview and makes the panel read as owned workspace chrome instead of a floating popup.
 
-The 1.82 m reference is derived directly from the measured source bounds and current root transform rather than waiting for live render AABBs. It is placed on the unobstructed left side of the preview, clear of the task panel, and uses a neutral dark silhouette plus a capped world-space 0.00 m-to-1.82 m ruler matching the original creator reference intent. The panel reports the imported model's independently measured height, so a short Automatic result cannot be mistaken for an oversized ruler. Its draw transform explicitly includes the active preview camera view-projection matrix, as required by Wicked's dummy visualizer.
+The 1.82 m reference position is derived directly from the measured source bounds and current root transform rather than waiting for live render AABBs. It is placed on the unobstructed left side of the preview, clear of the task panel, and uses the owner's supplied male silhouette as a transparent camera-facing world billboard plus a capped world-space 0.00 m-to-1.82 m ruler. The cropped figure is exactly 1.82 m from sole to crown; the stock Wicked dummy is not used. The panel reports the imported model's independently measured height, so a short Automatic result cannot be mistaken for an oversized ruler.
 
 The taller orange-range slider renderer is importer-only. Existing Studio
 Inspector, Environment and Terrain controls retain Wicked's compact native

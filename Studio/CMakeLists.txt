@@ -138,6 +138,9 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/creator-human-reference.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/creator-human-reference.png"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/package/BuildInputs"
         "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"

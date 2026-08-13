@@ -1,6 +1,6 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-13
+**Date:** 2026-08-14
 
 ## Active creator recovery — PR #57
 
@@ -30,9 +30,11 @@ dark surfaces, consistent white type and neutral grey focus treatment instead
 of cyan. A follow-up owner screenshot caught unreadable overlap in the Material
 section; its six-line readout now owns sufficient height and every following
 control is laid out below it. The 1.82 m reference no longer depends on a live
-render AABB, is deliberately placed left of the asset so the importer task panel
-cannot obscure it, and now supplies the view-projection transform required by
-Wicked's dummy renderer instead of submitting world coordinates as clip space.
+render AABB and is deliberately placed left of the asset so the importer task
+panel cannot obscure it. The stock Wicked dummy has been removed: the owner's
+supplied male silhouette is now a transparent, camera-facing world billboard
+whose cropped figure is exactly 1.82 m from sole to crown and never inherits the
+imported model transform.
 The importer task panel is now docked eight pixels from the application right
 edge instead of using the hidden ordinary-editor viewport boundary.
 Two consecutive exact-head Release runs exposed the same Windows access-denied
@@ -63,6 +65,9 @@ ordinary Inspector, Environment and Terrain sliders retain their compact
 native geometry. The right-docked importer uses the available screen height,
 keeps commit/cancel fixed, and scrolls long sections. The neutral 1.82 m male
 now includes a visible 0.00-to-1.82 m ruler and separate model-height readout.
+PBR slider drags update only the selected live Wicked material and stored
+override. They no longer rebuild, encode and reload full-resolution Surface PNGs
+on the render thread; authoritative packing remains part of Import & Place.
 
 GitHub CI remains authoritative because the owner CPU is confirmed unstable.
 Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and

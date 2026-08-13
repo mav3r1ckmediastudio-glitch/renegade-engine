@@ -5,8 +5,6 @@
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/CreatorModelMaterialPreparationService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
-#include "DummyVisualizer.h"
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -373,6 +371,7 @@ namespace
     renegade::studio::RenegadeButton creatorImportLightingReset;
     renegade::studio::RenegadeCheckBox creatorImportMannequinVisible;
     wi::gui::Label creatorImportHelpLabel;
+    wi::Resource creatorImportHumanReference;
 
     std::string CreatorImportEntityName(
         const wi::scene::Scene& scene,
@@ -647,6 +646,40 @@ namespace
         }
         creatorImportTextureHelp.SetText(
             "TEXTURE SLOT // AUTO-DETECT, REPLACE OR REMOVE");
+    }
+
+    void PreviewCreatorMaterialScalar(
+        float renegade::bridge::CreatorMaterialSourceOverride::* member,
+        const float value)
+    {
+        auto* session = renegade::bridge::StudioSession::Current();
+        if (session == nullptr || creatorModelImporter.materialEntities.empty())
+            return;
+        auto& scene = session->Scenes().GetScene();
+        const auto entity = creatorModelImporter.materialEntities[
+            std::min(
+                creatorModelImporter.selectedMaterial,
+                creatorModelImporter.materialEntities.size() - 1)];
+        auto* material = scene.materials.GetComponent(entity);
+        if (material == nullptr)
+            return;
+
+        using Override = renegade::bridge::CreatorMaterialSourceOverride;
+        if (member == &Override::roughnessValue)
+            material->SetRoughness(value);
+        else if (member == &Override::metalnessValue)
+            material->SetMetalness(value);
+        else if (member == &Override::reflectanceValue)
+            material->SetReflectance(value);
+        else if (member == &Override::normalStrengthValue)
+            material->SetNormalMapStrength(value);
+        else if (member == &Override::emissiveStrengthValue)
+            material->SetEmissiveStrength(value);
+
+        // AO strength changes packed Surface pixels, so its override is saved
+        // here and applied by the authoritative import preparation. Repacking
+        // and reloading PNG resources on the Studio render thread previously
+        // stalled it for seconds and made all PBR controls unusable.
     }
 
     void RefreshCreatorImportTextureEditor()
@@ -1230,23 +1263,33 @@ namespace renegade::studio
         {
             XMFLOAT3 minimum;
             XMFLOAT3 maximum;
-            if (CreatorImportWorldBounds(minimum, maximum))
+            if (CreatorImportWorldBounds(minimum, maximum) &&
+                creatorImportHumanReference.IsValid())
             {
-                constexpr float SourceMaleHeight = 1.891132f;
                 constexpr float ReferenceHeight = 1.82f;
-                constexpr float ReferenceHalfWidth = 0.23f;
+                constexpr float ReferenceWidth =
+                    ReferenceHeight * (544.0f / 1495.0f);
+                constexpr float ReferenceHalfWidth = ReferenceWidth * 0.5f;
                 constexpr float Clearance = 0.45f;
-                const float scale = ReferenceHeight / SourceMaleHeight;
-                // Keep the neutral silhouette on the unobstructed left side.
                 const float x = minimum.x - Clearance - ReferenceHalfWidth;
                 const float z = (minimum.z + maximum.z) * 0.5f;
-                const XMMATRIX matrix = XMMatrixScaling(scale, scale, scale) *
-                    XMMatrixTranslation(x, CreatorImportStageHeight, z) *
-                    camera->GetViewProjection();
-                dummy::draw_male(
-                    matrix,
-                    XMFLOAT4(0.16f, 0.17f, 0.18f, 0.96f),
-                    true,
+                const XMMATRIX rotation =
+                    XMLoadFloat3x3(&camera->rotationMatrix);
+                const XMMATRIX projection = camera->GetViewProjection();
+                wi::image::Params image;
+                image.pos = XMFLOAT3(x, CreatorImportStageHeight, z);
+                image.siz = XMFLOAT2(ReferenceWidth, ReferenceHeight);
+                image.pivot = XMFLOAT2(0.5f, 1.0f);
+                image.color = XMFLOAT4(0.82f, 0.84f, 0.85f, 0.92f);
+                image.enableDrawRect(XMFLOAT4(240.0f, 16.0f, 544.0f, 1495.0f));
+                image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
+                image.blendFlag = wi::enums::BLENDMODE_ALPHA;
+                image.customRotation = &rotation;
+                image.customProjection = &projection;
+                image.enableDepthTest();
+                wi::image::Draw(
+                    &creatorImportHumanReference.GetTexture(),
+                    image,
                     cmd);
             }
         }
@@ -3222,8 +3265,15 @@ namespace renegade::studio
                     creatorModelImporter.materialEntities.empty())
                     return;
                 EnsureCreatorMaterialOverride().*member = value;
-                ApplyDetectedCreatorPreviewMaterials();
-                RefreshCreatorImportMaterialReadout();
+                PreviewCreatorMaterialScalar(member, value);
+            });
+            slider.OnValueCommitted([member](const float value)
+            {
+                if (!creatorModelImporter.active ||
+                    creatorModelImporter.materialEntities.empty())
+                    return;
+                EnsureCreatorMaterialOverride().*member = value;
+                PreviewCreatorMaterialScalar(member, value);
             });
         };
         createMaterialScalar(creatorImportRoughness, "Import Roughness", "ROUGHNESS", 0.0f, 1.0f,
@@ -3265,6 +3315,8 @@ namespace renegade::studio
         creatorImportMannequinVisible.Create("Human Scale Reference");
         creatorImportMannequinVisible.SetText("SHOW 1.82 M MALE REFERENCE");
         creatorImportMannequinVisible.SetCheck(true);
+        creatorImportHumanReference = wi::resourcemanager::Load(
+            "Content/ui/creator-human-reference.png");
         creatorImportMannequinVisible.OnClick([](const wi::gui::EventArgs& args)
         {
             creatorModelImporter.mannequinVisible = args.bValue;
