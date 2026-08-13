@@ -30,6 +30,16 @@ namespace renegade::bridge
             lower(static_cast<unsigned char>(value[3])) == 'f';
     }
 
+    inline bool IsCreatorGovernedResourceClass(
+        const DependencyClass dependencyClass) noexcept
+    {
+        return dependencyClass == DependencyClass::Texture ||
+            dependencyClass == DependencyClass::Audio ||
+            dependencyClass == DependencyClass::Script ||
+            dependencyClass == DependencyClass::Video ||
+            dependencyClass == DependencyClass::Font;
+    }
+
     // Placement requires a live imported model product. Reimport deliberately
     // does not: a missing governed product is one of the states reimport must
     // be able to recover from.
@@ -47,5 +57,28 @@ namespace renegade::bridge
         return entry.registered && IsValidStableId(entry.assetId) &&
             entry.importedProduct &&
             IsCreatorModelSourceFormat(entry.sourceFormat);
+    }
+
+    // Gate 4 resource reimport requires a live retained source. Creator
+    // catalogue refresh projects that source state even when the governed
+    // product itself is represented only by an LC01 tombstone, so Studio can
+    // truthfully offer missing-product recovery without relying on backend
+    // failure as its action policy. Invalid active products remain blocked.
+    inline bool CanReimportCreatorResourceAsset(
+        const AssetCatalogueEntry& entry) noexcept
+    {
+        const bool activeProductState = entry.sourceAvailable &&
+            entry.productAvailable &&
+            (entry.state == AssetCatalogueState::Current ||
+             entry.state == AssetCatalogueState::Stale ||
+             entry.state == AssetCatalogueState::Moved);
+        const bool recoverableMissingProduct = entry.sourceAvailable &&
+            !entry.productAvailable &&
+            entry.state == AssetCatalogueState::Missing;
+        return entry.registered && IsValidStableId(entry.assetId) &&
+            entry.importedProduct &&
+            entry.importer == "wicked.resourcemanager" &&
+            IsCreatorGovernedResourceClass(entry.dependencyClass) &&
+            (activeProductState || recoverableMissingProduct);
     }
 }

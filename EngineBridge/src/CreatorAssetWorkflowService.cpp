@@ -373,8 +373,6 @@ namespace renegade::bridge
                     graph.rootIds.push_back(identity.nodeId);
             }
 
-            // Rebuild only previously authoritative graph edges whose two
-            // stable endpoints are still present in this refresh graph.
             for (const auto& identity : identities)
             {
                 const auto source = nodeByAssetId.find(identity.assetId);
@@ -394,10 +392,6 @@ namespace renegade::bridge
                 }
             }
 
-            // No unknown filesystem item is admitted into graph.nodes above.
-            // A defensive generator is still supplied because RefreshAssetRegistry
-            // requires one; if recovery facts were ambiguous it must fail closed
-            // rather than mint a new identity for an existing provenance endpoint.
             const AssetIdGenerator denyNewIdentity = []() -> StableId
             {
                 return {};
@@ -549,8 +543,30 @@ namespace renegade::bridge
 
         AssetCatalogueBuildOptions options;
         options.movedAssetIds = refresh.recoveredAssetIds;
-        return BuildAssetCatalogue(root.generic_u8string(), projectId,
-            refresh.registry, metadata, catalogue, error, std::move(options));
+        if (!BuildAssetCatalogue(root.generic_u8string(), projectId,
+                refresh.registry, metadata, catalogue, error, std::move(options)))
+            return false;
+
+        // A missing imported product is represented by its own tombstone, but
+        // creator actions still need the independent retained-source state.
+        // Project that state from the active provenance source record so Studio
+        // only offers recovery while the retained source is actually available.
+        for (auto& entry : catalogue.entries)
+        {
+            if (!entry.importedProduct || entry.productAvailable ||
+                entry.state != AssetCatalogueState::Missing ||
+                !IsValidStableId(entry.sourceAssetId))
+                continue;
+
+            const auto source = std::find_if(
+                refresh.registry.records.begin(), refresh.registry.records.end(),
+                [&entry](const AssetRecord& record)
+                { return record.assetId == entry.sourceAssetId; });
+            entry.sourceAvailable = source != refresh.registry.records.end() &&
+                source->sourceAvailable;
+        }
+        error.clear();
+        return true;
     }
 
     CreatorModelImportResult CreatorAssetWorkflowService::ImportModel(

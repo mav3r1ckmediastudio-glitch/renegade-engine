@@ -59,6 +59,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ImportServiceModel.cpp
     src/ResourceImportService.cpp
     src/ResourceAssetService.cpp
+    src/ResourceAssetReimportService.cpp
     src/ModelImporterFailureAdapter.cpp
     src/ReusableAssetService.cpp
     src/ReusableAssetReimportService.cpp
@@ -68,6 +69,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ReusableAssetRuntimeService.cpp
     src/MaterialService.cpp
     src/MaterialTextureAssetService.cpp
+    src/MaterialTextureReimportRefreshService.cpp
     src/CollisionService.cpp
     src/OceanService.cpp
     src/PrecipitationService.cpp

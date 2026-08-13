@@ -162,15 +162,62 @@ namespace renegade::bridge
         std::string error;
     };
 
-    // UI-independent first-import transaction for the non-model resource
-    // classes proven in LP08 Gate 1. The retained source remains editor-only;
-    // the governed .rasset product, LC01 provenance and derived catalogue
-    // metadata are committed atomically. Reimport is deliberately Gate 4.
+    // Gate 4 is stable-ID driven. Callers identify the governed product only;
+    // LC01 provenance and the accepted registry state resolve the retained
+    // source, product path, class, format, importer and version-1 recipe.
+    //
+    // IMPORTANT: callers must refresh LC01 from disk before invoking reimport.
+    // The source AssetRecord content hash is deliberately required to describe
+    // the bytes being replayed; ReimportResourceAsset will not silently absorb
+    // an edit that LC01 has not observed. A missing product is recoverable when
+    // its retained source is active and LC01 still owns the product tombstone.
+    struct ResourceAssetReimportRequest
+    {
+        std::string projectRoot;
+        StableId projectId;
+        StableId assetId;
+    };
+
+    struct ResourceAssetReimportOptions
+    {
+        std::string transactionId;
+        ProjectDocumentTransactionHook operationHook;
+    };
+
+    struct ResourceAssetReimportResult
+    {
+        bool succeeded = false;
+        bool recoveredMissingProduct = false;
+        StableId sourceAssetId;
+        StableId assetId;
+        ResourceClass resourceClass = ResourceClass::Unknown;
+        ResourceSourceFormat sourceFormat = ResourceSourceFormat::Unknown;
+        std::string sourceProjectRelativePath;
+        std::string assetProjectRelativePath;
+        ImportedProductStatus statusBefore;
+        std::string previousProductHash;
+        std::string sourceHash;
+        std::string productHash;
+        ResourceAssetDerivedMetadata derived;
+        ProjectDocumentTransactionResult transaction;
+        std::string error;
+    };
+
+    // UI-independent governed-resource lifecycle boundary. First import creates
+    // stable identity; Gate 4 reimport resolves and replays only the stored
+    // accepted recipe, retaining source/product IDs. An active product is
+    // replaced only after last-good validation; a deleted product can be
+    // recreated from its LC01 tombstone plus intact retained source. Product,
+    // registry and resource metadata always commit through one transaction.
     class ResourceAssetService
     {
     public:
         [[nodiscard]] ResourceAssetImportResult ImportResourceAsset(
             const ResourceAssetImportRequest& request,
             ResourceAssetImportOptions options = {}) const;
+
+        [[nodiscard]] ResourceAssetReimportResult ReimportResourceAsset(
+            const ResourceAssetReimportRequest& request,
+            ResourceAssetReimportOptions options = {}) const;
     };
 }

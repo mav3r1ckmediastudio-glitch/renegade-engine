@@ -75,6 +75,17 @@ namespace renegade::bridge
         const StableId& projectId,
         MaterialTextureResourceLoader loader = {});
 
+    // Gate 4 transient refresh after a governed texture product is reimported.
+    // Durable WISCENE identity is unchanged, so this is deliberately not a
+    // creator command: every binding to the stable asset ID is force-reloaded
+    // from the newly accepted .rasset payload without manual reassignment.
+    [[nodiscard]] MaterialTextureRestoreResult RefreshMaterialTextureBindingsForAsset(
+        wi::scene::Scene& scene,
+        const std::string& projectRoot,
+        const StableId& projectId,
+        const StableId& textureAssetId,
+        MaterialTextureResourceLoader loader = {});
+
     class SetMaterialBaseColorTextureAssetCommand final : public ICommand
     {
     public:
