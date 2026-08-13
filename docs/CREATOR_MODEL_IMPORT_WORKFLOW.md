@@ -27,6 +27,13 @@ effect.
 
 Each material exposes roughness, metalness, reflectance, normal strength, AO strength and emissive strength with slider-plus-number controls. These values are stored in the creator recipe and replayed during reimport.
 
+The selected material displays a MAX-style vertical map list for Base Color,
+Normal, packed Surface, Roughness, Metalness, AO and Emissive. Every map owns a
+labeled thumbnail, path and browse row; selecting a row synchronizes the
+existing path and Remove controls. PBR scalar controls live in a separate
+adjacent importer section so the complete map list remains readable. A missing
+map is shown explicitly rather than borrowing a different slot's image.
+
 Preview lighting is editor-only and never enters the model product or level. The creator can adjust intensity, horizontal direction, elevation and ambient brightness, use Neutral/Outdoor/Dark presets, or reset to neutral. A toggleable neutral male reference is drawn at exactly 1.82 m beside the model. It is never parented to the import, never inherits its transform, and its side offset follows the current world-space preview bounds plus fixed clearance.
 
 The initial preview camera is also derived from those measured, scaled bounds. It uses a neutral 32-degree perspective lens and a bounding-sphere fit instead of a fixed close camera position, preventing character heads, hands or boots from acquiring exaggerated near-camera proportions. The creator's previous editor lens and transform are restored on commit or cancel.
@@ -34,10 +41,9 @@ The initial preview camera is also derived from those measured, scaled bounds. I
 The temporary stage is positioned beyond the normal editor camera's far plane, but remains close enough to the world origin to preserve sub-millimetre 32-bit transform precision. This avoids preview-only vertex/normal quantization; it does not modify or repair source mesh data.
 
 Studio uses one neutral visual system across the importer and ordinary editor:
-the established dark panel geometry and typography, white text, restrained grey
-focus treatment and no cyan chrome. The Material readout reserves enough height
-for every detected-map and scalar line, and subsequent texture/PBR controls are
-positioned below it rather than overlapping its text.
+opaque dark blue/black panels, consistent white text, restrained grey focus
+treatment and no cyan or translucent glass chrome. Headings, readouts and
+controls share the same surface treatment rather than using pale label slabs.
 
 The importer task workspace is docked eight pixels from the application right edge rather than positioned inside the ordinary editor viewport. This returns the previously unused right-side space to the model preview and makes the panel read as owned workspace chrome instead of a floating popup.
 

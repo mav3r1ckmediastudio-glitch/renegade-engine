@@ -21,13 +21,13 @@ namespace
 {
     namespace fs = std::filesystem;
     constexpr std::uint8_t SelectionStencilReference = 0x0F;
-    constexpr wi::Color HologramIdle = wi::Color(12, 16, 19, 248);
+    constexpr wi::Color HologramIdle = wi::Color(12, 16, 19, 255);
     constexpr wi::Color HologramFocus = wi::Color(26, 31, 35, 255);
     constexpr wi::Color HologramActive = wi::Color(38, 43, 47, 255);
-    constexpr wi::Color HologramText = wi::Color(244, 239, 233, 255);
+    constexpr wi::Color HologramText = wi::Color(244, 244, 244, 255);
     constexpr wi::Color HologramMuted = wi::Color(178, 178, 176, 255);
     constexpr wi::Color HologramBorder = wi::Color(38, 52, 61, 255);
-    constexpr wi::Color HologramPanel = wi::Color(8, 11, 13, 252);
+    constexpr wi::Color HologramPanel = wi::Color(8, 12, 16, 255);
     constexpr wi::Color HologramSelected = wi::Color(44, 35, 29, 255);
     constexpr wi::Color WarningAmber = wi::Color(255, 150, 40, 255);
     constexpr int LayoutPreferenceBits = 10;
@@ -328,6 +328,7 @@ namespace
     wi::gui::Label creatorImportMaterialLabel;
     wi::gui::Label creatorImportMaterialReadout;
     wi::gui::Label creatorImportTextureHelp;
+    renegade::studio::RenegadeTextureMapList creatorImportTexturePreviews;
     renegade::studio::RenegadeComboBox creatorImportTextureSlotCombo;
     renegade::studio::RenegadeTextInputField creatorImportTexturePath;
     renegade::studio::RenegadeButton creatorImportTextureBrowse;
@@ -511,6 +512,7 @@ namespace
 
     void RefreshCreatorImportTextureEditor()
     {
+        creatorImportTexturePreviews.SetSelectedSlot(creatorImportTextureSlot);
         if (creatorModelImporter.materialEntities.empty())
         {
             creatorImportTexturePath.SetValue("");
@@ -636,6 +638,7 @@ namespace
         if (session == nullptr || creatorModelImporter.materialEntities.empty())
         {
             creatorImportMaterialReadout.SetText("No imported materials detected.");
+            creatorImportTexturePreviews.ClearSlots();
             return;
         }
         creatorModelImporter.selectedMaterial = std::min(
@@ -648,22 +651,61 @@ namespace
         if (material == nullptr)
         {
             creatorImportMaterialReadout.SetText("Selected material is unavailable.");
+            creatorImportTexturePreviews.ClearSlots();
             return;
         }
-        const auto textureName = [material](const int slot)
+        creatorImportTexturePreviews.ClearSlots();
+        creatorImportTexturePreviews.SetSlot(
+            0,
+            material->textures[wi::scene::MaterialComponent::BASECOLORMAP].resource,
+            material->textures[wi::scene::MaterialComponent::BASECOLORMAP].name);
+        creatorImportTexturePreviews.SetSlot(
+            1,
+            material->textures[wi::scene::MaterialComponent::NORMALMAP].resource,
+            material->textures[wi::scene::MaterialComponent::NORMALMAP].name);
+        creatorImportTexturePreviews.SetSlot(
+            2,
+            material->textures[wi::scene::MaterialComponent::SURFACEMAP].resource,
+            material->textures[wi::scene::MaterialComponent::SURFACEMAP].name);
+        creatorImportTexturePreviews.SetSlot(
+            6,
+            material->textures[wi::scene::MaterialComponent::EMISSIVEMAP].resource,
+            material->textures[wi::scene::MaterialComponent::EMISSIVEMAP].name);
+
+        const std::uint32_t materialIndex = static_cast<std::uint32_t>(
+            creatorModelImporter.selectedMaterial);
+        const auto source = std::find_if(
+            creatorModelImporter.materialOverrides.begin(),
+            creatorModelImporter.materialOverrides.end(),
+            [materialIndex](const renegade::bridge::CreatorMaterialSourceOverride& value)
+            { return value.materialIndex == materialIndex; });
+        if (source != creatorModelImporter.materialOverrides.end())
         {
-            const auto& texture = material->textures[slot];
-            if (texture.name.empty())
-                return std::string("<none>");
-            return fs::u8path(texture.name).filename().generic_u8string();
-        };
+            const auto loadSource = [](const renegade::bridge::CreatorTextureSourceChoice& choice)
+            {
+                if (!choice.overridden || choice.path.empty())
+                    return wi::Resource{};
+                return wi::resourcemanager::Load(choice.path);
+            };
+            creatorImportTexturePreviews.SetSlot(
+                3, loadSource(source->roughness), source->roughness.path);
+            creatorImportTexturePreviews.SetSlot(
+                4, loadSource(source->metalness), source->metalness.path);
+            wi::Resource ao = loadSource(source->occlusion);
+            std::string aoPath = source->occlusion.path;
+            if (!ao.IsValid())
+            {
+                ao = material->textures[
+                    wi::scene::MaterialComponent::OCCLUSIONMAP].resource;
+                aoPath = material->textures[
+                    wi::scene::MaterialComponent::OCCLUSIONMAP].name;
+            }
+            creatorImportTexturePreviews.SetSlot(5, ao, std::move(aoPath));
+        }
+        creatorImportTexturePreviews.SetSelectedSlot(creatorImportTextureSlot);
+
         std::ostringstream out;
-        out << "Base: " << textureName(wi::scene::MaterialComponent::BASECOLORMAP)
-            << "\nNormal: " << textureName(wi::scene::MaterialComponent::NORMALMAP)
-            << "\nSurface: " << textureName(wi::scene::MaterialComponent::SURFACEMAP)
-            << "\nEmissive: " << textureName(wi::scene::MaterialComponent::EMISSIVEMAP)
-            << "\nAO: " << textureName(wi::scene::MaterialComponent::OCCLUSIONMAP)
-            << "\nR " << material->roughness
+        out << "R " << material->roughness
             << "  M " << material->metalness
             << "  Refl " << material->reflectance;
         creatorImportMaterialReadout.SetText(out.str());
@@ -1345,7 +1387,7 @@ namespace renegade::studio
         inspectorPanel_.SetShadowRadius(0.0f);
         inspectorPanel_.SetColor(wi::Color::Transparent());
         inspectorPanel_.SetColor(
-            wi::Color(8, 11, 13, 255),
+            HologramPanel,
             wi::gui::WIDGET_ID_WINDOW_BASE);
         GetGUI().AddWidget(&inspectorPanel_);
 
@@ -2804,7 +2846,7 @@ namespace renegade::studio
         creatorImportHelpLabel.SetFitTextEnabled(true);
 
         creatorImportSectionCombo.Create("Importer Section");
-        for (const char* section : {"ASSET", "TRANSFORM & SCALE", "MATERIAL", "LIGHTING & SCALE REFERENCE", "ANIMATION"})
+        for (const char* section : {"ASSET", "TRANSFORM & SCALE", "MATERIAL MAPS", "PBR VALUES", "LIGHTING & SCALE REFERENCE", "ANIMATION"})
             creatorImportSectionCombo.AddItem(section);
         creatorImportSectionCombo.SetSelectedWithoutCallback(0);
         creatorImportSectionCombo.OnSelect([this](const wi::gui::EventArgs& args)
@@ -2964,6 +3006,23 @@ namespace renegade::studio
         });
         creatorImportMaterialReadout.Create("");
         creatorImportMaterialReadout.SetFitTextEnabled(true);
+        creatorImportTexturePreviews.SetName("Imported Material Map Previews");
+        creatorImportTexturePreviews.SetShadowRadius(0.0f);
+        creatorImportTexturePreviews.OnSlotSelected([](const std::size_t index)
+        {
+            creatorImportTextureSlot = index;
+            creatorImportTextureSlotCombo.SetSelectedWithoutCallback(
+                static_cast<int>(index));
+            RefreshCreatorImportTextureEditor();
+        });
+        creatorImportTexturePreviews.OnBrowseRequested([](const std::size_t index)
+        {
+            creatorImportTextureSlot = index;
+            creatorImportTextureSlotCombo.SetSelectedWithoutCallback(
+                static_cast<int>(index));
+            RefreshCreatorImportTextureEditor();
+            OpenCreatorImportTextureBrowser();
+        });
         creatorImportTextureHelp.Create("TEXTURE SLOT // AUTO-DETECT, REPLACE OR REMOVE");
         creatorImportTextureSlotCombo.Create("Texture Slot");
         for (const char* name : {"BASE COLOR", "NORMAL", "SURFACE (PACKED)", "ROUGHNESS", "METALNESS", "AO", "EMISSIVE"})
@@ -3219,6 +3278,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
             static_cast<wi::gui::Widget*>(&creatorImportMaterialCombo),
             static_cast<wi::gui::Widget*>(&creatorImportMaterialReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportTexturePreviews),
             static_cast<wi::gui::Widget*>(&creatorImportTextureHelp),
             static_cast<wi::gui::Widget*>(&creatorImportTextureSlotCombo),
             static_cast<wi::gui::Widget*>(&creatorImportTexturePath),
@@ -3307,7 +3367,7 @@ namespace renegade::studio
             wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
 
         projectHubPanel_.SetColor(
-            wi::Color(2, 9, 16, 232),
+            wi::Color(8, 12, 16, 255),
             wi::gui::WIDGET_ID_WINDOW_BASE);
 
         // The global Project Hub theme is intentionally not the workspace
@@ -3324,14 +3384,14 @@ namespace renegade::studio
         // inspectorPanel_'s per-instance override, only the global theme.
         importScalePanel_.SetColor(wi::Color::Transparent());
         importScalePanel_.SetColor(
-            wi::Color(8, 11, 13, 255),
+            HologramPanel,
             wi::gui::WIDGET_ID_WINDOW_BASE);
 
         const auto ownLabel = [](wi::gui::Label& label)
         {
-            label.SetColor(wi::Color::Transparent());
+            label.SetColor(HologramIdle);
             label.SetShadowRadius(0.0f);
-            label.font.params.color = wi::Color(244, 239, 233, 255);
+            label.font.params.color = HologramText;
             label.font.params.bolden = 0.18f;
             label.font.params.shadowColor = wi::Color::Transparent();
         };
@@ -3348,6 +3408,31 @@ namespace renegade::studio
         ownLabel(oceanLabel_);
         ownLabel(importScaleTitleLabel_);
         ownLabel(importScaleReadoutLabel_);
+        ownLabel(workspaceTitle_);
+        ownLabel(statusLabel_);
+        ownLabel(hierarchyLabel_);
+        ownLabel(terrainLabel_);
+        ownLabel(terrainMaterialLabel_);
+        ownLabel(terrainSculptLabel_);
+        ownLabel(terrainBrushReadout_);
+        ownLabel(terrainStrokeDiagnostic_);
+        ownLabel(contentLabel_);
+        ownLabel(contentPlaceholder_);
+        ownLabel(hubBrandLabel_);
+        ownLabel(hubTitleLabel_);
+        ownLabel(hubSubtitleLabel_);
+        ownLabel(recentProjectsLabel_);
+        ownLabel(selectedProjectLabel_);
+        ownLabel(hubMessageLabel_);
+        ownLabel(creatorImportMaterialLabel);
+        ownLabel(creatorImportMaterialReadout);
+        ownLabel(creatorImportTextureHelp);
+        ownLabel(creatorImportAnimationLabel);
+        ownLabel(creatorImportAnimationReadout);
+        ownLabel(creatorImportTransformLabel);
+        ownLabel(creatorImportMaterialScalarLabel);
+        ownLabel(creatorImportLightingLabel);
+        ownLabel(creatorImportHelpLabel);
 
         wi::gui::Theme scrollbarTheme = theme;
         scrollbarTheme.image.corner_rounding = false;
@@ -3902,25 +3987,27 @@ namespace renegade::studio
         creatorImportMaterialCombo.SetPos(XMFLOAT2(12.0f, 210.0f));
         creatorImportMaterialCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
         creatorImportMaterialReadout.SetPos(XMFLOAT2(12.0f, 242.0f));
-        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 110.0f));
-        creatorImportTextureHelp.SetPos(XMFLOAT2(12.0f, 356.0f));
+        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        creatorImportTexturePreviews.SetPos(XMFLOAT2(12.0f, 274.0f));
+        creatorImportTexturePreviews.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 322.0f));
+        creatorImportTextureHelp.SetPos(XMFLOAT2(12.0f, 600.0f));
         creatorImportTextureHelp.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 20.0f));
-        creatorImportTextureSlotCombo.SetPos(XMFLOAT2(12.0f, 380.0f));
+        creatorImportTextureSlotCombo.SetPos(XMFLOAT2(12.0f, 624.0f));
         creatorImportTextureSlotCombo.SetSize(XMFLOAT2(150.0f, 28.0f));
-        creatorImportTexturePath.SetPos(XMFLOAT2(166.0f, 380.0f));
+        creatorImportTexturePath.SetPos(XMFLOAT2(166.0f, 624.0f));
         creatorImportTexturePath.SetSize(XMFLOAT2(importScalePanelWidth - 178.0f, 28.0f));
-        creatorImportTextureBrowse.SetPos(XMFLOAT2(12.0f, 412.0f));
+        creatorImportTextureBrowse.SetPos(XMFLOAT2(12.0f, 656.0f));
         creatorImportTextureBrowse.SetSize(XMFLOAT2(120.0f, 28.0f));
-        creatorImportTextureClear.SetPos(XMFLOAT2(136.0f, 412.0f));
+        creatorImportTextureClear.SetPos(XMFLOAT2(136.0f, 656.0f));
         creatorImportTextureClear.SetSize(XMFLOAT2(100.0f, 28.0f));
-        creatorImportMaterialScalarLabel.SetPos(XMFLOAT2(12.0f, 444.0f));
+        creatorImportMaterialScalarLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
         creatorImportMaterialScalarLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 20.0f));
-        layoutFullRow(creatorImportRoughness, 468.0f);
-        layoutFullRow(creatorImportMetalness, 496.0f);
-        layoutFullRow(creatorImportReflectance, 524.0f);
-        layoutFullRow(creatorImportNormalStrength, 552.0f);
-        layoutFullRow(creatorImportAoStrength, 580.0f);
-        layoutFullRow(creatorImportEmissiveStrength, 608.0f);
+        layoutFullRow(creatorImportRoughness, 214.0f);
+        layoutFullRow(creatorImportMetalness, 246.0f);
+        layoutFullRow(creatorImportReflectance, 278.0f);
+        layoutFullRow(creatorImportNormalStrength, 310.0f);
+        layoutFullRow(creatorImportAoStrength, 342.0f);
+        layoutFullRow(creatorImportEmissiveStrength, 374.0f);
 
         creatorImportLightingLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
         creatorImportLightingLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
@@ -7660,11 +7747,15 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
             static_cast<wi::gui::Widget*>(&creatorImportMaterialCombo),
             static_cast<wi::gui::Widget*>(&creatorImportMaterialReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportTexturePreviews),
             static_cast<wi::gui::Widget*>(&creatorImportTextureHelp),
             static_cast<wi::gui::Widget*>(&creatorImportTextureSlotCombo),
             static_cast<wi::gui::Widget*>(&creatorImportTexturePath),
             static_cast<wi::gui::Widget*>(&creatorImportTextureBrowse),
-            static_cast<wi::gui::Widget*>(&creatorImportTextureClear),
+            static_cast<wi::gui::Widget*>(&creatorImportTextureClear)})
+            widget->SetVisible(section == 2);
+
+        for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportMaterialScalarLabel),
             static_cast<wi::gui::Widget*>(&creatorImportRoughness),
             static_cast<wi::gui::Widget*>(&creatorImportMetalness),
@@ -7672,7 +7763,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportNormalStrength),
             static_cast<wi::gui::Widget*>(&creatorImportAoStrength),
             static_cast<wi::gui::Widget*>(&creatorImportEmissiveStrength)})
-            widget->SetVisible(section == 2);
+            widget->SetVisible(section == 3);
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportLightingLabel),
@@ -7683,7 +7774,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportLightingPreset),
             static_cast<wi::gui::Widget*>(&creatorImportLightingReset),
             static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible)})
-            widget->SetVisible(section == 3);
+            widget->SetVisible(section == 4);
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
@@ -7695,7 +7786,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout)})
-            widget->SetVisible(section == 4);
+            widget->SetVisible(section == 5);
     }
 
     void StudioRenderPath::ApplyImportScaleMode(

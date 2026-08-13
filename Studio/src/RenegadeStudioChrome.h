@@ -77,6 +77,36 @@ namespace renegade::studio
         std::function<void(float)> valueCommitted_;
     };
 
+    class RenegadeTextureMapList final : public wi::gui::Widget
+    {
+    public:
+        static constexpr std::size_t SlotCount = 7;
+
+        void ClearSlots();
+        void SetSlot(
+            std::size_t index,
+            const wi::Resource& resource,
+            std::string path);
+        void SetSelectedSlot(std::size_t index);
+        void OnSlotSelected(std::function<void(std::size_t)> callback);
+        void OnBrowseRequested(std::function<void(std::size_t)> callback);
+        void Update(const wi::Canvas& canvas, float dt) override;
+        void Render(
+            const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const override;
+        const char* GetWidgetTypeName() const override
+        {
+            return "RenegadeTextureMapList";
+        }
+
+    private:
+        std::array<wi::Resource, SlotCount> resources_;
+        std::array<std::string, SlotCount> paths_;
+        std::size_t selectedSlot_ = 0;
+        std::function<void(std::size_t)> slotSelected_;
+        std::function<void(std::size_t)> browseRequested_;
+    };
+
     class RenegadeStudioChrome : public wi::gui::Widget
     {
     public:

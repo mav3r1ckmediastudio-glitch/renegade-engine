@@ -48,6 +48,11 @@ Preview texture loads now use the native slot flags (including normal-map
 handling) and report a visible Material-section error instead of failing
 silently. `RenegadeReusableAssetReimportRecipeTests` covers distinct preview
 cache identity for changed Surface sources and PBR values.
+The Material section also restores the missing visual inspection surface with a
+MAX-style vertical map list. Base, Normal, packed Surface, Roughness, Metalness,
+AO and Emissive each own a labeled thumbnail/path/browse row. The active slot
+uses the normal Studio accent border, while PBR scalar controls live on their
+own adjacent importer section so neither map rows nor numeric controls overlap.
 
 GitHub CI remains authoritative because the owner CPU is confirmed unstable.
 Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and

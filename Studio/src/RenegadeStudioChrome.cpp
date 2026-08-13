@@ -70,13 +70,13 @@ namespace
         }
     }
 
-    constexpr wi::Color Surface0 = wi::Color(8, 11, 13, 252);
+    constexpr wi::Color Surface0 = wi::Color(8, 12, 16, 255);
     constexpr wi::Color Surface2 = wi::Color(16, 23, 28, 255);
     constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
     constexpr wi::Color BorderSoft = wi::Color(25, 36, 43, 255);
-    constexpr wi::Color Text = wi::Color(210, 200, 188, 255);
-    constexpr wi::Color TextStrong = wi::Color(244, 239, 233, 255);
-    constexpr wi::Color TextSecondary = wi::Color(235, 233, 229, 255);
+    constexpr wi::Color Text = wi::Color(214, 214, 214, 255);
+    constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
+    constexpr wi::Color TextSecondary = wi::Color(226, 226, 226, 255);
     constexpr wi::Color Muted = wi::Color(142, 151, 156, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
     constexpr wi::Color HoverEdge = wi::Color(72, 78, 82, 255);
@@ -505,6 +505,167 @@ namespace renegade::studio
             cmd,
             0.0f,
             0.18f);
+    }
+
+    void RenegadeTextureMapList::ClearSlots()
+    {
+        resources_ = {};
+        paths_ = {};
+    }
+
+    void RenegadeTextureMapList::SetSlot(
+        const std::size_t index,
+        const wi::Resource& resource,
+        std::string path)
+    {
+        if (index < resources_.size())
+        {
+            resources_[index] = resource;
+            paths_[index] = std::move(path);
+        }
+    }
+
+    void RenegadeTextureMapList::SetSelectedSlot(
+        const std::size_t index)
+    {
+        selectedSlot_ = std::min(index, resources_.size() - 1);
+    }
+
+    void RenegadeTextureMapList::OnSlotSelected(
+        std::function<void(std::size_t)> callback)
+    {
+        slotSelected_ = std::move(callback);
+    }
+
+    void RenegadeTextureMapList::OnBrowseRequested(
+        std::function<void(std::size_t)> callback)
+    {
+        browseRequested_ = std::move(callback);
+    }
+
+    void RenegadeTextureMapList::Update(
+        const wi::Canvas& canvas,
+        const float dt)
+    {
+        Widget::Update(canvas, dt);
+        if (!IsVisible() || !IsEnabled() ||
+            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            return;
+        }
+        const XMFLOAT4 pointer = wi::input::GetPointer();
+        if (pointer.x < translation.x || pointer.x >= translation.x + scale.x ||
+            pointer.y < translation.y || pointer.y >= translation.y + scale.y)
+        {
+            return;
+        }
+        const float rowHeight = scale.y / static_cast<float>(SlotCount);
+        const std::size_t index = std::min(
+            SlotCount - 1,
+            static_cast<std::size_t>((pointer.y - translation.y) / rowHeight));
+        selectedSlot_ = index;
+        if (slotSelected_)
+        {
+            slotSelected_(index);
+        }
+        if (pointer.x >= translation.x + scale.x - 30.0f && browseRequested_)
+        {
+            browseRequested_(index);
+        }
+    }
+
+    void RenegadeTextureMapList::Render(
+        const wi::Canvas& canvas,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible())
+        {
+            return;
+        }
+        ApplyScissor(canvas, scissorRect, cmd);
+
+        constexpr std::array<const char*, SlotCount> labels = {
+            "BASE COLOR", "NORMAL", "SURFACE", "ROUGHNESS",
+            "METALNESS", "AO", "EMISSIVE"};
+        const float rowHeight = scale.y / static_cast<float>(SlotCount);
+        const float thumbnail = std::max(18.0f, rowHeight - 17.0f);
+
+        for (std::size_t index = 0; index < SlotCount; ++index)
+        {
+            const float y = translation.y + static_cast<float>(index) * rowHeight;
+            DrawBorderedRect(
+                translation.x,
+                y,
+                scale.x,
+                rowHeight - 3.0f,
+                wi::Color(6, 10, 12, 255),
+                index == selectedSlot_ ? Forge : Border,
+                cmd);
+            DrawText(
+                labels[index],
+                translation.x + 5.0f,
+                y + 3.0f,
+                8,
+                index == selectedSlot_ ? TextStrong : TextSecondary,
+                cmd,
+                0.0f,
+                0.14f);
+
+            const auto& resource = resources_[index];
+            if (resource.IsValid() && resource.GetTexture().IsValid())
+            {
+                wi::image::Params image(
+                    translation.x + 5.0f,
+                    y + 14.0f,
+                    thumbnail,
+                    thumbnail);
+                image.blendFlag = wi::enums::BLENDMODE_ALPHA;
+                image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
+                wi::image::Draw(&resource.GetTexture(), image, cmd);
+            }
+            else
+            {
+                DrawText(
+                    "--",
+                    translation.x + 10.0f,
+                    y + 20.0f,
+                    9,
+                    Muted,
+                    cmd);
+            }
+
+            const float pathX = translation.x + thumbnail + 12.0f;
+            DrawBorderedRect(
+                pathX,
+                y + 14.0f,
+                scale.x - thumbnail - 47.0f,
+                thumbnail,
+                Surface0,
+                BorderSoft,
+                cmd);
+            DrawText(
+                Ellipsize(paths_[index].empty() ? "<NONE>" : paths_[index], 42),
+                pathX + 5.0f,
+                y + 20.0f,
+                8,
+                paths_[index].empty() ? Muted : TextStrong,
+                cmd);
+            DrawBorderedRect(
+                translation.x + scale.x - 30.0f,
+                y + 14.0f,
+                25.0f,
+                thumbnail,
+                Surface2,
+                index == selectedSlot_ ? Forge : Border,
+                cmd);
+            DrawText(
+                "...",
+                translation.x + scale.x - 25.0f,
+                y + 20.0f,
+                9,
+                TextStrong,
+                cmd);
+        }
     }
 
     void RenegadeStudioChrome::Create()
