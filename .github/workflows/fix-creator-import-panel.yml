@@ -1,0 +1,22 @@
+name: Fix creator importer panel
+on:
+  push:
+    branches: [agent/creator-workflow-repair]
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[panel-fix-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/creator-workflow-repair
+          fetch-depth: 0
+      - run: python .github/fix_creator_import_panel.py
+      - run: |
+          git config user.name "renegade-recovery-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add Studio/src/StudioApplication.cpp
+          git commit -m "Fix creator importer window registration [panel-fix-applied]"
+          git push origin HEAD:agent/creator-workflow-repair
