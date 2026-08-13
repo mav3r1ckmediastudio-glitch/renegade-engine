@@ -449,6 +449,27 @@ namespace renegade::bridge
         return prepared;
     }
 
+    bool ImportService::RefreshPreparedModelEvidence(
+        PreparedModelImport& prepared,
+        std::string& error) const
+    {
+        if (!prepared.IsReady() || prepared.scene_ == nullptr)
+        {
+            error = "Prepared model import is not ready for creator recipe edits.";
+            return false;
+        }
+        prepared.result_.imported = Summarize(*prepared.scene_);
+        prepared.result_.importedEvidence = SummarizeModelEvidence(*prepared.scene_);
+        if (prepared.result_.imported.meshes == 0 ||
+            prepared.result_.imported.objects == 0)
+        {
+            error = "Creator recipe removed all reusable mesh/object content.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
     ImportResult ImportService::SavePreparedModelAsset(
         PreparedModelImport& prepared) const
     {

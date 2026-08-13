@@ -572,7 +572,8 @@ namespace renegade::bridge
     CreatorModelImportResult CreatorAssetWorkflowService::ImportModel(
         const std::string& projectRoot,
         const StableId& projectId,
-        const std::string& externalSourcePath) const
+        const std::string& externalSourcePath,
+        const std::string& settingsJson) const
     {
         CreatorModelImportResult result;
         if (!IsValidStableId(projectId))
@@ -673,6 +674,7 @@ namespace renegade::bridge
         request.projectId = projectId;
         request.sourceProjectRelativePath = result.stagedSourceProjectRelativePath;
         request.assetProjectRelativePath = result.assetProjectRelativePath;
+        request.settingsJson = settingsJson;
         request.expectedFormat = format;
         result.asset = ReusableAssetService().ImportModelAsset(request);
         if (!result.asset.succeeded)

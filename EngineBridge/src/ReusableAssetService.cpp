@@ -1,4 +1,5 @@
 #include "renegade/bridge/ReusableAssetService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 
 #include <algorithm>
 #include <array>
@@ -204,11 +205,9 @@ namespace renegade::bridge
                     error = "Reusable model import settings must be a canonical JSON object.";
                     return {};
                 }
-                if (!options.empty())
-                {
-                    error = "Reusable model import version-1 settings do not support options.";
+                CreatorModelImportRecipe creatorRecipe;
+                if (!ParseCreatorModelImportOptions(optionsJson, creatorRecipe, error))
                     return {};
-                }
                 nlohmann::json recipe;
                 recipe["options"] = options;
                 recipe["source_format"] = SourceFormatToken(format);
@@ -839,10 +838,19 @@ namespace renegade::bridge
             cleanupTemporary();
             return result;
         }
-        const wi::scene::Scene* preparedScene = prepared.PeekScene();
+        wi::scene::Scene* preparedScene = prepared.PeekMutableScene();
         if (preparedScene == nullptr)
         {
             result.error = "Reusable model conversion lost its prepared scene before validation.";
+            cleanupTemporary();
+            return result;
+        }
+        CreatorModelImportRecipe creatorRecipe;
+        if (!ParseCreatorModelImportOptions(request.settingsJson, creatorRecipe, result.error) ||
+            !ApplyCreatorModelImportRecipe(*preparedScene, root.generic_u8string(),
+                request.projectId, creatorRecipe, result.error) ||
+            !importer.RefreshPreparedModelEvidence(prepared, result.error))
+        {
             cleanupTemporary();
             return result;
         }

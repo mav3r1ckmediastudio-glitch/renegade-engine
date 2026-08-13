@@ -1,4 +1,5 @@
 #include "renegade/bridge/ReusableAssetService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 
 #include <algorithm>
 #include <cctype>
@@ -208,6 +209,7 @@ namespace renegade::bridge
         bool ParseStoredRecipe(
             const ImportedProductRecord& provenance,
             ModelSourceFormat& format,
+            std::string& optionsJson,
             std::string& error)
         {
             format = ModelSourceFormat::Unknown;
@@ -229,11 +231,10 @@ namespace renegade::bridge
                     error = "Stored reusable-model import recipe is not the canonical version-1 contract.";
                     return false;
                 }
-                if (!recipe.at("options").empty())
-                {
-                    error = "Stored reusable-model version-1 import options are unsupported.";
+                optionsJson = recipe.at("options").dump();
+                CreatorModelImportRecipe creatorRecipe;
+                if (!ParseCreatorModelImportOptions(optionsJson, creatorRecipe, error))
                     return false;
-                }
                 const std::string token = recipe.at("source_format").get<std::string>();
                 if (!ParseSourceFormatToken(token, format) ||
                     !ImportService::IsModelSourceFormatSupported(format))
@@ -549,7 +550,8 @@ namespace renegade::bridge
         }
 
         ModelSourceFormat format = ModelSourceFormat::Unknown;
-        if (!ParseStoredRecipe(acceptedProvenance, format, result.error))
+        std::string creatorOptionsJson;
+        if (!ParseStoredRecipe(acceptedProvenance, format, creatorOptionsJson, result.error))
             return result;
         if (existingAsset.manifest.sourceFormat != SourceFormatToken(format))
         {
@@ -591,10 +593,19 @@ namespace renegade::bridge
             cleanupTemporary();
             return result;
         }
-        const wi::scene::Scene* preparedScene = prepared.PeekScene();
+        wi::scene::Scene* preparedScene = prepared.PeekMutableScene();
         if (preparedScene == nullptr)
         {
             result.error = "Reusable model reimport lost its prepared scene before validation.";
+            cleanupTemporary();
+            return result;
+        }
+        CreatorModelImportRecipe creatorRecipe;
+        if (!ParseCreatorModelImportOptions(creatorOptionsJson, creatorRecipe, result.error) ||
+            !ApplyCreatorModelImportRecipe(*preparedScene, root.generic_u8string(),
+                request.projectId, creatorRecipe, result.error) ||
+            !importer.RefreshPreparedModelEvidence(prepared, result.error))
+        {
             cleanupTemporary();
             return result;
         }
