@@ -18,13 +18,19 @@ Close LP08 by proving that a durable governed resource reference crosses the exi
 - `RefreshPackagedMaterialTextureAssets()` resolves and decodes every distinct required texture before changing any target material. A missing/corrupt required product therefore fails before partial material replacement.
 - Named package-relative Runtime launches execute this resource refresh after the accepted LP07 reusable-model refresh. Runtime evidence records the resource stable ID, governed payload hash and package path.
 
-## Integrity decision
+## Integrity and live-cache decision
 
-LP08 version-1 `.rasset` and LC01 freshness records retain their accepted `fnv1a64:` compatibility token. Gate 5 does not silently mutate those durable schemas or invalidate Gate 2-4 products.
+LP08 version-1 `.rasset` manifests and LC01 freshness records retain their accepted `fnv1a64:` compatibility token. Gate 5 does not silently mutate those durable schemas or invalidate Gate 2-4 products.
 
-This token is treated as deterministic freshness/identity evidence, not as a security digest. LP06 package promotion and launch integrity remain independently protected by the existing SHA-256 package-integrity contract. Gate 5 therefore adds no third persistent hash schema.
+The FNV token is treated only as deterministic persisted freshness/compatibility evidence. It is **not** accepted as the sole identity of an in-memory Wicked resource because a collision there could return the wrong cached pixels after reimport.
+
+`ResourceAssetCacheIdentityService` therefore derives the transient Windows Wicked resource-manager name from SHA-256 of the actual accepted payload bytes plus the stable product ID and original source extension. Studio material loading and packaged Runtime loading both use this seam. The cache identity is deliberately transient and never written back into `.rasset`, LC01 or WISCENE. Non-Windows compile portability uses a fresh stable UUID load token, so two preparations cannot alias even though Windows x64 remains the accepted LP08 target.
+
+LP06 package promotion and launch integrity remain independently protected by the existing SHA-256 package-integrity contract over packaged files. Gate 5 therefore adds collision resistance where it is needed without adding a third persistent asset hash schema.
 
 ## Acceptance
+
+`RenegadeResourceAssetCacheIdentityTests` runs Debug and Release and proves the Windows live-cache name is deterministic SHA-256 over actual payload bytes: the same payload produces the same transient cache identity and changed bytes produce a different identity without consulting the persisted FNV token.
 
 `RenegadeResourceAssetPackageRuntimeTests` runs Debug and Release and proves:
 
@@ -35,13 +41,16 @@ This token is treated as deterministic freshness/identity evidence, not as a sec
 - exact stable-ID/payload-hash/package-path evidence is returned;
 - WAV, Lua, MP4 and TTF products use the same generic packaged resource resolver.
 
-The final Gate 5 Release acceptance extends this to the real Windows owner build and named Runtime: save scene -> change source -> explicit stable-ID reimport without resaving scene -> build -> package contains the current `.rasset` and no retained source -> remove source project -> launch promoted executable from an unrelated working directory -> Runtime reports the current packaged resource stable ID/hash.
+`RenegadeResourceAssetPackageAcceptance` is Release-only and exercises the real owner-build/named-Runtime boundary. It deliberately saves `LevelOne.wiscene` against the original governed texture stable ID, changes the retained PNG, proves the stale product fails the owner build before smoke while preserving prior output, explicitly reimports with the same source/product IDs, and **does not resave the scene**. The current owner build must package the reimported `.rasset` while excluding the retained source. The staged named Runtime must report the current stable texture ID/payload hash. After safe promotion, the source project is deleted and the promoted named executable is launched directly again from an unrelated working directory; it must report the same current packaged resource evidence.
+
+Representative WAV, Lua, MP4 and TTF products remain generic package-resolution regression proof. Their full gameplay/authoring consumers are intentionally not claimed by LP08.
 
 ## Failure rules
 
 - stale or missing authoritative source fails the owner build through existing LC01 freshness validation;
 - missing/corrupt/mismatched governed package products fail Runtime resource preparation closed;
 - every distinct material texture resource is prepared before any material binding is changed;
+- a persisted-FNV collision cannot alias the Windows Wicked live cache because transient cache identity is derived from payload SHA-256;
 - failed build/promotion continues to preserve the previous owner-visible output through the existing LP06 safe-promotion transaction.
 
 ## Explicit exclusions
