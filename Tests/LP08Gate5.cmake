@@ -1,6 +1,6 @@
 # LP08 Gate 5 — governed resource dependency/package/Runtime acceptance.
-# Headless stable-ID closure and package resolver proof runs Debug + Release.
-# The final owner build and named Runtime proof executes Release-only.
+# Headless stable-ID closure, live cache identity and package resolver proofs run
+# Debug + Release. The final owner build and named Runtime proof is Release-only.
 add_executable(RenegadeResourceAssetPackageRuntimeTests
     ${CMAKE_CURRENT_LIST_DIR}/ResourceAssetPackageRuntimeTests.cpp
 )
@@ -17,6 +17,25 @@ target_compile_options(
 )
 set_target_properties(
     RenegadeResourceAssetPackageRuntimeTests
+    PROPERTIES FOLDER "Renegade/Tests"
+)
+
+add_executable(RenegadeResourceAssetCacheIdentityTests
+    ${CMAKE_CURRENT_LIST_DIR}/ResourceAssetCacheIdentityTests.cpp
+)
+
+target_link_libraries(
+    RenegadeResourceAssetCacheIdentityTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+target_compile_options(
+    RenegadeResourceAssetCacheIdentityTests
+    PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+set_target_properties(
+    RenegadeResourceAssetCacheIdentityTests
     PROPERTIES FOLDER "Renegade/Tests"
 )
 
@@ -74,6 +93,7 @@ endif()
 add_dependencies(
     RenegadeBridgeTests
     RenegadeResourceAssetPackageRuntimeTests
+    RenegadeResourceAssetCacheIdentityTests
     RenegadeResourceAssetPackageAcceptance
 )
 
@@ -85,6 +105,15 @@ add_test(
 set_tests_properties(
     RenegadeResourceAssetPackageRuntimeTests
     PROPERTIES TIMEOUT 120
+)
+
+add_test(
+    NAME RenegadeResourceAssetCacheIdentityTests
+    COMMAND RenegadeResourceAssetCacheIdentityTests
+)
+set_tests_properties(
+    RenegadeResourceAssetCacheIdentityTests
+    PROPERTIES TIMEOUT 60
 )
 
 set(LP08_GATE5_LP03_FIXTURE
