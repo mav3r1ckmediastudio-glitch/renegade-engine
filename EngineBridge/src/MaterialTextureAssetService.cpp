@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/MaterialService.h"
+#include "renegade/bridge/ResourceAssetCacheIdentityService.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -48,28 +49,6 @@ namespace
                 return record.productAssetId == assetId;
             });
         return found == registry.importedProducts.end() ? nullptr : &*found;
-    }
-
-    std::string ExtensionForFormat(const ResourceSourceFormat format)
-    {
-        for (const auto& capability : GetSupportedResourceFormats())
-        {
-            if (capability.format == format)
-                return capability.extension;
-        }
-        return {};
-    }
-
-    std::string LogicalResourceName(
-        const StableId& assetId,
-        std::string hash,
-        const ResourceSourceFormat format)
-    {
-        hash.erase(std::remove(hash.begin(), hash.end(), ':'), hash.end());
-        std::replace(hash.begin(), hash.end(), '/', '_');
-        std::replace(hash.begin(), hash.end(), '\\', '_');
-        return "renegade_" + assetId + "_" + hash +
-            ExtensionForFormat(format);
     }
 
     bool ApplyBinding(
@@ -206,15 +185,16 @@ namespace renegade::bridge
         prepared.productProjectRelativePath = record->projectRelativePath;
         prepared.sourceFormat = document.manifest.sourceFormat;
         prepared.payloadHash = document.manifest.payloadHash;
-        prepared.logicalResourceName = LogicalResourceName(
-            textureAssetId, document.manifest.payloadHash,
-            document.manifest.sourceFormat);
         prepared.payload = std::move(document.payload);
-        if (prepared.logicalResourceName.empty() ||
-            ExtensionForFormat(prepared.sourceFormat).empty())
+        if (!BuildResourcePayloadCacheName(
+                "renegade_",
+                textureAssetId,
+                prepared.sourceFormat,
+                prepared.payload,
+                prepared.logicalResourceName,
+                error))
         {
             prepared = {};
-            error = "The governed texture source format cannot be handed to Wicked.";
             return false;
         }
         error.clear();
