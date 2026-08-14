@@ -210,8 +210,34 @@ namespace
         bool ambientCaptured = false;
         bool mannequinVisible = true;
         std::string thumbnailCapturePath;
+        bool thumbnailCapturePending = false;
+        bridge::PreparedModelImport preparedForCommit;
         std::size_t workspaceSection = 0;
     };
+
+    wi::allocator::shared_ptr<wi::scene::Scene> CloneCreatorPreviewScene(
+        wi::scene::Scene& source,
+        std::string& error)
+    {
+        auto clone = wi::allocator::make_shared_single<wi::scene::Scene>();
+        wi::Archive archive;
+        archive.SetReadModeAndResetPos(false);
+        wi::ecs::EntitySerializer serializer;
+        source.componentLibrary.Serialize(archive, serializer);
+        wi::jobsystem::Wait(serializer.ctx);
+        archive.SetReadModeAndResetPos(true);
+        clone->componentLibrary.Serialize(archive, serializer);
+        wi::jobsystem::Wait(serializer.ctx);
+        if (clone->transforms.GetCount() == 0 ||
+            clone->objects.GetCount() == 0 ||
+            clone->meshes.GetCount() == 0)
+        {
+            error = "The already-converted model could not be cloned for importer preview.";
+            return {};
+        }
+        error.clear();
+        return clone;
+    }
 
     CreatorModelImportWorkspaceState creatorModelImporter;
     renegade::studio::RenegadeComboBox creatorImportMaterialCombo;
@@ -380,6 +406,7 @@ namespace
     void QueueCreatorImportScaleRuler()
     {
         if (!creatorModelImporter.active ||
+            creatorModelImporter.thumbnailCapturePending ||
             !creatorModelImporter.mannequinVisible)
             return;
         XMFLOAT3 minimum;
@@ -1056,6 +1083,7 @@ namespace renegade::studio
         const wi::graphics::CommandList cmd) const
     {
         if (!gridVisible_ || projectHubVisible_ ||
+            creatorModelImporter.thumbnailCapturePending ||
             !gridPipeline_.IsValid() || camera == nullptr)
         {
             return;
@@ -1103,6 +1131,12 @@ namespace renegade::studio
         const wi::graphics::CommandList cmd) const
     {
         RenderPath3D::RenderTransparents(cmd);
+
+        // The base 3D scene (including the model's own transparent materials)
+        // remains visible. Everything below is Renegade editor/importer overlay
+        // content and must not contaminate the Asset Browser thumbnail.
+        if (creatorModelImporter.thumbnailCapturePending)
+            return;
 
         const bool drawMannequin = creatorModelImporter.active &&
             creatorModelImporter.mannequinVisible && session_ != nullptr;
@@ -1267,6 +1301,7 @@ namespace renegade::studio
 
         const auto* depthStencil = GetDepthStencil();
         if (projectHubVisible_ ||
+            creatorModelImporter.thumbnailCapturePending ||
             outlinedEntity_ == wi::ecs::INVALID_ENTITY ||
             depthStencil == nullptr ||
             !selectionOutlineMask_.IsValid())
@@ -3599,6 +3634,33 @@ namespace renegade::studio
     {
         PollTestLevel();
 
+        // The capture button is processed inside the previous frame's GUI
+        // update. While pending, every Renegade overlay is suppressed for that
+        // frame. Save that already-rendered clean 3D result here, before GUI
+        // callbacks can arm another capture.
+        if (creatorModelImporter.thumbnailCapturePending &&
+            !creatorModelImporter.thumbnailCapturePath.empty())
+        {
+            const bool captured = wi::helper::saveTextureToFile(
+                GetRenderResult3D(),
+                creatorModelImporter.thumbnailCapturePath);
+            creatorModelImporter.thumbnailCapturePending = false;
+            if (captured)
+            {
+                creatorImportThumbnailCapture.SetText("RETAKE THUMBNAIL");
+                creatorImportThumbnailStatus.SetText(
+                    "THUMBNAIL CAPTURED // CLEAN ASSET FRAME");
+                importScaleApplyButton_.SetEnabled(true);
+            }
+            else
+            {
+                creatorModelImporter.thumbnailCapturePath.clear();
+                creatorImportThumbnailStatus.SetText(
+                    "THUMBNAIL FAILED // RETAKE");
+                importScaleApplyButton_.SetEnabled(false);
+            }
+        }
+
         // Scene deserialization runs on Wicked's job system. Keep the current
         // document visible but immutable until its prepared replacement is
         // committed at EVENT_THREAD_SAFE_POINT. This check intentionally
@@ -3606,6 +3668,7 @@ namespace renegade::studio
         // scene changes from inside the base update.
         if (sceneOpenInProgress_)
         {
+            detail::ClearCreatorAssetDragPreview();
             pendingAction_ = EditorAction::None;
             return;
         }
@@ -3614,8 +3677,18 @@ namespace renegade::studio
 
         if (session_ == nullptr || projectHubVisible_)
         {
+            detail::ClearCreatorAssetDragPreview();
             return;
         }
+
+        // Renegade chrome callbacks have fully returned. It is now safe to
+        // create/move/remove the transient prefab copy. On LMB release this
+        // clears the ghost before HandleCreatorAssetPlacement() executes the
+        // one real production placement command later in this same update.
+        if (camera != nullptr)
+            detail::UpdateCreatorAssetDragPreview(*this, *camera);
+        else
+            detail::ClearCreatorAssetDragPreview();
 
         QueueCreatorImportScaleRuler();
 
@@ -3793,6 +3866,7 @@ namespace renegade::studio
         device->BindScissorRects(1, &viewportScissor, cmd);
 
         if (!projectHubVisible_ &&
+            !creatorModelImporter.thumbnailCapturePending &&
             outlinedEntity_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
@@ -3807,7 +3881,9 @@ namespace renegade::studio
                 XMFLOAT4(0.30f, 0.86f, 1.0f, 0.90f));
         }
 
-        if (!projectHubVisible_ && gizmoEntity_ != wi::ecs::INVALID_ENTITY)
+        if (!projectHubVisible_ &&
+            !creatorModelImporter.thumbnailCapturePending &&
+            gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
             gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
         }
@@ -5663,7 +5739,8 @@ namespace renegade::studio
     bool StudioRenderPath::HandleLightSceneIcons(
         const XMFLOAT4& pointer)
     {
-        if (session_ == nullptr || camera == nullptr || projectHubVisible_)
+        if (session_ == nullptr || camera == nullptr || projectHubVisible_ ||
+            creatorModelImporter.thumbnailCapturePending)
         {
             return false;
         }
@@ -7760,9 +7837,30 @@ namespace renegade::studio
                         const std::size_t materialStart = liveScene.materials.GetCount();
                         const std::size_t animationStart = liveScene.animations.GetCount();
 
+                        // Keep the one expensive conversion for governed commit.
+                        // The live importer gets a Wicked prefab copy, so cancelling
+                        // or editing the preview never consumes the retained source
+                        // scene and Confirm never needs to invoke FBX/GLTF again.
+                        std::string previewCloneError;
+                        auto previewScene = CloneCreatorPreviewScene(
+                            *state->prepared.PeekMutableScene(),
+                            previewCloneError);
+                        if (!previewScene.IsValid())
+                        {
+                            creatorModelImporter = {};
+                            studioChrome_.SetStatusText(
+                                "IMPORT MODEL // PREVIEW CLONE FAILED");
+                            wi::helper::messageBox(
+                                previewCloneError,
+                                "Import Model");
+                            return;
+                        }
+                        creatorModelImporter.preparedForCommit =
+                            std::move(state->prepared);
+
                         auto place = std::make_unique<bridge::PlaceImportedModelCommand>(
                             liveScene,
-                            state->prepared.ReleaseScene(),
+                            std::move(previewScene),
                             XMFLOAT3(0.0f, CreatorImportStageHeight, 0.0f),
                             creatorModelImporter.automaticScale);
                         auto* placed = place.get();
@@ -8032,6 +8130,7 @@ namespace renegade::studio
     {
         if (session_ == nullptr || !creatorModelImporter.active ||
             creatorModelImporter.committing ||
+            creatorModelImporter.thumbnailCapturePending ||
             !session_->Projects().HasProject())
             return;
 
@@ -8049,28 +8148,23 @@ namespace renegade::studio
 
         const fs::path capturePath =
             directory / ".creator-asset-thumbnail.png";
-        if (!wi::helper::saveTextureToFile(
-                GetRenderResult3D(), capturePath.generic_u8string()))
-        {
-            creatorImportThumbnailStatus.SetText(
-                "THUMBNAIL FAILED // RETAKE");
-            return;
-        }
-
+        fs::remove(capturePath, ec);
         creatorModelImporter.thumbnailCapturePath =
             capturePath.generic_u8string();
-        creatorImportThumbnailCapture.SetText("RETAKE THUMBNAIL");
+        creatorModelImporter.thumbnailCapturePending = true;
         creatorImportThumbnailStatus.SetText(
-            "THUMBNAIL CAPTURED // READY TO CONFIRM");
-        importScaleApplyButton_.SetEnabled(true);
+            "CAPTURING CLEAN ASSET FRAME...");
+        importScaleApplyButton_.SetEnabled(false);
     }
 
     void StudioRenderPath::ApplyImportScaleMode(
         const bridge::ModelScaleMode)
     {
-        if (session_ == nullptr || !creatorModelImporter.active || creatorModelImporter.committing)
+        if (session_ == nullptr || !creatorModelImporter.active ||
+            creatorModelImporter.committing)
             return;
-        if (creatorModelImporter.thumbnailCapturePath.empty() ||
+        if (creatorModelImporter.thumbnailCapturePending ||
+            creatorModelImporter.thumbnailCapturePath.empty() ||
             !fs::exists(fs::u8path(creatorModelImporter.thumbnailCapturePath)))
         {
             creatorImportThumbnailStatus.SetText(
@@ -8078,45 +8172,21 @@ namespace renegade::studio
             importScaleApplyButton_.SetEnabled(false);
             return;
         }
+        if (!creatorModelImporter.preparedForCommit.IsReady())
+        {
+            studioChrome_.SetStatusText("IMPORT MODEL // RETAINED PREVIEW LOST");
+            wi::helper::messageBox(
+                "The importer lost the already-converted model scene. The project was not changed.",
+                "Import Model");
+            return;
+        }
 
         auto& liveScene = session_->Scenes().GetScene();
-        auto* previewTransform = liveScene.transforms.GetComponent(creatorModelImporter.previewRoot);
-        if (previewTransform == nullptr)
+        if (liveScene.transforms.GetComponent(creatorModelImporter.previewRoot) == nullptr)
         {
             DismissImportScalePanel();
             return;
         }
-
-        const std::string sourcePath = creatorModelImporter.sourcePath;
-        const auto cameraBefore = creatorModelImporter.cameraBefore;
-        const auto materialOverrides = creatorModelImporter.materialOverrides;
-        const auto animationRecipe = creatorModelImporter.animationRecipe;
-        const XMFLOAT3 positionOffset = creatorModelImporter.positionOffset;
-        const XMFLOAT3 rotationDegrees = creatorModelImporter.rotationDegrees;
-        const XMFLOAT3 authoredScale = creatorModelImporter.scale;
-        const std::string assetName = creatorModelImporter.assetName;
-        const std::string destinationFolder = creatorModelImporter.destinationFolder;
-        creatorModelImporter.committing = true;
-
-        RestoreCreatorImportPreviewEnvironment();
-        while (session_->Commands().UndoCount() > creatorModelImporter.undoBaseline)
-        {
-            if (!session_->Commands().Undo())
-                break;
-        }
-        importScalePanel_.SetVisible(false);
-        studioChrome_.SetVisible(true);
-        inspectorPanel_.SetVisible(true);
-        hierarchySearch_.SetVisible(true);
-        editorCameraTransform_ = cameraBefore;
-        editorCameraTransform_.UpdateTransform();
-        camera->fov = creatorModelImporter.cameraFovBefore;
-        camera->TransformCamera(editorCameraTransform_);
-        camera->UpdateCamera();
-        ClearSelectionOutline();
-        session_->Selection().Clear();
-        RefreshHierarchy();
-        RefreshInspector();
 
         struct GovernedCommitState
         {
@@ -8133,39 +8203,69 @@ namespace renegade::studio
             XMFLOAT3 rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
             XMFLOAT3 authoredScale = XMFLOAT3(1.0f, 1.0f, 1.0f);
             std::string settingsJson = "{}";
+            bridge::PreparedModelImport prepared;
             bridge::CreatorModelImportResult imported;
         };
+
         auto state = std::make_shared<GovernedCommitState>();
         const auto& project = session_->Projects().CurrentProject();
         state->projectRoot = project.rootPath;
         state->projectId = project.projectId;
-        state->sourcePath = sourcePath;
-        state->assetName = assetName;
-        state->destinationFolder = destinationFolder;
+        state->sourcePath = creatorModelImporter.sourcePath;
+        state->assetName = creatorModelImporter.assetName;
+        state->destinationFolder = creatorModelImporter.destinationFolder;
         state->thumbnailCapturePath = creatorModelImporter.thumbnailCapturePath;
-        state->materialOverrides = materialOverrides;
-        state->animationRecipe = animationRecipe;
-        state->positionOffset = positionOffset;
-        state->rotationDegrees = rotationDegrees;
-        state->authoredScale = authoredScale;
+        state->materialOverrides = creatorModelImporter.materialOverrides;
+        state->animationRecipe = creatorModelImporter.animationRecipe;
+        state->positionOffset = creatorModelImporter.positionOffset;
+        state->rotationDegrees = creatorModelImporter.rotationDegrees;
+        state->authoredScale = creatorModelImporter.scale;
+        state->prepared = std::move(creatorModelImporter.preparedForCommit);
+
+        const auto cameraBefore = creatorModelImporter.cameraBefore;
+        const float cameraFovBefore = creatorModelImporter.cameraFovBefore;
+        const std::size_t undoBaseline = creatorModelImporter.undoBaseline;
+        creatorModelImporter.committing = true;
+
+        RestoreCreatorImportPreviewEnvironment();
+        while (session_->Commands().UndoCount() > undoBaseline)
+        {
+            if (!session_->Commands().Undo())
+                break;
+        }
+        importScalePanel_.SetVisible(false);
+        studioChrome_.SetVisible(true);
+        inspectorPanel_.SetVisible(true);
+        hierarchySearch_.SetVisible(true);
+        editorCameraTransform_ = cameraBefore;
+        editorCameraTransform_.UpdateTransform();
+        camera->fov = cameraFovBefore;
+        camera->TransformCamera(editorCameraTransform_);
+        camera->UpdateCamera();
+        ClearSelectionOutline();
+        session_->Selection().Clear();
+
+        // The importer stage is over now, not when the background transaction
+        // eventually finishes. This restores the world grid immediately.
+        creatorModelImporter = {};
+        importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
         studioChrome_.SetStatusText("IMPORT MODEL // COMMITTING GOVERNED ASSET");
 
         wi::jobsystem::Execute(modelImportWorkload_,
             [this, state](wi::jobsystem::JobArgs)
             {
-                const fs::path previewDirectory =
-                    fs::u8path(state->projectRoot) / "Intermediate" / "Imports";
-                std::error_code ec;
-                fs::create_directories(previewDirectory, ec);
-                bridge::ModelImportRequest modelRequest;
-                modelRequest.sourcePath = state->sourcePath;
-                modelRequest.assetPath = (previewDirectory / ".creator-commit.wiscene").generic_u8string();
-                modelRequest.expectedFormat = bridge::ImportService::ClassifyModelSourceFormat(state->sourcePath);
-                auto converted = bridge::ImportService().PrepareModelAsset(modelRequest);
-                if (converted.IsReady())
+                if (!state->prepared.IsReady() || state->prepared.PeekScene() == nullptr)
+                {
+                    state->imported.error =
+                        "The retained prepared model scene is unavailable.";
+                }
+                else
                 {
                     bridge::CreatorModelMaterialPreparationRequest materialRequest;
-                    materialRequest.preparedScene = converted.PeekScene();
+                    materialRequest.preparedScene = state->prepared.PeekScene();
                     materialRequest.projectRoot = state->projectRoot;
                     materialRequest.projectId = state->projectId;
                     materialRequest.modelSourcePath = state->sourcePath;
@@ -8196,17 +8296,19 @@ namespace renegade::studio
                         state->imported.error = materials.error;
                     }
                 }
-                else
-                {
-                    state->imported.error = converted.Result().error;
-                }
 
                 bridge::CreatorAssetWorkflowService workflow;
                 if (state->imported.error.empty())
+                {
                     state->imported = workflow.ImportModel(
-                        state->projectRoot, state->projectId, state->sourcePath,
-                        state->settingsJson, state->assetName,
-                        state->destinationFolder);
+                        state->projectRoot,
+                        state->projectId,
+                        state->sourcePath,
+                        state->settingsJson,
+                        state->assetName,
+                        state->destinationFolder,
+                        std::move(state->prepared));
+                }
                 if (state->imported.succeeded)
                 {
                     fs::path thumbnailPath =
@@ -8222,16 +8324,17 @@ namespace renegade::studio
                     if (thumbnailEc)
                         state->thumbnailError = thumbnailEc.message();
                 }
+
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, state](std::uint64_t)
                     {
-                        creatorModelImporter = {};
                         if (!state->imported.succeeded)
                         {
                             studioChrome_.SetStatusText("IMPORT MODEL // COMMIT FAILED");
                             wi::helper::messageBox(
-                                "The preview was discarded safely, but the governed asset could not be committed.\n\nReason: " + state->imported.error,
+                                "The preview was discarded safely, but the governed asset could not be committed.\n\nReason: " +
+                                    state->imported.error,
                                 "Import Model");
                             return;
                         }
@@ -8262,7 +8365,8 @@ namespace renegade::studio
                             (state->thumbnailError.empty()
                                 ? std::string(" // THUMBNAIL SAVED // ")
                                 : std::string(" // THUMBNAIL WARNING // ")) +
-                            fs::u8path(state->imported.assetProjectRelativePath).filename().generic_u8string());
+                            fs::u8path(state->imported.assetProjectRelativePath)
+                                .filename().generic_u8string());
                     });
             });
     }

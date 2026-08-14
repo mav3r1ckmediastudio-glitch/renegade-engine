@@ -325,7 +325,10 @@ namespace renegade::studio
 
     namespace detail
     {
-        void EnsureCreatorAssetDragPreviewInstalled();
+        void UpdateCreatorAssetDragPreview(
+            const wi::Canvas& canvas,
+            const wi::scene::CameraComponent& camera);
+        void ClearCreatorAssetDragPreview();
     }
 
     // LP07 Gate 5 overlays the creator Asset Browser lifecycle on Renegade's
@@ -339,10 +342,10 @@ namespace renegade::studio
         CreatorAssetStudioChrome()
         {
             current_ = this;
-            detail::EnsureCreatorAssetDragPreviewInstalled();
         }
         ~CreatorAssetStudioChrome() override
         {
+            detail::ClearCreatorAssetDragPreview();
             if (current_ == this)
                 current_ = nullptr;
         }

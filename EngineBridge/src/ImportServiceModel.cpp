@@ -592,6 +592,75 @@ namespace renegade::bridge
         return true;
     }
 
+    bool ImportService::RetargetPreparedModelAsset(
+        PreparedModelImport& prepared,
+        const ModelImportRequest& request,
+        std::string& error) const
+    {
+        if (!prepared.IsReady() || prepared.scene_ == nullptr)
+        {
+            error = "Prepared model import is not ready to retarget.";
+            return false;
+        }
+        if (request.sourcePath.empty() || request.assetPath.empty())
+        {
+            error = "Prepared model retarget requires source and destination paths.";
+            return false;
+        }
+
+        const ModelSourceFormat format = ClassifyModelSourceFormat(request.sourcePath);
+        if (!IsModelSourceFormatSupported(format) ||
+            format != prepared.result_.sourceFormat ||
+            (request.expectedFormat != ModelSourceFormat::Unknown &&
+                request.expectedFormat != format))
+        {
+            error = "Prepared model retarget source format does not match the converted preview.";
+            return false;
+        }
+        if (LowerExtension(request.assetPath) != ".wiscene")
+        {
+            error = "Prepared model retarget destination must use the .wiscene extension.";
+            return false;
+        }
+
+        std::uint64_t sourceBytes = 0;
+        std::uint64_t sourceFingerprint = 0;
+        if (!FingerprintFile(
+                request.sourcePath,
+                sourceBytes,
+                sourceFingerprint,
+                error))
+        {
+            return false;
+        }
+        if (sourceBytes != prepared.result_.sourceBytes ||
+            sourceFingerprint != prepared.result_.sourceFingerprint)
+        {
+            error =
+                "Project-retained model source differs from the source used to create the importer preview.";
+            return false;
+        }
+
+        std::error_code ec;
+        const fs::path destination = fs::u8path(request.assetPath);
+        if (!destination.parent_path().empty())
+        {
+            fs::create_directories(destination.parent_path(), ec);
+            if (ec)
+            {
+                error = "Could not create prepared model destination folder: " +
+                    destination.parent_path().u8string();
+                return false;
+            }
+        }
+
+        prepared.result_.sourcePath = request.sourcePath;
+        prepared.result_.assetPath = request.assetPath;
+        prepared.result_.error.clear();
+        error.clear();
+        return true;
+    }
+
     ImportResult ImportService::SavePreparedModelAsset(
         PreparedModelImport& prepared) const
     {

@@ -668,7 +668,8 @@ namespace renegade::bridge
         const std::string& externalSourcePath,
         const std::string& settingsJson,
         const std::string& assetName,
-        const std::string& destinationFolder) const
+        const std::string& destinationFolder,
+        PreparedModelImport preparedModel) const
     {
         CreatorModelImportResult result;
         if (!IsValidStableId(projectId))
@@ -780,7 +781,8 @@ namespace renegade::bridge
         request.assetProjectRelativePath = result.assetProjectRelativePath;
         request.settingsJson = settingsJson;
         request.expectedFormat = format;
-        result.asset = ReusableAssetService().ImportModelAsset(request);
+        result.asset = ReusableAssetService().ImportModelAsset(
+            request, {}, std::move(preparedModel));
         if (!result.asset.succeeded)
         {
             result.error = result.asset.error;

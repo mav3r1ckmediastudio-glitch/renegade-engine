@@ -661,7 +661,8 @@ namespace renegade::bridge
 
     ReusableModelImportResult ReusableAssetService::ImportModelAsset(
         const ReusableModelImportRequest& request,
-        ReusableModelImportOptions options) const
+        ReusableModelImportOptions options,
+        PreparedModelImport preparedModel) const
     {
         ReusableModelImportResult result;
         result.sourceProjectRelativePath = request.sourceProjectRelativePath;
@@ -828,15 +829,32 @@ namespace renegade::bridge
         importRequest.sourcePath = sourcePath.generic_u8string();
         importRequest.assetPath = temporaryWiscene.generic_u8string();
         importRequest.expectedFormat = format;
-        auto prepared = importer.PrepareModelAsset(importRequest);
-        if (!prepared.IsReady())
+
+        PreparedModelImport prepared = std::move(preparedModel);
+        if (prepared.PeekScene() != nullptr)
         {
-            result.import = prepared.Result();
-            result.error = result.import.error.empty()
-                ? "Reusable model conversion did not produce a prepared scene."
-                : result.import.error;
-            cleanupTemporary();
-            return result;
+            if (!prepared.IsReady() ||
+                !importer.RetargetPreparedModelAsset(
+                    prepared, importRequest, result.error))
+            {
+                if (result.error.empty())
+                    result.error = "Retained creator preview could not be reused for governed import.";
+                cleanupTemporary();
+                return result;
+            }
+        }
+        else
+        {
+            prepared = importer.PrepareModelAsset(importRequest);
+            if (!prepared.IsReady())
+            {
+                result.import = prepared.Result();
+                result.error = result.import.error.empty()
+                    ? "Reusable model conversion did not produce a prepared scene."
+                    : result.import.error;
+                cleanupTemporary();
+                return result;
+            }
         }
         wi::scene::Scene* preparedScene = prepared.PeekMutableScene();
         if (preparedScene == nullptr)

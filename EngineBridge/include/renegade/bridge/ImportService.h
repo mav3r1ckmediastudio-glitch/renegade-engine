@@ -196,6 +196,15 @@ namespace renegade::bridge
             PreparedModelImport& prepared,
             std::string& error) const;
 
+        // Repoint an already-converted model at the project-retained source and
+        // final temporary WISCENE destination without invoking the converter a
+        // second time. The retained source must be byte-identical to the source
+        // that produced the prepared scene.
+        [[nodiscard]] bool RetargetPreparedModelAsset(
+            PreparedModelImport& prepared,
+            const ModelImportRequest& request,
+            std::string& error) const;
+
         [[nodiscard]] ImportResult CompleteModelAsset(
             PreparedModelImport prepared) const;
 

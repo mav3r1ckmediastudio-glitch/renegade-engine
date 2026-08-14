@@ -178,6 +178,11 @@ namespace renegade::bridge
             return scene_.IsValid() ? scene_.get() : nullptr;
         }
 
+        [[nodiscard]] wi::scene::Scene* PeekMutableScene() noexcept
+        {
+            return scene_.IsValid() ? scene_.get() : nullptr;
+        }
+
         [[nodiscard]] wi::allocator::shared_ptr<wi::scene::Scene>
         ReleaseScene() noexcept
         {
@@ -202,7 +207,8 @@ namespace renegade::bridge
     public:
         [[nodiscard]] ReusableModelImportResult ImportModelAsset(
             const ReusableModelImportRequest& request,
-            ReusableModelImportOptions options = {}) const;
+            ReusableModelImportOptions options = {},
+            PreparedModelImport preparedModel = {}) const;
 
         [[nodiscard]] ReusableModelReimportResult ReimportModelAsset(
             const ReusableModelReimportRequest& request,

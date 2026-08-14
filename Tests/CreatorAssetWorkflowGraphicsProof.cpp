@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -144,9 +145,69 @@ namespace
             return false;
 
         CreatorAssetWorkflowService workflow;
+
+        // The creator importer already paid the conversion cost to create its
+        // visible preview. Prove that exact prepared scene can be retargeted to
+        // byte-identical project-owned source bytes, while even a one-byte source
+        // change is rejected before governed commit.
+        ImportService importer;
+        ModelImportRequest previewRequest;
+        previewRequest.sourcePath = animatedFixture.generic_u8string();
+        previewRequest.assetPath =
+            (projectRoot / "Intermediate" / "Imports" / ".retained-preview.wiscene")
+                .generic_u8string();
+        previewRequest.expectedFormat = ModelSourceFormat::Fbx;
+        auto retained = importer.PrepareModelAsset(previewRequest);
+        if (!Require(retained.IsReady(),
+                "representative FBX could not be prepared once for retained creator commit: " +
+                    retained.Result().error))
+            return false;
+
+        std::error_code retainedEc;
+        const fs::path identicalSource =
+            projectRoot / "Intermediate" / "Imports" / "retained-identical.fbx";
+        fs::create_directories(identicalSource.parent_path(), retainedEc);
+        if (!Require(!retainedEc, "could not create retained-import proof folder"))
+            return false;
+        fs::copy_file(animatedFixture, identicalSource,
+            fs::copy_options::overwrite_existing, retainedEc);
+        if (!Require(!retainedEc, "could not copy retained-import proof source"))
+            return false;
+
+        ModelImportRequest retargetRequest;
+        retargetRequest.sourcePath = identicalSource.generic_u8string();
+        retargetRequest.assetPath =
+            (projectRoot / "Intermediate" / "Imports" / ".retargeted-preview.wiscene")
+                .generic_u8string();
+        retargetRequest.expectedFormat = ModelSourceFormat::Fbx;
+        std::string retargetError;
+        if (!Require(importer.RetargetPreparedModelAsset(
+                retained, retargetRequest, retargetError),
+                "byte-identical retained source was rejected: " + retargetError))
+            return false;
+
+        {
+            std::ofstream mutate(identicalSource, std::ios::binary | std::ios::app);
+            mutate.put('X');
+        }
+        if (!Require(!importer.RetargetPreparedModelAsset(
+                retained, retargetRequest, retargetError),
+                "mutated retained source was not rejected fail-closed"))
+            return false;
+
+        retainedEc.clear();
+        fs::copy_file(animatedFixture, identicalSource,
+            fs::copy_options::overwrite_existing, retainedEc);
+        if (!Require(!retainedEc, "could not restore retained-import proof source") ||
+            !Require(importer.RetargetPreparedModelAsset(
+                retained, retargetRequest, retargetError),
+                "restored byte-identical retained source was rejected: " + retargetError))
+            return false;
+
         auto imported = workflow.ImportModel(
             projectRoot.generic_u8string(), ProjectId,
-            animatedFixture.generic_u8string());
+            animatedFixture.generic_u8string(),
+            "{}", {}, "Content/Models", std::move(retained));
         if (!Require(imported.succeeded && imported.asset.succeeded &&
                 imported.asset.transaction.committed,
                 "creator FBX import failed: " + imported.error) ||
