@@ -8242,7 +8242,6 @@ namespace renegade::studio
                             state->imported.assetProjectRelativePath)
                             .parent_path().lexically_normal().generic_u8string();
                         studioChrome_.SetActiveBottomTab(0, true);
-                        RefreshAssetBrowser();
                         std::string browserError;
                         if (!studioChrome_.RevealCreatorAsset(
                                 state->imported.asset.assetId,

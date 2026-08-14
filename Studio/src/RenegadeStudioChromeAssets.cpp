@@ -700,7 +700,7 @@ namespace renegade::studio
         {
             bridge::AssetCatalogue catalogue;
             std::string error;
-            if (!creatorAssetWorkflow_.BuildCatalogue(
+            if (!creatorAssetWorkflow_.BuildCatalogueSnapshot(
                     project.rootPath, project.projectId, catalogue, error))
             {
                 creatorAssetCatalogueDirty_ = true;

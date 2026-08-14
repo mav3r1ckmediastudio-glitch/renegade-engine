@@ -175,6 +175,20 @@ namespace
                 "creator tags could not be persisted: " + error))
             return false;
 
+        AssetCatalogue committedSnapshot;
+        if (!Require(workflow.BuildCatalogueSnapshot(
+                projectRoot.generic_u8string(), ProjectId, committedSnapshot, error),
+                "committed creator catalogue snapshot failed: " + error))
+            return false;
+        const auto* committedEntry = FindEntry(committedSnapshot, productId);
+        if (!Require(committedEntry != nullptr &&
+                committedEntry->projectRelativePath ==
+                    imported.assetProjectRelativePath &&
+                committedEntry->state == AssetCatalogueState::Current &&
+                CanPlaceCreatorModelAsset(*committedEntry),
+                "committed browser snapshot did not expose the exact stable-ID/path as a placeable model"))
+            return false;
+
         AssetCatalogue catalogue;
         if (!Require(workflow.BuildCatalogue(
                 projectRoot.generic_u8string(), ProjectId, catalogue, error),

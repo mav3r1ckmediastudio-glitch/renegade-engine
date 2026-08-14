@@ -30,6 +30,18 @@ namespace renegade::bridge
             AssetRegistry& registry,
             std::string& error) const;
 
+        // Fast creator-facing projection of the last committed LC01 state.
+        // Unlike BuildCatalogue(), this never rescans or hashes Content/SourceAssets;
+        // Studio uses it for normal browser presentation and immediate post-import
+        // reveal so a committed stable ID cannot be replaced by a recovery pass.
+        [[nodiscard]] bool BuildCatalogueSnapshot(
+            const std::string& projectRoot,
+            const StableId& projectId,
+            AssetCatalogue& catalogue,
+            std::string& error) const;
+
+        // Explicit disk-recovery projection. This retains the existing LC01 moved /
+        // missing / stale refresh semantics for lifecycle checks and recovery flows.
         [[nodiscard]] bool BuildCatalogue(
             const std::string& projectRoot,
             const StableId& projectId,

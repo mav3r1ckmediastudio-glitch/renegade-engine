@@ -558,6 +558,58 @@ namespace renegade::bridge
         return true;
     }
 
+    bool CreatorAssetWorkflowService::BuildCatalogueSnapshot(
+        const std::string& projectRoot,
+        const StableId& projectId,
+        AssetCatalogue& catalogue,
+        std::string& error) const
+    {
+        if (!IsValidStableId(projectId))
+        {
+            error = "Creator Asset Browser requires a valid project ID.";
+            return false;
+        }
+        fs::path root;
+        if (!ResolveRoot(projectRoot, root, error))
+            return false;
+
+        // Studio already has an authoritative transaction result after import.
+        // Read the committed LC01 document exactly as written instead of running
+        // RefreshRegistryInternal(), which hashes every registered file and can
+        // turn a cheap reveal into a long synchronous editor stall.
+        AssetRegistry registry;
+        if (!ExistingRegistryOrEmpty(root, projectId, registry, error))
+            return false;
+
+        AssetCatalogueMetadataDocument metadata;
+        if (!ReadAssetCatalogueMetadata(
+                root.generic_u8string(), projectId, metadata, error))
+            return false;
+
+        if (!BuildAssetCatalogue(root.generic_u8string(), projectId,
+                registry, metadata, catalogue, error))
+            return false;
+
+        // Keep the same missing-product/source projection as the recovery build;
+        // only the disk recovery/hash pass is intentionally omitted.
+        for (auto& entry : catalogue.entries)
+        {
+            if (!entry.importedProduct || entry.productAvailable ||
+                entry.state != AssetCatalogueState::Missing ||
+                !IsValidStableId(entry.sourceAssetId))
+                continue;
+
+            const auto source = std::find_if(
+                registry.records.begin(), registry.records.end(),
+                [&entry](const AssetRecord& record)
+                { return record.assetId == entry.sourceAssetId; });
+            entry.sourceAvailable = source != registry.records.end() &&
+                source->sourceAvailable;
+        }
+        error.clear();
+        return true;
+    }
+
     bool CreatorAssetWorkflowService::BuildCatalogue(
         const std::string& projectRoot,
         const StableId& projectId,
