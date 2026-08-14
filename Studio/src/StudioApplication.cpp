@@ -371,6 +371,7 @@ namespace
     renegade::studio::RenegadeButton creatorImportLightingReset;
     renegade::studio::RenegadeCheckBox creatorImportMannequinVisible;
     wi::gui::Label creatorImportHelpLabel;
+    wi::gui::Label creatorImportActionBar;
     wi::Resource creatorImportHumanReference;
 
     std::string CreatorImportEntityName(
@@ -3450,6 +3451,27 @@ namespace renegade::studio
             pendingAction_ = EditorAction::DismissImportScale;
         });
 
+        creatorImportActionBar.Create("");
+        creatorImportActionBar.SetShadowRadius(0.0f);
+
+        // Window children render in reverse insertion order. Insert the two
+        // fixed actions before the footer background and scrollable section
+        // widgets so IMPORT & PLACE / CANCEL are always the final, top-most
+        // controls. Previously the long Material section could paint over the
+        // buttons even though AttachmentOptions::NONE correctly excluded them
+        // from the scroll transform.
+        importScaleApplyButton_.SetShadowRadius(0.0f);
+        importScaleDismissButton_.SetShadowRadius(0.0f);
+        importScalePanel_.AddWidget(
+            &importScaleApplyButton_,
+            wi::gui::Window::AttachmentOptions::NONE);
+        importScalePanel_.AddWidget(
+            &importScaleDismissButton_,
+            wi::gui::Window::AttachmentOptions::NONE);
+        importScalePanel_.AddWidget(
+            &creatorImportActionBar,
+            wi::gui::Window::AttachmentOptions::NONE);
+
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&importScaleTitleLabel_),
             static_cast<wi::gui::Widget*>(&importScaleReadoutLabel_),
@@ -3507,17 +3529,6 @@ namespace renegade::studio
             widget->SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(widget);
         }
-        // Commit controls stay docked while the selected workspace section
-        // scrolls independently. This prevents long material/PBR content
-        // from pushing the only exit controls off-screen.
-        importScaleApplyButton_.SetShadowRadius(0.0f);
-        importScaleDismissButton_.SetShadowRadius(0.0f);
-        importScalePanel_.AddWidget(
-            &importScaleApplyButton_,
-            wi::gui::Window::AttachmentOptions::NONE);
-        importScalePanel_.AddWidget(
-            &importScaleDismissButton_,
-            wi::gui::Window::AttachmentOptions::NONE);
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
     }
@@ -3612,6 +3623,7 @@ namespace renegade::studio
         ownLabel(oceanLabel_);
         ownLabel(importScaleTitleLabel_);
         ownLabel(importScaleReadoutLabel_);
+        ownLabel(creatorImportActionBar);
         ownLabel(workspaceTitle_);
         ownLabel(statusLabel_);
         ownLabel(hierarchyLabel_);
@@ -4263,7 +4275,10 @@ namespace renegade::studio
         creatorImportAnimationDelete.SetSize(XMFLOAT2(120.0f, 28.0f));
         creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 354.0f));
         creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
-        const float commitY = importScalePanelHeight - 46.0f;
+        const float footerY = importScalePanelHeight - 54.0f;
+        creatorImportActionBar.SetPos(XMFLOAT2(4.0f, footerY));
+        creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 8.0f, 50.0f));
+        const float commitY = footerY + 8.0f;
         importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, commitY));
         importScaleApplyButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.64f, 34.0f));
         importScaleDismissButton_.SetPos(XMFLOAT2(20.0f + (importScalePanelWidth - 32.0f) * 0.64f, commitY));
