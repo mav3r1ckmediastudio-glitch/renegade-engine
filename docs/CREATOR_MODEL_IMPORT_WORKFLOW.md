@@ -4,7 +4,7 @@
 PR #57 restores Renegade Studio's guided creator model-import workflow. Importing a model first opens an isolated preview workspace. The preview is temporary; authoritative project assets are created only after the creator accepts the import.
 
 ## Workflow contract
-`ADD -> IMPORT MODEL...` accepts FBX, GLB, and GLTF. The Model Import Workspace owns the screen while active: normal scene search/Inspector controls are hidden, and the right-side task workspace is divided into Asset, Transform & Scale, Material, Lighting & Scale Reference, and Animation sections. Cancel restores the previous editor state. `IMPORT & PLACE` commits the governed reusable model and places that governed asset in the level.
+`ADD -> IMPORT MODEL...` accepts FBX, GLB, and GLTF. The Model Import Workspace owns the screen while active: normal scene search/Inspector controls are hidden, and the right-side task workspace flows through Asset, Transform & Scale, Material, Lighting & Scale Reference, Animation, and a final Import section. Cancel restores the previous editor state. The final section captures or retakes an Asset Browser thumbnail before `CONFIRM IMPORT` commits the governed reusable model. Import never inserts an instance into the level.
 
 The source filename seeds an editable asset name. The creator can also choose a canonical project destination below `Content`; the workflow rejects traversal, destinations outside Content, and an explicit name that is already occupied.
 
@@ -32,7 +32,7 @@ flags, including normal-map handling, and a decode/load failure is shown in the
 Material section rather than leaving the picker path changed with no visible
 effect.
 
-Each material exposes roughness, metalness, reflectance, normal strength, AO strength and emissive strength with slider-plus-number controls. These values are stored in the creator recipe and replayed during reimport. Slider interaction updates the live material and stored override without synchronously rebuilding Surface PNGs on every drag or release; authoritative Surface packing occurs during Import & Place.
+Each material exposes roughness, metalness, reflectance, normal strength, AO strength and emissive strength with slider-plus-number controls. These values are stored in the creator recipe and replayed during reimport. Slider interaction updates the live material and stored override without synchronously rebuilding Surface PNGs on every drag or release; authoritative Surface packing occurs during Confirm Import.
 
 The selected material displays a MAX-style vertical map list for Base Color,
 Normal, packed Surface, Roughness, Metalness, AO and Emissive. Every map owns a
@@ -54,7 +54,9 @@ opaque dark blue/black panels, consistent white text, restrained grey focus
 treatment and no cyan or translucent glass chrome. Headings, readouts and
 controls share the same surface treatment rather than using pale label slabs.
 
-The importer task workspace is docked eight pixels from the application right edge and uses the available application height rather than being positioned inside the ordinary editor viewport. Long sections scroll while Import & Place and Cancel remain docked. This returns previously unused space to the model preview and makes the panel read as owned workspace chrome instead of a floating popup.
+The importer task workspace is docked eight pixels from the application right edge and uses the available application height rather than being positioned inside the ordinary editor viewport. Long sections scroll, and the final Import section owns thumbnail capture, confirmation, and cancellation. This returns previously unused space to the model preview and makes the panel read as owned workspace chrome instead of a floating popup.
+
+After confirmation, the reusable asset appears in the Asset Browser with its captured thumbnail. Placement is a separate scene-editing action: either press Place and click a scene surface, or hold LMB on the asset card, drag into the viewport, and release. Both paths use the same scene raycast and offset the prepared model by its scaled measured minimum Y, so the asset bottom rests on the picked surface instead of being placed at a camera-relative point, at an arbitrary serial offset, floating, or intersecting the floor.
 
 The 1.82 m reference position is derived directly from the measured source bounds and current root transform rather than waiting for live render AABBs. It is placed on the unobstructed left side of the preview, clear of the task panel, and uses the owner's supplied male silhouette as a transparent camera-facing world billboard plus a capped world-space 0.00 m-to-1.82 m ruler. The cropped figure is exactly 1.82 m from sole to crown; the stock Wicked dummy is not used. The panel reports the imported model's independently measured height, so a short Automatic result cannot be mistaken for an oversized ruler.
 
@@ -84,4 +86,4 @@ This PR does not yet include automatic PBR derivation from a single colour image
 Existing LP07/LP08 tests continue to cover reusable-model conversion, placement, resource lifecycle, package closure, cache identity and Runtime behaviour.
 
 ## Owner acceptance
-CI is necessary but not sufficient. Before accepting PR #57, test the Release artifact with the previously problematic crocodile FBX, a textured GLB/GLTF, a multi-material model where available, and an animated model where available. Confirm preview visibility, material selection and texture detection, animation editing, Import & Place, save/reopen/reimport, and at least one packaged textured model.
+CI is necessary but not sufficient. Before accepting PR #57, test the Release artifact with the previously problematic crocodile FBX, a textured GLB/GLTF, a multi-material model where available, and an animated model where available. Confirm preview visibility, material selection and texture detection, animation editing, thumbnail capture/retake, Confirm Import without automatic scene insertion, Asset Browser drag/drop and surface grounding, save/reopen/reimport, and at least one packaged textured model.

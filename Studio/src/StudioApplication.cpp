@@ -164,115 +164,6 @@ namespace
         }
     }
 
-    fs::path AllocateImportedModelAssetPath(
-        const fs::path& projectRoot,
-        const fs::path& source)
-    {
-        const fs::path contentDirectory =
-            projectRoot / "Content" / "Models";
-        const fs::path sourceDirectory =
-            projectRoot / "SourceAssets" / "Models";
-        std::error_code ignored;
-        fs::create_directories(contentDirectory, ignored);
-        ignored.clear();
-        fs::create_directories(sourceDirectory, ignored);
-
-        std::string stem = source.stem().u8string();
-        if (stem.empty())
-        {
-            stem = "ImportedModel";
-        }
-
-        for (std::uint32_t index = 1; ; ++index)
-        {
-            const std::string candidateStem = index == 1
-                ? stem
-                : stem + "_" + std::to_string(index);
-            const fs::path assetPath =
-                contentDirectory / fs::u8path(candidateStem + ".wiscene");
-            const fs::path sourceSnapshot =
-                sourceDirectory / fs::u8path(candidateStem);
-            if (!fs::exists(assetPath) && !fs::exists(sourceSnapshot))
-            {
-                return assetPath;
-            }
-        }
-    }
-
-    bool CopyOriginalModelSource(
-        const fs::path& source,
-        const fs::path& projectRoot,
-        const fs::path& assetPath,
-        std::string& error)
-    {
-        if (!fs::is_regular_file(source))
-        {
-            error = "The selected source model no longer exists: " +
-                source.generic_u8string();
-            return false;
-        }
-
-        const fs::path snapshotDirectory =
-            projectRoot / "SourceAssets" / "Models" / assetPath.stem();
-        std::error_code copyError;
-        fs::create_directories(snapshotDirectory, copyError);
-        if (copyError)
-        {
-            error = "Could not create the model source snapshot folder: " +
-                copyError.message();
-            return false;
-        }
-
-        fs::copy_file(
-            source,
-            snapshotDirectory / source.filename(),
-            fs::copy_options::overwrite_existing,
-            copyError);
-        if (copyError)
-        {
-            std::error_code ignored;
-            fs::remove_all(snapshotDirectory, ignored);
-            error = "Could not copy the original model into SourceAssets: " +
-                copyError.message();
-            return false;
-        }
-
-        // Preserve the common same-stem binary sidecar for external GLTF.
-        if (wi::helper::toUpper(source.extension().u8string()) == ".GLTF")
-        {
-            for (const char* extension : {".bin", ".BIN"})
-            {
-                const fs::path sidecar = source.parent_path() /
-                    fs::u8path(source.stem().u8string() + extension);
-                if (!fs::is_regular_file(sidecar))
-                {
-                    continue;
-                }
-                copyError.clear();
-                fs::copy_file(
-                    sidecar,
-                    snapshotDirectory / sidecar.filename(),
-                    fs::copy_options::overwrite_existing,
-                    copyError);
-                if (copyError)
-                {
-                    std::error_code ignored;
-                    fs::remove_all(snapshotDirectory, ignored);
-                    error =
-                        "Could not copy the GLTF binary sidecar into "
-                        "SourceAssets: " +
-                        copyError.message();
-                    return false;
-                }
-                break;
-            }
-        }
-
-        error.clear();
-        return true;
-    }
-
-
     // Keep the temporary preview beyond the normal camera's 1000 m far plane
     // so the authored level remains invisible, but do not push it to 100 km.
     // At Y=100000 a 32-bit transform has roughly 7.8 mm granularity, which
@@ -317,6 +208,7 @@ namespace
         wi::ecs::Entity weatherEntity = wi::ecs::INVALID_ENTITY;
         bool ambientCaptured = false;
         bool mannequinVisible = true;
+        std::string thumbnailCapturePath;
         std::size_t workspaceSection = 0;
     };
 
@@ -372,6 +264,8 @@ namespace
     renegade::studio::RenegadeCheckBox creatorImportMannequinVisible;
     wi::gui::Label creatorImportHelpLabel;
     wi::gui::Label creatorImportActionBar;
+    renegade::studio::RenegadeButton creatorImportThumbnailCapture;
+    wi::gui::Label creatorImportThumbnailStatus;
     wi::Resource creatorImportHumanReference;
 
     std::string CreatorImportEntityName(
@@ -2847,6 +2741,22 @@ namespace renegade::studio
         {
             SelectAssetBrowserItem(relativePath);
         });
+        studioChrome_.OnCreatorAssetPlaceRequested(
+            [this](
+                const bridge::StableId& assetId,
+                const std::string& label)
+        {
+            BeginCreatorAssetPlacement(assetId, label);
+        });
+        studioChrome_.OnCreatorAssetDropped(
+            [this](
+                const bridge::StableId& assetId,
+                const std::string& label,
+                const float x,
+                const float y)
+        {
+            DropCreatorAsset(assetId, label, x, y);
+        });
         studioChrome_.OnLayoutChanged(
             [this](
                 const float hierarchyWidth,
@@ -3021,7 +2931,7 @@ namespace renegade::studio
         importScaleTitleLabel_.Create("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
         importScaleReadoutLabel_.Create("");
         creatorImportHelpLabel.Create(
-            "The model is temporary. The project is unchanged until IMPORT & PLACE is pressed.");
+            "The model is temporary. The project is unchanged until CONFIRM IMPORT is pressed.");
         creatorImportHelpLabel.SetFitTextEnabled(true);
 
         creatorImportSectionCombo.Create("Importer Section");
@@ -3430,10 +3340,21 @@ namespace renegade::studio
         creatorImportAnimationReadout.Create("");
         creatorImportAnimationReadout.SetFitTextEnabled(true);
 
+        creatorImportThumbnailCapture.Create("Capture Asset Thumbnail");
+        creatorImportThumbnailCapture.SetText("CAPTURE THUMBNAIL");
+        creatorImportThumbnailCapture.SetTooltip(
+            "Capture the currently framed importer preview for the Asset Browser. You can adjust the camera and retake it before confirming.");
+        creatorImportThumbnailCapture.OnClick([this](const wi::gui::EventArgs&)
+        {
+            CaptureCreatorImportThumbnail();
+        });
+        creatorImportThumbnailStatus.Create("THUMBNAIL NOT CAPTURED");
+        creatorImportThumbnailStatus.SetText("THUMBNAIL NOT CAPTURED");
+
         importScaleApplyButton_.Create("Import Model Commit");
-        importScaleApplyButton_.SetText("IMPORT & PLACE");
+        importScaleApplyButton_.SetText("CONFIRM IMPORT");
         importScaleApplyButton_.SetTooltip(
-            "Commit the governed reusable asset, then place the configured instance back in the real level.");
+            "Commit the governed reusable asset to the Asset Browser without placing an instance in the level.");
         importScaleApplyButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             pendingAction_ = EditorAction::ApplyImportScale;
@@ -3448,8 +3369,8 @@ namespace renegade::studio
             pendingAction_ = EditorAction::DismissImportScale;
         });
 
-        creatorImportActionBar.Create("IMPORT FINISHED ASSET");
-        creatorImportActionBar.SetText("IMPORT FINISHED ASSET");
+        creatorImportActionBar.Create("THUMBNAIL & IMPORT");
+        creatorImportActionBar.SetText("THUMBNAIL & IMPORT");
         creatorImportActionBar.SetShadowRadius(0.0f);
 
         // Commit is the final workflow page, matching the other sections and
@@ -3511,6 +3432,8 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),
+            static_cast<wi::gui::Widget*>(&creatorImportThumbnailCapture),
+            static_cast<wi::gui::Widget*>(&creatorImportThumbnailStatus),
             static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
             static_cast<wi::gui::Widget*>(&importScaleDismissButton_)})
         {
@@ -3613,6 +3536,7 @@ namespace renegade::studio
         ownLabel(importScaleTitleLabel_);
         ownLabel(importScaleReadoutLabel_);
         ownLabel(creatorImportActionBar);
+        ownLabel(creatorImportThumbnailStatus);
         ownLabel(workspaceTitle_);
         ownLabel(statusLabel_);
         ownLabel(hierarchyLabel_);
@@ -3777,6 +3701,11 @@ namespace renegade::studio
         {
             SyncGizmoSelection();
             SyncSelectionOutline();
+        }
+
+        if (HandleCreatorAssetPlacement(pointer))
+        {
+            return;
         }
 
         if (HandleLightPlacement(pointer))
@@ -4268,9 +4197,13 @@ namespace renegade::studio
         creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
         creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 278.0f));
         creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 318.0f));
+        creatorImportThumbnailCapture.SetPos(XMFLOAT2(12.0f, 318.0f));
+        creatorImportThumbnailCapture.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 40.0f));
+        creatorImportThumbnailStatus.SetPos(XMFLOAT2(12.0f, 368.0f));
+        creatorImportThumbnailStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 410.0f));
         importScaleApplyButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 44.0f));
-        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 372.0f));
+        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 464.0f));
         importScaleDismissButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
@@ -5441,6 +5374,190 @@ namespace renegade::studio
         lightPlacementActive_ = false;
         wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
         RefreshStatus();
+    }
+
+    void StudioRenderPath::BeginCreatorAssetPlacement(
+        const bridge::StableId& assetId,
+        const std::string& label)
+    {
+        if (session_ == nullptr || !bridge::IsValidStableId(assetId))
+            return;
+        CancelLightPlacement();
+        creatorAssetPlacementActive_ = true;
+        creatorAssetPlacementId_ = assetId;
+        creatorAssetPlacementLabel_ = label;
+        creatorAssetDropPending_ = false;
+        studioChrome_.SetActiveBottomTab(-1, true);
+        studioChrome_.SetStatusText(
+            "PLACE ASSET // CLICK A SURFACE // ESC OR RMB TO CANCEL");
+    }
+
+    void StudioRenderPath::DropCreatorAsset(
+        const bridge::StableId& assetId,
+        const std::string& label,
+        const float screenX,
+        const float screenY)
+    {
+        BeginCreatorAssetPlacement(assetId, label);
+        if (!creatorAssetPlacementActive_)
+            return;
+        creatorAssetDropPoint_ = XMFLOAT2(screenX, screenY);
+        creatorAssetDropPending_ = true;
+        studioChrome_.SetStatusText("PLACE ASSET // DROPPING ON SURFACE");
+    }
+
+    void StudioRenderPath::CancelCreatorAssetPlacement()
+    {
+        if (!creatorAssetPlacementActive_)
+            return;
+        creatorAssetPlacementActive_ = false;
+        creatorAssetPlacementId_.clear();
+        creatorAssetPlacementLabel_.clear();
+        creatorAssetDropPending_ = false;
+        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+        studioChrome_.SetStatusText("PLACE ASSET // CANCELLED");
+    }
+
+    bool StudioRenderPath::HandleCreatorAssetPlacement(
+        const XMFLOAT4& pointer)
+    {
+        if (!creatorAssetPlacementActive_ || session_ == nullptr)
+            return false;
+
+        XMFLOAT4 placementPointer = pointer;
+        if (creatorAssetDropPending_)
+        {
+            placementPointer.x = creatorAssetDropPoint_.x;
+            placementPointer.y = creatorAssetDropPoint_.y;
+        }
+
+        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
+            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+        {
+            CancelCreatorAssetPlacement();
+            return true;
+        }
+
+        if (flyCameraActive_ || GetGUI().HasFocus() ||
+            !IsPointerOverViewport(placementPointer))
+        {
+            wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
+            if (creatorAssetDropPending_)
+            {
+                CancelCreatorAssetPlacement();
+                studioChrome_.SetStatusText(
+                    "PLACE ASSET // DROP INSIDE THE SCENE VIEWPORT");
+            }
+            return true;
+        }
+
+        auto& scene = session_->Scenes().GetScene();
+        const auto ray = wi::renderer::GetPickRay(
+            static_cast<long>(placementPointer.x),
+            static_cast<long>(placementPointer.y),
+            *this,
+            *camera);
+        const auto picked = wi::scene::Pick(
+            ray,
+            wi::enums::FILTER_OBJECT_ALL | wi::enums::FILTER_TERRAIN,
+            ~0u,
+            scene);
+        XMFLOAT3 surfacePosition = picked.position;
+        bool hasSurface = picked.entity != wi::ecs::INVALID_ENTITY;
+        if (!hasSurface && std::abs(ray.direction.y) > 0.0001f)
+        {
+            const float distance = -ray.origin.y / ray.direction.y;
+            if (distance >= ray.TMin && distance <= ray.TMax)
+            {
+                surfacePosition = XMFLOAT3(
+                    ray.origin.x + ray.direction.x * distance,
+                    0.0f,
+                    ray.origin.z + ray.direction.z * distance);
+                hasSurface = true;
+            }
+        }
+        if (!hasSurface)
+        {
+            wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
+            if (creatorAssetDropPending_)
+            {
+                CancelCreatorAssetPlacement();
+                studioChrome_.SetStatusText(
+                    "PLACE ASSET // NO SURFACE UNDER DROP POINT");
+            }
+            return true;
+        }
+
+        wi::input::SetCursor(wi::input::CURSOR_CROSS);
+        wi::renderer::DrawSphere(
+            wi::primitive::Sphere(surfacePosition, 0.16f),
+            XMFLOAT4(1.0f, 0.36f, 0.06f, 0.9f),
+            false);
+        if (!creatorAssetDropPending_ &&
+            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+            return true;
+        creatorAssetDropPending_ = false;
+
+        const auto& project = session_->Projects().CurrentProject();
+        bridge::CreatorAssetWorkflowService workflow;
+        auto prepared = workflow.PrepareModelPlacement(
+            project.rootPath,
+            project.projectId,
+            creatorAssetPlacementId_);
+        if (!prepared.IsReady())
+        {
+            studioChrome_.SetStatusText(
+                "PLACE ASSET // PREPARE FAILED // " +
+                prepared.Result().error);
+            return true;
+        }
+
+        const wi::scene::Scene* preparedScene = prepared.PeekScene();
+        const float scale = bridge::ImportService::ResolveScaleFactor(
+            bridge::ModelScaleMode::Automatic,
+            *preparedScene);
+        const bridge::ModelBounds bounds =
+            bridge::ImportService::MeasureModelBounds(*preparedScene);
+        XMFLOAT3 position = surfacePosition;
+        if (bounds.valid)
+        {
+            // PlaceReusableModelCommand translates the prepared root to the
+            // requested point. Offset its local minimum upward so the actual
+            // bottom of the scaled asset rests on the picked surface.
+            position.y = bridge::ImportService::ResolveGroundedPlacementY(
+                surfacePosition.y,
+                bounds,
+                scale);
+        }
+
+        const bridge::StableId assetId = creatorAssetPlacementId_;
+        auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
+            scene,
+            prepared.ReleaseScene(),
+            assetId,
+            position,
+            scale);
+        auto* placed = command.get();
+        if (!session_->Commands().Execute(std::move(command)))
+        {
+            studioChrome_.SetStatusText("PLACE ASSET // FAILED");
+            return true;
+        }
+
+        const std::string label = creatorAssetPlacementLabel_;
+        creatorAssetPlacementActive_ = false;
+        creatorAssetPlacementId_.clear();
+        creatorAssetPlacementLabel_.clear();
+        creatorAssetDropPending_ = false;
+        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+        session_->Selection().Select(placed->PlacedEntity());
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+        studioChrome_.SetStatusText(
+            "PLACE ASSET // " + label +
+            " // SURFACE GROUNDED // STABLE RASSET INSTANCE");
+        return true;
     }
 
     bool StudioRenderPath::HandleLightPlacement(const XMFLOAT4& pointer)
@@ -7717,124 +7834,6 @@ namespace renegade::studio
             });
     }
 
-    void StudioRenderPath::CompleteModelImportPlacement(
-        bridge::PreparedModelImport prepared)
-    {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
-        if (!prepared.IsReady())
-        {
-            studioChrome_.SetStatusText("IMPORT MODEL // FAILED");
-            wi::helper::messageBox(
-                "Could not import the model.\n\nReason: " +
-                    prepared.Result().error,
-                "Import Model");
-            return;
-        }
-
-        const std::string sourcePath = prepared.Result().sourcePath;
-        const bridge::ImportResult savedAsset =
-            bridge::ImportService().SavePreparedGltfAsset(prepared);
-        if (!savedAsset.succeeded)
-        {
-            studioChrome_.SetStatusText("IMPORT MODEL // ASSET SAVE FAILED");
-            wi::helper::messageBox(
-                "The model converted, but its reusable project asset could "
-                "not be saved.\n\nReason: " + savedAsset.error,
-                "Import Model");
-            return;
-        }
-
-        const fs::path projectRoot =
-            fs::u8path(session_->Projects().CurrentProject().rootPath);
-        const fs::path savedAssetPath = fs::u8path(savedAsset.assetPath);
-        std::string sourceCopyError;
-        if (!CopyOriginalModelSource(
-                fs::u8path(sourcePath),
-                projectRoot,
-                savedAssetPath,
-                sourceCopyError))
-        {
-            std::error_code ignored;
-            fs::remove(savedAssetPath, ignored);
-            studioChrome_.SetStatusText(
-                "IMPORT MODEL // SOURCE SNAPSHOT FAILED");
-            wi::helper::messageBox(
-                "The converted asset was not registered because Renegade "
-                "could not preserve its selected source file.\n\nReason: " +
-                    sourceCopyError,
-                "Import Model");
-            return;
-        }
-
-        XMFLOAT3 position(0.0f, 0.0f, 0.0f);
-        if (camera != nullptr)
-        {
-            position = camera->Eye;
-            position.x += camera->At.x * 5.0f;
-            position.y += camera->At.y * 5.0f;
-            position.z += camera->At.z * 5.0f;
-        }
-
-        // Resolve Automatic scale against the still-isolated prepared scene
-        // before ReleaseScene() hands it to the command -- once merged, its
-        // meshes are indistinguishable from every other mesh already in the
-        // active scene. This is the default correction for arbitrary
-        // downloaded/authored models with an unknown source unit (the
-        // "imports VERY large" case); it is a non-destructive uniform Scale
-        // on the import root, never baked into vertex data, so it can be
-        // freely edited or reset afterward like any other transform.
-        float scaleFactor = 1.0f;
-        if (const auto* preparedScene = prepared.PeekScene())
-        {
-            scaleFactor = bridge::ImportService::ResolveScaleFactor(
-                bridge::ModelScaleMode::Automatic,
-                *preparedScene);
-        }
-
-        ClearSelectionOutline();
-        auto command = std::make_unique<bridge::PlaceImportedModelCommand>(
-            session_->Scenes().GetScene(),
-            prepared.ReleaseScene(),
-            position,
-            scaleFactor);
-        auto* placeCommand = command.get();
-        if (!session_->Commands().Execute(std::move(command)))
-        {
-            studioChrome_.SetStatusText("IMPORT MODEL // FAILED");
-            wi::helper::messageBox(
-                "The converted model produced no placeable entity.",
-                "Import Model");
-            SyncSelectionOutline();
-            return;
-        }
-
-        session_->Selection().Select(placeCommand->PlacedEntity());
-        RefreshHierarchy();
-        RefreshInspector();
-        RefreshStatus();
-
-        assetBrowserCurrentFolder_ = "Content/Models";
-        RefreshAssetBrowser();
-
-        const fs::path source = fs::u8path(sourcePath);
-        std::ostringstream scaleReadout;
-        scaleReadout.precision(3);
-        scaleReadout << std::fixed << scaleFactor;
-        studioChrome_.SetStatusText(
-            "IMPORT MODEL // ASSET SAVED + PLACED // " +
-            savedAssetPath.filename().u8string() +
-            " // AUTO SCALE x" + scaleReadout.str());
-
-        ShowImportScalePanel(
-            placeCommand->PlacedEntity(),
-            scaleFactor,
-            source.filename().u8string());
-    }
-
     void StudioRenderPath::ShowImportScalePanel(
         const wi::ecs::Entity entity,
         const float appliedScaleFactor,
@@ -7899,6 +7898,10 @@ namespace renegade::studio
         creatorImportAmbientBrightness.SetValue(creatorModelImporter.ambientBrightness);
         creatorImportLightingPreset.SetSelectedWithoutCallback(0);
         creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
+        creatorModelImporter.thumbnailCapturePath.clear();
+        creatorImportThumbnailCapture.SetText("CAPTURE THUMBNAIL");
+        creatorImportThumbnailStatus.SetText("THUMBNAIL NOT CAPTURED");
+        importScaleApplyButton_.SetEnabled(false);
         UpdateCreatorImportScaleReferenceLabel();
         importScalePanel_.SetVisible(true);
         importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
@@ -8015,16 +8018,63 @@ namespace renegade::studio
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),
+            static_cast<wi::gui::Widget*>(&creatorImportThumbnailCapture),
+            static_cast<wi::gui::Widget*>(&creatorImportThumbnailStatus),
             static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
             static_cast<wi::gui::Widget*>(&importScaleDismissButton_)})
             widget->SetVisible(section == 5);
     }
 
+    void StudioRenderPath::CaptureCreatorImportThumbnail()
+    {
+        if (session_ == nullptr || !creatorModelImporter.active ||
+            creatorModelImporter.committing ||
+            !session_->Projects().HasProject())
+            return;
+
+        const fs::path directory =
+            fs::u8path(session_->Projects().CurrentProject().rootPath) /
+            "Intermediate" / "Imports";
+        std::error_code ec;
+        fs::create_directories(directory, ec);
+        if (ec)
+        {
+            creatorImportThumbnailStatus.SetText(
+                "THUMBNAIL FAILED // CANNOT CREATE IMPORT CACHE");
+            return;
+        }
+
+        const fs::path capturePath =
+            directory / ".creator-asset-thumbnail.png";
+        if (!wi::helper::saveTextureToFile(
+                GetRenderResult3D(), capturePath.generic_u8string()))
+        {
+            creatorImportThumbnailStatus.SetText(
+                "THUMBNAIL FAILED // RETAKE");
+            return;
+        }
+
+        creatorModelImporter.thumbnailCapturePath =
+            capturePath.generic_u8string();
+        creatorImportThumbnailCapture.SetText("RETAKE THUMBNAIL");
+        creatorImportThumbnailStatus.SetText(
+            "THUMBNAIL CAPTURED // READY TO CONFIRM");
+        importScaleApplyButton_.SetEnabled(true);
+    }
+
     void StudioRenderPath::ApplyImportScaleMode(
-        const bridge::ModelScaleMode mode)
+        const bridge::ModelScaleMode)
     {
         if (session_ == nullptr || !creatorModelImporter.active || creatorModelImporter.committing)
             return;
+        if (creatorModelImporter.thumbnailCapturePath.empty() ||
+            !fs::exists(fs::u8path(creatorModelImporter.thumbnailCapturePath)))
+        {
+            creatorImportThumbnailStatus.SetText(
+                "CAPTURE A THUMBNAIL BEFORE CONFIRMING");
+            importScaleApplyButton_.SetEnabled(false);
+            return;
+        }
 
         auto& liveScene = session_->Scenes().GetScene();
         auto* previewTransform = liveScene.transforms.GetComponent(creatorModelImporter.previewRoot);
@@ -8034,11 +8084,6 @@ namespace renegade::studio
             return;
         }
 
-        const bridge::TransformState preview = bridge::CaptureTransform(*previewTransform);
-        const XMFLOAT3 previewOffset(
-            preview.translation.x,
-            preview.translation.y - CreatorImportStageHeight,
-            preview.translation.z);
         const std::string sourcePath = creatorModelImporter.sourcePath;
         const auto cameraBefore = creatorModelImporter.cameraBefore;
         const auto materialOverrides = creatorModelImporter.materialOverrides;
@@ -8072,32 +8117,23 @@ namespace renegade::studio
             std::string projectRoot;
             bridge::StableId projectId;
             std::string sourcePath;
-            XMFLOAT3 position;
-            XMFLOAT4 rotation;
-            XMFLOAT3 scale = XMFLOAT3(1.0f, 1.0f, 1.0f);
             std::string assetName;
             std::string destinationFolder;
+            std::string thumbnailCapturePath;
+            std::string thumbnailError;
             std::vector<bridge::CreatorMaterialSourceOverride> materialOverrides;
             std::vector<bridge::CreatorAnimationImportRecipe> animationRecipe;
             std::string settingsJson = "{}";
             bridge::CreatorModelImportResult imported;
-            bridge::PreparedReusableModelPlacement prepared;
         };
         auto state = std::make_shared<GovernedCommitState>();
         const auto& project = session_->Projects().CurrentProject();
         state->projectRoot = project.rootPath;
         state->projectId = project.projectId;
         state->sourcePath = sourcePath;
-        const XMFLOAT3 cameraPosition = cameraBefore.GetPosition();
-        const XMFLOAT3 cameraForward = cameraBefore.GetForward();
-        state->position = XMFLOAT3(
-            cameraPosition.x + cameraForward.x * 5.0f + previewOffset.x,
-            cameraPosition.y + cameraForward.y * 5.0f + previewOffset.y,
-            cameraPosition.z + cameraForward.z * 5.0f + previewOffset.z);
-        state->rotation = preview.rotation;
-        state->scale = preview.scale;
         state->assetName = assetName;
         state->destinationFolder = destinationFolder;
+        state->thumbnailCapturePath = creatorModelImporter.thumbnailCapturePath;
         state->materialOverrides = materialOverrides;
         state->animationRecipe = animationRecipe;
         studioChrome_.SetStatusText("IMPORT MODEL // COMMITTING GOVERNED ASSET");
@@ -8150,52 +8186,43 @@ namespace renegade::studio
                         state->settingsJson, state->assetName,
                         state->destinationFolder);
                 if (state->imported.succeeded)
-                    state->prepared = workflow.PrepareModelPlacement(
-                        state->projectRoot, state->projectId, state->imported.asset.assetId);
+                {
+                    fs::path thumbnailPath =
+                        fs::u8path(state->projectRoot) /
+                        fs::u8path(state->imported.assetProjectRelativePath);
+                    thumbnailPath.replace_extension(".thumbnail.png");
+                    std::error_code thumbnailEc;
+                    fs::copy_file(
+                        fs::u8path(state->thumbnailCapturePath),
+                        thumbnailPath,
+                        fs::copy_options::overwrite_existing,
+                        thumbnailEc);
+                    if (thumbnailEc)
+                        state->thumbnailError = thumbnailEc.message();
+                }
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, state](std::uint64_t)
                     {
                         creatorModelImporter = {};
-                        if (!state->imported.succeeded || !state->prepared.IsReady())
+                        if (!state->imported.succeeded)
                         {
                             studioChrome_.SetStatusText("IMPORT MODEL // COMMIT FAILED");
-                            const std::string reason = !state->imported.succeeded
-                                ? state->imported.error : state->prepared.Result().error;
                             wi::helper::messageBox(
-                                "The preview was discarded safely, but the governed asset could not be committed.\n\nReason: " + reason,
+                                "The preview was discarded safely, but the governed asset could not be committed.\n\nReason: " + state->imported.error,
                                 "Import Model");
                             return;
                         }
-
-                        auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
-                            session_->Scenes().GetScene(), state->prepared.ReleaseScene(),
-                            state->imported.asset.assetId, state->position, state->scale.x);
-                        auto* placed = command.get();
-                        if (!session_->Commands().Execute(std::move(command)))
-                        {
-                            studioChrome_.SetStatusText("IMPORT MODEL // ASSET COMMITTED // PLACE FAILED");
-                            return;
-                        }
-                        auto& scene = session_->Scenes().GetScene();
-                        auto* transform = scene.transforms.GetComponent(placed->PlacedEntity());
-                        if (transform != nullptr)
-                        {
-                            auto finalTransform = bridge::CaptureTransform(*transform);
-                            finalTransform.rotation = state->rotation;
-                            finalTransform.scale = state->scale;
-                            session_->Commands().Execute(
-                                std::make_unique<bridge::SetTransformCommand>(
-                                    scene, placed->PlacedEntity(), finalTransform));
-                        }
-                        session_->Selection().Select(placed->PlacedEntity());
                         RefreshHierarchy();
                         RefreshInspector();
                         RefreshStatus();
                         assetBrowserCurrentFolder_ = "Content/Models";
                         RefreshAssetBrowser();
                         studioChrome_.SetStatusText(
-                            "IMPORT MODEL // GOVERNED ASSET READY // " +
+                            "IMPORT MODEL // GOVERNED ASSET READY" +
+                            (state->thumbnailError.empty()
+                                ? std::string(" // THUMBNAIL SAVED // ")
+                                : std::string(" // THUMBNAIL WARNING // ")) +
                             fs::u8path(state->imported.assetProjectRelativePath).filename().generic_u8string());
                     });
             });
@@ -8484,6 +8511,16 @@ namespace renegade::studio
             card.typeLabel =
                 bridge::AssetBrowserService::TypeLabel(asset.type);
             card.directory = asset.directory;
+            if (!asset.directory)
+            {
+                fs::path thumbnailPath =
+                    fs::u8path(session_->Projects().CurrentProject().rootPath) /
+                    fs::u8path(asset.projectRelativePath);
+                thumbnailPath.replace_extension(".thumbnail.png");
+                if (fs::exists(thumbnailPath))
+                    card.thumbnail = wi::resourcemanager::Load(
+                        thumbnailPath.generic_u8string());
+            }
             assets.push_back(std::move(card));
         }
 

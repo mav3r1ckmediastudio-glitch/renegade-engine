@@ -1076,6 +1076,12 @@ namespace renegade::studio
         assetBrowserItemSelected_ = std::move(callback);
     }
 
+    void RenegadeStudioChrome::OnAssetBrowserItemDropped(
+        std::function<void(const std::string&, float, float)> callback)
+    {
+        assetBrowserItemDropped_ = std::move(callback);
+    }
+
     void RenegadeStudioChrome::OnLayoutChanged(
         std::function<void(float, float, float, bool)> callback)
     {
@@ -1329,6 +1335,41 @@ namespace renegade::studio
                             maximum);
                 }
                 pointerConsumed_ = true;
+            }
+        }
+
+        if (assetBrowserDragCandidate_)
+        {
+            const XMFLOAT4 dragPointer = wi::input::GetPointer();
+            if (wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+            {
+                const float dx = dragPointer.x - assetBrowserDragStart_.x;
+                const float dy = dragPointer.y - assetBrowserDragStart_.y;
+                if (!assetBrowserDragging_ && dx * dx + dy * dy >= 36.0f)
+                    assetBrowserDragging_ = true;
+                if (assetBrowserDragging_)
+                {
+                    wi::input::SetCursor(wi::input::CURSOR_HAND);
+                    pointerConsumed_ = true;
+                }
+            }
+            else if (wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
+            {
+                const bool dropped = assetBrowserDragging_;
+                const std::string path = assetBrowserDragPath_;
+                assetBrowserDragCandidate_ = false;
+                assetBrowserDragging_ = false;
+                assetBrowserDragPath_.clear();
+                if (dropped && assetBrowserItemDropped_)
+                    assetBrowserItemDropped_(
+                        path, dragPointer.x, dragPointer.y);
+                pointerConsumed_ = dropped;
+            }
+            else
+            {
+                assetBrowserDragCandidate_ = false;
+                assetBrowserDragging_ = false;
+                assetBrowserDragPath_.clear();
             }
         }
         if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
@@ -1732,6 +1773,13 @@ namespace renegade::studio
                                     assetBrowserAssets_[assetIndex];
                                 assetBrowserSelectedPath_ =
                                     asset.relativePath;
+                                if (!asset.directory)
+                                {
+                                    assetBrowserDragCandidate_ = true;
+                                    assetBrowserDragging_ = false;
+                                    assetBrowserDragPath_ = asset.relativePath;
+                                    assetBrowserDragStart_ = XMFLOAT2(x, y);
+                                }
                                 if (asset.directory &&
                                     assetBrowserFolderSelected_)
                                 {
@@ -2005,6 +2053,19 @@ namespace renegade::studio
                 35.0f,
                 wi::Color(8, 16, 21, 255),
                 cmd);
+            if (asset.thumbnail.IsValid())
+            {
+                wi::image::Params thumbnailParams(
+                    x + 7.0f,
+                    y + 7.0f,
+                    AssetCardWidth - 14.0f,
+                    35.0f);
+                thumbnailParams.blendFlag = wi::enums::BLENDMODE_OPAQUE;
+                wi::image::Draw(
+                    &asset.thumbnail.GetTexture(),
+                    thumbnailParams,
+                    cmd);
+            }
             DrawText(
                 asset.directory ? "DIR" : "FILE",
                 x + 12.0f,

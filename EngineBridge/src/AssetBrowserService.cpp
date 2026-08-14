@@ -247,6 +247,17 @@ namespace renegade::bridge
                 {
                     continue;
                 }
+                const std::string lowerFilename = Lower(filename);
+                constexpr const char* ThumbnailSuffix = ".thumbnail.png";
+                if (!directory &&
+                    lowerFilename.size() >= std::char_traits<char>::length(ThumbnailSuffix) &&
+                    lowerFilename.compare(
+                        lowerFilename.size() - std::char_traits<char>::length(ThumbnailSuffix),
+                        std::char_traits<char>::length(ThumbnailSuffix),
+                        ThumbnailSuffix) == 0)
+                {
+                    continue;
+                }
 
                 AssetEntry entry;
                 entry.name = filename;

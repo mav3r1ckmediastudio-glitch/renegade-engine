@@ -266,6 +266,17 @@ int main()
         {
             return Fail("1.82 m scale preset did not derive from actual model height");
         }
+        const float groundedY = renegade::bridge::ImportService::
+            ResolveGroundedPlacementY(3.0f, measured, automaticFactor);
+        if (std::abs(groundedY - 4.0f) > 0.0001f)
+        {
+            return Fail("surface placement did not offset the scaled model bottom");
+        }
+        if (renegade::bridge::ImportService::ResolveGroundedPlacementY(
+                3.0f, {}, automaticFactor) != 3.0f)
+        {
+            return Fail("surface placement did not fail closed for missing bounds");
+        }
     }
 
     const auto incomplete = imports.CompleteGltfAsset({});

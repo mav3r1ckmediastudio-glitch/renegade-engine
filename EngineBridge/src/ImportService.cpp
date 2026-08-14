@@ -653,6 +653,17 @@ namespace renegade::bridge
         return height > 0.0001f ? targetHeightMeters / height : 1.0f;
     }
 
+    float ImportService::ResolveGroundedPlacementY(
+        const float surfaceY,
+        const ModelBounds& bounds,
+        const float scaleFactor) noexcept
+    {
+        if (!bounds.valid || !std::isfinite(surfaceY) ||
+            !std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
+            return surfaceY;
+        return surfaceY - bounds.minimum.y * scaleFactor;
+    }
+
     PlaceImportedModelCommand::PlaceImportedModelCommand(
         wi::scene::Scene& targetScene,
         wi::allocator::shared_ptr<wi::scene::Scene> preparedScene,

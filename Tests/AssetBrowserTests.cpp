@@ -66,6 +66,7 @@ int main()
 
     Touch(root / "Content/Scenes/Main.wiscene");
     Touch(root / "Content/Models/Props/Crate.wiscene");
+    Touch(root / "Content/Models/Props/Crate.thumbnail.png");
     Touch(root / "Content/Materials/Water/RiverWater.ini");
     Touch(root / "Content/Audio/SFX/impact.wav");
     Touch(root / "Content/Scripts/gameplay.lua");
@@ -106,6 +107,10 @@ int main()
         crate->type != AssetType::Model)
     {
         return Fail(root, "model WISCENE classification failed");
+    }
+    if (FindAsset(crateFolder, "Crate.thumbnail.png") != nullptr)
+    {
+        return Fail(root, "model thumbnail sidecar leaked into asset cards");
     }
 
     const auto unsafe = browser.Scan(

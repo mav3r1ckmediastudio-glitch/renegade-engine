@@ -215,6 +215,10 @@ namespace renegade::bridge
         [[nodiscard]] static float ResolveScaleFactorForTargetHeight(
             float targetHeightMeters,
             const wi::scene::Scene& preparedScene) noexcept;
+        [[nodiscard]] static float ResolveGroundedPlacementY(
+            float surfaceY,
+            const ModelBounds& bounds,
+            float scaleFactor) noexcept;
     };
 
     class PlaceImportedModelCommand final : public ICommand

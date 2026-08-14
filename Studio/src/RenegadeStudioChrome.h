@@ -181,6 +181,7 @@ namespace renegade::studio
             std::string name;
             std::string relativePath;
             std::string typeLabel;
+            wi::Resource thumbnail;
             bool directory = false;
         };
 
@@ -214,6 +215,11 @@ namespace renegade::studio
             std::function<void(const std::string&)> callback);
         void OnAssetBrowserItemSelected(
             std::function<void(const std::string&)> callback);
+        void OnAssetBrowserItemDropped(
+            std::function<void(
+                const std::string&,
+                float,
+                float)> callback);
         void OnLayoutChanged(
             std::function<void(float, float, float, bool)> callback);
 
@@ -297,6 +303,12 @@ namespace renegade::studio
             assetBrowserFolderSelected_;
         std::function<void(const std::string&)>
             assetBrowserItemSelected_;
+        std::function<void(const std::string&, float, float)>
+            assetBrowserItemDropped_;
+        std::string assetBrowserDragPath_;
+        XMFLOAT2 assetBrowserDragStart_ = {};
+        bool assetBrowserDragCandidate_ = false;
+        bool assetBrowserDragging_ = false;
         std::function<void(float, float, float, bool)> layoutChanged_;
     };
 
@@ -318,6 +330,16 @@ namespace renegade::studio
         void OnAction(std::function<void(Action)> callback);
         void OnAssetBrowserItemSelected(
             std::function<void(const std::string&)> callback);
+        void OnCreatorAssetPlaceRequested(
+            std::function<void(
+                const bridge::StableId&,
+                const std::string&)> callback);
+        void OnCreatorAssetDropped(
+            std::function<void(
+                const bridge::StableId&,
+                const std::string&,
+                float,
+                float)> callback);
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
 
         void Update(const wi::Canvas& canvas, float dt) override;
@@ -344,9 +366,6 @@ namespace renegade::studio
         void PlaceSelectedCreatorAsset();
         void ReimportSelectedCreatorAsset();
         void SaveSelectedCreatorTags();
-        void PlacePreparedCreatorAsset(
-            bridge::PreparedReusableModelPlacement prepared,
-            const std::string& label);
         void RefreshCreatorHierarchyRows();
         [[nodiscard]] bridge::AssetCatalogueQuery CreatorAssetQuery() const;
         [[nodiscard]] std::vector<std::string> CreatorTagInput() const;
@@ -361,7 +380,13 @@ namespace renegade::studio
         int creatorAssetStateFilter_ = 0;
         int creatorAssetFormatFilter_ = 0;
         int creatorAssetRigFilter_ = 0;
-        std::uint32_t creatorPlacementSerial_ = 0;
+        std::function<void(const bridge::StableId&, const std::string&)>
+            creatorAssetPlaceRequested_;
+        std::function<void(
+            const bridge::StableId&,
+            const std::string&,
+            float,
+            float)> creatorAssetDropped_;
         wi::jobsystem::context creatorAssetWorkload_;
         RenegadeTextInputField creatorAssetSearch_;
         RenegadeTextInputField creatorAssetTags_;
