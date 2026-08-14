@@ -832,6 +832,12 @@ namespace renegade::studio
         RebuildVisibleAssetFolders();
     }
 
+    void RenegadeStudioChrome::SetAssetBrowserSelectedPath(
+        std::string relativePath)
+    {
+        assetBrowserSelectedPath_ = std::move(relativePath);
+    }
+
     void RenegadeStudioChrome::SetSceneName(std::string sceneName)
     {
         sceneName_ = std::move(sceneName);

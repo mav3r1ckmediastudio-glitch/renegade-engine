@@ -197,6 +197,58 @@ namespace renegade::studio
             });
     }
 
+    bool CreatorAssetStudioChrome::RevealCreatorAsset(
+        const bridge::StableId& assetId,
+        const std::string& relativePath,
+        std::string& error)
+    {
+        if (!bridge::IsValidStableId(assetId) || relativePath.empty())
+        {
+            error = "The imported asset did not provide a valid browser identity.";
+            return false;
+        }
+
+        creatorSelectedAssetId_ = assetId;
+        creatorSelectedAssetPath_ = relativePath;
+        creatorAssetSearch_.SetValue("");
+        creatorAssetLastSearch_.clear();
+        creatorAssetStateFilter_ = 0;
+        creatorAssetFormatFilter_ = 0;
+        creatorAssetRigFilter_ = 0;
+        creatorAssetStateCombo_.SetSelectedWithoutCallback(0);
+        creatorAssetFormatCombo_.SetSelectedWithoutCallback(0);
+        creatorAssetRigCombo_.SetSelectedWithoutCallback(0);
+        creatorAssetRefreshPending_ = false;
+        RefreshCreatorAssetBrowser();
+
+        const auto found = std::find_if(
+            creatorAssetCatalogue_.entries.begin(),
+            creatorAssetCatalogue_.entries.end(),
+            [&assetId, &relativePath](const bridge::AssetCatalogueEntry& entry)
+            {
+                return entry.assetId == assetId &&
+                    entry.projectRelativePath == relativePath;
+            });
+        if (found == creatorAssetCatalogue_.entries.end())
+        {
+            error = "The governed asset committed, but the Asset Browser catalogue did not expose its stable ID and path.";
+            creatorAssetRefreshPending_ = true;
+            return false;
+        }
+        if (!found->registered || !found->importedProduct ||
+            !found->productAvailable ||
+            !bridge::CanPlaceCreatorModelAsset(*found))
+        {
+            error = "The governed asset committed, but its Asset Browser entry is not a current placeable model product.";
+            creatorAssetRefreshPending_ = true;
+            return false;
+        }
+
+        SetAssetBrowserSelectedPath(relativePath);
+        error.clear();
+        return true;
+    }
+
     bool CreatorAssetStudioChrome::ConsumedPointerThisFrame() const noexcept
     {
         return creatorAssetControlConsumed_ ||
@@ -206,20 +258,6 @@ namespace renegade::studio
     void CreatorAssetStudioChrome::Update(const wi::Canvas& canvas, const float dt)
     {
         RenegadeStudioChrome::Update(canvas, dt);
-
-        auto* session = bridge::StudioSession::Current();
-        if (session != nullptr && session->Projects().HasProject())
-        {
-            const auto& project = session->Projects().CurrentProject();
-            const auto restored = bridge::RestoreMaterialTextureBindings(
-                session->Scenes().GetScene(), project.rootPath, project.projectId);
-            if (restored.succeeded && restored.restored > 0)
-            {
-                SetStatusText("TEXTURE BINDING // RESTORED " +
-                    std::to_string(restored.restored) + " GOVERNED MATERIAL TEXTURE");
-            }
-        }
-
         UpdateCreatorAssetControls(canvas, dt);
     }
 

@@ -139,6 +139,13 @@ int main()
     // graphics-free; real FBX conversion is exercised by the graphics-backed
     // Gate 1 proof rather than this headless harness.
     {
+        renegade::bridge::ImportedModelEvidence staticEvidence;
+        staticEvidence.rigAnimationFingerprint = 1234;
+        if (staticEvidence.HasRigOrAnimationPayload())
+        {
+            return Fail("static model bookkeeping was mistaken for rig/animation payload");
+        }
+
         wi::scene::Scene rigged;
         const auto bone = wi::ecs::CreateEntity();
         rigged.transforms.Create(bone);
@@ -189,7 +196,8 @@ int main()
             evidence.animationData != 1 ||
             evidence.animationKeyframes != 2 ||
             evidence.animationValues != 2 ||
-            evidence.rigAnimationFingerprint == 0)
+            evidence.rigAnimationFingerprint == 0 ||
+            !evidence.HasRigOrAnimationPayload())
         {
             return Fail("rig/animation evidence summary did not capture synthetic payload");
         }

@@ -185,9 +185,30 @@ namespace
                 entry->sourceFormat == "fbx" &&
                 entry->model.skinned && entry->model.animated,
                 "creator catalogue did not expose current FBX/system metadata") ||
+            !Require(CanPlaceCreatorModelAsset(*entry),
+                "creator catalogue entry was not accepted as a placeable model") ||
             !Require(entry->creatorTags == std::vector<std::string>({"gate5", "hero"}),
                 "creator tags were not canonicalised/persisted") ||
             !RequireCatalogueQuery(catalogue, productId))
+            return false;
+
+        const fs::path importedFolder = fs::u8path(
+            imported.assetProjectRelativePath).parent_path();
+        const AssetBrowserSnapshot browserSnapshot = AssetBrowserService().Scan(
+            projectRoot.generic_u8string(), importedFolder.generic_u8string());
+        if (!Require(browserSnapshot.succeeded,
+                "Asset Browser could not scan the imported product folder: " +
+                    browserSnapshot.error) ||
+            !Require(std::any_of(
+                    browserSnapshot.assets.begin(), browserSnapshot.assets.end(),
+                    [&imported](const AssetEntry& asset)
+                    {
+                        return !asset.directory &&
+                            asset.projectRelativePath ==
+                                imported.assetProjectRelativePath &&
+                            asset.type == AssetType::Model;
+                    }),
+                "Asset Browser did not expose the newly imported .rasset product"))
             return false;
 
         // Placement must consume only the registered RAsset. Prove this before

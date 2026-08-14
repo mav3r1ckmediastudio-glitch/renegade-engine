@@ -5438,7 +5438,8 @@ namespace renegade::studio
             return true;
         }
 
-        if (flyCameraActive_ || GetGUI().HasFocus() ||
+        if (flyCameraActive_ ||
+            (!creatorAssetDropPending_ && GetGUI().HasFocus()) ||
             !IsPointerOverViewport(placementPointer))
         {
             wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
@@ -8216,10 +8217,28 @@ namespace renegade::studio
                         RefreshHierarchy();
                         RefreshInspector();
                         RefreshStatus();
-                        assetBrowserCurrentFolder_ = "Content/Models";
+                        assetBrowserCurrentFolder_ = fs::u8path(
+                            state->imported.assetProjectRelativePath)
+                            .parent_path().lexically_normal().generic_u8string();
+                        studioChrome_.SetActiveBottomTab(0, true);
                         RefreshAssetBrowser();
+                        std::string browserError;
+                        if (!studioChrome_.RevealCreatorAsset(
+                                state->imported.asset.assetId,
+                                state->imported.assetProjectRelativePath,
+                                browserError))
+                        {
+                            studioChrome_.SetStatusText(
+                                "IMPORT MODEL // ASSET COMMITTED // BROWSER FAILED");
+                            wi::helper::messageBox(
+                                "The governed asset was committed, but Studio could not verify it in the Asset Browser. Do not import it again.\n\nAsset: " +
+                                    state->imported.assetProjectRelativePath +
+                                    "\n\nReason: " + browserError,
+                                "Import Model");
+                            return;
+                        }
                         studioChrome_.SetStatusText(
-                            "IMPORT MODEL // GOVERNED ASSET READY" +
+                            "IMPORT MODEL // GOVERNED ASSET VISIBLE + SELECTED" +
                             (state->thumbnailError.empty()
                                 ? std::string(" // THUMBNAIL SAVED // ")
                                 : std::string(" // THUMBNAIL WARNING // ")) +
@@ -8462,6 +8481,28 @@ namespace renegade::studio
         }
     }
 
+    void StudioRenderPath::RestoreGovernedMaterialTextures()
+    {
+        if (session_ == nullptr || !session_->Projects().HasProject())
+            return;
+
+        const auto& project = session_->Projects().CurrentProject();
+        const auto restored = bridge::RestoreMaterialTextureBindings(
+            session_->Scenes().GetScene(), project.rootPath, project.projectId);
+        if (!restored.succeeded)
+        {
+            studioChrome_.SetStatusText(
+                "TEXTURE BINDING // RESTORE WARNING // " + restored.error);
+        }
+        else if (restored.restored > 0)
+        {
+            studioChrome_.SetStatusText(
+                "TEXTURE BINDING // RESTORED " +
+                std::to_string(restored.restored) +
+                " GOVERNED MATERIAL TEXTURE");
+        }
+    }
+
     void StudioRenderPath::RefreshAssetBrowser()
     {
         std::vector<RenegadeStudioChrome::AssetFolderRow> folders;
@@ -8607,6 +8648,7 @@ namespace renegade::studio
                     return;
                 }
 
+                RestoreGovernedMaterialTextures();
                 workspaceTitle_.SetText(
                     "RENEGADE STUDIO // " +
                     session_->Projects().CurrentProject().name);
@@ -8789,6 +8831,7 @@ namespace renegade::studio
         }
 
         AdoptOpenedSceneCamera();
+        RestoreGovernedMaterialTextures();
         SetEnvironmentWorkspaceActive(false);
         SetTerrainWorkspaceActive(false);
         RefreshHierarchy();
@@ -8939,6 +8982,7 @@ namespace renegade::studio
             return;
         }
 
+        RestoreGovernedMaterialTextures();
         workspaceTitle_.SetText(
             "RENEGADE STUDIO // " +
             session_->Projects().CurrentProject().name);

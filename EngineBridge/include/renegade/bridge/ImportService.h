@@ -72,6 +72,19 @@ namespace renegade::bridge
         std::size_t animationValues = 0;
         std::uint64_t rigAnimationFingerprint = 0;
 
+        [[nodiscard]] bool HasRigOrAnimationPayload() const noexcept
+        {
+            return skinnedMeshes != 0 ||
+                primaryInfluenceVertices != 0 ||
+                secondaryInfluenceVertices != 0 ||
+                armatureBones != 0 ||
+                animationChannels != 0 ||
+                animationSamplers != 0 ||
+                animationData != 0 ||
+                animationKeyframes != 0 ||
+                animationValues != 0;
+        }
+
         [[nodiscard]] bool operator==(
             const ImportedModelEvidence& other) const noexcept
         {

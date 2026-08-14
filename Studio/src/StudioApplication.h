@@ -49,6 +49,7 @@ namespace renegade::studio
         void RefreshInspector();
         void RefreshProjectHub();
         void RefreshAssetBrowser();
+        void RestoreGovernedMaterialTextures();
 
     private:
         enum class EditorAction

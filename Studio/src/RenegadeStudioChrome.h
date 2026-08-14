@@ -192,6 +192,7 @@ namespace renegade::studio
             std::vector<AssetFolderRow> folders,
             std::vector<AssetCard> assets,
             std::string currentPath);
+        void SetAssetBrowserSelectedPath(std::string relativePath);
         void SetSceneName(std::string sceneName);
         void SetSceneDirty(bool dirty) noexcept;
         void SetStatusText(std::string statusText);
@@ -340,6 +341,10 @@ namespace renegade::studio
                 const std::string&,
                 float,
                 float)> callback);
+        [[nodiscard]] bool RevealCreatorAsset(
+            const bridge::StableId& assetId,
+            const std::string& relativePath,
+            std::string& error);
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
 
         void Update(const wi::Canvas& canvas, float dt) override;

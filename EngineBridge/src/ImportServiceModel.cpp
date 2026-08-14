@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <sstream>
 
 namespace fs = std::filesystem;
 
@@ -142,6 +143,24 @@ namespace
                 return static_cast<char>(std::tolower(c));
             });
         return extension;
+    }
+
+    std::string DescribeRigAnimationEvidence(
+        const renegade::bridge::ImportedModelEvidence& evidence)
+    {
+        std::ostringstream out;
+        out << "skinnedMeshes=" << evidence.skinnedMeshes
+            << ", primaryInfluenceVertices=" << evidence.primaryInfluenceVertices
+            << ", secondaryInfluenceVertices=" << evidence.secondaryInfluenceVertices
+            << ", bones=" << evidence.armatureBones
+            << ", channels=" << evidence.animationChannels
+            << ", samplers=" << evidence.animationSamplers
+            << ", animationData=" << evidence.animationData
+            << ", keyframes=" << evidence.animationKeyframes
+            << ", values=" << evidence.animationValues
+            << ", fingerprint=0x" << std::hex
+            << evidence.rigAnimationFingerprint << std::dec;
+        return out.str();
     }
 }
 
@@ -502,10 +521,20 @@ namespace renegade::bridge
             prepared.result_ = result;
             return result;
         }
-        if (!(result.importedEvidence == result.reloadedEvidence))
+        const bool importedHasRigAnimation =
+            result.importedEvidence.HasRigOrAnimationPayload();
+        const bool reloadedHasRigAnimation =
+            result.reloadedEvidence.HasRigOrAnimationPayload();
+        if (importedHasRigAnimation != reloadedHasRigAnimation ||
+            (importedHasRigAnimation &&
+                !(result.importedEvidence == result.reloadedEvidence)))
         {
             result.succeeded = false;
-            result.error = "Imported WISCENE rig/animation evidence changed after round-trip reload.";
+            result.error =
+                "Imported WISCENE rig/animation evidence changed after round-trip reload. Before: " +
+                DescribeRigAnimationEvidence(result.importedEvidence) +
+                ". After: " +
+                DescribeRigAnimationEvidence(result.reloadedEvidence) + ".";
             prepared.result_ = result;
             return result;
         }
