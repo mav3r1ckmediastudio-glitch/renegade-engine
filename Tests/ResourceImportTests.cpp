@@ -1,4 +1,5 @@
 #include "renegade/bridge/AssetBrowserService.h"
+#include "renegade/bridge/CreatorTextureWorkflowService.h"
 #include "renegade/bridge/ResourceImportService.h"
 
 #include <filesystem>
@@ -188,6 +189,48 @@ int main()
         "project traversal resource source must fail closed");
 
     fs::remove_all(root, cleanupError);
+
+    // Regression: a freshly created or pre-LC01 project may not have an
+    // AssetRegistry.renegade-assets document yet. The first creator texture
+    // imported while preparing a model must bootstrap that empty registry and
+    // then complete the normal governed LP08 transaction.
+    const fs::path creatorRoot =
+        fs::temp_directory_path() / "renegade-lp08-first-texture-no-registry";
+    fs::remove_all(creatorRoot, cleanupError);
+    fs::create_directories(creatorRoot);
+    const fs::path externalTexture = creatorRoot / "first.png";
+    WriteBytes(externalTexture,
+        {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A});
+    const StableId creatorProjectId = GenerateStableId();
+    Require(!fs::exists(creatorRoot / AssetRegistryDocumentName),
+        "first-texture fixture must begin without an asset registry document");
+
+    CreatorTextureWorkflowService creatorTextures;
+    const auto firstTexture = creatorTextures.ImportTexture(
+        creatorRoot.generic_u8string(), creatorProjectId,
+        externalTexture.generic_u8string());
+    Require(firstTexture.succeeded,
+        "first creator texture should bootstrap the registry and import: " +
+            firstTexture.error);
+    Require(firstTexture.committed,
+        "first creator texture should report a committed governed transaction");
+    Require(fs::is_regular_file(creatorRoot / AssetRegistryDocumentName),
+        "first creator texture should create AssetRegistry.renegade-assets");
+    Require(fs::is_regular_file(
+            creatorRoot / fs::u8path(firstTexture.assetProjectRelativePath)),
+        "first creator texture should create its governed .rasset product");
+
+    AssetRegistry bootstrappedRegistry;
+    error.clear();
+    Require(ReadAssetRegistry(
+            creatorRoot.generic_u8string(), creatorProjectId,
+            bootstrappedRegistry, error),
+        "bootstrapped registry should read back canonically: " + error);
+    Require(bootstrappedRegistry.records.size() == 2,
+        "first governed texture should register retained source and product");
+    Require(bootstrappedRegistry.importedProducts.size() == 1,
+        "first governed texture should persist one provenance record");
+    fs::remove_all(creatorRoot, cleanupError);
 
     if (failures != 0)
     {
