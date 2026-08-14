@@ -1,0 +1,157 @@
+name: PR57 max architecture package recovery v2
+
+on:
+  push:
+    branches:
+      - scratch/pr57-max-architecture
+    paths:
+      - ".github/workflows/pr57-max-architecture-package-verify-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  recover-package:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - name: Check out scratch candidate and pinned Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Apply corrected atomic creator package recovery
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/pr57-max-architecture-package-verify.yml')
+          text = workflow.read_text(encoding='utf-8')
+          start_marker = '''      - name: Apply atomic creator package recovery
+                  shell: pwsh
+                  run: |
+          '''
+          end_marker = '''
+                - name: Stage pinned LP07 FBX proof fixtures
+          '''
+          start = text.find(start_marker)
+          if start < 0:
+              raise RuntimeError('could not find original package-apply step')
+          start += len(start_marker)
+          end = text.find(end_marker, start)
+          if end < 0:
+              raise RuntimeError('could not find end of original package-apply step')
+          block = text[start:end]
+          lines = block.splitlines()
+          script = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in lines
+          ) + '\n'
+
+          # The first verifier encoded one continuation line with four C++
+          # spaces instead of the live header's eight. Correct both the search
+          # anchor and replacement text before executing the otherwise unchanged
+          # recovery generator.
+          script = script.replace(
+              '\n    "renegade-model-import-settings";',
+              '\n        "renegade-model-import-settings";')
+
+          Path('.github/pr57-package-apply-v2.ps1').write_text(
+              script, encoding='utf-8', newline='\n')
+          '@ | Set-Content -LiteralPath '.github/extract-pr57-package-apply.py' -Encoding UTF8
+          python .github/extract-pr57-package-apply.py
+          if ($LASTEXITCODE -ne 0) { throw 'could not extract corrected package recovery script' }
+          & ./.github/pr57-package-apply-v2.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'corrected atomic package recovery script failed' }
+          Remove-Item -LiteralPath '.github/extract-pr57-package-apply.py' -Force
+          Remove-Item -LiteralPath '.github/pr57-package-apply-v2.ps1' -Force
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed after package recovery patch' }
+          git status --short
+
+      - name: Stage pinned LP07 FBX proof fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixtureRoot = 'Tests/Fixtures/LP07'
+          New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
+          $upstreamCommit = 'fcc5d6ba444cfd3eb80677dba5e37e493941abe5'
+          $fixtures = @(
+            @{ Name = 'maya_cube_6100_ascii.fbx'; Blob = 'b0aa64ea2361060b4f9bc4cd4e7bd0f730b6f7d8' },
+            @{ Name = 'maya_transformed_skin_7700_ascii.fbx'; Blob = '683b74cf082e5adab645082c73dd221e0ff7f281' }
+          )
+          foreach ($fixture in $fixtures) {
+            $path = Join-Path $fixtureRoot $fixture.Name
+            $uri = "https://raw.githubusercontent.com/ufbx/ufbx/$upstreamCommit/data/$($fixture.Name)"
+            Invoke-WebRequest -Uri $uri -OutFile $path
+            $actualBlob = (& git.exe hash-object -- $path).Trim()
+            if ($LASTEXITCODE -ne 0 -or $actualBlob -ne $fixture.Blob) {
+              throw "LP07 fixture integrity failure for $($fixture.Name)"
+            }
+          }
+
+      - name: Build and test Debug plus Release candidate
+        shell: pwsh
+        run: >-
+          ./Tools/Build-Studio-Windows.ps1
+          -Configuration Debug,Release
+          -Clean
+          -ArtifactRoot "artifacts/studio/pr57-max-package-recovery"
+
+      - name: Release Studio startup smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $studio = 'BUILD/renegade/Studio/Release/RenegadeStudio.exe'
+          if (-not (Test-Path -LiteralPath $studio -PathType Leaf)) {
+            throw "Cannot find verified Release Studio at $studio"
+          }
+          $process = Start-Process -FilePath $studio -ArgumentList 'startup-smoke' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Release startup smoke failed with exit code $($process.ExitCode)."
+          }
+          Write-Host 'PR57_MAX_PACKAGE_RELEASE_STARTUP_PASS'
+
+      - name: Commit only verified package recovery source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item -LiteralPath '.github/workflows/pr57-max-architecture-package-verify.yml' -Force
+          Remove-Item -LiteralPath '.github/workflows/pr57-max-architecture-package-verify-v2.yml' -Force
+          $paths = @(
+            'EngineBridge/include/renegade/bridge/ReusableAssetService.h',
+            'EngineBridge/src/ReusableAssetService.cpp',
+            'EngineBridge/src/ReusableAssetReimportService.cpp',
+            'EngineBridge/include/renegade/bridge/CreatorAssetWorkflowService.h',
+            'EngineBridge/src/CreatorAssetWorkflowService.cpp',
+            'Studio/src/StudioApplication.cpp',
+            'Tests/ReusableAssetTests.cpp',
+            'Tests/ReusableAssetGraphicsProof.cpp',
+            'Tests/ReusableAssetReimportGraphicsProof.cpp',
+            '.github/workflows/pr57-max-architecture-package-verify.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v2.yml'
+          )
+          git add -- $paths
+          git diff --cached --check
+          if ($LASTEXITCODE -ne 0) { throw 'staged package recovery diff check failed' }
+          $allowed = [System.Collections.Generic.HashSet[string]]::new(
+            [string[]]$paths,
+            [System.StringComparer]::Ordinal)
+          $unexpected = git diff --cached --name-only | Where-Object {
+            -not $allowed.Contains($_)
+          }
+          if ($unexpected) { throw "Unexpected staged paths: $($unexpected -join ', ')" }
+          git config user.name 'mav3r1ckmediastudio-glitch'
+          git config user.email 'mav3r1ckmediastudio@gmail.com'
+          git commit -m 'feat(assets): make creator package writes atomic'
+          if ($LASTEXITCODE -ne 0) { throw 'verified package recovery commit failed' }
+          git push origin HEAD:scratch/pr57-max-architecture
+          if ($LASTEXITCODE -ne 0) { throw 'verified package recovery push failed' }
