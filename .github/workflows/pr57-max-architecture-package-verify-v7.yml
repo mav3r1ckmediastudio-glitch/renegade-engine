@@ -105,13 +105,25 @@ jobs:
           from pathlib import Path
           path = Path('Studio/CMakeLists.txt')
           text = path.read_text(encoding='utf-8')
+          block_start = text.find('target_compile_options(RenegadeStudio')
+          if block_start < 0:
+              raise RuntimeError('RenegadeStudio compile-options block not found')
+          block_end = text.find('\n)\n', block_start)
+          if block_end < 0:
+              raise RuntimeError('RenegadeStudio compile-options block end not found')
+          block = text[block_start:block_end]
           needle = '"$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"'
-          if text.count(needle) != 1:
-              raise RuntimeError(f'/utf-8 option expected once, found {text.count(needle)}')
-          pos = text.index(needle)
-          line_start = text.rfind('\n', 0, pos) + 1
+          if block.count(needle) != 1:
+              raise RuntimeError(
+                  f'RenegadeStudio /utf-8 option expected once, found {block.count(needle)}')
+          pos_in_block = block.index(needle)
+          pos = block_start + pos_in_block
+          line_start = text.rfind('\n', block_start, pos) + 1
           indent = text[line_start:pos]
-          text = text[:pos + len(needle)] + '\n' + indent + '"$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"' + text[pos + len(needle):]
+          text = (
+              text[:pos + len(needle)] + '\n' + indent +
+              '"$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"' +
+              text[pos + len(needle):])
           path.write_text(text, encoding='utf-8', newline='\n')
           '@ | Set-Content -LiteralPath '.github/add-bigobj-v7.py' -Encoding UTF8
           python .github/add-bigobj-v7.py
