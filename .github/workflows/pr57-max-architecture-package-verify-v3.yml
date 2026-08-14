@@ -108,6 +108,127 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'v3 atomic package recovery script failed' }
           Remove-Item -LiteralPath '.github/extract-pr57-package-apply-v3.py' -Force
           Remove-Item -LiteralPath '.github/pr57-package-apply-v3.ps1' -Force
+
+          @'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected one hardening anchor, found {count}')
+              file.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          # StudioApplication.cpp is already near MSVC's COFF section limit.
+          # The package call-site change legitimately tips it over in Debug,
+          # so make the Studio target durable instead of avoiding the source.
+          replace_once(
+              'Studio/CMakeLists.txt',
+              '''target_compile_options(RenegadeStudio
+              PRIVATE
+                  "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+          )''',
+              '''target_compile_options(RenegadeStudio
+              PRIVATE
+                  "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+                  "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"
+          )''')
+
+          # Managed .rasset.json files are package projections, never browser
+          # assets. Hide only that exact suffix so legitimate creator JSON data
+          # elsewhere remains visible/unsupported rather than silently hidden.
+          replace_once(
+              'EngineBridge/src/AssetBrowserService.cpp',
+              '''                constexpr const char* ThumbnailSuffix = ".thumbnail.png";
+                  if (!directory &&
+                      lowerFilename.size() >= std::char_traits<char>::length(ThumbnailSuffix) &&
+                      lowerFilename.compare(
+                          lowerFilename.size() - std::char_traits<char>::length(ThumbnailSuffix),
+                          std::char_traits<char>::length(ThumbnailSuffix),
+                          ThumbnailSuffix) == 0)
+                  {
+                      continue;
+                  }
+
+                  AssetEntry entry;''',
+              '''                constexpr const char* ThumbnailSuffix = ".thumbnail.png";
+                  if (!directory &&
+                      lowerFilename.size() >= std::char_traits<char>::length(ThumbnailSuffix) &&
+                      lowerFilename.compare(
+                          lowerFilename.size() - std::char_traits<char>::length(ThumbnailSuffix),
+                          std::char_traits<char>::length(ThumbnailSuffix),
+                          ThumbnailSuffix) == 0)
+                  {
+                      continue;
+                  }
+                  constexpr const char* ManagedProjectionSuffix = ".rasset.json";
+                  if (!directory &&
+                      lowerFilename.size() >= std::char_traits<char>::length(ManagedProjectionSuffix) &&
+                      lowerFilename.compare(
+                          lowerFilename.size() - std::char_traits<char>::length(ManagedProjectionSuffix),
+                          std::char_traits<char>::length(ManagedProjectionSuffix),
+                          ManagedProjectionSuffix) == 0)
+                  {
+                      continue;
+                  }
+
+                  AssetEntry entry;''')
+
+          # Defence in depth for catalogue paths: projection files are internal
+          # metadata even if another filesystem snapshot source is introduced.
+          replace_once(
+              'EngineBridge/src/AssetCatalogueService.cpp',
+              '''        bool IsInternalMetadataPath(const std::string& projectRelativePath)
+              {
+                  const std::string extension = LowerAscii(
+                      fs::u8path(projectRelativePath).extension().u8string());
+                  return extension == ".rmeta";
+              }''',
+              '''        bool IsInternalMetadataPath(const std::string& projectRelativePath)
+              {
+                  const std::string lowerPath = LowerAscii(projectRelativePath);
+                  const std::string extension = LowerAscii(
+                      fs::u8path(projectRelativePath).extension().u8string());
+                  constexpr const char* ManagedProjectionSuffix = ".rasset.json";
+                  return extension == ".rmeta" ||
+                      (lowerPath.size() >= std::char_traits<char>::length(ManagedProjectionSuffix) &&
+                       lowerPath.compare(
+                           lowerPath.size() - std::char_traits<char>::length(ManagedProjectionSuffix),
+                           std::char_traits<char>::length(ManagedProjectionSuffix),
+                           ManagedProjectionSuffix) == 0);
+              }''')
+
+          replace_once(
+              'Tests/AssetBrowserTests.cpp',
+              '''    Touch(root / "Content/Models/Props/Hero.rasset");
+              Touch(root / "Content/Models/Props/Hero.thumbnail.png");''',
+              '''    Touch(root / "Content/Models/Props/Hero.rasset");
+              Touch(root / "Content/Models/Props/Hero.rasset.json");
+              Touch(root / "Content/Models/Props/Hero.thumbnail.png");''')
+          replace_once(
+              'Tests/AssetBrowserTests.cpp',
+              '''    if (FindAsset(crateFolder, "Hero.thumbnail.png") != nullptr)
+              {
+                  return Fail(root, "governed asset thumbnail sidecar leaked into asset cards");
+              }
+
+              const auto unsafe = browser.Scan(''',
+              '''    if (FindAsset(crateFolder, "Hero.thumbnail.png") != nullptr)
+              {
+                  return Fail(root, "governed asset thumbnail sidecar leaked into asset cards");
+              }
+              if (FindAsset(crateFolder, "Hero.rasset.json") != nullptr)
+              {
+                  return Fail(root, "managed .rasset projection leaked into asset cards");
+              }
+
+              const auto unsafe = browser.Scan(''')
+          '@ | Set-Content -LiteralPath '.github/pr57-package-hardening.py' -Encoding UTF8
+          python .github/pr57-package-hardening.py
+          if ($LASTEXITCODE -ne 0) { throw 'package hardening patch failed' }
+          Remove-Item -LiteralPath '.github/pr57-package-hardening.py' -Force
+
           git diff --check
           if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed after package recovery patch' }
           git status --short
@@ -168,7 +289,11 @@ jobs:
             'EngineBridge/src/ReusableAssetReimportService.cpp',
             'EngineBridge/include/renegade/bridge/CreatorAssetWorkflowService.h',
             'EngineBridge/src/CreatorAssetWorkflowService.cpp',
+            'EngineBridge/src/AssetBrowserService.cpp',
+            'EngineBridge/src/AssetCatalogueService.cpp',
+            'Studio/CMakeLists.txt',
             'Studio/src/StudioApplication.cpp',
+            'Tests/AssetBrowserTests.cpp',
             'Tests/ReusableAssetTests.cpp',
             'Tests/ReusableAssetGraphicsProof.cpp',
             'Tests/ReusableAssetReimportGraphicsProof.cpp',
