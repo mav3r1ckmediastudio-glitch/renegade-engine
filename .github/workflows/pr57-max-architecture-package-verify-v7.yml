@@ -1,0 +1,194 @@
+name: PR57 atomic creator package core
+
+on:
+  push:
+    branches:
+      - scratch/pr57-max-architecture
+    paths:
+      - ".github/workflows/pr57-max-architecture-package-verify-v7.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  recover-package:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - name: Check out scratch branch and pinned Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Apply atomic creator package candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          from pathlib import Path
+
+          source = Path('.github/workflows/pr57-max-architecture-package-verify.yml').read_text(encoding='utf-8')
+          start_marker = '''      - name: Apply atomic creator package recovery
+                  shell: pwsh
+                  run: |
+          '''
+          end_marker = '''
+                - name: Stage pinned LP07 FBX proof fixtures
+          '''
+          start = source.find(start_marker)
+          if start < 0:
+              raise RuntimeError('base package step not found')
+          start += len(start_marker)
+          end = source.find(end_marker, start)
+          if end < 0:
+              raise RuntimeError('base package step end not found')
+          block = source[start:end]
+          script = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in block.splitlines()
+          ) + '\n'
+          script = script.replace(
+              '\n    "renegade-model-import-settings";',
+              '\n        "renegade-model-import-settings";')
+
+          old_helper = '''def replace_once(path, old, new):
+              text = load(path)
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected one replacement target, found {count}')
+              save(path, text.replace(old, new, 1))
+          '''
+          new_helper = '''def replace_once(path, old, new):
+              import re
+              text = load(path)
+              count = text.count(old)
+              if count == 1:
+                  save(path, text.replace(old, new, 1))
+                  return
+              if count > 1:
+                  raise RuntimeError(f'{path}: exact replacement target is ambiguous ({count})')
+              parts = old.split('\\n')
+              pattern_parts = []
+              for index, line in enumerate(parts):
+                  if line.strip():
+                      pattern_parts.append(r'^[ \\t]*' + re.escape(line.lstrip(' \\t')))
+                  else:
+                      pattern_parts.append(r'^[ \\t]*')
+                  if index + 1 < len(parts):
+                      pattern_parts.append(r'\\n')
+              matches = list(re.finditer(''.join(pattern_parts), text, flags=re.MULTILINE))
+              if len(matches) != 1:
+                  raise RuntimeError(
+                      f'{path}: expected one whitespace-normalized replacement target, found {len(matches)}')
+              match = matches[0]
+              save(path, text[:match.start()] + new + text[match.end():])
+          '''
+          if old_helper not in script:
+              raise RuntimeError('base replacement helper not found')
+          script = script.replace(old_helper, new_helper, 1)
+          Path('.github/pr57-package-base-v7.ps1').write_text(script, encoding='utf-8', newline='\n')
+          '@ | Set-Content -LiteralPath '.github/extract-pr57-package-base-v7.py' -Encoding UTF8
+          python .github/extract-pr57-package-base-v7.py
+          if ($LASTEXITCODE -ne 0) { throw 'base extractor failed' }
+          & ./.github/pr57-package-base-v7.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'atomic package candidate failed to apply' }
+          Remove-Item '.github/extract-pr57-package-base-v7.py' -Force
+          Remove-Item '.github/pr57-package-base-v7.ps1' -Force
+
+          @'
+          from pathlib import Path
+          path = Path('Studio/CMakeLists.txt')
+          text = path.read_text(encoding='utf-8')
+          needle = '"$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"'
+          if text.count(needle) != 1:
+              raise RuntimeError(f'/utf-8 option expected once, found {text.count(needle)}')
+          pos = text.index(needle)
+          line_start = text.rfind('\n', 0, pos) + 1
+          indent = text[line_start:pos]
+          text = text[:pos + len(needle)] + '\n' + indent + '"$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"' + text[pos + len(needle):]
+          path.write_text(text, encoding='utf-8', newline='\n')
+          '@ | Set-Content -LiteralPath '.github/add-bigobj-v7.py' -Encoding UTF8
+          python .github/add-bigobj-v7.py
+          if ($LASTEXITCODE -ne 0) { throw '/bigobj hardening failed' }
+          Remove-Item '.github/add-bigobj-v7.py' -Force
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'package candidate diff check failed' }
+
+      - name: Stage pinned LP07 FBX proof fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixtureRoot = 'Tests/Fixtures/LP07'
+          New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
+          $upstreamCommit = 'fcc5d6ba444cfd3eb80677dba5e37e493941abe5'
+          $fixtures = @(
+            @{ Name = 'maya_cube_6100_ascii.fbx'; Blob = 'b0aa64ea2361060b4f9bc4cd4e7bd0f730b6f7d8' },
+            @{ Name = 'maya_transformed_skin_7700_ascii.fbx'; Blob = '683b74cf082e5adab645082c73dd221e0ff7f281' }
+          )
+          foreach ($fixture in $fixtures) {
+            $path = Join-Path $fixtureRoot $fixture.Name
+            $uri = "https://raw.githubusercontent.com/ufbx/ufbx/$upstreamCommit/data/$($fixture.Name)"
+            Invoke-WebRequest -Uri $uri -OutFile $path
+            $actualBlob = (& git.exe hash-object -- $path).Trim()
+            if ($LASTEXITCODE -ne 0 -or $actualBlob -ne $fixture.Blob) {
+              throw "LP07 fixture integrity failure for $($fixture.Name)"
+            }
+          }
+
+      - name: Build and test Debug plus Release
+        shell: pwsh
+        run: >-
+          ./Tools/Build-Studio-Windows.ps1
+          -Configuration Debug,Release
+          -Clean
+          -ArtifactRoot "artifacts/studio/pr57-max-package-recovery"
+
+      - name: Release Studio startup smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $studio = 'BUILD/renegade/Studio/Release/RenegadeStudio.exe'
+          if (-not (Test-Path -LiteralPath $studio -PathType Leaf)) {
+            throw "Cannot find verified Release Studio at $studio"
+          }
+          $process = Start-Process -FilePath $studio -ArgumentList 'startup-smoke' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Release startup smoke failed with exit code $($process.ExitCode)."
+          }
+          Write-Host 'PR57_ATOMIC_PACKAGE_CORE_PASS'
+
+      - name: Commit verified atomic package core
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($workflow in Get-ChildItem '.github/workflows/pr57-max-architecture-package-verify*.yml' -ErrorAction SilentlyContinue) {
+            Remove-Item -LiteralPath $workflow.FullName -Force
+          }
+          $paths = @(
+            'EngineBridge/include/renegade/bridge/ReusableAssetService.h',
+            'EngineBridge/src/ReusableAssetService.cpp',
+            'EngineBridge/src/ReusableAssetReimportService.cpp',
+            'EngineBridge/include/renegade/bridge/CreatorAssetWorkflowService.h',
+            'EngineBridge/src/CreatorAssetWorkflowService.cpp',
+            'Studio/CMakeLists.txt',
+            'Studio/src/StudioApplication.cpp',
+            'Tests/ReusableAssetTests.cpp',
+            'Tests/ReusableAssetGraphicsProof.cpp',
+            'Tests/ReusableAssetReimportGraphicsProof.cpp',
+            '.github/workflows'
+          )
+          git add -- $paths
+          git diff --cached --check
+          if ($LASTEXITCODE -ne 0) { throw 'verified staged diff check failed' }
+          git config user.name 'mav3r1ckmediastudio-glitch'
+          git config user.email 'mav3r1ckmediastudio@gmail.com'
+          git commit -m 'feat(assets): make creator package writes atomic'
+          if ($LASTEXITCODE -ne 0) { throw 'verified package source commit failed' }
+          git push origin HEAD:scratch/pr57-max-architecture
+          if ($LASTEXITCODE -ne 0) { throw 'verified package source push failed' }
