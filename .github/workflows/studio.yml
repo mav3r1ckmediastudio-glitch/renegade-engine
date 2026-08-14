@@ -101,6 +101,21 @@ jobs:
           -Clean
           -ArtifactRoot "artifacts/studio/ci-${{ matrix.configuration }}"
 
+      - name: Verify Renegade Studio process startup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $studio = "BUILD/renegade/Studio/${{ matrix.configuration }}/RenegadeStudio.exe"
+          if (-not (Test-Path -LiteralPath $studio -PathType Leaf)) {
+            throw "Renegade Studio startup proof cannot find $studio"
+          }
+
+          $process = Start-Process -FilePath $studio -ArgumentList 'startup-smoke' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Renegade Studio startup proof failed with process exit code $($process.ExitCode)."
+          }
+          Write-Host "RENEGADE_STUDIO_STARTUP_SMOKE_PASS configuration=${{ matrix.configuration }}"
+
       - name: Upload build and evidence
         if: always()
         uses: actions/upload-artifact@v4
