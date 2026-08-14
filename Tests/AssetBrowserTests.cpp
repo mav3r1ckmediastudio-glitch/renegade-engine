@@ -67,6 +67,8 @@ int main()
     Touch(root / "Content/Scenes/Main.wiscene");
     Touch(root / "Content/Models/Props/Crate.wiscene");
     Touch(root / "Content/Models/Props/Crate.thumbnail.png");
+    Touch(root / "Content/Models/Props/Hero.rasset");
+    Touch(root / "Content/Models/Props/Hero.thumbnail.png");
     Touch(root / "Content/Materials/Water/RiverWater.ini");
     Touch(root / "Content/Audio/SFX/impact.wav");
     Touch(root / "Content/Scripts/gameplay.lua");
@@ -111,6 +113,15 @@ int main()
     if (FindAsset(crateFolder, "Crate.thumbnail.png") != nullptr)
     {
         return Fail(root, "model thumbnail sidecar leaked into asset cards");
+    }
+    const auto* hero = FindAsset(crateFolder, "Hero.rasset");
+    if (hero == nullptr || hero->directory || hero->type != AssetType::Model)
+    {
+        return Fail(root, "governed .rasset product was not exposed as a model card");
+    }
+    if (FindAsset(crateFolder, "Hero.thumbnail.png") != nullptr)
+    {
+        return Fail(root, "governed asset thumbnail sidecar leaked into asset cards");
     }
 
     const auto unsafe = browser.Scan(

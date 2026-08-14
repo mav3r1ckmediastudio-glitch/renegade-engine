@@ -34,11 +34,32 @@ namespace renegade::bridge
         bool enabled = true;
     };
 
+    struct CreatorModelTransformRecipe
+    {
+        bool authored = false;
+        float positionX = 0.0f;
+        float positionY = 0.0f;
+        float positionZ = 0.0f;
+        float rotationXDegrees = 0.0f;
+        float rotationYDegrees = 0.0f;
+        float rotationZDegrees = 0.0f;
+        float scaleX = 1.0f;
+        float scaleY = 1.0f;
+        float scaleZ = 1.0f;
+    };
+
     struct CreatorModelImportRecipe
     {
+        CreatorModelTransformRecipe transform;
         std::vector<CreatorMaterialImportRecipe> materials;
         std::vector<CreatorAnimationImportRecipe> animations;
     };
+
+    inline constexpr const char* CreatorAuthoredTransformRootName =
+        "__renegade_creator_authored_transform";
+
+    [[nodiscard]] bool HasCreatorAuthoredTransform(
+        const wi::scene::Scene& scene) noexcept;
 
     // The public settings string is the canonical JSON object stored under the
     // reusable-model recipe's `options` member. Empty arrays may be omitted.

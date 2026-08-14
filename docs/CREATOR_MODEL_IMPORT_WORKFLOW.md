@@ -16,6 +16,11 @@ default and can be unlocked. Real-dimension presets derive their factor from
 measured model height rather than fixed multipliers. The preset list includes
 0.50 m small prop, the canonical 1.82 m human height, 2.04 m doorway and 3.00 m
 large prop, while source-size and unit conversion options remain available.
+The accepted position, rotation and scale are stored in the governed creator
+recipe and applied through a dedicated authored root inside the `.rasset`.
+Browser placement therefore uses that approved transform instead of silently
+normalising the model a second time. Older `.rasset` products without the
+authored-root marker retain their established automatic-scale fallback.
 
 ## Material resolution
 Each imported material is handled independently. Texture sources resolve in this order: an existing imported material binding, a recognised filename suffix beside the model, then an explicit creator replacement or removal.
@@ -60,12 +65,15 @@ After confirmation, the reusable asset appears in the Asset Browser with its cap
 
 The 1.82 m reference position is derived directly from the measured source bounds and current root transform rather than waiting for live render AABBs. It is placed on the unobstructed left side of the preview, clear of the task panel, and uses the owner's supplied male silhouette as a transparent camera-facing world billboard plus a capped world-space 0.00 m-to-1.82 m ruler. The cropped figure is exactly 1.82 m from sole to crown; the stock Wicked dummy is not used. The panel reports the imported model's independently measured height, so a short Automatic result cannot be mistaken for an oversized ruler.
 
-The taller orange-range slider renderer is importer-only. Existing Studio
-Inspector, Environment and Terrain controls retain Wicked's compact native
-slider renderer because those workspaces use denser absolute row layouts.
+Every Renegade continuous slider now uses the same compact owned renderer:
+the label sits above a short recessed rail, the exact numeric field remains in
+its own right-hand column, and the orange range/diamond handle stays within the
+existing 28/34-pixel row. Inspector, Environment, Terrain and importer layouts
+therefore share one treatment without increasing their absolute row spacing or
+covering the following control. Animation clip boundaries remain numeric-only.
 
 ## Persistence
-Creator material choices are persisted using governed LP08 texture stable IDs inside the LP07 reusable-model creator recipe. Base Color, Normal, Surface, Emissive and AO bindings survive reimport through that recipe. Invalid stable IDs, duplicate material indices, invalid animation ranges and unknown recipe fields are rejected.
+Creator transform and material choices are persisted inside the LP07 reusable-model creator recipe, with governed LP08 texture stable IDs for map bindings. Position, rotation, scale, Base Color, Normal, Surface, Emissive and AO bindings survive reimport through that recipe. Invalid transforms, stable IDs, duplicate material indices, invalid animation ranges and unknown recipe fields are rejected.
 
 The packaged Runtime continues to consume governed products rather than editor source files. The existing Base Color compatibility mirror remains supported for older data.
 
@@ -78,10 +86,10 @@ The current start/end values are Wicked timeline values. PR #57 does not claim t
 PR #57 preserves the previously established model/resource lifecycle guarantees: invalid recipes do not become authoritative; rejected reimport does not mutate existing product or registry bytes; prepared models still require real mesh/object evidence; governed texture cache identity remains payload-SHA-256 based; and governed required textures remain package dependencies.
 
 ## Deliberate exclusions
-This PR does not yet include automatic PBR derivation from a single colour image, final collision-authoring UX, a separate import-to-assets-only action, or source-frame-number conversion.
+This PR does not yet include automatic PBR derivation from a single colour image, final collision-authoring UX, batch import, or source-frame-number conversion.
 
 ## Automated acceptance
-`RenegadeReusableAssetReimportRecipeTests` now covers supported recipe and PBR scalar round-trip, invalid recipe rejection, multi-material texture discovery and precedence, neutral no-Surface fallback, exact Surface channel packing (including neutral reflectance) and defaults, dimension mismatch and corrupt-input rejection, distinct preview cache identity for changed Surface sources/PBR values, plus authoritative-byte preservation after rejected reimport. `RenegadeImportTests` covers bounds measurement and real-height preset scaling.
+`RenegadeReusableAssetReimportRecipeTests` now covers supported transform/material/animation recipe round-trip, authored transform application and marker detection, invalid transform and recipe rejection, multi-material texture discovery and precedence, neutral no-Surface fallback, exact Surface channel packing (including neutral reflectance) and defaults, dimension mismatch and corrupt-input rejection, distinct preview cache identity for changed Surface sources/PBR values, plus authoritative-byte preservation after rejected reimport. `RenegadeImportTests` covers bounds measurement, real-height preset scaling, and semantic skinned/animated WISCENE round-trip evidence.
 
 Existing LP07/LP08 tests continue to cover reusable-model conversion, placement, resource lifecycle, package closure, cache identity and Runtime behaviour.
 

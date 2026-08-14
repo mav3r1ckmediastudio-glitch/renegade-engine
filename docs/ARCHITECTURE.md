@@ -158,6 +158,10 @@ lighting, ambient state and the 1.82 m male scale reference never serialize.
 Model bounds are measured from Wicked's updated world-space object AABBs, with
 raw mesh bounds retained as a headless fallback; real-dimension scale presets
 therefore target measured height rather than arbitrary multipliers.
+The accepted creator position, rotation and scale are serialized in the model
+recipe and applied as a marked root inside the governed WISCENE payload. New
+`.rasset` placement preserves that authored root at unit wrapper scale; legacy
+products without the marker retain automatic placement normalization.
 
 `CreatorModelMaterialPreparationService` is the authoritative material seam for
 both temporary preview and governed commit. It resolves the same declared,

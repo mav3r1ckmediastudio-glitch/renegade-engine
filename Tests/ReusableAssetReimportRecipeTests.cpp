@@ -99,6 +99,16 @@ namespace
         using namespace renegade::bridge;
 
         CreatorModelImportRecipe recipe;
+        recipe.transform.authored = true;
+        recipe.transform.positionX = 1.0f;
+        recipe.transform.positionY = -2.0f;
+        recipe.transform.positionZ = 3.0f;
+        recipe.transform.rotationXDegrees = 10.0f;
+        recipe.transform.rotationYDegrees = 20.0f;
+        recipe.transform.rotationZDegrees = 30.0f;
+        recipe.transform.scaleX = 0.5f;
+        recipe.transform.scaleY = 0.75f;
+        recipe.transform.scaleZ = 1.25f;
         CreatorMaterialImportRecipe material;
         material.materialIndex = 2;
         material.baseColorAssetId = TextureA;
@@ -142,6 +152,17 @@ namespace
                 "serialized creator recipe did not parse: " + error) ||
             !Require(decoded.materials.size() == 1 && decoded.animations.size() == 2,
                 "creator recipe did not round-trip material/animation counts") ||
+            !Require(decoded.transform.authored &&
+                decoded.transform.positionX == 1.0f &&
+                decoded.transform.positionY == -2.0f &&
+                decoded.transform.positionZ == 3.0f &&
+                decoded.transform.rotationXDegrees == 10.0f &&
+                decoded.transform.rotationYDegrees == 20.0f &&
+                decoded.transform.rotationZDegrees == 30.0f &&
+                decoded.transform.scaleX == 0.5f &&
+                decoded.transform.scaleY == 0.75f &&
+                decoded.transform.scaleZ == 1.25f,
+                "creator authored transform did not round-trip") ||
             !Require(decoded.materials[0].materialIndex == 2 &&
                 decoded.materials[0].baseColorAssetId == TextureA &&
                 decoded.materials[0].normalAssetId == TextureB &&
@@ -180,7 +201,24 @@ namespace
             !Require(!ParseCreatorModelImportOptions(
                 "{\"animations\":[{\"enabled\":true,\"end\":1.0,\"name\":\"Bad\",\"source_animation_index\":0,\"start\":2.0}]}",
                 invalid, error) && error.find("invalid start/end range") != std::string::npos,
-                "invalid animation clip range was not rejected"))
+                "invalid animation clip range was not rejected") ||
+            !Require(!ParseCreatorModelImportOptions(
+                "{\"transform\":{\"position\":[0,0,0],\"rotation_degrees\":[0,0,0],\"scale\":[0,1,1]}}",
+                invalid, error) && error.find("outside its supported range") != std::string::npos,
+                "invalid creator transform scale was not rejected"))
+            return false;
+
+        wi::scene::Scene transformed;
+        const auto sourceRoot = wi::ecs::CreateEntity();
+        transformed.names.Create(sourceRoot).name = "Source Root";
+        transformed.transforms.Create(sourceRoot);
+        CreatorModelImportRecipe transformOnly;
+        transformOnly.transform = recipe.transform;
+        if (!Require(ApplyCreatorModelImportRecipe(
+                transformed, "", ProjectId, transformOnly, error),
+                "creator transform recipe did not apply: " + error) ||
+            !Require(HasCreatorAuthoredTransform(transformed),
+                "creator transform marker was not present after apply"))
             return false;
 
         return true;

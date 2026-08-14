@@ -73,6 +73,45 @@ namespace renegade::bridge
             return true;
         }
 
+        bool ReadVector3(
+            const nlohmann::json& object,
+            const char* key,
+            float& x,
+            float& y,
+            float& z,
+            const float minimum,
+            const float maximum,
+            std::string& error)
+        {
+            if (!object.contains(key) || !object.at(key).is_array() ||
+                object.at(key).size() != 3)
+            {
+                error = std::string("Creator model transform '") + key +
+                    "' must be a three-number array.";
+                return false;
+            }
+            const auto& values = object.at(key);
+            if (!values[0].is_number() || !values[1].is_number() ||
+                !values[2].is_number())
+            {
+                error = std::string("Creator model transform '") + key +
+                    "' must contain only numbers.";
+                return false;
+            }
+            x = values[0].get<float>();
+            y = values[1].get<float>();
+            z = values[2].get<float>();
+            if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+                x < minimum || x > maximum || y < minimum || y > maximum ||
+                z < minimum || z > maximum)
+            {
+                error = std::string("Creator model transform '") + key +
+                    "' is outside its supported range.";
+                return false;
+            }
+            return true;
+        }
+
         bool ApplyTexture(
             wi::scene::Scene& scene,
             const wi::ecs::Entity materialEntity,
@@ -116,12 +155,43 @@ namespace renegade::bridge
             }
             for (auto iterator = root.begin(); iterator != root.end(); ++iterator)
             {
-                if (iterator.key() != "materials" && iterator.key() != "animations")
+                if (iterator.key() != "transform" &&
+                    iterator.key() != "materials" && iterator.key() != "animations")
                 {
                     error = "Creator model import options contain an unsupported key: " +
                         iterator.key();
                     return false;
                 }
+            }
+
+            if (root.contains("transform"))
+            {
+                const auto& transform = root.at("transform");
+                if (!transform.is_object() || transform.size() != 3 ||
+                    !transform.contains("position") ||
+                    !transform.contains("rotation_degrees") ||
+                    !transform.contains("scale"))
+                {
+                    error = "Creator model transform requires position, rotation_degrees and scale.";
+                    return false;
+                }
+                recipe.transform.authored = true;
+                if (!ReadVector3(transform, "position",
+                        recipe.transform.positionX,
+                        recipe.transform.positionY,
+                        recipe.transform.positionZ,
+                        -100.0f, 100.0f, error) ||
+                    !ReadVector3(transform, "rotation_degrees",
+                        recipe.transform.rotationXDegrees,
+                        recipe.transform.rotationYDegrees,
+                        recipe.transform.rotationZDegrees,
+                        -180.0f, 180.0f, error) ||
+                    !ReadVector3(transform, "scale",
+                        recipe.transform.scaleX,
+                        recipe.transform.scaleY,
+                        recipe.transform.scaleZ,
+                        0.000001f, 1000000.0f, error))
+                    return false;
             }
 
             if (root.contains("materials"))
@@ -245,6 +315,39 @@ namespace renegade::bridge
         std::string& error)
     {
         nlohmann::json root = nlohmann::json::object();
+        if (recipe.transform.authored)
+        {
+            const auto& transform = recipe.transform;
+            const auto valid = [](const float value, const float minimum,
+                const float maximum)
+            {
+                return std::isfinite(value) && value >= minimum &&
+                    value <= maximum;
+            };
+            if (!valid(transform.positionX, -100.0f, 100.0f) ||
+                !valid(transform.positionY, -100.0f, 100.0f) ||
+                !valid(transform.positionZ, -100.0f, 100.0f) ||
+                !valid(transform.rotationXDegrees, -180.0f, 180.0f) ||
+                !valid(transform.rotationYDegrees, -180.0f, 180.0f) ||
+                !valid(transform.rotationZDegrees, -180.0f, 180.0f) ||
+                !valid(transform.scaleX, 0.000001f, 1000000.0f) ||
+                !valid(transform.scaleY, 0.000001f, 1000000.0f) ||
+                !valid(transform.scaleZ, 0.000001f, 1000000.0f))
+            {
+                error = "Creator model transform contains an invalid authored value.";
+                optionsJson.clear();
+                return false;
+            }
+            root["transform"] = {
+                {"position", {transform.positionX, transform.positionY,
+                    transform.positionZ}},
+                {"rotation_degrees", {transform.rotationXDegrees,
+                    transform.rotationYDegrees,
+                    transform.rotationZDegrees}},
+                {"scale", {transform.scaleX, transform.scaleY,
+                    transform.scaleZ}},
+            };
+        }
         if (!recipe.materials.empty())
         {
             nlohmann::json materials = nlohmann::json::array();
@@ -314,6 +417,44 @@ namespace renegade::bridge
         {
             error = "Creator model recipe requires a valid project ID.";
             return false;
+        }
+
+        if (recipe.transform.authored)
+        {
+            std::vector<wi::ecs::Entity> roots;
+            roots.reserve(scene.transforms.GetCount());
+            for (std::size_t index = 0; index < scene.transforms.GetCount(); ++index)
+            {
+                const wi::ecs::Entity entity = scene.transforms.GetEntity(index);
+                const auto* hierarchy = scene.hierarchy.GetComponent(entity);
+                if (hierarchy == nullptr ||
+                    hierarchy->parentID == wi::ecs::INVALID_ENTITY)
+                    roots.push_back(entity);
+            }
+
+            const wi::ecs::Entity authoredRoot = wi::ecs::CreateEntity();
+            scene.names.Create(authoredRoot).name =
+                CreatorAuthoredTransformRootName;
+            auto& transform = scene.transforms.Create(authoredRoot);
+            transform.translation_local = XMFLOAT3(
+                recipe.transform.positionX,
+                recipe.transform.positionY,
+                recipe.transform.positionZ);
+            XMStoreFloat4(
+                &transform.rotation_local,
+                XMQuaternionRotationRollPitchYaw(
+                    XMConvertToRadians(recipe.transform.rotationXDegrees),
+                    XMConvertToRadians(recipe.transform.rotationYDegrees),
+                    XMConvertToRadians(recipe.transform.rotationZDegrees)));
+            transform.scale_local = XMFLOAT3(
+                recipe.transform.scaleX,
+                recipe.transform.scaleY,
+                recipe.transform.scaleZ);
+            transform.SetDirty();
+            transform.UpdateTransform();
+            for (const wi::ecs::Entity entity : roots)
+                scene.Component_Attach(entity, authoredRoot, true);
+            scene.Update(0.0f);
         }
 
         for (const auto& materialRecipe : recipe.materials)
@@ -410,5 +551,17 @@ namespace renegade::bridge
 
         error.clear();
         return true;
+    }
+
+    bool HasCreatorAuthoredTransform(
+        const wi::scene::Scene& scene) noexcept
+    {
+        for (std::size_t index = 0; index < scene.names.GetCount(); ++index)
+        {
+            if (scene.names[index].name == CreatorAuthoredTransformRootName &&
+                scene.transforms.Contains(scene.names.GetEntity(index)))
+                return true;
+        }
+        return false;
     }
 }

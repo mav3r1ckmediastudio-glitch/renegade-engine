@@ -59,7 +59,6 @@ namespace renegade::studio
         void OnDragStarted(std::function<void(float)> callback);
         void OnValuePreview(std::function<void(float)> callback);
         void OnValueCommitted(std::function<void(float)> callback);
-        void SetCreatorStyle(bool enabled) { creatorStyle_ = enabled; }
         void Update(const wi::Canvas& canvas, float dt) override;
         void Render(
             const wi::Canvas& canvas,
@@ -73,7 +72,6 @@ namespace renegade::studio
         std::string label_;
         float valueBeforeUpdate_ = 0.0f;
         bool dragging_ = false;
-        bool creatorStyle_ = false;
         std::function<void(float)> dragStarted_;
         std::function<void(float)> valuePreview_;
         std::function<void(float)> valueCommitted_;
@@ -377,14 +375,17 @@ namespace renegade::studio
 
         bridge::CreatorAssetWorkflowService creatorAssetWorkflow_;
         bridge::AssetCatalogue creatorAssetCatalogue_;
+        bridge::StableId creatorCatalogueProjectId_;
         bridge::StableId creatorSelectedAssetId_;
         std::string creatorSelectedAssetPath_;
         bool creatorAssetRefreshPending_ = true;
+        bool creatorAssetCatalogueDirty_ = true;
         bool creatorAssetControlConsumed_ = false;
         std::string creatorAssetLastSearch_;
         int creatorAssetStateFilter_ = 0;
         int creatorAssetFormatFilter_ = 0;
         int creatorAssetRigFilter_ = 0;
+        std::function<void(Action)> creatorAction_;
         std::function<void(const bridge::StableId&, const std::string&)>
             creatorAssetPlaceRequested_;
         std::function<void(
@@ -406,6 +407,8 @@ namespace renegade::studio
         float creatorLayoutHeight_ = 1080.0f;
         std::vector<AssetFolderRow> creatorFilesystemFolders_;
         std::vector<AssetCard> creatorFilesystemAssets_;
+        std::vector<std::string> creatorVisibleAssetPaths_;
+        std::unordered_set<std::string> creatorVisibleThumbnailPaths_;
         std::string creatorCurrentPath_ = "Content";
     };
 }

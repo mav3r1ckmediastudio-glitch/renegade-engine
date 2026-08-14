@@ -1,6 +1,8 @@
 #include "renegade/bridge/ImportService.h"
 
+#include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <utility>
 
@@ -200,6 +202,105 @@ int main()
             !evidence.HasRigOrAnimationPayload())
         {
             return Fail("rig/animation evidence summary did not capture synthetic payload");
+        }
+
+        // Wicked is allowed to remap ECS entity IDs while serializing a
+        // WISCENE. The acceptance proof must compare the referenced rig and
+        // animation payload, not transient component-manager indices.
+        const auto proofNonce = std::chrono::high_resolution_clock::now()
+            .time_since_epoch().count();
+        const auto proofPath = std::filesystem::temp_directory_path() /
+            ("renegade-import-rig-roundtrip-" +
+                std::to_string(proofNonce) + ".wiscene");
+        {
+            wi::Archive archive(proofPath.generic_u8string(), false);
+            if (!archive.IsOpen())
+                return Fail("could not create synthetic rig round-trip proof");
+            rigged.Serialize(archive);
+        }
+        wi::scene::Scene reloadedRigged;
+        {
+            wi::Archive archive(proofPath.generic_u8string(), true);
+            if (!archive.IsOpen())
+                return Fail("could not reopen synthetic rig round-trip proof");
+            reloadedRigged.Serialize(archive);
+            if (archive.GetPos() != archive.GetSize())
+                return Fail("synthetic rig round-trip proof did not consume the archive");
+        }
+        std::error_code cleanupError;
+        std::filesystem::remove(proofPath, cleanupError);
+        const auto reloadedEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(
+                reloadedRigged);
+        if (!(evidence == reloadedEvidence))
+        {
+            return Fail("semantic rig/animation evidence changed across a valid WISCENE reload");
+        }
+
+        // Conversely, exact payload edits must remain fail-closed even when
+        // every high-level count is unchanged.
+        auto* reloadedMesh = reloadedRigged.meshes.GetComponent(
+            reloadedRigged.meshes.GetEntity(0));
+        if (reloadedMesh == nullptr || reloadedMesh->vertex_boneweights.empty())
+            return Fail("synthetic reloaded rig lost its mesh weights");
+        reloadedMesh->vertex_boneweights[0].x = 0.75f;
+        const auto changedWeightEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(
+                reloadedRigged);
+        if (evidence.rigAnimationFingerprint ==
+            changedWeightEvidence.rigAnimationFingerprint)
+        {
+            return Fail("rig evidence did not reject a changed bone weight");
+        }
+        reloadedMesh->vertex_boneweights[0].x = 1.0f;
+
+        auto* reloadedArmature = reloadedRigged.armatures.GetComponent(
+            reloadedRigged.armatures.GetEntity(0));
+        if (reloadedArmature == nullptr ||
+            reloadedArmature->inverseBindMatrices.empty())
+            return Fail("synthetic reloaded rig lost its bind pose");
+        reloadedArmature->inverseBindMatrices[0]._41 = 0.25f;
+        const auto changedBindEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(
+                reloadedRigged);
+        if (evidence.rigAnimationFingerprint ==
+            changedBindEvidence.rigAnimationFingerprint)
+        {
+            return Fail("rig evidence did not reject a changed inverse bind matrix");
+        }
+        reloadedArmature->inverseBindMatrices[0]._41 = 0.0f;
+
+        auto* reloadedAnimation = reloadedRigged.animations.GetComponent(
+            reloadedRigged.animations.GetEntity(0));
+        if (reloadedAnimation == nullptr || reloadedAnimation->channels.empty())
+            return Fail("synthetic reloaded animation lost its target channel");
+        const auto originalTarget = reloadedAnimation->channels[0].target;
+        const auto alternateTarget = wi::ecs::CreateEntity();
+        reloadedRigged.names.Create(alternateTarget) = "Different Target";
+        reloadedRigged.transforms.Create(alternateTarget);
+        reloadedAnimation->channels[0].target = alternateTarget;
+        const auto changedTargetEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(
+                reloadedRigged);
+        if (evidence.rigAnimationFingerprint ==
+            changedTargetEvidence.rigAnimationFingerprint)
+        {
+            return Fail("animation evidence did not reject a changed channel target");
+        }
+        reloadedAnimation->channels[0].target = originalTarget;
+
+        auto* reloadedData = reloadedRigged.animation_datas.GetComponent(
+            reloadedRigged.animation_datas.GetEntity(0));
+        if (reloadedData == nullptr || reloadedData->keyframe_data.size() < 2)
+            return Fail("synthetic reloaded animation lost keyframe data");
+        reloadedData->keyframe_data[1] = 0.5f;
+        const auto changedAnimationEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(
+                reloadedRigged);
+        if (evidence.rigAnimationFingerprint ==
+            changedAnimationEvidence.rigAnimationFingerprint)
+        {
+            return Fail("animation evidence did not reject changed keyframe data");
         }
     }
 

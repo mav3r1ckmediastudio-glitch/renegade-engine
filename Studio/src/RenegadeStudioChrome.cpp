@@ -18,8 +18,8 @@ namespace
     constexpr float PanelHeaderHeight = 43.0f;
     constexpr float HierarchyRowHeight = 28.0f;
     constexpr float AssetFolderRowHeight = 24.0f;
-    constexpr float AssetCardWidth = 132.0f;
-    constexpr float AssetCardHeight = 82.0f;
+    constexpr float AssetCardWidth = 148.0f;
+    constexpr float AssetCardHeight = 112.0f;
     constexpr float AssetCardGap = 10.0f;
 
     std::size_t HierarchyRowCapacity(const float height) noexcept
@@ -482,16 +482,6 @@ namespace renegade::studio
             return;
         }
 
-        // The taller labelled treatment belongs only to the dedicated model
-        // importer. The normal Studio inspector was designed around Wicked's
-        // compact native slider geometry; drawing the importer rail there
-        // caused controls to overlap every following absolute-layout row.
-        if (!creatorStyle_)
-        {
-            Slider::Render(canvas, cmd);
-            return;
-        }
-
         ApplyScissor(canvas, scissorRect, cmd);
         const XMFLOAT2 inputPos = valueInputField.GetPos();
         const XMFLOAT2 inputSize = valueInputField.GetSize();
@@ -499,6 +489,11 @@ namespace renegade::studio
         const float trackWidth = std::max(
             24.0f,
             inputPos.x - trackX - 9.0f);
+        // Every continuous Studio control uses the same compact two-line
+        // treatment: an unobstructed label above a short rail, with the
+        // editable numeric field kept in its own right-hand column. This is
+        // deliberately contained inside the widget's normal 28/34px row so
+        // absolute-layout inspectors cannot overlap their following row.
         const float trackY = translation.y + scale.y - 9.0f;
         const float normalized = end > start
             ? std::clamp((value - start) / (end - start), 0.0f, 1.0f)
@@ -517,26 +512,26 @@ namespace renegade::studio
             trackX,
             trackY,
             trackWidth,
-            6.0f,
-            3.0f,
+            4.0f,
+            2.0f,
             BorderSoft,
             cmd);
         DrawRoundedRect(
             trackX,
             trackY,
             trackWidth * normalized,
-            6.0f,
-            3.0f,
+            4.0f,
+            2.0f,
             Forge,
             cmd);
         const float knobX = trackX + trackWidth * normalized;
-        const float knobY = trackY + 3.0f;
-        DrawDiamond(knobX + 1.0f, knobY + 2.0f, 18.0f,
+        const float knobY = trackY + 2.0f;
+        DrawDiamond(knobX + 1.0f, knobY + 1.0f, 9.0f,
             wi::Color(0, 0, 0, 100), cmd);
-        DrawDiamond(knobX, knobY, 16.0f,
+        DrawDiamond(knobX, knobY, 8.0f,
             state == wi::gui::ACTIVE ? TextStrong : TextSecondary, cmd);
-        DrawDiamond(knobX, knobY, 9.0f, Forge, cmd);
-        DrawDiamond(knobX, knobY, 3.5f, TextStrong, cmd);
+        DrawDiamond(knobX, knobY, 5.0f, Forge, cmd);
+        DrawDiamond(knobX, knobY, 2.0f, TextStrong, cmd);
 
         const wi::Color inputBorder =
             valueInputField.GetState() == wi::gui::ACTIVE
@@ -714,16 +709,14 @@ namespace renegade::studio
             {
                 const std::filesystem::path path =
                     std::filesystem::u8path(paths_[index]);
-                const std::string filename = path.filename().generic_u8string();
-                const std::string parent = path.parent_path().filename().generic_u8string();
-                displayedPath = parent.empty() ? filename : parent + "/" + filename;
-                if (displayedPath.size() > 42)
-                {
-                    displayedPath = "..." + displayedPath.substr(displayedPath.size() - 39);
-                }
+                // The slot row is for identifying the assigned map, so keep
+                // the filename readable instead of showing an unusable slice
+                // of a long absolute path. Hovering the row and the editable
+                // selected-slot field both expose the complete source path.
+                displayedPath = path.filename().generic_u8string();
             }
             DrawText(
-                displayedPath,
+                Ellipsize(displayedPath, 36),
                 pathX + 5.0f,
                 y + 20.0f,
                 8,
@@ -908,13 +901,17 @@ namespace renegade::studio
             inspectorWidth,
             280.0f,
             maximumInspector);
+        // Keep enough vertical room for the browser toolbar plus one complete
+        // thumbnail card. A shorter drawer looked open but clipped every card,
+        // which made successfully imported assets appear to be missing.
+        constexpr float MinimumDrawerHeight = 200.0f;
         const float maximumDrawer = std::max(
-            140.0f,
+            MinimumDrawerHeight,
             height_ - TopBarHeight - SceneTabsHeight -
                 BottomTabsHeight - StatusBarHeight - 180.0f);
         drawerHeight_ = std::clamp(
             drawerHeight,
-            140.0f,
+            MinimumDrawerHeight,
             std::min(480.0f, maximumDrawer));
     }
 
@@ -2056,7 +2053,7 @@ namespace renegade::studio
                 x + 7.0f,
                 y + 7.0f,
                 AssetCardWidth - 14.0f,
-                35.0f,
+                68.0f,
                 wi::Color(8, 16, 21, 255),
                 cmd);
             if (asset.thumbnail.IsValid())
@@ -2065,40 +2062,43 @@ namespace renegade::studio
                     x + 7.0f,
                     y + 7.0f,
                     AssetCardWidth - 14.0f,
-                    35.0f);
+                    68.0f);
                 thumbnailParams.blendFlag = wi::enums::BLENDMODE_OPAQUE;
                 wi::image::Draw(
                     &asset.thumbnail.GetTexture(),
                     thumbnailParams,
                     cmd);
             }
-            DrawText(
-                asset.directory ? "DIR" : "FILE",
-                x + 12.0f,
-                y + 15.0f,
-                8,
-                asset.directory ? TextStrong : Forge,
-                cmd,
-                0.4f,
-                0.16f);
-            DrawText(
-                Ellipsize(asset.typeLabel, 14),
-                x + 48.0f,
-                y + 15.0f,
-                8,
-                Muted,
-                cmd,
-                0.4f,
-                0.14f);
+            if (!asset.thumbnail.IsValid())
+            {
+                DrawText(
+                    asset.directory ? "DIR" : "FILE",
+                    x + 12.0f,
+                    y + 15.0f,
+                    8,
+                    asset.directory ? TextStrong : Forge,
+                    cmd,
+                    0.4f,
+                    0.16f);
+            }
             DrawText(
                 Ellipsize(asset.name, 18),
                 x + 8.0f,
-                y + 51.0f,
+                y + 82.0f,
                 9,
                 selected ? TextStrong : TextSecondary,
                 cmd,
                 0.1f,
                 0.16f);
+            DrawText(
+                Ellipsize(asset.typeLabel, 22),
+                x + 8.0f,
+                y + 97.0f,
+                7,
+                Muted,
+                cmd,
+                0.2f,
+                0.12f);
         }
     }
 

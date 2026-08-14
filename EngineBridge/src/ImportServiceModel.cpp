@@ -8,6 +8,7 @@
 #include <fstream>
 #include <limits>
 #include <sstream>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -60,14 +61,102 @@ namespace
         HashValue(hash, value._43); HashValue(hash, value._44);
     }
 
-    template<typename Component>
-    std::size_t StableIndex(
-        const wi::ecs::ComponentManager<Component>& manager,
-        const wi::ecs::Entity entity) noexcept
+    void HashString(std::uint64_t& hash, const std::string& value)
     {
-        return entity == wi::ecs::INVALID_ENTITY
-            ? wi::ecs::INVALID_INDEX
-            : manager.GetIndex(entity);
+        HashValue(hash, value.size());
+        if (!value.empty())
+            HashBytes(hash, value.data(), value.size());
+    }
+
+    void HashEntitySemanticIdentity(
+        std::uint64_t& hash,
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const std::size_t depth = 0)
+    {
+        const bool valid = entity != wi::ecs::INVALID_ENTITY;
+        HashValue(hash, valid);
+        if (!valid)
+            return;
+
+        const auto* name = scene.names.GetComponent(entity);
+        const bool hasName = name != nullptr;
+        HashValue(hash, hasName);
+        if (hasName)
+            HashString(hash, name->name);
+
+        const auto* transform = scene.transforms.GetComponent(entity);
+        const bool hasTransform = transform != nullptr;
+        HashValue(hash, hasTransform);
+        if (hasTransform)
+        {
+            HashValue(hash, transform->scale_local.x);
+            HashValue(hash, transform->scale_local.y);
+            HashValue(hash, transform->scale_local.z);
+            HashValue(hash, transform->rotation_local.x);
+            HashValue(hash, transform->rotation_local.y);
+            HashValue(hash, transform->rotation_local.z);
+            HashValue(hash, transform->rotation_local.w);
+            HashValue(hash, transform->translation_local.x);
+            HashValue(hash, transform->translation_local.y);
+            HashValue(hash, transform->translation_local.z);
+        }
+
+        const auto* hierarchy = scene.hierarchy.GetComponent(entity);
+        const bool hasParent = hierarchy != nullptr &&
+            hierarchy->parentID != wi::ecs::INVALID_ENTITY && depth < 256;
+        HashValue(hash, hasParent);
+        if (hasParent)
+        {
+            HashEntitySemanticIdentity(
+                hash, scene, hierarchy->parentID, depth + 1);
+        }
+    }
+
+    void HashAnimationDataSemanticIdentity(
+        std::uint64_t& hash,
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        const auto* data = scene.animation_datas.GetComponent(entity);
+        const bool valid = data != nullptr;
+        HashValue(hash, valid);
+        if (!valid)
+            return;
+        HashValue(hash, data->keyframe_times.size());
+        for (const float value : data->keyframe_times)
+            HashValue(hash, value);
+        HashValue(hash, data->keyframe_data.size());
+        for (const float value : data->keyframe_data)
+            HashValue(hash, value);
+    }
+
+    void HashArmatureSemanticIdentity(
+        std::uint64_t& hash,
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        const auto* armature = scene.armatures.GetComponent(entity);
+        const bool valid = armature != nullptr;
+        HashValue(hash, valid);
+        if (!valid)
+            return;
+        HashValue(hash, armature->boneCollection.size());
+        for (const auto bone : armature->boneCollection)
+            HashEntitySemanticIdentity(hash, scene, bone);
+        HashValue(hash, armature->inverseBindMatrices.size());
+        for (const auto& matrix : armature->inverseBindMatrices)
+            HashMatrix(hash, matrix);
+    }
+
+    void HashSortedBlocks(
+        std::uint64_t& hash,
+        std::vector<std::uint64_t>& blocks)
+    {
+        std::sort(blocks.begin(), blocks.end());
+        HashValue(hash, blocks.size());
+        for (const auto block : blocks)
+            HashValue(hash, block);
     }
 
     bool FingerprintFile(
@@ -215,12 +304,16 @@ namespace renegade::bridge
     {
         ImportedModelEvidence evidence;
         std::uint64_t fingerprint = FingerprintSeed;
+        std::vector<std::uint64_t> meshBlocks;
+        std::vector<std::uint64_t> armatureBlocks;
+        std::vector<std::uint64_t> animationBlocks;
+        std::vector<std::uint64_t> animationDataBlocks;
 
         for (std::size_t index = 0; index < scene.meshes.GetCount(); ++index)
         {
             const auto& mesh = scene.meshes[index];
-            const auto armatureIndex = StableIndex(scene.armatures, mesh.armatureID);
-            HashValue(fingerprint, armatureIndex);
+            std::uint64_t block = FingerprintSeed;
+            HashArmatureSemanticIdentity(block, scene, mesh.armatureID);
 
             if (mesh.armatureID != wi::ecs::INVALID_ENTITY)
             {
@@ -234,91 +327,101 @@ namespace renegade::bridge
                 mesh.vertex_boneindices2.size(),
                 mesh.vertex_boneweights2.size());
 
-            HashValue(fingerprint, mesh.vertex_boneindices.size());
+            HashValue(block, mesh.vertex_boneindices.size());
             for (const auto& value : mesh.vertex_boneindices)
             {
-                HashUInt4(fingerprint, value);
+                HashUInt4(block, value);
             }
-            HashValue(fingerprint, mesh.vertex_boneweights.size());
+            HashValue(block, mesh.vertex_boneweights.size());
             for (const auto& value : mesh.vertex_boneweights)
             {
-                HashFloat4(fingerprint, value);
+                HashFloat4(block, value);
             }
-            HashValue(fingerprint, mesh.vertex_boneindices2.size());
+            HashValue(block, mesh.vertex_boneindices2.size());
             for (const auto& value : mesh.vertex_boneindices2)
             {
-                HashUInt4(fingerprint, value);
+                HashUInt4(block, value);
             }
-            HashValue(fingerprint, mesh.vertex_boneweights2.size());
+            HashValue(block, mesh.vertex_boneweights2.size());
             for (const auto& value : mesh.vertex_boneweights2)
             {
-                HashFloat4(fingerprint, value);
+                HashFloat4(block, value);
             }
+            meshBlocks.push_back(block);
         }
+        HashSortedBlocks(fingerprint, meshBlocks);
 
         for (std::size_t index = 0; index < scene.armatures.GetCount(); ++index)
         {
             const auto& armature = scene.armatures[index];
+            std::uint64_t block = FingerprintSeed;
             evidence.armatureBones += armature.boneCollection.size();
-            HashValue(fingerprint, armature.boneCollection.size());
+            HashValue(block, armature.boneCollection.size());
             for (const auto bone : armature.boneCollection)
             {
-                const auto transformIndex = StableIndex(scene.transforms, bone);
-                HashValue(fingerprint, transformIndex);
+                HashEntitySemanticIdentity(block, scene, bone);
             }
-            HashValue(fingerprint, armature.inverseBindMatrices.size());
+            HashValue(block, armature.inverseBindMatrices.size());
             for (const auto& matrix : armature.inverseBindMatrices)
             {
-                HashMatrix(fingerprint, matrix);
+                HashMatrix(block, matrix);
             }
+            armatureBlocks.push_back(block);
         }
+        HashSortedBlocks(fingerprint, armatureBlocks);
 
         for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
         {
             const auto& animation = scene.animations[index];
+            std::uint64_t block = FingerprintSeed;
             evidence.animationChannels += animation.channels.size();
             evidence.animationSamplers += animation.samplers.size();
 
-            HashValue(fingerprint, animation.channels.size());
+            HashValue(block, animation.channels.size());
             for (const auto& channel : animation.channels)
             {
                 const auto path = static_cast<std::uint32_t>(channel.path);
-                const auto targetIndex = StableIndex(scene.transforms, channel.target);
-                HashValue(fingerprint, path);
-                HashValue(fingerprint, targetIndex);
-                HashValue(fingerprint, channel.samplerIndex);
-                HashValue(fingerprint, channel.retargetIndex);
+                HashValue(block, path);
+                HashEntitySemanticIdentity(
+                    block, scene, channel.target);
+                HashValue(block, channel.samplerIndex);
+                HashValue(block, channel.retargetIndex);
             }
 
-            HashValue(fingerprint, animation.samplers.size());
+            HashValue(block, animation.samplers.size());
             for (const auto& sampler : animation.samplers)
             {
                 const auto mode = static_cast<std::uint32_t>(sampler.mode);
-                const auto dataIndex = StableIndex(scene.animation_datas, sampler.data);
-                HashValue(fingerprint, mode);
-                HashValue(fingerprint, dataIndex);
+                HashValue(block, mode);
+                HashAnimationDataSemanticIdentity(
+                    block, scene, sampler.data);
             }
+            animationBlocks.push_back(block);
         }
+        HashSortedBlocks(fingerprint, animationBlocks);
 
         evidence.animationData = scene.animation_datas.GetCount();
         HashValue(fingerprint, evidence.animationData);
         for (std::size_t index = 0; index < scene.animation_datas.GetCount(); ++index)
         {
             const auto& data = scene.animation_datas[index];
+            std::uint64_t block = FingerprintSeed;
             evidence.animationKeyframes += data.keyframe_times.size();
             evidence.animationValues += data.keyframe_data.size();
 
-            HashValue(fingerprint, data.keyframe_times.size());
+            HashValue(block, data.keyframe_times.size());
             for (const auto value : data.keyframe_times)
             {
-                HashValue(fingerprint, value);
+                HashValue(block, value);
             }
-            HashValue(fingerprint, data.keyframe_data.size());
+            HashValue(block, data.keyframe_data.size());
             for (const auto value : data.keyframe_data)
             {
-                HashValue(fingerprint, value);
+                HashValue(block, value);
             }
+            animationDataBlocks.push_back(block);
         }
+        HashSortedBlocks(fingerprint, animationDataBlocks);
 
         evidence.rigAnimationFingerprint = fingerprint;
         return evidence;

@@ -2980,7 +2980,6 @@ namespace renegade::studio
             const int axis)
         {
             field.Create(minimum, maximum, initial, 2000.0f, name, label);
-            field.SetCreatorStyle(true);
             field.OnValuePreview([rotation, axis](const float value)
             {
                 XMFLOAT3& target = rotation
@@ -3002,7 +3001,6 @@ namespace renegade::studio
         const auto createScaleSlider = [](RenegadeSlider& field, const char* name, const char* label, const int axis)
         {
             field.Create(0.001f, 10.0f, 1.0f, 10000.0f, name, label);
-            field.SetCreatorStyle(true);
             field.OnValuePreview([axis](const float value)
             {
                 if (creatorModelImporter.scaleLinked)
@@ -3167,7 +3165,6 @@ namespace renegade::studio
             float renegade::bridge::CreatorMaterialSourceOverride::* member)
         {
             slider.Create(minimum, maximum, 0.0f, 1000.0f, name, label);
-            slider.SetCreatorStyle(true);
             slider.OnValuePreview([member](const float value)
             {
                 if (!creatorModelImporter.active ||
@@ -3204,7 +3201,6 @@ namespace renegade::studio
             const float maximum, float* value)
         {
             slider.Create(minimum, maximum, *value, 1000.0f, name, label);
-            slider.SetCreatorStyle(true);
             slider.OnValuePreview([value](const float next)
             {
                 *value = next;
@@ -5515,9 +5511,14 @@ namespace renegade::studio
         }
 
         const wi::scene::Scene* preparedScene = prepared.PeekScene();
-        const float scale = bridge::ImportService::ResolveScaleFactor(
-            bridge::ModelScaleMode::Automatic,
-            *preparedScene);
+        // New creator assets already contain the scale/rotation approved in
+        // the importer. Legacy .rasset products without that authored root
+        // retain the accepted automatic-normalisation placement behaviour.
+        const float scale = bridge::HasCreatorAuthoredTransform(*preparedScene)
+            ? 1.0f
+            : bridge::ImportService::ResolveScaleFactor(
+                bridge::ModelScaleMode::Automatic,
+                *preparedScene);
         const bridge::ModelBounds bounds =
             bridge::ImportService::MeasureModelBounds(*preparedScene);
         XMFLOAT3 position = surfacePosition;
@@ -8090,6 +8091,9 @@ namespace renegade::studio
         const auto cameraBefore = creatorModelImporter.cameraBefore;
         const auto materialOverrides = creatorModelImporter.materialOverrides;
         const auto animationRecipe = creatorModelImporter.animationRecipe;
+        const XMFLOAT3 positionOffset = creatorModelImporter.positionOffset;
+        const XMFLOAT3 rotationDegrees = creatorModelImporter.rotationDegrees;
+        const XMFLOAT3 authoredScale = creatorModelImporter.scale;
         const std::string assetName = creatorModelImporter.assetName;
         const std::string destinationFolder = creatorModelImporter.destinationFolder;
         creatorModelImporter.committing = true;
@@ -8125,6 +8129,9 @@ namespace renegade::studio
             std::string thumbnailError;
             std::vector<bridge::CreatorMaterialSourceOverride> materialOverrides;
             std::vector<bridge::CreatorAnimationImportRecipe> animationRecipe;
+            XMFLOAT3 positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
+            XMFLOAT3 rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
+            XMFLOAT3 authoredScale = XMFLOAT3(1.0f, 1.0f, 1.0f);
             std::string settingsJson = "{}";
             bridge::CreatorModelImportResult imported;
         };
@@ -8138,6 +8145,9 @@ namespace renegade::studio
         state->thumbnailCapturePath = creatorModelImporter.thumbnailCapturePath;
         state->materialOverrides = materialOverrides;
         state->animationRecipe = animationRecipe;
+        state->positionOffset = positionOffset;
+        state->rotationDegrees = rotationDegrees;
+        state->authoredScale = authoredScale;
         studioChrome_.SetStatusText("IMPORT MODEL // COMMITTING GOVERNED ASSET");
 
         wi::jobsystem::Execute(modelImportWorkload_,
@@ -8164,6 +8174,16 @@ namespace renegade::studio
                     if (materials.succeeded)
                     {
                         materials.recipe.animations = state->animationRecipe;
+                        materials.recipe.transform.authored = true;
+                        materials.recipe.transform.positionX = state->positionOffset.x;
+                        materials.recipe.transform.positionY = state->positionOffset.y;
+                        materials.recipe.transform.positionZ = state->positionOffset.z;
+                        materials.recipe.transform.rotationXDegrees = state->rotationDegrees.x;
+                        materials.recipe.transform.rotationYDegrees = state->rotationDegrees.y;
+                        materials.recipe.transform.rotationZDegrees = state->rotationDegrees.z;
+                        materials.recipe.transform.scaleX = state->authoredScale.x;
+                        materials.recipe.transform.scaleY = state->authoredScale.y;
+                        materials.recipe.transform.scaleZ = state->authoredScale.z;
                         std::string recipeError;
                         if (!bridge::SerializeCreatorModelImportOptions(
                                 materials.recipe, state->settingsJson, recipeError))
