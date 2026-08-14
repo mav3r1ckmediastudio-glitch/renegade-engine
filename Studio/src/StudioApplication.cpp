@@ -211,7 +211,7 @@ namespace
         bool mannequinVisible = true;
         std::string thumbnailCapturePath;
         bool thumbnailCapturePending = false;
-        bridge::PreparedModelImport preparedForCommit;
+        renegade::bridge::PreparedModelImport preparedForCommit;
         std::size_t workspaceSection = 0;
     };
 
