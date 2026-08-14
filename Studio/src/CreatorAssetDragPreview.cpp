@@ -4,9 +4,12 @@
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/StudioSession.h"
 
+#include "wiEventHandler.h"
+
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace renegade::studio::detail
@@ -14,6 +17,8 @@ namespace renegade::studio::detail
     namespace
     {
         constexpr std::uint32_t DragPreviewLayer = 1u << 31;
+        constexpr const char* DragPreviewWrapperName =
+            "Reusable Asset Drag Preview";
 
         struct DragPreviewState
         {
@@ -69,7 +74,10 @@ namespace renegade::studio::detail
             return true;
         }
 
-        void MarkPreviewLayer(wi::scene::Scene& scene, const wi::ecs::Entity wrapper)
+        void SetPreviewObjectLayer(
+            wi::scene::Scene& scene,
+            const wi::ecs::Entity wrapper,
+            const std::uint32_t layerMask)
         {
             for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)
             {
@@ -79,11 +87,96 @@ namespace renegade::studio::detail
                 auto* layer = scene.layers.GetComponent(entity);
                 if (layer == nullptr)
                     layer = &scene.layers.Create(entity);
-                layer->layerMask = DragPreviewLayer;
-                layer->propagationMask = DragPreviewLayer;
+                layer->layerMask = layerMask;
+                layer->propagationMask = layerMask;
                 if (index < scene.aabb_objects.size())
-                    scene.aabb_objects[index].layerMask = DragPreviewLayer;
+                    scene.aabb_objects[index].layerMask = layerMask;
             }
+        }
+
+        bool IsLivePreviewWrapper(
+            const wi::scene::Scene& scene,
+            const wi::ecs::Entity wrapper)
+        {
+            if (wrapper == wi::ecs::INVALID_ENTITY)
+                return false;
+            const auto* name = scene.names.GetComponent(wrapper);
+            return name != nullptr && name->name == DragPreviewWrapperName;
+        }
+
+        void HidePreviewImmediately(
+            wi::scene::Scene& scene,
+            const wi::ecs::Entity wrapper)
+        {
+            if (!IsLivePreviewWrapper(scene, wrapper))
+                return;
+
+            if (auto* transform = scene.transforms.GetComponent(wrapper))
+            {
+                transform->scale_local = XMFLOAT3(0.0f, 0.0f, 0.0f);
+                transform->SetDirty();
+            }
+            SetPreviewObjectLayer(scene, wrapper, 0u);
+        }
+
+        void HideAndDeferPreviewRemoval(
+            wi::scene::Scene* scene,
+            const wi::ecs::Entity wrapper,
+            std::vector<wi::ecs::Entity> createdEntities)
+        {
+            if (scene == nullptr || !IsLivePreviewWrapper(*scene, wrapper))
+                return;
+
+            // Wicked's EVENT_THREAD_SAFE_POINT fires on the main thread after
+            // input update and before PreUpdate()/scene Update()/render. Hide
+            // the transient hierarchy immediately, but do not mutate ECS
+            // ownership while Studio/Wicked update work can still reference it.
+            HidePreviewImmediately(*scene, wrapper);
+
+            wi::eventhandler::Subscribe_Once(
+                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [scene,
+                 wrapper,
+                 createdEntities = std::move(createdEntities)](std::uint64_t) mutable
+                {
+                    // StudioSession owns SceneService, which owns this Scene.
+                    // Guard the callback against shutdown/session replacement
+                    // and against entity-id reuse after a scene replacement.
+                    auto* session = bridge::StudioSession::Current();
+                    if (session == nullptr ||
+                        &session->Scenes().GetScene() != scene ||
+                        !IsLivePreviewWrapper(*scene, wrapper))
+                    {
+                        return;
+                    }
+
+                    scene->Entity_Remove(wrapper, true);
+
+                    // Instantiate can create resource/component entities that
+                    // are not hierarchy children of the wrapper. Remove only
+                    // the exact entities created by this preview.
+                    wi::unordered_set<wi::ecs::Entity> remaining;
+                    scene->FindAllEntities(remaining);
+                    for (const wi::ecs::Entity entity : createdEntities)
+                    {
+                        if (remaining.count(entity) != 0)
+                            scene->Entity_Remove(entity, false);
+                    }
+                });
+        }
+
+        std::vector<wi::ecs::Entity> CollectCreatedEntities(
+            const wi::unordered_set<wi::ecs::Entity>& before,
+            const wi::unordered_set<wi::ecs::Entity>& after)
+        {
+            std::vector<wi::ecs::Entity> created;
+            created.reserve(after.size());
+            for (const wi::ecs::Entity entity : after)
+            {
+                if (before.count(entity) == 0)
+                    created.push_back(entity);
+            }
+            return created;
         }
 
         bool CreatePreview(
@@ -127,10 +220,16 @@ namespace renegade::studio::detail
                 return false;
 
             const wi::ecs::Entity wrapper =
-                scene.Entity_CreateTransform("Reusable Asset Drag Preview");
+                scene.Entity_CreateTransform(DragPreviewWrapperName);
             auto* transform = scene.transforms.GetComponent(wrapper);
             if (transform == nullptr)
             {
+                wi::unordered_set<wi::ecs::Entity> afterFailure;
+                scene.FindAllEntities(afterFailure);
+                HideAndDeferPreviewRemoval(
+                    &scene,
+                    wrapper,
+                    CollectCreatedEntities(before, afterFailure));
                 return false;
             }
 
@@ -153,12 +252,12 @@ namespace renegade::studio::detail
             }
             if (roots.empty())
             {
-                scene.Entity_Remove(wrapper, false);
-                for (const wi::ecs::Entity entity : afterMerge)
-                {
-                    if (before.count(entity) == 0)
-                        scene.Entity_Remove(entity, false);
-                }
+                wi::unordered_set<wi::ecs::Entity> afterFailure;
+                scene.FindAllEntities(afterFailure);
+                HideAndDeferPreviewRemoval(
+                    &scene,
+                    wrapper,
+                    CollectCreatedEntities(before, afterFailure));
                 return false;
             }
             for (const wi::ecs::Entity root : roots)
@@ -173,19 +272,15 @@ namespace renegade::studio::detail
 
             wi::unordered_set<wi::ecs::Entity> after;
             scene.FindAllEntities(after);
-            preview.createdEntities.reserve(after.size());
-            for (const wi::ecs::Entity entity : after)
-            {
-                if (before.count(entity) == 0)
-                    preview.createdEntities.push_back(entity);
-            }
+            preview.createdEntities = CollectCreatedEntities(before, after);
+
             XMFLOAT3 position = surfacePosition;
             position.y = bridge::ImportService::ResolveGroundedPlacementY(
                 surfacePosition.y, bounds, scale);
             transform->translation_local = position;
             transform->scale_local = XMFLOAT3(scale, scale, scale);
             transform->SetDirty();
-            MarkPreviewLayer(scene, wrapper);
+            SetPreviewObjectLayer(scene, wrapper, DragPreviewLayer);
             chrome.SetStatusText(
                 "PLACE ASSET // PREVIEW // RELEASE LMB TO COMMIT");
             return true;
@@ -194,25 +289,13 @@ namespace renegade::studio::detail
 
     void ClearCreatorAssetDragPreview()
     {
-        if (preview.scene != nullptr)
+        if (preview.scene != nullptr &&
+            preview.wrapper != wi::ecs::INVALID_ENTITY)
         {
-            if (preview.wrapper != wi::ecs::INVALID_ENTITY &&
-                preview.scene->transforms.GetComponent(preview.wrapper) != nullptr)
-            {
-                preview.scene->Entity_Remove(preview.wrapper, true);
-            }
-
-            // Instantiate can create resource/component entities that are not
-            // hierarchy children of the returned wrapper. Remove only the exact
-            // entities created by this one preview; never sweep production scene
-            // state by component type or index.
-            wi::unordered_set<wi::ecs::Entity> remaining;
-            preview.scene->FindAllEntities(remaining);
-            for (const wi::ecs::Entity entity : preview.createdEntities)
-            {
-                if (remaining.count(entity) != 0)
-                    preview.scene->Entity_Remove(entity, false);
-            }
+            HideAndDeferPreviewRemoval(
+                preview.scene,
+                preview.wrapper,
+                std::move(preview.createdEntities));
         }
         preview = {};
     }
