@@ -3016,10 +3016,10 @@ namespace renegade::studio
         importScalePanel_.Create(
             "Model Import Workspace",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        // Register the importer as a real Studio GUI window before attaching
-        // children. Window::AddWidget inherits the parent's enabled/visible
-        // state, so hiding it first makes the controls unreachable.
-        GetGUI().AddWidget(&importScalePanel_);
+        // Registration is intentionally deferred until the fixed action strip
+        // has also been created. GUI renders root widgets in reverse insertion
+        // order, so the panel must be registered last and the action widgets
+        // immediately before it to keep the actions above the panel base.
 
         importScaleTitleLabel_.Create("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
         importScaleReadoutLabel_.Create("");
@@ -3454,23 +3454,13 @@ namespace renegade::studio
         creatorImportActionBar.Create("");
         creatorImportActionBar.SetShadowRadius(0.0f);
 
-        // Window children render in reverse insertion order. Insert the two
-        // fixed actions before the footer background and scrollable section
-        // widgets so IMPORT & PLACE / CANCEL are always the final, top-most
-        // controls. Previously the long Material section could paint over the
-        // buttons even though AttachmentOptions::NONE correctly excluded them
-        // from the scroll transform.
+        // These are root GUI widgets, not Window children. Wicked parents a
+        // non-scrollable Window child to the Window's full scale transform;
+        // pixel footer coordinates are consequently scaled a second time and
+        // place the widget outside the visible panel. Root widgets use canvas
+        // pixel coordinates and cannot inherit the importer scroll transform.
         importScaleApplyButton_.SetShadowRadius(0.0f);
         importScaleDismissButton_.SetShadowRadius(0.0f);
-        importScalePanel_.AddWidget(
-            &importScaleApplyButton_,
-            wi::gui::Window::AttachmentOptions::NONE);
-        importScalePanel_.AddWidget(
-            &importScaleDismissButton_,
-            wi::gui::Window::AttachmentOptions::NONE);
-        importScalePanel_.AddWidget(
-            &creatorImportActionBar,
-            wi::gui::Window::AttachmentOptions::NONE);
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&importScaleTitleLabel_),
@@ -3531,6 +3521,16 @@ namespace renegade::studio
         }
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
+        creatorImportActionBar.SetVisible(false);
+        importScaleApplyButton_.SetVisible(false);
+        importScaleDismissButton_.SetVisible(false);
+
+        // Root widgets render in reverse insertion order: panel base first,
+        // then footer background, then both actionable buttons on top.
+        GetGUI().AddWidget(&importScaleApplyButton_);
+        GetGUI().AddWidget(&importScaleDismissButton_);
+        GetGUI().AddWidget(&creatorImportActionBar);
+        GetGUI().AddWidget(&importScalePanel_);
     }
 
     void StudioRenderPath::ApplyRenegadeTheme()
@@ -4173,8 +4173,10 @@ namespace renegade::studio
         const float importScalePanelHeight = std::max(320.0f, height - 16.0f);
         // GGMAX-style task workspace: keep the preview unobstructed and dock
         // the importer controls down the right side of the preview viewport.
+        const float importScalePanelX =
+            std::max(8.0f, width - importScalePanelWidth - 8.0f);
         importScalePanel_.SetPos(XMFLOAT2(
-            std::max(8.0f, width - importScalePanelWidth - 8.0f),
+            importScalePanelX,
             importScalePanelTop));
         importScalePanel_.SetSize(XMFLOAT2(
             importScalePanelWidth,
@@ -4276,12 +4278,16 @@ namespace renegade::studio
         creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 354.0f));
         creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
         const float footerY = importScalePanelHeight - 54.0f;
-        creatorImportActionBar.SetPos(XMFLOAT2(4.0f, footerY));
+        creatorImportActionBar.SetPos(XMFLOAT2(
+            importScalePanelX + 4.0f,
+            importScalePanelTop + footerY));
         creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 8.0f, 50.0f));
-        const float commitY = footerY + 8.0f;
-        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, commitY));
+        const float commitY = importScalePanelTop + footerY + 8.0f;
+        importScaleApplyButton_.SetPos(XMFLOAT2(importScalePanelX + 12.0f, commitY));
         importScaleApplyButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.64f, 34.0f));
-        importScaleDismissButton_.SetPos(XMFLOAT2(20.0f + (importScalePanelWidth - 32.0f) * 0.64f, commitY));
+        importScaleDismissButton_.SetPos(XMFLOAT2(
+            importScalePanelX + 20.0f + (importScalePanelWidth - 32.0f) * 0.64f,
+            commitY));
         importScaleDismissButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.36f, 34.0f));
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
@@ -7912,6 +7918,9 @@ namespace renegade::studio
         creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
         UpdateCreatorImportScaleReferenceLabel();
         importScalePanel_.SetVisible(true);
+        creatorImportActionBar.SetVisible(true);
+        importScaleApplyButton_.SetVisible(true);
+        importScaleDismissButton_.SetVisible(true);
         importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
         RefreshCreatorImportWorkspaceSection();
     }
@@ -8063,6 +8072,9 @@ namespace renegade::studio
                 break;
         }
         importScalePanel_.SetVisible(false);
+        creatorImportActionBar.SetVisible(false);
+        importScaleApplyButton_.SetVisible(false);
+        importScaleDismissButton_.SetVisible(false);
         studioChrome_.SetVisible(true);
         inspectorPanel_.SetVisible(true);
         hierarchySearch_.SetVisible(true);
@@ -8213,6 +8225,9 @@ namespace renegade::studio
     void StudioRenderPath::DismissImportScalePanel()
     {
         importScalePanel_.SetVisible(false);
+        creatorImportActionBar.SetVisible(false);
+        importScaleApplyButton_.SetVisible(false);
+        importScaleDismissButton_.SetVisible(false);
         if (session_ != nullptr && creatorModelImporter.active)
         {
             RestoreCreatorImportPreviewEnvironment();
