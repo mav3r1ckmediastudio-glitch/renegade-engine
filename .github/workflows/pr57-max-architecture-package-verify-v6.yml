@@ -1,0 +1,290 @@
+name: PR57 max architecture package recovery v6
+
+on:
+  push:
+    branches:
+      - scratch/pr57-max-architecture
+    paths:
+      - ".github/workflows/pr57-max-architecture-package-verify-v6.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  recover-package:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - name: Check out scratch branch and pinned Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Apply base atomic package candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          from pathlib import Path
+
+          source = Path('.github/workflows/pr57-max-architecture-package-verify.yml').read_text(encoding='utf-8')
+          start_marker = '''      - name: Apply atomic creator package recovery
+                  shell: pwsh
+                  run: |
+          '''
+          end_marker = '''
+                - name: Stage pinned LP07 FBX proof fixtures
+          '''
+          start = source.find(start_marker)
+          if start < 0:
+              raise RuntimeError('base package step not found')
+          start += len(start_marker)
+          end = source.find(end_marker, start)
+          if end < 0:
+              raise RuntimeError('base package step end not found')
+          block = source[start:end]
+          script = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in block.splitlines()
+          ) + '\n'
+          script = script.replace(
+              '\n    "renegade-model-import-settings";',
+              '\n        "renegade-model-import-settings";')
+
+          old_helper = '''def replace_once(path, old, new):
+              text = load(path)
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected one replacement target, found {count}')
+              save(path, text.replace(old, new, 1))
+          '''
+          new_helper = '''def replace_once(path, old, new):
+              import re
+              text = load(path)
+              count = text.count(old)
+              if count == 1:
+                  save(path, text.replace(old, new, 1))
+                  return
+              if count > 1:
+                  raise RuntimeError(f'{path}: exact replacement target is ambiguous ({count})')
+              parts = old.split('\\n')
+              pattern_parts = []
+              for index, line in enumerate(parts):
+                  if line.strip():
+                      pattern_parts.append(r'^[ \\t]*' + re.escape(line.lstrip(' \\t')))
+                  else:
+                      pattern_parts.append(r'^[ \\t]*')
+                  if index + 1 < len(parts):
+                      pattern_parts.append(r'\\n')
+              matches = list(re.finditer(''.join(pattern_parts), text, flags=re.MULTILINE))
+              if len(matches) != 1:
+                  raise RuntimeError(
+                      f'{path}: expected one whitespace-normalized replacement target, found {len(matches)}')
+              match = matches[0]
+              save(path, text[:match.start()] + new + text[match.end():])
+          '''
+          if old_helper not in script:
+              raise RuntimeError('base replacement helper not found')
+          script = script.replace(old_helper, new_helper, 1)
+          Path('.github/pr57-package-base-v6.ps1').write_text(script, encoding='utf-8', newline='\n')
+          '@ | Set-Content -LiteralPath '.github/extract-pr57-package-base-v6.py' -Encoding UTF8
+          python .github/extract-pr57-package-base-v6.py
+          if ($LASTEXITCODE -ne 0) { throw 'base extractor failed' }
+          & ./.github/pr57-package-base-v6.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'base package candidate failed to apply' }
+          Remove-Item '.github/extract-pr57-package-base-v6.py' -Force
+          Remove-Item '.github/pr57-package-base-v6.ps1' -Force
+
+      - name: Apply durable Studio and sidecar hardening
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8', newline='\n')
+
+          # StudioApplication.cpp is already close to the MSVC COFF section
+          # ceiling; the package call-site makes Debug cross it. /bigobj is the
+          # compiler-supported durable fix for this translation unit size.
+          path = 'Studio/CMakeLists.txt'
+          text = read(path)
+          marker = '        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"'
+          if text.count(marker) != 1:
+              raise RuntimeError('Studio MSVC compile option marker is not unique')
+          text = text.replace(
+              marker,
+              marker + '\n        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"',
+              1)
+          write(path, text)
+
+          # Hide only the generated *.rasset.json package projection. Do not
+          # suppress arbitrary JSON content.
+          path = 'EngineBridge/src/AssetBrowserService.cpp'
+          text = read(path)
+          search_from = text.find('constexpr const char* ThumbnailSuffix = ".thumbnail.png";')
+          if search_from < 0:
+              raise RuntimeError('thumbnail sidecar filter not found')
+          marker = 'AssetEntry entry;'
+          insert_at = text.find(marker, search_from)
+          if insert_at < 0:
+              raise RuntimeError('asset entry insertion point not found')
+          line_start = text.rfind('\n', 0, insert_at) + 1
+          indent = text[line_start:insert_at]
+          block = (
+              indent + 'constexpr const char* ManagedProjectionSuffix = ".rasset.json";\n' +
+              indent + 'if (!directory &&\n' +
+              indent + '    lowerFilename.size() >= std::char_traits<char>::length(ManagedProjectionSuffix) &&\n' +
+              indent + '    lowerFilename.compare(\n' +
+              indent + '        lowerFilename.size() - std::char_traits<char>::length(ManagedProjectionSuffix),\n' +
+              indent + '        std::char_traits<char>::length(ManagedProjectionSuffix),\n' +
+              indent + '        ManagedProjectionSuffix) == 0)\n' +
+              indent + '{\n' +
+              indent + '    continue;\n' +
+              indent + '}\n\n')
+          text = text[:line_start] + block + text[line_start:]
+          write(path, text)
+
+          # Defence in depth: catalogue recovery treats managed projections as
+          # metadata even if a future snapshot source includes them.
+          path = 'EngineBridge/src/AssetCatalogueService.cpp'
+          text = read(path)
+          old = '            return extension == ".rmeta";'
+          if text.count(old) != 1:
+              raise RuntimeError('catalogue metadata return is not unique')
+          new = '''            const std::string lowerPath = LowerAscii(projectRelativePath);
+              constexpr const char* ManagedProjectionSuffix = ".rasset.json";
+              return extension == ".rmeta" ||
+                  (lowerPath.size() >= std::char_traits<char>::length(ManagedProjectionSuffix) &&
+                   lowerPath.compare(
+                       lowerPath.size() - std::char_traits<char>::length(ManagedProjectionSuffix),
+                       std::char_traits<char>::length(ManagedProjectionSuffix),
+                       ManagedProjectionSuffix) == 0);'''
+          text = text.replace(old, new, 1)
+          write(path, text)
+
+          path = 'Tests/AssetBrowserTests.cpp'
+          text = read(path)
+          hero = '    Touch(root / "Content/Models/Props/Hero.rasset");'
+          if text.count(hero) != 1:
+              raise RuntimeError('Hero rasset fixture marker is not unique')
+          text = text.replace(
+              hero,
+              hero + '\n    Touch(root / "Content/Models/Props/Hero.rasset.json");',
+              1)
+          unsafe = '    const auto unsafe = browser.Scan('
+          if text.count(unsafe) != 1:
+              raise RuntimeError('unsafe scan marker is not unique')
+          assertion = '''    if (FindAsset(crateFolder, "Hero.rasset.json") != nullptr)
+              {
+                  return Fail(root, "managed .rasset projection leaked into asset cards");
+              }
+
+          '''
+          text = text.replace(unsafe, assertion + unsafe, 1)
+          write(path, text)
+          '@ | Set-Content -LiteralPath '.github/pr57-package-hardening-v6.py' -Encoding UTF8
+          python .github/pr57-package-hardening-v6.py
+          if ($LASTEXITCODE -ne 0) { throw 'v6 hardening failed' }
+          Remove-Item '.github/pr57-package-hardening-v6.py' -Force
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'candidate diff check failed' }
+          git status --short
+
+      - name: Stage pinned LP07 FBX proof fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixtureRoot = 'Tests/Fixtures/LP07'
+          New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
+          $upstreamCommit = 'fcc5d6ba444cfd3eb80677dba5e37e493941abe5'
+          $fixtures = @(
+            @{ Name = 'maya_cube_6100_ascii.fbx'; Blob = 'b0aa64ea2361060b4f9bc4cd4e7bd0f730b6f7d8' },
+            @{ Name = 'maya_transformed_skin_7700_ascii.fbx'; Blob = '683b74cf082e5adab645082c73dd221e0ff7f281' }
+          )
+          foreach ($fixture in $fixtures) {
+            $path = Join-Path $fixtureRoot $fixture.Name
+            $uri = "https://raw.githubusercontent.com/ufbx/ufbx/$upstreamCommit/data/$($fixture.Name)"
+            Invoke-WebRequest -Uri $uri -OutFile $path
+            $actualBlob = (& git.exe hash-object -- $path).Trim()
+            if ($LASTEXITCODE -ne 0 -or $actualBlob -ne $fixture.Blob) {
+              throw "LP07 fixture integrity failure for $($fixture.Name)"
+            }
+          }
+
+      - name: Build and test Debug plus Release
+        shell: pwsh
+        run: >-
+          ./Tools/Build-Studio-Windows.ps1
+          -Configuration Debug,Release
+          -Clean
+          -ArtifactRoot "artifacts/studio/pr57-max-package-recovery"
+
+      - name: Release Studio startup smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $studio = 'BUILD/renegade/Studio/Release/RenegadeStudio.exe'
+          if (-not (Test-Path -LiteralPath $studio -PathType Leaf)) {
+            throw "Cannot find verified Release Studio at $studio"
+          }
+          $process = Start-Process -FilePath $studio -ArgumentList 'startup-smoke' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Release startup smoke failed with exit code $($process.ExitCode)."
+          }
+          Write-Host 'PR57_MAX_PACKAGE_RELEASE_STARTUP_PASS'
+
+      - name: Commit verified package recovery
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($workflow in @(
+            '.github/workflows/pr57-max-architecture-package-verify.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v2.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v3.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v4.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v5.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v6.yml'
+          )) {
+            if (Test-Path -LiteralPath $workflow) { Remove-Item -LiteralPath $workflow -Force }
+          }
+          $paths = @(
+            'EngineBridge/include/renegade/bridge/ReusableAssetService.h',
+            'EngineBridge/src/ReusableAssetService.cpp',
+            'EngineBridge/src/ReusableAssetReimportService.cpp',
+            'EngineBridge/include/renegade/bridge/CreatorAssetWorkflowService.h',
+            'EngineBridge/src/CreatorAssetWorkflowService.cpp',
+            'EngineBridge/src/AssetBrowserService.cpp',
+            'EngineBridge/src/AssetCatalogueService.cpp',
+            'Studio/CMakeLists.txt',
+            'Studio/src/StudioApplication.cpp',
+            'Tests/AssetBrowserTests.cpp',
+            'Tests/ReusableAssetTests.cpp',
+            'Tests/ReusableAssetGraphicsProof.cpp',
+            'Tests/ReusableAssetReimportGraphicsProof.cpp',
+            '.github/workflows/pr57-max-architecture-package-verify.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v2.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v3.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v4.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v5.yml',
+            '.github/workflows/pr57-max-architecture-package-verify-v6.yml'
+          )
+          git add -- $paths
+          git diff --cached --check
+          if ($LASTEXITCODE -ne 0) { throw 'verified staged diff check failed' }
+          git config user.name 'mav3r1ckmediastudio-glitch'
+          git config user.email 'mav3r1ckmediastudio@gmail.com'
+          git commit -m 'feat(assets): make creator package writes atomic'
+          if ($LASTEXITCODE -ne 0) { throw 'verified source commit failed' }
+          git push origin HEAD:scratch/pr57-max-architecture
+          if ($LASTEXITCODE -ne 0) { throw 'verified source push failed' }
