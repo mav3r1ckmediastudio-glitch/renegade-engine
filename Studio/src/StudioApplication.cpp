@@ -4,6 +4,7 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/CreatorModelMaterialPreparationService.h"
+#include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include <algorithm>
 #include <chrono>

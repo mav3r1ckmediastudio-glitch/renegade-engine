@@ -1,4 +1,5 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/CreatorAssetActionPolicy.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneDocumentService.h"
