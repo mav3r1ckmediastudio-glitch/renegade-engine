@@ -105,6 +105,51 @@ int main()
             reopened.payload == document.payload,
         "round-trip changed RAsset identity/recipe/payload");
 
+    ReusableModelManagedProjection projection;
+    projection.projectId = ProjectId;
+    projection.assetId = AssetId;
+    projection.sourceAssetId = SourceId;
+    projection.sourceProjectRelativePath = "SourceAssets/Models/source.fbx";
+    projection.assetProjectRelativePath = "Content/Models/fixture.rasset";
+    projection.sourceFormat = "fbx";
+    projection.importer = "wicked.ufbx";
+    projection.importerVersion = 1;
+    projection.settingsJson = document.manifest.settingsJson;
+    projection.payloadHash = document.manifest.payloadHash;
+    projection.modelMetadata.known = true;
+    projection.modelMetadata.meshCount = 1;
+    projection.modelMetadata.materialCount = 2;
+    projection.thumbnailProjectRelativePath =
+        ResolveReusableModelThumbnailPath(projection.assetProjectRelativePath);
+    passed &= Check(
+        ResolveReusableModelManagedProjectionPath(
+            projection.assetProjectRelativePath) ==
+            "Content/Models/fixture.rasset.json" &&
+        projection.thumbnailProjectRelativePath ==
+            "Content/Models/fixture.thumbnail.png",
+        "managed package path conventions changed");
+    passed &= Check(ValidateReusableModelManagedProjection(projection, error),
+        "valid managed projection rejected: " + error);
+    std::string projectionFirst;
+    std::string projectionSecond;
+    passed &= Check(SerializeReusableModelManagedProjection(
+            projection, projectionFirst, error),
+        "managed projection serialize failed: " + error);
+    passed &= Check(SerializeReusableModelManagedProjection(
+            projection, projectionSecond, error),
+        "managed projection repeat serialize failed: " + error);
+    passed &= Check(projectionFirst == projectionSecond &&
+            projectionFirst.find(ReusableModelManagedProjectionFormat) != std::string::npos &&
+            projectionFirst.find(AssetId) != std::string::npos &&
+            projectionFirst.find(SourceId) != std::string::npos &&
+            projectionFirst.find("Content/Models/fixture.thumbnail.png") != std::string::npos,
+        "managed projection is not deterministic/self-describing");
+    auto invalidProjection = projection;
+    invalidProjection.thumbnailProjectRelativePath = "Content/Other.png";
+    passed &= Check(!ValidateReusableModelManagedProjection(
+            invalidProjection, error),
+        "projection accepted a thumbnail outside its physical package naming contract");
+
     auto corruptPayload = first;
     corruptPayload.back() ^= 0xffu;
     passed &= Check(!DeserializeReusableModelAssetDocument(

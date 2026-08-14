@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <map>
 #include <set>
 #include <sstream>
@@ -177,7 +178,32 @@ namespace renegade::bridge
             return true;
         }
 
-        std::string TopLevelFolder(const std::string& projectRelativePath)
+        bool ReadBinaryFile(
+        const fs::path& path,
+        std::vector<std::uint8_t>& bytes,
+        std::string& error)
+    {
+        bytes.clear();
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            error = "Could not read creator package file: " + path.generic_u8string();
+            return false;
+        }
+        bytes.assign(
+            std::istreambuf_iterator<char>(stream),
+            std::istreambuf_iterator<char>());
+        if (!stream.good() && !stream.eof())
+        {
+            bytes.clear();
+            error = "Could not read complete creator package file: " + path.generic_u8string();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    std::string TopLevelFolder(const std::string& projectRelativePath)
         {
             const fs::path path = fs::u8path(projectRelativePath);
             const auto first = path.begin();
@@ -669,7 +695,8 @@ namespace renegade::bridge
         const std::string& settingsJson,
         const std::string& assetName,
         const std::string& destinationFolder,
-        PreparedModelImport preparedModel) const
+        PreparedModelImport preparedModel,
+        const std::string& thumbnailSourcePath) const
     {
         CreatorModelImportResult result;
         if (!IsValidStableId(projectId))
@@ -680,6 +707,27 @@ namespace renegade::bridge
         fs::path root;
         if (!ResolveRoot(projectRoot, root, result.error))
             return result;
+
+        std::vector<std::uint8_t> thumbnailPngBytes;
+        if (!thumbnailSourcePath.empty())
+        {
+            std::error_code thumbnailEc;
+            const fs::path intermediateRoot = fs::weakly_canonical(
+                root / "Intermediate", thumbnailEc);
+            const fs::path thumbnailPath = fs::weakly_canonical(
+                fs::absolute(fs::u8path(thumbnailSourcePath), thumbnailEc),
+                thumbnailEc);
+            if (thumbnailEc || !fs::is_directory(intermediateRoot, thumbnailEc) ||
+                thumbnailEc || !fs::is_regular_file(thumbnailPath, thumbnailEc) ||
+                thumbnailEc || !IsWithin(thumbnailPath, intermediateRoot))
+            {
+                result.error =
+                    "Creator thumbnail must be a regular file below project Intermediate.";
+                return result;
+            }
+            if (!ReadBinaryFile(thumbnailPath, thumbnailPngBytes, result.error))
+                return result;
+        }
 
         std::error_code ec;
         const fs::path source = fs::weakly_canonical(
@@ -734,7 +782,24 @@ namespace renegade::bridge
                 result.error = "Could not inspect reusable-asset destination.";
                 return result;
             }
-            if (!snapshotExists && !assetExists)
+            fs::path projectionPath = assetPath;
+            projectionPath += ".json";
+            fs::path thumbnailPath = assetPath;
+            thumbnailPath.replace_extension(".thumbnail.png");
+            const bool projectionExists = fs::exists(projectionPath, ec);
+            if (ec)
+            {
+                result.error = "Could not inspect managed asset projection destination.";
+                return result;
+            }
+            const bool thumbnailExists = fs::exists(thumbnailPath, ec);
+            if (ec)
+            {
+                result.error = "Could not inspect creator thumbnail destination.";
+                return result;
+            }
+            if (!snapshotExists && !assetExists &&
+                !projectionExists && !thumbnailExists)
                 break;
             if (explicitName)
             {
@@ -781,6 +846,7 @@ namespace renegade::bridge
         request.assetProjectRelativePath = result.assetProjectRelativePath;
         request.settingsJson = settingsJson;
         request.expectedFormat = format;
+        request.thumbnailPngBytes = std::move(thumbnailPngBytes);
         result.asset = ReusableAssetService().ImportModelAsset(
             request, {}, std::move(preparedModel));
         if (!result.asset.succeeded)

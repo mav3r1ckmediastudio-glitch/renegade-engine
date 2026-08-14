@@ -101,6 +101,7 @@ target_compile_definitions(RenegadeStudio
 target_compile_options(RenegadeStudio
     PRIVATE
         "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"
 )
 
 set_target_properties(RenegadeStudio PROPERTIES

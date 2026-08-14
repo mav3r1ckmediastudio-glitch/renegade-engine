@@ -49,13 +49,14 @@ namespace renegade::bridge
             std::string& error) const;
 
         [[nodiscard]] CreatorModelImportResult ImportModel(
-            const std::string& projectRoot,
-            const StableId& projectId,
-            const std::string& externalSourcePath,
-            const std::string& settingsJson = "{}",
-            const std::string& assetName = {},
-            const std::string& destinationFolder = "Content/Models",
-            PreparedModelImport preparedModel = {}) const;
+        const std::string& projectRoot,
+        const StableId& projectId,
+        const std::string& externalSourcePath,
+        const std::string& settingsJson = "{}",
+        const std::string& assetName = {},
+        const std::string& destinationFolder = "Content/Models",
+        PreparedModelImport preparedModel = {},
+        const std::string& thumbnailSourcePath = {}) const;
 
         [[nodiscard]] ReusableModelReimportResult ReimportModel(
             const std::string& projectRoot,

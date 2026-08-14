@@ -134,7 +134,16 @@ namespace renegade::bridge
             return true;
         }
 
-        std::string HashBytes(const std::vector<std::uint8_t>& bytes)
+        bool IsPngBytes(const std::vector<std::uint8_t>& bytes)
+    {
+        constexpr std::array<std::uint8_t, 8> signature = {
+            0x89u, 0x50u, 0x4eu, 0x47u, 0x0du, 0x0au, 0x1au, 0x0au
+        };
+        return bytes.size() >= signature.size() &&
+            std::equal(signature.begin(), signature.end(), bytes.begin());
+    }
+
+    std::string HashBytes(const std::vector<std::uint8_t>& bytes)
         {
             std::uint64_t hash = FnvOffset;
             for (const std::uint8_t value : bytes)
@@ -513,6 +522,141 @@ namespace renegade::bridge
         }
     }
 
+    std::string ResolveReusableModelManagedProjectionPath(
+        const std::string& assetProjectRelativePath)
+    {
+        if (assetProjectRelativePath.empty())
+            return {};
+        return assetProjectRelativePath + ".json";
+    }
+
+    std::string ResolveReusableModelThumbnailPath(
+        const std::string& assetProjectRelativePath)
+    {
+        if (assetProjectRelativePath.empty())
+            return {};
+        fs::path path = fs::u8path(assetProjectRelativePath);
+        path.replace_extension(".thumbnail.png");
+        return path.generic_u8string();
+    }
+
+    bool ValidateReusableModelManagedProjection(
+        const ReusableModelManagedProjection& projection,
+        std::string& error)
+    {
+        if (projection.formatIdentifier != ReusableModelManagedProjectionFormat ||
+            projection.schemaVersion != ReusableModelManagedProjection::CurrentSchemaVersion)
+        {
+            error = "Unsupported managed reusable-asset projection schema.";
+            return false;
+        }
+        if (!IsValidStableId(projection.projectId) ||
+            !IsValidStableId(projection.assetId) ||
+            !IsValidStableId(projection.sourceAssetId) ||
+            projection.assetId == projection.sourceAssetId)
+        {
+            error = "Managed reusable-asset projection identity is invalid.";
+            return false;
+        }
+        if (!IsSafeCanonicalProjectPath(projection.sourceProjectRelativePath) ||
+            !HasTopLevelFolder(projection.sourceProjectRelativePath, "SourceAssets") ||
+            !IsSafeCanonicalProjectPath(projection.assetProjectRelativePath) ||
+            !HasTopLevelFolder(projection.assetProjectRelativePath, "Content") ||
+            LowerExtension(projection.assetProjectRelativePath) != ReusableAssetExtension)
+        {
+            error = "Managed reusable-asset projection paths are invalid.";
+            return false;
+        }
+        if (!IsSupportedSourceFormatToken(projection.sourceFormat) ||
+            projection.importer.empty() || projection.importerVersion == 0 ||
+            projection.settingsSchema != ReusableModelImportSettingsSchema ||
+            projection.settingsVersion != 1 ||
+            !IsCanonicalJsonObject(projection.settingsJson) ||
+            projection.payloadHash.empty() || !projection.modelMetadata.known)
+        {
+            error = "Managed reusable-asset projection recipe/metadata is incomplete.";
+            return false;
+        }
+        try
+        {
+            const auto recipe = nlohmann::json::parse(projection.settingsJson);
+            if (!recipe.contains("source_format") ||
+                recipe.at("source_format").get<std::string>() != projection.sourceFormat ||
+                !recipe.contains("options") || !recipe.at("options").is_object())
+            {
+                error = "Managed reusable-asset projection recipe contradicts its source format.";
+                return false;
+            }
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            error = "Managed reusable-asset projection recipe is malformed.";
+            return false;
+        }
+        if (!projection.thumbnailProjectRelativePath.empty() &&
+            (!IsSafeCanonicalProjectPath(projection.thumbnailProjectRelativePath) ||
+             !HasTopLevelFolder(projection.thumbnailProjectRelativePath, "Content") ||
+             projection.thumbnailProjectRelativePath !=
+                 ResolveReusableModelThumbnailPath(projection.assetProjectRelativePath)))
+        {
+            error = "Managed reusable-asset projection thumbnail association is invalid.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    bool SerializeReusableModelManagedProjection(
+        const ReusableModelManagedProjection& projection,
+        std::string& json,
+        std::string& error)
+    {
+        json.clear();
+        if (!ValidateReusableModelManagedProjection(projection, error))
+            return false;
+        try
+        {
+            nlohmann::json model;
+            model["animated"] = projection.modelMetadata.animated;
+            model["animation_channel_count"] = projection.modelMetadata.animationChannelCount;
+            model["animation_clip_count"] = projection.modelMetadata.animationClipCount;
+            model["armature_count"] = projection.modelMetadata.armatureCount;
+            model["bone_count"] = projection.modelMetadata.boneCount;
+            model["known"] = projection.modelMetadata.known;
+            model["material_count"] = projection.modelMetadata.materialCount;
+            model["mesh_count"] = projection.modelMetadata.meshCount;
+            model["morph_target_count"] = projection.modelMetadata.morphTargetCount;
+            model["skinned"] = projection.modelMetadata.skinned;
+
+            nlohmann::json document;
+            document["asset_id"] = projection.assetId;
+            document["asset_path"] = projection.assetProjectRelativePath;
+            document["derived_model"] = std::move(model);
+            document["format"] = projection.formatIdentifier;
+            document["importer"] = projection.importer;
+            document["importer_version"] = projection.importerVersion;
+            document["payload_hash"] = projection.payloadHash;
+            document["project_id"] = projection.projectId;
+            document["schema_version"] = projection.schemaVersion;
+            document["settings"] = nlohmann::json::parse(projection.settingsJson);
+            document["settings_schema"] = projection.settingsSchema;
+            document["settings_version"] = projection.settingsVersion;
+            document["source_asset_id"] = projection.sourceAssetId;
+            document["source_format"] = projection.sourceFormat;
+            document["source_path"] = projection.sourceProjectRelativePath;
+            document["thumbnail_path"] = projection.thumbnailProjectRelativePath;
+            json = document.dump();
+        }
+        catch (const nlohmann::json::exception&)
+        {
+            error = "Could not serialize managed reusable-asset projection.";
+            json.clear();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
     bool ValidateReusableModelAssetDocument(
         const ReusableModelAssetDocument& document,
         std::string& error)
@@ -667,6 +811,10 @@ namespace renegade::bridge
         ReusableModelImportResult result;
         result.sourceProjectRelativePath = request.sourceProjectRelativePath;
         result.assetProjectRelativePath = request.assetProjectRelativePath;
+        result.managedProjectionProjectRelativePath =
+            ResolveReusableModelManagedProjectionPath(request.assetProjectRelativePath);
+        result.thumbnailProjectRelativePath =
+            ResolveReusableModelThumbnailPath(request.assetProjectRelativePath);
 
         if (!IsValidStableId(request.projectId))
         {
@@ -684,6 +832,11 @@ namespace renegade::bridge
             LowerExtension(request.assetProjectRelativePath) != ReusableAssetExtension)
         {
             result.error = "Reusable model product must be a canonical .rasset path below Content.";
+            return result;
+        }
+        if (!request.thumbnailPngBytes.empty() && !IsPngBytes(request.thumbnailPngBytes))
+        {
+            result.error = "Reusable model creator thumbnail is not a PNG payload.";
             return result;
         }
 
@@ -727,6 +880,21 @@ namespace renegade::bridge
                 ? "Could not inspect reusable model destination: " + ec.message()
                 : "Reusable model destination already exists; Gate 4 reimport/replacement is required.";
             return result;
+        }
+        const fs::path managedProjectionPath =
+            root / fs::u8path(result.managedProjectionProjectRelativePath);
+        const fs::path thumbnailPath =
+            root / fs::u8path(result.thumbnailProjectRelativePath);
+        for (const fs::path& member : {managedProjectionPath, thumbnailPath})
+        {
+            ec.clear();
+            if (fs::exists(member, ec) || ec)
+            {
+                result.error = ec
+                    ? "Could not inspect reusable model package member: " + ec.message()
+                    : "Reusable model package destination already contains a managed sidecar or thumbnail.";
+                return result;
+            }
         }
 
         const ModelSourceFormat format = ImportService::ClassifyModelSourceFormat(
@@ -908,6 +1076,27 @@ namespace renegade::bridge
             return result;
         const std::string assetHash = HashBytes(assetBytes);
 
+        ReusableModelManagedProjection projection;
+        projection.projectId = request.projectId;
+        projection.assetId = result.assetId;
+        projection.sourceAssetId = result.sourceAssetId;
+        projection.sourceProjectRelativePath = request.sourceProjectRelativePath;
+        projection.assetProjectRelativePath = request.assetProjectRelativePath;
+        projection.sourceFormat = assetDocument.manifest.sourceFormat;
+        projection.importer = assetDocument.manifest.importer;
+        projection.importerVersion = assetDocument.manifest.importerVersion;
+        projection.settingsSchema = assetDocument.manifest.settingsSchema;
+        projection.settingsVersion = assetDocument.manifest.settingsVersion;
+        projection.settingsJson = assetDocument.manifest.settingsJson;
+        projection.payloadHash = assetDocument.manifest.payloadHash;
+        projection.modelMetadata = result.modelMetadata;
+        projection.thumbnailProjectRelativePath = request.thumbnailPngBytes.empty()
+            ? std::string{} : result.thumbnailProjectRelativePath;
+        std::string projectionJson;
+        if (!SerializeReusableModelManagedProjection(
+                projection, projectionJson, result.error))
+            return result;
+
         AssetRecord product;
         product.assetId = result.assetId;
         product.dependencyNodeId = "lp07.rasset:" + result.assetId;
@@ -981,8 +1170,50 @@ namespace renegade::bridge
             return true;
         };
 
+        ProjectDocumentWrite projectionWrite;
+        projectionWrite.destinationPath = managedProjectionPath.generic_u8string();
+        projectionWrite.content.assign(projectionJson.begin(), projectionJson.end());
+        projectionWrite.validator = [projectionJson](
+            const std::string& path, std::string& error)
+        {
+            std::ifstream stream(fs::u8path(path), std::ios::binary);
+            const std::string staged{
+                std::istreambuf_iterator<char>(stream),
+                std::istreambuf_iterator<char>()};
+            if ((!stream && !stream.eof()) || staged != projectionJson)
+            {
+                error = "Staged managed reusable-asset projection changed before commit.";
+                return false;
+            }
+            error.clear();
+            return true;
+        };
+
         std::vector<ProjectDocumentWrite> writes;
         writes.push_back(std::move(assetWrite));
+        writes.push_back(std::move(projectionWrite));
+        if (!request.thumbnailPngBytes.empty())
+        {
+            ProjectDocumentWrite thumbnailWrite;
+            thumbnailWrite.destinationPath = thumbnailPath.generic_u8string();
+            thumbnailWrite.content = request.thumbnailPngBytes;
+            const auto expectedThumbnail = request.thumbnailPngBytes;
+            thumbnailWrite.validator = [expectedThumbnail](
+                const std::string& path, std::string& error)
+            {
+                std::vector<std::uint8_t> staged;
+                if (!ReadBytes(fs::u8path(path), staged, error))
+                    return false;
+                if (staged != expectedThumbnail)
+                {
+                    error = "Staged creator thumbnail bytes changed before commit.";
+                    return false;
+                }
+                error.clear();
+                return true;
+            };
+            writes.push_back(std::move(thumbnailWrite));
+        }
         writes.push_back(RegistryWrite(root, registry, registryJson));
         writes.push_back(MetadataWrite(root, metadata, metadataJson));
 

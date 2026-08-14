@@ -79,6 +79,12 @@ namespace
         return static_cast<bool>(output);
     }
 
+    std::vector<std::uint8_t> ThumbnailFixture()
+    {
+        return {0x89u, 0x50u, 0x4eu, 0x47u, 0x0du, 0x0au, 0x1au, 0x0au,
+            0x52u, 0x45u, 0x4eu, 0x45u, 0x47u, 0x41u, 0x44u, 0x45u};
+    }
+
     std::vector<std::string> CollectAnimationNames(const wi::scene::Scene& scene)
     {
         std::vector<std::string> names;
@@ -162,6 +168,7 @@ namespace
         request.sourceProjectRelativePath = sourceRelative;
         request.assetProjectRelativePath = assetRelative;
         request.expectedFormat = expectedFormat;
+        request.thumbnailPngBytes = ThumbnailFixture();
 
         ReusableAssetService service;
         const auto result = service.ImportModelAsset(request);
@@ -178,6 +185,39 @@ namespace
                 std::string(label) + ": converter WISCENE structure changed before container commit") ||
             !Require(result.import.importedEvidence == result.import.reloadedEvidence,
                 std::string(label) + ": converter rig/animation evidence changed before container commit"))
+        {
+            return false;
+        }
+
+        const fs::path projectionPath = projectRoot / fs::u8path(
+            ResolveReusableModelManagedProjectionPath(assetRelative));
+        const fs::path thumbnailPath = projectRoot / fs::u8path(
+            ResolveReusableModelThumbnailPath(assetRelative));
+        std::vector<std::uint8_t> projectionBytes;
+        std::vector<std::uint8_t> thumbnailBytes;
+        if (!Require(fs::is_regular_file(projectionPath) &&
+                fs::is_regular_file(thumbnailPath),
+                std::string(label) + ": physical creator package is incomplete") ||
+            !Require(ReadBytes(projectionPath, projectionBytes),
+                std::string(label) + ": managed projection could not be read") ||
+            !Require(ReadBytes(thumbnailPath, thumbnailBytes) &&
+                    thumbnailBytes == request.thumbnailPngBytes,
+                std::string(label) + ": thumbnail bytes did not commit atomically"))
+        {
+            return false;
+        }
+        const std::string projectionText(
+            projectionBytes.begin(), projectionBytes.end());
+        if (!Require(projectionText.find(ReusableModelManagedProjectionFormat) !=
+                    std::string::npos &&
+                projectionText.find(result.assetId) != std::string::npos &&
+                projectionText.find(result.sourceAssetId) != std::string::npos &&
+                projectionText.find(sourceRelative) != std::string::npos &&
+                projectionText.find(assetRelative) != std::string::npos &&
+                projectionText.find(
+                    ResolveReusableModelThumbnailPath(assetRelative)) !=
+                    std::string::npos,
+                std::string(label) + ": managed projection is missing package provenance"))
         {
             return false;
         }
@@ -325,6 +365,7 @@ namespace
         request.sourceProjectRelativePath = "SourceAssets/Models/static.fbx";
         request.assetProjectRelativePath = "Content/Models/forced-failure.rasset";
         request.expectedFormat = ModelSourceFormat::Fbx;
+        request.thumbnailPngBytes = ThumbnailFixture();
 
         ReusableModelImportOptions options;
         options.transactionId = "lp07-gate3-forced-rollback";
@@ -345,10 +386,14 @@ namespace
         ReusableAssetService service;
         const auto failed = service.ImportModelAsset(request, std::move(options));
         if (!Require(!failed.succeeded && failed.transaction.rolledBack,
-                "forced commit failure did not roll back") ||
-            !Require(!fs::exists(projectRoot / "Content/Models/forced-failure.rasset"),
-                "forced commit failure left a half-imported RAsset"))
-        {
+            "forced commit failure did not roll back") ||
+        !Require(!fs::exists(projectRoot / "Content/Models/forced-failure.rasset"),
+            "forced commit failure left a half-imported RAsset") ||
+        !Require(!fs::exists(projectRoot / "Content/Models/forced-failure.rasset.json"),
+            "forced commit failure left a managed projection") ||
+        !Require(!fs::exists(projectRoot / "Content/Models/forced-failure.thumbnail.png"),
+            "forced commit failure left a creator thumbnail"))
+{
             return false;
         }
 

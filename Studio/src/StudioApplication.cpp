@@ -8306,26 +8306,11 @@ namespace renegade::studio
                         state->sourcePath,
                         state->settingsJson,
                         state->assetName,
-                        state->destinationFolder,
-                        std::move(state->prepared));
-                }
-                if (state->imported.succeeded)
-                {
-                    fs::path thumbnailPath =
-                        fs::u8path(state->projectRoot) /
-                        fs::u8path(state->imported.assetProjectRelativePath);
-                    thumbnailPath.replace_extension(".thumbnail.png");
-                    std::error_code thumbnailEc;
-                    fs::copy_file(
-                        fs::u8path(state->thumbnailCapturePath),
-                        thumbnailPath,
-                        fs::copy_options::overwrite_existing,
-                        thumbnailEc);
-                    if (thumbnailEc)
-                        state->thumbnailError = thumbnailEc.message();
-                }
-
-                wi::eventhandler::Subscribe_Once(
+                state->destinationFolder,
+                std::move(state->prepared),
+                state->thumbnailCapturePath);
+}
+wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, state](std::uint64_t)
                     {
