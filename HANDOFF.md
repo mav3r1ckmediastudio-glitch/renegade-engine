@@ -57,17 +57,41 @@ uses the normal Studio accent border. Paths preserve the filename tail and
 expose the full value on hover/in the editable field; the material selector
 adds mesh/subset usage and the Base Color filename. PBR scalar controls now
 follow the maps in the same scrollable material workspace.
-All continuous creator-import sliders now use one deliberate visual treatment: an
-opaque recessed rail, orange filled range and layered diamond handle, with the
-numeric textbox retained for exact input. Animation clip start/end remain
-numeric-only as explicitly requested. The custom renderer is importer-only;
-ordinary Inspector, Environment and Terrain sliders retain their compact
-native geometry. The right-docked importer uses the available screen height,
+All continuous Studio sliders now use one compact Renegade-owned visual treatment:
+an opaque recessed rail, orange filled range and layered diamond handle, with a
+readable label above and the numeric textbox retained in its own right-hand
+column. Animation clip start/end remain numeric-only as explicitly requested.
+The treatment remains inside the existing dense Inspector, Environment,
+Terrain and importer row geometry. The right-docked importer uses the available screen height,
 keeps commit/cancel fixed, and scrolls long sections. The neutral 1.82 m male
 now includes a visible 0.00-to-1.82 m ruler and separate model-height readout.
 PBR slider drags update only the selected live Wicked material and stored
 override. They no longer rebuild, encode and reload full-resolution Surface PNGs
 on the render thread; authoritative packing remains part of Import & Place.
+
+The final pre-push repair addresses the owner-observed governed commit failure
+for skinned/animated WISCENE reloads by comparing semantic rig/animation data
+instead of transient ECS manager indices while continuing to reject changed
+weights, bind matrices, targets and keyframes. It also makes Asset Browser
+catalogue rebuilds explicit and project-scoped, verifies that a newly committed
+`.rasset` and its decoded `.thumbnail.png` card are actually visible before
+reporting success, keeps thumbnail sidecars out of the card list, restores the
+selection, and retains drag/drop through the stable-ID placement path with
+surface grounding. The creator-approved position, rotation and scale are now
+part of the canonical recipe and are applied through a marked authored root in
+the `.rasset`; placement does not automatically rescale that approved result a
+second time, while legacy products retain their previous automatic fallback.
+
+Implementation commit: `b3b4cb6` (`fix(studio): harden creator import and
+asset placement`), based directly on live PR branch head `151d7c5`. Pre-push
+validation passed: `git diff --check`; executable Linux
+`RenegadeAssetBrowserTests`; syntax-only compilation of the changed importer,
+creator-recipe, importer tests, recipe tests and both Studio chrome translation
+units; and `StudioApplication.cpp` syntax validation using temporary Linux-only
+Win32 declarations for its existing unguarded Runtime-path helper. A native
+Windows Studio build, visual DPI/window-size inspection and packaged Runtime
+test cannot be authoritative in this workspace and remain required through
+GitHub CI plus owner Release-artifact acceptance.
 
 GitHub CI remains authoritative because the owner CPU is confirmed unstable.
 Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and
