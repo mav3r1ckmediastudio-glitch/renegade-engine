@@ -1,3 +1,4 @@
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
@@ -57,6 +58,18 @@ namespace
         }
         error.clear();
         return true;
+    }
+
+    wi::ecs::Entity FindNamedEntity(
+        const wi::scene::Scene& scene,
+        const std::string& name)
+    {
+        for (std::size_t index = 0; index < scene.names.GetCount(); ++index)
+        {
+            if (scene.names[index].name == name)
+                return scene.names.GetEntity(index);
+        }
+        return wi::ecs::INVALID_ENTITY;
     }
 }
 
@@ -125,7 +138,7 @@ int main(int argc, char** argv)
                  Near(childTransform->scale_local.x, 1.0f) &&
                  Near(childTransform->scale_local.y, 1.0f) &&
                  Near(childTransform->scale_local.z, 1.0f),
-            "replaceable payload root was not normalized into wrapper-local space"))
+            "replaceable legacy payload root was not normalized into wrapper-local space"))
         return 1;
 
     command.Undo();
@@ -175,7 +188,72 @@ int main(int argc, char** argv)
             "WISCENE Save/Open did not preserve authored wrapper transform"))
         return 1;
 
+    // PR #57 creator products append a dedicated authored root after the
+    // original imported transforms. Placement must choose that marker as the
+    // replaceable payload boundary and retain its creator-approved transform;
+    // choosing the first merged transform strips the real scale and makes
+    // grounding operate in a different coordinate space from rendering.
+    auto creatorPayload = wi::allocator::make_shared<wi::scene::Scene>();
+    const wi::ecs::Entity originalRoot =
+        creatorPayload->Entity_CreateTransform("Original Imported Root");
+    const wi::ecs::Entity authoredRoot = wi::ecs::CreateEntity();
+    creatorPayload->names.Create(authoredRoot).name =
+        CreatorAuthoredTransformRootName;
+    auto& authoredTransform = creatorPayload->transforms.Create(authoredRoot);
+    authoredTransform.translation_local = XMFLOAT3(0.0f, 0.25f, 0.0f);
+    authoredTransform.scale_local = XMFLOAT3(0.125f, 0.125f, 0.125f);
+    authoredTransform.SetDirty();
+    authoredTransform.UpdateTransform();
+    creatorPayload->Component_Attach(originalRoot, authoredRoot, true);
+
+    wi::scene::Scene creatorTarget;
+    PlaceReusableModelCommand creatorCommand(
+        creatorTarget,
+        std::move(creatorPayload),
+        AssetId,
+        XMFLOAT3(1.0f, 2.0f, 3.0f),
+        1.0f);
+    if (!Require(creatorCommand.Execute(),
+            "creator-authored reusable placement failed"))
+        return 1;
+
+    const wi::ecs::Entity placedAuthoredRoot =
+        creatorCommand.PayloadRootEntity();
+    const wi::ecs::Entity placedOriginalRoot =
+        FindNamedEntity(creatorTarget, "Original Imported Root");
+    const auto* placedName =
+        creatorTarget.names.GetComponent(placedAuthoredRoot);
+    const auto* placedAuthoredTransform =
+        creatorTarget.transforms.GetComponent(placedAuthoredRoot);
+    if (!Require(placedName != nullptr &&
+            placedName->name == CreatorAuthoredTransformRootName,
+            "placement did not choose the creator-authored marker root") ||
+        !Require(placedAuthoredTransform != nullptr &&
+            Near(placedAuthoredTransform->translation_local.y, 0.25f) &&
+            Near(placedAuthoredTransform->scale_local.x, 0.125f) &&
+            Near(placedAuthoredTransform->scale_local.y, 0.125f) &&
+            Near(placedAuthoredTransform->scale_local.z, 0.125f),
+            "placement normalized away the creator-approved transform") ||
+        !Require(placedOriginalRoot != wi::ecs::INVALID_ENTITY &&
+            creatorTarget.Entity_IsDescendant(
+                placedOriginalRoot, creatorCommand.PlacedEntity()),
+            "creator payload hierarchy was not retained below the stable wrapper"))
+        return 1;
+
+    creatorCommand.Undo();
+    if (!Require(creatorCommand.Execute(),
+            "creator-authored Redo failed"))
+        return 1;
+    const auto* redoneAuthoredTransform =
+        creatorTarget.transforms.GetComponent(
+            creatorCommand.PayloadRootEntity());
+    if (!Require(redoneAuthoredTransform != nullptr &&
+            Near(redoneAuthoredTransform->translation_local.y, 0.25f) &&
+            Near(redoneAuthoredTransform->scale_local.x, 0.125f),
+            "creator-approved transform did not survive Undo/Redo"))
+        return 1;
+
     fs::remove_all(outputRoot, ec);
-    std::cout << "LP07 GATE 6 INSTANCE PASS // stable wrapper identity survives Undo/Redo and WISCENE Save/Open\n";
+    std::cout << "LP07 GATE 6 INSTANCE PASS // stable wrapper identity and creator-authored payload transform survive Undo/Redo and WISCENE Save/Open\n";
     return 0;
 }

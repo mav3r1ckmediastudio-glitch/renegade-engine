@@ -228,6 +228,18 @@ namespace renegade::studio
         [[nodiscard]] float DrawerHeight() const noexcept;
         [[nodiscard]] int ActiveBottomTab() const noexcept { return activeBottomTab_; }
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
+        [[nodiscard]] bool AssetBrowserDragCandidate() const noexcept
+        {
+            return assetBrowserDragCandidate_;
+        }
+        [[nodiscard]] bool AssetBrowserDragging() const noexcept
+        {
+            return assetBrowserDragging_;
+        }
+        [[nodiscard]] const std::string& AssetBrowserDragPath() const noexcept
+        {
+            return assetBrowserDragPath_;
+        }
 
         void Update(const wi::Canvas& canvas, float dt) override;
         void Render(
@@ -311,6 +323,11 @@ namespace renegade::studio
         std::function<void(float, float, float, bool)> layoutChanged_;
     };
 
+    namespace detail
+    {
+        void EnsureCreatorAssetDragPreviewInstalled();
+    }
+
     // LP07 Gate 5 overlays the creator Asset Browser lifecycle on Renegade's
     // existing custom chrome. The base chrome remains the rendering/interaction
     // authority for the rest of Studio; this subtype only intercepts the
@@ -319,6 +336,30 @@ namespace renegade::studio
     class CreatorAssetStudioChrome final : public RenegadeStudioChrome
     {
     public:
+        CreatorAssetStudioChrome()
+        {
+            current_ = this;
+            detail::EnsureCreatorAssetDragPreviewInstalled();
+        }
+        ~CreatorAssetStudioChrome() override
+        {
+            if (current_ == this)
+                current_ = nullptr;
+        }
+
+        [[nodiscard]] static CreatorAssetStudioChrome* Current() noexcept
+        {
+            return current_;
+        }
+        [[nodiscard]] const bridge::StableId& SelectedCreatorAssetId() const noexcept
+        {
+            return creatorSelectedAssetId_;
+        }
+        [[nodiscard]] const std::string& SelectedCreatorAssetPath() const noexcept
+        {
+            return creatorSelectedAssetPath_;
+        }
+
         void Create();
         void SetLayout(float width, float height);
         void SetAssetBrowserData(
@@ -373,6 +414,7 @@ namespace renegade::studio
         [[nodiscard]] bridge::AssetCatalogueQuery CreatorAssetQuery() const;
         [[nodiscard]] std::vector<std::string> CreatorTagInput() const;
 
+        inline static CreatorAssetStudioChrome* current_ = nullptr;
         bridge::CreatorAssetWorkflowService creatorAssetWorkflow_;
         bridge::AssetCatalogue creatorAssetCatalogue_;
         bridge::StableId creatorCatalogueProjectId_;

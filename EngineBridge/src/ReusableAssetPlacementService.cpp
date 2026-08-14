@@ -1,5 +1,7 @@
 #include "renegade/bridge/ReusableAssetService.h"
 
+#include "renegade/bridge/MaterialTextureAssetService.h"
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -7,6 +9,7 @@
 #include <iomanip>
 #include <iterator>
 #include <sstream>
+#include <unordered_set>
 #include <vector>
 
 namespace renegade::bridge
@@ -129,6 +132,82 @@ namespace renegade::bridge
                 return false;
             }
             error.clear();
+            return true;
+        }
+
+        bool ResolveWorldMatrix(
+            const wi::scene::Scene& scene,
+            const wi::ecs::Entity entity,
+            XMMATRIX& world,
+            std::unordered_set<wi::ecs::Entity>& visiting)
+        {
+            const auto* transform = scene.transforms.GetComponent(entity);
+            world = transform != nullptr
+                ? transform->GetLocalMatrix()
+                : XMMatrixIdentity();
+
+            const auto* hierarchy = scene.hierarchy.GetComponent(entity);
+            if (hierarchy == nullptr ||
+                hierarchy->parentID == wi::ecs::INVALID_ENTITY)
+            {
+                return true;
+            }
+            if (!visiting.insert(entity).second)
+                return false;
+
+            XMMATRIX parentWorld;
+            if (!ResolveWorldMatrix(
+                    scene, hierarchy->parentID, parentWorld, visiting))
+            {
+                visiting.erase(entity);
+                return false;
+            }
+            visiting.erase(entity);
+            world = world * parentWorld;
+            return true;
+        }
+
+        // Deserialized WISCENE payloads have serialized local transforms and
+        // hierarchy, but their renderer-owned aabb_objects stream has not yet
+        // been rebuilt. Raw-mesh fallback bounds therefore ignore the creator
+        // authored scale/rotation root and can lift a dropped model by metres.
+        // Build the object bounds directly from serialized local transforms so
+        // placement grounding has the same geometry space the renderer will
+        // display, without calling Scene::Update() in this headless-capable path.
+        bool PopulateHierarchyAwareObjectBounds(wi::scene::Scene& scene)
+        {
+            if (scene.objects.GetCount() == 0)
+                return false;
+
+            std::vector<wi::primitive::AABB> bounds;
+            bounds.reserve(scene.objects.GetCount());
+            for (std::size_t objectIndex = 0;
+                objectIndex < scene.objects.GetCount(); ++objectIndex)
+            {
+                const wi::ecs::Entity objectEntity =
+                    scene.objects.GetEntity(objectIndex);
+                const auto& object = scene.objects[objectIndex];
+                const auto* mesh = scene.meshes.GetComponent(object.meshID);
+                if (mesh == nullptr || mesh->vertex_positions.empty())
+                    return false;
+
+                std::unordered_set<wi::ecs::Entity> visiting;
+                XMMATRIX world;
+                if (!ResolveWorldMatrix(scene, objectEntity, world, visiting))
+                    return false;
+
+                wi::primitive::AABB objectBounds;
+                for (const auto& position : mesh->vertex_positions)
+                {
+                    objectBounds.AddPoint(
+                        XMVector3TransformCoord(XMLoadFloat3(&position), world));
+                }
+                if (!objectBounds.IsValid())
+                    return false;
+                bounds.push_back(objectBounds);
+            }
+
+            scene.aabb_objects = std::move(bounds);
             return true;
         }
     }
@@ -315,6 +394,35 @@ namespace renegade::bridge
         }
         archive = wi::Archive();
         cleanup();
+
+        // Stable-ID material bindings are authoritative but Wicked Resource
+        // handles themselves are not serialized. Resolve them at the exact
+        // point the reusable payload becomes a live placement candidate. This
+        // makes first placement match Save/Reopen instead of showing grey until
+        // a project lifecycle restore happens later.
+        const auto restored = RestoreMaterialTextureBindings(
+            *prepared.scene_, root.generic_u8string(), request.projectId);
+        if (!restored.succeeded)
+        {
+            result.error =
+                "Reusable asset material textures could not be restored for placement: " +
+                restored.error;
+            prepared.scene_.reset();
+            return prepared;
+        }
+
+        // Rebuild renderer-independent object bounds from serialized hierarchy
+        // before MeasureModelBounds() is used by Studio placement. If the scene
+        // does not expose ordinary mesh/object evidence, the normal validation
+        // below will reject it; otherwise a failure here is a corrupt hierarchy
+        // and must not silently fall back to unscaled raw mesh coordinates.
+        if (!PopulateHierarchyAwareObjectBounds(*prepared.scene_))
+        {
+            result.error =
+                "Reusable asset placement could not derive hierarchy-aware model bounds.";
+            prepared.scene_.reset();
+            return prepared;
+        }
 
         result.sceneSummary = ImportService::Summarize(*prepared.scene_);
         result.modelEvidence = ImportService::SummarizeModelEvidence(*prepared.scene_);

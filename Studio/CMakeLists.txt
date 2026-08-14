@@ -60,6 +60,7 @@ endif()
 add_executable(RenegadeStudio WIN32
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/DummyVisualizer.cpp"
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/Translator.cpp"
+    src/CreatorAssetDragPreview.cpp
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h

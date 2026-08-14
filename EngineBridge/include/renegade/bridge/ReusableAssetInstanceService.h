@@ -3,6 +3,8 @@
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -56,6 +58,16 @@ namespace renegade::bridge
         [[nodiscard]] const StableId& AssetId() const noexcept;
 
     private:
+        struct CapturedMaterialResource
+        {
+            wi::ecs::Entity materialEntity = wi::ecs::INVALID_ENTITY;
+            std::uint32_t slot = 0;
+            wi::Resource resource;
+        };
+
+        void CaptureMaterialResources(std::size_t firstMaterialIndex);
+        void RestoreCapturedMaterialResources();
+
         wi::scene::Scene* scene_ = nullptr;
         wi::allocator::shared_ptr<wi::scene::Scene> preparedScene_;
         StableId assetId_;
@@ -64,6 +76,7 @@ namespace renegade::bridge
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity payloadRoot_ = wi::ecs::INVALID_ENTITY;
         wi::Archive snapshot_;
+        std::vector<CapturedMaterialResource> materialResources_;
         bool hasSnapshot_ = false;
     };
 }
