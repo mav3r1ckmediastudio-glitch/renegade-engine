@@ -4,6 +4,7 @@
 
 #include <cwchar>
 #include <cstring>
+#include <memory>
 
 namespace
 {
@@ -97,13 +98,12 @@ int APIENTRY wWinMain(
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     wi::arguments::Parse(commandLine);
 
-    // Studio used to live in static storage. That was harmless until creator
-    // chrome construction began subscribing to Wicked events: the application
-    // could then touch wi::eventhandler's dynamically initialized manager before
-    // that manager's translation unit had constructed it. Constructing Studio
-    // here guarantees that every C++ static initializer has completed first.
-    renegade::studio::StudioApplication localApplication;
-    application = &localApplication;
+    // Construct Studio after all C++ static initializers have completed so
+    // creator chrome may safely subscribe to Wicked services. Studio is a very
+    // large aggregate, so keep it off the Windows thread stack.
+    auto localApplication =
+        std::make_unique<renegade::studio::StudioApplication>();
+    application = localApplication.get();
 
     // CI startup proof: reaching this point proves all process/static and Studio
     // object construction completed successfully, including creator-chrome event
