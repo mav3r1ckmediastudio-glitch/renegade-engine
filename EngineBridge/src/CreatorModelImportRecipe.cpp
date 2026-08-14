@@ -454,7 +454,11 @@ namespace renegade::bridge
             transform.UpdateTransform();
             for (const wi::ecs::Entity entity : roots)
                 scene.Component_Attach(entity, authoredRoot, true);
-            scene.Update(0.0f);
+            // Do not call Scene::Update() here. Creator recipes are also
+            // applied by headless import/reimport paths where Wicked's global
+            // graphics device can be null. The authored local transform and
+            // hierarchy are fully serializable; renderer-owned scene updates
+            // will propagate world transforms when a graphics context exists.
         }
 
         for (const auto& materialRecipe : recipe.materials)
