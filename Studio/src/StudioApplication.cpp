@@ -3016,10 +3016,7 @@ namespace renegade::studio
         importScalePanel_.Create(
             "Model Import Workspace",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        // Registration is intentionally deferred until the fixed action strip
-        // has also been created. GUI renders root widgets in reverse insertion
-        // order, so the panel must be registered last and the action widgets
-        // immediately before it to keep the actions above the panel base.
+        // Registration is deferred until every importer page is attached.
 
         importScaleTitleLabel_.Create("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
         importScaleReadoutLabel_.Create("");
@@ -3028,7 +3025,7 @@ namespace renegade::studio
         creatorImportHelpLabel.SetFitTextEnabled(true);
 
         creatorImportSectionCombo.Create("Importer Section");
-        for (const char* section : {"ASSET", "TRANSFORM & SCALE", "MATERIALS // MAPS + PBR", "LIGHTING & SCALE REFERENCE", "ANIMATION"})
+        for (const char* section : {"ASSET", "TRANSFORM & SCALE", "MATERIALS // MAPS + PBR", "LIGHTING & SCALE REFERENCE", "ANIMATION", "IMPORT"})
             creatorImportSectionCombo.AddItem(section);
         creatorImportSectionCombo.SetSelectedWithoutCallback(0);
         creatorImportSectionCombo.OnSelect([this](const wi::gui::EventArgs& args)
@@ -3451,14 +3448,12 @@ namespace renegade::studio
             pendingAction_ = EditorAction::DismissImportScale;
         });
 
-        creatorImportActionBar.Create("");
+        creatorImportActionBar.Create("IMPORT FINISHED ASSET");
+        creatorImportActionBar.SetText("IMPORT FINISHED ASSET");
         creatorImportActionBar.SetShadowRadius(0.0f);
 
-        // These are root GUI widgets, not Window children. Wicked parents a
-        // non-scrollable Window child to the Window's full scale transform;
-        // pixel footer coordinates are consequently scaled a second time and
-        // place the widget outside the visible panel. Root widgets use canvas
-        // pixel coordinates and cannot inherit the importer scroll transform.
+        // Commit is the final workflow page, matching the other sections and
+        // leaving this page available for a future batch-import queue.
         importScaleApplyButton_.SetShadowRadius(0.0f);
         importScaleDismissButton_.SetShadowRadius(0.0f);
 
@@ -3514,22 +3509,16 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout)})
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportActionBar),
+            static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
+            static_cast<wi::gui::Widget*>(&importScaleDismissButton_)})
         {
             widget->SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(widget);
         }
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
-        creatorImportActionBar.SetVisible(false);
-        importScaleApplyButton_.SetVisible(false);
-        importScaleDismissButton_.SetVisible(false);
-
-        // Root widgets render in reverse insertion order: panel base first,
-        // then footer background, then both actionable buttons on top.
-        GetGUI().AddWidget(&importScaleApplyButton_);
-        GetGUI().AddWidget(&importScaleDismissButton_);
-        GetGUI().AddWidget(&creatorImportActionBar);
         GetGUI().AddWidget(&importScalePanel_);
     }
 
@@ -4277,18 +4266,12 @@ namespace renegade::studio
         creatorImportAnimationDelete.SetSize(XMFLOAT2(120.0f, 28.0f));
         creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 354.0f));
         creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
-        const float footerY = importScalePanelHeight - 54.0f;
-        creatorImportActionBar.SetPos(XMFLOAT2(
-            importScalePanelX + 4.0f,
-            importScalePanelTop + footerY));
-        creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 8.0f, 50.0f));
-        const float commitY = importScalePanelTop + footerY + 8.0f;
-        importScaleApplyButton_.SetPos(XMFLOAT2(importScalePanelX + 12.0f, commitY));
-        importScaleApplyButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.64f, 34.0f));
-        importScaleDismissButton_.SetPos(XMFLOAT2(
-            importScalePanelX + 20.0f + (importScalePanelWidth - 32.0f) * 0.64f,
-            commitY));
-        importScaleDismissButton_.SetSize(XMFLOAT2((importScalePanelWidth - 32.0f) * 0.36f, 34.0f));
+        creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 278.0f));
+        creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 318.0f));
+        importScaleApplyButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 44.0f));
+        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 372.0f));
+        importScaleDismissButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
         projectHubPanel_.SetSize(XMFLOAT2(width - 24.0f, height - 24.0f));
@@ -7918,9 +7901,6 @@ namespace renegade::studio
         creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
         UpdateCreatorImportScaleReferenceLabel();
         importScalePanel_.SetVisible(true);
-        creatorImportActionBar.SetVisible(true);
-        importScaleApplyButton_.SetVisible(true);
-        importScaleDismissButton_.SetVisible(true);
         importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
         RefreshCreatorImportWorkspaceSection();
     }
@@ -7972,12 +7952,8 @@ namespace renegade::studio
     void StudioRenderPath::RefreshCreatorImportWorkspaceSection()
     {
         const std::size_t section = creatorModelImporter.workspaceSection;
-        const auto show = [section](wi::gui::Widget& widget, const std::size_t owner)
-        {
-            widget.SetVisible(section == owner);
-        };
-        show(creatorImportAssetName, 0);
-        show(creatorImportDestination, 0);
+        creatorImportAssetName.SetVisible(section == 0 || section == 5);
+        creatorImportDestination.SetVisible(section == 0 || section == 5);
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
@@ -8036,6 +8012,12 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout)})
             widget->SetVisible(section == 4);
+
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&creatorImportActionBar),
+            static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
+            static_cast<wi::gui::Widget*>(&importScaleDismissButton_)})
+            widget->SetVisible(section == 5);
     }
 
     void StudioRenderPath::ApplyImportScaleMode(
@@ -8072,9 +8054,6 @@ namespace renegade::studio
                 break;
         }
         importScalePanel_.SetVisible(false);
-        creatorImportActionBar.SetVisible(false);
-        importScaleApplyButton_.SetVisible(false);
-        importScaleDismissButton_.SetVisible(false);
         studioChrome_.SetVisible(true);
         inspectorPanel_.SetVisible(true);
         hierarchySearch_.SetVisible(true);
@@ -8225,9 +8204,6 @@ namespace renegade::studio
     void StudioRenderPath::DismissImportScalePanel()
     {
         importScalePanel_.SetVisible(false);
-        creatorImportActionBar.SetVisible(false);
-        importScaleApplyButton_.SetVisible(false);
-        importScaleDismissButton_.SetVisible(false);
         if (session_ != nullptr && creatorModelImporter.active)
         {
             RestoreCreatorImportPreviewEnvironment();
