@@ -5737,15 +5737,18 @@ namespace renegade::studio
         const float screenX,
         const float screenY)
     {
-        (void)label;
-        (void)screenX;
-        (void)screenY;
         if (detail::CreatorAssetDragPreviewOwnsDrop(assetId))
         {
+            // The live cursor instance is committed by the Studio update in
+            // this exact release frame. Do not create a second placement path.
             return;
         }
-        studioChrome_.SetStatusText(
-            "ASSET DRAG // DROP CANCELLED // RUNTIME INSTANCE NOT READY");
+
+        // Chrome has already consumed the release event by the time Studio
+        // reaches its drag-preview update. Preserve the stable asset identity
+        // and release point so a background preparation that is still finishing
+        // can complete the same drop instead of cancelling it as "not ready".
+        detail::QueueCreatorAssetDrop(assetId, label, screenX, screenY);
     }
 
     void StudioRenderPath::CancelCreatorAssetPlacement()

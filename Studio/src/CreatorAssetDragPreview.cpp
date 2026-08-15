@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -43,6 +44,7 @@ namespace
         renegade::bridge::ModelBounds bounds;
         float scale = 1.0f;
         std::string error;
+        std::uint64_t lastUse = 0;
     };
 
     struct DragPreviewState
@@ -60,8 +62,22 @@ namespace
         std::vector<LayerState> originalLayers;
     };
 
+    struct PendingDropState
+    {
+        renegade::bridge::StableId projectId;
+        renegade::bridge::StableId assetId;
+        std::string assetPath;
+        XMFLOAT2 screen = {};
+        bool active = false;
+    };
+
     DragPreviewState preview;
-    std::shared_ptr<PreparationJob> preparation;
+    PendingDropState pendingDrop;
+    std::unordered_map<std::string, std::shared_ptr<PreparationJob>>
+        preparationCache;
+    renegade::bridge::StableId preparationProjectId;
+    std::uint64_t preparationUseSerial = 0;
+    constexpr std::size_t MaximumPreparationCacheEntries = 16;
     std::size_t pendingPreviewCleanupCount = 0;
     bool dragCancelledUntilRelease = false;
 
@@ -92,17 +108,6 @@ namespace
         return name != nullptr && name->name == DragPreviewWrapperName;
     }
 
-    bool SamePreparedAsset(
-        const PreparationJob& job,
-        const renegade::bridge::StableId& projectId,
-        const renegade::bridge::StableId& assetId,
-        const std::string& assetPath) noexcept
-    {
-        return job.projectId == projectId &&
-            job.assetId == assetId &&
-            job.assetPath == assetPath;
-    }
-
     void FillPreparationMetrics(PreparationJob& job)
     {
         if (!job.prepared.IsReady() || job.prepared.PeekScene() == nullptr)
@@ -124,6 +129,137 @@ namespace
                 *scene);
         job.bounds = renegade::bridge::ImportService::MeasureModelBounds(*scene);
         job.error.clear();
+    }
+
+    std::string PreparationCacheKey(
+        const renegade::bridge::StableId& projectId,
+        const renegade::bridge::StableId& assetId,
+        const std::string& assetPath)
+    {
+        return projectId + "\n" + assetId + "\n" + NormalizePath(assetPath);
+    }
+
+    void EnsurePreparationProject(const renegade::bridge::StableId& projectId)
+    {
+        if (preparationProjectId == projectId)
+            return;
+        preparationCache.clear();
+        preparationProjectId = projectId;
+        pendingDrop = {};
+    }
+
+    std::shared_ptr<PreparationJob> FindPreparation(
+        const renegade::bridge::StableId& projectId,
+        const renegade::bridge::StableId& assetId,
+        const std::string& assetPath)
+    {
+        EnsurePreparationProject(projectId);
+        const auto found = preparationCache.find(
+            PreparationCacheKey(projectId, assetId, assetPath));
+        if (found == preparationCache.end())
+            return {};
+        found->second->lastUse = ++preparationUseSerial;
+        return found->second;
+    }
+
+    void ErasePreparation(const std::shared_ptr<PreparationJob>& job)
+    {
+        if (!job)
+            return;
+        const std::string key = PreparationCacheKey(
+            job->projectId, job->assetId, job->assetPath);
+        const auto found = preparationCache.find(key);
+        if (found != preparationCache.end() && found->second == job)
+            preparationCache.erase(found);
+    }
+
+    void TrimPreparationCache()
+    {
+        while (preparationCache.size() > MaximumPreparationCacheEntries)
+        {
+            auto oldest = preparationCache.end();
+            for (auto candidate = preparationCache.begin();
+                candidate != preparationCache.end(); ++candidate)
+            {
+                if (wi::jobsystem::IsBusy(candidate->second->context))
+                    continue;
+                if (oldest == preparationCache.end() ||
+                    candidate->second->lastUse < oldest->second->lastUse)
+                {
+                    oldest = candidate;
+                }
+            }
+            if (oldest == preparationCache.end())
+                break;
+            preparationCache.erase(oldest);
+        }
+    }
+
+    void StartPreparation(
+        const renegade::bridge::StableId& assetId,
+        const std::string& assetPath,
+        const bool announce)
+    {
+        auto* session = renegade::bridge::StudioSession::Current();
+        if (session == nullptr || !session->Projects().HasProject() ||
+            !renegade::bridge::IsValidStableId(assetId) || assetPath.empty())
+        {
+            return;
+        }
+        if (preview.assetId == assetId && preview.scene != nullptr &&
+            IsLivePreviewWrapper(*preview.scene, preview.wrapper))
+        {
+            return;
+        }
+
+        const auto& project = session->Projects().CurrentProject();
+        const std::string normalized = NormalizePath(assetPath);
+        if (auto existing = FindPreparation(
+                project.projectId, assetId, normalized))
+        {
+            if (announce && wi::jobsystem::IsBusy(existing->context))
+            {
+                if (auto* chrome =
+                        renegade::studio::CreatorAssetStudioChrome::Current())
+                {
+                    chrome->SetStatusText(
+                        "ASSET // PREPARING RUNTIME INSTANCE IN BACKGROUND");
+                }
+            }
+            return;
+        }
+
+        auto job = std::make_shared<PreparationJob>();
+        job->projectId = project.projectId;
+        job->assetId = assetId;
+        job->projectRoot = project.rootPath;
+        job->assetPath = normalized;
+        job->lastUse = ++preparationUseSerial;
+        preparationCache[
+            PreparationCacheKey(job->projectId, job->assetId, job->assetPath)] = job;
+        TrimPreparationCache();
+
+        wi::jobsystem::Execute(
+            job->context,
+            [job](wi::jobsystem::JobArgs)
+            {
+                renegade::bridge::CreatorAssetWorkflowService workflow;
+                job->prepared = workflow.PrepareModelPlacement(
+                    job->projectRoot,
+                    job->projectId,
+                    job->assetId);
+                FillPreparationMetrics(*job);
+            });
+
+        if (announce)
+        {
+            if (auto* chrome =
+                    renegade::studio::CreatorAssetStudioChrome::Current())
+            {
+                chrome->SetStatusText(
+                    "ASSET // PREPARING RUNTIME INSTANCE IN BACKGROUND");
+            }
+        }
     }
 
     std::vector<wi::ecs::Entity> CollectNewEntities(
@@ -394,23 +530,31 @@ namespace
         const XMFLOAT3& surface,
         std::string& error)
     {
-        if (!preparation ||
-            wi::jobsystem::IsBusy(preparation->context) ||
-            preparation->assetId != assetId ||
-            preparation->assetPath != assetPath ||
-            !preparation->prepared.IsReady())
+        const auto& project = session.Projects().CurrentProject();
+        auto job = FindPreparation(project.projectId, assetId, assetPath);
+        if (!job)
         {
-            error = preparation && !preparation->error.empty()
-                ? preparation->error
-                : "The reusable asset is still preparing for placement.";
+            error = "The reusable asset has not finished preparing for placement.";
+            return false;
+        }
+        if (wi::jobsystem::IsBusy(job->context))
+        {
+            error = "The reusable asset is still preparing for placement.";
+            return false;
+        }
+        if (!job->error.empty() || !job->prepared.IsReady())
+        {
+            error = !job->error.empty()
+                ? job->error
+                : "The reusable asset could not be prepared for placement.";
             return false;
         }
 
-        auto preparedScene = preparation->prepared.ReleaseScene();
+        auto preparedScene = job->prepared.ReleaseScene();
+        ErasePreparation(job);
         if (!preparedScene.IsValid())
         {
             error = "The prepared reusable asset scene is unavailable.";
-            preparation.reset();
             return false;
         }
 
@@ -425,10 +569,9 @@ namespace
         auto roots = FindRootTransforms(scene, created);
         if (roots.empty())
         {
-            HideAndDeferPreviewRemoval(&scene, wi::ecs::INVALID_ENTITY,
-                std::move(created));
+            HideAndDeferPreviewRemoval(
+                &scene, wi::ecs::INVALID_ENTITY, std::move(created));
             error = "The prepared reusable asset contains no transform root.";
-            preparation.reset();
             return false;
         }
 
@@ -454,19 +597,18 @@ namespace
         {
             HideAndDeferPreviewRemoval(&scene, wrapper, std::move(created));
             error = "The reusable asset cursor instance could not be created.";
-            preparation.reset();
             return false;
         }
         scene.Component_Attach(payloadRoot, wrapper, true);
 
         preview = {};
         preview.assetId = assetId;
-        preview.assetPath = assetPath;
+        preview.assetPath = NormalizePath(assetPath);
         preview.scene = &scene;
         preview.wrapper = wrapper;
         preview.payloadRoot = payloadRoot;
-        preview.bounds = preparation->bounds;
-        preview.scale = preparation->scale;
+        preview.bounds = job->bounds;
+        preview.scale = job->scale;
         preview.firstMaterialIndex = firstMaterialIndex;
         preview.createdEntities = std::move(created);
         CaptureAndSetPreviewLayers(
@@ -481,7 +623,6 @@ namespace
                 scene.animations[index].Play();
         }
 
-        preparation.reset();
         if (!PositionPreview(surface))
         {
             auto* failedScene = preview.scene;
@@ -505,53 +646,14 @@ namespace renegade::studio::detail
         const bridge::StableId& assetId,
         const std::string& assetPath)
     {
-        auto* session = bridge::StudioSession::Current();
-        if (session == nullptr || !session->Projects().HasProject() ||
-            !bridge::IsValidStableId(assetId) || assetPath.empty())
-        {
-            return;
-        }
-        if (preview.assetId == assetId && preview.scene != nullptr &&
-            IsLivePreviewWrapper(*preview.scene, preview.wrapper))
-        {
-            return;
-        }
+        StartPreparation(assetId, assetPath, true);
+    }
 
-        const auto& project = session->Projects().CurrentProject();
-        const std::string normalized = NormalizePath(assetPath);
-        if (preparation && SamePreparedAsset(
-                *preparation,
-                project.projectId,
-                assetId,
-                normalized))
-        {
-            return;
-        }
-
-        auto job = std::make_shared<PreparationJob>();
-        job->projectId = project.projectId;
-        job->assetId = assetId;
-        job->projectRoot = project.rootPath;
-        job->assetPath = normalized;
-        preparation = job;
-
-        wi::jobsystem::Execute(
-            job->context,
-            [job](wi::jobsystem::JobArgs)
-            {
-                bridge::CreatorAssetWorkflowService workflow;
-                job->prepared = workflow.PrepareModelPlacement(
-                    job->projectRoot,
-                    job->projectId,
-                    job->assetId);
-                FillPreparationMetrics(*job);
-            });
-
-        if (auto* chrome = CreatorAssetStudioChrome::Current())
-        {
-            chrome->SetStatusText(
-                "ASSET // PREPARING RUNTIME INSTANCE IN BACKGROUND");
-        }
+    void WarmCreatorAssetDragPreparation(
+        const bridge::StableId& assetId,
+        const std::string& assetPath)
+    {
+        StartPreparation(assetId, assetPath, false);
     }
 
     void PrimeCreatorAssetDragPreparation(
@@ -565,15 +667,41 @@ namespace renegade::studio::detail
         {
             return;
         }
-        auto job = std::make_shared<PreparationJob>();
         const auto& project = session->Projects().CurrentProject();
+        EnsurePreparationProject(project.projectId);
+        auto job = std::make_shared<PreparationJob>();
         job->projectId = project.projectId;
         job->assetId = assetId;
         job->projectRoot = project.rootPath;
         job->assetPath = NormalizePath(assetPath);
         job->prepared = std::move(prepared);
+        job->lastUse = ++preparationUseSerial;
         FillPreparationMetrics(*job);
-        preparation = std::move(job);
+        preparationCache[
+            PreparationCacheKey(job->projectId, job->assetId, job->assetPath)] = job;
+        TrimPreparationCache();
+    }
+
+    void QueueCreatorAssetDrop(
+        const bridge::StableId& assetId,
+        const std::string& assetPath,
+        const float screenX,
+        const float screenY)
+    {
+        auto* session = bridge::StudioSession::Current();
+        if (session == nullptr || !session->Projects().HasProject() ||
+            !bridge::IsValidStableId(assetId) || assetPath.empty())
+        {
+            return;
+        }
+        const auto& project = session->Projects().CurrentProject();
+        EnsurePreparationProject(project.projectId);
+        pendingDrop.projectId = project.projectId;
+        pendingDrop.assetId = assetId;
+        pendingDrop.assetPath = NormalizePath(assetPath);
+        pendingDrop.screen = XMFLOAT2(screenX, screenY);
+        pendingDrop.active = true;
+        StartPreparation(assetId, assetPath, false);
     }
 
     bool CreatorAssetDragPreviewOwnsDrop(
@@ -587,6 +715,7 @@ namespace renegade::studio::detail
 
     void ClearCreatorAssetDragPreview()
     {
+        pendingDrop = {};
         if (preview.scene == nullptr ||
             preview.wrapper == wi::ecs::INVALID_ENTITY)
         {
@@ -601,13 +730,14 @@ namespace renegade::studio::detail
         auto created = std::move(preview.createdEntities);
         preview = {};
         HideAndDeferPreviewRemoval(scene, wrapper, std::move(created));
-        RequestCreatorAssetDragPreparation(assetId, assetPath);
+        StartPreparation(assetId, assetPath, false);
     }
 
     bool CreatorAssetDragPreviewBlocksSave() noexcept
     {
         return pendingPreviewCleanupCount != 0 ||
-            preview.wrapper != wi::ecs::INVALID_ENTITY;
+            preview.wrapper != wi::ecs::INVALID_ENTITY ||
+            pendingDrop.active;
     }
 
     wi::ecs::Entity UpdateCreatorAssetDragPreview(
@@ -625,47 +755,31 @@ namespace renegade::studio::detail
         }
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
-            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
-        {
-            if (chrome->AssetBrowserDragCandidate() ||
-                chrome->AssetBrowserDragging() ||
-                preview.wrapper != wi::ecs::INVALID_ENTITY)
-            {
-                dragCancelledUntilRelease = true;
-                ClearCreatorAssetDragPreview();
-                chrome->SetStatusText("ASSET DRAG // CANCELLED");
-            }
-            return wi::ecs::INVALID_ENTITY;
-        }
 
-        if (wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
+        const auto commitPreviewAt =
+            [&](const XMFLOAT4& dropPointer) -> wi::ecs::Entity
         {
-            if (dragCancelledUntilRelease)
-            {
-                dragCancelledUntilRelease = false;
-                ClearCreatorAssetDragPreview();
-                return wi::ecs::INVALID_ENTITY;
-            }
             if (preview.scene == nullptr ||
                 !IsLivePreviewWrapper(*preview.scene, preview.wrapper))
             {
                 return wi::ecs::INVALID_ENTITY;
             }
-            if (!PointerInsideViewport(*chrome, pointer))
+            if (!PointerInsideViewport(*chrome, dropPointer))
             {
                 ClearCreatorAssetDragPreview();
-                chrome->SetStatusText("ASSET DRAG // CANCELLED // OUTSIDE VIEWPORT");
+                chrome->SetStatusText(
+                    "ASSET DRAG // CANCELLED // OUTSIDE VIEWPORT");
                 return wi::ecs::INVALID_ENTITY;
             }
 
             XMFLOAT3 surface;
             auto& scene = session->Scenes().GetScene();
-            if (!ResolveSurface(canvas, camera, pointer, scene, surface) ||
+            if (!ResolveSurface(canvas, camera, dropPointer, scene, surface) ||
                 !PositionPreview(surface))
             {
                 ClearCreatorAssetDragPreview();
-                chrome->SetStatusText("ASSET DRAG // DROP FAILED // NO SURFACE");
+                chrome->SetStatusText(
+                    "ASSET DRAG // DROP FAILED // NO SURFACE");
                 return wi::ecs::INVALID_ENTITY;
             }
 
@@ -687,7 +801,8 @@ namespace renegade::studio::detail
                 if (auto* name = scene.names.GetComponent(preview.wrapper))
                     name->name = DragPreviewWrapperName;
                 ClearCreatorAssetDragPreview();
-                chrome->SetStatusText("ASSET DRAG // DROP COMMIT FAILED");
+                chrome->SetStatusText(
+                    "ASSET DRAG // DROP COMMIT FAILED");
                 return wi::ecs::INVALID_ENTITY;
             }
 
@@ -695,8 +810,115 @@ namespace renegade::studio::detail
             preview = {};
             dragCancelledUntilRelease = false;
             wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-            RequestCreatorAssetDragPreparation(placedAssetId, placedAssetPath);
+            StartPreparation(placedAssetId, placedAssetPath, false);
             return placedEntity;
+        };
+
+        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
+            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+        {
+            if (chrome->AssetBrowserDragCandidate() ||
+                chrome->AssetBrowserDragging() ||
+                preview.wrapper != wi::ecs::INVALID_ENTITY ||
+                pendingDrop.active)
+            {
+                dragCancelledUntilRelease =
+                    wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
+                ClearCreatorAssetDragPreview();
+                chrome->SetStatusText("ASSET DRAG // CANCELLED");
+            }
+            return wi::ecs::INVALID_ENTITY;
+        }
+
+        // A new explicit mouse-down supersedes a previously queued release.
+        if (pendingDrop.active &&
+            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            pendingDrop = {};
+        }
+
+        if (pendingDrop.active)
+        {
+            const auto& project = session->Projects().CurrentProject();
+            if (pendingDrop.projectId != project.projectId)
+            {
+                pendingDrop = {};
+                return wi::ecs::INVALID_ENTITY;
+            }
+
+            const XMFLOAT4 dropPointer(
+                pendingDrop.screen.x,
+                pendingDrop.screen.y,
+                0.0f,
+                0.0f);
+            if (!PointerInsideViewport(*chrome, dropPointer))
+            {
+                pendingDrop = {};
+                chrome->SetStatusText(
+                    "ASSET DRAG // CANCELLED // OUTSIDE VIEWPORT");
+                return wi::ecs::INVALID_ENTITY;
+            }
+
+            const auto assetId = pendingDrop.assetId;
+            const std::string assetPath = pendingDrop.assetPath;
+            auto job = FindPreparation(
+                project.projectId, assetId, assetPath);
+            if (!job)
+            {
+                StartPreparation(assetId, assetPath, false);
+                job = FindPreparation(project.projectId, assetId, assetPath);
+            }
+            if (!job || wi::jobsystem::IsBusy(job->context))
+            {
+                chrome->SetStatusText(
+                    "ASSET DRAG // DROP QUEUED // PREPARING RUNTIME INSTANCE");
+                wi::input::SetCursor(wi::input::CURSOR_HAND);
+                return wi::ecs::INVALID_ENTITY;
+            }
+            if (!job->error.empty() || !job->prepared.IsReady())
+            {
+                chrome->SetStatusText(
+                    "ASSET DRAG // DROP FAILED // PREPARATION FAILED // " +
+                    (!job->error.empty()
+                        ? job->error
+                        : std::string("runtime instance unavailable")));
+                pendingDrop = {};
+                return wi::ecs::INVALID_ENTITY;
+            }
+
+            XMFLOAT3 surface;
+            auto& scene = session->Scenes().GetScene();
+            if (!ResolveSurface(canvas, camera, dropPointer, scene, surface))
+            {
+                pendingDrop = {};
+                chrome->SetStatusText(
+                    "ASSET DRAG // DROP FAILED // NO SURFACE");
+                return wi::ecs::INVALID_ENTITY;
+            }
+
+            std::string error;
+            if (!CreatePreviewFromPrepared(
+                    *session, assetId, assetPath, surface, error))
+            {
+                pendingDrop = {};
+                chrome->SetStatusText(
+                    "ASSET DRAG // DROP FAILED // PREVIEW FAILED // " + error);
+                return wi::ecs::INVALID_ENTITY;
+            }
+
+            pendingDrop = {};
+            return commitPreviewAt(dropPointer);
+        }
+
+        if (wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            if (dragCancelledUntilRelease)
+            {
+                dragCancelledUntilRelease = false;
+                ClearCreatorAssetDragPreview();
+                return wi::ecs::INVALID_ENTITY;
+            }
+            return commitPreviewAt(pointer);
         }
 
         if (dragCancelledUntilRelease)
@@ -750,26 +972,29 @@ namespace renegade::studio::detail
                 ClearCreatorAssetDragPreview();
 
             const auto& project = session->Projects().CurrentProject();
-            if (!preparation || !SamePreparedAsset(
-                    *preparation,
-                    project.projectId,
-                    assetId,
-                    assetPath))
+            auto job = FindPreparation(
+                project.projectId, assetId, assetPath);
+            if (!job)
             {
-                RequestCreatorAssetDragPreparation(assetId, assetPath);
+                StartPreparation(assetId, assetPath, false);
+                job = FindPreparation(project.projectId, assetId, assetPath);
             }
-            if (!preparation ||
-                wi::jobsystem::IsBusy(preparation->context))
+            if (!job || wi::jobsystem::IsBusy(job->context))
             {
                 chrome->SetStatusText(
-                    "ASSET DRAG // PREPARING IN BACKGROUND // KEEP HOLDING");
-                wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
+                    "ASSET DRAG // PREPARING RUNTIME INSTANCE // KEEP HOLDING OR RELEASE TO QUEUE");
+                // This is a valid accepted drag that is waiting on background
+                // preparation, not an illegal Windows drop target.
+                wi::input::SetCursor(wi::input::CURSOR_HAND);
                 return wi::ecs::INVALID_ENTITY;
             }
-            if (!preparation->error.empty() || !preparation->prepared.IsReady())
+            if (!job->error.empty() || !job->prepared.IsReady())
             {
                 chrome->SetStatusText(
-                    "ASSET DRAG // PREPARATION FAILED // " + preparation->error);
+                    "ASSET DRAG // PREPARATION FAILED // " +
+                    (!job->error.empty()
+                        ? job->error
+                        : std::string("runtime instance unavailable")));
                 wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
                 return wi::ecs::INVALID_ENTITY;
             }
@@ -778,7 +1003,8 @@ namespace renegade::studio::detail
             if (!CreatePreviewFromPrepared(
                     *session, assetId, assetPath, surface, error))
             {
-                chrome->SetStatusText("ASSET DRAG // PREVIEW FAILED // " + error);
+                chrome->SetStatusText(
+                    "ASSET DRAG // PREVIEW FAILED // " + error);
                 wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
                 return wi::ecs::INVALID_ENTITY;
             }
@@ -795,4 +1021,5 @@ namespace renegade::studio::detail
         wi::input::SetCursor(wi::input::CURSOR_HAND);
         return wi::ecs::INVALID_ENTITY;
     }
+
 }

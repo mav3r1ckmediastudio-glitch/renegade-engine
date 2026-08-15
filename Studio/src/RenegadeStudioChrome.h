@@ -328,10 +328,18 @@ namespace renegade::studio
         void RequestCreatorAssetDragPreparation(
             const bridge::StableId& assetId,
             const std::string& assetPath);
+        void WarmCreatorAssetDragPreparation(
+            const bridge::StableId& assetId,
+            const std::string& assetPath);
         void PrimeCreatorAssetDragPreparation(
             const bridge::StableId& assetId,
             const std::string& assetPath,
             bridge::PreparedReusableModelPlacement prepared);
+        void QueueCreatorAssetDrop(
+            const bridge::StableId& assetId,
+            const std::string& assetPath,
+            float screenX,
+            float screenY);
         [[nodiscard]] bool CreatorAssetDragPreviewOwnsDrop(
             const bridge::StableId& assetId) noexcept;
         [[nodiscard]] wi::ecs::Entity UpdateCreatorAssetDragPreview(

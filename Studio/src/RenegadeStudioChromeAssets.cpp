@@ -209,7 +209,7 @@ namespace renegade::studio
                 }
                 creatorAssetDropped_(
                     creatorSelectedAssetId_,
-                    fs::u8path(path).filename().generic_u8string(),
+                    selected->projectRelativePath,
                     x,
                     y);
             });
@@ -770,6 +770,30 @@ namespace renegade::studio
         }
         RenegadeStudioChrome::SetAssetBrowserData(
             creatorFilesystemFolders_, std::move(cards), creatorCurrentPath_);
+
+        // Warm the first visible page worth of placeable model products before
+        // the user begins a drag. Imported assets are already primed directly
+        // from their in-memory handoff; this closes the cold-start/restart gap
+        // for existing browser assets without doing any work in the pointer loop.
+        constexpr std::size_t CreatorPlacementWarmLimit = 12;
+        std::size_t warmedPlacements = 0;
+        const std::string normalizedCurrentPath =
+            fs::u8path(creatorCurrentPath_).lexically_normal().generic_u8string();
+        for (const auto& entry : matches)
+        {
+            if (warmedPlacements >= CreatorPlacementWarmLimit)
+                break;
+            if (!globalSearch &&
+                ParentPath(entry.projectRelativePath) != normalizedCurrentPath)
+            {
+                continue;
+            }
+            if (!bridge::CanPlaceCreatorModelAsset(entry))
+                continue;
+            detail::WarmCreatorAssetDragPreparation(
+                entry.assetId, entry.projectRelativePath);
+            ++warmedPlacements;
+        }
 
         const auto selected = std::find_if(
             creatorAssetCatalogue_.entries.begin(), creatorAssetCatalogue_.entries.end(),
