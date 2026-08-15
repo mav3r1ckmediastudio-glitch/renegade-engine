@@ -1,7 +1,10 @@
 #pragma once
 
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
+#include <mutex>
 #include <sstream>
 #include <string>
 
@@ -29,6 +32,27 @@ namespace renegade::bridge::diagnostics
              << elapsedMilliseconds << " ms";
         if (!detail.empty())
             line << " // " << detail;
-        wi::backlog::post(line.str());
+
+        const std::string text = line.str();
+        wi::backlog::post(text);
+
+        // Gate 1 diagnostics are deliberately fail-open: timing evidence must
+        // never influence project/scene behavior. Persist a simple owner-test
+        // log alongside Studio's Saved state so Release evidence can be handed
+        // back without requiring the Wicked backlog UI to remain visible.
+        static std::mutex fileMutex;
+        const std::lock_guard<std::mutex> lock(fileMutex);
+        std::error_code ec;
+        const std::filesystem::path directory =
+            std::filesystem::path("Saved") / "Diagnostics";
+        std::filesystem::create_directories(directory, ec);
+        if (ec)
+            return;
+
+        std::ofstream stream(
+            directory / "PR58Gate1Lifecycle.log",
+            std::ios::out | std::ios::app);
+        if (stream)
+            stream << text << '\n';
     }
 }
