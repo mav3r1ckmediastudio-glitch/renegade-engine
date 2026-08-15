@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -520,6 +521,48 @@ namespace
                 &scene, wi::ecs::INVALID_ENTITY, std::move(created));
             error = "The cached reusable asset template could not be instantiated.";
             return false;
+        }
+
+        // Wicked prefab instancing serializes material texture names but not
+        // live wi::Resource handles. Governed Renegade texture bindings keep
+        // their StableIds in metadata and deliberately clear the source name
+        // after loading, so a plain Scene::Instantiate() would otherwise clone
+        // an untextured material. Preserve the already-loaded cached-template
+        // resources directly; this keeps repeated drag/drop allocation-only
+        // instead of rereading governed texture products from disk per drag.
+        if (scene.materials.GetCount() < firstMaterialIndex)
+        {
+            HideAndDeferPreviewRemoval(
+                &scene, payloadRoot, std::move(created));
+            error = "The reusable asset instance material range is invalid.";
+            return false;
+        }
+        const std::size_t templateMaterialCount =
+            templateScene->materials.GetCount();
+        const std::size_t instanceMaterialCount =
+            scene.materials.GetCount() - firstMaterialIndex;
+        if (instanceMaterialCount != templateMaterialCount)
+        {
+            HideAndDeferPreviewRemoval(
+                &scene, payloadRoot, std::move(created));
+            error = "The reusable asset instance material layout changed during instancing.";
+            return false;
+        }
+        for (std::size_t materialIndex = 0;
+            materialIndex < templateMaterialCount; ++materialIndex)
+        {
+            const auto& templateMaterial =
+                templateScene->materials[materialIndex];
+            auto& instanceMaterial =
+                scene.materials[firstMaterialIndex + materialIndex];
+            for (std::size_t slot = 0;
+                slot < std::size(templateMaterial.textures); ++slot)
+            {
+                const auto& templateTexture = templateMaterial.textures[slot];
+                if (templateTexture.resource.IsValid())
+                    instanceMaterial.textures[slot].resource = templateTexture.resource;
+            }
+            instanceMaterial.SetDirty();
         }
 
         const wi::ecs::Entity wrapper =
