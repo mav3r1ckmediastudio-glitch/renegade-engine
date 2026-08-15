@@ -155,15 +155,13 @@ The measured performance optimization belongs to Gate 7. The project/scene split
 
 ## Gate 1 acceptance and closure
 
-Gate 1 performance-diagnostic evidence is now satisfied:
+Gate 1 performance-diagnostic and behavioral evidence is now satisfied:
 
 - exact-head Renegade Studio Debug/Release build passed before the V3 test;
 - exact-head Windows baseline Debug/Release passed before the V3 test;
 - owner tested the exact-head Release artifact on the real V3 project;
 - Reopen completed with all `156` governed texture bindings restored and `0` failures;
 - the expensive phase is identified with measured evidence;
-- the diagnostic reported all `156` governed texture bindings restored with `0` failures.
+- the owner explicitly confirmed that after Reopen the scene remained visually correct and its textures/materials remained intact.
 
-The continuation chat has not separately recorded an explicit owner statement that the post-Reopen scene remained visually texture-correct. Preserve that as the final behavioral acceptance check rather than inferring it from the diagnostic alone.
-
-This closure documentation is a docs-only branch change and must receive its own exact-head Renegade Studio and Windows baseline green status. Once that CI is green **and** the owner explicitly confirms the post-Reopen scene/textures remained correct, Gate 1 is closed. Do not begin Gate 2 until the owner explicitly approves advancement.
+This final closure documentation is a docs-only branch change and must receive its own exact-head Renegade Studio and Windows baseline green status. Once that CI is green, **Gate 1 is CLOSED**. Do not begin Gate 2 until the owner explicitly approves advancement.
