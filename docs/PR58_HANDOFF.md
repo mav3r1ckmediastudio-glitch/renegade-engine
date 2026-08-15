@@ -1,68 +1,62 @@
 # PR #58 Continuation Handoff — Startup, Project Hub & Project Lifecycle Reliability
 
-> **Purpose:** This file exists so a fresh ChatGPT/Claude session can continue PR #58 without context loss or design drift. Read this file **before changing code**. Then verify live GitHub state because SHAs/CI statuses can move after this handoff was written.
+> **Purpose:** This is the continuation authority for PR #58. A fresh session must read this file and `docs/PR58_GATE1_PROJECT_LIFECYCLE_BASELINE.md`, then verify live GitHub state before changing code. SHAs and CI statuses below are snapshots only.
 
-## 0. First actions for a new chat — mandatory
+## 0. Mandatory first actions in a new chat
 
-1. Inspect live PR #58 metadata and current head. Do **not** trust the SHA in this document if GitHub has advanced.
+1. Inspect live PR #58 metadata and current head.
 2. Inspect current `main` and confirm PR #58 still targets the merged PR #57 baseline.
-3. Compare `main` to the live PR #58 head and report the exact changed-file set before editing anything.
-4. Check exact-head Renegade Studio and Windows baseline workflows. CI status below is only a snapshot from handoff creation.
-5. Read `docs/PR58_GATE1_PROJECT_LIFECYCLE_BASELINE.md` in full.
-6. Do **not** start Gate 2 until Gate 1 is completed and the owner explicitly agrees to advance.
-7. Preserve the PR #57 reusable-asset pipeline. Do not refactor working `.rasset` import/thumbnail/browser/drag/texture behavior as part of PR #58.
+3. Compare `main` to the live PR head and report the exact changed-file set before editing.
+4. Check exact-head Renegade Studio and Windows baseline workflows.
+5. Read `docs/PR58_GATE1_PROJECT_LIFECYCLE_BASELINE.md` in full; it contains the measured V3 Gate 1 result.
+6. Preserve the PR #57 reusable-asset pipeline. Do not refactor working `.rasset` import, thumbnail, Asset Browser, drag/drop or texture persistence behavior without direct regression evidence.
+7. Work gate-by-gate. Do not begin a later gate without owner acceptance of the current gate.
 
 ## 1. Repository / PR identity
 
 - Repository: `mav3r1ckmediastudio-glitch/renegade-engine`
 - PR: **#58 — Rebuild Project Hub and harden project lifecycle**
 - PR branch: `agent/pr58-project-hub-lifecycle-reliability`
-- PR state at handoff: **OPEN, DRAFT, UNMERGED**
+- PR state: **OPEN, DRAFT, UNMERGED**
 - Base branch: `main`
 - PR #57 merge baseline on `main`: `a7775f31c5ec1ff61463d495e7db6ac4a5d63258`
-- Code-bearing PR #58 head immediately before this handoff document was committed: `e928596f5dc2815da032f2b35e757f9c18a212bc`
-- This documentation commit advances the branch beyond that SHA. **Always re-read live PR metadata before work.**
+- Diagnostic head used for the V3 Gate 1 owner test: `03d5d55dfe029f808ac499a91bdf87a91ce7fa34`
 - Pinned Wicked Engine commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
-
-### CI snapshot at handoff creation
-
-For pre-handoff code head `e928596f...`:
-
-- Windows baseline #919: **Debug SUCCESS / Release SUCCESS**
-- Renegade Studio #496: **Debug BUILDING / Release BUILDING** at the moment this handoff was written
-
-A docs-only handoff commit will trigger newer exact-head runs. A new chat must recheck them.
+- Always re-read the live PR head before work.
 
 ## 2. Owner / working rules
 
-The owner is building Renegade Engine as a Wicked-based engine with its own UX and project/asset architecture.
+Renegade Engine is a Wicked-based engine with its own UX and project/asset architecture. Wicked is the technical foundation, not the visible editor identity.
 
-Critical process rules:
+Critical rules:
 
-- Work gate-by-gate. Do not turn PR #58 into another uncontrolled multi-issue repair blob.
-- Diagnose before fixing. Compilation is not proof of behavior.
+- Work gate-by-gate; do not create another uncontrolled multi-issue repair blob.
+- Diagnose before fixing. Compilation is not behavioral proof.
 - GitHub CI is authoritative compile/test evidence because the owner's local CPU has known instability/damaged cores.
 - Owner testing of the **Release artifact** is authoritative for editor behavior.
-- PR #58 remains **Draft** until final Gate 8 acceptance.
-- After each visual/behavioral gate, stop and get owner acceptance before continuing.
-- No force-pushes to the PR branch. Prefer clean fast-forward changes. If risky patch generation is needed, use scratch isolation and verify containment first.
-- Preserve the owner's local modification to `Tools/Windows-Build.Common.ps1` and existing untracked LP04 patch files; do not instruct destructive cleanup of them.
+- PR #58 remains **Draft** until Gate 8 acceptance.
+- After each visual/behavioral gate, stop for owner acceptance.
+- No force-pushes to the PR branch.
+- Preserve the owner's local modification to `Tools/Windows-Build.Common.ps1` and existing untracked LP04 patch files; never instruct destructive cleanup of them.
 - Do not claim a workflow is fixed merely because CI is green.
 
-## 3. Why PR #58 exists
+## 3. PR #57 behavior that is locked/frozen
 
-PR #57 successfully established the reusable asset workflow but took roughly three days to stabilize. The following behavior is considered **locked/frozen** unless direct evidence proves a regression:
+PR #57 established the reusable asset workflow and took substantial stabilization work. Treat these as protected unless direct evidence proves regression:
 
 - governed `.rasset` model import
 - governed texture assets
 - thumbnail capture and Asset Browser display
-- imported assets appearing in the Asset Browser
+- imported assets appearing in Asset Browser
 - repeat drag/drop from Asset Browser
 - repeated placement without second-drag crash
 - live textures/materials on freshly dragged instances
 - saved scene texture/material persistence after close/reopen
+- the accepted Release did not reproduce the earlier automatic Runtime launch problem
 
-PR #58 intentionally moves away from importer work. Importer UX/reliability is planned for **PR #59**.
+PR #58 intentionally moves away from importer work. Creator Importer UX/reliability belongs to planned **PR #59**.
+
+## 4. PR #58 scope and explicit non-goals
 
 PR #58 owns three connected areas:
 
@@ -70,9 +64,7 @@ PR #58 owns three connected areas:
 2. Project Hub redesign
 3. project / scene / save / load lifecycle reliability and performance
 
-## 4. Explicit non-goals for PR #58
-
-Do **not** expand PR #58 into:
+Do **not** absorb into PR #58:
 
 - Creator Importer editable asset-name repair
 - importer false post-commit verification warning
@@ -84,172 +76,82 @@ Do **not** expand PR #58 into:
 - new gameplay/runtime systems
 - changes to PR #57 reusable-asset architecture unless a proven regression requires a minimal compatibility correction
 
-Those importer items belong in PR #59.
+## 5. Gate 1 — measured result and closure state
 
-## 5. Current Gate 1 — exact scope
+### Objective
 
-### Gate 1 objective
+Gate 1 was **Baseline, lifecycle map & diagnostics**. It deliberately changed no Hub/startup UX and introduced no reload optimization.
 
-**Baseline, lifecycle map & diagnostics.** No Hub redesign and no startup animation implementation yet.
+The owner tested exact diagnostic head `03d5d55dfe029f808ac499a91bdf87a91ce7fa34` using the real V3 project after:
 
-Gate 1 exists to understand current project/scene behavior and identify the cause of the owner's reported symptom:
+- Windows baseline #920: **Debug SUCCESS / Release SUCCESS**
+- Renegade Studio #497: **Debug SUCCESS / Release SUCCESS**
 
-> Reopen/Reload appears frozen for about **30 seconds**, then the scene finishes loading correctly with textures intact.
+### Owner V3 measurement
 
-No optimization is accepted before measurement.
+Owner wall-clock observation: approximately **2 minutes 3 seconds** from pressing Reopen until the editor unlocked and full controls returned.
 
-### Existing Gate 1 files
+The Reopen-aligned diagnostic pass reported:
 
-At the pre-handoff head the intended production diff from merged PR #57 was:
+- `156` persisted material/texture bindings
+- `27` unique governed texture Stable IDs
+- `0` already live
+- `156` restored
+- `0` failures
+- `18.08 ms` binding inspection
+- `122924.55 ms` governed preparation
+- `6551.67 ms` Wicked resource apply/load
+- `129653.87 ms` total governed texture restoration
 
-- `docs/PR58_GATE1_PROJECT_LIFECYCLE_BASELINE.md`
-- `EngineBridge/include/renegade/bridge/ProjectLifecycleDiagnostics.h`
-- `EngineBridge/src/MaterialTextureAssetService.cpp`
+The scene contains **27 asset instances**, each normally using approximately **4–6 PBR texture maps**. `156 / 27 = 5.78` bindings per instance on average, consistent with that workload.
 
-The handoff document itself adds `docs/PR58_HANDOFF.md`.
+Governed preparation consumed approximately **94.8%** of the measured texture-restore pass.
 
-There must be **no temporary workflow/patcher residue** in the final PR diff.
+### Proven Gate 1 diagnosis
 
-### Diagnostic output
+`RestoreMaterialTextureBindings()` walks persisted material/slot bindings. For each non-live binding it calls `PrepareMaterialTextureAsset()` before applying the resource. The measured workload contains only 27 unique governed texture Stable IDs but 156 bindings, so expensive governed preparation is repeated during one restoration pass.
 
-`ProjectLifecycleDiagnostics.h` writes `[PR58-GATE1]` timing information to Wicked backlog and also appends to the known file:
+**The Reopen stall is therefore dominated by governed texture preparation performed at binding granularity.** This is no longer a hypothesis.
 
-`Saved/Diagnostics/PR58Gate1Lifecycle.log`
+Do not fix it in Gate 1. The likely Gate 7 seam is to prepare/reuse each unique governed texture identity once per restore pass, or an equivalent measured design, while preserving `.rasset` governance, StableId authority and project portability.
 
-Logging must fail open: inability to write diagnostics must never block scene/project behavior.
+### Gate 1 lifecycle findings retained for later gates
 
-### Current texture-restore probe records
+Normal Reopen uses the prepared asynchronous scene-open path, then synchronously restores governed textures after commit. Project Open/Create currently differs and uses a synchronous `session_->LoadScene(...)` boundary.
 
-`RestoreMaterialTextureBindings()` reports:
+Two reliability hazards are already identified:
 
-- total persisted texture bindings
-- unique texture Stable IDs
-- bindings already live
-- bindings restored
-- failures
-- binding inspection time
-- cumulative governed texture preparation time
-- cumulative apply/Wicked decode time
-- total restore time
+1. **Project/scene split-brain on failed adoption — Gate 5.** Project identity/recents can become current before the startup scene is proven loadable, potentially leaving new project context with the old scene still active.
+2. **Asset Browser project-switch isolation — Gate 5.** Project adoption/switch does not make Asset Browser refresh an explicit lifecycle boundary, allowing stale project presentation until another refresh path runs.
 
-No cache/dedup optimization has been introduced yet.
+The existing save service has substantial safety architecture: temporary serialization, validation, destination protection, atomic replacement, final validation, restore-on-failure and backups. Do not casually replace it. Gate 6 tests and hardens user-facing semantics.
 
-## 6. Gate 1 lifecycle findings already proven by source review
+### Gate 1 closure requirements
 
-### Normal Reopen path
+Performance diagnosis is complete. To mark Gate 1 fully **CLOSED**:
 
-For a saved scene, Studio's Reopen button currently follows:
+1. the final docs-only closure head must pass exact-head Renegade Studio Debug/Release and Windows baseline Debug/Release;
+2. the owner must explicitly confirm the post-Reopen scene/textures remained visually correct.
 
-`ReopenScene()`
-→ dirty-state protection through `RequestSceneReplacement()`
-→ `BeginOpenScene(scenePath)`
-→ Wicked job system performs `SceneDocumentService::PrepareOpen()` / WISCENE deserialization in the background
-→ `EVENT_THREAD_SAFE_POINT`
-→ `CompleteOpenScene()`
-→ `CommitPreparedOpen()`
-→ `AdoptOpenedSceneCamera()`
-→ `RestoreGovernedMaterialTextures()`
-→ environment/terrain workspace reset
-→ hierarchy / Inspector / status refresh
+Then stop and obtain explicit owner approval before Gate 2.
 
-**Important correction:** normal Reopen does **not** simply perform the whole WISCENE load synchronously on the UI path. The reported ~30-second apparent freeze is therefore likely in a post-prepare/post-commit phase or in work triggered around that phase. Measure it; do not guess.
-
-### Project open/create path differs
-
-`OpenProjectDescriptor()` and current Create Project adoption call `session_->LoadScene(session_->Projects().StartupScenePath())`, which uses the synchronous `SceneDocumentService::Open()` boundary. Project opening therefore has different responsiveness characteristics from explicit Open Scene/Reopen and should be addressed later in lifecycle hardening.
-
-### Strong performance hypothesis — NOT yet proven
-
-Current governed texture restore does this per persisted material texture binding:
-
-`PrepareMaterialTextureAsset()`
-→ reads/validates LC01 asset registry
-→ finds texture asset/provenance
-→ canonicalizes paths
-→ reads governed texture `.rasset`
-→ extracts payload / builds resource cache identity
-→ loads/applies the resource
-
-In a scene containing many repeated instances of the same asset, many material bindings can reference the same Stable IDs. The current loop can therefore repeat governed preparation for the same texture asset many times.
-
-This is a **hypothesis** for the long stall, not a conclusion. The owner's V3 project log must prove how much time is actually spent there.
-
-### Reliability hazard 1: project/scene split-brain on failed adoption
-
-Current project open/create can commit `ProjectService`'s current project and recents **before** the startup scene is proven loadable. If startup-scene loading fails, Renegade can theoretically hold:
-
-- new project identity/context
-- old scene still in memory
-
-This must be fixed transactionally in **Gate 5**, not smuggled into Gate 1.
-
-### Reliability hazard 2: Asset Browser refresh on project switch
-
-Project switching/adoption does not currently make Asset Browser refresh an explicit lifecycle boundary. Stale browser presentation from Project A can therefore remain until another refresh path runs. Treat this as a Gate 5 reliability issue.
-
-### Save system facts observed in source
-
-`SceneDocumentService::Save()` already contains substantial safety architecture:
-
-- validates destination
-- ensures persistent entity identities
-- serializes to temporary archive
-- reopens temporary archive to validate it
-- protects previous destination
-- atomically replaces destination
-- validates final destination
-- restores previous file if final validation fails
-- creates `.bak.wiscene` / automatic rolling backups
-- marks command stack saved only after success
-
-Do not casually replace this architecture. Gate 6 is to test and harden user-facing semantics around it, especially Save As / cancel / dirty transitions.
-
-## 7. Gate 1 owner acceptance procedure
-
-Once exact-head Studio Debug/Release and Windows baseline are green:
-
-1. Fetch the **exact-head Renegade Studio Release artifact**.
-2. Owner launches that Release build.
-3. Open the real V3 project used during PR #57 acceptance.
-4. Confirm the scene is correct/textured before the test.
-5. Use **Reopen/Reload once** and allow it to finish.
-6. Confirm scene and textures are still correct after it completes.
-7. Send back:
-   - `Saved/Diagnostics/PR58Gate1Lifecycle.log`
-   - ideally a rough wall-clock observation of how long the apparent freeze lasted
-8. Analyze measured restore totals against the observed stall.
-9. If the texture restore probe does not account for most of the stall, add the **next smallest timing seam** rather than changing behavior.
-10. Gate 1 passes only when we can identify where the time is actually going with evidence sufficient for later optimization.
-
-Do not start Gate 2 just because the diagnostic build compiles.
-
-## 8. Full PR #58 gate plan
+## 6. Full PR #58 gate plan
 
 ### Gate 1 — Baseline, lifecycle map & diagnostics
 
-Scope:
+Status: **diagnosis complete; closure-head CI + explicit visual correctness confirmation are the remaining closure checks.**
 
-- map startup / Hub / project / scene / save / reopen paths
-- measure the ~30-second Reopen stall
-- document hazards without fixing later-gate items early
-
-Acceptance:
-
-- exact-head Studio Debug/Release green
-- exact-head Windows baseline Debug/Release green
-- owner Release test on real V3 project
-- measured evidence identifies the expensive phase(s)
-- no PR #57 regression
+No reload optimization belongs here.
 
 ### Gate 2 — Startup identity experience
 
-Gate 2 is the cinematic/startup state. It has four logical mini-stages:
+Gate 2 is the cinematic/startup state and has four mini-stages.
 
 #### Gate 2A — Logo reveal
 
 Use the owner's actual file: **`renegade logo reveal V2.mp4`**.
 
-Known media properties from inspection in the source chat:
+Known properties from the source chat:
 
 - approximately 9.77 seconds
 - 1280×720
@@ -257,7 +159,7 @@ Known media properties from inspection in the source chat:
 - 30 fps
 - AAC audio
 
-The file was supplied in the original chat but **was not committed to the repo at handoff time**. When Gate 2 implementation begins, obtain/re-upload the actual asset rather than inventing/replacing it.
+The file was supplied previously but is not committed to the repo. When Gate 2 begins, obtain/re-upload the real asset rather than inventing a substitute.
 
 Requirements:
 
@@ -266,221 +168,166 @@ Requirements:
 - audio plays
 - no editor or Hub flash/bleed underneath
 - clean fade to black at the end
-- missing/corrupt reveal must fail safe into startup rather than preventing Studio from opening
+- missing/corrupt reveal fails safe into startup rather than preventing Studio from opening
 - do not use the reveal to hide unrelated project loading
 
 #### Gate 2B — First-run developer identity prompt
 
-Original intended design:
+After the reveal:
 
-After logo reveal:
-
-- screen fades to black
-- blinking cursor appears
-- typewriter text types exactly/conceptually: **`Welcome developer, what is your name?`**
-- user can type a preferred display identity, e.g. owner uses **`MAV3R!CK`**
-- punctuation like `!` must be allowed because this is a display identity, not a filename
+- fade to black
+- blinking cursor
+- typewriter text: conceptually/exactly `Welcome developer, what is your name?`
+- user enters preferred display identity; the owner's example is `MAV3R!CK`
+- punctuation such as `!` is allowed because this is a display identity, not a filename
 - Backspace/editing works
 - Enter confirms
 - empty identity cannot confirm
-- chosen identity persists in **user/editor preferences**, not project metadata or WISCENE
+- identity persists in **user/editor preferences**, not project metadata or WISCENE
 
-This is intended as **first-run setup**, not a prompt on every launch.
+This is first-run setup, not a prompt on every launch.
 
 #### Gate 2C — Identity Handshake
 
-After identity exists, show the dedicated Identity Handshake screen based on the owner's supplied concept image:
+Use the owner's supplied concept image as the visual authority:
 
 - dark technical Renegade UI
 - large central mechanical/cybernetic iris
 - horizontal red scan/laser through the centre
 - diagnostic/status details around it
 - left-side identity-handshake language
-- dynamic text **`WELCOME, <chosen name>`**, e.g. `WELCOME, MAV3R!CK`
-- `RENEGADE // IDENTITY ACCEPTED` language belongs here, **not** permanently on the Hub
-- display an **ENTER HUB** control
-- do not automatically force entry; original concept requires user click
+- dynamic `WELCOME, <chosen name>`
+- `RENEGADE // IDENTITY ACCEPTED` belongs here, not permanently on the Hub
+- **ENTER HUB** control
+- do not force automatic entry; owner concept requires a click
 
-On subsequent launches the intended flow is:
+Subsequent launches should be:
 
 `logo reveal → handshake using saved identity → ENTER HUB`
 
-Do not ask for the name again unless user identity preferences have been cleared or changed.
+Do not ask for the name again unless identity preferences are cleared/changed.
 
-A later skip option may be desirable after novelty wears off, but exact skip policy was **not locked yet**. Do not invent it without owner discussion.
+A future skip option may be desirable, but skip policy was **not locked**. Do not invent it without owner discussion.
 
 #### Gate 2D — Iris-to-Hub transition
 
 On **ENTER HUB**:
 
-- central iris unlocks/splits vertically into left and right halves
-- halves move away from the centre
-- this recreates the semicircular side machinery seen in the owner's early Hub concept
-- the Project Hub is revealed between/behind the separating halves
+- central iris unlocks/splits vertically into left/right halves
+- halves move away from centre
+- this recreates the semicircular side machinery seen in the early Hub concept
+- Project Hub is revealed between/behind the halves
 
-Critical design history:
+Critical history: the giant semicircles in the early Hub concept were the split iris halves, not arbitrary permanent Hub decoration. The owner later asked to ignore/remove them from the everyday permanent Hub. Preserve the transition concept without permanently dominating the Hub with them.
 
-The huge semicircles on the early Hub concept were **not arbitrary permanent Hub decoration**. They originated as the two halves of the Identity Handshake iris after it split open.
+Gate 2 acceptance:
 
-The owner later said to ignore/remove the semicircles from the permanent Hub layout. Preserve the iris-opening transition concept, but do not make the final everyday Hub permanently dominated by giant side machinery unless the owner explicitly reverses that decision.
-
-Acceptance for Gate 2:
-
-- first run: reveal → black typed identity prompt → handshake with chosen identity → ENTER HUB → iris opens → Hub
-- subsequent run: reveal → handshake with persisted identity → ENTER HUB → Hub
+- first run: reveal → typed identity prompt → handshake → ENTER HUB → iris opens → Hub
+- later run: reveal → persisted-identity handshake → ENTER HUB → Hub
 - no editor/Hub bleed before intended reveal
 - no hardcoded `MAVERICK`; identity is user-selected
-- owner accepts visual/behavioral sequence before Gate 3
+- owner accepts the actual sequence before Gate 3
 
 ### Gate 3 — Full Project Hub redesign
 
 The current Hub is **not** to be cosmetically patched. Replace the prototype overlay experience with the approved Renegade design language.
 
-#### Current Hub defects reported by owner
+Known current defects:
 
-- unclear content visible behind/below Hub; editor appears to bleed around it
-- current Hub feels like an overlay rather than a true startup/home state
-- owner hates current colour treatment
-- font feels wrong and disconnected from Renegade Studio
-- does not feel like part of the same platform
-- sizing/layout poor
-- label such as `NAME:` visibly cut off at left edge
-- too bland
-- large dead areas without deliberate composition
-- recent projects represented too much like text/filesystem entries
-- needs project imagery so projects are visually identifiable
+- editor/content bleed visible behind/below Hub
+- feels like an overlay rather than a true startup/home state
+- wrong colour treatment and typography
+- disconnected from Renegade Studio visual language
+- poor sizing/layout and clipped labels such as `NAME:`
+- bland/dead areas
+- recent projects too filesystem/text-like
+- needs project imagery for rapid visual identification
 
-#### Visual references
+Visual authorities/references from the source chat:
 
-The source chat included three important screenshots/concepts:
+1. current Renegade Hub screenshot — defect evidence, not target
+2. GameGuru MAX Hub — information-architecture reference only; do **not** copy its visual styling/blue scheme
+3. original Renegade Project Hub concept — authoritative design-language target, except giant permanent side semicircles are removed/ignored
+4. Identity Handshake / iris concept — authority for Gate 2 transition
 
-1. **Current Renegade Hub screenshot** — evidence of current defects; not a design target.
-2. **GameGuru MAX Hub screenshot** — reference for useful information architecture only: visual project cards, browseable projects, selected-project preview/details, obvious actions. **Do not copy GGMAX visual styling/blue colour scheme.**
-3. **Original Renegade Project Hub concept** — authoritative design-language target, with giant side semicircles ignored/removed from the permanent Hub as owner requested.
-4. **Identity Handshake / iris concept** — source of those semicircles and authoritative reference for Gate 2 handshake transition.
+Before serious Gate 2/3 visual implementation, re-upload the reveal and reference images if absent from the active conversation. Do not improvise a materially different design from memory.
 
-A new chat does not automatically have those source images. Before serious Gate 2/3 visual implementation, ask the owner to re-upload the reveal and visual reference images if they are not available in the active conversation. Do not improvise a materially different design from memory.
-
-#### Original Renegade Hub design language to preserve
-
-Approximate structure from approved concept:
+Renegade Hub design language to preserve:
 
 - dark graphite / near-black base
 - fine technical/circuit/frame detailing
-- subtle cyan/blue luminous borders and UI edges
+- subtle cyan/blue luminous borders and edges
 - restrained orange micro-accents
 - white/grey technical typography
-- Renegade Engine logo/branding top-left
-- `PROJECT HUB` strong top/central heading
-- welcome/system status area top-right
+- Renegade branding top-left
+- strong `PROJECT HUB` heading
+- welcome/system status top-right
 - left action rail
-- central Recent Projects presentation driven by artwork
+- central Recent Projects driven by artwork
 - right selected-project details panel
-- strong primary `OPEN PROJECT` action
-- restrained bottom system/status strip using **real** useful information rather than fake decorative metrics
+- strong primary `OPEN PROJECT`
+- restrained bottom status strip using real useful information, not fake decorative metrics
 
-It should feel premium, futuristic, deliberate and recognisably Renegade, while still being practical for repeated daily use.
-
-#### Hub full-screen ownership
-
-The Hub must be a dedicated presentation/state:
-
-- no editor bleed-through
-- no hidden editor panel peeking out at bottom or edges
-- no partially constructed editor visible behind it
-- responsive layout at supported window sizes
-- no clipped labels
-- no control overlaps
-
-#### Hub project layout
+Hub must own the full presentation state: no editor bleed, no panel peeking, no partially constructed editor visible, responsive layout, no clipping or overlaps.
 
 Target interaction hierarchy:
 
 - **New Project**
 - **Open Project**
-- Recent Projects visual card/grid area
-- selected-project details and clear `OPEN PROJECT` action
-- `BACK TO EDITOR` when Hub is invoked while a project/editor session is already active
+- visual Recent Projects cards/grid
+- selected-project details + `OPEN PROJECT`
+- **BACK TO EDITOR** only when an active editor session exists
 
-There was discussion of `IMPORT PROJECT`; include only if a real, defined project-import workflow exists. Do not invent a meaningless button just because it appeared in concept art.
+`IMPORT PROJECT` belongs only if a real import workflow exists. Current recommendation is to remove `OPEN SCENE...` from the primary startup Hub because `.wiscene` should belong to project context; discuss before hard-locking that UX.
 
-#### Open Scene on Hub
-
-Current recommendation: **remove `OPEN SCENE...` from the primary startup Hub** because a `.wiscene` should belong to project context. File → Open Scene can remain in the editor after a project is active.
-
-This recommendation was not yet owner-tested as final UX; discuss before hard-locking Gate 3 behavior.
-
-#### `RETURN TO CURRENT PROJECT`
-
-Replace with clearer language such as **`BACK TO EDITOR`** when applicable. It should not appear on initial startup with no active editor session.
-
-Acceptance:
-
-- owner approves the actual visual design before Gate 4 begins
-- several supported sizes tested
-- zero clipping/overlap/editor bleed
-- design feels like the same product as Renegade Studio
+Gate 3 ends only after owner approval of the actual visual design.
 
 ### Gate 4 — Project identity, artwork & Recent Projects
 
-Project cards must become authoritative, not decorative.
-
-Requirements:
+Project cards become authoritative, not decorative. Support:
 
 - project name
-- descriptor/root path information where useful
-- last opened/recent metadata where available
-- visual artwork
+- descriptor/root path where useful
+- recent/last-opened metadata where available
 - selected state
 - moved/missing/unavailable state that does not crash
+- persistent **16:9 project artwork**
 
-#### Project artwork requirement
-
-Each project should support a persistent **16:9 project image**.
-
-Sources:
+Artwork precedence:
 
 1. user-provided/custom image
 2. Renegade automatic screenshot/capture
-3. branded fallback placeholder if neither exists
+3. branded fallback placeholder
 
-User-provided custom artwork should take precedence over automatic imagery.
+Store artwork reference in project/editor metadata as appropriate, not WISCENE scene content.
 
-Store artwork reference as project/editor metadata as appropriate; do not embed it into WISCENE scene content.
-
-Acceptance:
-
-- multiple project cards survive restart
-- correct details shown for selected project
-- missing/moved project produces a clear unavailable state rather than silent wrong-project behavior
+Acceptance includes restart persistence, correct selected-project details and safe missing/moved states.
 
 ### Gate 5 — Create / Open / Continue / Switch reliability
 
-Harden lifecycle transactionally:
+Harden transactionally:
 
 - Create Project
 - Open Project
 - Recent Project
-- Continue last/recent behavior where defined
+- Continue last/recent where defined
 - Return to Hub
 - Back to Editor
 - Project A → Project B switching
 - cancel paths
-- malformed project descriptor
+- malformed descriptor
 - missing project folder
 - missing startup scene
 
-Fix the already identified project/scene split-brain hazard: do not make new project identity authoritative until required startup scene preparation/adoption has succeeded, or provide an equivalent transactional rollback that guarantees consistency.
+Fix project/scene split-brain: new project identity must not become authoritative until startup scene preparation/adoption succeeds, or equivalent rollback must guarantee consistency.
 
-Make project switch explicitly refresh/isolate project-scoped presentation including Asset Browser state.
+Project switch must explicitly refresh/isolate project-scoped presentation including Asset Browser state.
 
-Acceptance sequence should include repeated A/B switching and restart/recent-project launch with no stale scene/assets/state from the previous project.
+Acceptance includes repeated A/B switching and restart/recent-project launch with no stale scene/assets/state.
 
 ### Gate 6 — Save / Save As / dirty-state safety
 
-Test deliberately for data loss.
-
-Cover:
+Deliberately test for data loss:
 
 - Save
 - Save As
@@ -490,67 +337,42 @@ Cover:
 - project switch
 - return to Hub
 - app exit
-- unsaved scene with and without existing path
+- unsaved scene with/without existing path
 
-Desired user choice semantics where appropriate:
+Desired choice semantics where appropriate:
 
 `SAVE / DON'T SAVE / CANCEL`
 
 **CANCEL must leave active work and context untouched.**
 
-Do not replace the existing atomic save architecture unless evidence requires it.
-
-Acceptance: if owner/testing can trick Renegade into silently losing dirty work, Gate 6 fails.
+Do not replace the existing atomic save architecture without evidence. If testing can trick Renegade into silently losing dirty work, Gate 6 fails.
 
 ### Gate 7 — Reload/Reopen performance
 
 Only now optimize from Gate 1 evidence.
 
-If repeated governed texture preparation is proven expensive, likely optimization direction is to read/validate shared project registry/context once and/or prepare/load each unique texture Stable ID once, then apply the already-prepared/live resource to all matching material bindings. But do **not** implement this merely because it sounds sensible; use measured evidence.
+The measured hotspot is governed texture preparation. Likely direction: read/validate shared project registry/context once and/or prepare/load each unique texture Stable ID once, then reuse the prepared/live resource for matching material bindings. Preserve StableId authority, `.rasset` governance and project portability.
 
-Other possible hotspots must be measured similarly if texture restoration is not dominant.
-
-If unavoidable work remains lengthy:
-
-- provide real loading state/progress
-- expose real phases
-- do not fake a timer over a blocked main thread
+If unavoidable work remains lengthy, provide real loading state/progress and expose real phases; never fake a timer over a blocked thread.
 
 Acceptance:
 
-- before/after timing evidence on same V3 project
-- repeated Reload/Reopen remains correct
+- before/after timing on same V3 project
+- repeated Reopen remains correct
 - textures/materials remain intact
 - PR #57 asset placement/persistence does not regress
 
 ### Gate 8 — Full owner acceptance, audit & merge
 
-Release-build owner acceptance across the entire PR:
+Release owner acceptance across:
 
 `startup reveal → identity flow → Hub → create/open/recent/switch → edit → Save → Save As → Reopen → Hub → Back to Editor → close/restart/reopen`
 
-Verify:
-
-- startup sequence
-- chosen identity persistence
-- iris transition
-- Hub visual quality
-- no clipping/overlap/editor bleed
-- project artwork
-- correct project/scene identity
-- dirty-state safety
-- correct Save/Save As behavior
-- Reload performance
-- textures/materials intact
-- Asset Browser intact
-- no PR #57 regression
-- exact-head Debug/Release Studio CI
-- exact-head Windows baseline
-- independent diff/audit before merge
+Verify startup, identity persistence, iris transition, Hub quality, no clipping/bleed, project artwork, correct project/scene identity, dirty-state safety, Save/Save As, Reload performance, textures/materials, Asset Browser, no PR #57 regression, exact-head Studio Debug/Release, Windows baseline, and an independent final diff/audit.
 
 Only then mark ready and merge PR #58.
 
-## 9. Startup / Hub concept — concise authoritative flow
+## 7. Startup / Hub authoritative flow
 
 ### First run
 
@@ -558,13 +380,13 @@ Only then mark ready and merge PR #58.
 → play `renegade logo reveal V2.mp4`
 → fade to black
 → blinking cursor
-→ typewriter: `Welcome developer, what is your name?`
-→ user enters chosen display identity (example: `MAV3R!CK`)
+→ `Welcome developer, what is your name?`
+→ user enters chosen display identity
 → persist identity
-→ Identity Handshake screen
-→ dynamic `WELCOME, MAV3R!CK`
+→ Identity Handshake
+→ dynamic `WELCOME, <chosen name>`
 → user clicks **ENTER HUB**
-→ iris splits into two halves
+→ iris splits
 → halves move left/right
 → Project Hub revealed
 
@@ -572,93 +394,56 @@ Only then mark ready and merge PR #58.
 
 `Launch`
 → logo reveal
-→ Identity Handshake using persisted chosen name
+→ handshake using persisted identity
 → ENTER HUB
 → iris opens
 → Hub
 
-### Hub after transition
+Permanent Hub should **not** be dominated by giant iris semicircles; they are transition remnants.
 
-Permanent Hub should **not** be dominated by the giant iris semicircles. The semicircles were transition remnants from the handshake concept. Use the cleaner original Renegade Hub concept as the everyday layout target.
+## 8. Platform consistency / portability principles
 
-## 10. Design philosophy / platform consistency
+Renegade Studio owns its UX:
 
-Renegade Studio owns its UX. Wicked is the technical foundation, not the visible editor identity.
-
-Therefore:
-
-- do not surface stock Wicked Editor windows as the product UI
+- do not surface stock Wicked Editor windows as product UI
 - preserve Renegade terminology and visual language
-- functionality may be backed by Wicked systems/services, but presentation is Renegade-owned
-- GGMAX is a behavioral/information-architecture reference where useful, not a visual clone
+- Wicked systems/services may back functionality, but presentation is Renegade-owned
+- GGMAX is an information-architecture reference where useful, not a visual clone
 
-The Hub must look and behave like part of the same Renegade platform as the editor.
+Imported external files are importer inputs, not intended runtime dependencies. Texture flow is conceptually:
 
-## 11. Important PR #57 context to protect
-
-PR #57 was merged before PR #58 began. The owner accepted the following Release behavior:
-
-- a newly imported asset appears in Asset Browser
-- thumbnails display
-- repeated instances can be dragged into scene
-- repeated drags no longer crash
-- newly dragged instances are textured immediately
-- save/close/reopen retains textures
-- current tested Release did not reproduce the earlier automatic Runtime launch problem
-
-Do not reopen these solved issues without evidence.
-
-One architecture detail matters for PR #58 performance work:
-
-Renegade governed material bindings use StableId metadata and live Wicked resources. On scene reload, `RestoreMaterialTextureBindings()` reconstructs those resources from governed project assets. Any performance optimization must preserve StableId authority and governed project portability; do not fall back to original external texture paths.
-
-## 12. Current project portability principle
-
-Imported external files are importer inputs, not intended runtime dependencies.
-
-For textures the established flow is conceptually:
-
-external source image
-→ retained source copy under project `SourceAssets/Textures/...`
+external image
+→ retained source copy under `SourceAssets/Textures/...`
 → governed texture product under `Content/Textures/...rasset`
-→ StableId binding in scene/material metadata
+→ StableId scene/material metadata
 → runtime/editor restoration from governed project asset
 
-Do not “optimize” reload by reintroducing dependency on the user's original external source folders.
+Never "optimize" reload by falling back to the user's original external source paths.
 
-## 13. PR #59 reminder
+## 9. PR #59 reminder
 
-After PR #58, planned **PR #59 — Creator Importer UX & Reliability** should handle at least:
+Planned **PR #59 — Creator Importer UX & Reliability** owns at least:
 
 - actually editable asset name
-- proper duplicate/rename behavior
-- false “committed but Asset Browser verification failed” warning
+- duplicate/rename behavior
+- false post-commit Asset Browser verification warning
 - real import stages/progress/percentage
 - investigate/reduce ~20-second import processing
 - portability acceptance
-- GLB/GLTF/FBX, multi-material, skinned/animated broader acceptance
+- broader GLB/GLTF/FBX, multi-material and skinned/animated acceptance
 
 Do not absorb these into #58.
 
-## 14. New-chat continuation command
+## 10. Immediate next action
 
-A user can start a fresh chat with something as short as:
-
-> Continue Renegade Engine PR #58. Read `docs/PR58_HANDOFF.md` and `docs/PR58_GATE1_PROJECT_LIFECYCLE_BASELINE.md`, then inspect live PR #58, current `main`, exact changed files and exact-head CI before doing anything. Continue the current gate only; do not advance gates without my acceptance.
-
-That should be sufficient. The assistant should use GitHub live state to resolve anything that has changed since this handoff was written.
-
-## 15. Immediate next action as of this handoff
-
-Do **not** design Gate 2 yet.
-
-1. Recheck the latest live PR #58 head after this handoff docs commit.
-2. Wait for exact-head Renegade Studio Debug/Release and Windows baseline workflows to complete.
-3. If exact-head Release succeeds, fetch the Release artifact.
-4. Give owner the exact artifact and the small Gate 1 V3 Reopen test.
-5. Owner returns `Saved/Diagnostics/PR58Gate1Lifecycle.log`.
-6. Analyze measured evidence.
-7. Complete Gate 1 only when the expensive phase is proven.
-8. Ask owner for approval before beginning Gate 2.
+1. Re-read the live PR #58 head after this handoff update.
+2. Confirm the final diff remains exactly the intended Gate 1 diagnostic code plus PR #58 documentation, with no temporary residue.
+3. Wait for exact-head Renegade Studio Debug/Release and Windows baseline Debug/Release on the final closure head.
+4. Record all four jobs green before mechanically closing Gate 1.
+5. Obtain/record the owner's explicit confirmation that the post-Reopen scene and textures remained visually correct.
+6. Once both are satisfied, mark **Gate 1 CLOSED**.
+7. Stop. Do **not** implement the measured reload optimization yet; it belongs to Gate 7.
+8. Obtain explicit owner approval before Gate 2.
+9. When Gate 2 is approved, re-upload the actual `renegade logo reveal V2.mp4` and relevant visual references if absent from the active conversation.
 
 **PR #58 remains Draft. Do not merge.**
