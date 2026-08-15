@@ -3777,6 +3777,20 @@ namespace renegade::studio
         ownLabel(importScaleReadoutLabel_);
         ownLabel(creatorImportActionBar);
         ownLabel(creatorImportThumbnailStatus);
+
+        // The thumbnail review is image content, not dark Renegade chrome.
+        // Wicked's image shader multiplies sampled texture RGB by the widget
+        // sprite colour, and Image::Create() disables the widget by default,
+        // which also applies disabled fade. Reassert a neutral treatment after
+        // the global theme so the owner sees the exact captured pixels.
+        creatorImportThumbnailPreview.SetColor(wi::Color::White());
+        creatorImportThumbnailPreview.SetShadowRadius(0.0f);
+        creatorImportThumbnailPreview.SetEnabled(true);
+        for (auto& sprite : creatorImportThumbnailPreview.sprites)
+        {
+            sprite.params.disableCornerRounding();
+        }
+
         ownLabel(workspaceTitle_);
         ownLabel(statusLabel_);
         ownLabel(hierarchyLabel_);
@@ -3856,15 +3870,35 @@ namespace renegade::studio
             RestoreCreatorThumbnailPresentation();
             if (captured)
             {
-                creatorImportThumbnailPreviewResource =
-                    wi::resourcemanager::Load(
-                        creatorModelImporter.thumbnailCapturePath);
-                creatorImportThumbnailPreview.SetImage(
-                    creatorImportThumbnailPreviewResource);
-                creatorImportThumbnailCapture.SetText("RETAKE THUMBNAIL");
-                creatorImportThumbnailStatus.SetText(
-                    "THUMBNAIL READY // REVIEW ABOVE // MOVE CAMERA + RETAKE TO RECOMPOSE");
-                importScaleApplyButton_.SetEnabled(true);
+                wi::Resource previewResource = wi::resourcemanager::Load(
+                    creatorModelImporter.thumbnailCapturePath);
+                const bool previewReady =
+                    previewResource.IsValid() &&
+                    previewResource.GetTexture().IsValid() &&
+                    previewResource.GetTexture().GetDesc().width > 0 &&
+                    previewResource.GetTexture().GetDesc().height > 0 &&
+                    previewResource.GetTexture().GetDesc().width ==
+                        previewResource.GetTexture().GetDesc().height;
+                if (previewReady)
+                {
+                    creatorImportThumbnailPreviewResource =
+                        std::move(previewResource);
+                    creatorImportThumbnailPreview.SetImage(
+                        creatorImportThumbnailPreviewResource);
+                    creatorImportThumbnailCapture.SetText("RETAKE THUMBNAIL");
+                    creatorImportThumbnailStatus.SetText(
+                        "THUMBNAIL READY // REVIEW ABOVE // MOVE CAMERA + RETAKE TO RECOMPOSE");
+                    importScaleApplyButton_.SetEnabled(true);
+                }
+                else
+                {
+                    creatorImportThumbnailPreviewResource = {};
+                    creatorImportThumbnailPreview.SetImage(wi::Resource{});
+                    creatorModelImporter.thumbnailCapturePath.clear();
+                    creatorImportThumbnailStatus.SetText(
+                        "THUMBNAIL FAILED // PREVIEW DECODE FAILED // RETAKE");
+                    importScaleApplyButton_.SetEnabled(false);
+                }
             }
             else
             {
