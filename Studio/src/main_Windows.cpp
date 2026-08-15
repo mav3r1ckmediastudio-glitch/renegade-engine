@@ -1,4 +1,5 @@
 #include "StudioApplication.h"
+#include "StartupRevealRenderPath.h"
 
 #include <Windows.h>
 
@@ -131,7 +132,10 @@ int APIENTRY wWinMain(
     windowClass.lpfnWndProc = RenegadeWindowProc;
     windowClass.hInstance = instance;
     windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    windowClass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    // Gate 2A: if Windows exposes the native window before Wicked's first
+    // present, the backing brush is black rather than the old white flash.
+    windowClass.hbrBackground =
+        reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
     windowClass.lpszClassName = L"RenegadeStudioWindow";
 
     if (RegisterClassExW(&windowClass) == 0)
@@ -159,9 +163,32 @@ int APIENTRY wWinMain(
         return 2;
     }
 
-    ShowWindow(window, showCommand);
+    // Initialize Studio while the native window is still hidden. This makes
+    // the normal Studio path available without ever presenting it. Gate 2A's
+    // reveal is then activated before ShowWindow(), preventing editor/Hub bleed.
+    // Engine initialization and Studio's proving-ground setup complete before
+    // the reveal starts; the movie is not used to disguise unrelated loading.
     application->SetWindow(window);
+    application->Initialize();
+    wi::initializer::WaitForInitializationsToFinish();
+
+    wi::RenderPath* studioPath = application->GetActivePath();
+    renegade::studio::StartupRevealRenderPath startupReveal;
+    startupReveal.Configure(
+        "Content/startup/renegade_logo_reveal_v2.mp4",
+        "Content/startup/renegade_logo_reveal_v2.wav");
+    application->ActivatePath(&startupReveal);
+
+    // Media/decoder/audio failures are explicitly fail-open: enter Studio before
+    // the window becomes visible instead of showing a broken or silent reveal.
+    if (startupReveal.HasFailedOpen())
+    {
+        application->ActivatePath(studioPath);
+    }
+
     SetWindowTextW(window, GraphicsBackendTitle());
+    ShowWindow(window, showCommand);
+    UpdateWindow(window);
 
     MSG message = {};
     while (message.message != WM_QUIT)
@@ -174,6 +201,15 @@ int APIENTRY wWinMain(
         else
         {
             application->Run();
+
+            // The reveal owns its final fully-black frame. Switch paths only
+            // after that frame has been presented so Studio never bleeds through
+            // the fade. Gate 2B will later take over this black handoff point.
+            if (application->GetActivePath() == &startupReveal &&
+                startupReveal.IsFinished())
+            {
+                application->ActivatePath(studioPath);
+            }
         }
     }
 
