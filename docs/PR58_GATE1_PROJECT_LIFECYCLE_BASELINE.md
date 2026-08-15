@@ -1,4 +1,4 @@
-# PR58 Gate 1 — Project Lifecycle Baseline and Diagnostic Scope
+# PR58 Gate 1 — Project Lifecycle Baseline, Diagnostic Result and Closure
 
 ## Baseline
 
@@ -6,7 +6,7 @@
 - Baseline branch: `main`
 - Exact baseline: `a7775f31c5ec1ff61463d495e7db6ac4a5d63258`
 - Baseline commit: `Restore guided creator asset workflow and textured model placement (#57)`
-- Gate branch: `agent/pr58-gate1-project-lifecycle-baseline`
+- PR branch: `agent/pr58-project-hub-lifecycle-reliability`
 
 PR58 is the Startup + Project Hub + Project Lifecycle Reliability programme. Gate 1 is deliberately non-visual and diagnostic. It must not redesign the Hub or change the accepted PR57 reusable-asset/texture placement architecture.
 
@@ -83,7 +83,7 @@ The save service currently performs a deliberately defensive sequence:
 9. create/rotate automatic backups;
 10. update the active scene path and mark commands saved.
 
-This is safe but potentially expensive. Gate 1 must measure it before Gate 6/7 considers any optimization. Validation must never be removed merely to improve timings.
+This safety architecture must not be removed merely to improve timings. Gate 6 will test and harden user-facing save semantics; Gate 7 may optimize only from measured evidence.
 
 ## Dirty-state path
 
@@ -104,44 +104,45 @@ Gate 6 will deliberately try to break this contract across project switching, Hu
 
 This creates a plausible stale-project browser state after project switches and must be behaviorally tested/fixed in Gate 5. Gate 1 does not alter it.
 
-## Reload performance: confirmed timing seams
+## Reload performance — measured V3 owner evidence
 
-Owner observation on the accepted PR57 Release build: Reopen/Reload can appear frozen for roughly 30 seconds and then complete correctly with textures preserved.
+The earlier owner observation described Reopen/Reload as an apparent stall of roughly 30 seconds. Gate 1 exact-head Release testing on the real V3 project measured a materially longer representative Reopen: approximately **2 minutes 3 seconds** from pressing Reopen until the editor unlocked and full controls returned.
 
-No root cause is claimed yet.
+The Gate 1 diagnostic log contained two governed texture-restore passes:
 
-Gate 1 must distinguish at least these phases:
+- `101753.24 ms` total: `156` bindings, `27` unique texture Stable IDs, `0` already live, `156` restored, `0` failures, `18.17 ms` inspection, `94542.57 ms` preparation, `7067.12 ms` apply/load.
+- `129653.87 ms` total: `156` bindings, `27` unique texture Stable IDs, `0` already live, `156` restored, `0` failures, `18.08 ms` inspection, `122924.55 ms` preparation, `6551.67 ms` apply/load.
 
-1. **WISCENE prepare** — archive open + full scene deserialization;
-2. **scene commit** — clear/merge, terrain rebinding, selection/command reset;
-3. **governed texture binding discovery**;
-4. **governed texture preparation**;
-5. **governed Wicked resource decode/load/apply**;
-6. **post-open camera/workspace/hierarchy/Inspector/status refresh**;
-7. **whole Reopen wall time**.
+The owner identified the scene as containing **27 asset instances**, with each asset normally carrying approximately **4–6 PBR texture maps**. The observed `156` persisted material/texture bindings are therefore consistent with the scene content: `156 / 27 = 5.78` bindings per instance on average.
 
-## High-risk texture-restoration pattern requiring measurement
+The approximately 2m03s owner wall-clock observation aligns closely enough with the `129653.87 ms` texture-restore pass to identify governed texture restoration as the dominant Reopen stall. The diagnostic timing is longer than the rough manual stopwatch observation by several seconds, so it should not be treated as an exact wall-clock equality; it is nevertheless of the same magnitude and directly captures the blocked phase.
 
-`RestoreMaterialTextureBindings()` enumerates every persisted material texture binding. For each binding that is not already live, it calls `PrepareMaterialTextureAsset()` independently.
+## Proven Gate 1 diagnosis — governed texture preparation dominates Reopen
 
-`PrepareMaterialTextureAsset()` currently rereads the LC01 asset registry, resolves/canonicalizes product paths, reads the governed `.rasset` document/payload and rebuilds its cache identity.
+`RestoreMaterialTextureBindings()` enumerates every persisted material/slot binding. For each binding that is not already live, it calls `PrepareMaterialTextureAsset()` independently before applying the prepared resource.
 
-Therefore repeated scene instances that reference the same governed texture can repeat registry/product preparation work for the same stable texture ID. This is a strong performance hypothesis, not an accepted diagnosis. Gate 1 timing/counters must prove or reject it before optimization.
+`PrepareMaterialTextureAsset()` rereads/validates governed project state, resolves product identity/path information, reads the governed texture `.rasset` payload and builds the resource cache identity.
 
-Instrumentation must record:
+Gate 1 instrumentation computes unique texture identity from each binding's `textureAssetId`. In the measured V3 Reopen pass:
 
-- total persisted bindings discovered;
-- number already live/skipped;
-- number actually restored;
-- number of unique governed texture stable IDs;
-- cumulative preparation time;
-- cumulative resource load/apply time;
-- total restore time;
-- failures and first failure without changing existing success/failure semantics.
+- persisted bindings: **156**
+- distinct governed texture Stable IDs: **27**
+- successful restores: **156 / 156**
+- failures: **0**
+- binding inspection: **18.08 ms**
+- governed preparation: **122924.55 ms**
+- Wicked resource apply/load: **6551.67 ms**
+- total governed texture restore: **129653.87 ms**
+
+Governed preparation therefore consumed approximately **94.8%** of the measured texture-restore pass. Binding inspection was negligible and resource apply/load was comparatively small.
+
+This promotes the earlier performance hypothesis to a **proven Gate 1 finding**: the Reopen stall is dominated by repeated governed texture preparation performed at material-binding granularity. The workload contains far fewer unique governed texture Stable IDs than persisted bindings, so the same governed texture identity can be prepared repeatedly during a single restore pass.
+
+This does **not** justify changing `.rasset`, StableId authority, project portability, or the accepted PR57 resource handoff architecture. The likely Gate 7 optimization seam is to avoid repeating expensive governed preparation for the same texture Stable ID within one restoration pass—for example by preparing each unique governed texture once and reusing the prepared/live resource for all matching bindings. That is a later-gate direction only, not a Gate 1 implementation.
 
 ## Gate 1 diagnostic-only implementation rule
 
-Instrumentation may add timing/counter logging, but it must not:
+Gate 1 instrumentation may record timing/counter evidence, but it must not:
 
 - cache or deduplicate texture work yet;
 - change scene load ordering;
@@ -150,20 +151,19 @@ Instrumentation may add timing/counter logging, but it must not:
 - change Hub presentation;
 - change PR57 `.rasset`, StableId, thumbnail, Asset Browser placement or texture-resource handoff behavior.
 
-Any performance/reliability fix discovered by the diagnostics belongs to its later gate.
+The measured performance optimization belongs to Gate 7. The project/scene split-brain and Asset Browser project-switch hazards belong to Gate 5. Save/dirty-state hardening belongs to Gate 6.
 
-## Gate 1 acceptance
+## Gate 1 acceptance and closure
 
-Gate 1 is complete only when an exact-head Release build can produce a timing report for the owner's V3 project that lets us state, with measured evidence, where Reopen spends its time.
+Gate 1 performance-diagnostic evidence is now satisfied:
 
-Minimum report:
+- exact-head Renegade Studio Debug/Release build passed before the V3 test;
+- exact-head Windows baseline Debug/Release passed before the V3 test;
+- owner tested the exact-head Release artifact on the real V3 project;
+- Reopen completed with all `156` governed texture bindings restored and `0` failures;
+- the expensive phase is identified with measured evidence;
+- the diagnostic reported all `156` governed texture bindings restored with `0` failures.
 
-- WISCENE prepare ms;
-- scene commit ms;
-- governed texture restore ms with binding/unique-ID counts;
-- post-open Studio refresh ms;
-- total Reopen ms.
+The continuation chat has not separately recorded an explicit owner statement that the post-Reopen scene remained visually texture-correct. Preserve that as the final behavioral acceptance check rather than inferring it from the diagnostic alone.
 
-Also record Create/Open/Save timings sufficiently to establish later Gate 5–7 baselines.
-
-CI remains authoritative for compilation/tests. Owner Release behavior/timing remains authoritative for the real V3 project.
+This closure documentation is a docs-only branch change and must receive its own exact-head Renegade Studio and Windows baseline green status. Once that CI is green **and** the owner explicitly confirms the post-Reopen scene/textures remained correct, Gate 1 is closed. Do not begin Gate 2 until the owner explicitly approves advancement.
