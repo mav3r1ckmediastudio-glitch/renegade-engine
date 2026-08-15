@@ -22,8 +22,6 @@ namespace
     constexpr std::uint32_t DragPreviewLayer = 1u << 31;
     constexpr const char* DragPreviewWrapperName =
         "Reusable Asset Drag Preview";
-    constexpr const char* LegacyPayloadRootName =
-        "Reusable Asset Payload";
 
     struct LayerState
     {
@@ -162,17 +160,6 @@ namespace
         return found->second;
     }
 
-    void ErasePreparation(const std::shared_ptr<PreparationJob>& job)
-    {
-        if (!job)
-            return;
-        const std::string key = PreparationCacheKey(
-            job->projectId, job->assetId, job->assetPath);
-        const auto found = preparationCache.find(key);
-        if (found != preparationCache.end() && found->second == job)
-            preparationCache.erase(found);
-    }
-
     void TrimPreparationCache()
     {
         while (preparationCache.size() > MaximumPreparationCacheEntries)
@@ -276,51 +263,6 @@ namespace
                 created.push_back(entity);
         }
         return created;
-    }
-
-    std::vector<wi::ecs::Entity> FindRootTransforms(
-        const wi::scene::Scene& scene,
-        const std::vector<wi::ecs::Entity>& created)
-    {
-        wi::unordered_set<wi::ecs::Entity> createdSet;
-        for (const auto entity : created)
-            createdSet.insert(entity);
-
-        std::vector<wi::ecs::Entity> roots;
-        for (const wi::ecs::Entity entity : created)
-        {
-            if (!scene.transforms.Contains(entity))
-                continue;
-            const auto* hierarchy = scene.hierarchy.GetComponent(entity);
-            if (hierarchy == nullptr ||
-                hierarchy->parentID == wi::ecs::INVALID_ENTITY ||
-                createdSet.count(hierarchy->parentID) == 0)
-            {
-                roots.push_back(entity);
-            }
-        }
-        return roots;
-    }
-
-    wi::ecs::Entity FindCreatorPayloadRoot(
-        const wi::scene::Scene& scene,
-        const std::vector<wi::ecs::Entity>& created)
-    {
-        wi::unordered_set<wi::ecs::Entity> createdSet;
-        for (const auto entity : created)
-            createdSet.insert(entity);
-        for (std::size_t index = 0; index < scene.names.GetCount(); ++index)
-        {
-            if (scene.names[index].name !=
-                renegade::bridge::CreatorAuthoredTransformRootName)
-            {
-                continue;
-            }
-            const auto entity = scene.names.GetEntity(index);
-            if (createdSet.count(entity) != 0 && scene.transforms.Contains(entity))
-                return entity;
-        }
-        return wi::ecs::INVALID_ENTITY;
     }
 
     void CaptureAndSetPreviewLayers(
@@ -550,11 +492,16 @@ namespace
             return false;
         }
 
-        auto preparedScene = job->prepared.ReleaseScene();
-        ErasePreparation(job);
-        if (!preparedScene.IsValid())
+        // PreparedReusableModelPlacement is the immutable browser/runtime
+        // template. Wicked Scene::Instantiate() copies the prefab into the
+        // target scene without consuming the source, so drag #2, #3, etc.
+        // reuse the same already-prepared template instead of deserializing
+        // the .rasset again. The prefab's internal optimized instantiation
+        // archive is also free to accelerate subsequent copies.
+        auto* templateScene = job->prepared.PeekMutableScene();
+        if (templateScene == nullptr)
         {
-            error = "The prepared reusable asset scene is unavailable.";
+            error = "The prepared reusable asset template is unavailable.";
             return false;
         }
 
@@ -562,41 +509,26 @@ namespace
         wi::unordered_set<wi::ecs::Entity> before;
         scene.FindAllEntities(before);
         const std::size_t firstMaterialIndex = scene.materials.GetCount();
-        scene.Merge(*preparedScene);
-        preparedScene.reset();
 
+        const wi::ecs::Entity payloadRoot =
+            scene.Instantiate(*templateScene, true);
         auto created = CollectNewEntities(scene, before);
-        auto roots = FindRootTransforms(scene, created);
-        if (roots.empty())
+        if (payloadRoot == wi::ecs::INVALID_ENTITY ||
+            !scene.transforms.Contains(payloadRoot))
         {
             HideAndDeferPreviewRemoval(
                 &scene, wi::ecs::INVALID_ENTITY, std::move(created));
-            error = "The prepared reusable asset contains no transform root.";
+            error = "The cached reusable asset template could not be instantiated.";
             return false;
-        }
-
-        wi::ecs::Entity payloadRoot = FindCreatorPayloadRoot(scene, created);
-        if (payloadRoot == wi::ecs::INVALID_ENTITY && roots.size() == 1)
-            payloadRoot = roots.front();
-        if (payloadRoot == wi::ecs::INVALID_ENTITY)
-        {
-            payloadRoot = scene.Entity_CreateTransform(LegacyPayloadRootName);
-            created.push_back(payloadRoot);
-        }
-        for (const auto root : roots)
-        {
-            if (root != payloadRoot)
-                scene.Component_Attach(root, payloadRoot, true);
         }
 
         const wi::ecs::Entity wrapper =
             scene.Entity_CreateTransform(DragPreviewWrapperName);
         created.push_back(wrapper);
-        if (!scene.transforms.Contains(wrapper) ||
-            !scene.transforms.Contains(payloadRoot))
+        if (!scene.transforms.Contains(wrapper))
         {
             HideAndDeferPreviewRemoval(&scene, wrapper, std::move(created));
-            error = "The reusable asset cursor instance could not be created.";
+            error = "The reusable asset cursor wrapper could not be created.";
             return false;
         }
         scene.Component_Attach(payloadRoot, wrapper, true);
@@ -725,12 +657,9 @@ namespace renegade::studio::detail
 
         auto* scene = preview.scene;
         const auto wrapper = preview.wrapper;
-        const auto assetId = preview.assetId;
-        const auto assetPath = preview.assetPath;
         auto created = std::move(preview.createdEntities);
         preview = {};
         HideAndDeferPreviewRemoval(scene, wrapper, std::move(created));
-        StartPreparation(assetId, assetPath, false);
     }
 
     bool CreatorAssetDragPreviewBlocksSave() noexcept
@@ -788,7 +717,6 @@ namespace renegade::studio::detail
                 name->name = "Reusable Asset Instance";
 
             const auto placedAssetId = preview.assetId;
-            const auto placedAssetPath = preview.assetPath;
             auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
                 scene,
                 placedAssetId,
@@ -810,7 +738,6 @@ namespace renegade::studio::detail
             preview = {};
             dragCancelledUntilRelease = false;
             wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-            StartPreparation(placedAssetId, placedAssetPath, false);
             return placedEntity;
         };
 
