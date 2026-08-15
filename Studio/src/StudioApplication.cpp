@@ -8412,6 +8412,24 @@ namespace renegade::studio
             return;
         }
 
+        const auto& project = session_->Projects().CurrentProject();
+        bridge::CreatorAssetWorkflowService workflow;
+        std::string destinationError;
+        if (!workflow.ValidateModelImportDestination(
+                project.rootPath,
+                creatorModelImporter.sourcePath,
+                creatorModelImporter.assetName,
+                creatorModelImporter.destinationFolder,
+                destinationError))
+        {
+            creatorImportThumbnailStatus.SetText(
+                "IMPORT BLOCKED // PREFLIGHT FAILED");
+            studioChrome_.SetStatusText(
+                "IMPORT MODEL // DESTINATION PREFLIGHT FAILED");
+            wi::helper::messageBox(destinationError.c_str(), "Import Model");
+            return;
+        }
+
         struct GovernedCommitState
         {
             std::string projectRoot;
@@ -8435,7 +8453,6 @@ namespace renegade::studio
         };
 
         auto state = std::make_shared<GovernedCommitState>();
-        const auto& project = session_->Projects().CurrentProject();
         state->projectRoot = project.rootPath;
         state->projectId = project.projectId;
         state->sourcePath = creatorModelImporter.sourcePath;

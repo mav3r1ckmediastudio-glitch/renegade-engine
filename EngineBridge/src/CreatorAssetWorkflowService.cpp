@@ -523,6 +523,78 @@ namespace renegade::bridge
             return value.empty() ? std::string("Model") : value;
         }
 
+        struct CreatorModelDestinationPlan
+        {
+            std::string candidateStem;
+            fs::path snapshotDirectory;
+            fs::path assetPath;
+        };
+
+        bool ResolveCreatorModelDestinationPlan(
+            const fs::path& root,
+            const fs::path& contentModels,
+            const std::string& baseStem,
+            const bool explicitName,
+            CreatorModelDestinationPlan& plan,
+            std::string& error)
+        {
+            const fs::path sourceModels = root / "SourceAssets" / "Models";
+            std::error_code ec;
+            for (std::uint32_t suffix = 0; ; ++suffix)
+            {
+                const std::string candidateStem = suffix == 0
+                    ? baseStem : baseStem + "_" + std::to_string(suffix + 1);
+                const fs::path snapshotDirectory =
+                    sourceModels / fs::u8path(candidateStem);
+                const fs::path assetPath = contentModels /
+                    fs::u8path(candidateStem + ReusableAssetExtension);
+
+                ec.clear();
+                const bool snapshotExists = fs::exists(snapshotDirectory, ec);
+                if (ec)
+                {
+                    error = "Could not inspect retained-source destination.";
+                    return false;
+                }
+                const bool assetExists = fs::exists(assetPath, ec);
+                if (ec)
+                {
+                    error = "Could not inspect reusable-asset destination.";
+                    return false;
+                }
+                fs::path projectionPath = assetPath;
+                projectionPath += ".json";
+                fs::path thumbnailPath = assetPath;
+                thumbnailPath.replace_extension(".thumbnail.png");
+                const bool projectionExists = fs::exists(projectionPath, ec);
+                if (ec)
+                {
+                    error = "Could not inspect managed asset projection destination.";
+                    return false;
+                }
+                const bool thumbnailExists = fs::exists(thumbnailPath, ec);
+                if (ec)
+                {
+                    error = "Could not inspect creator thumbnail destination.";
+                    return false;
+                }
+                if (!snapshotExists && !assetExists &&
+                    !projectionExists && !thumbnailExists)
+                {
+                    plan.candidateStem = candidateStem;
+                    plan.snapshotDirectory = snapshotDirectory;
+                    plan.assetPath = assetPath;
+                    error.clear();
+                    return true;
+                }
+                if (explicitName)
+                {
+                    error = "The selected creator asset name is already in use in the destination folder.";
+                    return false;
+                }
+            }
+        }
+
         bool CopyGltfExternalFiles(
             const fs::path& source,
             const fs::path& destinationDirectory,
@@ -708,6 +780,46 @@ namespace renegade::bridge
         return true;
     }
 
+    bool CreatorAssetWorkflowService::ValidateModelImportDestination(
+        const std::string& projectRoot,
+        const std::string& externalSourcePath,
+        const std::string& assetName,
+        const std::string& destinationFolder,
+        std::string& error) const
+    {
+        fs::path root;
+        if (!ResolveRoot(projectRoot, root, error))
+            return false;
+
+        std::error_code ec;
+        const fs::path source = fs::weakly_canonical(
+            fs::absolute(fs::u8path(externalSourcePath), ec), ec);
+        if (ec || !fs::is_regular_file(source, ec) || ec)
+        {
+            error = "Selected model source is unavailable.";
+            return false;
+        }
+        const ModelSourceFormat format = ImportService::ClassifyModelSourceFormat(
+            source.generic_u8string());
+        if (!ImportService::IsModelSourceFormatSupported(format))
+        {
+            error = "Selected model format is not enabled by LP07.";
+            return false;
+        }
+
+        fs::path contentModels;
+        if (!ResolveCreatorDestination(root, destinationFolder,
+                contentModels, error))
+            return false;
+
+        const bool explicitName = !assetName.empty();
+        const std::string baseStem = SanitizeStem(explicitName
+            ? assetName : source.stem().generic_u8string());
+        CreatorModelDestinationPlan plan;
+        return ResolveCreatorModelDestinationPlan(
+            root, contentModels, baseStem, explicitName, plan, error);
+    }
+
     CreatorModelImportResult CreatorAssetWorkflowService::ImportModel(
         const std::string& projectRoot,
         const StableId& projectId,
@@ -781,53 +893,14 @@ namespace renegade::bridge
         const bool explicitName = !assetName.empty();
         const std::string baseStem = SanitizeStem(explicitName
             ? assetName : source.stem().generic_u8string());
-        std::string candidateStem = baseStem;
-        fs::path snapshotDirectory;
-        fs::path assetPath;
-        for (std::uint32_t suffix = 0; ; ++suffix)
-        {
-            candidateStem = suffix == 0
-                ? baseStem : baseStem + "_" + std::to_string(suffix + 1);
-            snapshotDirectory = sourceModels / fs::u8path(candidateStem);
-            assetPath = contentModels / fs::u8path(candidateStem + ReusableAssetExtension);
-            ec.clear();
-            const bool snapshotExists = fs::exists(snapshotDirectory, ec);
-            if (ec)
-            {
-                result.error = "Could not inspect retained-source destination.";
-                return result;
-            }
-            const bool assetExists = fs::exists(assetPath, ec);
-            if (ec)
-            {
-                result.error = "Could not inspect reusable-asset destination.";
-                return result;
-            }
-            fs::path projectionPath = assetPath;
-            projectionPath += ".json";
-            fs::path thumbnailPath = assetPath;
-            thumbnailPath.replace_extension(".thumbnail.png");
-            const bool projectionExists = fs::exists(projectionPath, ec);
-            if (ec)
-            {
-                result.error = "Could not inspect managed asset projection destination.";
-                return result;
-            }
-            const bool thumbnailExists = fs::exists(thumbnailPath, ec);
-            if (ec)
-            {
-                result.error = "Could not inspect creator thumbnail destination.";
-                return result;
-            }
-            if (!snapshotExists && !assetExists &&
-                !projectionExists && !thumbnailExists)
-                break;
-            if (explicitName)
-            {
-                result.error = "The selected creator asset name is already in use in the destination folder.";
-                return result;
-            }
-        }
+        CreatorModelDestinationPlan destinationPlan;
+        if (!ResolveCreatorModelDestinationPlan(
+                root, contentModels, baseStem, explicitName,
+                destinationPlan, result.error))
+            return result;
+        std::string candidateStem = std::move(destinationPlan.candidateStem);
+        fs::path snapshotDirectory = std::move(destinationPlan.snapshotDirectory);
+        fs::path assetPath = std::move(destinationPlan.assetPath);
 
         fs::create_directories(snapshotDirectory, ec);
         if (ec)

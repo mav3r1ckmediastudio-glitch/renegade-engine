@@ -48,6 +48,16 @@ namespace renegade::bridge
             AssetCatalogue& catalogue,
             std::string& error) const;
 
+        // Cheap creator-facing destination/name preflight. This mirrors the
+        // authoritative collision semantics used by ImportModel() but performs no
+        // material preparation, source retention, package serialization or registry write.
+        [[nodiscard]] bool ValidateModelImportDestination(
+            const std::string& projectRoot,
+            const std::string& externalSourcePath,
+            const std::string& assetName,
+            const std::string& destinationFolder,
+            std::string& error) const;
+
         [[nodiscard]] CreatorModelImportResult ImportModel(
         const std::string& projectRoot,
         const StableId& projectId,
