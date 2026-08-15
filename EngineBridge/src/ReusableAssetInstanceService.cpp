@@ -146,6 +146,21 @@ namespace renegade::bridge
     {
     }
 
+    PlaceReusableModelCommand::PlaceReusableModelCommand(
+        wi::scene::Scene& targetScene,
+        StableId assetId,
+        const wi::ecs::Entity existingInstanceRoot,
+        const wi::ecs::Entity existingPayloadRoot,
+        const std::size_t firstMaterialIndex)
+        : scene_(&targetScene)
+        , assetId_(std::move(assetId))
+        , entity_(existingInstanceRoot)
+        , payloadRoot_(existingPayloadRoot)
+        , firstMaterialIndex_(firstMaterialIndex)
+        , adoptExisting_(true)
+    {
+    }
+
     void PlaceReusableModelCommand::CaptureMaterialResources(
         const std::size_t firstMaterialIndex)
     {
@@ -195,11 +210,46 @@ namespace renegade::bridge
     {
         if (!hasSnapshot_)
         {
-            if (scene_ == nullptr || !preparedScene_.IsValid() ||
-                !IsValidStableId(assetId_))
-            {
+            if (scene_ == nullptr || !IsValidStableId(assetId_))
                 return false;
+
+            if (adoptExisting_)
+            {
+                if (!WrapperExists(*scene_, entity_) ||
+                    !WrapperExists(*scene_, payloadRoot_) ||
+                    !scene_->Entity_IsDescendant(payloadRoot_, entity_))
+                {
+                    return false;
+                }
+
+                if (auto* name = scene_->names.GetComponent(entity_))
+                    name->name = "Reusable Asset Instance";
+                else
+                    scene_->names.Create(entity_).name = "Reusable Asset Instance";
+
+                auto& instanceMetadata = scene_->metadatas.Create(entity_);
+                instanceMetadata.string_values.set(
+                    ReusableAssetInstanceIdMetadataKey, assetId_);
+                instanceMetadata.int_values.set(
+                    ReusableAssetInstanceVersionMetadataKey,
+                    ReusableAssetInstanceVersion);
+
+                auto* payloadMetadata = scene_->metadatas.GetComponent(payloadRoot_);
+                if (payloadMetadata == nullptr)
+                    payloadMetadata = &scene_->metadatas.Create(payloadRoot_);
+                payloadMetadata->bool_values.set(
+                    ReusableAssetPayloadRootMetadataKey, true);
+
+                CaptureMaterialResources(firstMaterialIndex_);
+                snapshot_.SetReadModeAndResetPos(false);
+                wi::ecs::EntitySerializer serializer;
+                scene_->Entity_Serialize(snapshot_, serializer, entity_);
+                hasSnapshot_ = true;
+                return true;
             }
+
+            if (!preparedScene_.IsValid())
+                return false;
 
             wi::unordered_set<wi::ecs::Entity> entitiesBefore;
             scene_->FindAllEntities(entitiesBefore);

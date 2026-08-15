@@ -253,7 +253,82 @@ int main(int argc, char** argv)
             "creator-approved transform did not survive Undo/Redo"))
         return 1;
 
+    // PR57 owner-acceptance regression: a drag ghost is already live in the
+    // authoritative scene at mouse-up. Adopting it must not merge, clone or
+    // alter its exact visible transform; it only adds stable instance metadata
+    // and captures command history.
+    wi::scene::Scene adoptedTarget;
+    const wi::ecs::Entity adoptedWrapper =
+        adoptedTarget.Entity_CreateTransform("Reusable Asset Drag Preview");
+    const wi::ecs::Entity adoptedPayload =
+        adoptedTarget.Entity_CreateTransform("Live Cursor Payload");
+    adoptedTarget.Component_Attach(adoptedPayload, adoptedWrapper, true);
+    auto* adoptedTransform = adoptedTarget.transforms.GetComponent(adoptedWrapper);
+    adoptedTransform->translation_local = XMFLOAT3(7.0f, 8.0f, 9.0f);
+    adoptedTransform->scale_local = XMFLOAT3(0.5f, 0.5f, 0.5f);
+    adoptedTransform->SetDirty();
+    adoptedTransform->UpdateTransform();
+    const std::size_t adoptedTransformCount = adoptedTarget.transforms.GetCount();
+
+    PlaceReusableModelCommand adoptedCommand(
+        adoptedTarget,
+        AssetId,
+        adoptedWrapper,
+        adoptedPayload,
+        0);
+    if (!Require(adoptedCommand.Execute(),
+            "live cursor instance adoption failed") ||
+        !Require(adoptedCommand.PlacedEntity() == adoptedWrapper,
+            "live adoption replaced the visible cursor wrapper") ||
+        !Require(adoptedCommand.PayloadRootEntity() == adoptedPayload,
+            "live adoption replaced the visible payload root") ||
+        !Require(adoptedTarget.transforms.GetCount() == adoptedTransformCount,
+            "live adoption cloned or merged extra transforms"))
+        return 1;
+
+    const auto* adoptedAfter =
+        adoptedTarget.transforms.GetComponent(adoptedWrapper);
+    if (!Require(adoptedAfter != nullptr &&
+            Near(adoptedAfter->translation_local.x, 7.0f) &&
+            Near(adoptedAfter->translation_local.y, 8.0f) &&
+            Near(adoptedAfter->translation_local.z, 9.0f) &&
+            Near(adoptedAfter->scale_local.x, 0.5f),
+            "live adoption changed the exact cursor transform"))
+        return 1;
+
+    instances.clear();
+    if (!Require(InspectReusableAssetInstances(
+            adoptedTarget, instances, error),
+            "adopted instance inspection failed: " + error) ||
+        !Require(instances.size() == 1 &&
+            instances.front().assetId == AssetId &&
+            instances.front().instanceRoot == adoptedWrapper &&
+            instances.front().payloadRoot == adoptedPayload,
+            "live adoption did not stamp the stable asset/payload identity"))
+        return 1;
+
+    adoptedCommand.Undo();
+    instances.clear();
+    if (!Require(InspectReusableAssetInstances(
+            adoptedTarget, instances, error) && instances.empty(),
+            "Undo did not remove the adopted live instance"))
+        return 1;
+    if (!Require(adoptedCommand.Execute(),
+            "Redo of adopted live instance failed") ||
+        !Require(adoptedCommand.PlacedEntity() == adoptedWrapper,
+            "Redo remapped the adopted wrapper identity"))
+        return 1;
+    const auto* adoptedRedo =
+        adoptedTarget.transforms.GetComponent(adoptedWrapper);
+    if (!Require(adoptedRedo != nullptr &&
+            Near(adoptedRedo->translation_local.x, 7.0f) &&
+            Near(adoptedRedo->translation_local.y, 8.0f) &&
+            Near(adoptedRedo->translation_local.z, 9.0f) &&
+            Near(adoptedRedo->scale_local.x, 0.5f),
+            "adopted live transform did not survive Undo/Redo"))
+        return 1;
+
     fs::remove_all(outputRoot, ec);
-    std::cout << "LP07 GATE 6 INSTANCE PASS // stable wrapper identity and creator-authored payload transform survive Undo/Redo and WISCENE Save/Open\n";
+    std::cout << "LP07 GATE 6 INSTANCE PASS // stable wrapper identity, creator-authored payload transform, and live cursor adoption survive Undo/Redo and WISCENE Save/Open\n";
     return 0;
 }

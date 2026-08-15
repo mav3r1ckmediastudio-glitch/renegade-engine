@@ -289,6 +289,7 @@ namespace renegade::studio
         }
 
         SetAssetBrowserSelectedPath(normalizedPath);
+        detail::RequestCreatorAssetDragPreparation(assetId, normalizedPath);
         error.clear();
         return true;
     }
@@ -840,6 +841,12 @@ namespace renegade::studio
         if (!found->creatorTags.empty())
             status << " // TAGS " << JoinTags(found->creatorTags);
         SetStatusText(status.str());
+        if (bridge::CanPlaceCreatorModelAsset(*found))
+        {
+            detail::RequestCreatorAssetDragPreparation(
+                found->assetId,
+                found->projectRelativePath);
+        }
         return true;
     }
 

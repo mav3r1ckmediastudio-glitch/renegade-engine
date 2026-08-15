@@ -50,6 +50,16 @@ namespace renegade::bridge
             const XMFLOAT3& placementPosition,
             float scaleFactor);
 
+        // Adopt a live cursor instance without cloning, reparsing or moving it.
+        // The first Execute() only stamps stable Renegade metadata and captures
+        // the Undo/Redo snapshot; the visible entity is already in the scene.
+        PlaceReusableModelCommand(
+            wi::scene::Scene& targetScene,
+            StableId assetId,
+            wi::ecs::Entity existingInstanceRoot,
+            wi::ecs::Entity existingPayloadRoot,
+            std::size_t firstMaterialIndex);
+
         bool Execute() override;
         void Undo() override;
 
@@ -77,6 +87,8 @@ namespace renegade::bridge
         wi::ecs::Entity payloadRoot_ = wi::ecs::INVALID_ENTITY;
         wi::Archive snapshot_;
         std::vector<CapturedMaterialResource> materialResources_;
+        std::size_t firstMaterialIndex_ = 0;
+        bool adoptExisting_ = false;
         bool hasSnapshot_ = false;
     };
 }

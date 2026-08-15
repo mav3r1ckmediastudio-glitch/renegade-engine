@@ -325,15 +325,19 @@ namespace renegade::studio
 
     namespace detail
     {
-        void UpdateCreatorAssetDragPreview(
+        void RequestCreatorAssetDragPreparation(
+            const bridge::StableId& assetId,
+            const std::string& assetPath);
+        void PrimeCreatorAssetDragPreparation(
+            const bridge::StableId& assetId,
+            const std::string& assetPath,
+            bridge::PreparedReusableModelPlacement prepared);
+        [[nodiscard]] bool CreatorAssetDragPreviewOwnsDrop(
+            const bridge::StableId& assetId) noexcept;
+        [[nodiscard]] wi::ecs::Entity UpdateCreatorAssetDragPreview(
             const wi::Canvas& canvas,
             const wi::scene::CameraComponent& camera);
         void ClearCreatorAssetDragPreview();
-        bool ConsumeCreatorAssetDragPreview(
-            const bridge::StableId& assetId,
-            bridge::PreparedReusableModelPlacement& prepared,
-            XMFLOAT3& position,
-            float& scale);
         [[nodiscard]] bool CreatorAssetDragPreviewBlocksSave() noexcept;
     }
 

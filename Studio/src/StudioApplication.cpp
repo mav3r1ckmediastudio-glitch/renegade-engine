@@ -333,6 +333,7 @@ namespace
         bool ambientCaptured = false;
         bool mannequinVisible = true;
         std::string thumbnailCapturePath;
+        std::uint32_t thumbnailCaptureRevision = 0;
         bool thumbnailCapturePending = false;
         bool thumbnailPresentationOverridden = false;
         float thumbnailRestoreLightIntensity = 4.0f;
@@ -492,6 +493,8 @@ namespace
     renegade::studio::RenegadeCheckBox creatorImportMannequinVisible;
     wi::gui::Label creatorImportHelpLabel;
     wi::gui::Label creatorImportActionBar;
+    wi::gui::Image creatorImportThumbnailPreview;
+    wi::Resource creatorImportThumbnailPreviewResource;
     renegade::studio::RenegadeButton creatorImportThumbnailCapture;
     wi::gui::Label creatorImportThumbnailStatus;
     wi::Resource creatorImportHumanReference;
@@ -3573,6 +3576,9 @@ namespace renegade::studio
         creatorImportAnimationReadout.Create("");
         creatorImportAnimationReadout.SetFitTextEnabled(true);
 
+        creatorImportThumbnailPreview.Create("Final Asset Thumbnail Preview");
+        creatorImportThumbnailPreview.SetTooltip(
+            "Exact square Asset Browser thumbnail. Orbit/pan the importer camera and RETAKE until this preview is acceptable.");
         creatorImportThumbnailCapture.Create("Capture Asset Thumbnail");
         creatorImportThumbnailCapture.SetText("CAPTURE THUMBNAIL");
         creatorImportThumbnailCapture.SetTooltip(
@@ -3665,6 +3671,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),
+            static_cast<wi::gui::Widget*>(&creatorImportThumbnailPreview),
             static_cast<wi::gui::Widget*>(&creatorImportThumbnailCapture),
             static_cast<wi::gui::Widget*>(&creatorImportThumbnailStatus),
             static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
@@ -3849,9 +3856,14 @@ namespace renegade::studio
             RestoreCreatorThumbnailPresentation();
             if (captured)
             {
+                creatorImportThumbnailPreviewResource =
+                    wi::resourcemanager::Load(
+                        creatorModelImporter.thumbnailCapturePath);
+                creatorImportThumbnailPreview.SetImage(
+                    creatorImportThumbnailPreviewResource);
                 creatorImportThumbnailCapture.SetText("RETAKE THUMBNAIL");
                 creatorImportThumbnailStatus.SetText(
-                    "THUMBNAIL CAPTURED // SQUARE AUTO-FRAMED ASSET");
+                    "THUMBNAIL READY // REVIEW ABOVE // MOVE CAMERA + RETAKE TO RECOMPOSE");
                 importScaleApplyButton_.SetEnabled(true);
             }
             else
@@ -3883,14 +3895,25 @@ namespace renegade::studio
             return;
         }
 
-        // Renegade chrome callbacks have fully returned. It is now safe to
-        // create/move/remove the transient prefab copy. On LMB release this
-        // clears the ghost before HandleCreatorAssetPlacement() executes the
-        // one real production placement command later in this same update.
+        // Chrome callbacks have returned. A drag release is committed here in
+        // this exact frame, before ConsumedPointerThisFrame() can short-circuit
+        // the rest of Studio input processing.
+        wi::ecs::Entity dragPlaced = wi::ecs::INVALID_ENTITY;
         if (camera != nullptr)
-            detail::UpdateCreatorAssetDragPreview(*this, *camera);
+            dragPlaced = detail::UpdateCreatorAssetDragPreview(*this, *camera);
         else
             detail::ClearCreatorAssetDragPreview();
+        if (dragPlaced != wi::ecs::INVALID_ENTITY)
+        {
+            session_->Selection().Select(dragPlaced);
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+            SyncGizmoSelection();
+            SyncSelectionOutline();
+            studioChrome_.SetStatusText(
+                "PLACE ASSET // LIVE CURSOR INSTANCE COMMITTED // READY");
+        }
 
         QueueCreatorImportScaleRuler();
 
@@ -4470,15 +4493,22 @@ namespace renegade::studio
         creatorImportAnimationDelete.SetSize(XMFLOAT2(120.0f, 28.0f));
         creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 354.0f));
         creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
-        creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 278.0f));
+        creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 178.0f));
         creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        creatorImportThumbnailCapture.SetPos(XMFLOAT2(12.0f, 318.0f));
+        const float thumbnailPreviewSide = std::min(
+            244.0f, importScalePanelWidth - 48.0f);
+        creatorImportThumbnailPreview.SetPos(XMFLOAT2(
+            (importScalePanelWidth - thumbnailPreviewSide) * 0.5f,
+            214.0f));
+        creatorImportThumbnailPreview.SetSize(XMFLOAT2(
+            thumbnailPreviewSide, thumbnailPreviewSide));
+        creatorImportThumbnailCapture.SetPos(XMFLOAT2(12.0f, 468.0f));
         creatorImportThumbnailCapture.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 40.0f));
-        creatorImportThumbnailStatus.SetPos(XMFLOAT2(12.0f, 368.0f));
-        creatorImportThumbnailStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
-        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 410.0f));
+        creatorImportThumbnailStatus.SetPos(XMFLOAT2(12.0f, 516.0f));
+        creatorImportThumbnailStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 38.0f));
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 564.0f));
         importScaleApplyButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 44.0f));
-        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 464.0f));
+        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 618.0f));
         importScaleDismissButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
 
         projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
@@ -5673,12 +5703,15 @@ namespace renegade::studio
         const float screenX,
         const float screenY)
     {
-        BeginCreatorAssetPlacement(assetId, label);
-        if (!creatorAssetPlacementActive_)
+        (void)label;
+        (void)screenX;
+        (void)screenY;
+        if (detail::CreatorAssetDragPreviewOwnsDrop(assetId))
+        {
             return;
-        creatorAssetDropPoint_ = XMFLOAT2(screenX, screenY);
-        creatorAssetDropPending_ = true;
-        studioChrome_.SetStatusText("PLACE ASSET // DROPPING ON SURFACE");
+        }
+        studioChrome_.SetStatusText(
+            "ASSET DRAG // DROP CANCELLED // RUNTIME INSTANCE NOT READY");
     }
 
     void StudioRenderPath::CancelCreatorAssetPlacement()
@@ -5704,61 +5737,6 @@ namespace renegade::studio
             wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
         {
             CancelCreatorAssetPlacement();
-            return true;
-        }
-
-        if (creatorAssetDropPending_)
-        {
-            bridge::PreparedReusableModelPlacement prepared;
-            XMFLOAT3 position = {};
-            float scale = 1.0f;
-            if (!detail::ConsumeCreatorAssetDragPreview(
-                    creatorAssetPlacementId_,
-                    prepared,
-                    position,
-                    scale))
-            {
-                CancelCreatorAssetPlacement();
-                studioChrome_.SetStatusText(
-                    "PLACE ASSET // DROP CANCELLED // PREVIEW NOT READY");
-                return true;
-            }
-            creatorAssetDropPending_ = false;
-
-            auto& scene = session_->Scenes().GetScene();
-            const bridge::StableId assetId = creatorAssetPlacementId_;
-            auto command =
-                std::make_unique<bridge::PlaceReusableModelCommand>(
-                    scene,
-                    prepared.ReleaseScene(),
-                    assetId,
-                    position,
-                    scale);
-            auto* placed = command.get();
-            if (!session_->Commands().Execute(std::move(command)))
-            {
-                creatorAssetPlacementActive_ = false;
-                creatorAssetPlacementId_.clear();
-                creatorAssetPlacementLabel_.clear();
-                wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-                studioChrome_.SetStatusText(
-                    "PLACE ASSET // DROP COMMIT FAILED");
-                return true;
-            }
-
-            const std::string label = creatorAssetPlacementLabel_;
-            creatorAssetPlacementActive_ = false;
-            creatorAssetPlacementId_.clear();
-            creatorAssetPlacementLabel_.clear();
-            creatorAssetDropPending_ = false;
-            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-            session_->Selection().Select(placed->PlacedEntity());
-            RefreshHierarchy();
-            RefreshInspector();
-            RefreshStatus();
-            studioChrome_.SetStatusText(
-                "PLACE ASSET // " + label +
-                " // EXACT CURSOR PREVIEW COMMITTED // STABLE RASSET INSTANCE");
             return true;
         }
 
@@ -8231,8 +8209,12 @@ namespace renegade::studio
         creatorImportLightingPreset.SetSelectedWithoutCallback(0);
         creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
         creatorModelImporter.thumbnailCapturePath.clear();
+        creatorModelImporter.thumbnailCaptureRevision = 0;
+        creatorImportThumbnailPreviewResource = {};
+        creatorImportThumbnailPreview.SetImage(wi::Resource{});
         creatorImportThumbnailCapture.SetText("CAPTURE THUMBNAIL");
-        creatorImportThumbnailStatus.SetText("THUMBNAIL NOT CAPTURED");
+        creatorImportThumbnailStatus.SetText(
+            "THUMBNAIL // CAPTURE, REVIEW SQUARE PREVIEW, RETAKE IF NEEDED");
         importScaleApplyButton_.SetEnabled(false);
         UpdateCreatorImportScaleReferenceLabel();
         importScalePanel_.SetVisible(true);
@@ -8350,6 +8332,7 @@ namespace renegade::studio
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),
+            static_cast<wi::gui::Widget*>(&creatorImportThumbnailPreview),
             static_cast<wi::gui::Widget*>(&creatorImportThumbnailCapture),
             static_cast<wi::gui::Widget*>(&creatorImportThumbnailStatus),
             static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
@@ -8365,8 +8348,11 @@ namespace renegade::studio
             !session_->Projects().HasProject())
             return;
 
+        const bool firstThumbnailCapture =
+            creatorModelImporter.thumbnailCapturePath.empty();
         BeginCreatorThumbnailPresentation();
-        FrameCreatorImportPreviewCamera();
+        if (firstThumbnailCapture)
+            FrameCreatorImportPreviewCamera();
 
         const fs::path directory =
             fs::u8path(session_->Projects().CurrentProject().rootPath) /
@@ -8381,8 +8367,11 @@ namespace renegade::studio
             return;
         }
 
-        const fs::path capturePath =
-            directory / ".creator-asset-thumbnail.png";
+        ++creatorModelImporter.thumbnailCaptureRevision;
+        const fs::path capturePath = directory /
+            fs::u8path(".creator-asset-thumbnail-" +
+                std::to_string(creatorModelImporter.thumbnailCaptureRevision) +
+                ".png");
         fs::remove(capturePath, ec);
         creatorModelImporter.thumbnailCapturePath =
             capturePath.generic_u8string();
@@ -8440,6 +8429,11 @@ namespace renegade::studio
             std::string settingsJson = "{}";
             bridge::PreparedModelImport prepared;
             bridge::CreatorModelImportResult imported;
+            bridge::PreparedReusableModelPlacement warmedPlacement;
+            double materialsSeconds = 0.0;
+            double packageSeconds = 0.0;
+            double warmupSeconds = 0.0;
+            bool warmupSucceeded = false;
         };
 
         auto state = std::make_shared<GovernedCommitState>();
@@ -8468,10 +8462,13 @@ namespace renegade::studio
             if (!session_->Commands().Undo())
                 break;
         }
-        importScalePanel_.SetVisible(false);
-        studioChrome_.SetVisible(true);
-        inspectorPanel_.SetVisible(true);
-        hierarchySearch_.SetVisible(true);
+        importScalePanel_.SetEnabled(false);
+        importScaleApplyButton_.SetText("PROCESSING...");
+        importScaleApplyButton_.SetEnabled(false);
+        importScaleDismissButton_.SetEnabled(false);
+        creatorImportThumbnailCapture.SetEnabled(false);
+        creatorImportThumbnailStatus.SetText(
+            "PROCESSING // MATERIALS + GOVERNED TEXTURES");
         editorCameraTransform_ = cameraBefore;
         editorCameraTransform_.UpdateTransform();
         camera->fov = cameraFovBefore;
@@ -8480,14 +8477,13 @@ namespace renegade::studio
         ClearSelectionOutline();
         session_->Selection().Clear();
 
-        // The importer stage is over now, not when the background transaction
-        // eventually finishes. This restores the world grid immediately.
-        creatorModelImporter = {};
-        importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
+        // Keep the importer visibly open while the governed transaction runs.
+        // The user sees explicit phases instead of an apparently idle Studio.
         RefreshHierarchy();
         RefreshInspector();
         RefreshStatus();
-        studioChrome_.SetStatusText("IMPORT MODEL // COMMITTING GOVERNED ASSET");
+        studioChrome_.SetStatusText(
+            "IMPORT MODEL // PROCESSING // MATERIALS + GOVERNED TEXTURES");
 
         wi::jobsystem::Execute(modelImportWorkload_,
             [this, state](wi::jobsystem::JobArgs)
@@ -8505,7 +8501,10 @@ namespace renegade::studio
                     materialRequest.projectId = state->projectId;
                     materialRequest.modelSourcePath = state->sourcePath;
                     materialRequest.overrides = state->materialOverrides;
+                    const auto materialsStarted = std::chrono::steady_clock::now();
                     auto materials = bridge::PrepareCreatorModelMaterials(materialRequest);
+                    state->materialsSeconds = std::chrono::duration<double>(
+                        std::chrono::steady_clock::now() - materialsStarted).count();
                     if (materials.succeeded)
                     {
                         materials.recipe.animations = state->animationRecipe;
@@ -8535,6 +8534,19 @@ namespace renegade::studio
                 bridge::CreatorAssetWorkflowService workflow;
                 if (state->imported.error.empty())
                 {
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [this](std::uint64_t)
+                        {
+                            if (creatorModelImporter.committing)
+                            {
+                                creatorImportThumbnailStatus.SetText(
+                                    "PROCESSING // WRITING RASSET PACKAGE");
+                                studioChrome_.SetStatusText(
+                                    "IMPORT MODEL // PROCESSING // WRITING RASSET PACKAGE");
+                            }
+                        });
+                    const auto packageStarted = std::chrono::steady_clock::now();
                     state->imported = workflow.ImportModel(
                         state->projectRoot,
                         state->projectId,
@@ -8544,11 +8556,48 @@ namespace renegade::studio
                 state->destinationFolder,
                 std::move(state->prepared),
                 state->thumbnailCapturePath);
+                    state->packageSeconds = std::chrono::duration<double>(
+                        std::chrono::steady_clock::now() - packageStarted).count();
+                    if (state->imported.succeeded)
+                    {
+                        wi::eventhandler::Subscribe_Once(
+                            wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                            [this](std::uint64_t)
+                            {
+                                if (creatorModelImporter.committing)
+                                {
+                                    creatorImportThumbnailStatus.SetText(
+                                        "PROCESSING // PREPARING INSTANT PLACEMENT");
+                                    studioChrome_.SetStatusText(
+                                        "IMPORT MODEL // PROCESSING // PREPARING INSTANT PLACEMENT");
+                                }
+                            });
+                        const auto warmupStarted = std::chrono::steady_clock::now();
+                        state->warmedPlacement = workflow.PrepareModelPlacement(
+                            state->projectRoot,
+                            state->projectId,
+                            state->imported.asset.assetId);
+                        state->warmupSeconds = std::chrono::duration<double>(
+                            std::chrono::steady_clock::now() - warmupStarted).count();
+                        state->warmupSucceeded = state->warmedPlacement.IsReady();
+                    }
 }
 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, state](std::uint64_t)
                     {
+                        importScalePanel_.SetEnabled(true);
+                        importScalePanel_.SetVisible(false);
+                        studioChrome_.SetVisible(true);
+                        inspectorPanel_.SetVisible(true);
+                        hierarchySearch_.SetVisible(true);
+                        importScaleApplyButton_.SetText("CONFIRM IMPORT");
+                        importScaleApplyButton_.SetEnabled(true);
+                        importScaleDismissButton_.SetEnabled(true);
+                        creatorImportThumbnailCapture.SetEnabled(true);
+                        creatorModelImporter = {};
+                        importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
+
                         if (!state->imported.succeeded)
                         {
                             studioChrome_.SetStatusText("IMPORT MODEL // COMMIT FAILED");
@@ -8564,6 +8613,13 @@ wi::eventhandler::Subscribe_Once(
                         assetBrowserCurrentFolder_ = fs::u8path(
                             state->imported.assetProjectRelativePath)
                             .parent_path().lexically_normal().generic_u8string();
+                        if (state->warmupSucceeded)
+                        {
+                            detail::PrimeCreatorAssetDragPreparation(
+                                state->imported.asset.assetId,
+                                state->imported.assetProjectRelativePath,
+                                std::move(state->warmedPlacement));
+                        }
                         studioChrome_.SetActiveBottomTab(0, true);
                         std::string browserError;
                         if (!studioChrome_.RevealCreatorAsset(
@@ -8580,13 +8636,20 @@ wi::eventhandler::Subscribe_Once(
                                 "Import Model");
                             return;
                         }
-                        studioChrome_.SetStatusText(
-                            "IMPORT MODEL // GOVERNED ASSET VISIBLE + SELECTED" +
-                            (state->thumbnailError.empty()
-                                ? std::string(" // THUMBNAIL SAVED // ")
-                                : std::string(" // THUMBNAIL WARNING // ")) +
-                            fs::u8path(state->imported.assetProjectRelativePath)
-                                .filename().generic_u8string());
+                        std::ostringstream completed;
+                        completed << std::fixed << std::setprecision(1)
+                            << "IMPORT MODEL // READY // MATERIALS "
+                            << state->materialsSeconds << "s // PACKAGE "
+                            << state->packageSeconds << "s // PLACEMENT WARMUP "
+                            << state->warmupSeconds << "s // "
+                            << fs::u8path(state->imported.assetProjectRelativePath)
+                                .filename().generic_u8string();
+                        if (!state->warmupSucceeded &&
+                            state->warmupSeconds > 0.0)
+                        {
+                            completed << " // WARMUP WARNING";
+                        }
+                        studioChrome_.SetStatusText(completed.str());
                     });
             });
     }
