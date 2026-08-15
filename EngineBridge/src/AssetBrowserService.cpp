@@ -258,6 +258,18 @@ namespace renegade::bridge
                 {
                     continue;
                 }
+                constexpr const char* ManagedProjectionSuffix = ".rasset.json";
+                if (!directory &&
+                    lowerFilename.size() >=
+                        std::char_traits<char>::length(ManagedProjectionSuffix) &&
+                    lowerFilename.compare(
+                        lowerFilename.size() -
+                            std::char_traits<char>::length(ManagedProjectionSuffix),
+                        std::char_traits<char>::length(ManagedProjectionSuffix),
+                        ManagedProjectionSuffix) == 0)
+                {
+                    continue;
+                }
 
                 AssetEntry entry;
                 entry.name = filename;

@@ -365,6 +365,9 @@ namespace renegade::studio
         void SetProjectHubVisible(bool visible);
         void SyncGizmoSelection();
         void SyncSelectionOutline();
+        void SaveSceneAfterTransientCleanup(
+            const std::string& scenePath,
+            std::function<void(bool)> completion = {});
         void SaveScene();
         void SaveSceneAs(
             std::function<void(bool)> completion = {});

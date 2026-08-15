@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <cfloat>
 #include <filesystem>
 #include <iomanip>
@@ -174,6 +175,128 @@ namespace
     constexpr float CreatorImportStageHeight = 2048.0f;
     constexpr float CreatorImportPreviewFov = 32.0f * XM_PI / 180.0f;
 
+
+    struct CreatorThumbnailWeatherSnapshot
+    {
+        bool valid = false;
+        std::uint32_t flags = 0;
+        XMFLOAT3 horizon = {};
+        XMFLOAT3 zenith = {};
+        float skyExposure = 1.0f;
+        float fogDensity = 0.0f;
+        float stars = 0.0f;
+        std::string skyMapName;
+        wi::Resource skyMap;
+    };
+
+    CreatorThumbnailWeatherSnapshot CaptureThumbnailWeather(
+        const wi::scene::WeatherComponent& weather)
+    {
+        CreatorThumbnailWeatherSnapshot snapshot;
+        snapshot.valid = true;
+        snapshot.flags = weather._flags;
+        snapshot.horizon = weather.horizon;
+        snapshot.zenith = weather.zenith;
+        snapshot.skyExposure = weather.skyExposure;
+        snapshot.fogDensity = weather.fogDensity;
+        snapshot.stars = weather.stars;
+        snapshot.skyMapName = weather.skyMapName;
+        snapshot.skyMap = weather.skyMap;
+        return snapshot;
+    }
+
+    void ApplyNeutralThumbnailWeather(
+        wi::scene::WeatherComponent& weather)
+    {
+        weather.SetRealisticSky(false);
+        weather.SetVolumetricClouds(false);
+        weather.SetHeightFog(false);
+        weather.SetOverrideFogColor(false);
+        weather.horizon = XMFLOAT3(0.065f, 0.07f, 0.075f);
+        weather.zenith = XMFLOAT3(0.065f, 0.07f, 0.075f);
+        weather.skyExposure = 1.0f;
+        weather.fogDensity = 0.0f;
+        weather.stars = 0.0f;
+        weather.skyMapName.clear();
+        weather.skyMap = {};
+    }
+
+    void RestoreThumbnailWeather(
+        wi::scene::WeatherComponent& weather,
+        const CreatorThumbnailWeatherSnapshot& snapshot)
+    {
+        if (!snapshot.valid)
+            return;
+        weather._flags = snapshot.flags;
+        weather.horizon = snapshot.horizon;
+        weather.zenith = snapshot.zenith;
+        weather.skyExposure = snapshot.skyExposure;
+        weather.fogDensity = snapshot.fogDensity;
+        weather.stars = snapshot.stars;
+        weather.skyMapName = snapshot.skyMapName;
+        weather.skyMap = snapshot.skyMap;
+    }
+
+    bool SaveCreatorSquareThumbnail(
+        const wi::graphics::Texture& texture,
+        const std::string& path)
+    {
+        if (!texture.IsValid())
+            return false;
+
+        auto desc = texture.GetDesc();
+        if (desc.width == 0 || desc.height == 0 ||
+            desc.depth != 1 || desc.array_size != 1 ||
+            wi::graphics::GetFormatPlaneCount(desc.format) != 1 ||
+            wi::graphics::GetFormatBlockSize(desc.format) != 1)
+        {
+            return false;
+        }
+
+        const std::uint32_t stride =
+            wi::graphics::GetFormatStride(desc.format);
+        if (stride == 0)
+            return false;
+
+        wi::vector<std::uint8_t> pixels;
+        if (!wi::helper::saveTextureToMemory(texture, pixels))
+            return false;
+
+        const std::uint32_t side = std::min(desc.width, desc.height);
+        const std::uint32_t offsetX = (desc.width - side) / 2;
+        const std::uint32_t offsetY = (desc.height - side) / 2;
+        const std::size_t sourceRow =
+            static_cast<std::size_t>(desc.width) * stride;
+        const std::size_t squareRow =
+            static_cast<std::size_t>(side) * stride;
+        const std::size_t required =
+            sourceRow * static_cast<std::size_t>(desc.height);
+        if (pixels.size() < required)
+            return false;
+
+        wi::vector<std::uint8_t> square(
+            squareRow * static_cast<std::size_t>(side));
+        for (std::uint32_t row = 0; row < side; ++row)
+        {
+            const std::uint8_t* source =
+                pixels.data() +
+                (static_cast<std::size_t>(row + offsetY) * sourceRow) +
+                (static_cast<std::size_t>(offsetX) * stride);
+            std::uint8_t* destination =
+                square.data() +
+                static_cast<std::size_t>(row) * squareRow;
+            std::memcpy(destination, source, squareRow);
+        }
+
+        desc.width = side;
+        desc.height = side;
+        desc.depth = 1;
+        desc.array_size = 1;
+        desc.mip_levels = 1;
+        return wi::helper::saveTextureToFile(square, desc, path);
+    }
+
+    void ApplyCreatorImportPreviewLighting();
     struct CreatorModelImportWorkspaceState
     {
         bool active = false;
@@ -211,6 +334,13 @@ namespace
         bool mannequinVisible = true;
         std::string thumbnailCapturePath;
         bool thumbnailCapturePending = false;
+        bool thumbnailPresentationOverridden = false;
+        float thumbnailRestoreLightIntensity = 4.0f;
+        float thumbnailRestoreLightAzimuth = -35.0f;
+        float thumbnailRestoreLightElevation = 35.0f;
+        float thumbnailRestoreAmbientBrightness = 0.35f;
+        CreatorThumbnailWeatherSnapshot thumbnailSceneWeatherBefore;
+        CreatorThumbnailWeatherSnapshot thumbnailEntityWeatherBefore;
         renegade::bridge::PreparedModelImport preparedForCommit;
         std::size_t workspaceSection = 0;
     };
@@ -240,6 +370,77 @@ namespace
     }
 
     CreatorModelImportWorkspaceState creatorModelImporter;
+
+
+    void BeginCreatorThumbnailPresentation()
+    {
+        auto* session = renegade::bridge::StudioSession::Current();
+        if (session == nullptr || !creatorModelImporter.active)
+            return;
+
+        creatorModelImporter.thumbnailRestoreLightIntensity =
+            creatorModelImporter.lightIntensity;
+        creatorModelImporter.thumbnailRestoreLightAzimuth =
+            creatorModelImporter.lightAzimuth;
+        creatorModelImporter.thumbnailRestoreLightElevation =
+            creatorModelImporter.lightElevation;
+        creatorModelImporter.thumbnailRestoreAmbientBrightness =
+            creatorModelImporter.ambientBrightness;
+
+        auto& scene = session->Scenes().GetScene();
+        creatorModelImporter.thumbnailSceneWeatherBefore =
+            CaptureThumbnailWeather(scene.weather);
+        creatorModelImporter.thumbnailEntityWeatherBefore = {};
+        ApplyNeutralThumbnailWeather(scene.weather);
+        if (auto* weather =
+                scene.weathers.GetComponent(creatorModelImporter.weatherEntity))
+        {
+            creatorModelImporter.thumbnailEntityWeatherBefore =
+                CaptureThumbnailWeather(*weather);
+            ApplyNeutralThumbnailWeather(*weather);
+        }
+
+        creatorModelImporter.lightIntensity = 4.0f;
+        creatorModelImporter.lightAzimuth = -35.0f;
+        creatorModelImporter.lightElevation = 35.0f;
+        creatorModelImporter.ambientBrightness = 0.35f;
+        creatorModelImporter.thumbnailPresentationOverridden = true;
+        ApplyCreatorImportPreviewLighting();
+    }
+
+    void RestoreCreatorThumbnailPresentation()
+    {
+        if (!creatorModelImporter.thumbnailPresentationOverridden)
+            return;
+
+        auto* session = renegade::bridge::StudioSession::Current();
+        if (session != nullptr)
+        {
+            auto& scene = session->Scenes().GetScene();
+            RestoreThumbnailWeather(
+                scene.weather,
+                creatorModelImporter.thumbnailSceneWeatherBefore);
+            if (auto* weather =
+                    scene.weathers.GetComponent(
+                        creatorModelImporter.weatherEntity))
+            {
+                RestoreThumbnailWeather(
+                    *weather,
+                    creatorModelImporter.thumbnailEntityWeatherBefore);
+            }
+        }
+
+        creatorModelImporter.lightIntensity =
+            creatorModelImporter.thumbnailRestoreLightIntensity;
+        creatorModelImporter.lightAzimuth =
+            creatorModelImporter.thumbnailRestoreLightAzimuth;
+        creatorModelImporter.lightElevation =
+            creatorModelImporter.thumbnailRestoreLightElevation;
+        creatorModelImporter.ambientBrightness =
+            creatorModelImporter.thumbnailRestoreAmbientBrightness;
+        creatorModelImporter.thumbnailPresentationOverridden = false;
+        ApplyCreatorImportPreviewLighting();
+    }
     renegade::studio::RenegadeComboBox creatorImportMaterialCombo;
     renegade::studio::RenegadeComboBox creatorImportAnimationCombo;
     wi::gui::Label creatorImportMaterialLabel;
@@ -3641,15 +3842,16 @@ namespace renegade::studio
         if (creatorModelImporter.thumbnailCapturePending &&
             !creatorModelImporter.thumbnailCapturePath.empty())
         {
-            const bool captured = wi::helper::saveTextureToFile(
+            const bool captured = SaveCreatorSquareThumbnail(
                 GetRenderResult3D(),
                 creatorModelImporter.thumbnailCapturePath);
             creatorModelImporter.thumbnailCapturePending = false;
+            RestoreCreatorThumbnailPresentation();
             if (captured)
             {
                 creatorImportThumbnailCapture.SetText("RETAKE THUMBNAIL");
                 creatorImportThumbnailStatus.SetText(
-                    "THUMBNAIL CAPTURED // CLEAN ASSET FRAME");
+                    "THUMBNAIL CAPTURED // SQUARE AUTO-FRAMED ASSET");
                 importScaleApplyButton_.SetEnabled(true);
             }
             else
@@ -5487,6 +5689,7 @@ namespace renegade::studio
         creatorAssetPlacementId_.clear();
         creatorAssetPlacementLabel_.clear();
         creatorAssetDropPending_ = false;
+        detail::ClearCreatorAssetDragPreview();
         wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
         studioChrome_.SetStatusText("PLACE ASSET // CANCELLED");
     }
@@ -5497,13 +5700,6 @@ namespace renegade::studio
         if (!creatorAssetPlacementActive_ || session_ == nullptr)
             return false;
 
-        XMFLOAT4 placementPointer = pointer;
-        if (creatorAssetDropPending_)
-        {
-            placementPointer.x = creatorAssetDropPoint_.x;
-            placementPointer.y = creatorAssetDropPoint_.y;
-        }
-
         if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
             wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
         {
@@ -5511,24 +5707,73 @@ namespace renegade::studio
             return true;
         }
 
-        if (flyCameraActive_ ||
-            (!creatorAssetDropPending_ && GetGUI().HasFocus()) ||
-            !IsPointerOverViewport(placementPointer))
+        if (creatorAssetDropPending_)
         {
-            wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
-            if (creatorAssetDropPending_)
+            bridge::PreparedReusableModelPlacement prepared;
+            XMFLOAT3 position = {};
+            float scale = 1.0f;
+            if (!detail::ConsumeCreatorAssetDragPreview(
+                    creatorAssetPlacementId_,
+                    prepared,
+                    position,
+                    scale))
             {
                 CancelCreatorAssetPlacement();
                 studioChrome_.SetStatusText(
-                    "PLACE ASSET // DROP INSIDE THE SCENE VIEWPORT");
+                    "PLACE ASSET // DROP CANCELLED // PREVIEW NOT READY");
+                return true;
             }
+            creatorAssetDropPending_ = false;
+
+            auto& scene = session_->Scenes().GetScene();
+            const bridge::StableId assetId = creatorAssetPlacementId_;
+            auto command =
+                std::make_unique<bridge::PlaceReusableModelCommand>(
+                    scene,
+                    prepared.ReleaseScene(),
+                    assetId,
+                    position,
+                    scale);
+            auto* placed = command.get();
+            if (!session_->Commands().Execute(std::move(command)))
+            {
+                creatorAssetPlacementActive_ = false;
+                creatorAssetPlacementId_.clear();
+                creatorAssetPlacementLabel_.clear();
+                wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+                studioChrome_.SetStatusText(
+                    "PLACE ASSET // DROP COMMIT FAILED");
+                return true;
+            }
+
+            const std::string label = creatorAssetPlacementLabel_;
+            creatorAssetPlacementActive_ = false;
+            creatorAssetPlacementId_.clear();
+            creatorAssetPlacementLabel_.clear();
+            creatorAssetDropPending_ = false;
+            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+            session_->Selection().Select(placed->PlacedEntity());
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+            studioChrome_.SetStatusText(
+                "PLACE ASSET // " + label +
+                " // EXACT CURSOR PREVIEW COMMITTED // STABLE RASSET INSTANCE");
+            return true;
+        }
+
+        if (flyCameraActive_ ||
+            GetGUI().HasFocus() ||
+            !IsPointerOverViewport(pointer))
+        {
+            wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
             return true;
         }
 
         auto& scene = session_->Scenes().GetScene();
         const auto ray = wi::renderer::GetPickRay(
-            static_cast<long>(placementPointer.x),
-            static_cast<long>(placementPointer.y),
+            static_cast<long>(pointer.x),
+            static_cast<long>(pointer.y),
             *this,
             *camera);
         const auto picked = wi::scene::Pick(
@@ -5553,12 +5798,6 @@ namespace renegade::studio
         if (!hasSurface)
         {
             wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
-            if (creatorAssetDropPending_)
-            {
-                CancelCreatorAssetPlacement();
-                studioChrome_.SetStatusText(
-                    "PLACE ASSET // NO SURFACE UNDER DROP POINT");
-            }
             return true;
         }
 
@@ -5567,10 +5806,8 @@ namespace renegade::studio
             wi::primitive::Sphere(surfacePosition, 0.16f),
             XMFLOAT4(1.0f, 0.36f, 0.06f, 0.9f),
             false);
-        if (!creatorAssetDropPending_ &&
-            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
             return true;
-        creatorAssetDropPending_ = false;
 
         const auto& project = session_->Projects().CurrentProject();
         bridge::CreatorAssetWorkflowService workflow;
@@ -5587,9 +5824,6 @@ namespace renegade::studio
         }
 
         const wi::scene::Scene* preparedScene = prepared.PeekScene();
-        // New creator assets already contain the scale/rotation approved in
-        // the importer. Legacy .rasset products without that authored root
-        // retain the accepted automatic-normalisation placement behaviour.
         const float scale = bridge::HasCreatorAuthoredTransform(*preparedScene)
             ? 1.0f
             : bridge::ImportService::ResolveScaleFactor(
@@ -5600,9 +5834,6 @@ namespace renegade::studio
         XMFLOAT3 position = surfacePosition;
         if (bounds.valid)
         {
-            // PlaceReusableModelCommand translates the prepared root to the
-            // requested point. Offset its local minimum upward so the actual
-            // bottom of the scaled asset rests on the picked surface.
             position.y = bridge::ImportService::ResolveGroundedPlacementY(
                 surfacePosition.y,
                 bounds,
@@ -8134,6 +8365,9 @@ namespace renegade::studio
             !session_->Projects().HasProject())
             return;
 
+        BeginCreatorThumbnailPresentation();
+        FrameCreatorImportPreviewCamera();
+
         const fs::path directory =
             fs::u8path(session_->Projects().CurrentProject().rootPath) /
             "Intermediate" / "Imports";
@@ -8141,6 +8375,7 @@ namespace renegade::studio
         fs::create_directories(directory, ec);
         if (ec)
         {
+            RestoreCreatorThumbnailPresentation();
             creatorImportThumbnailStatus.SetText(
                 "THUMBNAIL FAILED // CANNOT CREATE IMPORT CACHE");
             return;
@@ -8153,7 +8388,7 @@ namespace renegade::studio
             capturePath.generic_u8string();
         creatorModelImporter.thumbnailCapturePending = true;
         creatorImportThumbnailStatus.SetText(
-            "CAPTURING CLEAN ASSET FRAME...");
+            "CAPTURING SQUARE AUTO-FRAMED ASSET...");
         importScaleApplyButton_.SetEnabled(false);
     }
 
@@ -9273,12 +9508,44 @@ wi::eventhandler::Subscribe_Once(
         object->SetUserStencilRef(SelectionStencilReference);
     }
 
-    void StudioRenderPath::SaveScene()
+    void StudioRenderPath::SaveSceneAfterTransientCleanup(
+        const std::string& scenePath,
+        std::function<void(bool)> completion)
     {
         if (session_ == nullptr)
         {
+            if (completion)
+                completion(false);
             return;
         }
+
+        if (detail::CreatorAssetDragPreviewBlocksSave())
+        {
+            detail::ClearCreatorAssetDragPreview();
+            studioChrome_.SetStatusText(
+                "SAVE // WAITING FOR TRANSIENT ASSET PREVIEW CLEANUP");
+            wi::eventhandler::Subscribe_Once(
+                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, scenePath, completion](std::uint64_t)
+                {
+                    SaveSceneAfterTransientCleanup(scenePath, completion);
+                });
+            return;
+        }
+
+        ClearSelectionOutline();
+        const bool saved = session_->SaveScene(scenePath);
+        SyncSelectionOutline();
+        RefreshStatus();
+        RefreshInspector();
+        if (completion)
+            completion(saved);
+    }
+
+    void StudioRenderPath::SaveScene()
+    {
+        if (session_ == nullptr)
+            return;
 
         const std::string scenePath = session_->Scenes().CurrentPath();
         if (scenePath.empty())
@@ -9288,11 +9555,7 @@ wi::eventhandler::Subscribe_Once(
         }
 
         StopSunPreview(true);
-        ClearSelectionOutline();
-        session_->SaveScene(scenePath);
-        SyncSelectionOutline();
-        RefreshStatus();
-        RefreshInspector();
+        SaveSceneAfterTransientCleanup(scenePath);
     }
 
     void StudioRenderPath::SaveSceneAs(
@@ -9300,6 +9563,8 @@ wi::eventhandler::Subscribe_Once(
     {
         if (session_ == nullptr)
         {
+            if (completion)
+                completion(false);
             return;
         }
 
@@ -9317,25 +9582,17 @@ wi::eventhandler::Subscribe_Once(
                     wi::helper::ForceExtension(selectedPath, "wiscene");
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, scenePath, completion](uint64_t)
+                    [this, scenePath, completion](std::uint64_t)
                     {
-                        ClearSelectionOutline();
-                        const bool saved = session_->SaveScene(scenePath);
-                        SyncSelectionOutline();
-                        RefreshStatus();
-                        RefreshInspector();
-                        if (completion)
-                        {
-                            completion(saved);
-                        }
+                        SaveSceneAfterTransientCleanup(
+                            scenePath,
+                            completion);
                     });
             },
             [completion]()
             {
                 if (completion)
-                {
                     completion(false);
-                }
             });
     }
 

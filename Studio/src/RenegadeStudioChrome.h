@@ -329,6 +329,12 @@ namespace renegade::studio
             const wi::Canvas& canvas,
             const wi::scene::CameraComponent& camera);
         void ClearCreatorAssetDragPreview();
+        bool ConsumeCreatorAssetDragPreview(
+            const bridge::StableId& assetId,
+            bridge::PreparedReusableModelPlacement& prepared,
+            XMFLOAT3& position,
+            float& scale);
+        [[nodiscard]] bool CreatorAssetDragPreviewBlocksSave() noexcept;
     }
 
     // LP07 Gate 5 overlays the creator Asset Browser lifecycle on Renegade's

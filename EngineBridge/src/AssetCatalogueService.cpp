@@ -255,9 +255,18 @@ namespace renegade::bridge
 
         bool IsInternalMetadataPath(const std::string& projectRelativePath)
         {
+            const std::string lowerPath = LowerAscii(projectRelativePath);
             const std::string extension = LowerAscii(
                 fs::u8path(projectRelativePath).extension().u8string());
-            return extension == ".rmeta";
+            constexpr const char* ManagedProjectionSuffix = ".rasset.json";
+            return extension == ".rmeta" ||
+                (lowerPath.size() >=
+                    std::char_traits<char>::length(ManagedProjectionSuffix) &&
+                 lowerPath.compare(
+                    lowerPath.size() -
+                        std::char_traits<char>::length(ManagedProjectionSuffix),
+                    std::char_traits<char>::length(ManagedProjectionSuffix),
+                    ManagedProjectionSuffix) == 0);
         }
 
         std::string SourceFormatForPath(const std::string& projectRelativePath)

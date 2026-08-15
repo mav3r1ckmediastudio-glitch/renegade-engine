@@ -1,6 +1,7 @@
 #include "RenegadeStudioChrome.h"
 
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
@@ -18,7 +19,7 @@ namespace
 {
     namespace fs = std::filesystem;
 
-    constexpr std::uint32_t DragPreviewLayer = 1u << 30;
+    constexpr std::uint32_t DragPreviewLayer = 1u << 31;
     constexpr const char* DragPreviewWrapperName =
         "Reusable Asset Drag Preview";
 
@@ -68,6 +69,27 @@ namespace
         return name != nullptr && name->name == DragPreviewWrapperName;
     }
 
+
+    void SetPreviewObjectLayer(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity wrapper,
+        const std::uint32_t layerMask)
+    {
+        for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)
+        {
+            const wi::ecs::Entity entity = scene.objects.GetEntity(index);
+            if (entity != wrapper && !scene.Entity_IsDescendant(entity, wrapper))
+                continue;
+            auto* layer = scene.layers.GetComponent(entity);
+            if (layer == nullptr)
+                layer = &scene.layers.Create(entity);
+            layer->layerMask = layerMask;
+            layer->propagationMask = layerMask;
+            if (index < scene.aabb_objects.size())
+                scene.aabb_objects[index].layerMask = layerMask;
+        }
+    }
+
     void HideAndDeferPreviewRemoval(
         wi::scene::Scene* scene,
         const wi::ecs::Entity wrapper,
@@ -82,11 +104,7 @@ namespace
             transform->SetDirty();
             transform->UpdateTransform();
         }
-        for (const wi::ecs::Entity entity : createdEntities)
-        {
-            if (auto* layer = scene->layers.GetComponent(entity))
-                layer->layerMask = 0u;
-        }
+        SetPreviewObjectLayer(*scene, wrapper, 0u);
 
         auto* session = renegade::bridge::StudioSession::Current();
         ++pendingPreviewCleanupCount;
@@ -111,23 +129,12 @@ namespace
                 }
 
                 scene->Entity_Remove(wrapper, true);
+                wi::unordered_set<wi::ecs::Entity> remaining;
+                scene->FindAllEntities(remaining);
                 for (const wi::ecs::Entity entity : createdEntities)
                 {
-                    if (entity == wrapper ||
-                        scene->hierarchy.Contains(entity) ||
-                        !EntityExists(*scene, entity))
-                    {
-                        continue;
-                    }
-
-                    scene->names.Remove(entity);
-                    scene->layers.Remove(entity);
-                    scene->transforms.Remove(entity);
-                    scene->objects.Remove(entity);
-                    scene->meshes.Remove(entity);
-                    scene->materials.Remove(entity);
-                    scene->armatures.Remove(entity);
-                    scene->animations.Remove(entity);
+                    if (remaining.count(entity) != 0)
+                        scene->Entity_Remove(entity, false);
                 }
                 finish();
             });
@@ -194,22 +201,26 @@ namespace
         return clone;
     }
 
-    wi::ecs::Entity FindRootEntity(
+    std::vector<wi::ecs::Entity> FindRootEntities(
         const wi::scene::Scene& scene,
         const std::vector<wi::ecs::Entity>& created)
     {
+        std::vector<wi::ecs::Entity> roots;
+        const std::unordered_set<wi::ecs::Entity> createdSet(
+            created.begin(), created.end());
         for (const wi::ecs::Entity entity : created)
         {
             if (!scene.transforms.Contains(entity))
                 continue;
             const auto* hierarchy = scene.hierarchy.GetComponent(entity);
             if (hierarchy == nullptr ||
-                hierarchy->parentID == wi::ecs::INVALID_ENTITY)
+                hierarchy->parentID == wi::ecs::INVALID_ENTITY ||
+                createdSet.find(hierarchy->parentID) == createdSet.end())
             {
-                return entity;
+                roots.push_back(entity);
             }
         }
-        return wi::ecs::INVALID_ENTITY;
+        return roots;
     }
 
     bool PointerInsideViewport(
@@ -217,8 +228,8 @@ namespace
         const XMFLOAT4& pointer) noexcept
     {
         const XMFLOAT4 bounds = chrome.ViewportBounds();
-        return pointer.x >= bounds.x && pointer.x <= bounds.x + bounds.z &&
-            pointer.y >= bounds.y && pointer.y <= bounds.y + bounds.w;
+        return pointer.x >= bounds.x && pointer.x < bounds.z &&
+            pointer.y >= bounds.y && pointer.y < bounds.w;
     }
 
     bool ResolveSurface(
@@ -278,6 +289,8 @@ namespace
                     preview.scale);
         }
         transform->translation_local = preview.position;
+        transform->scale_local = XMFLOAT3(
+            preview.scale, preview.scale, preview.scale);
         transform->SetDirty();
         transform->UpdateTransform();
         return true;
@@ -334,37 +347,24 @@ namespace
         const auto before = CollectEntities(scene);
         scene.Merge(*ghost);
         auto created = CollectNewEntities(scene, before);
-        const wi::ecs::Entity root = FindRootEntity(scene, created);
-        if (root == wi::ecs::INVALID_ENTITY)
-        {
-            for (const wi::ecs::Entity entity : created)
-            {
-                if (!scene.hierarchy.Contains(entity))
-                    scene.Entity_Remove(entity, true);
-            }
-            error = "The reusable asset cursor preview has no transform root.";
-            return false;
-        }
-
+        const auto roots = FindRootEntities(scene, created);
         const wi::ecs::Entity wrapper =
             scene.Entity_CreateTransform(DragPreviewWrapperName);
+        created.push_back(wrapper);
         auto* wrapperTransform = scene.transforms.GetComponent(wrapper);
-        if (wrapperTransform == nullptr)
+        if (wrapperTransform == nullptr || roots.empty())
         {
-            scene.Entity_Remove(root, true);
-            error = "The reusable asset cursor preview root could not be created.";
+            HideAndDeferPreviewRemoval(
+                &scene, wrapper, std::move(created));
+            error = roots.empty()
+                ? "The reusable asset cursor preview has no transform root."
+                : "The reusable asset cursor preview root could not be created.";
             return false;
         }
 
-        scene.Component_Attach(root, wrapper, true);
-        created.push_back(wrapper);
-        for (const wi::ecs::Entity entity : created)
-        {
-            if (!scene.layers.Contains(entity))
-                scene.layers.Create(entity);
-            if (auto* layer = scene.layers.GetComponent(entity))
-                layer->layerMask = DragPreviewLayer;
-        }
+        for (const wi::ecs::Entity root : roots)
+            scene.Component_Attach(root, wrapper, true);
+        SetPreviewObjectLayer(scene, wrapper, DragPreviewLayer);
 
         preview = {};
         preview.assetId = assetId;
@@ -571,7 +571,7 @@ namespace renegade::studio::detail
         {
             ClearCreatorAssetDragPreview();
             std::string error;
-            if (!CreatePreview(session, assetId, normalized, surface, error))
+            if (!CreatePreview(*session, assetId, normalized, surface, error))
             {
                 chrome->SetStatusText(
                     "ASSET DRAG // PREVIEW FAILED // " + error);

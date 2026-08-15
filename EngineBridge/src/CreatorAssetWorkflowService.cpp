@@ -94,6 +94,22 @@ namespace renegade::bridge
             return value;
         }
 
+        bool IsCreatorManagedSidecar(const std::string& relativePath)
+        {
+            const std::string name = LowerAscii(
+                fs::u8path(relativePath).filename().u8string());
+            const auto hasSuffix = [&name](const char* suffix)
+            {
+                const std::size_t length = std::char_traits<char>::length(suffix);
+                return name.size() >= length &&
+                    name.compare(name.size() - length, length, suffix) == 0;
+            };
+            return hasSuffix(".rasset.json") ||
+                hasSuffix(".thumbnail.png") ||
+                hasSuffix(".rmeta") ||
+                hasSuffix(".meta");
+        }
+
         bool ResolveCreatorDestination(
             const fs::path& root,
             const std::string& destinationFolder,
@@ -299,8 +315,12 @@ namespace renegade::bridge
                         continue;
                     const std::string relative = canonical.lexically_relative(root)
                         .lexically_normal().generic_u8string();
-                    if (relative.empty() || activePaths.find(relative) != activePaths.end())
+                    if (relative.empty() ||
+                        activePaths.find(relative) != activePaths.end() ||
+                        IsCreatorManagedSidecar(relative))
+                    {
                         continue;
+                    }
 
                     RefreshCandidate candidate;
                     candidate.projectRelativePath = relative;

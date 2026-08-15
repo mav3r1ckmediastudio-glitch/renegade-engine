@@ -68,7 +68,9 @@ int main()
     Touch(root / "Content/Models/Props/Crate.wiscene");
     Touch(root / "Content/Models/Props/Crate.thumbnail.png");
     Touch(root / "Content/Models/Props/Hero.rasset");
+    Touch(root / "Content/Models/Props/Hero.rasset.json");
     Touch(root / "Content/Models/Props/Hero.thumbnail.png");
+    Touch(root / "Content/Models/Props/Notes.json");
     Touch(root / "Content/Materials/Water/RiverWater.ini");
     Touch(root / "Content/Audio/SFX/impact.wav");
     Touch(root / "Content/Scripts/gameplay.lua");
@@ -122,6 +124,14 @@ int main()
     if (FindAsset(crateFolder, "Hero.thumbnail.png") != nullptr)
     {
         return Fail(root, "governed asset thumbnail sidecar leaked into asset cards");
+    }
+    if (FindAsset(crateFolder, "Hero.rasset.json") != nullptr)
+    {
+        return Fail(root, "managed rasset projection leaked into asset cards");
+    }
+    if (FindAsset(crateFolder, "Notes.json") == nullptr)
+    {
+        return Fail(root, "asset browser broadly hid arbitrary JSON");
     }
 
     const auto unsafe = browser.Scan(
