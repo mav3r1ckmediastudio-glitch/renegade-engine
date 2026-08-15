@@ -86,6 +86,78 @@ namespace
         return result;
     }
 
+    bool ResolveHierarchyWorldMatrix(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        XMMATRIX& world,
+        wi::unordered_set<wi::ecs::Entity>& visiting) noexcept
+    {
+        const auto* transform = scene.transforms.GetComponent(entity);
+        world = transform != nullptr
+            ? transform->GetLocalMatrix()
+            : XMMatrixIdentity();
+
+        const auto* hierarchy = scene.hierarchy.GetComponent(entity);
+        if (hierarchy == nullptr ||
+            hierarchy->parentID == wi::ecs::INVALID_ENTITY)
+        {
+            return true;
+        }
+        if (!visiting.insert(entity).second)
+            return false;
+
+        XMMATRIX parentWorld;
+        if (!ResolveHierarchyWorldMatrix(
+                scene, hierarchy->parentID, parentWorld, visiting))
+        {
+            visiting.erase(entity);
+            return false;
+        }
+        visiting.erase(entity);
+        world = world * parentWorld;
+        return true;
+    }
+
+    bool RebuildHierarchyAwareBounds(wi::scene::Scene& scene) noexcept
+    {
+        if (scene.objects.GetCount() == 0)
+            return false;
+
+        std::vector<wi::primitive::AABB> bounds;
+        bounds.reserve(scene.objects.GetCount());
+        for (std::size_t objectIndex = 0;
+            objectIndex < scene.objects.GetCount(); ++objectIndex)
+        {
+            const wi::ecs::Entity objectEntity =
+                scene.objects.GetEntity(objectIndex);
+            const auto& object = scene.objects[objectIndex];
+            const auto* mesh = scene.meshes.GetComponent(object.meshID);
+            if (mesh == nullptr || mesh->vertex_positions.empty())
+                return false;
+
+            wi::unordered_set<wi::ecs::Entity> visiting;
+            XMMATRIX world;
+            if (!ResolveHierarchyWorldMatrix(
+                    scene, objectEntity, world, visiting))
+            {
+                return false;
+            }
+
+            wi::primitive::AABB objectBounds;
+            for (const auto& position : mesh->vertex_positions)
+            {
+                objectBounds.AddPoint(
+                    XMVector3TransformCoord(XMLoadFloat3(&position), world));
+            }
+            if (!objectBounds.IsValid())
+                return false;
+            bounds.push_back(objectBounds);
+        }
+
+        scene.aabb_objects = std::move(bounds);
+        return true;
+    }
+
     float ComputeAutomaticScaleFactor(
         const wi::scene::Scene& scene) noexcept
     {
@@ -639,6 +711,12 @@ namespace renegade::bridge
         const wi::scene::Scene& preparedScene) noexcept
     {
         return ComputeModelBounds(preparedScene);
+    }
+
+    bool ImportService::RebuildHierarchyAwareModelBounds(
+        wi::scene::Scene& preparedScene) noexcept
+    {
+        return RebuildHierarchyAwareBounds(preparedScene);
     }
 
     float ImportService::ResolveScaleFactorForTargetHeight(

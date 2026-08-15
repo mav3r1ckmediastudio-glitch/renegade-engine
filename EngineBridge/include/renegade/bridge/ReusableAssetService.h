@@ -253,7 +253,8 @@ namespace renegade::bridge
         [[nodiscard]] ReusableModelImportResult ImportModelAsset(
             const ReusableModelImportRequest& request,
             ReusableModelImportOptions options = {},
-            PreparedModelImport preparedModel = {}) const;
+            PreparedModelImport preparedModel = {},
+            PreparedReusableModelPlacement* preparedPlacement = nullptr) const;
 
         [[nodiscard]] ReusableModelReimportResult ReimportModelAsset(
             const ReusableModelReimportRequest& request,

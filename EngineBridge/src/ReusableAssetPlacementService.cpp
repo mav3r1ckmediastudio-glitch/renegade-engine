@@ -135,81 +135,6 @@ namespace renegade::bridge
             return true;
         }
 
-        bool ResolveWorldMatrix(
-            const wi::scene::Scene& scene,
-            const wi::ecs::Entity entity,
-            XMMATRIX& world,
-            std::unordered_set<wi::ecs::Entity>& visiting)
-        {
-            const auto* transform = scene.transforms.GetComponent(entity);
-            world = transform != nullptr
-                ? transform->GetLocalMatrix()
-                : XMMatrixIdentity();
-
-            const auto* hierarchy = scene.hierarchy.GetComponent(entity);
-            if (hierarchy == nullptr ||
-                hierarchy->parentID == wi::ecs::INVALID_ENTITY)
-            {
-                return true;
-            }
-            if (!visiting.insert(entity).second)
-                return false;
-
-            XMMATRIX parentWorld;
-            if (!ResolveWorldMatrix(
-                    scene, hierarchy->parentID, parentWorld, visiting))
-            {
-                visiting.erase(entity);
-                return false;
-            }
-            visiting.erase(entity);
-            world = world * parentWorld;
-            return true;
-        }
-
-        // Deserialized WISCENE payloads have serialized local transforms and
-        // hierarchy, but their renderer-owned aabb_objects stream has not yet
-        // been rebuilt. Raw-mesh fallback bounds therefore ignore the creator
-        // authored scale/rotation root and can lift a dropped model by metres.
-        // Build the object bounds directly from serialized local transforms so
-        // placement grounding has the same geometry space the renderer will
-        // display, without calling Scene::Update() in this headless-capable path.
-        bool PopulateHierarchyAwareObjectBounds(wi::scene::Scene& scene)
-        {
-            if (scene.objects.GetCount() == 0)
-                return false;
-
-            std::vector<wi::primitive::AABB> bounds;
-            bounds.reserve(scene.objects.GetCount());
-            for (std::size_t objectIndex = 0;
-                objectIndex < scene.objects.GetCount(); ++objectIndex)
-            {
-                const wi::ecs::Entity objectEntity =
-                    scene.objects.GetEntity(objectIndex);
-                const auto& object = scene.objects[objectIndex];
-                const auto* mesh = scene.meshes.GetComponent(object.meshID);
-                if (mesh == nullptr || mesh->vertex_positions.empty())
-                    return false;
-
-                std::unordered_set<wi::ecs::Entity> visiting;
-                XMMATRIX world;
-                if (!ResolveWorldMatrix(scene, objectEntity, world, visiting))
-                    return false;
-
-                wi::primitive::AABB objectBounds;
-                for (const auto& position : mesh->vertex_positions)
-                {
-                    objectBounds.AddPoint(
-                        XMVector3TransformCoord(XMLoadFloat3(&position), world));
-                }
-                if (!objectBounds.IsValid())
-                    return false;
-                bounds.push_back(objectBounds);
-            }
-
-            scene.aabb_objects = std::move(bounds);
-            return true;
-        }
     }
 
     PreparedReusableModelPlacement ReusableAssetService::PrepareModelAssetPlacement(
@@ -416,7 +341,7 @@ namespace renegade::bridge
         // does not expose ordinary mesh/object evidence, the normal validation
         // below will reject it; otherwise a failure here is a corrupt hierarchy
         // and must not silently fall back to unscaled raw mesh coordinates.
-        if (!PopulateHierarchyAwareObjectBounds(*prepared.scene_))
+        if (!ImportService::RebuildHierarchyAwareModelBounds(*prepared.scene_))
         {
             result.error =
                 "Reusable asset placement could not derive hierarchy-aware model bounds.";

@@ -8432,8 +8432,6 @@ namespace renegade::studio
             bridge::PreparedReusableModelPlacement warmedPlacement;
             double materialsSeconds = 0.0;
             double packageSeconds = 0.0;
-            double warmupSeconds = 0.0;
-            bool warmupSucceeded = false;
         };
 
         auto state = std::make_shared<GovernedCommitState>();
@@ -8555,32 +8553,10 @@ namespace renegade::studio
                         state->assetName,
                 state->destinationFolder,
                 std::move(state->prepared),
-                state->thumbnailCapturePath);
+                state->thumbnailCapturePath,
+                &state->warmedPlacement);
                     state->packageSeconds = std::chrono::duration<double>(
                         std::chrono::steady_clock::now() - packageStarted).count();
-                    if (state->imported.succeeded)
-                    {
-                        wi::eventhandler::Subscribe_Once(
-                            wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                            [this](std::uint64_t)
-                            {
-                                if (creatorModelImporter.committing)
-                                {
-                                    creatorImportThumbnailStatus.SetText(
-                                        "PROCESSING // PREPARING INSTANT PLACEMENT");
-                                    studioChrome_.SetStatusText(
-                                        "IMPORT MODEL // PROCESSING // PREPARING INSTANT PLACEMENT");
-                                }
-                            });
-                        const auto warmupStarted = std::chrono::steady_clock::now();
-                        state->warmedPlacement = workflow.PrepareModelPlacement(
-                            state->projectRoot,
-                            state->projectId,
-                            state->imported.asset.assetId);
-                        state->warmupSeconds = std::chrono::duration<double>(
-                            std::chrono::steady_clock::now() - warmupStarted).count();
-                        state->warmupSucceeded = state->warmedPlacement.IsReady();
-                    }
 }
 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
@@ -8613,7 +8589,9 @@ wi::eventhandler::Subscribe_Once(
                         assetBrowserCurrentFolder_ = fs::u8path(
                             state->imported.assetProjectRelativePath)
                             .parent_path().lexically_normal().generic_u8string();
-                        if (state->warmupSucceeded)
+                        const bool instantPlacementReady =
+                            state->warmedPlacement.IsReady();
+                        if (instantPlacementReady)
                         {
                             detail::PrimeCreatorAssetDragPreparation(
                                 state->imported.asset.assetId,
@@ -8640,15 +8618,12 @@ wi::eventhandler::Subscribe_Once(
                         completed << std::fixed << std::setprecision(1)
                             << "IMPORT MODEL // READY // MATERIALS "
                             << state->materialsSeconds << "s // PACKAGE "
-                            << state->packageSeconds << "s // PLACEMENT WARMUP "
-                            << state->warmupSeconds << "s // "
+                            << state->packageSeconds << "s // "
                             << fs::u8path(state->imported.assetProjectRelativePath)
                                 .filename().generic_u8string();
-                        if (!state->warmupSucceeded &&
-                            state->warmupSeconds > 0.0)
-                        {
-                            completed << " // WARMUP WARNING";
-                        }
+                        completed << (instantPlacementReady
+                            ? " // INSTANT PLACEMENT READY"
+                            : " // PLACEMENT CACHE WARNING");
                         studioChrome_.SetStatusText(completed.str());
                     });
             });

@@ -234,6 +234,8 @@ namespace renegade::bridge
             const wi::scene::Scene& preparedScene) noexcept;
         [[nodiscard]] static ModelBounds MeasureModelBounds(
             const wi::scene::Scene& preparedScene) noexcept;
+        [[nodiscard]] static bool RebuildHierarchyAwareModelBounds(
+            wi::scene::Scene& preparedScene) noexcept;
         [[nodiscard]] static float ResolveScaleFactorForTargetHeight(
             float targetHeightMeters,
             const wi::scene::Scene& preparedScene) noexcept;

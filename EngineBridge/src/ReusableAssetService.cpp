@@ -806,9 +806,12 @@ namespace renegade::bridge
     ReusableModelImportResult ReusableAssetService::ImportModelAsset(
         const ReusableModelImportRequest& request,
         ReusableModelImportOptions options,
-        PreparedModelImport preparedModel) const
+        PreparedModelImport preparedModel,
+        PreparedReusableModelPlacement* preparedPlacement) const
     {
         ReusableModelImportResult result;
+        if (preparedPlacement != nullptr)
+            *preparedPlacement = {};
         result.sourceProjectRelativePath = request.sourceProjectRelativePath;
         result.assetProjectRelativePath = request.assetProjectRelativePath;
         result.managedProjectionProjectRelativePath =
@@ -1040,6 +1043,13 @@ namespace renegade::bridge
             cleanupTemporary();
             return result;
         }
+        if (!ImportService::RebuildHierarchyAwareModelBounds(*preparedScene))
+        {
+            result.error =
+                "Reusable model import could not derive hierarchy-aware placement bounds.";
+            cleanupTemporary();
+            return result;
+        }
 
         result.import = importer.SavePreparedModelAsset(prepared);
         if (!result.import.succeeded)
@@ -1217,6 +1227,28 @@ namespace renegade::bridge
         writes.push_back(RegistryWrite(root, registry, registryJson));
         writes.push_back(MetadataWrite(root, metadata, metadataJson));
 
+        PreparedReusableModelPlacement pendingPlacement;
+        if (preparedPlacement != nullptr)
+        {
+            pendingPlacement.scene_ = prepared.ReleaseScene();
+            if (!pendingPlacement.scene_.IsValid())
+            {
+                result.error =
+                    "Reusable model import lost its final prepared scene before commit.";
+                return result;
+            }
+            pendingPlacement.result_.sourceAssetId = result.sourceAssetId;
+            pendingPlacement.result_.assetId = result.assetId;
+            pendingPlacement.result_.assetProjectRelativePath =
+                result.assetProjectRelativePath;
+            pendingPlacement.result_.sceneSummary =
+                ImportService::Summarize(*pendingPlacement.scene_);
+            pendingPlacement.result_.modelEvidence =
+                ImportService::SummarizeModelEvidence(*pendingPlacement.scene_);
+            pendingPlacement.result_.succeeded = true;
+            pendingPlacement.result_.error.clear();
+        }
+
         ProjectDocumentTransactionOptions transactionOptions;
         transactionOptions.transactionId = std::move(options.transactionId);
         transactionOptions.journalDirectory =
@@ -1233,6 +1265,8 @@ namespace renegade::bridge
             return result;
         }
 
+        if (preparedPlacement != nullptr)
+            *preparedPlacement = std::move(pendingPlacement);
         result.succeeded = true;
         result.error.clear();
         return result;

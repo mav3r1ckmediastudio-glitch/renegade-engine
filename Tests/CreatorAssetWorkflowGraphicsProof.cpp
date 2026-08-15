@@ -204,10 +204,12 @@ namespace
                 "restored byte-identical retained source was rejected: " + retargetError))
             return false;
 
+        PreparedReusableModelPlacement importedPlacement;
         auto imported = workflow.ImportModel(
             projectRoot.generic_u8string(), ProjectId,
             animatedFixture.generic_u8string(),
-            "{}", {}, "Content/Models", std::move(retained));
+            "{}", {}, "Content/Models", std::move(retained), {},
+            &importedPlacement);
         if (!Require(imported.succeeded && imported.asset.succeeded &&
                 imported.asset.transaction.committed,
                 "creator FBX import failed: " + imported.error) ||
@@ -215,6 +217,20 @@ namespace
                     imported.asset.modelMetadata.skinned &&
                     imported.asset.modelMetadata.animated,
                 "representative FBX did not retain skinned/animated metadata"))
+            return false;
+
+        if (!Require(importedPlacement.IsReady(),
+                "successful creator import did not return an in-memory placement handoff") ||
+            !Require(importedPlacement.Result().assetId == imported.asset.assetId &&
+                    importedPlacement.Result().sourceAssetId == imported.asset.sourceAssetId &&
+                    importedPlacement.Result().assetProjectRelativePath ==
+                        imported.assetProjectRelativePath,
+                "in-memory placement handoff identity/path differs from committed RAsset") ||
+            !Require(importedPlacement.PeekScene() != nullptr &&
+                    importedPlacement.Result().sceneSummary.meshes > 0 &&
+                    importedPlacement.Result().sceneSummary.objects > 0 &&
+                    ImportService::MeasureModelBounds(*importedPlacement.PeekScene()).valid,
+                "in-memory placement handoff is not immediately measurable/placeable"))
             return false;
 
         const StableId sourceId = imported.asset.sourceAssetId;

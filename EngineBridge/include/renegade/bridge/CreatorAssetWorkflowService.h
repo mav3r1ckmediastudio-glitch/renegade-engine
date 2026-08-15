@@ -56,7 +56,8 @@ namespace renegade::bridge
         const std::string& assetName = {},
         const std::string& destinationFolder = "Content/Models",
         PreparedModelImport preparedModel = {},
-        const std::string& thumbnailSourcePath = {}) const;
+        const std::string& thumbnailSourcePath = {},
+        PreparedReusableModelPlacement* preparedPlacement = nullptr) const;
 
         [[nodiscard]] ReusableModelReimportResult ReimportModel(
             const std::string& projectRoot,

@@ -716,7 +716,8 @@ namespace renegade::bridge
         const std::string& assetName,
         const std::string& destinationFolder,
         PreparedModelImport preparedModel,
-        const std::string& thumbnailSourcePath) const
+        const std::string& thumbnailSourcePath,
+        PreparedReusableModelPlacement* preparedPlacement) const
     {
         CreatorModelImportResult result;
         if (!IsValidStableId(projectId))
@@ -868,7 +869,7 @@ namespace renegade::bridge
         request.expectedFormat = format;
         request.thumbnailPngBytes = std::move(thumbnailPngBytes);
         result.asset = ReusableAssetService().ImportModelAsset(
-            request, {}, std::move(preparedModel));
+            request, {}, std::move(preparedModel), preparedPlacement);
         if (!result.asset.succeeded)
         {
             result.error = result.asset.error;
