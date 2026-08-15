@@ -26,6 +26,7 @@ namespace renegade::bridge
                 result.plan,
                 error))
         {
+            if (error.empty()) error = "Build Windows Game failed while creating the build plan.";
             return false;
         }
 
@@ -35,6 +36,7 @@ namespace renegade::bridge
                 result.stage,
                 error))
         {
+            if (error.empty()) error = "Build Windows Game failed while staging the package.";
             return false;
         }
 
@@ -45,6 +47,7 @@ namespace renegade::bridge
                 result.identity,
                 error))
         {
+            if (error.empty()) error = "Build Windows Game failed while applying executable identity.";
             return false;
         }
 
@@ -54,6 +57,7 @@ namespace renegade::bridge
                 result.runtimeEvidencePath,
                 error))
         {
+            if (error.empty()) error = "Build Windows Game staged Runtime smoke failed without a diagnostic.";
             return false;
         }
         if (result.runtimeEvidencePath.empty())
@@ -70,6 +74,7 @@ namespace renegade::bridge
                 result.verification,
                 error))
         {
+            if (error.empty()) error = "Build Windows Game failed while recording verification evidence.";
             return false;
         }
 
@@ -81,6 +86,7 @@ namespace renegade::bridge
                 result.promotion,
                 error))
         {
+            if (error.empty()) error = "Build Windows Game failed while promoting the staged package.";
             return false;
         }
 

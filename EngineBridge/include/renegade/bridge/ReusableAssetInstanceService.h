@@ -3,6 +3,8 @@
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -48,6 +50,16 @@ namespace renegade::bridge
             const XMFLOAT3& placementPosition,
             float scaleFactor);
 
+        // Adopt a live cursor instance without cloning, reparsing or moving it.
+        // The first Execute() only stamps stable Renegade metadata and captures
+        // the Undo/Redo snapshot; the visible entity is already in the scene.
+        PlaceReusableModelCommand(
+            wi::scene::Scene& targetScene,
+            StableId assetId,
+            wi::ecs::Entity existingInstanceRoot,
+            wi::ecs::Entity existingPayloadRoot,
+            std::size_t firstMaterialIndex);
+
         bool Execute() override;
         void Undo() override;
 
@@ -56,6 +68,16 @@ namespace renegade::bridge
         [[nodiscard]] const StableId& AssetId() const noexcept;
 
     private:
+        struct CapturedMaterialResource
+        {
+            wi::ecs::Entity materialEntity = wi::ecs::INVALID_ENTITY;
+            std::uint32_t slot = 0;
+            wi::Resource resource;
+        };
+
+        void CaptureMaterialResources(std::size_t firstMaterialIndex);
+        void RestoreCapturedMaterialResources();
+
         wi::scene::Scene* scene_ = nullptr;
         wi::allocator::shared_ptr<wi::scene::Scene> preparedScene_;
         StableId assetId_;
@@ -64,6 +86,9 @@ namespace renegade::bridge
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity payloadRoot_ = wi::ecs::INVALID_ENTITY;
         wi::Archive snapshot_;
+        std::vector<CapturedMaterialResource> materialResources_;
+        std::size_t firstMaterialIndex_ = 0;
+        bool adoptExisting_ = false;
         bool hasSnapshot_ = false;
     };
 }

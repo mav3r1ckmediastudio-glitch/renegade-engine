@@ -1,6 +1,7 @@
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/DependencyService.h"
 
+#include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 
@@ -293,7 +294,7 @@ namespace
                 std::string path;
                 const bool parsed = ParseAlwaysIncludeDeclaration(
                     metadata.alwaysInclude[index], dependencyClass, path);
-                (void)parsed; // WriteProject validates before serialization.
+                (void)parsed;
                 stream << "always_include_" << index << "_class = "
                        << renegade::bridge::DependencyClassName(dependencyClass)
                        << '\n';
@@ -346,6 +347,84 @@ namespace
         }
         warning += std::move(addition);
     }
+
+    bool EnsureProjectAssetRegistry(
+        const fs::path& root,
+        const std::string& projectId,
+        std::string& warning,
+        std::string& error)
+    {
+        using namespace renegade::bridge;
+
+        if (!IsValidStableId(projectId))
+        {
+            error = "Could not initialise the project asset registry without a valid project ID.";
+            return false;
+        }
+
+        const fs::path registryPath = root / AssetRegistryDocumentName;
+        std::error_code pathError;
+        const bool exists = fs::exists(registryPath, pathError);
+        if (pathError)
+        {
+            error = "Could not inspect the project asset registry: " +
+                pathError.message();
+            return false;
+        }
+
+        if (exists)
+        {
+            AssetRegistry existing;
+            if (!ReadAssetRegistry(
+                    root.generic_u8string(), projectId, existing, error))
+            {
+                error = "Could not validate the project asset registry: " + error;
+                return false;
+            }
+            error.clear();
+            return true;
+        }
+
+        AssetRegistry registry;
+        registry.projectId = projectId;
+        registry.schemaVersion = AssetRegistry::CurrentSchemaVersion;
+
+        AssetRegistryPersistenceOptions options;
+        options.transactionId = "project-registry-bootstrap-" + GenerateStableId();
+        const auto written = WriteAssetRegistry(
+            root.generic_u8string(), registry, std::move(options));
+        if (!written.success || !written.committed)
+        {
+            error = "Could not initialise the project asset registry";
+            if (!written.code.empty())
+                error += " [" + written.code + "]";
+            if (!written.message.empty())
+                error += ": " + written.message;
+            return false;
+        }
+
+        AssetRegistry verified;
+        if (!ReadAssetRegistry(
+                root.generic_u8string(), projectId, verified, error))
+        {
+            error = "Project asset registry was written but did not verify: " + error;
+            return false;
+        }
+        if (!verified.records.empty() || !verified.importedProducts.empty() ||
+            !verified.missingAssets.empty())
+        {
+            error = "New project asset registry did not verify as empty.";
+            return false;
+        }
+
+        if (written.recoveryRequired)
+        {
+            warning = "Asset registry committed, but transaction cleanup remains pending: " +
+                written.message;
+        }
+        error.clear();
+        return true;
+    }
 }
 
 namespace renegade::bridge
@@ -386,6 +465,7 @@ namespace renegade::bridge
             return true;
         };
     }
+
     void ProjectService::Initialize(const std::string& stateFilePath)
     {
         stateFilePath_ = NormalizedAbsolutePath(stateFilePath);
@@ -458,6 +538,16 @@ namespace renegade::bridge
                 return false;
             }
 
+            std::string registryWarning;
+            std::string registryError;
+            if (!EnsureProjectAssetRegistry(
+                    root, metadata.projectId, registryWarning, registryError))
+            {
+                lastError_ = std::move(registryError);
+                return false;
+            }
+            AppendWarning(lastWarning_, std::move(registryWarning));
+
             currentProject_ = metadata;
             hasProject_ = true;
             AddRecent(metadata);
@@ -513,9 +603,6 @@ namespace renegade::bridge
             return false;
         }
 
-        // The additive v1 identity field is migrated only through mutable
-        // Studio open. WriteProject() now provides validation, rollback,
-        // recovery evidence and a retained previous-descriptor backup.
         if (metadata.projectId.empty())
         {
             metadata.projectId = GenerateStableId();
@@ -524,6 +611,16 @@ namespace renegade::bridge
                 return false;
             }
         }
+
+        std::string registryWarning;
+        if (!EnsureProjectAssetRegistry(
+                fs::u8path(metadata.rootPath), metadata.projectId,
+                registryWarning, error))
+        {
+            lastError_ = std::move(error);
+            return false;
+        }
+        AppendWarning(lastWarning_, std::move(registryWarning));
 
         currentProject_ = metadata;
         hasProject_ = true;
@@ -763,10 +860,6 @@ namespace renegade::bridge
                 }
                 else
                 {
-                    // Backward compatibility for the short-lived Gate 5
-                    // comma-array format merged in PR #29. New writes use
-                    // numbered, encoded fields because wi::config arrays
-                    // cannot escape commas, '#' or ';' in valid filenames.
                     for (const auto& entry :
                         dependencies.GetTextArray("always_include"))
                     {
@@ -974,10 +1067,6 @@ namespace renegade::bridge
         std::vector<ProjectDocumentWrite> writes;
         writes.reserve(replacingExisting ? 2u : 1u);
 
-        // The retained last-good descriptor participates in the same
-        // multi-file transaction as the new descriptor. A backup failure
-        // therefore leaves the live descriptor untouched rather than becoming
-        // a post-save warning or a crash window between two transactions.
         if (replacingExisting && previousContent != requestedContent)
         {
             ProjectDocumentWrite backupWrite;
@@ -1116,8 +1205,6 @@ namespace renegade::bridge
         }
         catch (const std::exception&)
         {
-            // A read-only settings location must not break the editor.
-            // The preference simply will not survive this session.
         }
     }
 
@@ -1169,7 +1256,6 @@ namespace renegade::bridge
         }
         catch (const std::exception&)
         {
-            // A read-only settings location must not prevent a project opening.
         }
     }
 }

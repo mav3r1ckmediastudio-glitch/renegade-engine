@@ -24,6 +24,19 @@ namespace
     constexpr float BottomTabsHeight = 32.0f;
     constexpr float StatusBarHeight = 28.0f;
 
+    void DrawSolidRect(
+        const float x,
+        const float y,
+        const float width,
+        const float height,
+        const wi::Color color,
+        const wi::graphics::CommandList cmd)
+    {
+        wi::image::Params params(x, y, width, height, color);
+        params.blendFlag = wi::enums::BLENDMODE_ALPHA;
+        wi::image::Draw(nullptr, params, cmd);
+    }
+
     std::string UpperAscii(std::string value)
     {
         std::transform(value.begin(), value.end(), value.begin(),
@@ -49,8 +62,6 @@ namespace
 
     std::string InputValue(const renegade::studio::RenegadeTextInputField& input)
     {
-        // Wicked's TextInputField::GetValue() is non-const even though reading
-        // the accepted input does not mutate creator workflow state.
         return const_cast<renegade::studio::RenegadeTextInputField&>(input).GetValue();
     }
 
@@ -97,6 +108,7 @@ namespace renegade::studio
         RenegadeStudioChrome::Create();
         CreateCreatorAssetControls();
         creatorAssetRefreshPending_ = true;
+        creatorAssetCatalogueDirty_ = true;
     }
 
     void CreatorAssetStudioChrome::SetLayout(const float width, const float height)
@@ -126,21 +138,24 @@ namespace renegade::studio
     {
         RenegadeStudioChrome::SetActiveBottomTab(tab, notify);
         if (tab == 0)
+        {
             creatorAssetRefreshPending_ = true;
+            creatorAssetCatalogueDirty_ = true;
+        }
     }
 
     void CreatorAssetStudioChrome::OnAction(std::function<void(Action)> callback)
     {
+        // ADD > IMPORT MODEL belongs to StudioApplication's guided
+        // creator workflow. LP07 previously intercepted this action
+        // here and auto-imported/placed the model, bypassing the
+        // dedicated import workspace entirely.
+        creatorAction_ = std::move(callback);
         RenegadeStudioChrome::OnAction(
-            [this, callback = std::move(callback)](const Action action) mutable
+            [this](const Action action)
             {
-                if (action == Action::ImportModel)
-                {
-                    ImportCreatorModel();
-                    return;
-                }
-                if (callback)
-                    callback(action);
+                if (creatorAction_)
+                    creatorAction_(action);
             });
     }
 
@@ -155,6 +170,130 @@ namespace renegade::studio
             });
     }
 
+    void CreatorAssetStudioChrome::OnCreatorAssetPlaceRequested(
+        std::function<void(
+            const bridge::StableId&,
+            const std::string&)> callback)
+    {
+        creatorAssetPlaceRequested_ = std::move(callback);
+    }
+
+    void CreatorAssetStudioChrome::OnCreatorAssetDropped(
+        std::function<void(
+            const bridge::StableId&,
+            const std::string&,
+            float,
+            float)> callback)
+    {
+        creatorAssetDropped_ = std::move(callback);
+        RenegadeStudioChrome::OnAssetBrowserItemDropped(
+            [this](const std::string& path, const float x, const float y)
+            {
+                if (!SelectCreatorAsset(path) ||
+                    !bridge::IsValidStableId(creatorSelectedAssetId_) ||
+                    !creatorAssetDropped_)
+                    return;
+                const auto selected = std::find_if(
+                    creatorAssetCatalogue_.entries.begin(),
+                    creatorAssetCatalogue_.entries.end(),
+                    [this](const bridge::AssetCatalogueEntry& entry)
+                    {
+                        return entry.assetId == creatorSelectedAssetId_;
+                    });
+                if (selected == creatorAssetCatalogue_.entries.end() ||
+                    !bridge::CanPlaceCreatorModelAsset(*selected))
+                {
+                    SetStatusText(
+                        "PLACE ASSET // DRAG A CURRENT MODEL ASSET");
+                    return;
+                }
+                creatorAssetDropped_(
+                    creatorSelectedAssetId_,
+                    selected->projectRelativePath,
+                    x,
+                    y);
+            });
+    }
+
+    bool CreatorAssetStudioChrome::RevealCreatorAsset(
+        const bridge::StableId& assetId,
+        const std::string& relativePath,
+        std::string& error)
+    {
+        if (!bridge::IsValidStableId(assetId) || relativePath.empty())
+        {
+            error = "The imported asset did not provide a valid browser identity.";
+            return false;
+        }
+
+        const std::string normalizedPath =
+            fs::u8path(relativePath).lexically_normal().generic_u8string();
+        creatorCurrentPath_ = ParentPath(normalizedPath);
+        creatorSelectedAssetId_ = assetId;
+        creatorSelectedAssetPath_ = normalizedPath;
+        creatorAssetSearch_.SetValue("");
+        creatorAssetLastSearch_.clear();
+        creatorAssetStateFilter_ = 0;
+        creatorAssetFormatFilter_ = 0;
+        creatorAssetRigFilter_ = 0;
+        creatorAssetStateCombo_.SetSelectedWithoutCallback(0);
+        creatorAssetFormatCombo_.SetSelectedWithoutCallback(0);
+        creatorAssetRigCombo_.SetSelectedWithoutCallback(0);
+        creatorAssetCatalogueDirty_ = true;
+        creatorAssetRefreshPending_ = false;
+        RefreshCreatorAssetBrowser();
+
+        const auto found = std::find_if(
+            creatorAssetCatalogue_.entries.begin(),
+            creatorAssetCatalogue_.entries.end(),
+            [&assetId, &normalizedPath](const bridge::AssetCatalogueEntry& entry)
+            {
+                return entry.assetId == assetId &&
+                    fs::u8path(entry.projectRelativePath)
+                        .lexically_normal().generic_u8string() == normalizedPath;
+            });
+        if (found == creatorAssetCatalogue_.entries.end())
+        {
+            error = "The governed asset committed, but the Asset Browser catalogue did not expose its stable ID and path.";
+            creatorAssetRefreshPending_ = true;
+            return false;
+        }
+        if (!found->registered || !found->importedProduct ||
+            !found->productAvailable ||
+            !bridge::CanPlaceCreatorModelAsset(*found))
+        {
+            error = "The governed asset committed, but its Asset Browser entry is not a current placeable model product.";
+            creatorAssetRefreshPending_ = true;
+            return false;
+        }
+
+        const auto visibleCard = std::find_if(
+            creatorVisibleAssetPaths_.begin(),
+            creatorVisibleAssetPaths_.end(),
+            [&normalizedPath](const std::string& card)
+            {
+                return fs::u8path(card)
+                    .lexically_normal().generic_u8string() == normalizedPath;
+            });
+        if (visibleCard == creatorVisibleAssetPaths_.end())
+        {
+            error = "The governed asset is registered but its destination folder is not visible in the Asset Browser.";
+            creatorAssetRefreshPending_ = true;
+            return false;
+        }
+        if (creatorVisibleThumbnailPaths_.count(normalizedPath) == 0)
+        {
+            error = "The governed asset card is visible, but its captured thumbnail could not be loaded.";
+            creatorAssetRefreshPending_ = true;
+            return false;
+        }
+
+        SetAssetBrowserSelectedPath(normalizedPath);
+        detail::RequestCreatorAssetDragPreparation(assetId, normalizedPath);
+        error.clear();
+        return true;
+    }
+
     bool CreatorAssetStudioChrome::ConsumedPointerThisFrame() const noexcept
     {
         return creatorAssetControlConsumed_ ||
@@ -164,25 +303,6 @@ namespace renegade::studio
     void CreatorAssetStudioChrome::Update(const wi::Canvas& canvas, const float dt)
     {
         RenegadeStudioChrome::Update(canvas, dt);
-
-        // Wicked serializes material texture filenames, while Renegade owns
-        // governed resource identity. Gate 3 stores the stable texture ID in
-        // WISCENE metadata and rehydrates its .rasset payload directly through
-        // wi::resourcemanager after scene load. This call is idempotent once
-        // the material has a live in-memory resource.
-        auto* session = bridge::StudioSession::Current();
-        if (session != nullptr && session->Projects().HasProject())
-        {
-            const auto& project = session->Projects().CurrentProject();
-            const auto restored = bridge::RestoreMaterialTextureBindings(
-                session->Scenes().GetScene(), project.rootPath, project.projectId);
-            if (restored.succeeded && restored.restored > 0)
-            {
-                SetStatusText("TEXTURE BINDING // RESTORED " +
-                    std::to_string(restored.restored) + " GOVERNED MATERIAL TEXTURE");
-            }
-        }
-
         UpdateCreatorAssetControls(canvas, dt);
     }
 
@@ -266,9 +386,9 @@ namespace renegade::studio
         });
 
         creatorAssetImportButton_.Create("Creator Import Asset");
-        creatorAssetImportButton_.SetText("IMPORT");
+        creatorAssetImportButton_.SetText("IMPORT MODEL...");
         creatorAssetImportButton_.SetTooltip(
-            "Import a reusable FBX/GLTF/GLB model or governed image texture into this project.");
+            "Open the guided preview, material, lighting, animation, thumbnail and final import workflow.");
         creatorAssetImportButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             ImportCreatorModel();
@@ -320,43 +440,62 @@ namespace renegade::studio
 
     void CreatorAssetStudioChrome::LayoutCreatorAssetControls()
     {
-        const float left = HierarchyWidth() + 13.0f;
+        // Preserve the base browser's 22px folder-tree toggle at the start of
+        // the toolbar; creator filters begin after it and never share its hit
+        // target.
+        const float left = HierarchyWidth() + 45.0f;
         const float right = creatorLayoutWidth_ - InspectorWidth() - 13.0f;
         const float available = std::max(0.0f, right - left);
         const float drawerTop = creatorLayoutHeight_ - BottomTabsHeight -
             StatusBarHeight - DrawerHeight();
-        const float y = drawerTop + 45.0f;
 
         constexpr float gap = 4.0f;
         constexpr float stateWidth = 70.0f;
         constexpr float formatWidth = 58.0f;
         constexpr float rigWidth = 70.0f;
-        constexpr float importWidth = 52.0f;
-        constexpr float placeWidth = 78.0f;
-        constexpr float reimportWidth = 64.0f;
-        constexpr float saveWidth = 68.0f;
-        constexpr float fixed = stateWidth + formatWidth + rigWidth +
-            importWidth + placeWidth + reimportWidth + saveWidth + gap * 8.0f;
-        const float flexible = std::max(160.0f, available - fixed);
+        constexpr float importWidth = 110.0f;
+        constexpr float placeWidth = 80.0f;
+        constexpr float reimportWidth = 76.0f;
+        constexpr float saveWidth = 70.0f;
+
+        // Keep the creator actions in the drawer header, away from the legacy
+        // breadcrumb / LOCAL CONTENT toolbar. The previous single-row layout
+        // put these controls underneath that toolbar at common 16:9 sizes,
+        // leaving the backend workflow effectively unreachable to creators.
+        const float actionY = drawerTop + 8.0f;
+        float actionX = right -
+            (importWidth + placeWidth + reimportWidth + saveWidth + gap * 3.0f);
+        const auto placeAction = [&actionX, actionY, gap](
+            wi::gui::Widget& widget, const float width)
+        {
+            widget.SetPos(XMFLOAT2(actionX, actionY));
+            widget.SetSize(XMFLOAT2(width, 25.0f));
+            actionX += width + gap;
+        };
+        placeAction(creatorAssetImportButton_, importWidth);
+        placeAction(creatorAssetPlaceButton_, placeWidth);
+        placeAction(creatorAssetReimportButton_, reimportWidth);
+        placeAction(creatorAssetSaveTagsButton_, saveWidth);
+
+        const float filterY = drawerTop + 45.0f;
+        const float fixed = stateWidth + formatWidth + rigWidth + gap * 4.0f;
+        const float flexible = std::max(80.0f, available - fixed);
         const float searchWidth = flexible * 0.5f;
         const float tagsWidth = flexible - searchWidth;
 
         float x = left;
-        const auto place = [&x, y, gap](wi::gui::Widget& widget, const float width)
+        const auto placeFilter = [&x, filterY, gap](
+            wi::gui::Widget& widget, const float width)
         {
-            widget.SetPos(XMFLOAT2(x, y));
+            widget.SetPos(XMFLOAT2(x, filterY));
             widget.SetSize(XMFLOAT2(width, 25.0f));
             x += width + gap;
         };
-        place(creatorAssetStateCombo_, stateWidth);
-        place(creatorAssetFormatCombo_, formatWidth);
-        place(creatorAssetRigCombo_, rigWidth);
-        place(creatorAssetSearch_, searchWidth);
-        place(creatorAssetTags_, tagsWidth);
-        place(creatorAssetImportButton_, importWidth);
-        place(creatorAssetPlaceButton_, placeWidth);
-        place(creatorAssetReimportButton_, reimportWidth);
-        place(creatorAssetSaveTagsButton_, saveWidth);
+        placeFilter(creatorAssetStateCombo_, stateWidth);
+        placeFilter(creatorAssetFormatCombo_, formatWidth);
+        placeFilter(creatorAssetRigCombo_, rigWidth);
+        placeFilter(creatorAssetSearch_, searchWidth);
+        placeFilter(creatorAssetTags_, tagsWidth);
     }
 
     bridge::AssetCatalogueQuery CreatorAssetStudioChrome::CreatorAssetQuery() const
@@ -518,6 +657,20 @@ namespace renegade::studio
     {
         if (ActiveBottomTab() != 0)
             return;
+        // The creator filters own the browser toolbar row. Cover the base
+        // chrome's placeholder breadcrumb/search treatment first so two
+        // independent toolbars can never render on top of each other.
+        const float left = HierarchyWidth() + 38.0f;
+        const float right = creatorLayoutWidth_ - InspectorWidth();
+        const float drawerTop = creatorLayoutHeight_ - BottomTabsHeight -
+            StatusBarHeight - DrawerHeight();
+        DrawSolidRect(
+            left,
+            drawerTop + 42.0f,
+            std::max(0.0f, right - left),
+            34.0f,
+            wi::Color(5, 10, 13, 255),
+            cmd);
         creatorAssetSearch_.Render(canvas, cmd);
         creatorAssetTags_.Render(canvas, cmd);
         creatorAssetStateCombo_.Render(canvas, cmd);
@@ -542,30 +695,44 @@ namespace renegade::studio
         }
 
         const auto& project = session->Projects().CurrentProject();
-        bridge::AssetCatalogue catalogue;
-        std::string error;
-        if (!creatorAssetWorkflow_.BuildCatalogue(
-                project.rootPath, project.projectId, catalogue, error))
+        std::string catalogueWarning;
+        if (creatorCatalogueProjectId_ != project.projectId ||
+            creatorAssetCatalogueDirty_)
         {
-            SetStatusText("ASSET BROWSER // REFRESH FAILED // " + error);
-            return;
+            bridge::AssetCatalogue catalogue;
+            std::string error;
+            if (!creatorAssetWorkflow_.BuildCatalogueSnapshot(
+                    project.rootPath, project.projectId, catalogue, error))
+            {
+                creatorAssetCatalogueDirty_ = true;
+                SetStatusText("ASSET BROWSER // REFRESH FAILED // " + error);
+                return;
+            }
+            bridge::CreatorTextureWorkflowService textureWorkflow;
+            std::string textureWarning;
+            (void)textureWorkflow.EnrichTextureCatalogue(
+                project.rootPath, project.projectId, catalogue, textureWarning);
+            creatorAssetCatalogue_ = std::move(catalogue);
+            creatorCatalogueProjectId_ = project.projectId;
+            creatorAssetCatalogueDirty_ = false;
+            catalogueWarning = std::move(textureWarning);
         }
-        bridge::CreatorTextureWorkflowService textureWorkflow;
-        std::string textureWarning;
-        (void)textureWorkflow.EnrichTextureCatalogue(
-            project.rootPath, project.projectId, catalogue, textureWarning);
-        creatorAssetCatalogue_ = std::move(catalogue);
 
         const auto query = CreatorAssetQuery();
         const auto matches = bridge::QueryAssetCatalogue(creatorAssetCatalogue_, query);
         const bool globalSearch = !query.text.empty();
         std::vector<AssetCard> cards;
+        creatorVisibleAssetPaths_.clear();
+        creatorVisibleThumbnailPaths_.clear();
         if (!globalSearch)
         {
             for (const auto& existing : creatorFilesystemAssets_)
             {
                 if (existing.directory)
+                {
                     cards.push_back(existing);
+                    creatorVisibleAssetPaths_.push_back(existing.relativePath);
+                }
             }
         }
         for (const auto& entry : matches)
@@ -577,6 +744,19 @@ namespace renegade::studio
             card.name = entry.name;
             card.relativePath = entry.projectRelativePath;
             card.typeLabel = UpperAscii(bridge::AssetCatalogueStateLabel(entry.state));
+            fs::path thumbnailPath =
+                fs::u8path(project.rootPath) /
+                fs::u8path(entry.projectRelativePath);
+            thumbnailPath.replace_extension(".thumbnail.png");
+            if (fs::exists(thumbnailPath))
+            {
+                card.thumbnail = wi::resourcemanager::Load(
+                    thumbnailPath.generic_u8string());
+                if (card.thumbnail.IsValid())
+                    creatorVisibleThumbnailPaths_.insert(
+                        fs::u8path(card.relativePath)
+                            .lexically_normal().generic_u8string());
+            }
             if (!entry.sourceFormat.empty())
                 card.typeLabel += " / " + UpperAscii(entry.sourceFormat);
             if (entry.dependencyClass == bridge::DependencyClass::Texture)
@@ -585,10 +765,35 @@ namespace renegade::studio
                 card.typeLabel += " / SKIN";
             if (entry.model.known && entry.model.animated)
                 card.typeLabel += " / ANIM";
+            creatorVisibleAssetPaths_.push_back(card.relativePath);
             cards.push_back(std::move(card));
         }
         RenegadeStudioChrome::SetAssetBrowserData(
             creatorFilesystemFolders_, std::move(cards), creatorCurrentPath_);
+
+        // Warm the first visible page worth of placeable model products before
+        // the user begins a drag. Imported assets are already primed directly
+        // from their in-memory handoff; this closes the cold-start/restart gap
+        // for existing browser assets without doing any work in the pointer loop.
+        constexpr std::size_t CreatorPlacementWarmLimit = 12;
+        std::size_t warmedPlacements = 0;
+        const std::string normalizedCurrentPath =
+            fs::u8path(creatorCurrentPath_).lexically_normal().generic_u8string();
+        for (const auto& entry : matches)
+        {
+            if (warmedPlacements >= CreatorPlacementWarmLimit)
+                break;
+            if (!globalSearch &&
+                ParentPath(entry.projectRelativePath) != normalizedCurrentPath)
+            {
+                continue;
+            }
+            if (!bridge::CanPlaceCreatorModelAsset(entry))
+                continue;
+            detail::WarmCreatorAssetDragPreparation(
+                entry.assetId, entry.projectRelativePath);
+            ++warmedPlacements;
+        }
 
         const auto selected = std::find_if(
             creatorAssetCatalogue_.entries.begin(), creatorAssetCatalogue_.entries.end(),
@@ -596,7 +801,12 @@ namespace renegade::studio
             {
                 return entry.projectRelativePath == creatorSelectedAssetPath_;
             });
-        if (selected == creatorAssetCatalogue_.entries.end())
+        const bool selectedVisible = selected != creatorAssetCatalogue_.entries.end() &&
+            std::find(
+                creatorVisibleAssetPaths_.begin(),
+                creatorVisibleAssetPaths_.end(),
+                selected->projectRelativePath) != creatorVisibleAssetPaths_.end();
+        if (!selectedVisible)
         {
             creatorSelectedAssetId_.clear();
             creatorSelectedAssetPath_.clear();
@@ -605,12 +815,13 @@ namespace renegade::studio
         else
         {
             creatorSelectedAssetId_ = selected->assetId;
+            SetAssetBrowserSelectedPath(selected->projectRelativePath);
         }
 
-        if (!textureWarning.empty())
+        if (!catalogueWarning.empty())
         {
             SetStatusText("ASSET BROWSER // TEXTURE METADATA WARNING // " +
-                textureWarning);
+                catalogueWarning);
         }
         else
         {
@@ -654,11 +865,27 @@ namespace renegade::studio
         if (!found->creatorTags.empty())
             status << " // TAGS " << JoinTags(found->creatorTags);
         SetStatusText(status.str());
+        if (bridge::CanPlaceCreatorModelAsset(*found))
+        {
+            detail::RequestCreatorAssetDragPreparation(
+                found->assetId,
+                found->projectRelativePath);
+        }
         return true;
     }
 
     void CreatorAssetStudioChrome::ImportCreatorModel()
     {
+        // Model imports must never bypass the dedicated preview-first
+        // workspace or its required thumbnail/verification stage. Route the
+        // Asset Browser shortcut through the same Studio action as
+        // ADD > IMPORT MODEL... .
+        if (creatorAction_)
+        {
+            creatorAction_(Action::ImportModel);
+            return;
+        }
+
         auto* session = bridge::StudioSession::Current();
         if (session == nullptr || !session->Projects().HasProject())
         {
@@ -723,6 +950,7 @@ namespace renegade::studio
                                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                                     [this, state](std::uint64_t)
                                     {
+                                        creatorAssetCatalogueDirty_ = true;
                                         creatorAssetRefreshPending_ = true;
                                         if (!state->imported.succeeded)
                                         {
@@ -762,7 +990,6 @@ namespace renegade::studio
                         bridge::StableId projectId;
                         std::string sourcePath;
                         bridge::CreatorModelImportResult imported;
-                        bridge::PreparedReusableModelPlacement prepared;
                     };
 
                     auto state = std::make_shared<ImportWorkState>();
@@ -778,16 +1005,11 @@ namespace renegade::studio
                             bridge::CreatorAssetWorkflowService workflow;
                             state->imported = workflow.ImportModel(
                                 state->projectRoot, state->projectId, state->sourcePath);
-                            if (state->imported.succeeded)
-                            {
-                                state->prepared = workflow.PrepareModelPlacement(
-                                    state->projectRoot, state->projectId,
-                                    state->imported.asset.assetId);
-                            }
                             wi::eventhandler::Subscribe_Once(
                                 wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                                 [this, state](std::uint64_t)
                                 {
+                                    creatorAssetCatalogueDirty_ = true;
                                     creatorAssetRefreshPending_ = true;
                                     if (!state->imported.succeeded)
                                     {
@@ -800,57 +1022,12 @@ namespace renegade::studio
                                     }
                                     creatorSelectedAssetId_ = state->imported.asset.assetId;
                                     creatorSelectedAssetPath_ = state->imported.assetProjectRelativePath;
-                                    if (!state->prepared.IsReady())
-                                    {
-                                        SetStatusText("IMPORT ASSET // CREATED // PLACEMENT FAILED");
-                                        wi::helper::messageBox(
-                                            "The .rasset was created, but its payload could not be prepared for placement.\n\nReason: " +
-                                                state->prepared.Result().error,
-                                            "Import Project Asset");
-                                        return;
-                                    }
-                                    PlacePreparedCreatorAsset(
-                                        std::move(state->prepared),
-                                        fs::u8path(state->imported.assetProjectRelativePath)
-                                            .filename().generic_u8string());
+                                    SetStatusText(
+                                        "IMPORT ASSET // CURRENT // READY IN ASSET BROWSER");
                                 });
                         });
                 });
         });
-    }
-
-    void CreatorAssetStudioChrome::PlacePreparedCreatorAsset(
-        bridge::PreparedReusableModelPlacement prepared,
-        const std::string& label)
-    {
-        auto* session = bridge::StudioSession::Current();
-        if (session == nullptr || !prepared.IsReady())
-            return;
-
-        const wi::scene::Scene* preparedScene = prepared.PeekScene();
-        const float scale = bridge::ImportService::ResolveScaleFactor(
-            bridge::ModelScaleMode::Automatic, *preparedScene);
-        const bridge::StableId assetId = prepared.Result().assetId;
-        const XMFLOAT3 position(
-            static_cast<float>(creatorPlacementSerial_) * 2.0f, 0.0f, 0.0f);
-        auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
-            session->Scenes().GetScene(), prepared.ReleaseScene(), assetId,
-            position, scale);
-        auto* raw = command.get();
-        if (!session->Commands().Execute(std::move(command)))
-        {
-            SetStatusText("PLACE ASSET // FAILED");
-            return;
-        }
-
-        ++creatorPlacementSerial_;
-        session->Selection().Select(raw->PlacedEntity());
-        SetSceneDirty(session->Commands().IsDirty());
-        SetSelectionName(label);
-        RefreshCreatorHierarchyRows();
-        creatorAssetRefreshPending_ = true;
-        SetStatusText("PLACE ASSET // " + label +
-            " // STABLE RASSET INSTANCE // NO SOURCE RECONVERSION");
     }
 
     void CreatorAssetStudioChrome::PlaceSelectedCreatorAsset()
@@ -934,16 +1111,14 @@ namespace renegade::studio
             return;
         }
 
-        const auto& project = session->Projects().CurrentProject();
-        auto prepared = creatorAssetWorkflow_.PrepareModelPlacement(
-            project.rootPath, project.projectId, creatorSelectedAssetId_);
-        if (!prepared.IsReady())
+        if (creatorAssetPlaceRequested_)
         {
-            SetStatusText("PLACE ASSET // FAILED // " + prepared.Result().error);
-            return;
+            creatorAssetPlaceRequested_(
+                creatorSelectedAssetId_,
+                fs::u8path(creatorSelectedAssetPath_)
+                    .filename().generic_u8string());
+            SetStatusText("PLACE ASSET // CLICK A SURFACE // ESC TO CANCEL");
         }
-        PlacePreparedCreatorAsset(std::move(prepared),
-            fs::u8path(creatorSelectedAssetPath_).filename().generic_u8string());
     }
 
     void CreatorAssetStudioChrome::ReimportSelectedCreatorAsset()
@@ -1016,6 +1191,7 @@ namespace renegade::studio
                         wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                         [this, state](std::uint64_t)
                         {
+                            creatorAssetCatalogueDirty_ = true;
                             creatorAssetRefreshPending_ = true;
                             if (!state->result.succeeded)
                             {
@@ -1096,6 +1272,7 @@ namespace renegade::studio
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, state](std::uint64_t)
                     {
+                        creatorAssetCatalogueDirty_ = true;
                         creatorAssetRefreshPending_ = true;
                         if (!state->result.succeeded)
                         {
@@ -1122,6 +1299,7 @@ namespace renegade::studio
             SetStatusText("SAVE TAGS // FAILED // " + error);
             return;
         }
+        creatorAssetCatalogueDirty_ = true;
         creatorAssetRefreshPending_ = true;
         SetStatusText("SAVE TAGS // COMMITTED");
     }

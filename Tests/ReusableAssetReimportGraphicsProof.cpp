@@ -63,6 +63,12 @@ namespace
         return input.good() || input.eof();
     }
 
+    std::vector<std::uint8_t> ThumbnailFixture()
+    {
+        return {0x89u, 0x50u, 0x4eu, 0x47u, 0x0du, 0x0au, 0x1au, 0x0au,
+            0x52u, 0x45u, 0x4eu, 0x45u, 0x47u, 0x41u, 0x44u, 0x45u};
+    }
+
     bool WriteText(const fs::path& path, const std::string& text)
     {
         std::ofstream output(path, std::ios::binary | std::ios::trunc);
@@ -327,6 +333,25 @@ namespace
                 "verify: RAsset identity/recipe changed after reimport"))
             return false;
 
+        std::vector<std::uint8_t> projectionBytes;
+        const std::string projectionRelative =
+            ResolveReusableModelManagedProjectionPath(product->projectRelativePath);
+        if (!Require(ReadBytes(projectRoot / fs::u8path(projectionRelative),
+                projectionBytes),
+                "verify: managed projection is missing after reimport"))
+            return false;
+        const std::string projectionText(
+            projectionBytes.begin(), projectionBytes.end());
+        if (!Require(projectionText.find(productId) != std::string::npos &&
+                projectionText.find(sourceId) != std::string::npos &&
+                projectionText.find(expectedSourcePath) != std::string::npos &&
+                projectionText.find(product->projectRelativePath) != std::string::npos &&
+                projectionText.find(
+                    ResolveReusableModelThumbnailPath(product->projectRelativePath)) !=
+                    std::string::npos,
+                "verify: managed projection did not refresh source/package provenance"))
+            return false;
+
         return RequireCatalogueState(projectRoot, productId, AssetCatalogueState::Current);
     }
 
@@ -366,6 +391,7 @@ namespace
         importRequest.sourceProjectRelativePath = sourceRelative;
         importRequest.assetProjectRelativePath = productRelative;
         importRequest.expectedFormat = ModelSourceFormat::Fbx;
+        importRequest.thumbnailPngBytes = ThumbnailFixture();
         ReusableAssetService service;
         const auto imported = service.ImportModelAsset(importRequest);
         if (!Require(imported.succeeded && imported.transaction.committed,

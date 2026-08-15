@@ -16,6 +16,8 @@ namespace renegade::bridge
     inline constexpr const char* ReusableModelPayloadFormat = "wicked-wiscene";
     inline constexpr const char* ReusableModelImportSettingsSchema =
         "renegade-model-import-settings";
+    inline constexpr const char* ReusableModelManagedProjectionFormat =
+        "renegade-managed-asset-projection";
 
     struct ReusableModelAssetManifest
     {
@@ -41,6 +43,40 @@ namespace renegade::bridge
         ReusableModelAssetManifest manifest;
         std::vector<std::uint8_t> payload;
     };
+
+    struct ReusableModelManagedProjection
+    {
+        static constexpr std::uint32_t CurrentSchemaVersion = 1;
+
+        std::string formatIdentifier = ReusableModelManagedProjectionFormat;
+        std::uint32_t schemaVersion = CurrentSchemaVersion;
+        StableId projectId;
+        StableId assetId;
+        StableId sourceAssetId;
+        std::string sourceProjectRelativePath;
+        std::string assetProjectRelativePath;
+        std::string sourceFormat;
+        std::string importer;
+        std::uint32_t importerVersion = 1;
+        std::string settingsSchema = ReusableModelImportSettingsSchema;
+        std::uint32_t settingsVersion = 1;
+        std::string settingsJson = "{}";
+        std::string payloadHash;
+        ModelDerivedMetadata modelMetadata;
+        std::string thumbnailProjectRelativePath;
+    };
+
+    [[nodiscard]] std::string ResolveReusableModelManagedProjectionPath(
+        const std::string& assetProjectRelativePath);
+    [[nodiscard]] std::string ResolveReusableModelThumbnailPath(
+        const std::string& assetProjectRelativePath);
+    [[nodiscard]] bool ValidateReusableModelManagedProjection(
+        const ReusableModelManagedProjection& projection,
+        std::string& error);
+    [[nodiscard]] bool SerializeReusableModelManagedProjection(
+        const ReusableModelManagedProjection& projection,
+        std::string& json,
+        std::string& error);
 
     [[nodiscard]] bool ValidateReusableModelAssetDocument(
         const ReusableModelAssetDocument& document,
@@ -77,6 +113,11 @@ namespace renegade::bridge
         // The canonical object is nevertheless persisted now so Gate 4 can
         // replay the exact accepted recipe instead of guessing from paths.
         std::string settingsJson = "{}";
+
+        // Optional creator thumbnail already captured as PNG bytes.
+        // The reusable service never reads an arbitrary external path;
+        // these bytes join the governed product transaction directly.
+        std::vector<std::uint8_t> thumbnailPngBytes;
     };
 
     struct ReusableModelImportOptions
@@ -93,6 +134,8 @@ namespace renegade::bridge
         StableId assetId;
         std::string sourceProjectRelativePath;
         std::string assetProjectRelativePath;
+        std::string managedProjectionProjectRelativePath;
+        std::string thumbnailProjectRelativePath;
         ImportResult import;
         ModelDerivedMetadata modelMetadata;
         ProjectDocumentTransactionResult transaction;
@@ -123,6 +166,8 @@ namespace renegade::bridge
         StableId assetId;
         std::string sourceProjectRelativePath;
         std::string assetProjectRelativePath;
+        std::string managedProjectionProjectRelativePath;
+        std::string thumbnailProjectRelativePath;
         ImportedProductStatus statusBefore;
         ImportResult import;
         ModelDerivedMetadata modelMetadata;
@@ -178,6 +223,11 @@ namespace renegade::bridge
             return scene_.IsValid() ? scene_.get() : nullptr;
         }
 
+        [[nodiscard]] wi::scene::Scene* PeekMutableScene() noexcept
+        {
+            return scene_.IsValid() ? scene_.get() : nullptr;
+        }
+
         [[nodiscard]] wi::allocator::shared_ptr<wi::scene::Scene>
         ReleaseScene() noexcept
         {
@@ -202,7 +252,9 @@ namespace renegade::bridge
     public:
         [[nodiscard]] ReusableModelImportResult ImportModelAsset(
             const ReusableModelImportRequest& request,
-            ReusableModelImportOptions options = {}) const;
+            ReusableModelImportOptions options = {},
+            PreparedModelImport preparedModel = {},
+            PreparedReusableModelPlacement* preparedPlacement = nullptr) const;
 
         [[nodiscard]] ReusableModelReimportResult ReimportModelAsset(
             const ReusableModelReimportRequest& request,

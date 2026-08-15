@@ -1,5 +1,7 @@
 #include "renegade/bridge/ReusableAssetService.h"
 
+#include "renegade/bridge/MaterialTextureAssetService.h"
+
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -7,6 +9,7 @@
 #include <iomanip>
 #include <iterator>
 #include <sstream>
+#include <unordered_set>
 #include <vector>
 
 namespace renegade::bridge
@@ -131,6 +134,7 @@ namespace renegade::bridge
             error.clear();
             return true;
         }
+
     }
 
     PreparedReusableModelPlacement ReusableAssetService::PrepareModelAssetPlacement(
@@ -240,19 +244,47 @@ namespace renegade::bridge
             return prepared;
         }
 
-        // Gate 3 serialized the embedded Wicked payload from this same project
-        // working directory. Recreate that location so relative resource paths
-        // inside the WISCENE are resolved exactly as they were at import time.
-        const fs::path importDirectory = root / "Intermediate" / "Imports";
-        fs::create_directories(importDirectory, ec);
+        // WISCENE material resources can retain relative paths from the model
+        // import. For retained glTF sources, sidecar images/buffers live beside
+        // the retained source under SourceAssets. Rehydrate the payload from
+        // that same directory whenever the retained source is available so
+        // Wicked resolves those relative paths against the correct base. This
+        // fixes the creator-facing geometry-without-textures failure. If the
+        // source is unavailable, preserve the accepted source-independent
+        // placement fallback used by the lifecycle tests.
+        fs::path placementDirectory = root / "Intermediate" / "Imports";
+        const AssetRecord* sourceRecord = FindRecordById(
+            registry, provenance->sourceAssetId);
+        if (sourceRecord != nullptr && sourceRecord->sourceAvailable &&
+            !sourceRecord->projectRelativePath.empty())
+        {
+            const fs::path sourceRoot = fs::weakly_canonical(root / "SourceAssets", ec);
+            if (!ec && fs::is_directory(sourceRoot, ec) && !ec)
+            {
+                const fs::path retainedSource = fs::weakly_canonical(
+                    root / fs::u8path(sourceRecord->projectRelativePath), ec);
+                if (!ec && fs::is_regular_file(retainedSource, ec) && !ec &&
+                    IsWithin(retainedSource, sourceRoot))
+                {
+                    placementDirectory = retainedSource.parent_path();
+                }
+                ec.clear();
+            }
+            else
+            {
+                ec.clear();
+            }
+        }
+
+        fs::create_directories(placementDirectory, ec);
         if (ec)
         {
             result.error =
                 "Could not create reusable placement working directory: " + ec.message();
             return prepared;
         }
-        const fs::path stagedPayload =
-            importDirectory / fs::u8path(request.assetId + ".placement.wiscene");
+        const fs::path stagedPayload = placementDirectory /
+            fs::u8path(".renegade-" + request.assetId + ".placement.wiscene");
         fs::remove(stagedPayload, ec);
         ec.clear();
 
@@ -287,6 +319,35 @@ namespace renegade::bridge
         }
         archive = wi::Archive();
         cleanup();
+
+        // Stable-ID material bindings are authoritative but Wicked Resource
+        // handles themselves are not serialized. Resolve them at the exact
+        // point the reusable payload becomes a live placement candidate. This
+        // makes first placement match Save/Reopen instead of showing grey until
+        // a project lifecycle restore happens later.
+        const auto restored = RestoreMaterialTextureBindings(
+            *prepared.scene_, root.generic_u8string(), request.projectId);
+        if (!restored.succeeded)
+        {
+            result.error =
+                "Reusable asset material textures could not be restored for placement: " +
+                restored.error;
+            prepared.scene_.reset();
+            return prepared;
+        }
+
+        // Rebuild renderer-independent object bounds from serialized hierarchy
+        // before MeasureModelBounds() is used by Studio placement. If the scene
+        // does not expose ordinary mesh/object evidence, the normal validation
+        // below will reject it; otherwise a failure here is a corrupt hierarchy
+        // and must not silently fall back to unscaled raw mesh coordinates.
+        if (!ImportService::RebuildHierarchyAwareModelBounds(*prepared.scene_))
+        {
+            result.error =
+                "Reusable asset placement could not derive hierarchy-aware model bounds.";
+            prepared.scene_.reset();
+            return prepared;
+        }
 
         result.sceneSummary = ImportService::Summarize(*prepared.scene_);
         result.modelEvidence = ImportService::SummarizeModelEvidence(*prepared.scene_);

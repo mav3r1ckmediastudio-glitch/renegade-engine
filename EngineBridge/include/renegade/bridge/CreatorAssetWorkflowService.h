@@ -17,11 +17,10 @@ namespace renegade::bridge
         std::string error;
     };
 
-    // Gate 5 creator-facing orchestration. This service does not own Studio UI
-    // and does not bypass LC01/LP07 services: it stages an external source into
-    // project-owned SourceAssets, projects current disk state through LC01,
-    // delegates import/reimport/placement to ReusableAssetService and persists
-    // creator-owned catalogue tags through AssetCatalogueService.
+    // Creator-facing orchestration. This service does not own Studio UI and
+    // does not bypass LC01/LP07/LP08 services: it stages external sources into
+    // project-owned SourceAssets, delegates governed import/reimport/placement,
+    // and persists creator-owned catalogue state.
     class CreatorAssetWorkflowService
     {
     public:
@@ -31,16 +30,44 @@ namespace renegade::bridge
             AssetRegistry& registry,
             std::string& error) const;
 
+        // Fast creator-facing projection of the last committed LC01 state.
+        // Unlike BuildCatalogue(), this never rescans or hashes Content/SourceAssets;
+        // Studio uses it for normal browser presentation and immediate post-import
+        // reveal so a committed stable ID cannot be replaced by a recovery pass.
+        [[nodiscard]] bool BuildCatalogueSnapshot(
+            const std::string& projectRoot,
+            const StableId& projectId,
+            AssetCatalogue& catalogue,
+            std::string& error) const;
+
+        // Explicit disk-recovery projection. This retains the existing LC01 moved /
+        // missing / stale refresh semantics for lifecycle checks and recovery flows.
         [[nodiscard]] bool BuildCatalogue(
             const std::string& projectRoot,
             const StableId& projectId,
             AssetCatalogue& catalogue,
             std::string& error) const;
 
-        [[nodiscard]] CreatorModelImportResult ImportModel(
+        // Cheap creator-facing destination/name preflight. This mirrors the
+        // authoritative collision semantics used by ImportModel() but performs no
+        // material preparation, source retention, package serialization or registry write.
+        [[nodiscard]] bool ValidateModelImportDestination(
             const std::string& projectRoot,
-            const StableId& projectId,
-            const std::string& externalSourcePath) const;
+            const std::string& externalSourcePath,
+            const std::string& assetName,
+            const std::string& destinationFolder,
+            std::string& error) const;
+
+        [[nodiscard]] CreatorModelImportResult ImportModel(
+        const std::string& projectRoot,
+        const StableId& projectId,
+        const std::string& externalSourcePath,
+        const std::string& settingsJson = "{}",
+        const std::string& assetName = {},
+        const std::string& destinationFolder = "Content/Models",
+        PreparedModelImport preparedModel = {},
+        const std::string& thumbnailSourcePath = {},
+        PreparedReusableModelPlacement* preparedPlacement = nullptr) const;
 
         [[nodiscard]] ReusableModelReimportResult ReimportModel(
             const std::string& projectRoot,

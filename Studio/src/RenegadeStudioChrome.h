@@ -77,6 +77,37 @@ namespace renegade::studio
         std::function<void(float)> valueCommitted_;
     };
 
+    class RenegadeTextureMapList final : public wi::gui::Widget
+    {
+    public:
+        static constexpr std::size_t SlotCount = 7;
+
+        void ClearSlots();
+        void SetSlot(
+            std::size_t index,
+            const wi::Resource& resource,
+            std::string path);
+        void SetSelectedSlot(std::size_t index);
+        void OnSlotSelected(std::function<void(std::size_t)> callback);
+        void OnBrowseRequested(std::function<void(std::size_t)> callback);
+        void Update(const wi::Canvas& canvas, float dt) override;
+        void Render(
+            const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const override;
+        const char* GetWidgetTypeName() const override
+        {
+            return "RenegadeTextureMapList";
+        }
+
+    private:
+        std::array<wi::Resource, SlotCount> resources_;
+        std::array<std::string, SlotCount> paths_;
+        std::size_t selectedSlot_ = 0;
+        std::size_t hoveredSlot_ = SlotCount;
+        std::function<void(std::size_t)> slotSelected_;
+        std::function<void(std::size_t)> browseRequested_;
+    };
+
     class RenegadeStudioChrome : public wi::gui::Widget
     {
     public:
@@ -148,6 +179,7 @@ namespace renegade::studio
             std::string name;
             std::string relativePath;
             std::string typeLabel;
+            wi::Resource thumbnail;
             bool directory = false;
         };
 
@@ -158,6 +190,7 @@ namespace renegade::studio
             std::vector<AssetFolderRow> folders,
             std::vector<AssetCard> assets,
             std::string currentPath);
+        void SetAssetBrowserSelectedPath(std::string relativePath);
         void SetSceneName(std::string sceneName);
         void SetSceneDirty(bool dirty) noexcept;
         void SetStatusText(std::string statusText);
@@ -181,6 +214,11 @@ namespace renegade::studio
             std::function<void(const std::string&)> callback);
         void OnAssetBrowserItemSelected(
             std::function<void(const std::string&)> callback);
+        void OnAssetBrowserItemDropped(
+            std::function<void(
+                const std::string&,
+                float,
+                float)> callback);
         void OnLayoutChanged(
             std::function<void(float, float, float, bool)> callback);
 
@@ -190,6 +228,18 @@ namespace renegade::studio
         [[nodiscard]] float DrawerHeight() const noexcept;
         [[nodiscard]] int ActiveBottomTab() const noexcept { return activeBottomTab_; }
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
+        [[nodiscard]] bool AssetBrowserDragCandidate() const noexcept
+        {
+            return assetBrowserDragCandidate_;
+        }
+        [[nodiscard]] bool AssetBrowserDragging() const noexcept
+        {
+            return assetBrowserDragging_;
+        }
+        [[nodiscard]] const std::string& AssetBrowserDragPath() const noexcept
+        {
+            return assetBrowserDragPath_;
+        }
 
         void Update(const wi::Canvas& canvas, float dt) override;
         void Render(
@@ -264,8 +314,40 @@ namespace renegade::studio
             assetBrowserFolderSelected_;
         std::function<void(const std::string&)>
             assetBrowserItemSelected_;
+        std::function<void(const std::string&, float, float)>
+            assetBrowserItemDropped_;
+        std::string assetBrowserDragPath_;
+        XMFLOAT2 assetBrowserDragStart_ = {};
+        bool assetBrowserDragCandidate_ = false;
+        bool assetBrowserDragging_ = false;
         std::function<void(float, float, float, bool)> layoutChanged_;
     };
+
+    namespace detail
+    {
+        void RequestCreatorAssetDragPreparation(
+            const bridge::StableId& assetId,
+            const std::string& assetPath);
+        void WarmCreatorAssetDragPreparation(
+            const bridge::StableId& assetId,
+            const std::string& assetPath);
+        void PrimeCreatorAssetDragPreparation(
+            const bridge::StableId& assetId,
+            const std::string& assetPath,
+            bridge::PreparedReusableModelPlacement prepared);
+        void QueueCreatorAssetDrop(
+            const bridge::StableId& assetId,
+            const std::string& assetPath,
+            float screenX,
+            float screenY);
+        [[nodiscard]] bool CreatorAssetDragPreviewOwnsDrop(
+            const bridge::StableId& assetId) noexcept;
+        [[nodiscard]] wi::ecs::Entity UpdateCreatorAssetDragPreview(
+            const wi::Canvas& canvas,
+            const wi::scene::CameraComponent& camera);
+        void ClearCreatorAssetDragPreview();
+        [[nodiscard]] bool CreatorAssetDragPreviewBlocksSave() noexcept;
+    }
 
     // LP07 Gate 5 overlays the creator Asset Browser lifecycle on Renegade's
     // existing custom chrome. The base chrome remains the rendering/interaction
@@ -275,6 +357,30 @@ namespace renegade::studio
     class CreatorAssetStudioChrome final : public RenegadeStudioChrome
     {
     public:
+        CreatorAssetStudioChrome()
+        {
+            current_ = this;
+        }
+        ~CreatorAssetStudioChrome() override
+        {
+            detail::ClearCreatorAssetDragPreview();
+            if (current_ == this)
+                current_ = nullptr;
+        }
+
+        [[nodiscard]] static CreatorAssetStudioChrome* Current() noexcept
+        {
+            return current_;
+        }
+        [[nodiscard]] const bridge::StableId& SelectedCreatorAssetId() const noexcept
+        {
+            return creatorSelectedAssetId_;
+        }
+        [[nodiscard]] const std::string& SelectedCreatorAssetPath() const noexcept
+        {
+            return creatorSelectedAssetPath_;
+        }
+
         void Create();
         void SetLayout(float width, float height);
         void SetAssetBrowserData(
@@ -285,6 +391,20 @@ namespace renegade::studio
         void OnAction(std::function<void(Action)> callback);
         void OnAssetBrowserItemSelected(
             std::function<void(const std::string&)> callback);
+        void OnCreatorAssetPlaceRequested(
+            std::function<void(
+                const bridge::StableId&,
+                const std::string&)> callback);
+        void OnCreatorAssetDropped(
+            std::function<void(
+                const bridge::StableId&,
+                const std::string&,
+                float,
+                float)> callback);
+        [[nodiscard]] bool RevealCreatorAsset(
+            const bridge::StableId& assetId,
+            const std::string& relativePath,
+            std::string& error);
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
 
         void Update(const wi::Canvas& canvas, float dt) override;
@@ -311,24 +431,31 @@ namespace renegade::studio
         void PlaceSelectedCreatorAsset();
         void ReimportSelectedCreatorAsset();
         void SaveSelectedCreatorTags();
-        void PlacePreparedCreatorAsset(
-            bridge::PreparedReusableModelPlacement prepared,
-            const std::string& label);
         void RefreshCreatorHierarchyRows();
         [[nodiscard]] bridge::AssetCatalogueQuery CreatorAssetQuery() const;
         [[nodiscard]] std::vector<std::string> CreatorTagInput() const;
 
+        inline static CreatorAssetStudioChrome* current_ = nullptr;
         bridge::CreatorAssetWorkflowService creatorAssetWorkflow_;
         bridge::AssetCatalogue creatorAssetCatalogue_;
+        bridge::StableId creatorCatalogueProjectId_;
         bridge::StableId creatorSelectedAssetId_;
         std::string creatorSelectedAssetPath_;
         bool creatorAssetRefreshPending_ = true;
+        bool creatorAssetCatalogueDirty_ = true;
         bool creatorAssetControlConsumed_ = false;
         std::string creatorAssetLastSearch_;
         int creatorAssetStateFilter_ = 0;
         int creatorAssetFormatFilter_ = 0;
         int creatorAssetRigFilter_ = 0;
-        std::uint32_t creatorPlacementSerial_ = 0;
+        std::function<void(Action)> creatorAction_;
+        std::function<void(const bridge::StableId&, const std::string&)>
+            creatorAssetPlaceRequested_;
+        std::function<void(
+            const bridge::StableId&,
+            const std::string&,
+            float,
+            float)> creatorAssetDropped_;
         wi::jobsystem::context creatorAssetWorkload_;
         RenegadeTextInputField creatorAssetSearch_;
         RenegadeTextInputField creatorAssetTags_;
@@ -343,6 +470,8 @@ namespace renegade::studio
         float creatorLayoutHeight_ = 1080.0f;
         std::vector<AssetFolderRow> creatorFilesystemFolders_;
         std::vector<AssetCard> creatorFilesystemAssets_;
+        std::vector<std::string> creatorVisibleAssetPaths_;
+        std::unordered_set<std::string> creatorVisibleThumbnailPaths_;
         std::string creatorCurrentPath_ = "Content";
     };
 }

@@ -58,7 +58,9 @@ if(NOT RENEGADE_WICKED_REVISION_RESULT EQUAL 0 OR
 endif()
 
 add_executable(RenegadeStudio WIN32
+    "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/DummyVisualizer.cpp"
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/Translator.cpp"
+    src/CreatorAssetDragPreview.cpp
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h
@@ -99,6 +101,7 @@ target_compile_definitions(RenegadeStudio
 target_compile_options(RenegadeStudio
     PRIVATE
         "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+        "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>"
 )
 
 set_target_properties(RenegadeStudio PROPERTIES
@@ -137,6 +140,9 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/creator-human-reference.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/creator-human-reference.png"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/package/BuildInputs"
         "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"

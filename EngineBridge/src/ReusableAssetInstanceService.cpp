@@ -1,5 +1,7 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 
+#include "renegade/bridge/CreatorModelImportRecipe.h"
+
 #include <utility>
 
 namespace renegade::bridge
@@ -49,6 +51,24 @@ namespace renegade::bridge
         {
             return metadata.bool_values.has(ReusableAssetPayloadRootMetadataKey) &&
                 metadata.bool_values.get(ReusableAssetPayloadRootMetadataKey);
+        }
+
+        wi::ecs::Entity FindNewCreatorAuthoredRoot(
+            const wi::scene::Scene& scene,
+            const wi::unordered_set<wi::ecs::Entity>& entitiesBefore) noexcept
+        {
+            for (std::size_t index = 0; index < scene.names.GetCount(); ++index)
+            {
+                if (scene.names[index].name != CreatorAuthoredTransformRootName)
+                    continue;
+                const wi::ecs::Entity entity = scene.names.GetEntity(index);
+                if (entitiesBefore.count(entity) == 0 &&
+                    scene.transforms.GetComponent(entity) != nullptr)
+                {
+                    return entity;
+                }
+            }
+            return wi::ecs::INVALID_ENTITY;
         }
     }
 
@@ -126,39 +146,150 @@ namespace renegade::bridge
     {
     }
 
+    PlaceReusableModelCommand::PlaceReusableModelCommand(
+        wi::scene::Scene& targetScene,
+        StableId assetId,
+        const wi::ecs::Entity existingInstanceRoot,
+        const wi::ecs::Entity existingPayloadRoot,
+        const std::size_t firstMaterialIndex)
+        : scene_(&targetScene)
+        , assetId_(std::move(assetId))
+        , entity_(existingInstanceRoot)
+        , payloadRoot_(existingPayloadRoot)
+        , firstMaterialIndex_(firstMaterialIndex)
+        , adoptExisting_(true)
+    {
+    }
+
+    void PlaceReusableModelCommand::CaptureMaterialResources(
+        const std::size_t firstMaterialIndex)
+    {
+        materialResources_.clear();
+        if (scene_ == nullptr)
+            return;
+
+        for (std::size_t materialIndex = firstMaterialIndex;
+            materialIndex < scene_->materials.GetCount(); ++materialIndex)
+        {
+            const wi::ecs::Entity materialEntity =
+                scene_->materials.GetEntity(materialIndex);
+            const auto& material = scene_->materials[materialIndex];
+            for (std::uint32_t slot = 0;
+                slot < wi::scene::MaterialComponent::TEXTURESLOT_COUNT; ++slot)
+            {
+                const auto& resource = material.textures[slot].resource;
+                if (resource.IsValid())
+                {
+                    materialResources_.push_back(
+                        {materialEntity, slot, resource});
+                }
+            }
+        }
+    }
+
+    void PlaceReusableModelCommand::RestoreCapturedMaterialResources()
+    {
+        if (scene_ == nullptr)
+            return;
+
+        for (const auto& captured : materialResources_)
+        {
+            auto* material = scene_->materials.GetComponent(
+                captured.materialEntity);
+            if (material == nullptr ||
+                captured.slot >= wi::scene::MaterialComponent::TEXTURESLOT_COUNT)
+            {
+                continue;
+            }
+            material->textures[captured.slot].resource = captured.resource;
+            material->SetDirty();
+        }
+    }
+
     bool PlaceReusableModelCommand::Execute()
     {
         if (!hasSnapshot_)
         {
-            if (scene_ == nullptr || !preparedScene_.IsValid() ||
-                !IsValidStableId(assetId_))
-            {
+            if (scene_ == nullptr || !IsValidStableId(assetId_))
                 return false;
+
+            if (adoptExisting_)
+            {
+                if (!WrapperExists(*scene_, entity_) ||
+                    !WrapperExists(*scene_, payloadRoot_) ||
+                    !scene_->Entity_IsDescendant(payloadRoot_, entity_))
+                {
+                    return false;
+                }
+
+                if (auto* name = scene_->names.GetComponent(entity_))
+                    name->name = "Reusable Asset Instance";
+                else
+                    scene_->names.Create(entity_).name = "Reusable Asset Instance";
+
+                auto& instanceMetadata = scene_->metadatas.Create(entity_);
+                instanceMetadata.string_values.set(
+                    ReusableAssetInstanceIdMetadataKey, assetId_);
+                instanceMetadata.int_values.set(
+                    ReusableAssetInstanceVersionMetadataKey,
+                    ReusableAssetInstanceVersion);
+
+                auto* payloadMetadata = scene_->metadatas.GetComponent(payloadRoot_);
+                if (payloadMetadata == nullptr)
+                    payloadMetadata = &scene_->metadatas.Create(payloadRoot_);
+                payloadMetadata->bool_values.set(
+                    ReusableAssetPayloadRootMetadataKey, true);
+
+                CaptureMaterialResources(firstMaterialIndex_);
+                snapshot_.SetReadModeAndResetPos(false);
+                wi::ecs::EntitySerializer serializer;
+                scene_->Entity_Serialize(snapshot_, serializer, entity_);
+                hasSnapshot_ = true;
+                return true;
             }
 
+            if (!preparedScene_.IsValid())
+                return false;
+
+            wi::unordered_set<wi::ecs::Entity> entitiesBefore;
+            scene_->FindAllEntities(entitiesBefore);
             const std::size_t transformCountBefore =
                 scene_->transforms.GetCount();
             const std::size_t animationCountBefore =
                 scene_->animations.GetCount();
+            const std::size_t materialCountBefore =
+                scene_->materials.GetCount();
 
             scene_->Merge(*preparedScene_);
             preparedScene_.reset();
             if (scene_->transforms.GetCount() <= transformCountBefore)
                 return false;
 
-            payloadRoot_ = scene_->transforms.GetEntity(transformCountBefore);
+            // Creator-authored products deliberately carry their approved
+            // transform on one marked root. That root is the replaceable
+            // payload boundary and must remain intact below the instance
+            // wrapper. Legacy products predate the marker and retain the Gate
+            // 6 normalization behavior.
+            payloadRoot_ = FindNewCreatorAuthoredRoot(*scene_, entitiesBefore);
+            const bool creatorAuthoredPayload =
+                payloadRoot_ != wi::ecs::INVALID_ENTITY;
+            if (!creatorAuthoredPayload)
+            {
+                payloadRoot_ =
+                    scene_->transforms.GetEntity(transformCountBefore);
+            }
+
             auto* payloadTransform =
                 scene_->transforms.GetComponent(payloadRoot_);
             if (payloadTransform == nullptr)
                 return false;
 
-            // Gate 5 put authored placement directly on the imported root. Gate
-            // 6 introduces a stable wrapper: authored instance transform lives
-            // there, while the child payload can later be replaced from the
-            // current packaged .rasset without destroying that authored state.
-            payloadTransform->translation_local = XMFLOAT3(0.0f, 0.0f, 0.0f);
-            payloadTransform->scale_local = XMFLOAT3(1.0f, 1.0f, 1.0f);
-            payloadTransform->SetDirty();
+            if (!creatorAuthoredPayload)
+            {
+                payloadTransform->translation_local = XMFLOAT3(0.0f, 0.0f, 0.0f);
+                payloadTransform->scale_local = XMFLOAT3(1.0f, 1.0f, 1.0f);
+                payloadTransform->SetDirty();
+            }
 
             entity_ = scene_->Entity_CreateTransform("Reusable Asset Instance");
             auto* instanceTransform = scene_->transforms.GetComponent(entity_);
@@ -182,8 +313,9 @@ namespace renegade::bridge
             payloadMetadata->bool_values.set(
                 ReusableAssetPayloadRootMetadataKey, true);
 
-            // The payload has just been normalized into wrapper-local space.
-            // Tell Wicked not to preserve its pre-attach world transform.
+            // Both the legacy normalized root and the creator-authored root are
+            // already in the local space Renegade wants to preserve below the
+            // stable instance wrapper.
             scene_->Component_Attach(payloadRoot_, entity_, true);
 
             for (std::size_t index = animationCountBefore;
@@ -191,6 +323,12 @@ namespace renegade::bridge
             {
                 scene_->animations[index].Play();
             }
+
+            // Wicked Resource handles are deliberately non-serialized. Keep
+            // the governed resources loaded by placement preparation alive so
+            // Undo/Redo can restore the exact same live material state instead
+            // of producing a grey instance until the next project reopen.
+            CaptureMaterialResources(materialCountBefore);
 
             snapshot_.SetReadModeAndResetPos(false);
             wi::ecs::EntitySerializer serializer;
@@ -219,6 +357,7 @@ namespace renegade::bridge
             if (instance.instanceRoot == entity_)
             {
                 payloadRoot_ = instance.payloadRoot;
+                RestoreCapturedMaterialResources();
                 return true;
             }
         }

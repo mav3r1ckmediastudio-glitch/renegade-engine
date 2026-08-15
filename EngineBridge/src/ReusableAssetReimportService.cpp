@@ -1,4 +1,5 @@
 #include "renegade/bridge/ReusableAssetService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 
 #include <algorithm>
 #include <cctype>
@@ -208,6 +209,7 @@ namespace renegade::bridge
         bool ParseStoredRecipe(
             const ImportedProductRecord& provenance,
             ModelSourceFormat& format,
+            std::string& optionsJson,
             std::string& error)
         {
             format = ModelSourceFormat::Unknown;
@@ -229,11 +231,10 @@ namespace renegade::bridge
                     error = "Stored reusable-model import recipe is not the canonical version-1 contract.";
                     return false;
                 }
-                if (!recipe.at("options").empty())
-                {
-                    error = "Stored reusable-model version-1 import options are unsupported.";
+                optionsJson = recipe.at("options").dump();
+                CreatorModelImportRecipe creatorRecipe;
+                if (!ParseCreatorModelImportOptions(optionsJson, creatorRecipe, error))
                     return false;
-                }
                 const std::string token = recipe.at("source_format").get<std::string>();
                 if (!ParseSourceFormatToken(token, format) ||
                     !ImportService::IsModelSourceFormatSupported(format))
@@ -445,6 +446,10 @@ namespace renegade::bridge
         }
         result.sourceProjectRelativePath = sourceRecord->projectRelativePath;
         result.assetProjectRelativePath = productRecord->projectRelativePath;
+        result.managedProjectionProjectRelativePath =
+            ResolveReusableModelManagedProjectionPath(result.assetProjectRelativePath);
+        result.thumbnailProjectRelativePath =
+            ResolveReusableModelThumbnailPath(result.assetProjectRelativePath);
         result.previousProductHash = productRecord->contentHash;
 
         if (sourceRecord->dependencyClass != DependencyClass::ImportedContent ||
@@ -495,6 +500,28 @@ namespace renegade::bridge
         {
             result.error = "Reusable model last-good product is unavailable or resolves outside Content.";
             return result;
+        }
+
+        std::string thumbnailAssociation;
+        const fs::path thumbnailPath =
+            root / fs::u8path(result.thumbnailProjectRelativePath);
+        ec.clear();
+        const bool thumbnailExists = fs::exists(thumbnailPath, ec);
+        if (ec)
+        {
+            result.error = "Could not inspect reusable model thumbnail: " + ec.message();
+            return result;
+        }
+        if (thumbnailExists)
+        {
+            const fs::path canonicalThumbnail = fs::weakly_canonical(thumbnailPath, ec);
+            if (ec || !fs::is_regular_file(canonicalThumbnail, ec) || ec ||
+                !IsWithin(canonicalThumbnail, contentRoot))
+            {
+                result.error = "Reusable model thumbnail is not a regular Content package file.";
+                return result;
+            }
+            thumbnailAssociation = result.thumbnailProjectRelativePath;
         }
 
         if (!GetImportedProductStatus(registry, acceptedProvenance,
@@ -549,7 +576,8 @@ namespace renegade::bridge
         }
 
         ModelSourceFormat format = ModelSourceFormat::Unknown;
-        if (!ParseStoredRecipe(acceptedProvenance, format, result.error))
+        std::string creatorOptionsJson;
+        if (!ParseStoredRecipe(acceptedProvenance, format, creatorOptionsJson, result.error))
             return result;
         if (existingAsset.manifest.sourceFormat != SourceFormatToken(format))
         {
@@ -591,10 +619,19 @@ namespace renegade::bridge
             cleanupTemporary();
             return result;
         }
-        const wi::scene::Scene* preparedScene = prepared.PeekScene();
+        wi::scene::Scene* preparedScene = prepared.PeekMutableScene();
         if (preparedScene == nullptr)
         {
             result.error = "Reusable model reimport lost its prepared scene before validation.";
+            cleanupTemporary();
+            return result;
+        }
+        CreatorModelImportRecipe creatorRecipe;
+        if (!ParseCreatorModelImportOptions(creatorOptionsJson, creatorRecipe, result.error) ||
+            !ApplyCreatorModelImportRecipe(*preparedScene, root.generic_u8string(),
+                request.projectId, creatorRecipe, result.error) ||
+            !importer.RefreshPreparedModelEvidence(prepared, result.error))
+        {
             cleanupTemporary();
             return result;
         }
@@ -687,6 +724,26 @@ namespace renegade::bridge
                 metadata, request.assetId, result.modelMetadata, result.error))
             return result;
 
+        ReusableModelManagedProjection projection;
+        projection.projectId = replacement.manifest.projectId;
+        projection.assetId = replacement.manifest.assetId;
+        projection.sourceAssetId = replacement.manifest.sourceAssetId;
+        projection.sourceProjectRelativePath = result.sourceProjectRelativePath;
+        projection.assetProjectRelativePath = result.assetProjectRelativePath;
+        projection.sourceFormat = replacement.manifest.sourceFormat;
+        projection.importer = replacement.manifest.importer;
+        projection.importerVersion = replacement.manifest.importerVersion;
+        projection.settingsSchema = replacement.manifest.settingsSchema;
+        projection.settingsVersion = replacement.manifest.settingsVersion;
+        projection.settingsJson = replacement.manifest.settingsJson;
+        projection.payloadHash = replacement.manifest.payloadHash;
+        projection.modelMetadata = result.modelMetadata;
+        projection.thumbnailProjectRelativePath = thumbnailAssociation;
+        std::string projectionJson;
+        if (!SerializeReusableModelManagedProjection(
+                projection, projectionJson, result.error))
+            return result;
+
         std::string registryJson;
         std::string metadataJson;
         if (!SerializeAssetRegistry(registry, registryJson, result.error) ||
@@ -736,8 +793,30 @@ namespace renegade::bridge
             return true;
         };
 
+        ProjectDocumentWrite projectionWrite;
+        projectionWrite.destinationPath =
+            (root / fs::u8path(result.managedProjectionProjectRelativePath))
+                .generic_u8string();
+        projectionWrite.content.assign(projectionJson.begin(), projectionJson.end());
+        projectionWrite.validator = [projectionJson](
+            const std::string& path, std::string& error)
+        {
+            std::ifstream stream(fs::u8path(path), std::ios::binary);
+            const std::string staged{
+                std::istreambuf_iterator<char>(stream),
+                std::istreambuf_iterator<char>()};
+            if ((!stream && !stream.eof()) || staged != projectionJson)
+            {
+                error = "Staged managed reusable-asset projection changed during reimport.";
+                return false;
+            }
+            error.clear();
+            return true;
+        };
+
         std::vector<ProjectDocumentWrite> writes;
         writes.push_back(std::move(assetWrite));
+        writes.push_back(std::move(projectionWrite));
         writes.push_back(RegistryWrite(root, registry, registryJson));
         writes.push_back(MetadataWrite(root, metadata, metadataJson));
 

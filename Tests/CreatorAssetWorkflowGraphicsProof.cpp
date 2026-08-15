@@ -1,4 +1,5 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/CreatorAssetActionPolicy.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneDocumentService.h"
@@ -10,6 +11,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -143,9 +145,71 @@ namespace
             return false;
 
         CreatorAssetWorkflowService workflow;
+
+        // The creator importer already paid the conversion cost to create its
+        // visible preview. Prove that exact prepared scene can be retargeted to
+        // byte-identical project-owned source bytes, while even a one-byte source
+        // change is rejected before governed commit.
+        ImportService importer;
+        ModelImportRequest previewRequest;
+        previewRequest.sourcePath = animatedFixture.generic_u8string();
+        previewRequest.assetPath =
+            (projectRoot / "Intermediate" / "Imports" / ".retained-preview.wiscene")
+                .generic_u8string();
+        previewRequest.expectedFormat = ModelSourceFormat::Fbx;
+        auto retained = importer.PrepareModelAsset(previewRequest);
+        if (!Require(retained.IsReady(),
+                "representative FBX could not be prepared once for retained creator commit: " +
+                    retained.Result().error))
+            return false;
+
+        std::error_code retainedEc;
+        const fs::path identicalSource =
+            projectRoot / "Intermediate" / "Imports" / "retained-identical.fbx";
+        fs::create_directories(identicalSource.parent_path(), retainedEc);
+        if (!Require(!retainedEc, "could not create retained-import proof folder"))
+            return false;
+        fs::copy_file(animatedFixture, identicalSource,
+            fs::copy_options::overwrite_existing, retainedEc);
+        if (!Require(!retainedEc, "could not copy retained-import proof source"))
+            return false;
+
+        ModelImportRequest retargetRequest;
+        retargetRequest.sourcePath = identicalSource.generic_u8string();
+        retargetRequest.assetPath =
+            (projectRoot / "Intermediate" / "Imports" / ".retargeted-preview.wiscene")
+                .generic_u8string();
+        retargetRequest.expectedFormat = ModelSourceFormat::Fbx;
+        std::string retargetError;
+        if (!Require(importer.RetargetPreparedModelAsset(
+                retained, retargetRequest, retargetError),
+                "byte-identical retained source was rejected: " + retargetError))
+            return false;
+
+        {
+            std::ofstream mutate(identicalSource, std::ios::binary | std::ios::app);
+            mutate.put('X');
+        }
+        if (!Require(!importer.RetargetPreparedModelAsset(
+                retained, retargetRequest, retargetError),
+                "mutated retained source was not rejected fail-closed"))
+            return false;
+
+        retainedEc.clear();
+        fs::copy_file(animatedFixture, identicalSource,
+            fs::copy_options::overwrite_existing, retainedEc);
+        if (!Require(!retainedEc, "could not restore retained-import proof source") ||
+            !Require(importer.RetargetPreparedModelAsset(
+                retained, retargetRequest, retargetError),
+                "restored byte-identical retained source was rejected: " + retargetError))
+            return false;
+
+        PreparedReusableModelPlacement importedPlacement;
         auto imported = workflow.ImportModel(
             projectRoot.generic_u8string(), ProjectId,
-            animatedFixture.generic_u8string());
+            animatedFixture.generic_u8string(),
+            "{}", {}, "Content/Models", std::move(retained), {},
+            &importedPlacement);
         if (!Require(imported.succeeded && imported.asset.succeeded &&
                 imported.asset.transaction.committed,
                 "creator FBX import failed: " + imported.error) ||
@@ -153,6 +217,20 @@ namespace
                     imported.asset.modelMetadata.skinned &&
                     imported.asset.modelMetadata.animated,
                 "representative FBX did not retain skinned/animated metadata"))
+            return false;
+
+        if (!Require(importedPlacement.IsReady(),
+                "successful creator import did not return an in-memory placement handoff") ||
+            !Require(importedPlacement.Result().assetId == imported.asset.assetId &&
+                    importedPlacement.Result().sourceAssetId == imported.asset.sourceAssetId &&
+                    importedPlacement.Result().assetProjectRelativePath ==
+                        imported.assetProjectRelativePath,
+                "in-memory placement handoff identity/path differs from committed RAsset") ||
+            !Require(importedPlacement.PeekScene() != nullptr &&
+                    importedPlacement.Result().sceneSummary.meshes > 0 &&
+                    importedPlacement.Result().sceneSummary.objects > 0 &&
+                    ImportService::MeasureModelBounds(*importedPlacement.PeekScene()).valid,
+                "in-memory placement handoff is not immediately measurable/placeable"))
             return false;
 
         const StableId sourceId = imported.asset.sourceAssetId;
@@ -174,6 +252,20 @@ namespace
                 "creator tags could not be persisted: " + error))
             return false;
 
+        AssetCatalogue committedSnapshot;
+        if (!Require(workflow.BuildCatalogueSnapshot(
+                projectRoot.generic_u8string(), ProjectId, committedSnapshot, error),
+                "committed creator catalogue snapshot failed: " + error))
+            return false;
+        const auto* committedEntry = FindEntry(committedSnapshot, productId);
+        if (!Require(committedEntry != nullptr &&
+                committedEntry->projectRelativePath ==
+                    imported.assetProjectRelativePath &&
+                committedEntry->state == AssetCatalogueState::Current &&
+                CanPlaceCreatorModelAsset(*committedEntry),
+                "committed browser snapshot did not expose the exact stable-ID/path as a placeable model"))
+            return false;
+
         AssetCatalogue catalogue;
         if (!Require(workflow.BuildCatalogue(
                 projectRoot.generic_u8string(), ProjectId, catalogue, error),
@@ -185,9 +277,30 @@ namespace
                 entry->sourceFormat == "fbx" &&
                 entry->model.skinned && entry->model.animated,
                 "creator catalogue did not expose current FBX/system metadata") ||
+            !Require(CanPlaceCreatorModelAsset(*entry),
+                "creator catalogue entry was not accepted as a placeable model") ||
             !Require(entry->creatorTags == std::vector<std::string>({"gate5", "hero"}),
                 "creator tags were not canonicalised/persisted") ||
             !RequireCatalogueQuery(catalogue, productId))
+            return false;
+
+        const fs::path importedFolder = fs::u8path(
+            imported.assetProjectRelativePath).parent_path();
+        const AssetBrowserSnapshot browserSnapshot = AssetBrowserService().Scan(
+            projectRoot.generic_u8string(), importedFolder.generic_u8string());
+        if (!Require(browserSnapshot.succeeded,
+                "Asset Browser could not scan the imported product folder: " +
+                    browserSnapshot.error) ||
+            !Require(std::any_of(
+                    browserSnapshot.assets.begin(), browserSnapshot.assets.end(),
+                    [&imported](const AssetEntry& asset)
+                    {
+                        return !asset.directory &&
+                            asset.projectRelativePath ==
+                                imported.assetProjectRelativePath &&
+                            asset.type == AssetType::Model;
+                    }),
+                "Asset Browser did not expose the newly imported .rasset product"))
             return false;
 
         // Placement must consume only the registered RAsset. Prove this before

@@ -5,6 +5,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <filesystem>
 #include <iterator>
 #include <utility>
 
@@ -17,8 +18,8 @@ namespace
     constexpr float PanelHeaderHeight = 43.0f;
     constexpr float HierarchyRowHeight = 28.0f;
     constexpr float AssetFolderRowHeight = 24.0f;
-    constexpr float AssetCardWidth = 132.0f;
-    constexpr float AssetCardHeight = 82.0f;
+    constexpr float AssetCardWidth = 148.0f;
+    constexpr float AssetCardHeight = 112.0f;
     constexpr float AssetCardGap = 10.0f;
 
     std::size_t HierarchyRowCapacity(const float height) noexcept
@@ -70,16 +71,16 @@ namespace
         }
     }
 
-    constexpr wi::Color Surface0 = wi::Color(8, 11, 13, 252);
+    constexpr wi::Color Surface0 = wi::Color(8, 12, 16, 255);
     constexpr wi::Color Surface2 = wi::Color(16, 23, 28, 255);
     constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
     constexpr wi::Color BorderSoft = wi::Color(25, 36, 43, 255);
-    constexpr wi::Color Text = wi::Color(210, 200, 188, 255);
-    constexpr wi::Color TextStrong = wi::Color(244, 239, 233, 255);
-    constexpr wi::Color TextSecondary = wi::Color(235, 233, 229, 255);
+    constexpr wi::Color Text = wi::Color(214, 214, 214, 255);
+    constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
+    constexpr wi::Color TextSecondary = wi::Color(226, 226, 226, 255);
     constexpr wi::Color Muted = wi::Color(142, 151, 156, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
-    constexpr wi::Color TechCyan = wi::Color(56, 183, 215, 255);
+    constexpr wi::Color HoverEdge = wi::Color(72, 78, 82, 255);
     constexpr wi::Color Success = wi::Color(76, 195, 138, 255);
 
     void DrawRect(
@@ -131,6 +132,43 @@ namespace
         DrawRect(x + 1.0f, y + 1.0f, width - 2.0f, height - 2.0f, fill, cmd);
     }
 
+    void DrawRoundedRect(
+        const float x,
+        const float y,
+        const float width,
+        const float height,
+        const float radius,
+        const wi::Color color,
+        const wi::graphics::CommandList cmd)
+    {
+        wi::image::Params params(x, y, width, height, color);
+        params.blendFlag = wi::enums::BLENDMODE_ALPHA;
+        params.enableCornerRounding();
+        for (auto& corner : params.corners_rounding)
+        {
+            corner.radius = radius;
+            corner.segments = 8;
+        }
+        wi::image::Draw(nullptr, params, cmd);
+    }
+
+    void DrawDiamond(
+        const float x,
+        const float y,
+        const float size,
+        const wi::Color color,
+        const wi::graphics::CommandList cmd)
+    {
+        wi::image::Params params;
+        params.pos = XMFLOAT3(x, y, 0.0f);
+        params.siz = XMFLOAT2(size, size);
+        params.pivot = XMFLOAT2(0.5f, 0.5f);
+        params.rotation = XM_PIDIV4;
+        params.color = color;
+        params.blendFlag = wi::enums::BLENDMODE_ALPHA;
+        wi::image::Draw(nullptr, params, cmd);
+    }
+
     std::string Ellipsize(std::string value, const std::size_t maximum)
     {
         if (value.size() <= maximum)
@@ -173,7 +211,7 @@ namespace renegade::studio
         }
         const wi::Color edge = state == wi::gui::ACTIVE
             ? Forge
-            : state == wi::gui::FOCUS ? TechCyan : Border;
+            : state == wi::gui::FOCUS ? HoverEdge : Border;
         DrawBorderedRect(
             translation.x,
             translation.y,
@@ -273,7 +311,7 @@ namespace renegade::studio
             box,
             box,
             wi::Color(6, 10, 12, 255),
-            state == wi::gui::FOCUS ? TechCyan : Border,
+            state == wi::gui::FOCUS ? HoverEdge : Border,
             cmd);
         if (checked)
         {
@@ -349,7 +387,7 @@ namespace renegade::studio
                 scale.x,
                 scale.y,
                 index == hovered ? Surface2 : Surface0,
-                index == hovered ? TechCyan : BorderSoft,
+                index == hovered ? HoverEdge : BorderSoft,
                 cmd);
             DrawText(
                 items[static_cast<std::size_t>(index)].name,
@@ -451,7 +489,12 @@ namespace renegade::studio
         const float trackWidth = std::max(
             24.0f,
             inputPos.x - trackX - 9.0f);
-        const float trackY = translation.y + scale.y - 6.0f;
+        // Every continuous Studio control uses the same compact two-line
+        // treatment: an unobstructed label above a short rail, with the
+        // editable numeric field kept in its own right-hand column. This is
+        // deliberately contained inside the widget's normal 28/34px row so
+        // absolute-layout inspectors cannot overlap their following row.
+        const float trackY = translation.y + scale.y - 9.0f;
         const float normalized = end > start
             ? std::clamp((value - start) / (end - start), 0.0f, 1.0f)
             : 0.0f;
@@ -465,28 +508,36 @@ namespace renegade::studio
             cmd,
             0.2f,
             0.18f);
-        DrawRect(trackX, trackY, trackWidth, 4.0f, Border, cmd);
-        DrawRect(
+        DrawRoundedRect(
+            trackX,
+            trackY,
+            trackWidth,
+            4.0f,
+            2.0f,
+            BorderSoft,
+            cmd);
+        DrawRoundedRect(
             trackX,
             trackY,
             trackWidth * normalized,
             4.0f,
+            2.0f,
             Forge,
             cmd);
         const float knobX = trackX + trackWidth * normalized;
-        DrawRect(
-            knobX - 3.0f,
-            translation.y + scale.y - 13.0f,
-            6.0f,
-            12.0f,
-            state == wi::gui::ACTIVE ? TextStrong : Forge,
-            cmd);
+        const float knobY = trackY + 2.0f;
+        DrawDiamond(knobX + 1.0f, knobY + 1.0f, 9.0f,
+            wi::Color(0, 0, 0, 100), cmd);
+        DrawDiamond(knobX, knobY, 8.0f,
+            state == wi::gui::ACTIVE ? TextStrong : TextSecondary, cmd);
+        DrawDiamond(knobX, knobY, 5.0f, Forge, cmd);
+        DrawDiamond(knobX, knobY, 2.0f, TextStrong, cmd);
 
         const wi::Color inputBorder =
             valueInputField.GetState() == wi::gui::ACTIVE
                 ? Forge
                 : valueInputField.GetState() == wi::gui::FOCUS
-                    ? TechCyan
+                    ? HoverEdge
                     : Border;
         DrawBorderedRect(
             inputPos.x,
@@ -505,6 +556,188 @@ namespace renegade::studio
             cmd,
             0.0f,
             0.18f);
+    }
+
+    void RenegadeTextureMapList::ClearSlots()
+    {
+        resources_ = {};
+        paths_ = {};
+    }
+
+    void RenegadeTextureMapList::SetSlot(
+        const std::size_t index,
+        const wi::Resource& resource,
+        std::string path)
+    {
+        if (index < resources_.size())
+        {
+            resources_[index] = resource;
+            paths_[index] = std::move(path);
+        }
+    }
+
+    void RenegadeTextureMapList::SetSelectedSlot(
+        const std::size_t index)
+    {
+        selectedSlot_ = std::min(index, resources_.size() - 1);
+    }
+
+    void RenegadeTextureMapList::OnSlotSelected(
+        std::function<void(std::size_t)> callback)
+    {
+        slotSelected_ = std::move(callback);
+    }
+
+    void RenegadeTextureMapList::OnBrowseRequested(
+        std::function<void(std::size_t)> callback)
+    {
+        browseRequested_ = std::move(callback);
+    }
+
+    void RenegadeTextureMapList::Update(
+        const wi::Canvas& canvas,
+        const float dt)
+    {
+        Widget::Update(canvas, dt);
+        hoveredSlot_ = SlotCount;
+        if (!IsVisible() || !IsEnabled())
+        {
+            return;
+        }
+        const XMFLOAT4 pointer = wi::input::GetPointer();
+        if (pointer.x < translation.x || pointer.x >= translation.x + scale.x ||
+            pointer.y < translation.y || pointer.y >= translation.y + scale.y)
+        {
+            return;
+        }
+        const float rowHeight = scale.y / static_cast<float>(SlotCount);
+        const std::size_t index = std::min(
+            SlotCount - 1,
+            static_cast<std::size_t>((pointer.y - translation.y) / rowHeight));
+        hoveredSlot_ = index;
+        SetTooltip(paths_[index].empty()
+            ? std::string("No texture assigned")
+            : paths_[index]);
+        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            return;
+        }
+        selectedSlot_ = index;
+        if (slotSelected_)
+        {
+            slotSelected_(index);
+        }
+        if (pointer.x >= translation.x + scale.x - 30.0f && browseRequested_)
+        {
+            browseRequested_(index);
+        }
+    }
+
+    void RenegadeTextureMapList::Render(
+        const wi::Canvas& canvas,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible())
+        {
+            return;
+        }
+        ApplyScissor(canvas, scissorRect, cmd);
+
+        constexpr std::array<const char*, SlotCount> labels = {
+            "BASE COLOR", "NORMAL", "SURFACE", "ROUGHNESS",
+            "METALNESS", "AO", "EMISSIVE"};
+        const float rowHeight = scale.y / static_cast<float>(SlotCount);
+        const float thumbnail = std::max(18.0f, rowHeight - 17.0f);
+
+        for (std::size_t index = 0; index < SlotCount; ++index)
+        {
+            const float y = translation.y + static_cast<float>(index) * rowHeight;
+            DrawBorderedRect(
+                translation.x,
+                y,
+                scale.x,
+                rowHeight - 3.0f,
+                wi::Color(6, 10, 12, 255),
+                index == selectedSlot_
+                    ? Forge
+                    : index == hoveredSlot_ ? HoverEdge : Border,
+                cmd);
+            DrawText(
+                labels[index],
+                translation.x + 5.0f,
+                y + 3.0f,
+                8,
+                index == selectedSlot_ ? TextStrong : TextSecondary,
+                cmd,
+                0.0f,
+                0.14f);
+
+            const auto& resource = resources_[index];
+            if (resource.IsValid() && resource.GetTexture().IsValid())
+            {
+                wi::image::Params image(
+                    translation.x + 5.0f,
+                    y + 14.0f,
+                    thumbnail,
+                    thumbnail);
+                image.blendFlag = wi::enums::BLENDMODE_ALPHA;
+                image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
+                wi::image::Draw(&resource.GetTexture(), image, cmd);
+            }
+            else
+            {
+                DrawText(
+                    "--",
+                    translation.x + 10.0f,
+                    y + 20.0f,
+                    9,
+                    Muted,
+                    cmd);
+            }
+
+            const float pathX = translation.x + thumbnail + 12.0f;
+            DrawBorderedRect(
+                pathX,
+                y + 14.0f,
+                scale.x - thumbnail - 47.0f,
+                thumbnail,
+                Surface0,
+                BorderSoft,
+                cmd);
+            std::string displayedPath = "<NONE>";
+            if (!paths_[index].empty())
+            {
+                const std::filesystem::path path =
+                    std::filesystem::u8path(paths_[index]);
+                // The slot row is for identifying the assigned map, so keep
+                // the filename readable instead of showing an unusable slice
+                // of a long absolute path. Hovering the row and the editable
+                // selected-slot field both expose the complete source path.
+                displayedPath = path.filename().generic_u8string();
+            }
+            DrawText(
+                Ellipsize(displayedPath, 36),
+                pathX + 5.0f,
+                y + 20.0f,
+                8,
+                paths_[index].empty() ? Muted : TextStrong,
+                cmd);
+            DrawBorderedRect(
+                translation.x + scale.x - 30.0f,
+                y + 14.0f,
+                25.0f,
+                thumbnail,
+                Surface2,
+                index == selectedSlot_ ? Forge : Border,
+                cmd);
+            DrawText(
+                "...",
+                translation.x + scale.x - 25.0f,
+                y + 20.0f,
+                9,
+                TextStrong,
+                cmd);
+        }
     }
 
     void RenegadeStudioChrome::Create()
@@ -592,6 +825,12 @@ namespace renegade::studio
         RebuildVisibleAssetFolders();
     }
 
+    void RenegadeStudioChrome::SetAssetBrowserSelectedPath(
+        std::string relativePath)
+    {
+        assetBrowserSelectedPath_ = std::move(relativePath);
+    }
+
     void RenegadeStudioChrome::SetSceneName(std::string sceneName)
     {
         sceneName_ = std::move(sceneName);
@@ -662,13 +901,17 @@ namespace renegade::studio
             inspectorWidth,
             280.0f,
             maximumInspector);
+        // Keep enough vertical room for the browser toolbar plus one complete
+        // thumbnail card. A shorter drawer looked open but clipped every card,
+        // which made successfully imported assets appear to be missing.
+        constexpr float MinimumDrawerHeight = 200.0f;
         const float maximumDrawer = std::max(
-            140.0f,
+            MinimumDrawerHeight,
             height_ - TopBarHeight - SceneTabsHeight -
                 BottomTabsHeight - StatusBarHeight - 180.0f);
         drawerHeight_ = std::clamp(
             drawerHeight,
-            140.0f,
+            MinimumDrawerHeight,
             std::min(480.0f, maximumDrawer));
     }
 
@@ -834,6 +1077,12 @@ namespace renegade::studio
         std::function<void(const std::string&)> callback)
     {
         assetBrowserItemSelected_ = std::move(callback);
+    }
+
+    void RenegadeStudioChrome::OnAssetBrowserItemDropped(
+        std::function<void(const std::string&, float, float)> callback)
+    {
+        assetBrowserItemDropped_ = std::move(callback);
     }
 
     void RenegadeStudioChrome::OnLayoutChanged(
@@ -1089,6 +1338,41 @@ namespace renegade::studio
                             maximum);
                 }
                 pointerConsumed_ = true;
+            }
+        }
+
+        if (assetBrowserDragCandidate_)
+        {
+            const XMFLOAT4 dragPointer = wi::input::GetPointer();
+            if (wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+            {
+                const float dx = dragPointer.x - assetBrowserDragStart_.x;
+                const float dy = dragPointer.y - assetBrowserDragStart_.y;
+                if (!assetBrowserDragging_ && dx * dx + dy * dy >= 36.0f)
+                    assetBrowserDragging_ = true;
+                if (assetBrowserDragging_)
+                {
+                    wi::input::SetCursor(wi::input::CURSOR_HAND);
+                    pointerConsumed_ = true;
+                }
+            }
+            else if (wi::input::Release(wi::input::MOUSE_BUTTON_LEFT))
+            {
+                const bool dropped = assetBrowserDragging_;
+                const std::string path = assetBrowserDragPath_;
+                assetBrowserDragCandidate_ = false;
+                assetBrowserDragging_ = false;
+                assetBrowserDragPath_.clear();
+                if (dropped && assetBrowserItemDropped_)
+                    assetBrowserItemDropped_(
+                        path, dragPointer.x, dragPointer.y);
+                pointerConsumed_ = dropped;
+            }
+            else
+            {
+                assetBrowserDragCandidate_ = false;
+                assetBrowserDragging_ = false;
+                assetBrowserDragPath_.clear();
             }
         }
         if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
@@ -1492,6 +1776,13 @@ namespace renegade::studio
                                     assetBrowserAssets_[assetIndex];
                                 assetBrowserSelectedPath_ =
                                     asset.relativePath;
+                                if (!asset.directory)
+                                {
+                                    assetBrowserDragCandidate_ = true;
+                                    assetBrowserDragging_ = false;
+                                    assetBrowserDragPath_ = asset.relativePath;
+                                    assetBrowserDragStart_ = XMFLOAT2(x, y);
+                                }
                                 if (asset.directory &&
                                     assetBrowserFolderSelected_)
                                 {
@@ -1762,36 +2053,52 @@ namespace renegade::studio
                 x + 7.0f,
                 y + 7.0f,
                 AssetCardWidth - 14.0f,
-                35.0f,
+                68.0f,
                 wi::Color(8, 16, 21, 255),
                 cmd);
-            DrawText(
-                asset.directory ? "DIR" : "FILE",
-                x + 12.0f,
-                y + 15.0f,
-                8,
-                asset.directory ? TechCyan : Forge,
-                cmd,
-                0.4f,
-                0.16f);
-            DrawText(
-                Ellipsize(asset.typeLabel, 14),
-                x + 48.0f,
-                y + 15.0f,
-                8,
-                Muted,
-                cmd,
-                0.4f,
-                0.14f);
+            if (asset.thumbnail.IsValid())
+            {
+                wi::image::Params thumbnailParams(
+                    x + 7.0f,
+                    y + 7.0f,
+                    AssetCardWidth - 14.0f,
+                    68.0f);
+                thumbnailParams.blendFlag = wi::enums::BLENDMODE_OPAQUE;
+                wi::image::Draw(
+                    &asset.thumbnail.GetTexture(),
+                    thumbnailParams,
+                    cmd);
+            }
+            if (!asset.thumbnail.IsValid())
+            {
+                DrawText(
+                    asset.directory ? "DIR" : "FILE",
+                    x + 12.0f,
+                    y + 15.0f,
+                    8,
+                    asset.directory ? TextStrong : Forge,
+                    cmd,
+                    0.4f,
+                    0.16f);
+            }
             DrawText(
                 Ellipsize(asset.name, 18),
                 x + 8.0f,
-                y + 51.0f,
+                y + 82.0f,
                 9,
                 selected ? TextStrong : TextSecondary,
                 cmd,
                 0.1f,
                 0.16f);
+            DrawText(
+                Ellipsize(asset.typeLabel, 22),
+                x + 8.0f,
+                y + 97.0f,
+                7,
+                Muted,
+                cmd,
+                0.2f,
+                0.12f);
         }
     }
 
@@ -2633,7 +2940,7 @@ namespace renegade::studio
             width_ - 285.0f,
             statusTop + 9.0f,
             9,
-            TechCyan,
+            TextSecondary,
             cmd,
             0.9f);
     }

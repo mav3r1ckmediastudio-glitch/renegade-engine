@@ -20,6 +20,14 @@
 #include "RenegadeStudioChrome.h"
 #include "TestLevelRuntimeProcess.h"
 
+// StudioApplication.cpp defines this helper in its global unnamed namespace.
+// Declare it here so earlier creator-import callbacks can call it before the
+// definition appears later in the translation unit.
+namespace
+{
+    void RefreshCreatorImportMaterialReadout();
+}
+
 namespace renegade::studio
 {
     class StudioRenderPath final : public wi::RenderPath3D
@@ -41,6 +49,7 @@ namespace renegade::studio
         void RefreshInspector();
         void RefreshProjectHub();
         void RefreshAssetBrowser();
+        void RestoreGovernedMaterialTextures();
 
     private:
         enum class EditorAction
@@ -260,15 +269,16 @@ namespace renegade::studio
             const bridge::ImportResult& result);
         void ImportModel();
         void RunModelImportPlacement(const std::string& sourcePath);
-        void CompleteModelImportPlacement(
-            bridge::PreparedModelImport prepared);
         void CreateImportScalePanel();
         void ShowImportScalePanel(
             wi::ecs::Entity entity,
             float appliedScaleFactor,
             const std::string& sourceFileName);
+        void FrameCreatorImportPreviewCamera();
+        void CaptureCreatorImportThumbnail();
         void ApplyImportScaleMode(bridge::ModelScaleMode mode);
         void DismissImportScalePanel();
+        void RefreshCreatorImportWorkspaceSection();
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -293,6 +303,16 @@ namespace renegade::studio
             const XMFLOAT4& rotation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
         bool HandleLightPlacement(const XMFLOAT4& pointer);
         void CancelLightPlacement();
+        void BeginCreatorAssetPlacement(
+            const bridge::StableId& assetId,
+            const std::string& label);
+        void DropCreatorAsset(
+            const bridge::StableId& assetId,
+            const std::string& label,
+            float screenX,
+            float screenY);
+        bool HandleCreatorAssetPlacement(const XMFLOAT4& pointer);
+        void CancelCreatorAssetPlacement();
         bool HandleLightSceneIcons(const XMFLOAT4& pointer);
         [[nodiscard]] bool ProjectEditorPoint(
             const XMFLOAT3& world,
@@ -345,6 +365,9 @@ namespace renegade::studio
         void SetProjectHubVisible(bool visible);
         void SyncGizmoSelection();
         void SyncSelectionOutline();
+        void SaveSceneAfterTransientCleanup(
+            const std::string& scenePath,
+            std::function<void(bool)> completion = {});
         void SaveScene();
         void SaveSceneAs(
             std::function<void(bool)> completion = {});
@@ -588,6 +611,11 @@ namespace renegade::studio
         wi::scene::LightComponent::LightType lightPlacementType_ =
             wi::scene::LightComponent::POINT;
         bool lightPlacementActive_ = false;
+        bool creatorAssetPlacementActive_ = false;
+        bridge::StableId creatorAssetPlacementId_;
+        std::string creatorAssetPlacementLabel_;
+        XMFLOAT2 creatorAssetDropPoint_ = {};
+        bool creatorAssetDropPending_ = false;
         bool projectHubVisible_ = true;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;

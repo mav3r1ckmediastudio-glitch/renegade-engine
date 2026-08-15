@@ -151,6 +151,33 @@ device and returns a clear error without one. A genuinely GPU-free importer
 would require an approved Wicked core patch or a maintained Renegade fork of
 the conversion code; Model Import V1 takes neither path.
 
+The creator importer is a dedicated Studio mode rather than ordinary editor
+chrome plus a popup. Temporary preview geometry remains isolated at a remote
+stage and is removed back to a captured command-history baseline. Preview-only
+lighting, ambient state and the 1.82 m male scale reference never serialize.
+Model bounds are measured from Wicked's updated world-space object AABBs, with
+raw mesh bounds retained as a headless fallback; real-dimension scale presets
+therefore target measured height rather than arbitrary multipliers.
+The accepted creator position, rotation and scale are serialized in the model
+recipe and applied as a marked root inside the governed WISCENE payload. New
+`.rasset` placement preserves that authored root at unit wrapper scale; legacy
+products without the marker retain automatic placement normalization.
+
+`CreatorModelMaterialPreparationService` is the authoritative material seam for
+both temporary preview and governed commit. It resolves the same declared,
+suffix-detected and creator-overridden sources, normalizes supplied/generated
+Surface data to Wicked's R=AO/G=roughness/B=metalness/A=reflectance layout, and
+persists material scalar values in the reusable-model recipe. No-Surface
+materials default to a neutral dielectric (roughness 0.75, metalness 0.0,
+reflectance 0.04). This prevents preview and final placement from drifting.
+
+Gate 5 package promotion remains an atomic same-volume directory transaction.
+On Windows, only access-denied, sharing-violation and lock-violation rename
+results receive a bounded retry window (50 attempts at 100 ms) to allow Runtime
+descendants or scanners to release package handles. Permanent locks still fail
+closed with candidate evidence retained and any previous valid build restored;
+all non-transient rename errors fail immediately.
+
 Terrain sculpting treats Wicked's streamed chunks as views into one canonical
 integer height grid. Neighbouring 67x67 chunk meshes deliberately duplicate
 their shared edge and corner vertices; a sculpt edit is therefore calculated

@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <map>
 #include <set>
 #include <sstream>
@@ -93,6 +94,63 @@ namespace renegade::bridge
             return value;
         }
 
+        bool IsCreatorManagedSidecar(const std::string& relativePath)
+        {
+            const std::string name = LowerAscii(
+                fs::u8path(relativePath).filename().u8string());
+            const auto hasSuffix = [&name](const char* suffix)
+            {
+                const std::size_t length = std::char_traits<char>::length(suffix);
+                return name.size() >= length &&
+                    name.compare(name.size() - length, length, suffix) == 0;
+            };
+            return hasSuffix(".rasset.json") ||
+                hasSuffix(".thumbnail.png") ||
+                hasSuffix(".rmeta") ||
+                hasSuffix(".meta");
+        }
+
+        bool ResolveCreatorDestination(
+            const fs::path& root,
+            const std::string& destinationFolder,
+            fs::path& destination,
+            std::string& error)
+        {
+            const fs::path requested = fs::u8path(destinationFolder).lexically_normal();
+            if (requested.empty() || requested.is_absolute() ||
+                requested.generic_u8string() != destinationFolder ||
+                requested.begin() == requested.end() ||
+                requested.begin()->generic_u8string() != "Content")
+            {
+                error = "Creator model destination must be a canonical project folder below Content.";
+                return false;
+            }
+            for (const auto& part : requested)
+            {
+                if (part == "." || part == "..")
+                {
+                    error = "Creator model destination cannot traverse outside Content.";
+                    return false;
+                }
+            }
+            std::error_code ec;
+            fs::create_directories(root / requested, ec);
+            if (ec)
+            {
+                error = "Could not create creator model destination: " + ec.message();
+                return false;
+            }
+            const fs::path contentRoot = fs::weakly_canonical(root / "Content", ec);
+            destination = fs::weakly_canonical(root / requested, ec);
+            if (ec || !IsWithin(destination, contentRoot))
+            {
+                error = "Creator model destination resolves outside project Content.";
+                return false;
+            }
+            error.clear();
+            return true;
+        }
+
         std::string HashStream(std::istream& stream)
         {
             std::uint64_t hash = FnvOffset;
@@ -136,7 +194,32 @@ namespace renegade::bridge
             return true;
         }
 
-        std::string TopLevelFolder(const std::string& projectRelativePath)
+        bool ReadBinaryFile(
+        const fs::path& path,
+        std::vector<std::uint8_t>& bytes,
+        std::string& error)
+    {
+        bytes.clear();
+        std::ifstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            error = "Could not read creator package file: " + path.generic_u8string();
+            return false;
+        }
+        bytes.assign(
+            std::istreambuf_iterator<char>(stream),
+            std::istreambuf_iterator<char>());
+        if (!stream.good() && !stream.eof())
+        {
+            bytes.clear();
+            error = "Could not read complete creator package file: " + path.generic_u8string();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    std::string TopLevelFolder(const std::string& projectRelativePath)
         {
             const fs::path path = fs::u8path(projectRelativePath);
             const auto first = path.begin();
@@ -232,8 +315,12 @@ namespace renegade::bridge
                         continue;
                     const std::string relative = canonical.lexically_relative(root)
                         .lexically_normal().generic_u8string();
-                    if (relative.empty() || activePaths.find(relative) != activePaths.end())
+                    if (relative.empty() ||
+                        activePaths.find(relative) != activePaths.end() ||
+                        IsCreatorManagedSidecar(relative))
+                    {
                         continue;
+                    }
 
                     RefreshCandidate candidate;
                     candidate.projectRelativePath = relative;
@@ -436,6 +523,78 @@ namespace renegade::bridge
             return value.empty() ? std::string("Model") : value;
         }
 
+        struct CreatorModelDestinationPlan
+        {
+            std::string candidateStem;
+            fs::path snapshotDirectory;
+            fs::path assetPath;
+        };
+
+        bool ResolveCreatorModelDestinationPlan(
+            const fs::path& root,
+            const fs::path& contentModels,
+            const std::string& baseStem,
+            const bool explicitName,
+            CreatorModelDestinationPlan& plan,
+            std::string& error)
+        {
+            const fs::path sourceModels = root / "SourceAssets" / "Models";
+            std::error_code ec;
+            for (std::uint32_t suffix = 0; ; ++suffix)
+            {
+                const std::string candidateStem = suffix == 0
+                    ? baseStem : baseStem + "_" + std::to_string(suffix + 1);
+                const fs::path snapshotDirectory =
+                    sourceModels / fs::u8path(candidateStem);
+                const fs::path assetPath = contentModels /
+                    fs::u8path(candidateStem + ReusableAssetExtension);
+
+                ec.clear();
+                const bool snapshotExists = fs::exists(snapshotDirectory, ec);
+                if (ec)
+                {
+                    error = "Could not inspect retained-source destination.";
+                    return false;
+                }
+                const bool assetExists = fs::exists(assetPath, ec);
+                if (ec)
+                {
+                    error = "Could not inspect reusable-asset destination.";
+                    return false;
+                }
+                fs::path projectionPath = assetPath;
+                projectionPath += ".json";
+                fs::path thumbnailPath = assetPath;
+                thumbnailPath.replace_extension(".thumbnail.png");
+                const bool projectionExists = fs::exists(projectionPath, ec);
+                if (ec)
+                {
+                    error = "Could not inspect managed asset projection destination.";
+                    return false;
+                }
+                const bool thumbnailExists = fs::exists(thumbnailPath, ec);
+                if (ec)
+                {
+                    error = "Could not inspect creator thumbnail destination.";
+                    return false;
+                }
+                if (!snapshotExists && !assetExists &&
+                    !projectionExists && !thumbnailExists)
+                {
+                    plan.candidateStem = candidateStem;
+                    plan.snapshotDirectory = snapshotDirectory;
+                    plan.assetPath = assetPath;
+                    error.clear();
+                    return true;
+                }
+                if (explicitName)
+                {
+                    error = "The selected creator asset name is already in use in the destination folder.";
+                    return false;
+                }
+            }
+        }
+
         bool CopyGltfExternalFiles(
             const fs::path& source,
             const fs::path& destinationDirectory,
@@ -517,6 +676,58 @@ namespace renegade::bridge
         return true;
     }
 
+    bool CreatorAssetWorkflowService::BuildCatalogueSnapshot(
+        const std::string& projectRoot,
+        const StableId& projectId,
+        AssetCatalogue& catalogue,
+        std::string& error) const
+    {
+        if (!IsValidStableId(projectId))
+        {
+            error = "Creator Asset Browser requires a valid project ID.";
+            return false;
+        }
+        fs::path root;
+        if (!ResolveRoot(projectRoot, root, error))
+            return false;
+
+        // Studio already has an authoritative transaction result after import.
+        // Read the committed LC01 document exactly as written instead of running
+        // RefreshRegistryInternal(), which hashes every registered file and can
+        // turn a cheap reveal into a long synchronous editor stall.
+        AssetRegistry registry;
+        if (!ExistingRegistryOrEmpty(root, projectId, registry, error))
+            return false;
+
+        AssetCatalogueMetadataDocument metadata;
+        if (!ReadAssetCatalogueMetadata(
+                root.generic_u8string(), projectId, metadata, error))
+            return false;
+
+        if (!BuildAssetCatalogue(root.generic_u8string(), projectId,
+                registry, metadata, catalogue, error))
+            return false;
+
+        // Keep the same missing-product/source projection as the recovery build;
+        // only the disk recovery/hash pass is intentionally omitted.
+        for (auto& entry : catalogue.entries)
+        {
+            if (!entry.importedProduct || entry.productAvailable ||
+                entry.state != AssetCatalogueState::Missing ||
+                !IsValidStableId(entry.sourceAssetId))
+                continue;
+
+            const auto source = std::find_if(
+                registry.records.begin(), registry.records.end(),
+                [&entry](const AssetRecord& record)
+                { return record.assetId == entry.sourceAssetId; });
+            entry.sourceAvailable = source != registry.records.end() &&
+                source->sourceAvailable;
+        }
+        error.clear();
+        return true;
+    }
+
     bool CreatorAssetWorkflowService::BuildCatalogue(
         const std::string& projectRoot,
         const StableId& projectId,
@@ -569,10 +780,56 @@ namespace renegade::bridge
         return true;
     }
 
+    bool CreatorAssetWorkflowService::ValidateModelImportDestination(
+        const std::string& projectRoot,
+        const std::string& externalSourcePath,
+        const std::string& assetName,
+        const std::string& destinationFolder,
+        std::string& error) const
+    {
+        fs::path root;
+        if (!ResolveRoot(projectRoot, root, error))
+            return false;
+
+        std::error_code ec;
+        const fs::path source = fs::weakly_canonical(
+            fs::absolute(fs::u8path(externalSourcePath), ec), ec);
+        if (ec || !fs::is_regular_file(source, ec) || ec)
+        {
+            error = "Selected model source is unavailable.";
+            return false;
+        }
+        const ModelSourceFormat format = ImportService::ClassifyModelSourceFormat(
+            source.generic_u8string());
+        if (!ImportService::IsModelSourceFormatSupported(format))
+        {
+            error = "Selected model format is not enabled by LP07.";
+            return false;
+        }
+
+        fs::path contentModels;
+        if (!ResolveCreatorDestination(root, destinationFolder,
+                contentModels, error))
+            return false;
+
+        const bool explicitName = !assetName.empty();
+        const std::string baseStem = SanitizeStem(explicitName
+            ? assetName : source.stem().generic_u8string());
+        CreatorModelDestinationPlan plan;
+        return ResolveCreatorModelDestinationPlan(
+            root, contentModels, baseStem, explicitName, plan, error);
+    }
+
     CreatorModelImportResult CreatorAssetWorkflowService::ImportModel(
         const std::string& projectRoot,
         const StableId& projectId,
-        const std::string& externalSourcePath) const
+        const std::string& externalSourcePath,
+        const std::string& settingsJson,
+        const std::string& assetName,
+        const std::string& destinationFolder,
+        PreparedModelImport preparedModel,
+        const std::string& thumbnailSourcePath,
+        PreparedReusableModelPlacement* preparedPlacement) const
     {
         CreatorModelImportResult result;
         if (!IsValidStableId(projectId))
@@ -583,6 +840,27 @@ namespace renegade::bridge
         fs::path root;
         if (!ResolveRoot(projectRoot, root, result.error))
             return result;
+
+        std::vector<std::uint8_t> thumbnailPngBytes;
+        if (!thumbnailSourcePath.empty())
+        {
+            std::error_code thumbnailEc;
+            const fs::path intermediateRoot = fs::weakly_canonical(
+                root / "Intermediate", thumbnailEc);
+            const fs::path thumbnailPath = fs::weakly_canonical(
+                fs::absolute(fs::u8path(thumbnailSourcePath), thumbnailEc),
+                thumbnailEc);
+            if (thumbnailEc || !fs::is_directory(intermediateRoot, thumbnailEc) ||
+                thumbnailEc || !fs::is_regular_file(thumbnailPath, thumbnailEc) ||
+                thumbnailEc || !IsWithin(thumbnailPath, intermediateRoot))
+            {
+                result.error =
+                    "Creator thumbnail must be a regular file below project Intermediate.";
+                return result;
+            }
+            if (!ReadBinaryFile(thumbnailPath, thumbnailPngBytes, result.error))
+                return result;
+        }
 
         std::error_code ec;
         const fs::path source = fs::weakly_canonical(
@@ -600,42 +878,29 @@ namespace renegade::bridge
             return result;
         }
 
-        const fs::path contentModels = root / "Content" / "Models";
+        fs::path contentModels;
+        if (!ResolveCreatorDestination(root, destinationFolder,
+                contentModels, result.error))
+            return result;
         const fs::path sourceModels = root / "SourceAssets" / "Models";
-        fs::create_directories(contentModels, ec);
-        if (!ec) fs::create_directories(sourceModels, ec);
+        fs::create_directories(sourceModels, ec);
         if (ec)
         {
             result.error = "Could not create project model folders: " + ec.message();
             return result;
         }
 
-        const std::string baseStem = SanitizeStem(source.stem().generic_u8string());
-        std::string candidateStem = baseStem;
-        fs::path snapshotDirectory;
-        fs::path assetPath;
-        for (std::uint32_t suffix = 0; ; ++suffix)
-        {
-            candidateStem = suffix == 0
-                ? baseStem : baseStem + "_" + std::to_string(suffix + 1);
-            snapshotDirectory = sourceModels / fs::u8path(candidateStem);
-            assetPath = contentModels / fs::u8path(candidateStem + ReusableAssetExtension);
-            ec.clear();
-            const bool snapshotExists = fs::exists(snapshotDirectory, ec);
-            if (ec)
-            {
-                result.error = "Could not inspect retained-source destination.";
-                return result;
-            }
-            const bool assetExists = fs::exists(assetPath, ec);
-            if (ec)
-            {
-                result.error = "Could not inspect reusable-asset destination.";
-                return result;
-            }
-            if (!snapshotExists && !assetExists)
-                break;
-        }
+        const bool explicitName = !assetName.empty();
+        const std::string baseStem = SanitizeStem(explicitName
+            ? assetName : source.stem().generic_u8string());
+        CreatorModelDestinationPlan destinationPlan;
+        if (!ResolveCreatorModelDestinationPlan(
+                root, contentModels, baseStem, explicitName,
+                destinationPlan, result.error))
+            return result;
+        std::string candidateStem = std::move(destinationPlan.candidateStem);
+        fs::path snapshotDirectory = std::move(destinationPlan.snapshotDirectory);
+        fs::path assetPath = std::move(destinationPlan.assetPath);
 
         fs::create_directories(snapshotDirectory, ec);
         if (ec)
@@ -673,8 +938,11 @@ namespace renegade::bridge
         request.projectId = projectId;
         request.sourceProjectRelativePath = result.stagedSourceProjectRelativePath;
         request.assetProjectRelativePath = result.assetProjectRelativePath;
+        request.settingsJson = settingsJson;
         request.expectedFormat = format;
-        result.asset = ReusableAssetService().ImportModelAsset(request);
+        request.thumbnailPngBytes = std::move(thumbnailPngBytes);
+        result.asset = ReusableAssetService().ImportModelAsset(
+            request, {}, std::move(preparedModel), preparedPlacement);
         if (!result.asset.succeeded)
         {
             result.error = result.asset.error;

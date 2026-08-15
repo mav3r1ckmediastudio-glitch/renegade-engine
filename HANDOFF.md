@@ -1,6 +1,102 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-11
+**Date:** 2026-08-14
+
+## Active creator recovery — PR #57
+
+PR #57 (`agent/creator-workflow-repair`) remains Draft. The last independently
+accepted pre-recovery head was `e5d4fed6ae8852562dbb0bfe75e60283967ef50f`,
+with Studio and baseline Debug/Release green and 65/65 CTests passing. Owner
+Release testing then exposed acceptance-scope usability/material failures, so
+that head must not be merged.
+
+The recovery work keeps the importer as the active programme. Do not begin a
+new backend milestone until exact-head CI/audit and owner manual acceptance pass.
+The recovery unifies preview/commit material application, corrects the generated
+Surface reflectance default from full-white to neutral dielectric, persists PBR
+scalars, adds editable asset name/destination, importer-owned chrome,
+slider-plus-number transform/material/lighting controls, linked scale,
+world-bounds dimension presets and a dynamic preview-only 1.82 m male reference.
+The follow-up preview framing fix replaces the fixed close camera with a
+bounds-fitted 32-degree lens; owner screenshots showed severe perspective
+exaggeration in the importer while the committed mesh remained correct.
+Those screenshots also exposed the primary preview-only rendering defect: the
+temporary stage was at world Y=100000, where float transform precision is only
+about 7.8 mm. The stage now remains beyond the normal far plane at Y=2048 while
+preserving sub-millimetre precision; source mesh data is never rewritten.
+Owner visual acceptance also rejected the remaining global hologram styling.
+Studio now retains the established panel geometry and typography while using
+dark surfaces, consistent white type and neutral grey focus treatment instead
+of cyan. A follow-up owner screenshot caught unreadable overlap in the Material
+section; its six-line readout now owns sufficient height and every following
+control is laid out below it. The 1.82 m reference no longer depends on a live
+render AABB and is deliberately placed left of the asset so the importer task
+panel cannot obscure it. The stock Wicked dummy has been removed: the owner's
+supplied male silhouette is now a transparent, camera-facing world billboard
+whose cropped figure is exactly 1.82 m from sole to crown and never inherits the
+imported model transform.
+The importer task panel is now docked eight pixels from the application right
+edge instead of using the hidden ordinary-editor viewport boundary.
+Two consecutive exact-head Release runs exposed the same Windows access-denied
+race while renaming a validated staged package after Runtime smoke exit. Gate 5
+now retries only access-denied/sharing/lock rename errors for a bounded five
+seconds; all other errors still fail immediately, and permanent locks retain
+the previous fail-closed transaction behavior. A real transient directory-lock
+regression complements the existing permanent-lock rejection proof.
+Creator-selected Surface replacements also receive a source/scalar-derived
+preview cache identity. This prevents Wicked's filename-keyed resource cache
+from retaining the previous GPU texture after the picker records a new file.
+Preview texture loads now use the native slot flags (including normal-map
+handling) and report a visible Material-section error instead of failing
+silently. `RenegadeReusableAssetReimportRecipeTests` covers distinct preview
+cache identity for changed Surface sources and PBR values.
+The Material section also restores the missing visual inspection surface with a
+MAX-style vertical map list. Base, Normal, packed Surface, Roughness, Metalness,
+AO and Emissive each own a labeled thumbnail/path/browse row. The active slot
+uses the normal Studio accent border. Paths preserve the filename tail and
+expose the full value on hover/in the editable field; the material selector
+adds mesh/subset usage and the Base Color filename. PBR scalar controls now
+follow the maps in the same scrollable material workspace.
+All continuous Studio sliders now use one compact Renegade-owned visual treatment:
+an opaque recessed rail, orange filled range and layered diamond handle, with a
+readable label above and the numeric textbox retained in its own right-hand
+column. Animation clip start/end remain numeric-only as explicitly requested.
+The treatment remains inside the existing dense Inspector, Environment,
+Terrain and importer row geometry. The right-docked importer uses the available screen height,
+keeps commit/cancel fixed, and scrolls long sections. The neutral 1.82 m male
+now includes a visible 0.00-to-1.82 m ruler and separate model-height readout.
+PBR slider drags update only the selected live Wicked material and stored
+override. They no longer rebuild, encode and reload full-resolution Surface PNGs
+on the render thread; authoritative packing remains part of Import & Place.
+
+The final pre-push repair addresses the owner-observed governed commit failure
+for skinned/animated WISCENE reloads by comparing semantic rig/animation data
+instead of transient ECS manager indices while continuing to reject changed
+weights, bind matrices, targets and keyframes. It also makes Asset Browser
+catalogue rebuilds explicit and project-scoped, verifies that a newly committed
+`.rasset` and its decoded `.thumbnail.png` card are actually visible before
+reporting success, keeps thumbnail sidecars out of the card list, restores the
+selection, and retains drag/drop through the stable-ID placement path with
+surface grounding. The creator-approved position, rotation and scale are now
+part of the canonical recipe and are applied through a marked authored root in
+the `.rasset`; placement does not automatically rescale that approved result a
+second time, while legacy products retain their previous automatic fallback.
+
+Implementation commit: `b3b4cb6` (`fix(studio): harden creator import and
+asset placement`), based directly on live PR branch head `151d7c5`. Pre-push
+validation passed: `git diff --check`; executable Linux
+`RenegadeAssetBrowserTests`; syntax-only compilation of the changed importer,
+creator-recipe, importer tests, recipe tests and both Studio chrome translation
+units; and `StudioApplication.cpp` syntax validation using temporary Linux-only
+Win32 declarations for its existing unguarded Runtime-path helper. A native
+Windows Studio build, visual DPI/window-size inspection and packaged Runtime
+test cannot be authoritative in this workspace and remain required through
+GitHub CI plus owner Release-artifact acceptance.
+
+GitHub CI remains authoritative because the owner CPU is confirmed unstable.
+Manual merge-gate coverage remains textured GLB/GLTF, FBX, multi-material and
+character import; preview/final parity; save/reopen; and packaged textured
+Runtime output. PR #57 must remain Draft until all of that passes.
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 

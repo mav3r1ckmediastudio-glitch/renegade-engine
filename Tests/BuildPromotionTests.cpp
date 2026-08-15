@@ -3,12 +3,14 @@
 #include "BuildPromotionServiceInternal.h"
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifndef NOMINMAX
@@ -439,6 +441,48 @@ namespace
             "locked-output failure left rollback state");
     }
 
+    void TestTransientLockedFinalOutput()
+    {
+        Fixture fixture("transient-lock");
+        EstablishPrevious(fixture);
+        CreateCandidate(fixture.candidateB, "B");
+
+        HANDLE lock = CreateFileW(
+            fixture.finalPath.c_str(),
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS,
+            nullptr);
+        Require(lock != INVALID_HANDLE_VALUE,
+            "could not acquire directory handle for transient-lock proof");
+
+        std::thread release([lock]
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            CloseHandle(lock);
+        });
+
+        WindowsGameBuildPromotionResult result;
+        std::string error;
+        const bool promoted = Promote(
+            fixture.candidateB, fixture.finalPath, result, error);
+        release.join();
+
+        Require(promoted,
+            "transient directory lock was not retried: " + error);
+        Require(result.succeeded,
+            "transient-lock promotion result was not successful");
+        Require(!fs::exists(fixture.candidateB),
+            "transient-lock promotion left candidate staging evidence");
+        Require(!fs::exists(fixture.rollbackPath),
+            "transient-lock promotion left rollback state");
+        RequireValidFinal(fixture.finalPath);
+        Require(ReadText(fixture.finalPath / "ProofGame.exe") == "runtime-B",
+            "transient-lock promotion did not commit candidate B");
+    }
+
     void TestInterruptedAfterBackup()
     {
         Fixture fixture("interrupted");
@@ -581,6 +625,8 @@ int main(int argc, char** argv)
             TestFailedSmokeCandidate();
         else if (testCase == "locked")
             TestLockedFinalOutput();
+        else if (testCase == "transient-lock")
+            TestTransientLockedFinalOutput();
         else if (testCase == "interrupted")
             TestInterruptedAfterBackup();
         else if (testCase == "post-move-validation")

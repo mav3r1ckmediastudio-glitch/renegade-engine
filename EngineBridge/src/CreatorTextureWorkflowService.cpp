@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <system_error>
+#include <utility>
 
 namespace
 {
@@ -26,6 +27,50 @@ namespace
         CreatorTextureImportResult result;
         result.error = std::move(error);
         return result;
+    }
+
+    bool EnsureAssetRegistryDocument(
+        const fs::path& root,
+        const StableId& projectId,
+        std::string& error)
+    {
+        const fs::path registryPath = root / AssetRegistryDocumentName;
+        std::error_code ec;
+        const bool exists = fs::exists(registryPath, ec);
+        if (ec)
+        {
+            error = "Could not inspect the project asset registry: " + ec.message();
+            return false;
+        }
+        if (exists)
+        {
+            error.clear();
+            return true;
+        }
+
+        // New and pre-LC01 projects can legitimately have no registry until
+        // their first governed asset is committed. LP07 model import already
+        // supports this create-on-first-write lifecycle; creator texture
+        // governance must do the same instead of failing before the model
+        // transaction can begin.
+        AssetRegistry registry;
+        registry.projectId = projectId;
+        registry.schemaVersion = AssetRegistry::CurrentSchemaVersion;
+
+        AssetRegistryPersistenceOptions options;
+        options.transactionId =
+            "lp08-creator-registry-bootstrap-" + GenerateStableId();
+        const auto written = WriteAssetRegistry(
+            root.generic_u8string(), registry, std::move(options));
+        if (!written.success || !written.committed)
+        {
+            error = written.message.empty()
+                ? "Could not initialise the project asset registry."
+                : written.message;
+            return false;
+        }
+        error.clear();
+        return true;
     }
 
     bool IsGovernedTextureEntry(const AssetCatalogueEntry& entry)
@@ -78,6 +123,10 @@ namespace renegade::bridge
             fs::absolute(fs::u8path(projectRoot), ec), ec);
         if (ec || root.empty() || !fs::is_directory(root, ec) || ec)
             return Failure("The active project root is unavailable.");
+
+        std::string registryError;
+        if (!EnsureAssetRegistryDocument(root, projectId, registryError))
+            return Failure(std::move(registryError));
 
         const fs::path sourceDirectory = root / "SourceAssets" / "Textures";
         const fs::path productDirectory = root / "Content" / "Textures";

@@ -11,6 +11,47 @@ namespace
         std::cerr << "RenegadeImportTests: " << message << '\n';
         return 1;
     }
+
+    void PopulateSyntheticRigScene(wi::scene::Scene& scene)
+    {
+        const auto bone = wi::ecs::CreateEntity();
+        scene.transforms.Create(bone);
+
+        const auto armatureEntity = wi::ecs::CreateEntity();
+        auto& armature = scene.armatures.Create(armatureEntity);
+        armature.boneCollection.push_back(bone);
+        armature.inverseBindMatrices.push_back(XMFLOAT4X4(
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1));
+
+        const auto meshEntity = wi::ecs::CreateEntity();
+        auto& mesh = scene.meshes.Create(meshEntity);
+        mesh.armatureID = armatureEntity;
+        mesh.vertex_boneindices.push_back(XMUINT4(0, 0, 0, 0));
+        mesh.vertex_boneweights.push_back(XMFLOAT4(1, 0, 0, 0));
+        mesh.vertex_boneindices2.push_back(XMUINT4(0, 0, 0, 0));
+        mesh.vertex_boneweights2.push_back(XMFLOAT4(0, 0, 0, 0));
+
+        const auto animationDataEntity = wi::ecs::CreateEntity();
+        auto& animationData = scene.animation_datas.Create(animationDataEntity);
+        animationData.keyframe_times.push_back(0.0f);
+        animationData.keyframe_times.push_back(1.0f);
+        animationData.keyframe_data.push_back(0.0f);
+        animationData.keyframe_data.push_back(1.0f);
+
+        const auto animationEntity = wi::ecs::CreateEntity();
+        auto& animation = scene.animations.Create(animationEntity);
+        wi::scene::AnimationComponent::AnimationChannel channel;
+        channel.path = wi::scene::AnimationComponent::AnimationChannel::Path::TRANSLATION;
+        channel.target = bone;
+        channel.samplerIndex = 0;
+        animation.channels.push_back(channel);
+        wi::scene::AnimationComponent::AnimationSampler sampler;
+        sampler.data = animationDataEntity;
+        animation.samplers.push_back(sampler);
+    }
 }
 
 int main()
@@ -139,47 +180,21 @@ int main()
     // graphics-free; real FBX conversion is exercised by the graphics-backed
     // Gate 1 proof rather than this headless harness.
     {
-        wi::scene::Scene rigged;
-        const auto bone = wi::ecs::CreateEntity();
-        rigged.transforms.Create(bone);
+        renegade::bridge::ImportedModelEvidence staticEvidence;
+        staticEvidence.rigAnimationFingerprint = 1234;
+        if (staticEvidence.HasRigOrAnimationPayload())
+        {
+            return Fail("static model bookkeeping was mistaken for rig/animation payload");
+        }
 
-        const auto armatureEntity = wi::ecs::CreateEntity();
-        auto& armature = rigged.armatures.Create(armatureEntity);
-        armature.boneCollection.push_back(bone);
-        armature.inverseBindMatrices.push_back(XMFLOAT4X4(
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1));
-
-        const auto meshEntity = wi::ecs::CreateEntity();
-        auto& mesh = rigged.meshes.Create(meshEntity);
-        mesh.armatureID = armatureEntity;
-        mesh.vertex_boneindices.push_back(XMUINT4(0, 0, 0, 0));
-        mesh.vertex_boneweights.push_back(XMFLOAT4(1, 0, 0, 0));
-        mesh.vertex_boneindices2.push_back(XMUINT4(0, 0, 0, 0));
-        mesh.vertex_boneweights2.push_back(XMFLOAT4(0, 0, 0, 0));
-
-        const auto animationDataEntity = wi::ecs::CreateEntity();
-        auto& animationData = rigged.animation_datas.Create(animationDataEntity);
-        animationData.keyframe_times.push_back(0.0f);
-        animationData.keyframe_times.push_back(1.0f);
-        animationData.keyframe_data.push_back(0.0f);
-        animationData.keyframe_data.push_back(1.0f);
-
-        const auto animationEntity = wi::ecs::CreateEntity();
-        auto& animation = rigged.animations.Create(animationEntity);
-        wi::scene::AnimationComponent::AnimationChannel channel;
-        channel.path = wi::scene::AnimationComponent::AnimationChannel::Path::TRANSLATION;
-        channel.target = bone;
-        channel.samplerIndex = 0;
-        animation.channels.push_back(channel);
-        wi::scene::AnimationComponent::AnimationSampler sampler;
-        sampler.data = animationDataEntity;
-        animation.samplers.push_back(sampler);
-
+        // Wicked Scene is a large aggregate, so keep these fixtures off the
+        // Windows worker stack. Two separately-created scenes also guarantee
+        // different transient ECS IDs without invoking renderer/job-system
+        // dependent WISCENE serialization in this headless unit test.
+        auto rigged = wi::allocator::make_shared_single<wi::scene::Scene>();
+        PopulateSyntheticRigScene(*rigged);
         const auto evidence =
-            renegade::bridge::ImportService::SummarizeModelEvidence(rigged);
+            renegade::bridge::ImportService::SummarizeModelEvidence(*rigged);
         if (evidence.skinnedMeshes != 1 ||
             evidence.primaryInfluenceVertices != 1 ||
             evidence.secondaryInfluenceVertices != 1 ||
@@ -189,9 +204,90 @@ int main()
             evidence.animationData != 1 ||
             evidence.animationKeyframes != 2 ||
             evidence.animationValues != 2 ||
-            evidence.rigAnimationFingerprint == 0)
+            evidence.rigAnimationFingerprint == 0 ||
+            !evidence.HasRigOrAnimationPayload())
         {
             return Fail("rig/animation evidence summary did not capture synthetic payload");
+        }
+        rigged.reset();
+
+        auto semanticTwin = wi::allocator::make_shared_single<wi::scene::Scene>();
+        PopulateSyntheticRigScene(*semanticTwin);
+        const auto twinEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(*semanticTwin);
+        if (!(evidence == twinEvidence))
+        {
+            return Fail("semantic rig/animation evidence depended on transient ECS entity IDs");
+        }
+
+        // Conversely, exact payload edits must remain fail-closed even when
+        // every high-level count is unchanged. Guard manager counts before
+        // indexing so corruption reports a normal test failure, never an AV.
+        if (semanticTwin->meshes.GetCount() == 0)
+            return Fail("synthetic semantic twin lost its mesh");
+        auto* twinMesh = semanticTwin->meshes.GetComponent(
+            semanticTwin->meshes.GetEntity(0));
+        if (twinMesh == nullptr || twinMesh->vertex_boneweights.empty())
+            return Fail("synthetic semantic twin lost its mesh weights");
+        twinMesh->vertex_boneweights[0].x = 0.75f;
+        const auto changedWeightEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(*semanticTwin);
+        if (evidence.rigAnimationFingerprint ==
+            changedWeightEvidence.rigAnimationFingerprint)
+        {
+            return Fail("rig evidence did not reject a changed bone weight");
+        }
+        twinMesh->vertex_boneweights[0].x = 1.0f;
+
+        if (semanticTwin->armatures.GetCount() == 0)
+            return Fail("synthetic semantic twin lost its armature");
+        auto* twinArmature = semanticTwin->armatures.GetComponent(
+            semanticTwin->armatures.GetEntity(0));
+        if (twinArmature == nullptr || twinArmature->inverseBindMatrices.empty())
+            return Fail("synthetic semantic twin lost its bind pose");
+        twinArmature->inverseBindMatrices[0]._41 = 0.25f;
+        const auto changedBindEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(*semanticTwin);
+        if (evidence.rigAnimationFingerprint ==
+            changedBindEvidence.rigAnimationFingerprint)
+        {
+            return Fail("rig evidence did not reject a changed inverse bind matrix");
+        }
+        twinArmature->inverseBindMatrices[0]._41 = 0.0f;
+
+        if (semanticTwin->animations.GetCount() == 0)
+            return Fail("synthetic semantic twin lost its animation");
+        auto* twinAnimation = semanticTwin->animations.GetComponent(
+            semanticTwin->animations.GetEntity(0));
+        if (twinAnimation == nullptr || twinAnimation->channels.empty())
+            return Fail("synthetic semantic twin lost its target channel");
+        const auto originalTarget = twinAnimation->channels[0].target;
+        const auto alternateTarget = wi::ecs::CreateEntity();
+        semanticTwin->names.Create(alternateTarget) = "Different Target";
+        semanticTwin->transforms.Create(alternateTarget);
+        twinAnimation->channels[0].target = alternateTarget;
+        const auto changedTargetEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(*semanticTwin);
+        if (evidence.rigAnimationFingerprint ==
+            changedTargetEvidence.rigAnimationFingerprint)
+        {
+            return Fail("animation evidence did not reject a changed channel target");
+        }
+        twinAnimation->channels[0].target = originalTarget;
+
+        if (semanticTwin->animation_datas.GetCount() == 0)
+            return Fail("synthetic semantic twin lost its animation data");
+        auto* twinData = semanticTwin->animation_datas.GetComponent(
+            semanticTwin->animation_datas.GetEntity(0));
+        if (twinData == nullptr || twinData->keyframe_data.size() < 2)
+            return Fail("synthetic semantic twin lost keyframe data");
+        twinData->keyframe_data[1] = 0.5f;
+        const auto changedAnimationEvidence =
+            renegade::bridge::ImportService::SummarizeModelEvidence(*semanticTwin);
+        if (evidence.rigAnimationFingerprint ==
+            changedAnimationEvidence.rigAnimationFingerprint)
+        {
+            return Fail("animation evidence did not reject changed keyframe data");
         }
     }
 
@@ -253,6 +349,29 @@ int main()
         if (std::abs(automaticFactor - 0.1f) > 0.0001f)
         {
             return Fail("Automatic scale mode did not normalize the largest mesh extent");
+        }
+        const auto measured = renegade::bridge::ImportService::MeasureModelBounds(
+            withMesh);
+        if (!measured.valid || measured.Extents().y != 20.0f)
+        {
+            return Fail("model bounds did not retain the actual source height");
+        }
+        const float humanFactor = renegade::bridge::ImportService::
+            ResolveScaleFactorForTargetHeight(1.82f, withMesh);
+        if (std::abs(humanFactor - 0.091f) > 0.0001f)
+        {
+            return Fail("1.82 m scale preset did not derive from actual model height");
+        }
+        const float groundedY = renegade::bridge::ImportService::
+            ResolveGroundedPlacementY(3.0f, measured, automaticFactor);
+        if (std::abs(groundedY - 4.0f) > 0.0001f)
+        {
+            return Fail("surface placement did not offset the scaled model bottom");
+        }
+        if (renegade::bridge::ImportService::ResolveGroundedPlacementY(
+                3.0f, {}, automaticFactor) != 3.0f)
+        {
+            return Fail("surface placement did not fail closed for missing bounds");
         }
     }
 

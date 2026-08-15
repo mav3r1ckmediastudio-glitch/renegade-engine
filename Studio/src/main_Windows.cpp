@@ -4,10 +4,11 @@
 
 #include <cwchar>
 #include <cstring>
+#include <memory>
 
 namespace
 {
-    renegade::studio::StudioApplication application;
+    renegade::studio::StudioApplication* application = nullptr;
 
     const wchar_t* GraphicsBackendTitle() noexcept
     {
@@ -29,9 +30,9 @@ namespace
         switch (message)
         {
         case WM_SIZE:
-            if (application.is_window_active)
+            if (application != nullptr && application->is_window_active)
             {
-                application.SetWindow(window);
+                application->SetWindow(window);
             }
             return 0;
 
@@ -46,9 +47,9 @@ namespace
                 suggested->right - suggested->left,
                 suggested->bottom - suggested->top,
                 SWP_NOACTIVATE | SWP_NOZORDER);
-            if (application.is_window_active)
+            if (application != nullptr && application->is_window_active)
             {
-                application.SetWindow(window);
+                application->SetWindow(window);
             }
             return 0;
         }
@@ -69,11 +70,13 @@ namespace
             return 0;
 
         case WM_KILLFOCUS:
-            application.is_window_active = false;
+            if (application != nullptr)
+                application->is_window_active = false;
             return 0;
 
         case WM_SETFOCUS:
-            application.is_window_active = true;
+            if (application != nullptr)
+                application->is_window_active = true;
             return 0;
 
         case WM_DESTROY:
@@ -94,6 +97,22 @@ int APIENTRY wWinMain(
 {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     wi::arguments::Parse(commandLine);
+
+    // Construct Studio after all C++ static initializers have completed so
+    // creator chrome may safely subscribe to Wicked services. Studio is a very
+    // large aggregate, so keep it off the Windows thread stack.
+    auto localApplication =
+        std::make_unique<renegade::studio::StudioApplication>();
+    application = localApplication.get();
+
+    // CI startup proof: reaching this point proves all process/static and Studio
+    // object construction completed successfully, including creator-chrome event
+    // registration, without requiring a graphics adapter or interactive window.
+    if (wi::arguments::HasArgument("startup-smoke"))
+    {
+        application = nullptr;
+        return 0;
+    }
 
     wchar_t executablePath[MAX_PATH] = {};
     if (GetModuleFileNameW(nullptr, executablePath, MAX_PATH) > 0)
@@ -117,6 +136,7 @@ int APIENTRY wWinMain(
 
     if (RegisterClassExW(&windowClass) == 0)
     {
+        application = nullptr;
         return 1;
     }
 
@@ -135,11 +155,12 @@ int APIENTRY wWinMain(
 
     if (window == nullptr)
     {
+        application = nullptr;
         return 2;
     }
 
     ShowWindow(window, showCommand);
-    application.SetWindow(window);
+    application->SetWindow(window);
     SetWindowTextW(window, GraphicsBackendTitle());
 
     MSG message = {};
@@ -152,10 +173,11 @@ int APIENTRY wWinMain(
         }
         else
         {
-            application.Run();
+            application->Run();
         }
     }
 
     wi::jobsystem::ShutDown();
+    application = nullptr;
     return static_cast<int>(message.wParam);
 }

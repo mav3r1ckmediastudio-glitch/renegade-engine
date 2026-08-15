@@ -6,6 +6,7 @@
 #include <string>
 
 #include "renegade/bridge/AssetBrowserService.h"
+#include "renegade/bridge/CreatorAssetWorkflowService.h"
 
 namespace
 {
@@ -58,6 +59,7 @@ int main()
 {
     using renegade::bridge::AssetBrowserService;
     using renegade::bridge::AssetType;
+    using renegade::bridge::CreatorAssetWorkflowService;
 
     const auto unique = std::chrono::high_resolution_clock::now()
         .time_since_epoch().count();
@@ -66,6 +68,11 @@ int main()
 
     Touch(root / "Content/Scenes/Main.wiscene");
     Touch(root / "Content/Models/Props/Crate.wiscene");
+    Touch(root / "Content/Models/Props/Crate.thumbnail.png");
+    Touch(root / "Content/Models/Props/Hero.rasset");
+    Touch(root / "Content/Models/Props/Hero.rasset.json");
+    Touch(root / "Content/Models/Props/Hero.thumbnail.png");
+    Touch(root / "Content/Models/Props/Notes.json");
     Touch(root / "Content/Materials/Water/RiverWater.ini");
     Touch(root / "Content/Audio/SFX/impact.wav");
     Touch(root / "Content/Scripts/gameplay.lua");
@@ -107,6 +114,27 @@ int main()
     {
         return Fail(root, "model WISCENE classification failed");
     }
+    if (FindAsset(crateFolder, "Crate.thumbnail.png") != nullptr)
+    {
+        return Fail(root, "model thumbnail sidecar leaked into asset cards");
+    }
+    const auto* hero = FindAsset(crateFolder, "Hero.rasset");
+    if (hero == nullptr || hero->directory || hero->type != AssetType::Model)
+    {
+        return Fail(root, "governed .rasset product was not exposed as a model card");
+    }
+    if (FindAsset(crateFolder, "Hero.thumbnail.png") != nullptr)
+    {
+        return Fail(root, "governed asset thumbnail sidecar leaked into asset cards");
+    }
+    if (FindAsset(crateFolder, "Hero.rasset.json") != nullptr)
+    {
+        return Fail(root, "managed rasset projection leaked into asset cards");
+    }
+    if (FindAsset(crateFolder, "Notes.json") == nullptr)
+    {
+        return Fail(root, "asset browser broadly hid arbitrary JSON");
+    }
 
     const auto unsafe = browser.Scan(
         root.generic_u8string(),
@@ -114,6 +142,63 @@ int main()
     if (unsafe.succeeded || unsafe.error.empty())
     {
         return Fail(root, "path traversal outside Content was accepted");
+    }
+
+    const fs::path creatorSource = root / "External/full.fbx";
+    Touch(creatorSource);
+    const CreatorAssetWorkflowService creatorWorkflow;
+    std::string creatorError;
+    if (!creatorWorkflow.ValidateModelImportDestination(
+            root.generic_u8string(), creatorSource.generic_u8string(),
+            "FreshAsset", "Content/Models", creatorError))
+    {
+        return Fail(root, "free creator destination preflight was rejected");
+    }
+    if (fs::exists(root / "SourceAssets/Models/FreshAsset"))
+    {
+        return Fail(root, "creator destination preflight performed retained-source work");
+    }
+
+    const std::string duplicateError =
+        "The selected creator asset name is already in use in the destination folder.";
+    Touch(root / "Content/Models/full.rasset");
+    creatorError.clear();
+    if (creatorWorkflow.ValidateModelImportDestination(
+            root.generic_u8string(), creatorSource.generic_u8string(),
+            "full", "Content/Models", creatorError) ||
+        creatorError != duplicateError)
+    {
+        return Fail(root, "existing rasset was not rejected by creator preflight");
+    }
+
+    Touch(root / "Content/Models/Bad_Name.rasset");
+    creatorError.clear();
+    if (creatorWorkflow.ValidateModelImportDestination(
+            root.generic_u8string(), creatorSource.generic_u8string(),
+            "Bad Name", "Content/Models", creatorError) ||
+        creatorError != duplicateError)
+    {
+        return Fail(root, "sanitized creator name collision escaped preflight");
+    }
+
+    Touch(root / "Content/Models/ProjectionOnly.rasset.json");
+    creatorError.clear();
+    if (creatorWorkflow.ValidateModelImportDestination(
+            root.generic_u8string(), creatorSource.generic_u8string(),
+            "ProjectionOnly", "Content/Models", creatorError) ||
+        creatorError != duplicateError)
+    {
+        return Fail(root, "managed projection collision escaped creator preflight");
+    }
+
+    fs::create_directories(root / "SourceAssets/Models/RetainedOnly");
+    creatorError.clear();
+    if (creatorWorkflow.ValidateModelImportDestination(
+            root.generic_u8string(), creatorSource.generic_u8string(),
+            "RetainedOnly", "Content/Models", creatorError) ||
+        creatorError != duplicateError)
+    {
+        return Fail(root, "retained-source collision escaped creator preflight");
     }
 
     if (AssetBrowserService::Classify(
