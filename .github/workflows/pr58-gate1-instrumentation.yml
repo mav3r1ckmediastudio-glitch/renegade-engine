@@ -1,0 +1,303 @@
+name: PR58 Gate1 instrumentation patcher
+
+on:
+  push:
+    branches:
+      - agent/pr58-gate1-project-lifecycle-baseline
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[pr58-gate1-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/pr58-gate1-project-lifecycle-baseline
+          fetch-depth: 0
+
+      - name: Apply diagnostic-only timing probes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one anchor, found {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          header = Path("EngineBridge/include/renegade/bridge/ProjectLifecycleDiagnostics.h")
+          if header.exists():
+              raise SystemExit("diagnostics header already exists")
+          header.write_text(r'''#pragma once
+
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <string>
+
+#include <wiBacklog.h>
+
+namespace renegade::bridge::diagnostics
+{
+    using LifecycleClock = std::chrono::steady_clock;
+    using LifecycleTimePoint = LifecycleClock::time_point;
+
+    inline double MillisecondsSince(const LifecycleTimePoint& started) noexcept
+    {
+        return std::chrono::duration<double, std::milli>(
+            LifecycleClock::now() - started).count();
+    }
+
+    inline void LogProjectLifecycleTiming(
+        const std::string& phase,
+        const double elapsedMilliseconds,
+        const std::string& detail = {})
+    {
+        std::ostringstream line;
+        line << "[PR58-GATE1] " << phase << " // "
+             << std::fixed << std::setprecision(2)
+             << elapsedMilliseconds << " ms";
+        if (!detail.empty())
+            line << " // " << detail;
+        wi::backlog::post(line.str());
+    }
+}
+''', encoding="utf-8")
+
+          scene = Path("EngineBridge/src/SceneDocumentService.cpp")
+          replace_once(scene,
+              '#include "renegade/bridge/ProjectService.h"\n',
+              '#include "renegade/bridge/ProjectService.h"\n#include "renegade/bridge/ProjectLifecycleDiagnostics.h"\n')
+
+          replace_once(scene,
+              '''    PreparedSceneOpen PrepareWickedSceneOpen(const std::string& filePath)\n    {\n        PreparedSceneOpen prepared;\n        prepared.path_ = filePath;\n''',
+              '''    PreparedSceneOpen PrepareWickedSceneOpen(const std::string& filePath)\n    {\n        const auto prepareStarted = diagnostics::LifecycleClock::now();\n        double deserializeMilliseconds = 0.0;\n        PreparedSceneOpen prepared;\n        prepared.path_ = filePath;\n''')
+
+          replace_once(scene,
+              '''            prepared.scene_ = std::make_unique<wi::scene::Scene>();\n            prepared.scene_->Serialize(archive);\n''',
+              '''            prepared.scene_ = std::make_unique<wi::scene::Scene>();\n            const auto deserializeStarted = diagnostics::LifecycleClock::now();\n            prepared.scene_->Serialize(archive);\n            deserializeMilliseconds = diagnostics::MillisecondsSince(deserializeStarted);\n''')
+
+          replace_once(scene,
+              '''        if (prepared.scene_->cameras.GetCount() > 0)\n        {\n            prepared.firstCamera_ = prepared.scene_->cameras.GetEntity(0);\n        }\n        return prepared;\n    }\n''',
+              '''        if (prepared.scene_->cameras.GetCount() > 0)\n        {\n            prepared.firstCamera_ = prepared.scene_->cameras.GetEntity(0);\n        }\n        std::ostringstream prepareDetail;\n        prepareDetail << "deserialize=" << std::fixed << std::setprecision(2)\n                      << deserializeMilliseconds << " ms // archive_bytes="\n                      << archive.GetSize() << " // " << filePath;\n        diagnostics::LogProjectLifecycleTiming(\n            "SCENE PREPARE",\n            diagnostics::MillisecondsSince(prepareStarted),\n            prepareDetail.str());\n        return prepared;\n    }\n''')
+
+          replace_once(scene,
+              '''    bool SceneDocumentService::CommitPreparedOpen(PreparedSceneOpen prepared)\n    {\n        if (!prepared.IsReady())\n''',
+              '''    bool SceneDocumentService::CommitPreparedOpen(PreparedSceneOpen prepared)\n    {\n        const auto commitStarted = diagnostics::LifecycleClock::now();\n        if (!prepared.IsReady())\n''')
+
+          replace_once(scene,
+              '''        scenes_.scene_.Clear();\n        scenes_.scene_.Merge(*prepared.scene_);\n        for (std::size_t index = 0;\n''',
+              '''        const auto mergeStarted = diagnostics::LifecycleClock::now();\n        scenes_.scene_.Clear();\n        scenes_.scene_.Merge(*prepared.scene_);\n        const double mergeMilliseconds =\n            diagnostics::MillisecondsSince(mergeStarted);\n        const auto rebindStarted = diagnostics::LifecycleClock::now();\n        for (std::size_t index = 0;\n''')
+
+          replace_once(scene,
+              '''        RebindDefaultTerrainMaterials(scenes_.scene_);\n        scenes_.currentPath_ = std::move(prepared.path_);\n''',
+              '''        RebindDefaultTerrainMaterials(scenes_.scene_);\n        const double rebindMilliseconds =\n            diagnostics::MillisecondsSince(rebindStarted);\n        const std::string committedPath = prepared.path_;\n        scenes_.currentPath_ = std::move(prepared.path_);\n''')
+
+          replace_once(scene,
+              '''        commands_.Clear();\n        lastOpenedCamera_ = prepared.firstCamera_;\n        return true;\n    }\n\n    bool SceneDocumentService::Open(const std::string& filePath)\n    {\n        return CommitPreparedOpen(PrepareOpen(filePath));\n    }\n''',
+              '''        commands_.Clear();\n        lastOpenedCamera_ = prepared.firstCamera_;\n        std::ostringstream commitDetail;\n        commitDetail << "merge=" << std::fixed << std::setprecision(2)\n                     << mergeMilliseconds << " ms // terrain_rebind="\n                     << rebindMilliseconds << " ms // " << committedPath;\n        diagnostics::LogProjectLifecycleTiming(\n            "SCENE COMMIT",\n            diagnostics::MillisecondsSince(commitStarted),\n            commitDetail.str());\n        return true;\n    }\n\n    bool SceneDocumentService::Open(const std::string& filePath)\n    {\n        const auto openStarted = diagnostics::LifecycleClock::now();\n        const bool opened = CommitPreparedOpen(PrepareOpen(filePath));\n        diagnostics::LogProjectLifecycleTiming(\n            "SCENE OPEN SYNC",\n            diagnostics::MillisecondsSince(openStarted),\n            std::string(opened ? "success // " : "failure // ") + filePath);\n        return opened;\n    }\n''')
+
+          replace_once(scene,
+              '''    bool SceneDocumentService::Save(const std::string& filePath)\n    {\n        lastWarning_.clear();\n''',
+              '''    bool SceneDocumentService::Save(const std::string& filePath)\n    {\n        const auto saveStarted = diagnostics::LifecycleClock::now();\n        lastWarning_.clear();\n''')
+
+          replace_once(scene,
+              '''        scenes_.lastError_.clear();\n        commands_.MarkSaved();\n        return true;\n    }\n''',
+              '''        scenes_.lastError_.clear();\n        commands_.MarkSaved();\n        diagnostics::LogProjectLifecycleTiming(\n            "SCENE SAVE",\n            diagnostics::MillisecondsSince(saveStarted),\n            destination.generic_u8string());\n        return true;\n    }\n''')
+
+          material = Path("EngineBridge/src/MaterialTextureAssetService.cpp")
+          replace_once(material,
+              '#include "renegade/bridge/MaterialService.h"\n',
+              '#include "renegade/bridge/MaterialService.h"\n#include "renegade/bridge/ProjectLifecycleDiagnostics.h"\n')
+          replace_once(material,
+              '#include <filesystem>\n#include <utility>\n',
+              '#include <filesystem>\n#include <set>\n#include <sstream>\n#include <utility>\n')
+
+          old_restore = r'''    MaterialTextureRestoreResult RestoreMaterialTextureBindings(
+        wi::scene::Scene& scene,
+        const std::string& projectRoot,
+        const StableId& projectId,
+        MaterialTextureResourceLoader loader)
+    {
+        MaterialTextureRestoreResult result;
+        std::vector<MaterialTextureBindingRecord> bindings;
+        if (!InspectMaterialTextureBindings(scene, bindings, result.error))
+            return result;
+        result.discovered = bindings.size();
+        if (!loader)
+            loader = LoadPreparedMaterialTextureAsset;
+
+        std::size_t failureCount = 0;
+        std::string firstFailure;
+        for (const auto& binding : bindings)
+        {
+            auto* material = scene.materials.GetComponent(binding.materialEntity);
+            if (material == nullptr)
+            {
+                ++failureCount;
+                if (firstFailure.empty())
+                    firstFailure = binding.textureAssetId +
+                        ": persisted texture binding lost its material target";
+                continue;
+            }
+            auto& texture = material->textures[WickedTextureSlot(binding.slot)];
+            if (texture.resource.IsValid() && texture.name.empty())
+                continue;
+
+            PreparedMaterialTextureAsset prepared;
+            std::string bindingError;
+            if (!PrepareMaterialTextureAsset(
+                    projectRoot, projectId, binding.textureAssetId,
+                    prepared, bindingError) ||
+                !ApplyPreparedMaterialTextureAsset(
+                    scene, binding.materialEntity, binding.slot,
+                    prepared, loader, bindingError))
+            {
+                ++failureCount;
+                if (firstFailure.empty())
+                    firstFailure = binding.textureAssetId + ": " + bindingError;
+                continue;
+            }
+            ++result.restored;
+        }
+
+        if (failureCount != 0)
+        {
+            result.error = std::to_string(failureCount) +
+                " governed material texture binding(s) could not be restored. First failure: " +
+                firstFailure;
+            return result;
+        }
+        result.succeeded = true;
+        result.error.clear();
+        return result;
+    }
+'''
+          new_restore = r'''    MaterialTextureRestoreResult RestoreMaterialTextureBindings(
+        wi::scene::Scene& scene,
+        const std::string& projectRoot,
+        const StableId& projectId,
+        MaterialTextureResourceLoader loader)
+    {
+        const auto restoreStarted = diagnostics::LifecycleClock::now();
+        MaterialTextureRestoreResult result;
+        std::vector<MaterialTextureBindingRecord> bindings;
+        const auto inspectStarted = diagnostics::LifecycleClock::now();
+        if (!InspectMaterialTextureBindings(scene, bindings, result.error))
+        {
+            diagnostics::LogProjectLifecycleTiming(
+                "TEXTURE RESTORE",
+                diagnostics::MillisecondsSince(restoreStarted),
+                "binding inspection failed // " + result.error);
+            return result;
+        }
+        const double inspectMilliseconds =
+            diagnostics::MillisecondsSince(inspectStarted);
+        result.discovered = bindings.size();
+        if (!loader)
+            loader = LoadPreparedMaterialTextureAsset;
+
+        std::set<StableId> uniqueTextureAssetIds;
+        for (const auto& binding : bindings)
+            uniqueTextureAssetIds.insert(binding.textureAssetId);
+
+        std::size_t failureCount = 0;
+        std::size_t alreadyLiveCount = 0;
+        double prepareMilliseconds = 0.0;
+        double applyMilliseconds = 0.0;
+        std::string firstFailure;
+        for (const auto& binding : bindings)
+        {
+            auto* material = scene.materials.GetComponent(binding.materialEntity);
+            if (material == nullptr)
+            {
+                ++failureCount;
+                if (firstFailure.empty())
+                    firstFailure = binding.textureAssetId +
+                        ": persisted texture binding lost its material target";
+                continue;
+            }
+            auto& texture = material->textures[WickedTextureSlot(binding.slot)];
+            if (texture.resource.IsValid() && texture.name.empty())
+            {
+                ++alreadyLiveCount;
+                continue;
+            }
+
+            PreparedMaterialTextureAsset prepared;
+            std::string bindingError;
+            const auto prepareStarted = diagnostics::LifecycleClock::now();
+            const bool preparedSuccessfully = PrepareMaterialTextureAsset(
+                projectRoot, projectId, binding.textureAssetId,
+                prepared, bindingError);
+            prepareMilliseconds += diagnostics::MillisecondsSince(prepareStarted);
+
+            bool appliedSuccessfully = false;
+            if (preparedSuccessfully)
+            {
+                const auto applyStarted = diagnostics::LifecycleClock::now();
+                appliedSuccessfully = ApplyPreparedMaterialTextureAsset(
+                    scene, binding.materialEntity, binding.slot,
+                    prepared, loader, bindingError);
+                applyMilliseconds += diagnostics::MillisecondsSince(applyStarted);
+            }
+
+            if (!preparedSuccessfully || !appliedSuccessfully)
+            {
+                ++failureCount;
+                if (firstFailure.empty())
+                    firstFailure = binding.textureAssetId + ": " + bindingError;
+                continue;
+            }
+            ++result.restored;
+        }
+
+        std::ostringstream restoreDetail;
+        restoreDetail << "bindings=" << bindings.size()
+                      << " // unique_ids=" << uniqueTextureAssetIds.size()
+                      << " // already_live=" << alreadyLiveCount
+                      << " // restored=" << result.restored
+                      << " // failures=" << failureCount
+                      << " // inspect=" << std::fixed << std::setprecision(2)
+                      << inspectMilliseconds << " ms"
+                      << " // prepare=" << prepareMilliseconds << " ms"
+                      << " // apply=" << applyMilliseconds << " ms";
+        diagnostics::LogProjectLifecycleTiming(
+            "TEXTURE RESTORE",
+            diagnostics::MillisecondsSince(restoreStarted),
+            restoreDetail.str());
+
+        if (failureCount != 0)
+        {
+            result.error = std::to_string(failureCount) +
+                " governed material texture binding(s) could not be restored. First failure: " +
+                firstFailure;
+            return result;
+        }
+        result.succeeded = true;
+        result.error.clear();
+        return result;
+    }
+'''
+          replace_once(material, old_restore, new_restore)
+
+          workflow = Path(".github/workflows/pr58-gate1-instrumentation.yml")
+          workflow.unlink()
+
+      - name: Commit diagnostic probe
+        shell: bash
+        run: |
+          git config user.name "Renegade Gate Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add EngineBridge/include/renegade/bridge/ProjectLifecycleDiagnostics.h \
+                  EngineBridge/src/SceneDocumentService.cpp \
+                  EngineBridge/src/MaterialTextureAssetService.cpp \
+                  .github/workflows/pr58-gate1-instrumentation.yml
+          git diff --cached --check
+          git commit -m "diag(pr58): instrument project lifecycle timings [pr58-gate1-applied]"
+          git push origin HEAD:agent/pr58-gate1-project-lifecycle-baseline
