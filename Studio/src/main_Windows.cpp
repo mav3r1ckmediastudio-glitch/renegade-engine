@@ -5,11 +5,28 @@
 
 #include <cwchar>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <memory>
+#include <string_view>
 
 namespace
 {
     renegade::studio::StudioApplication* application = nullptr;
+    bool windowReadyForWicked = false;
+
+    void LogGate2A(std::string_view message) noexcept
+    {
+        std::error_code error;
+        std::filesystem::create_directories("Saved/Diagnostics", error);
+        std::ofstream stream(
+            "Saved/Diagnostics/PR58Gate2AStartup.log",
+            std::ios::out | std::ios::app);
+        if (stream)
+        {
+            stream << "[PR58-GATE2A] " << message << '\n';
+        }
+    }
 
     const wchar_t* GraphicsBackendTitle() noexcept
     {
@@ -31,7 +48,9 @@ namespace
         switch (message)
         {
         case WM_SIZE:
-            if (application != nullptr && application->is_window_active)
+            if (application != nullptr &&
+                windowReadyForWicked &&
+                application->is_window_active)
             {
                 application->SetWindow(window);
             }
@@ -48,7 +67,9 @@ namespace
                 suggested->right - suggested->left,
                 suggested->bottom - suggested->top,
                 SWP_NOACTIVATE | SWP_NOZORDER);
-            if (application != nullptr && application->is_window_active)
+            if (application != nullptr &&
+                windowReadyForWicked &&
+                application->is_window_active)
             {
                 application->SetWindow(window);
             }
@@ -125,6 +146,7 @@ int APIENTRY wWinMain(
             SetCurrentDirectoryW(executablePath);
         }
     }
+    LogGate2A("PROCESS_START");
 
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
@@ -132,14 +154,15 @@ int APIENTRY wWinMain(
     windowClass.lpfnWndProc = RenegadeWindowProc;
     windowClass.hInstance = instance;
     windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    // Gate 2A: if Windows exposes the native window before Wicked's first
-    // present, the backing brush is black rather than the old white flash.
+    // Gate 2A: Windows owns the first visible pixels. Keep them black until
+    // Wicked has a reveal frame to present; never expose the editor underneath.
     windowClass.hbrBackground =
         reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
     windowClass.lpszClassName = L"RenegadeStudioWindow";
 
     if (RegisterClassExW(&windowClass) == 0)
     {
+        LogGate2A("REGISTER_WINDOW_CLASS_FAILED");
         application = nullptr;
         return 1;
     }
@@ -159,38 +182,88 @@ int APIENTRY wWinMain(
 
     if (window == nullptr)
     {
+        LogGate2A("CREATE_WINDOW_FAILED");
         application = nullptr;
         return 2;
     }
 
-    // Initialize Studio while the native window is still hidden. This makes
-    // the normal Studio path available without ever presenting it. Gate 2A's
-    // reveal is then activated before ShowWindow(), preventing editor/Hub bleed.
-    // Engine initialization and Studio's proving-ground setup complete before
-    // the reveal starts; the movie is not used to disguise unrelated loading.
-    application->SetWindow(window);
-    application->Initialize();
-    wi::initializer::WaitForInitializationsToFinish();
+    // The previous Gate 2A attempt hid this window until all initialization and
+    // video setup completed. Any block therefore looked like "literally nothing".
+    // Show a responsive black window first; this is not Renegade/editor content.
+    ShowWindow(window, showCommand);
+    UpdateWindow(window);
+    LogGate2A("WINDOW_VISIBLE_BLACK");
 
-    wi::RenderPath* studioPath = application->GetActivePath();
+    windowReadyForWicked = true;
+    application->SetWindow(window);
+    SetWindowTextW(window, GraphicsBackendTitle());
+    LogGate2A("WICKED_WINDOW_BOUND");
+
+    // Initialize only Wicked's application/core systems before the reveal. Do
+    // NOT initialize Studio/project state behind the movie: Gate 2A must not use
+    // the cinematic as a disguised loading screen.
+    LogGate2A("WICKED_CORE_INIT_BEGIN");
+    application->wi::Application::Initialize();
+
+    // Keep the native window responsive while Wicked's async systems finish.
+    // No Application::Run() call is made here because Wicked's built-in startup
+    // screen/backlog would violate the reveal's exclusive first-content rule.
+    MSG message = {};
+    while (!wi::initializer::IsInitializeFinished())
+    {
+        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+        {
+            if (message.message == WM_QUIT)
+            {
+                LogGate2A("QUIT_DURING_WICKED_CORE_INIT");
+                wi::jobsystem::ShutDown();
+                application = nullptr;
+                return static_cast<int>(message.wParam);
+            }
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+        Sleep(1);
+    }
+    LogGate2A("WICKED_CORE_INIT_END");
+
     renegade::studio::StartupRevealRenderPath startupReveal;
     startupReveal.Configure(
         "Content/startup/renegade_logo_reveal_v2.mp4",
         "Content/startup/renegade_logo_reveal_v2.wav");
-    application->ActivatePath(&startupReveal);
 
-    // Media/decoder/audio failures are explicitly fail-open: enter Studio before
-    // the window becomes visible instead of showing a broken or silent reveal.
+    LogGate2A("REVEAL_ACTIVATE_BEGIN");
+    application->ActivatePath(&startupReveal);
     if (startupReveal.HasFailedOpen())
     {
-        application->ActivatePath(studioPath);
+        LogGate2A("REVEAL_FAIL_OPEN");
+    }
+    else
+    {
+        LogGate2A("REVEAL_ACTIVE");
     }
 
-    SetWindowTextW(window, GraphicsBackendTitle());
-    ShowWindow(window, showCommand);
-    UpdateWindow(window);
+    bool studioInitialized = false;
+    const auto initializeStudio = [&]() {
+        if (studioInitialized)
+            return;
 
-    MSG message = {};
+        LogGate2A("STUDIO_INIT_BEGIN");
+        // StudioApplication::Initialize() calls the base initializer again, which
+        // is intentionally idempotent, then performs Renegade project/editor setup
+        // and activates Studio's normal render path.
+        application->Initialize();
+        studioInitialized = true;
+        LogGate2A("STUDIO_INIT_END");
+    };
+
+    // Missing/corrupt media or unsupported H.264 decode must never strand startup.
+    if (startupReveal.HasFailedOpen())
+    {
+        initializeStudio();
+    }
+
+    message = {};
     while (message.message != WM_QUIT)
     {
         if (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
@@ -202,17 +275,24 @@ int APIENTRY wWinMain(
         {
             application->Run();
 
-            // The reveal owns its final fully-black frame. Switch paths only
-            // after that frame has been presented so Studio never bleeds through
-            // the fade. Gate 2B will later take over this black handoff point.
-            if (application->GetActivePath() == &startupReveal &&
+            // StartupRevealRenderPath owns the fully-black final frame. Only after
+            // that frame has been submitted do we begin Studio/project loading.
+            // If Studio setup is slow, the user sees honest black rather than a
+            // movie disguising unrelated work. Gate 2B will later own this handoff.
+            if (!studioInitialized &&
+                application->GetActivePath() == &startupReveal &&
                 startupReveal.IsFinished())
             {
-                application->ActivatePath(studioPath);
+                LogGate2A(
+                    startupReveal.HasFailedOpen()
+                        ? "REVEAL_FINISHED_FAIL_OPEN"
+                        : "REVEAL_FINISHED");
+                initializeStudio();
             }
         }
     }
 
+    LogGate2A("PROCESS_EXIT");
     wi::jobsystem::ShutDown();
     application = nullptr;
     return static_cast<int>(message.wParam);
