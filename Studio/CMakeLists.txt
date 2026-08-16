@@ -65,6 +65,7 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h
     src/StartupIdentityHandshake.h
+    src/StartupIrisTransition.h
     src/StartupIdentityPrompt.cpp
     src/StartupIdentityPrompt.h
     src/StartupMediaFoundationPlayer.cpp
