@@ -30,7 +30,7 @@ namespace
     const XMFLOAT4 LeftBack = XMFLOAT4(186.0f, 536.0f, 423.0f, 610.0f);
     const XMFLOAT4 LeftExit = XMFLOAT4(186.0f, 651.0f, 423.0f, 725.0f);
     const XMFLOAT4 Featured = XMFLOAT4(464.0f, 193.0f, 1155.0f, 590.0f);
-    const XMFLOAT4 LowerNew = XMFLOAT4(464.0f, 606.0f, 730.0f, 765.0f);
+    const XMFLOAT4 LowerNew = XMFLOAT4(464.0f, 606.0f, 1155.0f, 765.0f);
     const XMFLOAT4 LowerRecent0 = XMFLOAT4(742.0f, 606.0f, 868.0f, 765.0f);
     const XMFLOAT4 LowerRecent1 = XMFLOAT4(879.0f, 606.0f, 1005.0f, 765.0f);
     const XMFLOAT4 LowerRecent2 = XMFLOAT4(1016.0f, 606.0f, 1155.0f, 765.0f);
@@ -496,47 +496,8 @@ namespace renegade::studio
             hovered_ == HoverTarget::LowerNewProject ? SurfaceRaised : Surface,
             hovered_ == HoverTarget::LowerNewProject ? Orange : Border);
         text("+", 518.0f, 646.0f, 34, TextStrong, 0.0f, 0.08f);
-        text("NEW PROJECT", 625.0f, 653.0f, 18, TextStrong, 1.2f, 0.13f);
-        text("CREATE A NEW RENEGADE PROJECT", 625.0f, 684.0f, 8, Muted, 0.6f, 0.10f);
-
-        const std::array<XMFLOAT4, 3> recentRects = {LowerRecent0, LowerRecent1, LowerRecent2};
-        const std::array<HoverTarget, 3> recentHover = {
-            HoverTarget::Recent0,
-            HoverTarget::Recent1,
-            HoverTarget::Recent2,
-        };
-        for (std::size_t slot = 0; slot < recentRects.size(); ++slot)
-        {
-            const std::size_t projectIndex = slot + 1u;
-            if (projectIndex >= projects_.size())
-                continue;
-            const bool hover = hovered_ == recentHover[slot];
-            bordered(recentRects[slot], hover ? SurfaceRaised : Surface, hover ? Cyan : Border);
-            text(
-                "0" + std::to_string(projectIndex + 1u),
-                recentRects[slot].x + 12.0f,
-                recentRects[slot].y + 14.0f,
-                9,
-                Cyan,
-                0.8f,
-                0.12f);
-            text(
-                UpperAscii(Ellipsize(projects_[projectIndex].name, 13u)),
-                recentRects[slot].x + 12.0f,
-                recentRects[slot].y + 48.0f,
-                10,
-                TextStrong,
-                0.55f,
-                0.13f);
-            text(
-                "RECENT PROJECT",
-                recentRects[slot].x + 12.0f,
-                recentRects[slot].y + 91.0f,
-                7,
-                Muted,
-                0.5f,
-                0.10f);
-        }
+        text("NEW PROJECT", 637.0f, 653.0f, 18, TextStrong, 1.2f, 0.13f);
+        text("CREATE A NEW RENEGADE PROJECT", 637.0f, 684.0f, 8, Muted, 0.6f, 0.10f);
 
         mask(1191.0f, 383.0f, 287.0f, 286.0f, wi::Color(5, 14, 19, 250));
         if (selectedIndex_ >= 0 &&
@@ -595,7 +556,7 @@ namespace renegade::studio
         if (newProjectMode_)
         {
             mask(0.0f, 0.0f, DesignWidth, DesignHeight, wi::Color(0, 4, 7, 185));
-            bordered(XMFLOAT4(sx(560.0f), sy(337.0f), sx(1112.0f), sy(554.0f)), SurfaceRaised, CyanSoft);
+            bordered(XMFLOAT4(560.0f, 337.0f, 1112.0f, 554.0f), SurfaceRaised, CyanSoft);
             text("CREATE NEW PROJECT", 612.0f, 360.0f, 20, TextStrong, 1.2f, 0.15f);
             text("PROJECT NAME", 612.0f, 393.0f, 8, Muted, 0.8f, 0.10f);
             text("Choose a name now. Folder selection follows after CREATE PROJECT.", 612.0f, 526.0f, 8, Muted, 0.25f, 0.10f);
