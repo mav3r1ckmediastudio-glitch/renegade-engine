@@ -1,5 +1,5 @@
 #include "StudioApplication.h"
-#include "StartupRevealRenderPath.h"
+#include "StartupMediaFoundationPlayer.h"
 
 #include <Windows.h>
 
@@ -15,7 +15,18 @@
 namespace
 {
     renegade::studio::StudioApplication* application = nullptr;
+    renegade::studio::StartupMediaFoundationPlayer* startupPlayer = nullptr;
     bool windowReadyForWicked = false;
+    bool startupMediaActive = false;
+
+    void ResetGate2ALog() noexcept
+    {
+        std::error_code error;
+        std::filesystem::create_directories("Saved/Diagnostics", error);
+        std::ofstream stream(
+            "Saved/Diagnostics/PR58Gate2AStartup.log",
+            std::ios::out | std::ios::trunc);
+    }
 
     void LogGate2A(std::string_view message) noexcept
     {
@@ -74,9 +85,13 @@ namespace
         switch (message)
         {
         case WM_SIZE:
-            if (application != nullptr &&
-                windowReadyForWicked &&
-                application->is_window_active)
+            if (startupMediaActive && startupPlayer != nullptr)
+            {
+                startupPlayer->Resize();
+            }
+            else if (application != nullptr &&
+                     windowReadyForWicked &&
+                     application->is_window_active)
             {
                 application->SetWindow(window);
             }
@@ -93,14 +108,34 @@ namespace
                 suggested->right - suggested->left,
                 suggested->bottom - suggested->top,
                 SWP_NOACTIVATE | SWP_NOZORDER);
-            if (application != nullptr &&
-                windowReadyForWicked &&
-                application->is_window_active)
+            if (startupMediaActive && startupPlayer != nullptr)
+            {
+                startupPlayer->Resize();
+            }
+            else if (application != nullptr &&
+                     windowReadyForWicked &&
+                     application->is_window_active)
             {
                 application->SetWindow(window);
             }
             return 0;
         }
+
+        case WM_PAINT:
+            if (startupMediaActive && startupPlayer != nullptr)
+            {
+                PAINTSTRUCT paint = {};
+                BeginPaint(window, &paint);
+                startupPlayer->Repaint();
+                EndPaint(window, &paint);
+                return 0;
+            }
+            break;
+
+        case WM_ERASEBKGND:
+            if (startupMediaActive)
+                return 1;
+            break;
 
         case WM_CHAR:
             if (wParam == VK_BACK)
@@ -132,8 +167,10 @@ namespace
             return 0;
 
         default:
-            return DefWindowProcW(window, message, wParam, lParam);
+            break;
         }
+
+        return DefWindowProcW(window, message, wParam, lParam);
     }
 }
 
@@ -156,16 +193,18 @@ int APIENTRY wWinMain(
         return 0;
     }
 
+    std::filesystem::path executableDirectory;
     wchar_t executablePath[MAX_PATH] = {};
     if (GetModuleFileNameW(nullptr, executablePath, MAX_PATH) > 0)
     {
-        wchar_t* lastSeparator = std::wcsrchr(executablePath, L'\\');
-        if (lastSeparator != nullptr)
+        executableDirectory = std::filesystem::path(executablePath).parent_path();
+        if (!executableDirectory.empty())
         {
-            *lastSeparator = L'\0';
-            SetCurrentDirectoryW(executablePath);
+            SetCurrentDirectoryW(executableDirectory.c_str());
         }
     }
+
+    ResetGate2ALog();
     LogGate2A("PROCESS_START");
 
     WNDCLASSEXW windowClass = {};
@@ -185,9 +224,6 @@ int APIENTRY wWinMain(
         return 1;
     }
 
-    // Gate 2A launches as a normal Windows application, maximized rather than
-    // borderless. This preserves the title bar, minimize/maximize/close buttons
-    // and the ability to restore/resize while still filling the launch monitor.
     const RECT workRect = ResolveLaunchMonitorWorkRect();
     const int workWidth = std::max(640, workRect.right - workRect.left);
     const int workHeight = std::max(480, workRect.bottom - workRect.top);
@@ -217,8 +253,6 @@ int APIENTRY wWinMain(
         return 2;
     }
 
-    // Honor an explicit hidden launch, otherwise start maximized. The user can
-    // immediately restore and resize the normal overlapped window afterwards.
     ShowWindow(window, showCommand == SW_HIDE ? SW_HIDE : SW_MAXIMIZE);
     UpdateWindow(window);
     LogGate2A(
@@ -231,41 +265,105 @@ int APIENTRY wWinMain(
     SetWindowTextW(window, GraphicsBackendTitle());
     LogGate2A("WICKED_WINDOW_BOUND");
 
-    // Initialize Studio while the already-visible maximized window remains
-    // black. This completes BEFORE reveal playback, so the cinematic does not
-    // conceal Studio/project loading and the normal frame loop is ready.
+    // Studio initialization completes against a visible black client area before
+    // the cinematic begins. The movie therefore never disguises project/editor
+    // loading, but the user always has a real responsive window with normal
+    // Windows chrome and controls.
     LogGate2A("STUDIO_INIT_BEGIN");
     application->Initialize();
     wi::initializer::WaitForInitializationsToFinish();
     LogGate2A("STUDIO_INIT_END");
 
-    wi::RenderPath* studioPath = application->GetActivePath();
-    if (studioPath == nullptr)
+    if (application->GetActivePath() == nullptr)
     {
         LogGate2A("STUDIO_PATH_MISSING");
         application = nullptr;
         return 3;
     }
 
-    renegade::studio::StartupRevealRenderPath startupReveal;
-    startupReveal.Configure(
-        "Content/startup/renegade_logo_reveal_v2.mp4",
-        "Content/startup/renegade_logo_reveal_v2.wav");
+    const std::filesystem::path revealPath =
+        executableDirectory /
+        L"Content" /
+        L"startup" /
+        L"renegade_logo_reveal_v2.mp4";
 
-    LogGate2A("REVEAL_ACTIVATE_BEGIN");
-    application->ActivatePath(&startupReveal);
-    if (startupReveal.HasFailedOpen())
+    std::error_code mediaError;
+    const bool mediaExists = std::filesystem::exists(revealPath, mediaError);
+    const auto mediaBytes = mediaExists
+        ? std::filesystem::file_size(revealPath, mediaError)
+        : 0;
+    LogGate2A(
+        "MEDIA_FILE // exists=" + std::string(mediaExists ? "1" : "0") +
+        " // bytes=" + std::to_string(mediaBytes));
+
+    renegade::studio::StartupMediaFoundationPlayer reveal;
+    startupPlayer = &reveal;
+    LogGate2A("MEDIA_FOUNDATION_REVEAL_BEGIN");
+    const bool revealStarted = reveal.Start(window, revealPath.wstring());
+
+    MSG message = {};
+    if (revealStarted)
     {
-        LogGate2A(
-            "REVEAL_FAIL_OPEN // " + startupReveal.FailureReason());
-        application->ActivatePath(studioPath);
+        startupMediaActive = true;
+        windowReadyForWicked = false;
+        LogGate2A("MEDIA_FOUNDATION_REVEAL_ACTIVE");
+
+        while (message.message != WM_QUIT && reveal.IsActive())
+        {
+            if (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+            {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+            else
+            {
+                reveal.Pump();
+                Sleep(1);
+            }
+        }
+
+        startupMediaActive = false;
+        const bool revealAcceptedHandoff =
+            reveal.IsFinished() && !reveal.HasFailed();
+        if (reveal.HasFailed())
+        {
+            LogGate2A(
+                "MEDIA_FOUNDATION_REVEAL_FAILED // " +
+                reveal.FailureReason());
+        }
+        else if (revealAcceptedHandoff)
+        {
+            LogGate2A("MEDIA_FOUNDATION_REVEAL_FINISHED");
+        }
+
+        // Preserve the fully-black fade overlay while the first Studio frame is
+        // rendered behind it. Removing the overlay afterwards prevents a flash of
+        // uninitialized/backbuffer content at the cinematic-to-Hub handoff.
+        reveal.Shutdown(revealAcceptedHandoff);
+        windowReadyForWicked = true;
+        if (message.message != WM_QUIT)
+        {
+            application->SetWindow(window);
+            if (revealAcceptedHandoff)
+            {
+                application->Run();
+                reveal.ReleaseFadeOverlay();
+                LogGate2A("STUDIO_FIRST_FRAME_READY");
+            }
+        }
     }
     else
     {
-        LogGate2A("REVEAL_ACTIVE");
+        LogGate2A(
+            "MEDIA_FOUNDATION_REVEAL_FAILED // " +
+            reveal.FailureReason());
+        reveal.Shutdown(false);
     }
 
-    MSG message = {};
+    startupPlayer = nullptr;
+    startupMediaActive = false;
+    windowReadyForWicked = true;
+
     while (message.message != WM_QUIT)
     {
         if (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
@@ -276,17 +374,6 @@ int APIENTRY wWinMain(
         else
         {
             application->Run();
-
-            if (application->GetActivePath() == &startupReveal &&
-                startupReveal.IsFinished())
-            {
-                LogGate2A(
-                    startupReveal.HasFailedOpen()
-                        ? "REVEAL_FINISHED_FAIL_OPEN"
-                        : "REVEAL_FINISHED");
-                application->ActivatePath(studioPath);
-                LogGate2A("STUDIO_PATH_RESTORED");
-            }
         }
     }
 
