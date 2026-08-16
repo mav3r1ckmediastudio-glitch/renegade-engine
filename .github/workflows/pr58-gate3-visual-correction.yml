@@ -1,0 +1,32 @@
+name: PR58 Gate3 concept fidelity correction
+
+on:
+  push:
+    branches:
+      - agent/pr58-project-hub-lifecycle-reliability
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/pr58-project-hub-lifecycle-reliability
+          fetch-depth: 0
+      - name: Apply asserted correction
+        run: python3 Tools/pr58_gate3_visual_correction.py
+      - name: Validate and commit
+        shell: bash
+        run: |
+          git diff --check
+          test ! -e .github/workflows/pr58-gate3-visual-correction.yml
+          test ! -e Tools/pr58_gate3_visual_correction.py
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "gate3: tighten concept fidelity before CI"
+          git push origin HEAD:agent/pr58-project-hub-lifecycle-reliability
