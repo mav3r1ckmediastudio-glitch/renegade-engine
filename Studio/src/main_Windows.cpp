@@ -1,4 +1,5 @@
 #include "StudioApplication.h"
+#include "StartupIdentityHandshake.h"
 #include "StartupIdentityPrompt.h"
 #include "StartupMediaFoundationPlayer.h"
 #include "StudioUserPreferences.h"
@@ -19,9 +20,11 @@ namespace
     renegade::studio::StudioApplication* application = nullptr;
     renegade::studio::StartupMediaFoundationPlayer* startupPlayer = nullptr;
     renegade::studio::StartupIdentityPrompt* startupIdentityPrompt = nullptr;
+    renegade::studio::StartupIdentityHandshake* startupIdentityHandshake = nullptr;
     bool windowReadyForWicked = false;
     bool startupMediaActive = false;
     bool startupIdentityActive = false;
+    bool startupHandshakeActive = false;
 
     void ResetGate2ALog() noexcept
     {
@@ -63,6 +66,35 @@ namespace
             stream << "[PR58-GATE2B] " << message << '\n';
     }
 
+    void ResetGate2CLog() noexcept
+    {
+        std::error_code error;
+        std::filesystem::create_directories("Saved/Diagnostics", error);
+        std::ofstream stream(
+            "Saved/Diagnostics/PR58Gate2CStartup.log",
+            std::ios::out | std::ios::trunc);
+    }
+
+    void LogGate2C(std::string_view message) noexcept
+    {
+        std::error_code error;
+        std::filesystem::create_directories("Saved/Diagnostics", error);
+        std::ofstream stream(
+            "Saved/Diagnostics/PR58Gate2CStartup.log",
+            std::ios::out | std::ios::app);
+        if (stream)
+            stream << "[PR58-GATE2C] " << message << '\n';
+    }
+
+    std::string DescribeFile(const std::filesystem::path& path) noexcept
+    {
+        std::error_code error;
+        const bool exists = std::filesystem::exists(path, error);
+        const auto bytes = exists ? std::filesystem::file_size(path, error) : 0;
+        return "exists=" + std::string(exists ? "1" : "0") +
+               " // bytes=" + std::to_string(bytes);
+    }
+
     RECT ResolveLaunchMonitorWorkRect() noexcept
     {
         POINT cursor = {};
@@ -101,7 +133,11 @@ namespace
         switch (message)
         {
         case WM_SIZE:
-            if (startupIdentityActive && startupIdentityPrompt != nullptr)
+            if (startupHandshakeActive && startupIdentityHandshake != nullptr)
+            {
+                startupIdentityHandshake->Resize();
+            }
+            else if (startupIdentityActive && startupIdentityPrompt != nullptr)
             {
                 startupIdentityPrompt->Resize();
             }
@@ -128,7 +164,11 @@ namespace
                 suggested->right - suggested->left,
                 suggested->bottom - suggested->top,
                 SWP_NOACTIVATE | SWP_NOZORDER);
-            if (startupIdentityActive && startupIdentityPrompt != nullptr)
+            if (startupHandshakeActive && startupIdentityHandshake != nullptr)
+            {
+                startupIdentityHandshake->Resize();
+            }
+            else if (startupIdentityActive && startupIdentityPrompt != nullptr)
             {
                 startupIdentityPrompt->Resize();
             }
@@ -157,12 +197,12 @@ namespace
             break;
 
         case WM_ERASEBKGND:
-            if (startupMediaActive || startupIdentityActive)
+            if (startupMediaActive || startupIdentityActive || startupHandshakeActive)
                 return 1;
             break;
 
         case WM_CHAR:
-            if (startupIdentityActive)
+            if (startupIdentityActive || startupHandshakeActive)
                 return 0;
             if (wParam == VK_BACK)
             {
@@ -231,8 +271,10 @@ int APIENTRY wWinMain(
 
     ResetGate2ALog();
     ResetGate2BLog();
+    ResetGate2CLog();
     LogGate2A("PROCESS_START");
     LogGate2B("PROCESS_START");
+    LogGate2C("PROCESS_START");
 
     if (wi::arguments::HasArgument("reset-developer-identity"))
     {
@@ -310,13 +352,7 @@ int APIENTRY wWinMain(
 
     const std::filesystem::path revealPath =
         executableDirectory / L"Content" / L"startup" / L"renegade_logo_reveal_v2.mp4";
-
-    std::error_code mediaError;
-    const bool mediaExists = std::filesystem::exists(revealPath, mediaError);
-    const auto mediaBytes = mediaExists ? std::filesystem::file_size(revealPath, mediaError) : 0;
-    LogGate2A(
-        "MEDIA_FILE // exists=" + std::string(mediaExists ? "1" : "0") +
-        " // bytes=" + std::to_string(mediaBytes));
+    LogGate2A("MEDIA_FILE // " + DescribeFile(revealPath));
 
     renegade::studio::StartupMediaFoundationPlayer reveal;
     startupPlayer = &reveal;
@@ -373,8 +409,8 @@ int APIENTRY wWinMain(
         std::string("IDENTITY_PREFERENCES // found=") +
         (developerIdentity.has_value() ? "1" : "0"));
 
-    bool firstStudioFrameReady = false;
     renegade::studio::StartupIdentityPrompt identityPrompt;
+    bool identityPromptHeld = false;
 
     if (message.message != WM_QUIT && !developerIdentity.has_value())
     {
@@ -385,8 +421,8 @@ int APIENTRY wWinMain(
             windowReadyForWicked = false;
             LogGate2B("FIRST_RUN_PROMPT_ACTIVE");
 
-            // The prompt is painted completely before the reveal's final-black
-            // overlay is removed, so there is no visible Hub/editor flash.
+            // The prompt is completely opaque before Gate 2A's final-black
+            // overlay is removed, preserving the accepted no-Hub-flash behavior.
             if (revealAcceptedHandoff)
                 reveal.ReleaseFadeOverlay();
 
@@ -410,17 +446,11 @@ int APIENTRY wWinMain(
             if (message.message != WM_QUIT && identityPrompt.IsCompleted())
             {
                 developerIdentity = identityPrompt.Identity();
+                identityPromptHeld = true;
                 LogGate2B(
                     "FIRST_RUN_IDENTITY_ACCEPTED // characters=" +
                     std::to_string(developerIdentity->size()));
-
-                // Render the first Studio frame while the opaque identity prompt
-                // still covers the client area. Only then remove the prompt.
-                application->SetWindow(window);
-                application->Run();
-                firstStudioFrameReady = true;
-                identityPrompt.Shutdown();
-                LogGate2B("FIRST_STUDIO_FRAME_READY_BEHIND_PROMPT");
+                LogGate2B("IDENTITY_PROMPT_HELD_FOR_GATE2C_HANDOFF");
             }
             else if (message.message == WM_QUIT)
             {
@@ -443,17 +473,204 @@ int APIENTRY wWinMain(
             std::to_string(developerIdentity->size()));
     }
 
-    if (message.message != WM_QUIT)
+    bool firstStudioFrameReady = false;
+
+    if (message.message != WM_QUIT && developerIdentity.has_value())
+    {
+        const std::filesystem::path handshakeVideoPath =
+            executableDirectory / L"Content" / L"startup" / L"renegade_identity_handshake_v1.mp4";
+        const std::filesystem::path handshakeFinalFramePath =
+            executableDirectory / L"Content" / L"startup" / L"renegade_identity_handshake_final.bmp";
+
+        LogGate2C("MOTION_PLATE_FILE // " + DescribeFile(handshakeVideoPath));
+        LogGate2C("FINAL_FRAME_FILE // " + DescribeFile(handshakeFinalFramePath));
+
+        renegade::studio::StartupMediaFoundationPlayer handshakeVideo;
+        startupPlayer = &handshakeVideo;
+        LogGate2C("HANDSHAKE_MOTION_BEGIN");
+        const bool handshakeVideoStarted =
+            handshakeVideo.Start(window, handshakeVideoPath.wstring());
+
+        bool handshakeMotionSucceeded = false;
+        if (handshakeVideoStarted)
+        {
+            startupMediaActive = true;
+            windowReadyForWicked = false;
+            LogGate2C("HANDSHAKE_MOTION_ACTIVE");
+
+            // Keep the previous opaque startup surface visible until Media
+            // Foundation has constructed the EVR video path. This prevents a
+            // transient Hub/editor frame between Gate 2B and the motion plate.
+            while (message.message != WM_QUIT &&
+                   handshakeVideo.IsActive() &&
+                   !handshakeVideo.HasVideo())
+            {
+                if (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+                {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+                else
+                {
+                    handshakeVideo.Pump();
+                    Sleep(1);
+                }
+            }
+
+            if (message.message != WM_QUIT && handshakeVideo.HasVideo())
+            {
+                if (identityPromptHeld)
+                {
+                    identityPrompt.Shutdown();
+                    identityPromptHeld = false;
+                    LogGate2B("IDENTITY_PROMPT_RELEASED_TO_GATE2C");
+                }
+                if (revealAcceptedHandoff)
+                    reveal.ReleaseFadeOverlay();
+                LogGate2C("HANDSHAKE_MOTION_VISIBLE");
+            }
+
+            while (message.message != WM_QUIT && handshakeVideo.IsActive())
+            {
+                if (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+                {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+                else
+                {
+                    handshakeVideo.Pump();
+                    Sleep(1);
+                }
+            }
+
+            startupMediaActive = false;
+            handshakeMotionSucceeded =
+                handshakeVideo.IsFinished() && !handshakeVideo.HasFailed();
+            if (handshakeVideo.HasFailed())
+            {
+                LogGate2C("HANDSHAKE_MOTION_FAILED // " + handshakeVideo.FailureReason());
+            }
+            else if (handshakeMotionSucceeded)
+            {
+                LogGate2C("HANDSHAKE_MOTION_FINISHED");
+            }
+
+            // Keep the player's final-black fade overlay until the exact final
+            // still + native Renegade UI is fully painted on top of it.
+            handshakeVideo.Shutdown(handshakeMotionSucceeded);
+        }
+        else
+        {
+            LogGate2C("HANDSHAKE_MOTION_FAILED // " + handshakeVideo.FailureReason());
+            handshakeVideo.Shutdown(false);
+        }
+
+        startupPlayer = nullptr;
+        startupMediaActive = false;
+
+        renegade::studio::StartupIdentityHandshake handshakeUi;
+        startupIdentityHandshake = &handshakeUi;
+        const bool handshakeUiStarted = handshakeUi.Start(
+            window,
+            handshakeFinalFramePath.wstring(),
+            *developerIdentity);
+
+        if (handshakeUiStarted)
+        {
+            startupHandshakeActive = true;
+            windowReadyForWicked = false;
+            LogGate2C(
+                std::string("FINAL_IDENTITY_UI_ACTIVE // background=") +
+                (handshakeUi.HasBackgroundBitmap() ? "1" : "0") +
+                " // identity_characters=" +
+                std::to_string(developerIdentity->size()));
+
+            // The final UI is already painted before either previous cover is
+            // released, so the generated plate never exposes the Studio/Hub.
+            if (identityPromptHeld)
+            {
+                identityPrompt.Shutdown();
+                identityPromptHeld = false;
+                LogGate2B("IDENTITY_PROMPT_RELEASED_TO_GATE2C_FALLBACK");
+            }
+            if (handshakeMotionSucceeded)
+                handshakeVideo.ReleaseFadeOverlay();
+            if (revealAcceptedHandoff)
+                reveal.ReleaseFadeOverlay();
+
+            while (message.message != WM_QUIT && !handshakeUi.IsCompleted())
+            {
+                if (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+                {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+                else
+                {
+                    handshakeUi.Pump();
+                    Sleep(8);
+                }
+            }
+
+            if (message.message != WM_QUIT && handshakeUi.IsCompleted())
+            {
+                LogGate2C("ENTER_HUB_ACCEPTED");
+
+                // Gate 2C ends with an intentionally simple black handoff. Gate
+                // 2D will replace this with the approved vertical iris split.
+                handshakeUi.BeginHandoff();
+                application->SetWindow(window);
+                application->Run();
+                firstStudioFrameReady = true;
+                LogGate2C("FIRST_STUDIO_FRAME_READY_BEHIND_HANDSHAKE");
+
+                handshakeUi.Shutdown();
+                startupHandshakeActive = false;
+                windowReadyForWicked = true;
+                application->SetWindow(window);
+                application->Run();
+                LogGate2C("HANDOFF_TO_STUDIO");
+            }
+            else if (message.message == WM_QUIT)
+            {
+                LogGate2C("HANDSHAKE_ABORTED_BY_WINDOW_CLOSE");
+            }
+        }
+        else
+        {
+            LogGate2C("FINAL_IDENTITY_UI_CREATE_FAILED // fail_open=1");
+            handshakeVideo.ReleaseFadeOverlay();
+        }
+
+        startupIdentityHandshake = nullptr;
+        startupHandshakeActive = false;
+        windowReadyForWicked = true;
+
+        if (!handshakeMotionSucceeded)
+            handshakeVideo.ReleaseFadeOverlay();
+    }
+
+    if (message.message != WM_QUIT && identityPromptHeld)
+    {
+        // Gate 2C could not establish an owner surface. Keep the old Gate 2B
+        // fail-open contract: render Studio first, then remove the opaque prompt.
+        application->SetWindow(window);
+        application->Run();
+        firstStudioFrameReady = true;
+        identityPrompt.Shutdown();
+        identityPromptHeld = false;
+        LogGate2B("FIRST_STUDIO_FRAME_READY_BEHIND_PROMPT // Gate2C_fail_open=1");
+    }
+
+    if (message.message != WM_QUIT && !firstStudioFrameReady)
     {
         application->SetWindow(window);
-        if (!firstStudioFrameReady && revealAcceptedHandoff)
-        {
-            application->Run();
-            firstStudioFrameReady = true;
+        application->Run();
+        firstStudioFrameReady = true;
+        if (revealAcceptedHandoff)
             reveal.ReleaseFadeOverlay();
-            LogGate2A("STUDIO_FIRST_FRAME_READY");
-        }
-        LogGate2B("HANDOFF_TO_STUDIO // Gate2C_not_implemented_yet");
+        LogGate2C("FAIL_OPEN_HANDOFF_TO_STUDIO");
     }
 
     while (message.message != WM_QUIT)
@@ -469,6 +686,7 @@ int APIENTRY wWinMain(
         }
     }
 
+    LogGate2C("PROCESS_EXIT");
     LogGate2B("PROCESS_EXIT");
     LogGate2A("PROCESS_EXIT");
     wi::jobsystem::ShutDown();
