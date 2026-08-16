@@ -29,6 +29,14 @@ namespace
     constexpr wi::Color HologramBorder = wi::Color(38, 52, 61, 255);
     constexpr wi::Color HologramPanel = wi::Color(8, 12, 16, 255);
     constexpr wi::Color HologramSelected = wi::Color(44, 35, 29, 255);
+    constexpr wi::Color HubBackground = wi::Color(4, 7, 10, 255);
+    constexpr wi::Color HubSurface = wi::Color(8, 14, 18, 255);
+    constexpr wi::Color HubSurfaceRaised = wi::Color(11, 20, 25, 255);
+    constexpr wi::Color HubBorder = wi::Color(28, 68, 82, 255);
+    constexpr wi::Color HubCyan = wi::Color(92, 208, 236, 255);
+    constexpr wi::Color HubOrange = wi::Color(222, 91, 29, 255);
+    constexpr wi::Color HubMuted = wi::Color(139, 158, 166, 255);
+    constexpr wi::Color HubSelected = wi::Color(13, 35, 43, 255);
     constexpr wi::Color WarningAmber = wi::Color(255, 150, 40, 255);
     constexpr int LayoutPreferenceBits = 10;
 
@@ -3036,43 +3044,44 @@ namespace renegade::studio
         projectHubPanel_.Create(
             "Renegade Project Hub",
             wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
-        projectHubPanel_.SetShadowRadius(12.0f);
+        projectHubPanel_.SetShadowRadius(0.0f);
         GetGUI().AddWidget(&projectHubPanel_);
 
         hubBrandLabel_.Create("Renegade Hub Brand");
-        hubBrandLabel_.SetText("RENEGADE // IDENTITY ACCEPTED");
-        hubBrandLabel_.font.params.size = 14;
-        hubBrandLabel_.font.params.color = HologramMuted;
+        hubBrandLabel_.SetText("RENEGADE");
+        hubBrandLabel_.font.params.size = 15;
+        hubBrandLabel_.font.params.bolden = 0.30f;
+        hubBrandLabel_.font.params.color = HubOrange;
         hubBrandLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         projectHubPanel_.AddWidget(&hubBrandLabel_);
 
         hubTitleLabel_.Create("Renegade Project Hub Title");
         hubTitleLabel_.SetText("PROJECT HUB");
-        hubTitleLabel_.font.params.size = 34;
-        hubTitleLabel_.font.params.bolden = 0.25f;
+        hubTitleLabel_.font.params.size = 38;
+        hubTitleLabel_.font.params.bolden = 0.28f;
         hubTitleLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         projectHubPanel_.AddWidget(&hubTitleLabel_);
 
         hubSubtitleLabel_.Create("Renegade Project Hub Subtitle");
         hubSubtitleLabel_.SetText(
-            "Create a new world, open an existing .renegade project, "
-            "or resume a recent operation.");
-        hubSubtitleLabel_.font.params.size = 16;
-        hubSubtitleLabel_.font.params.color = HologramMuted;
+            "PROJECT LIFECYCLE CONTROL // CREATE // OPEN // CONTINUE");
+        hubSubtitleLabel_.font.params.size = 14;
+        hubSubtitleLabel_.font.params.color = HubMuted;
         hubSubtitleLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         projectHubPanel_.AddWidget(&hubSubtitleLabel_);
 
         projectNameInput_.Create("New Project Name");
-        projectNameInput_.SetDescription("PROJECT NAME: ");
+        projectNameInput_.SetDescription("NEW PROJECT // NAME: ");
         projectNameInput_.SetText("New Renegade Project");
         projectNameInput_.SetCancelInputEnabled(false);
+        projectNameInput_.SetTooltip("Name the project, then choose its parent folder");
         projectHubPanel_.AddWidget(&projectNameInput_);
 
         createProjectButton_.Create("Create Renegade Project");
-        createProjectButton_.SetText("CREATE PROJECT");
+        createProjectButton_.SetText("CREATE NEW PROJECT");
         createProjectButton_.SetTooltip(
             "Choose a parent folder and create a project from the Proving Ground");
-        createProjectButton_.SetAngularHighlightWidth(5.0f);
+        createProjectButton_.SetAngularHighlightWidth(3.0f);
         createProjectButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             CreateProject();
@@ -3081,27 +3090,31 @@ namespace renegade::studio
 
         openProjectButton_.Create("Open Renegade Project");
         openProjectButton_.SetText("OPEN PROJECT...");
-        openProjectButton_.SetAngularHighlightWidth(5.0f);
+        openProjectButton_.SetTooltip(
+            "Open an existing Renegade project descriptor (.renegade)");
+        openProjectButton_.SetAngularHighlightWidth(3.0f);
         openProjectButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             OpenProject();
         });
         projectHubPanel_.AddWidget(&openProjectButton_);
 
+        // Project Hub is deliberately project-level. OPEN SCENE remains an
+        // editor command in the Renegade Studio chrome, but is not presented
+        // as a primary startup action here.
         openSceneButton_.Create("Open Renegade Scene");
         openSceneButton_.SetText("OPEN SCENE...");
-        openSceneButton_.SetTooltip(
-            "Open an existing Wicked scene (.wiscene) in Renegade Studio");
-        openSceneButton_.SetAngularHighlightWidth(5.0f);
         openSceneButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             OpenScene();
         });
+        openSceneButton_.SetVisible(false);
         projectHubPanel_.AddWidget(&openSceneButton_);
 
         recentProjectsLabel_.Create("Recent Projects");
-        recentProjectsLabel_.SetText("RECENT OPERATIONS");
+        recentProjectsLabel_.SetText("RECENT PROJECTS");
         recentProjectsLabel_.font.params.size = 17;
+        recentProjectsLabel_.font.params.bolden = 0.22f;
         recentProjectsLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         projectHubPanel_.AddWidget(&recentProjectsLabel_);
 
@@ -3110,9 +3123,11 @@ namespace renegade::studio
             auto& button = recentProjectButtons_[index];
             button.Create("Recent Project " + std::to_string(index));
             button.SetText("");
-            button.SetAngularHighlightWidth(4.0f);
+            button.SetAngularHighlightWidth(2.0f);
+            button.SetShadowRadius(1.0f);
+            button.font.params.size = 14;
             button.font.params.h_align = wi::font::WIFALIGN_LEFT;
-            button.font.params.v_align = wi::font::WIFALIGN_TOP;
+            button.font.params.v_align = wi::font::WIFALIGN_CENTER;
             button.OnClick([this, index](const wi::gui::EventArgs&)
             {
                 SelectRecentProject(index);
@@ -3121,15 +3136,16 @@ namespace renegade::studio
         }
 
         selectedProjectLabel_.Create("Selected Project");
-        selectedProjectLabel_.SetText("SELECT A PROJECT CARD");
+        selectedProjectLabel_.SetText("PROJECT DETAILS");
         selectedProjectLabel_.SetFitTextEnabled(true);
-        selectedProjectLabel_.font.params.size = 17;
+        selectedProjectLabel_.font.params.size = 15;
         selectedProjectLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        selectedProjectLabel_.font.params.v_align = wi::font::WIFALIGN_TOP;
         projectHubPanel_.AddWidget(&selectedProjectLabel_);
 
         launchProjectButton_.Create("Launch Selected Project");
-        launchProjectButton_.SetText("LAUNCH PROJECT");
-        launchProjectButton_.SetAngularHighlightWidth(5.0f);
+        launchProjectButton_.SetText("OPEN PROJECT");
+        launchProjectButton_.SetAngularHighlightWidth(3.0f);
         launchProjectButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             OpenSelectedRecentProject();
@@ -3137,7 +3153,10 @@ namespace renegade::studio
         projectHubPanel_.AddWidget(&launchProjectButton_);
 
         continueProjectButton_.Create("Continue Current Project");
-        continueProjectButton_.SetText("RETURN TO CURRENT PROJECT");
+        continueProjectButton_.SetText("BACK TO EDITOR");
+        continueProjectButton_.SetTooltip(
+            "Close Project Hub and return to the currently active project");
+        continueProjectButton_.SetAngularHighlightWidth(2.0f);
         continueProjectButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             SetProjectHubVisible(false);
@@ -3145,10 +3164,11 @@ namespace renegade::studio
         projectHubPanel_.AddWidget(&continueProjectButton_);
 
         hubMessageLabel_.Create("Project Hub Message");
-        hubMessageLabel_.SetText("SYSTEM READY // PROJECT SERVICES ONLINE");
+        hubMessageLabel_.SetText(
+            "PROJECT SERVICES // ONLINE     FORMAT // RENEGADE PROJECT V1");
         hubMessageLabel_.SetFitTextEnabled(true);
-        hubMessageLabel_.font.params.size = 14;
-        hubMessageLabel_.font.params.color = HologramMuted;
+        hubMessageLabel_.font.params.size = 13;
+        hubMessageLabel_.font.params.color = HubMuted;
         hubMessageLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         projectHubPanel_.AddWidget(&hubMessageLabel_);
     }
@@ -3734,8 +3754,13 @@ namespace renegade::studio
             wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
 
         projectHubPanel_.SetColor(
-            wi::Color(8, 12, 16, 255),
+            HubBackground,
             wi::gui::WIDGET_ID_WINDOW_BASE);
+        projectHubPanel_.SetShadowRadius(0.0f);
+        for (auto& sprite : projectHubPanel_.sprites)
+        {
+            sprite.params.disableCornerRounding();
+        }
 
         // The global Project Hub theme is intentionally not the workspace
         // theme. Reassert the owned Inspector host after the global pass so
@@ -3801,12 +3826,49 @@ namespace renegade::studio
         ownLabel(terrainStrokeDiagnostic_);
         ownLabel(contentLabel_);
         ownLabel(contentPlaceholder_);
-        ownLabel(hubBrandLabel_);
-        ownLabel(hubTitleLabel_);
-        ownLabel(hubSubtitleLabel_);
-        ownLabel(recentProjectsLabel_);
-        ownLabel(selectedProjectLabel_);
-        ownLabel(hubMessageLabel_);
+        const auto ownHubLabel = [](
+            wi::gui::Label& label,
+            const wi::Color foreground,
+            const wi::Color background = wi::Color::Transparent())
+        {
+            label.SetColor(background);
+            label.SetShadowRadius(0.0f);
+            label.font.params.color = foreground;
+            label.font.params.shadowColor = wi::Color::Transparent();
+        };
+        ownHubLabel(hubBrandLabel_, HubOrange);
+        ownHubLabel(hubTitleLabel_, HologramText);
+        ownHubLabel(hubSubtitleLabel_, HubMuted);
+        ownHubLabel(recentProjectsLabel_, HubCyan);
+        ownHubLabel(selectedProjectLabel_, HologramText, HubSurfaceRaised);
+        ownHubLabel(hubMessageLabel_, HubMuted);
+
+        const auto styleHubButton = [](
+            wi::gui::Button& button,
+            const wi::Color idle,
+            const wi::Color focus,
+            const wi::Color active)
+        {
+            button.SetColor(idle, wi::gui::IDLE);
+            button.SetColor(focus, wi::gui::FOCUS);
+            button.SetColor(active, wi::gui::ACTIVE);
+            button.SetColor(idle, wi::gui::DEACTIVATING);
+            button.SetShadowRadius(1.0f);
+            button.font.params.color = HologramText;
+            button.font.params.shadowColor = wi::Color::Transparent();
+        };
+        styleHubButton(
+            createProjectButton_, HubSurfaceRaised, HubOrange, HubSelected);
+        styleHubButton(
+            openProjectButton_, HubSurface, HubBorder, HubSelected);
+        styleHubButton(
+            launchProjectButton_, HubSelected, HubCyan, HubBorder);
+        styleHubButton(
+            continueProjectButton_, HubSurface, HubBorder, HubSelected);
+        for (auto& button : recentProjectButtons_)
+        {
+            styleHubButton(button, HubSurface, HubBorder, HubSelected);
+        }
         ownLabel(creatorImportMaterialLabel);
         ownLabel(creatorImportMaterialReadout);
         ownLabel(creatorImportTextureHelp);
@@ -4545,55 +4607,93 @@ namespace renegade::studio
         importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 618.0f));
         importScaleDismissButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
 
-        projectHubPanel_.SetPos(XMFLOAT2(12.0f, 12.0f));
-        projectHubPanel_.SetSize(XMFLOAT2(width - 24.0f, height - 24.0f));
-        hubBrandLabel_.SetPos(XMFLOAT2(38.0f, 24.0f));
-        hubBrandLabel_.SetSize(XMFLOAT2(500.0f, 24.0f));
-        hubTitleLabel_.SetPos(XMFLOAT2(38.0f, 58.0f));
-        hubTitleLabel_.SetSize(XMFLOAT2(500.0f, 48.0f));
-        hubSubtitleLabel_.SetPos(XMFLOAT2(40.0f, 112.0f));
-        hubSubtitleLabel_.SetSize(XMFLOAT2(width - 100.0f, 30.0f));
+        const float hubMargin = std::clamp(width * 0.025f, 24.0f, 40.0f);
+        const float hubGap = 18.0f;
+        const float hubHeaderHeight = 112.0f;
+        const float hubStatusHeight = 34.0f;
+        const float hubContentTop = hubMargin + hubHeaderHeight;
+        const float hubStatusY = std::max(
+            hubContentTop + 280.0f,
+            height - hubMargin - hubStatusHeight);
+        const bool hubCompact = width < 1080.0f;
+        const float hubLeftWidth = std::clamp(width * 0.205f, 230.0f, 300.0f);
+        const float hubRightWidth = hubCompact
+            ? hubLeftWidth
+            : std::clamp(width * 0.27f, 310.0f, 410.0f);
+        const float hubMainX = hubMargin + hubLeftWidth + hubGap;
+        const float hubRightX = hubCompact
+            ? hubMargin
+            : width - hubMargin - hubRightWidth;
+        const float hubMainWidth = std::max(
+            220.0f,
+            (hubCompact ? width - hubMargin : hubRightX) - hubGap - hubMainX);
 
-        projectNameInput_.SetPos(XMFLOAT2(40.0f, 160.0f));
-        projectNameInput_.SetSize(XMFLOAT2(330.0f, 32.0f));
-        createProjectButton_.SetPos(XMFLOAT2(388.0f, 160.0f));
-        createProjectButton_.SetSize(XMFLOAT2(170.0f, 32.0f));
-        openProjectButton_.SetPos(XMFLOAT2(570.0f, 160.0f));
-        openProjectButton_.SetSize(XMFLOAT2(170.0f, 32.0f));
-        openSceneButton_.SetPos(XMFLOAT2(752.0f, 160.0f));
-        openSceneButton_.SetSize(XMFLOAT2(170.0f, 32.0f));
+        projectHubPanel_.SetPos(XMFLOAT2(0.0f, 0.0f));
+        projectHubPanel_.SetSize(XMFLOAT2(width, height));
+        hubBrandLabel_.SetPos(XMFLOAT2(hubMargin, hubMargin));
+        hubBrandLabel_.SetSize(XMFLOAT2(280.0f, 22.0f));
+        hubTitleLabel_.SetPos(XMFLOAT2(hubMargin, hubMargin + 24.0f));
+        hubTitleLabel_.SetSize(XMFLOAT2(520.0f, 48.0f));
+        hubSubtitleLabel_.SetPos(XMFLOAT2(hubMargin, hubMargin + 75.0f));
+        hubSubtitleLabel_.SetSize(XMFLOAT2(width - hubMargin * 2.0f, 26.0f));
 
-        recentProjectsLabel_.SetPos(XMFLOAT2(40.0f, 218.0f));
-        recentProjectsLabel_.SetSize(XMFLOAT2(500.0f, 28.0f));
+        projectNameInput_.SetPos(XMFLOAT2(hubMargin, hubContentTop + 30.0f));
+        projectNameInput_.SetSize(XMFLOAT2(hubLeftWidth, 38.0f));
+        createProjectButton_.SetPos(XMFLOAT2(hubMargin, hubContentTop + 82.0f));
+        createProjectButton_.SetSize(XMFLOAT2(hubLeftWidth, 46.0f));
+        openProjectButton_.SetPos(XMFLOAT2(hubMargin, hubContentTop + 140.0f));
+        openProjectButton_.SetSize(XMFLOAT2(hubLeftWidth, 42.0f));
+        continueProjectButton_.SetPos(XMFLOAT2(hubMargin, hubContentTop + 194.0f));
+        continueProjectButton_.SetSize(XMFLOAT2(hubLeftWidth, 40.0f));
+        openSceneButton_.SetVisible(false);
+        openSceneButton_.SetPos(XMFLOAT2(0.0f, 0.0f));
+        openSceneButton_.SetSize(XMFLOAT2(0.0f, 0.0f));
 
-        const float previewX = std::max(820.0f, width * 0.64f);
-        const float cardsWidth = std::max(620.0f, previewX - 70.0f);
-        const float cardWidth = (cardsWidth - 18.0f) * 0.5f;
-        constexpr float cardHeight = 76.0f;
+        recentProjectsLabel_.SetPos(XMFLOAT2(hubMainX, hubContentTop));
+        recentProjectsLabel_.SetSize(XMFLOAT2(hubMainWidth, 26.0f));
+        const float hubCardsTop = hubContentTop + 38.0f;
+        const std::size_t hubColumns = hubMainWidth >= 430.0f ? 2u : 1u;
+        const std::size_t hubRows =
+            (recentProjectButtons_.size() + hubColumns - 1u) / hubColumns;
+        const float hubCardGap = 10.0f;
+        const float hubCardsAvailable = std::max(
+            180.0f,
+            hubStatusY - hubCardsTop - 14.0f);
+        const float hubCardHeight = std::clamp(
+            (hubCardsAvailable - hubCardGap * static_cast<float>(hubRows - 1u)) /
+                static_cast<float>(hubRows),
+            38.0f,
+            68.0f);
+        const float hubCardWidth =
+            (hubMainWidth - hubCardGap * static_cast<float>(hubColumns - 1u)) /
+            static_cast<float>(hubColumns);
         for (std::size_t index = 0; index < recentProjectButtons_.size(); ++index)
         {
-            const float x =
-                40.0f + static_cast<float>(index % 2) * (cardWidth + 18.0f);
-            const float y =
-                254.0f + static_cast<float>(index / 2) * (cardHeight + 14.0f);
-            recentProjectButtons_[index].SetPos(XMFLOAT2(x, y));
-            recentProjectButtons_[index].SetSize(
-                XMFLOAT2(cardWidth, cardHeight));
-            recentProjectButtons_[index].font.params.h_wrap =
-                cardWidth - 20.0f;
+            const std::size_t column = index % hubColumns;
+            const std::size_t row = index / hubColumns;
+            recentProjectButtons_[index].SetPos(XMFLOAT2(
+                hubMainX + static_cast<float>(column) * (hubCardWidth + hubCardGap),
+                hubCardsTop + static_cast<float>(row) * (hubCardHeight + hubCardGap)));
+            recentProjectButtons_[index].SetSize(XMFLOAT2(hubCardWidth, hubCardHeight));
         }
 
-        selectedProjectLabel_.SetPos(XMFLOAT2(previewX, 254.0f));
-        selectedProjectLabel_.SetSize(XMFLOAT2(
-            std::max(260.0f, width - previewX - 50.0f),
-            140.0f));
-        launchProjectButton_.SetPos(XMFLOAT2(previewX, 410.0f));
-        launchProjectButton_.SetSize(XMFLOAT2(240.0f, 42.0f));
-        continueProjectButton_.SetPos(XMFLOAT2(previewX, 466.0f));
-        continueProjectButton_.SetSize(XMFLOAT2(240.0f, 36.0f));
+        const float hubDetailsY = hubCompact
+            ? hubContentTop + 252.0f
+            : hubContentTop;
+        const float hubDetailsHeight = hubCompact
+            ? std::max(110.0f, hubStatusY - hubDetailsY - 66.0f)
+            : std::clamp(height * 0.36f, 210.0f, 300.0f);
+        selectedProjectLabel_.SetPos(XMFLOAT2(hubRightX, hubDetailsY));
+        selectedProjectLabel_.SetSize(XMFLOAT2(hubRightWidth, hubDetailsHeight));
+        launchProjectButton_.SetPos(XMFLOAT2(
+            hubRightX,
+            hubDetailsY + hubDetailsHeight + 12.0f));
+        launchProjectButton_.SetSize(XMFLOAT2(hubRightWidth, 46.0f));
 
-        hubMessageLabel_.SetPos(XMFLOAT2(40.0f, height - 74.0f));
-        hubMessageLabel_.SetSize(XMFLOAT2(width - 90.0f, 38.0f));
+        hubMessageLabel_.SetPos(XMFLOAT2(hubMargin, hubStatusY));
+        hubMessageLabel_.SetSize(XMFLOAT2(
+            width - hubMargin * 2.0f,
+            hubStatusHeight));
 
         if (diagnostics_ != nullptr)
         {
@@ -6444,6 +6544,17 @@ namespace renegade::studio
         }
 
         const auto& projects = session_->Projects().RecentProjects();
+        if (projects.empty())
+        {
+            selectedRecentProject_ = -1;
+        }
+        else if (selectedRecentProject_ < 0 ||
+                 static_cast<std::size_t>(selectedRecentProject_) >= projects.size())
+        {
+            // Presentation-only default selection: no project is opened here.
+            selectedRecentProject_ = 0;
+        }
+
         for (std::size_t index = 0; index < recentProjectButtons_.size(); ++index)
         {
             auto& button = recentProjectButtons_[index];
@@ -6454,35 +6565,43 @@ namespace renegade::studio
                 continue;
             }
 
-            button.SetText(
-                projects[index].name + "\n" +
-                projects[index].descriptorPath);
+            const std::string ordinal =
+                (index + 1u < 10u ? "0" : "") + std::to_string(index + 1u);
+            button.SetText(ordinal + "  //  " + projects[index].name);
+            button.SetTooltip(projects[index].descriptorPath);
             button.SetColor(
                 static_cast<int>(index) == selectedRecentProject_
-                    ? HologramSelected
-                    : HologramIdle,
+                    ? HubSelected
+                    : HubSurface,
                 wi::gui::IDLE);
         }
 
-        if (selectedRecentProject_ < 0 ||
-            static_cast<std::size_t>(selectedRecentProject_) >= projects.size())
+        if (selectedRecentProject_ < 0)
         {
-            selectedRecentProject_ = -1;
             selectedProjectLabel_.SetText(
-                projects.empty()
-                    ? "NO RECENT PROJECTS\n\nCreate a project to initialise "
-                      "the Renegade workspace."
-                    : "SELECT A PROJECT CARD\n\nThe selected project details "
-                      "and launch control appear here.");
+                "PROJECT DETAILS
+
+"
+                "NO RECENT PROJECTS
+
+"
+                "Create a new project or open an existing .renegade project to begin.");
         }
         else
         {
             const auto& selected =
                 projects[static_cast<std::size_t>(selectedRecentProject_)];
             selectedProjectLabel_.SetText(
-                selected.name + "\n\n" +
-                selected.descriptorPath +
-                "\n\nFORMAT // RENEGADE PROJECT V1");
+                "PROJECT DETAILS
+
+" + selected.name +
+                "
+
+PROJECT DESCRIPTOR
+" + selected.descriptorPath +
+                "
+
+FORMAT // RENEGADE PROJECT V1");
         }
 
         launchProjectButton_.SetEnabled(selectedRecentProject_ >= 0);
@@ -6490,8 +6609,7 @@ namespace renegade::studio
         if (session_->Projects().HasProject())
         {
             continueProjectButton_.SetText(
-                "RETURN TO " +
-                session_->Projects().CurrentProject().name);
+                "BACK TO EDITOR // " + session_->Projects().CurrentProject().name);
         }
     }
 
