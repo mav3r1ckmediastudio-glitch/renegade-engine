@@ -304,7 +304,8 @@ namespace renegade::studio
 
         TEXTMETRICW metrics = {};
         GetTextMetricsW(dc, &metrics);
-        const int lineHeight = (std::max)(30, metrics.tmHeight + metrics.tmExternalLeading + 8);
+        const int measuredLineHeight = static_cast<int>(metrics.tmHeight + metrics.tmExternalLeading + 8);
+        const int lineHeight = (std::max)(30, measuredLineHeight);
         const int left = static_cast<int>((std::max)(48L, (client.right - client.left) / 10));
         const int top = static_cast<int>((std::max)(72L, (client.bottom - client.top) / 3));
 
@@ -341,10 +342,11 @@ namespace renegade::studio
                         &extent);
                 }
                 const int cursorLeft = left + prefixExtent.cx + extent.cx;
+                const int cursorWidth = (std::max)(8, static_cast<int>(metrics.tmAveCharWidth));
                 RECT cursor = {
                     cursorLeft,
                     inputTop + metrics.tmAscent + 3,
-                    cursorLeft + (std::max)(8, metrics.tmAveCharWidth),
+                    cursorLeft + cursorWidth,
                     inputTop + metrics.tmAscent + 6
                 };
                 HBRUSH cursorBrush = CreateSolidBrush(IdentityTextColor());
