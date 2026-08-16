@@ -1,5 +1,6 @@
 #include "StudioApplication.h"
 #include "StartupIdentityHandshake.h"
+#include "StartupIrisTransition.h"
 #include "StartupIdentityPrompt.h"
 #include "StartupMediaFoundationPlayer.h"
 #include "StudioUserPreferences.h"
@@ -21,10 +22,12 @@ namespace
     renegade::studio::StartupMediaFoundationPlayer* startupPlayer = nullptr;
     renegade::studio::StartupIdentityPrompt* startupIdentityPrompt = nullptr;
     renegade::studio::StartupIdentityHandshake* startupIdentityHandshake = nullptr;
+    renegade::studio::StartupIrisTransition* startupIrisTransition = nullptr;
     bool windowReadyForWicked = false;
     bool startupMediaActive = false;
     bool startupIdentityActive = false;
     bool startupHandshakeActive = false;
+    bool startupIrisTransitionActive = false;
 
     void ResetGate2ALog() noexcept
     {
@@ -86,6 +89,26 @@ namespace
             stream << "[PR58-GATE2C] " << message << '\n';
     }
 
+    void ResetGate2DLog() noexcept
+    {
+        std::error_code error;
+        std::filesystem::create_directories("Saved/Diagnostics", error);
+        std::ofstream stream(
+            "Saved/Diagnostics/PR58Gate2DStartup.log",
+            std::ios::out | std::ios::trunc);
+    }
+
+    void LogGate2D(std::string_view message) noexcept
+    {
+        std::error_code error;
+        std::filesystem::create_directories("Saved/Diagnostics", error);
+        std::ofstream stream(
+            "Saved/Diagnostics/PR58Gate2DStartup.log",
+            std::ios::out | std::ios::app);
+        if (stream)
+            stream << "[PR58-GATE2D] " << message << '\n';
+    }
+
     std::string DescribeFile(const std::filesystem::path& path) noexcept
     {
         std::error_code error;
@@ -133,7 +156,11 @@ namespace
         switch (message)
         {
         case WM_SIZE:
-            if (startupHandshakeActive && startupIdentityHandshake != nullptr)
+            if (startupIrisTransitionActive && startupIrisTransition != nullptr)
+            {
+                startupIrisTransition->Resize();
+            }
+            else if (startupHandshakeActive && startupIdentityHandshake != nullptr)
             {
                 startupIdentityHandshake->Resize();
             }
@@ -164,7 +191,11 @@ namespace
                 suggested->right - suggested->left,
                 suggested->bottom - suggested->top,
                 SWP_NOACTIVATE | SWP_NOZORDER);
-            if (startupHandshakeActive && startupIdentityHandshake != nullptr)
+            if (startupIrisTransitionActive && startupIrisTransition != nullptr)
+            {
+                startupIrisTransition->Resize();
+            }
+            else if (startupHandshakeActive && startupIdentityHandshake != nullptr)
             {
                 startupIdentityHandshake->Resize();
             }
@@ -197,13 +228,19 @@ namespace
             break;
 
         case WM_ERASEBKGND:
-            if (startupMediaActive || startupIdentityActive || startupHandshakeActive)
+            if (startupMediaActive || startupIdentityActive ||
+                startupHandshakeActive || startupIrisTransitionActive)
+            {
                 return 1;
+            }
             break;
 
         case WM_CHAR:
-            if (startupIdentityActive || startupHandshakeActive)
+            if (startupIdentityActive || startupHandshakeActive ||
+                startupIrisTransitionActive)
+            {
                 return 0;
+            }
             if (wParam == VK_BACK)
             {
                 wi::gui::TextInputField::DeleteFromInput();
@@ -272,9 +309,11 @@ int APIENTRY wWinMain(
     ResetGate2ALog();
     ResetGate2BLog();
     ResetGate2CLog();
+    ResetGate2DLog();
     LogGate2A("PROCESS_START");
     LogGate2B("PROCESS_START");
     LogGate2C("PROCESS_START");
+    LogGate2D("PROCESS_START");
 
     if (wi::arguments::HasArgument("reset-developer-identity"))
     {
@@ -616,20 +655,80 @@ int APIENTRY wWinMain(
             if (message.message != WM_QUIT && handshakeUi.IsCompleted())
             {
                 LogGate2C("ENTER_HUB_ACCEPTED");
+                LogGate2D("ENTER_HUB_TRANSITION_REQUESTED");
 
-                // Gate 2C ends with an intentionally simple black handoff. Gate
-                // 2D will replace this with the approved vertical iris split.
-                handshakeUi.BeginHandoff();
+                // Render the actual live Project Hub while Gate 2C still fully
+                // covers the client area. Gate 2D never transitions to a fake
+                // Hub image: the real Studio surface is already underneath.
                 application->SetWindow(window);
                 application->Run();
                 firstStudioFrameReady = true;
-                LogGate2C("FIRST_STUDIO_FRAME_READY_BEHIND_HANDSHAKE");
+                LogGate2D("LIVE_HUB_FRAME_READY_BEHIND_HANDSHAKE");
 
-                handshakeUi.Shutdown();
-                startupHandshakeActive = false;
+                renegade::studio::StartupIrisTransition irisTransition;
+                startupIrisTransition = &irisTransition;
+                const bool irisTransitionStarted = irisTransition.Start(
+                    window,
+                    handshakeFinalFramePath.wstring());
+
+                if (irisTransitionStarted)
+                {
+                    startupIrisTransitionActive = true;
+                    LogGate2D(
+                        std::string("IRIS_SPLIT_ACTIVE // background=") +
+                        (irisTransition.HasBackgroundBitmap() ? "1" : "0"));
+
+                    // Gate 2D has already painted an opaque copy of the accepted
+                    // final plate, so Gate 2C can now be removed without any Hub
+                    // flash. The transition layer then fades that plate while
+                    // the two iris halves move over the live Hub underneath.
+                    handshakeUi.Shutdown();
+                    startupIdentityHandshake = nullptr;
+                    startupHandshakeActive = false;
+
+                    while (message.message != WM_QUIT && irisTransition.IsActive())
+                    {
+                        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
+                        {
+                            TranslateMessage(&message);
+                            DispatchMessageW(&message);
+                            if (message.message == WM_QUIT)
+                                break;
+                        }
+                        if (message.message == WM_QUIT)
+                            break;
+
+                        application->Run();
+                        irisTransition.Pump();
+                        Sleep(1);
+                    }
+
+                    if (message.message != WM_QUIT && irisTransition.IsCompleted())
+                    {
+                        LogGate2D("IRIS_SPLIT_FINISHED");
+                    }
+                    else if (message.message == WM_QUIT)
+                    {
+                        LogGate2D("IRIS_SPLIT_ABORTED_BY_WINDOW_CLOSE");
+                    }
+
+                    irisTransition.Shutdown();
+                    startupIrisTransition = nullptr;
+                    startupIrisTransitionActive = false;
+                }
+                else
+                {
+                    // Cosmetic transition failure must never strand startup.
+                    LogGate2D("IRIS_SPLIT_CREATE_FAILED // fail_open=1");
+                    handshakeUi.Shutdown();
+                    startupIdentityHandshake = nullptr;
+                    startupHandshakeActive = false;
+                }
+
                 windowReadyForWicked = true;
                 application->SetWindow(window);
                 application->Run();
+                LogGate2D("HANDOFF_TO_LIVE_HUB");
                 LogGate2C("HANDOFF_TO_STUDIO");
             }
             else if (message.message == WM_QUIT)
@@ -645,6 +744,8 @@ int APIENTRY wWinMain(
 
         startupIdentityHandshake = nullptr;
         startupHandshakeActive = false;
+        startupIrisTransition = nullptr;
+        startupIrisTransitionActive = false;
         windowReadyForWicked = true;
 
         if (!handshakeMotionSucceeded)
@@ -686,6 +787,7 @@ int APIENTRY wWinMain(
         }
     }
 
+    LogGate2D("PROCESS_EXIT");
     LogGate2C("PROCESS_EXIT");
     LogGate2B("PROCESS_EXIT");
     LogGate2A("PROCESS_EXIT");
