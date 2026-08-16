@@ -6579,12 +6579,8 @@ namespace renegade::studio
         if (selectedRecentProject_ < 0)
         {
             selectedProjectLabel_.SetText(
-                "PROJECT DETAILS
-
-"
-                "NO RECENT PROJECTS
-
-"
+                "PROJECT DETAILS\n\n"
+                "NO RECENT PROJECTS\n\n"
                 "Create a new project or open an existing .renegade project to begin.");
         }
         else
@@ -6592,16 +6588,9 @@ namespace renegade::studio
             const auto& selected =
                 projects[static_cast<std::size_t>(selectedRecentProject_)];
             selectedProjectLabel_.SetText(
-                "PROJECT DETAILS
-
-" + selected.name +
-                "
-
-PROJECT DESCRIPTOR
-" + selected.descriptorPath +
-                "
-
-FORMAT // RENEGADE PROJECT V1");
+                "PROJECT DETAILS\n\n" + selected.name +
+                "\n\nPROJECT DESCRIPTOR\n" + selected.descriptorPath +
+                "\n\nFORMAT // RENEGADE PROJECT V1");
         }
 
         launchProjectButton_.SetEnabled(selectedRecentProject_ >= 0);
