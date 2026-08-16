@@ -316,12 +316,15 @@ namespace renegade::studio
         {
             const int inputTop = top + (lineHeight * 2);
             constexpr std::wstring_view prefix = L"> ";
+            SIZE prefixExtent = {};
+            GetTextExtentPoint32W(dc, prefix.data(), static_cast<int>(prefix.size()), &prefixExtent);
+
             SetTextColor(dc, IdentityTextColor());
             TextOutW(dc, left, inputTop, prefix.data(), static_cast<int>(prefix.size()));
             TextOutW(
                 dc,
-                left,
-                inputTop + lineHeight,
+                left + prefixExtent.cx,
+                inputTop,
                 identity_.data(),
                 static_cast<int>(identity_.size()));
 
@@ -337,11 +340,12 @@ namespace renegade::studio
                         static_cast<int>(beforeCursor.size()),
                         &extent);
                 }
+                const int cursorLeft = left + prefixExtent.cx + extent.cx;
                 RECT cursor = {
-                    left + extent.cx,
-                    inputTop + lineHeight + metrics.tmAscent + 3,
-                    left + extent.cx + std::max(8, metrics.tmAveCharWidth),
-                    inputTop + lineHeight + metrics.tmAscent + 6
+                    cursorLeft,
+                    inputTop + metrics.tmAscent + 3,
+                    cursorLeft + std::max(8, metrics.tmAveCharWidth),
+                    inputTop + metrics.tmAscent + 6
                 };
                 HBRUSH cursorBrush = CreateSolidBrush(IdentityTextColor());
                 FillRect(dc, &cursor, cursorBrush);
@@ -354,7 +358,7 @@ namespace renegade::studio
                 TextOutW(
                     dc,
                     left,
-                    inputTop + (lineHeight * 3),
+                    inputTop + (lineHeight * 2),
                     lastError_.data(),
                     static_cast<int>(lastError_.size()));
             }
