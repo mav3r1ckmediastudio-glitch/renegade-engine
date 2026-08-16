@@ -304,9 +304,9 @@ namespace renegade::studio
 
         TEXTMETRICW metrics = {};
         GetTextMetricsW(dc, &metrics);
-        const int lineHeight = std::max(30, metrics.tmHeight + metrics.tmExternalLeading + 8);
-        const int left = std::max(48L, (client.right - client.left) / 10);
-        const int top = std::max(72L, (client.bottom - client.top) / 3);
+        const int lineHeight = (std::max)(30, metrics.tmHeight + metrics.tmExternalLeading + 8);
+        const int left = static_cast<int>((std::max)(48L, (client.right - client.left) / 10));
+        const int top = static_cast<int>((std::max)(72L, (client.bottom - client.top) / 3));
 
         const std::wstring prompt(PromptText.substr(0, promptVisibleCharacters_));
         SetTextColor(dc, PromptTextColor());
@@ -344,7 +344,7 @@ namespace renegade::studio
                 RECT cursor = {
                     cursorLeft,
                     inputTop + metrics.tmAscent + 3,
-                    cursorLeft + std::max(8, metrics.tmAveCharWidth),
+                    cursorLeft + (std::max)(8, metrics.tmAveCharWidth),
                     inputTop + metrics.tmAscent + 6
                 };
                 HBRUSH cursorBrush = CreateSolidBrush(IdentityTextColor());
