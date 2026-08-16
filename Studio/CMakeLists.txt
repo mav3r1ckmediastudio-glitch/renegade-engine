@@ -64,6 +64,8 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h
+    src/RenegadeProjectHub.cpp
+    src/RenegadeProjectHub.h
     src/StartupIdentityHandshake.h
     src/StartupIrisTransition.h
     src/StartupIdentityPrompt.cpp
@@ -177,6 +179,18 @@ add_custom_command(
         "32"
     VERBATIM
 )
+
+# Gate 3 concept plate is owner media. CI can omit it; owner packaging injects it.
+set(RENEGADE_PROJECT_HUB_CONCEPT
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-project-hub-concept.jpg")
+if(EXISTS "${RENEGADE_PROJECT_HUB_CONCEPT}")
+    add_custom_command(TARGET RenegadeStudio POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${RENEGADE_PROJECT_HUB_CONCEPT}"
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-project-hub-concept.jpg"
+        VERBATIM)
+endif()
 
 # Gate 2A plays the owner's original MP4 directly through Windows Media
 # Foundation. There is no companion WAV and no Wicked video-decoder dependency.

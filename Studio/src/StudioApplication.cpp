@@ -1,4 +1,5 @@
 #include "StudioApplication.h"
+#include "StudioUserPreferences.h"
 
 #include "renegade/bridge/TestLevelSnapshotService.h"
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
@@ -1094,6 +1095,11 @@ namespace renegade::studio
     {
         session_ = &session;
         scene = &session.Scenes().GetScene();
+    }
+
+    void StudioRenderPath::SetExitRequestHandler(std::function<void()> handler)
+    {
+        exitRequestHandler_ = std::move(handler);
     }
 
     void StudioRenderPath::BindDiagnostics(
@@ -3171,6 +3177,70 @@ namespace renegade::studio
         hubMessageLabel_.font.params.color = HubMuted;
         hubMessageLabel_.font.params.h_align = wi::font::WIFALIGN_LEFT;
         projectHubPanel_.AddWidget(&hubMessageLabel_);
+        projectHubPanel_.SetVisible(false);
+
+        projectHubChrome_.Create();
+        const auto savedIdentity = StudioUserPreferences::LoadDeveloperIdentity();
+        projectHubChrome_.SetDeveloperIdentity(savedIdentity.has_value()
+            ? fs::path(*savedIdentity).u8string() : std::string("DEVELOPER"));
+        projectHubChrome_.SetStatusProvider([this]() { return hubMessageLabel_.GetText(); });
+        projectHubChrome_.OnRecentProjectSelected([this](std::size_t index) { SelectRecentProject(index); });
+        projectHubChrome_.OnAction([this](RenegadeProjectHub::Action action)
+        {
+            switch (action)
+            {
+            case RenegadeProjectHub::Action::NewProject:
+                hubNewProjectMode_ = true;
+                projectHubChrome_.SetNewProjectMode(true);
+                hubNewProjectNameInput_.SetText("New Renegade Project");
+                hubNewProjectNameInput_.SetVisible(true);
+                hubNewProjectConfirmButton_.SetVisible(true);
+                hubNewProjectCancelButton_.SetVisible(true);
+                break;
+            case RenegadeProjectHub::Action::OpenProject: OpenProject(); break;
+            case RenegadeProjectHub::Action::OpenSelectedProject: OpenSelectedRecentProject(); break;
+            case RenegadeProjectHub::Action::BackToEditor:
+                if (session_ && session_->Projects().HasProject()) SetProjectHubVisible(false);
+                break;
+            case RenegadeProjectHub::Action::ExitRenegade:
+                if (exitRequestHandler_) exitRequestHandler_();
+                break;
+            case RenegadeProjectHub::Action::CancelNewProject:
+                hubNewProjectMode_ = false;
+                projectHubChrome_.SetNewProjectMode(false);
+                hubNewProjectNameInput_.SetVisible(false);
+                hubNewProjectConfirmButton_.SetVisible(false);
+                hubNewProjectCancelButton_.SetVisible(false);
+                break;
+            }
+        });
+        projectHubChrome_.SetVisible(projectHubVisible_);
+        GetGUI().AddWidget(&projectHubChrome_);
+
+        hubNewProjectNameInput_.Create("Hub New Project Name");
+        hubNewProjectNameInput_.SetPlaceholder("PROJECT NAME");
+        hubNewProjectNameInput_.SetText("New Renegade Project");
+        hubNewProjectNameInput_.SetCancelInputEnabled(false);
+        hubNewProjectNameInput_.OnInputAccepted([this](const wi::gui::EventArgs&) { CreateProject(); });
+        hubNewProjectNameInput_.SetVisible(false);
+        GetGUI().AddWidget(&hubNewProjectNameInput_);
+        hubNewProjectConfirmButton_.Create("Hub Create Project Confirm");
+        hubNewProjectConfirmButton_.SetText("CREATE PROJECT");
+        hubNewProjectConfirmButton_.OnClick([this](const wi::gui::EventArgs&) { CreateProject(); });
+        hubNewProjectConfirmButton_.SetVisible(false);
+        GetGUI().AddWidget(&hubNewProjectConfirmButton_);
+        hubNewProjectCancelButton_.Create("Hub Create Project Cancel");
+        hubNewProjectCancelButton_.SetText("CANCEL");
+        hubNewProjectCancelButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            hubNewProjectMode_ = false;
+            projectHubChrome_.SetNewProjectMode(false);
+            hubNewProjectNameInput_.SetVisible(false);
+            hubNewProjectConfirmButton_.SetVisible(false);
+            hubNewProjectCancelButton_.SetVisible(false);
+        });
+        hubNewProjectCancelButton_.SetVisible(false);
+        GetGUI().AddWidget(&hubNewProjectCancelButton_);
     }
 
     // A small, self-contained popup rather than a new row wedged into the
@@ -4225,6 +4295,16 @@ namespace renegade::studio
         const float width = GetLogicalWidth();
         const float height = GetLogicalHeight();
         studioChrome_.SetLayout(width, height);
+        projectHubChrome_.SetLayout(width, height);
+        const XMFLOAT4 n = projectHubChrome_.NewProjectInputBounds();
+        hubNewProjectNameInput_.SetPos(XMFLOAT2(n.x,n.y));
+        hubNewProjectNameInput_.SetSize(XMFLOAT2(n.z-n.x,n.w-n.y));
+        const XMFLOAT4 c = projectHubChrome_.NewProjectConfirmBounds();
+        hubNewProjectConfirmButton_.SetPos(XMFLOAT2(c.x,c.y));
+        hubNewProjectConfirmButton_.SetSize(XMFLOAT2(c.z-c.x,c.w-c.y));
+        const XMFLOAT4 x = projectHubChrome_.NewProjectCancelBounds();
+        hubNewProjectCancelButton_.SetPos(XMFLOAT2(x.x,x.y));
+        hubNewProjectCancelButton_.SetSize(XMFLOAT2(x.z-x.x,x.w-x.y));
         const float toolbarHeight = 54.0f;
         const float leftWidth = projectHubVisible_
             ? std::clamp(width * 0.2f, 250.0f, 310.0f)
@@ -6538,68 +6618,40 @@ namespace renegade::studio
 
     void StudioRenderPath::RefreshProjectHub()
     {
-        if (session_ == nullptr)
-        {
-            return;
-        }
-
+        if (!session_) return;
         const auto& projects = session_->Projects().RecentProjects();
-        if (projects.empty())
-        {
-            selectedRecentProject_ = -1;
-        }
-        else if (selectedRecentProject_ < 0 ||
-                 static_cast<std::size_t>(selectedRecentProject_) >= projects.size())
-        {
-            // Presentation-only default selection: no project is opened here.
+        if (projects.empty()) selectedRecentProject_ = -1;
+        else if (selectedRecentProject_ < 0 || static_cast<std::size_t>(selectedRecentProject_) >= projects.size())
             selectedRecentProject_ = 0;
-        }
 
-        for (std::size_t index = 0; index < recentProjectButtons_.size(); ++index)
-        {
-            auto& button = recentProjectButtons_[index];
-            const bool hasProject = index < projects.size();
-            button.SetVisible(hasProject);
-            if (!hasProject)
-            {
-                continue;
-            }
-
-            const std::string ordinal =
-                (index + 1u < 10u ? "0" : "") + std::to_string(index + 1u);
-            button.SetText(ordinal + "  //  " + projects[index].name);
-            button.SetTooltip(projects[index].descriptorPath);
-            button.SetColor(
-                static_cast<int>(index) == selectedRecentProject_
-                    ? HubSelected
-                    : HubSurface,
-                wi::gui::IDLE);
-        }
-
-        if (selectedRecentProject_ < 0)
-        {
-            selectedProjectLabel_.SetText(
-                "PROJECT DETAILS\n\n"
-                "NO RECENT PROJECTS\n\n"
-                "Create a new project or open an existing .renegade project to begin.");
-        }
-        else
-        {
-            const auto& selected =
-                projects[static_cast<std::size_t>(selectedRecentProject_)];
-            selectedProjectLabel_.SetText(
-                "PROJECT DETAILS\n\n" + selected.name +
-                "\n\nPROJECT DESCRIPTOR\n" + selected.descriptorPath +
-                "\n\nFORMAT // RENEGADE PROJECT V1");
-        }
-
+        for (auto& button : recentProjectButtons_) button.SetVisible(false);
         launchProjectButton_.SetEnabled(selectedRecentProject_ >= 0);
-        continueProjectButton_.SetVisible(session_->Projects().HasProject());
-        if (session_->Projects().HasProject())
+        continueProjectButton_.SetVisible(false);
+
+        std::vector<RenegadeProjectHub::ProjectEntry> entries;
+        entries.reserve(projects.size());
+        for (const auto& recent : projects)
         {
-            continueProjectButton_.SetText(
-                "BACK TO EDITOR // " + session_->Projects().CurrentProject().name);
+            RenegadeProjectHub::ProjectEntry entry;
+            entry.name = recent.name;
+            entry.descriptorPath = recent.descriptorPath;
+            bridge::ProjectMetadata meta;
+            std::string error;
+            entry.descriptorValid = session_->Projects().InspectProject(recent.descriptorPath, meta, error);
+            if (entry.descriptorValid)
+            {
+                if (!meta.name.empty()) entry.name = meta.name;
+                entry.rootPath = meta.rootPath;
+                entry.startupScene = meta.startupScene;
+                entry.formatVersion = meta.formatVersion;
+            }
+            entries.push_back(std::move(entry));
         }
+        projectHubChrome_.SetProjects(std::move(entries), selectedRecentProject_);
+        if (session_->Projects().HasProject())
+            projectHubChrome_.SetCurrentProject(session_->Projects().CurrentProject().name, true);
+        else
+            projectHubChrome_.SetCurrentProject({}, false);
     }
 
     void StudioRenderPath::ApplySelectedTransformValue(
@@ -9157,7 +9209,7 @@ wi::eventhandler::Subscribe_Once(
             return;
         }
 
-        const std::string projectName = projectNameInput_.GetText();
+        const std::string projectName = hubNewProjectNameInput_.GetText();
         const std::string parentDirectory = wi::helper::FolderDialog(
             "Select the folder that will contain the new Renegade project.");
         if (parentDirectory.empty())
@@ -9595,7 +9647,16 @@ wi::eventhandler::Subscribe_Once(
         }
 
         projectHubVisible_ = visible;
-        projectHubPanel_.SetVisible(visible);
+        projectHubPanel_.SetVisible(false);
+        projectHubChrome_.SetVisible(visible);
+        if (!visible)
+        {
+            hubNewProjectMode_ = false;
+            projectHubChrome_.SetNewProjectMode(false);
+        }
+        hubNewProjectNameInput_.SetVisible(visible && hubNewProjectMode_);
+        hubNewProjectConfirmButton_.SetVisible(visible && hubNewProjectMode_);
+        hubNewProjectCancelButton_.SetVisible(visible && hubNewProjectMode_);
         // Stock workspace surfaces stay hidden. RenegadeStudioChrome owns the
         // shell, while the opaque Inspector host schedules the functional
         // controls rendered by Renegade subclasses.
@@ -9835,6 +9896,11 @@ wi::eventhandler::Subscribe_Once(
 
         session_.Scenes().CreateProvingGround();
         session_.SaveScene(startupScene_);
+    }
+
+    void StudioApplication::SetExitRequestHandler(std::function<void()> handler)
+    {
+        renderer_.SetExitRequestHandler(std::move(handler));
     }
 
     void StudioApplication::Initialize()

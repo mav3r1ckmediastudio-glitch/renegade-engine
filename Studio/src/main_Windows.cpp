@@ -374,6 +374,7 @@ int APIENTRY wWinMain(
 
     windowReadyForWicked = true;
     application->SetWindow(window);
+    application->SetExitRequestHandler([window]() { PostMessageW(window, WM_CLOSE, 0, 0); });
     SetWindowTextW(window, GraphicsBackendTitle());
     LogGate2A("WICKED_WINDOW_BOUND");
 
