@@ -64,7 +64,8 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h
-    src/StartupRevealRenderPath.h
+    src/StartupMediaFoundationPlayer.cpp
+    src/StartupMediaFoundationPlayer.h
     src/StudioApplication.cpp
     src/StudioApplication.h
     src/WindowsGameBuildController.cpp
@@ -89,6 +90,11 @@ target_link_libraries(RenegadeStudio
     PRIVATE
         Renegade::EngineBridge
         Renegade::TestLevelRuntimeProcess
+        mfplat
+        mf
+        mfuuid
+        evr
+        ole32
 )
 
 target_compile_definitions(RenegadeStudio
@@ -165,17 +171,11 @@ add_custom_command(
     VERBATIM
 )
 
-# Gate 2A media is owner-authored and is intentionally not substituted. Wicked's
-# pinned video player decodes the H.264 MP4 but does not implement its embedded
-# AAC track, so the approved reveal is packaged together with a companion WAV
-# extracted from that same source file. Both files are required: incomplete media
-# leaves the runtime fail-open path active instead of presenting a silent reveal.
+# Gate 2A plays the owner's original MP4 directly through Windows Media
+# Foundation. There is no companion WAV and no Wicked video-decoder dependency.
 set(RENEGADE_STARTUP_REVEAL_VIDEO
     "${CMAKE_CURRENT_SOURCE_DIR}/assets/startup/renegade_logo_reveal_v2.mp4")
-set(RENEGADE_STARTUP_REVEAL_AUDIO
-    "${CMAKE_CURRENT_SOURCE_DIR}/assets/startup/renegade_logo_reveal_v2.wav")
-if(EXISTS "${RENEGADE_STARTUP_REVEAL_VIDEO}" AND
-   EXISTS "${RENEGADE_STARTUP_REVEAL_AUDIO}")
+if(EXISTS "${RENEGADE_STARTUP_REVEAL_VIDEO}")
     add_custom_command(
         TARGET RenegadeStudio POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -183,12 +183,9 @@ if(EXISTS "${RENEGADE_STARTUP_REVEAL_VIDEO}" AND
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${RENEGADE_STARTUP_REVEAL_VIDEO}"
             "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup/renegade_logo_reveal_v2.mp4"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${RENEGADE_STARTUP_REVEAL_AUDIO}"
-            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup/renegade_logo_reveal_v2.wav"
         VERBATIM
     )
 else()
     message(STATUS
-        "Gate 2A startup reveal media is not present; Renegade Studio will use its fail-open startup path.")
+        "Gate 2A startup MP4 is not present in this checkout; runtime will fail open and owner test packaging must inject the approved MP4 under Content/startup/.")
 endif()
