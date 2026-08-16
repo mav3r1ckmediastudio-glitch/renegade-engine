@@ -111,12 +111,16 @@ namespace renegade::studio
             if (!line.empty() && line.back() == '\r')
                 line.pop_back();
 
-            if (!line.starts_with(DeveloperIdentityPrefix))
+            constexpr std::size_t prefixLength = sizeof(DeveloperIdentityPrefix) - 1;
+            if (line.size() < prefixLength ||
+                line.compare(0, prefixLength, DeveloperIdentityPrefix) != 0)
+            {
                 continue;
+            }
 
             const std::string_view encoded(
-                line.data() + (sizeof(DeveloperIdentityPrefix) - 1),
-                line.size() - (sizeof(DeveloperIdentityPrefix) - 1));
+                line.data() + prefixLength,
+                line.size() - prefixLength);
             const std::wstring decoded = Utf8ToWide(encoded);
             std::wstring normalized;
             if (!NormalizeDeveloperIdentity(decoded, normalized))
