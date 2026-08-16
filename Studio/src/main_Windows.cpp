@@ -3,6 +3,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <cwchar>
 #include <cstring>
 #include <filesystem>
@@ -29,7 +30,7 @@ namespace
         }
     }
 
-    RECT ResolveLaunchMonitorRect() noexcept
+    RECT ResolveLaunchMonitorWorkRect() noexcept
     {
         POINT cursor = {};
         if (!GetCursorPos(&cursor))
@@ -44,7 +45,7 @@ namespace
         monitorInfo.cbSize = sizeof(monitorInfo);
         if (monitor != nullptr && GetMonitorInfoW(monitor, &monitorInfo))
         {
-            return monitorInfo.rcMonitor;
+            return monitorInfo.rcWork;
         }
 
         RECT fallback = {};
@@ -145,16 +146,10 @@ int APIENTRY wWinMain(
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     wi::arguments::Parse(commandLine);
 
-    // Construct Studio after all C++ static initializers have completed so
-    // creator chrome may safely subscribe to Wicked services. Studio is a very
-    // large aggregate, so keep it off the Windows thread stack.
     auto localApplication =
         std::make_unique<renegade::studio::StudioApplication>();
     application = localApplication.get();
 
-    // CI startup proof: reaching this point proves all process/static and Studio
-    // object construction completed successfully, including creator-chrome event
-    // registration, without requiring a graphics adapter or interactive window.
     if (wi::arguments::HasArgument("startup-smoke"))
     {
         application = nullptr;
@@ -179,8 +174,6 @@ int APIENTRY wWinMain(
     windowClass.lpfnWndProc = RenegadeWindowProc;
     windowClass.hInstance = instance;
     windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    // Windows owns the first visible pixels. Keep them black until Wicked has a
-    // reveal frame to present; never expose the editor underneath.
     windowClass.hbrBackground =
         reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
     windowClass.lpszClassName = L"RenegadeStudioWindow";
@@ -192,22 +185,26 @@ int APIENTRY wWinMain(
         return 1;
     }
 
-    // Gate 2A is a full-screen startup experience. Create a borderless window
-    // covering the monitor under the launch cursor rather than the legacy
-    // 1600x900 overlapped editor window.
-    const RECT monitorRect = ResolveLaunchMonitorRect();
-    const int monitorWidth = monitorRect.right - monitorRect.left;
-    const int monitorHeight = monitorRect.bottom - monitorRect.top;
+    // Gate 2A launches as a normal Windows application, maximized rather than
+    // borderless. This preserves the title bar, minimize/maximize/close buttons
+    // and the ability to restore/resize while still filling the launch monitor.
+    const RECT workRect = ResolveLaunchMonitorWorkRect();
+    const int workWidth = std::max(640, workRect.right - workRect.left);
+    const int workHeight = std::max(480, workRect.bottom - workRect.top);
+    const int initialWidth = std::min(1600, workWidth);
+    const int initialHeight = std::min(900, workHeight);
+    const int initialX = workRect.left + (workWidth - initialWidth) / 2;
+    const int initialY = workRect.top + (workHeight - initialHeight) / 2;
 
     const HWND window = CreateWindowExW(
         WS_EX_APPWINDOW,
         windowClass.lpszClassName,
         L"Renegade Studio - Phase 3",
-        WS_POPUP,
-        monitorRect.left,
-        monitorRect.top,
-        monitorWidth,
-        monitorHeight,
+        WS_OVERLAPPEDWINDOW,
+        initialX,
+        initialY,
+        initialWidth,
+        initialHeight,
         nullptr,
         nullptr,
         instance,
@@ -220,22 +217,23 @@ int APIENTRY wWinMain(
         return 2;
     }
 
-    ShowWindow(window, showCommand == SW_HIDE ? SW_SHOW : showCommand);
+    // Honor an explicit hidden launch, otherwise start maximized. The user can
+    // immediately restore and resize the normal overlapped window afterwards.
+    ShowWindow(window, showCommand == SW_HIDE ? SW_HIDE : SW_MAXIMIZE);
     UpdateWindow(window);
     LogGate2A(
-        "WINDOW_VISIBLE_FULLSCREEN // " +
-        std::to_string(monitorWidth) + "x" +
-        std::to_string(monitorHeight));
+        "WINDOW_VISIBLE_MAXIMIZED // workarea=" +
+        std::to_string(workWidth) + "x" +
+        std::to_string(workHeight));
 
     windowReadyForWicked = true;
     application->SetWindow(window);
     SetWindowTextW(window, GraphicsBackendTitle());
     LogGate2A("WICKED_WINDOW_BOUND");
 
-    // Initialize Studio while the already-visible full-screen window remains
-    // black. This intentionally happens BEFORE the movie, so the cinematic does
-    // not disguise editor/project loading. It also guarantees the normal Studio
-    // virtual frame loop is fully initialized before Application::Run() begins.
+    // Initialize Studio while the already-visible maximized window remains
+    // black. This completes BEFORE reveal playback, so the cinematic does not
+    // conceal Studio/project loading and the normal frame loop is ready.
     LogGate2A("STUDIO_INIT_BEGIN");
     application->Initialize();
     wi::initializer::WaitForInitializationsToFinish();
@@ -279,9 +277,6 @@ int APIENTRY wWinMain(
         {
             application->Run();
 
-            // StartupRevealRenderPath owns the final fully-black frame. The
-            // Studio path is already initialized and ready, so switching here
-            // cannot expose editor loading behind the reveal.
             if (application->GetActivePath() == &startupReveal &&
                 startupReveal.IsFinished())
             {
