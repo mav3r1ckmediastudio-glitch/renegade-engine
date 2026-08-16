@@ -72,6 +72,6 @@ namespace renegade::studio
         Microsoft::WRL::ComPtr<IMFMediaSource> source_;
         Microsoft::WRL::ComPtr<IMFVideoDisplayControl> videoDisplay_;
         Microsoft::WRL::ComPtr<IMFSimpleAudioVolume> audioVolume_;
-        Microsoft::WRL::ComPtr<IMFClock> clock_;
+        Microsoft::WRL::ComPtr<IMFPresentationClock> clock_;
     };
 }
