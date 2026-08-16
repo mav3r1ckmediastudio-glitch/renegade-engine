@@ -439,7 +439,11 @@ namespace renegade::studio
         }
 
         playbackStarted_ = true;
-        (void)session_->GetClock(&clock_);
+        ComPtr<IMFClock> sessionClock;
+        if (SUCCEEDED(session_->GetClock(&sessionClock)) && sessionClock != nullptr)
+        {
+            (void)sessionClock.As(&clock_);
+        }
     }
 
     void StartupMediaFoundationPlayer::UpdateFade()
@@ -449,7 +453,11 @@ namespace renegade::studio
 
         if (clock_ == nullptr)
         {
-            (void)session_->GetClock(&clock_);
+            ComPtr<IMFClock> sessionClock;
+            if (SUCCEEDED(session_->GetClock(&sessionClock)) && sessionClock != nullptr)
+            {
+                (void)sessionClock.As(&clock_);
+            }
             if (clock_ == nullptr)
                 return;
         }
