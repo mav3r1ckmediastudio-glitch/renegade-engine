@@ -64,10 +64,14 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h
+    src/StartupIdentityPrompt.cpp
+    src/StartupIdentityPrompt.h
     src/StartupMediaFoundationPlayer.cpp
     src/StartupMediaFoundationPlayer.h
     src/StudioApplication.cpp
     src/StudioApplication.h
+    src/StudioUserPreferences.cpp
+    src/StudioUserPreferences.h
     src/WindowsGameBuildController.cpp
     src/WindowsGameBuildController.h
     src/main_Windows.cpp
@@ -76,15 +80,10 @@ add_executable(RenegadeStudio WIN32
 add_executable(RenegadeTerrainSurfacePacker
     "${CMAKE_SOURCE_DIR}/Tools/TerrainSurfacePacker.cpp"
 )
-set_target_properties(RenegadeTerrainSurfacePacker PROPERTIES
-    FOLDER "Renegade/Tools"
-)
+set_target_properties(RenegadeTerrainSurfacePacker PROPERTIES FOLDER "Renegade/Tools")
 add_dependencies(RenegadeStudio RenegadeTerrainSurfacePacker)
 
-target_include_directories(RenegadeStudio
-    PRIVATE
-        "${CMAKE_SOURCE_DIR}/WickedEngine/Editor"
-)
+target_include_directories(RenegadeStudio PRIVATE "${CMAKE_SOURCE_DIR}/WickedEngine/Editor")
 
 target_link_libraries(RenegadeStudio
     PRIVATE
@@ -117,49 +116,22 @@ set_target_properties(RenegadeStudio PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeStudio>"
 )
 
-# Renegade-owned shaders are compiled at runtime from source shipped beside the
-# executable, so they must land under Content/ where Build-Studio-Windows.ps1
-# already packages the whole directory. They are deliberately NOT added to
-# Wicked's shader dump: they belong to Studio, not to the engine.
 add_custom_command(
     TARGET RenegadeStudio POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content"
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders"
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui"
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass"
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll"
-        "$<TARGET_FILE_DIR:RenegadeStudio>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/cube.wiscene"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeGridVS.hlsl"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeGridVS.hlsl"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeGridPS.hlsl"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeGridPS.hlsl"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/creator-human-reference.png"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/creator-human-reference.png"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/package/BuildInputs"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/WickedEngine/LICENSE.txt"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs/WickedEngine-LICENSE.txt"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/WickedEngine/third_party_software.txt"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs/WickedEngine-third_party_software.txt"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/WickedEngine/WickedEngine/dxcompiler.dll" "$<TARGET_FILE_DIR:RenegadeStudio>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene" "$<TARGET_FILE_DIR:RenegadeStudio>/Content/cube.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeGridVS.hlsl" "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeGridVS.hlsl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeGridPS.hlsl" "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeGridPS.hlsl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png" "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/assets/creator-human-reference.png" "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/creator-human-reference.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/package/BuildInputs" "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/WickedEngine/LICENSE.txt" "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs/WickedEngine-LICENSE.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/WickedEngine/third_party_software.txt" "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs/WickedEngine-third_party_software.txt"
     COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_ao.tga"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_roughness.tga"
@@ -172,21 +144,14 @@ add_custom_command(
     VERBATIM
 )
 
-# Gate 2A plays the owner's original MP4 directly through Windows Media
-# Foundation. There is no companion WAV and no Wicked video-decoder dependency.
-set(RENEGADE_STARTUP_REVEAL_VIDEO
-    "${CMAKE_CURRENT_SOURCE_DIR}/assets/startup/renegade_logo_reveal_v2.mp4")
+set(RENEGADE_STARTUP_REVEAL_VIDEO "${CMAKE_CURRENT_SOURCE_DIR}/assets/startup/renegade_logo_reveal_v2.mp4")
 if(EXISTS "${RENEGADE_STARTUP_REVEAL_VIDEO}")
     add_custom_command(
         TARGET RenegadeStudio POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory
-            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${RENEGADE_STARTUP_REVEAL_VIDEO}"
-            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup/renegade_logo_reveal_v2.mp4"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${RENEGADE_STARTUP_REVEAL_VIDEO}" "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup/renegade_logo_reveal_v2.mp4"
         VERBATIM
     )
 else()
-    message(STATUS
-        "Gate 2A startup MP4 is not present in this checkout; runtime will fail open and owner test packaging must inject the approved MP4 under Content/startup/.")
+    message(STATUS "Gate 2A startup MP4 is not present in this checkout; runtime will fail open and owner test packaging must inject the approved MP4 under Content/startup/.")
 endif()
