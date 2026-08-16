@@ -225,12 +225,18 @@ int APIENTRY wWinMain(
     }
 
     const RECT workRect = ResolveLaunchMonitorWorkRect();
-    const int workWidth = std::max(640, workRect.right - workRect.left);
-    const int workHeight = std::max(480, workRect.bottom - workRect.top);
+    const int workWidth = std::max(
+        640,
+        static_cast<int>(workRect.right - workRect.left));
+    const int workHeight = std::max(
+        480,
+        static_cast<int>(workRect.bottom - workRect.top));
     const int initialWidth = std::min(1600, workWidth);
     const int initialHeight = std::min(900, workHeight);
-    const int initialX = workRect.left + (workWidth - initialWidth) / 2;
-    const int initialY = workRect.top + (workHeight - initialHeight) / 2;
+    const int initialX = static_cast<int>(workRect.left) +
+        (workWidth - initialWidth) / 2;
+    const int initialY = static_cast<int>(workRect.top) +
+        (workHeight - initialHeight) / 2;
 
     const HWND window = CreateWindowExW(
         WS_EX_APPWINDOW,
