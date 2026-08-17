@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          src=ceaf01a455a6cfdd92d27bbfd0692b14185dae35
+          src=4bd1d24d6f2a67c7314630a26414037641a472ce
           : > /tmp/pr58-hub.b64
           for n in 00 01 02 03 04 05 06 07 08; do
             git show "$src:.github/tmp/pr58-hub-plate/part${n}.b64" >> /tmp/pr58-hub.b64
