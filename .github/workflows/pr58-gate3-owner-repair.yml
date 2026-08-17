@@ -1,5 +1,6 @@
 name: PR58 Gate3 Owner Repair
 
+# Triggered once to finish the owner-requested Gate 3 repair.
 on:
   push:
     branches:
