@@ -31,7 +31,6 @@ jobs:
           tr -d '\r\n' < /tmp/pr58-hub.b64 | base64 -d > Studio/assets/renegade-project-hub-concept.jpg
           python - <<'PY'
           from pathlib import Path
-          from PIL import Image
           import hashlib
           p = Path('Studio/assets/renegade-project-hub-concept.jpg')
           b = p.read_bytes()
@@ -39,11 +38,9 @@ jobs:
           assert b.endswith(b'\xff\xd9'), 'Hub plate is truncated'
           digest = hashlib.sha256(b).hexdigest()
           assert digest == '3415c609233408872bcc09dc55551b44e92badb8a93a143cd8d9fbcec7473758', digest
-          with Image.open(p) as im:
-              assert im.size == (1672, 941), im.size
-              im.verify()
           print('Approved Hub plate verified:', len(b), digest)
           PY
+          file Studio/assets/renegade-project-hub-concept.jpg | grep -q 'JPEG image data'
           git diff --check
           test "$(git diff --name-only -- Studio/assets/renegade-project-hub-concept.jpg | wc -l)" -eq 1
 
