@@ -1,6 +1,6 @@
 name: PR58 Gate3 Owner Repair
 
-# Triggered once to finish the owner-requested Gate 3 repair.
+# One-shot Gate 3 repair only. Do not expand scope.
 on:
   push:
     branches:
@@ -19,6 +19,27 @@ jobs:
         with:
           ref: agent/pr58-project-hub-lifecycle-reliability
           fetch-depth: 0
+
+      - name: Reconstruct approved Hub plate
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/tmp/pr58-hub-plate/part*.b64 | tr -d '\r\n' | base64 -d > Studio/assets/renegade-project-hub-concept.jpg
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          import hashlib
+          p = Path("Studio/assets/renegade-project-hub-concept.jpg")
+          b = p.read_bytes()
+          assert b.startswith(b"\xff\xd8\xff"), "Hub plate is not JPEG"
+          assert b.endswith(b"\xff\xd9"), "Hub plate JPEG is truncated"
+          digest = hashlib.sha256(b).hexdigest()
+          assert digest == "3415c609233408872bcc09dc55551b44e92badb8a93a143cd8d9fbcec7473758", digest
+          with Image.open(p) as im:
+              assert im.size == (1672, 941), im.size
+              im.verify()
+          print("Hub plate verified:", len(b), digest)
+          PY
 
       - name: Repair Gate 3 plate and Open Project path
         run: python Tools/PR58-Gate3OwnerRepair.py
@@ -43,6 +64,7 @@ jobs:
           grep -q 'PR58 Gate 3: invoke the proven project-open flow directly' Studio/src/StudioApplication.cpp
           grep -q 'Required Gate 3 Hub plate is missing' Studio/CMakeLists.txt
           grep -q 'compare_files' Studio/CMakeLists.txt
+          grep -q 'Content/ui/renegade-project-hub-concept.jpg' Studio/src/RenegadeProjectHub.cpp
 
       - name: Commit final repair and remove one-shot machinery
         shell: bash
@@ -51,6 +73,8 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git rm .github/workflows/pr58-gate3-owner-repair.yml Tools/PR58-Gate3OwnerRepair.py
+          git rm -r .github/tmp/pr58-hub-plate
+          git rm -f .github/tmp/.keep 2>/dev/null || true
           git add Studio/assets/renegade-project-hub-concept.jpg Studio/assets/renegade-project-hub-concept.png Studio/src/StudioApplication.cpp Studio/src/RenegadeProjectHub.cpp Studio/CMakeLists.txt 2>/dev/null || true
           git diff --cached --check
           git commit -m 'gate3: restore Hub plate and project opening'
