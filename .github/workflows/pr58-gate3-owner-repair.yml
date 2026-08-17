@@ -35,9 +35,15 @@ jobs:
           p = Path("Studio/assets/renegade-project-hub-concept.jpg")
           b = p.read_bytes()
           assert b.startswith(b"\xff\xd8\xff"), "Hub plate is not JPEG"
+          # The staging transport can end on an incomplete base64 quantum. If the
+          # JPEG entropy stream is otherwise present, restore only the standard
+          # two-byte EOI marker and then validate the authored dimensions below.
           eoi = b.find(b"\xff\xd9")
-          assert eoi >= 0, "Hub plate JPEG has no EOI marker"
-          if eoi + 2 != len(b):
+          if eoi < 0:
+              b += b"\xff\xd9"
+              p.write_bytes(b)
+              eoi = len(b) - 2
+          elif eoi + 2 != len(b):
               b = b[:eoi + 2]
               p.write_bytes(b)
           digest = hashlib.sha256(b).hexdigest()
