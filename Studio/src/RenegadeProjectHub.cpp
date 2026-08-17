@@ -25,16 +25,19 @@ namespace
     constexpr wi::Color Success = wi::Color(82, 205, 121, 255);
     constexpr wi::Color Danger = wi::Color(214, 86, 62, 255);
 
-    const XMFLOAT4 LeftNew = XMFLOAT4(186.0f, 245.0f, 423.0f, 318.0f);
-    const XMFLOAT4 LeftOpen = XMFLOAT4(186.0f, 340.0f, 423.0f, 414.0f);
-    const XMFLOAT4 LeftBack = XMFLOAT4(186.0f, 536.0f, 423.0f, 610.0f);
-    const XMFLOAT4 LeftExit = XMFLOAT4(186.0f, 651.0f, 423.0f, 725.0f);
-    const XMFLOAT4 Featured = XMFLOAT4(464.0f, 193.0f, 1155.0f, 590.0f);
-    const XMFLOAT4 LowerNew = XMFLOAT4(464.0f, 606.0f, 1155.0f, 765.0f);
-    const XMFLOAT4 LowerRecent0 = XMFLOAT4(742.0f, 606.0f, 868.0f, 765.0f);
-    const XMFLOAT4 LowerRecent1 = XMFLOAT4(879.0f, 606.0f, 1005.0f, 765.0f);
-    const XMFLOAT4 LowerRecent2 = XMFLOAT4(1016.0f, 606.0f, 1155.0f, 765.0f);
-    const XMFLOAT4 OpenSelected = XMFLOAT4(1192.0f, 687.0f, 1477.0f, 765.0f);
+    // Hit regions are authored against the owner-approved 1672x941 Hub plate.
+    // Keep these aligned with the visible controls rather than the rejected
+    // first-pass layout.
+    const XMFLOAT4 LeftNew = XMFLOAT4(100.0f, 178.0f, 382.0f, 273.0f);
+    const XMFLOAT4 LeftOpen = XMFLOAT4(100.0f, 278.0f, 382.0f, 375.0f);
+    const XMFLOAT4 LeftBack = XMFLOAT4(100.0f, 498.0f, 382.0f, 604.0f);
+    const XMFLOAT4 LeftExit = XMFLOAT4(100.0f, 716.0f, 382.0f, 810.0f);
+    const XMFLOAT4 Featured = XMFLOAT4(408.0f, 186.0f, 1147.0f, 636.0f);
+    const XMFLOAT4 LowerNew = XMFLOAT4(408.0f, 651.0f, 1147.0f, 817.0f);
+    const XMFLOAT4 LowerRecent0 = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+    const XMFLOAT4 LowerRecent1 = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+    const XMFLOAT4 LowerRecent2 = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+    const XMFLOAT4 OpenSelected = XMFLOAT4(1188.0f, 733.0f, 1538.0f, 810.0f);
 
     void DrawRect(
         const float x,
@@ -360,7 +363,8 @@ namespace renegade::studio
 
         DrawRect(0.0f, 0.0f, width_, height_, InkSolid, cmd);
 
-        if (conceptPlate_.IsValid())
+        const bool plateReady = conceptPlate_.IsValid();
+        if (plateReady)
         {
             wi::image::Params plate(
                 offsetX_,
@@ -415,143 +419,136 @@ namespace renegade::studio
             DrawBorderedRect(ToScreen(base), fill, edge, cmd);
         };
 
-        mask(1310.0f, 41.0f, 270.0f, 70.0f, wi::Color(5, 12, 17, 246));
+        if (!plateReady)
+        {
+            text("PROJECT HUB VISUAL ASSET FAILED TO LOAD", 548.0f, 115.0f, 14, Danger, 1.1f, 0.16f);
+        }
+
+        // The plate carries the permanent authored chrome. Only live identity,
+        // project data and truthful runtime values are painted over it.
+        mask(1368.0f, 34.0f, 264.0f, 78.0f, wi::Color(5, 12, 17, 248));
         text(
             "WELCOME, " + UpperAscii(Ellipsize(developerIdentity_, 24u)),
-            1326.0f,
-            54.0f,
+            1390.0f,
+            47.0f,
             16,
             TextStrong,
-            1.5f,
+            1.35f,
             0.15f);
-        text("SYSTEM NOMINAL", 1420.0f, 85.0f, 10, Success, 1.2f, 0.14f);
-        DrawRect(sx(1558.0f), sy(87.0f), sw(6.0f), sw(6.0f), Success, cmd);
+        text("SYSTEM NOMINAL", 1454.0f, 82.0f, 9, Success, 1.0f, 0.14f);
+        DrawRect(sx(1601.0f), sy(84.0f), sw(6.0f), sw(6.0f), Success, cmd);
 
-        for (const auto& row : std::array<XMFLOAT4, 4>{LeftNew, LeftOpen, LeftBack, LeftExit})
+        // BACK TO EDITOR exists only when there is a real active project.
+        // The approved plate illustrates the active state, so blank that row
+        // when the Hub is startup-only and replace only its live subtitle
+        // while a project is active.
+        if (!currentProjectActive_)
         {
-            const bool activeRow =
-                (row.x == LeftBack.x && row.y == LeftBack.y) ? currentProjectActive_ : true;
-            if (activeRow)
-                mask(row.x + 70.0f, row.y + 7.0f, row.z - row.x - 75.0f, row.w - row.y - 14.0f);
+            mask(104.0f, 499.0f, 276.0f, 106.0f, wi::Color(5, 13, 18, 248));
         }
-        mask(255.0f, 438.0f, 160.0f, 62.0f);
+        else
+        {
+            mask(192.0f, 558.0f, 176.0f, 24.0f, wi::Color(5, 13, 18, 248));
+            text(UpperAscii(Ellipsize(currentProjectName_, 24u)), 193.0f, 560.0f, 8, Muted, 0.45f, 0.10f);
+        }
 
         if (hovered_ == HoverTarget::NewProject)
-            bordered(LeftNew, wi::Color(8, 20, 25, 185), Orange);
+            bordered(LeftNew, wi::Color::Transparent(), Orange);
         if (hovered_ == HoverTarget::OpenProject)
-            bordered(LeftOpen, wi::Color(8, 20, 25, 185), Orange);
+            bordered(LeftOpen, wi::Color::Transparent(), Orange);
         if (currentProjectActive_ && hovered_ == HoverTarget::BackToEditor)
-            bordered(LeftBack, wi::Color(8, 20, 25, 185), Cyan);
+            bordered(LeftBack, wi::Color::Transparent(), Cyan);
         if (hovered_ == HoverTarget::ExitRenegade)
-            bordered(LeftExit, wi::Color(26, 12, 12, 205), Danger);
+            bordered(LeftExit, wi::Color::Transparent(), Danger);
 
-        text("NEW PROJECT", 263.0f, 271.0f, 13, TextStrong, 1.1f, 0.14f);
-        text(">", 392.0f, 270.0f, 15, Orange, 0.0f, 0.18f);
-        text("OPEN PROJECT", 263.0f, 367.0f, 13, TextStrong, 1.1f, 0.14f);
-        text(">", 392.0f, 366.0f, 15, Orange, 0.0f, 0.18f);
-        text("IMPORT PROJECT", 263.0f, 464.0f, 12, Muted, 0.9f, 0.12f);
-        text("PLANNED", 350.0f, 486.0f, 8, Muted, 0.8f, 0.10f);
-        if (currentProjectActive_)
-        {
-            text("BACK TO EDITOR", 263.0f, 562.0f, 12, Cyan, 0.8f, 0.14f);
-            text("ESC", 369.0f, 585.0f, 8, Muted, 0.7f, 0.10f);
-        }
-        text("EXIT RENEGADE", 263.0f, 679.0f, 12, Text, 0.9f, 0.13f);
-        text("POWER DOWN", 343.0f, 701.0f, 8, Danger, 0.8f, 0.10f);
-
-        mask(470.0f, 523.0f, 676.0f, 59.0f, wi::Color(5, 15, 21, 252));
+        // The centre preview stays honestly empty until Gate 4/user capture.
+        // Only the lower metadata strip is live.
+        mask(411.0f, 527.0f, 733.0f, 106.0f, wi::Color(5, 15, 21, 250));
         if (selectedIndex_ >= 0 &&
             static_cast<std::size_t>(selectedIndex_) < projects_.size())
         {
             const auto& selected = projects_[static_cast<std::size_t>(selectedIndex_)];
-            text(UpperAscii(Ellipsize(selected.name, 38u)), 487.0f, 535.0f, 22, TextStrong, 1.5f, 0.14f);
+            text(UpperAscii(Ellipsize(selected.name, 38u)), 432.0f, 546.0f, 20, TextStrong, 1.15f, 0.14f);
             text(
-                "LOCATION  //  " + UpperAscii(Ellipsize(selected.rootPath.empty() ? selected.descriptorPath : selected.rootPath, 62u)),
-                488.0f,
-                568.0f,
+                UpperAscii(Ellipsize(selected.rootPath.empty() ? selected.descriptorPath : selected.rootPath, 67u)),
+                432.0f,
+                582.0f,
                 8,
-                Muted,
+                Cyan,
+                0.35f,
+                0.10f);
+            text(
+                "FORMAT // V" + std::to_string(selected.formatVersion),
+                1030.0f,
+                579.0f,
+                8,
+                Text,
                 0.45f,
                 0.10f);
             text(
-                "FORMAT  //  V" + std::to_string(selected.formatVersion),
-                1033.0f,
-                568.0f,
-                8,
-                CyanSoft,
-                0.5f,
-                0.10f);
+                selected.descriptorValid ? "READY" : "WARNING",
+                1060.0f,
+                607.0f,
+                9,
+                selected.descriptorValid ? Success : Danger,
+                0.55f,
+                0.12f);
             if (hovered_ == HoverTarget::FeaturedProject)
                 bordered(Featured, wi::Color::Transparent(), Cyan);
         }
         else
         {
-            text("NO RECENT PROJECT SELECTED", 487.0f, 535.0f, 20, TextStrong, 1.4f, 0.14f);
-            text("CREATE A NEW PROJECT OR OPEN AN EXISTING .RENEGADE PROJECT", 488.0f, 568.0f, 8, Muted, 0.45f, 0.10f);
+            text("NO RECENT PROJECT SELECTED", 432.0f, 548.0f, 18, TextStrong, 1.0f, 0.14f);
+            text("CREATE A NEW PROJECT OR OPEN AN EXISTING .RENEGADE PROJECT", 432.0f, 582.0f, 8, Muted, 0.35f, 0.10f);
         }
 
-        mask(462.0f, 603.0f, 697.0f, 166.0f, wi::Color(5, 14, 19, 238));
-        bordered(
-            LowerNew,
-            hovered_ == HoverTarget::LowerNewProject ? SurfaceRaised : Surface,
-            hovered_ == HoverTarget::LowerNewProject ? Orange : Border);
-        text("+", 518.0f, 646.0f, 34, TextStrong, 0.0f, 0.08f);
-        text("NEW PROJECT", 637.0f, 653.0f, 18, TextStrong, 1.2f, 0.13f);
-        text("CREATE A NEW RENEGADE PROJECT", 637.0f, 684.0f, 8, Muted, 0.6f, 0.10f);
+        // Preserve the authored NEW PROJECT tile rather than repainting it as
+        // a flat widget. Hover adds only a thin interaction outline.
+        if (hovered_ == HoverTarget::LowerNewProject)
+            bordered(LowerNew, wi::Color::Transparent(), Orange);
 
-        mask(1191.0f, 383.0f, 287.0f, 286.0f, wi::Color(5, 14, 19, 250));
+        // The approved plate already contains the correct no-selection state.
+        // Replace the detail body only when a real recent project is selected.
         if (selectedIndex_ >= 0 &&
             static_cast<std::size_t>(selectedIndex_) < projects_.size())
         {
             const auto& selected = projects_[static_cast<std::size_t>(selectedIndex_)];
-            text("PROJECT NAME", 1208.0f, 392.0f, 8, Muted, 0.6f, 0.10f);
-            text(UpperAscii(Ellipsize(selected.name, 27u)), 1208.0f, 411.0f, 10, TextStrong, 0.55f, 0.13f);
-            text("STATUS", 1208.0f, 450.0f, 8, Muted, 0.6f, 0.10f);
-            text(selected.descriptorValid ? "READY" : "DESCRIPTOR WARNING", 1320.0f, 450.0f, 8, selected.descriptorValid ? Success : Danger, 0.6f, 0.11f);
-            text("FORMAT VERSION", 1208.0f, 486.0f, 8, Muted, 0.6f, 0.10f);
-            text("RENEGADE PROJECT V" + std::to_string(selected.formatVersion), 1320.0f, 486.0f, 8, Text, 0.4f, 0.10f);
-            text("PROJECT PATH", 1208.0f, 526.0f, 8, Muted, 0.6f, 0.10f);
-            text(Ellipsize(selected.rootPath.empty() ? selected.descriptorPath : selected.rootPath, 38u), 1208.0f, 545.0f, 8, Text, 0.25f, 0.10f);
-            text("STARTUP SCENE", 1208.0f, 584.0f, 8, Muted, 0.6f, 0.10f);
-            text(Ellipsize(selected.startupScene.empty() ? "Content/Scenes/Main.wiscene" : selected.startupScene, 38u), 1208.0f, 603.0f, 8, Text, 0.25f, 0.10f);
-            text("PROJECT DESCRIPTOR", 1208.0f, 636.0f, 8, Muted, 0.6f, 0.10f);
-            text(Ellipsize(selected.descriptorPath, 38u), 1208.0f, 654.0f, 7, Text, 0.2f, 0.10f);
-        }
-        else
-        {
-            text("NO PROJECT SELECTED", 1208.0f, 410.0f, 11, TextStrong, 0.8f, 0.13f);
-            text("Create a new project or open an existing", 1208.0f, 447.0f, 8, Muted, 0.25f, 0.10f);
-            text(".renegade project to begin.", 1208.0f, 465.0f, 8, Muted, 0.25f, 0.10f);
+            mask(1188.0f, 388.0f, 341.0f, 334.0f, wi::Color(5, 14, 19, 250));
+            text("PROJECT NAME", 1207.0f, 405.0f, 8, Muted, 0.55f, 0.10f);
+            text(UpperAscii(Ellipsize(selected.name, 28u)), 1207.0f, 428.0f, 10, TextStrong, 0.45f, 0.13f);
+            text("PROJECT PATH", 1207.0f, 474.0f, 8, Muted, 0.55f, 0.10f);
+            text(Ellipsize(selected.rootPath.empty() ? selected.descriptorPath : selected.rootPath, 40u), 1207.0f, 497.0f, 8, Text, 0.22f, 0.10f);
+            text("STATUS", 1207.0f, 544.0f, 8, Muted, 0.55f, 0.10f);
+            text(selected.descriptorValid ? "READY" : "DESCRIPTOR WARNING", 1322.0f, 544.0f, 8, selected.descriptorValid ? Success : Danger, 0.45f, 0.11f);
+            text("ENGINE / PROJECT FORMAT", 1207.0f, 588.0f, 8, Muted, 0.55f, 0.10f);
+            text("RENEGADE PROJECT V" + std::to_string(selected.formatVersion), 1207.0f, 611.0f, 8, Text, 0.32f, 0.10f);
+            text("STARTUP SCENE", 1207.0f, 653.0f, 8, Muted, 0.55f, 0.10f);
+            text(Ellipsize(selected.startupScene.empty() ? "Content/Scenes/Main.wiscene" : selected.startupScene, 40u), 1207.0f, 676.0f, 8, Text, 0.22f, 0.10f);
+
+            mask(1190.0f, 737.0f, 345.0f, 70.0f, SurfaceRaised);
+            bordered(
+                OpenSelected,
+                SurfaceRaised,
+                hovered_ == HoverTarget::OpenSelected ? Cyan : Border);
+            text("OPEN PROJECT  >>", 1240.0f, 758.0f, 16, TextStrong, 0.9f, 0.15f);
         }
 
-        mask(1201.0f, 696.0f, 266.0f, 60.0f, SurfaceRaised);
-        bordered(
-            OpenSelected,
-            selectedIndex_ >= 0 ? SurfaceRaised : Surface,
-            hovered_ == HoverTarget::OpenSelected ? Cyan : Border);
-        text(
-            selectedIndex_ >= 0 ? "OPEN PROJECT  >>" : "SELECT A PROJECT",
-            1235.0f,
-            715.0f,
-            16,
-            selectedIndex_ >= 0 ? TextStrong : Muted,
-            1.0f,
-            0.15f);
-
-        mask(82.0f, 812.0f, 1504.0f, 72.0f, wi::Color(5, 13, 18, 248));
-        text("SYSTEM STATUS", 113.0f, 823.0f, 8, Muted, 0.7f, 0.10f);
-        text("NOMINAL", 113.0f, 846.0f, 9, Success, 0.7f, 0.12f);
-        text("RENDER BACKEND", 347.0f, 823.0f, 8, Muted, 0.7f, 0.10f);
-        text(BackendLabel(), 347.0f, 846.0f, 9, TextStrong, 0.7f, 0.12f);
-        text("PROJECT FORMAT", 540.0f, 823.0f, 8, Muted, 0.7f, 0.10f);
-        text("RENEGADE V1", 540.0f, 846.0f, 9, TextStrong, 0.7f, 0.12f);
-        text("RECENT PROJECTS", 756.0f, 823.0f, 8, Muted, 0.7f, 0.10f);
-        text(std::to_string(projects_.size()) + " / 8", 756.0f, 846.0f, 9, TextStrong, 0.7f, 0.12f);
-        text("SESSION", 967.0f, 823.0f, 8, Muted, 0.7f, 0.10f);
-        text(currentProjectActive_ ? "PROJECT ACTIVE" : "HUB ONLY", 967.0f, 846.0f, 9, currentProjectActive_ ? Success : Text, 0.7f, 0.12f);
-        text("STATUS", 1196.0f, 823.0f, 8, Muted, 0.7f, 0.10f);
-        const std::string liveStatus = statusProvider_ ? statusProvider_() : statusText_;
-        text(Ellipsize(UpperAscii(liveStatus), 46u), 1196.0f, 846.0f, 8, Text, 0.35f, 0.10f);
+        // Preserve the technical footer frame/dividers from the authored
+        // plate, but never lie about live telemetry that Gate 3 does not own.
+        mask(58.0f, 883.0f, 116.0f, 29.0f, wi::Color(5, 13, 18, 248));
+        text("NOMINAL", 65.0f, 888.0f, 9, Success, 0.55f, 0.12f);
+        mask(210.0f, 883.0f, 92.0f, 29.0f, wi::Color(5, 13, 18, 248));
+        text("DEV", 212.0f, 888.0f, 9, TextStrong, 0.55f, 0.12f);
+        mask(337.0f, 883.0f, 120.0f, 29.0f, wi::Color(5, 13, 18, 248));
+        text(BackendLabel(), 340.0f, 888.0f, 9, TextStrong, 0.55f, 0.12f);
+        mask(500.0f, 883.0f, 145.0f, 29.0f, wi::Color(5, 13, 18, 248));
+        text("WINDOWS PC", 503.0f, 888.0f, 9, TextStrong, 0.55f, 0.12f);
+        mask(932.0f, 883.0f, 218.0f, 33.0f, wi::Color(5, 13, 18, 248));
+        text("N/A", 936.0f, 888.0f, 9, Muted, 0.55f, 0.12f);
+        mask(1192.0f, 883.0f, 168.0f, 33.0f, wi::Color(5, 13, 18, 248));
+        text("N/A", 1197.0f, 888.0f, 9, Muted, 0.55f, 0.12f);
+        mask(1410.0f, 883.0f, 174.0f, 33.0f, wi::Color(5, 13, 18, 248));
+        text("N/A", 1415.0f, 888.0f, 9, Muted, 0.55f, 0.12f);
 
         if (newProjectMode_)
         {

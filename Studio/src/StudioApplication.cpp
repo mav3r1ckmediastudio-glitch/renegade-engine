@@ -3197,7 +3197,17 @@ namespace renegade::studio
                 hubNewProjectConfirmButton_.SetVisible(true);
                 hubNewProjectCancelButton_.SetVisible(true);
                 break;
-            case RenegadeProjectHub::Action::OpenProject: OpenProject(); break;
+            case RenegadeProjectHub::Action::OpenProject:
+                // Defer the native browser until the next thread-safe point.
+                // Calling it directly from the custom Hub input pass can race
+                // the GUI/input update and was observed by the owner as a
+                // dead OPEN PROJECT control.
+                hubMessageLabel_.font.params.color = HologramMuted;
+                hubMessageLabel_.SetText("PROJECT BROWSER // OPENING");
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this](uint64_t) { OpenProject(); });
+                break;
             case RenegadeProjectHub::Action::OpenSelectedProject: OpenSelectedRecentProject(); break;
             case RenegadeProjectHub::Action::BackToEditor:
                 if (session_ && session_->Projects().HasProject()) SetProjectHubVisible(false);
@@ -9267,10 +9277,16 @@ wi::eventhandler::Subscribe_Once(
             params,
             [this](const std::string& descriptorPath)
             {
+                if (descriptorPath.empty())
+                    return;
                 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, descriptorPath](uint64_t)
                     {
+                        hubMessageLabel_.font.params.color = HologramMuted;
+                        hubMessageLabel_.SetText(
+                            "PROJECT OPENING // " +
+                            wi::helper::GetFileNameFromPath(descriptorPath));
                         OpenProjectDescriptor(descriptorPath);
                     });
             });
