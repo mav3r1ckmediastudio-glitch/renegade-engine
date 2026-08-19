@@ -22,6 +22,7 @@ namespace
         "81111111-1111-4111-8111-111111111111";
 
     int failures = 0;
+    int fakeLoaderCalls = 0;
 
     void Require(const bool condition, const std::string& message)
     {
@@ -77,6 +78,7 @@ namespace
         const PreparedMaterialTextureAsset& prepared,
         std::string& error)
     {
+        ++fakeLoaderCalls;
         wi::vector<std::uint8_t> bytes;
         bytes.assign(prepared.payload.begin(), prepared.payload.end());
         wi::Resource resource;
@@ -318,10 +320,13 @@ int main()
             "WISCENE serialized a governed texture as a fake external filename");
     }
 
+    fakeLoaderCalls = 0;
     const auto restored = RestoreMaterialTextureBindings(
         reopened, root.generic_u8string(), ProjectId, FakeLoader);
-    Require(restored.succeeded && restored.discovered == 1 && restored.restored == 1,
-        "WISCENE governed texture did not rehydrate by stable ID: " + restored.error);
+    Require(restored.succeeded && restored.discovered == 1 && restored.restored == 1 &&
+            restored.uniqueAssetIds == 1 && restored.preparedUnique == 1 &&
+            restored.loadedUnique == 1 && fakeLoaderCalls == 1,
+        "WISCENE governed texture did not rehydrate once by stable ID: " + restored.error);
     reopenedMaterial = reopened.materials.GetComponent(bindings.front().materialEntity);
     Require(reopenedMaterial != nullptr &&
             reopenedMaterial->textures[
@@ -330,8 +335,48 @@ int main()
     const auto secondRestore = RestoreMaterialTextureBindings(
         reopened, root.generic_u8string(), ProjectId, FakeLoader);
     Require(secondRestore.succeeded && secondRestore.discovered == 1 &&
-            secondRestore.restored == 0,
+            secondRestore.restored == 0 && secondRestore.alreadyLive == 1 &&
+            fakeLoaderCalls == 1,
         "material texture restore is not idempotent once the resource is live");
+
+    wi::scene::Scene deduplicated;
+    const wi::ecs::Entity dedupA = wi::ecs::CreateEntity();
+    const wi::ecs::Entity dedupB = wi::ecs::CreateEntity();
+    deduplicated.materials.Create(dedupA).textures[
+        wi::scene::MaterialComponent::BASECOLORMAP].name =
+        "legacy/original/source-a.png";
+    deduplicated.materials.Create(dedupB).textures[
+        wi::scene::MaterialComponent::BASECOLORMAP].name =
+        "legacy/original/source-b.png";
+    for (const auto entity : {dedupA, dedupB})
+    {
+        auto& dedupMetadata = deduplicated.metadatas.Create(entity);
+        dedupMetadata.int_values.set(
+            MaterialTextureAssetBindingVersionMetadataKey,
+            MaterialTextureAssetBindingVersion);
+        dedupMetadata.string_values.set(
+            MaterialBaseColorTextureAssetIdMetadataKey,
+            imported.assetId);
+    }
+    fakeLoaderCalls = 0;
+    const auto dedupRestore = RestoreMaterialTextureBindings(
+        deduplicated, root.generic_u8string(), ProjectId, FakeLoader);
+    const auto* dedupMaterialA = deduplicated.materials.GetComponent(dedupA);
+    const auto* dedupMaterialB = deduplicated.materials.GetComponent(dedupB);
+    Require(dedupRestore.succeeded && dedupRestore.discovered == 2 &&
+            dedupRestore.restored == 2 && dedupRestore.uniqueAssetIds == 1 &&
+            dedupRestore.preparedUnique == 1 && dedupRestore.loadedUnique == 1 &&
+            fakeLoaderCalls == 1 && dedupMaterialA != nullptr &&
+            dedupMaterialB != nullptr &&
+            dedupMaterialA->textures[
+                wi::scene::MaterialComponent::BASECOLORMAP].name.empty() &&
+            dedupMaterialB->textures[
+                wi::scene::MaterialComponent::BASECOLORMAP].name.empty() &&
+            dedupMaterialA->textures[
+                wi::scene::MaterialComponent::BASECOLORMAP].resource.IsValid() &&
+            dedupMaterialB->textures[
+                wi::scene::MaterialComponent::BASECOLORMAP].resource.IsValid(),
+        "duplicate StableId bindings were not prepared/loaded once and fanned out to both materials");
 
     wi::scene::Scene partial;
     const wi::ecs::Entity badMaterialEntity = wi::ecs::CreateEntity();
@@ -352,6 +397,7 @@ int main()
     goodMetadata.string_values.set(
         MaterialBaseColorTextureAssetIdMetadataKey,
         imported.assetId);
+    fakeLoaderCalls = 0;
     const auto partialRestore = RestoreMaterialTextureBindings(
         partial, root.generic_u8string(), ProjectId, FakeLoader);
     Require(!partialRestore.succeeded && partialRestore.discovered == 2 &&
@@ -368,6 +414,6 @@ int main()
                   << failures << " checks failed\n";
         return 1;
     }
-    std::cout << "LP08 GATE 3 MATERIAL TEXTURE PASS // stable_id save_open undo_redo audit_regressions\n";
+    std::cout << "LP08 GATE 3 MATERIAL TEXTURE PASS // stable_id save_open undo_redo dedup_restore audit_regressions\n";
     return 0;
 }
