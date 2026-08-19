@@ -50,6 +50,11 @@ namespace
     const XMFLOAT4 LowerNew = XMFLOAT4(435.0f, 614.0f, 1150.0f, 780.0f);
     const XMFLOAT4 PreviousRecent = XMFLOAT4(1064.0f, 151.0f, 1097.0f, 181.0f);
     const XMFLOAT4 NextRecent = XMFLOAT4(1111.0f, 151.0f, 1144.0f, 181.0f);
+    const std::array<XMFLOAT4, 3> RecentCards = {{
+        XMFLOAT4(435.0f, 614.0f, 662.0f, 780.0f),
+        XMFLOAT4(679.0f, 614.0f, 906.0f, 780.0f),
+        XMFLOAT4(923.0f, 614.0f, 1150.0f, 780.0f),
+    }};
 
     const XMFLOAT4 DetailsHero = XMFLOAT4(1213.0f, 188.0f, 1621.0f, 374.0f);
     const XMFLOAT4 OpenSelected = XMFLOAT4(1213.0f, 708.0f, 1621.0f, 776.0f);
@@ -202,6 +207,7 @@ namespace renegade::studio
                 project.artworkPath = FindPersistedArtwork(project);
         }
         projects_ = std::move(projects);
+        ReloadProjectArtworkCache();
         SetSelectedIndex(selectedIndex);
     }
 
@@ -282,6 +288,35 @@ namespace renegade::studio
             point.y >= rect.y && point.y <= rect.w;
     }
 
+    std::size_t RenegadeProjectHub::VisibleRecentStart() const noexcept
+    {
+        if (projects_.empty() || selectedIndex_ < 0)
+            return 0u;
+        const std::size_t selected = static_cast<std::size_t>(selectedIndex_);
+        return (selected / RecentCards.size()) * RecentCards.size();
+    }
+
+    int RenegadeProjectHub::RecentIndexForTarget(const HoverTarget target) const noexcept
+    {
+        std::size_t offset = RecentCards.size();
+        switch (target)
+        {
+        case HoverTarget::RecentCard0:
+            offset = 0u;
+            break;
+        case HoverTarget::RecentCard1:
+            offset = 1u;
+            break;
+        case HoverTarget::RecentCard2:
+            offset = 2u;
+            break;
+        default:
+            return -1;
+        }
+        const std::size_t index = VisibleRecentStart() + offset;
+        return index < projects_.size() ? static_cast<int>(index) : -1;
+    }
+
     RenegadeProjectHub::HoverTarget RenegadeProjectHub::ResolveHover(
         const XMFLOAT2& point) const noexcept
     {
@@ -295,12 +330,42 @@ namespace renegade::studio
             return HoverTarget::ImportProject;
         if (currentProjectActive_ && ContainsBase(point, LeftBack))
             return HoverTarget::BackToEditor;
-        if (ContainsBase(point, LowerNew))
-            return HoverTarget::LowerNewProject;
-        if (selectedIndex_ >= 0 && ContainsBase(point, Preview))
+
+        if (projects_.empty())
+        {
+            if (ContainsBase(point, LowerNew))
+                return HoverTarget::LowerNewProject;
+        }
+        else
+        {
+            const std::size_t start = VisibleRecentStart();
+            for (std::size_t slot = 0; slot < RecentCards.size(); ++slot)
+            {
+                if (start + slot >= projects_.size())
+                    break;
+                if (!ContainsBase(point, RecentCards[slot]))
+                    continue;
+                switch (slot)
+                {
+                case 0u: return HoverTarget::RecentCard0;
+                case 1u: return HoverTarget::RecentCard1;
+                default: return HoverTarget::RecentCard2;
+                }
+            }
+        }
+
+        if (selectedIndex_ >= 0 &&
+            projects_[static_cast<std::size_t>(selectedIndex_)].descriptorValid &&
+            ContainsBase(point, Preview))
+        {
             return HoverTarget::ProjectPreview;
-        if (selectedIndex_ >= 0 && ContainsBase(point, OpenSelected))
+        }
+        if (selectedIndex_ >= 0 &&
+            projects_[static_cast<std::size_t>(selectedIndex_)].descriptorValid &&
+            ContainsBase(point, OpenSelected))
+        {
             return HoverTarget::OpenSelected;
+        }
         if (projects_.size() > 1u && ContainsBase(point, PreviousRecent))
             return HoverTarget::PreviousRecent;
         if (projects_.size() > 1u && ContainsBase(point, NextRecent))
@@ -332,6 +397,16 @@ namespace renegade::studio
             recentProjectSelected_(static_cast<std::size_t>(next));
     }
 
+    void RenegadeProjectHub::SelectRecentCard(const HoverTarget target)
+    {
+        const int index = RecentIndexForTarget(target);
+        if (index < 0)
+            return;
+        SetSelectedIndex(index);
+        if (recentProjectSelected_)
+            recentProjectSelected_(static_cast<std::size_t>(index));
+    }
+
     std::string RenegadeProjectHub::FindPersistedArtwork(const ProjectEntry& entry)
     {
         fs::path root;
@@ -358,6 +433,20 @@ namespace renegade::studio
         return {};
     }
 
+    void RenegadeProjectHub::ReloadProjectArtworkCache()
+    {
+        projectArtworkCache_.clear();
+        projectArtworkCache_.resize(projects_.size());
+        for (std::size_t index = 0; index < projects_.size(); ++index)
+        {
+            auto& project = projects_[index];
+            if (project.artworkPath.empty())
+                project.artworkPath = FindPersistedArtwork(project);
+            if (!project.artworkPath.empty())
+                projectArtworkCache_[index] = wi::resourcemanager::Load(project.artworkPath);
+        }
+    }
+
     void RenegadeProjectHub::ReloadSelectedArtwork()
     {
         projectArtwork_ = {};
@@ -365,11 +454,11 @@ namespace renegade::studio
             static_cast<std::size_t>(selectedIndex_) >= projects_.size())
             return;
 
-        auto& project = projects_[static_cast<std::size_t>(selectedIndex_)];
-        if (project.artworkPath.empty())
-            project.artworkPath = FindPersistedArtwork(project);
-        if (!project.artworkPath.empty())
-            projectArtwork_ = wi::resourcemanager::Load(project.artworkPath);
+        const std::size_t index = static_cast<std::size_t>(selectedIndex_);
+        if (projectArtworkCache_.size() != projects_.size())
+            ReloadProjectArtworkCache();
+        if (index < projectArtworkCache_.size())
+            projectArtwork_ = projectArtworkCache_[index];
     }
 
     void RenegadeProjectHub::BeginChooseProjectArtwork()
@@ -454,6 +543,7 @@ namespace renegade::studio
                             return;
 
                         project.artworkPath = destination.u8string();
+                        ReloadProjectArtworkCache();
                         ReloadSelectedArtwork();
                         statusText_ = projectArtwork_.IsValid()
                             ? "PROJECT SCREENSHOT // UPDATED"
@@ -537,6 +627,11 @@ namespace renegade::studio
         case HoverTarget::NextRecent:
             SelectRelativeRecent(1);
             break;
+        case HoverTarget::RecentCard0:
+        case HoverTarget::RecentCard1:
+        case HoverTarget::RecentCard2:
+            SelectRecentCard(hovered_);
+            break;
         case HoverTarget::None:
         default:
             break;
@@ -588,6 +683,34 @@ namespace renegade::studio
         const auto line = [&](const float x, const float y, const float width, const wi::Color color)
         {
             DrawRect(sx(x), sy(y), sw(width), std::max(1.0f, scale_), color, cmd);
+        };
+        const auto drawResourceContained = [&](const wi::Resource& resource, const XMFLOAT4& rect)
+        {
+            if (!resource.IsValid())
+                return;
+            const auto desc = resource.GetTexture().GetDesc();
+            const float availableWidth = rect.z - rect.x;
+            const float availableHeight = rect.w - rect.y;
+            float drawWidth = availableWidth;
+            float drawHeight = availableHeight;
+            if (desc.width > 0 && desc.height > 0)
+            {
+                const float aspect = static_cast<float>(desc.width) /
+                    static_cast<float>(desc.height);
+                drawHeight = drawWidth / aspect;
+                if (drawHeight > availableHeight)
+                {
+                    drawHeight = availableHeight;
+                    drawWidth = drawHeight * aspect;
+                }
+            }
+            const float imageX = rect.x + (availableWidth - drawWidth) * 0.5f;
+            const float imageY = rect.y + (availableHeight - drawHeight) * 0.5f;
+            wi::image::Params image(
+                sx(imageX), sy(imageY), sw(drawWidth), sw(drawHeight));
+            image.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
+            wi::image::Draw(&resource.GetTexture(), image, cmd);
         };
 
         for (float x = 28.0f; x <= 1644.0f; x += 34.0f)
@@ -690,31 +813,18 @@ namespace renegade::studio
         const bool hasSelected =
             selectedIndex_ >= 0 &&
             static_cast<std::size_t>(selectedIndex_) < projects_.size();
+        const bool selectedOpenable = hasSelected &&
+            projects_[static_cast<std::size_t>(selectedIndex_)].descriptorValid;
 
-        panel(Preview, PanelDeep, hovered_ == HoverTarget::ProjectPreview ? CyanDim : BorderBright);
+        panel(
+            Preview,
+            PanelDeep,
+            hovered_ == HoverTarget::ProjectPreview ? CyanDim : BorderBright);
         if (projectArtwork_.IsValid())
         {
-            const auto desc = projectArtwork_.GetTexture().GetDesc();
-            const float availableWidth = Preview.z - Preview.x - 8.0f;
-            const float availableHeight = Preview.w - Preview.y - 8.0f;
-            float drawWidth = availableWidth;
-            float drawHeight = availableHeight;
-            if (desc.width > 0 && desc.height > 0)
-            {
-                const float aspect = static_cast<float>(desc.width) / static_cast<float>(desc.height);
-                drawHeight = drawWidth / aspect;
-                if (drawHeight > availableHeight)
-                {
-                    drawHeight = availableHeight;
-                    drawWidth = drawHeight * aspect;
-                }
-            }
-            const float imageX = Preview.x + (Preview.z - Preview.x - drawWidth) * 0.5f;
-            const float imageY = Preview.y + (Preview.w - Preview.y - drawHeight) * 0.5f;
-            wi::image::Params image(sx(imageX), sy(imageY), sw(drawWidth), sw(drawHeight));
-            image.blendFlag = wi::enums::BLENDMODE_ALPHA;
-            image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
-            wi::image::Draw(&projectArtwork_.GetTexture(), image, cmd);
+            drawResourceContained(
+                projectArtwork_,
+                XMFLOAT4(Preview.x + 4.0f, Preview.y + 4.0f, Preview.z - 4.0f, Preview.w - 4.0f));
             DrawRect(sx(Preview.x + 10.0f), sy(Preview.w - 40.0f), sw(Preview.z - Preview.x - 20.0f), sw(28.0f), wi::Color(3, 8, 12, 205), cmd);
             if (hasSelected)
             {
@@ -738,11 +848,13 @@ namespace renegade::studio
 
             text(hasSelected ? "NO PREVIEW LOADED" : "NO RECENT PROJECTS", 792.0f, 367.0f, 15, TextStrong, wi::font::WIFALIGN_CENTER, 1.1f, 0.11f);
             text(
-                hasSelected ? "CLICK TO SET FROM LOCAL STORAGE" : "CREATE A NEW PROJECT OR OPEN AN EXISTING RENEGADE PROJECT",
+                hasSelected
+                    ? (selectedOpenable ? "CLICK TO SET FROM LOCAL STORAGE" : "PROJECT LOCATION IS UNAVAILABLE")
+                    : "CREATE A NEW PROJECT OR OPEN AN EXISTING RENEGADE PROJECT",
                 792.0f,
                 401.0f,
                 9,
-                hasSelected ? CyanDim : Muted,
+                selectedOpenable ? CyanDim : Muted,
                 wi::font::WIFALIGN_CENTER,
                 0.6f,
                 0.08f);
@@ -754,40 +866,104 @@ namespace renegade::studio
             text("SELECTED // " + UpperAscii(Ellipsize(selected.name, 40u)), 448.0f, 565.0f, 8, Muted, wi::font::WIFALIGN_LEFT, 0.45f, 0.08f);
         }
 
-        const bool lowerHover = hovered_ == HoverTarget::LowerNewProject;
-        panel(LowerNew, lowerHover ? PanelRaised : PanelDeep, lowerHover ? CyanDim : Border);
-        panel(XMFLOAT4(459.0f, 640.0f, 568.0f, 752.0f), Panel, lowerHover ? Cyan : BorderBright);
-        text("+", 513.5f, 661.0f, 43, lowerHover ? Cyan : Text, wi::font::WIFALIGN_CENTER, 0.0f, 0.01f);
-        line(592.0f, 642.0f, 1.0f, BorderBright);
-        text("NEW PROJECT", 620.0f, 652.0f, 20, TextStrong, wi::font::WIFALIGN_LEFT, 1.4f, 0.10f);
-        text("CREATE A NEW PROJECT", 620.0f, 690.0f, 9, Muted, wi::font::WIFALIGN_LEFT, 1.1f, 0.08f);
-        text("Start and save a Renegade project to your local system.", 620.0f, 719.0f, 9, Dim, wi::font::WIFALIGN_LEFT, 0.35f, 0.06f);
+        if (projects_.empty())
+        {
+            const bool lowerHover = hovered_ == HoverTarget::LowerNewProject;
+            panel(LowerNew, lowerHover ? PanelRaised : PanelDeep, lowerHover ? CyanDim : Border);
+            panel(XMFLOAT4(459.0f, 640.0f, 568.0f, 752.0f), Panel, lowerHover ? Cyan : BorderBright);
+            text("+", 513.5f, 661.0f, 43, lowerHover ? Cyan : Text, wi::font::WIFALIGN_CENTER, 0.0f, 0.01f);
+            line(592.0f, 642.0f, 1.0f, BorderBright);
+            text("NEW PROJECT", 620.0f, 652.0f, 20, TextStrong, wi::font::WIFALIGN_LEFT, 1.4f, 0.10f);
+            text("CREATE A NEW PROJECT", 620.0f, 690.0f, 9, Muted, wi::font::WIFALIGN_LEFT, 1.1f, 0.08f);
+            text("Start and save a Renegade project to your local system.", 620.0f, 719.0f, 9, Dim, wi::font::WIFALIGN_LEFT, 0.35f, 0.06f);
+        }
+        else
+        {
+            const std::size_t start = VisibleRecentStart();
+            const std::array<HoverTarget, 3> cardTargets = {{
+                HoverTarget::RecentCard0,
+                HoverTarget::RecentCard1,
+                HoverTarget::RecentCard2,
+            }};
+            for (std::size_t slot = 0; slot < RecentCards.size(); ++slot)
+            {
+                const XMFLOAT4& card = RecentCards[slot];
+                const std::size_t index = start + slot;
+                if (index >= projects_.size())
+                {
+                    panel(card, PanelDeep, Border);
+                    text("NO PROJECT", (card.x + card.z) * 0.5f, card.y + 72.0f, 8, Dim, wi::font::WIFALIGN_CENTER, 0.7f, 0.08f);
+                    continue;
+                }
+
+                const auto& project = projects_[index];
+                const bool selected = selectedIndex_ == static_cast<int>(index);
+                const bool hover = hovered_ == cardTargets[slot];
+                panel(
+                    card,
+                    selected || hover ? PanelRaised : PanelDeep,
+                    selected ? Cyan : (hover ? CyanDim : Border));
+                if (selected)
+                    DrawRect(sx(card.x + 1.0f), sy(card.y + 1.0f), sw(card.z - card.x - 2.0f), std::max(2.0f, sw(3.0f)), Orange, cmd);
+
+                const XMFLOAT4 imageRect(
+                    card.x + 4.0f,
+                    card.y + 5.0f,
+                    card.z - 4.0f,
+                    card.y + 130.0f);
+                DrawRect(
+                    sx(imageRect.x),
+                    sy(imageRect.y),
+                    sw(imageRect.z - imageRect.x),
+                    sw(imageRect.w - imageRect.y),
+                    wi::Color(3, 8, 12, 255),
+                    cmd);
+                if (index < projectArtworkCache_.size() &&
+                    projectArtworkCache_[index].IsValid())
+                {
+                    drawResourceContained(projectArtworkCache_[index], imageRect);
+                }
+                else
+                {
+                    text("RENEGADE", (card.x + card.z) * 0.5f, card.y + 48.0f, 10, Dim, wi::font::WIFALIGN_CENTER, 1.3f, 0.09f);
+                    text("PROJECT", (card.x + card.z) * 0.5f, card.y + 73.0f, 7, CyanDim, wi::font::WIFALIGN_CENTER, 1.0f, 0.07f);
+                }
+
+                DrawRect(
+                    sx(card.x + 4.0f),
+                    sy(card.y + 132.0f),
+                    sw(card.z - card.x - 8.0f),
+                    sw(30.0f),
+                    wi::Color(4, 10, 14, 246),
+                    cmd);
+                text(
+                    UpperAscii(Ellipsize(project.name, 22u)),
+                    card.x + 11.0f,
+                    card.y + 138.0f,
+                    8,
+                    project.descriptorValid ? TextStrong : Warning,
+                    wi::font::WIFALIGN_LEFT,
+                    0.45f,
+                    0.08f);
+                text(
+                    project.descriptorValid ? "READY" : "MISSING",
+                    card.z - 10.0f,
+                    card.y + 139.0f,
+                    7,
+                    project.descriptorValid ? Success : Warning,
+                    wi::font::WIFALIGN_RIGHT,
+                    0.35f,
+                    0.08f);
+            }
+        }
 
         text("PROJECT DETAILS", 1213.0f, 154.0f, 15, TextStrong, wi::font::WIFALIGN_LEFT, 1.4f, 0.11f);
         panel(DetailsHero, PanelDeep, BorderBright);
         if (projectArtwork_.IsValid())
         {
-            const auto desc = projectArtwork_.GetTexture().GetDesc();
-            const float availableWidth = DetailsHero.z - DetailsHero.x - 8.0f;
-            const float availableHeight = DetailsHero.w - DetailsHero.y - 8.0f;
-            float drawWidth = availableWidth;
-            float drawHeight = availableHeight;
-            if (desc.width > 0 && desc.height > 0)
-            {
-                const float aspect = static_cast<float>(desc.width) / static_cast<float>(desc.height);
-                drawHeight = drawWidth / aspect;
-                if (drawHeight > availableHeight)
-                {
-                    drawHeight = availableHeight;
-                    drawWidth = drawHeight * aspect;
-                }
-            }
-            const float imageX = DetailsHero.x + (DetailsHero.z - DetailsHero.x - drawWidth) * 0.5f;
-            const float imageY = DetailsHero.y + (DetailsHero.w - DetailsHero.y - drawHeight) * 0.5f;
-            wi::image::Params image(sx(imageX), sy(imageY), sw(drawWidth), sw(drawHeight));
-            image.blendFlag = wi::enums::BLENDMODE_ALPHA;
-            image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
-            wi::image::Draw(&projectArtwork_.GetTexture(), image, cmd);
+            drawResourceContained(
+                projectArtwork_,
+                XMFLOAT4(DetailsHero.x + 4.0f, DetailsHero.y + 4.0f, DetailsHero.z - 4.0f, DetailsHero.w - 4.0f));
         }
         else
         {
@@ -808,7 +984,7 @@ namespace renegade::studio
         {
             const auto& selected = projects_[static_cast<std::size_t>(selectedIndex_)];
             detail("PROJECT NAME", UpperAscii(Ellipsize(selected.name, 42u)), TextStrong);
-            detail("STATUS", selected.descriptorValid ? "READY" : "DESCRIPTOR WARNING", selected.descriptorValid ? Success : Warning);
+            detail("STATUS", selected.descriptorValid ? "READY" : "PROJECT UNAVAILABLE", selected.descriptorValid ? Success : Warning);
             detail("ENGINE / PROJECT FORMAT", "RENEGADE PROJECT V" + std::to_string(selected.formatVersion), Text);
             detail("PROJECT PATH", Ellipsize(selected.rootPath.empty() ? selected.descriptorPath : selected.rootPath, 52u), CyanDim);
             detail("STARTUP SCENE", Ellipsize(selected.startupScene.empty() ? "Content/Scenes/Main.wiscene" : selected.startupScene, 52u), Muted);
@@ -824,16 +1000,16 @@ namespace renegade::studio
 
         panel(
             OpenSelected,
-            hasSelected ? PanelRaised : PanelDeep,
-            hasSelected
+            selectedOpenable ? PanelRaised : PanelDeep,
+            selectedOpenable
                 ? (hovered_ == HoverTarget::OpenSelected ? Cyan : CyanDim)
                 : Border);
         text(
-            "OPEN PROJECT  >>",
+            selectedOpenable ? "OPEN PROJECT  >>" : "PROJECT UNAVAILABLE",
             1417.0f,
             726.0f,
-            17,
-            hasSelected ? TextStrong : Dim,
+            selectedOpenable ? 17 : 12,
+            selectedOpenable ? TextStrong : Dim,
             wi::font::WIFALIGN_CENTER,
             1.2f,
             0.10f);
