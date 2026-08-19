@@ -18,6 +18,7 @@ namespace renegade::studio
             std::string descriptorPath;
             std::string rootPath;
             std::string startupScene;
+            std::string artworkPath;
             std::uint32_t formatVersion = 1;
             bool descriptorValid = true;
         };
@@ -62,14 +63,13 @@ namespace renegade::studio
             None,
             NewProject,
             OpenProject,
+            ImportProject,
             BackToEditor,
-            ExitRenegade,
-            FeaturedProject,
+            ProjectPreview,
             OpenSelected,
             LowerNewProject,
-            Recent0,
-            Recent1,
-            Recent2,
+            PreviousRecent,
+            NextRecent,
         };
 
         [[nodiscard]] XMFLOAT2 ToBase(float x, float y) const noexcept;
@@ -79,6 +79,10 @@ namespace renegade::studio
             const XMFLOAT4& rect) const noexcept;
         [[nodiscard]] HoverTarget ResolveHover(const XMFLOAT2& basePointer) const noexcept;
         void Invoke(Action action);
+        void SelectRelativeRecent(int delta);
+        void BeginChooseProjectArtwork();
+        void ReloadSelectedArtwork();
+        [[nodiscard]] static std::string FindPersistedArtwork(const ProjectEntry& entry);
 
         float width_ = 1920.0f;
         float height_ = 1080.0f;
@@ -90,7 +94,8 @@ namespace renegade::studio
         bool newProjectMode_ = false;
         int selectedIndex_ = -1;
         HoverTarget hovered_ = HoverTarget::None;
-        wi::Resource conceptPlate_;
+        wi::Resource wordmark_;
+        wi::Resource projectArtwork_;
         std::string developerIdentity_ = "DEVELOPER";
         std::string currentProjectName_;
         std::string statusText_ = "PROJECT SERVICES // ONLINE";
