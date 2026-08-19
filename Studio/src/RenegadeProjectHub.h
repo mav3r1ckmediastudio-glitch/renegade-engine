@@ -70,6 +70,9 @@ namespace renegade::studio
             LowerNewProject,
             PreviousRecent,
             NextRecent,
+            RecentCard0,
+            RecentCard1,
+            RecentCard2,
         };
 
         [[nodiscard]] XMFLOAT2 ToBase(float x, float y) const noexcept;
@@ -78,10 +81,14 @@ namespace renegade::studio
             const XMFLOAT2& point,
             const XMFLOAT4& rect) const noexcept;
         [[nodiscard]] HoverTarget ResolveHover(const XMFLOAT2& basePointer) const noexcept;
+        [[nodiscard]] std::size_t VisibleRecentStart() const noexcept;
+        [[nodiscard]] int RecentIndexForTarget(HoverTarget target) const noexcept;
         void Invoke(Action action);
         void SelectRelativeRecent(int delta);
+        void SelectRecentCard(HoverTarget target);
         void BeginChooseProjectArtwork();
         void ReloadSelectedArtwork();
+        void ReloadProjectArtworkCache();
         [[nodiscard]] static std::string FindPersistedArtwork(const ProjectEntry& entry);
 
         float width_ = 1920.0f;
@@ -96,6 +103,7 @@ namespace renegade::studio
         HoverTarget hovered_ = HoverTarget::None;
         wi::Resource wordmark_;
         wi::Resource projectArtwork_;
+        std::vector<wi::Resource> projectArtworkCache_;
         std::string developerIdentity_ = "DEVELOPER";
         std::string currentProjectName_;
         std::string statusText_ = "PROJECT SERVICES // ONLINE";
