@@ -64,8 +64,18 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h
+    src/RenegadeProjectHub.cpp
+    src/RenegadeProjectHub.h
+    src/StartupIdentityHandshake.h
+    src/StartupIrisTransition.h
+    src/StartupIdentityPrompt.cpp
+    src/StartupIdentityPrompt.h
+    src/StartupMediaFoundationPlayer.cpp
+    src/StartupMediaFoundationPlayer.h
     src/StudioApplication.cpp
     src/StudioApplication.h
+    src/StudioUserPreferences.cpp
+    src/StudioUserPreferences.h
     src/WindowsGameBuildController.cpp
     src/WindowsGameBuildController.h
     src/main_Windows.cpp
@@ -88,6 +98,12 @@ target_link_libraries(RenegadeStudio
     PRIVATE
         Renegade::EngineBridge
         Renegade::TestLevelRuntimeProcess
+        mfplat
+        mf
+        mfuuid
+        evr
+        strmiids
+        ole32
 )
 
 target_compile_definitions(RenegadeStudio
@@ -163,3 +179,61 @@ add_custom_command(
         "32"
     VERBATIM
 )
+
+# Gate 3 concept plate is owner media. CI can omit it; owner packaging injects it.
+set(RENEGADE_PROJECT_HUB_CONCEPT
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-project-hub-concept.jpg")
+if(EXISTS "${RENEGADE_PROJECT_HUB_CONCEPT}")
+    add_custom_command(TARGET RenegadeStudio POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${RENEGADE_PROJECT_HUB_CONCEPT}"
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-project-hub-concept.jpg"
+        VERBATIM)
+endif()
+
+# Gate 2A plays the owner's original MP4 directly through Windows Media
+# Foundation. There is no companion WAV and no Wicked video-decoder dependency.
+set(RENEGADE_STARTUP_REVEAL_VIDEO
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/startup/renegade_logo_reveal_v2.mp4")
+if(EXISTS "${RENEGADE_STARTUP_REVEAL_VIDEO}")
+    add_custom_command(
+        TARGET RenegadeStudio POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${RENEGADE_STARTUP_REVEAL_VIDEO}"
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup/renegade_logo_reveal_v2.mp4"
+        VERBATIM
+    )
+else()
+    message(STATUS
+        "Gate 2A startup MP4 is not present in this checkout; runtime will fail open and owner test packaging must inject the approved MP4 under Content/startup/.")
+endif()
+
+# Gate 2C owns both the generated motion plate and an exact final-frame bitmap.
+# The motion plate supplies machinery/head/scan animation only. Renegade draws
+# the dynamic developer identity, accepted state and ENTER HUB interaction
+# natively over the final bitmap so generated pseudo-text is never authoritative.
+set(RENEGADE_IDENTITY_HANDSHAKE_VIDEO
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/startup/renegade_identity_handshake_v1.mp4")
+set(RENEGADE_IDENTITY_HANDSHAKE_FINAL_FRAME
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/startup/renegade_identity_handshake_final.bmp")
+if(EXISTS "${RENEGADE_IDENTITY_HANDSHAKE_VIDEO}" AND
+   EXISTS "${RENEGADE_IDENTITY_HANDSHAKE_FINAL_FRAME}")
+    add_custom_command(
+        TARGET RenegadeStudio POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${RENEGADE_IDENTITY_HANDSHAKE_VIDEO}"
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup/renegade_identity_handshake_v1.mp4"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${RENEGADE_IDENTITY_HANDSHAKE_FINAL_FRAME}"
+            "$<TARGET_FILE_DIR:RenegadeStudio>/Content/startup/renegade_identity_handshake_final.bmp"
+        VERBATIM
+    )
+else()
+    message(STATUS
+        "Gate 2C identity-handshake media is not present in this checkout; runtime will fail soft and owner test packaging must inject both accepted assets under Content/startup/.")
+endif()

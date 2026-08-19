@@ -18,6 +18,7 @@
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "RenegadeStudioChrome.h"
+#include "RenegadeProjectHub.h"
 #include "TestLevelRuntimeProcess.h"
 
 // StudioApplication.cpp defines this helper in its global unnamed namespace.
@@ -34,6 +35,7 @@ namespace renegade::studio
     {
     public:
         void BindSession(bridge::StudioSession& session) noexcept;
+        void SetExitRequestHandler(std::function<void()> handler);
         void BindDiagnostics(
             wi::Application::InfoDisplayer& diagnostics) noexcept;
         void DeleteGPUResources() override;
@@ -507,6 +509,7 @@ namespace renegade::studio
         bridge::AssetBrowserService assetBrowserService_;
         std::string assetBrowserCurrentFolder_ = "Content";
         wi::gui::Window projectHubPanel_;
+        RenegadeProjectHub projectHubChrome_;
         wi::gui::Label hubBrandLabel_;
         wi::gui::Label hubTitleLabel_;
         wi::gui::Label hubSubtitleLabel_;
@@ -522,6 +525,9 @@ namespace renegade::studio
         wi::gui::Button launchProjectButton_;
         wi::gui::Button continueProjectButton_;
         wi::gui::Label hubMessageLabel_;
+        RenegadeTextInputField hubNewProjectNameInput_;
+        RenegadeButton hubNewProjectConfirmButton_;
+        RenegadeButton hubNewProjectCancelButton_;
         wi::gui::Button gridToggleButton_;
         wi::gui::Window importScalePanel_;
         wi::gui::Label importScaleTitleLabel_;
@@ -617,6 +623,8 @@ namespace renegade::studio
         XMFLOAT2 creatorAssetDropPoint_ = {};
         bool creatorAssetDropPending_ = false;
         bool projectHubVisible_ = true;
+        bool hubNewProjectMode_ = false;
+        std::function<void()> exitRequestHandler_;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
         wi::jobsystem::context sceneOpenWorkload_;
@@ -633,6 +641,7 @@ namespace renegade::studio
     {
     public:
         void SetStartupScene(std::string filePath);
+        void SetExitRequestHandler(std::function<void()> handler);
         void Initialize() override;
 
     private:

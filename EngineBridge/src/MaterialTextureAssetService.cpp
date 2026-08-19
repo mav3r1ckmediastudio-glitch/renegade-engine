@@ -2,11 +2,14 @@
 
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/MaterialService.h"
+#include "renegade/bridge/ProjectLifecycleDiagnostics.h"
 #include "renegade/bridge/ResourceAssetCacheIdentityService.h"
 
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <set>
+#include <sstream>
 #include <utility>
 
 namespace
@@ -338,15 +341,32 @@ namespace renegade::bridge
         const StableId& projectId,
         MaterialTextureResourceLoader loader)
     {
+        const auto restoreStarted = diagnostics::LifecycleClock::now();
         MaterialTextureRestoreResult result;
         std::vector<MaterialTextureBindingRecord> bindings;
+        const auto inspectStarted = diagnostics::LifecycleClock::now();
         if (!InspectMaterialTextureBindings(scene, bindings, result.error))
+        {
+            diagnostics::LogProjectLifecycleTiming(
+                "TEXTURE RESTORE",
+                diagnostics::MillisecondsSince(restoreStarted),
+                "binding inspection failed // " + result.error);
             return result;
+        }
+        const double inspectMilliseconds =
+            diagnostics::MillisecondsSince(inspectStarted);
         result.discovered = bindings.size();
         if (!loader)
             loader = LoadPreparedMaterialTextureAsset;
 
+        std::set<StableId> uniqueTextureAssetIds;
+        for (const auto& binding : bindings)
+            uniqueTextureAssetIds.insert(binding.textureAssetId);
+
         std::size_t failureCount = 0;
+        std::size_t alreadyLiveCount = 0;
+        double prepareMilliseconds = 0.0;
+        double applyMilliseconds = 0.0;
         std::string firstFailure;
         for (const auto& binding : bindings)
         {
@@ -361,16 +381,30 @@ namespace renegade::bridge
             }
             auto& texture = material->textures[WickedTextureSlot(binding.slot)];
             if (texture.resource.IsValid() && texture.name.empty())
+            {
+                ++alreadyLiveCount;
                 continue;
+            }
 
             PreparedMaterialTextureAsset prepared;
             std::string bindingError;
-            if (!PrepareMaterialTextureAsset(
-                    projectRoot, projectId, binding.textureAssetId,
-                    prepared, bindingError) ||
-                !ApplyPreparedMaterialTextureAsset(
+            const auto prepareStarted = diagnostics::LifecycleClock::now();
+            const bool preparedSuccessfully = PrepareMaterialTextureAsset(
+                projectRoot, projectId, binding.textureAssetId,
+                prepared, bindingError);
+            prepareMilliseconds += diagnostics::MillisecondsSince(prepareStarted);
+
+            bool appliedSuccessfully = false;
+            if (preparedSuccessfully)
+            {
+                const auto applyStarted = diagnostics::LifecycleClock::now();
+                appliedSuccessfully = ApplyPreparedMaterialTextureAsset(
                     scene, binding.materialEntity, binding.slot,
-                    prepared, loader, bindingError))
+                    prepared, loader, bindingError);
+                applyMilliseconds += diagnostics::MillisecondsSince(applyStarted);
+            }
+
+            if (!preparedSuccessfully || !appliedSuccessfully)
             {
                 ++failureCount;
                 if (firstFailure.empty())
@@ -379,6 +413,21 @@ namespace renegade::bridge
             }
             ++result.restored;
         }
+
+        std::ostringstream restoreDetail;
+        restoreDetail << "bindings=" << bindings.size()
+                      << " // unique_ids=" << uniqueTextureAssetIds.size()
+                      << " // already_live=" << alreadyLiveCount
+                      << " // restored=" << result.restored
+                      << " // failures=" << failureCount
+                      << " // inspect=" << std::fixed << std::setprecision(2)
+                      << inspectMilliseconds << " ms"
+                      << " // prepare=" << prepareMilliseconds << " ms"
+                      << " // apply=" << applyMilliseconds << " ms";
+        diagnostics::LogProjectLifecycleTiming(
+            "TEXTURE RESTORE",
+            diagnostics::MillisecondsSince(restoreStarted),
+            restoreDetail.str());
 
         if (failureCount != 0)
         {
