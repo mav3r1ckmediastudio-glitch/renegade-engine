@@ -4,40 +4,55 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <filesystem>
+#include <system_error>
 #include <utility>
+
+#ifndef RENEGADE_SOURCE_REVISION
+#define RENEGADE_SOURCE_REVISION "unknown"
+#endif
 
 namespace
 {
+    namespace fs = std::filesystem;
+
     constexpr float DesignWidth = 1672.0f;
     constexpr float DesignHeight = 941.0f;
 
-    constexpr wi::Color Ink = wi::Color(4, 9, 13, 248);
-    constexpr wi::Color InkSolid = wi::Color(4, 9, 13, 255);
-    constexpr wi::Color Surface = wi::Color(7, 16, 22, 248);
-    constexpr wi::Color SurfaceRaised = wi::Color(9, 22, 29, 250);
-    constexpr wi::Color Border = wi::Color(42, 76, 90, 230);
-    constexpr wi::Color Cyan = wi::Color(101, 207, 235, 255);
-    constexpr wi::Color CyanSoft = wi::Color(74, 154, 181, 220);
-    constexpr wi::Color Orange = wi::Color(224, 105, 31, 255);
-    constexpr wi::Color Text = wi::Color(220, 226, 228, 255);
-    constexpr wi::Color TextStrong = wi::Color(245, 248, 249, 255);
-    constexpr wi::Color Muted = wi::Color(122, 145, 154, 255);
-    constexpr wi::Color Success = wi::Color(82, 205, 121, 255);
-    constexpr wi::Color Danger = wi::Color(214, 86, 62, 255);
+    constexpr wi::Color Background = wi::Color(4, 8, 12, 255);
+    constexpr wi::Color Panel = wi::Color(7, 14, 20, 246);
+    constexpr wi::Color PanelRaised = wi::Color(9, 19, 27, 250);
+    constexpr wi::Color PanelDeep = wi::Color(5, 11, 16, 252);
+    constexpr wi::Color Border = wi::Color(34, 58, 72, 230);
+    constexpr wi::Color BorderBright = wi::Color(66, 91, 108, 235);
+    constexpr wi::Color Cyan = wi::Color(95, 216, 255, 255);
+    constexpr wi::Color CyanDim = wi::Color(49, 110, 139, 255);
+    constexpr wi::Color Orange = wi::Color(238, 117, 26, 255);
+    constexpr wi::Color Text = wi::Color(219, 230, 238, 255);
+    constexpr wi::Color TextStrong = wi::Color(244, 248, 251, 255);
+    constexpr wi::Color Muted = wi::Color(143, 162, 179, 255);
+    constexpr wi::Color Dim = wi::Color(78, 96, 113, 255);
+    constexpr wi::Color Success = wi::Color(79, 224, 160, 255);
+    constexpr wi::Color Warning = wi::Color(255, 180, 84, 255);
 
-    // Hit regions are authored against the owner-approved 1672x941 Hub plate.
-    // Keep these aligned with the visible controls rather than the rejected
-    // first-pass layout.
-    const XMFLOAT4 LeftNew = XMFLOAT4(100.0f, 178.0f, 382.0f, 273.0f);
-    const XMFLOAT4 LeftOpen = XMFLOAT4(100.0f, 278.0f, 382.0f, 375.0f);
-    const XMFLOAT4 LeftBack = XMFLOAT4(100.0f, 498.0f, 382.0f, 604.0f);
-    const XMFLOAT4 LeftExit = XMFLOAT4(100.0f, 716.0f, 382.0f, 810.0f);
-    const XMFLOAT4 Featured = XMFLOAT4(408.0f, 186.0f, 1147.0f, 636.0f);
-    const XMFLOAT4 LowerNew = XMFLOAT4(408.0f, 651.0f, 1147.0f, 817.0f);
-    const XMFLOAT4 LowerRecent0 = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
-    const XMFLOAT4 LowerRecent1 = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
-    const XMFLOAT4 LowerRecent2 = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
-    const XMFLOAT4 OpenSelected = XMFLOAT4(1188.0f, 733.0f, 1538.0f, 810.0f);
+    const XMFLOAT4 Header = XMFLOAT4(18.0f, 18.0f, 1654.0f, 122.0f);
+    const XMFLOAT4 LeftPanel = XMFLOAT4(28.0f, 142.0f, 394.0f, 800.0f);
+    const XMFLOAT4 CenterPanel = XMFLOAT4(414.0f, 142.0f, 1171.0f, 800.0f);
+    const XMFLOAT4 DetailsPanel = XMFLOAT4(1191.0f, 142.0f, 1644.0f, 800.0f);
+    const XMFLOAT4 Footer = XMFLOAT4(18.0f, 818.0f, 1654.0f, 923.0f);
+
+    const XMFLOAT4 LeftNew = XMFLOAT4(50.0f, 174.0f, 370.0f, 266.0f);
+    const XMFLOAT4 LeftOpen = XMFLOAT4(50.0f, 284.0f, 370.0f, 376.0f);
+    const XMFLOAT4 LeftImport = XMFLOAT4(50.0f, 394.0f, 370.0f, 486.0f);
+    const XMFLOAT4 LeftBack = XMFLOAT4(50.0f, 690.0f, 370.0f, 752.0f);
+
+    const XMFLOAT4 Preview = XMFLOAT4(435.0f, 188.0f, 1150.0f, 592.0f);
+    const XMFLOAT4 LowerNew = XMFLOAT4(435.0f, 614.0f, 1150.0f, 780.0f);
+    const XMFLOAT4 PreviousRecent = XMFLOAT4(1064.0f, 151.0f, 1097.0f, 181.0f);
+    const XMFLOAT4 NextRecent = XMFLOAT4(1111.0f, 151.0f, 1144.0f, 181.0f);
+
+    const XMFLOAT4 DetailsHero = XMFLOAT4(1213.0f, 188.0f, 1621.0f, 374.0f);
+    const XMFLOAT4 OpenSelected = XMFLOAT4(1213.0f, 708.0f, 1621.0f, 776.0f);
 
     void DrawRect(
         const float x,
@@ -54,18 +69,19 @@ namespace
         wi::image::Draw(nullptr, params, cmd);
     }
 
-    void DrawBorderedRect(
+    void DrawPanel(
         const XMFLOAT4& rect,
         const wi::Color fill,
         const wi::Color edge,
-        const wi::graphics::CommandList cmd)
+        const wi::graphics::CommandList cmd,
+        const float edgeWidth = 1.0f)
     {
         DrawRect(rect.x, rect.y, rect.z - rect.x, rect.w - rect.y, edge, cmd);
         DrawRect(
-            rect.x + 1.0f,
-            rect.y + 1.0f,
-            rect.z - rect.x - 2.0f,
-            rect.w - rect.y - 2.0f,
+            rect.x + edgeWidth,
+            rect.y + edgeWidth,
+            rect.z - rect.x - edgeWidth * 2.0f,
+            rect.w - rect.y - edgeWidth * 2.0f,
             fill,
             cmd);
     }
@@ -77,14 +93,15 @@ namespace
         const int size,
         const wi::Color color,
         const wi::graphics::CommandList cmd,
+        const int horizontal = wi::font::WIFALIGN_LEFT,
         const float tracking = 0.7f,
-        const float bolden = 0.12f)
+        const float bolden = 0.10f)
     {
         wi::font::Params params(
             x,
             y,
             size,
-            wi::font::WIFALIGN_LEFT,
+            horizontal,
             wi::font::WIFALIGN_TOP,
             color,
             wi::Color::Transparent());
@@ -120,6 +137,30 @@ namespace
             return "VULKAN";
         return "DX12";
     }
+
+    std::string ShortSourceRevision()
+    {
+        std::string revision = RENEGADE_SOURCE_REVISION;
+        if (revision.size() > 8u)
+            revision.resize(8u);
+        return UpperAscii(revision);
+    }
+
+    bool SupportedArtworkExtension(std::string extension)
+    {
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](const unsigned char c)
+        {
+            return static_cast<char>(std::tolower(c));
+        });
+        static constexpr std::array<const char*, 5> Supported =
+        {
+            ".jpg", ".jpeg", ".png", ".bmp", ".tga"
+        };
+        return std::any_of(Supported.begin(), Supported.end(), [&extension](const char* candidate)
+        {
+            return extension == candidate;
+        });
+    }
 }
 
 namespace renegade::studio
@@ -127,8 +168,7 @@ namespace renegade::studio
     void RenegadeProjectHub::Create()
     {
         SetName("Renegade-owned Project Hub");
-        conceptPlate_ = wi::resourcemanager::Load(
-            "Content/ui/renegade-project-hub-concept.jpg");
+        wordmark_ = wi::resourcemanager::Load("Content/ui/renegade-engine-wordmark.png");
         SetShadowRadius(0.0f);
         SetLayout(width_, height_);
     }
@@ -156,6 +196,11 @@ namespace renegade::studio
         std::vector<ProjectEntry> projects,
         const int selectedIndex)
     {
+        for (auto& project : projects)
+        {
+            if (project.artworkPath.empty())
+                project.artworkPath = FindPersistedArtwork(project);
+        }
         projects_ = std::move(projects);
         SetSelectedIndex(selectedIndex);
     }
@@ -166,9 +211,11 @@ namespace renegade::studio
             static_cast<std::size_t>(selectedIndex) >= projects_.size())
         {
             selectedIndex_ = -1;
+            projectArtwork_ = {};
             return;
         }
         selectedIndex_ = selectedIndex;
+        ReloadSelectedArtwork();
     }
 
     void RenegadeProjectHub::SetCurrentProject(
@@ -244,22 +291,20 @@ namespace renegade::studio
             return HoverTarget::NewProject;
         if (ContainsBase(point, LeftOpen))
             return HoverTarget::OpenProject;
+        if (ContainsBase(point, LeftImport))
+            return HoverTarget::ImportProject;
         if (currentProjectActive_ && ContainsBase(point, LeftBack))
             return HoverTarget::BackToEditor;
-        if (ContainsBase(point, LeftExit))
-            return HoverTarget::ExitRenegade;
-        if (selectedIndex_ >= 0 && ContainsBase(point, Featured))
-            return HoverTarget::FeaturedProject;
-        if (selectedIndex_ >= 0 && ContainsBase(point, OpenSelected))
-            return HoverTarget::OpenSelected;
         if (ContainsBase(point, LowerNew))
             return HoverTarget::LowerNewProject;
-        if (projects_.size() > 1u && ContainsBase(point, LowerRecent0))
-            return HoverTarget::Recent0;
-        if (projects_.size() > 2u && ContainsBase(point, LowerRecent1))
-            return HoverTarget::Recent1;
-        if (projects_.size() > 3u && ContainsBase(point, LowerRecent2))
-            return HoverTarget::Recent2;
+        if (selectedIndex_ >= 0 && ContainsBase(point, Preview))
+            return HoverTarget::ProjectPreview;
+        if (selectedIndex_ >= 0 && ContainsBase(point, OpenSelected))
+            return HoverTarget::OpenSelected;
+        if (projects_.size() > 1u && ContainsBase(point, PreviousRecent))
+            return HoverTarget::PreviousRecent;
+        if (projects_.size() > 1u && ContainsBase(point, NextRecent))
+            return HoverTarget::NextRecent;
         return HoverTarget::None;
     }
 
@@ -269,19 +314,167 @@ namespace renegade::studio
             action_(action);
     }
 
+    void RenegadeProjectHub::SelectRelativeRecent(const int delta)
+    {
+        if (projects_.empty())
+            return;
+        int next = selectedIndex_;
+        if (next < 0)
+            next = 0;
+        next += delta;
+        const int count = static_cast<int>(projects_.size());
+        if (next < 0)
+            next = count - 1;
+        else if (next >= count)
+            next = 0;
+        SetSelectedIndex(next);
+        if (recentProjectSelected_)
+            recentProjectSelected_(static_cast<std::size_t>(next));
+    }
+
+    std::string RenegadeProjectHub::FindPersistedArtwork(const ProjectEntry& entry)
+    {
+        fs::path root;
+        if (!entry.rootPath.empty())
+            root = fs::path(entry.rootPath);
+        else if (!entry.descriptorPath.empty())
+            root = fs::path(entry.descriptorPath).parent_path();
+        if (root.empty())
+            return {};
+
+        const fs::path folder = root / "Saved" / "ProjectHub";
+        static constexpr std::array<const char*, 5> Extensions =
+        {
+            ".jpg", ".jpeg", ".png", ".bmp", ".tga"
+        };
+        std::error_code error;
+        for (const char* extension : Extensions)
+        {
+            const fs::path candidate = folder / (std::string("project-preview") + extension);
+            if (fs::is_regular_file(candidate, error))
+                return candidate.u8string();
+            error.clear();
+        }
+        return {};
+    }
+
+    void RenegadeProjectHub::ReloadSelectedArtwork()
+    {
+        projectArtwork_ = {};
+        if (selectedIndex_ < 0 ||
+            static_cast<std::size_t>(selectedIndex_) >= projects_.size())
+            return;
+
+        auto& project = projects_[static_cast<std::size_t>(selectedIndex_)];
+        if (project.artworkPath.empty())
+            project.artworkPath = FindPersistedArtwork(project);
+        if (!project.artworkPath.empty())
+            projectArtwork_ = wi::resourcemanager::Load(project.artworkPath);
+    }
+
+    void RenegadeProjectHub::BeginChooseProjectArtwork()
+    {
+        if (selectedIndex_ < 0 ||
+            static_cast<std::size_t>(selectedIndex_) >= projects_.size())
+            return;
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Project Screenshot";
+        params.extensions.push_back("jpg");
+        params.extensions.push_back("jpeg");
+        params.extensions.push_back("png");
+        params.extensions.push_back("bmp");
+        params.extensions.push_back("tga");
+
+        wi::helper::FileDialog(
+            params,
+            [this](const std::string& selectedPath)
+            {
+                if (selectedPath.empty())
+                    return;
+
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, selectedPath](uint64_t)
+                    {
+                        if (selectedIndex_ < 0 ||
+                            static_cast<std::size_t>(selectedIndex_) >= projects_.size())
+                            return;
+
+                        auto& project = projects_[static_cast<std::size_t>(selectedIndex_)];
+                        fs::path root;
+                        if (!project.rootPath.empty())
+                            root = fs::path(project.rootPath);
+                        else if (!project.descriptorPath.empty())
+                            root = fs::path(project.descriptorPath).parent_path();
+                        if (root.empty())
+                            return;
+
+                        fs::path source(selectedPath);
+                        std::string extension = source.extension().u8string();
+                        std::transform(
+                            extension.begin(),
+                            extension.end(),
+                            extension.begin(),
+                            [](const unsigned char c)
+                            {
+                                return static_cast<char>(std::tolower(c));
+                            });
+                        if (!SupportedArtworkExtension(extension))
+                            return;
+
+                        const fs::path folder = root / "Saved" / "ProjectHub";
+                        std::error_code error;
+                        fs::create_directories(folder, error);
+                        if (error)
+                            return;
+
+                        static constexpr std::array<const char*, 5> Extensions =
+                        {
+                            ".jpg", ".jpeg", ".png", ".bmp", ".tga"
+                        };
+                        for (const char* existingExtension : Extensions)
+                        {
+                            error.clear();
+                            fs::remove(
+                                folder / (std::string("project-preview") + existingExtension),
+                                error);
+                        }
+
+                        const fs::path destination =
+                            folder / (std::string("project-preview") + extension);
+                        error.clear();
+                        fs::copy_file(
+                            source,
+                            destination,
+                            fs::copy_options::overwrite_existing,
+                            error);
+                        if (error)
+                            return;
+
+                        project.artworkPath = destination.u8string();
+                        ReloadSelectedArtwork();
+                        statusText_ = projectArtwork_.IsValid()
+                            ? "PROJECT SCREENSHOT // UPDATED"
+                            : "PROJECT SCREENSHOT // LOAD FAILED";
+                    });
+            });
+    }
+
     XMFLOAT4 RenegadeProjectHub::NewProjectInputBounds() const noexcept
     {
-        return ToScreen(XMFLOAT4(612.0f, 405.0f, 1060.0f, 445.0f));
+        return ToScreen(XMFLOAT4(604.0f, 406.0f, 1068.0f, 448.0f));
     }
 
     XMFLOAT4 RenegadeProjectHub::NewProjectConfirmBounds() const noexcept
     {
-        return ToScreen(XMFLOAT4(612.0f, 463.0f, 826.0f, 510.0f));
+        return ToScreen(XMFLOAT4(604.0f, 468.0f, 828.0f, 518.0f));
     }
 
     XMFLOAT4 RenegadeProjectHub::NewProjectCancelBounds() const noexcept
     {
-        return ToScreen(XMFLOAT4(846.0f, 463.0f, 1060.0f, 510.0f));
+        return ToScreen(XMFLOAT4(844.0f, 468.0f, 1068.0f, 518.0f));
     }
 
     void RenegadeProjectHub::Update(
@@ -326,27 +519,23 @@ namespace renegade::studio
         case HoverTarget::OpenProject:
             Invoke(Action::OpenProject);
             break;
+        case HoverTarget::ImportProject:
+            Invoke(Action::OpenProject);
+            break;
         case HoverTarget::BackToEditor:
             Invoke(Action::BackToEditor);
             break;
-        case HoverTarget::ExitRenegade:
-            Invoke(Action::ExitRenegade);
+        case HoverTarget::ProjectPreview:
+            BeginChooseProjectArtwork();
             break;
-        case HoverTarget::FeaturedProject:
         case HoverTarget::OpenSelected:
             Invoke(Action::OpenSelectedProject);
             break;
-        case HoverTarget::Recent0:
-            if (recentProjectSelected_)
-                recentProjectSelected_(1u);
+        case HoverTarget::PreviousRecent:
+            SelectRelativeRecent(-1);
             break;
-        case HoverTarget::Recent1:
-            if (recentProjectSelected_)
-                recentProjectSelected_(2u);
-            break;
-        case HoverTarget::Recent2:
-            if (recentProjectSelected_)
-                recentProjectSelected_(3u);
+        case HoverTarget::NextRecent:
+            SelectRelativeRecent(1);
             break;
         case HoverTarget::None:
         default:
@@ -361,36 +550,25 @@ namespace renegade::studio
         if (!IsVisible())
             return;
 
-        DrawRect(0.0f, 0.0f, width_, height_, InkSolid, cmd);
-
-        const bool plateReady = conceptPlate_.IsValid();
-        if (plateReady)
-        {
-            wi::image::Params plate(
-                offsetX_,
-                offsetY_,
-                DesignWidth * scale_,
-                DesignHeight * scale_);
-            plate.blendFlag = wi::enums::BLENDMODE_ALPHA;
-            plate.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
-            wi::image::Draw(&conceptPlate_.GetTexture(), plate, cmd);
-        }
+        DrawRect(0.0f, 0.0f, width_, height_, Background, cmd);
 
         const auto sx = [this](const float value) { return offsetX_ + value * scale_; };
         const auto sy = [this](const float value) { return offsetY_ + value * scale_; };
         const auto sw = [this](const float value) { return value * scale_; };
+        const auto screen = [this](const XMFLOAT4& rect) { return ToScreen(rect); };
         const auto fontSize = [this](const int value)
         {
             return std::max(8, static_cast<int>(std::round(value * scale_)));
         };
-        const auto text = [&] (
+        const auto text = [&](
             const std::string& value,
             const float x,
             const float y,
             const int size,
             const wi::Color color,
+            const int align = wi::font::WIFALIGN_LEFT,
             const float tracking = 0.7f,
-            const float bolden = 0.12f)
+            const float bolden = 0.10f)
         {
             DrawText(
                 value,
@@ -399,164 +577,307 @@ namespace renegade::studio
                 fontSize(size),
                 color,
                 cmd,
+                align,
                 tracking * scale_,
                 bolden);
         };
-        const auto mask = [&] (
-            const float x,
-            const float y,
-            const float width,
-            const float height,
-            const wi::Color color = Ink)
+        const auto panel = [&](const XMFLOAT4& rect, const wi::Color fill, const wi::Color edge)
         {
-            DrawRect(sx(x), sy(y), sw(width), sw(height), color, cmd);
+            DrawPanel(screen(rect), fill, edge, cmd, std::max(1.0f, scale_));
         };
-        const auto bordered = [&] (
-            const XMFLOAT4& base,
-            const wi::Color fill,
-            const wi::Color edge)
+        const auto line = [&](const float x, const float y, const float width, const wi::Color color)
         {
-            DrawBorderedRect(ToScreen(base), fill, edge, cmd);
+            DrawRect(sx(x), sy(y), sw(width), std::max(1.0f, scale_), color, cmd);
         };
 
-        if (!plateReady)
+        for (float x = 28.0f; x <= 1644.0f; x += 34.0f)
+            DrawRect(sx(x), sy(142.0f), std::max(1.0f, scale_ * 0.5f), sw(658.0f), wi::Color(36, 72, 89, 22), cmd);
+        for (float y = 142.0f; y <= 800.0f; y += 34.0f)
+            DrawRect(sx(28.0f), sy(y), sw(1616.0f), std::max(1.0f, scale_ * 0.5f), wi::Color(36, 72, 89, 22), cmd);
+
+        panel(Header, PanelDeep, Border);
+        panel(LeftPanel, Panel, Border);
+        panel(CenterPanel, Panel, Border);
+        panel(DetailsPanel, Panel, Border);
+        panel(Footer, PanelDeep, Border);
+
+        if (wordmark_.IsValid())
         {
-            text("PROJECT HUB VISUAL ASSET FAILED TO LOAD", 548.0f, 115.0f, 14, Danger, 1.1f, 0.16f);
+            const auto desc = wordmark_.GetTexture().GetDesc();
+            const float targetWidth = sw(205.0f);
+            const float targetHeight = sw(58.0f);
+            float drawWidth = targetWidth;
+            float drawHeight = targetHeight;
+            if (desc.width > 0 && desc.height > 0)
+            {
+                const float aspect = static_cast<float>(desc.width) / static_cast<float>(desc.height);
+                drawHeight = drawWidth / aspect;
+                if (drawHeight > targetHeight)
+                {
+                    drawHeight = targetHeight;
+                    drawWidth = drawHeight * aspect;
+                }
+            }
+            wi::image::Params logo(
+                sx(48.0f),
+                sy(42.0f),
+                drawWidth,
+                drawHeight);
+            logo.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            logo.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
+            wi::image::Draw(&wordmark_.GetTexture(), logo, cmd);
         }
 
-        // The plate carries the permanent authored chrome. Only live identity,
-        // project data and truthful runtime values are painted over it.
-        mask(1368.0f, 34.0f, 264.0f, 78.0f, wi::Color(5, 12, 17, 248));
+        line(520.0f, 70.0f, 150.0f, BorderBright);
+        line(1002.0f, 70.0f, 150.0f, BorderBright);
+        text("PROJECT HUB", 836.0f, 49.0f, 28, TextStrong, wi::font::WIFALIGN_CENTER, 2.9f, 0.10f);
         text(
             "WELCOME, " + UpperAscii(Ellipsize(developerIdentity_, 24u)),
-            1390.0f,
-            47.0f,
-            16,
+            1608.0f,
+            43.0f,
+            15,
             TextStrong,
-            1.35f,
-            0.15f);
-        text("SYSTEM NOMINAL", 1454.0f, 82.0f, 9, Success, 1.0f, 0.14f);
-        DrawRect(sx(1601.0f), sy(84.0f), sw(6.0f), sw(6.0f), Success, cmd);
+            wi::font::WIFALIGN_RIGHT,
+            1.1f,
+            0.10f);
+        text("SYSTEM NOMINAL", 1608.0f, 76.0f, 10, Success, wi::font::WIFALIGN_RIGHT, 0.8f, 0.12f);
+        DrawRect(sx(1619.0f), sy(78.0f), sw(7.0f), sw(7.0f), Success, cmd);
 
-        // BACK TO EDITOR exists only when there is a real active project.
-        // The approved plate illustrates the active state, so blank that row
-        // when the Hub is startup-only and replace only its live subtitle
-        // while a project is active.
-        if (!currentProjectActive_)
+        const auto actionButton = [&](const XMFLOAT4& rect, const char* icon, const char* labelText, const HoverTarget target)
         {
-            mask(104.0f, 499.0f, 276.0f, 106.0f, wi::Color(5, 13, 18, 248));
+            const bool hover = hovered_ == target;
+            panel(rect, hover ? PanelRaised : PanelDeep, hover ? CyanDim : Border);
+            const XMFLOAT4 r = rect;
+            panel(
+                XMFLOAT4(r.x + 16.0f, r.y + 16.0f, r.x + 78.0f, r.w - 16.0f),
+                Panel,
+                hover ? Cyan : BorderBright);
+            text(icon, r.x + 47.0f, r.y + 27.0f, 29, hover ? Cyan : Text, wi::font::WIFALIGN_CENTER, 0.0f, 0.02f);
+            text(labelText, r.x + 98.0f, r.y + 34.0f, 14, TextStrong, wi::font::WIFALIGN_LEFT, 1.0f, 0.11f);
+            text(">", r.z - 24.0f, r.y + 34.0f, 18, hover ? Orange : Dim, wi::font::WIFALIGN_CENTER, 0.0f, 0.10f);
+        };
+
+        actionButton(LeftNew, "+", "NEW PROJECT", HoverTarget::NewProject);
+        actionButton(LeftOpen, "[]", "OPEN PROJECT", HoverTarget::OpenProject);
+        actionButton(LeftImport, "v", "IMPORT PROJECT", HoverTarget::ImportProject);
+
+        if (currentProjectActive_)
+        {
+            const bool hover = hovered_ == HoverTarget::BackToEditor;
+            panel(LeftBack, hover ? PanelRaised : PanelDeep, hover ? CyanDim : Border);
+            text("BACK TO EDITOR", 70.0f, 706.0f, 12, hover ? Cyan : TextStrong, wi::font::WIFALIGN_LEFT, 0.9f, 0.11f);
+            text(UpperAscii(Ellipsize(currentProjectName_, 28u)), 70.0f, 730.0f, 8, Muted, wi::font::WIFALIGN_LEFT, 0.4f, 0.08f);
+        }
+
+        text("PROJECT ACTIONS", 52.0f, 512.0f, 9, Dim, wi::font::WIFALIGN_LEFT, 1.2f, 0.10f);
+        text("LOCAL PROJECT FILESYSTEM", 52.0f, 536.0f, 8, Muted, wi::font::WIFALIGN_LEFT, 0.5f, 0.07f);
+
+        text("RECENT PROJECTS", 435.0f, 154.0f, 15, TextStrong, wi::font::WIFALIGN_LEFT, 1.4f, 0.11f);
+        const std::string countLabel = projects_.empty()
+            ? "00 / 00"
+            : (selectedIndex_ >= 0
+                ? (std::to_string(selectedIndex_ + 1) + " / " + std::to_string(projects_.size()))
+                : ("-- / " + std::to_string(projects_.size())));
+        text(countLabel, 1048.0f, 156.0f, 9, Muted, wi::font::WIFALIGN_RIGHT, 0.5f, 0.08f);
+        if (projects_.size() > 1u)
+        {
+            panel(PreviousRecent, PanelDeep, hovered_ == HoverTarget::PreviousRecent ? CyanDim : Border);
+            panel(NextRecent, PanelDeep, hovered_ == HoverTarget::NextRecent ? CyanDim : Border);
+            text("<", 1080.0f, 156.0f, 12, hovered_ == HoverTarget::PreviousRecent ? Cyan : Muted, wi::font::WIFALIGN_CENTER, 0.0f, 0.10f);
+            text(">", 1127.0f, 156.0f, 12, hovered_ == HoverTarget::NextRecent ? Cyan : Muted, wi::font::WIFALIGN_CENTER, 0.0f, 0.10f);
+        }
+
+        const bool hasSelected =
+            selectedIndex_ >= 0 &&
+            static_cast<std::size_t>(selectedIndex_) < projects_.size();
+
+        panel(Preview, PanelDeep, hovered_ == HoverTarget::ProjectPreview ? CyanDim : BorderBright);
+        if (projectArtwork_.IsValid())
+        {
+            const auto desc = projectArtwork_.GetTexture().GetDesc();
+            const float availableWidth = Preview.z - Preview.x - 8.0f;
+            const float availableHeight = Preview.w - Preview.y - 8.0f;
+            float drawWidth = availableWidth;
+            float drawHeight = availableHeight;
+            if (desc.width > 0 && desc.height > 0)
+            {
+                const float aspect = static_cast<float>(desc.width) / static_cast<float>(desc.height);
+                drawHeight = drawWidth / aspect;
+                if (drawHeight > availableHeight)
+                {
+                    drawHeight = availableHeight;
+                    drawWidth = drawHeight * aspect;
+                }
+            }
+            const float imageX = Preview.x + (Preview.z - Preview.x - drawWidth) * 0.5f;
+            const float imageY = Preview.y + (Preview.w - Preview.y - drawHeight) * 0.5f;
+            wi::image::Params image(sx(imageX), sy(imageY), sw(drawWidth), sw(drawHeight));
+            image.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
+            wi::image::Draw(&projectArtwork_.GetTexture(), image, cmd);
+            DrawRect(sx(Preview.x + 10.0f), sy(Preview.w - 40.0f), sw(Preview.z - Preview.x - 20.0f), sw(28.0f), wi::Color(3, 8, 12, 205), cmd);
+            if (hasSelected)
+            {
+                text(
+                    UpperAscii(Ellipsize(projects_[static_cast<std::size_t>(selectedIndex_)].name, 48u)),
+                    Preview.x + 20.0f,
+                    Preview.w - 34.0f,
+                    9,
+                    TextStrong,
+                    wi::font::WIFALIGN_LEFT,
+                    0.7f,
+                    0.10f);
+            }
         }
         else
         {
-            mask(192.0f, 558.0f, 176.0f, 24.0f, wi::Color(5, 13, 18, 248));
-            text(UpperAscii(Ellipsize(currentProjectName_, 24u)), 193.0f, 560.0f, 8, Muted, 0.45f, 0.10f);
-        }
+            for (float x = Preview.x + 20.0f; x < Preview.z - 20.0f; x += 42.0f)
+                DrawRect(sx(x), sy(Preview.y + 20.0f), std::max(1.0f, scale_ * 0.45f), sw(Preview.w - Preview.y - 40.0f), wi::Color(95, 216, 255, 20), cmd);
+            for (float y = Preview.y + 20.0f; y < Preview.w - 20.0f; y += 42.0f)
+                DrawRect(sx(Preview.x + 20.0f), sy(y), sw(Preview.z - Preview.x - 40.0f), std::max(1.0f, scale_ * 0.45f), wi::Color(95, 216, 255, 20), cmd);
 
-        if (hovered_ == HoverTarget::NewProject)
-            bordered(LeftNew, wi::Color::Transparent(), Orange);
-        if (hovered_ == HoverTarget::OpenProject)
-            bordered(LeftOpen, wi::Color::Transparent(), Orange);
-        if (currentProjectActive_ && hovered_ == HoverTarget::BackToEditor)
-            bordered(LeftBack, wi::Color::Transparent(), Cyan);
-        if (hovered_ == HoverTarget::ExitRenegade)
-            bordered(LeftExit, wi::Color::Transparent(), Danger);
-
-        // The centre preview stays honestly empty until Gate 4/user capture.
-        // Only the lower metadata strip is live.
-        mask(411.0f, 527.0f, 733.0f, 106.0f, wi::Color(5, 15, 21, 250));
-        if (selectedIndex_ >= 0 &&
-            static_cast<std::size_t>(selectedIndex_) < projects_.size())
-        {
-            const auto& selected = projects_[static_cast<std::size_t>(selectedIndex_)];
-            text(UpperAscii(Ellipsize(selected.name, 38u)), 432.0f, 546.0f, 20, TextStrong, 1.15f, 0.14f);
+            text(hasSelected ? "NO PREVIEW LOADED" : "NO RECENT PROJECTS", 792.0f, 367.0f, 15, TextStrong, wi::font::WIFALIGN_CENTER, 1.1f, 0.11f);
             text(
-                UpperAscii(Ellipsize(selected.rootPath.empty() ? selected.descriptorPath : selected.rootPath, 67u)),
-                432.0f,
-                582.0f,
-                8,
-                Cyan,
-                0.35f,
-                0.10f);
-            text(
-                "FORMAT // V" + std::to_string(selected.formatVersion),
-                1030.0f,
-                579.0f,
-                8,
-                Text,
-                0.45f,
-                0.10f);
-            text(
-                selected.descriptorValid ? "READY" : "WARNING",
-                1060.0f,
-                607.0f,
+                hasSelected ? "CLICK TO SET FROM LOCAL STORAGE" : "CREATE A NEW PROJECT OR OPEN AN EXISTING RENEGADE PROJECT",
+                792.0f,
+                401.0f,
                 9,
-                selected.descriptorValid ? Success : Danger,
-                0.55f,
-                0.12f);
-            if (hovered_ == HoverTarget::FeaturedProject)
-                bordered(Featured, wi::Color::Transparent(), Cyan);
+                hasSelected ? CyanDim : Muted,
+                wi::font::WIFALIGN_CENTER,
+                0.6f,
+                0.08f);
+        }
+
+        if (hasSelected)
+        {
+            const auto& selected = projects_[static_cast<std::size_t>(selectedIndex_)];
+            text("SELECTED // " + UpperAscii(Ellipsize(selected.name, 40u)), 448.0f, 565.0f, 8, Muted, wi::font::WIFALIGN_LEFT, 0.45f, 0.08f);
+        }
+
+        const bool lowerHover = hovered_ == HoverTarget::LowerNewProject;
+        panel(LowerNew, lowerHover ? PanelRaised : PanelDeep, lowerHover ? CyanDim : Border);
+        panel(XMFLOAT4(459.0f, 640.0f, 568.0f, 752.0f), Panel, lowerHover ? Cyan : BorderBright);
+        text("+", 513.5f, 661.0f, 43, lowerHover ? Cyan : Text, wi::font::WIFALIGN_CENTER, 0.0f, 0.01f);
+        line(592.0f, 642.0f, 1.0f, BorderBright);
+        text("NEW PROJECT", 620.0f, 652.0f, 20, TextStrong, wi::font::WIFALIGN_LEFT, 1.4f, 0.10f);
+        text("CREATE A NEW PROJECT", 620.0f, 690.0f, 9, Muted, wi::font::WIFALIGN_LEFT, 1.1f, 0.08f);
+        text("Start and save a Renegade project to your local system.", 620.0f, 719.0f, 9, Dim, wi::font::WIFALIGN_LEFT, 0.35f, 0.06f);
+
+        text("PROJECT DETAILS", 1213.0f, 154.0f, 15, TextStrong, wi::font::WIFALIGN_LEFT, 1.4f, 0.11f);
+        panel(DetailsHero, PanelDeep, BorderBright);
+        if (projectArtwork_.IsValid())
+        {
+            const auto desc = projectArtwork_.GetTexture().GetDesc();
+            const float availableWidth = DetailsHero.z - DetailsHero.x - 8.0f;
+            const float availableHeight = DetailsHero.w - DetailsHero.y - 8.0f;
+            float drawWidth = availableWidth;
+            float drawHeight = availableHeight;
+            if (desc.width > 0 && desc.height > 0)
+            {
+                const float aspect = static_cast<float>(desc.width) / static_cast<float>(desc.height);
+                drawHeight = drawWidth / aspect;
+                if (drawHeight > availableHeight)
+                {
+                    drawHeight = availableHeight;
+                    drawWidth = drawHeight * aspect;
+                }
+            }
+            const float imageX = DetailsHero.x + (DetailsHero.z - DetailsHero.x - drawWidth) * 0.5f;
+            const float imageY = DetailsHero.y + (DetailsHero.w - DetailsHero.y - drawHeight) * 0.5f;
+            wi::image::Params image(sx(imageX), sy(imageY), sw(drawWidth), sw(drawHeight));
+            image.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
+            wi::image::Draw(&projectArtwork_.GetTexture(), image, cmd);
         }
         else
         {
-            text("NO RECENT PROJECT SELECTED", 432.0f, 548.0f, 18, TextStrong, 1.0f, 0.14f);
-            text("CREATE A NEW PROJECT OR OPEN AN EXISTING .RENEGADE PROJECT", 432.0f, 582.0f, 8, Muted, 0.35f, 0.10f);
+            text("RENEGADE", 1417.0f, 257.0f, 18, Dim, wi::font::WIFALIGN_CENTER, 2.0f, 0.10f);
+            text("PROJECT", 1417.0f, 291.0f, 9, CyanDim, wi::font::WIFALIGN_CENTER, 1.5f, 0.08f);
         }
 
-        // Preserve the authored NEW PROJECT tile rather than repainting it as
-        // a flat widget. Hover adds only a thin interaction outline.
-        if (hovered_ == HoverTarget::LowerNewProject)
-            bordered(LowerNew, wi::Color::Transparent(), Orange);
+        float detailY = 394.0f;
+        const auto detail = [&](const char* label, const std::string& value, const wi::Color valueColor = Text)
+        {
+            text(label, 1214.0f, detailY, 8, Dim, wi::font::WIFALIGN_LEFT, 0.8f, 0.08f);
+            text(value, 1214.0f, detailY + 20.0f, 9, valueColor, wi::font::WIFALIGN_LEFT, 0.35f, 0.08f);
+            detailY += 54.0f;
+            line(1214.0f, detailY - 10.0f, 405.0f, Border);
+        };
 
-        // The approved plate already contains the correct no-selection state.
-        // Replace the detail body only when a real recent project is selected.
-        if (selectedIndex_ >= 0 &&
-            static_cast<std::size_t>(selectedIndex_) < projects_.size())
+        if (hasSelected)
         {
             const auto& selected = projects_[static_cast<std::size_t>(selectedIndex_)];
-            mask(1188.0f, 388.0f, 341.0f, 334.0f, wi::Color(5, 14, 19, 250));
-            text("PROJECT NAME", 1207.0f, 405.0f, 8, Muted, 0.55f, 0.10f);
-            text(UpperAscii(Ellipsize(selected.name, 28u)), 1207.0f, 428.0f, 10, TextStrong, 0.45f, 0.13f);
-            text("PROJECT PATH", 1207.0f, 474.0f, 8, Muted, 0.55f, 0.10f);
-            text(Ellipsize(selected.rootPath.empty() ? selected.descriptorPath : selected.rootPath, 40u), 1207.0f, 497.0f, 8, Text, 0.22f, 0.10f);
-            text("STATUS", 1207.0f, 544.0f, 8, Muted, 0.55f, 0.10f);
-            text(selected.descriptorValid ? "READY" : "DESCRIPTOR WARNING", 1322.0f, 544.0f, 8, selected.descriptorValid ? Success : Danger, 0.45f, 0.11f);
-            text("ENGINE / PROJECT FORMAT", 1207.0f, 588.0f, 8, Muted, 0.55f, 0.10f);
-            text("RENEGADE PROJECT V" + std::to_string(selected.formatVersion), 1207.0f, 611.0f, 8, Text, 0.32f, 0.10f);
-            text("STARTUP SCENE", 1207.0f, 653.0f, 8, Muted, 0.55f, 0.10f);
-            text(Ellipsize(selected.startupScene.empty() ? "Content/Scenes/Main.wiscene" : selected.startupScene, 40u), 1207.0f, 676.0f, 8, Text, 0.22f, 0.10f);
-
-            mask(1190.0f, 737.0f, 345.0f, 70.0f, SurfaceRaised);
-            bordered(
-                OpenSelected,
-                SurfaceRaised,
-                hovered_ == HoverTarget::OpenSelected ? Cyan : Border);
-            text("OPEN PROJECT  >>", 1240.0f, 758.0f, 16, TextStrong, 0.9f, 0.15f);
+            detail("PROJECT NAME", UpperAscii(Ellipsize(selected.name, 42u)), TextStrong);
+            detail("STATUS", selected.descriptorValid ? "READY" : "DESCRIPTOR WARNING", selected.descriptorValid ? Success : Warning);
+            detail("ENGINE / PROJECT FORMAT", "RENEGADE PROJECT V" + std::to_string(selected.formatVersion), Text);
+            detail("PROJECT PATH", Ellipsize(selected.rootPath.empty() ? selected.descriptorPath : selected.rootPath, 52u), CyanDim);
+            detail("STARTUP SCENE", Ellipsize(selected.startupScene.empty() ? "Content/Scenes/Main.wiscene" : selected.startupScene, 52u), Muted);
+        }
+        else
+        {
+            detail("PROJECT NAME", "NO PROJECT SELECTED", Muted);
+            detail("STATUS", "-", Dim);
+            detail("ENGINE / PROJECT FORMAT", "RENEGADE PROJECT", Text);
+            detail("PROJECT PATH", "-", Dim);
+            detail("STARTUP SCENE", "-", Dim);
         }
 
-        // Preserve the technical footer frame/dividers from the authored
-        // plate, but never lie about live telemetry that Gate 3 does not own.
-        mask(58.0f, 883.0f, 116.0f, 29.0f, wi::Color(5, 13, 18, 248));
-        text("NOMINAL", 65.0f, 888.0f, 9, Success, 0.55f, 0.12f);
-        mask(210.0f, 883.0f, 92.0f, 29.0f, wi::Color(5, 13, 18, 248));
-        text("DEV", 212.0f, 888.0f, 9, TextStrong, 0.55f, 0.12f);
-        mask(337.0f, 883.0f, 120.0f, 29.0f, wi::Color(5, 13, 18, 248));
-        text(BackendLabel(), 340.0f, 888.0f, 9, TextStrong, 0.55f, 0.12f);
-        mask(500.0f, 883.0f, 145.0f, 29.0f, wi::Color(5, 13, 18, 248));
-        text("WINDOWS PC", 503.0f, 888.0f, 9, TextStrong, 0.55f, 0.12f);
-        mask(932.0f, 883.0f, 218.0f, 33.0f, wi::Color(5, 13, 18, 248));
-        text("N/A", 936.0f, 888.0f, 9, Muted, 0.55f, 0.12f);
-        mask(1192.0f, 883.0f, 168.0f, 33.0f, wi::Color(5, 13, 18, 248));
-        text("N/A", 1197.0f, 888.0f, 9, Muted, 0.55f, 0.12f);
-        mask(1410.0f, 883.0f, 174.0f, 33.0f, wi::Color(5, 13, 18, 248));
-        text("N/A", 1415.0f, 888.0f, 9, Muted, 0.55f, 0.12f);
+        panel(
+            OpenSelected,
+            hasSelected ? PanelRaised : PanelDeep,
+            hasSelected
+                ? (hovered_ == HoverTarget::OpenSelected ? Cyan : CyanDim)
+                : Border);
+        text(
+            "OPEN PROJECT  >>",
+            1417.0f,
+            726.0f,
+            17,
+            hasSelected ? TextStrong : Dim,
+            wi::font::WIFALIGN_CENTER,
+            1.2f,
+            0.10f);
+
+        text("SYSTEM STATUS", 50.0f, 843.0f, 8, Dim, wi::font::WIFALIGN_LEFT, 0.8f, 0.08f);
+        text("OPTIMAL", 50.0f, 870.0f, 11, Success, wi::font::WIFALIGN_LEFT, 0.7f, 0.10f);
+        line(180.0f, 836.0f, 1.0f, Border);
+        text("SOURCE", 205.0f, 843.0f, 8, Dim, wi::font::WIFALIGN_LEFT, 0.8f, 0.08f);
+        text(ShortSourceRevision(), 205.0f, 870.0f, 10, Text, wi::font::WIFALIGN_LEFT, 0.5f, 0.08f);
+        line(330.0f, 836.0f, 1.0f, Border);
+        text("RENDER BACKEND", 355.0f, 843.0f, 8, Dim, wi::font::WIFALIGN_LEFT, 0.8f, 0.08f);
+        text(BackendLabel(), 355.0f, 870.0f, 10, Text, wi::font::WIFALIGN_LEFT, 0.6f, 0.08f);
+        line(510.0f, 836.0f, 1.0f, Border);
+        text("TARGET PLATFORM", 535.0f, 843.0f, 8, Dim, wi::font::WIFALIGN_LEFT, 0.8f, 0.08f);
+        text("WINDOWS PC", 535.0f, 870.0f, 10, Text, wi::font::WIFALIGN_LEFT, 0.6f, 0.08f);
+
+        const std::string status =
+            statusProvider_ ? statusProvider_() : statusText_;
+        text(
+            UpperAscii(Ellipsize(status, 66u)),
+            1620.0f,
+            855.0f,
+            9,
+            Muted,
+            wi::font::WIFALIGN_RIGHT,
+            0.45f,
+            0.08f);
+        text(
+            "RECENT PROJECTS // " + std::to_string(projects_.size()),
+            1620.0f,
+            882.0f,
+            8,
+            Dim,
+            wi::font::WIFALIGN_RIGHT,
+            0.45f,
+            0.08f);
 
         if (newProjectMode_)
         {
-            mask(0.0f, 0.0f, DesignWidth, DesignHeight, wi::Color(0, 4, 7, 185));
-            bordered(XMFLOAT4(560.0f, 337.0f, 1112.0f, 554.0f), SurfaceRaised, CyanSoft);
-            text("CREATE NEW PROJECT", 612.0f, 360.0f, 20, TextStrong, 1.2f, 0.15f);
-            text("PROJECT NAME", 612.0f, 393.0f, 8, Muted, 0.8f, 0.10f);
-            text("Choose a name now. Folder selection follows after CREATE PROJECT.", 612.0f, 526.0f, 8, Muted, 0.25f, 0.10f);
+            DrawRect(sx(0.0f), sy(0.0f), sw(DesignWidth), sw(DesignHeight), wi::Color(0, 4, 7, 194), cmd);
+            panel(XMFLOAT4(548.0f, 328.0f, 1124.0f, 558.0f), PanelRaised, CyanDim);
+            text("CREATE NEW PROJECT", 604.0f, 354.0f, 21, TextStrong, wi::font::WIFALIGN_LEFT, 1.3f, 0.11f);
+            text("PROJECT NAME", 604.0f, 390.0f, 8, Muted, wi::font::WIFALIGN_LEFT, 0.8f, 0.08f);
+            text("Choose a project name, then select the local parent folder.", 604.0f, 531.0f, 8, Muted, wi::font::WIFALIGN_LEFT, 0.35f, 0.07f);
         }
     }
 }
