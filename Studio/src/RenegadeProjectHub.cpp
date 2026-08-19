@@ -93,7 +93,7 @@ namespace
         const int size,
         const wi::Color color,
         const wi::graphics::CommandList cmd,
-        const int horizontal = wi::font::WIFALIGN_LEFT,
+        const wi::font::Alignment horizontal = wi::font::WIFALIGN_LEFT,
         const float tracking = 0.7f,
         const float bolden = 0.10f)
     {
@@ -560,13 +560,13 @@ namespace renegade::studio
         {
             return std::max(8, static_cast<int>(std::round(value * scale_)));
         };
-        const auto text = [&](
+        const auto text = [&] (
             const std::string& value,
             const float x,
             const float y,
             const int size,
             const wi::Color color,
-            const int align = wi::font::WIFALIGN_LEFT,
+            const wi::font::Alignment align = wi::font::WIFALIGN_LEFT,
             const float tracking = 0.7f,
             const float bolden = 0.10f)
         {
