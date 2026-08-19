@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <map>
 #include <set>
 #include <sstream>
 #include <utility>
@@ -362,10 +363,23 @@ namespace renegade::bridge
         std::set<StableId> uniqueTextureAssetIds;
         for (const auto& binding : bindings)
             uniqueTextureAssetIds.insert(binding.textureAssetId);
+        result.uniqueAssetIds = uniqueTextureAssetIds.size();
+
+        struct CachedRestoreAsset
+        {
+            bool prepareAttempted = false;
+            bool preparedSuccessfully = false;
+            bool loadAttempted = false;
+            bool loadedSuccessfully = false;
+            PreparedMaterialTextureAsset prepared;
+            wi::Resource resource;
+            std::string error;
+        };
+        std::map<StableId, CachedRestoreAsset> cache;
 
         std::size_t failureCount = 0;
-        std::size_t alreadyLiveCount = 0;
         double prepareMilliseconds = 0.0;
+        double loadMilliseconds = 0.0;
         double applyMilliseconds = 0.0;
         std::string firstFailure;
         for (const auto& binding : bindings)
@@ -382,47 +396,74 @@ namespace renegade::bridge
             auto& texture = material->textures[WickedTextureSlot(binding.slot)];
             if (texture.resource.IsValid() && texture.name.empty())
             {
-                ++alreadyLiveCount;
+                ++result.alreadyLive;
                 continue;
             }
 
-            PreparedMaterialTextureAsset prepared;
-            std::string bindingError;
-            const auto prepareStarted = diagnostics::LifecycleClock::now();
-            const bool preparedSuccessfully = PrepareMaterialTextureAsset(
-                projectRoot, projectId, binding.textureAssetId,
-                prepared, bindingError);
-            prepareMilliseconds += diagnostics::MillisecondsSince(prepareStarted);
-
-            bool appliedSuccessfully = false;
-            if (preparedSuccessfully)
+            auto& cached = cache[binding.textureAssetId];
+            if (!cached.prepareAttempted)
             {
-                const auto applyStarted = diagnostics::LifecycleClock::now();
-                appliedSuccessfully = ApplyPreparedMaterialTextureAsset(
-                    scene, binding.materialEntity, binding.slot,
-                    prepared, loader, bindingError);
-                applyMilliseconds += diagnostics::MillisecondsSince(applyStarted);
+                cached.prepareAttempted = true;
+                const auto prepareStarted = diagnostics::LifecycleClock::now();
+                cached.preparedSuccessfully = PrepareMaterialTextureAsset(
+                    projectRoot, projectId, binding.textureAssetId,
+                    cached.prepared, cached.error);
+                prepareMilliseconds += diagnostics::MillisecondsSince(prepareStarted);
+                if (cached.preparedSuccessfully)
+                    ++result.preparedUnique;
             }
 
-            if (!preparedSuccessfully || !appliedSuccessfully)
+            if (cached.preparedSuccessfully && !cached.loadAttempted)
+            {
+                cached.loadAttempted = true;
+                const auto loadStarted = diagnostics::LifecycleClock::now();
+                cached.resource = loader(cached.prepared, cached.error);
+                loadMilliseconds += diagnostics::MillisecondsSince(loadStarted);
+                cached.loadedSuccessfully = cached.resource.IsValid();
+                if (cached.loadedSuccessfully)
+                    ++result.loadedUnique;
+                else if (cached.error.empty())
+                    cached.error =
+                        "Wicked did not create a valid resource from the governed texture payload.";
+            }
+
+            if (!cached.preparedSuccessfully || !cached.loadedSuccessfully)
             {
                 ++failureCount;
                 if (firstFailure.empty())
-                    firstFailure = binding.textureAssetId + ": " + bindingError;
+                    firstFailure = binding.textureAssetId + ": " + cached.error;
                 continue;
             }
+
+            const auto applyStarted = diagnostics::LifecycleClock::now();
+            texture.name.clear();
+            texture.resource = cached.resource;
+            material->SetDirty();
+            auto* metadata = scene.metadatas.GetComponent(binding.materialEntity);
+            if (metadata == nullptr)
+                metadata = &scene.metadatas.Create(binding.materialEntity);
+            metadata->int_values.set(
+                MaterialTextureAssetBindingVersionMetadataKey,
+                MaterialTextureAssetBindingVersion);
+            metadata->string_values.set(
+                MaterialTextureSlotMetadataKey(binding.slot),
+                cached.prepared.assetId);
+            applyMilliseconds += diagnostics::MillisecondsSince(applyStarted);
             ++result.restored;
         }
 
         std::ostringstream restoreDetail;
         restoreDetail << "bindings=" << bindings.size()
-                      << " // unique_ids=" << uniqueTextureAssetIds.size()
-                      << " // already_live=" << alreadyLiveCount
+                      << " // unique_ids=" << result.uniqueAssetIds
+                      << " // prepared_unique=" << result.preparedUnique
+                      << " // loaded_unique=" << result.loadedUnique
+                      << " // already_live=" << result.alreadyLive
                       << " // restored=" << result.restored
                       << " // failures=" << failureCount
                       << " // inspect=" << std::fixed << std::setprecision(2)
                       << inspectMilliseconds << " ms"
                       << " // prepare=" << prepareMilliseconds << " ms"
+                      << " // load=" << loadMilliseconds << " ms"
                       << " // apply=" << applyMilliseconds << " ms";
         diagnostics::LogProjectLifecycleTiming(
             "TEXTURE RESTORE",

@@ -73,6 +73,10 @@ namespace renegade::bridge
         bool succeeded = false;
         std::size_t discovered = 0;
         std::size_t restored = 0;
+        std::size_t uniqueAssetIds = 0;
+        std::size_t preparedUnique = 0;
+        std::size_t loadedUnique = 0;
+        std::size_t alreadyLive = 0;
         std::string error;
     };
 
