@@ -1,0 +1,860 @@
+name: Story Flow Gate 3B patch
+
+on:
+  push:
+    branches:
+      - stack/story-flow-gate3b-dedicated-renderpath
+    paths:
+      - ".github/workflows/story-flow-gate3b-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: stack/story-flow-gate3b-dedicated-renderpath
+          fetch-depth: 0
+
+      - name: Apply dedicated Story Flow render-path slice
+        shell: python
+        run: |
+          from pathlib import Path
+          from textwrap import dedent
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected one match, found {count}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8", newline="\n")
+
+          # StudioApplication owns both paths. The existing 3D path keeps the
+          # Hub/Level Editor; Story Flow gets an independent 2D path.
+          replace_once(
+              "Studio/src/StudioApplication.h",
+              '#include "RenegadeProjectLoadingOverlay.h"\n#include "StoryFlowStudioIntegration.h"',
+              '#include "RenegadeProjectLoadingOverlay.h"\n#include "RenegadeStoryFlowRenderPath.h"\n#include "StoryFlowStudioIntegration.h"')
+
+          replace_once(
+              "Studio/src/StudioApplication.h",
+              dedent('''\
+                      // Gate 1 exposes only the presentation/lifecycle seams required by the
+                      // Story Flow adapter. Semantic Flow state remains in EngineBridge.
+                      [[nodiscard]] bool IsProjectHubVisible() const noexcept
+                      {
+                          return projectHubVisible_;
+                      }
+
+                      [[nodiscard]] bool IsProjectLoadBlocking() const noexcept
+                      {
+                          return projectLoadingOverlay_.IsBlocking();
+                      }
+
+                      [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
+                      {
+                          return studioChrome_.ViewportBounds();
+                      }
+
+                      wi::gui::GUI& StoryFlowGui() noexcept
+                      {
+                          return GetGUI();
+                      }
+              '''),
+              dedent('''\
+                      [[nodiscard]] bool IsProjectHubVisible() const noexcept
+                      {
+                          return projectHubVisible_;
+                      }
+
+                      [[nodiscard]] bool IsProjectLoadBlocking() const noexcept
+                      {
+                          return projectLoadingOverlay_.IsBlocking();
+                      }
+
+                      // Story Flow owns a separate RenderPath from Gate 3 onward. The
+                      // 3D path only exposes Hub state plus this explicit return seam.
+                      void ShowProjectHub()
+                      {
+                          SetProjectHubVisible(true);
+                      }
+              '''))
+
+          replace_once(
+              "Studio/src/StudioApplication.h",
+              dedent('''\
+                      // Keep every existing call site unchanged while inserting the Gate 1
+                      // lifecycle adapter after Wicked has completed the frame. This makes
+                      // the native workspace visible on the following frame and guarantees
+                      // the renderer GUI has already been constructed before it is attached.
+                      void Run()
+                      {
+                          wi::Application::Run();
+                          storyFlowIntegration_.Tick(renderer_, session_);
+                      }
+              '''),
+              dedent('''\
+                      // Workspace activation is deliberately resolved after Wicked completes
+                      // the current frame. ActivatePath() then owns the following frame, so
+                      // the inactive Level Editor cannot continue ticking behind Story Flow.
+                      void Run()
+                      {
+                          wi::Application::Run();
+                          storyFlowIntegration_.Tick(
+                              *this,
+                              renderer_,
+                              storyFlowRenderer_,
+                              session_);
+                      }
+              '''))
+
+          replace_once(
+              "Studio/src/StudioApplication.h",
+              "        bridge::StudioSession session_;\n        StudioRenderPath renderer_;\n        StoryFlowStudioIntegration storyFlowIntegration_;",
+              "        bridge::StudioSession session_;\n        StudioRenderPath renderer_;\n        RenegadeStoryFlowRenderPath storyFlowRenderer_;\n        StoryFlowStudioIntegration storyFlowIntegration_;")
+
+          Path("Studio/src/RenegadeStoryFlowRenderPath.h").write_text(dedent(r'''\
+              #pragma once
+
+              #include <functional>
+
+              #include <WickedEngine.h>
+
+              #include "RenegadeStoryFlowWorkspace.h"
+
+              namespace renegade::studio
+              {
+                  // Gate 3 promotes Story Flow out of the 3D Level Editor overlay and into
+                  // its own first-class 2D RenderPath. Only the active Wicked RenderPath is
+                  // updated/rendered, so the Level Editor scene is dormant while this path
+                  // owns the application.
+                  class RenegadeStoryFlowRenderPath final : public wi::RenderPath2D
+                  {
+                  public:
+                      ~RenegadeStoryFlowRenderPath() override;
+
+                      void EnsureLoaded();
+                      void Load() override;
+                      void Start() override;
+                      void Stop() override;
+                      void ResizeLayout() override;
+                      void Update(float dt) override;
+
+                      void Bind(
+                          const bridge::StoryFlowAuthoringModel* model,
+                          bridge::StoryFlowLayoutDocument* layout);
+                      void Clear() noexcept;
+                      void FitToContent();
+                      void CenterOnGameStart();
+                      void SetWorkspaceActive(bool active);
+                      void OnLayoutChanged(std::function<void()> callback);
+                      void SetProjectHubRequestHandler(std::function<void()> callback);
+
+                      [[nodiscard]] bool IsWorkspaceActive() const noexcept
+                      {
+                          return workspaceActive_;
+                      }
+
+                  private:
+                      void LayoutWorkspace();
+
+                      RenegadeStoryFlowWorkspace workspace_;
+                      bool loaded_ = false;
+                      bool workspaceActive_ = false;
+                      float lastLogicalWidth_ = -1.0f;
+                      float lastLogicalHeight_ = -1.0f;
+                  };
+              }
+          '''), encoding="utf-8", newline="\n")
+
+          Path("Studio/src/RenegadeStoryFlowRenderPath.cpp").write_text(dedent(r'''\
+              #include "RenegadeStoryFlowRenderPath.h"
+
+              #include <algorithm>
+              #include <cmath>
+              #include <utility>
+
+              namespace renegade::studio
+              {
+                  RenegadeStoryFlowRenderPath::~RenegadeStoryFlowRenderPath()
+                  {
+                      if (loaded_)
+                      {
+                          GetGUI().RemoveWidget(&workspace_);
+                      }
+                  }
+
+                  void RenegadeStoryFlowRenderPath::EnsureLoaded()
+                  {
+                      if (loaded_)
+                          return;
+
+                      workspace_.Create();
+                      workspace_.SetVisible(false);
+                      workspace_.SetEnabled(false);
+                      GetGUI().AddWidget(&workspace_);
+                      loaded_ = true;
+                      LayoutWorkspace();
+                  }
+
+                  void RenegadeStoryFlowRenderPath::Load()
+                  {
+                      EnsureLoaded();
+                  }
+
+                  void RenegadeStoryFlowRenderPath::Start()
+                  {
+                      EnsureLoaded();
+                      LayoutWorkspace();
+                      workspace_.SetVisible(workspaceActive_);
+                      workspace_.SetEnabled(workspaceActive_);
+                  }
+
+                  void RenegadeStoryFlowRenderPath::Stop()
+                  {
+                      if (!loaded_)
+                          return;
+                      workspace_.SetVisible(false);
+                      workspace_.SetEnabled(false);
+                  }
+
+                  void RenegadeStoryFlowRenderPath::ResizeLayout()
+                  {
+                      wi::RenderPath2D::ResizeLayout();
+                      LayoutWorkspace();
+                  }
+
+                  void RenegadeStoryFlowRenderPath::Update(const float dt)
+                  {
+                      EnsureLoaded();
+                      LayoutWorkspace();
+                      wi::RenderPath2D::Update(dt);
+                  }
+
+                  void RenegadeStoryFlowRenderPath::Bind(
+                      const bridge::StoryFlowAuthoringModel* model,
+                      bridge::StoryFlowLayoutDocument* layout)
+                  {
+                      EnsureLoaded();
+                      workspace_.Bind(model, layout);
+                  }
+
+                  void RenegadeStoryFlowRenderPath::Clear() noexcept
+                  {
+                      if (loaded_)
+                      {
+                          workspace_.Clear();
+                      }
+                  }
+
+                  void RenegadeStoryFlowRenderPath::FitToContent()
+                  {
+                      EnsureLoaded();
+                      workspace_.FitToContent();
+                  }
+
+                  void RenegadeStoryFlowRenderPath::CenterOnGameStart()
+                  {
+                      EnsureLoaded();
+                      workspace_.CenterOnGameStart();
+                  }
+
+                  void RenegadeStoryFlowRenderPath::SetWorkspaceActive(const bool active)
+                  {
+                      workspaceActive_ = active;
+                      if (!loaded_)
+                          return;
+                      workspace_.SetVisible(active);
+                      workspace_.SetEnabled(active);
+                  }
+
+                  void RenegadeStoryFlowRenderPath::OnLayoutChanged(
+                      std::function<void()> callback)
+                  {
+                      EnsureLoaded();
+                      workspace_.OnLayoutChanged(std::move(callback));
+                  }
+
+                  void RenegadeStoryFlowRenderPath::SetProjectHubRequestHandler(
+                      std::function<void()> callback)
+                  {
+                      EnsureLoaded();
+                      workspace_.OnProjectHubRequested(std::move(callback));
+                  }
+
+                  void RenegadeStoryFlowRenderPath::LayoutWorkspace()
+                  {
+                      if (!loaded_)
+                          return;
+
+                      const float width = std::max(1.0f, GetLogicalWidth());
+                      const float height = std::max(1.0f, GetLogicalHeight());
+                      if (std::abs(width - lastLogicalWidth_) < 0.01f &&
+                          std::abs(height - lastLogicalHeight_) < 0.01f)
+                      {
+                          return;
+                      }
+
+                      lastLogicalWidth_ = width;
+                      lastLogicalHeight_ = height;
+                      workspace_.SetPos(XMFLOAT2(0.0f, 0.0f));
+                      workspace_.SetLayout(width, height);
+                  }
+              }
+          '''), encoding="utf-8", newline="\n")
+
+          # The lifecycle adapter now binds presentation state to the dedicated
+          # path and performs path switches only after the current frame.
+          Path("Studio/src/StoryFlowStudioIntegration.h").write_text(dedent(r'''\
+              #pragma once
+
+              #include "renegade/bridge/StoryFlowAuthoringModel.h"
+              #include "renegade/bridge/StoryFlowLayoutService.h"
+
+              #include <chrono>
+              #include <filesystem>
+              #include <string>
+              #include <system_error>
+              #include <utility>
+
+              namespace renegade::studio
+              {
+                  class StoryFlowStudioIntegration final
+                  {
+                  public:
+                      enum class Workspace
+                      {
+                          LevelEditor,
+                          StoryFlow,
+                      };
+
+                      void RequestStoryFlow() noexcept
+                      {
+                          desiredWorkspace_ = Workspace::StoryFlow;
+                      }
+
+                      // Gate 4 will use this before opening a Level. Keeping the seam
+                      // explicit now prevents startup_flow presence from forcing the
+                      // application straight back to Story Flow on the next frame.
+                      void RequestLevelEditor() noexcept
+                      {
+                          desiredWorkspace_ = Workspace::LevelEditor;
+                      }
+
+                      void RequestProjectHub() noexcept
+                      {
+                          projectHubRequested_ = true;
+                          desiredWorkspace_ = Workspace::LevelEditor;
+                      }
+
+                      template <typename Application, typename LevelEditor, typename StoryFlowPath, typename Session>
+                      void Tick(
+                          Application& application,
+                          LevelEditor& levelEditor,
+                          StoryFlowPath& storyFlow,
+                          Session& session)
+                      {
+                          Attach(storyFlow);
+
+                          if (projectHubRequested_)
+                          {
+                              FlushLayout(true);
+                              storyFlow.SetWorkspaceActive(false);
+                              levelEditor.ShowProjectHub();
+                              EnsureActive(application, levelEditor);
+                              projectHubRequested_ = false;
+                              hubOwnedLastTick_ = true;
+                              return;
+                          }
+
+                          if (!session.Projects().HasProject())
+                          {
+                              FlushLayout(true);
+                              ResetActiveFlow(storyFlow);
+                              storyFlow.SetWorkspaceActive(false);
+                              desiredWorkspace_ = Workspace::LevelEditor;
+                              hubOwnedLastTick_ = true;
+                              EnsureActive(application, levelEditor);
+                              return;
+                          }
+
+                          const bool hubOwnsSurface =
+                              levelEditor.IsProjectHubVisible() ||
+                              levelEditor.IsProjectLoadBlocking();
+                          if (hubOwnsSurface)
+                          {
+                              FlushLayout(true);
+                              storyFlow.SetWorkspaceActive(false);
+                              desiredWorkspace_ = Workspace::LevelEditor;
+                              hubOwnedLastTick_ = true;
+                              EnsureActive(application, levelEditor);
+                              return;
+                          }
+
+                          const auto& project = session.Projects().CurrentProject();
+                          const bool hasStartupFlow =
+                              bridge::IsValidStableId(project.startupFlowId) &&
+                              !project.startupFlow.empty();
+                          if (!hasStartupFlow)
+                          {
+                              FlushLayout(true);
+                              ResetActiveFlow(storyFlow);
+                              storyFlow.SetWorkspaceActive(false);
+                              desiredWorkspace_ = Workspace::LevelEditor;
+                              hubOwnedLastTick_ = false;
+                              EnsureActive(application, levelEditor);
+                              return;
+                          }
+
+                          const bool projectOrFlowChanged =
+                              trackedProjectId_ != project.projectId ||
+                              trackedFlowId_ != project.startupFlowId;
+                          if (projectOrFlowChanged)
+                          {
+                              FlushLayout(true);
+                              ResetActiveFlow(storyFlow);
+                              trackedProjectId_ = project.projectId;
+                              trackedFlowId_ = project.startupFlowId;
+                              loadAttempted_ = false;
+                              desiredWorkspace_ = Workspace::StoryFlow;
+                          }
+                          else if (hubOwnedLastTick_)
+                          {
+                              // Opening/continuing an existing Flow project from the Hub
+                              // enters Story Flow as the project-level authoring home.
+                              desiredWorkspace_ = Workspace::StoryFlow;
+                          }
+                          hubOwnedLastTick_ = false;
+
+                          if (!loadAttempted_)
+                          {
+                              loadAttempted_ = true;
+                              if (!LoadCurrentFlow(project, storyFlow))
+                              {
+                                  storyFlow.SetWorkspaceActive(false);
+                                  desiredWorkspace_ = Workspace::LevelEditor;
+                                  EnsureActive(application, levelEditor);
+                                  return;
+                              }
+                          }
+
+                          if (!model_.IsLoaded())
+                          {
+                              storyFlow.SetWorkspaceActive(false);
+                              desiredWorkspace_ = Workspace::LevelEditor;
+                              EnsureActive(application, levelEditor);
+                              return;
+                          }
+
+                          if (desiredWorkspace_ == Workspace::LevelEditor)
+                          {
+                              storyFlow.SetWorkspaceActive(false);
+                              EnsureActive(application, levelEditor);
+                              return;
+                          }
+
+                          storyFlow.SetWorkspaceActive(true);
+                          EnsureActive(application, storyFlow);
+                          FlushLayout(false);
+                      }
+
+                  private:
+                      template <typename StoryFlowPath>
+                      void Attach(StoryFlowPath& storyFlow)
+                      {
+                          if (attached_)
+                              return;
+
+                          storyFlow.EnsureLoaded();
+                          storyFlow.OnLayoutChanged([this]()
+                          {
+                              layoutDirty_ = true;
+                          });
+                          storyFlow.SetProjectHubRequestHandler([this]()
+                          {
+                              RequestProjectHub();
+                          });
+                          lastLayoutWrite_ = std::chrono::steady_clock::now();
+                          attached_ = true;
+                      }
+
+                      template <typename Application, typename Path>
+                      static void EnsureActive(Application& application, Path& path)
+                      {
+                          if (application.GetActivePath() != &path)
+                          {
+                              application.ActivatePath(&path);
+                          }
+                      }
+
+                      template <typename Project, typename StoryFlowPath>
+                      bool LoadCurrentFlow(const Project& project, StoryFlowPath& storyFlow)
+                      {
+                          std::string resolvedFlowPath;
+                          std::string error;
+                          if (!bridge::ResolveStoryFlowDocumentPath(
+                                  project.rootPath,
+                                  project.projectId,
+                                  project.startupFlowId,
+                                  project.startupFlow,
+                                  resolvedFlowPath,
+                                  error))
+                          {
+                              ReportSemanticFailure(
+                                  "could not resolve startup_flow '" + project.startupFlow +
+                                  "': " + error);
+                              return false;
+                          }
+
+                          bridge::FlowDocument document;
+                          if (!bridge::ReadFlowDocument(
+                                  resolvedFlowPath,
+                                  project.projectId,
+                                  document,
+                                  error))
+                          {
+                              ReportSemanticFailure(
+                                  "could not read startup_flow '" + resolvedFlowPath +
+                                  "': " + error);
+                              return false;
+                          }
+
+                          if (!model_.Load(std::move(document), project.projectId, error))
+                          {
+                              ReportSemanticFailure(
+                                  "startup_flow failed Story Flow authoring validation: " + error);
+                              return false;
+                          }
+
+                          layoutPath_ = bridge::ResolveStoryFlowLayoutPath(
+                              project.rootPath,
+                              project.startupFlowId);
+
+                          bool restoredSavedLayout = false;
+                          if (!layoutPath_.empty())
+                          {
+                              std::error_code existsError;
+                              const bool layoutExists = std::filesystem::exists(
+                                  std::filesystem::u8path(layoutPath_),
+                                  existsError);
+                              if (!existsError && layoutExists)
+                              {
+                                  bridge::StoryFlowLayoutDocument saved;
+                                  std::string layoutError;
+                                  if (bridge::ReadStoryFlowLayout(
+                                          layoutPath_,
+                                          project.projectId,
+                                          project.startupFlowId,
+                                          saved,
+                                          layoutError) &&
+                                      bridge::ReconcileStoryFlowLayout(
+                                          model_,
+                                          project.projectId,
+                                          project.startupFlowId,
+                                          saved,
+                                          layoutError))
+                                  {
+                                      layout_ = std::move(saved);
+                                      restoredSavedLayout = true;
+                                  }
+                                  else
+                                  {
+                                      ReportLayoutWarning(
+                                          "saved layout was ignored and rebuilt: " +
+                                          layoutError);
+                                  }
+                              }
+                              else if (existsError)
+                              {
+                                  ReportLayoutWarning(
+                                      "could not inspect saved layout; using deterministic "
+                                      "layout: " + existsError.message());
+                              }
+                          }
+
+                          if (!restoredSavedLayout)
+                          {
+                              layout_ = bridge::BuildDeterministicStoryFlowLayout(
+                                  model_,
+                                  project.projectId,
+                                  project.startupFlowId);
+                          }
+
+                          if (!bridge::ReconcileStoryFlowLayout(
+                                  model_,
+                                  project.projectId,
+                                  project.startupFlowId,
+                                  layout_,
+                                  error))
+                          {
+                              ReportLayoutWarning(
+                                  "layout reconciliation failed and was rebuilt: " + error);
+                              layout_ = bridge::BuildDeterministicStoryFlowLayout(
+                                  model_,
+                                  project.projectId,
+                                  project.startupFlowId);
+                          }
+
+                          storyFlow.Bind(&model_, &layout_);
+                          if (!restoredSavedLayout)
+                          {
+                              storyFlow.FitToContent();
+                          }
+                          layoutDirty_ = !restoredSavedLayout;
+                          if (layoutDirty_)
+                          {
+                              FlushLayout(true);
+                          }
+
+                          wi::backlog::post(
+                              "Renegade Story Flow: activated dedicated render path for " +
+                                  resolvedFlowPath,
+                              wi::backlog::LogLevel::Default);
+                          return true;
+                      }
+
+                      template <typename StoryFlowPath>
+                      void ResetActiveFlow(StoryFlowPath& storyFlow)
+                      {
+                          storyFlow.Clear();
+                          model_.Clear();
+                          layout_ = {};
+                          layoutPath_.clear();
+                          trackedProjectId_.clear();
+                          trackedFlowId_.clear();
+                          loadAttempted_ = false;
+                          layoutDirty_ = false;
+                      }
+
+                      void FlushLayout(const bool force)
+                      {
+                          if (!layoutDirty_ || layoutPath_.empty() || !model_.IsLoaded())
+                              return;
+
+                          const auto now = std::chrono::steady_clock::now();
+                          if (!force &&
+                              now - lastLayoutWrite_ < std::chrono::milliseconds(250))
+                          {
+                              return;
+                          }
+
+                          std::string error;
+                          if (!bridge::WriteStoryFlowLayout(layoutPath_, layout_, error))
+                          {
+                              ReportLayoutWarning("could not persist layout: " + error);
+                              lastLayoutWrite_ = now;
+                              return;
+                          }
+
+                          layoutDirty_ = false;
+                          lastLayoutWrite_ = now;
+                      }
+
+                      static void ReportSemanticFailure(const std::string& message)
+                      {
+                          wi::backlog::post(
+                              "Renegade Story Flow: " + message,
+                              wi::backlog::LogLevel::Error);
+                      }
+
+                      static void ReportLayoutWarning(const std::string& message)
+                      {
+                          wi::backlog::post(
+                              "Renegade Story Flow presentation: " + message,
+                              wi::backlog::LogLevel::Warning);
+                      }
+
+                      bridge::StoryFlowAuthoringModel model_;
+                      bridge::StoryFlowLayoutDocument layout_;
+                      bridge::StableId trackedProjectId_;
+                      bridge::StableId trackedFlowId_;
+                      std::string layoutPath_;
+                      std::chrono::steady_clock::time_point lastLayoutWrite_{};
+                      Workspace desiredWorkspace_ = Workspace::StoryFlow;
+                      bool attached_ = false;
+                      bool loadAttempted_ = false;
+                      bool layoutDirty_ = false;
+                      bool projectHubRequested_ = false;
+                      bool hubOwnedLastTick_ = true;
+                  };
+              }
+          '''), encoding="utf-8", newline="\n")
+
+          # Provide an explicit Hub escape on the dedicated path. The graph is
+          # still the Gate 1 visual scaffold; Gate 3's next slice binds mutation.
+          replace_once(
+              "Studio/src/RenegadeStoryFlowWorkspace.h",
+              "        void OnLayoutChanged(std::function<void()> callback);\n",
+              "        void OnLayoutChanged(std::function<void()> callback);\n        void OnProjectHubRequested(std::function<void()> callback);\n")
+          replace_once(
+              "Studio/src/RenegadeStoryFlowWorkspace.h",
+              "        std::function<void()> layoutChanged_;\n",
+              "        std::function<void()> layoutChanged_;\n        std::function<void()> projectHubRequested_;\n")
+
+          replace_once(
+              "Studio/src/RenegadeStoryFlowWorkspace.cpp",
+              dedent('''\
+                      void RenegadeStoryFlowWorkspace::OnLayoutChanged(
+                          std::function<void()> callback)
+                      {
+                          layoutChanged_ = std::move(callback);
+                      }
+              '''),
+              dedent('''\
+                      void RenegadeStoryFlowWorkspace::OnLayoutChanged(
+                          std::function<void()> callback)
+                      {
+                          layoutChanged_ = std::move(callback);
+                      }
+
+                      void RenegadeStoryFlowWorkspace::OnProjectHubRequested(
+                          std::function<void()> callback)
+                      {
+                          projectHubRequested_ = std::move(callback);
+                      }
+              '''))
+
+          replace_once(
+              "Studio/src/RenegadeStoryFlowWorkspace.cpp",
+              dedent('''\
+                      const XMFLOAT4 fitBounds(right - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
+                      const XMFLOAT4 startBounds(right - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
+              '''),
+              dedent('''\
+                      const XMFLOAT4 hubBounds(right - 216.0f, translation.y + 10.0f, 70.0f, 28.0f);
+                      const XMFLOAT4 fitBounds(right - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
+                      const XMFLOAT4 startBounds(right - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
+              '''))
+
+          replace_once(
+              "Studio/src/RenegadeStoryFlowWorkspace.cpp",
+              dedent('''\
+                              if (Contains(fitBounds, pointer))
+                              {
+                                  FitToContent();
+                                  return;
+                              }
+              '''),
+              dedent('''\
+                              if (Contains(hubBounds, pointer))
+                              {
+                                  if (projectHubRequested_)
+                                  {
+                                      projectHubRequested_();
+                                  }
+                                  return;
+                              }
+                              if (Contains(fitBounds, pointer))
+                              {
+                                  FitToContent();
+                                  return;
+                              }
+              '''))
+
+          replace_once(
+              "Studio/src/RenegadeStoryFlowWorkspace.cpp",
+              '        Label("READ-ONLY FOUNDATION", translation.x + 130, translation.y + 16, 9, Muted, cmd);',
+              '        Label("DEDICATED RENDER PATH // GRAPH FOUNDATION", translation.x + 130, translation.y + 16, 9, Muted, cmd);')
+
+          replace_once(
+              "Studio/src/RenegadeStoryFlowWorkspace.cpp",
+              dedent('''\
+                      const XMFLOAT4 fitBounds(right - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
+                      const XMFLOAT4 startBounds(right - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
+                      BorderedRect(fitBounds.x, fitBounds.y, fitBounds.z, fitBounds.w,
+                          Surface, Border, cmd);
+              '''),
+              dedent('''\
+                      const XMFLOAT4 hubBounds(right - 216.0f, translation.y + 10.0f, 70.0f, 28.0f);
+                      const XMFLOAT4 fitBounds(right - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
+                      const XMFLOAT4 startBounds(right - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
+                      BorderedRect(hubBounds.x, hubBounds.y, hubBounds.z, hubBounds.w,
+                          Surface, Border, cmd);
+                      BorderedRect(fitBounds.x, fitBounds.y, fitBounds.z, fitBounds.w,
+                          Surface, Border, cmd);
+              '''))
+
+          replace_once(
+              "Studio/src/RenegadeStoryFlowWorkspace.cpp",
+              '        Label("FIT", fitBounds.x + 15.0f, fitBounds.y + 8.0f, 9, Text, cmd);',
+              '        Label("HUB", hubBounds.x + 22.0f, hubBounds.y + 8.0f, 9, Text, cmd);\n        Label("FIT", fitBounds.x + 15.0f, fitBounds.y + 8.0f, 9, Text, cmd);')
+
+          replace_once(
+              "Studio/CMakeLists.txt",
+              "    src/RenegadeStoryFlowWorkspace.cpp\n    src/RenegadeStoryFlowWorkspace.h\n",
+              "    src/RenegadeStoryFlowWorkspace.cpp\n    src/RenegadeStoryFlowWorkspace.h\n    src/RenegadeStoryFlowRenderPath.cpp\n    src/RenegadeStoryFlowRenderPath.h\n")
+
+          Path("docs/STORY_FLOW_GATE3_DEDICATED_RENDER_PATH.md").write_text(dedent(r'''\
+              # Story Flow Gate 3B — Dedicated Render Path
+
+              **Base:** Gate 3 authoring foundation (`83e8450ac44d4cfb4383d8d78f703ce72a5d396a`)
+
+              ## Purpose
+
+              This slice retires the accepted Gate 1 hosting architecture. Story Flow is no
+              longer attached to `StudioRenderPath`'s GUI or sized from the Level Editor
+              viewport. It owns a first-class `RenegadeStoryFlowRenderPath` derived from
+              Wicked `RenderPath2D`.
+
+              Wicked `Application::ActivatePath()` stops the previous path, starts the next
+              path, and only the active path receives the application's Update/FixedUpdate/
+              Render/Compose lifecycle. Therefore, when Story Flow is active, the 3D Level
+              Editor render path is not continuously ticking or rendering underneath it.
+
+              ## Lifecycle established
+
+              - Project Hub/loading remains owned by the existing 3D Studio path.
+              - Opening/continuing a project with a valid `startup_flow` activates the
+                dedicated Story Flow path after the current frame.
+              - A project without `startup_flow` remains on the legacy Level Editor path.
+              - Story Flow has an explicit HUB action that flushes layout state, switches
+                back to the 3D Studio path, and exposes Project Hub.
+              - `RequestLevelEditor()` and `RequestStoryFlow()` are explicit seams for Gate 4
+                Level open/return integration, preventing startup-flow presence from
+                immediately forcing the wrong workspace after a deliberate transition.
+              - Story Flow semantic/model/layout state remains in shared EngineBridge/editor
+                services; only presentation/render-path ownership changes here.
+
+              ## Deliberate exclusions
+
+              This is the render-path promotion slice, not the complete Gate 3 UI. The graph
+              still uses the existing engineering canvas while the mutable
+              `StoryFlowAuthoringSession` from the preceding slice remains presentation-
+              independent. Native Graph mutation controls, Inspector editing, Flow Save/
+              Undo/Redo buttons and richer diagnostics are the next Gate 3 slice.
+
+              Journey View remains Gate 6.
+          '''), encoding="utf-8", newline="\n")
+
+          # Static fail-fast checks before committing.
+          app = Path("Studio/src/StudioApplication.h").read_text(encoding="utf-8")
+          integration = Path("Studio/src/StoryFlowStudioIntegration.h").read_text(encoding="utf-8")
+          cmake = Path("Studio/CMakeLists.txt").read_text(encoding="utf-8")
+          assert "StoryFlowWorkspaceBounds" not in app
+          assert "StoryFlowGui" not in app
+          assert "RenegadeStoryFlowRenderPath storyFlowRenderer_" in app
+          assert "ActivatePath(&path)" in integration
+          assert "src/RenegadeStoryFlowRenderPath.cpp" in cmake
+
+      - name: Commit bounded Gate 3B slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/story-flow-gate3b-patch.yml
+          git add Studio/src/StudioApplication.h \
+                  Studio/src/StoryFlowStudioIntegration.h \
+                  Studio/src/RenegadeStoryFlowRenderPath.h \
+                  Studio/src/RenegadeStoryFlowRenderPath.cpp \
+                  Studio/src/RenegadeStoryFlowWorkspace.h \
+                  Studio/src/RenegadeStoryFlowWorkspace.cpp \
+                  Studio/CMakeLists.txt \
+                  docs/STORY_FLOW_GATE3_DEDICATED_RENDER_PATH.md
+          git diff --cached --check
+          git commit -m "studio: promote Story Flow to dedicated render path"
+          git push origin HEAD:stack/story-flow-gate3b-dedicated-renderpath
