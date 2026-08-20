@@ -1,205 +1,220 @@
-# Roadmap
+# Renegade Engine Roadmap
 
-## Current milestone
+**Current authoritative main:**
+`02df129f96c860dd3a7d6b6e065c928bef0f8907`
+(`hub: expose Exit Renegade action (#65)`).
 
-**Phase 4 — Project and asset pipeline**
+**Wicked pin:**
+`3a800b7134aafe58461093c8abb2e274d4e64033`
 
-**Outcome:** assets become repeatable project resources rather than ad-hoc file
-opens.
+## Current product programme
 
-The phase remains open, but several backend lifecycle foundations that the
-original roadmap expected later are now already complete. The current main
-baseline after LP06 is `48126f859b2f9b25a60182c4311cfc6c91d98436`.
+The immediate active programme is **Renegade Story Flow**.
 
-## Accepted lifecycle foundations
+Story Flow is the project-level authoring home for the complete player journey.
+It will use one authoritative semantic Flow document exposed through two
+synchronized views:
+
+- **Journey View** — primary/default creator surface;
+- **Graph View** — secondary structural/logic surface.
+
+Story Flow is also locked as a **first-class Studio render path/workspace**.
+The finished product must not leave the 3D Level Editor continuously running
+behind Story Flow. A Level or Screen editor is entered only when that content is
+explicitly opened and returns control to Story Flow afterwards.
+
+The full programme contract is in:
+
+`docs/STORY_FLOW_JOURNEY_VIEW_IMPLEMENTATION_PLAN.md`
+
+## Story Flow gate status
+
+### Gate 1 — Shared Story Flow foundation and Studio workspace
+
+**Status:** implementation and owner visual/interaction acceptance passed;
+final documentation/exact-head PR closeout remains before merge.
+
+Implemented on PR #66:
+
+- read-only presentation-independent model over LP02 `FlowDocument`;
+- stable node/route indexes and diagnostics;
+- deterministic default presentation;
+- separate layout persistence under `Saved/EditorState/StoryFlow/`;
+- native wiGUI Story Flow surface;
+- startup Flow resolution for an opened project;
+- node/route rendering with outcome labels;
+- selection, cursor-relative zoom, middle-mouse pan, `FIT` and `START`;
+- controlled four-node owner-test fixture;
+- tests proving presentation state does not change Runtime Flow traversal.
+
+Exact implementation evidence:
+
+- tested implementation head:
+  `6f02f00519b344faa2fbe9a0f0d9d9174ad3f8d4`;
+- Renegade Studio run 628: success;
+- Windows baseline run 1156: success;
+- owner Release acceptance on 2026-08-20: PASS;
+- visible route:
+  `Game Start -> Level One -> Level Two -> Complete Game`;
+- owner confirmed node selection, zoom, pan, `FIT` and `START` all work.
+
+The current Gate 1 workspace is intentionally hosted over the existing 3D
+Studio render path. That condition is accepted only as the Gate 1 integration
+scaffold. It is not the final Story Flow architecture.
+
+### Gate 2 — First-class Screen semantics
+
+Next after Gate 1 merge.
+
+Extend the real Flow/runtime contract so `Screen` is a first-class executable
+Flow destination backed by stable runtime-screen identity and named outcomes.
+Acceptance is a real Runtime journey such as:
+
+`Game Start -> Title Screen -> Level -> Victory Screen -> Complete Game`
+
+### Gate 3 — Dedicated Story Flow render path, core editing and Graph View
+
+Before Story Flow becomes the long-lived editable authoring surface, retire the
+Gate 1 overlay scaffold and give Story Flow its own render path/workspace.
+Then add semantic Flow mutation, Graph View, Flow-specific Undo/Redo, dirty
+state, transactional Save/Open and route/node editing.
+
+The 3D Level Editor must be inactive while Story Flow owns the surface.
+
+### Gate 4 — Level lifecycle integration
+
+Add New/Existing Level, governed Scene creation/identity, moved/missing
+resolution, Level open into the 3D editor and explicit Return to Story Flow.
+
+### Gate 5 — Screen lifecycle integration
+
+Add governed Screen creation/templates/identity, Screen outcome exposure and the
+open boundary for the Screen Editor.
+
+### Gate 6 — Journey View MVP
+
+Build the primary creator experience on the dedicated Story Flow render path:
+main journey reel, Level/Screen cards, branch tracks, previews, Inspector-driven
+exits and Journey/Graph synchronization.
+
+### Gate 7 — New Project / project-home lifecycle
+
+Make `Project Hub -> Story Flow` the normal project-open/create journey.
+New projects receive a startup Flow and permanent Game Start rather than landing
+in an arbitrary blank `Main.wiscene` purely to satisfy the old scene-first
+lifecycle.
+
+### Gate 8 — Screen Editor MVP
+
+Native Screen Editor with image/background/text/button/layout/action authoring,
+preview, validation, Save/Undo/Redo and Return to Story Flow.
+
+### Gate 9 — Advanced Journey authoring and scale
+
+Semantic zoom, minimap, branch collapse, search/focus, chapters/groups,
+auto-splice, loops/hubs/returns and large-project diagnostics.
+
+### Gate 10 — Runtime/build/standalone closeout
+
+Prove end-to-end semantic parity:
+
+`Hub -> Story Flow -> Screens/Levels -> save -> reopen -> Runtime -> Windows build -> standalone`
+
+No editor/runtime disagreement is acceptable.
+
+## Accepted platform foundations on current main
+
+The old roadmap stopped around LP06. Current main is substantially further
+advanced.
 
 ### LP04 — Unsaved Test Level Snapshot
 
-Accepted. Studio can snapshot the current unsaved authoring scene, launch the
-real standalone Runtime, wait for the explicit READY handshake, display the
-unsaved content and STOP cleanly without overwriting the authoritative scene.
+Accepted. Studio can snapshot unsaved authoring state and launch the real
+separate Runtime without forcing an authoritative save.
 
 ### LP05 — Representative Dependency Extraction
 
-Accepted. Renegade owns a deterministic typed dependency graph across project,
-Story Flow, Runtime Screen, WISCENE, glTF and explicit declared-reference
-providers. Packaged Debug and Release proof produce the canonical 4,681-byte
-graph with SHA-256
-`23b67f63099293d79a239997730b287f157fb38e5421aecb5505e0ca42c84384`.
+Accepted. Renegade owns deterministic dependency discovery across project,
+Story Flow, Runtime Screen, WISCENE, model resources and explicit references.
 
 ### LC01 — Asset Identity and Source Tracking
 
-Accepted through PR #39, squash merge
-`01d790bda5acea0cdb6a7735557b12224c795a64`. Exact final head
-`3d3e780b38792aec866cd19ce6638a8260ffff4f` passed Studio run 166 and
-Windows baseline run 185 in Debug and Release. LC01 establishes stable project
-asset IDs, transactional `AssetRegistry.renegade-assets` persistence,
-source-to-imported-product provenance/import settings and deterministic
-moved/missing recovery. Its canonical packaged registry is 2,180 bytes with
-SHA-256
-`547a26c09e6a74394cc9bc67885070272928f5af14d736e8e086d022f0aeea0e`.
+Accepted. Stable project asset IDs, transactional asset registry persistence,
+source/import provenance and moved/missing recovery are established.
 
-LC01 deliberately does **not** execute reimport or provide creator-facing asset
-management UI.
+### LP06 — Named Standalone Windows Build / safe rebuild
 
-### LP06 — Named Standalone Windows Build and Safe Rebuild
+Accepted. Renegade can build a named Windows game package with deterministic
+closure, integrity validation, safe staging/promotion and direct standalone
+launch. Distribution hardening/signing/installer policy remains later work.
 
-Accepted through PR #44, squash merge
-`48126f859b2f9b25a60182c4311cfc6c91d98436`. Exact accepted PR head
-`99cfe1f74016bb6a53a4c35e020f6884099a52fd` passed Renegade Studio run
-239 and Windows baseline run 364 in Debug and Release. Release passed 42/42
-CTest entries including the real standalone package smoke and the owner-build
-scene-identity regression; Debug retained only the accepted Gate 4 hosted audio
-capability skip.
+### LP07 — Reusable Project Asset Workflow
 
-LP06 now provides:
+**Complete and accepted through PR #51.**
 
-- deterministic Windows build planning;
-- same-volume governed staging;
-- a named game executable with package-relative startup;
-- exact package integrity and runtime-support manifests;
-- detached Release DX12 smoke/Test All parity from an unrelated working folder;
-- safe last-good-build preservation, rollback and promotion;
-- **BUILD > BUILD WINDOWS GAME...** in Release Studio; and
-- direct owner launch of the promoted named executable without Studio or an
-  explicit `--project` argument.
+Current main includes the full reusable model-asset lifecycle:
 
-The first owner build exposed a real missing scene-identity-sidecar integration
-bug. The corrected LP06-only scene companion provider packages reachable
-`<scene>.wiscene.rmeta` files without changing the accepted LP05 canonical
-graph. The corrected build completed successfully, the promoted executable
-launched directly from Explorer, and Runtime Screen -> PLAY -> Level One was
-accepted on owner hardware. Independent exact-head audit passed.
+- format-neutral importer seam;
+- pinned Wicked FBX/ufbx path plus GLB/GLTF regression;
+- stable registry-backed catalogue;
+- governed `.rasset` import transaction;
+- explicit stable reimport;
+- creator Asset Browser workflow;
+- repeatable placement;
+- packaged Runtime acceptance.
 
-LP06 output remains deliberately `distribution_ready=false`; commercial
-redistribution/signing/installer policy is a later release boundary.
+### LP08 — Governed non-model resource pipeline
 
-## Phase 4 position after LP06
+**Gates 1–5 accepted through PR #56.**
 
-The original Phase 4 deliverables were:
+Current main includes the governed resource seam and texture workflow,
+transactional resource assets, material texture binding, stable resource
+reimport and packaged Runtime resource resolution/cache identity.
 
-- project-relative asset database and stable asset IDs;
-- Content Browser with folders, filters, previews and drag/drop;
-- import/reimport for supported model formats;
-- texture/audio/video/script/font handling;
-- import settings and source-file tracking;
-- thumbnails and dependency/reference reporting;
-- moved/missing asset recovery;
-- background import jobs and visible error reporting.
+Broader audio/video/script/font creator workflows remain future work on the
+accepted common resource foundation.
 
-Stable asset IDs, durable registry persistence, source tracking, provenance,
-dependency extraction and backend moved/missing recovery are now established.
-What remains is primarily the **creator-facing reusable asset workflow and real
-reimport execution**, followed by broader asset classes and polish.
+### Creator workflow recovery — PR #57
 
-## Immediate next programme
+Merged as `a7775f31c5ec1ff61463d495e7db6ac4a5d63258`.
 
-**LP07 — Reusable Project Asset Workflow**
+The creator model workflow now includes the repaired preview/import/placement
+lifecycle, governed textures/materials, creator transforms and scale handling,
+asset browser thumbnails/drag placement, atomic package writes and the broader
+acceptance fixes proven during PR #57.
 
-LP07 is the next bounded lifecycle programme. It is now explicitly **FBX-first
-and multi-format**, because the primary creator asset workflow depends on FBX,
-including animated/skinned FBX.
+### Project Hub and project lifecycle — PR #58 through #65
 
-The exact pinned Wicked revision already contains a dedicated FBX converter based
-on its bundled `ufbx` loader. That converter maps meshes, materials/textures,
-armatures/skinning, morph data and FBX animation stacks/takes into native Wicked
-scene/animation components. Renegade should prove and expose that existing path
-through its own service boundary before considering another FBX stack.
+Current main includes the rebuilt native Project Hub and the post-PR58 lifecycle
+hardening:
 
-### LP07 format priority
+- startup reveal / identity / Hub presentation;
+- visual recent-project cards;
+- staged project adoption after startup-scene validation;
+- unsaved-scene protection across project/exit transitions;
+- responsive real-phase project loading overlay;
+- governed texture restore deduplication;
+- explicit Exit Renegade action.
 
-- **P0:** FBX — static, skinned and animated; owner/package acceptance format.
-- **P1:** GLTF/GLB — already proven foundation, retained as required regression
-  and supported alternative.
-- **P2:** OBJ and PLY through the common import service when the pinned Wicked
-  converter seams are proven clean; VRM/VRMA after an exact pinned-source seam
-  audit.
-- **Fallback only:** Assimp or another external importer when a concrete required
-  format/FBX feature is proven unsupported or unreliable through the Wicked
-  path. A second importer stack is not added merely to increase extension count.
+These foundations are the launch point for Story Flow.
 
-Target outcome:
+## Product architecture rules carried forward
 
-> A creator imports an FBX once as a governed project asset, including preserving
-> skinned/animated content where present, sees it in the Renegade Asset Browser
-> with stable identity/provenance status, places it repeatedly without
-> reconverting the external source, changes the source, performs an explicit safe
-> reimport that preserves asset identity, then reopens and builds the project
-> without broken references. GLB/GLTF remains functional throughout.
+- Renegade Studio owns the UX; do not expose stock Wicked Editor windows.
+- Wicked functionality is consumed through Renegade-owned services and native
+  Renegade UI.
+- Stable IDs are authoritative; paths are hints.
+- Semantic documents and editor presentation/layout remain separate.
+- Persistent creator mutations require Undo/Redo plus Save/Open proof.
+- Multi-document writes use transactional/fail-closed discipline.
+- Hosted/local compilation alone is never creator acceptance.
+- GitHub CI remains authoritative when owner-machine CPU instability makes local
+  compilation unreliable.
+- Owner visual/behavioural findings override green CI.
+- Wicked remains pinned unless a deliberate, justified core-patch decision is
+  made.
 
-See `docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md` for the gate contract.
-
-### LP07 gate map
-
-1. **Gate 1 — Common model-import seam and FBX proof**
-   - generalise the current GLB/GLTF-shaped `ImportService` contract;
-   - compile/call the exact pinned Wicked FBX converter without exposing the
-     stock Wicked Editor;
-   - prove static FBX plus skinned/animated FBX through WISCENE round trip;
-   - retain GLB/GLTF regression proof;
-   - audit exact OBJ/PLY/VRM/VRMA seams and record what Renegade can safely expose.
-2. **Gate 2 — Registry-backed asset catalogue**
-   - join the existing Asset Browser filesystem view with LC01 stable registry
-     identity/provenance/status;
-   - expose a UI-free catalogue model first;
-   - no import or file mutation.
-3. **Gate 3 — Governed reusable model-asset import transaction**
-   - FBX is the primary acceptance format; GLB/GLTF shares the same transaction;
-   - commit a reusable WISCENE project product and LC01 provenance only after
-     successful conversion/round-trip validation;
-   - failed import preserves the previous project/registry state.
-4. **Gate 4 — Stable explicit reimport**
-   - explicitly re-run the stored importer/backend/settings recipe against a
-     stale source;
-   - preserve source/product asset IDs and last-good product on failure;
-   - animated FBX reimport must preserve/prove the expected animation structure;
-   - no silent/background overwrite.
-5. **Gate 5 — Creator Asset Browser workflow**
-   - display stable asset type, identity and source health;
-   - import/browse/filter/select reusable assets;
-   - place a registered model repeatedly through Renegade-owned commands;
-   - surface missing/moved/stale states and explicit reimport;
-   - owner acceptance uses a representative animated/skinned FBX.
-6. **Gate 6 — Packaged lifecycle acceptance**
-   - FBX import -> place -> Save/Open -> source update -> explicit reimport ->
-     reopen;
-   - dependency closure and LC01 identity remain coherent;
-   - Build Windows Game succeeds and the standalone Runtime uses the updated
-     product;
-   - GLB/GLTF remains a required regression path;
-   - owner acceptance plus independent exact-head review.
-
-### LP07 deliberate exclusions
-
-LP07 does not add Assimp without a proven capability gap, promise dozens of DCC
-formats merely to increase extension count, or build texture/audio/video/font
-asset editors, universal thumbnails, background import queues, animation state
-machines/timelines, physics authoring, particles, Lua gameplay or multiplayer.
-
-Imported FBX animation data must survive and be usable; **animation authoring** is
-still a later bounded programme.
-
-## After LP07
-
-Subject to LP07 acceptance, the likely order is:
-
-- broaden the asset pipeline beyond model assets: textures, audio, video,
-  scripts and fonts;
-- add any further high-value model formats behind the accepted common importer
-  contract, using external libraries only where justified by evidence;
-- previews/thumbnails, dependency/reference reporting and background jobs;
-- complete creator-facing materials/render/world exposure where gaps remain;
-- physics, character controller, input and audio gameplay foundations;
-- animation/retargeting/IK workflows;
-- particles/effects and the generic projectile/magic framework;
-- scripting/gameplay framework and richer Runtime game-state/save systems;
-- later networking/multiplayer, specialist systems and distribution hardening.
-
-The ordering follows the master-plan rule that higher-level gameplay systems
-should consume reliable project assets and Runtime/build semantics rather than
-inventing parallel file-loading paths.
-
-## Master phase plan
+## Broader phase position
 
 | Phase | Outcome | Current position |
 |---|---|---|
@@ -207,30 +222,39 @@ inventing parallel file-loading paths.
 | 1. Reproducible build | Reliable Wicked/Renegade Windows build | Complete |
 | 2. Architecture/UI proof | Branded Studio/Runtime architecture proof | Complete |
 | 3. Studio foundation | Dependable project/scene/editor workflows | Substantially complete |
-| 4. Project and asset pipeline | Repeatable assets/import/reimport/content browser | **Active** |
-| 5. Scene/render exposure | Core visual/world systems authorable | Partially advanced early |
+| 4. Project and asset pipeline | Repeatable governed assets/import/reimport/browser | Substantially advanced |
+| 5. Scene/render exposure | Core visual/world systems authorable | Partially advanced |
+| Story Flow programme | Player-journey authoring/project home | **Active** |
 | 6. Physics/audio/gameplay | Small interactive packaged game | Future |
 | 7. Advanced systems | Animation, particles and specialist systems | Future |
-| 8. Scripting/runtime/export | Lua/runtime/export maturity | Partially advanced early by LP04/LP06 |
-| 9. Exposure audit/platforms | Pinned-baseline coverage/performance/platform audit | Future |
+| 8. Scripting/runtime/export | Runtime/export maturity | Partially advanced |
+| 9. Exposure audit/platforms | Coverage/performance/platform audit | Future |
 | 10. Beta and V1 | Hardened supportable release | Future |
 
-The original time ranges in `docs/MASTER_PLAN.md` remain planning guidance, not
-a promise. Work has intentionally crossed some original phase boundaries where
-a later lifecycle foundation was required to prove an earlier system safely.
+## After Story Flow
+
+The remaining high-level engine roadmap still includes:
+
+- broader governed audio/video/script/font creator workflows;
+- remaining materials/render/world exposure gaps;
+- physics and character controller authoring;
+- input and audio gameplay foundations;
+- animation/retargeting/IK workflows;
+- particles/effects;
+- generic projectile/magic framework;
+- scripting/gameplay framework;
+- richer Runtime state/save systems;
+- networking/multiplayer where justified;
+- distribution/signing/installer/update hardening.
+
+Higher-level systems should consume the accepted project, asset, Flow, Runtime
+and build contracts rather than introducing parallel file/runtime models.
 
 ## Status rules
 
-- A lifecycle gate completes only with a runnable increment and updated evidence.
+- A gate completes only with runnable evidence appropriate to the feature.
 - Compilation alone is not behavioural proof.
 - Visual/behavioural failure overrides green CI.
-- Persistent creator mutations require Undo/Redo and Save/Open evidence where
-  applicable.
-- Hosted CI limitations are recorded, not disguised by weakening Wicked or the
-  product contract.
-- Wicked remains pinned; modify it only through an explicit justified core-patch
-  decision.
-- New Wicked features enter through controlled roadmap/matrix review rather than
-  silently expanding an active gate.
-- Owner-visible standalone build success is not equivalent to commercial
-  redistribution approval.
+- Persistent creator mutations require Undo/Redo and Save/Open evidence.
+- Hosted limitations are recorded, not hidden by weakening the product contract.
+- New Wicked features enter through deliberate roadmap/matrix review.
