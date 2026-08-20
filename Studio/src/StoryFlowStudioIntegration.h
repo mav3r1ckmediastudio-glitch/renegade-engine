@@ -63,6 +63,15 @@ namespace renegade::studio
                 return;
             }
 
+            // Size the native surface before loading the Flow. A first-open
+            // deterministic layout calls FitToContent(), so framing must use
+            // the real Studio viewport rather than the widget's 1x1 default.
+            const XMFLOAT4 viewport = renderer.StoryFlowWorkspaceBounds();
+            const float width = std::max(1.0f, viewport.z - viewport.x);
+            const float height = std::max(1.0f, viewport.w - viewport.y);
+            workspace_.SetPos(XMFLOAT2(viewport.x, viewport.y));
+            workspace_.SetLayout(width, height);
+
             if (trackedProjectId_ != project.projectId ||
                 trackedFlowId_ != project.startupFlowId)
             {
@@ -89,11 +98,6 @@ namespace renegade::studio
                 return;
             }
 
-            const XMFLOAT4 viewport = renderer.StoryFlowWorkspaceBounds();
-            const float width = std::max(1.0f, viewport.z - viewport.x);
-            const float height = std::max(1.0f, viewport.w - viewport.y);
-            workspace_.SetPos(XMFLOAT2(viewport.x, viewport.y));
-            workspace_.SetLayout(width, height);
             SetWorkspaceVisible(true);
             FlushLayout(false);
         }
