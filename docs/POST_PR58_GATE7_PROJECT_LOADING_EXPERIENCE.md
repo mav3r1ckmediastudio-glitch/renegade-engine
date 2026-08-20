@@ -22,7 +22,7 @@ Existing-project opening now follows these visible phases:
 4. **ARGUING WITH THE LAST FEW BYTES...** — commit project identity and the already-prepared scene at the Gate 5 adoption boundary, then refresh project-scoped editor state.
 5. **READY. GO BREAK SOMETHING.** — 100% state briefly confirms success before the overlay automatically reveals the editor.
 
-The percentage is stage-weighted pipeline completion. It is not a prediction of elapsed time. Opaque Wicked operations hold at their real stage while an activity scanner remains animated; Renegade does not fabricate intermediate percentages.
+The percentage is stage-weighted pipeline completion. It is not a prediction of elapsed time. Opaque Wicked operations hold at their real stage while an activity scanner remains animated; Renegade does not fabricate intermediate percentages. The governed-resource phase begins at its stage boundary and advances only from real preparation counts, so the displayed progress remains monotonic when the total count becomes known.
 
 ## Responsiveness rule
 
@@ -62,6 +62,7 @@ Pass conditions:
 - loading messages correspond to actual pipeline stages;
 - governed-resource phase shows real counts when governed bindings exist;
 - activity continues while a stage is opaque;
+- progress never visibly runs backwards;
 - Studio does not present a frozen Hub as the loading state;
 - success reaches **READY. GO BREAK SOMETHING.** and automatically enters the correct editor project;
 - no extra Enter Project button is required.
