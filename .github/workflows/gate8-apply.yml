@@ -1,0 +1,67 @@
+name: Apply Gate 8 texture path cleanup
+
+on:
+  push:
+    branches:
+      - agent/post-pr58-gate8-legacy-texture-path-cleanup
+    paths:
+      - '.github/workflows/gate8-apply.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/post-pr58-gate8-legacy-texture-path-cleanup
+          fetch-depth: 0
+      - name: Apply Gate 8 source changes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'anchor not found in {path}: {old[:80]!r}')
+              text = text.replace(old, new, 1)
+              p.write_text(text, encoding='utf-8')
+
+          replace_once(
+              'EngineBridge/include/renegade/bridge/MaterialTextureAssetService.h',
+              '    struct MaterialTextureRestoreResult\n    {\n',
+              '''    struct MaterialTexturePathCleanupResult\n    {\n        bool succeeded = false;\n        std::size_t inspected = 0;\n        std::size_t cleared = 0;\n        std::string error;\n    };\n\n    // Governed stable IDs are authoritative. Wicked TextureMap::name is only\n    // a legacy external-file locator for these slots and must not be persisted\n    // once a slot is governed, otherwise WISCENE open probes the old source\n    // path before Renegade can restore the resource from project metadata.\n    [[nodiscard]] MaterialTexturePathCleanupResult\n        ClearLegacyGovernedMaterialTexturePaths(wi::scene::Scene& scene);\n\n    struct MaterialTextureRestoreResult\n    {\n''')
+
+          replace_once(
+              'EngineBridge/src/MaterialTextureAssetService.cpp',
+              '    MaterialTextureRestoreResult RestoreMaterialTextureBindings(\n',
+              '''    MaterialTexturePathCleanupResult\n        ClearLegacyGovernedMaterialTexturePaths(wi::scene::Scene& scene)\n    {\n        MaterialTexturePathCleanupResult result;\n        std::vector<MaterialTextureBindingRecord> bindings;\n        if (!InspectMaterialTextureBindings(scene, bindings, result.error))\n            return result;\n\n        result.inspected = bindings.size();\n        for (const auto& binding : bindings)\n        {\n            auto* material = scene.materials.GetComponent(binding.materialEntity);\n            if (material == nullptr)\n            {\n                result.error =\n                    "Governed texture path cleanup lost its material target.";\n                return result;\n            }\n            auto& texture = material->textures[WickedTextureSlot(binding.slot)];\n            if (!texture.name.empty())\n            {\n                texture.name.clear();\n                material->SetDirty();\n                ++result.cleared;\n            }\n        }\n        result.succeeded = true;\n        result.error.clear();\n        return result;\n    }\n\n    MaterialTextureRestoreResult RestoreMaterialTextureBindings(\n''')
+
+          replace_once(
+              'EngineBridge/src/SceneDocumentService.cpp',
+              '#include "renegade/bridge/IdentityService.h"\n',
+              '#include "renegade/bridge/IdentityService.h"\n#include "renegade/bridge/MaterialTextureAssetService.h"\n')
+
+          replace_once(
+              'EngineBridge/src/SceneDocumentService.cpp',
+              '        const std::string token = SaveToken();\n',
+              '''        // Gate 8 migration boundary: a governed stable asset ID is the\n        // authoritative texture identity. Strip obsolete Wicked source names\n        // before writing so future opens never probe the importer workstation.\n        // The live resource and Renegade provenance/metadata remain untouched.\n        const auto texturePathCleanup =\n            ClearLegacyGovernedMaterialTexturePaths(scenes_.scene_);\n        if (!texturePathCleanup.succeeded)\n        {\n            scenes_.lastError_ =\n                "Governed texture path cleanup failed: " +\n                texturePathCleanup.error;\n            return false;\n        }\n\n        const std::string token = SaveToken();\n''')
+
+          replace_once(
+              'Tests/MaterialTextureAssetTests.cpp',
+              '    fakeLoaderCalls = 0;\n    const auto restored = RestoreMaterialTextureBindings(\n',
+              '''    // Gate 8: simulate an older WISCENE that retained the importer\n    // workstation path even though the slot already has authoritative stable\n    // governed metadata. Cleanup must remove only that redundant filename.\n    reopenedMaterial->textures[\n        wi::scene::MaterialComponent::BASECOLORMAP].name =\n        "C:/old-import-workstation/textures/brick.png";\n    const wi::ecs::Entity ungovernedEntity = wi::ecs::CreateEntity();\n    auto& ungoverned = reopened.materials.Create(ungovernedEntity);\n    ungoverned.textures[wi::scene::MaterialComponent::BASECOLORMAP].name =\n        "Content/Textures/authored-local.png";\n    const auto cleanup = ClearLegacyGovernedMaterialTexturePaths(reopened);\n    Require(cleanup.succeeded && cleanup.inspected == 1 && cleanup.cleared == 1,\n        "Gate 8 governed texture cleanup did not report the legacy slot");\n    Require(reopenedMaterial->textures[\n            wi::scene::MaterialComponent::BASECOLORMAP].name.empty(),\n        "Gate 8 cleanup retained the obsolete governed source filename");\n    Require(ungoverned.textures[\n            wi::scene::MaterialComponent::BASECOLORMAP].name ==\n            "Content/Textures/authored-local.png",\n        "Gate 8 cleanup touched an ungoverned authored texture path");\n\n    fakeLoaderCalls = 0;\n    const auto restored = RestoreMaterialTextureBindings(\n''')
+
+          Path('.github/workflows/gate8-apply.yml').unlink()
+      - name: Commit Gate 8 implementation
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'gate8: strip legacy governed texture paths on scene save'
+          git push origin HEAD:agent/post-pr58-gate8-legacy-texture-path-cleanup
