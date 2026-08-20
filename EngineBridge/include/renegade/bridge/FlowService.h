@@ -17,6 +17,7 @@ namespace renegade::bridge
     {
         GameStart,
         Level,
+        Screen,
         CompleteGame,
         ReturnToMainMenu,
         Quit,
@@ -43,11 +44,16 @@ namespace renegade::bridge
         FlowNodeKind kind = FlowNodeKind::Level;
         std::string name;
 
-        // Level nodes use a stable asset identity as authority. The path is a
-        // current project-relative resolution hint and is never a route
-        // destination or durable identity by itself.
+        // Level nodes use stable Scene document identity as authority. The path
+        // remains a current project-relative resolution hint only.
         StableId sceneAssetId;
         std::string scenePathHint;
+
+        // Screen nodes use stable Runtime Screen document identity as authority.
+        // As with Level nodes, the path is a repairable project-relative hint,
+        // never durable identity or executable routing state.
+        StableId screenDocumentId;
+        std::string screenPathHint;
     };
 
     struct FlowRoute
@@ -140,6 +146,8 @@ namespace renegade::bridge
         std::string outcome;
         StableId sceneAssetId;
         std::string scenePathHint;
+        StableId screenDocumentId;
+        std::string screenPathHint;
         std::string destinationEntry;
         FlowTerminalAction terminalAction = FlowTerminalAction::None;
     };
