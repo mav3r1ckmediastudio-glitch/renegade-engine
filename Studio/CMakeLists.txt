@@ -64,6 +64,8 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h
+    src/RenegadeStoryFlowWorkspace.cpp
+    src/RenegadeStoryFlowWorkspace.h
     src/RenegadeProjectHub.cpp
     src/RenegadeProjectHub.h
     src/RenegadeProjectLoadingOverlay.cpp

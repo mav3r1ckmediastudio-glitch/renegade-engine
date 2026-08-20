@@ -21,6 +21,7 @@
 #include "RenegadeStudioChrome.h"
 #include "RenegadeProjectHub.h"
 #include "RenegadeProjectLoadingOverlay.h"
+#include "StoryFlowStudioIntegration.h"
 #include "TestLevelRuntimeProcess.h"
 
 // StudioApplication.cpp defines this helper in its global unnamed namespace.
@@ -55,6 +56,28 @@ namespace renegade::studio
         void RefreshProjectHub();
         void RefreshAssetBrowser();
         void RestoreGovernedMaterialTextures();
+
+        // Gate 1 exposes only the presentation/lifecycle seams required by the
+        // Story Flow adapter. Semantic Flow state remains in EngineBridge.
+        [[nodiscard]] bool IsProjectHubVisible() const noexcept
+        {
+            return projectHubVisible_;
+        }
+
+        [[nodiscard]] bool IsProjectLoadBlocking() const noexcept
+        {
+            return projectLoadingOverlay_.IsBlocking();
+        }
+
+        [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
+        {
+            return studioChrome_.ViewportBounds();
+        }
+
+        wi::gui::GUI& StoryFlowGui() noexcept
+        {
+            return GetGUI();
+        }
 
     private:
         enum class EditorAction
@@ -653,11 +676,22 @@ namespace renegade::studio
         void RequestExit();
         void Initialize() override;
 
+        // Keep every existing call site unchanged while inserting the Gate 1
+        // lifecycle adapter after Wicked has completed the frame. This makes
+        // the native workspace visible on the following frame and guarantees
+        // the renderer GUI has already been constructed before it is attached.
+        void Run()
+        {
+            wi::Application::Run();
+            storyFlowIntegration_.Tick(renderer_, session_);
+        }
+
     private:
         void PrepareProvingGround();
 
         bridge::StudioSession session_;
         StudioRenderPath renderer_;
+        StoryFlowStudioIntegration storyFlowIntegration_;
         std::string startupScene_ = "Content/ProvingGround.wiscene";
     };
 }

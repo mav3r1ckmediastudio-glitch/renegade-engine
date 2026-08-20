@@ -19,6 +19,8 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/CreatorTextureWorkflowService.h
     include/renegade/bridge/DependencyService.h
     include/renegade/bridge/FlowService.h
+    include/renegade/bridge/StoryFlowAuthoringModel.h
+    include/renegade/bridge/StoryFlowLayoutService.h
     include/renegade/bridge/ScreenService.h
     include/renegade/bridge/IdentityService.h
     include/renegade/bridge/LightService.h
@@ -62,6 +64,8 @@ add_library(RenegadeEngineBridge STATIC
     src/CreatorTextureWorkflowService.cpp
     src/DependencyService.cpp
     src/FlowService.cpp
+    src/StoryFlowAuthoringModel.cpp
+    src/StoryFlowLayoutService.cpp
     src/ScreenService.cpp
     src/IdentityService.cpp
     src/LightService.cpp
