@@ -32,6 +32,8 @@ namespace renegade::bridge
         std::string name;
         StableId sceneAssetId;
         std::string scenePathHint;
+        StableId screenDocumentId;
+        std::string screenPathHint;
         bool reachableFromStart = false;
         std::size_t presentationColumn = 0;
         std::size_t presentationRow = 0;
@@ -50,9 +52,9 @@ namespace renegade::bridge
         std::size_t conditionCount = 0;
     };
 
-    // Gate 1 read-only authoring boundary. It owns a validated FlowDocument and
-    // derives deterministic presentation metadata without duplicating Runtime
-    // semantics. Journey View and Graph View must consume this shared model.
+    // Shared authoring boundary. It owns a validated FlowDocument and derives
+    // deterministic presentation metadata without duplicating Runtime semantics.
+    // Journey View and Graph View must consume this same model.
     class StoryFlowAuthoringModel
     {
     public:
