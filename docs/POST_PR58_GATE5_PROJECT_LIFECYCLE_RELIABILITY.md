@@ -101,6 +101,19 @@ Pass conditions:
 - current project, scene and recents are unchanged;
 - no editor work is discarded.
 
+### F. First-open NEW PROJECT controls
+
+Owner testing found that the first NEW PROJECT modal display could paint the authored Hub chrome over the native project-name, CREATE PROJECT and CANCEL controls. The controls existed and were clickable; interacting with them promoted their Wicked GUI priority and made them appear, so subsequent modal opens looked correct.
+
+The repair changes only top-level widget registration order. Wicked renders these widgets back-to-front, so the Hub chrome is now registered after the three modal controls and therefore renders behind them from their first visible frame.
+
+Pass conditions from a completely fresh Studio launch:
+
+- the first click of NEW PROJECT immediately shows the project-name input;
+- CREATE PROJECT is immediately visible;
+- CANCEL is immediately visible;
+- no hover, click in empty space, second modal open or other interaction is required to make those controls paint.
+
 ## Locked exclusions
 
 This gate does not add the requested existing-project loading progress bar. That is a later dedicated loading/progress gate so progress can be driven by real lifecycle phases rather than a fake timer.
@@ -113,5 +126,5 @@ Do not merge until:
 
 - exact-head Renegade Studio Debug and Release are green;
 - exact-head Windows baseline Debug and Release are green;
-- owner Release testing passes A–E above;
+- owner Release testing passes A–F above;
 - the accepted Gate 2 startup flow, native Hub, Gate 4 project cards/artwork and PR #57 reusable-asset behaviour have not regressed.
