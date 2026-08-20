@@ -336,6 +336,37 @@ namespace renegade::bridge
         return true;
     }
 
+    MaterialTexturePathCleanupResult
+        ClearLegacyGovernedMaterialTexturePaths(wi::scene::Scene& scene)
+    {
+        MaterialTexturePathCleanupResult result;
+        std::vector<MaterialTextureBindingRecord> bindings;
+        if (!InspectMaterialTextureBindings(scene, bindings, result.error))
+            return result;
+
+        result.inspected = bindings.size();
+        for (const auto& binding : bindings)
+        {
+            auto* material = scene.materials.GetComponent(binding.materialEntity);
+            if (material == nullptr)
+            {
+                result.error =
+                    "Governed texture path cleanup lost its material target.";
+                return result;
+            }
+            auto& texture = material->textures[WickedTextureSlot(binding.slot)];
+            if (!texture.name.empty())
+            {
+                texture.name.clear();
+                material->SetDirty();
+                ++result.cleared;
+            }
+        }
+        result.succeeded = true;
+        result.error.clear();
+        return result;
+    }
+
     MaterialTextureRestoreResult RestoreMaterialTextureBindings(
         wi::scene::Scene& scene,
         const std::string& projectRoot,

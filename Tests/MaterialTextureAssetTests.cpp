@@ -320,6 +320,27 @@ int main()
             "WISCENE serialized a governed texture as a fake external filename");
     }
 
+    // Gate 8: simulate an older WISCENE that retained the importer
+    // workstation path even though the slot already has authoritative stable
+    // governed metadata. Cleanup must remove only that redundant filename.
+    reopenedMaterial->textures[
+        wi::scene::MaterialComponent::BASECOLORMAP].name =
+        "C:/old-import-workstation/textures/brick.png";
+    const wi::ecs::Entity ungovernedEntity = wi::ecs::CreateEntity();
+    auto& ungoverned = reopened.materials.Create(ungovernedEntity);
+    ungoverned.textures[wi::scene::MaterialComponent::BASECOLORMAP].name =
+        "Content/Textures/authored-local.png";
+    const auto cleanup = ClearLegacyGovernedMaterialTexturePaths(reopened);
+    Require(cleanup.succeeded && cleanup.inspected == 1 && cleanup.cleared == 1,
+        "Gate 8 governed texture cleanup did not report the legacy slot");
+    Require(reopenedMaterial->textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].name.empty(),
+        "Gate 8 cleanup retained the obsolete governed source filename");
+    Require(ungoverned.textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].name ==
+            "Content/Textures/authored-local.png",
+        "Gate 8 cleanup touched an ungoverned authored texture path");
+
     fakeLoaderCalls = 0;
     const auto restored = RestoreMaterialTextureBindings(
         reopened, root.generic_u8string(), ProjectId, FakeLoader);

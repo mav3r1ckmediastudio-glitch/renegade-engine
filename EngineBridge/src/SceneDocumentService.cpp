@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
@@ -300,6 +301,20 @@ namespace renegade::bridge
         {
             scenes_.lastError_ = "Scene identity validation failed: " +
                 identityError;
+            return false;
+        }
+
+        // Gate 8 migration boundary: a governed stable asset ID is the
+        // authoritative texture identity. Strip obsolete Wicked source names
+        // before writing so future opens never probe the importer workstation.
+        // The live resource and Renegade provenance/metadata remain untouched.
+        const auto texturePathCleanup =
+            ClearLegacyGovernedMaterialTexturePaths(scenes_.scene_);
+        if (!texturePathCleanup.succeeded)
+        {
+            scenes_.lastError_ =
+                "Governed texture path cleanup failed: " +
+                texturePathCleanup.error;
             return false;
         }
 

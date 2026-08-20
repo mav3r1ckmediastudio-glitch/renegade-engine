@@ -73,6 +73,21 @@ namespace renegade::bridge
         StableId baseColorTextureAssetId;
     };
 
+    struct MaterialTexturePathCleanupResult
+    {
+        bool succeeded = false;
+        std::size_t inspected = 0;
+        std::size_t cleared = 0;
+        std::string error;
+    };
+
+    // Governed stable IDs are authoritative. Wicked TextureMap::name is only
+    // a legacy external-file locator for these slots and must not be persisted
+    // once a slot is governed, otherwise WISCENE open probes the old source
+    // path before Renegade can restore the resource from project metadata.
+    [[nodiscard]] MaterialTexturePathCleanupResult
+        ClearLegacyGovernedMaterialTexturePaths(wi::scene::Scene& scene);
+
     struct MaterialTextureRestoreResult
     {
         bool succeeded = false;
