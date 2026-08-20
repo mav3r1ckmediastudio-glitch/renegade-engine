@@ -127,7 +127,7 @@ namespace renegade::studio
         case Phase::PreparingScene: return 0.24f;
         case Phase::RestoringAssets:
             if (total == 0)
-                return 0.72f;
+                return 0.35f;
             return 0.35f + 0.52f * std::clamp(
                 static_cast<float>(completed) / static_cast<float>(total), 0.0f, 1.0f);
         case Phase::Finalising: return 0.94f;
@@ -183,7 +183,7 @@ namespace renegade::studio
             {
                 std::ostringstream out;
                 out << completed << " / " << total
-                    << " governed resources restored from project metadata.";
+                    << " governed resources prepared from project metadata.";
                 return out.str();
             }
             return "Checking behind the sofa for governed resources.";
