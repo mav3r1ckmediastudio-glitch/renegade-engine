@@ -129,6 +129,11 @@ namespace renegade::studio
 
             if (desiredWorkspace_ == Workspace::LevelEditor)
             {
+                // Leaving Story Flow is a lifecycle boundary, not just a draw
+                // toggle. Persist any debounced presentation edits before the
+                // 2D path is stopped so Gate 4 Level transitions cannot lose
+                // the creator's latest framing.
+                FlushLayout(true);
                 storyFlow.SetWorkspaceActive(false);
                 EnsureActive(application, levelEditor);
                 return;
