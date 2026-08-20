@@ -24,42 +24,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  gate6_apply:
-    name: Apply Gate 6 save-safety source patch
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.head_ref == 'agent/post-pr58-gate6-save-safety' &&
-      github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out Gate 6 branch
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-
-      - name: Apply source patch
-        run: python Tools/Gate6-Apply.py
-
-      - name: Remove temporary repair plumbing
-        shell: bash
-        run: |
-          git checkout origin/main -- .github/workflows/studio.yml
-          git rm -f Tools/Gate6-Apply.py .github/workflows/gate6-save-safety-apply.yml
-
-      - name: Commit and push Gate 6 source changes
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Studio/src/StudioApplication.cpp Studio/src/StudioApplication.h Studio/src/main_Windows.cpp .github/workflows/studio.yml
-          git diff --cached --check
-          git commit -m "gate6: protect destructive actions from unsaved scene loss"
-          git push origin HEAD:${{ github.head_ref }}
-
   studio:
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025

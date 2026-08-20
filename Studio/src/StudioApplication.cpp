@@ -1102,6 +1102,23 @@ namespace renegade::studio
         exitRequestHandler_ = std::move(handler);
     }
 
+    void StudioRenderPath::RequestExit()
+    {
+        if (session_ == nullptr)
+        {
+            if (exitRequestHandler_)
+                exitRequestHandler_();
+            return;
+        }
+
+        RequestSceneReplacement(
+            [this]()
+            {
+                if (exitRequestHandler_)
+                    exitRequestHandler_();
+            });
+    }
+
     void StudioRenderPath::BindDiagnostics(
         wi::Application::InfoDisplayer& diagnostics) noexcept
     {
@@ -3213,7 +3230,7 @@ namespace renegade::studio
                 if (session_ && session_->Projects().HasProject()) SetProjectHubVisible(false);
                 break;
             case RenegadeProjectHub::Action::ExitRenegade:
-                if (exitRequestHandler_) exitRequestHandler_();
+                RequestExit();
                 break;
             case RenegadeProjectHub::Action::CancelNewProject:
                 hubNewProjectMode_ = false;
@@ -9236,7 +9253,10 @@ wi::eventhandler::Subscribe_Once(
             wi::eventhandler::EVENT_THREAD_SAFE_POINT,
             [this, parentDirectory, projectName](uint64_t)
             {
-                if (!session_->Projects().CreateProject(
+                RequestSceneReplacement(
+                    [this, parentDirectory, projectName]()
+                    {
+                        if (!session_->Projects().CreateProject(
                         parentDirectory,
                         projectName,
                         "Content/ProvingGround.wiscene"))
@@ -9263,12 +9283,13 @@ wi::eventhandler::Subscribe_Once(
                     "RENEGADE STUDIO // " +
                     session_->Projects().CurrentProject().name);
                 hubMessageLabel_.font.params.color = HologramMuted;
-                hubMessageLabel_.SetText(
-                    "PROJECT CREATED // " +
-                    session_->Projects().CurrentProject().descriptorPath);
-                selectedRecentProject_ = -1;
-                RefreshProjectHub();
-                SetProjectHubVisible(false);
+                        hubMessageLabel_.SetText(
+                            "PROJECT CREATED // " +
+                            session_->Projects().CurrentProject().descriptorPath);
+                        selectedRecentProject_ = -1;
+                        RefreshProjectHub();
+                        SetProjectHubVisible(false);
+                    });
             });
     }
 
@@ -9288,11 +9309,15 @@ wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this, descriptorPath](uint64_t)
                     {
-                        hubMessageLabel_.font.params.color = HologramMuted;
-                        hubMessageLabel_.SetText(
-                            "PROJECT OPENING // " +
-                            wi::helper::GetFileNameFromPath(descriptorPath));
-                        OpenProjectDescriptor(descriptorPath);
+                        RequestSceneReplacement(
+                            [this, descriptorPath]()
+                            {
+                                hubMessageLabel_.font.params.color = HologramMuted;
+                                hubMessageLabel_.SetText(
+                                    "PROJECT OPENING // " +
+                                    wi::helper::GetFileNameFromPath(descriptorPath));
+                                OpenProjectDescriptor(descriptorPath);
+                            });
                     });
             });
     }
@@ -9346,15 +9371,15 @@ wi::eventhandler::Subscribe_Once(
             return;
         }
 
-        ClearSelectionOutline();
-        const bool saved = session_->SaveScene(currentPath);
-        SyncSelectionOutline();
-        RefreshStatus();
-        RefreshInspector();
-        if (saved)
-        {
-            continuation();
-        }
+        SaveSceneAfterTransientCleanup(
+            currentPath,
+            [continuation = std::move(continuation)](const bool saved)
+            {
+                if (saved)
+                {
+                    continuation();
+                }
+            });
     }
 
     void StudioRenderPath::OpenScene()
@@ -9625,7 +9650,12 @@ wi::eventhandler::Subscribe_Once(
             return;
         }
 
-        OpenProjectDescriptor(recent[index].descriptorPath);
+        const std::string descriptorPath = recent[index].descriptorPath;
+        RequestSceneReplacement(
+            [this, descriptorPath]()
+            {
+                OpenProjectDescriptor(descriptorPath);
+            });
     }
 
     void StudioRenderPath::ReturnToProjectHub()
@@ -9922,6 +9952,11 @@ wi::eventhandler::Subscribe_Once(
     void StudioApplication::SetExitRequestHandler(std::function<void()> handler)
     {
         renderer_.SetExitRequestHandler(std::move(handler));
+    }
+
+    void StudioApplication::RequestExit()
+    {
+        renderer_.RequestExit();
     }
 
     void StudioApplication::Initialize()
