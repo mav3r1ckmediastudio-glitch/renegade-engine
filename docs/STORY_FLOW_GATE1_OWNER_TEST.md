@@ -51,7 +51,7 @@ A missing or invalid semantic Flow is an error and is not silently replaced. A m
 
 Do not begin the owner test merely because the fixture exists. The exact PR head containing the Studio `startup_flow` integration must first pass both Windows baseline and Renegade Studio Debug/Release CI.
 
-The Release build used for the test must correspond to that exact PR head.
+The Release build used for the test must correspond to that exact PR head. Do not substitute an earlier green artifact: the integration itself must be present in the tested executable.
 
 ## Owner acceptance steps
 
