@@ -45,6 +45,7 @@ namespace
     const XMFLOAT4 LeftOpen = XMFLOAT4(50.0f, 284.0f, 370.0f, 376.0f);
     const XMFLOAT4 LeftImport = XMFLOAT4(50.0f, 394.0f, 370.0f, 486.0f);
     const XMFLOAT4 LeftBack = XMFLOAT4(50.0f, 690.0f, 370.0f, 752.0f);
+    const XMFLOAT4 LeftExit = XMFLOAT4(50.0f, 760.0f, 370.0f, 786.0f);
 
     const XMFLOAT4 Preview = XMFLOAT4(435.0f, 188.0f, 1150.0f, 592.0f);
     const XMFLOAT4 LowerNew = XMFLOAT4(435.0f, 614.0f, 1150.0f, 780.0f);
@@ -600,6 +601,12 @@ namespace renegade::studio
         if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
             return;
 
+        if (!newProjectMode_ && ContainsBase(basePointer, LeftExit))
+        {
+            Invoke(Action::ExitRenegade);
+            return;
+        }
+
         switch (hovered_)
         {
         case HoverTarget::NewProject:
@@ -791,6 +798,13 @@ namespace renegade::studio
             text("BACK TO EDITOR", 70.0f, 706.0f, 12, hover ? Cyan : TextStrong, wi::font::WIFALIGN_LEFT, 0.9f, 0.11f);
             text(UpperAscii(Ellipsize(currentProjectName_, 28u)), 70.0f, 730.0f, 8, Muted, wi::font::WIFALIGN_LEFT, 0.4f, 0.08f);
         }
+
+        const XMFLOAT4 exitPointer = wi::input::GetPointer();
+        const bool exitHover = !newProjectMode_ &&
+            ContainsBase(ToBase(exitPointer.x, exitPointer.y), LeftExit);
+        panel(LeftExit, exitHover ? PanelRaised : PanelDeep, exitHover ? Orange : Border);
+        text("EXIT RENEGADE", 70.0f, 766.0f, 9, exitHover ? Orange : Muted, wi::font::WIFALIGN_LEFT, 0.9f, 0.10f);
+        text("X", 348.0f, 766.0f, 9, exitHover ? Orange : Dim, wi::font::WIFALIGN_CENTER, 0.0f, 0.10f);
 
         text("PROJECT ACTIONS", 52.0f, 512.0f, 9, Dim, wi::font::WIFALIGN_LEFT, 1.2f, 0.10f);
         text("LOCAL PROJECT FILESYSTEM", 52.0f, 536.0f, 8, Muted, wi::font::WIFALIGN_LEFT, 0.5f, 0.07f);
