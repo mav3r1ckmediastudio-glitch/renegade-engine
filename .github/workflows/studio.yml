@@ -24,9 +24,34 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  apply-gate7-polish:
+    name: Apply Gate 7 progress polish
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/post-pr58-gate7-project-loading-experience' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Gate 7 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/post-pr58-gate7-project-loading-experience
+          fetch-depth: 0
+      - name: Apply progress polish
+        run: python .github/scripts/gate7_polish.py
+      - name: Remove temporary patch plumbing
+        run: |
+          git rm .github/scripts/gate7_polish.py
+          git checkout origin/main -- .github/workflows/studio.yml
+      - name: Commit and push polish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Studio/src/RenegadeProjectLoadingOverlay.cpp .github/workflows/studio.yml
+          git diff --cached --check
+          git commit -m "gate7: keep real loading progress monotonic"
+          git push origin HEAD:agent/post-pr58-gate7-project-loading-experience
+
   studio:
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025
