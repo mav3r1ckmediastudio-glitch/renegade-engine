@@ -1,0 +1,57 @@
+name: Gate 8 test pointer fix
+
+on:
+  push:
+    branches:
+      - agent/post-pr58-gate8-legacy-texture-path-cleanup
+    paths:
+      - ".github/workflows/gate8-test-pointer-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Gate 8 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/post-pr58-gate8-legacy-texture-path-cleanup
+          fetch-depth: 0
+      - name: Fix stale test pointer
+        shell: pwsh
+        run: |
+          $path = 'Tests/MaterialTextureAssetTests.cpp'
+          $text = Get-Content -LiteralPath $path -Raw
+          $old = @'
+    const auto cleanup = ClearLegacyGovernedMaterialTexturePaths(reopened);
+    Require(cleanup.succeeded && cleanup.inspected == 1 && cleanup.cleared == 1,
+        "Gate 8 governed texture cleanup did not report the legacy slot");
+    Require(reopenedMaterial->textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].name.empty(),
+        "Gate 8 cleanup retained the obsolete governed source filename");
+'@
+          $new = @'
+    const auto cleanup = ClearLegacyGovernedMaterialTexturePaths(reopened);
+    Require(cleanup.succeeded && cleanup.inspected == 1 && cleanup.cleared == 1,
+        "Gate 8 governed texture cleanup did not report the legacy slot");
+    // Creating the ungoverned material above can reallocate Wicked's component
+    // storage, so reacquire the governed material before inspecting it.
+    reopenedMaterial = reopened.materials.GetComponent(bindings.front().materialEntity);
+    Require(reopenedMaterial != nullptr && reopenedMaterial->textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].name.empty(),
+        "Gate 8 cleanup retained the obsolete governed source filename");
+'@
+          if (-not $text.Contains($old)) { throw 'Expected Gate 8 test block was not found.' }
+          $text = $text.Replace($old, $new)
+          Set-Content -LiteralPath $path -Value $text -NoNewline
+      - name: Remove temporary workflow
+        run: git rm .github/workflows/gate8-test-pointer-fix.yml
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Tests/MaterialTextureAssetTests.cpp
+          git commit -m "test: reacquire governed material after scene mutation"
+          git push origin HEAD:agent/post-pr58-gate8-legacy-texture-path-cleanup
