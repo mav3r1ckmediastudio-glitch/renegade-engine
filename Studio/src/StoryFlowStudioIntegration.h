@@ -2,6 +2,7 @@
 
 #include "RenegadeStoryFlowWorkspace.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <string>
