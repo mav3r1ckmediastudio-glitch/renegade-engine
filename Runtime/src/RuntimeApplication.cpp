@@ -88,6 +88,9 @@ namespace renegade::runtime
         renderer_.BindScene(scenes_);
         renderer_.init(canvas);
 
+        // LP03 compatibility path: an explicitly declared project startup
+        // screen still appears before Story Flow. Gate 2 additionally allows
+        // Story Flow itself to enter Screen destinations after play.
         if (!startupResult_.startupScreenPath.empty())
         {
             std::string error;
@@ -145,6 +148,25 @@ namespace renegade::runtime
         if (!startupResult_.succeeded)
         {
             return;
+        }
+
+        if (flowStarted_)
+        {
+            const auto* current = flow_.CurrentNode();
+            if (current != nullptr &&
+                current->kind == bridge::FlowNodeKind::Screen)
+            {
+                std::string error;
+                if (!LoadCurrentFlowScreen(error))
+                {
+                    startupResult_.succeeded = false;
+                    startupResult_.code = RuntimeBootstrapCode::ScreenLoadFailed;
+                    startupResult_.message =
+                        "Could not load Story Flow Runtime screen: " + error;
+                    ++evidenceRevision_;
+                    return;
+                }
+            }
         }
 
         renderer_.Load();
@@ -211,7 +233,7 @@ namespace renegade::runtime
                         true,
                         RuntimeActionCode::Success,
                         request,
-                        "Runtime action play entered the existing LP02 Story Flow.",
+                        "Runtime action play entered the project Story Flow.",
                     };
                 },
                 error))
@@ -289,6 +311,64 @@ namespace renegade::runtime
         return true;
     }
 
+    bool RuntimeApplication::LoadCurrentFlowScreen(std::string& error)
+    {
+        const auto* current = flow_.CurrentNode();
+        if (!flowStarted_ || current == nullptr ||
+            current->kind != bridge::FlowNodeKind::Screen)
+        {
+            error = "Story Flow is not currently positioned on a Screen destination.";
+            return false;
+        }
+        if (startupResult_.startupScreenPath.empty() ||
+            startupResult_.screenDocumentId != current->screenDocumentId)
+        {
+            error = "Story Flow Screen destination has not been resolved into Runtime state.";
+            return false;
+        }
+
+        bridge::ScreenDocument document;
+        if (!bridge::ReadScreenDocument(
+                startupResult_.startupScreenPath,
+                startupResult_.project.projectId,
+                document,
+                error))
+        {
+            return false;
+        }
+        if (document.envelope.documentId != current->screenDocumentId)
+        {
+            error = "Resolved Runtime screen document ID does not match the current Story Flow node.";
+            return false;
+        }
+        if (!screenController_.Initialize(document, error))
+        {
+            return false;
+        }
+        if (!screenPresenter_.Load(
+                document,
+                startupResult_.project.rootPath,
+                renderer_,
+                screenController_,
+                [this](RuntimeActionRequest request)
+                {
+                    QueueAction(std::move(request));
+                },
+                error))
+        {
+            return false;
+        }
+
+        startupResult_.screenDocumentId = document.envelope.documentId;
+        const auto* focused = screenController_.FocusedWidget();
+        startupResult_.screenFocusedWidgetId =
+            focused == nullptr ? std::string{} : focused->id;
+        startupResult_.screenLoaded = true;
+        startupResult_.screenWasLoaded = true;
+        error.clear();
+        return true;
+    }
+
     void RuntimeApplication::QueueAction(RuntimeActionRequest request)
     {
         pendingActions_.push_back(std::move(request));
@@ -305,14 +385,85 @@ namespace renegade::runtime
         pending.swap(pendingActions_);
         for (const auto& request : pending)
         {
-            const RuntimeActionResult result = actions_.Dispatch(request);
-            RecordAction(result);
+            const auto* current = flowStarted_ ? flow_.CurrentNode() : nullptr;
+            if (current != nullptr &&
+                current->kind == bridge::FlowNodeKind::Screen)
+            {
+                RuntimeActionResult result;
+                result.request = request;
+
+                auto step = flow_.EmitOutcome(request.actionId);
+                if (!step.succeeded)
+                {
+                    result.succeeded = false;
+                    result.code = RuntimeActionCode::FlowStartFailed;
+                    result.message = step.message;
+                    RecordAction(result);
+                    continue;
+                }
+
+                std::string error;
+                if (!flow_.ApplyStep(scenes_, startupResult_, step, error))
+                {
+                    result.succeeded = false;
+                    result.code = RuntimeActionCode::FlowStartFailed;
+                    result.message = error;
+                    RecordAction(result);
+                    continue;
+                }
+
+                screenPresenter_.Reset(renderer_);
+                startupResult_.screenLoaded = false;
+
+                const auto* destination = flow_.CurrentNode();
+                if (destination != nullptr &&
+                    destination->kind == bridge::FlowNodeKind::Screen)
+                {
+                    if (!LoadCurrentFlowScreen(error))
+                    {
+                        result.succeeded = false;
+                        result.code = RuntimeActionCode::FlowStartFailed;
+                        result.message = error;
+                        RecordAction(result);
+                        continue;
+                    }
+                }
+
+                if (startupResult_.flowTerminalAction ==
+                    bridge::FlowTerminalAction::Quit)
+                {
+                    quitRequested_ = true;
+                }
+
+                result.succeeded = true;
+                result.code = RuntimeActionCode::Success;
+                result.message = "Runtime Screen action advanced Story Flow to '" +
+                    startupResult_.flowNodeName + "'.";
+                RecordAction(result);
+                continue;
+            }
+
+            RuntimeActionResult result = actions_.Dispatch(request);
             if (result.succeeded &&
                 result.request.actionId == bridge::RuntimeScreenPlayAction)
             {
                 screenPresenter_.Reset(renderer_);
                 startupResult_.screenLoaded = false;
+
+                const auto* destination = flow_.CurrentNode();
+                if (destination != nullptr &&
+                    destination->kind == bridge::FlowNodeKind::Screen)
+                {
+                    std::string error;
+                    if (!LoadCurrentFlowScreen(error))
+                    {
+                        result.succeeded = false;
+                        result.code = RuntimeActionCode::FlowStartFailed;
+                        result.message = error;
+                    }
+                }
             }
+            RecordAction(result);
         }
     }
 
