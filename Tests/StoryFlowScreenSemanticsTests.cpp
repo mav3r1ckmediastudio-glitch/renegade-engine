@@ -271,6 +271,42 @@ int main()
             "Story Flow dependency reader did not expose Screen documents");
     }
 
+    DependencyNode flowDependencyNode;
+    flowDependencyNode.id = "flow-root";
+    flowDependencyNode.projectRelativePath = "Content/Flow/Main.renegade-flow";
+    flowDependencyNode.dependencyClass = DependencyClass::StoryFlowDocument;
+    StoryFlowDependencyProvider dependencyProvider(dependencyReader);
+    std::vector<DependencyCandidate> emittedDependencies;
+    DependencyProviderContext dependencyContext;
+    dependencyContext.projectRoot = root.generic_u8string();
+    dependencyContext.source = &flowDependencyNode;
+    if (!dependencyProvider.Discover(
+            dependencyContext,
+            [&](const DependencyCandidate& candidate)
+            {
+                emittedDependencies.push_back(candidate);
+            },
+            [](const DependencyProviderDiagnostic&) {},
+            error))
+    {
+        return Fail(temporary.path,
+            "Story Flow dependency provider rejected the Gate 2 Flow");
+    }
+    std::size_t sceneDependencyCount = 0;
+    std::size_t screenDependencyCount = 0;
+    for (const auto& dependency : emittedDependencies)
+    {
+        if (dependency.dependencyClass == DependencyClass::Scene)
+            ++sceneDependencyCount;
+        if (dependency.dependencyClass == DependencyClass::RuntimeScreenDocument)
+            ++screenDependencyCount;
+    }
+    if (sceneDependencyCount != 1 || screenDependencyCount != 2)
+    {
+        return Fail(temporary.path,
+            "Story Flow provider did not type Level and Screen dependencies correctly");
+    }
+
     FlowInterpreter interpreter;
     if (!interpreter.Initialize(reopened, error))
     {
