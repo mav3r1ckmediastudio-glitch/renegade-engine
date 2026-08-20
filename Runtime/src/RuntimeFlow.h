@@ -10,9 +10,8 @@
 namespace renegade::runtime
 {
     // Runtime-owned execution boundary over the bridge's serialized,
-    // renderer-independent flow model. LP02 exposes only deterministic startup
-    // and named-outcome advancement; gameplay triggers and screen actions join
-    // this same contract in later proofs.
+    // renderer-independent flow model. Screen actions and gameplay outcomes
+    // both advance the same deterministic FlowInterpreter contract.
     class RuntimeFlowController
     {
     public:
@@ -32,6 +31,7 @@ namespace renegade::runtime
 
         [[nodiscard]] const std::vector<std::string>& Trace() const noexcept;
         [[nodiscard]] const bridge::FlowDocument& Document() const noexcept;
+        [[nodiscard]] const bridge::FlowNode* CurrentNode() const noexcept;
 
     private:
         void RecordStep(const bridge::FlowStepResult& step);
@@ -42,8 +42,8 @@ namespace renegade::runtime
     };
 
     // Starts at the permanent Game Start node, emits game.start through the
-    // same named-outcome contract used later by UI/gameplay, loads the selected
-    // Level node, and then consumes any diagnostic --flow-outcome arguments.
+    // shared named-outcome contract, enters the selected Level or Screen, and
+    // then consumes any diagnostic --flow-outcome arguments.
     [[nodiscard]] RuntimeBootstrapResult LoadRuntimeProjectFlow(
         bridge::SceneService& scenes,
         RuntimeFlowController& flow,
