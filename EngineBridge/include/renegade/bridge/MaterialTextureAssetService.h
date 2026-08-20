@@ -57,6 +57,11 @@ namespace renegade::bridge
         const PreparedMaterialTextureAsset& prepared,
         std::string& error)>;
 
+    // Reports completed unique governed resource preparations. It is designed
+    // for UI telemetry and may be invoked from a background job.
+    using MaterialTextureRestoreProgress =
+        std::function<void(std::size_t completed, std::size_t total)>;
+
     // One record represents one material/slot binding. baseColorTextureAssetId
     // is retained as a compatibility mirror for Gate 1-era callers/tests and is
     // populated only when slot == BaseColor; new code must use textureAssetId.
@@ -110,7 +115,8 @@ namespace renegade::bridge
         wi::scene::Scene& scene,
         const std::string& projectRoot,
         const StableId& projectId,
-        MaterialTextureResourceLoader loader = {});
+        MaterialTextureResourceLoader loader = {},
+        MaterialTextureRestoreProgress progress = {});
 
     [[nodiscard]] MaterialTextureRestoreResult RefreshMaterialTextureBindingsForAsset(
         wi::scene::Scene& scene,

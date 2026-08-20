@@ -81,18 +81,13 @@ namespace renegade::bridge
             documents_.NewScene();
         }
 
-        bool LoadScene(const std::string& filePath)
+        bool CommitPendingProjectScene(PreparedSceneOpen prepared)
         {
             if (!projects_.HasPendingProject())
             {
-                return documents_.Open(filePath);
+                return documents_.CommitPreparedOpen(std::move(prepared));
             }
 
-            // Project switches are two-phase in Studio: deserialize/validate
-            // the candidate scene without touching the active document first.
-            // A bad startup scene therefore leaves both the current project
-            // identity and current scene untouched.
-            auto prepared = documents_.PrepareOpen(filePath);
             if (!prepared.IsReady())
             {
                 const bool ignored =
@@ -102,10 +97,6 @@ namespace renegade::bridge
                 return false;
             }
 
-            // Only after the candidate scene is known-good do we make the
-            // candidate project authoritative (and update Recent Projects).
-            // CommitPreparedOpen has no failure path for a ready result, so
-            // project and scene adoption share one validated boundary.
             if (!projects_.CommitPendingProject())
             {
                 scenes_.SetLastError(
@@ -116,6 +107,11 @@ namespace renegade::bridge
             }
 
             return documents_.CommitPreparedOpen(std::move(prepared));
+        }
+
+        bool LoadScene(const std::string& filePath)
+        {
+            return CommitPendingProjectScene(documents_.PrepareOpen(filePath));
         }
 
         bool SaveScene(const std::string& filePath)

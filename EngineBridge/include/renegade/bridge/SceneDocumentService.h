@@ -51,6 +51,14 @@ namespace renegade::bridge
             return scene_.get();
         }
 
+        // Mutable preparation seam for background restoration work. This scene
+        // is still detached from Studio's active document; callers must finish
+        // all mutation before CommitPreparedOpen() adopts it.
+        [[nodiscard]] wi::scene::Scene* MutablePreparedScene() noexcept
+        {
+            return scene_.get();
+        }
+
     private:
         friend class SceneService;
         friend class SceneDocumentService;

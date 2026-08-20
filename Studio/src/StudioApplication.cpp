@@ -1091,6 +1091,16 @@ namespace
 
 namespace renegade::studio
 {
+    struct StudioRenderPath::ProjectLoadOperation
+    {
+        std::string descriptorPath;
+        std::string startupScenePath;
+        bridge::ProjectMetadata project;
+        bridge::PreparedSceneOpen preparedScene;
+        bridge::MaterialTextureRestoreResult textureRestore;
+        std::string error;
+    };
+
     void StudioRenderPath::BindSession(bridge::StudioSession& session) noexcept
     {
         session_ = &session;
@@ -1104,6 +1114,11 @@ namespace renegade::studio
 
     void StudioRenderPath::RequestExit()
     {
+        if (projectLoadingOverlay_.IsBlocking() &&
+            projectLoadingOverlay_.CurrentPhase() != RenegadeProjectLoadingOverlay::Phase::Failed)
+        {
+            return;
+        }
         if (session_ == nullptr)
         {
             if (exitRequestHandler_)
@@ -3196,6 +3211,15 @@ namespace renegade::studio
         projectHubPanel_.AddWidget(&hubMessageLabel_);
         projectHubPanel_.SetVisible(false);
 
+        projectLoadingOverlay_.Create();
+        projectLoadingOverlay_.OnReturnToHub([this]()
+        {
+            projectLoadingOverlay_.SetVisible(false);
+            RefreshProjectHub();
+            SetProjectHubVisible(true);
+        });
+        GetGUI().AddWidget(&projectLoadingOverlay_);
+
         projectHubChrome_.Create();
         const auto savedIdentity = StudioUserPreferences::LoadDeveloperIdentity();
         projectHubChrome_.SetDeveloperIdentity(savedIdentity.has_value()
@@ -4328,6 +4352,8 @@ namespace renegade::studio
         const float height = GetLogicalHeight();
         studioChrome_.SetLayout(width, height);
         projectHubChrome_.SetLayout(width, height);
+
+        projectLoadingOverlay_.SetLayout(width, height);
         const XMFLOAT4 n = projectHubChrome_.NewProjectInputBounds();
         hubNewProjectNameInput_.SetPos(XMFLOAT2(n.x,n.y));
         hubNewProjectNameInput_.SetSize(XMFLOAT2(n.z-n.x,n.w-n.y));
@@ -9597,43 +9623,139 @@ wi::eventhandler::Subscribe_Once(
         camera->UpdateCamera();
     }
 
-    void StudioRenderPath::OpenProjectDescriptor(
+    void StudioRenderPath::BeginProjectLoad(
         const std::string& descriptorPath)
     {
-        if (session_ == nullptr)
+        if (session_ == nullptr || descriptorPath.empty() ||
+            projectLoadingOverlay_.IsBlocking() ||
+            wi::jobsystem::IsBusy(projectLoadWorkload_))
         {
             return;
         }
 
+        projectLoadingOverlay_.Begin(
+            wi::helper::GetFileNameFromPath(descriptorPath));
+        projectHubChrome_.SetVisible(false);
+        hubNewProjectNameInput_.SetVisible(false);
+        hubNewProjectConfirmButton_.SetVisible(false);
+        hubNewProjectCancelButton_.SetVisible(false);
+
+        projectLoadingOverlay_.SetPhase(
+            RenegadeProjectLoadingOverlay::Phase::ValidatingProject);
         if (!session_->Projects().OpenProject(descriptorPath))
         {
-            hubMessageLabel_.font.params.color = WarningAmber;
-            hubMessageLabel_.SetText(
-                "PROJECT OPEN FAILED // " +
-                session_->Projects().LastError());
-            return;
-        }
-        ClearSelectionOutline();
-        if (!session_->LoadScene(session_->Projects().StartupScenePath()))
-        {
-            hubMessageLabel_.font.params.color = WarningAmber;
-            hubMessageLabel_.SetText(
-                "PROJECT SCENE FAILED // " +
-                session_->Scenes().LastError());
+            projectLoadingOverlay_.Fail(
+                "Project validation failed: " + session_->Projects().LastError());
             return;
         }
 
-        RestoreGovernedMaterialTextures();
+        auto operation = std::make_shared<ProjectLoadOperation>();
+        operation->descriptorPath = descriptorPath;
+        operation->startupScenePath = session_->Projects().StartupScenePath();
+        operation->project = session_->Projects().PendingProject();
+        projectLoadingOverlay_.SetPhase(
+            RenegadeProjectLoadingOverlay::Phase::PreparingScene);
+
+        projectLoadWorkload_.priority = wi::jobsystem::Priority::Low;
+        wi::jobsystem::Execute(
+            projectLoadWorkload_,
+            [this, operation](wi::jobsystem::JobArgs)
+            {
+                operation->preparedScene =
+                    session_->Documents().PrepareOpen(operation->startupScenePath);
+                if (!operation->preparedScene.IsReady())
+                {
+                    operation->error = operation->preparedScene.Error().empty()
+                        ? "The startup scene could not be prepared."
+                        : operation->preparedScene.Error();
+                }
+                else
+                {
+                    auto* candidate = operation->preparedScene.MutablePreparedScene();
+                    if (candidate != nullptr)
+                    {
+                        projectLoadingOverlay_.SetPhase(
+                            RenegadeProjectLoadingOverlay::Phase::RestoringAssets,
+                            0, 0);
+                        operation->textureRestore =
+                            bridge::RestoreMaterialTextureBindings(
+                                *candidate,
+                                operation->project.rootPath,
+                                operation->project.projectId,
+                                {},
+                                [this](const std::size_t completed,
+                                    const std::size_t total)
+                                {
+                                    projectLoadingOverlay_.SetPhase(
+                                        RenegadeProjectLoadingOverlay::Phase::RestoringAssets,
+                                        completed, total);
+                                });
+                    }
+                }
+
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, operation](std::uint64_t)
+                    {
+                        CompleteProjectLoad(operation);
+                    });
+            });
+    }
+
+    void StudioRenderPath::CompleteProjectLoad(
+        std::shared_ptr<ProjectLoadOperation> operation)
+    {
+        if (session_ == nullptr || !operation)
+            return;
+
+        if (!operation->error.empty())
+        {
+            session_->Projects().DiscardPendingProject();
+            projectLoadingOverlay_.Fail(operation->error);
+            return;
+        }
+
+        projectLoadingOverlay_.SetPhase(
+            RenegadeProjectLoadingOverlay::Phase::Finalising);
+        ClearSelectionOutline();
+        if (!session_->CommitPendingProjectScene(
+                std::move(operation->preparedScene)))
+        {
+            SyncSelectionOutline();
+            projectLoadingOverlay_.Fail(
+                session_->Scenes().LastError().empty()
+                    ? "The prepared project could not be adopted."
+                    : session_->Scenes().LastError());
+            return;
+        }
+
+        AdoptOpenedSceneCamera();
+        SetEnvironmentWorkspaceActive(false);
+        SetTerrainWorkspaceActive(false);
         workspaceTitle_.SetText(
             "RENEGADE STUDIO // " +
             session_->Projects().CurrentProject().name);
-        hubMessageLabel_.font.params.color = HologramMuted;
-        hubMessageLabel_.SetText(
-            "PROJECT ONLINE // " +
-            session_->Projects().CurrentProject().descriptorPath);
+        hubMessageLabel_.font.params.color = operation->textureRestore.succeeded
+            ? HologramMuted : WarningAmber;
+        hubMessageLabel_.SetText(operation->textureRestore.succeeded
+            ? "PROJECT ONLINE // " + session_->Projects().CurrentProject().descriptorPath
+            : "PROJECT ONLINE // GOVERNED RESOURCE WARNING // " +
+                operation->textureRestore.error);
         selectedRecentProject_ = -1;
         RefreshProjectHub();
+        RefreshAssetBrowser();
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
         SetProjectHubVisible(false);
+        projectLoadingOverlay_.SetPhase(
+            RenegadeProjectLoadingOverlay::Phase::Ready);
+    }
+
+    void StudioRenderPath::OpenProjectDescriptor(
+        const std::string& descriptorPath)
+    {
+        BeginProjectLoad(descriptorPath);
     }
 
     void StudioRenderPath::OpenSelectedRecentProject()

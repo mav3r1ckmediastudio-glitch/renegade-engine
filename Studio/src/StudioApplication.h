@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,7 @@
 #include "renegade/bridge/TerrainService.h"
 #include "RenegadeStudioChrome.h"
 #include "RenegadeProjectHub.h"
+#include "RenegadeProjectLoadingOverlay.h"
 #include "TestLevelRuntimeProcess.h"
 
 // StudioApplication.cpp defines this helper in its global unnamed namespace.
@@ -354,6 +356,9 @@ namespace renegade::studio
         void AdoptOpenedSceneCamera();
         void AdoptOpenedSceneTerrainFallbackCamera(
             const wi::scene::Scene& openedScene);
+        struct ProjectLoadOperation;
+        void BeginProjectLoad(const std::string& descriptorPath);
+        void CompleteProjectLoad(std::shared_ptr<ProjectLoadOperation> operation);
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
@@ -511,6 +516,7 @@ namespace renegade::studio
         std::string assetBrowserCurrentFolder_ = "Content";
         wi::gui::Window projectHubPanel_;
         RenegadeProjectHub projectHubChrome_;
+        RenegadeProjectLoadingOverlay projectLoadingOverlay_;
         wi::gui::Label hubBrandLabel_;
         wi::gui::Label hubTitleLabel_;
         wi::gui::Label hubSubtitleLabel_;
@@ -629,6 +635,7 @@ namespace renegade::studio
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
         wi::jobsystem::context sceneOpenWorkload_;
+        wi::jobsystem::context projectLoadWorkload_;
         wi::jobsystem::context modelImportWorkload_;
         std::string openingScenePath_;
         bool sceneOpenInProgress_ = false;

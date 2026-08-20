@@ -340,7 +340,8 @@ namespace renegade::bridge
         wi::scene::Scene& scene,
         const std::string& projectRoot,
         const StableId& projectId,
-        MaterialTextureResourceLoader loader)
+        MaterialTextureResourceLoader loader,
+        MaterialTextureRestoreProgress progress)
     {
         const auto restoreStarted = diagnostics::LifecycleClock::now();
         MaterialTextureRestoreResult result;
@@ -364,6 +365,9 @@ namespace renegade::bridge
         for (const auto& binding : bindings)
             uniqueTextureAssetIds.insert(binding.textureAssetId);
         result.uniqueAssetIds = uniqueTextureAssetIds.size();
+        std::size_t progressedUnique = 0;
+        if (progress)
+            progress(0, result.uniqueAssetIds);
 
         struct CachedRestoreAsset
         {
@@ -411,6 +415,9 @@ namespace renegade::bridge
                 prepareMilliseconds += diagnostics::MillisecondsSince(prepareStarted);
                 if (cached.preparedSuccessfully)
                     ++result.preparedUnique;
+                ++progressedUnique;
+                if (progress)
+                    progress(progressedUnique, result.uniqueAssetIds);
             }
 
             if (cached.preparedSuccessfully && !cached.loadAttempted)
