@@ -1,7 +1,9 @@
 #pragma once
 
+#include <utility>
+
 #include "renegade/bridge/CommandService.h"
-#include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/StudioProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/SelectionService.h"
@@ -64,12 +66,12 @@ namespace renegade::bridge
             return commands_;
         }
 
-        [[nodiscard]] ProjectService& Projects() noexcept
+        [[nodiscard]] StudioProjectService& Projects() noexcept
         {
             return projects_;
         }
 
-        [[nodiscard]] const ProjectService& Projects() const noexcept
+        [[nodiscard]] const StudioProjectService& Projects() const noexcept
         {
             return projects_;
         }
@@ -81,7 +83,39 @@ namespace renegade::bridge
 
         bool LoadScene(const std::string& filePath)
         {
-            return documents_.Open(filePath);
+            if (!projects_.HasPendingProject())
+            {
+                return documents_.Open(filePath);
+            }
+
+            // Project switches are two-phase in Studio: deserialize/validate
+            // the candidate scene without touching the active document first.
+            // A bad startup scene therefore leaves both the current project
+            // identity and current scene untouched.
+            auto prepared = documents_.PrepareOpen(filePath);
+            if (!prepared.IsReady())
+            {
+                const bool ignored =
+                    documents_.CommitPreparedOpen(std::move(prepared));
+                (void)ignored;
+                projects_.DiscardPendingProject();
+                return false;
+            }
+
+            // Only after the candidate scene is known-good do we make the
+            // candidate project authoritative (and update Recent Projects).
+            // CommitPreparedOpen has no failure path for a ready result, so
+            // project and scene adoption share one validated boundary.
+            if (!projects_.CommitPendingProject())
+            {
+                scenes_.SetLastError(
+                    "Project adoption failed after startup-scene validation: " +
+                    projects_.LastError());
+                projects_.DiscardPendingProject();
+                return false;
+            }
+
+            return documents_.CommitPreparedOpen(std::move(prepared));
         }
 
         bool SaveScene(const std::string& filePath)
@@ -97,7 +131,7 @@ namespace renegade::bridge
     private:
         inline static StudioSession* current_ = nullptr;
 
-        ProjectService projects_;
+        StudioProjectService projects_;
         SceneService scenes_;
         SelectionService selection_;
         CommandService commands_;
