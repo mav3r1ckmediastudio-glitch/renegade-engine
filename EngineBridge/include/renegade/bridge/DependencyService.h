@@ -180,6 +180,7 @@ namespace renegade::bridge
     {
         std::string projectId;
         std::vector<std::string> scenePathHints;
+        std::vector<std::string> screenPathHints;
     };
 
     struct RuntimeScreenDependencyDocument

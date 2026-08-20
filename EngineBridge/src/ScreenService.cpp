@@ -187,6 +187,7 @@ namespace renegade::bridge
             return true;
         };
     }
+
     const char* ScreenWidgetKindName(const ScreenWidgetKind kind) noexcept
     {
         switch (kind)
@@ -230,9 +231,9 @@ namespace renegade::bridge
             error = "The Runtime screen has invalid design dimensions.";
             return false;
         }
-        if (document.actions.size() != 2)
+        if (document.actions.empty() || document.actions.size() > 64)
         {
-            error = "LP03 Runtime screens must declare exactly play and quit.";
+            error = "The Runtime screen must declare between 1 and 64 actions.";
             return false;
         }
         if (document.widgets.empty() || document.widgets.size() > 256)
@@ -256,19 +257,9 @@ namespace renegade::bridge
                 return false;
             }
         }
-        if (actionIds.count(RuntimeScreenPlayAction) != 1 ||
-            actionIds.count(RuntimeScreenQuitAction) != 1)
-        {
-            error = "The Runtime screen must declare stable play and quit actions.";
-            return false;
-        }
 
         std::unordered_map<StableId, const ScreenWidget*> widgets;
-        std::size_t imageCount = 0;
-        std::size_t textCount = 0;
         std::size_t buttonCount = 0;
-        std::size_t playButtonCount = 0;
-        std::size_t quitButtonCount = 0;
         std::size_t availableButtonCount = 0;
 
         for (const auto& widget : document.widgets)
@@ -303,7 +294,6 @@ namespace renegade::bridge
             switch (widget.kind)
             {
             case ScreenWidgetKind::Image:
-                ++imageCount;
                 if (!widget.visible ||
                     !IsContentRelativePath(widget.resourcePath) ||
                     !widget.text.empty() || !widget.actionId.empty())
@@ -315,7 +305,6 @@ namespace renegade::bridge
                 break;
 
             case ScreenWidgetKind::Text:
-                ++textCount;
                 if (widget.text.empty() || !widget.resourcePath.empty() ||
                     !widget.actionId.empty())
                 {
@@ -338,23 +327,13 @@ namespace renegade::bridge
                 {
                     ++availableButtonCount;
                 }
-                if (widget.actionId == RuntimeScreenPlayAction)
-                {
-                    ++playButtonCount;
-                }
-                if (widget.actionId == RuntimeScreenQuitAction)
-                {
-                    ++quitButtonCount;
-                }
                 break;
             }
         }
 
-        if (imageCount != 1 || textCount < 1 || buttonCount != 2 ||
-            playButtonCount != 1 || quitButtonCount != 1)
+        if (buttonCount == 0)
         {
-            error = "The LP03 screen must contain one image, text, and one "
-                "button for each of play and quit.";
+            error = "The Runtime screen must contain at least one action button.";
             return false;
         }
         if (availableButtonCount == 0)
@@ -545,7 +524,7 @@ namespace renegade::bridge
             const int actionCount = screen.GetInt("action_count");
             const int widgetCount = screen.GetInt("widget_count");
             const int focusCount = screen.GetInt("focus_count");
-            if (actionCount < 0 || actionCount > 64 ||
+            if (actionCount <= 0 || actionCount > 64 ||
                 widgetCount <= 0 || widgetCount > 256 ||
                 focusCount < 0 || focusCount > 256)
             {

@@ -886,6 +886,10 @@ namespace renegade::bridge
         for (std::size_t index = 0; index < document.scenePathHints.size(); ++index)
             EmitPath(emit, document.scenePathHints[index], DependencyClass::Scene,
                 "story_flow.level[" + std::to_string(index) + "].scene_path_hint");
+        for (std::size_t index = 0; index < document.screenPathHints.size(); ++index)
+            EmitPath(emit, document.screenPathHints[index],
+                DependencyClass::RuntimeScreenDocument,
+                "story_flow.screen[" + std::to_string(index) + "].screen_path_hint");
         error.clear();
         return true;
     }

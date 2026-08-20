@@ -67,6 +67,7 @@ namespace
         {
         case FlowNodeKind::GameStart: return "GAME START";
         case FlowNodeKind::Level: return "LEVEL";
+        case FlowNodeKind::Screen: return "SCREEN";
         case FlowNodeKind::CompleteGame: return "COMPLETE GAME";
         case FlowNodeKind::ReturnToMainMenu: return "RETURN TO MENU";
         case FlowNodeKind::Quit: return "QUIT";
