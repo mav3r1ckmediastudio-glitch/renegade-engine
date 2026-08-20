@@ -71,6 +71,11 @@ namespace
             kind = FlowNodeKind::Level;
             return true;
         }
+        if (value == "screen")
+        {
+            kind = FlowNodeKind::Screen;
+            return true;
+        }
         if (value == "complete_game")
         {
             kind = FlowNodeKind::CompleteGame;
@@ -329,7 +334,6 @@ namespace
         error.clear();
         return true;
     }
-
 }
 
 namespace renegade::bridge
@@ -338,21 +342,35 @@ namespace renegade::bridge
         std::string expectedProjectId)
     {
         return [projectId = std::move(expectedProjectId)](
-            const std::string& path, StoryFlowDependencyDocument& document,
+            const std::string& path,
+            StoryFlowDependencyDocument& document,
             std::string& error)
         {
             FlowDocument flow;
             if (!ReadFlowDocument(path, projectId, flow, error))
+            {
                 return false;
+            }
+
             document.projectId = flow.envelope.projectId;
             document.scenePathHints.clear();
+            document.screenPathHints.clear();
             for (const auto& node : flow.nodes)
+            {
                 if (node.kind == FlowNodeKind::Level)
+                {
                     document.scenePathHints.push_back(node.scenePathHint);
+                }
+                else if (node.kind == FlowNodeKind::Screen)
+                {
+                    document.screenPathHints.push_back(node.screenPathHint);
+                }
+            }
             error.clear();
             return true;
         };
     }
+
     const char* FlowNodeKindName(const FlowNodeKind kind) noexcept
     {
         switch (kind)
@@ -361,6 +379,8 @@ namespace renegade::bridge
             return "game_start";
         case FlowNodeKind::Level:
             return "level";
+        case FlowNodeKind::Screen:
+            return "screen";
         case FlowNodeKind::CompleteGame:
             return "complete_game";
         case FlowNodeKind::ReturnToMainMenu:
@@ -446,8 +466,9 @@ namespace renegade::bridge
                 ++gameStartCount;
             }
 
-            if (node.kind == FlowNodeKind::Level)
+            switch (node.kind)
             {
+            case FlowNodeKind::Level:
                 if (!IsValidStableId(node.sceneAssetId))
                 {
                     error = "Level node '" + node.name +
@@ -460,11 +481,45 @@ namespace renegade::bridge
                         "' has an unsafe scene path hint.";
                     return false;
                 }
-            }
-            else if (!node.sceneAssetId.empty() || !node.scenePathHint.empty())
-            {
-                error = "Only Level nodes may reference a scene asset.";
-                return false;
+                if (!node.screenDocumentId.empty() ||
+                    !node.screenPathHint.empty())
+                {
+                    error = "Level node '" + node.name +
+                        "' cannot reference a Runtime screen document.";
+                    return false;
+                }
+                break;
+
+            case FlowNodeKind::Screen:
+                if (!IsValidStableId(node.screenDocumentId))
+                {
+                    error = "Screen node '" + node.name +
+                        "' is missing a valid Runtime screen document ID.";
+                    return false;
+                }
+                if (!IsSafeRelativePath(node.screenPathHint))
+                {
+                    error = "Screen node '" + node.name +
+                        "' has an unsafe Runtime screen path hint.";
+                    return false;
+                }
+                if (!node.sceneAssetId.empty() || !node.scenePathHint.empty())
+                {
+                    error = "Screen node '" + node.name +
+                        "' cannot reference a Scene document.";
+                    return false;
+                }
+                break;
+
+            default:
+                if (!node.sceneAssetId.empty() || !node.scenePathHint.empty() ||
+                    !node.screenDocumentId.empty() ||
+                    !node.screenPathHint.empty())
+                {
+                    error = "Only Level and Screen nodes may reference project content documents.";
+                    return false;
+                }
+                break;
             }
         }
 
@@ -498,6 +553,7 @@ namespace renegade::bridge
                 error = "Story Flow routes must use stable node IDs, not paths or canvas state.";
                 return false;
             }
+
             const auto source = nodes.find(route.sourceNodeId);
             const auto destination = nodes.find(route.destinationNodeId);
             if (source == nodes.end() || destination == nodes.end())
@@ -522,6 +578,7 @@ namespace renegade::bridge
                 error = "Story Flow route contains an invalid named outcome.";
                 return false;
             }
+
             if (destination->second->kind == FlowNodeKind::Level)
             {
                 if (!IsValidSymbol(route.destinationEntry))
@@ -616,6 +673,8 @@ namespace renegade::bridge
                     section.Set("name", node.name);
                     section.Set("scene_asset_id", node.sceneAssetId);
                     section.Set("scene_path_hint", node.scenePathHint);
+                    section.Set("screen_document_id", node.screenDocumentId);
+                    section.Set("screen_path_hint", node.screenPathHint);
                 }
 
                 for (std::size_t index = 0;
@@ -628,9 +687,7 @@ namespace renegade::bridge
                     section.Set("source", route.sourceNodeId);
                     section.Set("outcome", route.outcome);
                     section.Set("destination", route.destinationNodeId);
-                    section.Set(
-                        "destination_entry",
-                        route.destinationEntry);
+                    section.Set("destination_entry", route.destinationEntry);
                     section.Set("priority", route.priority);
                     section.Set(
                         "condition_count",
@@ -640,17 +697,13 @@ namespace renegade::bridge
                         conditionIndex < route.conditions.size();
                         ++conditionIndex)
                     {
-                        const auto& condition =
-                            route.conditions[conditionIndex];
+                        const auto& condition = route.conditions[conditionIndex];
                         section.Set(
                             IndexedKey(conditionIndex, "key").c_str(),
                             condition.key);
                         section.Set(
-                            IndexedKey(
-                                conditionIndex,
-                                "operator").c_str(),
-                            FlowConditionOperatorName(
-                                condition.operation));
+                            IndexedKey(conditionIndex, "operator").c_str(),
+                            FlowConditionOperatorName(condition.operation));
                         section.Set(
                             IndexedKey(conditionIndex, "value").c_str(),
                             condition.value);
@@ -753,6 +806,8 @@ namespace renegade::bridge
                 node.name = section.GetText("name");
                 node.sceneAssetId = section.GetText("scene_asset_id");
                 node.scenePathHint = section.GetText("scene_path_hint");
+                node.screenDocumentId = section.GetText("screen_document_id");
+                node.screenPathHint = section.GetText("screen_path_hint");
                 parsed.nodes.push_back(std::move(node));
             }
 
@@ -1213,6 +1268,8 @@ namespace renegade::bridge
         result.outcome = std::move(outcome);
         result.sceneAssetId = node.sceneAssetId;
         result.scenePathHint = node.scenePathHint;
+        result.screenDocumentId = node.screenDocumentId;
+        result.screenPathHint = node.screenPathHint;
         if (route != nullptr)
         {
             result.routeId = route->id;
