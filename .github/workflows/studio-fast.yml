@@ -1,0 +1,78 @@
+name: Renegade Studio Fast
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/studio-fast.yml"
+      - "CMakeLists.txt"
+      - "EngineBridge/**"
+      - "Studio/**"
+      - "Runtime/**"
+      - "Tests/**"
+      - "Tools/Build-Studio-Windows-Fast.ps1"
+      - "Tools/Windows-Build.Common.ps1"
+      - ".gitmodules"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SCCACHE_GHA_ENABLED: "true"
+
+concurrency:
+  group: renegade-studio-fast-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast-release:
+    name: Renegade Studio Fast Release
+    runs-on: windows-2025
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out Renegade and Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure MSBuild discovery
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+
+      - name: Build cached Release iteration
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+          if not defined VSINSTALL (
+            echo Visual Studio C++ installation not found.
+            exit /b 1
+          )
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          if errorlevel 1 exit /b %errorlevel%
+          pwsh -NoLogo -NoProfile -File .\Tools\Build-Studio-Windows-Fast.ps1 -Configuration Release -ArtifactRoot "artifacts/studio-fast/ci-Release"
+          if errorlevel 1 exit /b %errorlevel%
+
+      - name: Show compiler-cache statistics
+        if: always()
+        shell: pwsh
+        run: |
+          if (Get-Command sccache -ErrorAction SilentlyContinue) {
+            sccache --show-stats
+          }
+
+      - name: Upload fast Release package and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renegade-studio-fast-windows-x64-Release-${{ github.sha }}
+          path: artifacts/studio-fast/ci-Release
+          if-no-files-found: warn
+          retention-days: 7
