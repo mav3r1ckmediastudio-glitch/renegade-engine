@@ -3225,7 +3225,6 @@ namespace renegade::studio
             }
         });
         projectHubChrome_.SetVisible(projectHubVisible_);
-        GetGUI().AddWidget(&projectHubChrome_);
 
         hubNewProjectNameInput_.Create("Hub New Project Name");
         hubNewProjectNameInput_.SetPlaceholder("PROJECT NAME");
@@ -3251,6 +3250,12 @@ namespace renegade::studio
         });
         hubNewProjectCancelButton_.SetVisible(false);
         GetGUI().AddWidget(&hubNewProjectCancelButton_);
+
+        // Wicked GUI renders top-level widgets back-to-front. Register the
+        // authored Hub chrome after its native NEW PROJECT controls so the
+        // input/CREATE/CANCEL controls render above the modal on their very
+        // first visible frame instead of only being promoted after a click.
+        GetGUI().AddWidget(&projectHubChrome_);
     }
 
     // A small, self-contained popup rather than a new row wedged into the
