@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
+#include "renegade/bridge/StoryFlowAuthoringSession.h"
 #include "renegade/bridge/StoryFlowLayoutService.h"
 
 #include <chrono>
@@ -11,9 +12,9 @@
 
 namespace renegade::studio
 {
-    // Gate 3 lifecycle adapter. Semantic Flow remains owned by EngineBridge;
-    // this class decides which first-class Studio RenderPath owns the next
-    // frame and persists presentation-only Story Flow layout state.
+    // Gate 3 lifecycle adapter. Semantic Flow is owned by the EngineBridge
+    // authoring session; this class decides which first-class Studio RenderPath
+    // owns the next frame and persists presentation-only layout state.
     class StoryFlowStudioIntegration final
     {
     public:
@@ -119,7 +120,7 @@ namespace renegade::studio
                 }
             }
 
-            if (!model_.IsLoaded())
+            if (!authoringSession_.IsLoaded() || !model_.IsLoaded())
             {
                 storyFlow.SetWorkspaceActive(false);
                 desiredWorkspace_ = Workspace::LevelEditor;
@@ -130,9 +131,10 @@ namespace renegade::studio
             if (desiredWorkspace_ == Workspace::LevelEditor)
             {
                 // Leaving Story Flow is a lifecycle boundary, not just a draw
-                // toggle. Persist any debounced presentation edits before the
-                // 2D path is stopped so Gate 4 Level transitions cannot lose
-                // the creator's latest framing.
+                // toggle. Persist presentation edits before the 2D path stops.
+                // Semantic edits remain alive in authoringSession_ until the
+                // creator explicitly saves or a later lifecycle guard resolves
+                // dirty state.
                 FlushLayout(true);
                 storyFlow.SetWorkspaceActive(false);
                 EnsureActive(application, levelEditor);
@@ -188,24 +190,26 @@ namespace renegade::studio
                 return false;
             }
 
-            bridge::FlowDocument document;
-            if (!bridge::ReadFlowDocument(
+            if (!authoringSession_.Open(
                     resolvedFlowPath,
                     project.projectId,
-                    document,
                     error))
             {
                 ReportSemanticFailure(
-                    "could not read startup_flow '" + resolvedFlowPath +
-                    "': " + error);
+                    "could not open startup_flow authoring session '" +
+                    resolvedFlowPath + "': " + error);
                 return false;
             }
 
-            if (!model_.Load(std::move(document), project.projectId, error))
+            if (!model_.Load(
+                    authoringSession_.Document(),
+                    project.projectId,
+                    error))
             {
                 ReportSemanticFailure(
-                    "startup_flow failed Story Flow authoring validation: " +
+                    "startup_flow failed Story Flow presentation validation: " +
                     error);
+                authoringSession_.Clear();
                 return false;
             }
 
@@ -281,7 +285,7 @@ namespace renegade::studio
             // SyncCanvas() has already given the dedicated path the current
             // application dimensions, so first-open FitToContent() frames
             // against the real window instead of the old 3D viewport host.
-            storyFlow.Bind(&model_, &layout_);
+            storyFlow.Bind(&authoringSession_, &model_, &layout_);
             if (!restoredSavedLayout)
             {
                 storyFlow.FitToContent();
@@ -293,7 +297,7 @@ namespace renegade::studio
             }
 
             wi::backlog::post(
-                "Renegade Story Flow: dedicated render path ready for " +
+                "Renegade Story Flow: editable Graph session ready for " +
                     resolvedFlowPath,
                 wi::backlog::LogLevel::Default);
             return true;
@@ -303,6 +307,7 @@ namespace renegade::studio
         void ResetActiveFlow(StoryFlowPath& storyFlow)
         {
             storyFlow.Clear();
+            authoringSession_.Clear();
             model_.Clear();
             layout_ = {};
             layoutPath_.clear();
@@ -350,6 +355,7 @@ namespace renegade::studio
                 wi::backlog::LogLevel::Warning);
         }
 
+        bridge::StoryFlowAuthoringSession authoringSession_;
         bridge::StoryFlowAuthoringModel model_;
         bridge::StoryFlowLayoutDocument layout_;
         bridge::StableId trackedProjectId_;
