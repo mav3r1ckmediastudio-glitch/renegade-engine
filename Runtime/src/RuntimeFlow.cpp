@@ -1,5 +1,7 @@
 #include "RuntimeFlow.h"
 
+#include "renegade/bridge/ScreenService.h"
+
 #include <utility>
 
 namespace
@@ -24,6 +26,14 @@ namespace
         result.flowNodeName = step.currentNodeName;
         result.flowEntry = step.destinationEntry;
         result.flowTerminalAction = step.terminalAction;
+    }
+
+    renegade::runtime::RuntimeBootstrapCode ContentFailureCode(
+        const renegade::bridge::FlowStepResult& step) noexcept
+    {
+        return step.currentNodeKind == renegade::bridge::FlowNodeKind::Screen
+            ? renegade::runtime::RuntimeBootstrapCode::ScreenLoadFailed
+            : renegade::runtime::RuntimeBootstrapCode::SceneLoadFailed;
     }
 }
 
@@ -94,8 +104,53 @@ namespace renegade::runtime
         CopyStepToResult(bootstrap, step);
         bootstrap.flowTrace = trace_;
 
+        if (step.currentNodeKind == bridge::FlowNodeKind::Screen)
+        {
+            std::string screenPath;
+            if (!bridge::ResolveRuntimeScreenDocumentPath(
+                    projectRoot_,
+                    bootstrap.project.projectId,
+                    step.screenDocumentId,
+                    step.screenPathHint,
+                    screenPath,
+                    error))
+            {
+                return false;
+            }
+
+            bridge::ScreenDocument screen;
+            if (!bridge::ReadScreenDocument(
+                    screenPath,
+                    bootstrap.project.projectId,
+                    screen,
+                    error))
+            {
+                return false;
+            }
+            if (screen.envelope.documentId != step.screenDocumentId)
+            {
+                error = "Resolved Runtime screen document ID does not match the Story Flow node.";
+                return false;
+            }
+
+            bootstrap.startupScreenPath = screenPath;
+            bootstrap.screenDocumentId = screen.envelope.documentId;
+            bootstrap.screenFocusedWidgetId.clear();
+            bootstrap.screenLoaded = false;
+            bootstrap.entityCount = 0;
+            error.clear();
+            return true;
+        }
+
         if (step.currentNodeKind != bridge::FlowNodeKind::Level)
         {
+            if (step.terminalAction != bridge::FlowTerminalAction::None)
+            {
+                bootstrap.startupScreenPath.clear();
+                bootstrap.screenDocumentId.clear();
+                bootstrap.screenFocusedWidgetId.clear();
+                bootstrap.screenLoaded = false;
+            }
             error.clear();
             return true;
         }
@@ -126,6 +181,10 @@ namespace renegade::runtime
         }
 
         bootstrap.startupScenePath = scenePath;
+        bootstrap.startupScreenPath.clear();
+        bootstrap.screenDocumentId.clear();
+        bootstrap.screenFocusedWidgetId.clear();
+        bootstrap.screenLoaded = false;
         bootstrap.entityCount = scenes.EntityCount();
         error.clear();
         return true;
@@ -139,6 +198,11 @@ namespace renegade::runtime
     const bridge::FlowDocument& RuntimeFlowController::Document() const noexcept
     {
         return interpreter_.Document();
+    }
+
+    const bridge::FlowNode* RuntimeFlowController::CurrentNode() const noexcept
+    {
+        return interpreter_.CurrentNode();
     }
 
     void RuntimeFlowController::RecordStep(
@@ -192,7 +256,7 @@ namespace renegade::runtime
         {
             return Fail(
                 std::move(result),
-                RuntimeBootstrapCode::SceneLoadFailed,
+                ContentFailureCode(step),
                 error);
         }
 
@@ -209,7 +273,7 @@ namespace renegade::runtime
         {
             return Fail(
                 std::move(result),
-                RuntimeBootstrapCode::SceneLoadFailed,
+                ContentFailureCode(step),
                 error);
         }
 
@@ -228,7 +292,7 @@ namespace renegade::runtime
             {
                 return Fail(
                     std::move(result),
-                    RuntimeBootstrapCode::SceneLoadFailed,
+                    ContentFailureCode(step),
                     error);
             }
         }
