@@ -1,6 +1,7 @@
 #include "RenegadeStoryFlowWorkspace.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -21,6 +22,7 @@ namespace
     constexpr wi::Color Muted(132, 143, 149, 255);
     constexpr wi::Color Accent(210, 91, 29, 255);
     constexpr wi::Color Route(76, 96, 106, 255);
+    constexpr wi::Color Error(229, 92, 92, 255);
 
     void Rect(float x, float y, float w, float h, wi::Color color,
         wi::graphics::CommandList cmd)
@@ -80,6 +82,52 @@ namespace
         return pointer.x >= bounds.x && pointer.y >= bounds.y &&
             pointer.x < bounds.x + bounds.z && pointer.y < bounds.y + bounds.w;
     }
+
+    std::string Trim(std::string value)
+    {
+        const auto whitespace = [](const unsigned char c)
+        {
+            return std::isspace(c) != 0;
+        };
+        while (!value.empty() && whitespace(value.front())) value.erase(value.begin());
+        while (!value.empty() && whitespace(value.back())) value.pop_back();
+        return value;
+    }
+
+    std::string Shorten(std::string value, const std::size_t limit)
+    {
+        if (value.size() <= limit) return value;
+        if (limit <= 3) return value.substr(0, limit);
+        value.resize(limit - 3);
+        value += "...";
+        return value;
+    }
+
+    float DistanceToSegment(
+        const XMFLOAT2 point,
+        const XMFLOAT2 start,
+        const XMFLOAT2 end)
+    {
+        const float dx = end.x - start.x;
+        const float dy = end.y - start.y;
+        const float lengthSquared = dx * dx + dy * dy;
+        if (lengthSquared <= 0.0001f)
+        {
+            const float px = point.x - start.x;
+            const float py = point.y - start.y;
+            return std::sqrt(px * px + py * py);
+        }
+        const float projection = std::clamp(
+            ((point.x - start.x) * dx + (point.y - start.y) * dy) /
+                lengthSquared,
+            0.0f,
+            1.0f);
+        const float nearestX = start.x + projection * dx;
+        const float nearestY = start.y + projection * dy;
+        const float px = point.x - nearestX;
+        const float py = point.y - nearestY;
+        return std::sqrt(px * px + py * py);
+    }
 }
 
 namespace renegade::studio
@@ -88,6 +136,7 @@ namespace renegade::studio
     {
         SetName("Renegade Story Flow workspace");
         SetShadowRadius(0.0f);
+        CreateAuthoringControls();
         SetLayout(width_, height_);
     }
 
@@ -96,26 +145,46 @@ namespace renegade::studio
         width_ = std::max(1.0f, width);
         height_ = std::max(1.0f, height);
         SetSize(XMFLOAT2(width_, height_));
+        LayoutAuthoringControls();
     }
 
     void RenegadeStoryFlowWorkspace::Bind(
-        const bridge::StoryFlowAuthoringModel* model,
+        bridge::StoryFlowAuthoringSession* session,
+        bridge::StoryFlowAuthoringModel* model,
         bridge::StoryFlowLayoutDocument* layout)
     {
+        session_ = session;
         model_ = model;
         layout_ = layout;
-        if (model_ && layout_ && model_->IsLoaded())
+        selectedRouteId_.clear();
+        connectionSourceNodeId_.clear();
+        reconnectRouteId_.clear();
+        if (session_ && model_ && layout_ && session_->IsLoaded() && model_->IsLoaded())
+        {
             selectedNodeId_ = model_->GameStartNodeId();
+            statusMessage_ = "FLOW OPEN // EDITS ARE VALIDATED BEFORE HISTORY";
+        }
         else
+        {
             selectedNodeId_.clear();
+            statusMessage_ = "NO FLOW OPEN";
+        }
+        RefreshInspectorControls();
     }
 
     void RenegadeStoryFlowWorkspace::Clear() noexcept
     {
+        session_ = nullptr;
         model_ = nullptr;
         layout_ = nullptr;
         selectedNodeId_.clear();
+        selectedRouteId_.clear();
+        connectionSourceNodeId_.clear();
+        reconnectRouteId_.clear();
+        draggedNodeId_.clear();
         panning_ = false;
+        nodeDragging_ = false;
+        statusMessage_ = "NO FLOW OPEN";
     }
 
     void RenegadeStoryFlowWorkspace::OnSelectionChanged(
@@ -148,17 +217,39 @@ namespace renegade::studio
         return it == layout_->nodes.end() ? nullptr : &*it;
     }
 
+    const bridge::FlowNode* RenegadeStoryFlowWorkspace::FindDocumentNode(
+        const bridge::StableId& id) const noexcept
+    {
+        if (!session_ || !session_->IsLoaded()) return nullptr;
+        const auto& nodes = session_->Document().nodes;
+        const auto it = std::find_if(nodes.begin(), nodes.end(),
+            [&](const bridge::FlowNode& item) { return item.id == id; });
+        return it == nodes.end() ? nullptr : &*it;
+    }
+
+    const bridge::FlowRoute* RenegadeStoryFlowWorkspace::FindDocumentRoute(
+        const bridge::StableId& id) const noexcept
+    {
+        if (!session_ || !session_->IsLoaded()) return nullptr;
+        const auto& routes = session_->Document().routes;
+        const auto it = std::find_if(routes.begin(), routes.end(),
+            [&](const bridge::FlowRoute& item) { return item.id == id; });
+        return it == routes.end() ? nullptr : &*it;
+    }
+
     XMFLOAT2 RenegadeStoryFlowWorkspace::CanvasToScreen(float x, float y) const noexcept
     {
         const float zoom = layout_ ? layout_->canvas.zoom : 1.0f;
-        return XMFLOAT2(translation.x + Padding + (layout_ ? layout_->canvas.panX : 0) + x * zoom,
+        return XMFLOAT2(
+            translation.x + Padding + (layout_ ? layout_->canvas.panX : 0) + x * zoom,
             translation.y + HeaderHeight + Padding + (layout_ ? layout_->canvas.panY : 0) + y * zoom);
     }
 
     XMFLOAT2 RenegadeStoryFlowWorkspace::ScreenToCanvas(float x, float y) const noexcept
     {
         const float zoom = layout_ ? std::max(0.001f, layout_->canvas.zoom) : 1.0f;
-        return XMFLOAT2((x - translation.x - Padding - (layout_ ? layout_->canvas.panX : 0)) / zoom,
+        return XMFLOAT2(
+            (x - translation.x - Padding - (layout_ ? layout_->canvas.panX : 0)) / zoom,
             (y - translation.y - HeaderHeight - Padding - (layout_ ? layout_->canvas.panY : 0)) / zoom);
     }
 
@@ -170,22 +261,89 @@ namespace renegade::studio
         return XMFLOAT4(p.x, p.y, NodeWidth * zoom, NodeHeight * zoom);
     }
 
-    bool RenegadeStoryFlowWorkspace::PointerInsideWorkspace(const XMFLOAT4& p) const noexcept
+    float RenegadeStoryFlowWorkspace::GraphWidth() const noexcept
+    {
+        const float reserved = std::min(InspectorWidth, width_ * 0.42f);
+        return std::max(1.0f, width_ - reserved);
+    }
+
+    bool RenegadeStoryFlowWorkspace::PointerInsideGraph(const XMFLOAT4& p) const noexcept
     {
         return p.x >= translation.x && p.y >= translation.y + HeaderHeight &&
-            p.x < translation.x + scale.x && p.y < translation.y + scale.y;
+            p.x < translation.x + GraphWidth() && p.y < translation.y + scale.y;
+    }
+
+    bridge::StableId RenegadeStoryFlowWorkspace::HitTestRoute(
+        const XMFLOAT4& pointer) const
+    {
+        if (!model_ || !layout_) return {};
+        const XMFLOAT2 point(pointer.x, pointer.y);
+        for (const auto& route : model_->Routes())
+        {
+            const auto* a = FindLayout(route.sourceNodeId);
+            const auto* b = FindLayout(route.destinationNodeId);
+            if (!a || !b) continue;
+            const XMFLOAT4 ab = NodeScreenBounds(*a);
+            const XMFLOAT4 bb = NodeScreenBounds(*b);
+            const XMFLOAT2 start(ab.x + ab.z, ab.y + ab.w * 0.5f);
+            const XMFLOAT2 end(bb.x, bb.y + bb.w * 0.5f);
+            if (DistanceToSegment(point, start, end) <= 8.0f)
+            {
+                return route.id;
+            }
+        }
+        return {};
+    }
+
+    bool RenegadeStoryFlowWorkspace::IsTerminalKind(
+        const bridge::FlowNodeKind kind) noexcept
+    {
+        return kind == bridge::FlowNodeKind::CompleteGame ||
+            kind == bridge::FlowNodeKind::ReturnToMainMenu ||
+            kind == bridge::FlowNodeKind::Quit;
     }
 
     void RenegadeStoryFlowWorkspace::SelectNode(const bridge::StableId& id)
     {
-        if (selectedNodeId_ == id) return;
+        if (selectedNodeId_ == id && selectedRouteId_.empty()) return;
         selectedNodeId_ = id;
+        selectedRouteId_.clear();
+        RefreshInspectorControls();
         if (selectionChanged_) selectionChanged_(selectedNodeId_);
+    }
+
+    void RenegadeStoryFlowWorkspace::SelectRoute(const bridge::StableId& id)
+    {
+        selectedRouteId_ = id;
+        selectedNodeId_.clear();
+        connectionSourceNodeId_.clear();
+        reconnectRouteId_.clear();
+        RefreshInspectorControls();
+        if (selectionChanged_) selectionChanged_({});
     }
 
     void RenegadeStoryFlowWorkspace::NotifyLayoutChanged()
     {
         if (layoutChanged_) layoutChanged_();
+    }
+
+    void RenegadeStoryFlowWorkspace::SetStatus(std::string message)
+    {
+        statusMessage_ = std::move(message);
+    }
+
+    void RenegadeStoryFlowWorkspace::EnsureSelectionValid()
+    {
+        if (model_ && !selectedNodeId_.empty() && !model_->FindNode(selectedNodeId_))
+            selectedNodeId_.clear();
+        if (model_ && !selectedRouteId_.empty() && !model_->FindRoute(selectedRouteId_))
+            selectedRouteId_.clear();
+        if (model_ && !connectionSourceNodeId_.empty() &&
+            !model_->FindNode(connectionSourceNodeId_))
+        {
+            connectionSourceNodeId_.clear();
+            reconnectRouteId_.clear();
+        }
     }
 
     void RenegadeStoryFlowWorkspace::FitToContent()
@@ -204,10 +362,13 @@ namespace renegade::studio
         if (minX > maxX || minY > maxY) return;
         const float cw = std::max(1.0f, maxX - minX);
         const float ch = std::max(1.0f, maxY - minY);
-        layout_->canvas.zoom = std::clamp(std::min((width_ - 4 * Padding) / cw,
+        const float graphWidth = GraphWidth();
+        layout_->canvas.zoom = std::clamp(std::min((graphWidth - 4 * Padding) / cw,
             (height_ - HeaderHeight - 4 * Padding) / ch), MinZoom, MaxZoom);
-        layout_->canvas.panX = (width_ - cw * layout_->canvas.zoom) * 0.5f - Padding - minX * layout_->canvas.zoom;
-        layout_->canvas.panY = (height_ - HeaderHeight - ch * layout_->canvas.zoom) * 0.5f - Padding - minY * layout_->canvas.zoom;
+        layout_->canvas.panX = (graphWidth - cw * layout_->canvas.zoom) * 0.5f -
+            Padding - minX * layout_->canvas.zoom;
+        layout_->canvas.panY = (height_ - HeaderHeight - ch * layout_->canvas.zoom) * 0.5f -
+            Padding - minY * layout_->canvas.zoom;
         NotifyLayoutChanged();
     }
 
@@ -216,24 +377,586 @@ namespace renegade::studio
         if (!model_ || !layout_) return;
         const auto* node = FindLayout(model_->GameStartNodeId());
         if (!node) return;
-        layout_->canvas.panX = width_ * 0.5f - Padding - (node->x + NodeWidth * 0.5f) * layout_->canvas.zoom;
-        layout_->canvas.panY = (height_ - HeaderHeight) * 0.5f - Padding - (node->y + NodeHeight * 0.5f) * layout_->canvas.zoom;
+        layout_->canvas.panX = GraphWidth() * 0.5f - Padding -
+            (node->x + NodeWidth * 0.5f) * layout_->canvas.zoom;
+        layout_->canvas.panY = (height_ - HeaderHeight) * 0.5f - Padding -
+            (node->y + NodeHeight * 0.5f) * layout_->canvas.zoom;
         NotifyLayoutChanged();
+    }
+
+    void RenegadeStoryFlowWorkspace::CreateAuthoringControls()
+    {
+        saveButton_.Create("Story Flow Save");
+        saveButton_.SetText("SAVE");
+        saveButton_.SetTooltip("Transactionally save the authoritative Story Flow document.");
+        saveButton_.OnClick([this](const wi::gui::EventArgs&) { SaveFlow(); });
+
+        undoButton_.Create("Story Flow Undo");
+        undoButton_.SetText("UNDO");
+        undoButton_.SetTooltip("Undo the previous Story Flow semantic edit.");
+        undoButton_.OnClick([this](const wi::gui::EventArgs&) { UndoFlow(); });
+
+        redoButton_.Create("Story Flow Redo");
+        redoButton_.SetText("REDO");
+        redoButton_.SetTooltip("Redo the next Story Flow semantic edit.");
+        redoButton_.OnClick([this](const wi::gui::EventArgs&) { RedoFlow(); });
+
+        connectButton_.Create("Story Flow Connect");
+        connectButton_.SetText("CONNECT");
+        connectButton_.SetTooltip("Connect the selected non-terminal node to another destination.");
+        connectButton_.OnClick([this](const wi::gui::EventArgs&) { BeginConnect(); });
+
+        nodeNameInput_.Create("Story Flow Node Name");
+        nodeNameInput_.SetDescription("NAME  ");
+        nodeNameInput_.SetPlaceholder("Destination name...");
+        nodeNameInput_.SetCancelInputEnabled(false);
+        nodeNameInput_.OnInputAccepted([this](const wi::gui::EventArgs&) { ApplySelectedNode(); });
+
+        applyNodeButton_.Create("Story Flow Apply Node");
+        applyNodeButton_.SetText("APPLY NAME");
+        applyNodeButton_.OnClick([this](const wi::gui::EventArgs&) { ApplySelectedNode(); });
+
+        deleteNodeButton_.Create("Story Flow Delete Node");
+        deleteNodeButton_.SetText("DELETE NODE");
+        deleteNodeButton_.SetTooltip("Delete this node and its connected routes as one semantic edit.");
+        deleteNodeButton_.OnClick([this](const wi::gui::EventArgs&) { DeleteSelectedNode(); });
+
+        routeOutcomeInput_.Create("Story Flow Route Outcome");
+        routeOutcomeInput_.SetDescription("OUTCOME  ");
+        routeOutcomeInput_.SetPlaceholder("next / failed / new_game...");
+        routeOutcomeInput_.SetCancelInputEnabled(false);
+
+        routeEntryInput_.Create("Story Flow Route Player Entry");
+        routeEntryInput_.SetDescription("ENTRY  ");
+        routeEntryInput_.SetPlaceholder("player_entry");
+        routeEntryInput_.SetCancelInputEnabled(false);
+
+        routePriorityInput_.Create("Story Flow Route Priority");
+        routePriorityInput_.SetDescription("PRIORITY  ");
+        routePriorityInput_.SetPlaceholder("0");
+        routePriorityInput_.SetCancelInputEnabled(false);
+        routePriorityInput_.OnInputAccepted([this](const wi::gui::EventArgs&) { ApplySelectedRoute(); });
+
+        applyRouteButton_.Create("Story Flow Apply Route");
+        applyRouteButton_.SetText("APPLY ROUTE");
+        applyRouteButton_.OnClick([this](const wi::gui::EventArgs&) { ApplySelectedRoute(); });
+
+        reconnectRouteButton_.Create("Story Flow Reconnect Route");
+        reconnectRouteButton_.SetText("RECONNECT");
+        reconnectRouteButton_.SetTooltip("Keep this route identity and source, then choose a new destination node.");
+        reconnectRouteButton_.OnClick([this](const wi::gui::EventArgs&) { BeginReconnect(); });
+
+        deleteRouteButton_.Create("Story Flow Delete Route");
+        deleteRouteButton_.SetText("DELETE ROUTE");
+        deleteRouteButton_.OnClick([this](const wi::gui::EventArgs&) { DeleteSelectedRoute(); });
+
+        addCompleteButton_.Create("Story Flow Add Complete Game");
+        addCompleteButton_.SetText("+ COMPLETE");
+        addCompleteButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            AddTerminalNode(bridge::FlowNodeKind::CompleteGame, "Complete Game");
+        });
+
+        addReturnButton_.Create("Story Flow Add Return To Menu");
+        addReturnButton_.SetText("+ RETURN MENU");
+        addReturnButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            AddTerminalNode(bridge::FlowNodeKind::ReturnToMainMenu, "Return To Main Menu");
+        });
+
+        addQuitButton_.Create("Story Flow Add Quit");
+        addQuitButton_.SetText("+ QUIT");
+        addQuitButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            AddTerminalNode(bridge::FlowNodeKind::Quit, "Quit");
+        });
+
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&saveButton_),
+            static_cast<wi::gui::Widget*>(&undoButton_),
+            static_cast<wi::gui::Widget*>(&redoButton_),
+            static_cast<wi::gui::Widget*>(&connectButton_),
+            static_cast<wi::gui::Widget*>(&nodeNameInput_),
+            static_cast<wi::gui::Widget*>(&applyNodeButton_),
+            static_cast<wi::gui::Widget*>(&deleteNodeButton_),
+            static_cast<wi::gui::Widget*>(&routeOutcomeInput_),
+            static_cast<wi::gui::Widget*>(&routeEntryInput_),
+            static_cast<wi::gui::Widget*>(&routePriorityInput_),
+            static_cast<wi::gui::Widget*>(&applyRouteButton_),
+            static_cast<wi::gui::Widget*>(&reconnectRouteButton_),
+            static_cast<wi::gui::Widget*>(&deleteRouteButton_),
+            static_cast<wi::gui::Widget*>(&addCompleteButton_),
+            static_cast<wi::gui::Widget*>(&addReturnButton_),
+            static_cast<wi::gui::Widget*>(&addQuitButton_)})
+        {
+            widget->SetShadowRadius(0.0f);
+            widget->SetVisible(false);
+        }
+    }
+
+    void RenegadeStoryFlowWorkspace::LayoutAuthoringControls()
+    {
+        const float top = translation.y + 10.0f;
+        float x = translation.x + 220.0f;
+        const auto headerButton = [&x, top](wi::gui::Widget& widget, const float width)
+        {
+            widget.SetPos(XMFLOAT2(x, top));
+            widget.SetSize(XMFLOAT2(width, 28.0f));
+            x += width + 5.0f;
+        };
+        headerButton(undoButton_, 56.0f);
+        headerButton(redoButton_, 56.0f);
+        headerButton(saveButton_, 56.0f);
+        headerButton(connectButton_, 78.0f);
+
+        const float inspectorX = translation.x + GraphWidth() + 14.0f;
+        const float inspectorWidth = std::max(90.0f, width_ - GraphWidth() - 28.0f);
+        const float fieldWidth = inspectorWidth;
+        const float y0 = translation.y + HeaderHeight + 56.0f;
+
+        nodeNameInput_.SetPos(XMFLOAT2(inspectorX, y0));
+        nodeNameInput_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+        applyNodeButton_.SetPos(XMFLOAT2(inspectorX, y0 + 38.0f));
+        applyNodeButton_.SetSize(XMFLOAT2(fieldWidth * 0.52f - 3.0f, 28.0f));
+        deleteNodeButton_.SetPos(XMFLOAT2(inspectorX + fieldWidth * 0.52f + 3.0f, y0 + 38.0f));
+        deleteNodeButton_.SetSize(XMFLOAT2(fieldWidth * 0.48f - 3.0f, 28.0f));
+
+        routeOutcomeInput_.SetPos(XMFLOAT2(inspectorX, y0));
+        routeOutcomeInput_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+        routeEntryInput_.SetPos(XMFLOAT2(inspectorX, y0 + 38.0f));
+        routeEntryInput_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+        routePriorityInput_.SetPos(XMFLOAT2(inspectorX, y0 + 76.0f));
+        routePriorityInput_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+        applyRouteButton_.SetPos(XMFLOAT2(inspectorX, y0 + 114.0f));
+        applyRouteButton_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+        reconnectRouteButton_.SetPos(XMFLOAT2(inspectorX, y0 + 152.0f));
+        reconnectRouteButton_.SetSize(XMFLOAT2(fieldWidth * 0.52f - 3.0f, 28.0f));
+        deleteRouteButton_.SetPos(XMFLOAT2(inspectorX + fieldWidth * 0.52f + 3.0f, y0 + 152.0f));
+        deleteRouteButton_.SetSize(XMFLOAT2(fieldWidth * 0.48f - 3.0f, 28.0f));
+
+        const float addY = translation.y + HeaderHeight + 306.0f;
+        addCompleteButton_.SetPos(XMFLOAT2(inspectorX, addY));
+        addCompleteButton_.SetSize(XMFLOAT2(fieldWidth, 27.0f));
+        addReturnButton_.SetPos(XMFLOAT2(inspectorX, addY + 35.0f));
+        addReturnButton_.SetSize(XMFLOAT2(fieldWidth, 27.0f));
+        addQuitButton_.SetPos(XMFLOAT2(inspectorX, addY + 70.0f));
+        addQuitButton_.SetSize(XMFLOAT2(fieldWidth, 27.0f));
+    }
+
+    void RenegadeStoryFlowWorkspace::UpdateAuthoringControls(
+        const wi::Canvas& canvas,
+        const float dt)
+    {
+        LayoutAuthoringControls();
+        const bool loaded = session_ && model_ && layout_ &&
+            session_->IsLoaded() && model_->IsLoaded();
+
+        saveButton_.SetVisible(loaded);
+        undoButton_.SetVisible(loaded);
+        redoButton_.SetVisible(loaded);
+        connectButton_.SetVisible(loaded);
+        saveButton_.SetEnabled(loaded && session_->IsDirty());
+        undoButton_.SetEnabled(loaded && session_->CanUndo());
+        redoButton_.SetEnabled(loaded && session_->CanRedo());
+
+        const auto* selectedNode = FindDocumentNode(selectedNodeId_);
+        const auto* selectedRoute = FindDocumentRoute(selectedRouteId_);
+        const bool connecting = !connectionSourceNodeId_.empty();
+        connectButton_.SetText(connecting ? "CANCEL LINK" : "CONNECT");
+        connectButton_.SetEnabled(loaded && (connecting ||
+            (selectedNode != nullptr && !IsTerminalKind(selectedNode->kind))));
+
+        const bool nodeSelected = loaded && selectedNode != nullptr;
+        nodeNameInput_.SetVisible(nodeSelected);
+        applyNodeButton_.SetVisible(nodeSelected);
+        deleteNodeButton_.SetVisible(nodeSelected);
+        deleteNodeButton_.SetEnabled(nodeSelected && selectedNode->kind != bridge::FlowNodeKind::GameStart);
+
+        const bool routeSelected = loaded && selectedRoute != nullptr;
+        routeOutcomeInput_.SetVisible(routeSelected);
+        routeEntryInput_.SetVisible(routeSelected);
+        routePriorityInput_.SetVisible(routeSelected);
+        applyRouteButton_.SetVisible(routeSelected);
+        reconnectRouteButton_.SetVisible(routeSelected);
+        deleteRouteButton_.SetVisible(routeSelected);
+        if (routeSelected)
+        {
+            const auto* destination = FindDocumentNode(selectedRoute->destinationNodeId);
+            routeEntryInput_.SetEnabled(destination && destination->kind == bridge::FlowNodeKind::Level);
+        }
+
+        addCompleteButton_.SetVisible(loaded);
+        addReturnButton_.SetVisible(loaded);
+        addQuitButton_.SetVisible(loaded);
+
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&saveButton_),
+            static_cast<wi::gui::Widget*>(&undoButton_),
+            static_cast<wi::gui::Widget*>(&redoButton_),
+            static_cast<wi::gui::Widget*>(&connectButton_),
+            static_cast<wi::gui::Widget*>(&nodeNameInput_),
+            static_cast<wi::gui::Widget*>(&applyNodeButton_),
+            static_cast<wi::gui::Widget*>(&deleteNodeButton_),
+            static_cast<wi::gui::Widget*>(&routeOutcomeInput_),
+            static_cast<wi::gui::Widget*>(&routeEntryInput_),
+            static_cast<wi::gui::Widget*>(&routePriorityInput_),
+            static_cast<wi::gui::Widget*>(&applyRouteButton_),
+            static_cast<wi::gui::Widget*>(&reconnectRouteButton_),
+            static_cast<wi::gui::Widget*>(&deleteRouteButton_),
+            static_cast<wi::gui::Widget*>(&addCompleteButton_),
+            static_cast<wi::gui::Widget*>(&addReturnButton_),
+            static_cast<wi::gui::Widget*>(&addQuitButton_)})
+        {
+            if (widget->IsVisible()) widget->Update(canvas, dt);
+        }
+    }
+
+    void RenegadeStoryFlowWorkspace::RenderAuthoringControls(
+        const wi::Canvas& canvas,
+        const wi::graphics::CommandList cmd) const
+    {
+        for (const wi::gui::Widget* widget : {
+            static_cast<const wi::gui::Widget*>(&saveButton_),
+            static_cast<const wi::gui::Widget*>(&undoButton_),
+            static_cast<const wi::gui::Widget*>(&redoButton_),
+            static_cast<const wi::gui::Widget*>(&connectButton_),
+            static_cast<const wi::gui::Widget*>(&nodeNameInput_),
+            static_cast<const wi::gui::Widget*>(&applyNodeButton_),
+            static_cast<const wi::gui::Widget*>(&deleteNodeButton_),
+            static_cast<const wi::gui::Widget*>(&routeOutcomeInput_),
+            static_cast<const wi::gui::Widget*>(&routeEntryInput_),
+            static_cast<const wi::gui::Widget*>(&routePriorityInput_),
+            static_cast<const wi::gui::Widget*>(&applyRouteButton_),
+            static_cast<const wi::gui::Widget*>(&reconnectRouteButton_),
+            static_cast<const wi::gui::Widget*>(&deleteRouteButton_),
+            static_cast<const wi::gui::Widget*>(&addCompleteButton_),
+            static_cast<const wi::gui::Widget*>(&addReturnButton_),
+            static_cast<const wi::gui::Widget*>(&addQuitButton_)})
+        {
+            if (widget->IsVisible()) widget->Render(canvas, cmd);
+        }
+    }
+
+    void RenegadeStoryFlowWorkspace::RefreshInspectorControls()
+    {
+        if (const auto* node = FindDocumentNode(selectedNodeId_))
+        {
+            nodeNameInput_.SetValue(node->name);
+        }
+        if (const auto* route = FindDocumentRoute(selectedRouteId_))
+        {
+            routeOutcomeInput_.SetValue(route->outcome);
+            routeEntryInput_.SetValue(route->destinationEntry);
+            routePriorityInput_.SetValue(std::to_string(route->priority));
+        }
+    }
+
+    bool RenegadeStoryFlowWorkspace::RefreshPresentationAfterSemanticChange()
+    {
+        if (!session_ || !model_ || !layout_ || !session_->IsLoaded()) return false;
+        std::string error;
+        if (!model_->Load(session_->Document(), session_->ProjectId(), error))
+        {
+            SetStatus("PRESENTATION ERROR // " + error);
+            return false;
+        }
+
+        const bridge::StableId flowId = session_->Document().envelope.documentId;
+        if (!bridge::ReconcileStoryFlowLayout(
+                *model_, session_->ProjectId(), flowId, *layout_, error))
+        {
+            *layout_ = bridge::BuildDeterministicStoryFlowLayout(
+                *model_, session_->ProjectId(), flowId);
+            SetStatus("LAYOUT REBUILT // " + error);
+        }
+        EnsureSelectionValid();
+        RefreshInspectorControls();
+        NotifyLayoutChanged();
+        return true;
+    }
+
+    void RenegadeStoryFlowWorkspace::SaveFlow()
+    {
+        if (!session_) return;
+        std::string error;
+        if (!session_->Save(error))
+        {
+            SetStatus("SAVE FAILED // " + error);
+            return;
+        }
+        SetStatus("FLOW SAVED // TRANSACTION COMMITTED");
+    }
+
+    void RenegadeStoryFlowWorkspace::UndoFlow()
+    {
+        if (!session_) return;
+        std::string error;
+        if (!session_->Undo(error))
+        {
+            SetStatus("UNDO REFUSED // " + error);
+            return;
+        }
+        RefreshPresentationAfterSemanticChange();
+        SetStatus("FLOW UNDO // VALID STATE RESTORED");
+    }
+
+    void RenegadeStoryFlowWorkspace::RedoFlow()
+    {
+        if (!session_) return;
+        std::string error;
+        if (!session_->Redo(error))
+        {
+            SetStatus("REDO REFUSED // " + error);
+            return;
+        }
+        RefreshPresentationAfterSemanticChange();
+        SetStatus("FLOW REDO // VALID STATE RESTORED");
+    }
+
+    void RenegadeStoryFlowWorkspace::ApplySelectedNode()
+    {
+        if (!session_ || selectedNodeId_.empty()) return;
+        std::string error;
+        const std::string name = Trim(nodeNameInput_.GetValue());
+        if (!session_->RenameNode(selectedNodeId_, name, error))
+        {
+            SetStatus("NODE EDIT REJECTED // " + error);
+            RefreshInspectorControls();
+            return;
+        }
+        RefreshPresentationAfterSemanticChange();
+        SetStatus("NODE UPDATED // UNSAVED FLOW CHANGE");
+    }
+
+    void RenegadeStoryFlowWorkspace::DeleteSelectedNode()
+    {
+        if (!session_ || selectedNodeId_.empty()) return;
+        const bridge::StableId deleting = selectedNodeId_;
+        std::string error;
+        if (!session_->DeleteNode(deleting, error))
+        {
+            SetStatus("DELETE REJECTED // " + error);
+            return;
+        }
+        selectedNodeId_.clear();
+        selectedRouteId_.clear();
+        RefreshPresentationAfterSemanticChange();
+        SetStatus("NODE + CONNECTED ROUTES DELETED // UNSAVED");
+    }
+
+    void RenegadeStoryFlowWorkspace::ApplySelectedRoute()
+    {
+        if (!session_ || selectedRouteId_.empty()) return;
+        const auto* current = FindDocumentRoute(selectedRouteId_);
+        if (!current) return;
+        bridge::FlowRoute route = *current;
+        route.outcome = Trim(routeOutcomeInput_.GetValue());
+        route.destinationEntry = Trim(routeEntryInput_.GetValue());
+
+        const std::string priorityText = Trim(routePriorityInput_.GetValue());
+        try
+        {
+            std::size_t used = 0;
+            route.priority = std::stoi(priorityText, &used);
+            if (used != priorityText.size())
+            {
+                SetStatus("ROUTE EDIT REJECTED // PRIORITY MUST BE AN INTEGER");
+                RefreshInspectorControls();
+                return;
+            }
+        }
+        catch (...)
+        {
+            SetStatus("ROUTE EDIT REJECTED // PRIORITY MUST BE AN INTEGER");
+            RefreshInspectorControls();
+            return;
+        }
+
+        std::string error;
+        if (!session_->UpdateRoute(selectedRouteId_, std::move(route), error))
+        {
+            SetStatus("ROUTE EDIT REJECTED // " + error);
+            RefreshInspectorControls();
+            return;
+        }
+        RefreshPresentationAfterSemanticChange();
+        SetStatus("ROUTE UPDATED // UNSAVED FLOW CHANGE");
+    }
+
+    void RenegadeStoryFlowWorkspace::DeleteSelectedRoute()
+    {
+        if (!session_ || selectedRouteId_.empty()) return;
+        const bridge::StableId deleting = selectedRouteId_;
+        std::string error;
+        if (!session_->DeleteRoute(deleting, error))
+        {
+            SetStatus("ROUTE DELETE REJECTED // " + error);
+            return;
+        }
+        selectedRouteId_.clear();
+        RefreshPresentationAfterSemanticChange();
+        SetStatus("ROUTE DELETED // UNSAVED FLOW CHANGE");
+    }
+
+    void RenegadeStoryFlowWorkspace::AddTerminalNode(
+        const bridge::FlowNodeKind kind,
+        const char* defaultName)
+    {
+        if (!session_ || !layout_) return;
+        XMFLOAT2 anchor(0.0f, 0.0f);
+        bool hasAnchor = false;
+        if (const auto* selectedLayout = FindLayout(selectedNodeId_))
+        {
+            anchor = XMFLOAT2(selectedLayout->x, selectedLayout->y);
+            hasAnchor = true;
+        }
+
+        bridge::FlowNode node;
+        node.kind = kind;
+        node.name = defaultName;
+        bridge::StableId createdId;
+        std::string error;
+        if (!session_->AddNode(std::move(node), createdId, error))
+        {
+            SetStatus("ADD NODE REJECTED // " + error);
+            return;
+        }
+        RefreshPresentationAfterSemanticChange();
+        if (auto* createdLayout = FindLayout(createdId))
+        {
+            if (hasAnchor)
+            {
+                createdLayout->x = anchor.x + 300.0f;
+                createdLayout->y = anchor.y + 135.0f;
+            }
+            NotifyLayoutChanged();
+        }
+        SelectNode(createdId);
+        SetStatus("TERMINAL DESTINATION ADDED // UNSAVED FLOW CHANGE");
+    }
+
+    void RenegadeStoryFlowWorkspace::BeginConnect()
+    {
+        if (!connectionSourceNodeId_.empty())
+        {
+            connectionSourceNodeId_.clear();
+            reconnectRouteId_.clear();
+            SetStatus("CONNECT CANCELLED");
+            return;
+        }
+        const auto* source = FindDocumentNode(selectedNodeId_);
+        if (!source || IsTerminalKind(source->kind))
+        {
+            SetStatus("CONNECT REQUIRES A NON-TERMINAL SOURCE NODE");
+            return;
+        }
+        connectionSourceNodeId_ = source->id;
+        reconnectRouteId_.clear();
+        SetStatus("CONNECT // SELECT A DESTINATION NODE");
+    }
+
+    void RenegadeStoryFlowWorkspace::BeginReconnect()
+    {
+        const auto* route = FindDocumentRoute(selectedRouteId_);
+        if (!route)
+        {
+            SetStatus("RECONNECT REQUIRES A SELECTED ROUTE");
+            return;
+        }
+        connectionSourceNodeId_ = route->sourceNodeId;
+        reconnectRouteId_ = route->id;
+        SetStatus("RECONNECT // SELECT THE NEW DESTINATION NODE");
+    }
+
+    void RenegadeStoryFlowWorkspace::CommitConnectionTo(
+        const bridge::StableId& destinationNodeId)
+    {
+        if (!session_ || connectionSourceNodeId_.empty()) return;
+        const auto* destination = FindDocumentNode(destinationNodeId);
+        if (!destination || destination->kind == bridge::FlowNodeKind::GameStart)
+        {
+            SetStatus("CONNECT REJECTED // GAME START CANNOT BE A DESTINATION");
+            return;
+        }
+
+        std::string error;
+        bridge::StableId resultingRouteId;
+        if (!reconnectRouteId_.empty())
+        {
+            const auto* current = FindDocumentRoute(reconnectRouteId_);
+            if (!current)
+            {
+                SetStatus("RECONNECT REJECTED // ROUTE NO LONGER EXISTS");
+                connectionSourceNodeId_.clear();
+                reconnectRouteId_.clear();
+                return;
+            }
+            bridge::FlowRoute route = *current;
+            route.destinationNodeId = destinationNodeId;
+            if (destination->kind == bridge::FlowNodeKind::Level)
+            {
+                if (route.destinationEntry.empty()) route.destinationEntry = "player_entry";
+            }
+            else
+            {
+                route.destinationEntry.clear();
+            }
+            resultingRouteId = reconnectRouteId_;
+            if (!session_->UpdateRoute(reconnectRouteId_, std::move(route), error))
+            {
+                SetStatus("RECONNECT REJECTED // " + error);
+                return;
+            }
+        }
+        else
+        {
+            const auto* source = FindDocumentNode(connectionSourceNodeId_);
+            if (!source)
+            {
+                SetStatus("CONNECT REJECTED // SOURCE NODE NO LONGER EXISTS");
+                connectionSourceNodeId_.clear();
+                return;
+            }
+            bridge::FlowRoute route;
+            route.sourceNodeId = connectionSourceNodeId_;
+            route.outcome = source->kind == bridge::FlowNodeKind::GameStart
+                ? bridge::GameStartOutcome : "next";
+            route.destinationNodeId = destinationNodeId;
+            if (destination->kind == bridge::FlowNodeKind::Level)
+                route.destinationEntry = "player_entry";
+            if (!session_->AddRoute(std::move(route), resultingRouteId, error))
+            {
+                SetStatus("CONNECT REJECTED // " + error);
+                return;
+            }
+        }
+
+        connectionSourceNodeId_.clear();
+        reconnectRouteId_.clear();
+        RefreshPresentationAfterSemanticChange();
+        SelectRoute(resultingRouteId);
+        SetStatus("ROUTE COMMITTED TO HISTORY // UNSAVED FLOW CHANGE");
     }
 
     void RenegadeStoryFlowWorkspace::Update(const wi::Canvas& canvas, float dt)
     {
         Widget::Update(canvas, dt);
         pointerConsumed_ = false;
+        UpdateAuthoringControls(canvas, dt);
         if (!IsVisible() || !IsEnabled() || !model_ || !layout_) return;
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        const float right = translation.x + scale.x;
-        const XMFLOAT4 fitBounds(right - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
-        const XMFLOAT4 startBounds(right - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
+        const float graphRight = translation.x + GraphWidth();
+        const XMFLOAT4 fitBounds(graphRight - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
+        const XMFLOAT4 startBounds(graphRight - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
         const bool insideHeader =
-            pointer.x >= translation.x && pointer.x < right &&
+            pointer.x >= translation.x && pointer.x < translation.x + scale.x &&
             pointer.y >= translation.y && pointer.y < translation.y + HeaderHeight;
+        const bool insideInspector = pointer.x >= graphRight &&
+            pointer.x < translation.x + scale.x &&
+            pointer.y >= translation.y + HeaderHeight &&
+            pointer.y < translation.y + scale.y;
+
         if (insideHeader)
         {
             pointerConsumed_ = true;
@@ -250,19 +973,29 @@ namespace renegade::studio
                     return;
                 }
             }
+            return;
+        }
+        if (insideInspector)
+        {
+            pointerConsumed_ = true;
+            return;
         }
 
-        const bool inside = PointerInsideWorkspace(pointer);
+        const bool inside = PointerInsideGraph(pointer);
         pointerConsumed_ = pointerConsumed_ || inside;
         if (inside && std::abs(pointer.z) > 0.001f)
         {
             const XMFLOAT2 before = ScreenToCanvas(pointer.x, pointer.y);
-            layout_->canvas.zoom = std::clamp(layout_->canvas.zoom * (pointer.z > 0 ? 1.1f : 1.0f / 1.1f), MinZoom, MaxZoom);
+            layout_->canvas.zoom = std::clamp(
+                layout_->canvas.zoom * (pointer.z > 0 ? 1.1f : 1.0f / 1.1f),
+                MinZoom,
+                MaxZoom);
             const XMFLOAT2 after = CanvasToScreen(before.x, before.y);
             layout_->canvas.panX += pointer.x - after.x;
             layout_->canvas.panY += pointer.y - after.y;
             NotifyLayoutChanged();
         }
+
         if (inside && wi::input::Press(wi::input::MOUSE_BUTTON_MIDDLE))
         {
             panning_ = true;
@@ -275,30 +1008,86 @@ namespace renegade::studio
             layout_->canvas.panY = panValueAnchor_.y + pointer.y - panPointerAnchor_.y;
             NotifyLayoutChanged();
         }
-        else if (panning_) panning_ = false;
+        else if (panning_)
+        {
+            panning_ = false;
+        }
+
+        if (nodeDragging_ && wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            if (auto* pos = FindLayout(draggedNodeId_))
+            {
+                const float zoom = std::max(0.001f, layout_->canvas.zoom);
+                pos->x = nodeDragValueAnchor_.x +
+                    (pointer.x - nodeDragPointerAnchor_.x) / zoom;
+                pos->y = nodeDragValueAnchor_.y +
+                    (pointer.y - nodeDragPointerAnchor_.y) / zoom;
+                NotifyLayoutChanged();
+            }
+        }
+        else if (nodeDragging_)
+        {
+            nodeDragging_ = false;
+            draggedNodeId_.clear();
+        }
+
         if (!inside || !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) return;
+
         for (const auto& node : model_->Nodes())
         {
             const auto* pos = FindLayout(node.id);
-            if (pos && Contains(NodeScreenBounds(*pos), pointer)) { SelectNode(node.id); return; }
+            if (!pos || !Contains(NodeScreenBounds(*pos), pointer)) continue;
+            if (!connectionSourceNodeId_.empty())
+            {
+                CommitConnectionTo(node.id);
+                return;
+            }
+            SelectNode(node.id);
+            nodeDragging_ = true;
+            draggedNodeId_ = node.id;
+            nodeDragPointerAnchor_ = XMFLOAT2(pointer.x, pointer.y);
+            nodeDragValueAnchor_ = XMFLOAT2(pos->x, pos->y);
+            return;
         }
+
+        const bridge::StableId routeId = HitTestRoute(pointer);
+        if (!routeId.empty())
+        {
+            SelectRoute(routeId);
+            return;
+        }
+
+        connectionSourceNodeId_.clear();
+        reconnectRouteId_.clear();
         SelectNode({});
     }
 
-    void RenegadeStoryFlowWorkspace::Render(const wi::Canvas& canvas,
+    void RenegadeStoryFlowWorkspace::Render(
+        const wi::Canvas& canvas,
         wi::graphics::CommandList cmd) const
     {
         if (!IsVisible()) return;
         ApplyScissor(canvas, scissorRect, cmd);
-        Rect(translation.x, translation.y, scale.x, scale.y, Surface, cmd);
-        Rect(translation.x, translation.y, scale.x, HeaderHeight, Raised, cmd);
-        Label("STORY FLOW", translation.x + 18, translation.y + 13, 14, Text, cmd);
-        Label("READ-ONLY FOUNDATION", translation.x + 130, translation.y + 16, 9, Muted, cmd);
-        if (!model_ || !layout_) return;
+        const float graphWidth = GraphWidth();
+        const float graphRight = translation.x + graphWidth;
+        const float inspectorWidth = std::max(0.0f, scale.x - graphWidth);
 
-        const float right = translation.x + scale.x;
-        const XMFLOAT4 fitBounds(right - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
-        const XMFLOAT4 startBounds(right - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
+        Rect(translation.x, translation.y, graphWidth, scale.y, Surface, cmd);
+        Rect(graphRight, translation.y, inspectorWidth, scale.y, Raised, cmd);
+        Rect(translation.x, translation.y, scale.x, HeaderHeight, Raised, cmd);
+        Rect(graphRight, translation.y + HeaderHeight, 1.0f, scale.y - HeaderHeight, Border, cmd);
+
+        Label("STORY FLOW", translation.x + 18, translation.y + 13, 14, Text, cmd);
+        Label("GRAPH AUTHORING", translation.x + 118, translation.y + 16, 9, Accent, cmd);
+
+        if (!model_ || !layout_ || !session_)
+        {
+            RenderAuthoringControls(canvas, cmd);
+            return;
+        }
+
+        const XMFLOAT4 fitBounds(graphRight - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
+        const XMFLOAT4 startBounds(graphRight - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
         BorderedRect(fitBounds.x, fitBounds.y, fitBounds.z, fitBounds.w,
             Surface, Border, cmd);
         BorderedRect(startBounds.x, startBounds.y, startBounds.z, startBounds.w,
@@ -307,14 +1096,29 @@ namespace renegade::studio
         Label("START", startBounds.x + 10.0f, startBounds.y + 8.0f, 9, Text, cmd);
 
         const int zoomPercent = static_cast<int>(std::round(layout_->canvas.zoom * 100.0f));
+        const std::string dirty = session_->IsDirty() ? "DIRTY" : "SAVED";
         Label(
-            std::to_string(model_->Nodes().size()) + " DESTINATIONS  //  " +
+            dirty + " // " + std::to_string(model_->Nodes().size()) + " NODES // " +
+                std::to_string(model_->Routes().size()) + " ROUTES // " +
                 std::to_string(zoomPercent) + "%",
-            translation.x + 286.0f,
+            translation.x + 510.0f,
             translation.y + 16.0f,
             9,
-            Muted,
+            session_->IsDirty() ? Accent : Muted,
             cmd);
+
+        if (!connectionSourceNodeId_.empty())
+        {
+            Label(
+                reconnectRouteId_.empty()
+                    ? "CONNECT MODE // SELECT DESTINATION"
+                    : "RECONNECT MODE // SELECT NEW DESTINATION",
+                translation.x + 510.0f,
+                translation.y + 30.0f,
+                8,
+                Accent,
+                cmd);
+        }
 
         for (const auto& route : model_->Routes())
         {
@@ -326,6 +1130,7 @@ namespace renegade::studio
             const XMFLOAT2 start(ab.x + ab.z, ab.y + ab.w * 0.5f);
             const XMFLOAT2 end(bb.x, bb.y + bb.w * 0.5f);
             const wi::Color routeColor =
+                route.id == selectedRouteId_ ||
                 route.sourceNodeId == selectedNodeId_ ||
                 route.destinationNodeId == selectedNodeId_
                     ? Accent : Route;
@@ -341,13 +1146,15 @@ namespace renegade::studio
                     cmd);
             }
         }
+
         for (const auto& node : model_->Nodes())
         {
-            const auto* pos = FindLayout(node.id); if (!pos) continue;
+            const auto* pos = FindLayout(node.id);
+            if (!pos) continue;
             const XMFLOAT4 b = NodeScreenBounds(*pos);
             const bool selected = node.id == selectedNodeId_;
             const bool start = node.kind == bridge::FlowNodeKind::GameStart;
-            Rect(b.x, b.y, b.z, b.w, selected ? wi::Color(28,20,16,255) : Raised, cmd);
+            Rect(b.x, b.y, b.z, b.w, selected ? wi::Color(28, 20, 16, 255) : Raised, cmd);
             Rect(b.x, b.y, b.z, 1.0f, selected || start ? Accent : Border, cmd);
             Rect(b.x, b.y + b.w - 1.0f, b.z, 1.0f, selected || start ? Accent : Border, cmd);
             Rect(b.x, b.y, 1.0f, b.w, selected || start ? Accent : Border, cmd);
@@ -358,5 +1165,75 @@ namespace renegade::studio
                 Label(node.name, b.x + 10, b.y + 31, 11, Text, cmd);
             }
         }
+
+        const float inspectorX = graphRight + 14.0f;
+        Label("INSPECTOR", inspectorX, translation.y + HeaderHeight + 14.0f, 12, Text, cmd);
+        if (const auto* node = FindDocumentNode(selectedNodeId_))
+        {
+            Label(KindLabel(node->kind), inspectorX, translation.y + HeaderHeight + 35.0f, 8,
+                node->kind == bridge::FlowNodeKind::GameStart ? Accent : Muted, cmd);
+            Label("STABLE ID // " + Shorten(node->id, 30), inspectorX,
+                translation.y + HeaderHeight + 181.0f, 8, Muted, cmd);
+            if (node->kind == bridge::FlowNodeKind::Level)
+            {
+                Label("SCENE // " + Shorten(node->scenePathHint, 35), inspectorX,
+                    translation.y + HeaderHeight + 198.0f, 8, Muted, cmd);
+            }
+            else if (node->kind == bridge::FlowNodeKind::Screen)
+            {
+                Label("SCREEN // " + Shorten(node->screenPathHint, 35), inspectorX,
+                    translation.y + HeaderHeight + 198.0f, 8, Muted, cmd);
+            }
+        }
+        else if (const auto* route = FindDocumentRoute(selectedRouteId_))
+        {
+            Label("ROUTE", inspectorX, translation.y + HeaderHeight + 35.0f, 8, Accent, cmd);
+            Label("ID // " + Shorten(route->id, 31), inspectorX,
+                translation.y + HeaderHeight + 235.0f, 8, Muted, cmd);
+            Label("CONDITIONS // " + std::to_string(route->conditions.size()), inspectorX,
+                translation.y + HeaderHeight + 252.0f, 8, Muted, cmd);
+        }
+        else
+        {
+            Label("SELECT A NODE OR ROUTE", inspectorX,
+                translation.y + HeaderHeight + 38.0f, 9, Muted, cmd);
+        }
+
+        Label("ADD TERMINAL DESTINATION", inspectorX,
+            translation.y + HeaderHeight + 284.0f, 8, Muted, cmd);
+        Label("LEVEL/SCREEN CREATION ARRIVES WITH THEIR LIFECYCLE GATES", inspectorX,
+            translation.y + HeaderHeight + 410.0f, 7, Muted, cmd);
+
+        Label("VALIDATION", inspectorX,
+            translation.y + HeaderHeight + 448.0f, 8, Muted, cmd);
+        if (model_->Diagnostics().empty())
+        {
+            Label("NO PRESENTATION DIAGNOSTICS", inspectorX,
+                translation.y + HeaderHeight + 466.0f, 8, Muted, cmd);
+        }
+        else
+        {
+            float diagnosticY = translation.y + HeaderHeight + 466.0f;
+            const std::size_t count = std::min<std::size_t>(3, model_->Diagnostics().size());
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                const auto& diagnostic = model_->Diagnostics()[i];
+                const wi::Color color = diagnostic.severity == bridge::StoryFlowDiagnosticSeverity::Error
+                    ? Error : Muted;
+                Label(Shorten(diagnostic.code + " // " + diagnostic.message, 42),
+                    inspectorX, diagnosticY, 8, color, cmd);
+                diagnosticY += 17.0f;
+            }
+        }
+
+        Label("STATUS // " + Shorten(statusMessage_, 42), inspectorX,
+            translation.y + scale.y - 28.0f, 8,
+            statusMessage_.find("FAILED") != std::string::npos ||
+            statusMessage_.find("REJECTED") != std::string::npos ||
+            statusMessage_.find("ERROR") != std::string::npos
+                ? Error : Muted,
+            cmd);
+
+        RenderAuthoringControls(canvas, cmd);
     }
 }

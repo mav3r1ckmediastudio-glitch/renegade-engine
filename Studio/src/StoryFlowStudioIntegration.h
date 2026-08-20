@@ -1,8 +1,9 @@
 #pragma once
 
-#include "RenegadeStoryFlowWorkspace.h"
+#include "renegade/bridge/StoryFlowAuthoringModel.h"
+#include "renegade/bridge/StoryFlowAuthoringSession.h"
+#include "renegade/bridge/StoryFlowLayoutService.h"
 
-#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <string>
@@ -11,43 +12,65 @@
 
 namespace renegade::studio
 {
-    // Gate 1 Studio lifecycle adapter for the native read-only Story Flow
-    // workspace. The semantic Flow remains owned by the existing LP02
-    // document/runtime contract; this adapter only resolves the current
-    // project's startup_flow, builds the presentation model and persists the
-    // separate editor layout document.
+    // Gate 3 lifecycle adapter. Semantic Flow is owned by the EngineBridge
+    // authoring session; this class decides which first-class Studio RenderPath
+    // owns the next frame and persists presentation-only layout state.
     class StoryFlowStudioIntegration final
     {
     public:
-        ~StoryFlowStudioIntegration()
+        enum class Workspace
         {
-            if (attached_ && gui_ != nullptr)
-            {
-                gui_->RemoveWidget(&workspace_);
-            }
+            LevelEditor,
+            StoryFlow,
+        };
+
+        void RequestStoryFlow() noexcept
+        {
+            desiredWorkspace_ = Workspace::StoryFlow;
         }
 
-        template <typename Renderer, typename Session>
-        void Tick(Renderer& renderer, Session& session)
+        // Gate 4 uses this seam before a Level is explicitly opened. Without
+        // it, the presence of startup_flow would force the application back to
+        // Story Flow on the next frame.
+        void RequestLevelEditor() noexcept
         {
-            Attach(renderer);
+            desiredWorkspace_ = Workspace::LevelEditor;
+        }
+
+        template <typename Application, typename LevelEditor, typename StoryFlowPath, typename Session>
+        void Tick(
+            Application& application,
+            LevelEditor& levelEditor,
+            StoryFlowPath& storyFlow,
+            Session& session)
+        {
+            Attach(storyFlow);
+            storyFlow.SyncCanvas(application.canvas);
 
             if (!session.Projects().HasProject())
             {
                 FlushLayout(true);
-                ResetActiveFlow();
-                SetWorkspaceVisible(false);
+                ResetActiveFlow(storyFlow);
+                storyFlow.SetWorkspaceActive(false);
+                desiredWorkspace_ = Workspace::LevelEditor;
+                hubOwnedLastTick_ = true;
+                EnsureActive(application, levelEditor);
                 return;
             }
 
-            // Project Hub and the project loading overlay own the surface while
-            // visible. Keep the loaded Flow in memory so returning to the same
-            // project is instant, but persist presentation changes before the
-            // workspace disappears.
-            if (renderer.IsProjectHubVisible() || renderer.IsProjectLoadBlocking())
+            // Hub and the project-loading overlay remain owned by the existing
+            // 3D Studio path. Story Flow is only activated after those surfaces
+            // relinquish ownership.
+            const bool hubOwnsSurface =
+                levelEditor.IsProjectHubVisible() ||
+                levelEditor.IsProjectLoadBlocking();
+            if (hubOwnsSurface)
             {
                 FlushLayout(true);
-                SetWorkspaceVisible(false);
+                storyFlow.SetWorkspaceActive(false);
+                desiredWorkspace_ = Workspace::LevelEditor;
+                hubOwnedLastTick_ = true;
+                EnsureActive(application, levelEditor);
                 return;
             }
 
@@ -58,72 +81,98 @@ namespace renegade::studio
             if (!hasStartupFlow)
             {
                 FlushLayout(true);
-                ResetActiveFlow();
-                SetWorkspaceVisible(false);
+                ResetActiveFlow(storyFlow);
+                storyFlow.SetWorkspaceActive(false);
+                desiredWorkspace_ = Workspace::LevelEditor;
+                hubOwnedLastTick_ = false;
+                EnsureActive(application, levelEditor);
                 return;
             }
 
-            // Size the native surface before loading the Flow. A first-open
-            // deterministic layout calls FitToContent(), so framing must use
-            // the real Studio viewport rather than the widget's 1x1 default.
-            const XMFLOAT4 viewport = renderer.StoryFlowWorkspaceBounds();
-            const float width = std::max(1.0f, viewport.z - viewport.x);
-            const float height = std::max(1.0f, viewport.w - viewport.y);
-            workspace_.SetPos(XMFLOAT2(viewport.x, viewport.y));
-            workspace_.SetLayout(width, height);
-
-            if (trackedProjectId_ != project.projectId ||
-                trackedFlowId_ != project.startupFlowId)
+            const bool projectOrFlowChanged =
+                trackedProjectId_ != project.projectId ||
+                trackedFlowId_ != project.startupFlowId;
+            if (projectOrFlowChanged)
             {
                 FlushLayout(true);
-                ResetActiveFlow();
+                ResetActiveFlow(storyFlow);
                 trackedProjectId_ = project.projectId;
                 trackedFlowId_ = project.startupFlowId;
                 loadAttempted_ = false;
+                desiredWorkspace_ = Workspace::StoryFlow;
             }
+            else if (hubOwnedLastTick_)
+            {
+                // Open/Continue Project enters Story Flow as the project home.
+                desiredWorkspace_ = Workspace::StoryFlow;
+            }
+            hubOwnedLastTick_ = false;
 
             if (!loadAttempted_)
             {
                 loadAttempted_ = true;
-                if (!LoadCurrentFlow(project))
+                if (!LoadCurrentFlow(project, storyFlow))
                 {
-                    SetWorkspaceVisible(false);
+                    storyFlow.SetWorkspaceActive(false);
+                    desiredWorkspace_ = Workspace::LevelEditor;
+                    EnsureActive(application, levelEditor);
                     return;
                 }
             }
 
-            if (!model_.IsLoaded())
+            if (!authoringSession_.IsLoaded() || !model_.IsLoaded())
             {
-                SetWorkspaceVisible(false);
+                storyFlow.SetWorkspaceActive(false);
+                desiredWorkspace_ = Workspace::LevelEditor;
+                EnsureActive(application, levelEditor);
                 return;
             }
 
-            SetWorkspaceVisible(true);
+            if (desiredWorkspace_ == Workspace::LevelEditor)
+            {
+                // Leaving Story Flow is a lifecycle boundary, not just a draw
+                // toggle. Persist presentation edits before the 2D path stops.
+                // Semantic edits remain alive in authoringSession_ until the
+                // creator explicitly saves or a later lifecycle guard resolves
+                // dirty state.
+                FlushLayout(true);
+                storyFlow.SetWorkspaceActive(false);
+                EnsureActive(application, levelEditor);
+                return;
+            }
+
+            storyFlow.SetWorkspaceActive(true);
+            EnsureActive(application, storyFlow);
             FlushLayout(false);
         }
 
     private:
-        template <typename Renderer>
-        void Attach(Renderer& renderer)
+        template <typename StoryFlowPath>
+        void Attach(StoryFlowPath& storyFlow)
         {
             if (attached_)
                 return;
 
-            workspace_.Create();
-            workspace_.SetVisible(false);
-            workspace_.SetEnabled(false);
-            workspace_.OnLayoutChanged([this]()
+            storyFlow.EnsureLoaded();
+            storyFlow.OnLayoutChanged([this]()
             {
                 layoutDirty_ = true;
             });
-            gui_ = &renderer.StoryFlowGui();
-            gui_->AddWidget(&workspace_);
             lastLayoutWrite_ = std::chrono::steady_clock::now();
             attached_ = true;
         }
 
-        template <typename Project>
-        bool LoadCurrentFlow(const Project& project)
+        template <typename Application, typename Path>
+        static void EnsureActive(Application& application, Path& path)
+        {
+            if (application.GetActivePath() != &path)
+            {
+                application.ActivatePath(&path);
+            }
+        }
+
+        template <typename Project, typename StoryFlowPath>
+        bool LoadCurrentFlow(const Project& project, StoryFlowPath& storyFlow)
         {
             std::string resolvedFlowPath;
             std::string error;
@@ -141,24 +190,26 @@ namespace renegade::studio
                 return false;
             }
 
-            bridge::FlowDocument document;
-            if (!bridge::ReadFlowDocument(
+            if (!authoringSession_.Open(
                     resolvedFlowPath,
                     project.projectId,
-                    document,
                     error))
             {
                 ReportSemanticFailure(
-                    "could not read startup_flow '" + resolvedFlowPath +
-                    "': " + error);
+                    "could not open startup_flow authoring session '" +
+                    resolvedFlowPath + "': " + error);
                 return false;
             }
 
-            if (!model_.Load(std::move(document), project.projectId, error))
+            if (!model_.Load(
+                    authoringSession_.Document(),
+                    project.projectId,
+                    error))
             {
                 ReportSemanticFailure(
-                    "startup_flow failed Story Flow authoring validation: " +
+                    "startup_flow failed Story Flow presentation validation: " +
                     error);
+                authoringSession_.Clear();
                 return false;
             }
 
@@ -223,9 +274,6 @@ namespace renegade::studio
                     layout_,
                     error))
             {
-                // A presentation-only document must never stop a valid
-                // semantic Flow from opening. Rebuild once from deterministic
-                // metadata and leave Runtime/Flow content untouched.
                 ReportLayoutWarning(
                     "layout reconciliation failed and was rebuilt: " + error);
                 layout_ = bridge::BuildDeterministicStoryFlowLayout(
@@ -234,10 +282,13 @@ namespace renegade::studio
                     project.startupFlowId);
             }
 
-            workspace_.Bind(&model_, &layout_);
+            // SyncCanvas() has already given the dedicated path the current
+            // application dimensions, so first-open FitToContent() frames
+            // against the real window instead of the old 3D viewport host.
+            storyFlow.Bind(&authoringSession_, &model_, &layout_);
             if (!restoredSavedLayout)
             {
-                workspace_.FitToContent();
+                storyFlow.FitToContent();
             }
             layoutDirty_ = !restoredSavedLayout;
             if (layoutDirty_)
@@ -246,22 +297,17 @@ namespace renegade::studio
             }
 
             wi::backlog::post(
-                "Renegade Story Flow: opened startup_flow " + resolvedFlowPath,
+                "Renegade Story Flow: editable Graph session ready for " +
+                    resolvedFlowPath,
                 wi::backlog::LogLevel::Default);
             return true;
         }
 
-        void SetWorkspaceVisible(const bool visible)
+        template <typename StoryFlowPath>
+        void ResetActiveFlow(StoryFlowPath& storyFlow)
         {
-            if (!attached_)
-                return;
-            workspace_.SetVisible(visible);
-            workspace_.SetEnabled(visible);
-        }
-
-        void ResetActiveFlow()
-        {
-            workspace_.Clear();
+            storyFlow.Clear();
+            authoringSession_.Clear();
             model_.Clear();
             layout_ = {};
             layoutPath_.clear();
@@ -295,30 +341,31 @@ namespace renegade::studio
             lastLayoutWrite_ = now;
         }
 
-        void ReportSemanticFailure(const std::string& message)
+        static void ReportSemanticFailure(const std::string& message)
         {
             wi::backlog::post(
                 "Renegade Story Flow: " + message,
                 wi::backlog::LogLevel::Error);
         }
 
-        void ReportLayoutWarning(const std::string& message)
+        static void ReportLayoutWarning(const std::string& message)
         {
             wi::backlog::post(
                 "Renegade Story Flow presentation: " + message,
                 wi::backlog::LogLevel::Warning);
         }
 
-        RenegadeStoryFlowWorkspace workspace_;
+        bridge::StoryFlowAuthoringSession authoringSession_;
         bridge::StoryFlowAuthoringModel model_;
         bridge::StoryFlowLayoutDocument layout_;
         bridge::StableId trackedProjectId_;
         bridge::StableId trackedFlowId_;
         std::string layoutPath_;
-        wi::gui::GUI* gui_ = nullptr;
         std::chrono::steady_clock::time_point lastLayoutWrite_{};
+        Workspace desiredWorkspace_ = Workspace::StoryFlow;
         bool attached_ = false;
         bool loadAttempted_ = false;
         bool layoutDirty_ = false;
+        bool hubOwnedLastTick_ = true;
     };
 }
