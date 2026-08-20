@@ -31,6 +31,16 @@ namespace
         wi::image::Draw(nullptr, params, cmd);
     }
 
+    void BorderedRect(float x, float y, float w, float h,
+        wi::Color fill, wi::Color border, wi::graphics::CommandList cmd)
+    {
+        Rect(x, y, w, h, fill, cmd);
+        Rect(x, y, w, 1.0f, border, cmd);
+        Rect(x, y + h - 1.0f, w, 1.0f, border, cmd);
+        Rect(x, y, 1.0f, h, border, cmd);
+        Rect(x + w - 1.0f, y, 1.0f, h, border, cmd);
+    }
+
     void Label(const std::string& value, float x, float y, int size,
         wi::Color color, wi::graphics::CommandList cmd)
     {
@@ -215,9 +225,34 @@ namespace renegade::studio
         Widget::Update(canvas, dt);
         pointerConsumed_ = false;
         if (!IsVisible() || !IsEnabled() || !model_ || !layout_) return;
+
         const XMFLOAT4 pointer = wi::input::GetPointer();
+        const float right = translation.x + scale.x;
+        const XMFLOAT4 fitBounds(right - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
+        const XMFLOAT4 startBounds(right - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
+        const bool insideHeader =
+            pointer.x >= translation.x && pointer.x < right &&
+            pointer.y >= translation.y && pointer.y < translation.y + HeaderHeight;
+        if (insideHeader)
+        {
+            pointerConsumed_ = true;
+            if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+            {
+                if (Contains(fitBounds, pointer))
+                {
+                    FitToContent();
+                    return;
+                }
+                if (Contains(startBounds, pointer))
+                {
+                    CenterOnGameStart();
+                    return;
+                }
+            }
+        }
+
         const bool inside = PointerInsideWorkspace(pointer);
-        pointerConsumed_ = inside;
+        pointerConsumed_ = pointerConsumed_ || inside;
         if (inside && std::abs(pointer.z) > 0.001f)
         {
             const XMFLOAT2 before = ScreenToCanvas(pointer.x, pointer.y);
@@ -259,13 +294,51 @@ namespace renegade::studio
         Label("STORY FLOW", translation.x + 18, translation.y + 13, 14, Text, cmd);
         Label("READ-ONLY FOUNDATION", translation.x + 130, translation.y + 16, 9, Muted, cmd);
         if (!model_ || !layout_) return;
+
+        const float right = translation.x + scale.x;
+        const XMFLOAT4 fitBounds(right - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
+        const XMFLOAT4 startBounds(right - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
+        BorderedRect(fitBounds.x, fitBounds.y, fitBounds.z, fitBounds.w,
+            Surface, Border, cmd);
+        BorderedRect(startBounds.x, startBounds.y, startBounds.z, startBounds.w,
+            Surface, Border, cmd);
+        Label("FIT", fitBounds.x + 15.0f, fitBounds.y + 8.0f, 9, Text, cmd);
+        Label("START", startBounds.x + 10.0f, startBounds.y + 8.0f, 9, Text, cmd);
+
+        const int zoomPercent = static_cast<int>(std::round(layout_->canvas.zoom * 100.0f));
+        Label(
+            std::to_string(model_->Nodes().size()) + " DESTINATIONS  //  " +
+                std::to_string(zoomPercent) + "%",
+            translation.x + 286.0f,
+            translation.y + 16.0f,
+            9,
+            Muted,
+            cmd);
+
         for (const auto& route : model_->Routes())
         {
-            const auto* a = FindLayout(route.sourceNodeId); const auto* b = FindLayout(route.destinationNodeId);
+            const auto* a = FindLayout(route.sourceNodeId);
+            const auto* b = FindLayout(route.destinationNodeId);
             if (!a || !b) continue;
-            const XMFLOAT4 ab = NodeScreenBounds(*a); const XMFLOAT4 bb = NodeScreenBounds(*b);
-            Line(XMFLOAT2(ab.x + ab.z, ab.y + ab.w * 0.5f), XMFLOAT2(bb.x, bb.y + bb.w * 0.5f),
-                route.sourceNodeId == selectedNodeId_ || route.destinationNodeId == selectedNodeId_ ? Accent : Route);
+            const XMFLOAT4 ab = NodeScreenBounds(*a);
+            const XMFLOAT4 bb = NodeScreenBounds(*b);
+            const XMFLOAT2 start(ab.x + ab.z, ab.y + ab.w * 0.5f);
+            const XMFLOAT2 end(bb.x, bb.y + bb.w * 0.5f);
+            const wi::Color routeColor =
+                route.sourceNodeId == selectedNodeId_ ||
+                route.destinationNodeId == selectedNodeId_
+                    ? Accent : Route;
+            Line(start, end, routeColor);
+            if (layout_->canvas.zoom >= 0.55f)
+            {
+                Label(
+                    route.outcome,
+                    (start.x + end.x) * 0.5f - 42.0f,
+                    (start.y + end.y) * 0.5f - 15.0f,
+                    8,
+                    routeColor,
+                    cmd);
+            }
         }
         for (const auto& node : model_->Nodes())
         {
