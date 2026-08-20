@@ -19,6 +19,14 @@ namespace renegade::studio
     class StoryFlowStudioIntegration final
     {
     public:
+        ~StoryFlowStudioIntegration()
+        {
+            if (attached_ && gui_ != nullptr)
+            {
+                gui_->RemoveWidget(&workspace_);
+            }
+        }
+
         template <typename Renderer, typename Session>
         void Tick(Renderer& renderer, Session& session)
         {
@@ -104,7 +112,8 @@ namespace renegade::studio
             {
                 layoutDirty_ = true;
             });
-            renderer.StoryFlowGui().AddWidget(&workspace_);
+            gui_ = &renderer.StoryFlowGui();
+            gui_->AddWidget(&workspace_);
             lastLayoutWrite_ = std::chrono::steady_clock::now();
             attached_ = true;
         }
@@ -302,6 +311,7 @@ namespace renegade::studio
         bridge::StableId trackedProjectId_;
         bridge::StableId trackedFlowId_;
         std::string layoutPath_;
+        wi::gui::GUI* gui_ = nullptr;
         std::chrono::steady_clock::time_point lastLayoutWrite_{};
         bool attached_ = false;
         bool loadAttempted_ = false;
