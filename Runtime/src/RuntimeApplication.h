@@ -44,6 +44,7 @@ namespace renegade::runtime
     private:
         [[nodiscard]] bool ConfigureActions(std::string& error);
         [[nodiscard]] bool LoadStartupScreen(std::string& error);
+        [[nodiscard]] bool LoadCurrentFlowScreen(std::string& error);
         void QueueAction(RuntimeActionRequest request);
         void ProcessPendingActions();
         void RecordAction(const RuntimeActionResult& result);
