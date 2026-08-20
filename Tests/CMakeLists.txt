@@ -339,6 +339,26 @@ add_test(
     COMMAND RenegadeFlowTests
 )
 
+add_executable(RenegadeStoryFlowPresentationTests
+    StoryFlowPresentationTests.cpp
+)
+
+target_link_libraries(RenegadeStoryFlowPresentationTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+set_target_properties(RenegadeStoryFlowPresentationTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeStoryFlowPresentationTests)
+
+add_test(
+    NAME RenegadeStoryFlowPresentationTests
+    COMMAND RenegadeStoryFlowPresentationTests
+)
+
 add_executable(RenegadeRuntimeFlowTests
     RuntimeFlowTests.cpp
 )
