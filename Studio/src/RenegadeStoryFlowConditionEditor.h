@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 
@@ -568,16 +569,17 @@ namespace renegade::studio
             }
             else
             {
-                statusMessage_ = "CONDITION EDIT REJECTED // SELECTION IS STALE";
                 RefreshFromAuthoritativeRoute(true);
+                statusMessage_ = "CONDITION EDIT REJECTED // SELECTION IS STALE";
                 return;
             }
 
             std::string error;
             if (!session_->UpdateRoute(activeRouteId_, std::move(candidate), error))
             {
-                statusMessage_ = "CONDITION EDIT REJECTED // " + error;
+                const std::string failure = "CONDITION EDIT REJECTED // " + error;
                 RefreshFromAuthoritativeRoute(true);
+                statusMessage_ = failure;
                 return;
             }
             if (!model_->Load(session_->Document(), session_->ProjectId(), error))
@@ -617,8 +619,9 @@ namespace renegade::studio
             std::string error;
             if (!session_->UpdateRoute(activeRouteId_, std::move(candidate), error))
             {
-                statusMessage_ = "CONDITION DELETE REJECTED // " + error;
+                const std::string failure = "CONDITION DELETE REJECTED // " + error;
                 RefreshFromAuthoritativeRoute(true);
+                statusMessage_ = failure;
                 return;
             }
             if (!model_->Load(session_->Document(), session_->ProjectId(), error))
