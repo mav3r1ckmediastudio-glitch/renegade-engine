@@ -1,0 +1,62 @@
+name: Story Flow Gate 2 self patch
+
+on:
+  push:
+    branches:
+      - agent/story-flow-gate2-screen-semantics
+    paths:
+      - ".github/workflows/story-flow-gate2-self-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/story-flow-gate2-screen-semantics
+          fetch-depth: 0
+
+      - name: Patch typed Story Flow Screen dependency emission
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("EngineBridge/src/DependencyService.cpp")
+          text = path.read_text(encoding="utf-8")
+          old = '''        StoryFlowDependencyDocument document;
+                  if (!reader_(path, document, error)) return false;
+                  for (std::size_t index = 0; index < document.scenePathHints.size(); ++index)
+                      EmitPath(emit, document.scenePathHints[index], DependencyClass::Scene,
+                          "story_flow.level[" + std::to_string(index) + "].scene_path_hint");
+                  error.clear();
+                  return true;
+          '''
+          new = '''        StoryFlowDependencyDocument document;
+                  if (!reader_(path, document, error)) return false;
+                  for (std::size_t index = 0; index < document.scenePathHints.size(); ++index)
+                      EmitPath(emit, document.scenePathHints[index], DependencyClass::Scene,
+                          "story_flow.level[" + std::to_string(index) + "].scene_path_hint");
+                  for (std::size_t index = 0; index < document.screenPathHints.size(); ++index)
+                      EmitPath(emit, document.screenPathHints[index],
+                          DependencyClass::RuntimeScreenDocument,
+                          "story_flow.screen[" + std::to_string(index) + "].screen_path_hint");
+                  error.clear();
+                  return true;
+          '''
+          if text.count(old) != 1:
+              raise SystemExit("Expected StoryFlowDependencyProvider block was not found exactly once")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+
+          Path(".github/workflows/story-flow-gate2-self-patch.yml").unlink()
+
+      - name: Commit bounded patch
+        shell: bash
+        run: |
+          git config user.name "renegade-ci"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "story-flow: include Screen documents in dependency closure"
+          git push origin HEAD:agent/story-flow-gate2-screen-semantics
