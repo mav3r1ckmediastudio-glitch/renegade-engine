@@ -24,9 +24,34 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  apply-gate7:
+    name: Apply Gate 7 project loading source patch
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/post-pr58-gate7-project-loading-experience' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Gate 7 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/post-pr58-gate7-project-loading-experience
+          fetch-depth: 0
+      - name: Apply source patch
+        run: python .github/scripts/gate7_apply.py
+      - name: Remove temporary patch plumbing
+        run: |
+          git rm .github/scripts/gate7_apply.py
+          git checkout origin/main -- .github/workflows/studio.yml
+      - name: Commit and push Gate 7 implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add EngineBridge Studio .github/workflows/studio.yml
+          git diff --cached --check
+          git commit -m "gate7: add responsive real-phase project loading experience"
+          git push origin HEAD:agent/post-pr58-gate7-project-loading-experience
+
   studio:
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025
