@@ -36,6 +36,7 @@ namespace renegade::studio
     public:
         void BindSession(bridge::StudioSession& session) noexcept;
         void SetExitRequestHandler(std::function<void()> handler);
+        void RequestExit();
         void BindDiagnostics(
             wi::Application::InfoDisplayer& diagnostics) noexcept;
         void DeleteGPUResources() override;
@@ -642,6 +643,7 @@ namespace renegade::studio
     public:
         void SetStartupScene(std::string filePath);
         void SetExitRequestHandler(std::function<void()> handler);
+        void RequestExit();
         void Initialize() override;
 
     private:

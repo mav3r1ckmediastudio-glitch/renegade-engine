@@ -267,6 +267,15 @@ namespace
                 startupIdentityPrompt->Focus();
             return 0;
 
+        case WM_CLOSE:
+            if (application != nullptr && windowReadyForWicked)
+            {
+                application->RequestExit();
+                return 0;
+            }
+            DestroyWindow(window);
+            return 0;
+
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
@@ -374,7 +383,7 @@ int APIENTRY wWinMain(
 
     windowReadyForWicked = true;
     application->SetWindow(window);
-    application->SetExitRequestHandler([window]() { PostMessageW(window, WM_CLOSE, 0, 0); });
+    application->SetExitRequestHandler([window]() { DestroyWindow(window); });
     SetWindowTextW(window, GraphicsBackendTitle());
     LogGate2A("WICKED_WINDOW_BOUND");
 
