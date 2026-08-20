@@ -7,6 +7,7 @@
 
 #include <WickedEngine.h>
 
+#include "RenegadeStoryFlowConditionEditor.h"
 #include "RenegadeStoryFlowWorkspace.h"
 
 namespace renegade::studio
@@ -22,6 +23,7 @@ namespace renegade::studio
         {
             if (loaded_)
             {
+                GetGUI().RemoveWidget(&conditionEditor_);
                 GetGUI().RemoveWidget(&workspace_);
             }
         }
@@ -35,6 +37,16 @@ namespace renegade::studio
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
             GetGUI().AddWidget(&workspace_);
+
+            // The condition panel is deliberately hosted by the same native
+            // Story Flow render path and is registered after the Graph surface
+            // so it renders above the Inspector validation text it replaces
+            // while a route is selected.
+            conditionEditor_.Create();
+            conditionEditor_.SetVisible(false);
+            conditionEditor_.SetEnabled(false);
+            GetGUI().AddWidget(&conditionEditor_);
+
             loaded_ = true;
             LayoutWorkspace();
         }
@@ -50,6 +62,8 @@ namespace renegade::studio
             LayoutWorkspace();
             workspace_.SetVisible(workspaceActive_);
             workspace_.SetEnabled(workspaceActive_);
+            conditionEditor_.SetVisible(workspaceActive_);
+            conditionEditor_.SetEnabled(workspaceActive_);
         }
 
         void Stop() override
@@ -57,6 +71,8 @@ namespace renegade::studio
             if (!loaded_)
                 return;
 
+            conditionEditor_.SetVisible(false);
+            conditionEditor_.SetEnabled(false);
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
         }
@@ -88,12 +104,14 @@ namespace renegade::studio
         {
             EnsureLoaded();
             workspace_.Bind(session, model, layout);
+            conditionEditor_.Bind(session, model, &workspace_);
         }
 
         void Clear() noexcept
         {
             if (loaded_)
             {
+                conditionEditor_.Clear();
                 workspace_.Clear();
             }
         }
@@ -118,6 +136,8 @@ namespace renegade::studio
 
             workspace_.SetVisible(active);
             workspace_.SetEnabled(active);
+            conditionEditor_.SetVisible(active);
+            conditionEditor_.SetEnabled(active);
         }
 
         void OnLayoutChanged(std::function<void()> callback)
@@ -149,9 +169,11 @@ namespace renegade::studio
             lastLogicalHeight_ = height;
             workspace_.SetPos(XMFLOAT2(0.0f, 0.0f));
             workspace_.SetLayout(width, height);
+            conditionEditor_.SetLayout(width, height);
         }
 
         RenegadeStoryFlowWorkspace workspace_;
+        RenegadeStoryFlowConditionEditor conditionEditor_;
         bool loaded_ = false;
         bool workspaceActive_ = false;
         float lastLogicalWidth_ = -1.0f;
