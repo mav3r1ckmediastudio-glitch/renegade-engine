@@ -19,14 +19,16 @@ namespace renegade::bridge
                 return 0;
             case FlowNodeKind::Level:
                 return 1;
-            case FlowNodeKind::CompleteGame:
+            case FlowNodeKind::Screen:
                 return 2;
-            case FlowNodeKind::ReturnToMainMenu:
+            case FlowNodeKind::CompleteGame:
                 return 3;
-            case FlowNodeKind::Quit:
+            case FlowNodeKind::ReturnToMainMenu:
                 return 4;
-            default:
+            case FlowNodeKind::Quit:
                 return 5;
+            default:
+                return 6;
             }
         }
 
@@ -165,6 +167,8 @@ namespace renegade::bridge
             view.name = node->name;
             view.sceneAssetId = node->sceneAssetId;
             view.scenePathHint = node->scenePathHint;
+            view.screenDocumentId = node->screenDocumentId;
+            view.screenPathHint = node->screenPathHint;
             view.reachableFromStart = reachable;
             view.presentationColumn = column;
             view.presentationRow = nextRowByColumn[column]++;
