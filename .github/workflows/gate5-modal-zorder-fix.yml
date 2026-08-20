@@ -1,0 +1,56 @@
+name: Gate 5 modal z-order repair
+
+on:
+  push:
+    branches:
+      - agent/post-pr58-gate5-project-lifecycle-reliability
+    paths:
+      - .github/workflows/gate5-modal-zorder-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reorder Hub chrome behind first-open modal controls
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('Studio/src/StudioApplication.cpp')
+          text = path.read_text(encoding='utf-8')
+
+          before = '''        projectHubChrome_.SetVisible(projectHubVisible_);\n        GetGUI().AddWidget(&projectHubChrome_);\n\n        hubNewProjectNameInput_.Create("Hub New Project Name");'''
+          after = '''        projectHubChrome_.SetVisible(projectHubVisible_);\n\n        hubNewProjectNameInput_.Create("Hub New Project Name");'''
+          if text.count(before) != 1:
+              raise SystemExit(f'expected one Hub chrome registration seam, found {text.count(before)}')
+          text = text.replace(before, after, 1)
+
+          before_tail = '''        hubNewProjectCancelButton_.SetVisible(false);\n        GetGUI().AddWidget(&hubNewProjectCancelButton_);\n    }'''
+          after_tail = '''        hubNewProjectCancelButton_.SetVisible(false);\n        GetGUI().AddWidget(&hubNewProjectCancelButton_);\n\n        // Wicked GUI renders top-level widgets back-to-front. Register the\n        // authored Hub chrome after its native NEW PROJECT controls so the\n        // input/CREATE/CANCEL controls render above the modal on their very\n        // first visible frame instead of only being promoted after a click.\n        GetGUI().AddWidget(&projectHubChrome_);\n    }'''
+          if text.count(before_tail) != 1:
+              raise SystemExit(f'expected one modal-control tail seam, found {text.count(before_tail)}')
+          text = text.replace(before_tail, after_tail, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Remove one-shot repair workflow
+        run: git rm .github/workflows/gate5-modal-zorder-fix.yml
+
+      - name: Commit and push repair
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Studio/src/StudioApplication.cpp
+          git diff --cached --check
+          git commit -m "fix: render new-project controls above Hub modal"
+          git push origin HEAD:agent/post-pr58-gate5-project-lifecycle-reliability
