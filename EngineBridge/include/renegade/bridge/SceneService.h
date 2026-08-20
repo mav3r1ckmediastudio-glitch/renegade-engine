@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <WickedEngine.h>
@@ -116,6 +117,14 @@ namespace renegade::bridge
             wi::ecs::Entity entity) const;
         [[nodiscard]] const std::string& CurrentPath() const noexcept;
         [[nodiscard]] const std::string& LastError() const noexcept;
+
+        // Studio's transactional project switch can fail project adoption
+        // after a candidate startup scene has already validated. Preserve that
+        // diagnostic through the same error channel the existing Hub uses.
+        void SetLastError(std::string error)
+        {
+            lastError_ = std::move(error);
+        }
 
     private:
         friend class SceneDocumentService;
