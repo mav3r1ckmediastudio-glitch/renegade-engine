@@ -82,11 +82,12 @@ namespace renegade::studio
         }
 
         void Bind(
-            const bridge::StoryFlowAuthoringModel* model,
+            bridge::StoryFlowAuthoringSession* session,
+            bridge::StoryFlowAuthoringModel* model,
             bridge::StoryFlowLayoutDocument* layout)
         {
             EnsureLoaded();
-            workspace_.Bind(model, layout);
+            workspace_.Bind(session, model, layout);
         }
 
         void Clear() noexcept
