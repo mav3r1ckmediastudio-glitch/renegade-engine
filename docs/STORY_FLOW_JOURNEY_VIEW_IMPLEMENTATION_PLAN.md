@@ -1,6 +1,6 @@
 # Renegade Story Flow — Journey View Implementation Plan
 
-**Status:** Locked product direction; implementation programme starts with Gate 1.
+**Status:** Locked product direction. Gate 1 implementation and owner visual/interaction acceptance are complete; final Gate 1 documentation/exact-head closeout remains before merge.
 
 **Prepared:** 2026-08-20
 
@@ -17,7 +17,7 @@
 Story Flow is the project-level authoring home for the complete player journey,
 not only a level-sequencing graph.
 
-The normal creator journey is:
+The target creator journey is:
 
 `PROJECT HUB -> CREATE/OPEN PROJECT -> STORY FLOW -> SCREEN/LEVEL -> EDITOR`
 
@@ -34,7 +34,34 @@ credits and custom screens.
 HUD authoring is deliberately excluded from this programme. HUD/player-overlay
 architecture will be designed separately after a robust UI/runtime system exists.
 
-## 2. Two synchronized views, one authoritative model
+## 2. First-class render-path architecture
+
+Story Flow is a **separate first-class Studio render path/workspace**. It is not
+an overlay that permanently leaves the 3D Level Editor running underneath it.
+
+The target lifecycle is:
+
+- `Project Hub -> Story Flow`;
+- `Story Flow -> Level Editor -> Story Flow` when a Level is opened;
+- `Story Flow -> Screen Editor -> Story Flow` when a Screen is opened.
+
+Shared project/session/document services may remain alive across transitions,
+but the inactive content editor must not continue rendering/ticking its full
+scene/editor UI behind Story Flow.
+
+Gate 1 deliberately uses the existing 3D Studio render path as a temporary host
+to prove startup Flow resolution, the shared presentation model, native wiGUI
+rendering and layout persistence without changing the established project
+lifecycle at the same time. Owner acceptance explicitly confirmed this scaffold
+works. The scaffold is **not** the finished architecture and must be retired
+before Story Flow becomes the mature editable project-home surface.
+
+The render-path promotion is a required Gate 3 deliverable before core Graph
+editing becomes the long-lived authoring implementation. Journey View therefore
+inherits the dedicated Story Flow render path rather than being built as a
+permanent 3D-editor overlay.
+
+## 3. Two synchronized views, one authoritative model
 
 Renegade Story Flow has two presentations over one authoritative Story Flow
 document.
@@ -81,7 +108,7 @@ Presentation state such as card position, graph position, track arrangement,
 pan, zoom, collapsed groups and future chapter regions is editor state only and
 must never alter Runtime semantics.
 
-## 3. Existing foundations retained
+## 4. Existing foundations retained
 
 LP02 already provides the authoritative Story Flow/runtime foundation:
 
@@ -105,7 +132,7 @@ The Story Flow programme will extend the real Flow/runtime contract so a Screen
 becomes a first-class Flow destination rather than drawing fake screen nodes
 that Runtime cannot execute.
 
-## 4. Screen model direction
+## 5. Screen model direction
 
 Creator-facing screen purposes such as Title, Loading, Options, Death, Victory,
 Save/Load and Credits should be variants/templates of one underlying Screen
@@ -115,17 +142,10 @@ The creator sees names such as `TITLE SCREEN` and `LOADING SCREEN`; the backend
 retains one extensible Screen contract.
 
 A Screen's authored actions become named Story Flow outcomes. For example a
-Title Screen may expose:
-
-- `new_game`;
-- `load_game`;
-- `options`;
-- `credits`;
-- `quit`.
-
+Title Screen may expose `new_game`, `load_game`, `options`, `credits` and `quit`.
 Those outcomes route through the same stable LP02 route contract used by Levels.
 
-## 5. Level model direction
+## 6. Level model direction
 
 A Level node/card remains a reference to a governed Scene/WISCENE document.
 It does not embed a separate Level editor.
@@ -134,7 +154,7 @@ Double-click/open on a Level transitions to the existing 3D Level Editor. The
 Level reference remains stable-ID authoritative, reports moved/missing identity
 failures clearly, and returns to the same Story Flow project context.
 
-## 6. GameGuru MAX reference policy
+## 7. GameGuru MAX reference policy
 
 GameGuru MAX is a useful public implementation reference for solved creator
 workflows. Its Storyboard demonstrates the value of project-wide visual flow,
@@ -146,16 +166,19 @@ fixed-capacity node model, ImGui/imnodes UI, Lua-special-case routing or visual
 layout. MAX is used to understand workflow and edge cases while Renegade keeps
 its own stable-ID, transactional and runtime architecture.
 
-## 7. Implementation gates
+## 8. Implementation gates
 
 ### Gate 1 — Shared Story Flow foundation and Studio workspace
+
+**Status:** implementation and owner visual/interaction acceptance passed;
+final documentation/exact-head closeout pending before merge.
 
 **Purpose:** establish the presentation-independent foundation required by both
 Journey View and Graph View.
 
-Deliverables:
+Delivered:
 
-- re-audit exact `main` before editing and record material changes;
+- exact-main re-audit at `02df129f96c860dd3a7d6b6e065c928bef0f8907`;
 - UI-independent read-only Story Flow authoring/presentation model over the
   existing `FlowDocument`;
 - stable-ID-indexed nodes/routes and diagnostics;
@@ -164,19 +187,29 @@ Deliverables:
   `Saved/EditorState/StoryFlow/`;
 - layout state contains presentation only, never routes/runtime semantics;
 - native Renegade Studio Story Flow workspace boundary;
-- render the existing LP02 node kinds/routes;
-- pan, zoom, select and fit/centre;
+- rendering of existing LP02 node kinds/routes and outcome labels;
+- pan, zoom, select, `FIT` and `START` framing;
 - permanent Game Start representation;
-- open Story Flow for an already-open project with a valid startup Flow;
+- open Story Flow for an existing project with a valid startup Flow;
 - tests proving layout cannot alter Runtime traversal;
-- reconcile stale `HANDOFF.md` / `docs/ROADMAP.md` statements.
+- controlled owner-test fixture.
+
+**Exact implementation evidence:**
+
+- implementation head `6f02f00519b344faa2fbe9a0f0d9d9174ad3f8d4`;
+- Renegade Studio run 628: success;
+- Windows baseline run 1156: success;
+- owner Release test: PASS on 2026-08-20;
+- visible four-node route: `Game Start -> Level One -> Level Two -> Complete Game`;
+- owner confirmed selection, zoom, middle-mouse pan, `FIT` and `START` all work.
+
+**Accepted temporary condition:** the Gate 1 surface is hosted over the existing
+3D Studio render path. This is a scaffold only. The locked architecture requires
+a separate Story Flow render path/workspace before the mature editable surface.
 
 **Explicit exclusions:** no New Project lifecycle change, no automatic startup
 Flow creation, no Flow mutation, no Level creation, no Screen Flow node yet, no
 Screen Editor, no auto-splice, no importer work and no Wicked modification.
-
-**Acceptance:** a real existing LP02 Story Flow renders natively in Studio and
-its Runtime semantics are byte/behaviourally unaffected by layout operations.
 
 ### Gate 2 — First-class Screen semantics
 
@@ -196,13 +229,16 @@ Deliverables:
 **Acceptance:** Screen nodes are real Runtime destinations, never decorative
 editor-only nodes.
 
-### Gate 3 — Core Flow editing and Graph View
+### Gate 3 — Dedicated Story Flow render path, core editing and Graph View
 
-**Purpose:** make the authoritative Story Flow fully authorable and expose its
-exact topology.
+**Purpose:** retire the temporary Gate 1 overlay scaffold, make the authoritative
+Story Flow fully authorable and expose its exact topology.
 
 Deliverables:
 
+- first-class Story Flow render path/workspace separate from the 3D Level Editor;
+- no continuously ticking/rendering Level Editor scene behind Story Flow;
+- preserve shared project/session/document services across workspace transitions;
 - Graph View over the shared model;
 - add/delete supported nodes;
 - add/delete/reconnect routes;
@@ -216,7 +252,8 @@ Deliverables:
 - Graph presentation persistence independent of semantic Flow data.
 
 **Acceptance:** the LP02 four-node proof and a Screen-containing proof can be
-authored entirely inside Studio.
+authored entirely inside the dedicated Story Flow surface, with the 3D Level
+Editor inactive until a Level is explicitly opened.
 
 ### Gate 4 — Level lifecycle integration
 
@@ -256,7 +293,8 @@ Deliverables:
 
 ### Gate 6 — Journey View MVP
 
-**Purpose:** deliver the locked primary creator experience.
+**Purpose:** deliver the locked primary creator experience on the dedicated Story
+Flow render path established by Gate 3.
 
 Deliverables:
 
@@ -287,7 +325,7 @@ Deliverables:
 
 - New Project creates/owns a startup Flow;
 - exactly one permanent Game Start;
-- new projects land in Journey View;
+- new projects land in Journey View on the dedicated Story Flow render path;
 - no arbitrary blank `Main.wiscene` solely to satisfy the old startup path;
 - resolve the current `startup_scene` project-validation constraint safely;
 - failure rollback leaves no half-created project/Flow/Scene content;
@@ -302,7 +340,7 @@ journey.
 
 Minimum deliverables:
 
-- native Screen Editor workspace;
+- native Screen Editor render path/workspace;
 - screen canvas;
 - background/image;
 - text;
@@ -363,26 +401,26 @@ Required verification:
 - owner visual/behavioural Release-artifact acceptance;
 - independent exact-head review where required.
 
-## 8. Programme-wide invariants
+## 9. Programme-wide invariants
 
-1. Story Flow is Runtime truth; editor presentation never becomes a second
-   executable format.
+1. Story Flow is Runtime truth; editor presentation never becomes a second executable format.
 2. Journey View is primary; Graph View is secondary but fully synchronized.
-3. Stable IDs are authoritative; paths remain hints.
-4. Presentation layout is separate from semantic Story Flow data.
-5. Game Start is unique and permanent.
-6. Failures are visible and fail closed; no silent fallback to an arbitrary
-   Scene or Screen.
-7. Persistent semantic mutations require command-history and Save/Open proof.
-8. Multi-document mutations use project transactions/rollback rather than
-   sequential best-effort writes.
-9. Wicked remains pinned unless a separate explicit core-patch decision is made.
-10. HUDs remain outside this programme until their architecture is designed.
+3. Story Flow is a first-class render path/workspace; the 3D Level Editor runs only when a Level is explicitly opened.
+4. Stable IDs are authoritative; paths remain hints.
+5. Presentation layout is separate from semantic Story Flow data.
+6. Game Start is unique and permanent.
+7. Failures are visible and fail closed; no silent fallback to an arbitrary Scene or Screen.
+8. Persistent semantic mutations require command-history and Save/Open proof.
+9. Multi-document mutations use project transactions/rollback rather than sequential best-effort writes.
+10. Wicked remains pinned unless a separate explicit core-patch decision is made.
+11. HUDs remain outside this programme until their architecture is designed.
 
-## 9. Definition of complete
+## 10. Definition of complete
 
 Story Flow is complete when a creator can launch Renegade, create/open a project
-from the Hub, land in Journey View, create and edit Screens and Levels, author
-branches/loops/exits, optionally inspect the same topology in Graph View, save
-and reopen without identity/layout loss, run the project and build a standalone
-Windows game whose executable follows exactly the same authored player journey.
+from the Hub, land in Journey View on its own Story Flow render path, create and
+edit Screens and Levels, author branches/loops/exits, optionally inspect the
+same topology in Graph View, enter the 3D Level Editor or Screen Editor only when
+opening that content, return to Story Flow without losing context, save/reopen
+without identity/layout loss, run the project and build a standalone Windows
+game whose executable follows exactly the same authored player journey.
