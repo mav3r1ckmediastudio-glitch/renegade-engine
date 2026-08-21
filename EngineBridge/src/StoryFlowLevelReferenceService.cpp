@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -295,11 +296,29 @@ namespace renegade::bridge
 
             fs::path sidecarPath = scenePath;
             sidecarPath += ".rmeta";
-            const bool sidecarExists = fs::is_regular_file(sidecarPath, pathError);
+            pathError.clear();
+            const fs::file_status sidecarStatus = fs::status(sidecarPath, pathError);
+            bool sidecarExists = false;
             if (pathError)
             {
-                return Failure(StoryFlowLevelReferenceCode::Conflict,
-                    "The Scene identity sidecar could not be inspected.");
+                if (pathError == std::errc::no_such_file_or_directory)
+                {
+                    pathError.clear();
+                }
+                else
+                {
+                    return Failure(StoryFlowLevelReferenceCode::Conflict,
+                        "The Scene identity sidecar could not be inspected.");
+                }
+            }
+            else if (fs::exists(sidecarStatus))
+            {
+                if (!fs::is_regular_file(sidecarStatus))
+                {
+                    return Failure(StoryFlowLevelReferenceCode::Conflict,
+                        "The Scene identity sidecar is not a regular file.");
+                }
+                sidecarExists = true;
             }
 
             DocumentEnvelope sceneEnvelope;
