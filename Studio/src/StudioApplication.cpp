@@ -7,6 +7,7 @@
 #include "renegade/bridge/CreatorModelMaterialPreparationService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
+#include "renegade/bridge/FlowService.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -1098,6 +1099,7 @@ namespace renegade::studio
         bridge::ProjectMetadata project;
         bridge::PreparedSceneOpen preparedScene;
         bridge::MaterialTextureRestoreResult textureRestore;
+        bool storyFlowNative = false;
         std::string error;
     };
 
@@ -6701,6 +6703,7 @@ namespace renegade::studio
                 if (!meta.name.empty()) entry.name = meta.name;
                 entry.rootPath = meta.rootPath;
                 entry.startupScene = meta.startupScene;
+                entry.startupFlow = meta.startupFlow;
                 entry.formatVersion = meta.formatVersion;
             }
             entries.push_back(std::move(entry));
@@ -9282,33 +9285,31 @@ wi::eventhandler::Subscribe_Once(
                 RequestSceneReplacement(
                     [this, parentDirectory, projectName]()
                     {
-                        if (!session_->Projects().CreateProject(
-                        parentDirectory,
-                        projectName,
-                        "Content/ProvingGround.wiscene"))
-                {
-                    hubMessageLabel_.font.params.color = WarningAmber;
-                    hubMessageLabel_.SetText(
-                        "PROJECT CREATE FAILED // " +
-                        session_->Projects().LastError());
-                    return;
-                }
+                        if (!session_->Projects().CreateStoryFlowProject(
+                                parentDirectory,
+                                projectName))
+                        {
+                            hubMessageLabel_.font.params.color = WarningAmber;
+                            hubMessageLabel_.SetText(
+                                "PROJECT CREATE FAILED // " +
+                                session_->Projects().LastError());
+                            return;
+                        }
 
-                ClearSelectionOutline();
-                if (!session_->LoadScene(session_->Projects().StartupScenePath()))
-                {
-                    hubMessageLabel_.font.params.color = WarningAmber;
-                    hubMessageLabel_.SetText(
-                        "PROJECT SCENE FAILED // " +
-                        session_->Scenes().LastError());
-                    return;
-                }
+                        ClearSelectionOutline();
+                        if (!session_->CommitPendingProjectWithoutScene())
+                        {
+                            hubMessageLabel_.font.params.color = WarningAmber;
+                            hubMessageLabel_.SetText(
+                                "PROJECT HOME FAILED // " +
+                                session_->Scenes().LastError());
+                            return;
+                        }
 
-                RestoreGovernedMaterialTextures();
-                workspaceTitle_.SetText(
-                    "RENEGADE STUDIO // " +
-                    session_->Projects().CurrentProject().name);
-                hubMessageLabel_.font.params.color = HologramMuted;
+                        workspaceTitle_.SetText(
+                            "RENEGADE STUDIO // " +
+                            session_->Projects().CurrentProject().name);
+                        hubMessageLabel_.font.params.color = HologramMuted;
                         hubMessageLabel_.SetText(
                             "PROJECT CREATED // " +
                             session_->Projects().CurrentProject().descriptorPath);
@@ -9653,6 +9654,7 @@ wi::eventhandler::Subscribe_Once(
         operation->descriptorPath = descriptorPath;
         operation->startupScenePath = session_->Projects().StartupScenePath();
         operation->project = session_->Projects().PendingProject();
+        operation->storyFlowNative = operation->startupScenePath.empty();
         projectLoadingOverlay_.SetPhase(
             RenegadeProjectLoadingOverlay::Phase::PreparingScene);
 
@@ -9661,35 +9663,61 @@ wi::eventhandler::Subscribe_Once(
             projectLoadWorkload_,
             [this, operation](wi::jobsystem::JobArgs)
             {
-                operation->preparedScene =
-                    session_->Documents().PrepareOpen(operation->startupScenePath);
-                if (!operation->preparedScene.IsReady())
+                if (operation->storyFlowNative)
                 {
-                    operation->error = operation->preparedScene.Error().empty()
-                        ? "The startup scene could not be prepared."
-                        : operation->preparedScene.Error();
+                    std::string resolvedFlow;
+                    bridge::FlowDocument flow;
+                    if (!bridge::ResolveStoryFlowDocumentPath(
+                            operation->project.rootPath,
+                            operation->project.projectId,
+                            operation->project.startupFlowId,
+                            operation->project.startupFlow,
+                            resolvedFlow,
+                            operation->error) ||
+                        !bridge::ReadFlowDocument(
+                            resolvedFlow,
+                            operation->project.projectId,
+                            flow,
+                            operation->error))
+                    {
+                        operation->error =
+                            "The Story Flow project home could not be prepared: " +
+                            operation->error;
+                    }
                 }
                 else
                 {
-                    auto* candidate = operation->preparedScene.MutablePreparedScene();
-                    if (candidate != nullptr)
+                    operation->preparedScene = session_->Documents().PrepareOpen(
+                        operation->startupScenePath);
+                    if (!operation->preparedScene.IsReady())
                     {
-                        projectLoadingOverlay_.SetPhase(
-                            RenegadeProjectLoadingOverlay::Phase::RestoringAssets,
-                            0, 0);
-                        operation->textureRestore =
-                            bridge::RestoreMaterialTextureBindings(
-                                *candidate,
-                                operation->project.rootPath,
-                                operation->project.projectId,
-                                {},
-                                [this](const std::size_t completed,
-                                    const std::size_t total)
-                                {
-                                    projectLoadingOverlay_.SetPhase(
-                                        RenegadeProjectLoadingOverlay::Phase::RestoringAssets,
-                                        completed, total);
-                                });
+                        operation->error = operation->preparedScene.Error().empty()
+                            ? "The startup scene could not be prepared."
+                            : operation->preparedScene.Error();
+                    }
+                    else
+                    {
+                        auto* candidate =
+                            operation->preparedScene.MutablePreparedScene();
+                        if (candidate != nullptr)
+                        {
+                            projectLoadingOverlay_.SetPhase(
+                                RenegadeProjectLoadingOverlay::Phase::RestoringAssets,
+                                0, 0);
+                            operation->textureRestore =
+                                bridge::RestoreMaterialTextureBindings(
+                                    *candidate,
+                                    operation->project.rootPath,
+                                    operation->project.projectId,
+                                    {},
+                                    [this](const std::size_t completed,
+                                        const std::size_t total)
+                                    {
+                                        projectLoadingOverlay_.SetPhase(
+                                            RenegadeProjectLoadingOverlay::Phase::RestoringAssets,
+                                            completed, total);
+                                    });
+                        }
                     }
                 }
 
@@ -9718,8 +9746,11 @@ wi::eventhandler::Subscribe_Once(
         projectLoadingOverlay_.SetPhase(
             RenegadeProjectLoadingOverlay::Phase::Finalising);
         ClearSelectionOutline();
-        if (!session_->CommitPendingProjectScene(
-                std::move(operation->preparedScene)))
+        const bool adopted = operation->storyFlowNative
+            ? session_->CommitPendingProjectWithoutScene()
+            : session_->CommitPendingProjectScene(
+                std::move(operation->preparedScene));
+        if (!adopted)
         {
             SyncSelectionOutline();
             projectLoadingOverlay_.Fail(
@@ -9729,15 +9760,20 @@ wi::eventhandler::Subscribe_Once(
             return;
         }
 
-        AdoptOpenedSceneCamera();
+        if (!operation->storyFlowNative)
+        {
+            AdoptOpenedSceneCamera();
+        }
         SetEnvironmentWorkspaceActive(false);
         SetTerrainWorkspaceActive(false);
         workspaceTitle_.SetText(
             "RENEGADE STUDIO // " +
             session_->Projects().CurrentProject().name);
-        hubMessageLabel_.font.params.color = operation->textureRestore.succeeded
+        hubMessageLabel_.font.params.color =
+            operation->storyFlowNative || operation->textureRestore.succeeded
             ? HologramMuted : WarningAmber;
-        hubMessageLabel_.SetText(operation->textureRestore.succeeded
+        hubMessageLabel_.SetText(
+            operation->storyFlowNative || operation->textureRestore.succeeded
             ? "PROJECT ONLINE // " + session_->Projects().CurrentProject().descriptorPath
             : "PROJECT ONLINE // GOVERNED RESOURCE WARNING // " +
                 operation->textureRestore.error);

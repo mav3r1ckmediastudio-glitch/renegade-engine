@@ -109,6 +109,37 @@ namespace renegade::bridge
             return documents_.CommitPreparedOpen(std::move(prepared));
         }
 
+        // Gate 7 Story Flow-native adoption boundary. The pending descriptor
+        // has already had its startup Flow resolved and parsed. Commit project
+        // authority first, then clear any Scene belonging to the previous
+        // project so it cannot leak into the newly active context.
+        bool CommitPendingProjectWithoutScene()
+        {
+            if (!projects_.HasPendingProject())
+            {
+                scenes_.SetLastError(
+                    "No Story Flow project is pending adoption.");
+                return false;
+            }
+            if (!projects_.PendingProject().startupScene.empty())
+            {
+                scenes_.SetLastError(
+                    "Scene-first projects require the prepared Scene adoption boundary.");
+                projects_.DiscardPendingProject();
+                return false;
+            }
+            if (!projects_.CommitPendingProject())
+            {
+                scenes_.SetLastError(
+                    "Project adoption failed after startup-Flow validation: " +
+                    projects_.LastError());
+                projects_.DiscardPendingProject();
+                return false;
+            }
+            documents_.NewScene();
+            return true;
+        }
+
         bool LoadScene(const std::string& filePath)
         {
             return CommitPendingProjectScene(documents_.PrepareOpen(filePath));

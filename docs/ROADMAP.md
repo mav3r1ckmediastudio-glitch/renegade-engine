@@ -1,8 +1,8 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`c133221b63c744f737ec09da1fa2800158ae22ea`
-(`Story Flow Gate 5 recovery: make Story Flow the project home (#84)`).
+`24186b2510fad6aa231020225e8d712a90aa69e5`
+(`Story Flow Gate 6: Journey View MVP (#85)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -59,9 +59,9 @@ Flow as the interim project home while retaining the legacy startup WISCENE.
 
 ### Gate 6 — Journey View MVP
 
-**Status:** implementation and exact packaged Release owner acceptance passed
-on PR #85 head `9f827dd4ccf9675f3c237dd2dcf25f5ab6f3778d`; documentation-only closeout and
-final exact-head CI remain before merge.
+**Status:** accepted and merged through PR #85. Journey View is the default
+projection; Graph remains synchronized; creation focus and double-click
+activation passed the exact packaged Release owner audit.
 
 Build the primary creator experience on the dedicated Story Flow render path:
 main journey reel, Level/Screen cards, deterministic branch tracks,
@@ -76,10 +76,14 @@ into the advanced Journey UX programme.
 
 ### Gate 7 — New Project / project-home lifecycle
 
+**Status:** implementation active on
+`feature/story-flow-gate7-project-home`.
+
 Complete the project-home transition begun by the Gate 5 recovery. Remove the
 arbitrary blank `Main.wiscene` requirement from new-project construction rather
 than merely adopting it into a canonical Flow, and finish dedicated project
-templates/migration policy around permanent Game Start.
+templates/migration policy around permanent Game Start. The locked contract is
+`docs/STORY_FLOW_GATE7_PROJECT_HOME_LIFECYCLE.md`.
 
 ### Gate 8 — Screen Editor MVP
 

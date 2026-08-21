@@ -1,7 +1,6 @@
 # Story Flow Gate 6 — Journey View MVP
 
-Status: implementation and exact Release owner acceptance passed on
-`feature/story-flow-gate6-journey-view`; PR #85 closeout is pending.
+Status: accepted and merged through PR #85.
 
 Baseline: merged `main` commit
 `c133221b63c744f737ec09da1fa2800158ae22ea` (PR #84).

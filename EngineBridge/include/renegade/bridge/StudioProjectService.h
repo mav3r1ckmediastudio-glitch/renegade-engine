@@ -12,10 +12,10 @@ namespace renegade::bridge
     //
     // ProjectService remains the authoritative project persistence service.
     // This facade prevents Studio from changing its active project identity or
-    // Recent Projects list until the requested startup scene has been prepared
-    // successfully. The candidate project is validated/migrated in an isolated
-    // ProjectService instance first; CommitPendingProject() performs the real
-    // adoption only at the scene replacement boundary.
+    // Recent Projects list until the requested launch root has been validated.
+    // The candidate project is validated/migrated in an isolated ProjectService
+    // instance first; CommitPendingProject() performs the real adoption only at
+    // the Scene or Story Flow replacement boundary.
     class StudioProjectService final : public ProjectService
     {
     public:
@@ -27,6 +27,24 @@ namespace renegade::bridge
             ProjectService candidate;
             if (!candidate.CreateProject(
                     parentDirectory, projectName, templateScenePath))
+            {
+                pendingProject_ = {};
+                hasPendingProject_ = false;
+                pendingError_ = candidate.LastError();
+                pendingWarning_ = candidate.LastWarning();
+                return false;
+            }
+            Stage(candidate.CurrentProject(), candidate.LastWarning());
+            return true;
+        }
+
+        bool CreateStoryFlowProject(
+            const std::string& parentDirectory,
+            const std::string& projectName)
+        {
+            ProjectService candidate;
+            if (!candidate.CreateStoryFlowProject(
+                    parentDirectory, projectName))
             {
                 pendingProject_ = {};
                 hasPendingProject_ = false;
@@ -69,6 +87,8 @@ namespace renegade::bridge
                 ? &pendingProject_
                 : (HasProject() ? &CurrentProject() : nullptr);
             if (project == nullptr)
+                return {};
+            if (project->startupScene.empty())
                 return {};
             return (
                 std::filesystem::u8path(project->rootPath) /

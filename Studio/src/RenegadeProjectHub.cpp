@@ -1001,7 +1001,14 @@ namespace renegade::studio
             detail("STATUS", selected.descriptorValid ? "READY" : "PROJECT UNAVAILABLE", selected.descriptorValid ? Success : Warning);
             detail("ENGINE / PROJECT FORMAT", "RENEGADE PROJECT V" + std::to_string(selected.formatVersion), Text);
             detail("PROJECT PATH", Ellipsize(selected.rootPath.empty() ? selected.descriptorPath : selected.rootPath, 52u), CyanDim);
-            detail("STARTUP SCENE", Ellipsize(selected.startupScene.empty() ? "Content/Scenes/Main.wiscene" : selected.startupScene, 52u), Muted);
+            if (!selected.startupFlow.empty())
+            {
+                detail("PROJECT HOME", Ellipsize(selected.startupFlow, 52u), Muted);
+            }
+            else
+            {
+                detail("STARTUP SCENE", Ellipsize(selected.startupScene, 52u), Muted);
+            }
         }
         else
         {
@@ -1009,7 +1016,7 @@ namespace renegade::studio
             detail("STATUS", "-", Dim);
             detail("ENGINE / PROJECT FORMAT", "RENEGADE PROJECT", Text);
             detail("PROJECT PATH", "-", Dim);
-            detail("STARTUP SCENE", "-", Dim);
+            detail("PROJECT HOME", "-", Dim);
         }
 
         panel(

@@ -319,6 +319,37 @@ add_test(
     COMMAND RenegadeRuntimeBootstrapTests
 )
 
+add_executable(RenegadeStoryFlowGate7ProjectHomeLifecycleTests
+    StoryFlowGate7ProjectHomeLifecycleTests.cpp
+)
+
+target_link_libraries(
+    RenegadeStoryFlowGate7ProjectHomeLifecycleTests
+    PRIVATE
+        Renegade::EngineBridge
+        Renegade::RuntimeBootstrap
+)
+
+target_compile_options(RenegadeStoryFlowGate7ProjectHomeLifecycleTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(
+    RenegadeStoryFlowGate7ProjectHomeLifecycleTests
+    PROPERTIES FOLDER "Renegade/Tests"
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeStoryFlowGate7ProjectHomeLifecycleTests
+)
+
+add_test(
+    NAME RenegadeStoryFlowGate7ProjectHomeLifecycleTests
+    COMMAND RenegadeStoryFlowGate7ProjectHomeLifecycleTests
+)
+
 add_executable(RenegadeFlowTests
     FlowTests.cpp
 )

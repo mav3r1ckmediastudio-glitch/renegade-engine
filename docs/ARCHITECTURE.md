@@ -216,6 +216,28 @@ read-only settings location degrades to a session-only preference rather than
 an error. Grid visibility is the first; camera speed and editor layout are still
 session-only and should adopt this route rather than inventing a second one.
 
+### Story Flow project-home lifecycle
+
+Project format v1 supports two backward-compatible launch-root shapes. A
+scene-first project declares a safe project-relative `startup_scene`. A Story
+Flow-native project leaves `startup_scene` empty and declares a complete stable
+`startup_flow_id` plus safe project-relative `startup_flow` pair. A descriptor
+with neither root, or with an incomplete Flow pair, fails closed.
+
+`ProjectService::CreateStoryFlowProject` creates the canonical Flow containing
+exactly one permanent Game Start before committing the descriptor. Studio stages
+that candidate through `StudioProjectService`, resolves and reads its Flow, and
+only then adopts project identity. The Flow-only adoption boundary clears the
+neutral in-memory Scene after commit so content from the previous project cannot
+leak across the switch. Scene-first projects retain the existing prepared-Scene
+adoption boundary and `StoryFlowProjectHomeService` remains their transactional
+migration seam.
+
+Runtime prefers the configured Flow and does not synthesize a startup Scene.
+It can enter Game Start with no loaded Scene and resolves/loads WISCENE content
+only when traversal reaches a Level. Dependency extraction likewise omits an
+empty Scene root and follows the startup Flow.
+
 ### Story Flow authoring projections
 
 `StoryFlowAuthoringSession` and `StoryFlowAuthoringModel` remain the one

@@ -198,21 +198,25 @@ namespace renegade::runtime
         }
 
         const fs::path projectRoot = fs::u8path(metadata.rootPath);
-        const fs::path startupScene =
-            (projectRoot / fs::u8path(metadata.startupScene))
-                .lexically_normal();
-
-        std::string containmentError;
-        if (!IsWithinProjectRoot(
-                projectRoot,
-                startupScene,
-                "startup scene",
-                containmentError))
+        std::string startupScenePath;
+        if (!metadata.startupScene.empty())
         {
-            return Fail(
-                std::move(result),
-                RuntimeBootstrapCode::StartupSceneOutsideProject,
-                containmentError);
+            const fs::path startupScene =
+                (projectRoot / fs::u8path(metadata.startupScene))
+                    .lexically_normal();
+            std::string containmentError;
+            if (!IsWithinProjectRoot(
+                    projectRoot,
+                    startupScene,
+                    "startup scene",
+                    containmentError))
+            {
+                return Fail(
+                    std::move(result),
+                    RuntimeBootstrapCode::StartupSceneOutsideProject,
+                    containmentError);
+            }
+            startupScenePath = startupScene.generic_u8string();
         }
 
         std::string startupFlowPath;
@@ -265,7 +269,7 @@ namespace renegade::runtime
 
         result.project = std::move(metadata);
         result.projectDescriptorPath = result.project.descriptorPath;
-        result.startupScenePath = startupScene.generic_u8string();
+        result.startupScenePath = std::move(startupScenePath);
         result.startupFlowPath = std::move(startupFlowPath);
         result.startupScreenPath = std::move(startupScreenPath);
         result.succeeded = true;
@@ -282,6 +286,14 @@ namespace renegade::runtime
         if (!result.succeeded)
         {
             return result;
+        }
+
+        if (result.startupScenePath.empty())
+        {
+            return Fail(
+                std::move(result),
+                RuntimeBootstrapCode::SceneLoadFailed,
+                "The project does not declare a startup Scene; Runtime must enter through its Story Flow.");
         }
 
         if (!scenes.LoadScene(result.startupScenePath))

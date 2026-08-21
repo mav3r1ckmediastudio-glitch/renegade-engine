@@ -14,6 +14,10 @@ namespace renegade::bridge
         std::string name;
         std::string descriptorPath;
         std::string rootPath;
+        // Gate 7: startup Scene is optional when a complete startup Flow pair
+        // is present. New projects explicitly clear this legacy default;
+        // scene-first descriptors and existing construction sites remain
+        // backward compatible.
         std::string startupScene = "Content/Scenes/Main.wiscene";
         // Optional Renegade-owned Story Flow root. The stable document ID is
         // authoritative; startupFlow is a project-relative location hint.
@@ -53,6 +57,9 @@ namespace renegade::bridge
             const std::string& parentDirectory,
             const std::string& projectName,
             const std::string& templateScenePath);
+        bool CreateStoryFlowProject(
+            const std::string& parentDirectory,
+            const std::string& projectName);
         bool OpenProject(const std::string& descriptorPath);
 
         // Read-only descriptor validation for Runtime/bootstrap tooling.

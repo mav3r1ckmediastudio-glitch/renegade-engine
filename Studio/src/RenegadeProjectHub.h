@@ -18,6 +18,7 @@ namespace renegade::studio
             std::string descriptorPath;
             std::string rootPath;
             std::string startupScene;
+            std::string startupFlow;
             std::string artworkPath;
             std::uint32_t formatVersion = 1;
             bool descriptorValid = true;
