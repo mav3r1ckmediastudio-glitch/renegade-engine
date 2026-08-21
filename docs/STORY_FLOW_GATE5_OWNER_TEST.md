@@ -18,11 +18,10 @@ checkpoint on PR #80. Do not use an older Gate 5A artifact.
 3. In the Screen lifecycle row, enter `Gate 5 Title`.
 4. Select `TITLE / MAIN MENU` as the Screen template.
 5. Click `+ SCREEN`.
-6. Confirm a new **Screen** node named `Gate 5 Title` appears in Story Flow and
-   is selected.
+6. Confirm a new **Screen** node named `Gate 5 Title` appears in Story Flow.
 7. Save Story Flow normally.
 8. Leave/reopen the project and confirm the same Screen node still exists.
-9. Select `Gate 5 Title` and click `OPEN SCREEN`.
+9. Select the `Gate 5 Title` Screen node and click `OPEN SCREEN`.
 10. Expected Gate 5 behaviour: Story Flow remains active because the visual
     Screen Editor is Gate 8. The open action must resolve successfully and the
     backlog must report that the **Screen Editor handoff is ready** (or that it
