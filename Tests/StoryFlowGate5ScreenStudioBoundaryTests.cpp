@@ -1,10 +1,12 @@
 #include "StoryFlowScreenEditorHandoff.h"
+#include "StoryFlowGuiLayerPolicy.h"
 
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/StoryFlowScreenLifecycleService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <iostream>
@@ -37,6 +39,79 @@ namespace
             fs::remove_all(path, ignored);
         }
     };
+
+    struct LayerWidget
+    {
+        std::string name;
+    };
+
+    struct WickedGuiOrderProbe
+    {
+        std::vector<LayerWidget*> widgets;
+
+        void AddWidget(LayerWidget* widget)
+        {
+            widgets.push_back(widget);
+        }
+
+        void RemoveWidget(LayerWidget* widget)
+        {
+            const auto found = std::find(widgets.begin(), widgets.end(), widget);
+            if (found == widgets.end()) return;
+            *found = widgets.back();
+            widgets.pop_back();
+        }
+
+        [[nodiscard]] std::vector<std::string> RenderOrder() const
+        {
+            std::vector<std::string> result;
+            for (auto found = widgets.rbegin(); found != widgets.rend(); ++found)
+                result.push_back((*found)->name);
+            return result;
+        }
+    };
+
+    void TestLifecycleControlsRenderAboveWorkspace()
+    {
+        LayerWidget workspace{"workspace"};
+        LayerWidget conditions{"conditions"};
+        LayerWidget levelControls{"level-controls"};
+        LayerWidget screenControls{"screen-controls"};
+        WickedGuiOrderProbe gui;
+
+        // Reproduce the production registration state before the Gate 4/5
+        // controls are layered: the full-screen workspace was registered first.
+        gui.AddWidget(&workspace);
+        gui.AddWidget(&conditions);
+        gui.AddWidget(&levelControls);
+        gui.AddWidget(&screenControls);
+
+        PlaceStoryFlowWorkspaceBehindLifecycleControls(
+            gui, workspace, conditions);
+
+        auto rendered = gui.RenderOrder();
+        Check(rendered.size() == 4 &&
+                rendered[0] == "workspace" &&
+                rendered[1] == "conditions" &&
+                std::find(rendered.begin() + 2, rendered.end(), "level-controls") !=
+                    rendered.end() &&
+                std::find(rendered.begin() + 2, rendered.end(), "screen-controls") !=
+                    rendered.end(),
+            "Gate 4/5 lifecycle controls would render behind the opaque Story Flow workspace");
+
+        // A canvas interaction can reprioritize the workspace to the front.
+        // The production RenderPath reapplies the policy every Update before
+        // Render; reproduce that disturbance and prove the invariant recovers.
+        gui.RemoveWidget(&workspace);
+        gui.widgets.insert(gui.widgets.begin(), &workspace);
+        PlaceStoryFlowWorkspaceBehindLifecycleControls(
+            gui, workspace, conditions);
+        rendered = gui.RenderOrder();
+        Check(rendered.size() == 4 &&
+                rendered[0] == "workspace" &&
+                rendered[1] == "conditions",
+            "Story Flow canvas interaction could move the opaque workspace back over lifecycle controls");
+    }
 
     FlowDocument MakeBaseFlow(
         const StableId& projectId,
@@ -145,6 +220,8 @@ int main()
         fs::temp_directory_path() /
         fs::u8path("renegade story flow gate5c " + std::to_string(unique))
     };
+
+    TestLifecycleControlsRenderAboveWorkspace();
 
     TestStableScreenEditorHandoff(temporary.path / "screen boundary project");
 

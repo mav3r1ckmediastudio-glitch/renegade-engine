@@ -24,9 +24,17 @@ failure: the recovery service retained its project-descriptor read handle while
 the transaction attempted to replace that same file. Windows rejected both the
 replacement and rollback with a sharing violation.
 
+The first owner Release screenshot from the recovery head then proved that the
+opaque full-screen Graph workspace was painted over the Gate 4 Level and Gate 5
+Screen lifecycle controls. Wicked renders GUI registrations in reverse order,
+and later canvas interaction can reprioritize widgets, so merely marking those
+controls visible was not visual acceptance.
+
 The corrective contract is:
 
 - the descriptor read handle is closed before its replacement transaction;
+- the Graph workspace is re-layered behind Level/Screen lifecycle controls
+  after GUI input/update and before every render;
 - governed descriptor mutations refresh the already-authoritative project
   without staging a second project switch;
 - a stale active snapshot recognizes the valid on-disk Flow and never replays

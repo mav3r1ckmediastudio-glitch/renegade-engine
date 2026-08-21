@@ -9,6 +9,7 @@
 
 #include "RenegadeStoryFlowConditionEditor.h"
 #include "RenegadeStoryFlowWorkspace.h"
+#include "StoryFlowGuiLayerPolicy.h"
 
 namespace renegade::studio
 {
@@ -84,6 +85,14 @@ namespace renegade::studio
             EnsureLoaded();
             LayoutWorkspace();
             wi::RenderPath2D::Update(dt);
+            if (lifecycleLayeringReady_)
+            {
+                // Widget interaction can reprioritize Wicked GUI registrations.
+                // Reassert the invariant after input/update and before Render so
+                // the opaque workspace can never move in front of the controls.
+                PlaceStoryFlowWorkspaceBehindLifecycleControls(
+                    GetGUI(), workspace_, conditionEditor_);
+            }
         }
 
         void SyncCanvas(const wi::Canvas& canvas)
@@ -149,6 +158,23 @@ namespace renegade::studio
             workspace_.OnSelectionChanged(std::move(callback));
         }
 
+        // External Level/Screen lifecycle controls are added after this path
+        // is loaded. Wicked paints GUI widgets in reverse registration order,
+        // so re-register the full-screen workspace last to keep it behind the
+        // controls instead of obscuring them with its opaque canvas/header.
+        void PlaceWorkspaceBehindLifecycleControls()
+        {
+            EnsureLoaded();
+            PlaceStoryFlowWorkspaceBehindLifecycleControls(
+                GetGUI(), workspace_, conditionEditor_);
+            lifecycleLayeringReady_ = true;
+        }
+
+        [[nodiscard]] bool IsLifecycleLayeringReady() const noexcept
+        {
+            return lifecycleLayeringReady_;
+        }
+
         [[nodiscard]] const bridge::StableId& SelectedNodeId() const noexcept
         {
             return workspace_.SelectedNodeId();
@@ -184,6 +210,7 @@ namespace renegade::studio
         RenegadeStoryFlowConditionEditor conditionEditor_;
         bool loaded_ = false;
         bool workspaceActive_ = false;
+        bool lifecycleLayeringReady_ = false;
         float lastLogicalWidth_ = -1.0f;
         float lastLogicalHeight_ = -1.0f;
     };

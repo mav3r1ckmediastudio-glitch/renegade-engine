@@ -332,6 +332,11 @@ namespace renegade::studio
                 pendingScreenAction_ = PendingScreenAction::Open;
             });
 
+            // The Story Flow workspace is an opaque full-screen widget.
+            // Wicked renders GUI registrations back-to-front, so finalize the
+            // order only after both lifecycle panels have attached.
+            storyFlow.PlaceWorkspaceBehindLifecycleControls();
+
             returnToStoryFlowButton_.Create("Return to Story Flow");
             returnToStoryFlowButton_.SetText("< STORY FLOW");
             returnToStoryFlowButton_.SetTooltip(

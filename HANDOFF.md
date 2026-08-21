@@ -33,6 +33,12 @@ while its transaction attempted to replace that file. Windows rejected the
 commit and rollback with a sharing violation. The service now closes and
 verifies that handle before beginning the descriptor transaction.
 
+Owner Release evidence then exposed a Gate 3/4/5 UI-layering defect that the
+service-only tests missed: the opaque full-screen Graph workspace rendered in
+front of the Level and Screen lifecycle controls. PR #84 must keep the workspace
+behind those controls after every GUI update, and the owner must visibly confirm
+both lifecycle rows before acceptance.
+
 The recovery worktree adds:
 
 - an authoritative active-project metadata refresh seam;

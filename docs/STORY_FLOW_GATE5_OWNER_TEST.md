@@ -23,6 +23,10 @@ artifact or an older Gate 5A build.
 4. Confirm the Flow contains exactly one permanent `Game Start` and one adopted
    `Main Level` representing the generated startup WISCENE.
 5. Confirm `Game Start` is routed to `Main Level`.
+6. Confirm both lifecycle rows are visibly present across the Story Flow header:
+   `LEVEL` with `+ NEW LEVEL` / `+ EXISTING...` / `OPEN LEVEL`, and `SCREEN`
+   with its template chooser / `+ SCREEN` / `OPEN SCREEN`. Missing or obscured
+   lifecycle controls are an immediate failure; stop the audit.
 
 ## Test 2 — Recent Project returns to Story Flow
 
