@@ -367,9 +367,19 @@ namespace renegade::bridge
                     "The adopted Level would make Story Flow invalid: " + error);
             }
 
-            const fs::path renderRoot = projectRoot / "Intermediate" /
-                "Transactions" / "StoryFlowLevelAdopt" /
-                fs::u8path(GenerateStableId());
+            // Render-only payloads are scratch data, not project mutations.
+            // Keep them in the OS temp root so nested transaction artifact
+            // names cannot amplify a deep project path past Windows limits.
+            // The final Flow/sidecar writes remain governed below.
+            pathError.clear();
+            const fs::path temporaryRoot = fs::temp_directory_path(pathError);
+            if (pathError)
+            {
+                return Failure(StoryFlowLevelReferenceCode::TransactionFailed,
+                    "Could not resolve the Level adoption render root.");
+            }
+            const fs::path renderRoot = temporaryRoot / "renegade-story-flow" /
+                "level-adopt" / fs::u8path(GenerateStableId());
             fs::create_directories(renderRoot, pathError);
             if (pathError)
             {
