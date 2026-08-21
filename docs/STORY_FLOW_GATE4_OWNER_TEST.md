@@ -33,4 +33,20 @@ This proof is automated in CI. No manual file surgery is required for owner acce
 
 Gate 4 passes owner acceptance only if New Level, Existing Level, Level open, normal Scene Save, explicit Return to Story Flow, and reopen all work without losing the stable Story Flow -> Scene relationship.
 
-Do not merge Gate 4 on CI alone; owner Release-artifact acceptance remains required.
+## Acceptance record
+
+**Owner result: PASS — 2026-08-21.**
+
+The accepted Release artifact was:
+
+`renegade-studio-windows-x64-Release-0e3e13f7fa3fc05659c3c784427759bba8c970b1`
+
+- PR #78 source head: `9afb6377d19cbf206182219953acb852d4ed1cdd`.
+- CI merge ref: `0e3e13f7fa3fc05659c3c784427759bba8c970b1`.
+- Renegade Studio workflow run: `32469160009`.
+- Artifact ID: `9442719486`.
+- SHA-256: `6f306903cef2d111023da04caaeb7ab798f15eef113201a98b6cd129db714bd0`.
+
+The owner confirmed the required New Level, open/edit/save/return/reopen lifecycle and Existing Level open/return lifecycle passed on this Release artifact.
+
+Recording this result changes the final candidate tree, so a fresh docs-inclusive exact-tree CI checkpoint is still required before merge authorization can be accepted.
