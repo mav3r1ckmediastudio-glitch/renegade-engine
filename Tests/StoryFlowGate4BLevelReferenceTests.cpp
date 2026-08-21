@@ -2,6 +2,7 @@
 #include "renegade/bridge/IdentityService.h"
 
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 
@@ -22,6 +23,35 @@ namespace
             ++failures;
             std::cerr << "FAIL: " << message << '\n';
         }
+    }
+
+    void DumpFailure(const StoryFlowExistingLevelResult& result)
+    {
+        std::cerr
+            << "GATE4B_ADOPT_RESULT: succeeded="
+            << (result.succeeded ? "true" : "false")
+            << " code=" << StoryFlowLevelReferenceCodeName(result.code)
+            << " message=\"" << result.message << "\""
+            << " level_node_id=\"" << result.levelNodeId << "\""
+            << " scene_document_id=\"" << result.sceneDocumentId << "\""
+            << " created_metadata="
+            << (result.createdMetadata ? "true" : "false")
+            << " transaction_success="
+            << (result.transaction.success ? "true" : "false")
+            << " transaction_committed="
+            << (result.transaction.committed ? "true" : "false")
+            << " transaction_stage="
+            << static_cast<int>(result.transaction.stage)
+            << " transaction_document_index="
+            << result.transaction.documentIndex
+            << " transaction_code=\"" << result.transaction.code << "\""
+            << " transaction_message=\"" << result.transaction.message << "\""
+            << " rolled_back="
+            << (result.transaction.rolledBack ? "true" : "false")
+            << " recovery_required="
+            << (result.transaction.recoveryRequired ? "true" : "false")
+            << " event_count=" << result.transaction.events.size()
+            << '\n' << std::flush;
     }
 
     bool WriteScene(const fs::path& path)
@@ -90,7 +120,20 @@ int main()
 
     StoryFlowLevelReferenceService service;
     auto adopted = service.AddExistingLevel(request);
-    Check(adopted.succeeded, "existing WISCENE was not adopted");
+    if (!adopted.succeeded)
+    {
+        DumpFailure(adopted);
+        std::error_code cleanupError;
+        fs::remove_all(root, cleanupError);
+        std::cerr << "RenegadeStoryFlowGate4BLevelReferenceTests: adoption failed\n"
+                  << std::flush;
+        // Wicked owns process-lifetime callbacks that can strand a completed
+        // test process. The functional failure has already been surfaced and
+        // the fixture tree is gone, so do not let unrelated teardown hide it
+        // behind the CTest timeout.
+        std::_Exit(1);
+    }
+
     Check(adopted.createdMetadata,
         "ungoverned existing WISCENE did not receive Scene metadata");
     Check(IsValidStableId(adopted.sceneDocumentId),
@@ -149,9 +192,12 @@ int main()
     if (failures != 0)
     {
         std::cerr << "RenegadeStoryFlowGate4BLevelReferenceTests: "
-                  << failures << " failure(s)\n";
-        return 1;
+                  << failures << " failure(s)\n" << std::flush;
+        std::_Exit(1);
     }
-    std::cout << "PASS: Story Flow Gate 4B existing Level adoption and identity resolution\n";
-    return 0;
+    std::cout << "PASS: Story Flow Gate 4B existing Level adoption and identity resolution\n"
+              << std::flush;
+    // Match the known-good Gate4SceneFixture lifetime policy: all owned files
+    // and assertions are complete, so bypass unrelated Wicked static teardown.
+    std::_Exit(0);
 }
