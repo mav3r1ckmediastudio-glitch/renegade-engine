@@ -20,6 +20,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/DependencyService.h
     include/renegade/bridge/FlowService.h
     include/renegade/bridge/StoryFlowAuthoringModel.h
+    include/renegade/bridge/StoryFlowAuthoringSession.h
     include/renegade/bridge/StoryFlowLayoutService.h
     include/renegade/bridge/ScreenService.h
     include/renegade/bridge/IdentityService.h
@@ -65,6 +66,7 @@ add_library(RenegadeEngineBridge STATIC
     src/DependencyService.cpp
     src/FlowService.cpp
     src/StoryFlowAuthoringModel.cpp
+    src/StoryFlowAuthoringSession.cpp
     src/StoryFlowLayoutService.cpp
     src/ScreenService.cpp
     src/IdentityService.cpp

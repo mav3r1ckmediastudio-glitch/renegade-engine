@@ -21,6 +21,7 @@
 #include "RenegadeStudioChrome.h"
 #include "RenegadeProjectHub.h"
 #include "RenegadeProjectLoadingOverlay.h"
+#include "RenegadeStoryFlowRenderPath.h"
 #include "StoryFlowStudioIntegration.h"
 #include "TestLevelRuntimeProcess.h"
 
@@ -676,14 +677,17 @@ namespace renegade::studio
         void RequestExit();
         void Initialize() override;
 
-        // Keep every existing call site unchanged while inserting the Gate 1
-        // lifecycle adapter after Wicked has completed the frame. This makes
-        // the native workspace visible on the following frame and guarantees
-        // the renderer GUI has already been constructed before it is attached.
+        // Workspace activation is resolved after Wicked completes the current
+        // frame. ActivatePath() then owns the following frame, so the inactive
+        // Level Editor cannot continue ticking/rendering behind Story Flow.
         void Run()
         {
             wi::Application::Run();
-            storyFlowIntegration_.Tick(renderer_, session_);
+            storyFlowIntegration_.Tick(
+                *this,
+                renderer_,
+                storyFlowRenderer_,
+                session_);
         }
 
     private:
@@ -691,6 +695,7 @@ namespace renegade::studio
 
         bridge::StudioSession session_;
         StudioRenderPath renderer_;
+        RenegadeStoryFlowRenderPath storyFlowRenderer_;
         StoryFlowStudioIntegration storyFlowIntegration_;
         std::string startupScene_ = "Content/ProvingGround.wiscene";
     };
