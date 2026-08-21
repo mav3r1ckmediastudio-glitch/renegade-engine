@@ -256,6 +256,13 @@ namespace renegade::bridge
                 }
                 std::ostringstream descriptorStream;
                 descriptorStream << input.rdbuf();
+                input.close();
+                if (input.fail())
+                {
+                    result.message =
+                        "Could not close the project descriptor before Story Flow migration.";
+                    return result;
+                }
                 std::string descriptor = descriptorStream.str();
 
                 const auto setKey = [](std::string& text,

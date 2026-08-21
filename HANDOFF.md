@@ -27,6 +27,12 @@ old scene-first metadata, replayed migration and returned before Story Flow
 activation. Gate 4 itself remains accepted; its controlled Story Flow -> Level
 Editor -> Story Flow lifecycle is a required regression.
 
+The first corrective Windows CI checkpoint exposed a second product defect:
+`StoryFlowProjectHomeService` retained the project descriptor's read handle
+while its transaction attempted to replace that file. Windows rejected the
+commit and rollback with a sharing violation. The service now closes and
+verifies that handle before beginning the descriptor transaction.
+
 The recovery worktree adds:
 
 - an authoritative active-project metadata refresh seam;

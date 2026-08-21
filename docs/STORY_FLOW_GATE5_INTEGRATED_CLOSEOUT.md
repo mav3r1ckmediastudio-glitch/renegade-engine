@@ -19,8 +19,14 @@ committed Story Flow metadata, then called the staged project-switch
 active project. The active snapshot therefore remained scene-first and replayed
 the migration before Story Flow activation.
 
+The first corrective CI checkpoint also proved a separate Windows commit
+failure: the recovery service retained its project-descriptor read handle while
+the transaction attempted to replace that same file. Windows rejected both the
+replacement and rollback with a sharing violation.
+
 The corrective contract is:
 
+- the descriptor read handle is closed before its replacement transaction;
 - governed descriptor mutations refresh the already-authoritative project
   without staging a second project switch;
 - a stale active snapshot recognizes the valid on-disk Flow and never replays
