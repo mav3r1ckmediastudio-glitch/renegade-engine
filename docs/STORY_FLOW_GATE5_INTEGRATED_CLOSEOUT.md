@@ -7,6 +7,28 @@ lifecycle. The visual Screen Editor is explicitly out of scope and remains Gate
 8. Gate 5 ends at a stable open/handoff boundary that Gate 8 can consume without
 re-resolving paths or inventing editor-only semantics.
 
+## PR #84 project-home recovery
+
+The first PR #84 Release artifact at synthetic merge commit
+`d184f5478fecb4f1bf6a041fed858d88a522d5cd` is rejected by owner testing.
+New and scene-first projects landed in the Level Editor instead of Story Flow.
+
+The fault was not a Gate 4 Level lifecycle regression. The recovery adapter
+committed Story Flow metadata, then called the staged project-switch
+`StudioProjectService::OpenProject()` path as if it refreshed the authoritative
+active project. The active snapshot therefore remained scene-first and replayed
+the migration before Story Flow activation.
+
+The corrective contract is:
+
+- governed descriptor mutations refresh the already-authoritative project
+  without staging a second project switch;
+- a stale active snapshot recognizes the valid on-disk Flow and never replays
+  project writes;
+- New Project, Open Project and Recent Project all resolve to Story Flow;
+- Gate 4 explicit Level open/return remains unchanged;
+- the packaged Release contains this owner audit under `Docs/`.
+
 ## Implementation slices
 
 ### Gate 5A — governed Screen creation
@@ -47,9 +69,9 @@ re-resolving paths or inventing editor-only semantics.
 
 ## Integrated validation
 
-Validation-only PR #80 is reused as the exact-tree Gate 5 checkpoint. It is
-parented directly on the current merged Gate 4 `main` and must exactly match the
-latest Gate 5C tree before acceptance.
+Draft PR #84 is the only current integrated recovery candidate. It is parented
+directly on the owner-accepted Gate 4 `main` and must carry the complete Gate 5
+tree plus the project-home correction before acceptance.
 
 Required authoritative checks:
 
@@ -60,6 +82,7 @@ Required authoritative checks:
 - Gate 5A lifecycle/rollback test — required;
 - Gate 5B resolution/outcome test — required;
 - Gate 5C Screen Editor handoff test — required;
+- Gate 5 Project Home Create/Open/Recent recovery test — required;
 - Runtime Screen/Flow regressions — required;
 - Studio startup smoke — required in Debug and Release.
 
@@ -68,12 +91,12 @@ pre-existing skip and all executed tests pass.
 
 ## Owner acceptance
 
-Owner audit is defined in `docs/STORY_FLOW_GATE5_OWNER_TEST.md` and is currently
-**PENDING**. Gate 5 is not DONE until the exact docs-inclusive tree is green and
-the owner audit passes.
+Owner audit is defined in `docs/STORY_FLOW_GATE5_OWNER_TEST.md`, must also ship
+inside the exact Release artifact, and is currently **PENDING**. Gate 5 is not
+DONE until the corrected PR #84 exact tree is green and the owner audit passes.
 
 ## Merge rule
 
-No Gate 5 PR is to be merged without explicit owner authorization after final CI
-and owner acceptance. The validation-only PR #80 must never be merged as a
-substitute for the stacked implementation review path.
+PR #84 remains Draft and must not be merged without explicit owner authorization
+after corrected exact-head CI and owner Release acceptance. Earlier PR #80 and
+the rejected `d184f547...` artifact are not acceptance evidence.

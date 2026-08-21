@@ -80,6 +80,49 @@ namespace renegade::bridge
                 return result;
             }
 
+            // The active Studio snapshot can legitimately lag a descriptor
+            // transaction until Studio refreshes its authoritative metadata.
+            // Re-read the descriptor before planning a migration so a failed
+            // refresh cannot replay the same project writes every frame.
+            ProjectService inspector;
+            ProjectMetadata onDiskProject;
+            std::string inspectionError;
+            if (inspector.InspectProject(
+                    project.descriptorPath, onDiskProject, inspectionError) &&
+                onDiskProject.projectId == project.projectId &&
+                IsValidStableId(onDiskProject.startupFlowId) &&
+                !onDiskProject.startupFlow.empty())
+            {
+                std::string resolved;
+                std::string error;
+                FlowDocument flow;
+                if (ResolveStoryFlowDocumentPath(
+                        onDiskProject.rootPath,
+                        onDiskProject.projectId,
+                        onDiskProject.startupFlowId,
+                        onDiskProject.startupFlow,
+                        resolved,
+                        error) &&
+                    ReadFlowDocument(
+                        resolved,
+                        onDiskProject.projectId,
+                        flow,
+                        error))
+                {
+                    result.succeeded = true;
+                    result.flowDocumentId = flow.envelope.documentId;
+                    result.flowPathHint = onDiskProject.startupFlow;
+                    result.flowPath = std::move(resolved);
+                    result.message =
+                        "On-disk Story Flow project home is valid; active metadata refresh required.";
+                    return result;
+                }
+
+                result.message =
+                    "Configured on-disk startup Story Flow is invalid: " + error;
+                return result;
+            }
+
             try
             {
                 const fs::path root = fs::weakly_canonical(fs::u8path(project.rootPath));

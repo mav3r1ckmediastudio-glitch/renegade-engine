@@ -137,8 +137,7 @@ namespace renegade::studio
                     return;
                 }
 
-                const std::string descriptorPath = project.descriptorPath;
-                if (!session.Projects().OpenProject(descriptorPath))
+                if (!session.Projects().RefreshCurrentProject())
                 {
                     FlushLayout(true);
                     ResetActiveFlow(storyFlow);
@@ -148,6 +147,24 @@ namespace renegade::studio
                         "Story Flow project home was committed but the project "
                         "descriptor could not be refreshed: " +
                         session.Projects().LastError());
+                    desiredWorkspace_ = Workspace::LevelEditor;
+                    hubOwnedLastTick_ = false;
+                    EnsureActive(application, levelEditor);
+                    return;
+                }
+
+                const auto& refreshedProject =
+                    session.Projects().CurrentProject();
+                if (refreshedProject.startupFlowId != ensured.flowDocumentId ||
+                    refreshedProject.startupFlow != ensured.flowPathHint)
+                {
+                    FlushLayout(true);
+                    ResetActiveFlow(storyFlow);
+                    storyFlow.SetWorkspaceActive(false);
+                    SetContentControlsActive(false, false);
+                    ReportSemanticFailure(
+                        "Story Flow project home was committed but the active "
+                        "project did not adopt its stable Flow identity.");
                     desiredWorkspace_ = Workspace::LevelEditor;
                     hubOwnedLastTick_ = false;
                     EnsureActive(application, levelEditor);

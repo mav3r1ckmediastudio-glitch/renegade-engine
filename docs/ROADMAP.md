@@ -1,8 +1,8 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`02df129f96c860dd3a7d6b6e065c928bef0f8907`
-(`hub: expose Exit Renegade action (#65)`).
+`a79955fee8481cd65f617c4bd2d20602f2a3d63d`
+(`Story Flow Gate 4: final owner-accepted exact-tree checkpoint (#78)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -91,6 +91,14 @@ resolution, Level open into the 3D editor and explicit Return to Story Flow.
 Add governed Screen creation/templates/identity, Screen outcome exposure and the
 open boundary for the Screen Editor.
 
+**Recovery in progress on draft PR #84.** Owner testing showed normal New/Open
+project entry still bypassed Story Flow. The bounded recovery therefore also
+establishes an interim project-home migration while retaining the existing
+startup WISCENE. The first PR #84 Release was rejected because it staged
+refreshed metadata without making it authoritative. Corrected acceptance
+requires Create/Open/Recent -> Story Flow proof plus the unchanged Gate 4 Level
+path.
+
 ### Gate 6 — Journey View MVP
 
 Build the primary creator experience on the dedicated Story Flow render path:
@@ -99,10 +107,10 @@ exits and Journey/Graph synchronization.
 
 ### Gate 7 — New Project / project-home lifecycle
 
-Make `Project Hub -> Story Flow` the normal project-open/create journey.
-New projects receive a startup Flow and permanent Game Start rather than landing
-in an arbitrary blank `Main.wiscene` purely to satisfy the old scene-first
-lifecycle.
+Complete the project-home transition begun by the Gate 5 recovery. Remove the
+arbitrary blank `Main.wiscene` requirement from new-project construction rather
+than merely adopting it into a canonical Flow, and finish dedicated project
+templates/migration policy around permanent Game Start.
 
 ### Gate 8 — Screen Editor MVP
 

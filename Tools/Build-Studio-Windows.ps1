@@ -129,6 +129,28 @@ try {
             -Destination $packageRoot `
             -Force
 
+        # The owner audit must travel with the exact executable it validates.
+        # A green source-tree document is not usable evidence when the Release
+        # artifact is downloaded and tested outside the repository.
+        $ownerDocsRoot = Join-Path $packageRoot "Docs"
+        $storyFlowOwnerAudit = Join-Path `
+            $repositoryRoot `
+            "docs\STORY_FLOW_GATE5_OWNER_TEST.md"
+        if (-not (Test-Path $storyFlowOwnerAudit -PathType Leaf)) {
+            throw "Story Flow Gate 5 owner-audit instructions are missing."
+        }
+        New-Item -ItemType Directory -Path $ownerDocsRoot -Force | Out-Null
+        $packagedStoryFlowOwnerAudit = Join-Path `
+            $ownerDocsRoot `
+            "STORY_FLOW_GATE5_OWNER_TEST.md"
+        Copy-Item `
+            -Path $storyFlowOwnerAudit `
+            -Destination $packagedStoryFlowOwnerAudit `
+            -Force
+        if (-not (Test-Path $packagedStoryFlowOwnerAudit -PathType Leaf)) {
+            throw "Story Flow Gate 5 owner-audit instructions were not packaged."
+        }
+
         # Gate 5 owner builds consume the exact governed inputs emitted beside
         # the compiled Studio, including pinned Wicked licence/notice files.
         # Copy that resolved set over the source package placeholders so the
