@@ -11,7 +11,7 @@
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow Gate 6 Journey View MVP
+## Active work — Story Flow Gate 6 closeout
 
 Branch: `feature/story-flow-gate6-journey-view`.
 
@@ -22,7 +22,7 @@ and Flow edits persist. Owner testing also established the remaining real UX
 defects: double-click activation was absent and governed Level/Screen creation
 could reset the visible workspace selection to Game Start.
 
-Gate 6 is implementing the locked primary Journey experience without changing
+Gate 6 implements the locked primary Journey experience without changing
 Runtime semantics:
 
 - deterministic main and alternate Journey tracks over the shared authoring
@@ -38,9 +38,28 @@ Runtime semantics:
 
 The UI-independent Gate 6 presentation test passes locally through a direct GNU
 C++ build. Studio source and integration headers also pass local syntax checks.
-This environment has no CMake installation and cannot replace the required
-Windows Debug/Release build, exact CI commit, packaged Release and owner visual
-interaction acceptance. Gate 6 is not accepted or merge-ready yet.
+Renegade Studio run 668 and Windows baseline run 1247 passed Debug and Release
+for implementation head `9f827dd4ccf9675f3c237dd2dcf25f5ab6f3778d`.
+
+The project owner completed the exact packaged Release audit on 2026-08-21 and
+reported PASS. All required nodes were created, the remaining Journey/Graph and
+persistence checks passed, and Level-card double-click activation opened the
+governed editor. The tested artifact was:
+
+`renegade-studio-windows-x64-Release-92bc0cf4dcfa8e474104cae0c557de1306df6b90`
+
+SHA-256:
+`d7f2f67b8c6e9cebc96d77274e6c0a646eba9111e05671980b1a7e7de13ff0e8`.
+
+The owner found the current MVP interaction badly signposted. Selection,
+connection direction and completion feedback remain weak, but this is recorded
+for the Gate 9 Journey UX programme rather than treated as a Gate 6 functional
+failure. The original owner-test instruction also incorrectly attempted to add
+a second Game Start route; it now extends the seeded
+`Game Start -> Main Level` journey from Main Level.
+
+Gate 6 implementation and owner acceptance are complete. PR #85 still requires
+documentation-only exact-head CI and the owner's normal merge decision.
 
 Acceptance is locked in `docs/STORY_FLOW_GATE6_JOURNEY_VIEW_MVP.md`.
 
@@ -211,9 +230,9 @@ It must establish:
 ## Remaining Story Flow programme
 
 - **Gates 1-5:** accepted and merged through PR #84.
-- **Gate 6 (active):** Journey View MVP — reel/cards/branches/Inspector,
-  double-click activation, creation feedback and Journey/Graph synchronization
-  on the dedicated Story Flow render path.
+- **Gate 6 (closeout):** Journey View MVP implementation and exact Release
+  owner acceptance passed; documentation-only exact-head CI remains before PR
+  #85 can be offered for merge.
 - **Gate 7:** New Project/project-home lifecycle — Hub -> Story Flow by default,
   startup Flow + permanent Game Start, remove arbitrary blank startup Scene
   requirement safely.

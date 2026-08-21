@@ -59,14 +59,20 @@ Flow as the interim project home while retaining the legacy startup WISCENE.
 
 ### Gate 6 — Journey View MVP
 
-**Status:** implementation in progress on
-`feature/story-flow-gate6-journey-view`.
+**Status:** implementation and exact packaged Release owner acceptance passed
+on PR #85 head `9f827dd4ccf9675f3c237dd2dcf25f5ab6f3778d`; documentation-only closeout and
+final exact-head CI remain before merge.
 
 Build the primary creator experience on the dedicated Story Flow render path:
 main journey reel, Level/Screen cards, deterministic branch tracks,
 Inspector-driven exits, Journey-specific layout state, double-click activation,
 creation feedback and immediate Journey/Graph synchronization. Acceptance is
 locked in `docs/STORY_FLOW_GATE6_JOURNEY_VIEW_MVP.md`.
+
+The owner confirmed the functional Gate 6 boundary while reporting that the
+MVP's selection, connection and completion feedback is difficult to understand.
+That feedback is retained for Gate 9 rather than retroactively widening Gate 6
+into the advanced Journey UX programme.
 
 ### Gate 7 — New Project / project-home lifecycle
 

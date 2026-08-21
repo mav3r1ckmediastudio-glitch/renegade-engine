@@ -29,7 +29,10 @@ selection to Game Start.
 
 ## 3. Ordinary Journey authoring
 
-1. Select Game Start, press `CONNECT`, then select `Gate 6 Level`.
+The new-project fixture already contains `Game Start -> Main Level`. Extend that
+existing main journey; do not attempt to add a second Game Start route.
+
+1. Select `Main Level`, press `CONNECT`, then select `Gate 6 Level`.
 2. Select `Gate 6 Level`, press `CONNECT`, then select `Gate 6 Screen`.
 3. Select `Gate 6 Screen`, press `CONNECT`, then select `Complete Game`.
 4. Select a card with exits. Confirm each exit is listed in the Inspector.
@@ -82,3 +85,20 @@ Record PASS/FAIL for every section plus screenshots of:
 
 Gate 6 is accepted only on the exact commit and exact packaged Release that
 passes this audit.
+
+## Accepted implementation evidence
+
+The project owner completed this audit on 2026-08-21 against PR #85 head
+`9f827dd4ccf9675f3c237dd2dcf25f5ab6f3778d` using the Release artifact from
+Renegade Studio run 668:
+
+`renegade-studio-windows-x64-Release-92bc0cf4dcfa8e474104cae0c557de1306df6b90`
+
+Outer artifact SHA-256:
+`d7f2f67b8c6e9cebc96d77274e6c0a646eba9111e05671980b1a7e7de13ff0e8`.
+
+All remaining owner-test sections passed. The owner specifically confirmed that
+all required nodes were created and Level-card double-click activation opened
+the governed Level Editor. The owner also identified the MVP interaction as
+poorly signposted; that usability feedback does not invalidate the working
+Gate 6 functional boundary and is retained for the Gate 9 Journey UX programme.

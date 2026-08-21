@@ -1,6 +1,7 @@
 # Story Flow Gate 6 — Journey View MVP
 
-Status: implementation in progress on `feature/story-flow-gate6-journey-view`.
+Status: implementation and exact Release owner acceptance passed on
+`feature/story-flow-gate6-journey-view`; PR #85 closeout is pending.
 
 Baseline: merged `main` commit
 `c133221b63c744f737ec09da1fa2800158ae22ea` (PR #84).
@@ -76,3 +77,22 @@ commit:
   large-project tooling (Gate 9);
 - Runtime/build/standalone programme closeout (Gate 10);
 - Wicked Engine source or file-format changes.
+
+## Acceptance evidence
+
+- PR implementation head:
+  `9f827dd4ccf9675f3c237dd2dcf25f5ab6f3778d`.
+- Renegade Studio run 668 and Windows baseline run 1247 passed Debug and
+  Release.
+- Owner-tested Release artifact:
+  `renegade-studio-windows-x64-Release-92bc0cf4dcfa8e474104cae0c557de1306df6b90`.
+- Artifact SHA-256:
+  `d7f2f67b8c6e9cebc96d77274e6c0a646eba9111e05671980b1a7e7de13ff0e8`.
+- On 2026-08-21 the project owner completed the packaged audit and reported
+  PASS. Required nodes were created, Journey/Graph and persistence checks
+  passed, and Level-card double-click activation opened the governed editor.
+
+The owner found the MVP interaction difficult to understand because selection,
+connection direction and completion feedback are weak. That is recorded as
+future Journey UX work rather than a failure of the Gate 6 functional scope;
+Gate 9 owns the advanced Journey usability and scale programme.
