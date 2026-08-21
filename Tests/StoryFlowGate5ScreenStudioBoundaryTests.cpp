@@ -114,7 +114,9 @@ namespace
         Check(handoff.screenNodeId == created.screenNodeId &&
                 handoff.screenDocumentId == created.screenDocumentId,
             "Gate 5C Screen Editor handoff lost stable identity");
-        Check(handoff.resolvedPath == moved.generic_u8string(),
+        std::error_code pathIdentityError;
+        Check(fs::equivalent(fs::u8path(handoff.resolvedPath), moved, pathIdentityError) &&
+                !pathIdentityError,
             "Gate 5C Screen Editor handoff did not carry resolved moved path");
         Check(handoff.resolvedPathHint ==
                 "Content/Screens/Menu/TitleMoved.renegade-screen" &&
