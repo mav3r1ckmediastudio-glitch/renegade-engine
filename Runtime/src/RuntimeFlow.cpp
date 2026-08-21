@@ -260,21 +260,40 @@ namespace renegade::runtime
                 error);
         }
 
-        step = flow.EmitOutcome(bridge::GameStartOutcome);
-        if (!step.succeeded)
+        // A newly created Story Flow project intentionally starts with only
+        // the permanent Game Start node. Remaining at that node is a valid
+        // Runtime state until the creator authors a game.start route. Existing
+        // routed projects retain their automatic Game Start handoff, including
+        // structured missing/ambiguous-route diagnostics.
+        bool hasGameStartRoute = false;
+        for (const auto& route : flow.Document().routes)
         {
-            result.flowTrace = flow.Trace();
-            return Fail(
-                std::move(result),
-                RuntimeBootstrapCode::FlowExecutionFailed,
-                step.message);
+            if (route.sourceNodeId == step.currentNodeId &&
+                route.outcome == bridge::GameStartOutcome)
+            {
+                hasGameStartRoute = true;
+                break;
+            }
         }
-        if (!flow.ApplyStep(scenes, result, step, error))
+
+        if (hasGameStartRoute)
         {
-            return Fail(
-                std::move(result),
-                ContentFailureCode(step),
-                error);
+            step = flow.EmitOutcome(bridge::GameStartOutcome);
+            if (!step.succeeded)
+            {
+                result.flowTrace = flow.Trace();
+                return Fail(
+                    std::move(result),
+                    RuntimeBootstrapCode::FlowExecutionFailed,
+                    step.message);
+            }
+            if (!flow.ApplyStep(scenes, result, step, error))
+            {
+                return Fail(
+                    std::move(result),
+                    ContentFailureCode(step),
+                    error);
+            }
         }
 
         for (const auto& outcome : result.flowOutcomes)
