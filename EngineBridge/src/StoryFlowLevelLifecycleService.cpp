@@ -517,10 +517,24 @@ namespace renegade::bridge
                     "The new Level identity envelope is invalid: " + error);
             }
 
+            // Render-only scratch files are not project mutations. Keep them
+            // in the OS temp root so the inner document writer's transaction
+            // artifact names do not amplify a deep project path past legacy
+            // Windows path limits. The final project writes below remain
+            // governed by ProjectDocumentTransaction under projectRoot.
+            pathError.clear();
+            const fs::path renderRoot = fs::temp_directory_path(pathError);
+            if (pathError)
+            {
+                return Failure(
+                    StoryFlowLevelCreateCode::RenderFailed,
+                    "Could not resolve the Level transaction render root: " +
+                        pathError.message());
+            }
             const std::string renderToken = GenerateStableId();
             ScopedDirectory renderDirectory{
-                projectRoot / "Intermediate" / "Transactions" /
-                "StoryFlowLevelCreate" / fs::u8path(renderToken)
+                renderRoot / "renegade-story-flow" / "level-create" /
+                fs::u8path(renderToken)
             };
             fs::create_directories(renderDirectory.path, pathError);
             if (pathError)
