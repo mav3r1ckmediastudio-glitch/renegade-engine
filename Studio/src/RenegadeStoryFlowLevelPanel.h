@@ -25,6 +25,7 @@ namespace renegade::studio
             levelName_.Create("Story Flow Level Name");
             levelName_.SetDescription("LEVEL  ");
             levelName_.SetPlaceholder("Level name...");
+            levelName_.SetValue("");
             levelName_.SetCancelInputEnabled(false);
 
             newLevel_.Create("Story Flow Add New Level");

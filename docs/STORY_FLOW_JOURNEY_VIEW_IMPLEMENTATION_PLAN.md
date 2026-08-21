@@ -293,6 +293,10 @@ Deliverables:
 
 ### Gate 6 — Journey View MVP
 
+**Status:** implementation in progress on
+`feature/story-flow-gate6-journey-view`; acceptance contract locked in
+`docs/STORY_FLOW_GATE6_JOURNEY_VIEW_MVP.md`.
+
 **Purpose:** deliver the locked primary creator experience on the dedicated Story
 Flow render path established by Gate 3.
 

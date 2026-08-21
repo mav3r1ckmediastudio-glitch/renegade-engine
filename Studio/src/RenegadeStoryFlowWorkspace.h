@@ -8,15 +8,15 @@
 
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
 #include "renegade/bridge/StoryFlowAuthoringSession.h"
+#include "renegade/bridge/StoryFlowJourneyModel.h"
 #include "renegade/bridge/StoryFlowLayoutService.h"
 #include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
 {
-    // Gate 3 native Graph authoring surface. Semantic edits are delegated to
-    // StoryFlowAuthoringSession; this widget owns only presentation state,
-    // selection and native editor controls. Journey View remains a later view
-    // over the same semantic session/model.
+    // Native synchronized Journey/Graph authoring surface. Semantic edits are
+    // delegated to StoryFlowAuthoringSession; this widget owns presentation
+    // state, shared selection, activation and native editor controls only.
     class RenegadeStoryFlowWorkspace final : public wi::gui::Widget
     {
     public:
@@ -30,10 +30,13 @@ namespace renegade::studio
 
         void FitToContent();
         void CenterOnGameStart();
+        void SelectAndFocusNode(const bridge::StableId& nodeId);
 
         void OnSelectionChanged(
             std::function<void(const bridge::StableId&)> callback);
         void OnLayoutChanged(std::function<void()> callback);
+        void OnNodeActivated(
+            std::function<void(const bridge::StableId&)> callback);
 
         [[nodiscard]] const bridge::StableId& SelectedNodeId() const noexcept
         {
@@ -48,6 +51,12 @@ namespace renegade::studio
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept
         {
             return pointerConsumed_;
+        }
+
+        [[nodiscard]] bridge::StoryFlowViewMode ActiveView() const noexcept
+        {
+            return layout_ ? layout_->activeView
+                : bridge::StoryFlowViewMode::Journey;
         }
 
         void Update(const wi::Canvas& canvas, float dt) override;
@@ -66,6 +75,10 @@ namespace renegade::studio
             const bridge::StableId& nodeId) const noexcept;
         [[nodiscard]] bridge::StoryFlowNodeLayout* FindLayout(
             const bridge::StableId& nodeId) noexcept;
+        [[nodiscard]] const bridge::StoryFlowJourneyCardLayout* FindJourneyLayout(
+            const bridge::StableId& nodeId) const noexcept;
+        [[nodiscard]] bridge::StoryFlowJourneyCardLayout* FindJourneyLayout(
+            const bridge::StableId& nodeId) noexcept;
         [[nodiscard]] const bridge::FlowNode* FindDocumentNode(
             const bridge::StableId& nodeId) const noexcept;
         [[nodiscard]] const bridge::FlowRoute* FindDocumentRoute(
@@ -74,6 +87,12 @@ namespace renegade::studio
         [[nodiscard]] XMFLOAT2 ScreenToCanvas(float x, float y) const noexcept;
         [[nodiscard]] XMFLOAT4 NodeScreenBounds(
             const bridge::StoryFlowNodeLayout& node) const noexcept;
+        [[nodiscard]] XMFLOAT4 JourneyCardScreenBounds(
+            const bridge::StoryFlowJourneyCard& card) const noexcept;
+        [[nodiscard]] XMFLOAT4 NodeBounds(
+            const bridge::StableId& nodeId) const noexcept;
+        [[nodiscard]] bridge::StoryFlowCanvasLayout& ActiveCanvas() noexcept;
+        [[nodiscard]] const bridge::StoryFlowCanvasLayout& ActiveCanvas() const noexcept;
         [[nodiscard]] float GraphWidth() const noexcept;
         [[nodiscard]] bool PointerInsideGraph(const XMFLOAT4& pointer) const noexcept;
         [[nodiscard]] bridge::StableId HitTestRoute(
@@ -86,6 +105,11 @@ namespace renegade::studio
         void NotifyLayoutChanged();
         void SetStatus(std::string message);
         void EnsureSelectionValid();
+        void SetActiveView(bridge::StoryFlowViewMode view);
+        [[nodiscard]] bool RebuildJourneyProjection();
+        void RememberOrActivateNodeClick(
+            const bridge::StoryFlowNodeView& node,
+            const XMFLOAT4& pointer);
 
         void CreateAuthoringControls();
         void LayoutAuthoringControls();
@@ -110,12 +134,14 @@ namespace renegade::studio
 
         bridge::StoryFlowAuthoringSession* session_ = nullptr;
         bridge::StoryFlowAuthoringModel* model_ = nullptr;
+        bridge::StoryFlowJourneyModel journeyModel_;
         bridge::StoryFlowLayoutDocument* layout_ = nullptr;
         bridge::StableId selectedNodeId_;
         bridge::StableId selectedRouteId_;
         bridge::StableId connectionSourceNodeId_;
         bridge::StableId reconnectRouteId_;
         std::function<void(const bridge::StableId&)> selectionChanged_;
+        std::function<void(const bridge::StableId&)> nodeActivated_;
         std::function<void()> layoutChanged_;
         std::string statusMessage_ = "READY";
         float width_ = 1.0f;
@@ -127,6 +153,9 @@ namespace renegade::studio
         XMFLOAT2 nodeDragPointerAnchor_ = {};
         XMFLOAT2 nodeDragValueAnchor_ = {};
         bridge::StableId draggedNodeId_;
+        bridge::StableId previousClickedNodeId_;
+        XMFLOAT2 previousClickPointer_ = {};
+        float secondsSincePreviousNodeClick_ = 1000.0f;
         bool pointerConsumed_ = false;
 
         RenegadeButton saveButton_;

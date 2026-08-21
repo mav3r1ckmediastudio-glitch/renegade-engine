@@ -24,6 +24,7 @@ namespace renegade::studio
             screenName_.Create("Story Flow Screen Name");
             screenName_.SetDescription("SCREEN  ");
             screenName_.SetPlaceholder("Screen name...");
+            screenName_.SetValue("");
             screenName_.SetCancelInputEnabled(false);
 
             screenTemplate_.Create("Story Flow Screen Template");

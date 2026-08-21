@@ -158,6 +158,19 @@ namespace renegade::studio
             workspace_.OnSelectionChanged(std::move(callback));
         }
 
+        void OnNodeActivated(
+            std::function<void(const bridge::StableId&)> callback)
+        {
+            EnsureLoaded();
+            workspace_.OnNodeActivated(std::move(callback));
+        }
+
+        void SelectAndFocusNode(const bridge::StableId& nodeId)
+        {
+            EnsureLoaded();
+            workspace_.SelectAndFocusNode(nodeId);
+        }
+
         // External Level/Screen lifecycle controls are added after this path
         // is loaded. Wicked paints GUI widgets in reverse registration order,
         // so re-register the full-screen workspace last to keep it behind the

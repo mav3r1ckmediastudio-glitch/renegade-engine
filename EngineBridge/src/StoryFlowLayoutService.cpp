@@ -69,6 +69,34 @@ namespace renegade::bridge
             std::error_code ignored;
             fs::remove(path, ignored);
         }
+
+        bool ReadCanvas(
+            const nlohmann::json& object,
+            StoryFlowCanvasLayout& canvas,
+            std::string& error)
+        {
+            if (!object.is_object() ||
+                !HasOnlyKeys(object, {"pan_x", "pan_y", "zoom"}) ||
+                !ReadFiniteFloat(object, "pan_x", canvas.panX, error) ||
+                !ReadFiniteFloat(object, "pan_y", canvas.panY, error) ||
+                !ReadFiniteFloat(object, "zoom", canvas.zoom, error))
+            {
+                if (error.empty())
+                    error = "The Story Flow layout has invalid canvas state.";
+                return false;
+            }
+            return true;
+        }
+    }
+
+    const char* StoryFlowViewModeName(const StoryFlowViewMode mode) noexcept
+    {
+        switch (mode)
+        {
+        case StoryFlowViewMode::Journey: return "journey";
+        case StoryFlowViewMode::Graph: return "graph";
+        default: return "journey";
+        }
     }
 
     std::string ResolveStoryFlowLayoutPath(
@@ -95,6 +123,7 @@ namespace renegade::bridge
         layout.projectId = projectId;
         layout.flowDocumentId = flowDocumentId;
         layout.nodes.reserve(model.Nodes().size());
+        layout.journeyCards.reserve(model.Nodes().size());
         for (const auto& node : model.Nodes())
         {
             layout.nodes.push_back({
@@ -102,6 +131,7 @@ namespace renegade::bridge
                 static_cast<float>(node.presentationColumn) * DefaultColumnSpacing,
                 static_cast<float>(node.presentationRow) * DefaultRowSpacing,
             });
+            layout.journeyCards.push_back({node.id, 0.0f, 0.0f});
         }
         return layout;
     }
@@ -136,9 +166,16 @@ namespace renegade::bridge
         for (const auto& item : layout.nodes)
             saved.emplace(item.nodeId, item);
 
+        std::unordered_map<StableId, StoryFlowJourneyCardLayout> savedJourney;
+        savedJourney.reserve(layout.journeyCards.size());
+        for (const auto& item : layout.journeyCards)
+            savedJourney.emplace(item.nodeId, item);
+
         StoryFlowLayoutDocument reconciled =
             BuildDeterministicStoryFlowLayout(model, projectId, flowDocumentId);
         reconciled.canvas = layout.canvas;
+        reconciled.journeyCanvas = layout.journeyCanvas;
+        reconciled.activeView = layout.activeView;
         for (auto& item : reconciled.nodes)
         {
             const auto found = saved.find(item.nodeId);
@@ -146,6 +183,15 @@ namespace renegade::bridge
             {
                 item.x = found->second.x;
                 item.y = found->second.y;
+            }
+        }
+        for (auto& item : reconciled.journeyCards)
+        {
+            const auto found = savedJourney.find(item.nodeId);
+            if (found != savedJourney.end())
+            {
+                item.offsetX = found->second.offsetX;
+                item.offsetY = found->second.offsetY;
             }
         }
 
@@ -193,6 +239,15 @@ namespace renegade::bridge
             error = "The Story Flow layout contains invalid canvas state.";
             return false;
         }
+        if (!IsFiniteCoordinate(layout.journeyCanvas.panX) ||
+            !IsFiniteCoordinate(layout.journeyCanvas.panY) ||
+            !std::isfinite(layout.journeyCanvas.zoom) ||
+            layout.journeyCanvas.zoom < MinimumZoom ||
+            layout.journeyCanvas.zoom > MaximumZoom)
+        {
+            error = "The Story Flow layout contains invalid Journey canvas state.";
+            return false;
+        }
 
         std::set<StableId> nodeIds;
         for (const auto& node : layout.nodes)
@@ -208,6 +263,28 @@ namespace renegade::bridge
                 error = "The Story Flow layout contains an invalid node position.";
                 return false;
             }
+        }
+
+        std::set<StableId> journeyNodeIds;
+        for (const auto& card : layout.journeyCards)
+        {
+            if (!IsValidStableId(card.nodeId) ||
+                !journeyNodeIds.insert(card.nodeId).second)
+            {
+                error = "The Story Flow layout contains a malformed or duplicate Journey card ID.";
+                return false;
+            }
+            if (!IsFiniteCoordinate(card.offsetX) ||
+                !IsFiniteCoordinate(card.offsetY))
+            {
+                error = "The Story Flow layout contains an invalid Journey card offset.";
+                return false;
+            }
+        }
+        if (journeyNodeIds != nodeIds)
+        {
+            error = "Story Flow Graph nodes and Journey cards must reference the same semantic nodes.";
+            return false;
         }
 
         error.clear();
@@ -235,10 +312,16 @@ namespace renegade::bridge
         root["schema_version"] = layout.schemaVersion;
         root["project_id"] = layout.projectId;
         root["flow_document_id"] = layout.flowDocumentId;
+        root["active_view"] = StoryFlowViewModeName(layout.activeView);
         root["canvas"] = {
             {"pan_x", layout.canvas.panX},
             {"pan_y", layout.canvas.panY},
             {"zoom", layout.canvas.zoom},
+        };
+        root["journey_canvas"] = {
+            {"pan_x", layout.journeyCanvas.panX},
+            {"pan_y", layout.journeyCanvas.panY},
+            {"zoom", layout.journeyCanvas.zoom},
         };
         root["nodes"] = nlohmann::json::array();
         for (const auto& node : layout.nodes)
@@ -247,6 +330,15 @@ namespace renegade::bridge
                 {"node_id", node.nodeId},
                 {"x", node.x},
                 {"y", node.y},
+            });
+        }
+        root["journey_cards"] = nlohmann::json::array();
+        for (const auto& card : layout.journeyCards)
+        {
+            root["journey_cards"].push_back({
+                {"node_id", card.nodeId},
+                {"offset_x", card.offsetX},
+                {"offset_y", card.offsetY},
             });
         }
         const std::string content = root.dump();
@@ -362,9 +454,7 @@ namespace renegade::bridge
                 (std::istreambuf_iterator<char>(stream)),
                 std::istreambuf_iterator<char>());
             const nlohmann::json root = nlohmann::json::parse(content);
-            if (!HasOnlyKeys(root, {
-                    "format", "schema_version", "project_id",
-                    "flow_document_id", "canvas", "nodes"}) ||
+            if (!root.is_object() ||
                 !root.contains("format") || !root.at("format").is_string() ||
                 !root.contains("schema_version") ||
                 !root.at("schema_version").is_number_unsigned() ||
@@ -385,16 +475,32 @@ namespace renegade::bridge
             parsed.projectId = root.at("project_id").get<std::string>();
             parsed.flowDocumentId = root.at("flow_document_id").get<std::string>();
 
-            const auto& canvas = root.at("canvas");
-            if (!HasOnlyKeys(canvas, {"pan_x", "pan_y", "zoom"}) ||
-                !ReadFiniteFloat(canvas, "pan_x", parsed.canvas.panX, error) ||
-                !ReadFiniteFloat(canvas, "pan_y", parsed.canvas.panY, error) ||
-                !ReadFiniteFloat(canvas, "zoom", parsed.canvas.zoom, error))
+            const bool schemaOne = parsed.schemaVersion == 1;
+            const bool schemaTwo =
+                parsed.schemaVersion == StoryFlowLayoutDocument::CurrentSchemaVersion;
+            if (!schemaOne && !schemaTwo)
             {
-                if (error.empty())
-                    error = "The Story Flow layout has invalid canvas state.";
+                error = "Unsupported Story Flow layout schema version: " +
+                    std::to_string(parsed.schemaVersion);
                 return false;
             }
+
+            const std::set<std::string> allowedRootKeys = schemaOne
+                ? std::set<std::string>{
+                    "format", "schema_version", "project_id",
+                    "flow_document_id", "canvas", "nodes"}
+                : std::set<std::string>{
+                    "format", "schema_version", "project_id",
+                    "flow_document_id", "active_view", "canvas", "nodes",
+                    "journey_canvas", "journey_cards"};
+            if (!HasOnlyKeys(root, allowedRootKeys))
+            {
+                error = "The Story Flow layout has an invalid root structure.";
+                return false;
+            }
+
+            if (!ReadCanvas(root.at("canvas"), parsed.canvas, error))
+                return false;
 
             parsed.nodes.reserve(root.at("nodes").size());
             for (const auto& item : root.at("nodes"))
@@ -413,6 +519,64 @@ namespace renegade::bridge
                     return false;
                 }
                 parsed.nodes.push_back(std::move(node));
+            }
+
+            if (schemaOne)
+            {
+                parsed.schemaVersion = StoryFlowLayoutDocument::CurrentSchemaVersion;
+                parsed.activeView = StoryFlowViewMode::Journey;
+                parsed.journeyCanvas = {};
+                parsed.journeyCards.reserve(parsed.nodes.size());
+                for (const auto& node : parsed.nodes)
+                    parsed.journeyCards.push_back({node.nodeId, 0.0f, 0.0f});
+            }
+            else
+            {
+                if (!root.contains("active_view") ||
+                    !root.at("active_view").is_string() ||
+                    !root.contains("journey_canvas") ||
+                    !root.contains("journey_cards") ||
+                    !root.at("journey_cards").is_array())
+                {
+                    error = "The Story Flow layout is missing Journey View state.";
+                    return false;
+                }
+                const std::string activeView =
+                    root.at("active_view").get<std::string>();
+                if (activeView == "journey")
+                    parsed.activeView = StoryFlowViewMode::Journey;
+                else if (activeView == "graph")
+                    parsed.activeView = StoryFlowViewMode::Graph;
+                else
+                {
+                    error = "The Story Flow layout has an invalid active view.";
+                    return false;
+                }
+                if (!ReadCanvas(
+                        root.at("journey_canvas"), parsed.journeyCanvas, error))
+                {
+                    return false;
+                }
+
+                parsed.journeyCards.reserve(root.at("journey_cards").size());
+                for (const auto& item : root.at("journey_cards"))
+                {
+                    if (!HasOnlyKeys(item, {"node_id", "offset_x", "offset_y"}) ||
+                        !item.contains("node_id") ||
+                        !item.at("node_id").is_string())
+                    {
+                        error = "The Story Flow layout contains an invalid Journey card record.";
+                        return false;
+                    }
+                    StoryFlowJourneyCardLayout card;
+                    card.nodeId = item.at("node_id").get<std::string>();
+                    if (!ReadFiniteFloat(item, "offset_x", card.offsetX, error) ||
+                        !ReadFiniteFloat(item, "offset_y", card.offsetY, error))
+                    {
+                        return false;
+                    }
+                    parsed.journeyCards.push_back(std::move(card));
+                }
             }
 
             if (!ValidateStoryFlowLayout(

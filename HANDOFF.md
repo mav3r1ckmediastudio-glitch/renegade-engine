@@ -5,70 +5,44 @@
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`a79955fee8481cd65f617c4bd2d20602f2a3d63d`
-(`Story Flow Gate 4: final owner-accepted exact-tree checkpoint (#78)`).
+`c133221b63c744f737ec09da1fa2800158ae22ea`
+(`Story Flow Gate 5 recovery: make Story Flow the project home (#84)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow Gate 5 recovery PR #84
+## Active work — Story Flow Gate 6 Journey View MVP
 
-PR #84 is Draft on branch `fix/story-flow-project-home-recovery`.
+Branch: `feature/story-flow-gate6-journey-view`.
 
-The first owner Release artifact at synthetic merge commit
-`d184f5478fecb4f1bf6a041fed858d88a522d5cd` is rejected. New and scene-first
-projects opened in the Level Editor rather than Story Flow, and the package
-omitted the Gate 5 owner-audit document.
+Gate 5/PR #84 is merged and owner-accepted. New/Open projects enter the
+dedicated Story Flow render path, governed Level and Screen lifecycle controls
+remain visible, explicit Level open/return works, Screen Editor handoff resolves,
+and Flow edits persist. Owner testing also established the remaining real UX
+defects: double-click activation was absent and governed Level/Screen creation
+could reset the visible workspace selection to Game Start.
 
-Root cause: after project-home migration,
-`StoryFlowStudioIntegration` called the staged project-switch
-`StudioProjectService::OpenProject()` API. That left `CurrentProject()` on the
-old scene-first metadata, replayed migration and returned before Story Flow
-activation. Gate 4 itself remains accepted; its controlled Story Flow -> Level
-Editor -> Story Flow lifecycle is a required regression.
+Gate 6 is implementing the locked primary Journey experience without changing
+Runtime semantics:
 
-The first corrective Windows CI checkpoint exposed a second product defect:
-`StoryFlowProjectHomeService` retained the project descriptor's read handle
-while its transaction attempted to replace that file. Windows rejected the
-commit and rollback with a sharing violation. The service now closes and
-verifies that handle before beginning the descriptor transaction.
+- deterministic main and alternate Journey tracks over the shared authoring
+  model, including merge/cycle safety and detached unreachable content;
+- Level/Screen cards with identity/path context where available;
+- Inspector exit selection and existing route edit/reconnect boundaries;
+- persisted Journey/Graph view toggle with shared selection and immediate
+  semantic synchronization;
+- schema-v2 presentation state with lossless schema-v1 Graph migration;
+- presentation-only Journey card offsets and independent Journey canvas state;
+- double-click dispatch to the accepted Level and Screen open boundaries;
+- selection/focus feedback after governed content creation.
 
-Owner Release evidence then exposed a Gate 3/4/5 UI-layering defect that the
-service-only tests missed: the opaque full-screen Graph workspace rendered in
-front of the Level and Screen lifecycle controls. PR #84 must keep the workspace
-behind those controls after every GUI update, and the owner must visibly confirm
-both lifecycle rows before acceptance.
+The UI-independent Gate 6 presentation test passes locally through a direct GNU
+C++ build. Studio source and integration headers also pass local syntax checks.
+This environment has no CMake installation and cannot replace the required
+Windows Debug/Release build, exact CI commit, packaged Release and owner visual
+interaction acceptance. Gate 6 is not accepted or merge-ready yet.
 
-The recovery worktree adds:
-
-- an authoritative active-project metadata refresh seam;
-- idempotent recognition of an already-migrated on-disk descriptor when the
-  active snapshot is stale;
-- a dedicated New/Open/Recent project-home regression test;
-- packaged `Docs/STORY_FLOW_GATE5_OWNER_TEST.md` and a corrected
-  `README-FIRST.txt`;
-- updated owner acceptance covering project home, Screen lifecycle and the
-  Gate 4 Level regression.
-
-No merge is authorized. GitHub CI Debug/Release and owner testing of the exact
-corrected Release artifact are still required.
-
-## Historical programme context — Story Flow PR #66
-
-PR #66:
-`Story Flow Gate 1: shared foundation for Journey + Graph views`
-
-Branch:
-`agent/story-flow-gate1-foundation`
-
-Gate 1 implementation and owner visual/interaction acceptance have passed.
-Final documentation reconciliation has now been applied on the branch; the live
-PR head must be verified and exact-head CI must pass again before merge.
-
-Do not treat the older PR #57/importer handoff that previously occupied this
-file as current. PR #57 is already merged on main as
-`a7775f31c5ec1ff61463d495e7db6ac4a5d63258`, followed by LP08/project-lifecycle
-work through PR #65.
+Acceptance is locked in `docs/STORY_FLOW_GATE6_JOURNEY_VIEW_MVP.md`.
 
 ## Story Flow locked product architecture
 
@@ -236,12 +210,10 @@ It must establish:
 
 ## Remaining Story Flow programme
 
-- **Gate 4:** Level lifecycle — Add New/Existing Level, governed Scene identity,
-  open Level Editor, Return to Story Flow.
-- **Gate 5:** Screen lifecycle — governed Screen creation/templates/identity and
-  Screen Editor open boundary.
-- **Gate 6:** Journey View MVP — reel/cards/branches/Inspector and Journey/Graph
-  synchronization on the dedicated Story Flow render path.
+- **Gates 1-5:** accepted and merged through PR #84.
+- **Gate 6 (active):** Journey View MVP — reel/cards/branches/Inspector,
+  double-click activation, creation feedback and Journey/Graph synchronization
+  on the dedicated Story Flow render path.
 - **Gate 7:** New Project/project-home lifecycle — Hub -> Story Flow by default,
   startup Flow + permanent Game Start, remove arbitrary blank startup Scene
   requirement safely.

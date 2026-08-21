@@ -1,8 +1,8 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`a79955fee8481cd65f617c4bd2d20602f2a3d63d`
-(`Story Flow Gate 4: final owner-accepted exact-tree checkpoint (#78)`).
+`c133221b63c744f737ec09da1fa2800158ae22ea`
+(`Story Flow Gate 5 recovery: make Story Flow the project home (#84)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -12,7 +12,7 @@
 The immediate active programme is **Renegade Story Flow**.
 
 Story Flow is the project-level authoring home for the complete player journey.
-It will use one authoritative semantic Flow document exposed through two
+It uses one authoritative semantic Flow document exposed through two
 synchronized views:
 
 - **Journey View** — primary/default creator surface;
@@ -31,79 +31,42 @@ The full programme contract is in:
 
 ### Gate 1 — Shared Story Flow foundation and Studio workspace
 
-**Status:** implementation and owner visual/interaction acceptance passed;
-final documentation/exact-head PR closeout remains before merge.
+**Status:** accepted and merged.
 
-Implemented on PR #66:
-
-- read-only presentation-independent model over LP02 `FlowDocument`;
-- stable node/route indexes and diagnostics;
-- deterministic default presentation;
-- separate layout persistence under `Saved/EditorState/StoryFlow/`;
-- native wiGUI Story Flow surface;
-- startup Flow resolution for an opened project;
-- node/route rendering with outcome labels;
-- selection, cursor-relative zoom, middle-mouse pan, `FIT` and `START`;
-- controlled four-node owner-test fixture;
-- tests proving presentation state does not change Runtime Flow traversal.
-
-Exact implementation evidence:
-
-- tested implementation head:
-  `6f02f00519b344faa2fbe9a0f0d9d9174ad3f8d4`;
-- Renegade Studio run 628: success;
-- Windows baseline run 1156: success;
-- owner Release acceptance on 2026-08-20: PASS;
-- visible route:
-  `Game Start -> Level One -> Level Two -> Complete Game`;
-- owner confirmed node selection, zoom, pan, `FIT` and `START` all work.
-
-The current Gate 1 workspace is intentionally hosted over the existing 3D
-Studio render path. That condition is accepted only as the Gate 1 integration
-scaffold. It is not the final Story Flow architecture.
+Shared model, deterministic presentation, separate editor layout persistence and
+the first native Story Flow proof surface are established.
 
 ### Gate 2 — First-class Screen semantics
 
-Next after Gate 1 merge.
-
-Extend the real Flow/runtime contract so `Screen` is a first-class executable
-Flow destination backed by stable runtime-screen identity and named outcomes.
-Acceptance is a real Runtime journey such as:
-
-`Game Start -> Title Screen -> Level -> Victory Screen -> Complete Game`
+**Status:** accepted and merged. Screen is a first-class executable Flow
+destination backed by stable runtime-screen identity and named outcomes.
 
 ### Gate 3 — Dedicated Story Flow render path, core editing and Graph View
 
-Before Story Flow becomes the long-lived editable authoring surface, retire the
-Gate 1 overlay scaffold and give Story Flow its own render path/workspace.
-Then add semantic Flow mutation, Graph View, Flow-specific Undo/Redo, dirty
-state, transactional Save/Open and route/node editing.
-
-The 3D Level Editor must be inactive while Story Flow owns the surface.
+**Status:** accepted and merged. Story Flow has a dedicated render path plus
+Graph authoring, transactional Save/Open, validation and Flow history.
 
 ### Gate 4 — Level lifecycle integration
 
-Add New/Existing Level, governed Scene creation/identity, moved/missing
-resolution, Level open into the 3D editor and explicit Return to Story Flow.
+**Status:** accepted and merged. New/Existing Level, governed identity,
+resolution, 3D editor open and Return to Story Flow are present.
 
 ### Gate 5 — Screen lifecycle integration
 
-Add governed Screen creation/templates/identity, Screen outcome exposure and the
-open boundary for the Screen Editor.
-
-**Recovery in progress on draft PR #84.** Owner testing showed normal New/Open
-project entry still bypassed Story Flow. The bounded recovery therefore also
-establishes an interim project-home migration while retaining the existing
-startup WISCENE. The first PR #84 Release was rejected because it staged
-refreshed metadata without making it authoritative. Corrected acceptance
-requires Create/Open/Recent -> Story Flow proof plus the unchanged Gate 4 Level
-path.
+**Status:** accepted and merged through PR #84. Governed Screen lifecycle and
+the Screen Editor handoff are present; New/Open project entry now uses Story
+Flow as the interim project home while retaining the legacy startup WISCENE.
 
 ### Gate 6 — Journey View MVP
 
+**Status:** implementation in progress on
+`feature/story-flow-gate6-journey-view`.
+
 Build the primary creator experience on the dedicated Story Flow render path:
-main journey reel, Level/Screen cards, branch tracks, previews, Inspector-driven
-exits and Journey/Graph synchronization.
+main journey reel, Level/Screen cards, deterministic branch tracks,
+Inspector-driven exits, Journey-specific layout state, double-click activation,
+creation feedback and immediate Journey/Graph synchronization. Acceptance is
+locked in `docs/STORY_FLOW_GATE6_JOURNEY_VIEW_MVP.md`.
 
 ### Gate 7 — New Project / project-home lifecycle
 

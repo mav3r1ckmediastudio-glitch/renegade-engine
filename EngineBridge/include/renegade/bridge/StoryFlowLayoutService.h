@@ -27,17 +27,38 @@ namespace renegade::bridge
         float zoom = 1.0f;
     };
 
+    enum class StoryFlowViewMode
+    {
+        Journey,
+        Graph,
+    };
+
+    struct StoryFlowJourneyCardLayout
+    {
+        StableId nodeId;
+        float offsetX = 0.0f;
+        float offsetY = 0.0f;
+    };
+
     struct StoryFlowLayoutDocument
     {
-        static constexpr std::uint32_t CurrentSchemaVersion = 1;
+        static constexpr std::uint32_t CurrentSchemaVersion = 2;
 
         std::string formatIdentifier = StoryFlowLayoutFormat;
         std::uint32_t schemaVersion = CurrentSchemaVersion;
         StableId projectId;
         StableId flowDocumentId;
+        StoryFlowViewMode activeView = StoryFlowViewMode::Journey;
+        // `canvas` remains the Graph canvas for source compatibility with the
+        // accepted Gate 1-5 presentation code and schema-v1 migration.
         StoryFlowCanvasLayout canvas;
+        StoryFlowCanvasLayout journeyCanvas;
         std::vector<StoryFlowNodeLayout> nodes;
+        std::vector<StoryFlowJourneyCardLayout> journeyCards;
     };
+
+    [[nodiscard]] const char* StoryFlowViewModeName(
+        StoryFlowViewMode mode) noexcept;
 
     [[nodiscard]] std::string ResolveStoryFlowLayoutPath(
         const std::string& projectRoot,
