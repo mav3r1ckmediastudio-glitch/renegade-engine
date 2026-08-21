@@ -404,7 +404,7 @@ int main()
         ShouldActivateStoryFlowNodeClick(
             FlowNodeKind::Level, false, 0.10f, 1.0f) ||
         ShouldActivateStoryFlowNodeClick(
-            FlowNodeKind::Level, true, 0.50f, 1.0f))
+            FlowNodeKind::Level, true, 0.65f, 1.0f))
     {
         return Fail(temporary.path,
             "double-click activation policy did not preserve Level/Screen boundaries");

@@ -11,7 +11,7 @@ namespace renegade::bridge
         ScreenEditor,
     };
 
-    inline constexpr float StoryFlowDoubleClickSeconds = 0.35f;
+    inline constexpr float StoryFlowDoubleClickSeconds = 0.50f;
     inline constexpr float StoryFlowDoubleClickDistance = 8.0f;
 
     [[nodiscard]] bool IsStoryFlowNodeActivatable(FlowNodeKind kind) noexcept;
