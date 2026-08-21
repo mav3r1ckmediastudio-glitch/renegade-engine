@@ -28,6 +28,35 @@ namespace
         }
     }
 
+    void DumpFailure(
+        const char* label,
+        const StoryFlowNewLevelResult& result)
+    {
+        std::cerr
+            << label
+            << ": succeeded=" << (result.succeeded ? "true" : "false")
+            << " code=" << StoryFlowLevelCreateCodeName(result.code)
+            << " message=\"" << result.message << "\""
+            << " level_node_id=\"" << result.levelNodeId << "\""
+            << " scene_document_id=\"" << result.sceneDocumentId << "\""
+            << " transaction_success="
+            << (result.transaction.success ? "true" : "false")
+            << " transaction_committed="
+            << (result.transaction.committed ? "true" : "false")
+            << " transaction_stage="
+            << static_cast<int>(result.transaction.stage)
+            << " transaction_document_index="
+            << result.transaction.documentIndex
+            << " transaction_code=\"" << result.transaction.code << "\""
+            << " transaction_message=\"" << result.transaction.message << "\""
+            << " rolled_back="
+            << (result.transaction.rolledBack ? "true" : "false")
+            << " recovery_required="
+            << (result.transaction.recoveryRequired ? "true" : "false")
+            << " event_count=" << result.transaction.events.size()
+            << '\n';
+    }
+
     struct TemporaryDirectory
     {
         fs::path path;
@@ -122,6 +151,11 @@ namespace
 
         StoryFlowLevelLifecycleService service;
         const StoryFlowNewLevelResult result = service.CreateNewLevel(request);
+        if (!result.succeeded ||
+            result.code != StoryFlowLevelCreateCode::Success)
+        {
+            DumpFailure("GATE4A_CREATE_RESULT", result);
+        }
 
         Check(result.succeeded &&
                 result.code == StoryFlowLevelCreateCode::Success,
@@ -228,6 +262,13 @@ namespace
 
         StoryFlowLevelLifecycleService service;
         const StoryFlowNewLevelResult result = service.CreateNewLevel(request);
+        if (result.succeeded ||
+            result.code != StoryFlowLevelCreateCode::TransactionFailed ||
+            !result.transaction.rolledBack ||
+            result.transaction.recoveryRequired)
+        {
+            DumpFailure("GATE4A_ROLLBACK_RESULT", result);
+        }
 
         Check(!result.succeeded &&
                 result.code == StoryFlowLevelCreateCode::TransactionFailed,
