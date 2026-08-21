@@ -97,6 +97,38 @@ namespace renegade::bridge
             return true;
         }
 
+        // Refresh metadata for the already-authoritative project without
+        // entering the staged project-switch lifecycle. This is required when
+        // a governed service transactionally updates the active descriptor
+        // while its currently loaded Scene remains authoritative.
+        bool RefreshCurrentProject()
+        {
+            if (hasPendingProject_)
+            {
+                pendingError_ =
+                    "Could not refresh the active project while another project is pending.";
+                return false;
+            }
+            if (!HasProject())
+            {
+                pendingError_ =
+                    "Could not refresh project metadata without an active project.";
+                return false;
+            }
+
+            const std::string descriptor = CurrentProject().descriptorPath;
+            if (!ProjectService::OpenProject(descriptor))
+            {
+                pendingError_ = ProjectService::LastError();
+                pendingWarning_ = ProjectService::LastWarning();
+                return false;
+            }
+
+            pendingError_.clear();
+            pendingWarning_.clear();
+            return true;
+        }
+
         void DiscardPendingProject() noexcept
         {
             pendingProject_ = {};

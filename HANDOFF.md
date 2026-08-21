@@ -1,17 +1,59 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-20
+**Date:** 2026-08-21
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`02df129f96c860dd3a7d6b6e065c928bef0f8907`
-(`hub: expose Exit Renegade action (#65)`).
+`a79955fee8481cd65f617c4bd2d20602f2a3d63d`
+(`Story Flow Gate 4: final owner-accepted exact-tree checkpoint (#78)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow PR #66
+## Active work — Story Flow Gate 5 recovery PR #84
+
+PR #84 is Draft on branch `fix/story-flow-project-home-recovery`.
+
+The first owner Release artifact at synthetic merge commit
+`d184f5478fecb4f1bf6a041fed858d88a522d5cd` is rejected. New and scene-first
+projects opened in the Level Editor rather than Story Flow, and the package
+omitted the Gate 5 owner-audit document.
+
+Root cause: after project-home migration,
+`StoryFlowStudioIntegration` called the staged project-switch
+`StudioProjectService::OpenProject()` API. That left `CurrentProject()` on the
+old scene-first metadata, replayed migration and returned before Story Flow
+activation. Gate 4 itself remains accepted; its controlled Story Flow -> Level
+Editor -> Story Flow lifecycle is a required regression.
+
+The first corrective Windows CI checkpoint exposed a second product defect:
+`StoryFlowProjectHomeService` retained the project descriptor's read handle
+while its transaction attempted to replace that file. Windows rejected the
+commit and rollback with a sharing violation. The service now closes and
+verifies that handle before beginning the descriptor transaction.
+
+Owner Release evidence then exposed a Gate 3/4/5 UI-layering defect that the
+service-only tests missed: the opaque full-screen Graph workspace rendered in
+front of the Level and Screen lifecycle controls. PR #84 must keep the workspace
+behind those controls after every GUI update, and the owner must visibly confirm
+both lifecycle rows before acceptance.
+
+The recovery worktree adds:
+
+- an authoritative active-project metadata refresh seam;
+- idempotent recognition of an already-migrated on-disk descriptor when the
+  active snapshot is stale;
+- a dedicated New/Open/Recent project-home regression test;
+- packaged `Docs/STORY_FLOW_GATE5_OWNER_TEST.md` and a corrected
+  `README-FIRST.txt`;
+- updated owner acceptance covering project home, Screen lifecycle and the
+  Gate 4 Level regression.
+
+No merge is authorized. GitHub CI Debug/Release and owner testing of the exact
+corrected Release artifact are still required.
+
+## Historical programme context — Story Flow PR #66
 
 PR #66:
 `Story Flow Gate 1: shared foundation for Journey + Graph views`

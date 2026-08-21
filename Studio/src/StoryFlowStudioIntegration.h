@@ -5,22 +5,29 @@
 #include "renegade/bridge/StoryFlowLayoutService.h"
 #include "renegade/bridge/StoryFlowLevelLifecycleService.h"
 #include "renegade/bridge/StoryFlowLevelReferenceService.h"
+#include "renegade/bridge/StoryFlowProjectHomeService.h"
+#include "renegade/bridge/StoryFlowScreenLifecycleService.h"
+#include "renegade/bridge/StoryFlowScreenReferenceService.h"
 #include "RenegadeStoryFlowLevelPanel.h"
+#include "RenegadeStoryFlowScreenPanel.h"
+#include "StoryFlowScreenEditorHandoff.h"
 #include "RenegadeStudioChrome.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cctype>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <system_error>
 #include <utility>
 
 namespace renegade::studio
 {
-    // Gate 4 lifecycle coordinator. Semantic Flow stays in the EngineBridge
-    // authoring session while this adapter owns first-class workspace switches,
-    // governed Level mutations and the explicit return path to Story Flow.
+    // Story Flow lifecycle coordinator. Semantic Flow stays in the EngineBridge
+    // authoring session while this adapter owns first-class Studio content
+    // lifecycle actions and workspace boundaries. Gate 5 adds governed Screen
+    // creation/resolution without constructing Gate 8's visual Screen Editor.
     class StoryFlowStudioIntegration final
     {
     public:
@@ -40,6 +47,28 @@ namespace renegade::studio
             desiredWorkspace_ = Workspace::LevelEditor;
         }
 
+        void OnScreenEditorOpen(
+            std::function<void(const StoryFlowScreenEditorHandoff&)> callback)
+        {
+            screenEditorOpen_ = std::move(callback);
+        }
+
+        [[nodiscard]] bool HasScreenEditorHandoff() const noexcept
+        {
+            return screenEditorHandoff_.ready;
+        }
+
+        [[nodiscard]] const StoryFlowScreenEditorHandoff&
+        ScreenEditorHandoff() const noexcept
+        {
+            return screenEditorHandoff_;
+        }
+
+        void ClearScreenEditorHandoff() noexcept
+        {
+            screenEditorHandoff_ = {};
+        }
+
         template <typename Application, typename LevelEditor, typename StoryFlowPath, typename Session>
         void Tick(
             Application& application,
@@ -49,16 +78,17 @@ namespace renegade::studio
         {
             Attach(levelEditor, storyFlow);
             storyFlow.SyncCanvas(application.canvas);
-            levelPanel_.SetLayout(
-                std::max(1.0f, storyFlow.GetLogicalWidth()),
-                std::max(1.0f, storyFlow.GetLogicalHeight()));
+            const float storyWidth = std::max(1.0f, storyFlow.GetLogicalWidth());
+            const float storyHeight = std::max(1.0f, storyFlow.GetLogicalHeight());
+            levelPanel_.SetLayout(storyWidth, storyHeight);
+            screenPanel_.SetLayout(storyWidth, storyHeight);
             LayoutReturnButton(levelEditor);
 
             if (!session.Projects().HasProject())
             {
                 FlushLayout(true);
                 ResetActiveFlow(storyFlow);
-                SetLevelControlsActive(false, false);
+                SetContentControlsActive(false, false);
                 desiredWorkspace_ = Workspace::LevelEditor;
                 hubOwnedLastTick_ = true;
                 EnsureActive(application, levelEditor);
@@ -72,7 +102,7 @@ namespace renegade::studio
             {
                 FlushLayout(true);
                 storyFlow.SetWorkspaceActive(false);
-                SetLevelControlsActive(false, false);
+                SetContentControlsActive(false, false);
                 desiredWorkspace_ = Workspace::LevelEditor;
                 hubOwnedLastTick_ = true;
                 EnsureActive(application, levelEditor);
@@ -85,13 +115,71 @@ namespace renegade::studio
                 !project.startupFlow.empty();
             if (!hasStartupFlow)
             {
+                // Story Flow is the Renegade project home. Scene-first projects
+                // are legacy state to migrate, never a reason to route creators
+                // back into the Level Editor. Bootstrap a canonical Flow,
+                // adopt the existing startup scene as its first Level, update
+                // the descriptor transactionally, then refresh ProjectService.
+                bridge::StoryFlowProjectHomeService projectHome;
+                const auto ensured = projectHome.Ensure(project);
+                if (!ensured.succeeded)
+                {
+                    FlushLayout(true);
+                    ResetActiveFlow(storyFlow);
+                    storyFlow.SetWorkspaceActive(false);
+                    SetContentControlsActive(false, false);
+                    ReportSemanticFailure(
+                        "could not establish Story Flow project home: " +
+                        ensured.message);
+                    desiredWorkspace_ = Workspace::LevelEditor;
+                    hubOwnedLastTick_ = false;
+                    EnsureActive(application, levelEditor);
+                    return;
+                }
+
+                if (!session.Projects().RefreshCurrentProject())
+                {
+                    FlushLayout(true);
+                    ResetActiveFlow(storyFlow);
+                    storyFlow.SetWorkspaceActive(false);
+                    SetContentControlsActive(false, false);
+                    ReportSemanticFailure(
+                        "Story Flow project home was committed but the project "
+                        "descriptor could not be refreshed: " +
+                        session.Projects().LastError());
+                    desiredWorkspace_ = Workspace::LevelEditor;
+                    hubOwnedLastTick_ = false;
+                    EnsureActive(application, levelEditor);
+                    return;
+                }
+
+                const auto& refreshedProject =
+                    session.Projects().CurrentProject();
+                if (refreshedProject.startupFlowId != ensured.flowDocumentId ||
+                    refreshedProject.startupFlow != ensured.flowPathHint)
+                {
+                    FlushLayout(true);
+                    ResetActiveFlow(storyFlow);
+                    storyFlow.SetWorkspaceActive(false);
+                    SetContentControlsActive(false, false);
+                    ReportSemanticFailure(
+                        "Story Flow project home was committed but the active "
+                        "project did not adopt its stable Flow identity.");
+                    desiredWorkspace_ = Workspace::LevelEditor;
+                    hubOwnedLastTick_ = false;
+                    EnsureActive(application, levelEditor);
+                    return;
+                }
+
                 FlushLayout(true);
                 ResetActiveFlow(storyFlow);
-                storyFlow.SetWorkspaceActive(false);
-                SetLevelControlsActive(false, false);
-                desiredWorkspace_ = Workspace::LevelEditor;
+                desiredWorkspace_ = Workspace::StoryFlow;
                 hubOwnedLastTick_ = false;
-                EnsureActive(application, levelEditor);
+                wi::backlog::post(
+                    ensured.adoptedStartupScene
+                        ? "Renegade Story Flow: project home created; existing startup Level adopted."
+                        : "Renegade Story Flow: project home created.",
+                    wi::backlog::LogLevel::Default);
                 return;
             }
 
@@ -107,6 +195,7 @@ namespace renegade::studio
                 loadAttempted_ = false;
                 desiredWorkspace_ = Workspace::StoryFlow;
                 activeLevelNodeId_.clear();
+                screenEditorHandoff_ = {};
             }
             else if (hubOwnedLastTick_)
             {
@@ -120,7 +209,7 @@ namespace renegade::studio
                 if (!LoadCurrentFlow(project, storyFlow))
                 {
                     storyFlow.SetWorkspaceActive(false);
-                    SetLevelControlsActive(false, false);
+                    SetContentControlsActive(false, false);
                     desiredWorkspace_ = Workspace::LevelEditor;
                     EnsureActive(application, levelEditor);
                     return;
@@ -130,25 +219,26 @@ namespace renegade::studio
             if (!authoringSession_.IsLoaded() || !model_.IsLoaded())
             {
                 storyFlow.SetWorkspaceActive(false);
-                SetLevelControlsActive(false, false);
+                SetContentControlsActive(false, false);
                 desiredWorkspace_ = Workspace::LevelEditor;
                 EnsureActive(application, levelEditor);
                 return;
             }
 
             ProcessPendingLevelAction(levelEditor, storyFlow, session, project);
+            ProcessPendingScreenAction(storyFlow, project);
 
             if (desiredWorkspace_ == Workspace::LevelEditor)
             {
                 FlushLayout(true);
                 storyFlow.SetWorkspaceActive(false);
-                SetLevelControlsActive(false, !activeLevelNodeId_.empty());
+                SetContentControlsActive(false, !activeLevelNodeId_.empty());
                 EnsureActive(application, levelEditor);
                 return;
             }
 
             storyFlow.SetWorkspaceActive(true);
-            SetLevelControlsActive(true, false);
+            SetContentControlsActive(true, false);
             EnsureActive(application, storyFlow);
             FlushLayout(false);
         }
@@ -159,6 +249,13 @@ namespace renegade::studio
             None,
             AddNew,
             AddExisting,
+            Open,
+        };
+
+        enum class PendingScreenAction
+        {
+            None,
+            AddNew,
             Open,
         };
 
@@ -176,13 +273,17 @@ namespace renegade::studio
             storyFlow.OnSelectionChanged([this](const bridge::StableId& nodeId)
             {
                 bridge::StableId levelId;
+                bridge::StableId screenId;
                 if (model_.IsLoaded())
                 {
                     const auto* node = model_.FindNode(nodeId);
                     if (node && node->kind == bridge::FlowNodeKind::Level)
                         levelId = nodeId;
+                    else if (node && node->kind == bridge::FlowNodeKind::Screen)
+                        screenId = nodeId;
                 }
                 levelPanel_.SetSelectedLevelNode(std::move(levelId));
+                screenPanel_.SetSelectedScreenNode(std::move(screenId));
             });
 
             levelPanel_.Create();
@@ -214,6 +315,28 @@ namespace renegade::studio
                 pendingLevelAction_ = PendingLevelAction::Open;
             });
 
+            screenPanel_.Create();
+            screenPanel_.Attach(storyFlow.GetGUI());
+            screenPanel_.SetActive(false);
+            screenPanel_.OnAddNew([this](
+                const std::string& name,
+                const bridge::StoryFlowScreenTemplate screenTemplate)
+            {
+                pendingScreenName_ = name;
+                pendingScreenTemplate_ = screenTemplate;
+                pendingScreenAction_ = PendingScreenAction::AddNew;
+            });
+            screenPanel_.OnOpen([this](const bridge::StableId& nodeId)
+            {
+                pendingScreenNodeId_ = nodeId;
+                pendingScreenAction_ = PendingScreenAction::Open;
+            });
+
+            // The Story Flow workspace is an opaque full-screen widget.
+            // Wicked renders GUI registrations back-to-front, so finalize the
+            // order only after both lifecycle panels have attached.
+            storyFlow.PlaceWorkspaceBehindLifecycleControls();
+
             returnToStoryFlowButton_.Create("Return to Story Flow");
             returnToStoryFlowButton_.SetText("< STORY FLOW");
             returnToStoryFlowButton_.SetTooltip(
@@ -243,11 +366,12 @@ namespace renegade::studio
             returnToStoryFlowButton_.SetSize(XMFLOAT2(132.0f, 30.0f));
         }
 
-        void SetLevelControlsActive(
+        void SetContentControlsActive(
             const bool storyFlowActive,
             const bool levelEditorActive)
         {
             levelPanel_.SetActive(storyFlowActive);
+            screenPanel_.SetActive(storyFlowActive);
             returnToStoryFlowButton_.SetVisible(levelEditorActive);
             returnToStoryFlowButton_.SetEnabled(levelEditorActive);
         }
@@ -270,7 +394,9 @@ namespace renegade::studio
             return value;
         }
 
-        static std::string SafeLevelFileStem(std::string name)
+        static std::string SafeFileStem(
+            std::string name,
+            const char* fallback)
         {
             name = Trim(std::move(name));
             std::string result;
@@ -289,7 +415,7 @@ namespace renegade::studio
                 }
             }
             while (!result.empty() && result.back() == '-') result.pop_back();
-            if (result.empty()) result = "Level";
+            if (result.empty()) result = fallback;
             return result;
         }
 
@@ -320,7 +446,7 @@ namespace renegade::studio
                 request.flow = authoringSession_.Document();
                 request.levelName = levelName;
                 request.scenePathHint = "Content/Scenes/" +
-                    SafeLevelFileStem(levelName) + ".wiscene";
+                    SafeFileStem(levelName, "Level") + ".wiscene";
 
                 bridge::StoryFlowLevelLifecycleService service;
                 const auto result = service.CreateNewLevel(request);
@@ -329,7 +455,7 @@ namespace renegade::studio
                     ReportSemanticFailure("Add New Level failed: " + result.message);
                     return;
                 }
-                if (!ReloadAfterLevelMutation(project, storyFlow, result.levelNodeId))
+                if (!ReloadAfterContentMutation(project, storyFlow, result.levelNodeId))
                     return;
                 wi::backlog::post(
                     "Renegade Story Flow: created governed Level '" + levelName +
@@ -368,7 +494,7 @@ namespace renegade::studio
                     ReportSemanticFailure("Add Existing Level failed: " + result.message);
                     return;
                 }
-                if (!ReloadAfterLevelMutation(project, storyFlow, result.levelNodeId))
+                if (!ReloadAfterContentMutation(project, storyFlow, result.levelNodeId))
                     return;
                 wi::backlog::post(
                     "Renegade Story Flow: adopted governed Level '" + levelName +
@@ -418,8 +544,92 @@ namespace renegade::studio
             }
         }
 
+        template <typename StoryFlowPath, typename Project>
+        void ProcessPendingScreenAction(
+            StoryFlowPath& storyFlow,
+            const Project& project)
+        {
+            const PendingScreenAction action = pendingScreenAction_;
+            if (action == PendingScreenAction::None) return;
+            pendingScreenAction_ = PendingScreenAction::None;
+
+            if (action == PendingScreenAction::AddNew)
+            {
+                const std::string screenName = Trim(pendingScreenName_);
+                if (screenName.empty())
+                {
+                    ReportSemanticFailure("Add Screen requires a Screen name.");
+                    return;
+                }
+
+                bridge::StoryFlowNewScreenRequest request;
+                request.projectRoot = project.rootPath;
+                request.projectId = project.projectId;
+                request.flowPath = authoringSession_.FilePath();
+                request.flow = authoringSession_.Document();
+                request.screenName = screenName;
+                request.screenPathHint = "Content/Screens/" +
+                    SafeFileStem(screenName, "Screen") + ".renegade-screen";
+                request.screenTemplate = pendingScreenTemplate_;
+
+                bridge::StoryFlowScreenLifecycleService service;
+                const auto result = service.CreateNewScreen(request);
+                if (!result.succeeded)
+                {
+                    ReportSemanticFailure("Add Screen failed: " + result.message);
+                    return;
+                }
+                if (!ReloadAfterContentMutation(project, storyFlow, result.screenNodeId))
+                    return;
+                wi::backlog::post(
+                    "Renegade Story Flow: created governed " +
+                    std::string(bridge::StoryFlowScreenTemplateName(pendingScreenTemplate_)) +
+                    " Screen '" + screenName + "' -> " + result.screenPathHint,
+                    wi::backlog::LogLevel::Default);
+                return;
+            }
+
+            if (action == PendingScreenAction::Open)
+            {
+                bridge::StoryFlowScreenReferenceService service;
+                const auto resolved = service.ResolveScreen(
+                    project.rootPath,
+                    project.projectId,
+                    authoringSession_.Document(),
+                    pendingScreenNodeId_);
+                if (!resolved.succeeded)
+                {
+                    ReportSemanticFailure("Open Screen failed: " + resolved.message);
+                    pendingScreenNodeId_.clear();
+                    return;
+                }
+
+                StoryFlowScreenEditorHandoff handoff;
+                std::string error;
+                if (!BuildStoryFlowScreenEditorHandoff(resolved, handoff, error))
+                {
+                    ReportSemanticFailure("Open Screen handoff failed: " + error);
+                    pendingScreenNodeId_.clear();
+                    return;
+                }
+
+                screenEditorHandoff_ = std::move(handoff);
+                pendingScreenNodeId_.clear();
+                if (screenEditorOpen_)
+                    screenEditorOpen_(screenEditorHandoff_);
+
+                wi::backlog::post(
+                    resolved.pathHintMoved
+                        ? "Renegade Story Flow: Screen Editor handoff resolved by stable identity after move; stored path hint is stale."
+                        : "Renegade Story Flow: Screen Editor handoff ready. Gate 8 will consume this boundary.",
+                    resolved.pathHintMoved
+                        ? wi::backlog::LogLevel::Warning
+                        : wi::backlog::LogLevel::Default);
+            }
+        }
+
         template <typename Project, typename StoryFlowPath>
-        bool ReloadAfterLevelMutation(
+        bool ReloadAfterContentMutation(
             const Project& project,
             StoryFlowPath& storyFlow,
             const bridge::StableId& createdNodeId)
@@ -429,13 +639,13 @@ namespace renegade::studio
                     authoringSession_.FilePath(), project.projectId, error))
             {
                 ReportSemanticFailure(
-                    "Level transaction committed but Story Flow reload failed: " + error);
+                    "Content transaction committed but Story Flow reload failed: " + error);
                 return false;
             }
             if (!model_.Load(authoringSession_.Document(), project.projectId, error))
             {
                 ReportSemanticFailure(
-                    "Level transaction committed but Story Flow model reload failed: " + error);
+                    "Content transaction committed but Story Flow model reload failed: " + error);
                 return false;
             }
             if (!bridge::ReconcileStoryFlowLayout(
@@ -447,9 +657,13 @@ namespace renegade::studio
             storyFlow.Bind(&authoringSession_, &model_, &layout_);
             layoutDirty_ = true;
             FlushLayout(true);
+
             const auto* node = model_.FindNode(createdNodeId);
             levelPanel_.SetSelectedLevelNode(
                 node && node->kind == bridge::FlowNodeKind::Level
+                    ? createdNodeId : bridge::StableId{});
+            screenPanel_.SetSelectedScreenNode(
+                node && node->kind == bridge::FlowNodeKind::Screen
                     ? createdNodeId : bridge::StableId{});
             return true;
         }
@@ -583,11 +797,15 @@ namespace renegade::studio
             trackedFlowId_.clear();
             activeLevelNodeId_.clear();
             pendingLevelNodeId_.clear();
+            pendingScreenNodeId_.clear();
             pendingExistingScenePath_.clear();
             pendingLevelAction_ = PendingLevelAction::None;
+            pendingScreenAction_ = PendingScreenAction::None;
+            screenEditorHandoff_ = {};
             loadAttempted_ = false;
             layoutDirty_ = false;
             levelPanel_.SetSelectedLevelNode({});
+            screenPanel_.SetSelectedScreenNode({});
         }
 
         void FlushLayout(const bool force)
@@ -630,17 +848,25 @@ namespace renegade::studio
         bridge::StoryFlowAuthoringModel model_;
         bridge::StoryFlowLayoutDocument layout_;
         RenegadeStoryFlowLevelPanel levelPanel_;
+        RenegadeStoryFlowScreenPanel screenPanel_;
         RenegadeButton returnToStoryFlowButton_;
+        StoryFlowScreenEditorHandoff screenEditorHandoff_;
+        std::function<void(const StoryFlowScreenEditorHandoff&)> screenEditorOpen_;
         bridge::StableId trackedProjectId_;
         bridge::StableId trackedFlowId_;
         bridge::StableId activeLevelNodeId_;
         bridge::StableId pendingLevelNodeId_;
+        bridge::StableId pendingScreenNodeId_;
         std::string layoutPath_;
         std::string pendingLevelName_;
+        std::string pendingScreenName_;
         std::string pendingExistingScenePath_;
         std::chrono::steady_clock::time_point lastLayoutWrite_{};
         Workspace desiredWorkspace_ = Workspace::StoryFlow;
         PendingLevelAction pendingLevelAction_ = PendingLevelAction::None;
+        PendingScreenAction pendingScreenAction_ = PendingScreenAction::None;
+        bridge::StoryFlowScreenTemplate pendingScreenTemplate_ =
+            bridge::StoryFlowScreenTemplate::Title;
         bool attached_ = false;
         bool loadAttempted_ = false;
         bool layoutDirty_ = false;
