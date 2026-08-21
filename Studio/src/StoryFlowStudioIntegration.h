@@ -5,6 +5,7 @@
 #include "renegade/bridge/StoryFlowLayoutService.h"
 #include "renegade/bridge/StoryFlowLevelLifecycleService.h"
 #include "renegade/bridge/StoryFlowLevelReferenceService.h"
+#include "renegade/bridge/StoryFlowProjectHomeService.h"
 #include "renegade/bridge/StoryFlowScreenLifecycleService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 #include "RenegadeStoryFlowLevelPanel.h"
@@ -114,13 +115,54 @@ namespace renegade::studio
                 !project.startupFlow.empty();
             if (!hasStartupFlow)
             {
+                // Story Flow is the Renegade project home. Scene-first projects
+                // are legacy state to migrate, never a reason to route creators
+                // back into the Level Editor. Bootstrap a canonical Flow,
+                // adopt the existing startup scene as its first Level, update
+                // the descriptor transactionally, then refresh ProjectService.
+                bridge::StoryFlowProjectHomeService projectHome;
+                const auto ensured = projectHome.Ensure(project);
+                if (!ensured.succeeded)
+                {
+                    FlushLayout(true);
+                    ResetActiveFlow(storyFlow);
+                    storyFlow.SetWorkspaceActive(false);
+                    SetContentControlsActive(false, false);
+                    ReportSemanticFailure(
+                        "could not establish Story Flow project home: " +
+                        ensured.message);
+                    desiredWorkspace_ = Workspace::LevelEditor;
+                    hubOwnedLastTick_ = false;
+                    EnsureActive(application, levelEditor);
+                    return;
+                }
+
+                const std::string descriptorPath = project.descriptorPath;
+                if (!session.Projects().OpenProject(descriptorPath))
+                {
+                    FlushLayout(true);
+                    ResetActiveFlow(storyFlow);
+                    storyFlow.SetWorkspaceActive(false);
+                    SetContentControlsActive(false, false);
+                    ReportSemanticFailure(
+                        "Story Flow project home was committed but the project "
+                        "descriptor could not be refreshed: " +
+                        session.Projects().LastError());
+                    desiredWorkspace_ = Workspace::LevelEditor;
+                    hubOwnedLastTick_ = false;
+                    EnsureActive(application, levelEditor);
+                    return;
+                }
+
                 FlushLayout(true);
                 ResetActiveFlow(storyFlow);
-                storyFlow.SetWorkspaceActive(false);
-                SetContentControlsActive(false, false);
-                desiredWorkspace_ = Workspace::LevelEditor;
+                desiredWorkspace_ = Workspace::StoryFlow;
                 hubOwnedLastTick_ = false;
-                EnsureActive(application, levelEditor);
+                wi::backlog::post(
+                    ensured.adoptedStartupScene
+                        ? "Renegade Story Flow: project home created; existing startup Level adopted."
+                        : "Renegade Story Flow: project home created.",
+                    wi::backlog::LogLevel::Default);
                 return;
             }
 
@@ -517,7 +559,6 @@ namespace renegade::studio
                 }
                 if (!ReloadAfterContentMutation(project, storyFlow, result.screenNodeId))
                     return;
-
                 wi::backlog::post(
                     "Renegade Story Flow: created governed " +
                     std::string(bridge::StoryFlowScreenTemplateName(pendingScreenTemplate_)) +
