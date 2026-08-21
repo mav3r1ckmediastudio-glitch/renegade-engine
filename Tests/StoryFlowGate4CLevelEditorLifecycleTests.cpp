@@ -101,6 +101,18 @@ int main()
     StoryFlowLevelReferenceService references;
     const auto resolved = references.ResolveLevel(
         root.generic_u8string(), projectId, authoring.Document(), levelId);
+    if (!resolved.succeeded)
+    {
+        std::cerr
+            << "GATE4C_RESOLVE_RESULT: code="
+            << StoryFlowLevelReferenceCodeName(resolved.code)
+            << " message=\"" << resolved.message << "\""
+            << " scene_document_id=\"" << resolved.sceneDocumentId << "\""
+            << " requested_path_hint=\"" << resolved.requestedPathHint << "\""
+            << " resolved_path=\"" << resolved.resolvedPath << "\""
+            << " resolved_path_hint=\"" << resolved.resolvedPathHint << "\""
+            << '\n';
+    }
     Check(resolved.succeeded, "selected Level did not resolve");
 
     SceneService scenes;
@@ -108,7 +120,15 @@ int main()
     CommandService commands;
     ProjectService projects;
     SceneDocumentService documents(scenes, selection, commands, projects);
-    Check(documents.Open(resolved.resolvedPath),
+    const bool opened = documents.Open(resolved.resolvedPath);
+    if (!opened)
+    {
+        std::cerr
+            << "GATE4C_OPEN_RESULT: resolved_path=\""
+            << resolved.resolvedPath << "\" warning=\""
+            << documents.LastWarning() << "\"\n";
+    }
+    Check(opened,
         "resolved Level did not open through governed Scene document service");
     Check(scenes.CurrentPath() == resolved.resolvedPath,
         "Level Editor document path did not adopt resolved WISCENE");
