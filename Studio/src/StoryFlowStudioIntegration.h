@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
 #include "renegade/bridge/StoryFlowAuthoringSession.h"
+#include "renegade/bridge/StoryFlowInteractionPolicy.h"
 #include "renegade/bridge/StoryFlowLayoutService.h"
 #include "renegade/bridge/StoryFlowLevelLifecycleService.h"
 #include "renegade/bridge/StoryFlowLevelReferenceService.h"
@@ -26,8 +27,9 @@ namespace renegade::studio
 {
     // Story Flow lifecycle coordinator. Semantic Flow stays in the EngineBridge
     // authoring session while this adapter owns first-class Studio content
-    // lifecycle actions and workspace boundaries. Gate 5 adds governed Screen
-    // creation/resolution without constructing Gate 8's visual Screen Editor.
+    // lifecycle actions and workspace boundaries. Gate 6 adds shared
+    // Journey/Graph activation and creation focus without constructing Gate 8's
+    // visual Screen Editor.
     class StoryFlowStudioIntegration final
     {
     public:
@@ -284,6 +286,24 @@ namespace renegade::studio
                 }
                 levelPanel_.SetSelectedLevelNode(std::move(levelId));
                 screenPanel_.SetSelectedScreenNode(std::move(screenId));
+            });
+            storyFlow.OnNodeActivated([this](const bridge::StableId& nodeId)
+            {
+                if (!model_.IsLoaded()) return;
+                const auto* node = model_.FindNode(nodeId);
+                if (!node) return;
+                const auto target =
+                    bridge::StoryFlowActivationTargetForKind(node->kind);
+                if (target == bridge::StoryFlowActivationTarget::LevelEditor)
+                {
+                    pendingLevelNodeId_ = nodeId;
+                    pendingLevelAction_ = PendingLevelAction::Open;
+                }
+                else if (target == bridge::StoryFlowActivationTarget::ScreenEditor)
+                {
+                    pendingScreenNodeId_ = nodeId;
+                    pendingScreenAction_ = PendingScreenAction::Open;
+                }
             });
 
             levelPanel_.Create();
@@ -655,6 +675,7 @@ namespace renegade::studio
                     model_, project.projectId, project.startupFlowId);
             }
             storyFlow.Bind(&authoringSession_, &model_, &layout_);
+            storyFlow.SelectAndFocusNode(createdNodeId);
             layoutDirty_ = true;
             FlushLayout(true);
 
@@ -779,7 +800,7 @@ namespace renegade::studio
             if (layoutDirty_) FlushLayout(true);
 
             wi::backlog::post(
-                "Renegade Story Flow: editable Graph session ready for " +
+                "Renegade Story Flow: synchronized Journey/Graph session ready for " +
                     resolvedFlowPath,
                 wi::backlog::LogLevel::Default);
             return true;

@@ -216,6 +216,25 @@ read-only settings location degrades to a session-only preference rather than
 an error. Grid visibility is the first; camera speed and editor layout are still
 session-only and should adopt this route rather than inventing a second one.
 
+### Story Flow authoring projections
+
+`StoryFlowAuthoringSession` and `StoryFlowAuthoringModel` remain the one
+authoritative semantic editor boundary. Graph View and Journey View consume that
+same model, selection and history. Neither view owns a second node/route format.
+
+`StoryFlowJourneyModel` is a deterministic read-only projection. It follows the
+first ordered exit from Game Start for the main reel, emits additional ordered
+exits as subordinate tracks, represents semantic nodes exactly once across
+merges/loops and keeps unreachable content visible on detached tracks. The
+separate `StoryFlowLayoutDocument` stores Graph positions plus Journey pan/zoom,
+active view and card offsets. Schema-v1 Graph layouts migrate to schema v2 with
+Journey as the default; editor layout data never changes Runtime traversal.
+
+Level/Screen activation reuses their governed lifecycle boundaries. The
+workspace recognizes a bounded second click on the same card/node and the
+Studio integration dispatches it to the existing Level Editor or Screen Editor
+handoff. Game Start and terminal destinations are not editor-activatable.
+
 ### Runtime screen and action boundary
 
 `ScreenService` owns the serialized Renegade `runtime-screen` document above

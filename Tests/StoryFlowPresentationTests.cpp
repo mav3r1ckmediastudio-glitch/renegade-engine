@@ -1,9 +1,12 @@
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
+#include "renegade/bridge/StoryFlowInteractionPolicy.h"
+#include "renegade/bridge/StoryFlowJourneyModel.h"
 #include "renegade/bridge/StoryFlowLayoutService.h"
 
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -37,6 +40,16 @@ namespace
         "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     constexpr const char* StaleNodeId =
         "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    constexpr const char* ScreenNodeId =
+        "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    constexpr const char* ScreenDocumentId =
+        "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    constexpr const char* RouteBranchId =
+        "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    constexpr const char* RouteScreenId =
+        "12121212-1212-4212-8212-121212121212";
+    constexpr const char* RouteCycleId =
+        "13131313-1313-4313-8313-131313131313";
 
     struct TemporaryDirectory
     {
@@ -84,6 +97,41 @@ namespace
                 {}, 0, {}},
         };
         return document;
+    }
+
+    FlowDocument MakeJourneyFlow()
+    {
+        FlowDocument document = MakeFlow();
+        document.nodes.push_back({
+            ScreenNodeId, FlowNodeKind::Screen, "Options Screen", {}, {},
+            ScreenDocumentId, "Content/Screens/Options.renegade-screen"});
+        document.routes = {
+            {RouteStartId, GameStartId, GameStartOutcome, LevelOneId,
+                "default", 0, {}},
+            {RouteOneId, LevelOneId, "continue", LevelTwoId,
+                "from-level-one", 0, {}},
+            {RouteBranchId, LevelOneId, "options", ScreenNodeId,
+                {}, 1, {}},
+            {RouteCycleId, LevelTwoId, "retry", LevelOneId,
+                "from-level-two", 0, {}},
+            {RouteScreenId, ScreenNodeId, "back", CompleteId,
+                {}, 0, {}},
+        };
+        return document;
+    }
+
+    std::vector<std::string> JourneySignature(
+        const StoryFlowJourneyModel& journey)
+    {
+        std::vector<std::string> signature;
+        for (const auto& card : journey.Cards())
+        {
+            signature.push_back(
+                card.nodeId + ":" + std::to_string(card.trackIndex) + ":" +
+                std::to_string(card.sequenceIndex) + ":" +
+                std::to_string(card.columnIndex));
+        }
+        return signature;
     }
 
     std::unordered_map<StableId, std::pair<float, float>> LayoutPositions(
@@ -138,6 +186,21 @@ int main()
         BuildDeterministicStoryFlowLayout(model, ProjectId, FlowDocumentId);
     if (firstLayout.nodes.size() != model.Nodes().size())
         return Fail(temporary.path, "default layout omitted Flow nodes");
+    if (firstLayout.schemaVersion != StoryFlowLayoutDocument::CurrentSchemaVersion ||
+        firstLayout.activeView != StoryFlowViewMode::Journey ||
+        firstLayout.journeyCards.size() != model.Nodes().size())
+    {
+        return Fail(temporary.path,
+            "default layout did not establish Journey as the primary view");
+    }
+    StoryFlowLayoutDocument splitPresentation = firstLayout;
+    splitPresentation.journeyCards.pop_back();
+    if (ValidateStoryFlowLayout(
+            splitPresentation, ProjectId, FlowDocumentId, error))
+    {
+        return Fail(temporary.path,
+            "layout accepted divergent Graph/Journey semantic node references");
+    }
 
     FlowDocument reordered = MakeFlow();
     std::reverse(reordered.nodes.begin(), reordered.nodes.end());
@@ -174,7 +237,54 @@ int main()
         return Fail(temporary.path, "layout did not round-trip");
     }
 
+    reopened.activeView = StoryFlowViewMode::Graph;
+    reopened.journeyCanvas.panX = 41.0f;
+    reopened.journeyCanvas.panY = -19.0f;
+    reopened.journeyCanvas.zoom = 1.4f;
+    reopened.journeyCards.front().offsetX = 23.0f;
+    reopened.journeyCards.front().offsetY = -7.0f;
+    if (!WriteStoryFlowLayout(layoutPath, reopened, error))
+        return Fail(temporary.path, "Journey layout state could not be written");
+    StoryFlowLayoutDocument reopenedJourney;
+    if (!ReadStoryFlowLayout(
+            layoutPath, ProjectId, FlowDocumentId, reopenedJourney, error) ||
+        reopenedJourney.activeView != StoryFlowViewMode::Graph ||
+        reopenedJourney.journeyCanvas.panX != 41.0f ||
+        reopenedJourney.journeyCanvas.panY != -19.0f ||
+        reopenedJourney.journeyCanvas.zoom != 1.4f ||
+        reopenedJourney.journeyCards.front().offsetX != 23.0f ||
+        reopenedJourney.journeyCards.front().offsetY != -7.0f)
+    {
+        return Fail(temporary.path,
+            "Journey view/canvas/card presentation state did not round-trip");
+    }
+
+    const fs::path schemaOnePath = temporary.path / "schema-one.renegade-flow-layout";
+    {
+        std::ofstream legacy(schemaOnePath, std::ios::binary | std::ios::trunc);
+        legacy << "{\"format\":\"renegade-story-flow-layout\","
+            "\"schema_version\":1,\"project_id\":\"" << ProjectId <<
+            "\",\"flow_document_id\":\"" << FlowDocumentId <<
+            "\",\"canvas\":{\"pan_x\":9,\"pan_y\":-4,\"zoom\":1.2},"
+            "\"nodes\":[{\"node_id\":\"" << GameStartId <<
+            "\",\"x\":17,\"y\":29}]}";
+    }
+    StoryFlowLayoutDocument migrated;
+    if (!ReadStoryFlowLayout(
+            schemaOnePath.generic_u8string(), ProjectId, FlowDocumentId,
+            migrated, error) ||
+        migrated.schemaVersion != StoryFlowLayoutDocument::CurrentSchemaVersion ||
+        migrated.activeView != StoryFlowViewMode::Journey ||
+        migrated.canvas.panX != 9.0f || migrated.canvas.panY != -4.0f ||
+        migrated.nodes.size() != 1 || migrated.journeyCards.size() != 1 ||
+        migrated.journeyCards.front().nodeId != GameStartId)
+    {
+        return Fail(temporary.path,
+            "schema-v1 Graph layout did not migrate losslessly to Journey layout state");
+    }
+
     reopened.nodes.push_back({StaleNodeId, 1200.0f, 900.0f});
+    reopened.journeyCards.push_back({StaleNodeId, 15.0f, -12.0f});
     reopened.canvas.panX = 17.0f;
     reopened.canvas.panY = -31.0f;
     reopened.canvas.zoom = 1.25f;
@@ -242,6 +352,74 @@ int main()
         diagnosticModel.FindNode(LevelTwoId)->reachableFromStart)
     {
         return Fail(temporary.path, "unreachable node diagnostic was not exposed");
+    }
+
+    FlowDocument journeyFlow = MakeJourneyFlow();
+    if (!ValidateFlowDocument(journeyFlow, ProjectId, error))
+        return Fail(temporary.path, "valid branching/cyclic Journey fixture was rejected");
+    StoryFlowAuthoringModel journeyAuthoringModel;
+    if (!journeyAuthoringModel.Load(journeyFlow, ProjectId, error))
+        return Fail(temporary.path, "Journey authoring model did not load");
+    StoryFlowJourneyModel journey;
+    if (!journey.Build(journeyAuthoringModel, error) ||
+        journey.Cards().size() != journeyFlow.nodes.size() ||
+        journey.Exits().size() != journeyFlow.routes.size() ||
+        journey.Tracks().size() != 2 ||
+        !journey.Tracks().front().mainTrack ||
+        journey.FindCard(GameStartId) == nullptr ||
+        journey.FindCard(GameStartId)->trackIndex != 0 ||
+        journey.FindCard(LevelOneId) == nullptr ||
+        journey.FindCard(LevelOneId)->trackIndex != 0 ||
+        journey.FindCard(LevelTwoId) == nullptr ||
+        journey.FindCard(LevelTwoId)->trackIndex != 0 ||
+        journey.FindCard(ScreenNodeId) == nullptr ||
+        journey.FindCard(ScreenNodeId)->trackIndex != 1 ||
+        journey.FindCard(ScreenNodeId)->columnIndex != 2 ||
+        journey.FindCard(CompleteId) == nullptr ||
+        journey.FindCard(CompleteId)->trackIndex != 1 ||
+        journey.FindCard(CompleteId)->columnIndex != 3)
+    {
+        return Fail(temporary.path,
+            "Journey projection did not derive deterministic main/alternate tracks");
+    }
+
+    std::reverse(journeyFlow.nodes.begin(), journeyFlow.nodes.end());
+    std::reverse(journeyFlow.routes.begin(), journeyFlow.routes.end());
+    StoryFlowAuthoringModel reorderedJourneyAuthoringModel;
+    StoryFlowJourneyModel reorderedJourney;
+    if (!reorderedJourneyAuthoringModel.Load(journeyFlow, ProjectId, error) ||
+        !reorderedJourney.Build(reorderedJourneyAuthoringModel, error) ||
+        JourneySignature(reorderedJourney) != JourneySignature(journey))
+    {
+        return Fail(temporary.path,
+            "Journey projection depended on serialized node/route order");
+    }
+
+    if (!ShouldActivateStoryFlowNodeClick(
+            FlowNodeKind::Level, true, 0.20f, 2.0f) ||
+        !ShouldActivateStoryFlowNodeClick(
+            FlowNodeKind::Screen, true, 0.35f, 8.0f) ||
+        ShouldActivateStoryFlowNodeClick(
+            FlowNodeKind::CompleteGame, true, 0.10f, 1.0f) ||
+        ShouldActivateStoryFlowNodeClick(
+            FlowNodeKind::Level, false, 0.10f, 1.0f) ||
+        ShouldActivateStoryFlowNodeClick(
+            FlowNodeKind::Level, true, 0.65f, 1.0f))
+    {
+        return Fail(temporary.path,
+            "double-click activation policy did not preserve Level/Screen boundaries");
+    }
+    if (StoryFlowActivationTargetForKind(FlowNodeKind::Level) !=
+            StoryFlowActivationTarget::LevelEditor ||
+        StoryFlowActivationTargetForKind(FlowNodeKind::Screen) !=
+            StoryFlowActivationTarget::ScreenEditor ||
+        StoryFlowActivationTargetForKind(FlowNodeKind::GameStart) !=
+            StoryFlowActivationTarget::None ||
+        StoryFlowActivationTargetForKind(FlowNodeKind::Quit) !=
+            StoryFlowActivationTarget::None)
+    {
+        return Fail(temporary.path,
+            "node activation did not dispatch to the accepted Level/Screen boundary");
     }
 
     std::cout << "RenegadeStoryFlowPresentationTests: PASS\n";

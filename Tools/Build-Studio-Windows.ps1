@@ -151,6 +151,23 @@ try {
             throw "Story Flow Gate 5 owner-audit instructions were not packaged."
         }
 
+        $storyFlowGate6OwnerAudit = Join-Path `
+            $repositoryRoot `
+            "docs\STORY_FLOW_GATE6_OWNER_TEST.md"
+        if (-not (Test-Path $storyFlowGate6OwnerAudit -PathType Leaf)) {
+            throw "Story Flow Gate 6 owner-audit instructions are missing."
+        }
+        $packagedStoryFlowGate6OwnerAudit = Join-Path `
+            $ownerDocsRoot `
+            "STORY_FLOW_GATE6_OWNER_TEST.md"
+        Copy-Item `
+            -Path $storyFlowGate6OwnerAudit `
+            -Destination $packagedStoryFlowGate6OwnerAudit `
+            -Force
+        if (-not (Test-Path $packagedStoryFlowGate6OwnerAudit -PathType Leaf)) {
+            throw "Story Flow Gate 6 owner-audit instructions were not packaged."
+        }
+
         # Gate 5 owner builds consume the exact governed inputs emitted beside
         # the compiled Studio, including pinned Wicked licence/notice files.
         # Copy that resolved set over the source package placeholders so the
