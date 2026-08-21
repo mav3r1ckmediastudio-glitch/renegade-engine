@@ -2,6 +2,7 @@
 #include "renegade/bridge/DependencyService.h"
 
 #include "renegade/bridge/AssetRegistryService.h"
+#include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 
@@ -24,9 +25,12 @@ namespace
 
     constexpr const char* ProjectFormat = "renegade-project";
     constexpr const char* DefaultStartupScene = "Content/Scenes/Main.wiscene";
+    constexpr const char* DefaultStartupFlow =
+        "Content/StoryFlow/Main.renegade-flow";
 
-    constexpr std::array<const char*, 35> DefaultProjectDirectories = {
+    constexpr std::array<const char*, 36> DefaultProjectDirectories = {
         "Content/Scenes",
+        "Content/StoryFlow",
         "Content/Models",
         "Content/Prefabs",
         "Content/Materials",
@@ -561,6 +565,111 @@ namespace renegade::bridge
         }
     }
 
+    bool ProjectService::CreateStoryFlowProject(
+        const std::string& parentDirectory,
+        const std::string& projectName)
+    {
+        lastError_.clear();
+        lastWarning_.clear();
+
+        if (!IsValidProjectName(projectName))
+        {
+            lastError_ =
+                "Project names cannot be empty or contain unsafe filename or project-file characters.";
+            return false;
+        }
+        if (parentDirectory.empty() ||
+            !fs::is_directory(fs::u8path(parentDirectory)))
+        {
+            lastError_ = "Choose an existing parent folder for the project.";
+            return false;
+        }
+
+        try
+        {
+            const fs::path root =
+                fs::absolute(fs::u8path(parentDirectory) / fs::u8path(projectName))
+                    .lexically_normal();
+            if (fs::exists(root) && !fs::is_empty(root))
+            {
+                lastError_ =
+                    "A non-empty project folder already exists: " +
+                    root.generic_u8string();
+                return false;
+            }
+
+            std::string directoryError;
+            if (!EnsureDefaultProjectDirectories(root, directoryError))
+            {
+                lastError_ = std::move(directoryError);
+                return false;
+            }
+
+            ProjectMetadata metadata;
+            metadata.formatVersion = CurrentFormatVersion;
+            metadata.projectId = GenerateStableId();
+            metadata.name = projectName;
+            metadata.rootPath = root.generic_u8string();
+            metadata.descriptorPath =
+                (root / fs::u8path(projectName + ".renegade"))
+                    .generic_u8string();
+            metadata.startupScene.clear();
+            metadata.startupFlow = DefaultStartupFlow;
+
+            FlowDocument flow;
+            flow.envelope = CreateDocumentEnvelope(
+                metadata.projectId,
+                StoryFlowDocumentType,
+                DefaultStartupFlow,
+                "renegade-story-flow-project-home-v1");
+            metadata.startupFlowId = flow.envelope.documentId;
+
+            FlowNode start;
+            start.id = GenerateStableId();
+            start.kind = FlowNodeKind::GameStart;
+            start.name = "Game Start";
+            flow.startNodeId = start.id;
+            flow.nodes.push_back(std::move(start));
+
+            std::string flowError;
+            const fs::path flowPath = root / fs::u8path(DefaultStartupFlow);
+            if (!WriteFlowDocument(
+                    flowPath.generic_u8string(), flow, flowError))
+            {
+                lastError_ = "Could not create the project Story Flow: " +
+                    flowError;
+                return false;
+            }
+
+            if (!WriteProject(metadata))
+            {
+                return false;
+            }
+
+            std::string registryWarning;
+            std::string registryError;
+            if (!EnsureProjectAssetRegistry(
+                    root, metadata.projectId, registryWarning, registryError))
+            {
+                lastError_ = std::move(registryError);
+                return false;
+            }
+            AppendWarning(lastWarning_, std::move(registryWarning));
+
+            currentProject_ = metadata;
+            hasProject_ = true;
+            AddRecent(metadata);
+            return true;
+        }
+        catch (const std::exception& exception)
+        {
+            lastError_ =
+                std::string("Could not create the Story Flow project: ") +
+                exception.what();
+            return false;
+        }
+    }
+
     bool ProjectService::OpenProject(const std::string& descriptorPath)
     {
         lastError_.clear();
@@ -690,6 +799,10 @@ namespace renegade::bridge
             return {};
         }
 
+        if (currentProject_.startupScene.empty())
+        {
+            return {};
+        }
         return (
             fs::u8path(currentProject_.rootPath) /
             fs::u8path(currentProject_.startupScene))
@@ -803,8 +916,9 @@ namespace renegade::bridge
             const bool hasStartupFlowHint = !startupFlow.empty();
             const bool hasStartupScreenId = !startupScreenId.empty();
             const bool hasStartupScreenHint = !startupScreen.empty();
+            const bool hasStartupScene = !startupScene.empty();
             if (!IsValidProjectName(name) ||
-                !IsSafeRelativePath(startupScene) ||
+                (hasStartupScene && !IsSafeRelativePath(startupScene)) ||
                 (hasStartupFlowId != hasStartupFlowHint) ||
                 (hasStartupFlowId && !IsValidStableId(startupFlowId)) ||
                 (hasStartupFlowHint && !IsSafeRelativePath(startupFlow)) ||
@@ -813,6 +927,11 @@ namespace renegade::bridge
                 (hasStartupScreenHint && !IsSafeRelativePath(startupScreen)))
             {
                 error = "The project descriptor contains invalid project metadata.";
+                return false;
+            }
+            if (!hasStartupScene && !hasStartupFlowId)
+            {
+                error = "The project descriptor does not declare a startup Scene or Story Flow.";
                 return false;
             }
 
@@ -879,13 +998,30 @@ namespace renegade::bridge
             }
 
             const fs::path root = descriptor.parent_path();
-            const fs::path startupPath = (root / startupScene).lexically_normal();
-            if (requireStartupScene && !fs::is_regular_file(startupPath))
+            const fs::path startupPath =
+                hasStartupScene ? (root / startupScene).lexically_normal() : fs::path{};
+            if (requireStartupScene && hasStartupScene &&
+                !fs::is_regular_file(startupPath))
             {
                 error =
                     "Project startup scene is missing: " +
                     startupPath.generic_u8string();
                 return false;
+            }
+            if (requireStartupScene && !hasStartupScene)
+            {
+                std::string resolvedFlow;
+                FlowDocument flow;
+                if (!ResolveStoryFlowDocumentPath(
+                        root.generic_u8string(), projectId,
+                        startupFlowId, startupFlow.generic_u8string(),
+                        resolvedFlow, error) ||
+                    !ReadFlowDocument(
+                        resolvedFlow, projectId, flow, error))
+                {
+                    error = "Project startup Story Flow is invalid: " + error;
+                    return false;
+                }
             }
             metadata.formatVersion = static_cast<std::uint32_t>(version);
             metadata.projectId = projectId;
@@ -992,8 +1128,10 @@ namespace renegade::bridge
             lastError_ = "Could not write a project without a valid stable project ID.";
             return false;
         }
+        const bool hasStartupScene = !metadata.startupScene.empty();
         if (!IsValidProjectName(metadata.name) ||
-            !IsSafeRelativePath(fs::u8path(metadata.startupScene)))
+            (hasStartupScene &&
+                !IsSafeRelativePath(fs::u8path(metadata.startupScene))))
         {
             lastError_ = "Could not write invalid project metadata.";
             return false;
@@ -1003,7 +1141,8 @@ namespace renegade::bridge
         const bool hasStartupFlowHint = !metadata.startupFlow.empty();
         const bool hasStartupScreenId = !metadata.startupScreenId.empty();
         const bool hasStartupScreenHint = !metadata.startupScreen.empty();
-        if (hasStartupFlowId != hasStartupFlowHint ||
+        if ((!hasStartupScene && !hasStartupFlowId) ||
+            hasStartupFlowId != hasStartupFlowHint ||
             (hasStartupFlowId && !IsValidStableId(metadata.startupFlowId)) ||
             (hasStartupFlowHint &&
                 !IsSafeRelativePath(fs::u8path(metadata.startupFlow))) ||

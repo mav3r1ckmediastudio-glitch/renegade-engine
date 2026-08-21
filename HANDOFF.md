@@ -5,15 +5,46 @@
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`c133221b63c744f737ec09da1fa2800158ae22ea`
-(`Story Flow Gate 5 recovery: make Story Flow the project home (#84)`).
+`24186b2510fad6aa231020225e8d712a90aa69e5`
+(`Story Flow Gate 6: Journey View MVP (#85)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow Gate 6 closeout
+## Active work — Story Flow Gate 7 project-home lifecycle
 
-Branch: `feature/story-flow-gate6-journey-view`.
+Branch: `feature/story-flow-gate7-project-home`.
+
+Gate 6/PR #85 is merged and owner-accepted. The owner confirmed all functional
+Journey tests, including node creation and Level double-click activation. Weak
+selection, connection-direction and completion feedback remains explicitly
+owned by Gate 9 rather than reopening Gate 6.
+
+Gate 7 now completes the Story Flow project-home transition. Its locked
+implementation contract is
+`docs/STORY_FLOW_GATE7_PROJECT_HOME_LIFECYCLE.md`.
+
+The implementation in progress establishes:
+
+- an explicit Story Flow-native project constructor;
+- canonical Flow plus permanent Game Start before descriptor adoption;
+- no generated or declared placeholder `Main.wiscene` for new projects;
+- backward-compatible descriptor validation requiring either a Scene root or a
+  complete Flow root;
+- a staged Flow-validation boundary that preserves the previous project when a
+  candidate is invalid and clears the previous Scene only after native adoption;
+- Runtime entry at Game Start without a loaded Scene;
+- dependency extraction with no invented Scene root;
+- Project Hub reporting of the actual Flow project home;
+- legacy scene-first migration unchanged.
+
+Focused Gate 7 lifecycle tests and Windows Debug/Release CI are required before
+the packaged Release owner audit in `docs/STORY_FLOW_GATE7_OWNER_TEST.md`.
+
+Do not merge automatically. The exact CI artifact must pass the owner test and
+the owner must make the normal merge decision.
+
+## Gate 6 accepted evidence
 
 Gate 5/PR #84 is merged and owner-accepted. New/Open projects enter the
 dedicated Story Flow render path, governed Level and Screen lifecycle controls
@@ -58,8 +89,7 @@ failure. The original owner-test instruction also incorrectly attempted to add
 a second Game Start route; it now extends the seeded
 `Game Start -> Main Level` journey from Main Level.
 
-Gate 6 implementation and owner acceptance are complete. PR #85 still requires
-documentation-only exact-head CI and the owner's normal merge decision.
+Gate 6 implementation, owner acceptance and PR #85 merge are complete.
 
 Acceptance is locked in `docs/STORY_FLOW_GATE6_JOURNEY_VIEW_MVP.md`.
 
@@ -230,12 +260,10 @@ It must establish:
 ## Remaining Story Flow programme
 
 - **Gates 1-5:** accepted and merged through PR #84.
-- **Gate 6 (closeout):** Journey View MVP implementation and exact Release
-  owner acceptance passed; documentation-only exact-head CI remains before PR
-  #85 can be offered for merge.
-- **Gate 7:** New Project/project-home lifecycle — Hub -> Story Flow by default,
-  startup Flow + permanent Game Start, remove arbitrary blank startup Scene
-  requirement safely.
+- **Gate 6:** accepted and merged through PR #85.
+- **Gate 7 (active):** New Project/project-home lifecycle — Hub -> Story Flow by
+  default, startup Flow + permanent Game Start, and no arbitrary blank startup
+  Scene requirement.
 - **Gate 8:** Screen Editor MVP.
 - **Gate 9:** large/nonlinear Journey UX.
 - **Gate 10:** Runtime/persistence/build/standalone parity closeout.
