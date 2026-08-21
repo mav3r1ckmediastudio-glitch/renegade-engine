@@ -38,16 +38,19 @@ namespace
         }
     };
 
-    bool WriteBlankWiscene(const fs::path& path)
+    bool WriteProofWiscene(const fs::path& path)
     {
         std::error_code error;
         fs::create_directories(path.parent_path(), error);
         if (error) return false;
 
         wi::scene::Scene scene;
+        // Match the owner-accepted Gate 4B WISCENE proof fixture. A compressed,
+        // entity-free archive is not the Studio starter-scene contract and can
+        // be rejected by the authoritative Wicked scene-open validation path.
+        scene.Entity_CreateTransform("Story Flow Project Home Proof");
         wi::Archive archive(path.generic_u8string(), false, false);
         if (!archive.IsOpen()) return false;
-        archive.SetCompressionEnabled(true);
         scene.Serialize(archive);
         const bool saved = archive.SaveFile(path.generic_u8string());
         archive = wi::Archive();
@@ -137,6 +140,17 @@ namespace
 
         StoryFlowProjectHomeService homes;
         const auto migrated = homes.Ensure(staleProject);
+        if (!migrated.succeeded)
+        {
+            std::cerr << "CREATE_PROJECT_HOME_RESULT: message=\""
+                      << migrated.message << "\" created_flow="
+                      << (migrated.createdFlow ? "true" : "false")
+                      << " adopted_startup_scene="
+                      << (migrated.adoptedStartupScene ? "true" : "false")
+                      << " updated_descriptor="
+                      << (migrated.updatedProjectDescriptor ? "true" : "false")
+                      << '\n';
+        }
         Check(migrated.createdFlow && migrated.adoptedStartupScene &&
                 migrated.updatedProjectDescriptor,
             "new project did not create, adopt and bind its Story Flow home");
@@ -206,6 +220,17 @@ namespace
         const ProjectMetadata staleProject = studio.CurrentProject();
         StoryFlowProjectHomeService homes;
         const auto migrated = homes.Ensure(staleProject);
+        if (!migrated.succeeded)
+        {
+            std::cerr << "OPEN_PROJECT_HOME_RESULT: message=\""
+                      << migrated.message << "\" created_flow="
+                      << (migrated.createdFlow ? "true" : "false")
+                      << " adopted_startup_scene="
+                      << (migrated.adoptedStartupScene ? "true" : "false")
+                      << " updated_descriptor="
+                      << (migrated.updatedProjectDescriptor ? "true" : "false")
+                      << '\n';
+        }
         Check(migrated.succeeded && migrated.adoptedStartupScene,
             "scene-first Open Project did not migrate to Story Flow");
         VerifyMigratedHome(staleProject, migrated);
@@ -229,7 +254,7 @@ int main()
             std::to_string(unique))
     };
     const fs::path templateScene = temporary.path / "Template.wiscene";
-    Check(WriteBlankWiscene(templateScene),
+    Check(WriteProofWiscene(templateScene),
         "could not create the project-home WISCENE fixture");
     if (fs::is_regular_file(templateScene))
     {
