@@ -121,11 +121,25 @@ int main()
     auto resolvedRuntime = runtime::ResolveRuntimeProject(
         runtime::ParseRuntimeLaunchArguments(
             {"--project", nativeA.descriptorPath}));
-    if (!resolvedRuntime.succeeded ||
-        !resolvedRuntime.startupScenePath.empty() ||
-        fs::u8path(resolvedRuntime.startupFlowPath) != nativeAFlow)
+    if (!resolvedRuntime.succeeded)
     {
-        return Fail("Runtime rejected the Flow-only project home");
+        return Fail((
+            "Runtime rejected the Flow-only project home: " +
+            resolvedRuntime.message).c_str());
+    }
+    if (!resolvedRuntime.startupScenePath.empty())
+    {
+        return Fail("Runtime invented a startup Scene for a Flow-only project");
+    }
+    std::error_code equivalentError;
+    if (!fs::equivalent(
+            fs::u8path(resolvedRuntime.startupFlowPath),
+            nativeAFlow,
+            equivalentError) ||
+        equivalentError)
+    {
+        return Fail(
+            "Runtime startup Flow did not resolve to the canonical project-home file");
     }
 
     bridge::SceneService scenes;
