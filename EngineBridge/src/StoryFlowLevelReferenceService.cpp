@@ -54,7 +54,15 @@ namespace
 
     bool IsInsideRoot(const fs::path& root, const fs::path& candidate)
     {
-        const fs::path relative = candidate.lexically_relative(root);
+        std::error_code rootError;
+        std::error_code candidateError;
+        const fs::path canonicalRoot = fs::weakly_canonical(root, rootError);
+        const fs::path canonicalCandidate =
+            fs::weakly_canonical(candidate, candidateError);
+        if (rootError || candidateError)
+            return false;
+        const fs::path relative =
+            canonicalCandidate.lexically_relative(canonicalRoot);
         return IsContainedRelative(relative);
     }
 
@@ -129,6 +137,12 @@ namespace
         if (pathError || resolved.filename().empty() || !IsInsideRoot(root, resolved))
         {
             error = "The selected path is not contained by the active project.";
+            return false;
+        }
+        resolved = fs::weakly_canonical(resolved, pathError);
+        if (pathError || resolved.filename().empty())
+        {
+            error = "The selected path could not be canonicalized inside the active project.";
             return false;
         }
         error.clear();
@@ -216,8 +230,7 @@ namespace renegade::bridge
 
             std::error_code pathError;
             const fs::path projectRoot =
-                fs::absolute(fs::u8path(request.projectRoot), pathError)
-                    .lexically_normal();
+                fs::weakly_canonical(fs::u8path(request.projectRoot), pathError);
             if (pathError || !fs::is_directory(projectRoot, pathError))
             {
                 return Failure(StoryFlowLevelReferenceCode::InvalidRequest,
@@ -574,12 +587,13 @@ namespace renegade::bridge
             return result;
         }
 
+        std::error_code rootError;
         std::error_code pathError;
-        const fs::path root = fs::absolute(fs::u8path(projectRoot), pathError)
-            .lexically_normal();
-        const fs::path path = fs::absolute(fs::u8path(resolved), pathError)
-            .lexically_normal();
-        if (pathError || !IsInsideRoot(root, path))
+        const fs::path root =
+            fs::weakly_canonical(fs::u8path(projectRoot), rootError);
+        const fs::path path =
+            fs::weakly_canonical(fs::u8path(resolved), pathError);
+        if (rootError || pathError || !IsInsideRoot(root, path))
         {
             result.message = "Resolved Level escaped the active project root.";
             return result;
