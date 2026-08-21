@@ -1,5 +1,6 @@
 #pragma once
 
+#include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 
 #include <string>
