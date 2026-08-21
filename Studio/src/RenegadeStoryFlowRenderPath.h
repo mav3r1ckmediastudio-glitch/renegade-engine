@@ -38,10 +38,6 @@ namespace renegade::studio
             workspace_.SetEnabled(false);
             GetGUI().AddWidget(&workspace_);
 
-            // The condition panel is deliberately hosted by the same native
-            // Story Flow render path and is registered after the Graph surface
-            // so it renders above the Inspector validation text it replaces
-            // while a route is selected.
             conditionEditor_.Create();
             conditionEditor_.SetVisible(false);
             conditionEditor_.SetEnabled(false);
@@ -144,6 +140,18 @@ namespace renegade::studio
         {
             EnsureLoaded();
             workspace_.OnLayoutChanged(std::move(callback));
+        }
+
+        void OnSelectionChanged(
+            std::function<void(const bridge::StableId&)> callback)
+        {
+            EnsureLoaded();
+            workspace_.OnSelectionChanged(std::move(callback));
+        }
+
+        [[nodiscard]] const bridge::StableId& SelectedNodeId() const noexcept
+        {
+            return workspace_.SelectedNodeId();
         }
 
         [[nodiscard]] bool IsWorkspaceActive() const noexcept
