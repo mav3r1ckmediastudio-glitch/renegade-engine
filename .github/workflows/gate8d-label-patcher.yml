@@ -1,0 +1,51 @@
+name: Gate 8D creator label patcher
+
+on:
+  push:
+    branches:
+      - feature/story-flow-gate8d-creator-controls
+    paths:
+      - .github/workflows/gate8d-label-patcher.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/story-flow-gate8d-creator-controls
+          fetch-depth: 0
+      - name: Make creator labels explicit
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path("Studio/src/RenegadeScreenEditorWorkspace.cpp")
+          text = path.read_text(encoding="utf-8")
+          replacements = [
+              ('constexpr float HierarchyRowsTop = HeaderHeight + 126.0f;',
+               'constexpr float HierarchyRowsTop = HeaderHeight + 160.0f;'),
+              ('addBackgroundButton_.SetText("+ BG");',
+               'addBackgroundButton_.SetText("+ BACKGROUND");'),
+          ]
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f"missing anchor: {old}")
+              text = text.replace(old, new, 1)
+
+          old_layout = '''        creator(addTextButton_, 54.0f, 0.0f);\n        creator(addButtonButton_, 64.0f, 0.0f);\n        creator(addImageButton_, 58.0f, 0.0f);\n        creator(addBackgroundButton_, 54.0f, 0.0f);\n        creatorX = 10.0f;\n        creator(duplicateButton_, 52.0f, 1.0f);\n        creator(deleteButton_, 60.0f, 1.0f);\n        creator(backButton_, 54.0f, 1.0f);\n        creator(frontButton_, 62.0f, 1.0f);\n'''
+          new_layout = '''        creator(addTextButton_, 112.0f, 0.0f);\n        creator(addButtonButton_, 112.0f, 0.0f);\n        creatorX = 10.0f;\n        creator(addImageButton_, 112.0f, 1.0f);\n        creator(addBackgroundButton_, 112.0f, 1.0f);\n        creatorX = 10.0f;\n        creator(duplicateButton_, 52.0f, 2.0f);\n        creator(deleteButton_, 60.0f, 2.0f);\n        creator(backButton_, 54.0f, 2.0f);\n        creator(frontButton_, 62.0f, 2.0f);\n'''
+          if old_layout not in text:
+              raise SystemExit("creator layout anchor missing")
+          path.write_text(text.replace(old_layout, new_layout, 1), encoding="utf-8")
+      - name: Commit creator label repair
+        shell: bash
+        run: |
+          git config user.name "Renegade Repair Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add Studio/src/RenegadeScreenEditorWorkspace.cpp
+          git diff --cached --check
+          git commit -m "Story Flow Gate 8D: make creator controls explicit"
+          git push origin HEAD:feature/story-flow-gate8d-creator-controls
