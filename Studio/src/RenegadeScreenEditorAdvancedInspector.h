@@ -30,7 +30,7 @@ namespace renegade::studio
             SetName("Renegade Screen advanced Inspector");
             SetShadowRadius(0.0f);
 
-            toggleButton_.Create("Renegade Screen advanced Inspector Toggle");
+            toggleButton_.Create("Screen Advanced Inspector Toggle");
             toggleButton_.SetText("ADVANCED");
             toggleButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -108,7 +108,7 @@ namespace renegade::studio
             {
                 const auto* widget = Selected();
                 if (!widget) return;
-                draftStyle_ = widget->style;
+                if (!draftStyleValid_) draftStyle_ = widget->style;
                 auto& value = draftStyle_.text.horizontalAlignment;
                 value = value == bridge::ScreenHorizontalAlignment::Left
                     ? bridge::ScreenHorizontalAlignment::Center
@@ -246,7 +246,7 @@ namespace renegade::studio
         {
             width_ = std::max(1.0f, width);
             height_ = std::max(1.0f, height);
-            panelWidth_ = std::min(390.0f, std::max(320.0f, width_ * 0.31f));
+            panelWidth_ = std::min(360.0f, width_);
             panelX_ = width_ - panelWidth_;
             panelY_ = 64.0f;
             panelHeight_ = std::max(1.0f, height_ - 108.0f);
@@ -1006,7 +1006,7 @@ namespace renegade::studio
         float height_ = 1.0f;
         float panelX_ = 0.0f;
         float panelY_ = 64.0f;
-        float panelWidth_ = 390.0f;
+        float panelWidth_ = 360.0f;
         float panelHeight_ = 1.0f;
         std::string status_;
 
