@@ -2,8 +2,12 @@
 
 #include "renegade/bridge/ScreenService.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace renegade::bridge
@@ -15,6 +19,16 @@ namespace renegade::bridge
         ScreenRect resolvedRect;
         bool visible = true;
         bool enabled = true;
+    };
+
+    struct ScreenWidgetCreatorEdit
+    {
+        std::string resourcePath;
+        std::string actionId;
+        StableId parentId;
+        ScreenLayoutMode layoutMode = ScreenLayoutMode::Absolute;
+        ScreenAnchors anchors;
+        ScreenWidgetStyle style;
     };
 
     // UI-independent Screen document mutation boundary. Gate 8C established
@@ -37,6 +51,73 @@ namespace renegade::bridge
             ScreenWidgetAuthoringEdit edit,
             std::string& error);
 
+        // Complete Gate 8D presentation/binding transaction. The existing 8C
+        // basic edit remains untouched; this additive path owns every remaining
+        // persistent schema-v2 property and commits through the same history.
+        [[nodiscard]] bool UpdateWidgetCreatorFields(
+            const StableId& widgetId,
+            ScreenWidgetCreatorEdit edit,
+            std::string& error)
+        {
+            if (!loaded_)
+            {
+                error = "Screen authoring session is not open.";
+                return false;
+            }
+
+            ScreenDocument candidate = Document();
+            const auto found = std::find_if(
+                candidate.widgets.begin(), candidate.widgets.end(),
+                [&widgetId](const ScreenWidget& widget)
+                {
+                    return widget.id == widgetId;
+                });
+            if (found == candidate.widgets.end())
+            {
+                error = "Screen widget does not exist: " + widgetId;
+                return false;
+            }
+            if (edit.parentId == widgetId)
+            {
+                error = "A Screen widget cannot parent itself.";
+                return false;
+            }
+
+            ScreenRect resolvedBefore;
+            if (!ResolveScreenWidgetRect(
+                    candidate, widgetId, resolvedBefore, error))
+            {
+                return false;
+            }
+
+            found->resourcePath = std::move(edit.resourcePath);
+            found->actionId = std::move(edit.actionId);
+            found->parentId = std::move(edit.parentId);
+            found->layoutMode = edit.layoutMode;
+            found->anchors = edit.anchors;
+            found->style = std::move(edit.style);
+
+            if (found->layoutMode == ScreenLayoutMode::Absolute)
+            {
+                ScreenRect parentRect{
+                    0.0f, 0.0f, candidate.designWidth, candidate.designHeight};
+                if (!found->parentId.empty() &&
+                    !ResolveScreenWidgetRect(
+                        candidate, found->parentId, parentRect, error))
+                {
+                    return false;
+                }
+                found->rect = {
+                    resolvedBefore.x - parentRect.x,
+                    resolvedBefore.y - parentRect.y,
+                    resolvedBefore.width,
+                    resolvedBefore.height,
+                };
+            }
+
+            return CommitMutation(std::move(candidate), error);
+        }
+
         // Gate 8D creator transactions. Every operation mutates a complete
         // candidate document, validates it, then enters the same bounded
         // Screen Undo/Redo history as Inspector edits.
@@ -49,6 +130,105 @@ namespace renegade::bridge
             const StableId& widgetId,
             StableId& duplicatedWidgetId,
             std::string& error);
+
+        // Reusable components are authored Screen subtrees, not a competing
+        // file format. This transaction duplicates one root plus descendants,
+        // remaps every parent link and gives every copied element a fresh ID.
+        [[nodiscard]] bool DuplicateWidgetTree(
+            const StableId& widgetId,
+            StableId& duplicatedRootId,
+            std::string& error)
+        {
+            duplicatedRootId.clear();
+            if (!loaded_)
+            {
+                error = "Screen authoring session is not open.";
+                return false;
+            }
+
+            ScreenDocument candidate = Document();
+            const auto root = std::find_if(
+                candidate.widgets.begin(), candidate.widgets.end(),
+                [&widgetId](const ScreenWidget& widget)
+                {
+                    return widget.id == widgetId;
+                });
+            if (root == candidate.widgets.end())
+            {
+                error = "Screen widget does not exist: " + widgetId;
+                return false;
+            }
+
+            std::unordered_set<StableId> subtree{widgetId};
+            bool expanded = true;
+            while (expanded)
+            {
+                expanded = false;
+                for (const auto& widget : candidate.widgets)
+                {
+                    if (!widget.parentId.empty() &&
+                        subtree.count(widget.parentId) != 0 &&
+                        subtree.insert(widget.id).second)
+                    {
+                        expanded = true;
+                    }
+                }
+            }
+            if (candidate.widgets.size() + subtree.size() > 256)
+            {
+                error = "Reusable component duplication would exceed the Screen element limit.";
+                return false;
+            }
+
+            std::unordered_map<StableId, StableId> remap;
+            remap.reserve(subtree.size());
+            for (const auto& widget : candidate.widgets)
+            {
+                if (subtree.count(widget.id) != 0)
+                    remap.emplace(widget.id, GenerateStableId());
+            }
+
+            std::vector<ScreenWidget> duplicates;
+            duplicates.reserve(subtree.size());
+            for (const auto& source : candidate.widgets)
+            {
+                const auto mapped = remap.find(source.id);
+                if (mapped == remap.end()) continue;
+                ScreenWidget duplicate = source;
+                duplicate.id = mapped->second;
+                if (source.id == widgetId)
+                    duplicate.name += " Copy";
+                const auto mappedParent = remap.find(source.parentId);
+                if (mappedParent != remap.end())
+                    duplicate.parentId = mappedParent->second;
+                duplicates.push_back(std::move(duplicate));
+            }
+            candidate.widgets.insert(
+                candidate.widgets.end(), duplicates.begin(), duplicates.end());
+
+            std::vector<StableId> newFocusOrder;
+            newFocusOrder.reserve(candidate.focusOrder.size() + subtree.size());
+            for (const auto& focusId : candidate.focusOrder)
+            {
+                newFocusOrder.push_back(focusId);
+                const auto mapped = remap.find(focusId);
+                if (mapped != remap.end())
+                    newFocusOrder.push_back(mapped->second);
+            }
+            candidate.focusOrder = std::move(newFocusOrder);
+
+            const auto copiedRoot = remap.find(widgetId);
+            if (copiedRoot == remap.end())
+            {
+                error = "Reusable component root could not be remapped.";
+                return false;
+            }
+            const StableId newRootId = copiedRoot->second;
+            if (!CommitMutation(std::move(candidate), error)) return false;
+            duplicatedRootId = newRootId;
+            return true;
+        }
+
         [[nodiscard]] bool DeleteWidget(
             const StableId& widgetId,
             std::string& error);
