@@ -32,6 +32,9 @@ The implementation establishes:
   retained;
 - deterministic `BuildScreenRenderItems` frame evidence for output ordering,
   state selection and geometry/typography scaling;
+- an explicit schema-v2 packaged LP03 visual fixture with distinct orange
+  focus, cyan hover, near-white press and non-zero rounded borders, plus a test
+  preventing regression to an incapable legacy proof fixture;
 - removal of Runtime's duplicated button layout record.
 
 Focused GNU C++17 syntax checks cover the shared renderer, Runtime integration

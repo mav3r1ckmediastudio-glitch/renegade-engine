@@ -1,6 +1,7 @@
 #include "renegade/screen/ScreenRenderer.h"
 
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -114,6 +115,25 @@ int main()
         return Fail("disabled state did not override pointer state exactly");
     if (items[0].interaction == screen::ScreenInteractionState::Disabled)
         return Fail("non-interactive image was incorrectly faded as disabled");
+
+    bridge::ScreenDocument packagedFixture;
+    const std::filesystem::path fixturePath =
+        std::filesystem::path(RENEGADE_SOURCE_DIR) /
+        "Runtime/fixtures/LP03/Valid Screen/Content/UI/Main.renegade-screen";
+    if (!bridge::ReadScreenDocument(
+            fixturePath.generic_u8string(),
+            "61111111-1111-4111-8111-111111111111",
+            packagedFixture,
+            error))
+        return Fail("packaged visual fixture is not a valid schema-v2 Screen");
+    if (packagedFixture.schemaVersion !=
+            bridge::ScreenDocument::CurrentSchemaVersion ||
+        packagedFixture.widgets.size() != 4 ||
+        packagedFixture.widgets[1].style.borderWidth <= 0.0f ||
+        packagedFixture.widgets[2].style.borderWidth <= 0.0f ||
+        packagedFixture.widgets[2].style.focused.background.red ==
+            packagedFixture.widgets[2].style.hover.background.red)
+        return Fail("packaged fixture does not visibly prove Gate 8B fidelity");
 
     std::cout << "PASS: Gate 8B shared Screen render contract\n";
     return 0;

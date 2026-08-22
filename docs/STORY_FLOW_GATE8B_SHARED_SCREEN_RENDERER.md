@@ -60,11 +60,19 @@ From the exact CI Release artifact:
 1. Extract `RenegadeRuntime-Release.zip`.
 2. Run `Run-LP03-Screen-Proof.cmd`.
 3. Confirm the title/background/buttons are visible and correctly layered.
-4. Confirm Play begins focused, pointer hover changes its authored state,
-   mouse press shows the pressed state and keyboard/gamepad focus uses the
-   focused state without an unexplained dimming overlay.
+4. Confirm the v2 proof styling is unmistakable: title and buttons have visible
+   rounded borders; keyboard focus is orange; pointer hover is cyan; held mouse
+   press is near-white. These states must not be hidden by an unexplained
+   dimming overlay.
 5. Confirm Play still enters the level and Quit still exits normally.
 6. Report PASS or the exact visual/behavioural mismatch.
 
 A visual or behavioural mismatch overrides green CI. Gate 8B is not complete
 until the exact Release head passes this inspection.
+
+The first PR #88 artifact incorrectly packaged the legacy schema-v1 LP03
+fixture. It proved Runtime launch/layering and showed hover, but its migrated
+defaults had zero-width borders and therefore could not visually prove the
+Gate 8B renderer. The corrected fixture is explicit schema v2 and the automated
+renderer test now rejects any future fixture that lacks visible border/state
+evidence.

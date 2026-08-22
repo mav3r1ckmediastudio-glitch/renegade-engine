@@ -474,6 +474,11 @@ target_compile_options(RenegadeScreenRendererTests
         "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
 )
 
+target_compile_definitions(RenegadeScreenRendererTests
+    PRIVATE
+        RENEGADE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 set_target_properties(RenegadeScreenRendererTests PROPERTIES
     FOLDER "Renegade"
 )
