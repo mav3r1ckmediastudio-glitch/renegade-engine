@@ -75,11 +75,13 @@ namespace renegade::studio
             workspace_.SetEnabled(open_);
             advancedInspector_.SetVisible(open_);
             advancedInspector_.SetEnabled(open_);
+            workspace_.SetInspectorSuppressed(open_ && advancedExpanded_);
         }
 
         void Stop() override
         {
             if (!loaded_) return;
+            workspace_.SetInspectorSuppressed(false);
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
             advancedInspector_.SetVisible(false);
@@ -97,6 +99,7 @@ namespace renegade::studio
         {
             EnsureLoaded();
             LayoutWorkspace();
+            SyncAdvancedInspectorMode();
             if (previewDirty_)
             {
                 previewDirty_ = false;
@@ -147,7 +150,9 @@ namespace renegade::studio
             session_ = std::move(candidate);
             projectRoot_ = projectRoot;
             open_ = true;
+            advancedExpanded_ = false;
             workspace_.Bind(&session_, &renderer_);
+            workspace_.SetInspectorSuppressed(false);
             advancedInspector_.Bind(
                 &session_, &workspace_, projectRoot_,
                 [this]() { previewDirty_ = true; });
@@ -174,6 +179,7 @@ namespace renegade::studio
             session_.Clear();
             projectRoot_.clear();
             advancedInspector_.Clear();
+            workspace_.SetInspectorSuppressed(false);
             workspace_.Clear();
             if (loaded_)
             {
@@ -184,6 +190,7 @@ namespace renegade::studio
             }
             previewDirty_ = false;
             open_ = false;
+            advancedExpanded_ = false;
         }
 
         void OnReturnRequested(std::function<void()> callback)
@@ -218,6 +225,30 @@ namespace renegade::studio
             renderer_.SetViewport(workspace_.PreviewBounds());
         }
 
+        void SyncAdvancedInspectorMode()
+        {
+            if (!open_)
+            {
+                advancedExpanded_ = false;
+                workspace_.SetInspectorSuppressed(false);
+                return;
+            }
+
+            // Keep an explicit render-path copy of the advanced toggle state so
+            // the accepted 8C workspace can be suppressed before Wicked updates
+            // either sibling widget. The advanced Inspector's only expansion
+            // transition is this header toggle, so both states stay in lockstep.
+            const XMFLOAT4 pointer = wi::input::GetPointer();
+            const float right = std::max(1.0f, GetLogicalWidth()) - 14.0f;
+            const float left = right - 108.0f;
+            const bool overToggle = pointer.x >= left && pointer.x < right &&
+                pointer.y >= 14.0f && pointer.y < 46.0f;
+            if (overToggle && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+                advancedExpanded_ = !advancedExpanded_;
+
+            workspace_.SetInspectorSuppressed(advancedExpanded_);
+        }
+
         [[nodiscard]] bool ReloadPreview(std::string& error)
         {
             if (!open_ || !session_.IsLoaded())
@@ -247,6 +278,7 @@ namespace renegade::studio
         bool loaded_ = false;
         bool open_ = false;
         bool previewDirty_ = false;
+        bool advancedExpanded_ = false;
         float lastWidth_ = -1.0f;
         float lastHeight_ = -1.0f;
     };
