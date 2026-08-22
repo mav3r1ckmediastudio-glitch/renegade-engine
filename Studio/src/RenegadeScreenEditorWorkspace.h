@@ -11,9 +11,9 @@
 
 namespace renegade::studio
 {
-    // Gate 8C's visible Screen authoring shell. It owns editor selection and
-    // controls only; document mutations stay in ScreenAuthoringSession and the
-    // central preview is always the shared Gate 8B ScreenRenderer.
+    // Native Screen authoring workspace. Gate 8C established selection,
+    // Inspector editing and shared Runtime preview; Gate 8D adds creator-level
+    // element transactions while keeping ScreenAuthoringSession authoritative.
     class RenegadeScreenEditorWorkspace final : public wi::gui::Widget
     {
     public:
@@ -58,6 +58,11 @@ namespace renegade::studio
         void RedoScreen();
         void ToggleVisible();
         void ToggleEnabled();
+        void CreateElement(bridge::ScreenWidgetKind kind, bool background);
+        void DuplicateSelectedWidget();
+        void DeleteSelectedWidget();
+        void MoveSelectedWidgetToBack();
+        void MoveSelectedWidgetToFront();
         void ReturnToStoryFlow();
         void RefreshAfterMutation(std::string status);
         void SetStatus(std::string status);
@@ -76,6 +81,14 @@ namespace renegade::studio
         RenegadeButton saveButton_;
         RenegadeButton undoButton_;
         RenegadeButton redoButton_;
+        RenegadeButton addTextButton_;
+        RenegadeButton addButtonButton_;
+        RenegadeButton addImageButton_;
+        RenegadeButton addBackgroundButton_;
+        RenegadeButton duplicateButton_;
+        RenegadeButton deleteButton_;
+        RenegadeButton backButton_;
+        RenegadeButton frontButton_;
         RenegadeButton applyButton_;
         RenegadeButton visibleButton_;
         RenegadeButton enabledButton_;
