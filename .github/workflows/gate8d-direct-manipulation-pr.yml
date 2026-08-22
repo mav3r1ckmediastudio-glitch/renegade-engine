@@ -1,0 +1,50 @@
+name: Gate 8D direct manipulation PR patch
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.event.pull_request.head.ref == 'wip/story-flow-gate8d-direct-manipulation' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Execute bounded patch and remove temporary runners
+        shell: bash
+        run: |
+          python3 - <<'RUNNER'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/gate8d-direct-manipulation-patch.yml').read_text(encoding='utf-8')
+          marker = "python3 - <<'PY'\n"
+          if marker not in workflow:
+              raise SystemExit('embedded Gate 8D patch script marker is missing')
+          block = workflow.split(marker, 1)[1]
+          end = "\n          PY\n"
+          if end not in block:
+              raise SystemExit('embedded Gate 8D patch script terminator is missing')
+          block = block.split(end, 1)[0]
+          block = textwrap.dedent(block)
+          exec(compile(block, 'gate8d-direct-manipulation-patch', 'exec'))
+          RUNNER
+
+          rm -f .github/gate8d-direct-trigger
+          rm -f .github/workflows/gate8d-direct-manipulation-pr.yml
+          rm -f .github/workflows/gate8d-direct-manipulation-patch.yml
+
+          git config user.name "renegade-gate8d-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Gate 8D: add direct Screen move and resize [gate8d-direct-patched]"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
