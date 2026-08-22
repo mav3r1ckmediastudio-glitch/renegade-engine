@@ -260,11 +260,22 @@ handoff. Game Start and terminal destinations are not editor-activatable.
 ### Runtime screen and action boundary
 
 `ScreenService` owns the serialized Renegade `runtime-screen` document above
-Wicked. The document carries a stable document envelope, design size, bounded
-widget records, stable action IDs and deterministic focus order. Image resources
-must resolve to existing files inside the owning project's `Content` tree.
-Malformed documents, duplicate IDs, unsafe paths, missing required controls,
-unknown actions and ambiguous stable-ID resolution fail closed.
+Wicked. Screen schema v2 carries a stable document envelope, explicit design
+size and fit/fill/stretch canvas policy, bounded widget records, parent/anchor
+layout, stable action IDs and deterministic focus order. It also serializes the
+complete editable appearance contract for the current Image/Text/Button slice:
+normal, hover, pressed, focused and disabled colours/state images, opacity,
+border/corner data, typography, wrapping and alignment. A font is never selected
+implicitly: every text-bearing widget identifies either the explicit
+`builtin:liberation-sans` resource or a project-contained `Content/.../*.ttf`.
+Schema-v1 runtime-proof Screens migrate in memory to schema v2 with their
+accepted appearance made explicit; subsequent writes are deterministic v2.
+
+Image, state-image and project-font resources must be safe paths inside the
+owning project's `Content` tree and are projected into dependency extraction.
+Malformed documents, duplicate IDs, cyclic/missing parents, unsafe paths,
+invalid anchors or appearance, missing required controls, unknown actions and
+ambiguous stable-ID resolution fail closed.
 
 Runtime presents the document on its existing `RenderPath3D`/`RenderPath2D`
 seam; it does not create a second application window or embed the stock Wicked
@@ -273,6 +284,15 @@ confirm/debounce and the `RuntimeActionRequest` evidence shape. Mouse, keyboard
 and gamepad-labelled requests enter the same `RuntimeActionDispatcher`.
 The stable `play` action enters the existing LP02 project flow loader, while
 `quit` requests normal application-owned Win32 shutdown.
+
+The Gate 8A presenter consumes authored state colours/images, font resource,
+font metrics, shadow, alignment, wrapping, opacity and corner radius. Canvas and
+font metrics use the same resolved transform, so the default 1280x720 design
+maps exactly to 1920x1080 at 1.5x. Border colour/width are already governed and
+persisted but remain a declared Gate 8B renderer item; the existing Wicked GUI
+presenter cannot draw that contract exactly. Gate 8B therefore replaces the
+remaining presentation seam with one Renegade-owned renderer shared by Runtime
+and the Screen Editor preview rather than duplicating editor-only visuals.
 
 Wicked `wiGUI` stores widgets in insertion order but renders that storage in
 reverse. Runtime therefore inserts the authored back-to-front widget document in

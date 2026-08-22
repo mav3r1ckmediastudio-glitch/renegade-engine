@@ -64,6 +64,20 @@ namespace
             document.widgets[2].id,
             document.widgets[3].id,
         };
+        for (auto& widget : document.widgets)
+        {
+            widget.style = MakeScreenWidgetStyleTemplate(
+                widget.kind, widget.rect.height);
+        }
+        document.widgets[1].style.text.fontResource =
+            "Content/UI/title.ttf";
+        document.widgets[2].style.focused.imageResourcePath =
+            "Content/UI/play-focused.png";
+        document.widgets[3].layoutMode = ScreenLayoutMode::Anchored;
+        document.widgets[3].anchors = {
+            0.5f, 0.0f, 0.5f, 0.0f,
+            -200.0f, 440.0f, 200.0f, 516.0f,
+        };
         return document;
     }
 
@@ -97,6 +111,12 @@ int main()
     {
         std::ofstream resource(background, std::ios::binary);
         resource << "LP03 deterministic resource fixture";
+    }
+    {
+        std::ofstream(root / "Content/UI/title.ttf", std::ios::binary)
+            << "Gate 8 governed font fixture";
+        std::ofstream(root / "Content/UI/play-focused.png", std::ios::binary)
+            << "Gate 8 state image fixture";
     }
 
     const StableId projectId = GenerateStableId();
@@ -167,12 +187,23 @@ int main()
     {
         return Fail(temporary.path, "valid screen did not serialize");
     }
+    const std::string serializedScreen = ReadAll(actualScreen);
+    if (serializedScreen.find("normal_background = #") != std::string::npos ||
+        serializedScreen.find("normal_background = 121B2AEB") ==
+            std::string::npos)
+    {
+        return Fail(temporary.path,
+            "Screen colours used Wicked's comment delimiter");
+    }
 
     RuntimeScreenDependencyDocument dependencyDocument;
     auto dependencyReader = MakeRuntimeScreenDependencyReader(projectId);
     if (!dependencyReader(actualScreen.generic_u8string(), dependencyDocument, error) ||
-        dependencyDocument.imagePaths.size() != 1 ||
-        dependencyDocument.imagePaths.front() != "Content/UI/background.png")
+        dependencyDocument.imagePaths.size() != 2 ||
+        dependencyDocument.imagePaths.front() != "Content/UI/background.png" ||
+        dependencyDocument.imagePaths[1] != "Content/UI/play-focused.png" ||
+        dependencyDocument.fontPaths.size() != 1 ||
+        dependencyDocument.fontPaths.front() != "Content/UI/title.ttf")
     {
         return Fail(temporary.path,
             "Runtime Screen dependency adapter did not retain Image resources");
@@ -187,7 +218,11 @@ int main()
         reloaded.envelope.documentId != documentId ||
         reloaded.widgets.size() != document.widgets.size() ||
         reloaded.focusOrder != document.focusOrder ||
-        reloaded.widgets[2].actionId != RuntimeScreenPlayAction)
+        reloaded.widgets[2].actionId != RuntimeScreenPlayAction ||
+        reloaded.schemaVersion != ScreenDocument::CurrentSchemaVersion ||
+        reloaded.widgets[1].style.text.fontResource != "Content/UI/title.ttf" ||
+        reloaded.widgets[2].style.focused.imageResourcePath !=
+            "Content/UI/play-focused.png")
     {
         return Fail(temporary.path, "screen reload was not structurally equivalent");
     }
@@ -201,6 +236,37 @@ int main()
         return Fail(temporary.path, "screen serialization was not deterministic");
     }
     fs::remove(secondScreen);
+
+    const fs::path legacyPath = root / "Content/UI/Legacy.renegade-screen";
+    const StableId legacyDocumentId = GenerateStableId();
+    const StableId legacyWidgetId = GenerateStableId();
+    {
+        std::ofstream legacy(legacyPath, std::ios::binary);
+        legacy
+            << "format = renegade-document\nversion = 1\n\n"
+            << "[document]\nid = " << legacyDocumentId
+            << "\nproject_id = " << projectId
+            << "\ntype = runtime-screen\npath_hint = Content/UI/Legacy.renegade-screen"
+            << "\ngenerator = Gate 8 legacy fixture\nmigrated_from = 0\n\n"
+            << "[screen]\ndesign_width = 1280\ndesign_height = 720"
+            << "\naction_count = 1\nwidget_count = 1\nfocus_count = 1\n\n"
+            << "[action_0]\nid = continue\n\n"
+            << "[widget_0]\nid = " << legacyWidgetId
+            << "\nkind = button\nname = Continue\nx = 440\ny = 330"
+            << "\nwidth = 400\nheight = 76\nvisible = true\nenabled = true"
+            << "\ntext = CONTINUE\nresource =\naction = continue\n\n"
+            << "[focus_0]\nwidget_id = " << legacyWidgetId << '\n';
+    }
+    ScreenDocument migratedLegacy;
+    if (!ReadScreenDocument(
+            legacyPath.generic_u8string(), projectId, migratedLegacy, error) ||
+        migratedLegacy.schemaVersion != ScreenDocument::CurrentSchemaVersion ||
+        migratedLegacy.migratedFromVersion != 1 ||
+        migratedLegacy.widgets[0].style.normal.background.red != 18 ||
+        migratedLegacy.widgets[0].style.text.fontResource != BuiltinScreenFont)
+    {
+        return Fail(temporary.path, "schema-v1 Screen did not migrate losslessly");
+    }
 
     const std::string previousTitle = document.widgets[1].text;
     document.widgets[1].text = "RENEGADE UPDATED";
@@ -295,6 +361,48 @@ int main()
     if (ValidateScreenDocument(invalid, projectId, error))
     {
         return Fail(temporary.path, "duplicate action identity was accepted");
+    }
+
+    invalid = document;
+    invalid.widgets[1].style.text.fontResource = "Content/UI/title.otf";
+    if (ValidateScreenDocument(invalid, projectId, error))
+    {
+        return Fail(temporary.path, "unsupported governed font type was accepted");
+    }
+
+    invalid = document;
+    invalid.widgets[3].anchors.maximumX = 0.25f;
+    if (ValidateScreenDocument(invalid, projectId, error))
+    {
+        return Fail(temporary.path, "inverted responsive anchors were accepted");
+    }
+
+    ScreenRect anchoredRect;
+    if (!ResolveScreenWidgetRect(
+            document, document.widgets[3].id, anchoredRect, error) ||
+        anchoredRect.x != 440.0f || anchoredRect.y != 440.0f ||
+        anchoredRect.width != 400.0f || anchoredRect.height != 76.0f)
+    {
+        return Fail(temporary.path, "anchored layout did not resolve deterministically");
+    }
+
+    ScreenCanvasTransform fullHd;
+    if (!ResolveScreenCanvasTransform(
+            document, 1920.0f, 1080.0f, fullHd, error) ||
+        fullHd.scaleX != 1.5f || fullHd.scaleY != 1.5f ||
+        fullHd.offsetX != 0.0f || fullHd.offsetY != 0.0f)
+    {
+        return Fail(temporary.path,
+            "1280x720 design canvas did not map exactly to 1920x1080");
+    }
+
+    ScreenCanvasTransform letterboxed;
+    if (!ResolveScreenCanvasTransform(
+            document, 1920.0f, 1200.0f, letterboxed, error) ||
+        letterboxed.scaleX != 1.5f || letterboxed.scaleY != 1.5f ||
+        letterboxed.offsetX != 0.0f || letterboxed.offsetY != 60.0f)
+    {
+        return Fail(temporary.path, "fit canvas policy did not letterbox deterministically");
     }
 
     invalid = document;
