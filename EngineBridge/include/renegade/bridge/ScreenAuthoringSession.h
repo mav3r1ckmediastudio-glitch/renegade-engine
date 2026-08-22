@@ -167,6 +167,145 @@ namespace renegade::bridge
             return CommitMutation(std::move(candidate), error);
         }
 
+        // Symbolic Screen action identity is authored here; Story Flow remains
+        // the sole authority that later routes those IDs to destinations.
+        [[nodiscard]] bool AddAction(
+            std::string actionId,
+            std::string& error)
+        {
+            if (!loaded_)
+            {
+                error = "Screen authoring session is not open.";
+                return false;
+            }
+            if (actionId.empty())
+            {
+                error = "A Screen action ID cannot be empty.";
+                return false;
+            }
+            ScreenDocument candidate = Document();
+            if (candidate.actions.size() >= 64)
+            {
+                error = "The Screen action limit has been reached.";
+                return false;
+            }
+            if (std::any_of(candidate.actions.begin(), candidate.actions.end(),
+                    [&actionId](const ScreenAction& action)
+                    {
+                        return action.id == actionId;
+                    }))
+            {
+                error = "Screen action already exists: " + actionId;
+                return false;
+            }
+            candidate.actions.push_back({std::move(actionId)});
+            return CommitMutation(std::move(candidate), error);
+        }
+
+        [[nodiscard]] bool RenameAction(
+            const std::string& actionId,
+            std::string replacementId,
+            std::string& error)
+        {
+            if (!loaded_)
+            {
+                error = "Screen authoring session is not open.";
+                return false;
+            }
+            if (replacementId.empty())
+            {
+                error = "A Screen action ID cannot be empty.";
+                return false;
+            }
+            ScreenDocument candidate = Document();
+            const auto found = std::find_if(
+                candidate.actions.begin(), candidate.actions.end(),
+                [&actionId](const ScreenAction& action)
+                {
+                    return action.id == actionId;
+                });
+            if (found == candidate.actions.end())
+            {
+                error = "Screen action does not exist: " + actionId;
+                return false;
+            }
+            if (replacementId != actionId &&
+                std::any_of(candidate.actions.begin(), candidate.actions.end(),
+                    [&replacementId](const ScreenAction& action)
+                    {
+                        return action.id == replacementId;
+                    }))
+            {
+                error = "Screen action already exists: " + replacementId;
+                return false;
+            }
+
+            found->id = replacementId;
+            for (auto& widget : candidate.widgets)
+            {
+                if (widget.kind == ScreenWidgetKind::Button &&
+                    widget.actionId == actionId)
+                {
+                    widget.actionId = replacementId;
+                }
+            }
+            return CommitMutation(std::move(candidate), error);
+        }
+
+        [[nodiscard]] bool DeleteAction(
+            const std::string& actionId,
+            std::string& error)
+        {
+            if (!loaded_)
+            {
+                error = "Screen authoring session is not open.";
+                return false;
+            }
+            ScreenDocument candidate = Document();
+            const auto found = std::find_if(
+                candidate.actions.begin(), candidate.actions.end(),
+                [&actionId](const ScreenAction& action)
+                {
+                    return action.id == actionId;
+                });
+            if (found == candidate.actions.end())
+            {
+                error = "Screen action does not exist: " + actionId;
+                return false;
+            }
+            if (candidate.actions.size() <= 1)
+            {
+                error = "A Screen must retain at least one action.";
+                return false;
+            }
+            if (std::any_of(candidate.widgets.begin(), candidate.widgets.end(),
+                    [&actionId](const ScreenWidget& widget)
+                    {
+                        return widget.kind == ScreenWidgetKind::Button &&
+                            widget.actionId == actionId;
+                    }))
+            {
+                error = "Screen action is still referenced by a Button: " + actionId;
+                return false;
+            }
+            candidate.actions.erase(found);
+            return CommitMutation(std::move(candidate), error);
+        }
+
+        [[nodiscard]] bool MoveButtonFocusEarlier(
+            const StableId& widgetId,
+            std::string& error)
+        {
+            return MoveButtonFocus(widgetId, -1, error);
+        }
+
+        [[nodiscard]] bool MoveButtonFocusLater(
+            const StableId& widgetId,
+            std::string& error)
+        {
+            return MoveButtonFocus(widgetId, 1, error);
+        }
+
         // Gate 8D creator transactions. Every operation mutates a complete
         // candidate document, validates it, then enters the same bounded
         // Screen Undo/Redo history as Inspector edits.
@@ -307,6 +446,52 @@ namespace renegade::bridge
         static constexpr std::size_t InvalidHistoryIndex =
             static_cast<std::size_t>(-1);
         static constexpr std::size_t MaximumHistoryEntries = 256;
+
+        [[nodiscard]] bool MoveButtonFocus(
+            const StableId& widgetId,
+            const int direction,
+            std::string& error)
+        {
+            if (!loaded_)
+            {
+                error = "Screen authoring session is not open.";
+                return false;
+            }
+            ScreenDocument candidate = Document();
+            const auto widget = std::find_if(
+                candidate.widgets.begin(), candidate.widgets.end(),
+                [&widgetId](const ScreenWidget& value)
+                {
+                    return value.id == widgetId;
+                });
+            if (widget == candidate.widgets.end() ||
+                widget->kind != ScreenWidgetKind::Button)
+            {
+                error = "Screen focus order can only move Button widgets.";
+                return false;
+            }
+            const auto focus = std::find(
+                candidate.focusOrder.begin(), candidate.focusOrder.end(), widgetId);
+            if (focus == candidate.focusOrder.end())
+            {
+                error = "The Button is missing from Screen focus order.";
+                return false;
+            }
+            const std::ptrdiff_t index = std::distance(
+                candidate.focusOrder.begin(), focus);
+            const std::ptrdiff_t target = index + direction;
+            if (target < 0 ||
+                target >= static_cast<std::ptrdiff_t>(candidate.focusOrder.size()))
+            {
+                error = direction < 0
+                    ? "The Button is already first in focus order."
+                    : "The Button is already last in focus order.";
+                return false;
+            }
+            std::swap(candidate.focusOrder[static_cast<std::size_t>(index)],
+                candidate.focusOrder[static_cast<std::size_t>(target)]);
+            return CommitMutation(std::move(candidate), error);
+        }
 
         [[nodiscard]] bool Adopt(
             ScreenDocument document,
