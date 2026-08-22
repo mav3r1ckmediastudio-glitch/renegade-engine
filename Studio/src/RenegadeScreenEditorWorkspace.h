@@ -24,7 +24,51 @@ namespace renegade::studio
             screen::ScreenRenderer* renderer);
         void Clear() noexcept;
         void SelectWidget(const bridge::StableId& widgetId);
-        void SetInspectorSuppressed(bool suppressed) noexcept;
+        void SetInspectorSuppressed(const bool suppressed) noexcept
+        {
+            if (inspectorSuppressed_ == suppressed) return;
+            inspectorSuppressed_ = suppressed;
+
+            for (wi::gui::Widget* widget : {
+                    static_cast<wi::gui::Widget*>(&nameInput_),
+                    static_cast<wi::gui::Widget*>(&textInput_),
+                    static_cast<wi::gui::Widget*>(&xInput_),
+                    static_cast<wi::gui::Widget*>(&yInput_),
+                    static_cast<wi::gui::Widget*>(&widthInput_),
+                    static_cast<wi::gui::Widget*>(&heightInput_),
+                    static_cast<wi::gui::Widget*>(&applyButton_),
+                    static_cast<wi::gui::Widget*>(&visibleButton_),
+                    static_cast<wi::gui::Widget*>(&enabledButton_)})
+            {
+                widget->SetEnabled(!suppressed);
+                if (suppressed) widget->SetVisible(false);
+            }
+
+            // The accepted 8C workspace still updates its controls each frame.
+            // Guard every basic-Inspector mutation callback as well as disabling
+            // the widgets so an advanced-panel click can never create a second
+            // mutation through a covered 8C control.
+            applyButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                if (!inspectorSuppressed_) ApplySelectedWidget();
+            });
+            visibleButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                if (!inspectorSuppressed_) ToggleVisible();
+            });
+            enabledButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                if (!inspectorSuppressed_) ToggleEnabled();
+            });
+            textInput_.OnInputAccepted([this](const wi::gui::EventArgs&)
+            {
+                if (!inspectorSuppressed_) ApplySelectedWidget();
+            });
+            heightInput_.OnInputAccepted([this](const wi::gui::EventArgs&)
+            {
+                if (!inspectorSuppressed_) ApplySelectedWidget();
+            });
+        }
 
         void OnDocumentChanged(std::function<void()> callback);
         void OnReturnRequested(std::function<void()> callback);
