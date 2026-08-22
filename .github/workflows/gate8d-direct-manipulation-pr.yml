@@ -24,7 +24,6 @@ jobs:
         run: |
           python3 - <<'RUNNER'
           from pathlib import Path
-          import textwrap
 
           workflow = Path('.github/workflows/gate8d-direct-manipulation-patch.yml').read_text(encoding='utf-8')
           marker = "python3 - <<'PY'\n"
@@ -35,11 +34,18 @@ jobs:
           if end not in block:
               raise SystemExit('embedded Gate 8D patch script terminator is missing')
           block = block.split(end, 1)[0]
-          block = textwrap.dedent(block)
+          lines = block.splitlines()
+          block = "\n".join(
+              line[10:] if line.startswith("          ") else line
+              for line in lines
+          ) + "\n"
           exec(compile(block, 'gate8d-direct-manipulation-patch', 'exec'))
           RUNNER
 
           rm -f .github/gate8d-direct-trigger
+          rm -f .github/gate8d-direct-pr-open-trigger
+          rm -f .github/gate8d-direct-pr-note
+          rm -f docs/GATE8D_DIRECT_MANIPULATION_WIP.md
           rm -f .github/workflows/gate8d-direct-manipulation-pr.yml
           rm -f .github/workflows/gate8d-direct-manipulation-patch.yml
 
