@@ -214,7 +214,9 @@ namespace
     std::string ColorText(const renegade::bridge::ScreenColor& color)
     {
         std::ostringstream text;
-        text << '#' << std::hex << std::uppercase << std::setfill('0')
+        // Wicked config treats '#' as a comment delimiter, so the canonical
+        // serialized form is eight unprefixed hexadecimal RGBA digits.
+        text << std::hex << std::uppercase << std::setfill('0')
             << std::setw(2) << static_cast<int>(color.red)
             << std::setw(2) << static_cast<int>(color.green)
             << std::setw(2) << static_cast<int>(color.blue)
@@ -226,12 +228,13 @@ namespace
         const std::string& value,
         renegade::bridge::ScreenColor& color)
     {
-        if (value.size() != 9 || value.front() != '#') return false;
+        const bool prefixed = value.size() == 9 && value.front() == '#';
+        if (!prefixed && value.size() != 8) return false;
         unsigned long packed = 0;
         try
         {
             std::size_t consumed = 0;
-            packed = std::stoul(value.substr(1), &consumed, 16);
+            packed = std::stoul(value.substr(prefixed ? 1 : 0), &consumed, 16);
             if (consumed != 8) return false;
         }
         catch (const std::exception&)

@@ -187,6 +187,14 @@ int main()
     {
         return Fail(temporary.path, "valid screen did not serialize");
     }
+    const std::string serializedScreen = ReadAll(actualScreen);
+    if (serializedScreen.find("normal_background = #") != std::string::npos ||
+        serializedScreen.find("normal_background = 121B2AEB") ==
+            std::string::npos)
+    {
+        return Fail(temporary.path,
+            "Screen colours used Wicked's comment delimiter");
+    }
 
     RuntimeScreenDependencyDocument dependencyDocument;
     auto dependencyReader = MakeRuntimeScreenDependencyReader(projectId);
