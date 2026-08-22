@@ -24,7 +24,6 @@ jobs:
                   raise SystemExit(f'{label}: expected 1 anchor, found {count}')
               return text.replace(old, new, 1)
 
-          # ScreenAuthoringSession: coalesce live pointer frames into one Undo.
           path = 'EngineBridge/include/renegade/bridge/ScreenAuthoringSession.h'
           text = read(path)
           text = once(text,
@@ -49,18 +48,11 @@ jobs:
               '            coalescedMutationCreated_ = false;\n'
               '        }\n',
               'session coalescing API')
-          text = text.replace(
-              '// The visible X/Y/W/H controls remain authoritative for anchor\n'
-              '                // offsets. Editing anchor min/max or changing parent therefore\n'
-              '                // does not make the element jump on the design canvas.',
-              '// Resolved preview geometry remains authoritative for anchor\n'
-              '                // offsets. Editing anchors or changing parent therefore does\n'
-              '                // not make the element jump on the design canvas.')
+          text = text.replace('The visible X/Y/W/H controls remain authoritative',
+                              'Resolved preview geometry remains authoritative')
           text = once(text,
-              '        std::string filePath_;\n'
-              '        bool loaded_ = false;\n',
-              '        std::string filePath_;\n'
-              '        bool loaded_ = false;\n'
+              '        std::string filePath_;\n        bool loaded_ = false;\n',
+              '        std::string filePath_;\n        bool loaded_ = false;\n'
               '        bool coalescedEditActive_ = false;\n'
               '        bool coalescedMutationCreated_ = false;\n',
               'session coalescing state')
@@ -69,59 +61,25 @@ jobs:
           path = 'EngineBridge/src/ScreenAuthoringSession.cpp'
           text = read(path)
           text = once(text,
-              '        filePath_.clear();\n'
-              '        loaded_ = false;\n'
-              '    }\n',
-              '        filePath_.clear();\n'
-              '        loaded_ = false;\n'
+              '        filePath_.clear();\n        loaded_ = false;\n    }\n',
+              '        filePath_.clear();\n        loaded_ = false;\n'
               '        coalescedEditActive_ = false;\n'
-              '        coalescedMutationCreated_ = false;\n'
-              '    }\n',
+              '        coalescedMutationCreated_ = false;\n    }\n',
               'clear coalescing state')
           text = once(text,
-              '        filePath_ = std::move(filePath);\n'
-              '        loaded_ = true;\n'
-              '        error.clear();\n'
-              '        return true;\n',
-              '        filePath_ = std::move(filePath);\n'
-              '        loaded_ = true;\n'
+              '        filePath_ = std::move(filePath);\n        loaded_ = true;\n'
+              '        error.clear();\n        return true;\n',
+              '        filePath_ = std::move(filePath);\n        loaded_ = true;\n'
               '        coalescedEditActive_ = false;\n'
               '        coalescedMutationCreated_ = false;\n'
-              '        error.clear();\n'
-              '        return true;\n',
+              '        error.clear();\n        return true;\n',
               'adopt coalescing state')
 
-          # Absolute child geometry must be stored parent-local, just like
-          # anchored offsets are derived from the resolved design-space rect.
-          old_geometry = '''        if (found->layoutMode == ScreenLayoutMode::Absolute)
-        {
-            found->rect = edit.resolvedRect;
-        }
-        else
-        {
-            ScreenRect parentRect{0.0f, 0.0f,
-                candidate.designWidth, candidate.designHeight};
-            if (!found->parentId.empty() &&
-                !ResolveScreenWidgetRect(
-                    candidate, found->parentId, parentRect, error))
-            {
-                return false;
-            }
-            const float relativeX = edit.resolvedRect.x - parentRect.x;
-            const float relativeY = edit.resolvedRect.y - parentRect.y;
-            found->anchors.offsetMinimumX = relativeX -
-                found->anchors.minimumX * parentRect.width;
-            found->anchors.offsetMinimumY = relativeY -
-                found->anchors.minimumY * parentRect.height;
-            found->anchors.offsetMaximumX =
-                relativeX + edit.resolvedRect.width -
-                found->anchors.maximumX * parentRect.width;
-            found->anchors.offsetMaximumY =
-                relativeY + edit.resolvedRect.height -
-                found->anchors.maximumY * parentRect.height;
-        }
-'''
-          new_geometry = '''        ScreenRect parentRect{0.0f, 0.0f,
+          geometry_pattern = re.compile(
+              r'        if \(found->layoutMode == ScreenLayoutMode::Absolute\)\n'
+              r'        \{.*?\n        \}\n\n'
+              r'        return CommitMutation\(std::move\(candidate\), error\);', re.S)
+          geometry_replacement = '''        ScreenRect parentRect{0.0f, 0.0f,
             candidate.designWidth, candidate.designHeight};
         if (!found->parentId.empty() &&
             !ResolveScreenWidgetRect(
@@ -134,11 +92,8 @@ jobs:
         if (found->layoutMode == ScreenLayoutMode::Absolute)
         {
             found->rect = {
-                relativeX,
-                relativeY,
-                edit.resolvedRect.width,
-                edit.resolvedRect.height,
-            };
+                relativeX, relativeY,
+                edit.resolvedRect.width, edit.resolvedRect.height};
         }
         else
         {
@@ -153,22 +108,18 @@ jobs:
                 relativeY + edit.resolvedRect.height -
                 found->anchors.maximumY * parentRect.height;
         }
-'''
-          text = once(text, old_geometry, new_geometry, 'parent-local absolute geometry')
 
-          commit_anchor = '''        if (historyIndex_ + 1 < history_.size())
-        {
-'''
-          coalesced = '''        if (coalescedEditActive_ && coalescedMutationCreated_)
-        {
-            history_[historyIndex_] = std::move(document);
-            error.clear();
-            return true;
-        }
+        return CommitMutation(std::move(candidate), error);'''
+          text, count = geometry_pattern.subn(geometry_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'parent-local geometry replacement: found {count}')
 
-'''
-          text = once(text, commit_anchor, coalesced + commit_anchor,
-                      'coalesced replacement boundary')
+          anchor = '        if (historyIndex_ + 1 < history_.size())\n        {\n'
+          text = once(text, anchor,
+              '        if (coalescedEditActive_ && coalescedMutationCreated_)\n'
+              '        {\n            history_[historyIndex_] = std::move(document);\n'
+              '            error.clear();\n            return true;\n        }\n\n' + anchor,
+              'coalesced replacement boundary')
           text = once(text,
               '        history_.push_back(std::move(document));\n'
               '        historyIndex_ = history_.size() - 1;\n',
@@ -178,7 +129,6 @@ jobs:
               'coalesced first mutation')
           write(path, text)
 
-          # Workspace header: direct manipulation replaces numeric geometry entry.
           path = 'Studio/src/RenegadeScreenEditorWorkspace.h'
           text = read(path)
           text = text.replace('#include <functional>\n',
@@ -189,21 +139,16 @@ jobs:
               '                    static_cast<wi::gui::Widget*>(&widthInput_),\n',
               '                    static_cast<wi::gui::Widget*>(&heightInput_),\n'):
               text = text.replace(line, '')
-          text = re.sub(
-              r'            heightInput_\.OnInputAccepted\(\[this\]\(const wi::gui::EventArgs&\)\n'
-              r'            \{\n'
-              r'                if \(!inspectorSuppressed_\) ApplySelectedWidget\(\);\n'
-              r'            \}\);\n', '', text, count=1)
+          text = re.sub(r'            heightInput_\.OnInputAccepted\(.*?            \}\);\n',
+                        '', text, count=1, flags=re.S)
           text = once(text,
               '        void RefreshAfterMutation(std::string status);\n'
               '        void SetStatus(std::string status);\n',
               '        void RefreshAfterMutation(std::string status);\n'
               '        void SetStatus(std::string status);\n\n'
               '        enum class DirectManipulationMode : std::uint8_t\n'
-              '        {\n'
-              '            None, Move, ResizeTopLeft, ResizeTopRight,\n'
-              '            ResizeBottomLeft, ResizeBottomRight,\n'
-              '        };\n'
+              '        {\n            None, Move, ResizeTopLeft, ResizeTopRight,\n'
+              '            ResizeBottomLeft, ResizeBottomRight,\n        };\n'
               '        [[nodiscard]] DirectManipulationMode HitResizeHandle(\n'
               '            const XMFLOAT4& pointer) const noexcept;\n'
               '        void BeginDirectManipulation(\n'
@@ -212,10 +157,8 @@ jobs:
               '        void EndDirectManipulation();\n',
               'workspace direct declarations')
           text = once(text,
-              '        std::size_t hierarchyScroll_ = 0;\n'
-              '        bool inspectorSuppressed_ = false;\n',
-              '        std::size_t hierarchyScroll_ = 0;\n'
-              '        bool inspectorSuppressed_ = false;\n'
+              '        std::size_t hierarchyScroll_ = 0;\n        bool inspectorSuppressed_ = false;\n',
+              '        std::size_t hierarchyScroll_ = 0;\n        bool inspectorSuppressed_ = false;\n'
               '        DirectManipulationMode directManipulationMode_ =\n'
               '            DirectManipulationMode::None;\n'
               '        XMFLOAT2 directManipulationStartPointer_ = {};\n'
@@ -224,18 +167,13 @@ jobs:
               '        float directManipulationScaleY_ = 1.0f;\n'
               '        bool directManipulationChanged_ = false;\n',
               'workspace direct state')
-          for member in (
-              '        RenegadeTextInputField xInput_;\n',
-              '        RenegadeTextInputField yInput_;\n',
-              '        RenegadeTextInputField widthInput_;\n',
-              '        RenegadeTextInputField heightInput_;\n'):
-              text = text.replace(member, '')
+          for member in ('xInput_', 'yInput_', 'widthInput_', 'heightInput_'):
+              text = re.sub(r'        RenegadeTextInputField ' + member + r';\n', '', text)
           write(path, text)
 
           path = 'Studio/src/RenegadeScreenEditorWorkspace.cpp'
           text = read(path)
-          text = text.replace('#include <iomanip>\n', '')
-          text = text.replace('#include <sstream>\n', '')
+          text = text.replace('#include <iomanip>\n', '').replace('#include <sstream>\n', '')
           text = text.replace(
               '    constexpr float HierarchyRowsTop = HeaderHeight + 160.0f;\n',
               '    constexpr float HierarchyRowsTop = HeaderHeight + 160.0f;\n'
@@ -250,78 +188,56 @@ jobs:
               '        configureInput(widthInput_, "Screen Element Width", "Width");\n',
               '        configureInput(heightInput_, "Screen Element Height", "Height");\n'):
               text = text.replace(line, '')
-          text = re.sub(
-              r'        heightInput_\.OnInputAccepted\(\[this\]\(const wi::gui::EventArgs&\)\n'
-              r'        \{\n'
-              r'            ApplySelectedWidget\(\);\n'
-              r'        \}\);\n', '', text, count=1)
+          text = re.sub(r'        heightInput_\.OnInputAccepted\(.*?        \}\);\n',
+                        '', text, count=1, flags=re.S)
           for token in ('xInput_', 'yInput_', 'widthInput_', 'heightInput_'):
-              text = re.sub(
-                  r'\s*static_cast<(?:const )?wi::gui::Widget\*>\(&' + token + r'\),?\n',
-                  '\n', text)
-
-          layout_pattern = re.compile(
+              text = re.sub(r'\s*static_cast<(?:const )?wi::gui::Widget\*>\(&' + token + r'\),?\n',
+                            '\n', text)
+          text, count = re.subn(
               r'        field\(nameInput_\);\n        field\(textInput_\);\n\n'
-              r'        xInput_\.SetPos.*?'
-              r'        visibleButton_\.SetPos\(XMFLOAT2\(inspectorX, y\)\);\n', re.S)
-          replacement = (
-              '        field(nameInput_);\n'
-              '        field(textInput_);\n\n'
-              '        // Position and size are authored directly in the preview.\n'
-              '        y += 8.0f;\n'
-              '        visibleButton_.SetPos(XMFLOAT2(inspectorX, y));\n')
-          text, count = layout_pattern.subn(replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'workspace numeric layout removal: found {count}')
-
-          refresh_pattern = re.compile(
+              r'        xInput_\.SetPos.*?        visibleButton_\.SetPos\(XMFLOAT2\(inspectorX, y\)\);\n',
+              '        field(nameInput_);\n        field(textInput_);\n\n'
+              '        // Geometry is authored directly in the Runtime preview.\n'
+              '        y += 8.0f;\n        visibleButton_.SetPos(XMFLOAT2(inspectorX, y));\n',
+              text, count=1, flags=re.S)
+          if count != 1: raise SystemExit(f'numeric layout removal: found {count}')
+          text = re.sub(
               r'        bridge::ScreenRect rect;\n        std::string error;\n'
               r'        if \(!bridge::ResolveScreenWidgetRect\(.*?\n        \}\n'
-              r'        nameInput_\.SetValue', re.S)
-          text, count = refresh_pattern.subn('        nameInput_.SetValue', text, count=1)
-          if count != 1:
-              raise SystemExit(f'workspace numeric refresh removal: found {count}')
+              r'        nameInput_\.SetValue',
+              '        nameInput_.SetValue', text, count=1, flags=re.S)
           for line in (
               '        xInput_.SetValue(Number(rect.x));\n',
               '        yInput_.SetValue(Number(rect.y));\n',
               '        widthInput_.SetValue(Number(rect.width));\n',
               '        heightInput_.SetValue(Number(rect.height));\n'):
               text = text.replace(line, '')
-
-          apply_pattern = re.compile(
+          text, count = re.subn(
               r'        if \(!ParseNumber\(xInput_\.GetValue\(\), edit\.resolvedRect\.x\).*?'
-              r'        std::string error;\n', re.S)
-          apply_replacement = '''        std::string error;
+              r'        std::string error;\n',
+              '''        std::string error;
         if (!bridge::ResolveScreenWidgetRect(
-                session_->Document(), selectedWidgetId_,
-                edit.resolvedRect, error))
+                session_->Document(), selectedWidgetId_, edit.resolvedRect, error))
         {
             SetStatus("EDIT REJECTED // " + error);
             RefreshInspector();
             return;
         }
 
-'''
-          text, count = apply_pattern.subn(apply_replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'basic apply geometry preservation: found {count}')
-
-          labels_pattern = re.compile(
+''', text, count=1, flags=re.S)
+          if count != 1: raise SystemExit(f'basic geometry apply removal: found {count}')
+          text, count = re.subn(
               r'                Label\("POSITION  X / Y".*?'
               r'                    inspectorX, HeaderHeight \+ 410\.0f, 9, Muted, cmd\);\n',
-              re.S)
-          labels_replacement = '''                Label("DRAG ELEMENT IN PREVIEW TO MOVE", inspectorX,
+              '''                Label("DRAG ELEMENT IN PREVIEW TO MOVE", inspectorX,
                     HeaderHeight + 190.0f, 9, Muted, cmd);
                 Label("DRAG CORNER HANDLES TO RESIZE", inspectorX,
                     HeaderHeight + 208.0f, 9, Muted, cmd);
                 Label(widget->layoutMode == bridge::ScreenLayoutMode::Anchored
-                        ? "LAYOUT // ANCHORED"
-                        : "LAYOUT // ABSOLUTE",
+                        ? "LAYOUT // ANCHORED" : "LAYOUT // ABSOLUTE",
                     inspectorX, HeaderHeight + 238.0f, 9, Muted, cmd);
-'''
-          text, count = labels_pattern.subn(labels_replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'creator geometry labels: found {count}')
+''', text, count=1, flags=re.S)
+          if count != 1: raise SystemExit(f'geometry labels replacement: found {count}')
 
           marker = '''    void RenegadeScreenEditorWorkspace::SetStatus(std::string status)
     {
@@ -333,39 +249,31 @@ jobs:
     RenegadeScreenEditorWorkspace::HitResizeHandle(
         const XMFLOAT4& pointer) const noexcept
     {
-        if (!renderer_ || selectedWidgetId_.empty())
-            return DirectManipulationMode::None;
+        if (!renderer_ || selectedWidgetId_.empty()) return DirectManipulationMode::None;
         const auto* rect = renderer_->LogicalRect(selectedWidgetId_);
         if (!rect) return DirectManipulationMode::None;
         const float half = ResizeHandleSize * 0.5f;
-        const auto hit = [&pointer, half](const float x, const float y)
+        const auto hit = [&pointer, half](float x, float y)
         {
             return pointer.x >= x - half && pointer.x <= x + half &&
                 pointer.y >= y - half && pointer.y <= y + half;
         };
         if (hit(rect->x, rect->y)) return DirectManipulationMode::ResizeTopLeft;
-        if (hit(rect->x + rect->width, rect->y))
-            return DirectManipulationMode::ResizeTopRight;
-        if (hit(rect->x, rect->y + rect->height))
-            return DirectManipulationMode::ResizeBottomLeft;
-        if (hit(rect->x + rect->width, rect->y + rect->height))
-            return DirectManipulationMode::ResizeBottomRight;
+        if (hit(rect->x + rect->width, rect->y)) return DirectManipulationMode::ResizeTopRight;
+        if (hit(rect->x, rect->y + rect->height)) return DirectManipulationMode::ResizeBottomLeft;
+        if (hit(rect->x + rect->width, rect->y + rect->height)) return DirectManipulationMode::ResizeBottomRight;
         return DirectManipulationMode::None;
     }
 
     void RenegadeScreenEditorWorkspace::BeginDirectManipulation(
-        const DirectManipulationMode mode,
-        const XMFLOAT4& pointer)
+        DirectManipulationMode mode, const XMFLOAT4& pointer)
     {
-        if (!session_ || !renderer_ || selectedWidgetId_.empty() ||
-            mode == DirectManipulationMode::None) return;
+        if (!session_ || !renderer_ || selectedWidgetId_.empty() || mode == DirectManipulationMode::None) return;
         const auto* logical = renderer_->LogicalRect(selectedWidgetId_);
         bridge::ScreenRect resolved;
         std::string error;
-        if (!logical || !bridge::ResolveScreenWidgetRect(
-                session_->Document(), selectedWidgetId_, resolved, error) ||
-            resolved.width <= 0.0f || resolved.height <= 0.0f ||
-            logical->width <= 0.0f || logical->height <= 0.0f)
+        if (!logical || !bridge::ResolveScreenWidgetRect(session_->Document(), selectedWidgetId_, resolved, error) ||
+            resolved.width <= 0.0f || resolved.height <= 0.0f || logical->width <= 0.0f || logical->height <= 0.0f)
         {
             SetStatus("DIRECT EDIT REJECTED // COULD NOT RESOLVE ELEMENT GEOMETRY");
             return;
@@ -377,93 +285,39 @@ jobs:
         directManipulationScaleY_ = logical->height / resolved.height;
         directManipulationChanged_ = false;
         session_->BeginCoalescedEdit();
-        SetStatus(mode == DirectManipulationMode::Move
-            ? "DRAGGING ELEMENT // RELEASE TO FINISH"
-            : "RESIZING ELEMENT // RELEASE TO FINISH");
+        SetStatus(mode == DirectManipulationMode::Move ? "DRAGGING ELEMENT // RELEASE TO FINISH" : "RESIZING ELEMENT // RELEASE TO FINISH");
     }
 
-    void RenegadeScreenEditorWorkspace::UpdateDirectManipulation(
-        const XMFLOAT4& pointer)
+    void RenegadeScreenEditorWorkspace::UpdateDirectManipulation(const XMFLOAT4& pointer)
     {
-        if (!session_ || directManipulationMode_ == DirectManipulationMode::None ||
-            directManipulationScaleX_ <= 0.0f || directManipulationScaleY_ <= 0.0f)
-            return;
+        if (!session_ || directManipulationMode_ == DirectManipulationMode::None || directManipulationScaleX_ <= 0.0f || directManipulationScaleY_ <= 0.0f) return;
         const auto* widget = session_->FindWidget(selectedWidgetId_);
         if (!widget) { EndDirectManipulation(); return; }
-
-        const float dx = (pointer.x - directManipulationStartPointer_.x) /
-            directManipulationScaleX_;
-        const float dy = (pointer.y - directManipulationStartPointer_.y) /
-            directManipulationScaleY_;
+        const float dx = (pointer.x - directManipulationStartPointer_.x) / directManipulationScaleX_;
+        const float dy = (pointer.y - directManipulationStartPointer_.y) / directManipulationScaleY_;
         bridge::ScreenRect next = directManipulationStartRect_;
         const float canvasWidth = session_->Document().designWidth;
         const float canvasHeight = session_->Document().designHeight;
         constexpr float minimumSize = 8.0f;
-
         switch (directManipulationMode_)
         {
         case DirectManipulationMode::Move:
-            next.x = std::clamp(directManipulationStartRect_.x + dx, 0.0f,
-                std::max(0.0f, canvasWidth - directManipulationStartRect_.width));
-            next.y = std::clamp(directManipulationStartRect_.y + dy, 0.0f,
-                std::max(0.0f, canvasHeight - directManipulationStartRect_.height));
+            next.x = std::clamp(directManipulationStartRect_.x + dx, 0.0f, std::max(0.0f, canvasWidth - directManipulationStartRect_.width));
+            next.y = std::clamp(directManipulationStartRect_.y + dy, 0.0f, std::max(0.0f, canvasHeight - directManipulationStartRect_.height));
             break;
         case DirectManipulationMode::ResizeTopLeft:
-        {
-            const float right = directManipulationStartRect_.x + directManipulationStartRect_.width;
-            const float bottom = directManipulationStartRect_.y + directManipulationStartRect_.height;
-            next.x = std::clamp(directManipulationStartRect_.x + dx, 0.0f, right - minimumSize);
-            next.y = std::clamp(directManipulationStartRect_.y + dy, 0.0f, bottom - minimumSize);
-            next.width = right - next.x;
-            next.height = bottom - next.y;
-            break;
-        }
+        { const float right = directManipulationStartRect_.x + directManipulationStartRect_.width; const float bottom = directManipulationStartRect_.y + directManipulationStartRect_.height; next.x = std::clamp(directManipulationStartRect_.x + dx, 0.0f, right - minimumSize); next.y = std::clamp(directManipulationStartRect_.y + dy, 0.0f, bottom - minimumSize); next.width = right - next.x; next.height = bottom - next.y; break; }
         case DirectManipulationMode::ResizeTopRight:
-        {
-            const float bottom = directManipulationStartRect_.y + directManipulationStartRect_.height;
-            const float right = std::clamp(
-                directManipulationStartRect_.x + directManipulationStartRect_.width + dx,
-                directManipulationStartRect_.x + minimumSize, canvasWidth);
-            next.y = std::clamp(directManipulationStartRect_.y + dy, 0.0f, bottom - minimumSize);
-            next.width = right - directManipulationStartRect_.x;
-            next.height = bottom - next.y;
-            break;
-        }
+        { const float bottom = directManipulationStartRect_.y + directManipulationStartRect_.height; const float right = std::clamp(directManipulationStartRect_.x + directManipulationStartRect_.width + dx, directManipulationStartRect_.x + minimumSize, canvasWidth); next.y = std::clamp(directManipulationStartRect_.y + dy, 0.0f, bottom - minimumSize); next.width = right - directManipulationStartRect_.x; next.height = bottom - next.y; break; }
         case DirectManipulationMode::ResizeBottomLeft:
-        {
-            const float right = directManipulationStartRect_.x + directManipulationStartRect_.width;
-            const float bottom = std::clamp(
-                directManipulationStartRect_.y + directManipulationStartRect_.height + dy,
-                directManipulationStartRect_.y + minimumSize, canvasHeight);
-            next.x = std::clamp(directManipulationStartRect_.x + dx, 0.0f, right - minimumSize);
-            next.width = right - next.x;
-            next.height = bottom - directManipulationStartRect_.y;
-            break;
-        }
+        { const float right = directManipulationStartRect_.x + directManipulationStartRect_.width; const float bottom = std::clamp(directManipulationStartRect_.y + directManipulationStartRect_.height + dy, directManipulationStartRect_.y + minimumSize, canvasHeight); next.x = std::clamp(directManipulationStartRect_.x + dx, 0.0f, right - minimumSize); next.width = right - next.x; next.height = bottom - directManipulationStartRect_.y; break; }
         case DirectManipulationMode::ResizeBottomRight:
-        {
-            const float right = std::clamp(
-                directManipulationStartRect_.x + directManipulationStartRect_.width + dx,
-                directManipulationStartRect_.x + minimumSize, canvasWidth);
-            const float bottom = std::clamp(
-                directManipulationStartRect_.y + directManipulationStartRect_.height + dy,
-                directManipulationStartRect_.y + minimumSize, canvasHeight);
-            next.width = right - directManipulationStartRect_.x;
-            next.height = bottom - directManipulationStartRect_.y;
-            break;
+        { const float right = std::clamp(directManipulationStartRect_.x + directManipulationStartRect_.width + dx, directManipulationStartRect_.x + minimumSize, canvasWidth); const float bottom = std::clamp(directManipulationStartRect_.y + directManipulationStartRect_.height + dy, directManipulationStartRect_.y + minimumSize, canvasHeight); next.width = right - directManipulationStartRect_.x; next.height = bottom - directManipulationStartRect_.y; break; }
+        case DirectManipulationMode::None: return;
         }
-        case DirectManipulationMode::None:
-            return;
-        }
-
-        bridge::ScreenWidgetAuthoringEdit edit{
-            widget->name, widget->text, next, widget->visible, widget->enabled};
+        bridge::ScreenWidgetAuthoringEdit edit{widget->name, widget->text, next, widget->visible, widget->enabled};
         std::string error;
-        if (!session_->UpdateWidget(selectedWidgetId_, std::move(edit), error))
-        {
-            SetStatus("DIRECT EDIT REJECTED // " + error);
-            return;
-        }
+        if (!session_->UpdateWidget(selectedWidgetId_, std::move(edit), error)) { SetStatus("DIRECT EDIT REJECTED // " + error); return; }
         directManipulationChanged_ = true;
         RefreshInspector();
         if (documentChanged_) documentChanged_();
@@ -473,208 +327,126 @@ jobs:
     {
         if (session_) session_->EndCoalescedEdit();
         if (directManipulationMode_ != DirectManipulationMode::None)
-            SetStatus(directManipulationChanged_
-                ? "DIRECT GEOMETRY UPDATED // UNSAVED SCREEN CHANGE"
-                : "ELEMENT SELECTED // DRAG TO MOVE OR RESIZE");
+            SetStatus(directManipulationChanged_ ? "DIRECT GEOMETRY UPDATED // UNSAVED SCREEN CHANGE" : "ELEMENT SELECTED // DRAG TO MOVE OR RESIZE");
         directManipulationMode_ = DirectManipulationMode::None;
         directManipulationChanged_ = false;
     }
 
 '''
           text = once(text, marker, marker + direct, 'direct implementation insertion')
-
-          update_pattern = re.compile(
-              r'    void RenegadeScreenEditorWorkspace::Update\(\n.*?\n    \}\n\n'
-              r'    void RenegadeScreenEditorWorkspace::Render\(', re.S)
-          new_update = r'''    void RenegadeScreenEditorWorkspace::Update(
+          text, count = re.subn(
+              r'    void RenegadeScreenEditorWorkspace::Update\(\n.*?\n    \}\n\n    void RenegadeScreenEditorWorkspace::Render\(',
+              lambda _: r'''    void RenegadeScreenEditorWorkspace::Update(
         const wi::Canvas& canvas,
         const float dt)
     {
         Widget::Update(canvas, dt);
         UpdateControls(canvas, dt);
-        if (!IsVisible() || !IsEnabled() || !session_ ||
-            !session_->IsLoaded()) return;
-
+        if (!IsVisible() || !IsEnabled() || !session_ || !session_->IsLoaded()) return;
         const XMFLOAT4 pointer = wi::input::GetPointer();
         if (directManipulationMode_ != DirectManipulationMode::None)
         {
-            if (wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
-                UpdateDirectManipulation(pointer);
-            else
-                EndDirectManipulation();
+            if (wi::input::Down(wi::input::MOUSE_BUTTON_LEFT)) UpdateDirectManipulation(pointer);
+            else EndDirectManipulation();
             return;
         }
-
         const float rowTop = HierarchyRowsTop;
-        const std::size_t visibleRows = static_cast<std::size_t>(std::max(
-            1.0f, std::floor((height_ - rowTop - FooterHeight) /
-                HierarchyRowHeight)));
+        const std::size_t visibleRows = static_cast<std::size_t>(std::max(1.0f, std::floor((height_ - rowTop - FooterHeight) / HierarchyRowHeight)));
         const auto& widgets = session_->Document().widgets;
-        if (pointer.x < HierarchyWidth && pointer.y >= HeaderHeight &&
-            pointer.y < height_ - FooterHeight)
+        if (pointer.x < HierarchyWidth && pointer.y >= HeaderHeight && pointer.y < height_ - FooterHeight)
         {
             if (pointer.z != 0.0f && widgets.size() > visibleRows)
             {
-                if (pointer.z < 0.0f)
-                    hierarchyScroll_ = std::min(
-                        hierarchyScroll_ + 1, widgets.size() - visibleRows);
+                if (pointer.z < 0.0f) hierarchyScroll_ = std::min(hierarchyScroll_ + 1, widgets.size() - visibleRows);
                 else if (hierarchyScroll_ > 0) --hierarchyScroll_;
             }
             if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) && pointer.y >= rowTop)
             {
-                const std::size_t row = static_cast<std::size_t>(
-                    (pointer.y - rowTop) / HierarchyRowHeight);
+                const std::size_t row = static_cast<std::size_t>((pointer.y - rowTop) / HierarchyRowHeight);
                 const std::size_t index = hierarchyScroll_ + row;
-                if (row < visibleRows && index < widgets.size())
-                    SelectWidget(widgets[index].id);
+                if (row < visibleRows && index < widgets.size()) SelectWidget(widgets[index].id);
             }
             return;
         }
-
         const auto preview = PreviewBounds();
-        if (!Contains(preview, pointer) || !renderer_ ||
-            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) return;
-
+        if (!Contains(preview, pointer) || !renderer_ || !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) return;
         const auto handle = HitResizeHandle(pointer);
-        if (handle != DirectManipulationMode::None)
-        {
-            BeginDirectManipulation(handle, pointer);
-            return;
-        }
+        if (handle != DirectManipulationMode::None) { BeginDirectManipulation(handle, pointer); return; }
         for (auto iterator = widgets.rbegin(); iterator != widgets.rend(); ++iterator)
         {
             const auto* bounds = renderer_->LogicalRect(iterator->id);
-            if (bounds && Contains(*bounds, pointer))
-            {
-                SelectWidget(iterator->id);
-                BeginDirectManipulation(DirectManipulationMode::Move, pointer);
-                return;
-            }
+            if (bounds && Contains(*bounds, pointer)) { SelectWidget(iterator->id); BeginDirectManipulation(DirectManipulationMode::Move, pointer); return; }
         }
     }
 
-    void RenegadeScreenEditorWorkspace::Render('''
-          text, count = update_pattern.subn(lambda _: new_update, text, count=1)
-          if count != 1:
-              raise SystemExit(f'workspace Update replacement: found {count}')
-
+    void RenegadeScreenEditorWorkspace::Render(''',
+              text, count=1, flags=re.S)
+          if count != 1: raise SystemExit(f'workspace Update replacement: found {count}')
           outline = '''                Outline(selected->x - 2.0f, selected->y - 2.0f,
                     selected->width + 4.0f, selected->height + 4.0f,
                     Cyan, 2.0f, cmd);
 '''
-          handles = outline + '''                const float half = ResizeHandleSize * 0.5f;
-                const float corners[][2] = {
-                    {selected->x, selected->y},
-                    {selected->x + selected->width, selected->y},
-                    {selected->x, selected->y + selected->height},
-                    {selected->x + selected->width, selected->y + selected->height},
-                };
+          text = once(text, outline, outline + '''                const float half = ResizeHandleSize * 0.5f;
+                const float corners[][2] = {{selected->x, selected->y}, {selected->x + selected->width, selected->y}, {selected->x, selected->y + selected->height}, {selected->x + selected->width, selected->y + selected->height}};
                 for (const auto& corner : corners)
                 {
-                    Rect(corner[0] - half, corner[1] - half,
-                        ResizeHandleSize, ResizeHandleSize, Cyan, cmd);
-                    Outline(corner[0] - half, corner[1] - half,
-                        ResizeHandleSize, ResizeHandleSize, Text, 1.0f, cmd);
+                    Rect(corner[0] - half, corner[1] - half, ResizeHandleSize, ResizeHandleSize, Cyan, cmd);
+                    Outline(corner[0] - half, corner[1] - half, ResizeHandleSize, ResizeHandleSize, Text, 1.0f, cmd);
                 }
-'''
-          text = once(text, outline, handles, 'resize handle rendering')
+''', 'resize handle rendering')
           write(path, text)
 
-          # Tests: gesture coalescing and parent-local absolute geometry.
           path = 'Tests/ScreenAuthoringSessionTests.cpp'
           text = read(path)
           anchor = '''    if (!authored.MoveButtonFocusLater(creatorButtonId, error))
         return Fail("focus move later failed: " + error);
 
 '''
-          proof = r'''    // Direct manipulation emits many live geometry snapshots but one
-    // pointer gesture is one Undo boundary.
-    ScreenRect beforeDirectEdit;
-    if (!ResolveScreenWidgetRect(
-            authored.Document(), creatorTextId, beforeDirectEdit, error))
-        return Fail("could not resolve direct-edit fixture: " + error);
+          proof = r'''    ScreenRect beforeDirectEdit;
+    if (!ResolveScreenWidgetRect(authored.Document(), creatorTextId, beforeDirectEdit, error)) return Fail("could not resolve direct-edit fixture: " + error);
     const std::size_t undoBeforeDirectEdit = authored.UndoCount();
     const auto* directWidget = authored.FindWidget(creatorTextId);
     if (!directWidget) return Fail("direct-edit fixture widget is missing");
     authored.BeginCoalescedEdit();
-    ScreenWidgetAuthoringEdit directEdit{
-        directWidget->name, directWidget->text,
-        {beforeDirectEdit.x + 20.0f, beforeDirectEdit.y + 10.0f,
-         beforeDirectEdit.width + 30.0f, beforeDirectEdit.height + 15.0f},
-        directWidget->visible, directWidget->enabled};
-    if (!authored.UpdateWidget(creatorTextId, directEdit, error))
-        return Fail("first direct geometry frame failed: " + error);
+    ScreenWidgetAuthoringEdit directEdit{directWidget->name, directWidget->text,
+        {beforeDirectEdit.x + 20.0f, beforeDirectEdit.y + 10.0f, beforeDirectEdit.width + 30.0f, beforeDirectEdit.height + 15.0f}, directWidget->visible, directWidget->enabled};
+    if (!authored.UpdateWidget(creatorTextId, directEdit, error)) return Fail("first direct geometry frame failed: " + error);
     directEdit.resolvedRect.x += 25.0f;
     directEdit.resolvedRect.width += 10.0f;
-    if (!authored.UpdateWidget(creatorTextId, directEdit, error))
-        return Fail("second direct geometry frame failed: " + error);
+    if (!authored.UpdateWidget(creatorTextId, directEdit, error)) return Fail("second direct geometry frame failed: " + error);
     authored.EndCoalescedEdit();
-    if (authored.UndoCount() != undoBeforeDirectEdit + 1)
-        return Fail("one direct manipulation gesture created multiple Undo entries");
+    if (authored.UndoCount() != undoBeforeDirectEdit + 1) return Fail("one direct gesture created multiple Undo entries");
     ScreenRect afterDirectEdit;
-    if (!ResolveScreenWidgetRect(
-            authored.Document(), creatorTextId, afterDirectEdit, error) ||
-        afterDirectEdit.x != directEdit.resolvedRect.x ||
-        afterDirectEdit.width != directEdit.resolvedRect.width)
-        return Fail("direct manipulation did not preserve final geometry");
-    if (!authored.Undo(error))
-        return Fail("direct manipulation Undo failed: " + error);
+    if (!ResolveScreenWidgetRect(authored.Document(), creatorTextId, afterDirectEdit, error) || afterDirectEdit.x != directEdit.resolvedRect.x || afterDirectEdit.width != directEdit.resolvedRect.width) return Fail("direct manipulation did not preserve final geometry");
+    if (!authored.Undo(error)) return Fail("direct manipulation Undo failed: " + error);
     ScreenRect undoneDirectEdit;
-    if (!ResolveScreenWidgetRect(
-            authored.Document(), creatorTextId, undoneDirectEdit, error) ||
-        !SameRect(beforeDirectEdit, undoneDirectEdit))
-        return Fail("direct manipulation Undo did not restore pre-drag geometry");
-    if (!authored.Redo(error))
-        return Fail("direct manipulation Redo failed: " + error);
+    if (!ResolveScreenWidgetRect(authored.Document(), creatorTextId, undoneDirectEdit, error) || !SameRect(beforeDirectEdit, undoneDirectEdit)) return Fail("direct manipulation Undo did not restore pre-drag geometry");
+    if (!authored.Redo(error)) return Fail("direct manipulation Redo failed: " + error);
 
 '''
-          text = once(text, anchor, anchor + proof, 'direct manipulation regression proof')
-          text = text.replace(
-              'parent/layout geometry, action/focus identity, reusable component remapping, history and transactional Save/Open',
-              'parent/layout geometry, direct move/resize coalescing, action/focus identity, reusable component remapping, history and transactional Save/Open')
+          text = once(text, anchor, anchor + proof, 'direct manipulation test')
           write(path, text)
 
-          # Docs/package: direct preview manipulation is the creator geometry path.
           owner = '''## Owner acceptance — complete Gate 8D
 
-The exact packaged Release must pass all of the following before Gate 8D is accepted:
+1. Open a governed Screen from Story Flow and confirm the creator controls load.
+2. Create Text, Button, Image and Background elements.
+3. Select elements directly in the preview and drag them; they must follow the pointer live.
+4. Confirm four corner resize handles appear on the selected element and resize from every corner.
+5. Confirm X/Y/W/H coordinate-entry fields are gone from the normal creator workflow.
+6. Undo/Redo a complete move and resize; each full gesture must consume one Undo step.
+7. Confirm direct manipulation also works after parenting and after Absolute/Anchored layout changes without a jump.
+8. Recheck Advanced style/state, colour, typography/font, governed resource, action, focus, parent/layout, presets and component duplication controls.
+9. Save, return to Story Flow, reopen and confirm geometry plus all other authored state persists.
+10. Confirm Runtime preview parity and Hub → Story Flow → Screen/Level navigation remain intact.
 
-1. Create/open a project and open a governed Screen from Story Flow.
-2. Confirm `+ TEXT`, `+ BUTTON`, `+ IMAGE`, `+ BACKGROUND`, Duplicate, Delete, Back and Front are visible and functional.
-3. Create each element type and confirm hierarchy + shared Runtime preview update immediately.
-4. Open **ADVANCED** and confirm the basic Inspector is not simultaneously interactive; close Advanced and confirm the basic Inspector returns normally.
-5. Select several elements directly in the preview. Drag each to a new position and confirm it follows the pointer live.
-6. Confirm the selected element shows four corner resize handles. Resize from every corner and confirm live visual feedback.
-7. Confirm the normal Basic Inspector no longer requires X/Y/W/H coordinate entry. Geometry is authored visually.
-8. Undo and Redo a complete move and a complete resize; each full pointer gesture must consume exactly one Undo step.
-9. On STYLE, edit several values across Normal, Hover, Pressed, Focused and Disabled and confirm authored states are used.
-10. Use the RGBA picker and precision hex field and confirm both author the same persisted colour.
-11. On TEXT / FONT, select a governed Font when available and edit typography without one pending choice resetting another.
-12. On BIND / LAYOUT, select governed images where available.
-13. Add a custom symbolic action, bind a Button, rename it and confirm binding survives; deleting a referenced action must be refused.
-14. Move two Buttons with Focus Up/Down and confirm saved traversal order.
-15. Reparent an element and switch Absolute/Anchored mode; confirm it does not jump. Then drag the parented element and confirm direct manipulation remains correct.
-16. Create Panel and Heading presets and confirm their values remain editable.
-17. Parent Text/Button children under an element, use **DUP COMPONENT**, and confirm the copy is independently editable with preserved action/focus behaviour.
-18. Exercise Undo/Redo across style, typography, binding, action, focus, component and direct geometry changes.
-19. Save, return to Story Flow, reopen the Screen and confirm all authored state and direct geometry persist.
-20. Confirm the same Screen renders identically in packaged Runtime and Screen Editor preview at the accepted scale.
-21. Confirm Hub → Story Flow → Screen and Story Flow → Level workflows have not regressed.
-
-Gate 8D is not merge-ready until exact-head authoritative CI is green and this owner audit passes.
+Gate 8D is not merge-ready until exact-head CI and this owner audit pass.
 '''
-          for path in ('docs/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md',
-                       'Studio/package/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md'):
+          for path in ('docs/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md', 'Studio/package/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md'):
               text = read(path)
-              text = text.replace(
-                  '- parent selection plus Absolute/Anchored layout and all four anchor coordinates;\n',
-                  '- direct preview manipulation: drag elements to move and drag corner handles to resize;\n'
-                  '- parent selection plus Absolute/Anchored layout and all four anchor coordinates;\n')
-              text = text.replace(
-                  '- basic 8C name/text/X/Y/W/H/visible/enabled edits;\n',
-                  '- basic name/text/visible/enabled edits plus direct preview geometry manipulation;\n')
-              if '## Owner acceptance — complete Gate 8D' not in text:
-                  raise SystemExit(f'owner acceptance marker missing: {path}')
+              text = text.replace('- parent selection plus Absolute/Anchored layout and all four anchor coordinates;\n', '- direct preview manipulation: drag elements to move and drag corner handles to resize;\n- parent selection plus Absolute/Anchored layout and all four anchor coordinates;\n')
+              text = text.replace('- basic 8C name/text/X/Y/W/H/visible/enabled edits;\n', '- basic name/text/visible/enabled edits plus direct preview geometry manipulation;\n')
+              if '## Owner acceptance — complete Gate 8D' not in text: raise SystemExit(f'owner marker missing: {path}')
               text = text.split('## Owner acceptance — complete Gate 8D', 1)[0].rstrip() + '\n\n' + owner
               write(path, text)
           PY
