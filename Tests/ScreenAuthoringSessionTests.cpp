@@ -1,5 +1,6 @@
 #include "renegade/bridge/ScreenAuthoringSession.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <iostream>
@@ -195,6 +196,136 @@ int main()
         return Fail("saved Screen did not preserve authored content/layout");
     }
 
-    std::cout << "PASS: Gate 8C Screen authoring session preserves validated edits, anchored layout, history and transactional Save/Open\n";
+    // Gate 8D: every creator operation must be one validated Screen mutation
+    // using the same history and persistence seam as Gate 8C Inspector edits.
+    ScreenWidget creatorText;
+    creatorText.kind = ScreenWidgetKind::Text;
+    creatorText.name = "Subtitle";
+    creatorText.rect = {300.0f, 220.0f, 680.0f, 70.0f};
+    creatorText.visible = true;
+    creatorText.enabled = false;
+    creatorText.text = "CREATOR TEXT";
+    creatorText.style = MakeScreenWidgetStyleTemplate(
+        creatorText.kind, creatorText.rect.height);
+    StableId creatorTextId;
+    if (!reopened.CreateWidget(
+            creatorText, false, creatorTextId, error) ||
+        !IsValidStableId(creatorTextId) ||
+        !reopened.FindWidget(creatorTextId) ||
+        reopened.FindWidget(creatorTextId)->text != "CREATOR TEXT")
+    {
+        return Fail("Gate 8D Text creation did not commit a valid widget: " + error);
+    }
+
+    ScreenWidget creatorButton;
+    creatorButton.kind = ScreenWidgetKind::Button;
+    creatorButton.name = "Continue";
+    creatorButton.rect = {440.0f, 550.0f, 400.0f, 76.0f};
+    creatorButton.visible = true;
+    creatorButton.enabled = true;
+    creatorButton.text = "CONTINUE";
+    creatorButton.actionId = RuntimeScreenPlayAction;
+    creatorButton.style = MakeScreenWidgetStyleTemplate(
+        creatorButton.kind, creatorButton.rect.height);
+    StableId creatorButtonId;
+    if (!reopened.CreateWidget(
+            creatorButton, false, creatorButtonId, error) ||
+        reopened.Document().focusOrder.back() != creatorButtonId ||
+        reopened.FindWidget(creatorButtonId)->actionId != RuntimeScreenPlayAction)
+    {
+        return Fail("Gate 8D Button creation did not preserve action/focus identity: " + error);
+    }
+
+    StableId duplicateButtonId;
+    if (!reopened.DuplicateWidget(
+            creatorButtonId, duplicateButtonId, error) ||
+        duplicateButtonId == creatorButtonId ||
+        reopened.FindWidget(duplicateButtonId) == nullptr ||
+        reopened.FindWidget(duplicateButtonId)->actionId != RuntimeScreenPlayAction)
+    {
+        return Fail("Gate 8D Button duplication lost stable/action identity: " + error);
+    }
+    const auto duplicateFocus = std::find(
+        reopened.Document().focusOrder.begin(),
+        reopened.Document().focusOrder.end(), duplicateButtonId);
+    const auto creatorFocus = std::find(
+        reopened.Document().focusOrder.begin(),
+        reopened.Document().focusOrder.end(), creatorButtonId);
+    if (duplicateFocus == reopened.Document().focusOrder.end() ||
+        creatorFocus == reopened.Document().focusOrder.end() ||
+        duplicateFocus != creatorFocus + 1)
+    {
+        return Fail("Gate 8D duplicated Button was not inserted after its source in focus order");
+    }
+
+    if (!reopened.MoveWidgetToBack(duplicateButtonId, error) ||
+        reopened.Document().widgets.front().id != duplicateButtonId ||
+        !reopened.MoveWidgetToFront(duplicateButtonId, error) ||
+        reopened.Document().widgets.back().id != duplicateButtonId)
+    {
+        return Fail("Gate 8D layer transactions did not preserve authored order: " + error);
+    }
+
+    // Images may exist before a resource is chosen and may be deliberately
+    // hidden. The shared renderer already treats an empty resource as an
+    // authored surface; validation must not force Image visibility.
+    ScreenWidget creatorImage;
+    creatorImage.kind = ScreenWidgetKind::Image;
+    creatorImage.name = "Artwork";
+    creatorImage.rect = {80.0f, 80.0f, 320.0f, 180.0f};
+    creatorImage.visible = false;
+    creatorImage.enabled = false;
+    creatorImage.style = MakeScreenWidgetStyleTemplate(
+        creatorImage.kind, creatorImage.rect.height);
+    creatorImage.style.normal.background = {60, 70, 80, 100};
+    creatorImage.style.hover = creatorImage.style.normal;
+    creatorImage.style.pressed = creatorImage.style.normal;
+    creatorImage.style.focused = creatorImage.style.normal;
+    creatorImage.style.disabled = creatorImage.style.normal;
+    StableId creatorImageId;
+    if (!reopened.CreateWidget(
+            creatorImage, true, creatorImageId, error) ||
+        reopened.Document().widgets.front().id != creatorImageId ||
+        reopened.FindWidget(creatorImageId)->visible ||
+        !reopened.FindWidget(creatorImageId)->resourcePath.empty())
+    {
+        return Fail("Gate 8D hidden/unassigned Image creation was rejected: " + error);
+    }
+
+    if (!reopened.DeleteWidget(duplicateButtonId, error) ||
+        reopened.FindWidget(duplicateButtonId) != nullptr ||
+        std::find(
+            reopened.Document().focusOrder.begin(),
+            reopened.Document().focusOrder.end(), duplicateButtonId) !=
+            reopened.Document().focusOrder.end())
+    {
+        return Fail("Gate 8D deletion did not remove duplicated Button/focus identity: " + error);
+    }
+
+    if (!reopened.Undo(error) || reopened.FindWidget(duplicateButtonId) == nullptr ||
+        !reopened.Redo(error) || reopened.FindWidget(duplicateButtonId) != nullptr)
+    {
+        return Fail("Gate 8D creator transactions did not participate in Screen Undo/Redo: " + error);
+    }
+
+    if (!reopened.Save(error) || reopened.IsDirty())
+        return Fail("Gate 8D creator state did not save transactionally: " + error);
+
+    ScreenAuthoringSession creatorReopened;
+    if (!creatorReopened.Open(screenPath.generic_u8string(), projectId, error) ||
+        !creatorReopened.FindWidget(creatorTextId) ||
+        !creatorReopened.FindWidget(creatorButtonId) ||
+        !creatorReopened.FindWidget(creatorImageId) ||
+        creatorReopened.FindWidget(creatorImageId)->visible ||
+        creatorReopened.FindWidget(creatorButtonId)->actionId != RuntimeScreenPlayAction ||
+        std::find(
+            creatorReopened.Document().focusOrder.begin(),
+            creatorReopened.Document().focusOrder.end(), creatorButtonId) ==
+            creatorReopened.Document().focusOrder.end())
+    {
+        return Fail("Gate 8D creator transactions did not survive Save/Open: " + error);
+    }
+
+    std::cout << "PASS: Gate 8D Screen authoring preserves validated edits, creator transactions, layer/focus identity, hidden Images, history and transactional Save/Open\n";
     return 0;
 }
