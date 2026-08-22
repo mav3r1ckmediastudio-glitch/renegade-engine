@@ -15,7 +15,7 @@ namespace
     constexpr float InspectorWidth = 360.0f;
     constexpr float PanelGap = 14.0f;
     constexpr float HierarchyRowHeight = 32.0f;
-    constexpr float HierarchyRowsTop = HeaderHeight + 126.0f;
+    constexpr float HierarchyRowsTop = HeaderHeight + 160.0f;
 
     constexpr wi::Color Background(4, 7, 10, 255);
     constexpr wi::Color Surface(8, 13, 17, 255);
@@ -234,7 +234,7 @@ namespace renegade::studio
         });
 
         addBackgroundButton_.Create("Screen Editor Add Background");
-        addBackgroundButton_.SetText("+ BG");
+        addBackgroundButton_.SetText("+ BACKGROUND");
         addBackgroundButton_.SetTooltip("Create a full-canvas Image at the back of the authored layer stack.");
         addBackgroundButton_.OnClick([this](const wi::gui::EventArgs&)
         {
@@ -368,15 +368,16 @@ namespace renegade::studio
             widget.SetSize(XMFLOAT2(width, 28.0f));
             creatorX += width + 4.0f;
         };
-        creator(addTextButton_, 54.0f, 0.0f);
-        creator(addButtonButton_, 64.0f, 0.0f);
-        creator(addImageButton_, 58.0f, 0.0f);
-        creator(addBackgroundButton_, 54.0f, 0.0f);
+        creator(addTextButton_, 112.0f, 0.0f);
+        creator(addButtonButton_, 112.0f, 0.0f);
         creatorX = 10.0f;
-        creator(duplicateButton_, 52.0f, 1.0f);
-        creator(deleteButton_, 60.0f, 1.0f);
-        creator(backButton_, 54.0f, 1.0f);
-        creator(frontButton_, 62.0f, 1.0f);
+        creator(addImageButton_, 112.0f, 1.0f);
+        creator(addBackgroundButton_, 112.0f, 1.0f);
+        creatorX = 10.0f;
+        creator(duplicateButton_, 52.0f, 2.0f);
+        creator(deleteButton_, 60.0f, 2.0f);
+        creator(backButton_, 54.0f, 2.0f);
+        creator(frontButton_, 62.0f, 2.0f);
 
         const float inspectorX = width_ - InspectorWidth + 14.0f;
         const float fieldWidth = InspectorWidth - 28.0f;
