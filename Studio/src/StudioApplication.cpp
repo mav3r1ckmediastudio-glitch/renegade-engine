@@ -10137,6 +10137,27 @@ wi::eventhandler::Subscribe_Once(
         renderer_.BindDiagnostics(infoDisplay);
         renderer_.init(canvas);
         renderer_.Load();
+
+        storyFlowIntegration_.OnScreenEditorOpen(
+            [this](const StoryFlowScreenEditorHandoff& handoff)
+            {
+                if (!session_.Projects().HasProject()) return;
+                const auto& project = session_.Projects().CurrentProject();
+                std::string error;
+                if (!screenEditorRenderer_.OpenScreen(
+                        handoff, project.rootPath, project.projectId, error))
+                {
+                    wi::backlog::post(
+                        "Renegade Screen Editor: " + error,
+                        wi::backlog::LogLevel::Error);
+                    return;
+                }
+                storyFlowIntegration_.RequestScreenEditor();
+            });
+        screenEditorRenderer_.OnReturnRequested([this]()
+        {
+            storyFlowIntegration_.RequestStoryFlow();
+        });
         ActivatePath(&renderer_);
     }
 }

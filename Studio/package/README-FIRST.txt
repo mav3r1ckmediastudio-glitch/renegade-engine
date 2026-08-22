@@ -1,14 +1,15 @@
-RENEGADE STORY FLOW GATE 6 JOURNEY VIEW OWNER TEST
-==================================================
+RENEGADE STORY FLOW GATE 8C SCREEN EDITOR OWNER TEST
+===================================================
 
-This Release must open every governed project on Story Flow with Journey View
-as the primary/default authoring surface.
+This Release is the owner-acceptance candidate for the first real governed
+Screen Editor authoring shell.
 
-1. Read Docs\STORY_FLOW_GATE6_OWNER_TEST.md in this package.
+1. Read STORY_FLOW_GATE8C_SCREEN_EDITOR_SHELL.md in this package.
 2. Double-click Run-RenegadeStudio-DX12.cmd.
-3. Follow every Journey creation, route, Journey/Graph synchronization,
-   double-click, persistence and Gate 4/5 regression check in that document.
-4. Stop at the first mismatch. Do not treat a green build log as acceptance.
+3. Follow every visible Screen Editor transition, hierarchy/preview selection,
+   Inspector edit, Undo/Redo, dirty-return guard, Save and reopen check in that
+   document.
+4. Stop at the first mismatch. Do not treat green CI as visual acceptance.
 
-Gate 6 is not complete and must not be merged until the exact packaged Release
-passes that owner audit.
+Gate 8C is not complete and must not be merged until this exact packaged
+Release passes that owner audit.

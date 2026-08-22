@@ -37,6 +37,7 @@ namespace renegade::studio
         {
             LevelEditor,
             StoryFlow,
+            ScreenEditor,
         };
 
         void RequestStoryFlow() noexcept
@@ -47,6 +48,11 @@ namespace renegade::studio
         void RequestLevelEditor() noexcept
         {
             desiredWorkspace_ = Workspace::LevelEditor;
+        }
+
+        void RequestScreenEditor() noexcept
+        {
+            desiredWorkspace_ = Workspace::ScreenEditor;
         }
 
         void OnScreenEditorOpen(
@@ -71,15 +77,18 @@ namespace renegade::studio
             screenEditorHandoff_ = {};
         }
 
-        template <typename Application, typename LevelEditor, typename StoryFlowPath, typename Session>
+        template <typename Application, typename LevelEditor, typename StoryFlowPath,
+            typename ScreenEditorPath, typename Session>
         void Tick(
             Application& application,
             LevelEditor& levelEditor,
             StoryFlowPath& storyFlow,
+            ScreenEditorPath& screenEditor,
             Session& session)
         {
             Attach(levelEditor, storyFlow);
             storyFlow.SyncCanvas(application.canvas);
+            screenEditor.SyncCanvas(application.canvas);
             const float storyWidth = std::max(1.0f, storyFlow.GetLogicalWidth());
             const float storyHeight = std::max(1.0f, storyFlow.GetLogicalHeight());
             levelPanel_.SetLayout(storyWidth, storyHeight);
@@ -198,6 +207,7 @@ namespace renegade::studio
                 desiredWorkspace_ = Workspace::StoryFlow;
                 activeLevelNodeId_.clear();
                 screenEditorHandoff_ = {};
+                screenEditor.Clear();
             }
             else if (hubOwnedLastTick_)
             {
@@ -229,6 +239,15 @@ namespace renegade::studio
 
             ProcessPendingLevelAction(levelEditor, storyFlow, session, project);
             ProcessPendingScreenAction(storyFlow, project);
+
+            if (desiredWorkspace_ == Workspace::ScreenEditor)
+            {
+                FlushLayout(true);
+                storyFlow.SetWorkspaceActive(false);
+                SetContentControlsActive(false, false);
+                EnsureActive(application, screenEditor);
+                return;
+            }
 
             if (desiredWorkspace_ == Workspace::LevelEditor)
             {
@@ -641,7 +660,7 @@ namespace renegade::studio
                 wi::backlog::post(
                     resolved.pathHintMoved
                         ? "Renegade Story Flow: Screen Editor handoff resolved by stable identity after move; stored path hint is stale."
-                        : "Renegade Story Flow: Screen Editor handoff ready. Gate 8 will consume this boundary.",
+                        : "Renegade Story Flow: Screen Editor handoff opened the governed Screen.",
                     resolved.pathHintMoved
                         ? wi::backlog::LogLevel::Warning
                         : wi::backlog::LogLevel::Default);

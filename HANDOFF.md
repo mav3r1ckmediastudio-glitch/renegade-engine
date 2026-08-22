@@ -5,44 +5,39 @@
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`d9f49a0dbd3cc9d03656d22f951b9ce67d52cdce`
-(`Story Flow Gate 8A: govern Screen contract v2 (#87)`).
+`fe5871091ccb74a417081c4e4abe38ed86010f53`
+(`Story Flow Gate 8B: shared Screen renderer (#88)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow Gate 8B shared Screen renderer
+## Active work — Story Flow Gate 8C Screen Editor authoring shell
 
-Branch: `feature/story-flow-gate8b-shared-screen-renderer`.
+Branch: `feature/story-flow-gate8c-screen-editor-shell`.
 
-Gate 8A/PR #87 is merged. Gate 8B replaces the remaining stock Wicked widget
-presentation with the one Renegade-owned renderer that Gate 8C preview must
-reuse. It does not claim the Screen Editor authoring shell.
+Gate 8B/PR #88 is merged at the authoritative main above. Its corrected schema-v2
+Release fixture received owner visual/behavioural acceptance: rounded borders,
+hover/focus/pressed states, Play and Quit all behaved as authored.
 
-The implementation establishes:
+Gate 8C now implements the first real Screen Editor UI:
 
-- new `Renegade::ScreenRenderer` target available to Runtime and Studio;
-- one custom Screen surface which retains Wicked scheduling/input but owns all
-  rendered image, shape, border and text pixels;
-- exact authored normal/hover/pressed/focused/disabled state precedence;
-- exact scaled inset borders and rounded inner/outer geometry;
-- no implicit Wicked disabled fade for buttons or non-interactive content;
-- persistent project font style through the Renegade direct-font draw path;
-- Runtime delegation to the shared renderer with existing focus/action dispatch
-  retained;
-- deterministic `BuildScreenRenderItems` frame evidence for output ordering,
-  state selection and geometry/typography scaling;
-- an explicit schema-v2 packaged LP03 visual fixture with distinct orange
-  focus, cyan hover, near-white press and non-zero rounded borders, plus a test
-  preventing regression to an incapable legacy proof fixture;
-- removal of Runtime's duplicated button layout record.
+- `ScreenAuthoringSession` with validated mutations, bounded history, dirty
+  state and transactional Save/Open;
+- first-class `RenegadeScreenEditorRenderPath` consuming the Gate 5 handoff;
+- hierarchy and preview selection over stable widget IDs;
+- Inspector editing for name, Text/Button content, resolved X/Y/size and
+  visible/enabled state;
+- anchored edits preserve anchors by updating parent-relative offsets;
+- the central preview uses the exact Gate 8B renderer inside an editor viewport;
+- visible Save/Undo/Redo and a Return action that refuses silent dirty loss.
 
-Focused GNU C++17 syntax checks cover the shared renderer, Runtime integration
-and render-contract test. Windows Debug/Release CI and owner visual inspection
-of the exact Release Runtime remain authoritative before merge.
+Focused GNU C++17 syntax checks cover the new session, test, shared renderer,
+workspace, render path, integration header and full Studio translation unit.
+Windows Debug/Release CI and owner inspection of the exact packaged Studio are
+still required.
 
 Acceptance and owner-test instructions are locked in
-`docs/STORY_FLOW_GATE8B_SHARED_SCREEN_RENDERER.md`.
+`docs/STORY_FLOW_GATE8C_SCREEN_EDITOR_SHELL.md`.
 
 Do not merge automatically. CI must pass and the owner retains the merge
 decision.
@@ -266,8 +261,10 @@ It must establish:
 - **Gate 6:** accepted and merged through PR #85.
 - **Gate 7:** accepted and merged through PR #86; Hub -> Story Flow by default,
   startup Flow + permanent Game Start, and no arbitrary blank startup Scene.
-- **Gate 8 (active):** Screen Editor MVP; 8A contract v2 is the current slice.
-- **Gate 9:** large/nonlinear Journey UX.
+- **Gate 8 (active):** Screen Editor MVP; 8A and 8B are accepted, and 8C is
+  the current authoring-shell slice. Gate 8 contains only 8A through 8E.
+- **Gate 9:** implement the recovered approved Journey View concept as the real
+  Story Flow UI/UX, then complete large/nonlinear Journey authoring and scale.
 - **Gate 10:** Runtime/persistence/build/standalone parity closeout.
 
 ## Existing accepted foundations on main

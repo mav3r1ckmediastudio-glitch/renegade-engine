@@ -269,6 +269,37 @@ namespace renegade::screen
         return true;
     }
 
+    bool BuildScreenRenderItemsInViewport(
+        const bridge::ScreenDocument& document,
+        const bridge::ScreenRect& viewport,
+        const std::unordered_map<bridge::StableId, ScreenInteractionState>&
+            interactions,
+        std::vector<ScreenRenderItem>& items,
+        std::string& error)
+    {
+        if (!std::isfinite(viewport.x) || !std::isfinite(viewport.y) ||
+            !std::isfinite(viewport.width) ||
+            !std::isfinite(viewport.height) || viewport.width <= 0.0f ||
+            viewport.height <= 0.0f)
+        {
+            items.clear();
+            error = "Screen render viewport must have finite positive geometry.";
+            return false;
+        }
+        if (!BuildScreenRenderItems(
+                document, viewport.width, viewport.height, interactions,
+                items, error))
+        {
+            return false;
+        }
+        for (auto& item : items)
+        {
+            item.logicalRect.x += viewport.x;
+            item.logicalRect.y += viewport.y;
+        }
+        return true;
+    }
+
     struct ScreenRenderer::Impl
     {
         bridge::ScreenDocument document;
@@ -276,6 +307,8 @@ namespace renegade::screen
         std::vector<std::unique_ptr<ScreenSurface>> surfaces;
         std::unordered_map<bridge::StableId, ScreenSurface*> byId;
         std::unordered_map<bridge::StableId, bridge::ScreenRect> logicalRects;
+        bridge::ScreenRect viewport;
+        bool hasViewport = false;
         bool loaded = false;
     };
 
@@ -406,6 +439,22 @@ namespace renegade::screen
         return true;
     }
 
+    void ScreenRenderer::SetViewport(
+        const bridge::ScreenRect& viewport) noexcept
+    {
+        impl_->viewport = viewport;
+        impl_->hasViewport = std::isfinite(viewport.x) &&
+            std::isfinite(viewport.y) && std::isfinite(viewport.width) &&
+            std::isfinite(viewport.height) && viewport.width > 0.0f &&
+            viewport.height > 0.0f;
+    }
+
+    void ScreenRenderer::ClearViewport() noexcept
+    {
+        impl_->viewport = {};
+        impl_->hasViewport = false;
+    }
+
     void ScreenRenderer::ApplyLayout(wi::RenderPath2D& renderPath)
     {
         if (!impl_->loaded) return;
@@ -414,10 +463,13 @@ namespace renegade::screen
             states.emplace(id, surface->Interaction());
         std::vector<ScreenRenderItem> items;
         std::string error;
-        if (!BuildScreenRenderItems(
+        const bool built = impl_->hasViewport ?
+            BuildScreenRenderItemsInViewport(
+                impl_->document, impl_->viewport, states, items, error) :
+            BuildScreenRenderItems(
                 impl_->document, renderPath.GetLogicalWidth(),
-                renderPath.GetLogicalHeight(), states, items, error))
-            return;
+                renderPath.GetLogicalHeight(), states, items, error);
+        if (!built) return;
 
         impl_->logicalRects.clear();
         for (const auto& item : items)
@@ -425,7 +477,8 @@ namespace renegade::screen
             const auto found = impl_->byId.find(item.widgetId);
             if (found == impl_->byId.end()) continue;
             auto* surface = found->second;
-            surface->SetPos(XMFLOAT2(item.logicalRect.x, item.logicalRect.y));
+            surface->SetPos(XMFLOAT2(
+                item.logicalRect.x, item.logicalRect.y));
             surface->SetSize(XMFLOAT2(
                 item.logicalRect.width, item.logicalRect.height));
             surface->scaleX = item.scaleX;

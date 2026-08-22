@@ -303,6 +303,18 @@ so Wicked cannot introduce a second colour, font, corner or opacity policy.
 `BuildScreenRenderItems` is the renderer-independent frame evidence seam used
 to test exact ordering, state choice and scaled metrics without a GPU.
 
+Gate 8C adds `ScreenAuthoringSession` as the sole mutable Screen Editor document
+boundary. It keeps complete validated Screen snapshots in bounded history,
+commits through `WriteScreenDocument`, and converts edits to anchored widgets'
+resolved rectangles back into parent-relative offsets without replacing their
+anchor contract. The native `RenegadeScreenEditorRenderPath` consumes the
+accepted stable Story Flow handoff and owns the active Studio frame while a
+Screen is open. Its hierarchy, selection and Inspector are editor presentation;
+the central canvas is a viewport-confined instance of the exact shared
+`Renegade::ScreenRenderer` used by Runtime. The renderer-independent
+`BuildScreenRenderItemsInViewport` seam proves that confinement is only a
+translation of the same scaled frame contract.
+
 Wicked `wiGUI` stores widgets in insertion order but renders that storage in
 reverse. The shared renderer therefore inserts the authored back-to-front widget
 document in reverse so the full-screen background renders first and
