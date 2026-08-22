@@ -39,6 +39,29 @@ jobs:
               line[10:] if line.startswith("          ") else line
               for line in lines
           ) + "\n"
+
+          fragile = "text = replace_once(text, old_update, new_update, 'replace workspace update with direct manipulation')\n"
+          if fragile not in block:
+              raise SystemExit('direct manipulation Update replacement hook is missing')
+          resilient = '''import re
+update_pattern = (
+    r"    void RenegadeScreenEditorWorkspace::Update\\(\\n"
+    r".*?"
+    r"\\n    \\}\\n\\n"
+    r"    void RenegadeScreenEditorWorkspace::Render\\("
+)
+update_replacement = new_update + "\\n    void RenegadeScreenEditorWorkspace::Render("
+text, update_count = re.subn(
+    update_pattern,
+    lambda _: update_replacement,
+    text,
+    count=1,
+    flags=re.S,
+)
+if update_count != 1:
+    raise SystemExit(f'expected exactly one Screen Editor Update function, found {update_count}')
+'''
+          block = block.replace(fragile, resilient, 1)
           exec(compile(block, 'gate8d-direct-manipulation-patch', 'exec'))
           RUNNER
 
