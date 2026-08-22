@@ -24,6 +24,7 @@ namespace renegade::studio
             screen::ScreenRenderer* renderer);
         void Clear() noexcept;
         void SelectWidget(const bridge::StableId& widgetId);
+        void SetInspectorSuppressed(bool suppressed) noexcept;
 
         void OnDocumentChanged(std::function<void()> callback);
         void OnReturnRequested(std::function<void()> callback);
@@ -32,6 +33,10 @@ namespace renegade::studio
         [[nodiscard]] const bridge::StableId& SelectedWidgetId() const noexcept
         {
             return selectedWidgetId_;
+        }
+        [[nodiscard]] bool IsInspectorSuppressed() const noexcept
+        {
+            return inspectorSuppressed_;
         }
 
         void Update(const wi::Canvas& canvas, float dt) override;
@@ -76,6 +81,7 @@ namespace renegade::studio
         float width_ = 1.0f;
         float height_ = 1.0f;
         std::size_t hierarchyScroll_ = 0;
+        bool inspectorSuppressed_ = false;
 
         RenegadeButton returnButton_;
         RenegadeButton saveButton_;
