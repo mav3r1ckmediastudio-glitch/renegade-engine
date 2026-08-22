@@ -83,6 +83,37 @@ namespace renegade::bridge
                 return false;
             }
 
+            if (!edit.parentId.empty())
+            {
+                StableId ancestor = edit.parentId;
+                std::unordered_set<StableId> visited;
+                while (!ancestor.empty())
+                {
+                    if (ancestor == widgetId)
+                    {
+                        error = "A Screen widget cannot be parented to one of its descendants.";
+                        return false;
+                    }
+                    if (!visited.insert(ancestor).second)
+                    {
+                        error = "The proposed Screen parent graph already contains a cycle.";
+                        return false;
+                    }
+                    const auto parent = std::find_if(
+                        candidate.widgets.begin(), candidate.widgets.end(),
+                        [&ancestor](const ScreenWidget& widget)
+                        {
+                            return widget.id == ancestor;
+                        });
+                    if (parent == candidate.widgets.end())
+                    {
+                        error = "The proposed Screen parent does not exist: " + ancestor;
+                        return false;
+                    }
+                    ancestor = parent->parentId;
+                }
+            }
+
             ScreenRect resolvedBefore;
             if (!ResolveScreenWidgetRect(
                     candidate, widgetId, resolvedBefore, error))
