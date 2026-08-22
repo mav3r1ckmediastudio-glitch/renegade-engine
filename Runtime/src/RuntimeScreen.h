@@ -2,16 +2,15 @@
 
 #include "RuntimeActions.h"
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/screen/ScreenRenderer.h"
 
 #include <WickedEngine.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <memory>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 namespace renegade::runtime
 {
@@ -83,45 +82,15 @@ namespace renegade::runtime
         [[nodiscard]] bool IsLoaded() const noexcept;
 
     private:
-        struct VisualWidget
-        {
-            std::string widgetId;
-            bridge::ScreenRect designRect;
-            float designFontSize = 0.0f;
-            float designCharacterSpacing = 0.0f;
-            float designLineSpacing = 0.0f;
-            float designShadowOffsetX = 0.0f;
-            float designShadowOffsetY = 0.0f;
-            float designCornerRadius = 0.0f;
-            wi::gui::Widget* widget = nullptr;
-        };
-
-        struct ButtonStateResources
-        {
-            wi::Resource normal;
-            wi::Resource focused;
-            wi::Resource disabled;
-        };
-
-        void ApplyLayout(wi::RenderPath2D& renderPath);
         void QueueFocused(RuntimeInputSource source);
         void QueueWidget(
             const std::string& widgetId,
             RuntimeInputSource source);
         void ApplyPointerFocus(RuntimeScreenController& controller);
 
-        bridge::ScreenDocument document_;
         RuntimeScreenController* controller_ = nullptr;
         RequestSink requestSink_;
-        std::vector<VisualWidget> visuals_;
-        std::unordered_map<std::string, wi::gui::Button*> buttons_;
-        std::unordered_map<std::string, ButtonStateResources>
-            buttonStateResources_;
-        std::unordered_map<std::string, bridge::ScreenRect> logicalRects_;
-        std::vector<std::unique_ptr<wi::gui::Image>> images_;
-        std::vector<std::unique_ptr<wi::gui::Label>> labels_;
-        std::vector<std::unique_ptr<wi::gui::Button>> buttonStorage_;
+        screen::ScreenRenderer renderer_;
         std::uint64_t nextSequence_ = 1;
-        bool loaded_ = false;
     };
 }

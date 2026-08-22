@@ -1,8 +1,8 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`cc3c1b79df5d480c69ae0489b6ceff54a5ef5350`
-(`Story Flow Gate 7: Flow-native project home lifecycle (#86)`).
+`d9f49a0dbd3cc9d03656d22f951b9ce67d52cdce`
+(`Story Flow Gate 8A: govern Screen contract v2 (#87)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -91,8 +91,8 @@ templates/migration policy around permanent Game Start. The locked contract is
 Native Screen Editor with image/background/text/button/layout/action authoring,
 preview, validation, Save/Undo/Redo and Return to Story Flow.
 
-**Status:** implementation active on
-`feature/story-flow-gate8-screen-contract`.
+**Status:** Gate 8A accepted and merged through PR #87. Gate 8B implementation
+active on `feature/story-flow-gate8b-shared-screen-renderer`.
 
 Gate 8 is delivered as bounded internal slices so the editor is not built on
 the old runtime-proof schema:
@@ -101,8 +101,10 @@ the old runtime-proof schema:
    layout, editable normal/hover/pressed/focused/disabled appearance, explicit
    built-in or project `.ttf` font identity, lossless v1 migration and Runtime
    consumption. No visual property may be supplied by hidden Runtime styling.
-2. **8B — shared Screen renderer:** one Renegade-owned layout/presentation core
-   used by editor preview and Runtime, including remaining shape/border fidelity.
+2. **8B — shared Screen renderer (active):** one Renegade-owned
+   layout/presentation core used by editor preview and Runtime, including
+   remaining shape/border fidelity and removal of Wicked's implicit disabled
+   fade.
 3. **8C — authoring shell:** canvas, hierarchy, selection, transform/layout
    tools, Inspector, preview, Save/Undo/Redo and Return to Story Flow.
 4. **8D — creator controls:** image/background/text/button plus the broader

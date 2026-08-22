@@ -22,7 +22,8 @@ framework.
 
 ## Current baseline
 
-- Main baseline after LP06: `48126f859b2f9b25a60182c4311cfc6c91d98436`
+- Current main baseline: `d9f49a0dbd3cc9d03656d22f951b9ce67d52cdce`
+  (Story Flow Gate 8A Screen contract v2, PR #87)
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
 - Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`

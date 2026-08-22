@@ -10,6 +10,7 @@ on:
       - "EngineBridge/**"
       - "Studio/**"
       - "Runtime/**"
+      - "ScreenRenderer/**"
       - "Tests/**"
       - "Tools/Build-Studio-Windows.ps1"
       - "Tools/Test-Windows-LoggedCommand.ps1"

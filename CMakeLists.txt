@@ -45,6 +45,7 @@ add_subdirectory(WickedEngine)
 add_subdirectory(EngineBridge)
 
 if(WIN32)
+    add_subdirectory(ScreenRenderer)
     add_subdirectory(Studio)
     add_subdirectory(Runtime)
     include(Runtime/LP06Gate3.cmake)

@@ -101,6 +101,7 @@ target_include_directories(RenegadeStudio
 target_link_libraries(RenegadeStudio
     PRIVATE
         Renegade::EngineBridge
+        Renegade::ScreenRenderer
         Renegade::TestLevelRuntimeProcess
         mfplat
         mf
