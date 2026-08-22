@@ -12,6 +12,8 @@
 
 #include <WickedEngine.h>
 
+#include "RenegadeScreenChoicePicker.h"
+#include "RenegadeScreenColorPicker.h"
 #include "RenegadeScreenEditorWorkspace.h"
 #include "RenegadeStudioChrome.h"
 #include "renegade/bridge/ScreenAuthoringSession.h"
@@ -19,15 +21,16 @@
 
 namespace renegade::studio
 {
-    // Gate 8D's complete schema-v2 Inspector. It overlays the accepted 8C
-    // basic Inspector only while expanded; closing it reveals the original
-    // position/size/name/text workflow unchanged.
+    // Gate 8D's creator Inspector. It overlays the accepted 8C basic Inspector
+    // only while expanded. All persistent changes still flow through
+    // ScreenAuthoringSession and the shared Runtime renderer remains preview
+    // authority.
     class RenegadeScreenEditorAdvancedInspector final : public wi::gui::Widget
     {
     public:
         void Create()
         {
-            SetName("Renegade Screen advanced Inspector");
+            SetName("Renegade Screen Advanced Inspector");
             SetShadowRadius(0.0f);
 
             toggleButton_.Create("Screen Advanced Inspector Toggle");
@@ -36,6 +39,8 @@ namespace renegade::studio
             {
                 expanded_ = !expanded_;
                 toggleButton_.SetText(expanded_ ? "< BASIC" : "ADVANCED");
+                choicePicker_.Close();
+                colorPicker_.Close();
                 RefreshFromSelection(true);
             });
 
@@ -44,6 +49,8 @@ namespace renegade::studio
             stylePageButton_.OnClick([this](const wi::gui::EventArgs&)
             {
                 page_ = Page::Style;
+                choicePicker_.Close();
+                colorPicker_.Close();
                 RefreshFromSelection(true);
             });
             textPageButton_.Create("Screen Inspector Text Page");
@@ -51,6 +58,8 @@ namespace renegade::studio
             textPageButton_.OnClick([this](const wi::gui::EventArgs&)
             {
                 page_ = Page::Text;
+                choicePicker_.Close();
+                colorPicker_.Close();
                 RefreshFromSelection(true);
             });
             bindingPageButton_.Create("Screen Inspector Binding Page");
@@ -58,6 +67,8 @@ namespace renegade::studio
             bindingPageButton_.OnClick([this](const wi::gui::EventArgs&)
             {
                 page_ = Page::Binding;
+                choicePicker_.Close();
+                colorPicker_.Close();
                 RefreshFromSelection(true);
             });
 
@@ -71,7 +82,7 @@ namespace renegade::studio
             stateImageButton_.Create("Screen State Image Resource");
             stateImageButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                CycleStateImage();
+                OpenStateImagePicker();
             });
 
             ConfigureInput(backgroundInput_, "Screen State Background", "BACKGROUND RGBA");
@@ -81,6 +92,14 @@ namespace renegade::studio
             ConfigureInput(borderWidthInput_, "Screen Border Width", "BORDER WIDTH");
             ConfigureInput(cornerRadiusInput_, "Screen Corner Radius", "CORNER RADIUS");
             ConfigureInput(opacityInput_, "Screen Opacity", "OPACITY 0..1");
+            ConfigureColorButton(backgroundColorButton_, "Screen Background Color Picker",
+                [this]() { OpenStateColor(ColorTarget::Background); });
+            ConfigureColorButton(foregroundColorButton_, "Screen Foreground Color Picker",
+                [this]() { OpenStateColor(ColorTarget::Foreground); });
+            ConfigureColorButton(tintColorButton_, "Screen Image Tint Color Picker",
+                [this]() { OpenStateColor(ColorTarget::Tint); });
+            ConfigureColorButton(borderColorButton_, "Screen Border Color Picker",
+                [this]() { OpenStateColor(ColorTarget::Border); });
             applyStyleButton_.Create("Apply Screen Style");
             applyStyleButton_.SetText("APPLY STYLE STATE");
             applyStyleButton_.OnClick([this](const wi::gui::EventArgs&)
@@ -91,7 +110,7 @@ namespace renegade::studio
             fontButton_.Create("Screen Font Resource");
             fontButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                CycleFont();
+                OpenFontPicker();
             });
             ConfigureInput(fontSizeInput_, "Screen Font Size", "FONT SIZE");
             ConfigureInput(characterSpacingInput_, "Screen Character Spacing", "CHAR SPACING");
@@ -103,19 +122,21 @@ namespace renegade::studio
             ConfigureInput(shadowYInput_, "Screen Shadow Y", "SHADOW Y");
             ConfigureInput(shadowSoftnessInput_, "Screen Shadow Softness", "SHADOW SOFTNESS");
             ConfigureInput(shadowBoldenInput_, "Screen Shadow Bolden", "SHADOW BOLDEN");
+            ConfigureColorButton(shadowColorButton_, "Screen Shadow Color Picker",
+                [this]() { OpenStateColor(ColorTarget::Shadow); });
+
             horizontalButton_.Create("Screen Horizontal Alignment");
             horizontalButton_.OnClick([this](const wi::gui::EventArgs&)
             {
                 const auto* widget = Selected();
                 if (!widget) return;
-                if (!draftStyleValid_) draftStyle_ = widget->style;
+                EnsureDraftStyle(*widget);
                 auto& value = draftStyle_.text.horizontalAlignment;
                 value = value == bridge::ScreenHorizontalAlignment::Left
                     ? bridge::ScreenHorizontalAlignment::Center
                     : value == bridge::ScreenHorizontalAlignment::Center
                         ? bridge::ScreenHorizontalAlignment::Right
                         : bridge::ScreenHorizontalAlignment::Left;
-                draftStyleValid_ = true;
                 horizontalButton_.SetText(HorizontalText(value));
             });
             verticalButton_.Create("Screen Vertical Alignment");
@@ -123,14 +144,13 @@ namespace renegade::studio
             {
                 const auto* widget = Selected();
                 if (!widget) return;
-                if (!draftStyleValid_) draftStyle_ = widget->style;
+                EnsureDraftStyle(*widget);
                 auto& value = draftStyle_.text.verticalAlignment;
                 value = value == bridge::ScreenVerticalAlignment::Top
                     ? bridge::ScreenVerticalAlignment::Center
                     : value == bridge::ScreenVerticalAlignment::Center
                         ? bridge::ScreenVerticalAlignment::Bottom
                         : bridge::ScreenVerticalAlignment::Top;
-                draftStyleValid_ = true;
                 verticalButton_.SetText(VerticalText(value));
             });
             wrapButton_.Create("Screen Text Wrap");
@@ -138,9 +158,8 @@ namespace renegade::studio
             {
                 const auto* widget = Selected();
                 if (!widget) return;
-                if (!draftStyleValid_) draftStyle_ = widget->style;
+                EnsureDraftStyle(*widget);
                 draftStyle_.text.wrap = !draftStyle_.text.wrap;
-                draftStyleValid_ = true;
                 wrapButton_.SetText(draftStyle_.text.wrap ? "WRAP: YES" : "WRAP: NO");
             });
             applyTextButton_.Create("Apply Screen Typography");
@@ -153,17 +172,40 @@ namespace renegade::studio
             primaryResourceButton_.Create("Screen Primary Image Resource");
             primaryResourceButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                CyclePrimaryResource();
+                OpenPrimaryImagePicker();
             });
             actionButton_.Create("Screen Action Binding");
             actionButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                CycleAction();
+                OpenActionPicker();
             });
+            ConfigureInput(actionIdInput_, "Screen Action ID", "ACTION ID");
+            addActionButton_.Create("Add Screen Action");
+            addActionButton_.SetText("+ ACTION");
+            addActionButton_.OnClick([this](const wi::gui::EventArgs&) { AddAction(); });
+            renameActionButton_.Create("Rename Screen Action");
+            renameActionButton_.SetText("RENAME ACTION");
+            renameActionButton_.OnClick([this](const wi::gui::EventArgs&) { RenameAction(); });
+            deleteActionButton_.Create("Delete Screen Action");
+            deleteActionButton_.SetText("DELETE ACTION");
+            deleteActionButton_.OnClick([this](const wi::gui::EventArgs&) { DeleteAction(); });
+            focusEarlierButton_.Create("Screen Focus Earlier");
+            focusEarlierButton_.SetText("FOCUS UP");
+            focusEarlierButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                MoveFocus(true);
+            });
+            focusLaterButton_.Create("Screen Focus Later");
+            focusLaterButton_.SetText("FOCUS DOWN");
+            focusLaterButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                MoveFocus(false);
+            });
+
             parentButton_.Create("Screen Parent Binding");
             parentButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                CycleParent();
+                OpenParentPicker();
             });
             layoutButton_.Create("Screen Layout Mode");
             layoutButton_.OnClick([this](const wi::gui::EventArgs&)
@@ -188,16 +230,10 @@ namespace renegade::studio
 
             panelButton_.Create("Create Screen Panel Preset");
             panelButton_.SetText("+ PANEL");
-            panelButton_.OnClick([this](const wi::gui::EventArgs&)
-            {
-                CreatePanel();
-            });
+            panelButton_.OnClick([this](const wi::gui::EventArgs&) { CreatePanel(); });
             headingButton_.Create("Create Screen Heading Preset");
             headingButton_.SetText("+ HEADING");
-            headingButton_.OnClick([this](const wi::gui::EventArgs&)
-            {
-                CreateHeading();
-            });
+            headingButton_.OnClick([this](const wi::gui::EventArgs&) { CreateHeading(); });
             duplicateComponentButton_.Create("Duplicate Screen Component");
             duplicateComponentButton_.SetText("DUP COMPONENT");
             duplicateComponentButton_.OnClick([this](const wi::gui::EventArgs&)
@@ -231,6 +267,8 @@ namespace renegade::studio
 
         void Clear() noexcept
         {
+            choicePicker_.Close();
+            colorPicker_.Close();
             session_ = nullptr;
             workspace_ = nullptr;
             projectRoot_.clear();
@@ -239,6 +277,7 @@ namespace renegade::studio
             imageResources_.clear();
             fontResources_.clear();
             expanded_ = false;
+            draftStyleValid_ = false;
             HideAll();
         }
 
@@ -252,6 +291,14 @@ namespace renegade::studio
             panelHeight_ = std::max(1.0f, height_ - 108.0f);
             SetPos(XMFLOAT2(panelX_, panelY_));
             SetSize(XMFLOAT2(panelWidth_, panelHeight_));
+            choicePicker_.SetLayout(
+                panelX_ + 8.0f, panelY_ + 74.0f,
+                std::max(220.0f, panelWidth_ - 16.0f),
+                std::min(430.0f, std::max(180.0f, panelHeight_ - 92.0f)));
+            colorPicker_.SetLayout(
+                panelX_ + 12.0f, panelY_ + 82.0f,
+                std::max(280.0f, panelWidth_ - 24.0f),
+                std::min(340.0f, std::max(280.0f, panelHeight_ - 110.0f)));
             LayoutControls();
         }
 
@@ -261,17 +308,33 @@ namespace renegade::studio
             if (!created_ || !IsVisible() || !session_ || !session_->IsLoaded())
             {
                 HideAll();
+                choicePicker_.Close();
+                colorPicker_.Close();
                 return;
             }
+
             const bridge::StableId selection = workspace_
                 ? workspace_->SelectedWidgetId() : bridge::StableId{};
             if (selection != selectedId_)
             {
                 selectedId_ = selection;
+                choicePicker_.Close();
+                colorPicker_.Close();
                 RefreshFromSelection(true);
             }
+
             LayoutControls();
             SyncVisibility();
+            if (choicePicker_.IsOpen())
+            {
+                choicePicker_.Update();
+                return;
+            }
+            if (colorPicker_.IsOpen())
+            {
+                colorPicker_.Update();
+                return;
+            }
             for (auto* widget : AllControls())
             {
                 if (widget->IsVisible()) widget->Update(canvas, dt);
@@ -302,6 +365,8 @@ namespace renegade::studio
             {
                 if (widget->IsVisible()) widget->Render(canvas, cmd);
             }
+            choicePicker_.Render(cmd);
+            colorPicker_.Render(cmd);
         }
 
         const char* GetWidgetTypeName() const override
@@ -312,6 +377,7 @@ namespace renegade::studio
     private:
         enum class Page { Style, Text, Binding };
         enum class VisualState { Normal, Hover, Pressed, Focused, Disabled };
+        enum class ColorTarget { Background, Foreground, Tint, Border, Shadow };
 
         static void ConfigureInput(
             RenegadeTextInputField& input,
@@ -322,6 +388,32 @@ namespace renegade::studio
             input.SetDescription((std::string(description) + "  ").c_str());
             input.SetCancelInputEnabled(false);
             input.SetShadowRadius(0.0f);
+        }
+
+        void ConfigureColorButton(
+            RenegadeButton& button,
+            const char* name,
+            std::function<void()> callback)
+        {
+            button.Create(name);
+            button.SetText("PICK");
+            button.OnClick([callback = std::move(callback)](const wi::gui::EventArgs&)
+            {
+                if (callback) callback();
+            });
+        }
+
+        static std::string Trim(std::string value)
+        {
+            const auto whitespace = [](const unsigned char character)
+            {
+                return std::isspace(character) != 0;
+            };
+            while (!value.empty() && whitespace(value.front()))
+                value.erase(value.begin());
+            while (!value.empty() && whitespace(value.back()))
+                value.pop_back();
+            return value;
         }
 
         static std::string Number(const float value)
@@ -336,8 +428,9 @@ namespace renegade::studio
             try
             {
                 std::size_t used = 0;
-                result = std::stof(value, &used);
-                return used == value.size() && std::isfinite(result);
+                const std::string trimmed = Trim(value);
+                result = std::stof(trimmed, &used);
+                return used == trimmed.size() && std::isfinite(result);
             }
             catch (...) { return false; }
         }
@@ -355,6 +448,7 @@ namespace renegade::studio
 
         static bool ParseColor(std::string text, bridge::ScreenColor& color)
         {
+            text = Trim(std::move(text));
             if (!text.empty() && text.front() == '#') text.erase(text.begin());
             if (text.size() != 8) return false;
             if (!std::all_of(text.begin(), text.end(), [](const unsigned char c)
@@ -416,9 +510,23 @@ namespace renegade::studio
             return "..." + value.substr(value.size() - 27);
         }
 
+        static std::string ShortId(const bridge::StableId& value)
+        {
+            return value.size() <= 8 ? value : value.substr(0, 8);
+        }
+
         const bridge::ScreenWidget* Selected() const noexcept
         {
             return session_ ? session_->FindWidget(selectedId_) : nullptr;
+        }
+
+        void EnsureDraftStyle(const bridge::ScreenWidget& widget)
+        {
+            if (!draftStyleValid_)
+            {
+                draftStyle_ = widget.style;
+                draftStyleValid_ = true;
+            }
         }
 
         bridge::ScreenVisualState* DraftVisual() noexcept
@@ -452,12 +560,21 @@ namespace renegade::studio
         {
             imageResources_.clear();
             fontResources_.clear();
+            if (!session_ || !session_->IsLoaded()) return;
             const auto images = bridge::EnumerateScreenCreatorResources(
-                projectRoot_, bridge::ScreenCreatorResourceKind::Image);
-            if (images.succeeded) imageResources_ = images.choices;
+                projectRoot_, session_->ProjectId(),
+                bridge::ScreenCreatorResourceKind::Image);
+            if (images.succeeded)
+                imageResources_ = images.choices;
             const auto fonts = bridge::EnumerateScreenCreatorResources(
-                projectRoot_, bridge::ScreenCreatorResourceKind::Font);
-            if (fonts.succeeded) fontResources_ = fonts.choices;
+                projectRoot_, session_->ProjectId(),
+                bridge::ScreenCreatorResourceKind::Font);
+            if (fonts.succeeded)
+                fontResources_ = fonts.choices;
+            if (!images.succeeded && !images.error.empty())
+                status_ = "RESOURCE CATALOGUE // " + images.error;
+            else if (!fonts.succeeded && !fonts.error.empty())
+                status_ = "RESOURCE CATALOGUE // " + fonts.error;
         }
 
         void RefreshFromSelection(const bool overwriteDraft)
@@ -477,8 +594,7 @@ namespace renegade::studio
 
             stateButton_.SetText(StateText(state_));
             const auto* state = Visual(draftStyle_);
-            stateImageButton_.SetText(
-                "STATE IMAGE: " + Short(state->imageResourcePath));
+            stateImageButton_.SetText("STATE IMAGE: " + Short(state->imageResourcePath));
             backgroundInput_.SetValue(ColorText(state->background));
             foregroundInput_.SetValue(ColorText(state->foreground));
             tintInput_.SetValue(ColorText(state->imageTint));
@@ -502,10 +618,10 @@ namespace renegade::studio
             verticalButton_.SetText(VerticalText(draftStyle_.text.verticalAlignment));
             wrapButton_.SetText(draftStyle_.text.wrap ? "WRAP: YES" : "WRAP: NO");
 
-            primaryResourceButton_.SetText(
-                "IMAGE: " + Short(draftPrimaryResource_));
+            primaryResourceButton_.SetText("IMAGE: " + Short(draftPrimaryResource_));
             actionButton_.SetText("ACTION: " +
                 (draftAction_.empty() ? std::string("< NONE >") : draftAction_));
+            actionIdInput_.SetValue(draftAction_);
             parentButton_.SetText("PARENT: " + ParentLabel(draftParent_));
             layoutButton_.SetText(
                 draftLayout_ == bridge::ScreenLayoutMode::Absolute
@@ -526,9 +642,13 @@ namespace renegade::studio
         bool IsDescendantOfSelection(const bridge::ScreenWidget& candidate) const
         {
             bridge::StableId parent = candidate.parentId;
+            std::vector<bridge::StableId> visited;
             while (!parent.empty())
             {
                 if (parent == selectedId_) return true;
+                if (std::find(visited.begin(), visited.end(), parent) != visited.end())
+                    return true;
+                visited.push_back(parent);
                 const auto* widget = session_->FindWidget(parent);
                 if (!widget) break;
                 parent = widget->parentId;
@@ -536,100 +656,176 @@ namespace renegade::studio
             return false;
         }
 
-        void CycleStringChoice(
-            std::string& current,
-            const std::vector<std::string>& choices,
+        std::vector<RenegadeScreenChoicePicker::Choice> ImageChoices(
             const bool includeEmpty)
         {
-            std::vector<std::string> values;
-            if (includeEmpty) values.emplace_back();
-            values.insert(values.end(), choices.begin(), choices.end());
-            if (values.empty()) return;
-            const auto found = std::find(values.begin(), values.end(), current);
-            const std::size_t index = found == values.end()
-                ? 0 : (static_cast<std::size_t>(
-                    std::distance(values.begin(), found)) + 1) % values.size();
-            current = values[index];
-        }
-
-        std::vector<std::string> ImagePaths() const
-        {
-            std::vector<std::string> values;
+            RefreshResources();
+            std::vector<RenegadeScreenChoicePicker::Choice> choices;
+            if (includeEmpty) choices.push_back({"< NONE >", ""});
             for (const auto& choice : imageResources_)
-                values.push_back(choice.projectRelativePath);
-            return values;
+            {
+                choices.push_back({
+                    choice.projectRelativePath + "  [" + ShortId(choice.assetId) + "]",
+                    choice.projectRelativePath});
+            }
+            return choices;
         }
 
-        std::vector<std::string> FontPaths() const
+        std::vector<RenegadeScreenChoicePicker::Choice> FontChoices()
         {
-            std::vector<std::string> values{bridge::BuiltinScreenFont};
+            RefreshResources();
+            std::vector<RenegadeScreenChoicePicker::Choice> choices{
+                {"BUILT-IN // Liberation Sans", bridge::BuiltinScreenFont}};
             for (const auto& choice : fontResources_)
-                values.push_back(choice.projectRelativePath);
-            return values;
+            {
+                choices.push_back({
+                    choice.projectRelativePath + "  [" + ShortId(choice.assetId) + "]",
+                    choice.projectRelativePath});
+            }
+            return choices;
         }
 
-        void CycleStateImage()
+        void OpenStateImagePicker()
         {
             const auto* widget = Selected();
             if (!widget) return;
-            if (!draftStyleValid_) draftStyle_ = widget->style;
-            auto* state = DraftVisual();
-            auto values = ImagePaths();
-            CycleStringChoice(state->imageResourcePath, values, true);
-            stateImageButton_.SetText(
-                "STATE IMAGE: " + Short(state->imageResourcePath));
+            EnsureDraftStyle(*widget);
+            const std::string current = DraftVisual()->imageResourcePath;
+            choicePicker_.Open("SELECT STATE IMAGE", ImageChoices(true), current,
+                [this](const std::string& value)
+                {
+                    if (!Selected()) return;
+                    DraftVisual()->imageResourcePath = value;
+                    stateImageButton_.SetText("STATE IMAGE: " + Short(value));
+                });
         }
 
-        void CycleFont()
+        void OpenFontPicker()
         {
             const auto* widget = Selected();
-            if (!widget) return;
-            if (!draftStyleValid_) draftStyle_ = widget->style;
-            const auto values = FontPaths();
-            CycleStringChoice(draftStyle_.text.fontResource, values, false);
-            fontButton_.SetText("FONT: " + Short(draftStyle_.text.fontResource));
+            if (!widget || widget->kind == bridge::ScreenWidgetKind::Image) return;
+            EnsureDraftStyle(*widget);
+            choicePicker_.Open("SELECT FONT", FontChoices(),
+                draftStyle_.text.fontResource,
+                [this](const std::string& value)
+                {
+                    draftStyle_.text.fontResource = value;
+                    fontButton_.SetText("FONT: " + Short(value));
+                });
         }
 
-        void CyclePrimaryResource()
+        void OpenPrimaryImagePicker()
         {
             const auto* widget = Selected();
             if (!widget || widget->kind != bridge::ScreenWidgetKind::Image) return;
-            const auto values = ImagePaths();
-            CycleStringChoice(draftPrimaryResource_, values, true);
-            primaryResourceButton_.SetText(
-                "IMAGE: " + Short(draftPrimaryResource_));
+            choicePicker_.Open("SELECT IMAGE", ImageChoices(true), draftPrimaryResource_,
+                [this](const std::string& value)
+                {
+                    draftPrimaryResource_ = value;
+                    primaryResourceButton_.SetText("IMAGE: " + Short(value));
+                });
         }
 
-        void CycleAction()
+        void OpenActionPicker()
         {
             const auto* widget = Selected();
-            if (!widget || widget->kind != bridge::ScreenWidgetKind::Button) return;
-            std::vector<std::string> values;
+            if (!widget || widget->kind != bridge::ScreenWidgetKind::Button || !session_)
+                return;
+            std::vector<RenegadeScreenChoicePicker::Choice> choices;
             for (const auto& action : session_->Document().actions)
-                values.push_back(action.id);
-            CycleStringChoice(draftAction_, values, false);
-            actionButton_.SetText("ACTION: " + draftAction_);
+                choices.push_back({action.id, action.id});
+            choicePicker_.Open("SELECT BUTTON ACTION", std::move(choices), draftAction_,
+                [this](const std::string& value)
+                {
+                    draftAction_ = value;
+                    actionIdInput_.SetValue(value);
+                    actionButton_.SetText("ACTION: " + value);
+                });
         }
 
-        void CycleParent()
+        void OpenParentPicker()
         {
             const auto* widget = Selected();
-            if (!widget) return;
-            std::vector<std::string> values;
-            values.emplace_back();
+            if (!widget || !session_) return;
+            std::vector<RenegadeScreenChoicePicker::Choice> choices{
+                {"CANVAS", ""}};
             for (const auto& candidate : session_->Document().widgets)
             {
                 if (candidate.id == selectedId_ || IsDescendantOfSelection(candidate))
                     continue;
-                values.push_back(candidate.id);
+                choices.push_back({candidate.name + "  [" + ShortId(candidate.id) + "]",
+                    candidate.id});
             }
-            if (values.empty()) return;
-            const auto found = std::find(values.begin(), values.end(), draftParent_);
-            const std::size_t index = found == values.end()
-                ? 0 : (static_cast<std::size_t>(
-                    std::distance(values.begin(), found)) + 1) % values.size();
-            draftParent_ = values[index];
-            parentButton_.SetText("PARENT: " + ParentLabel(draftParent_));
+            choicePicker_.Open("SELECT PARENT", std::move(choices), draftParent_,
+                [this](const std::string& value)
+                {
+                    draftParent_ = value;
+                    parentButton_.SetText("PARENT: " + ParentLabel(value));
+                });
+        }
+
+        void OpenStateColor(const ColorTarget target)
+        {
+            const auto* widget = Selected();
+            if (!widget) return;
+            EnsureDraftStyle(*widget);
+            bridge::ScreenColor value;
+            std::string title;
+            if (target == ColorTarget::Background)
+            {
+                value = DraftVisual()->background;
+                title = "BACKGROUND RGBA";
+            }
+            else if (target == ColorTarget::Foreground)
+            {
+                value = DraftVisual()->foreground;
+                title = "FOREGROUND RGBA";
+            }
+            else if (target == ColorTarget::Tint)
+            {
+                value = DraftVisual()->imageTint;
+                title = "IMAGE TINT RGBA";
+            }
+            else if (target == ColorTarget::Border)
+            {
+                value = draftStyle_.borderColor;
+                title = "BORDER RGBA";
+            }
+            else
+            {
+                value = draftStyle_.text.shadowColor;
+                title = "SHADOW RGBA";
+            }
+            colorPicker_.Open(title, value,
+                [this, target](const bridge::ScreenColor& color)
+                {
+                    if (!Selected()) return;
+                    if (target == ColorTarget::Background)
+                    {
+                        DraftVisual()->background = color;
+                        backgroundInput_.SetValue(ColorText(color));
+                    }
+                    else if (target == ColorTarget::Foreground)
+                    {
+                        DraftVisual()->foreground = color;
+                        foregroundInput_.SetValue(ColorText(color));
+                    }
+                    else if (target == ColorTarget::Tint)
+                    {
+                        DraftVisual()->imageTint = color;
+                        tintInput_.SetValue(ColorText(color));
+                    }
+                    else if (target == ColorTarget::Border)
+                    {
+                        draftStyle_.borderColor = color;
+                        borderColorInput_.SetValue(ColorText(color));
+                    }
+                    else
+                    {
+                        draftStyle_.text.shadowColor = color;
+                        shadowColorInput_.SetValue(ColorText(color));
+                    }
+                });
         }
 
         bool ReadStyleFields(bridge::ScreenWidgetStyle& style)
@@ -646,15 +842,39 @@ namespace renegade::studio
                 }
                 return &style.normal;
             }();
-            if (!ParseColor(backgroundInput_.GetValue(), state->background) ||
-                !ParseColor(foregroundInput_.GetValue(), state->foreground) ||
-                !ParseColor(tintInput_.GetValue(), state->imageTint) ||
-                !ParseColor(borderColorInput_.GetValue(), style.borderColor) ||
-                !ParseNumber(borderWidthInput_.GetValue(), style.borderWidth) ||
-                !ParseNumber(cornerRadiusInput_.GetValue(), style.cornerRadius) ||
-                !ParseNumber(opacityInput_.GetValue(), style.opacity))
+            if (!ParseColor(backgroundInput_.GetValue(), state->background))
             {
-                status_ = "STYLE REJECTED // CHECK RGBA AND NUMBER FIELDS";
+                status_ = "STYLE REJECTED // BACKGROUND RGBA IS INVALID";
+                return false;
+            }
+            if (!ParseColor(foregroundInput_.GetValue(), state->foreground))
+            {
+                status_ = "STYLE REJECTED // FOREGROUND RGBA IS INVALID";
+                return false;
+            }
+            if (!ParseColor(tintInput_.GetValue(), state->imageTint))
+            {
+                status_ = "STYLE REJECTED // IMAGE TINT RGBA IS INVALID";
+                return false;
+            }
+            if (!ParseColor(borderColorInput_.GetValue(), style.borderColor))
+            {
+                status_ = "STYLE REJECTED // BORDER RGBA IS INVALID";
+                return false;
+            }
+            if (!ParseNumber(borderWidthInput_.GetValue(), style.borderWidth))
+            {
+                status_ = "STYLE REJECTED // BORDER WIDTH IS INVALID";
+                return false;
+            }
+            if (!ParseNumber(cornerRadiusInput_.GetValue(), style.cornerRadius))
+            {
+                status_ = "STYLE REJECTED // CORNER RADIUS IS INVALID";
+                return false;
+            }
+            if (!ParseNumber(opacityInput_.GetValue(), style.opacity))
+            {
+                status_ = "STYLE REJECTED // OPACITY IS INVALID";
                 return false;
             }
             return true;
@@ -663,18 +883,46 @@ namespace renegade::studio
         bool ReadTextFields(bridge::ScreenWidgetStyle& style)
         {
             auto& text = style.text;
-            if (!ParseNumber(fontSizeInput_.GetValue(), text.fontSize) ||
-                !ParseNumber(characterSpacingInput_.GetValue(), text.characterSpacing) ||
-                !ParseNumber(lineSpacingInput_.GetValue(), text.lineSpacing) ||
-                !ParseNumber(softnessInput_.GetValue(), text.softness) ||
-                !ParseNumber(boldenInput_.GetValue(), text.bolden) ||
-                !ParseColor(shadowColorInput_.GetValue(), text.shadowColor) ||
-                !ParseNumber(shadowXInput_.GetValue(), text.shadowOffsetX) ||
-                !ParseNumber(shadowYInput_.GetValue(), text.shadowOffsetY) ||
-                !ParseNumber(shadowSoftnessInput_.GetValue(), text.shadowSoftness) ||
+            if (!ParseNumber(fontSizeInput_.GetValue(), text.fontSize))
+            {
+                status_ = "TYPOGRAPHY REJECTED // FONT SIZE IS INVALID";
+                return false;
+            }
+            if (!ParseNumber(characterSpacingInput_.GetValue(), text.characterSpacing))
+            {
+                status_ = "TYPOGRAPHY REJECTED // CHARACTER SPACING IS INVALID";
+                return false;
+            }
+            if (!ParseNumber(lineSpacingInput_.GetValue(), text.lineSpacing))
+            {
+                status_ = "TYPOGRAPHY REJECTED // LINE SPACING IS INVALID";
+                return false;
+            }
+            if (!ParseNumber(softnessInput_.GetValue(), text.softness))
+            {
+                status_ = "TYPOGRAPHY REJECTED // SOFTNESS IS INVALID";
+                return false;
+            }
+            if (!ParseNumber(boldenInput_.GetValue(), text.bolden))
+            {
+                status_ = "TYPOGRAPHY REJECTED // BOLDEN IS INVALID";
+                return false;
+            }
+            if (!ParseColor(shadowColorInput_.GetValue(), text.shadowColor))
+            {
+                status_ = "TYPOGRAPHY REJECTED // SHADOW RGBA IS INVALID";
+                return false;
+            }
+            if (!ParseNumber(shadowXInput_.GetValue(), text.shadowOffsetX) ||
+                !ParseNumber(shadowYInput_.GetValue(), text.shadowOffsetY))
+            {
+                status_ = "TYPOGRAPHY REJECTED // SHADOW OFFSET IS INVALID";
+                return false;
+            }
+            if (!ParseNumber(shadowSoftnessInput_.GetValue(), text.shadowSoftness) ||
                 !ParseNumber(shadowBoldenInput_.GetValue(), text.shadowBolden))
             {
-                status_ = "TYPOGRAPHY REJECTED // CHECK RGBA AND NUMBER FIELDS";
+                status_ = "TYPOGRAPHY REJECTED // SHADOW SOFTNESS/BOLDEN IS INVALID";
                 return false;
             }
             return true;
@@ -715,9 +963,8 @@ namespace renegade::studio
         {
             const auto* widget = Selected();
             if (!widget) return;
-            if (!draftStyleValid_) draftStyle_ = widget->style;
+            EnsureDraftStyle(*widget);
             if (!ReadStyleFields(draftStyle_)) return;
-            draftStyleValid_ = true;
             CommitCreatorEdit(CurrentCreatorEdit(),
                 "STYLE STATE UPDATED // UNSAVED SCREEN CHANGE");
         }
@@ -726,9 +973,8 @@ namespace renegade::studio
         {
             const auto* widget = Selected();
             if (!widget || widget->kind == bridge::ScreenWidgetKind::Image) return;
-            if (!draftStyleValid_) draftStyle_ = widget->style;
+            EnsureDraftStyle(*widget);
             if (!ReadTextFields(draftStyle_)) return;
-            draftStyleValid_ = true;
             CommitCreatorEdit(CurrentCreatorEdit(),
                 "TYPOGRAPHY UPDATED // UNSAVED SCREEN CHANGE");
         }
@@ -747,6 +993,86 @@ namespace renegade::studio
             }
             CommitCreatorEdit(CurrentCreatorEdit(),
                 "BINDING / LAYOUT UPDATED // UNSAVED SCREEN CHANGE");
+        }
+
+        void AddAction()
+        {
+            if (!session_) return;
+            const std::string value = Trim(actionIdInput_.GetValue());
+            std::string error;
+            if (!session_->AddAction(value, error))
+            {
+                status_ = "ADD ACTION REJECTED // " + error;
+                return;
+            }
+            draftAction_ = value;
+            actionButton_.SetText("ACTION: " + value);
+            status_ = "ACTION ADDED // APPLY BINDING TO USE IT";
+            if (documentChanged_) documentChanged_();
+        }
+
+        void RenameAction()
+        {
+            if (!session_ || draftAction_.empty())
+            {
+                status_ = "RENAME ACTION REJECTED // SELECT AN ACTION FIRST";
+                return;
+            }
+            const std::string replacement = Trim(actionIdInput_.GetValue());
+            const std::string original = draftAction_;
+            std::string error;
+            if (!session_->RenameAction(original, replacement, error))
+            {
+                status_ = "RENAME ACTION REJECTED // " + error;
+                return;
+            }
+            draftAction_ = replacement;
+            actionButton_.SetText("ACTION: " + replacement);
+            status_ = "ACTION RENAMED // BUTTON REFERENCES UPDATED";
+            if (documentChanged_) documentChanged_();
+            RefreshFromSelection(true);
+        }
+
+        void DeleteAction()
+        {
+            if (!session_ || draftAction_.empty())
+            {
+                status_ = "DELETE ACTION REJECTED // SELECT AN ACTION FIRST";
+                return;
+            }
+            const std::string action = draftAction_;
+            std::string error;
+            if (!session_->DeleteAction(action, error))
+            {
+                status_ = "DELETE ACTION REJECTED // " + error;
+                return;
+            }
+            status_ = "ACTION DELETED // UNSAVED SCREEN CHANGE";
+            draftAction_.clear();
+            actionIdInput_.SetValue("");
+            actionButton_.SetText("ACTION: < NONE >");
+            if (documentChanged_) documentChanged_();
+            RefreshFromSelection(true);
+        }
+
+        void MoveFocus(const bool earlier)
+        {
+            const auto* widget = Selected();
+            if (!session_ || !widget || widget->kind != bridge::ScreenWidgetKind::Button)
+                return;
+            std::string error;
+            const bool moved = earlier
+                ? session_->MoveButtonFocusEarlier(widget->id, error)
+                : session_->MoveButtonFocusLater(widget->id, error);
+            if (!moved)
+            {
+                status_ = "FOCUS ORDER REJECTED // " + error;
+                return;
+            }
+            status_ = earlier
+                ? "BUTTON MOVED EARLIER IN FOCUS ORDER"
+                : "BUTTON MOVED LATER IN FOCUS ORDER";
+            if (documentChanged_) documentChanged_();
         }
 
         void CreatePanel()
@@ -849,13 +1175,21 @@ namespace renegade::studio
             bindingPageButton_.SetSize(XMFLOAT2(third, 28.0f));
             y += 38.0f;
 
-            auto place = [&](wi::gui::Widget& widget, const float h = 28.0f)
+            const auto place = [&](wi::gui::Widget& widget, const float h = 28.0f)
             {
                 widget.SetPos(XMFLOAT2(x, y));
                 widget.SetSize(XMFLOAT2(w, h));
                 y += h + 7.0f;
             };
-            auto pair = [&](wi::gui::Widget& a, wi::gui::Widget& b)
+            const auto pair = [&](wi::gui::Widget& a, wi::gui::Widget& b)
+            {
+                a.SetPos(XMFLOAT2(x, y));
+                a.SetSize(XMFLOAT2(w * 0.70f - 3.0f, 28.0f));
+                b.SetPos(XMFLOAT2(x + w * 0.70f + 3.0f, y));
+                b.SetSize(XMFLOAT2(w * 0.30f - 3.0f, 28.0f));
+                y += 35.0f;
+            };
+            const auto halves = [&](wi::gui::Widget& a, wi::gui::Widget& b)
             {
                 a.SetPos(XMFLOAT2(x, y));
                 a.SetSize(XMFLOAT2(w * 0.5f - 3.0f, 28.0f));
@@ -866,26 +1200,44 @@ namespace renegade::studio
 
             if (page_ == Page::Style)
             {
-                place(stateButton_); place(stateImageButton_);
-                place(backgroundInput_); place(foregroundInput_); place(tintInput_);
-                place(borderColorInput_); pair(borderWidthInput_, cornerRadiusInput_);
-                place(opacityInput_); place(applyStyleButton_, 32.0f);
+                place(stateButton_);
+                place(stateImageButton_);
+                pair(backgroundInput_, backgroundColorButton_);
+                pair(foregroundInput_, foregroundColorButton_);
+                pair(tintInput_, tintColorButton_);
+                pair(borderColorInput_, borderColorButton_);
+                halves(borderWidthInput_, cornerRadiusInput_);
+                place(opacityInput_);
+                place(applyStyleButton_, 32.0f);
             }
             else if (page_ == Page::Text)
             {
-                place(fontButton_); pair(fontSizeInput_, characterSpacingInput_);
-                pair(lineSpacingInput_, softnessInput_); pair(boldenInput_, shadowColorInput_);
-                pair(shadowXInput_, shadowYInput_);
-                pair(shadowSoftnessInput_, shadowBoldenInput_);
-                pair(horizontalButton_, verticalButton_); place(wrapButton_);
+                place(fontButton_);
+                halves(fontSizeInput_, characterSpacingInput_);
+                halves(lineSpacingInput_, softnessInput_);
+                place(boldenInput_);
+                pair(shadowColorInput_, shadowColorButton_);
+                halves(shadowXInput_, shadowYInput_);
+                halves(shadowSoftnessInput_, shadowBoldenInput_);
+                halves(horizontalButton_, verticalButton_);
+                place(wrapButton_);
                 place(applyTextButton_, 32.0f);
             }
             else
             {
-                place(primaryResourceButton_); place(actionButton_); place(parentButton_);
-                place(layoutButton_); pair(anchorMinXInput_, anchorMinYInput_);
-                pair(anchorMaxXInput_, anchorMaxYInput_); place(applyBindingButton_, 32.0f);
-                y += 4.0f; pair(panelButton_, headingButton_);
+                place(primaryResourceButton_);
+                place(actionButton_);
+                place(actionIdInput_);
+                halves(addActionButton_, renameActionButton_);
+                place(deleteActionButton_);
+                halves(focusEarlierButton_, focusLaterButton_);
+                place(parentButton_);
+                place(layoutButton_);
+                halves(anchorMinXInput_, anchorMinYInput_);
+                halves(anchorMaxXInput_, anchorMaxYInput_);
+                place(applyBindingButton_, 32.0f);
+                y += 4.0f;
+                halves(panelButton_, headingButton_);
                 place(duplicateComponentButton_, 32.0f);
             }
         }
@@ -911,35 +1263,46 @@ namespace renegade::studio
             else
             {
                 for (auto* widget : BindingControls()) widget->SetVisible(true);
-                primaryResourceButton_.SetEnabled(
-                    Selected()->kind == bridge::ScreenWidgetKind::Image);
-                actionButton_.SetEnabled(
-                    Selected()->kind == bridge::ScreenWidgetKind::Button);
+                const bool image = Selected()->kind == bridge::ScreenWidgetKind::Image;
+                const bool button = Selected()->kind == bridge::ScreenWidgetKind::Button;
+                primaryResourceButton_.SetEnabled(image);
+                actionButton_.SetEnabled(button);
+                focusEarlierButton_.SetEnabled(button);
+                focusLaterButton_.SetEnabled(button);
             }
         }
 
         std::vector<wi::gui::Widget*> StyleControls()
         {
-            return {&stateButton_, &stateImageButton_, &backgroundInput_,
-                &foregroundInput_, &tintInput_, &borderColorInput_,
+            return {&stateButton_, &stateImageButton_,
+                &backgroundInput_, &backgroundColorButton_,
+                &foregroundInput_, &foregroundColorButton_,
+                &tintInput_, &tintColorButton_,
+                &borderColorInput_, &borderColorButton_,
                 &borderWidthInput_, &cornerRadiusInput_, &opacityInput_,
                 &applyStyleButton_};
         }
+
         std::vector<wi::gui::Widget*> TextControls()
         {
             return {&fontButton_, &fontSizeInput_, &characterSpacingInput_,
                 &lineSpacingInput_, &softnessInput_, &boldenInput_,
-                &shadowColorInput_, &shadowXInput_, &shadowYInput_,
-                &shadowSoftnessInput_, &shadowBoldenInput_, &horizontalButton_,
-                &verticalButton_, &wrapButton_, &applyTextButton_};
+                &shadowColorInput_, &shadowColorButton_, &shadowXInput_,
+                &shadowYInput_, &shadowSoftnessInput_, &shadowBoldenInput_,
+                &horizontalButton_, &verticalButton_, &wrapButton_,
+                &applyTextButton_};
         }
+
         std::vector<wi::gui::Widget*> BindingControls()
         {
-            return {&primaryResourceButton_, &actionButton_, &parentButton_,
+            return {&primaryResourceButton_, &actionButton_, &actionIdInput_,
+                &addActionButton_, &renameActionButton_, &deleteActionButton_,
+                &focusEarlierButton_, &focusLaterButton_, &parentButton_,
                 &layoutButton_, &anchorMinXInput_, &anchorMinYInput_,
                 &anchorMaxXInput_, &anchorMaxYInput_, &applyBindingButton_,
                 &panelButton_, &headingButton_, &duplicateComponentButton_};
         }
+
         std::vector<wi::gui::Widget*> AllControls()
         {
             auto result = std::vector<wi::gui::Widget*>{
@@ -949,9 +1312,12 @@ namespace renegade::studio
             {
                 result.insert(result.end(), values.begin(), values.end());
             };
-            append(StyleControls()); append(TextControls()); append(BindingControls());
+            append(StyleControls());
+            append(TextControls());
+            append(BindingControls());
             return result;
         }
+
         std::vector<const wi::gui::Widget*> AllControlsConst() const
         {
             std::vector<const wi::gui::Widget*> result;
@@ -959,6 +1325,7 @@ namespace renegade::studio
             for (auto* widget : self->AllControls()) result.push_back(widget);
             return result;
         }
+
         void HideAll()
         {
             for (auto* widget : AllControls()) widget->SetVisible(false);
@@ -972,6 +1339,7 @@ namespace renegade::studio
             params.blendFlag = wi::enums::BLENDMODE_ALPHA;
             wi::image::Draw(nullptr, params, cmd);
         }
+
         static void DrawBorder(
             const float x, const float y, const float w, const float h,
             const wi::Color color, const wi::graphics::CommandList cmd)
@@ -981,6 +1349,7 @@ namespace renegade::studio
             DrawRect(x, y, 1.0f, h, color, cmd);
             DrawRect(x + w - 1.0f, y, 1.0f, h, color, cmd);
         }
+
         static void DrawLabel(
             const std::string& value, const float x, const float y,
             const int size, const wi::Color color,
@@ -1019,6 +1388,8 @@ namespace renegade::studio
         bridge::ScreenAnchors draftAnchors_;
         std::vector<bridge::ScreenCreatorResourceChoice> imageResources_;
         std::vector<bridge::ScreenCreatorResourceChoice> fontResources_;
+        RenegadeScreenChoicePicker choicePicker_;
+        RenegadeScreenColorPicker colorPicker_;
 
         RenegadeButton toggleButton_;
         RenegadeButton stylePageButton_;
@@ -1027,9 +1398,13 @@ namespace renegade::studio
         RenegadeButton stateButton_;
         RenegadeButton stateImageButton_;
         RenegadeTextInputField backgroundInput_;
+        RenegadeButton backgroundColorButton_;
         RenegadeTextInputField foregroundInput_;
+        RenegadeButton foregroundColorButton_;
         RenegadeTextInputField tintInput_;
+        RenegadeButton tintColorButton_;
         RenegadeTextInputField borderColorInput_;
+        RenegadeButton borderColorButton_;
         RenegadeTextInputField borderWidthInput_;
         RenegadeTextInputField cornerRadiusInput_;
         RenegadeTextInputField opacityInput_;
@@ -1041,6 +1416,7 @@ namespace renegade::studio
         RenegadeTextInputField softnessInput_;
         RenegadeTextInputField boldenInput_;
         RenegadeTextInputField shadowColorInput_;
+        RenegadeButton shadowColorButton_;
         RenegadeTextInputField shadowXInput_;
         RenegadeTextInputField shadowYInput_;
         RenegadeTextInputField shadowSoftnessInput_;
@@ -1051,6 +1427,12 @@ namespace renegade::studio
         RenegadeButton applyTextButton_;
         RenegadeButton primaryResourceButton_;
         RenegadeButton actionButton_;
+        RenegadeTextInputField actionIdInput_;
+        RenegadeButton addActionButton_;
+        RenegadeButton renameActionButton_;
+        RenegadeButton deleteActionButton_;
+        RenegadeButton focusEarlierButton_;
+        RenegadeButton focusLaterButton_;
         RenegadeButton parentButton_;
         RenegadeButton layoutButton_;
         RenegadeTextInputField anchorMinXInput_;
