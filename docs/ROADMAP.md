@@ -1,8 +1,8 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`d9f49a0dbd3cc9d03656d22f951b9ce67d52cdce`
-(`Story Flow Gate 8A: govern Screen contract v2 (#87)`).
+`fe5871091ccb74a417081c4e4abe38ed86010f53`
+(`Story Flow Gate 8B: shared Screen renderer (#88)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -91,8 +91,8 @@ templates/migration policy around permanent Game Start. The locked contract is
 Native Screen Editor with image/background/text/button/layout/action authoring,
 preview, validation, Save/Undo/Redo and Return to Story Flow.
 
-**Status:** Gate 8A accepted and merged through PR #87. Gate 8B implementation
-active on `feature/story-flow-gate8b-shared-screen-renderer`.
+**Status:** Gates 8A and 8B are accepted and merged through PR #88. Gate 8C
+implementation is active on `feature/story-flow-gate8c-screen-editor-shell`.
 
 Gate 8 is delivered as bounded internal slices so the editor is not built on
 the old runtime-proof schema:
@@ -101,22 +101,30 @@ the old runtime-proof schema:
    layout, editable normal/hover/pressed/focused/disabled appearance, explicit
    built-in or project `.ttf` font identity, lossless v1 migration and Runtime
    consumption. No visual property may be supplied by hidden Runtime styling.
-2. **8B — shared Screen renderer (active):** one Renegade-owned
+2. **8B — shared Screen renderer (accepted):** one Renegade-owned
    layout/presentation core used by editor preview and Runtime, including
    remaining shape/border fidelity and removal of Wicked's implicit disabled
    fade.
-3. **8C — authoring shell:** canvas, hierarchy, selection, transform/layout
-   tools, Inspector, preview, Save/Undo/Redo and Return to Story Flow.
+3. **8C — authoring shell (active):** first-class Screen Editor path, canvas,
+   hierarchy, stable selection, transform/layout tools, Inspector, shared
+   Runtime preview, Save/Undo/Redo and guarded Return to Story Flow. Contract:
+   `docs/STORY_FLOW_GATE8C_SCREEN_EDITOR_SHELL.md`.
 4. **8D — creator controls:** image/background/text/button plus the broader
    control catalogue, reusable components, state editing and typed data/action
    binding.
 5. **8E — Story Flow and packaging acceptance:** named outcomes remain Story
    Flow routing authority; save/reopen/Runtime/standalone parity is proven.
 
-### Gate 9 — Advanced Journey authoring and scale
+### Gate 9 — Journey View UI/UX implementation and scale
 
-Semantic zoom, minimap, branch collapse, search/focus, chapters/groups,
-auto-splice, loops/hubs/returns and large-project diagnostics.
+Implement the recovered approved Journey View concept as the real Story Flow
+creator experience: Renegade Studio chrome, navigation rail, journey reels and
+branch lanes, visual cards, Inspector, overview/minimap and the complete
+interaction language. Concept fidelity is owner-reviewed UI/UX work, not an
+implicit side effect of the functional gates.
+
+The same gate adds semantic zoom, branch collapse, search/focus,
+chapters/groups, auto-splice, loops/hubs/returns and large-project diagnostics.
 
 ### Gate 10 — Runtime/build/standalone closeout
 

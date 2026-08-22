@@ -100,6 +100,24 @@ int main()
         rendered.visual.background.red != 10)
         return Fail("focused visual state was not selected");
 
+    const bridge::ScreenRect editorViewport{300.0f, 200.0f, 960.0f, 540.0f};
+    if (!screen::BuildScreenRenderItemsInViewport(
+            document, editorViewport, states, items, error))
+        return Fail("valid Screen Editor preview viewport was rejected");
+    const auto& previewButton = items[1];
+    if (!Near(previewButton.logicalRect.x, 630.0f) ||
+        !Near(previewButton.logicalRect.y, 440.0f) ||
+        !Near(previewButton.logicalRect.width, 300.0f) ||
+        !Near(previewButton.logicalRect.height, 60.0f) ||
+        !Near(previewButton.scaleX, 0.75f) ||
+        !Near(previewButton.scaleY, 0.75f))
+        return Fail("Screen Editor viewport diverged from shared render geometry");
+
+    const bridge::ScreenRect invalidViewport{0.0f, 0.0f, 0.0f, 540.0f};
+    if (screen::BuildScreenRenderItemsInViewport(
+            document, invalidViewport, states, items, error))
+        return Fail("invalid Screen Editor preview viewport was accepted");
+
     states[button.id] = screen::ScreenInteractionState::Pressed;
     if (!screen::BuildScreenRenderItems(
             document, 1280.0f, 720.0f, states, items, error) ||

@@ -57,9 +57,19 @@ namespace renegade::screen
         std::vector<ScreenRenderItem>& items,
         std::string& error);
 
+    // Produces the same frame inside an editor-owned logical viewport. This is
+    // a translation of the Runtime contract, not a second preview renderer.
+    [[nodiscard]] bool BuildScreenRenderItemsInViewport(
+        const bridge::ScreenDocument& document,
+        const bridge::ScreenRect& viewport,
+        const std::unordered_map<bridge::StableId, ScreenInteractionState>&
+            interactions,
+        std::vector<ScreenRenderItem>& items,
+        std::string& error);
+
     // Renegade's sole Wicked-backed Screen presentation implementation.
-    // Runtime uses it now; Gate 8C Screen Editor preview must instantiate this
-    // same class rather than reproduce its drawing rules.
+    // Runtime and Gate 8C Screen Editor preview instantiate this same class
+    // rather than reproducing its drawing rules.
     class ScreenRenderer
     {
     public:
@@ -78,6 +88,11 @@ namespace renegade::screen
             wi::RenderPath2D& renderPath,
             ActivateSink activateSink,
             std::string& error);
+        // Studio preview can confine the exact Runtime presentation to its
+        // central canvas. Runtime leaves this unset and continues to use the
+        // full RenderPath logical extent.
+        void SetViewport(const bridge::ScreenRect& viewport) noexcept;
+        void ClearViewport() noexcept;
         void ApplyLayout(wi::RenderPath2D& renderPath);
         void SetFocusedWidget(const bridge::StableId& widgetId);
         void SetWidgetState(

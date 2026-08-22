@@ -490,6 +490,34 @@ add_test(
     COMMAND RenegadeScreenRendererTests
 )
 
+add_executable(RenegadeScreenAuthoringSessionTests
+    ScreenAuthoringSessionTests.cpp
+)
+
+target_link_libraries(RenegadeScreenAuthoringSessionTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+target_compile_options(RenegadeScreenAuthoringSessionTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(RenegadeScreenAuthoringSessionTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeScreenAuthoringSessionTests
+)
+
+add_test(
+    NAME RenegadeScreenAuthoringSessionTests
+    COMMAND RenegadeScreenAuthoringSessionTests
+)
+
 add_executable(RenegadeProjectDocumentTransactionTests
     ProjectDocumentTransactionTests.cpp
 )

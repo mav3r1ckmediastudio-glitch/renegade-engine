@@ -22,6 +22,7 @@
 #include "RenegadeProjectHub.h"
 #include "RenegadeProjectLoadingOverlay.h"
 #include "RenegadeStoryFlowRenderPath.h"
+#include "RenegadeScreenEditorRenderPath.h"
 #include "StoryFlowStudioIntegration.h"
 #include "TestLevelRuntimeProcess.h"
 
@@ -687,6 +688,7 @@ namespace renegade::studio
                 *this,
                 renderer_,
                 storyFlowRenderer_,
+                screenEditorRenderer_,
                 session_);
         }
 
@@ -696,6 +698,7 @@ namespace renegade::studio
         bridge::StudioSession session_;
         StudioRenderPath renderer_;
         RenegadeStoryFlowRenderPath storyFlowRenderer_;
+        RenegadeScreenEditorRenderPath screenEditorRenderer_;
         StoryFlowStudioIntegration storyFlowIntegration_;
         std::string startupScene_ = "Content/ProvingGround.wiscene";
     };
