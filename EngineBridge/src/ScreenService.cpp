@@ -729,8 +729,8 @@ namespace renegade::bridge
             switch (widget.kind)
             {
             case ScreenWidgetKind::Image:
-                if (!widget.visible ||
-                    !IsContentRelativePath(widget.resourcePath) ||
+                if ((!widget.resourcePath.empty() &&
+                     !IsContentRelativePath(widget.resourcePath)) ||
                     !widget.text.empty() || !widget.actionId.empty())
                 {
                     error = "Runtime screen image '" + widget.name +
