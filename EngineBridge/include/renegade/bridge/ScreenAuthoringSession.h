@@ -97,22 +97,40 @@ namespace renegade::bridge
             found->anchors = edit.anchors;
             found->style = std::move(edit.style);
 
+            ScreenRect parentRect{
+                0.0f, 0.0f, candidate.designWidth, candidate.designHeight};
+            if (!found->parentId.empty() &&
+                !ResolveScreenWidgetRect(
+                    candidate, found->parentId, parentRect, error))
+            {
+                return false;
+            }
+            const float relativeX = resolvedBefore.x - parentRect.x;
+            const float relativeY = resolvedBefore.y - parentRect.y;
             if (found->layoutMode == ScreenLayoutMode::Absolute)
             {
-                ScreenRect parentRect{
-                    0.0f, 0.0f, candidate.designWidth, candidate.designHeight};
-                if (!found->parentId.empty() &&
-                    !ResolveScreenWidgetRect(
-                        candidate, found->parentId, parentRect, error))
-                {
-                    return false;
-                }
                 found->rect = {
-                    resolvedBefore.x - parentRect.x,
-                    resolvedBefore.y - parentRect.y,
+                    relativeX,
+                    relativeY,
                     resolvedBefore.width,
                     resolvedBefore.height,
                 };
+            }
+            else
+            {
+                // The visible X/Y/W/H controls remain authoritative for anchor
+                // offsets. Editing anchor min/max or changing parent therefore
+                // does not make the element jump on the design canvas.
+                found->anchors.offsetMinimumX = relativeX -
+                    found->anchors.minimumX * parentRect.width;
+                found->anchors.offsetMinimumY = relativeY -
+                    found->anchors.minimumY * parentRect.height;
+                found->anchors.offsetMaximumX =
+                    relativeX + resolvedBefore.width -
+                    found->anchors.maximumX * parentRect.width;
+                found->anchors.offsetMaximumY =
+                    relativeY + resolvedBefore.height -
+                    found->anchors.maximumY * parentRect.height;
             }
 
             return CommitMutation(std::move(candidate), error);
