@@ -5,42 +5,44 @@
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`cc3c1b79df5d480c69ae0489b6ceff54a5ef5350`
-(`Story Flow Gate 7: Flow-native project home lifecycle (#86)`).
+`d9f49a0dbd3cc9d03656d22f951b9ce67d52cdce`
+(`Story Flow Gate 8A: govern Screen contract v2 (#87)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow Gate 8A Screen contract v2
+## Active work — Story Flow Gate 8B shared Screen renderer
 
-Branch: `feature/story-flow-gate8-screen-contract`.
+Branch: `feature/story-flow-gate8b-shared-screen-renderer`.
 
-Gate 7/PR #86 is merged. Gate 8 is now split into bounded internal slices so a
-visual editor is not built on the old runtime-only Screen proof. Gate 8A owns
-the data and Runtime boundary only; it does not claim the Screen Editor UI.
+Gate 8A/PR #87 is merged. Gate 8B replaces the remaining stock Wicked widget
+presentation with the one Renegade-owned renderer that Gate 8C preview must
+reuse. It does not claim the Screen Editor authoring shell.
 
 The implementation establishes:
 
-- Screen schema v2 with deterministic v1 migration;
-- explicit fit/fill/stretch canvas scaling and parent/anchor layout;
-- editable normal/hover/pressed/focused/disabled colours and state images;
-- governed explicit built-in or project-contained `.ttf` font identity;
-- authored font metrics, alignment, wrapping, shadow, opacity, corner and
-  border data rather than Runtime-selected visuals;
-- dependency extraction for state images and project fonts;
-- Runtime consumption of authored visuals and typography, including font scale;
-- pure layout tests proving 1280x720 maps exactly to 1920x1080 at 1.5x.
+- new `Renegade::ScreenRenderer` target available to Runtime and Studio;
+- one custom Screen surface which retains Wicked scheduling/input but owns all
+  rendered image, shape, border and text pixels;
+- exact authored normal/hover/pressed/focused/disabled state precedence;
+- exact scaled inset borders and rounded inner/outer geometry;
+- no implicit Wicked disabled fade for buttons or non-interactive content;
+- persistent project font style through the Renegade direct-font draw path;
+- Runtime delegation to the shared renderer with existing focus/action dispatch
+  retained;
+- deterministic `BuildScreenRenderItems` frame evidence for output ordering,
+  state selection and geometry/typography scaling;
+- an explicit schema-v2 packaged LP03 visual fixture with distinct orange
+  focus, cyan hover, near-white press and non-zero rounded borders, plus a test
+  preventing regression to an incapable legacy proof fixture;
+- removal of Runtime's duplicated button layout record.
 
-The current Wicked GUI presenter still cannot faithfully draw the persisted
-border contract and applies an upstream disabled fade. These are explicit Gate
-8B shared-renderer work, not hidden acceptance. Gate 8B must create one
-Renegade-owned renderer used by both Screen Editor preview and Runtime before
-the authoring shell is accepted.
+Focused GNU C++17 syntax checks cover the shared renderer, Runtime integration
+and render-contract test. Windows Debug/Release CI and owner visual inspection
+of the exact Release Runtime remain authoritative before merge.
 
-Local Linux full CMake/CTest is unavailable because `cmake` is not installed
-and Studio/Runtime targets are Windows-only. Direct GNU C++17 syntax checks pass
-for ScreenService, RuntimeScreen, Screen lifecycle and focused Screen tests.
-Windows Debug/Release CI is therefore authoritative.
+Acceptance and owner-test instructions are locked in
+`docs/STORY_FLOW_GATE8B_SHARED_SCREEN_RENDERER.md`.
 
 Do not merge automatically. CI must pass and the owner retains the merge
 decision.

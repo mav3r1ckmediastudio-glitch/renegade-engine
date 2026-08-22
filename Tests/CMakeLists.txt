@@ -460,6 +460,36 @@ add_test(
     COMMAND RenegadeRuntimeScreenTests
 )
 
+add_executable(RenegadeScreenRendererTests
+    ScreenRendererTests.cpp
+)
+
+target_link_libraries(RenegadeScreenRendererTests
+    PRIVATE
+        Renegade::ScreenRenderer
+)
+
+target_compile_options(RenegadeScreenRendererTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+target_compile_definitions(RenegadeScreenRendererTests
+    PRIVATE
+        RENEGADE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
+set_target_properties(RenegadeScreenRendererTests PROPERTIES
+    FOLDER "Renegade"
+)
+
+add_dependencies(RenegadeBridgeTests RenegadeScreenRendererTests)
+
+add_test(
+    NAME RenegadeScreenRendererTests
+    COMMAND RenegadeScreenRendererTests
+)
+
 add_executable(RenegadeProjectDocumentTransactionTests
     ProjectDocumentTransactionTests.cpp
 )

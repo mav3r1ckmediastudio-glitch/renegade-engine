@@ -15,6 +15,7 @@ add_library(Renegade::RuntimeBootstrap ALIAS RenegadeRuntimeBootstrap)
 target_link_libraries(RenegadeRuntimeBootstrap
     PUBLIC
         Renegade::EngineBridge
+        Renegade::ScreenRenderer
 )
 
 target_include_directories(RenegadeRuntimeBootstrap

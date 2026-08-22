@@ -285,20 +285,29 @@ and gamepad-labelled requests enter the same `RuntimeActionDispatcher`.
 The stable `play` action enters the existing LP02 project flow loader, while
 `quit` requests normal application-owned Win32 shutdown.
 
-The Gate 8A presenter consumes authored state colours/images, font resource,
-font metrics, shadow, alignment, wrapping, opacity and corner radius. Canvas and
-font metrics use the same resolved transform, so the default 1280x720 design
-maps exactly to 1920x1080 at 1.5x. Border colour/width are already governed and
-persisted but remain a declared Gate 8B renderer item; the existing Wicked GUI
-presenter cannot draw that contract exactly. Gate 8B therefore replaces the
-remaining presentation seam with one Renegade-owned renderer shared by Runtime
-and the Screen Editor preview rather than duplicating editor-only visuals.
+Gate 8B places the sole Wicked-backed implementation in
+`Renegade::ScreenRenderer`. It emits Renegade-owned pixels while retaining
+Wicked's proven GUI scheduling and button input mechanics. Runtime delegates all
+Screen presentation to this renderer; Gate 8C preview must instantiate the same
+class rather than reproduce its drawing rules. The renderer consumes authored
+state colours/images, governed font identity and metrics, shadow, alignment,
+wrapping, opacity, corner radius and exact inset border geometry. Canvas,
+border, corner, font and shadow metrics use the same resolved transform, so the
+default 1280x720 design maps exactly to 1920x1080 at 1.5x.
+
+Visual-state precedence is deterministic: disabled, pointer pressed, pointer
+hover, keyboard/gamepad focus, then normal. Non-interactive Image/Text widgets
+remain in their authored normal state instead of inheriting Wicked's disabled
+fade. The custom draw path does not call the stock Button/Label/Image renderer,
+so Wicked cannot introduce a second colour, font, corner or opacity policy.
+`BuildScreenRenderItems` is the renderer-independent frame evidence seam used
+to test exact ordering, state choice and scaled metrics without a GPU.
 
 Wicked `wiGUI` stores widgets in insertion order but renders that storage in
-reverse. Runtime therefore inserts the authored back-to-front widget document in
-reverse so the full-screen background renders first and title/buttons remain
-visible above it. This is an integration detail; authored document order remains
-back-to-front and independent of Wicked's internal storage order.
+reverse. The shared renderer therefore inserts the authored back-to-front widget
+document in reverse so the full-screen background renders first and
+title/buttons remain visible above it. This is an integration detail; authored
+document order remains back-to-front and independent of Wicked's storage order.
 
 A project descriptor may pair `startup_screen_id` with `startup_screen`.
 The stable ID is reference authority; the project-relative path is a mutable

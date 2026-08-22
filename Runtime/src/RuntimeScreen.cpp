@@ -8,87 +8,6 @@
 namespace
 {
     constexpr std::size_t NoFocus = std::numeric_limits<std::size_t>::max();
-
-    wi::Color ToWickedColor(
-        const renegade::bridge::ScreenColor& color,
-        const float opacity = 1.0f)
-    {
-        return wi::Color(
-            color.red,
-            color.green,
-            color.blue,
-            static_cast<std::uint8_t>(std::clamp(
-                static_cast<float>(color.alpha) * opacity,
-                0.0f,
-                255.0f)));
-    }
-
-    wi::font::Alignment ToWickedAlignment(
-        const renegade::bridge::ScreenHorizontalAlignment alignment)
-    {
-        using renegade::bridge::ScreenHorizontalAlignment;
-        switch (alignment)
-        {
-        case ScreenHorizontalAlignment::Left: return wi::font::WIFALIGN_LEFT;
-        case ScreenHorizontalAlignment::Center: return wi::font::WIFALIGN_CENTER;
-        case ScreenHorizontalAlignment::Right: return wi::font::WIFALIGN_RIGHT;
-        default: return wi::font::WIFALIGN_LEFT;
-        }
-    }
-
-    wi::font::Alignment ToWickedAlignment(
-        const renegade::bridge::ScreenVerticalAlignment alignment)
-    {
-        using renegade::bridge::ScreenVerticalAlignment;
-        switch (alignment)
-        {
-        case ScreenVerticalAlignment::Top: return wi::font::WIFALIGN_TOP;
-        case ScreenVerticalAlignment::Center: return wi::font::WIFALIGN_CENTER;
-        case ScreenVerticalAlignment::Bottom: return wi::font::WIFALIGN_BOTTOM;
-        default: return wi::font::WIFALIGN_TOP;
-        }
-    }
-
-    void ApplyTextStyle(
-        wi::gui::Widget& widget,
-        const renegade::bridge::ScreenWidgetStyle& style,
-        const int fontStyle)
-    {
-        const auto& text = style.text;
-        widget.font.params.style = fontStyle;
-        widget.font.params.color = ToWickedColor(
-            style.normal.foreground, style.opacity);
-        widget.font.params.shadowColor = ToWickedColor(
-            text.shadowColor, style.opacity);
-        widget.font.params.size = static_cast<int>(std::round(text.fontSize));
-        widget.font.params.spacingX = text.characterSpacing;
-        widget.font.params.spacingY = text.lineSpacing;
-        widget.font.params.softness = text.softness;
-        widget.font.params.bolden = text.bolden;
-        widget.font.params.shadow_offset_x = text.shadowOffsetX;
-        widget.font.params.shadow_offset_y = text.shadowOffsetY;
-        widget.font.params.shadow_softness = text.shadowSoftness;
-        widget.font.params.shadow_bolden = text.shadowBolden;
-        widget.font.params.h_align = ToWickedAlignment(text.horizontalAlignment);
-        widget.font.params.v_align = ToWickedAlignment(text.verticalAlignment);
-    }
-
-    void ApplyCornerRadius(wi::gui::Widget& widget, const float radius)
-    {
-        for (auto& sprite : widget.sprites)
-        {
-            if (radius > 0.0f)
-            {
-                sprite.params.enableCornerRounding();
-                for (auto& corner : sprite.params.corners_rounding)
-                    corner.radius = radius;
-            }
-            else
-            {
-                sprite.params.disableCornerRounding();
-            }
-        }
-    }
 }
 
 namespace renegade::runtime
@@ -324,228 +243,24 @@ namespace renegade::runtime
             return false;
         }
 
-        document_ = document;
         controller_ = &controller;
         requestSink_ = std::move(requestSink);
-
-        const auto resolveFontStyle = [&projectRoot, &error](
-            const bridge::ScreenTextStyle& text,
-            int& fontStyle)
+        if (!renderer_.Load(
+                document,
+                projectRoot,
+                renderPath,
+                [this](const bridge::StableId& widgetId)
+                {
+                    if (controller_ != nullptr)
+                        (void)controller_->FocusWidget(widgetId);
+                    QueueWidget(widgetId, RuntimeInputSource::Mouse);
+                },
+                error))
         {
-            if (text.fontResource == bridge::BuiltinScreenFont)
-            {
-                fontStyle = 0;
-                return true;
-            }
-            std::string fontPath;
-            if (!bridge::ResolveScreenResourcePath(
-                    projectRoot, text.fontResource, fontPath, error))
-            {
-                return false;
-            }
-            fontStyle = wi::font::AddFontStyle(fontPath);
-            if (fontStyle < 0)
-            {
-                error = "Wicked could not load Runtime screen font: " + fontPath;
-                return false;
-            }
-            return true;
-        };
-
-        const auto addVisual = [this](
-            const bridge::ScreenWidget& widget,
-            const bridge::ScreenRect& designRect,
-            wi::gui::Widget* wickedWidget)
-        {
-            VisualWidget visual;
-            visual.widgetId = widget.id;
-            visual.designRect = designRect;
-            visual.designFontSize = widget.style.text.fontSize;
-            visual.designCharacterSpacing = widget.style.text.characterSpacing;
-            visual.designLineSpacing = widget.style.text.lineSpacing;
-            visual.designShadowOffsetX = widget.style.text.shadowOffsetX;
-            visual.designShadowOffsetY = widget.style.text.shadowOffsetY;
-            visual.designCornerRadius = widget.style.cornerRadius;
-            visual.widget = wickedWidget;
-            visuals_.push_back(std::move(visual));
-        };
-
-        // Wicked's GUI stores widgets in insertion order but renders that
-        // storage in reverse. Iterate the authored back-to-front document
-        // order in reverse so backgrounds render first and controls remain
-        // visible above them.
-        for (auto iterator = document_.widgets.rbegin();
-             iterator != document_.widgets.rend();
-             ++iterator)
-        {
-            const auto& widget = *iterator;
-            const std::string widgetName = widget.name + "#" + widget.id;
-            bridge::ScreenRect designRect;
-            if (!bridge::ResolveScreenWidgetRect(
-                    document_, widget.id, designRect, error))
-            {
-                Reset(renderPath);
-                return false;
-            }
-            switch (widget.kind)
-            {
-            case bridge::ScreenWidgetKind::Image:
-            {
-                std::string resourcePath;
-                const std::string& authoredImage =
-                    widget.style.normal.imageResourcePath.empty() ?
-                    widget.resourcePath : widget.style.normal.imageResourcePath;
-                if (!bridge::ResolveScreenResourcePath(
-                        projectRoot,
-                        authoredImage,
-                        resourcePath,
-                        error))
-                {
-                    Reset(renderPath);
-                    return false;
-                }
-                wi::Resource resource = wi::resourcemanager::Load(resourcePath);
-                if (!resource.IsValid())
-                {
-                    error = "Wicked could not load Runtime screen image: " +
-                        resourcePath;
-                    Reset(renderPath);
-                    return false;
-                }
-
-                auto image = std::make_unique<wi::gui::Image>();
-                image->Create(widgetName);
-                image->SetImage(resource);
-                image->SetColor(ToWickedColor(
-                    widget.style.normal.imageTint, widget.style.opacity));
-                image->SetVisible(widget.visible);
-                image->SetEnabled(false);
-                ApplyCornerRadius(*image, widget.style.cornerRadius);
-                renderPath.GetGUI().AddWidget(image.get());
-                addVisual(widget, designRect, image.get());
-                images_.push_back(std::move(image));
-                break;
-            }
-
-            case bridge::ScreenWidgetKind::Text:
-            {
-                auto label = std::make_unique<wi::gui::Label>();
-                label->Create(widgetName);
-                label->SetText(widget.text);
-                label->SetWrapEnabled(widget.style.text.wrap);
-                label->SetVisible(widget.visible);
-                label->SetEnabled(false);
-                label->SetColor(ToWickedColor(
-                    widget.style.normal.background, widget.style.opacity));
-                int fontStyle = 0;
-                if (!resolveFontStyle(widget.style.text, fontStyle))
-                {
-                    Reset(renderPath);
-                    return false;
-                }
-                ApplyTextStyle(*label, widget.style, fontStyle);
-                ApplyCornerRadius(*label, widget.style.cornerRadius);
-                renderPath.GetGUI().AddWidget(label.get());
-                addVisual(widget, designRect, label.get());
-                labels_.push_back(std::move(label));
-                break;
-            }
-
-            case bridge::ScreenWidgetKind::Button:
-            {
-                auto button = std::make_unique<wi::gui::Button>();
-                button->Create(widgetName);
-                button->SetText(widget.text);
-                button->SetVisible(widget.visible);
-                button->SetEnabled(widget.enabled);
-                const bool hasButtonImage =
-                    !widget.style.normal.imageResourcePath.empty();
-                const auto stateColor = [&widget, hasButtonImage](
-                    const bridge::ScreenVisualState& state)
-                {
-                    return ToWickedColor(
-                        (hasButtonImage || !state.imageResourcePath.empty()) ?
-                            state.imageTint : state.background,
-                        widget.style.opacity);
-                };
-                button->SetColor(stateColor(widget.style.normal),
-                    wi::gui::WIDGET_ID_IDLE);
-                button->SetColor(stateColor(widget.style.hover),
-                    wi::gui::WIDGET_ID_FOCUS);
-                button->SetColor(stateColor(widget.style.pressed),
-                    wi::gui::WIDGET_ID_ACTIVE);
-                button->SetColor(stateColor(widget.style.normal),
-                    wi::gui::WIDGET_ID_DEACTIVATING);
-                ButtonStateResources stateResources;
-                const auto applyStateImage = [
-                    &projectRoot, &error, &button](
-                    const bridge::ScreenVisualState& state,
-                    const int stateId,
-                    wi::Resource* retained)
-                {
-                    if (state.imageResourcePath.empty()) return true;
-                    std::string path;
-                    if (!bridge::ResolveScreenResourcePath(
-                            projectRoot, state.imageResourcePath, path, error))
-                        return false;
-                    wi::Resource resource = wi::resourcemanager::Load(path);
-                    if (!resource.IsValid())
-                    {
-                        error = "Wicked could not load Runtime screen state image: " + path;
-                        return false;
-                    }
-                    button->SetImage(resource, stateId);
-                    if (retained != nullptr) *retained = resource;
-                    return true;
-                };
-                if (!applyStateImage(widget.style.normal, wi::gui::WIDGET_ID_IDLE,
-                        &stateResources.normal) ||
-                    !applyStateImage(widget.style.hover, wi::gui::WIDGET_ID_FOCUS,
-                        nullptr) ||
-                    !applyStateImage(widget.style.pressed, wi::gui::WIDGET_ID_ACTIVE,
-                        nullptr) ||
-                    !applyStateImage(
-                        widget.style.normal, wi::gui::WIDGET_ID_DEACTIVATING,
-                        nullptr) ||
-                    !applyStateImage(widget.style.focused, wi::gui::WIDGET_ID_IDLE,
-                        &stateResources.focused) ||
-                    !applyStateImage(widget.style.disabled, wi::gui::WIDGET_ID_IDLE,
-                        &stateResources.disabled))
-                {
-                    Reset(renderPath);
-                    return false;
-                }
-                int fontStyle = 0;
-                if (!resolveFontStyle(widget.style.text, fontStyle))
-                {
-                    Reset(renderPath);
-                    return false;
-                }
-                ApplyTextStyle(*button, widget.style, fontStyle);
-                ApplyCornerRadius(*button, widget.style.cornerRadius);
-                const std::string widgetId = widget.id;
-                button->OnClick(
-                    [this, widgetId](const wi::gui::EventArgs&)
-                    {
-                        if (controller_ != nullptr)
-                        {
-                            (void)controller_->FocusWidget(widgetId);
-                        }
-                        QueueWidget(widgetId, RuntimeInputSource::Mouse);
-                    });
-                renderPath.GetGUI().AddWidget(button.get());
-                buttons_.emplace(widget.id, button.get());
-                buttonStateResources_.emplace(
-                    widget.id, std::move(stateResources));
-                addVisual(widget, designRect, button.get());
-                buttonStorage_.push_back(std::move(button));
-                break;
-            }
-            }
+            controller_ = nullptr;
+            requestSink_ = {};
+            return false;
         }
-
-        loaded_ = true;
-        ApplyLayout(renderPath);
         RefreshVisualFocus(controller);
         error.clear();
         return true;
@@ -555,12 +270,12 @@ namespace renegade::runtime
         wi::RenderPath2D& renderPath,
         RuntimeScreenController& controller)
     {
-        if (!loaded_)
+        if (!renderer_.IsLoaded())
         {
             return;
         }
 
-        ApplyLayout(renderPath);
+        renderer_.ApplyLayout(renderPath);
 
         const bool gamepadPrevious =
             wi::input::Press(wi::input::GAMEPAD_BUTTON_UP) ||
@@ -629,118 +344,23 @@ namespace renegade::runtime
         const RuntimeScreenController& controller)
     {
         const auto* focused = controller.FocusedWidget();
-        const std::string focusedId = focused == nullptr ? std::string{} : focused->id;
-
-        for (const auto& [widgetId, button] : buttons_)
-        {
-            const auto* widget = controller.FindWidget(widgetId);
-            if (widget != nullptr)
-            {
-                button->SetVisible(widget->visible);
-                button->SetEnabled(widget->enabled);
-                const bridge::ScreenVisualState& state = !widget->enabled ?
-                    widget->style.disabled :
-                    (widgetId == focusedId ? widget->style.focused :
-                        widget->style.normal);
-                const bridge::ScreenColor& background =
-                    (widget->style.normal.imageResourcePath.empty() &&
-                     state.imageResourcePath.empty()) ?
-                        state.background : state.imageTint;
-                button->SetColor(
-                    ToWickedColor(background, widget->style.opacity),
-                    wi::gui::WIDGET_ID_IDLE);
-                button->font.params.color = ToWickedColor(
-                    state.foreground, widget->style.opacity);
-                const auto resources = buttonStateResources_.find(widgetId);
-                if (resources != buttonStateResources_.end())
-                {
-                    const wi::Resource* resource = &resources->second.normal;
-                    if (!widget->enabled && resources->second.disabled.IsValid())
-                        resource = &resources->second.disabled;
-                    else if (widgetId == focusedId &&
-                        resources->second.focused.IsValid())
-                        resource = &resources->second.focused;
-                    if (resource->IsValid())
-                        button->SetImage(*resource, wi::gui::WIDGET_ID_IDLE);
-                }
-            }
-        }
+        renderer_.SetFocusedWidget(
+            focused == nullptr ? bridge::StableId{} : focused->id);
+        for (const auto& widget : controller.Document().widgets)
+            renderer_.SetWidgetState(widget.id, widget.visible, widget.enabled);
     }
 
     void RuntimeScreenPresenter::Reset(wi::RenderPath2D& renderPath) noexcept
     {
-        for (const auto& visual : visuals_)
-        {
-            if (visual.widget != nullptr)
-            {
-                renderPath.GetGUI().RemoveWidget(visual.widget);
-            }
-        }
-
-        visuals_.clear();
-        buttons_.clear();
-        buttonStateResources_.clear();
-        logicalRects_.clear();
-        images_.clear();
-        labels_.clear();
-        buttonStorage_.clear();
+        renderer_.Reset(renderPath);
         requestSink_ = {};
         controller_ = nullptr;
-        document_ = {};
         nextSequence_ = 1;
-        loaded_ = false;
     }
 
     bool RuntimeScreenPresenter::IsLoaded() const noexcept
     {
-        return loaded_;
-    }
-
-    void RuntimeScreenPresenter::ApplyLayout(wi::RenderPath2D& renderPath)
-    {
-        const float logicalWidth = renderPath.GetLogicalWidth();
-        const float logicalHeight = renderPath.GetLogicalHeight();
-        if (logicalWidth <= 0.0f || logicalHeight <= 0.0f ||
-            document_.designWidth <= 0.0f || document_.designHeight <= 0.0f)
-        {
-            return;
-        }
-
-        bridge::ScreenCanvasTransform canvas;
-        std::string layoutError;
-        if (!bridge::ResolveScreenCanvasTransform(
-                document_, logicalWidth, logicalHeight, canvas, layoutError))
-        {
-            return;
-        }
-        const float fontScale = std::min(canvas.scaleX, canvas.scaleY);
-
-        logicalRects_.clear();
-        for (auto& visual : visuals_)
-        {
-            const bridge::ScreenRect logical{
-                canvas.offsetX + visual.designRect.x * canvas.scaleX,
-                canvas.offsetY + visual.designRect.y * canvas.scaleY,
-                visual.designRect.width * canvas.scaleX,
-                visual.designRect.height * canvas.scaleY,
-            };
-            logicalRects_.emplace(visual.widgetId, logical);
-            visual.widget->SetPos(XMFLOAT2(logical.x, logical.y));
-            visual.widget->SetSize(XMFLOAT2(logical.width, logical.height));
-            visual.widget->font.params.size = std::max(
-                1, static_cast<int>(std::round(
-                    visual.designFontSize * fontScale)));
-            visual.widget->font.params.spacingX =
-                visual.designCharacterSpacing * fontScale;
-            visual.widget->font.params.spacingY =
-                visual.designLineSpacing * fontScale;
-            visual.widget->font.params.shadow_offset_x =
-                visual.designShadowOffsetX * fontScale;
-            visual.widget->font.params.shadow_offset_y =
-                visual.designShadowOffsetY * fontScale;
-            ApplyCornerRadius(
-                *visual.widget, visual.designCornerRadius * fontScale);
-        }
+        return renderer_.IsLoaded();
     }
 
     void RuntimeScreenPresenter::QueueFocused(const RuntimeInputSource source)
@@ -794,19 +414,20 @@ namespace renegade::runtime
         }
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        for (auto iterator = document_.focusOrder.rbegin();
-            iterator != document_.focusOrder.rend();
+        const auto& document = controller.Document();
+        for (auto iterator = document.focusOrder.rbegin();
+            iterator != document.focusOrder.rend();
             ++iterator)
         {
-            const auto rect = logicalRects_.find(*iterator);
+            const auto* rect = renderer_.LogicalRect(*iterator);
             const auto* widget = controller.FindWidget(*iterator);
-            if (rect == logicalRects_.end() || widget == nullptr ||
+            if (rect == nullptr || widget == nullptr ||
                 !widget->visible || !widget->enabled)
             {
                 continue;
             }
 
-            const auto& area = rect->second;
+            const auto& area = *rect;
             if (pointer.x >= area.x && pointer.x <= area.x + area.width &&
                 pointer.y >= area.y && pointer.y <= area.y + area.height)
             {
