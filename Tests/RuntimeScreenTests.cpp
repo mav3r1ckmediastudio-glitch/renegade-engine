@@ -43,6 +43,11 @@ namespace
             document.widgets[2].id,
             document.widgets[3].id,
         };
+        for (auto& widget : document.widgets)
+        {
+            widget.style = bridge::MakeScreenWidgetStyleTemplate(
+                widget.kind, widget.rect.height);
+        }
         return document;
     }
 

@@ -1,48 +1,49 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-21
+**Date:** 2026-08-22
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`24186b2510fad6aa231020225e8d712a90aa69e5`
-(`Story Flow Gate 6: Journey View MVP (#85)`).
+`cc3c1b79df5d480c69ae0489b6ceff54a5ef5350`
+(`Story Flow Gate 7: Flow-native project home lifecycle (#86)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow Gate 7 project-home lifecycle
+## Active work — Story Flow Gate 8A Screen contract v2
 
-Branch: `feature/story-flow-gate7-project-home`.
+Branch: `feature/story-flow-gate8-screen-contract`.
 
-Gate 6/PR #85 is merged and owner-accepted. The owner confirmed all functional
-Journey tests, including node creation and Level double-click activation. Weak
-selection, connection-direction and completion feedback remains explicitly
-owned by Gate 9 rather than reopening Gate 6.
+Gate 7/PR #86 is merged. Gate 8 is now split into bounded internal slices so a
+visual editor is not built on the old runtime-only Screen proof. Gate 8A owns
+the data and Runtime boundary only; it does not claim the Screen Editor UI.
 
-Gate 7 now completes the Story Flow project-home transition. Its locked
-implementation contract is
-`docs/STORY_FLOW_GATE7_PROJECT_HOME_LIFECYCLE.md`.
+The implementation establishes:
 
-The implementation in progress establishes:
+- Screen schema v2 with deterministic v1 migration;
+- explicit fit/fill/stretch canvas scaling and parent/anchor layout;
+- editable normal/hover/pressed/focused/disabled colours and state images;
+- governed explicit built-in or project-contained `.ttf` font identity;
+- authored font metrics, alignment, wrapping, shadow, opacity, corner and
+  border data rather than Runtime-selected visuals;
+- dependency extraction for state images and project fonts;
+- Runtime consumption of authored visuals and typography, including font scale;
+- pure layout tests proving 1280x720 maps exactly to 1920x1080 at 1.5x.
 
-- an explicit Story Flow-native project constructor;
-- canonical Flow plus permanent Game Start before descriptor adoption;
-- no generated or declared placeholder `Main.wiscene` for new projects;
-- backward-compatible descriptor validation requiring either a Scene root or a
-  complete Flow root;
-- a staged Flow-validation boundary that preserves the previous project when a
-  candidate is invalid and clears the previous Scene only after native adoption;
-- Runtime entry at Game Start without a loaded Scene;
-- dependency extraction with no invented Scene root;
-- Project Hub reporting of the actual Flow project home;
-- legacy scene-first migration unchanged.
+The current Wicked GUI presenter still cannot faithfully draw the persisted
+border contract and applies an upstream disabled fade. These are explicit Gate
+8B shared-renderer work, not hidden acceptance. Gate 8B must create one
+Renegade-owned renderer used by both Screen Editor preview and Runtime before
+the authoring shell is accepted.
 
-Focused Gate 7 lifecycle tests and Windows Debug/Release CI are required before
-the packaged Release owner audit in `docs/STORY_FLOW_GATE7_OWNER_TEST.md`.
+Local Linux full CMake/CTest is unavailable because `cmake` is not installed
+and Studio/Runtime targets are Windows-only. Direct GNU C++17 syntax checks pass
+for ScreenService, RuntimeScreen, Screen lifecycle and focused Screen tests.
+Windows Debug/Release CI is therefore authoritative.
 
-Do not merge automatically. The exact CI artifact must pass the owner test and
-the owner must make the normal merge decision.
+Do not merge automatically. CI must pass and the owner retains the merge
+decision.
 
 ## Gate 6 accepted evidence
 
@@ -261,10 +262,9 @@ It must establish:
 
 - **Gates 1-5:** accepted and merged through PR #84.
 - **Gate 6:** accepted and merged through PR #85.
-- **Gate 7 (active):** New Project/project-home lifecycle — Hub -> Story Flow by
-  default, startup Flow + permanent Game Start, and no arbitrary blank startup
-  Scene requirement.
-- **Gate 8:** Screen Editor MVP.
+- **Gate 7:** accepted and merged through PR #86; Hub -> Story Flow by default,
+  startup Flow + permanent Game Start, and no arbitrary blank startup Scene.
+- **Gate 8 (active):** Screen Editor MVP; 8A contract v2 is the current slice.
 - **Gate 9:** large/nonlinear Journey UX.
 - **Gate 10:** Runtime/persistence/build/standalone parity closeout.
 

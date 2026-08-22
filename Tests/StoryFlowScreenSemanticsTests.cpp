@@ -61,6 +61,8 @@ namespace
         label.visible = true;
         label.enabled = false;
         label.text = title;
+        label.style = MakeScreenWidgetStyleTemplate(
+            label.kind, label.rect.height);
 
         ScreenWidget button;
         button.id = GenerateStableId();
@@ -71,6 +73,8 @@ namespace
         button.enabled = true;
         button.text = actionId;
         button.actionId = actionId;
+        button.style = MakeScreenWidgetStyleTemplate(
+            button.kind, button.rect.height);
 
         screen.widgets = {label, button};
         screen.focusOrder = {button.id};

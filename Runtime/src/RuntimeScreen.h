@@ -87,7 +87,20 @@ namespace renegade::runtime
         {
             std::string widgetId;
             bridge::ScreenRect designRect;
+            float designFontSize = 0.0f;
+            float designCharacterSpacing = 0.0f;
+            float designLineSpacing = 0.0f;
+            float designShadowOffsetX = 0.0f;
+            float designShadowOffsetY = 0.0f;
+            float designCornerRadius = 0.0f;
             wi::gui::Widget* widget = nullptr;
+        };
+
+        struct ButtonStateResources
+        {
+            wi::Resource normal;
+            wi::Resource focused;
+            wi::Resource disabled;
         };
 
         void ApplyLayout(wi::RenderPath2D& renderPath);
@@ -102,6 +115,8 @@ namespace renegade::runtime
         RequestSink requestSink_;
         std::vector<VisualWidget> visuals_;
         std::unordered_map<std::string, wi::gui::Button*> buttons_;
+        std::unordered_map<std::string, ButtonStateResources>
+            buttonStateResources_;
         std::unordered_map<std::string, bridge::ScreenRect> logicalRects_;
         std::vector<std::unique_ptr<wi::gui::Image>> images_;
         std::vector<std::unique_ptr<wi::gui::Label>> labels_;

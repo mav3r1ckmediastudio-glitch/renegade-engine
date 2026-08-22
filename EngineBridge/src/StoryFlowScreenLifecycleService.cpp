@@ -211,6 +211,7 @@ namespace
         widget.visible = true;
         widget.enabled = false;
         widget.text = std::move(text);
+        widget.style = MakeScreenWidgetStyleTemplate(widget.kind, height);
         document.widgets.push_back(std::move(widget));
     }
 
@@ -231,6 +232,8 @@ namespace
         widget.enabled = true;
         widget.text = std::move(label);
         widget.actionId = std::move(actionId);
+        widget.style = MakeScreenWidgetStyleTemplate(
+            widget.kind, widget.rect.height);
         document.focusOrder.push_back(widget.id);
         document.widgets.push_back(std::move(widget));
     }

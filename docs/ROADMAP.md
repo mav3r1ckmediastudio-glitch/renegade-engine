@@ -1,8 +1,8 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`24186b2510fad6aa231020225e8d712a90aa69e5`
-(`Story Flow Gate 6: Journey View MVP (#85)`).
+`cc3c1b79df5d480c69ae0489b6ceff54a5ef5350`
+(`Story Flow Gate 7: Flow-native project home lifecycle (#86)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -76,8 +76,9 @@ into the advanced Journey UX programme.
 
 ### Gate 7 — New Project / project-home lifecycle
 
-**Status:** implementation active on
-`feature/story-flow-gate7-project-home`.
+**Status:** accepted and merged through PR #86. New Project creates a native
+Flow project home without an invented placeholder Scene; Runtime, dependency
+closure and Project Hub all accept that launch root.
 
 Complete the project-home transition begun by the Gate 5 recovery. Remove the
 arbitrary blank `Main.wiscene` requirement from new-project construction rather
@@ -89,6 +90,26 @@ templates/migration policy around permanent Game Start. The locked contract is
 
 Native Screen Editor with image/background/text/button/layout/action authoring,
 preview, validation, Save/Undo/Redo and Return to Story Flow.
+
+**Status:** implementation active on
+`feature/story-flow-gate8-screen-contract`.
+
+Gate 8 is delivered as bounded internal slices so the editor is not built on
+the old runtime-proof schema:
+
+1. **8A — Screen contract v2:** fully serialized canvas scaling, parent/anchor
+   layout, editable normal/hover/pressed/focused/disabled appearance, explicit
+   built-in or project `.ttf` font identity, lossless v1 migration and Runtime
+   consumption. No visual property may be supplied by hidden Runtime styling.
+2. **8B — shared Screen renderer:** one Renegade-owned layout/presentation core
+   used by editor preview and Runtime, including remaining shape/border fidelity.
+3. **8C — authoring shell:** canvas, hierarchy, selection, transform/layout
+   tools, Inspector, preview, Save/Undo/Redo and Return to Story Flow.
+4. **8D — creator controls:** image/background/text/button plus the broader
+   control catalogue, reusable components, state editing and typed data/action
+   binding.
+5. **8E — Story Flow and packaging acceptance:** named outcomes remain Story
+   Flow routing authority; save/reopen/Runtime/standalone parity is proven.
 
 ### Gate 9 — Advanced Journey authoring and scale
 
