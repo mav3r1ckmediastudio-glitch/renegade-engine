@@ -468,6 +468,22 @@ int main()
     if (!authored.MoveButtonFocusLater(creatorButtonId, error))
         return Fail("focus move later failed: " + error);
 
+    ScreenRect directBefore;
+    if (!ResolveScreenWidgetRect(authored.Document(), creatorTextId, directBefore, error)) return Fail("direct geometry fixture failed: " + error);
+    const std::size_t directUndo = authored.UndoCount();
+    const auto* directWidget = authored.FindWidget(creatorTextId);
+    authored.BeginCoalescedEdit();
+    ScreenWidgetAuthoringEdit directEdit{directWidget->name, directWidget->text, {directBefore.x + 20.0f, directBefore.y + 10.0f, directBefore.width + 20.0f, directBefore.height + 10.0f}, directWidget->visible, directWidget->enabled};
+    if (!authored.UpdateWidget(creatorTextId, directEdit, error)) return Fail("direct frame one failed: " + error);
+    directEdit.resolvedRect.x += 20.0f;
+    if (!authored.UpdateWidget(creatorTextId, directEdit, error)) return Fail("direct frame two failed: " + error);
+    authored.EndCoalescedEdit();
+    if (authored.UndoCount() != directUndo + 1) return Fail("direct gesture polluted Undo history");
+    if (!authored.Undo(error)) return Fail("direct Undo failed: " + error);
+    ScreenRect directUndone;
+    if (!ResolveScreenWidgetRect(authored.Document(), creatorTextId, directUndone, error) || !SameRect(directBefore, directUndone)) return Fail("direct Undo geometry mismatch");
+    if (!authored.Redo(error)) return Fail("direct Redo failed: " + error);
+
     if (!authored.Save(error) || authored.IsDirty())
         return Fail("advanced Gate 8D state did not save transactionally: " + error);
 

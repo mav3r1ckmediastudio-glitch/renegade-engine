@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
-#include <iomanip>
-#include <sstream>
 #include <utility>
 
 namespace
@@ -16,6 +14,7 @@ namespace
     constexpr float PanelGap = 14.0f;
     constexpr float HierarchyRowHeight = 32.0f;
     constexpr float HierarchyRowsTop = HeaderHeight + 160.0f;
+    constexpr float ResizeHandleSize = 12.0f;
 
     constexpr wi::Color Background(4, 7, 10, 255);
     constexpr wi::Color Surface(8, 13, 17, 255);
@@ -81,26 +80,6 @@ namespace
         return value;
     }
 
-    std::string Number(const float value)
-    {
-        std::ostringstream text;
-        text << std::fixed << std::setprecision(1) << value;
-        return text.str();
-    }
-
-    bool ParseNumber(const std::string& value, float& result)
-    {
-        try
-        {
-            std::size_t used = 0;
-            result = std::stof(Trim(value), &used);
-            return used == Trim(value).size() && std::isfinite(result);
-        }
-        catch (...)
-        {
-            return false;
-        }
-    }
 
     std::string Shorten(std::string value, const std::size_t limit)
     {
@@ -284,10 +263,6 @@ namespace renegade::studio
         };
         configureInput(nameInput_, "Screen Element Name", "Element name");
         configureInput(textInput_, "Screen Element Text", "Displayed text");
-        configureInput(xInput_, "Screen Element X", "X");
-        configureInput(yInput_, "Screen Element Y", "Y");
-        configureInput(widthInput_, "Screen Element Width", "Width");
-        configureInput(heightInput_, "Screen Element Height", "Height");
 
         applyButton_.Create("Screen Editor Apply Element");
         applyButton_.SetText("APPLY ELEMENT");
@@ -296,10 +271,6 @@ namespace renegade::studio
             ApplySelectedWidget();
         });
         textInput_.OnInputAccepted([this](const wi::gui::EventArgs&)
-        {
-            ApplySelectedWidget();
-        });
-        heightInput_.OnInputAccepted([this](const wi::gui::EventArgs&)
         {
             ApplySelectedWidget();
         });
@@ -330,10 +301,6 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&frontButton_),
                 static_cast<wi::gui::Widget*>(&nameInput_),
                 static_cast<wi::gui::Widget*>(&textInput_),
-                static_cast<wi::gui::Widget*>(&xInput_),
-                static_cast<wi::gui::Widget*>(&yInput_),
-                static_cast<wi::gui::Widget*>(&widthInput_),
-                static_cast<wi::gui::Widget*>(&heightInput_),
                 static_cast<wi::gui::Widget*>(&applyButton_),
                 static_cast<wi::gui::Widget*>(&visibleButton_),
                 static_cast<wi::gui::Widget*>(&enabledButton_)})
@@ -391,19 +358,8 @@ namespace renegade::studio
         field(nameInput_);
         field(textInput_);
 
-        xInput_.SetPos(XMFLOAT2(inspectorX, y));
-        xInput_.SetSize(XMFLOAT2(fieldWidth * 0.5f - 4.0f, 30.0f));
-        yInput_.SetPos(XMFLOAT2(
-            inspectorX + fieldWidth * 0.5f + 4.0f, y));
-        yInput_.SetSize(XMFLOAT2(fieldWidth * 0.5f - 4.0f, 30.0f));
-        y += 64.0f;
-        widthInput_.SetPos(XMFLOAT2(inspectorX, y));
-        widthInput_.SetSize(XMFLOAT2(fieldWidth * 0.5f - 4.0f, 30.0f));
-        heightInput_.SetPos(XMFLOAT2(
-            inspectorX + fieldWidth * 0.5f + 4.0f, y));
-        heightInput_.SetSize(XMFLOAT2(fieldWidth * 0.5f - 4.0f, 30.0f));
-        y += 52.0f;
-
+        // Geometry is authored directly in the Runtime preview.
+        y += 8.0f;
         visibleButton_.SetPos(XMFLOAT2(inspectorX, y));
         visibleButton_.SetSize(XMFLOAT2(fieldWidth * 0.5f - 4.0f, 30.0f));
         enabledButton_.SetPos(XMFLOAT2(
@@ -443,10 +399,6 @@ namespace renegade::studio
         for (wi::gui::Widget* widget : {
                 static_cast<wi::gui::Widget*>(&nameInput_),
                 static_cast<wi::gui::Widget*>(&textInput_),
-                static_cast<wi::gui::Widget*>(&xInput_),
-                static_cast<wi::gui::Widget*>(&yInput_),
-                static_cast<wi::gui::Widget*>(&widthInput_),
-                static_cast<wi::gui::Widget*>(&heightInput_),
                 static_cast<wi::gui::Widget*>(&applyButton_),
                 static_cast<wi::gui::Widget*>(&visibleButton_),
                 static_cast<wi::gui::Widget*>(&enabledButton_)})
@@ -473,10 +425,6 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&frontButton_),
                 static_cast<wi::gui::Widget*>(&nameInput_),
                 static_cast<wi::gui::Widget*>(&textInput_),
-                static_cast<wi::gui::Widget*>(&xInput_),
-                static_cast<wi::gui::Widget*>(&yInput_),
-                static_cast<wi::gui::Widget*>(&widthInput_),
-                static_cast<wi::gui::Widget*>(&heightInput_),
                 static_cast<wi::gui::Widget*>(&applyButton_),
                 static_cast<wi::gui::Widget*>(&visibleButton_),
                 static_cast<wi::gui::Widget*>(&enabledButton_)})
@@ -504,10 +452,6 @@ namespace renegade::studio
                 static_cast<const wi::gui::Widget*>(&frontButton_),
                 static_cast<const wi::gui::Widget*>(&nameInput_),
                 static_cast<const wi::gui::Widget*>(&textInput_),
-                static_cast<const wi::gui::Widget*>(&xInput_),
-                static_cast<const wi::gui::Widget*>(&yInput_),
-                static_cast<const wi::gui::Widget*>(&widthInput_),
-                static_cast<const wi::gui::Widget*>(&heightInput_),
                 static_cast<const wi::gui::Widget*>(&applyButton_),
                 static_cast<const wi::gui::Widget*>(&visibleButton_),
                 static_cast<const wi::gui::Widget*>(&enabledButton_)})
@@ -534,20 +478,8 @@ namespace renegade::studio
         const auto* widget = session_
             ? session_->FindWidget(selectedWidgetId_) : nullptr;
         if (!widget) return;
-        bridge::ScreenRect rect;
-        std::string error;
-        if (!bridge::ResolveScreenWidgetRect(
-                session_->Document(), widget->id, rect, error))
-        {
-            SetStatus("LAYOUT ERROR // " + error);
-            return;
-        }
         nameInput_.SetValue(widget->name);
         textInput_.SetValue(widget->text);
-        xInput_.SetValue(Number(rect.x));
-        yInput_.SetValue(Number(rect.y));
-        widthInput_.SetValue(Number(rect.width));
-        heightInput_.SetValue(Number(rect.height));
         visibleButton_.SetText(widget->visible ? "VISIBLE: YES" : "VISIBLE: NO");
         enabledButton_.SetText(widget->enabled ? "ENABLED: YES" : "ENABLED: NO");
     }
@@ -564,17 +496,14 @@ namespace renegade::studio
             ? widget->text : textInput_.GetValue();
         edit.visible = widget->visible;
         edit.enabled = widget->enabled;
-        if (!ParseNumber(xInput_.GetValue(), edit.resolvedRect.x) ||
-            !ParseNumber(yInput_.GetValue(), edit.resolvedRect.y) ||
-            !ParseNumber(widthInput_.GetValue(), edit.resolvedRect.width) ||
-            !ParseNumber(heightInput_.GetValue(), edit.resolvedRect.height))
+        std::string error;
+        if (!bridge::ResolveScreenWidgetRect(session_->Document(), selectedWidgetId_, edit.resolvedRect, error))
         {
-            SetStatus("EDIT REJECTED // POSITION AND SIZE MUST BE NUMBERS");
+            SetStatus("EDIT REJECTED // " + error);
             RefreshInspector();
             return;
         }
 
-        std::string error;
         if (!session_->UpdateWidget(selectedWidgetId_, std::move(edit), error))
         {
             SetStatus("EDIT REJECTED // " + error);
@@ -823,59 +752,35 @@ namespace renegade::studio
         status_ = std::move(status);
     }
 
-    void RenegadeScreenEditorWorkspace::Update(
-        const wi::Canvas& canvas,
-        const float dt)
+    RenegadeScreenEditorWorkspace::DirectManipulationMode RenegadeScreenEditorWorkspace::HitResizeHandle(const XMFLOAT4& pointer) const noexcept
     {
-        Widget::Update(canvas, dt);
-        UpdateControls(canvas, dt);
-        if (!IsVisible() || !IsEnabled() || !session_ ||
-            !session_->IsLoaded()) return;
+        if (!renderer_ || selectedWidgetId_.empty()) return DirectManipulationMode::None;
+        const auto* r = renderer_->LogicalRect(selectedWidgetId_); if (!r) return DirectManipulationMode::None;
+        const float h=ResizeHandleSize*0.5f; const auto hit=[&](float x,float y){return pointer.x>=x-h&&pointer.x<=x+h&&pointer.y>=y-h&&pointer.y<=y+h;};
+        if(hit(r->x,r->y))return DirectManipulationMode::ResizeTopLeft; if(hit(r->x+r->width,r->y))return DirectManipulationMode::ResizeTopRight; if(hit(r->x,r->y+r->height))return DirectManipulationMode::ResizeBottomLeft; if(hit(r->x+r->width,r->y+r->height))return DirectManipulationMode::ResizeBottomRight; return DirectManipulationMode::None;
+    }
+    void RenegadeScreenEditorWorkspace::BeginDirectManipulation(DirectManipulationMode mode,const XMFLOAT4& pointer)
+    {
+        if(!session_||!renderer_||selectedWidgetId_.empty()||mode==DirectManipulationMode::None)return; const auto* logical=renderer_->LogicalRect(selectedWidgetId_); bridge::ScreenRect resolved; std::string error;
+        if(!logical||!bridge::ResolveScreenWidgetRect(session_->Document(),selectedWidgetId_,resolved,error)||resolved.width<=0||resolved.height<=0||logical->width<=0||logical->height<=0){SetStatus("DIRECT EDIT REJECTED // COULD NOT RESOLVE ELEMENT GEOMETRY");return;}
+        directManipulationMode_=mode; directManipulationStartPointer_={pointer.x,pointer.y}; directManipulationStartRect_=resolved; directManipulationScaleX_=logical->width/resolved.width; directManipulationScaleY_=logical->height/resolved.height; directManipulationChanged_=false; session_->BeginCoalescedEdit(); SetStatus(mode==DirectManipulationMode::Move?"DRAGGING ELEMENT // RELEASE TO FINISH":"RESIZING ELEMENT // RELEASE TO FINISH");
+    }
+    void RenegadeScreenEditorWorkspace::UpdateDirectManipulation(const XMFLOAT4& pointer)
+    {
+        if(!session_||directManipulationMode_==DirectManipulationMode::None||directManipulationScaleX_<=0||directManipulationScaleY_<=0)return; const auto* w=session_->FindWidget(selectedWidgetId_); if(!w){EndDirectManipulation();return;}
+        const float dx=(pointer.x-directManipulationStartPointer_.x)/directManipulationScaleX_,dy=(pointer.y-directManipulationStartPointer_.y)/directManipulationScaleY_; bridge::ScreenRect n=directManipulationStartRect_; const float cw=session_->Document().designWidth,ch=session_->Document().designHeight,m=8.0f;
+        switch(directManipulationMode_){case DirectManipulationMode::Move:n.x=std::clamp(directManipulationStartRect_.x+dx,0.0f,std::max(0.0f,cw-directManipulationStartRect_.width));n.y=std::clamp(directManipulationStartRect_.y+dy,0.0f,std::max(0.0f,ch-directManipulationStartRect_.height));break;case DirectManipulationMode::ResizeTopLeft:{float r=directManipulationStartRect_.x+directManipulationStartRect_.width,b=directManipulationStartRect_.y+directManipulationStartRect_.height;n.x=std::clamp(directManipulationStartRect_.x+dx,0.0f,r-m);n.y=std::clamp(directManipulationStartRect_.y+dy,0.0f,b-m);n.width=r-n.x;n.height=b-n.y;break;}case DirectManipulationMode::ResizeTopRight:{float b=directManipulationStartRect_.y+directManipulationStartRect_.height,r=std::clamp(directManipulationStartRect_.x+directManipulationStartRect_.width+dx,directManipulationStartRect_.x+m,cw);n.y=std::clamp(directManipulationStartRect_.y+dy,0.0f,b-m);n.width=r-directManipulationStartRect_.x;n.height=b-n.y;break;}case DirectManipulationMode::ResizeBottomLeft:{float r=directManipulationStartRect_.x+directManipulationStartRect_.width,b=std::clamp(directManipulationStartRect_.y+directManipulationStartRect_.height+dy,directManipulationStartRect_.y+m,ch);n.x=std::clamp(directManipulationStartRect_.x+dx,0.0f,r-m);n.width=r-n.x;n.height=b-directManipulationStartRect_.y;break;}case DirectManipulationMode::ResizeBottomRight:{float r=std::clamp(directManipulationStartRect_.x+directManipulationStartRect_.width+dx,directManipulationStartRect_.x+m,cw),b=std::clamp(directManipulationStartRect_.y+directManipulationStartRect_.height+dy,directManipulationStartRect_.y+m,ch);n.width=r-directManipulationStartRect_.x;n.height=b-directManipulationStartRect_.y;break;}case DirectManipulationMode::None:return;}
+        bridge::ScreenWidgetAuthoringEdit e{w->name,w->text,n,w->visible,w->enabled};std::string error;if(!session_->UpdateWidget(selectedWidgetId_,std::move(e),error)){SetStatus("DIRECT EDIT REJECTED // "+error);return;}directManipulationChanged_=true;RefreshInspector();if(documentChanged_)documentChanged_();
+    }
+    void RenegadeScreenEditorWorkspace::EndDirectManipulation(){if(session_)session_->EndCoalescedEdit();if(directManipulationMode_!=DirectManipulationMode::None)SetStatus(directManipulationChanged_?"DIRECT GEOMETRY UPDATED // UNSAVED SCREEN CHANGE":"ELEMENT SELECTED // DRAG TO MOVE OR RESIZE");directManipulationMode_=DirectManipulationMode::None;directManipulationChanged_=false;}
 
-        const XMFLOAT4 pointer = wi::input::GetPointer();
-        const float rowTop = HierarchyRowsTop;
-        const std::size_t visibleRows = static_cast<std::size_t>(std::max(
-            1.0f, std::floor((height_ - rowTop - FooterHeight) /
-                HierarchyRowHeight)));
-        const auto& widgets = session_->Document().widgets;
-
-        if (pointer.x < HierarchyWidth && pointer.y >= HeaderHeight &&
-            pointer.y < height_ - FooterHeight)
-        {
-            if (pointer.z != 0.0f && widgets.size() > visibleRows)
-            {
-                if (pointer.z < 0.0f)
-                    hierarchyScroll_ = std::min(
-                        hierarchyScroll_ + 1, widgets.size() - visibleRows);
-                else if (hierarchyScroll_ > 0)
-                    --hierarchyScroll_;
-            }
-            if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) &&
-                pointer.y >= rowTop)
-            {
-                const std::size_t row = static_cast<std::size_t>(
-                    (pointer.y - rowTop) / HierarchyRowHeight);
-                const std::size_t index = hierarchyScroll_ + row;
-                if (row < visibleRows && index < widgets.size())
-                    SelectWidget(widgets[index].id);
-            }
-            return;
-        }
-
-        const auto preview = PreviewBounds();
-        if (!Contains(preview, pointer) ||
-            !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) || !renderer_)
-            return;
-
-        for (auto iterator = widgets.rbegin(); iterator != widgets.rend(); ++iterator)
-        {
-            const auto* bounds = renderer_->LogicalRect(iterator->id);
-            if (bounds && Contains(*bounds, pointer))
-            {
-                SelectWidget(iterator->id);
-                return;
-            }
-        }
+    void RenegadeScreenEditorWorkspace::Update(const wi::Canvas& canvas,const float dt)
+    {
+        Widget::Update(canvas,dt);UpdateControls(canvas,dt);if(!IsVisible()||!IsEnabled()||!session_||!session_->IsLoaded())return;const XMFLOAT4 pointer=wi::input::GetPointer();
+        if(directManipulationMode_!=DirectManipulationMode::None){if(wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))UpdateDirectManipulation(pointer);else EndDirectManipulation();return;}
+        const float rowTop=HierarchyRowsTop;const std::size_t visibleRows=static_cast<std::size_t>(std::max(1.0f,std::floor((height_-rowTop-FooterHeight)/HierarchyRowHeight)));const auto& widgets=session_->Document().widgets;
+        if(pointer.x<HierarchyWidth&&pointer.y>=HeaderHeight&&pointer.y<height_-FooterHeight){if(pointer.z!=0&&widgets.size()>visibleRows){if(pointer.z<0)hierarchyScroll_=std::min(hierarchyScroll_+1,widgets.size()-visibleRows);else if(hierarchyScroll_>0)--hierarchyScroll_;}if(wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)&&pointer.y>=rowTop){const std::size_t row=static_cast<std::size_t>((pointer.y-rowTop)/HierarchyRowHeight),index=hierarchyScroll_+row;if(row<visibleRows&&index<widgets.size())SelectWidget(widgets[index].id);}return;}
+        const auto preview=PreviewBounds();if(!Contains(preview,pointer)||!renderer_||!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))return;const auto handle=HitResizeHandle(pointer);if(handle!=DirectManipulationMode::None){BeginDirectManipulation(handle,pointer);return;}for(auto i=widgets.rbegin();i!=widgets.rend();++i){const auto* b=renderer_->LogicalRect(i->id);if(b&&Contains(*b,pointer)){SelectWidget(i->id);BeginDirectManipulation(DirectManipulationMode::Move,pointer);return;}}
     }
 
     void RenegadeScreenEditorWorkspace::Render(
@@ -935,14 +840,9 @@ namespace renegade::studio
                     HeaderHeight + 42.0f, 10, Orange, cmd);
                 Label("NAME", inspectorX, HeaderHeight + 58.0f, 9, Muted, cmd);
                 Label("TEXT", inspectorX, HeaderHeight + 122.0f, 9, Muted, cmd);
-                Label("POSITION  X / Y", inspectorX,
-                    HeaderHeight + 186.0f, 9, Muted, cmd);
-                Label("SIZE  WIDTH / HEIGHT", inspectorX,
-                    HeaderHeight + 250.0f, 9, Muted, cmd);
-                Label(widget->layoutMode == bridge::ScreenLayoutMode::Anchored
-                        ? "LAYOUT // ANCHORED (OFFSETS PRESERVED)"
-                        : "LAYOUT // ABSOLUTE",
-                    inspectorX, HeaderHeight + 410.0f, 9, Muted, cmd);
+                Label("DRAG ELEMENT IN PREVIEW TO MOVE", inspectorX, HeaderHeight + 190.0f, 9, Muted, cmd);
+                Label("DRAG CORNER HANDLES TO RESIZE", inspectorX, HeaderHeight + 208.0f, 9, Muted, cmd);
+                Label(widget->layoutMode == bridge::ScreenLayoutMode::Anchored ? "LAYOUT // ANCHORED" : "LAYOUT // ABSOLUTE", inspectorX, HeaderHeight + 238.0f, 9, Muted, cmd);
             }
         }
 
@@ -953,6 +853,9 @@ namespace renegade::studio
                 Outline(selected->x - 2.0f, selected->y - 2.0f,
                     selected->width + 4.0f, selected->height + 4.0f,
                     Cyan, 2.0f, cmd);
+      const float half = ResizeHandleSize * 0.5f;
+      const float corners[][2] = {{selected->x, selected->y}, {selected->x + selected->width, selected->y}, {selected->x, selected->y + selected->height}, {selected->x + selected->width, selected->y + selected->height}};
+      for (const auto& corner : corners) { Rect(corner[0]-half, corner[1]-half, ResizeHandleSize, ResizeHandleSize, Cyan, cmd); Outline(corner[0]-half, corner[1]-half, ResizeHandleSize, ResizeHandleSize, Text, 1.0f, cmd); }
             }
         }
 

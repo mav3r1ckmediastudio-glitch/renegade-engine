@@ -100,3 +100,17 @@ This package is the owner-acceptance candidate for Gate 8D creator controls. Gre
 4. Confirm no stock Wicked Editor windows appear.
 
 Gate 8D is accepted only when this exact packaged Release passes the full owner audit.
+
+## Owner acceptance — complete Gate 8D
+
+1. Open a governed Screen and create Text, Button, Image and Background elements.
+2. Select an element in the preview and drag it; it must follow the pointer live.
+3. Use all four corner resize handles and confirm live resizing.
+4. Confirm normal X/Y/W/H coordinate-entry fields are gone.
+5. Undo/Redo a move and resize; each full gesture is one Undo step.
+6. Parent an element and switch Absolute/Anchored mode; direct movement must not jump.
+7. Recheck Advanced style/state, colour, typography/font, governed resource, action, focus, parent/layout, presets and component controls.
+8. Save, return to Story Flow, reopen and confirm geometry plus authored state persists.
+9. Confirm Runtime preview parity and Hub → Story Flow → Screen/Level navigation remain intact.
+
+Gate 8D is not merge-ready until exact-head CI and this owner audit pass.

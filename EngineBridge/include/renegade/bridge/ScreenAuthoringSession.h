@@ -51,6 +51,19 @@ namespace renegade::bridge
             ScreenWidgetAuthoringEdit edit,
             std::string& error);
 
+        // Direct preview manipulation updates geometry every frame.
+        // Coalescing keeps one complete pointer gesture as one Undo.
+        void BeginCoalescedEdit() noexcept
+        {
+            coalescedEditActive_ = true;
+            coalescedMutationCreated_ = false;
+        }
+        void EndCoalescedEdit() noexcept
+        {
+            coalescedEditActive_ = false;
+            coalescedMutationCreated_ = false;
+        }
+
         // Complete Gate 8D presentation/binding transaction. The existing 8C
         // basic edit remains untouched; this additive path owns every remaining
         // persistent schema-v2 property and commits through the same history.
@@ -149,7 +162,7 @@ namespace renegade::bridge
             }
             else
             {
-                // The visible X/Y/W/H controls remain authoritative for anchor
+                // Resolved preview geometry remains authoritative for anchor
                 // offsets. Editing anchor min/max or changing parent therefore
                 // does not make the element jump on the design canvas.
                 found->anchors.offsetMinimumX = relativeX -
@@ -509,5 +522,7 @@ namespace renegade::bridge
         StableId projectId_;
         std::string filePath_;
         bool loaded_ = false;
+        bool coalescedEditActive_ = false;
+        bool coalescedMutationCreated_ = false;
     };
 }

@@ -20,6 +20,7 @@ Gate 8D owns:
 - editable font identity, size, spacing, softness, bolden, shadow, alignment and wrapping;
 - symbolic Screen action identity authoring and typed Button action selection;
 - creator-authored Button focus order;
+- direct preview manipulation: drag elements to move and drag corner handles to resize;
 - parent selection plus Absolute/Anchored layout and all four anchor coordinates;
 - the same Screen-specific Undo/Redo, transactional Save/Open and dirty-return guarantees established by Gate 8C.
 
@@ -33,7 +34,7 @@ Every persistent operation builds a complete candidate `ScreenDocument`, validat
 
 This includes:
 
-- basic 8C name/text/X/Y/W/H/visible/enabled edits;
+- basic name/text/visible/enabled edits plus direct preview geometry manipulation;
 - create/delete/duplicate/layer transactions;
 - full advanced style/state/typography edits;
 - resource/action/parent/layout bindings;
@@ -177,24 +178,14 @@ Windows Debug/Release CI remains authoritative for compilation and regression pr
 
 ## Owner acceptance — complete Gate 8D
 
-The exact packaged Release must pass all of the following before Gate 8D is accepted:
+1. Open a governed Screen and create Text, Button, Image and Background elements.
+2. Select an element in the preview and drag it; it must follow the pointer live.
+3. Use all four corner resize handles and confirm live resizing.
+4. Confirm normal X/Y/W/H coordinate-entry fields are gone.
+5. Undo/Redo a move and resize; each full gesture is one Undo step.
+6. Parent an element and switch Absolute/Anchored mode; direct movement must not jump.
+7. Recheck Advanced style/state, colour, typography/font, governed resource, action, focus, parent/layout, presets and component controls.
+8. Save, return to Story Flow, reopen and confirm geometry plus authored state persists.
+9. Confirm Runtime preview parity and Hub → Story Flow → Screen/Level navigation remain intact.
 
-1. Create/open a project and open a governed Screen from Story Flow.
-2. Confirm `+ TEXT`, `+ BUTTON`, `+ IMAGE`, `+ BACKGROUND`, Duplicate, Delete, Back and Front are visible and functional.
-3. Create each element type and confirm hierarchy + shared Runtime preview update immediately.
-4. Open **ADVANCED** and confirm the basic Inspector is not simultaneously interactive; close Advanced and confirm the basic Inspector returns normally.
-5. On STYLE, edit several values across at least Normal, Hover, Pressed, Focused and Disabled. Confirm preview/runtime interaction uses the authored states.
-6. Use the RGBA picker and the precision hex field; confirm both author the same persisted colour.
-7. On TEXT / FONT, select a governed Font (when available), edit size/spacing/shadow/alignment/wrap and confirm changes do not reset one another.
-8. On BIND / LAYOUT, select a governed Image for an Image widget and a per-state image for a Button where available.
-9. Add a custom symbolic action, bind a Button to it, rename it and confirm the Button remains bound. Confirm deleting a referenced action is refused.
-10. Move two Buttons with Focus Up/Down and confirm authored keyboard/controller traversal follows the saved order.
-11. Reparent an element and switch Absolute/Anchored mode; confirm it does not jump on the design canvas.
-12. Create Panel and Heading presets and confirm every resulting appearance/layout value remains editable.
-13. Parent Text/Button children under an element, use **DUP COMPONENT**, and confirm the copied subtree is independently selectable/editable with preserved action/focus behaviour.
-14. Exercise Undo/Redo across style, typography, binding, action, focus and component changes.
-15. Save, return to Story Flow, reopen the Screen and confirm all authored state persists.
-16. Confirm the same Screen renders identically in the packaged Runtime path and Screen Editor preview at the accepted design/output scale.
-17. Confirm Hub → Story Flow → Screen and Story Flow → Level workflows have not regressed.
-
-Gate 8D is not merge-ready until exact-head authoritative CI is green and this owner audit passes.
+Gate 8D is not merge-ready until exact-head CI and this owner audit pass.

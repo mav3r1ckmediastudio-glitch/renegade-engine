@@ -96,6 +96,8 @@ namespace renegade::bridge
         projectId_.clear();
         filePath_.clear();
         loaded_ = false;
+        coalescedEditActive_ = false;
+        coalescedMutationCreated_ = false;
     }
 
     bool ScreenAuthoringSession::UpdateWidget(
@@ -147,32 +149,21 @@ namespace renegade::bridge
         found->visible = edit.visible;
         found->enabled = edit.enabled;
 
+        ScreenRect parentRect{0.0f, 0.0f,
+  candidate.designWidth, candidate.designHeight};
+        if (!found->parentId.empty() &&
+  !ResolveScreenWidgetRect(candidate, found->parentId, parentRect, error))
+  return false;
+        const float relativeX = edit.resolvedRect.x - parentRect.x;
+        const float relativeY = edit.resolvedRect.y - parentRect.y;
         if (found->layoutMode == ScreenLayoutMode::Absolute)
-        {
-            found->rect = edit.resolvedRect;
-        }
+  found->rect = {relativeX, relativeY, edit.resolvedRect.width, edit.resolvedRect.height};
         else
         {
-            ScreenRect parentRect{0.0f, 0.0f,
-                candidate.designWidth, candidate.designHeight};
-            if (!found->parentId.empty() &&
-                !ResolveScreenWidgetRect(
-                    candidate, found->parentId, parentRect, error))
-            {
-                return false;
-            }
-            const float relativeX = edit.resolvedRect.x - parentRect.x;
-            const float relativeY = edit.resolvedRect.y - parentRect.y;
-            found->anchors.offsetMinimumX = relativeX -
-                found->anchors.minimumX * parentRect.width;
-            found->anchors.offsetMinimumY = relativeY -
-                found->anchors.minimumY * parentRect.height;
-            found->anchors.offsetMaximumX =
-                relativeX + edit.resolvedRect.width -
-                found->anchors.maximumX * parentRect.width;
-            found->anchors.offsetMaximumY =
-                relativeY + edit.resolvedRect.height -
-                found->anchors.maximumY * parentRect.height;
+  found->anchors.offsetMinimumX = relativeX - found->anchors.minimumX * parentRect.width;
+  found->anchors.offsetMinimumY = relativeY - found->anchors.minimumY * parentRect.height;
+  found->anchors.offsetMaximumX = relativeX + edit.resolvedRect.width - found->anchors.maximumX * parentRect.width;
+  found->anchors.offsetMaximumY = relativeY + edit.resolvedRect.height - found->anchors.maximumY * parentRect.height;
         }
 
         return CommitMutation(std::move(candidate), error);
@@ -502,6 +493,8 @@ namespace renegade::bridge
         projectId_ = expectedProjectId;
         filePath_ = std::move(filePath);
         loaded_ = true;
+        coalescedEditActive_ = false;
+        coalescedMutationCreated_ = false;
         error.clear();
         return true;
     }
@@ -518,6 +511,13 @@ namespace renegade::bridge
         if (!ValidateScreenDocument(document, projectId_, error))
             return false;
 
+        if (coalescedEditActive_ && coalescedMutationCreated_)
+        {
+            history_[historyIndex_] = std::move(document);
+            error.clear();
+            return true;
+        }
+
         if (historyIndex_ + 1 < history_.size())
         {
             if (savedHistoryIndex_ != InvalidHistoryIndex &&
@@ -531,6 +531,7 @@ namespace renegade::bridge
 
         history_.push_back(std::move(document));
         historyIndex_ = history_.size() - 1;
+        if (coalescedEditActive_) coalescedMutationCreated_ = true;
         if (history_.size() > MaximumHistoryEntries)
         {
             history_.erase(history_.begin());

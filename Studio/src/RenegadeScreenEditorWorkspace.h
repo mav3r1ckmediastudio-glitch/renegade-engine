@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -32,10 +33,6 @@ namespace renegade::studio
             for (wi::gui::Widget* widget : {
                     static_cast<wi::gui::Widget*>(&nameInput_),
                     static_cast<wi::gui::Widget*>(&textInput_),
-                    static_cast<wi::gui::Widget*>(&xInput_),
-                    static_cast<wi::gui::Widget*>(&yInput_),
-                    static_cast<wi::gui::Widget*>(&widthInput_),
-                    static_cast<wi::gui::Widget*>(&heightInput_),
                     static_cast<wi::gui::Widget*>(&applyButton_),
                     static_cast<wi::gui::Widget*>(&visibleButton_),
                     static_cast<wi::gui::Widget*>(&enabledButton_)})
@@ -61,10 +58,6 @@ namespace renegade::studio
                 if (!inspectorSuppressed_) ToggleEnabled();
             });
             textInput_.OnInputAccepted([this](const wi::gui::EventArgs&)
-            {
-                if (!inspectorSuppressed_) ApplySelectedWidget();
-            });
-            heightInput_.OnInputAccepted([this](const wi::gui::EventArgs&)
             {
                 if (!inspectorSuppressed_) ApplySelectedWidget();
             });
@@ -116,6 +109,15 @@ namespace renegade::studio
         void RefreshAfterMutation(std::string status);
         void SetStatus(std::string status);
 
+        enum class DirectManipulationMode : std::uint8_t
+        {
+            None, Move, ResizeTopLeft, ResizeTopRight, ResizeBottomLeft, ResizeBottomRight,
+        };
+        [[nodiscard]] DirectManipulationMode HitResizeHandle(const XMFLOAT4& pointer) const noexcept;
+        void BeginDirectManipulation(DirectManipulationMode mode, const XMFLOAT4& pointer);
+        void UpdateDirectManipulation(const XMFLOAT4& pointer);
+        void EndDirectManipulation();
+
         bridge::ScreenAuthoringSession* session_ = nullptr;
         screen::ScreenRenderer* renderer_ = nullptr;
         bridge::StableId selectedWidgetId_;
@@ -126,6 +128,12 @@ namespace renegade::studio
         float height_ = 1.0f;
         std::size_t hierarchyScroll_ = 0;
         bool inspectorSuppressed_ = false;
+        DirectManipulationMode directManipulationMode_ = DirectManipulationMode::None;
+        XMFLOAT2 directManipulationStartPointer_ = {};
+        bridge::ScreenRect directManipulationStartRect_;
+        float directManipulationScaleX_ = 1.0f;
+        float directManipulationScaleY_ = 1.0f;
+        bool directManipulationChanged_ = false;
 
         RenegadeButton returnButton_;
         RenegadeButton saveButton_;
@@ -144,9 +152,5 @@ namespace renegade::studio
         RenegadeButton enabledButton_;
         RenegadeTextInputField nameInput_;
         RenegadeTextInputField textInput_;
-        RenegadeTextInputField xInput_;
-        RenegadeTextInputField yInput_;
-        RenegadeTextInputField widthInput_;
-        RenegadeTextInputField heightInput_;
     };
 }
