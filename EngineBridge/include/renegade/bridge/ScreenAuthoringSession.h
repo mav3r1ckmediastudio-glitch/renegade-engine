@@ -17,9 +17,10 @@ namespace renegade::bridge
         bool enabled = true;
     };
 
-    // Gate 8C's UI-independent Screen document boundary. The editor shell
-    // selects and presents widgets, while this session owns validated
-    // mutations, history, dirty state and transactional Screen persistence.
+    // UI-independent Screen document mutation boundary. Gate 8C established
+    // validated property editing/history/persistence; Gate 8D extends the same
+    // authority to creator-level element transactions without giving Studio a
+    // second mutation path around the governed Screen document.
     class ScreenAuthoringSession final
     {
     public:
@@ -34,6 +35,28 @@ namespace renegade::bridge
         [[nodiscard]] bool UpdateWidget(
             const StableId& widgetId,
             ScreenWidgetAuthoringEdit edit,
+            std::string& error);
+
+        // Gate 8D creator transactions. Every operation mutates a complete
+        // candidate document, validates it, then enters the same bounded
+        // Screen Undo/Redo history as Inspector edits.
+        [[nodiscard]] bool CreateWidget(
+            ScreenWidget widget,
+            bool insertAtBack,
+            StableId& createdWidgetId,
+            std::string& error);
+        [[nodiscard]] bool DuplicateWidget(
+            const StableId& widgetId,
+            StableId& duplicatedWidgetId,
+            std::string& error);
+        [[nodiscard]] bool DeleteWidget(
+            const StableId& widgetId,
+            std::string& error);
+        [[nodiscard]] bool MoveWidgetToBack(
+            const StableId& widgetId,
+            std::string& error);
+        [[nodiscard]] bool MoveWidgetToFront(
+            const StableId& widgetId,
             std::string& error);
 
         [[nodiscard]] bool Undo(std::string& error);
