@@ -1,10 +1,11 @@
 #pragma once
 
 #include "renegade/bridge/AssetBrowserService.h"
+#include "renegade/bridge/AssetRegistryService.h"
+#include "renegade/bridge/ResourceAssetService.h"
 
 #include <algorithm>
 #include <filesystem>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -18,7 +19,12 @@ namespace renegade::bridge
 
     struct ScreenCreatorResourceChoice
     {
+        // Stable LP08 product identity is creator-selection authority. The
+        // source path remains the schema-v2 renderer-compatible path hint until
+        // Screen persistence itself moves to stable resource references.
+        StableId assetId;
         std::string projectRelativePath;
+        std::string productProjectRelativePath;
         AssetType assetType = AssetType::Unknown;
     };
 
@@ -29,56 +35,121 @@ namespace renegade::bridge
         std::string error;
     };
 
-    // Deterministic creator-facing projection over the existing Renegade Asset
-    // Browser seam. No arbitrary absolute-path picker is introduced: every
-    // choice is a supported resource already inside the active project Content
-    // tree. The current Screen renderer consumes project-relative texture/font
-    // paths, so only renderer-compatible source resources are surfaced here.
+    // Creator-facing projection over accepted LC01/LP08 governance. No raw
+    // filesystem scan and no arbitrary path picker is used: every choice must
+    // resolve through imported-product provenance to a current authoritative
+    // .rasset plus retained source inside the active project.
     [[nodiscard]] inline ScreenCreatorResourceCatalogue
     EnumerateScreenCreatorResources(
         const std::string& projectRoot,
+        const StableId& projectId,
         const ScreenCreatorResourceKind kind)
     {
         ScreenCreatorResourceCatalogue result;
-        AssetBrowserService browser;
-        const AssetBrowserSnapshot root = browser.Scan(projectRoot, "Content");
-        if (!root.succeeded)
+        if (projectRoot.empty() || !IsValidStableId(projectId))
         {
-            result.error = root.error;
+            result.error =
+                "Screen resource catalogue requires an active project and valid project ID.";
             return result;
         }
 
-        const AssetType requestedType = kind == ScreenCreatorResourceKind::Image
-            ? AssetType::Texture : AssetType::Font;
-        std::set<std::string> paths;
-        const auto collect = [&](const AssetBrowserSnapshot& snapshot)
+        AssetRegistry registry;
+        if (!ReadAssetRegistry(projectRoot, projectId, registry, result.error))
         {
-            if (!snapshot.succeeded) return;
-            for (const auto& asset : snapshot.assets)
-            {
-                if (asset.directory || asset.type != requestedType) continue;
-                const auto path = std::filesystem::u8path(
-                    asset.projectRelativePath).lexically_normal();
-                const std::string extension = path.extension().u8string();
-                if (extension == ".rasset" || extension == ".RASSET")
-                    continue;
-                paths.insert(path.generic_u8string());
-            }
+            result.error = "Screen resource catalogue could not read LC01: " +
+                result.error;
+            return result;
+        }
+
+        ResourceAssetMetadataDocument metadata;
+        if (!ReadResourceAssetMetadata(
+                projectRoot, projectId, metadata, result.error))
+        {
+            result.error =
+                "Screen resource catalogue could not read LP08 metadata: " +
+                result.error;
+            return result;
+        }
+
+        const ResourceClass requestedClass =
+            kind == ScreenCreatorResourceKind::Image
+                ? ResourceClass::Texture : ResourceClass::Font;
+        const AssetType requestedType =
+            ResourceClassAssetType(requestedClass);
+
+        const auto findAsset = [&registry](const StableId& id)
+            -> const AssetRecord*
+        {
+            const auto found = std::find_if(
+                registry.records.begin(), registry.records.end(),
+                [&id](const AssetRecord& record)
+                {
+                    return record.assetId == id;
+                });
+            return found == registry.records.end() ? nullptr : &*found;
+        };
+        const auto findMetadata = [&metadata](const StableId& id)
+            -> const ResourceAssetMetadataRecord*
+        {
+            const auto found = std::find_if(
+                metadata.records.begin(), metadata.records.end(),
+                [&id](const ResourceAssetMetadataRecord& record)
+                {
+                    return record.assetId == id;
+                });
+            return found == metadata.records.end() ? nullptr : &*found;
         };
 
-        collect(root);
-        for (const auto& folder : root.folders)
+        for (const auto& provenance : registry.importedProducts)
         {
-            if (folder.projectRelativePath == "Content") continue;
-            collect(browser.Scan(projectRoot, folder.projectRelativePath));
+            const auto* product = findAsset(provenance.productAssetId);
+            const auto* source = findAsset(provenance.sourceAssetId);
+            const auto* productMetadata = findMetadata(
+                provenance.productAssetId);
+            if (product == nullptr || source == nullptr ||
+                productMetadata == nullptr ||
+                productMetadata->resourceClass != requestedClass ||
+                !product->sourceAvailable || !source->sourceAvailable ||
+                product->provider != "lp08.rasset" ||
+                provenance.importer != "wicked.resourcemanager" ||
+                std::filesystem::u8path(product->projectRelativePath).extension() !=
+                    ResourceAssetExtension ||
+                AssetBrowserService::Classify(source->projectRelativePath) !=
+                    requestedType)
+            {
+                continue;
+            }
+
+            ScreenCreatorResourceChoice choice;
+            choice.assetId = product->assetId;
+            choice.projectRelativePath = std::filesystem::u8path(
+                source->projectRelativePath).lexically_normal().generic_u8string();
+            choice.productProjectRelativePath = std::filesystem::u8path(
+                product->projectRelativePath).lexically_normal().generic_u8string();
+            choice.assetType = requestedType;
+            result.choices.push_back(std::move(choice));
         }
 
-        result.choices.reserve(paths.size());
-        for (const auto& path : paths)
-        {
-            result.choices.push_back({path, requestedType});
-        }
+        std::sort(
+            result.choices.begin(), result.choices.end(),
+            [](const ScreenCreatorResourceChoice& left,
+               const ScreenCreatorResourceChoice& right)
+            {
+                if (left.projectRelativePath != right.projectRelativePath)
+                    return left.projectRelativePath < right.projectRelativePath;
+                return left.assetId < right.assetId;
+            });
+        result.choices.erase(
+            std::unique(
+                result.choices.begin(), result.choices.end(),
+                [](const ScreenCreatorResourceChoice& left,
+                   const ScreenCreatorResourceChoice& right)
+                {
+                    return left.assetId == right.assetId;
+                }),
+            result.choices.end());
         result.succeeded = true;
+        result.error.clear();
         return result;
     }
 }
