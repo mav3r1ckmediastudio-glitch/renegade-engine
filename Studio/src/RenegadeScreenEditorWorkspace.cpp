@@ -15,6 +15,7 @@ namespace
     constexpr float InspectorWidth = 360.0f;
     constexpr float PanelGap = 14.0f;
     constexpr float HierarchyRowHeight = 32.0f;
+    constexpr float HierarchyRowsTop = HeaderHeight + 126.0f;
 
     constexpr wi::Color Background(4, 7, 10, 255);
     constexpr wi::Color Surface(8, 13, 17, 255);
@@ -208,6 +209,70 @@ namespace renegade::studio
         redoButton_.SetText("REDO");
         redoButton_.OnClick([this](const wi::gui::EventArgs&) { RedoScreen(); });
 
+        addTextButton_.Create("Screen Editor Add Text");
+        addTextButton_.SetText("+ TEXT");
+        addTextButton_.SetTooltip("Create an editable Text element.");
+        addTextButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            CreateElement(bridge::ScreenWidgetKind::Text, false);
+        });
+
+        addButtonButton_.Create("Screen Editor Add Button");
+        addButtonButton_.SetText("+ BUTTON");
+        addButtonButton_.SetTooltip("Create an editable Button bound to an existing Screen action.");
+        addButtonButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            CreateElement(bridge::ScreenWidgetKind::Button, false);
+        });
+
+        addImageButton_.Create("Screen Editor Add Image");
+        addImageButton_.SetText("+ IMAGE");
+        addImageButton_.SetTooltip("Create an editable Image element. Resource assignment remains explicit.");
+        addImageButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            CreateElement(bridge::ScreenWidgetKind::Image, false);
+        });
+
+        addBackgroundButton_.Create("Screen Editor Add Background");
+        addBackgroundButton_.SetText("+ BG");
+        addBackgroundButton_.SetTooltip("Create a full-canvas Image at the back of the authored layer stack.");
+        addBackgroundButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            CreateElement(bridge::ScreenWidgetKind::Image, true);
+        });
+
+        duplicateButton_.Create("Screen Editor Duplicate Element");
+        duplicateButton_.SetText("DUP");
+        duplicateButton_.SetTooltip("Duplicate the selected element with a new stable ID.");
+        duplicateButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            DuplicateSelectedWidget();
+        });
+
+        deleteButton_.Create("Screen Editor Delete Element");
+        deleteButton_.SetText("DELETE");
+        deleteButton_.SetTooltip("Delete the selected element when the complete Screen remains valid.");
+        deleteButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            DeleteSelectedWidget();
+        });
+
+        backButton_.Create("Screen Editor Send Back");
+        backButton_.SetText("BACK");
+        backButton_.SetTooltip("Send the selected element to the back of the authored layer stack.");
+        backButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            MoveSelectedWidgetToBack();
+        });
+
+        frontButton_.Create("Screen Editor Bring Front");
+        frontButton_.SetText("FRONT");
+        frontButton_.SetTooltip("Bring the selected element to the front of the authored layer stack.");
+        frontButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            MoveSelectedWidgetToFront();
+        });
+
         const auto configureInput = [](RenegadeTextInputField& input,
                                        const char* name,
                                        const char* placeholder)
@@ -255,6 +320,14 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&saveButton_),
                 static_cast<wi::gui::Widget*>(&undoButton_),
                 static_cast<wi::gui::Widget*>(&redoButton_),
+                static_cast<wi::gui::Widget*>(&addTextButton_),
+                static_cast<wi::gui::Widget*>(&addButtonButton_),
+                static_cast<wi::gui::Widget*>(&addImageButton_),
+                static_cast<wi::gui::Widget*>(&addBackgroundButton_),
+                static_cast<wi::gui::Widget*>(&duplicateButton_),
+                static_cast<wi::gui::Widget*>(&deleteButton_),
+                static_cast<wi::gui::Widget*>(&backButton_),
+                static_cast<wi::gui::Widget*>(&frontButton_),
                 static_cast<wi::gui::Widget*>(&nameInput_),
                 static_cast<wi::gui::Widget*>(&textInput_),
                 static_cast<wi::gui::Widget*>(&xInput_),
@@ -283,6 +356,27 @@ namespace renegade::studio
         header(undoButton_, 64.0f);
         header(redoButton_, 64.0f);
         header(saveButton_, 64.0f);
+
+        float creatorX = 10.0f;
+        const float creatorTop = HeaderHeight + 42.0f;
+        const auto creator = [&creatorX, creatorTop](
+            wi::gui::Widget& widget,
+            const float width,
+            const float row)
+        {
+            widget.SetPos(XMFLOAT2(creatorX, creatorTop + row * 34.0f));
+            widget.SetSize(XMFLOAT2(width, 28.0f));
+            creatorX += width + 4.0f;
+        };
+        creator(addTextButton_, 54.0f, 0.0f);
+        creator(addButtonButton_, 64.0f, 0.0f);
+        creator(addImageButton_, 58.0f, 0.0f);
+        creator(addBackgroundButton_, 54.0f, 0.0f);
+        creatorX = 10.0f;
+        creator(duplicateButton_, 52.0f, 1.0f);
+        creator(deleteButton_, 60.0f, 1.0f);
+        creator(backButton_, 54.0f, 1.0f);
+        creator(frontButton_, 62.0f, 1.0f);
 
         const float inspectorX = width_ - InspectorWidth + 14.0f;
         const float fieldWidth = InspectorWidth - 28.0f;
@@ -332,11 +426,19 @@ namespace renegade::studio
         saveButton_.SetVisible(loaded);
         undoButton_.SetVisible(loaded);
         redoButton_.SetVisible(loaded);
+        addTextButton_.SetVisible(loaded);
+        addButtonButton_.SetVisible(loaded);
+        addImageButton_.SetVisible(loaded);
+        addBackgroundButton_.SetVisible(loaded);
         saveButton_.SetEnabled(loaded && session_->IsDirty());
         undoButton_.SetEnabled(loaded && session_->CanUndo());
         redoButton_.SetEnabled(loaded && session_->CanRedo());
 
         const bool selectedReady = selected != nullptr;
+        duplicateButton_.SetVisible(selectedReady);
+        deleteButton_.SetVisible(selectedReady);
+        backButton_.SetVisible(selectedReady);
+        frontButton_.SetVisible(selectedReady);
         for (wi::gui::Widget* widget : {
                 static_cast<wi::gui::Widget*>(&nameInput_),
                 static_cast<wi::gui::Widget*>(&textInput_),
@@ -360,6 +462,14 @@ namespace renegade::studio
                 static_cast<wi::gui::Widget*>(&saveButton_),
                 static_cast<wi::gui::Widget*>(&undoButton_),
                 static_cast<wi::gui::Widget*>(&redoButton_),
+                static_cast<wi::gui::Widget*>(&addTextButton_),
+                static_cast<wi::gui::Widget*>(&addButtonButton_),
+                static_cast<wi::gui::Widget*>(&addImageButton_),
+                static_cast<wi::gui::Widget*>(&addBackgroundButton_),
+                static_cast<wi::gui::Widget*>(&duplicateButton_),
+                static_cast<wi::gui::Widget*>(&deleteButton_),
+                static_cast<wi::gui::Widget*>(&backButton_),
+                static_cast<wi::gui::Widget*>(&frontButton_),
                 static_cast<wi::gui::Widget*>(&nameInput_),
                 static_cast<wi::gui::Widget*>(&textInput_),
                 static_cast<wi::gui::Widget*>(&xInput_),
@@ -383,6 +493,14 @@ namespace renegade::studio
                 static_cast<const wi::gui::Widget*>(&saveButton_),
                 static_cast<const wi::gui::Widget*>(&undoButton_),
                 static_cast<const wi::gui::Widget*>(&redoButton_),
+                static_cast<const wi::gui::Widget*>(&addTextButton_),
+                static_cast<const wi::gui::Widget*>(&addButtonButton_),
+                static_cast<const wi::gui::Widget*>(&addImageButton_),
+                static_cast<const wi::gui::Widget*>(&addBackgroundButton_),
+                static_cast<const wi::gui::Widget*>(&duplicateButton_),
+                static_cast<const wi::gui::Widget*>(&deleteButton_),
+                static_cast<const wi::gui::Widget*>(&backButton_),
+                static_cast<const wi::gui::Widget*>(&frontButton_),
                 static_cast<const wi::gui::Widget*>(&nameInput_),
                 static_cast<const wi::gui::Widget*>(&textInput_),
                 static_cast<const wi::gui::Widget*>(&xInput_),
@@ -539,6 +657,147 @@ namespace renegade::studio
         RefreshAfterMutation("ENABLED STATE UPDATED // UNSAVED SCREEN CHANGE");
     }
 
+    void RenegadeScreenEditorWorkspace::CreateElement(
+        const bridge::ScreenWidgetKind kind,
+        const bool background)
+    {
+        if (!session_ || !session_->IsLoaded()) return;
+        const auto& document = session_->Document();
+
+        bridge::ScreenWidget widget;
+        widget.kind = kind;
+        widget.visible = true;
+        widget.enabled = kind == bridge::ScreenWidgetKind::Button;
+
+        if (background)
+        {
+            widget.name = "Background";
+            widget.rect = {0.0f, 0.0f, document.designWidth, document.designHeight};
+            widget.enabled = false;
+            widget.style = bridge::MakeScreenWidgetStyleTemplate(
+                bridge::ScreenWidgetKind::Image, widget.rect.height);
+            widget.style.normal.background = {12, 16, 20, 255};
+            widget.style.hover = widget.style.normal;
+            widget.style.pressed = widget.style.normal;
+            widget.style.focused = widget.style.normal;
+            widget.style.disabled = widget.style.normal;
+        }
+        else if (kind == bridge::ScreenWidgetKind::Text)
+        {
+            widget.name = "Text";
+            widget.text = "TEXT";
+            widget.rect.width = std::min(640.0f, document.designWidth - 40.0f);
+            widget.rect.height = std::min(96.0f, document.designHeight - 40.0f);
+            widget.rect.x = (document.designWidth - widget.rect.width) * 0.5f;
+            widget.rect.y = std::max(20.0f, document.designHeight * 0.2f);
+            if (widget.rect.y + widget.rect.height > document.designHeight)
+                widget.rect.y = document.designHeight - widget.rect.height;
+            widget.enabled = false;
+            widget.style = bridge::MakeScreenWidgetStyleTemplate(
+                kind, widget.rect.height);
+        }
+        else if (kind == bridge::ScreenWidgetKind::Button)
+        {
+            if (document.actions.empty())
+            {
+                SetStatus("BUTTON CREATE REJECTED // SCREEN HAS NO ACTIONS");
+                return;
+            }
+            widget.name = "Button";
+            widget.text = "BUTTON";
+            widget.actionId = document.actions.front().id;
+            widget.rect.width = std::min(400.0f, document.designWidth - 40.0f);
+            widget.rect.height = std::min(76.0f, document.designHeight - 40.0f);
+            widget.rect.x = (document.designWidth - widget.rect.width) * 0.5f;
+            widget.rect.y = (document.designHeight - widget.rect.height) * 0.5f;
+            widget.style = bridge::MakeScreenWidgetStyleTemplate(
+                kind, widget.rect.height);
+        }
+        else
+        {
+            widget.name = "Image";
+            widget.rect.width = std::min(480.0f, document.designWidth - 40.0f);
+            widget.rect.height = std::min(270.0f, document.designHeight - 40.0f);
+            widget.rect.x = (document.designWidth - widget.rect.width) * 0.5f;
+            widget.rect.y = (document.designHeight - widget.rect.height) * 0.5f;
+            widget.enabled = false;
+            widget.style = bridge::MakeScreenWidgetStyleTemplate(
+                kind, widget.rect.height);
+            widget.style.normal.background = {64, 76, 84, 96};
+            widget.style.hover = widget.style.normal;
+            widget.style.pressed = widget.style.normal;
+            widget.style.focused = widget.style.normal;
+            widget.style.disabled = widget.style.normal;
+        }
+
+        bridge::StableId created;
+        std::string error;
+        if (!session_->CreateWidget(
+                std::move(widget), background, created, error))
+        {
+            SetStatus("CREATE REJECTED // " + error);
+            return;
+        }
+        selectedWidgetId_ = created;
+        hierarchyScroll_ = 0;
+        RefreshAfterMutation(background
+            ? "BACKGROUND CREATED // UNSAVED SCREEN CHANGE"
+            : "ELEMENT CREATED // UNSAVED SCREEN CHANGE");
+    }
+
+    void RenegadeScreenEditorWorkspace::DuplicateSelectedWidget()
+    {
+        if (!session_ || selectedWidgetId_.empty()) return;
+        bridge::StableId duplicated;
+        std::string error;
+        if (!session_->DuplicateWidget(
+                selectedWidgetId_, duplicated, error))
+        {
+            SetStatus("DUPLICATE REJECTED // " + error);
+            return;
+        }
+        selectedWidgetId_ = duplicated;
+        RefreshAfterMutation("ELEMENT DUPLICATED // UNSAVED SCREEN CHANGE");
+    }
+
+    void RenegadeScreenEditorWorkspace::DeleteSelectedWidget()
+    {
+        if (!session_ || selectedWidgetId_.empty()) return;
+        std::string error;
+        if (!session_->DeleteWidget(selectedWidgetId_, error))
+        {
+            SetStatus("DELETE REJECTED // " + error);
+            return;
+        }
+        selectedWidgetId_.clear();
+        hierarchyScroll_ = 0;
+        RefreshAfterMutation("ELEMENT DELETED // UNSAVED SCREEN CHANGE");
+    }
+
+    void RenegadeScreenEditorWorkspace::MoveSelectedWidgetToBack()
+    {
+        if (!session_ || selectedWidgetId_.empty()) return;
+        std::string error;
+        if (!session_->MoveWidgetToBack(selectedWidgetId_, error))
+        {
+            SetStatus("LAYER MOVE REJECTED // " + error);
+            return;
+        }
+        RefreshAfterMutation("ELEMENT SENT TO BACK // UNSAVED SCREEN CHANGE");
+    }
+
+    void RenegadeScreenEditorWorkspace::MoveSelectedWidgetToFront()
+    {
+        if (!session_ || selectedWidgetId_.empty()) return;
+        std::string error;
+        if (!session_->MoveWidgetToFront(selectedWidgetId_, error))
+        {
+            SetStatus("LAYER MOVE REJECTED // " + error);
+            return;
+        }
+        RefreshAfterMutation("ELEMENT BROUGHT TO FRONT // UNSAVED SCREEN CHANGE");
+    }
+
     void RenegadeScreenEditorWorkspace::ReturnToStoryFlow()
     {
         if (session_ && session_->IsDirty())
@@ -573,7 +832,7 @@ namespace renegade::studio
             !session_->IsLoaded()) return;
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        const float rowTop = HeaderHeight + 50.0f;
+        const float rowTop = HierarchyRowsTop;
         const std::size_t visibleRows = static_cast<std::size_t>(std::max(
             1.0f, std::floor((height_ - rowTop - FooterHeight) /
                 HierarchyRowHeight)));
@@ -639,13 +898,14 @@ namespace renegade::studio
         Label("LIVE RUNTIME PREVIEW", preview.x, HeaderHeight - 20.0f,
             11, Muted, cmd);
         Label("HIERARCHY", 16.0f, HeaderHeight + 16.0f, 13, Text, cmd);
+        Label("CREATE / LAYERS", 128.0f, HeaderHeight + 18.0f, 9, Muted, cmd);
         Label("INSPECTOR", width_ - InspectorWidth + 14.0f,
             HeaderHeight + 16.0f, 13, Text, cmd);
 
         if (session_ && session_->IsLoaded())
         {
             const auto& widgets = session_->Document().widgets;
-            const float rowTop = HeaderHeight + 50.0f;
+            const float rowTop = HierarchyRowsTop;
             const std::size_t visibleRows = static_cast<std::size_t>(std::max(
                 1.0f, std::floor((height_ - rowTop - FooterHeight) /
                     HierarchyRowHeight)));
