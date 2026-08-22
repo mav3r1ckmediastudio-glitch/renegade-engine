@@ -30,7 +30,7 @@ namespace renegade::studio
             SetName("Renegade Screen advanced Inspector");
             SetShadowRadius(0.0f);
 
-            toggleButton_.Create("Screen Advanced Inspector Toggle");
+            toggleButton_.Create("Renegade Screen advanced Inspector Toggle");
             toggleButton_.SetText("ADVANCED");
             toggleButton_.OnClick([this](const wi::gui::EventArgs&)
             {
@@ -955,7 +955,7 @@ namespace renegade::studio
         std::vector<const wi::gui::Widget*> AllControlsConst() const
         {
             std::vector<const wi::gui::Widget*> result;
-            const auto* self = const_cast<RenegadeScreenEditorAdvancedInspector*>(this);
+            auto* self = const_cast<RenegadeScreenEditorAdvancedInspector*>(this);
             for (auto* widget : self->AllControls()) result.push_back(widget);
             return result;
         }
