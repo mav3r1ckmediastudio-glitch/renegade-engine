@@ -10,13 +10,16 @@
 
 #include "renegade/bridge/ScreenAuthoringSession.h"
 #include "renegade/screen/ScreenRenderer.h"
+#include "RenegadeScreenEditorAdvancedInspector.h"
 #include "RenegadeScreenEditorWorkspace.h"
 #include "StoryFlowScreenEditorHandoff.h"
 
 namespace renegade::studio
 {
-    // First-class Gate 8C Screen Editor path. The inactive Story Flow and 3D
-    // Level Editor paths do not tick or render while this path owns Studio.
+    // First-class Screen Editor path. The inactive Story Flow and 3D Level
+    // Editor paths do not tick or render while this path owns Studio. Gate 8D's
+    // advanced Inspector is a sibling overlay; the accepted 8C workspace stays
+    // intact underneath and remains available whenever ADVANCED is collapsed.
     class RenegadeScreenEditorRenderPath final : public wi::RenderPath2D
     {
     public:
@@ -25,6 +28,7 @@ namespace renegade::studio
             if (loaded_)
             {
                 renderer_.Reset(*this);
+                GetGUI().RemoveWidget(&advancedInspector_);
                 GetGUI().RemoveWidget(&workspace_);
             }
         }
@@ -32,6 +36,11 @@ namespace renegade::studio
         void EnsureLoaded()
         {
             if (loaded_) return;
+
+            advancedInspector_.Create();
+            advancedInspector_.SetVisible(false);
+            advancedInspector_.SetEnabled(false);
+
             workspace_.Create();
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
@@ -43,9 +52,11 @@ namespace renegade::studio
             {
                 if (returnRequested_) returnRequested_();
             });
-            // Register the shell before preview surfaces. Wicked renders GUI
-            // storage in reverse, so the shell's panels and selection outline
-            // remain above the shared preview without covering its canvas.
+
+            // Wicked renders GUI storage in reverse. Register the advanced
+            // Inspector first, then the workspace; Runtime preview surfaces are
+            // registered later. Result: preview -> workspace -> advanced panel.
+            GetGUI().AddWidget(&advancedInspector_);
             GetGUI().AddWidget(&workspace_);
             loaded_ = true;
             LayoutWorkspace();
@@ -62,6 +73,8 @@ namespace renegade::studio
             LayoutWorkspace();
             workspace_.SetVisible(open_);
             workspace_.SetEnabled(open_);
+            advancedInspector_.SetVisible(open_);
+            advancedInspector_.SetEnabled(open_);
         }
 
         void Stop() override
@@ -69,6 +82,8 @@ namespace renegade::studio
             if (!loaded_) return;
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
+            advancedInspector_.SetVisible(false);
+            advancedInspector_.SetEnabled(false);
         }
 
         void ResizeLayout() override
@@ -133,8 +148,13 @@ namespace renegade::studio
             projectRoot_ = projectRoot;
             open_ = true;
             workspace_.Bind(&session_, &renderer_);
+            advancedInspector_.Bind(
+                &session_, &workspace_, projectRoot_,
+                [this]() { previewDirty_ = true; });
             workspace_.SetVisible(true);
             workspace_.SetEnabled(true);
+            advancedInspector_.SetVisible(true);
+            advancedInspector_.SetEnabled(true);
             LayoutWorkspace();
             if (!ReloadPreview(error))
             {
@@ -142,7 +162,7 @@ namespace renegade::studio
                 return false;
             }
             wi::backlog::post(
-                "Renegade Screen Editor: authoring shell opened " +
+                "Renegade Screen Editor: creator authoring surface opened " +
                     handoff.resolvedPath,
                 wi::backlog::LogLevel::Default);
             return true;
@@ -153,11 +173,14 @@ namespace renegade::studio
             if (loaded_) renderer_.Reset(*this);
             session_.Clear();
             projectRoot_.clear();
+            advancedInspector_.Clear();
             workspace_.Clear();
             if (loaded_)
             {
                 workspace_.SetVisible(false);
                 workspace_.SetEnabled(false);
+                advancedInspector_.SetVisible(false);
+                advancedInspector_.SetEnabled(false);
             }
             previewDirty_ = false;
             open_ = false;
@@ -191,6 +214,7 @@ namespace renegade::studio
             lastHeight_ = height;
             workspace_.SetPos(XMFLOAT2(0.0f, 0.0f));
             workspace_.SetLayout(width, height);
+            advancedInspector_.SetLayout(width, height);
             renderer_.SetViewport(workspace_.PreviewBounds());
         }
 
@@ -216,6 +240,7 @@ namespace renegade::studio
 
         bridge::ScreenAuthoringSession session_;
         screen::ScreenRenderer renderer_;
+        RenegadeScreenEditorAdvancedInspector advancedInspector_;
         RenegadeScreenEditorWorkspace workspace_;
         std::function<void()> returnRequested_;
         std::string projectRoot_;
