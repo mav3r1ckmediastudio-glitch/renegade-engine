@@ -74,6 +74,24 @@ namespace
         document.focusOrder = {play.id, quit.id};
         return document;
     }
+
+    ScreenWidgetCreatorEdit CreatorEditFor(const ScreenWidget& widget)
+    {
+        ScreenWidgetCreatorEdit edit;
+        edit.resourcePath = widget.resourcePath;
+        edit.actionId = widget.actionId;
+        edit.parentId = widget.parentId;
+        edit.layoutMode = widget.layoutMode;
+        edit.anchors = widget.anchors;
+        edit.style = widget.style;
+        return edit;
+    }
+
+    bool SameRect(const ScreenRect& left, const ScreenRect& right)
+    {
+        return left.x == right.x && left.y == right.y &&
+            left.width == right.width && left.height == right.height;
+    }
 }
 
 int main()
@@ -92,6 +110,7 @@ int main()
     const StableId projectId = GenerateStableId();
     ScreenDocument source = MakeDocument(projectId);
     const StableId titleId = source.widgets[0].id;
+    const StableId playId = source.widgets[1].id;
     const StableId quitId = source.widgets[2].id;
     const ScreenAnchors originalQuitAnchors = source.widgets[2].anchors;
     std::string error;
@@ -196,8 +215,8 @@ int main()
         return Fail("saved Screen did not preserve authored content/layout");
     }
 
-    // Gate 8D: every creator operation must be one validated Screen mutation
-    // using the same history and persistence seam as Gate 8C Inspector edits.
+    // Gate 8D foundation: creation/deletion/duplication/layering all use the
+    // same validated history and persistence seam as Gate 8C Inspector edits.
     ScreenWidget creatorText;
     creatorText.kind = ScreenWidgetKind::Text;
     creatorText.name = "Subtitle";
@@ -267,8 +286,8 @@ int main()
     }
 
     // Images may exist before a resource is chosen and may be deliberately
-    // hidden. The shared renderer already treats an empty resource as an
-    // authored surface; validation must not force Image visibility.
+    // hidden. The shared renderer treats an empty resource as an authored
+    // surface; validation must not force Image visibility.
     ScreenWidget creatorImage;
     creatorImage.kind = ScreenWidgetKind::Image;
     creatorImage.name = "Artwork";
@@ -326,6 +345,261 @@ int main()
         return Fail("Gate 8D creator transactions did not survive Save/Open: " + error);
     }
 
-    std::cout << "PASS: Gate 8D Screen authoring preserves validated edits, creator transactions, layer/focus identity, hidden Images, history and transactional Save/Open\n";
+    // Gate 8D advanced appearance: one mutation carries every schema-v2 style
+    // family through the same history/persistence authority.
+    auto advancedButtonEdit = CreatorEditFor(
+        *creatorReopened.FindWidget(creatorButtonId));
+    advancedButtonEdit.style.hover.background = {1, 2, 3, 4};
+    advancedButtonEdit.style.pressed.foreground = {5, 6, 7, 8};
+    advancedButtonEdit.style.focused.imageTint = {9, 10, 11, 12};
+    advancedButtonEdit.style.disabled.imageResourcePath =
+        "Content/UI/disabled.png";
+    advancedButtonEdit.style.borderColor = {13, 14, 15, 16};
+    advancedButtonEdit.style.borderWidth = 3.0f;
+    advancedButtonEdit.style.cornerRadius = 11.0f;
+    advancedButtonEdit.style.opacity = 0.75f;
+    advancedButtonEdit.style.text.fontSize = 33.0f;
+    advancedButtonEdit.style.text.characterSpacing = 1.5f;
+    advancedButtonEdit.style.text.lineSpacing = 2.5f;
+    advancedButtonEdit.style.text.softness = 0.25f;
+    advancedButtonEdit.style.text.bolden = 0.35f;
+    advancedButtonEdit.style.text.shadowColor = {17, 18, 19, 20};
+    advancedButtonEdit.style.text.shadowOffsetX = 2.0f;
+    advancedButtonEdit.style.text.shadowOffsetY = 4.0f;
+    advancedButtonEdit.style.text.shadowSoftness = 0.45f;
+    advancedButtonEdit.style.text.shadowBolden = 0.55f;
+    advancedButtonEdit.style.text.horizontalAlignment =
+        ScreenHorizontalAlignment::Right;
+    advancedButtonEdit.style.text.verticalAlignment =
+        ScreenVerticalAlignment::Bottom;
+    advancedButtonEdit.style.text.wrap = true;
+    if (!creatorReopened.UpdateWidgetCreatorFields(
+            creatorButtonId, advancedButtonEdit, error))
+    {
+        return Fail("advanced style/typography transaction failed: " + error);
+    }
+    const auto* styledButton = creatorReopened.FindWidget(creatorButtonId);
+    if (!styledButton || styledButton->style.hover.background.red != 1 ||
+        styledButton->style.pressed.foreground.green != 6 ||
+        styledButton->style.focused.imageTint.blue != 11 ||
+        styledButton->style.disabled.imageResourcePath !=
+            "Content/UI/disabled.png" ||
+        styledButton->style.borderWidth != 3.0f ||
+        styledButton->style.cornerRadius != 11.0f ||
+        styledButton->style.opacity != 0.75f ||
+        styledButton->style.text.fontSize != 33.0f ||
+        styledButton->style.text.horizontalAlignment !=
+            ScreenHorizontalAlignment::Right ||
+        styledButton->style.text.verticalAlignment !=
+            ScreenVerticalAlignment::Bottom ||
+        !styledButton->style.text.wrap)
+    {
+        return Fail("advanced style/typography values were not committed exactly");
+    }
+
+    // Legal reparenting and layout-mode changes preserve resolved design-space
+    // geometry. Parent authority rejects self/descendant cycles before Runtime
+    // validation ever sees them.
+    ScreenRect textBeforeParent;
+    if (!ResolveScreenWidgetRect(
+            creatorReopened.Document(), creatorTextId, textBeforeParent, error))
+        return Fail("could not resolve component child before reparent: " + error);
+    auto textParentEdit = CreatorEditFor(
+        *creatorReopened.FindWidget(creatorTextId));
+    textParentEdit.parentId = creatorImageId;
+    textParentEdit.layoutMode = ScreenLayoutMode::Anchored;
+    textParentEdit.anchors.minimumX = 0.25f;
+    textParentEdit.anchors.minimumY = 0.25f;
+    textParentEdit.anchors.maximumX = 0.25f;
+    textParentEdit.anchors.maximumY = 0.25f;
+    if (!creatorReopened.UpdateWidgetCreatorFields(
+            creatorTextId, textParentEdit, error))
+    {
+        return Fail("legal anchored reparent failed: " + error);
+    }
+    ScreenRect textAfterParent;
+    if (!ResolveScreenWidgetRect(
+            creatorReopened.Document(), creatorTextId, textAfterParent, error) ||
+        !SameRect(textBeforeParent, textAfterParent))
+    {
+        return Fail("reparent/layout-mode change moved resolved Screen geometry");
+    }
+
+    auto selfParent = CreatorEditFor(*creatorReopened.FindWidget(creatorImageId));
+    selfParent.parentId = creatorImageId;
+    if (creatorReopened.UpdateWidgetCreatorFields(
+            creatorImageId, selfParent, error) ||
+        error.find("cannot parent itself") == std::string::npos)
+    {
+        return Fail("self-parent mutation was not rejected by authoring authority");
+    }
+
+    auto descendantParent = CreatorEditFor(
+        *creatorReopened.FindWidget(creatorImageId));
+    descendantParent.parentId = creatorTextId;
+    if (creatorReopened.UpdateWidgetCreatorFields(
+            creatorImageId, descendantParent, error) ||
+        error.find("descendants") == std::string::npos)
+    {
+        return Fail("descendant-parent cycle was not rejected by authoring authority");
+    }
+
+    // Put a Button inside the same reusable component subtree so duplication
+    // proves stable ID remapping and focus-order insertion together.
+    ScreenRect buttonBeforeParent;
+    if (!ResolveScreenWidgetRect(
+            creatorReopened.Document(), creatorButtonId, buttonBeforeParent, error))
+        return Fail("could not resolve component Button before reparent: " + error);
+    auto buttonParentEdit = CreatorEditFor(
+        *creatorReopened.FindWidget(creatorButtonId));
+    buttonParentEdit.parentId = creatorImageId;
+    if (!creatorReopened.UpdateWidgetCreatorFields(
+            creatorButtonId, buttonParentEdit, error))
+    {
+        return Fail("component Button reparent failed: " + error);
+    }
+    ScreenRect buttonAfterParent;
+    if (!ResolveScreenWidgetRect(
+            creatorReopened.Document(), creatorButtonId, buttonAfterParent, error) ||
+        !SameRect(buttonBeforeParent, buttonAfterParent))
+    {
+        return Fail("component Button reparent changed resolved geometry");
+    }
+
+    const std::size_t widgetsBeforeTreeCopy =
+        creatorReopened.Document().widgets.size();
+    const std::size_t undoBeforeTreeCopy = creatorReopened.UndoCount();
+    StableId duplicateRootId;
+    if (!creatorReopened.DuplicateWidgetTree(
+            creatorImageId, duplicateRootId, error) ||
+        !IsValidStableId(duplicateRootId) || duplicateRootId == creatorImageId ||
+        creatorReopened.Document().widgets.size() != widgetsBeforeTreeCopy + 3)
+    {
+        return Fail("nested reusable component duplication failed: " + error);
+    }
+    const auto* duplicateRoot = creatorReopened.FindWidget(duplicateRootId);
+    if (!duplicateRoot || !duplicateRoot->parentId.empty())
+        return Fail("duplicated component root lost its external parent contract");
+
+    StableId duplicateTextId;
+    StableId duplicateComponentButtonId;
+    for (const auto& widget : creatorReopened.Document().widgets)
+    {
+        if (widget.parentId != duplicateRootId) continue;
+        if (widget.kind == ScreenWidgetKind::Text)
+            duplicateTextId = widget.id;
+        if (widget.kind == ScreenWidgetKind::Button)
+            duplicateComponentButtonId = widget.id;
+    }
+    if (!IsValidStableId(duplicateTextId) ||
+        !IsValidStableId(duplicateComponentButtonId) ||
+        duplicateTextId == creatorTextId ||
+        duplicateComponentButtonId == creatorButtonId ||
+        creatorReopened.FindWidget(duplicateComponentButtonId)->actionId !=
+            RuntimeScreenPlayAction)
+    {
+        return Fail("component descendants were not remapped with fresh stable IDs/action identity");
+    }
+
+    const auto originalComponentFocus = std::find(
+        creatorReopened.Document().focusOrder.begin(),
+        creatorReopened.Document().focusOrder.end(), creatorButtonId);
+    const auto duplicateComponentFocus = std::find(
+        creatorReopened.Document().focusOrder.begin(),
+        creatorReopened.Document().focusOrder.end(), duplicateComponentButtonId);
+    if (originalComponentFocus == creatorReopened.Document().focusOrder.end() ||
+        duplicateComponentFocus == creatorReopened.Document().focusOrder.end() ||
+        duplicateComponentFocus != originalComponentFocus + 1)
+    {
+        return Fail("component Button copy was not inserted after source focus entry");
+    }
+
+    if (!creatorReopened.Undo(error) ||
+        creatorReopened.FindWidget(duplicateRootId) != nullptr ||
+        creatorReopened.UndoCount() + 1 != undoBeforeTreeCopy ||
+        !creatorReopened.Redo(error) ||
+        creatorReopened.FindWidget(duplicateRootId) == nullptr)
+    {
+        return Fail("component duplication did not round-trip through Undo/Redo: " + error);
+    }
+
+    // Gate 8D owns symbolic action identity only. Rename updates every Button
+    // reference atomically; Story Flow destination routing stays outside Screen.
+    if (!creatorReopened.AddAction("open_audio_settings", error))
+        return Fail("custom Screen action creation failed: " + error);
+    if (!creatorReopened.RenameAction(
+            RuntimeScreenPlayAction, "start_game", error))
+    {
+        return Fail("Screen action rename failed: " + error);
+    }
+    if (creatorReopened.FindWidget(playId)->actionId != "start_game" ||
+        creatorReopened.FindWidget(creatorButtonId)->actionId != "start_game" ||
+        creatorReopened.FindWidget(duplicateComponentButtonId)->actionId !=
+            "start_game")
+    {
+        return Fail("action rename did not update all Button references atomically");
+    }
+    if (creatorReopened.DeleteAction("start_game", error) ||
+        error.find("still referenced") == std::string::npos)
+    {
+        return Fail("referenced Screen action deletion was not rejected");
+    }
+    if (!creatorReopened.DeleteAction("open_audio_settings", error))
+        return Fail("unreferenced custom Screen action could not be deleted: " + error);
+
+    // Focus order is creator-authorable independently of visual layer order.
+    const auto focusBeforeMove = std::find(
+        creatorReopened.Document().focusOrder.begin(),
+        creatorReopened.Document().focusOrder.end(), creatorButtonId);
+    if (focusBeforeMove == creatorReopened.Document().focusOrder.begin() ||
+        focusBeforeMove == creatorReopened.Document().focusOrder.end())
+    {
+        return Fail("fixture Button did not have a movable focus position");
+    }
+    const StableId precedingFocusId = *(focusBeforeMove - 1);
+    if (!creatorReopened.MoveButtonFocusEarlier(creatorButtonId, error))
+        return Fail("creator focus-order move earlier failed: " + error);
+    const auto focusAfterEarlier = std::find(
+        creatorReopened.Document().focusOrder.begin(),
+        creatorReopened.Document().focusOrder.end(), creatorButtonId);
+    if (focusAfterEarlier == creatorReopened.Document().focusOrder.end() ||
+        focusAfterEarlier + 1 == creatorReopened.Document().focusOrder.end() ||
+        *(focusAfterEarlier + 1) != precedingFocusId)
+    {
+        return Fail("creator focus-order move earlier did not swap adjacent Buttons");
+    }
+    if (!creatorReopened.MoveButtonFocusLater(creatorButtonId, error))
+        return Fail("creator focus-order move later failed: " + error);
+
+    if (!creatorReopened.Save(error) || creatorReopened.IsDirty())
+        return Fail("advanced Gate 8D state did not save transactionally: " + error);
+
+    ScreenAuthoringSession advancedReopened;
+    if (!advancedReopened.Open(screenPath.generic_u8string(), projectId, error))
+        return Fail("advanced Gate 8D Screen did not reopen: " + error);
+    const auto* persistedButton = advancedReopened.FindWidget(creatorButtonId);
+    const auto* persistedText = advancedReopened.FindWidget(creatorTextId);
+    const auto* persistedDuplicateRoot = advancedReopened.FindWidget(duplicateRootId);
+    if (!persistedButton || !persistedText || !persistedDuplicateRoot ||
+        persistedButton->style.hover.background.red != 1 ||
+        persistedButton->style.text.fontSize != 33.0f ||
+        persistedButton->actionId != "start_game" ||
+        persistedButton->parentId != creatorImageId ||
+        persistedText->parentId != creatorImageId ||
+        persistedText->layoutMode != ScreenLayoutMode::Anchored ||
+        advancedReopened.FindWidget(duplicateComponentButtonId) == nullptr ||
+        advancedReopened.FindWidget(duplicateComponentButtonId)->parentId !=
+            duplicateRootId ||
+        advancedReopened.FindWidget(duplicateComponentButtonId)->actionId !=
+            "start_game" ||
+        std::find(
+            advancedReopened.Document().focusOrder.begin(),
+            advancedReopened.Document().focusOrder.end(),
+            duplicateComponentButtonId) == advancedReopened.Document().focusOrder.end())
+    {
+        return Fail("advanced Gate 8D style/binding/component/action/focus state did not survive Save/Open");
+    }
+
+    std::cout << "PASS: Gate 8D Screen authoring preserves basic and advanced edits, creator transactions, style states, typography, parent/layout geometry, action/focus identity, reusable component remapping, history and transactional Save/Open\n";
     return 0;
 }
