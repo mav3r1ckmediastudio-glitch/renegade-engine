@@ -26,6 +26,7 @@ namespace renegade::studio
         {
             if (loaded_)
             {
+                GetGUI().RemoveWidget(&deleteSelectionButton_);
                 GetGUI().RemoveWidget(&conditionEditor_);
                 GetGUI().RemoveWidget(&journeyChrome_);
                 GetGUI().RemoveWidget(&workspace_);
@@ -49,11 +50,24 @@ namespace renegade::studio
             conditionEditor_.SetVisible(false);
             conditionEditor_.SetEnabled(false);
 
+            deleteSelectionButton_.Create("Story Flow Delete Selection");
+            deleteSelectionButton_.SetText("DELETE");
+            deleteSelectionButton_.SetTooltip(
+                "Delete the selected Story Flow route or non-Game-Start node. Delete also works from the keyboard.");
+            deleteSelectionButton_.SetShadowRadius(0.0f);
+            deleteSelectionButton_.SetVisible(false);
+            deleteSelectionButton_.SetEnabled(false);
+            deleteSelectionButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                workspace_.DeleteSelection();
+            });
+
             // Wicked paints widgets in reverse registration order. Keep the
             // semantic workspace at the back, then native Journey chrome, then
-            // the modal condition editor. The Graph canvas is composed later by
-            // RenegadeStoryFlowGraphEditor and never registers a full-screen
-            // wiGUI widget.
+            // the modal condition editor. The compact delete command is added
+            // before these layers so it remains a real native control above the
+            // shared Story Flow surface in both Journey and Graph.
+            GetGUI().AddWidget(&deleteSelectionButton_);
             GetGUI().AddWidget(&conditionEditor_);
             GetGUI().AddWidget(&journeyChrome_);
             GetGUI().AddWidget(&workspace_);
@@ -76,6 +90,10 @@ namespace renegade::studio
             journeyChrome_.SetVisible(workspaceActive_);
             conditionEditor_.SetVisible(workspaceActive_);
             conditionEditor_.SetEnabled(workspaceActive_);
+            deleteSelectionButton_.SetVisible(
+                workspaceActive_ && workspace_.CanDeleteSelection());
+            deleteSelectionButton_.SetEnabled(
+                workspaceActive_ && workspace_.CanDeleteSelection());
         }
 
         void Stop() override
@@ -83,6 +101,8 @@ namespace renegade::studio
             if (!loaded_)
                 return;
 
+            deleteSelectionButton_.SetVisible(false);
+            deleteSelectionButton_.SetEnabled(false);
             conditionEditor_.SetVisible(false);
             conditionEditor_.SetEnabled(false);
             journeyChrome_.SetVisible(false);
@@ -101,6 +121,11 @@ namespace renegade::studio
             EnsureLoaded();
             LayoutWorkspace();
 
+            const bool canDeleteBeforeUpdate =
+                workspaceActive_ && workspace_.CanDeleteSelection();
+            deleteSelectionButton_.SetVisible(canDeleteBeforeUpdate);
+            deleteSelectionButton_.SetEnabled(canDeleteBeforeUpdate);
+
             const XMFLOAT4 pointer = wi::input::GetPointer();
             const bool graphActive = workspaceActive_ &&
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
@@ -117,7 +142,36 @@ namespace renegade::studio
             wi::RenderPath2D::Update(dt);
             workspace_.SetEnabled(workspaceActive_);
 
-            graphEditor_.Update(*this, dt, graphActive);
+            // A native Wicked ComboBox opens down into the Graph viewport. The
+            // ImNodes canvas is composed after wiGUI, so rendering or accepting
+            // Graph input while that popup is active would cover/intercept the
+            // dropdown. Suspend the Graph overlay for the popup's active span;
+            // the synchronized legacy projection remains underneath for those
+            // few frames and the native dropdown stays authoritative.
+            bool nativePopupActive = false;
+            if (auto* widget = GetGUI().GetWidget("Story Flow Screen Template"))
+            {
+                nativePopupActive = widget->IsVisible() &&
+                    widget->GetState() >= wi::gui::ACTIVE;
+            }
+
+            graphEditor_.Update(*this, dt, graphActive && !nativePopupActive);
+            if (graphActive && !nativePopupActive)
+            {
+                graphEditor_.ReconcileHostInteractions(!GetGUI().IsTyping());
+            }
+            else if (workspaceActive_ &&
+                workspace_.ActiveView() == bridge::StoryFlowViewMode::Journey &&
+                !GetGUI().IsTyping() &&
+                wi::input::Press(wi::input::KEYBOARD_BUTTON_DELETE))
+            {
+                workspace_.DeleteSelection();
+            }
+
+            const bool canDeleteAfterUpdate =
+                workspaceActive_ && workspace_.CanDeleteSelection();
+            deleteSelectionButton_.SetVisible(canDeleteAfterUpdate);
+            deleteSelectionButton_.SetEnabled(canDeleteAfterUpdate);
 
             if (lifecycleLayeringReady_)
                 PlaceJourneyLayersBehindLifecycleControls();
@@ -154,6 +208,8 @@ namespace renegade::studio
                 conditionEditor_.Clear();
                 graphEditor_.Clear();
                 workspace_.Clear();
+                deleteSelectionButton_.SetVisible(false);
+                deleteSelectionButton_.SetEnabled(false);
             }
         }
 
@@ -180,6 +236,9 @@ namespace renegade::studio
             journeyChrome_.SetVisible(active);
             conditionEditor_.SetVisible(active);
             conditionEditor_.SetEnabled(active);
+            const bool canDelete = active && workspace_.CanDeleteSelection();
+            deleteSelectionButton_.SetVisible(canDelete);
+            deleteSelectionButton_.SetEnabled(canDelete);
         }
 
         void OnLayoutChanged(std::function<void()> callback)
@@ -301,6 +360,11 @@ namespace renegade::studio
                     1.0f,
                     height - RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight)));
 
+            deleteSelectionButton_.SetPos(XMFLOAT2(
+                workspaceLeft + graphWidth + std::max(0.0f, inspectorWidth - 88.0f),
+                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 9.0f));
+            deleteSelectionButton_.SetSize(XMFLOAT2(74.0f, 26.0f));
+
             conditionEditor_.SetLayout(width, height);
         }
 
@@ -308,6 +372,7 @@ namespace renegade::studio
         RenegadeStoryFlowGraphEditor graphEditor_;
         RenegadeStoryFlowJourneyChrome journeyChrome_;
         RenegadeStoryFlowConditionEditor conditionEditor_;
+        RenegadeButton deleteSelectionButton_;
         bool loaded_ = false;
         bool workspaceActive_ = false;
         bool lifecycleLayeringReady_ = false;

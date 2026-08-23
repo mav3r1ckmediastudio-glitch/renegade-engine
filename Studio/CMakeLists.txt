@@ -86,6 +86,7 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeStudioChrome.h
     src/RenegadeStoryFlowGraphEditor.cpp
     src/RenegadeStoryFlowGraphEditor.h
+    src/RenegadeStoryFlowGate9COwnerRecovery.cpp
     src/RenegadeStoryFlowWorkspace.cpp
     src/RenegadeStoryFlowWorkspace.h
     src/RenegadeScreenEditorWorkspace.cpp
