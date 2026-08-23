@@ -42,6 +42,8 @@ namespace renegade::studio
 
         void RequestStoryFlow() noexcept
         {
+            if (desiredWorkspace_ == Workspace::ScreenEditor)
+                screenOutcomeAuditPending_ = true;
             desiredWorkspace_ = Workspace::StoryFlow;
         }
 
@@ -214,6 +216,7 @@ namespace renegade::studio
                 desiredWorkspace_ = Workspace::StoryFlow;
             }
             hubOwnedLastTick_ = false;
+            activeProjectRoot_ = project.rootPath;
 
             if (!loadAttempted_)
             {
@@ -239,6 +242,14 @@ namespace renegade::studio
 
             ProcessPendingLevelAction(levelEditor, storyFlow, session, project);
             ProcessPendingScreenAction(storyFlow, project);
+
+            if (screenOutcomeAuditPending_ &&
+                desiredWorkspace_ == Workspace::StoryFlow)
+            {
+                screenOutcomeAuditPending_ = false;
+                AuditScreenOutcomeParity(
+                    project, storyFlow, screenEditorHandoff_.screenNodeId);
+            }
 
             if (desiredWorkspace_ == Workspace::ScreenEditor)
             {
@@ -305,6 +316,36 @@ namespace renegade::studio
                 }
                 levelPanel_.SetSelectedLevelNode(std::move(levelId));
                 screenPanel_.SetSelectedScreenNode(std::move(screenId));
+            });
+            storyFlow.OnSemanticChanged([this]()
+            {
+                screenOutcomeAuditPending_ = true;
+            });
+            storyFlow.OnScreenOutcomeQuery([this](
+                const bridge::StableId& nodeId,
+                std::vector<std::string>& outcomes,
+                std::string& error)
+            {
+                outcomes.clear();
+                if (activeProjectRoot_.empty() || !authoringSession_.IsLoaded())
+                {
+                    error = "No active Story Flow project is available for Screen outcome resolution.";
+                    return false;
+                }
+                bridge::StoryFlowScreenReferenceService service;
+                const auto resolved = service.ResolveScreen(
+                    activeProjectRoot_,
+                    authoringSession_.ProjectId(),
+                    authoringSession_.Document(),
+                    nodeId);
+                if (!resolved.succeeded)
+                {
+                    error = resolved.message;
+                    return false;
+                }
+                outcomes = resolved.actionIds;
+                error.clear();
+                return true;
             });
             storyFlow.OnNodeActivated([this](const bridge::StableId& nodeId)
             {
@@ -668,6 +709,47 @@ namespace renegade::studio
         }
 
         template <typename Project, typename StoryFlowPath>
+        bool AuditScreenOutcomeParity(
+            const Project& project,
+            StoryFlowPath& storyFlow,
+            const bridge::StableId& preferredNodeId)
+        {
+            if (!authoringSession_.IsLoaded()) return false;
+
+            bridge::StoryFlowScreenReferenceService service;
+            bool sawScreen = false;
+            for (const auto& node : authoringSession_.Document().nodes)
+            {
+                if (node.kind != bridge::FlowNodeKind::Screen) continue;
+                sawScreen = true;
+                const auto audit = service.AuditScreenOutcomes(
+                    project.rootPath,
+                    project.projectId,
+                    authoringSession_.Document(),
+                    node.id);
+                if (!audit.succeeded)
+                {
+                    storyFlow.SelectAndFocusNode(node.id);
+                    storyFlow.SetExternalStatus(
+                        "SCREEN ROUTING INVALID // " + audit.message);
+                    ReportSemanticFailure(
+                        "Screen outcome parity failed for '" + node.name +
+                        "': " + audit.message);
+                    return false;
+                }
+            }
+
+            if (sawScreen)
+            {
+                if (!preferredNodeId.empty())
+                    storyFlow.SelectAndFocusNode(preferredNodeId);
+                storyFlow.SetExternalStatus(
+                    "SCREEN OUTCOMES SYNCHRONIZED // STORY FLOW ROUTING READY");
+            }
+            return true;
+        }
+
+        template <typename Project, typename StoryFlowPath>
         bool ReloadAfterContentMutation(
             const Project& project,
             StoryFlowPath& storyFlow,
@@ -695,6 +777,7 @@ namespace renegade::studio
             }
             storyFlow.Bind(&authoringSession_, &model_, &layout_);
             storyFlow.SelectAndFocusNode(createdNodeId);
+            AuditScreenOutcomeParity(project, storyFlow, createdNodeId);
             layoutDirty_ = true;
             FlushLayout(true);
 
@@ -813,6 +896,7 @@ namespace renegade::studio
             }
 
             storyFlow.Bind(&authoringSession_, &model_, &layout_);
+            AuditScreenOutcomeParity(project, storyFlow, {});
             if (!restoredSavedLayout)
                 storyFlow.FitToContent();
             layoutDirty_ = !restoredSavedLayout;
@@ -842,6 +926,8 @@ namespace renegade::studio
             pendingLevelAction_ = PendingLevelAction::None;
             pendingScreenAction_ = PendingScreenAction::None;
             screenEditorHandoff_ = {};
+            activeProjectRoot_.clear();
+            screenOutcomeAuditPending_ = false;
             loadAttempted_ = false;
             layoutDirty_ = false;
             levelPanel_.SetSelectedLevelNode({});
@@ -901,6 +987,7 @@ namespace renegade::studio
         std::string pendingLevelName_;
         std::string pendingScreenName_;
         std::string pendingExistingScenePath_;
+        std::string activeProjectRoot_;
         std::chrono::steady_clock::time_point lastLayoutWrite_{};
         Workspace desiredWorkspace_ = Workspace::StoryFlow;
         PendingLevelAction pendingLevelAction_ = PendingLevelAction::None;
@@ -911,5 +998,6 @@ namespace renegade::studio
         bool loadAttempted_ = false;
         bool layoutDirty_ = false;
         bool hubOwnedLastTick_ = true;
+        bool screenOutcomeAuditPending_ = false;
     };
 }

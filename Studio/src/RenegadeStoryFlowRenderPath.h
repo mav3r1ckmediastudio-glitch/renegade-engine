@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <string>
 #include <utility>
 
 #include <WickedEngine.h>
@@ -156,6 +157,25 @@ namespace renegade::studio
         {
             EnsureLoaded();
             workspace_.OnSelectionChanged(std::move(callback));
+        }
+
+        void OnSemanticChanged(std::function<void()> callback)
+        {
+            EnsureLoaded();
+            workspace_.OnSemanticChanged(std::move(callback));
+        }
+
+        void OnScreenOutcomeQuery(
+            RenegadeStoryFlowWorkspace::ScreenOutcomeQuery callback)
+        {
+            EnsureLoaded();
+            workspace_.OnScreenOutcomeQuery(std::move(callback));
+        }
+
+        void SetExternalStatus(std::string message)
+        {
+            EnsureLoaded();
+            workspace_.SetExternalStatus(std::move(message));
         }
 
         void OnNodeActivated(
