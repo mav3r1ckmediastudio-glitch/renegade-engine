@@ -473,7 +473,10 @@ namespace renegade::studio
 
         ImNodes::EndNode();
         if (start)
-            ImNodes::PopColorStyle(2);
+        {
+            ImNodes::PopColorStyle();
+            ImNodes::PopColorStyle();
+        }
     }
 
     void RenegadeStoryFlowGraphEditor::DrawLinks()
@@ -741,7 +744,7 @@ namespace renegade::studio
             {
                 const bridge::StableId reconnecting = pendingReconnectRouteId_;
                 pendingReconnectRouteId_.clear();
-                ReconnectRoute(reconnecting, *input);
+                (void)ReconnectRoute(reconnecting, *input);
             }
             else if (rejectNewLinkFromInput_ || FindInput(linkStartedAtPin_) != nullptr)
             {
@@ -749,7 +752,7 @@ namespace renegade::studio
             }
             else
             {
-                CreateRoute(*output, *input);
+                (void)CreateRoute(*output, *input);
             }
             linkStartedAtPin_ = 0;
             rejectNewLinkFromInput_ = false;
