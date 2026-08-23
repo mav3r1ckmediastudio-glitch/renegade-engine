@@ -38,11 +38,14 @@ namespace renegade::bridge
         StableId nodeId;
         float offsetX = 0.0f;
         float offsetY = 0.0f;
+        // Gate 9B presentation-only media. This is always a project-relative
+        // managed thumbnail path and never participates in Runtime semantics.
+        std::string thumbnailPathHint;
     };
 
     struct StoryFlowLayoutDocument
     {
-        static constexpr std::uint32_t CurrentSchemaVersion = 2;
+        static constexpr std::uint32_t CurrentSchemaVersion = 3;
 
         std::string formatIdentifier = StoryFlowLayoutFormat;
         std::uint32_t schemaVersion = CurrentSchemaVersion;
