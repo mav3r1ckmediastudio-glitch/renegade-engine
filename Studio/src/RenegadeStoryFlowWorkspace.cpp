@@ -222,6 +222,17 @@ namespace renegade::studio
         nodeActivated_ = std::move(callback);
     }
 
+    void RenegadeStoryFlowWorkspace::OnScreenOutcomeQuery(
+        ScreenOutcomeQuery callback)
+    {
+        screenOutcomeQuery_ = std::move(callback);
+    }
+
+    void RenegadeStoryFlowWorkspace::SetExternalStatus(std::string message)
+    {
+        SetStatus(std::move(message));
+    }
+
     const bridge::StoryFlowNodeLayout* RenegadeStoryFlowWorkspace::FindLayout(
         const bridge::StableId& id) const noexcept
     {
@@ -958,6 +969,65 @@ namespace renegade::studio
         SetStatus("NODE + CONNECTED ROUTES DELETED // UNSAVED");
     }
 
+    bool RenegadeStoryFlowWorkspace::QueryScreenOutcomes(
+        const bridge::StableId& sourceNodeId,
+        std::vector<std::string>& outcomes,
+        std::string& error) const
+    {
+        outcomes.clear();
+        const auto* source = FindDocumentNode(sourceNodeId);
+        if (!source)
+        {
+            error = "route source no longer exists";
+            return false;
+        }
+        if (source->kind != bridge::FlowNodeKind::Screen)
+        {
+            error.clear();
+            return true;
+        }
+        if (!screenOutcomeQuery_)
+        {
+            error = "Screen outcome authority is unavailable";
+            return false;
+        }
+        return screenOutcomeQuery_(sourceNodeId, outcomes, error);
+    }
+
+    bool RenegadeStoryFlowWorkspace::ValidateRouteOutcomeForSource(
+        const bridge::StableId& sourceNodeId,
+        const std::string& outcome,
+        std::string& error) const
+    {
+        const auto* source = FindDocumentNode(sourceNodeId);
+        if (!source)
+        {
+            error = "route source no longer exists";
+            return false;
+        }
+        if (source->kind != bridge::FlowNodeKind::Screen)
+        {
+            error.clear();
+            return true;
+        }
+
+        std::vector<std::string> outcomes;
+        if (!QueryScreenOutcomes(sourceNodeId, outcomes, error))
+            return false;
+        if (outcomes.empty())
+        {
+            error = "Screen has no authored actions";
+            return false;
+        }
+        if (std::find(outcomes.begin(), outcomes.end(), outcome) == outcomes.end())
+        {
+            error = "'" + outcome + "' IS NOT AN AUTHORED SCREEN ACTION";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
     void RenegadeStoryFlowWorkspace::ApplySelectedRoute()
     {
         if (!session_ || selectedRouteId_.empty()) return;
@@ -966,6 +1036,15 @@ namespace renegade::studio
         bridge::FlowRoute route = *current;
         route.outcome = Trim(routeOutcomeInput_.GetValue());
         route.destinationEntry = Trim(routeEntryInput_.GetValue());
+
+        std::string error;
+        if (!ValidateRouteOutcomeForSource(
+                route.sourceNodeId, route.outcome, error))
+        {
+            SetStatus("ROUTE EDIT REJECTED // " + error);
+            RefreshInspectorControls();
+            return;
+        }
 
         const std::string priorityText = Trim(routePriorityInput_.GetValue());
         try
@@ -986,7 +1065,6 @@ namespace renegade::studio
             return;
         }
 
-        std::string error;
         if (!session_->UpdateRoute(selectedRouteId_, std::move(route), error))
         {
             SetStatus("ROUTE EDIT REJECTED // " + error);
@@ -1133,8 +1211,29 @@ namespace renegade::studio
             }
             bridge::FlowRoute route;
             route.sourceNodeId = connectionSourceNodeId_;
-            route.outcome = source->kind == bridge::FlowNodeKind::GameStart
-                ? bridge::GameStartOutcome : "next";
+            if (source->kind == bridge::FlowNodeKind::GameStart)
+            {
+                route.outcome = bridge::GameStartOutcome;
+            }
+            else if (source->kind == bridge::FlowNodeKind::Screen)
+            {
+                std::vector<std::string> outcomes;
+                if (!QueryScreenOutcomes(source->id, outcomes, error))
+                {
+                    SetStatus("CONNECT REJECTED // " + error);
+                    return;
+                }
+                if (outcomes.empty())
+                {
+                    SetStatus("CONNECT REJECTED // SCREEN HAS NO AUTHORED ACTIONS");
+                    return;
+                }
+                route.outcome = outcomes.front();
+            }
+            else
+            {
+                route.outcome = "next";
+            }
             route.destinationNodeId = destinationNodeId;
             if (destination->kind == bridge::FlowNodeKind::Level)
                 route.destinationEntry = "player_entry";

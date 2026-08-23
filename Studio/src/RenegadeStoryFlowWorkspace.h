@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include <WickedEngine.h>
 
@@ -20,6 +21,11 @@ namespace renegade::studio
     class RenegadeStoryFlowWorkspace final : public wi::gui::Widget
     {
     public:
+        using ScreenOutcomeQuery = std::function<bool(
+            const bridge::StableId&,
+            std::vector<std::string>&,
+            std::string&)>;
+
         void Create();
         void SetLayout(float width, float height);
         void Bind(
@@ -37,6 +43,8 @@ namespace renegade::studio
         void OnLayoutChanged(std::function<void()> callback);
         void OnNodeActivated(
             std::function<void(const bridge::StableId&)> callback);
+        void OnScreenOutcomeQuery(ScreenOutcomeQuery callback);
+        void SetExternalStatus(std::string message);
 
         [[nodiscard]] const bridge::StableId& SelectedNodeId() const noexcept
         {
@@ -83,6 +91,14 @@ namespace renegade::studio
             const bridge::StableId& nodeId) const noexcept;
         [[nodiscard]] const bridge::FlowRoute* FindDocumentRoute(
             const bridge::StableId& routeId) const noexcept;
+        [[nodiscard]] bool QueryScreenOutcomes(
+            const bridge::StableId& sourceNodeId,
+            std::vector<std::string>& outcomes,
+            std::string& error) const;
+        [[nodiscard]] bool ValidateRouteOutcomeForSource(
+            const bridge::StableId& sourceNodeId,
+            const std::string& outcome,
+            std::string& error) const;
         [[nodiscard]] XMFLOAT2 CanvasToScreen(float x, float y) const noexcept;
         [[nodiscard]] XMFLOAT2 ScreenToCanvas(float x, float y) const noexcept;
         [[nodiscard]] XMFLOAT4 NodeScreenBounds(
@@ -143,6 +159,7 @@ namespace renegade::studio
         std::function<void(const bridge::StableId&)> selectionChanged_;
         std::function<void(const bridge::StableId&)> nodeActivated_;
         std::function<void()> layoutChanged_;
+        ScreenOutcomeQuery screenOutcomeQuery_;
         std::string statusMessage_ = "READY";
         float width_ = 1.0f;
         float height_ = 1.0f;

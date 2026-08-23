@@ -1,6 +1,7 @@
 #include "RuntimeFlow.h"
 
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/StoryFlowScreenReferenceService.h"
 
 #include <utility>
 
@@ -63,6 +64,24 @@ namespace renegade::runtime
             error = "Resolved Story Flow document ID does not match the project manifest.";
             return false;
         }
+
+        bridge::StoryFlowScreenReferenceService screenReferences;
+        for (const auto& node : document.nodes)
+        {
+            if (node.kind != bridge::FlowNodeKind::Screen) continue;
+            const auto audit = screenReferences.AuditScreenOutcomes(
+                bootstrap.project.rootPath,
+                bootstrap.project.projectId,
+                document,
+                node.id);
+            if (!audit.succeeded)
+            {
+                error = "Story Flow Screen outcome parity failed for '" +
+                    node.name + "': " + audit.message;
+                return false;
+            }
+        }
+
         if (!interpreter_.Initialize(std::move(document), error))
         {
             return false;
