@@ -588,16 +588,21 @@ namespace renegade::studio
             journeyViewButton_.SetSize(XMFLOAT2(58.0f, 28.0f));
             graphViewButton_.SetPos(XMFLOAT2(workspaceLeft + 174.0f, 10.0f));
             graphViewButton_.SetSize(XMFLOAT2(44.0f, 28.0f));
-            fitButton_.SetPos(XMFLOAT2(
-                workspaceLeft + graphWidth - 136.0f, 10.0f));
+
+            // Canvas navigation lives in the existing lower-left navigation
+            // host area, away from Level/Screen lifecycle controls in the two
+            // header rows. This remains stable even at the 1280x720 owner size.
+            const float canvasNavY = std::max(
+                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 18.0f,
+                height - 52.0f);
+            fitButton_.SetPos(XMFLOAT2(workspaceLeft + 18.0f, canvasNavY));
             fitButton_.SetSize(XMFLOAT2(52.0f, 28.0f));
-            startButton_.SetPos(XMFLOAT2(
-                workspaceLeft + graphWidth - 76.0f, 10.0f));
+            startButton_.SetPos(XMFLOAT2(workspaceLeft + 76.0f, canvasNavY));
             startButton_.SetSize(XMFLOAT2(64.0f, 28.0f));
 
             const float inspectorX = workspaceLeft + graphWidth + 14.0f;
             const float findY = std::max(
-                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 560.0f,
+                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 300.0f,
                 height - 66.0f);
             const float findButtonWidth = 62.0f;
             const float findFieldWidth = std::max(
