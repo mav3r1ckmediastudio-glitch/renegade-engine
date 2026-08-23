@@ -73,6 +73,35 @@ namespace renegade::studio
                 : bridge::StoryFlowViewMode::Journey;
         }
 
+        // Gate 9C routing overlay bridge. These are deliberately thin calls
+        // into the established workspace/session path so visual wires and the
+        // Inspector remain one semantic/history system rather than parallel
+        // route authoring implementations.
+        void SelectRouteFromRouting(const bridge::StableId& routeId)
+        {
+            SelectRoute(routeId);
+        }
+
+        void BeginGraphConnectFromRouting()
+        {
+            BeginConnect();
+        }
+
+        [[nodiscard]] bool IsConnectionModeActive() const noexcept
+        {
+            return !connectionSourceNodeId_.empty();
+        }
+
+        [[nodiscard]] bool RefreshAfterExternalRoutingChange()
+        {
+            return RefreshPresentationAfterSemanticChange();
+        }
+
+        void SetRoutingStatus(std::string message)
+        {
+            SetStatus(std::move(message));
+        }
+
         void Update(const wi::Canvas& canvas, float dt) override;
         void Render(
             const wi::Canvas& canvas,
