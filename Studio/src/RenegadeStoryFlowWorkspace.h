@@ -15,6 +15,7 @@
 #include "renegade/bridge/StoryFlowJourneyThumbnailService.h"
 #include "renegade/bridge/StoryFlowLayoutService.h"
 #include "RenegadeStoryFlowJourneyCard.h"
+#include "RenegadeStoryFlowJourneyLane.h"
 #include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
@@ -128,8 +129,8 @@ namespace renegade::studio
         void EnsureSelectionValid();
         void SetActiveView(bridge::StoryFlowViewMode view);
         [[nodiscard]] bool RebuildJourneyProjection();
-        void RebuildJourneyCardObjects();
-        void UpdateJourneyCardObjects(const wi::Canvas& canvas, float dt);
+        void RebuildJourneyObjects();
+        void UpdateJourneyObjects(const wi::Canvas& canvas, float dt);
         void RefreshJourneyThumbnailResources();
         void ChooseLevelThumbnail(const bridge::StableId& nodeId);
         [[nodiscard]] std::string JourneyCardSubtitle(
@@ -169,6 +170,9 @@ namespace renegade::studio
         std::unordered_map<
             bridge::StableId,
             std::unique_ptr<RenegadeStoryFlowJourneyCard>> journeyCardObjects_;
+        std::unordered_map<
+            std::size_t,
+            std::unique_ptr<RenegadeStoryFlowJourneyLane>> journeyLaneObjects_;
         std::string projectRoot_;
         bridge::StableId selectedNodeId_;
         bridge::StableId selectedRouteId_;
