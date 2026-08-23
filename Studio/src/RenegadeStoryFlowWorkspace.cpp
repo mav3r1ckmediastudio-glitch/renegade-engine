@@ -29,7 +29,6 @@ namespace
     constexpr wi::Color Text(244, 244, 244, 255);
     constexpr wi::Color Muted(132, 143, 149, 255);
     constexpr wi::Color Accent(210, 91, 29, 255);
-    constexpr wi::Color Route(76, 96, 106, 255);
     constexpr wi::Color Error(229, 92, 92, 255);
 
     void Rect(float x, float y, float w, float h, wi::Color color,
@@ -58,16 +57,6 @@ namespace
             wi::font::WIFALIGN_TOP, color, wi::Color::Transparent());
         params.bolden = 0.14f;
         wi::font::Draw(value, params, cmd);
-    }
-
-    void Line(XMFLOAT2 start, XMFLOAT2 end, wi::Color color)
-    {
-        wi::renderer::RenderableLine2D line;
-        line.start = start;
-        line.end = end;
-        line.color_start = color;
-        line.color_end = color;
-        wi::renderer::DrawLine(line);
     }
 
     const char* KindLabel(renegade::bridge::FlowNodeKind kind)
@@ -109,32 +98,6 @@ namespace
         value.resize(limit - 3);
         value += "...";
         return value;
-    }
-
-    float DistanceToSegment(
-        const XMFLOAT2 point,
-        const XMFLOAT2 start,
-        const XMFLOAT2 end)
-    {
-        const float dx = end.x - start.x;
-        const float dy = end.y - start.y;
-        const float lengthSquared = dx * dx + dy * dy;
-        if (lengthSquared <= 0.0001f)
-        {
-            const float px = point.x - start.x;
-            const float py = point.y - start.y;
-            return std::sqrt(px * px + py * py);
-        }
-        const float projection = std::clamp(
-            ((point.x - start.x) * dx + (point.y - start.y) * dy) /
-                lengthSquared,
-            0.0f,
-            1.0f);
-        const float nearestX = start.x + projection * dx;
-        const float nearestY = start.y + projection * dy;
-        const float px = point.x - nearestX;
-        const float py = point.y - nearestY;
-        return std::sqrt(px * px + py * py);
     }
 }
 
@@ -414,24 +377,9 @@ namespace renegade::studio
     }
 
     bridge::StableId RenegadeStoryFlowWorkspace::HitTestRoute(
-        const XMFLOAT4& pointer) const
+        const XMFLOAT4&) const
     {
-        if (!model_ || !layout_) return {};
-        const XMFLOAT2 point(pointer.x, pointer.y);
-        for (const auto& route : model_->Routes())
-        {
-            const auto* a = FindLayout(route.sourceNodeId);
-            const auto* b = FindLayout(route.destinationNodeId);
-            if (!a || !b) continue;
-            const XMFLOAT4 ab = NodeScreenBounds(*a);
-            const XMFLOAT4 bb = NodeScreenBounds(*b);
-            const XMFLOAT2 start(ab.x + ab.z, ab.y + ab.w * 0.5f);
-            const XMFLOAT2 end(bb.x, bb.y + bb.w * 0.5f);
-            if (DistanceToSegment(point, start, end) <= 8.0f)
-            {
-                return route.id;
-            }
-        }
+        // Graph route hit-testing is owned exclusively by ImNodes from Gate 9D.
         return {};
     }
 
@@ -490,12 +438,28 @@ namespace renegade::studio
         const bridge::StoryFlowViewMode view)
     {
         if (!layout_ || layout_->activeView == view) return;
+
+        // Journey never owns a route selection. If the creator leaves Graph
+        // while a wire is selected, preserve useful context by selecting the
+        // route's source card instead of carrying a topology editor state into
+        // the overview surface.
+        if (view == bridge::StoryFlowViewMode::Journey && !selectedRouteId_.empty())
+        {
+            const auto* route = FindDocumentRoute(selectedRouteId_);
+            selectedNodeId_ = route ? route->sourceNodeId : bridge::StableId{};
+            selectedRouteId_.clear();
+            RefreshInspectorControls();
+            if (selectionChanged_) selectionChanged_(selectedNodeId_);
+        }
+
+        connectionSourceNodeId_.clear();
+        reconnectRouteId_.clear();
         layout_->activeView = view;
         panning_ = false;
         nodeDragging_ = false;
         draggedNodeId_.clear();
         SetStatus(view == bridge::StoryFlowViewMode::Journey
-            ? "JOURNEY VIEW // SHARED FLOW MODEL"
+            ? "JOURNEY VIEW // READ-ONLY ROUTE OVERVIEW"
             : "GRAPH VIEW // EXACT SHARED TOPOLOGY");
         NotifyLayoutChanged();
     }
@@ -908,7 +872,7 @@ namespace renegade::studio
             (height_ - HeaderHeight) * 0.5f -
             (bounds.y + bounds.w * 0.5f);
         NotifyLayoutChanged();
-        SetStatus("CREATED DESTINATION SELECTED // READY TO CONNECT");
+        SetStatus("NODE SELECTED // VIEW CENTERED");
     }
 
     void RenegadeStoryFlowWorkspace::CreateAuthoringControls()
@@ -928,10 +892,13 @@ namespace renegade::studio
         redoButton_.SetTooltip("Redo the next Story Flow semantic edit.");
         redoButton_.OnClick([this](const wi::gui::EventArgs&) { RedoFlow(); });
 
+        // Retained as private compatibility objects while Gate 9D removes the
+        // old canvas path. Direct ImNodes sockets are the only surfaced route
+        // connect/reconnect interaction.
         connectButton_.Create("Story Flow Connect");
         connectButton_.SetText("CONNECT");
-        connectButton_.SetTooltip("Connect the selected non-terminal node to another destination.");
-        connectButton_.OnClick([this](const wi::gui::EventArgs&) { BeginConnect(); });
+        connectButton_.SetVisible(false);
+        connectButton_.SetEnabled(false);
 
         nodeNameInput_.Create("Story Flow Node Name");
         nodeNameInput_.SetDescription("NAME  ");
@@ -945,7 +912,7 @@ namespace renegade::studio
 
         deleteNodeButton_.Create("Story Flow Delete Node");
         deleteNodeButton_.SetText("DELETE NODE");
-        deleteNodeButton_.SetTooltip("Delete this node and its connected routes as one semantic edit.");
+        deleteNodeButton_.SetTooltip("Delete this Graph node and its connected routes as one semantic edit.");
         deleteNodeButton_.OnClick([this](const wi::gui::EventArgs&) { DeleteSelectedNode(); });
 
         routeOutcomeInput_.Create("Story Flow Route Outcome");
@@ -970,8 +937,8 @@ namespace renegade::studio
 
         reconnectRouteButton_.Create("Story Flow Reconnect Route");
         reconnectRouteButton_.SetText("RECONNECT");
-        reconnectRouteButton_.SetTooltip("Keep this route identity and source, then choose a new destination node.");
-        reconnectRouteButton_.OnClick([this](const wi::gui::EventArgs&) { BeginReconnect(); });
+        reconnectRouteButton_.SetVisible(false);
+        reconnectRouteButton_.SetEnabled(false);
 
         deleteRouteButton_.Create("Story Flow Delete Route");
         deleteRouteButton_.SetText("DELETE ROUTE");
@@ -1058,8 +1025,8 @@ namespace renegade::studio
         applyRouteButton_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
         reconnectRouteButton_.SetPos(XMFLOAT2(inspectorX, y0 + 152.0f));
         reconnectRouteButton_.SetSize(XMFLOAT2(fieldWidth * 0.52f - 3.0f, 28.0f));
-        deleteRouteButton_.SetPos(XMFLOAT2(inspectorX + fieldWidth * 0.52f + 3.0f, y0 + 152.0f));
-        deleteRouteButton_.SetSize(XMFLOAT2(fieldWidth * 0.48f - 3.0f, 28.0f));
+        deleteRouteButton_.SetPos(XMFLOAT2(inspectorX, y0 + 152.0f));
+        deleteRouteButton_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
 
         const float addY = translation.y + HeaderHeight + 356.0f;
         addCompleteButton_.SetPos(XMFLOAT2(inspectorX, addY));
@@ -1077,44 +1044,47 @@ namespace renegade::studio
         LayoutAuthoringControls();
         const bool loaded = session_ && model_ && layout_ &&
             session_->IsLoaded() && model_->IsLoaded();
+        const bool graphMode = loaded &&
+            layout_->activeView == bridge::StoryFlowViewMode::Graph;
 
         saveButton_.SetVisible(loaded);
         undoButton_.SetVisible(loaded);
         redoButton_.SetVisible(loaded);
-        connectButton_.SetVisible(loaded);
+        connectButton_.SetVisible(false);
+        connectButton_.SetEnabled(false);
         saveButton_.SetEnabled(loaded && session_->IsDirty());
         undoButton_.SetEnabled(loaded && session_->CanUndo());
         redoButton_.SetEnabled(loaded && session_->CanRedo());
 
         const auto* selectedNode = FindDocumentNode(selectedNodeId_);
         const auto* selectedRoute = FindDocumentRoute(selectedRouteId_);
-        const bool connecting = !connectionSourceNodeId_.empty();
-        connectButton_.SetText(connecting ? "CANCEL LINK" : "CONNECT");
-        connectButton_.SetEnabled(loaded && (connecting ||
-            (selectedNode != nullptr && !IsTerminalKind(selectedNode->kind))));
 
         const bool nodeSelected = loaded && selectedNode != nullptr;
         nodeNameInput_.SetVisible(nodeSelected);
         applyNodeButton_.SetVisible(nodeSelected);
-        deleteNodeButton_.SetVisible(nodeSelected);
-        deleteNodeButton_.SetEnabled(nodeSelected && selectedNode->kind != bridge::FlowNodeKind::GameStart);
+        deleteNodeButton_.SetVisible(nodeSelected && graphMode);
+        deleteNodeButton_.SetEnabled(
+            nodeSelected && graphMode &&
+            selectedNode->kind != bridge::FlowNodeKind::GameStart);
 
-        const bool routeSelected = loaded && selectedRoute != nullptr;
+        const bool routeSelected = graphMode && selectedRoute != nullptr;
         routeOutcomeInput_.SetVisible(routeSelected);
         routeEntryInput_.SetVisible(routeSelected);
         routePriorityInput_.SetVisible(routeSelected);
         applyRouteButton_.SetVisible(routeSelected);
-        reconnectRouteButton_.SetVisible(routeSelected);
+        reconnectRouteButton_.SetVisible(false);
+        reconnectRouteButton_.SetEnabled(false);
         deleteRouteButton_.SetVisible(routeSelected);
         if (routeSelected)
         {
             const auto* destination = FindDocumentNode(selectedRoute->destinationNodeId);
-            routeEntryInput_.SetEnabled(destination && destination->kind == bridge::FlowNodeKind::Level);
+            routeEntryInput_.SetEnabled(
+                destination && destination->kind == bridge::FlowNodeKind::Level);
         }
 
-        addCompleteButton_.SetVisible(loaded);
-        addReturnButton_.SetVisible(loaded);
-        addQuitButton_.SetVisible(loaded);
+        addCompleteButton_.SetVisible(graphMode);
+        addReturnButton_.SetVisible(graphMode);
+        addQuitButton_.SetVisible(graphMode);
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&saveButton_),
@@ -1399,7 +1369,11 @@ namespace renegade::studio
         const bridge::FlowNodeKind kind,
         const char* defaultName)
     {
-        if (!session_ || !layout_) return;
+        if (!session_ || !layout_ ||
+            layout_->activeView != bridge::StoryFlowViewMode::Graph)
+        {
+            return;
+        }
         XMFLOAT2 anchor(0.0f, 0.0f);
         bool hasAnchor = false;
         if (const auto* selectedLayout = FindLayout(selectedNodeId_))
@@ -1434,126 +1408,28 @@ namespace renegade::studio
 
     void RenegadeStoryFlowWorkspace::BeginConnect()
     {
-        if (!connectionSourceNodeId_.empty())
-        {
-            connectionSourceNodeId_.clear();
-            reconnectRouteId_.clear();
-            SetStatus("CONNECT CANCELLED");
-            return;
-        }
-        const auto* source = FindDocumentNode(selectedNodeId_);
-        if (!source || IsTerminalKind(source->kind))
-        {
-            SetStatus("CONNECT REQUIRES A NON-TERMINAL SOURCE NODE");
-            return;
-        }
-        connectionSourceNodeId_ = source->id;
+        // Retired in Gate 9D. Direct ImNodes output sockets own route creation.
+        connectionSourceNodeId_.clear();
         reconnectRouteId_.clear();
-        SetStatus("CONNECT // SELECT A DESTINATION NODE");
+        SetStatus("GRAPH ROUTES // DRAG FROM AN OUTPUT SOCKET");
     }
 
     void RenegadeStoryFlowWorkspace::BeginReconnect()
     {
-        const auto* route = FindDocumentRoute(selectedRouteId_);
-        if (!route)
-        {
-            SetStatus("RECONNECT REQUIRES A SELECTED ROUTE");
-            return;
-        }
-        connectionSourceNodeId_ = route->sourceNodeId;
-        reconnectRouteId_ = route->id;
-        SetStatus("RECONNECT // SELECT THE NEW DESTINATION NODE");
+        // Retired in Gate 9D. Detach and drag an existing ImNodes link endpoint.
+        connectionSourceNodeId_.clear();
+        reconnectRouteId_.clear();
+        SetStatus("GRAPH REWIRE // DRAG THE EXISTING LINK ENDPOINT");
     }
 
     void RenegadeStoryFlowWorkspace::CommitConnectionTo(
-        const bridge::StableId& destinationNodeId)
+        const bridge::StableId&)
     {
-        if (!session_ || connectionSourceNodeId_.empty()) return;
-        const auto* destination = FindDocumentNode(destinationNodeId);
-        if (!destination || destination->kind == bridge::FlowNodeKind::GameStart)
-        {
-            SetStatus("CONNECT REJECTED // GAME START CANNOT BE A DESTINATION");
-            return;
-        }
-
-        std::string error;
-        bridge::StableId resultingRouteId;
-        if (!reconnectRouteId_.empty())
-        {
-            const auto* current = FindDocumentRoute(reconnectRouteId_);
-            if (!current)
-            {
-                SetStatus("RECONNECT REJECTED // ROUTE NO LONGER EXISTS");
-                connectionSourceNodeId_.clear();
-                reconnectRouteId_.clear();
-                return;
-            }
-            bridge::FlowRoute route = *current;
-            route.destinationNodeId = destinationNodeId;
-            if (destination->kind == bridge::FlowNodeKind::Level)
-            {
-                if (route.destinationEntry.empty()) route.destinationEntry = "player_entry";
-            }
-            else
-            {
-                route.destinationEntry.clear();
-            }
-            resultingRouteId = reconnectRouteId_;
-            if (!session_->UpdateRoute(reconnectRouteId_, std::move(route), error))
-            {
-                SetStatus("RECONNECT REJECTED // " + error);
-                return;
-            }
-        }
-        else
-        {
-            const auto* source = FindDocumentNode(connectionSourceNodeId_);
-            if (!source)
-            {
-                SetStatus("CONNECT REJECTED // SOURCE NODE NO LONGER EXISTS");
-                connectionSourceNodeId_.clear();
-                return;
-            }
-            bridge::FlowRoute route;
-            route.sourceNodeId = connectionSourceNodeId_;
-            if (source->kind == bridge::FlowNodeKind::GameStart)
-            {
-                route.outcome = bridge::GameStartOutcome;
-            }
-            else if (source->kind == bridge::FlowNodeKind::Screen)
-            {
-                std::vector<std::string> outcomes;
-                if (!QueryScreenOutcomes(source->id, outcomes, error))
-                {
-                    SetStatus("CONNECT REJECTED // " + error);
-                    return;
-                }
-                if (outcomes.empty())
-                {
-                    SetStatus("CONNECT REJECTED // SCREEN HAS NO AUTHORED ACTIONS");
-                    return;
-                }
-                route.outcome = outcomes.front();
-            }
-            else
-            {
-                route.outcome = "next";
-            }
-            route.destinationNodeId = destinationNodeId;
-            if (destination->kind == bridge::FlowNodeKind::Level)
-                route.destinationEntry = "player_entry";
-            if (!session_->AddRoute(std::move(route), resultingRouteId, error))
-            {
-                SetStatus("CONNECT REJECTED // " + error);
-                return;
-            }
-        }
-
+        // Retired compatibility seam. StoryFlowAuthoringSession remains the
+        // authority, but all surfaced connection gestures now originate in the
+        // ImNodes Graph adapter.
         connectionSourceNodeId_.clear();
         reconnectRouteId_.clear();
-        RefreshPresentationAfterSemanticChange();
-        SelectRoute(resultingRouteId);
-        SetStatus("ROUTE COMMITTED TO HISTORY // UNSAVED FLOW CHANGE");
     }
 
     void RenegadeStoryFlowWorkspace::Update(const wi::Canvas& canvas, float dt)
@@ -1566,12 +1442,14 @@ namespace renegade::studio
         UpdateJourneyObjects(canvas, dt);
         if (!IsVisible() || !IsEnabled() || !model_ || !layout_) return;
 
+        // The shared workspace owns canvas gestures only in Journey. RenderPath
+        // disables it while Graph is active, and this guard makes that ownership
+        // explicit even if a future caller enables the widget accidentally.
+        if (layout_->activeView != bridge::StoryFlowViewMode::Journey)
+            return;
+
         const XMFLOAT4 pointer = wi::input::GetPointer();
         const float graphRight = translation.x + GraphWidth();
-        const XMFLOAT4 fitBounds(graphRight - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
-        const XMFLOAT4 startBounds(graphRight - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
-        const XMFLOAT4 journeyBounds(translation.x + 112.0f, translation.y + 10.0f, 58.0f, 28.0f);
-        const XMFLOAT4 graphBounds(translation.x + 174.0f, translation.y + 10.0f, 44.0f, 28.0f);
         const bool insideHeader =
             pointer.x >= translation.x && pointer.x < translation.x + scale.x &&
             pointer.y >= translation.y && pointer.y < translation.y + HeaderHeight;
@@ -1580,39 +1458,18 @@ namespace renegade::studio
             pointer.y >= translation.y + HeaderHeight &&
             pointer.y < translation.y + scale.y;
 
+        // View/FIT/START are real native controls in the RenderPath. The
+        // workspace paints no interactive header hit targets anymore.
         if (insideHeader)
         {
             pointerConsumed_ = true;
-            if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
-            {
-                if (Contains(journeyBounds, pointer))
-                {
-                    SetActiveView(bridge::StoryFlowViewMode::Journey);
-                    return;
-                }
-                if (Contains(graphBounds, pointer))
-                {
-                    SetActiveView(bridge::StoryFlowViewMode::Graph);
-                    return;
-                }
-                if (Contains(fitBounds, pointer))
-                {
-                    FitToContent();
-                    return;
-                }
-                if (Contains(startBounds, pointer))
-                {
-                    CenterOnGameStart();
-                    return;
-                }
-            }
             return;
         }
+
         if (insideInspector)
         {
             pointerConsumed_ = true;
-            if (layout_->activeView == bridge::StoryFlowViewMode::Journey &&
-                wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+            if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
             {
                 const auto* selected = model_->FindNode(selectedNodeId_);
                 if (selected)
@@ -1629,6 +1486,8 @@ namespace renegade::studio
                         if (Contains(exitBounds, pointer))
                         {
                             SelectRoute(selected->outgoingRouteIds[i]);
+                            SetActiveView(bridge::StoryFlowViewMode::Graph);
+                            SetStatus("JOURNEY EXIT // OPENED IN GRAPH");
                             return;
                         }
                     }
@@ -1656,9 +1515,7 @@ namespace renegade::studio
         // The Level thumbnail utility is deliberately hit-tested before the
         // card body. It cannot count as card selection/double-click activation
         // or begin a Journey card drag.
-        if (inside &&
-            layout_->activeView == bridge::StoryFlowViewMode::Journey &&
-            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        if (inside && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
             for (const auto& card : journeyModel_.Cards())
             {
@@ -1697,22 +1554,11 @@ namespace renegade::studio
         if (nodeDragging_ && wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
         {
             const float zoom = std::max(0.001f, ActiveCanvas().zoom);
-            if (layout_->activeView == bridge::StoryFlowViewMode::Journey)
+            if (auto* pos = FindJourneyLayout(draggedNodeId_))
             {
-                if (auto* pos = FindJourneyLayout(draggedNodeId_))
-                {
-                    pos->offsetX = nodeDragValueAnchor_.x +
-                        (pointer.x - nodeDragPointerAnchor_.x) / zoom;
-                    pos->offsetY = nodeDragValueAnchor_.y +
-                        (pointer.y - nodeDragPointerAnchor_.y) / zoom;
-                    NotifyLayoutChanged();
-                }
-            }
-            else if (auto* pos = FindLayout(draggedNodeId_))
-            {
-                pos->x = nodeDragValueAnchor_.x +
+                pos->offsetX = nodeDragValueAnchor_.x +
                     (pointer.x - nodeDragPointerAnchor_.x) / zoom;
-                pos->y = nodeDragValueAnchor_.y +
+                pos->offsetY = nodeDragValueAnchor_.y +
                     (pointer.y - nodeDragPointerAnchor_.y) / zoom;
                 NotifyLayoutChanged();
             }
@@ -1729,11 +1575,6 @@ namespace renegade::studio
         {
             const XMFLOAT4 bounds = NodeBounds(node.id);
             if (bounds.z <= 0.0f || !Contains(bounds, pointer)) continue;
-            if (!connectionSourceNodeId_.empty())
-            {
-                CommitConnectionTo(node.id);
-                return;
-            }
             SelectNode(node.id);
             RememberOrActivateNodeClick(node, pointer);
             if (secondsSincePreviousNodeClick_ >= 999.0f)
@@ -1741,35 +1582,13 @@ namespace renegade::studio
             nodeDragging_ = true;
             draggedNodeId_ = node.id;
             nodeDragPointerAnchor_ = XMFLOAT2(pointer.x, pointer.y);
-            if (layout_->activeView == bridge::StoryFlowViewMode::Journey)
-            {
-                const auto* pos = FindJourneyLayout(node.id);
-                nodeDragValueAnchor_ = pos
-                    ? XMFLOAT2(pos->offsetX, pos->offsetY)
-                    : XMFLOAT2{};
-            }
-            else
-            {
-                const auto* pos = FindLayout(node.id);
-                nodeDragValueAnchor_ = pos
-                    ? XMFLOAT2(pos->x, pos->y)
-                    : XMFLOAT2{};
-            }
+            const auto* pos = FindJourneyLayout(node.id);
+            nodeDragValueAnchor_ = pos
+                ? XMFLOAT2(pos->offsetX, pos->offsetY)
+                : XMFLOAT2{};
             return;
         }
 
-        const bridge::StableId routeId =
-            layout_->activeView == bridge::StoryFlowViewMode::Graph
-                ? HitTestRoute(pointer)
-                : bridge::StableId{};
-        if (!routeId.empty())
-        {
-            SelectRoute(routeId);
-            return;
-        }
-
-        connectionSourceNodeId_.clear();
-        reconnectRouteId_.clear();
         SelectNode({});
     }
 
@@ -1789,35 +1608,12 @@ namespace renegade::studio
         Rect(graphRight, translation.y + HeaderHeight, 1.0f, scale.y - HeaderHeight, Border, cmd);
 
         Label("STORY FLOW", translation.x + 18, translation.y + 13, 14, Text, cmd);
-        const XMFLOAT4 journeyBounds(translation.x + 112.0f, translation.y + 10.0f, 58.0f, 28.0f);
-        const XMFLOAT4 graphBounds(translation.x + 174.0f, translation.y + 10.0f, 44.0f, 28.0f);
-        const bool journeyActive = !layout_ ||
-            layout_->activeView == bridge::StoryFlowViewMode::Journey;
-        BorderedRect(journeyBounds.x, journeyBounds.y, journeyBounds.z, journeyBounds.w,
-            journeyActive ? wi::Color(35, 24, 18, 255) : Surface,
-            journeyActive ? Accent : Border, cmd);
-        BorderedRect(graphBounds.x, graphBounds.y, graphBounds.z, graphBounds.w,
-            journeyActive ? Surface : wi::Color(35, 24, 18, 255),
-            journeyActive ? Border : Accent, cmd);
-        Label("JOURNEY", journeyBounds.x + 7.0f, journeyBounds.y + 8.0f, 8,
-            journeyActive ? Accent : Muted, cmd);
-        Label("GRAPH", graphBounds.x + 8.0f, graphBounds.y + 8.0f, 8,
-            journeyActive ? Muted : Accent, cmd);
 
         if (!model_ || !layout_ || !session_)
         {
             RenderAuthoringControls(canvas, cmd);
             return;
         }
-
-        const XMFLOAT4 fitBounds(graphRight - 136.0f, translation.y + 10.0f, 52.0f, 28.0f);
-        const XMFLOAT4 startBounds(graphRight - 76.0f, translation.y + 10.0f, 64.0f, 28.0f);
-        BorderedRect(fitBounds.x, fitBounds.y, fitBounds.z, fitBounds.w,
-            Surface, Border, cmd);
-        BorderedRect(startBounds.x, startBounds.y, startBounds.z, startBounds.w,
-            Surface, Border, cmd);
-        Label("FIT", fitBounds.x + 15.0f, fitBounds.y + 8.0f, 9, Text, cmd);
-        Label("START", startBounds.x + 10.0f, startBounds.y + 8.0f, 9, Text, cmd);
 
         const int zoomPercent = static_cast<int>(std::round(ActiveCanvas().zoom * 100.0f));
         const std::string dirty = session_->IsDirty() ? "DIRTY" : "SAVED";
@@ -1831,72 +1627,11 @@ namespace renegade::studio
             session_->IsDirty() ? Accent : Muted,
             cmd);
 
-        if (!connectionSourceNodeId_.empty())
+        // Graph is intentionally not rendered here. ImNodes is the sole Graph
+        // renderer and is composed by RenegadeStoryFlowGraphLayer. Journey keeps
+        // its native lane/card projection in this shared presentation workspace.
+        if (layout_->activeView == bridge::StoryFlowViewMode::Journey)
         {
-            Label(
-                reconnectRouteId_.empty()
-                    ? "CONNECT MODE // SELECT DESTINATION"
-                    : "RECONNECT MODE // SELECT NEW DESTINATION",
-                translation.x + 112.0f,
-                translation.y + 65.0f,
-                8,
-                Accent,
-                cmd);
-        }
-
-        if (layout_->activeView == bridge::StoryFlowViewMode::Graph)
-        {
-            for (const auto& route : model_->Routes())
-            {
-                const auto* a = FindLayout(route.sourceNodeId);
-                const auto* b = FindLayout(route.destinationNodeId);
-                if (!a || !b) continue;
-                const XMFLOAT4 ab = NodeScreenBounds(*a);
-                const XMFLOAT4 bb = NodeScreenBounds(*b);
-                const XMFLOAT2 start(ab.x + ab.z, ab.y + ab.w * 0.5f);
-                const XMFLOAT2 end(bb.x, bb.y + bb.w * 0.5f);
-                const wi::Color routeColor =
-                    route.id == selectedRouteId_ ||
-                    route.sourceNodeId == selectedNodeId_ ||
-                    route.destinationNodeId == selectedNodeId_
-                        ? Accent : Route;
-                Line(start, end, routeColor);
-                if (layout_->canvas.zoom >= 0.55f)
-                {
-                    Label(
-                        route.outcome,
-                        (start.x + end.x) * 0.5f - 42.0f,
-                        (start.y + end.y) * 0.5f - 15.0f,
-                        8,
-                        routeColor,
-                        cmd);
-                }
-            }
-
-            for (const auto& node : model_->Nodes())
-            {
-                const auto* pos = FindLayout(node.id);
-                if (!pos) continue;
-                const XMFLOAT4 b = NodeScreenBounds(*pos);
-                const bool selected = node.id == selectedNodeId_;
-                const bool start = node.kind == bridge::FlowNodeKind::GameStart;
-                Rect(b.x, b.y, b.z, b.w, selected ? wi::Color(28, 20, 16, 255) : Raised, cmd);
-                Rect(b.x, b.y, b.z, 1.0f, selected || start ? Accent : Border, cmd);
-                Rect(b.x, b.y + b.w - 1.0f, b.z, 1.0f, selected || start ? Accent : Border, cmd);
-                Rect(b.x, b.y, 1.0f, b.w, selected || start ? Accent : Border, cmd);
-                Rect(b.x + b.z - 1.0f, b.y, 1.0f, b.w, selected || start ? Accent : Border, cmd);
-                if (layout_->canvas.zoom >= 0.45f)
-                {
-                    Label(KindLabel(node.kind), b.x + 10, b.y + 10, 8, start ? Accent : Muted, cmd);
-                    Label(node.name, b.x + 10, b.y + 31, 11, Text, cmd);
-                }
-            }
-        }
-        else
-        {
-            // 9B Journey presentation is composed from real reusable lane and
-            // card widgets. The old primitive BorderedRect card renderer is no
-            // longer used in Journey View.
             for (const auto& track : journeyModel_.Tracks())
             {
                 const auto laneIt = journeyLaneObjects_.find(track.index);
@@ -1932,9 +1667,9 @@ namespace renegade::studio
                         translation.y + HeaderHeight + 198.0f, 8, Muted, cmd);
                 }
             }
-            if (layout_->activeView == bridge::StoryFlowViewMode::Journey)
+            else
             {
-                Label("EXITS // CLICK TO EDIT", inspectorX,
+                Label("EXITS // OPEN IN GRAPH", inspectorX,
                     translation.y + HeaderHeight + 134.0f, 8, Muted, cmd);
                 const auto* nodeView = model_->FindNode(node->id);
                 const std::size_t count = std::min<std::size_t>(
@@ -1957,22 +1692,33 @@ namespace renegade::studio
                 }
             }
         }
-        else if (const auto* route = FindDocumentRoute(selectedRouteId_))
+        else if (layout_->activeView == bridge::StoryFlowViewMode::Graph)
         {
-            Label("ROUTE", inspectorX, translation.y + HeaderHeight + 35.0f, 8, Accent, cmd);
-            Label("ID // " + Shorten(route->id, 31), inspectorX,
-                translation.y + HeaderHeight + 235.0f, 8, Muted, cmd);
-            Label("CONDITIONS // " + std::to_string(route->conditions.size()), inspectorX,
-                translation.y + HeaderHeight + 252.0f, 8, Muted, cmd);
+            if (const auto* route = FindDocumentRoute(selectedRouteId_))
+            {
+                Label("ROUTE", inspectorX, translation.y + HeaderHeight + 35.0f, 8, Accent, cmd);
+                Label("ID // " + Shorten(route->id, 31), inspectorX,
+                    translation.y + HeaderHeight + 235.0f, 8, Muted, cmd);
+                Label("CONDITIONS // " + std::to_string(route->conditions.size()), inspectorX,
+                    translation.y + HeaderHeight + 252.0f, 8, Muted, cmd);
+            }
+            else
+            {
+                Label("SELECT A NODE OR ROUTE", inspectorX,
+                    translation.y + HeaderHeight + 38.0f, 9, Muted, cmd);
+            }
         }
         else
         {
-            Label("SELECT A NODE OR ROUTE", inspectorX,
+            Label("SELECT A JOURNEY CARD", inspectorX,
                 translation.y + HeaderHeight + 38.0f, 9, Muted, cmd);
         }
 
-        Label("ADD TERMINAL DESTINATION", inspectorX,
-            translation.y + HeaderHeight + 334.0f, 8, Muted, cmd);
+        if (layout_->activeView == bridge::StoryFlowViewMode::Graph)
+        {
+            Label("ADD TERMINAL DESTINATION", inspectorX,
+                translation.y + HeaderHeight + 334.0f, 8, Muted, cmd);
+        }
         Label("LEVEL/SCREEN CREATION USES GOVERNED LIFECYCLE CONTROLS", inspectorX,
             translation.y + HeaderHeight + 460.0f, 7, Muted, cmd);
 
