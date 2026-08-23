@@ -130,9 +130,7 @@ namespace renegade::studio
         [[nodiscard]] bool RebuildJourneyProjection();
         void RebuildJourneyCardObjects();
         void UpdateJourneyCardObjects(const wi::Canvas& canvas, float dt);
-        void LoadJourneyThumbnailState();
         void RefreshJourneyThumbnailResources();
-        [[nodiscard]] bool PersistJourneyThumbnailState(std::string& error);
         void ChooseLevelThumbnail(const bridge::StableId& nodeId);
         [[nodiscard]] std::string JourneyCardSubtitle(
             const bridge::StoryFlowNodeView& node) const;
@@ -166,7 +164,6 @@ namespace renegade::studio
         bridge::StoryFlowJourneyModel journeyModel_;
         bridge::StoryFlowLayoutDocument* layout_ = nullptr;
         bridge::StoryFlowJourneyThumbnailService journeyThumbnailService_;
-        bridge::StoryFlowJourneyThumbnailMap journeyThumbnailPaths_;
         std::unordered_map<bridge::StableId, wi::Resource>
             journeyThumbnailResources_;
         std::unordered_map<
