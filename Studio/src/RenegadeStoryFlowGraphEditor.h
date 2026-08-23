@@ -159,6 +159,14 @@ namespace renegade::studio
         bool bindingsDirty_ = true;
         bool frameActive_ = false;
         bool initialized_ = false;
+
+        // ImNodes has no main-canvas zoom. Renegade therefore maintains the
+        // persisted Story Flow node coordinates as logical coordinates and
+        // applies a bounded presentation scale to the ImNodes editor geometry.
+        // Gate 9D can build semantic LOD/minimap behaviour on this stable base.
+        bool zoomGeometryReady_ = false;
+        float appliedGraphZoom_ = 1.0f;
+
         std::size_t observedUndoCount_ = static_cast<std::size_t>(-1);
         std::size_t observedRedoCount_ = static_cast<std::size_t>(-1);
         XMFLOAT4 viewport_ = {};
