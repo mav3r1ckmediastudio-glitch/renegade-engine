@@ -1,0 +1,56 @@
+if(NOT DEFINED RENEGADE_SOURCE_DIR)
+    message(FATAL_ERROR "RENEGADE_SOURCE_DIR is required")
+endif()
+
+set(WORKSPACE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowWorkspace.cpp")
+set(RENDER_PATH "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowRenderPath.h")
+set(GRAPH_EDITOR "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowGraphEditor.h")
+
+foreach(path IN ITEMS "${WORKSPACE}" "${RENDER_PATH}" "${GRAPH_EDITOR}")
+    if(NOT EXISTS "${path}")
+        message(FATAL_ERROR "Gate 9D source contract input is missing: ${path}")
+    endif()
+endforeach()
+
+file(READ "${WORKSPACE}" workspace_source)
+file(READ "${RENDER_PATH}" render_path_source)
+file(READ "${GRAPH_EDITOR}" graph_editor_source)
+
+function(require_text haystack_var needle description)
+    string(FIND "${${haystack_var}}" "${needle}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 9D contract missing ${description}: ${needle}")
+    endif()
+endfunction()
+
+function(forbid_text haystack_var needle description)
+    string(FIND "${${haystack_var}}" "${needle}" found)
+    if(NOT found EQUAL -1)
+        message(FATAL_ERROR "Gate 9D contract regressed ${description}: ${needle}")
+    endif()
+endfunction()
+
+# Journey is a high-level navigation surface, never a second topology editor.
+require_text(workspace_source "EXITS // OPEN IN GRAPH" "Journey-to-Graph exit affordance")
+forbid_text(workspace_source "EXITS // CLICK TO EDIT" "legacy Journey route-edit affordance")
+require_text(workspace_source "deleteNodeButton_.SetVisible(nodeSelected && graphMode);" "Graph-only node deletion")
+require_text(workspace_source "const bool routeSelected = graphMode && selectedRoute != nullptr;" "Graph-only route editing")
+require_text(workspace_source "connectButton_.SetVisible(false);" "retired legacy CONNECT control")
+require_text(workspace_source "reconnectRouteButton_.SetVisible(false);" "retired legacy RECONNECT control")
+
+# ImNodes is the only Graph canvas renderer and runtime interaction owner.
+require_text(workspace_source "Graph is intentionally not rendered here." "single Graph renderer boundary")
+forbid_text(workspace_source "Line(start, end, routeColor);" "primitive legacy Graph route renderer")
+forbid_text(workspace_source "if (Contains(fitBounds, pointer))" "legacy header FIT hit testing")
+forbid_text(workspace_source "if (Contains(startBounds, pointer))" "legacy header START hit testing")
+require_text(render_path_source "workspace_.SetEnabled(workspaceActive_ && !graphBeforeUpdate);" "Graph workspace ownership cutoff")
+forbid_text(render_path_source "KEYBOARD_BUTTON_DELETE" "Journey-level Delete shortcut")
+
+# Gate 9D navigation is native and presentation-only.
+require_text(render_path_source "Story Flow Journey View" "native Journey view control")
+require_text(render_path_source "Story Flow Graph View" "native Graph view control")
+require_text(render_path_source "Story Flow Find Node" "native node-name search")
+require_text(graph_editor_source "bool FocusNodeByName" "Graph/Journey focus navigation API")
+require_text(graph_editor_source "void RenderOverview" "presentation-only Graph overview API")
+
+message(STATUS "Story Flow Gate 9D source ownership contract passed")
