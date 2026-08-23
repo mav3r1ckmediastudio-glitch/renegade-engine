@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -18,9 +17,8 @@
 
 namespace renegade::studio
 {
-    // Gate 9C visual routing layer. This is presentation/input over the exact
-    // authoritative Story Flow route objects owned by StoryFlowAuthoringSession.
-    // It does not serialize or invent a second routing model.
+    // Gate 9C presentation/input over the one authoritative Story Flow route
+    // model. No route semantics are duplicated or serialized by this widget.
     class RenegadeStoryFlowJourneyRoutingOverlay final : public wi::gui::Widget
     {
     public:
@@ -50,14 +48,13 @@ namespace renegade::studio
             model_ = model;
             layout_ = layout;
             workspace_ = workspace;
+            routeObjects_.clear();
+            routeOrder_.clear();
+            portObjects_.clear();
+            portOutcomesByNode_.clear();
             projectionDirty_ = true;
             portsDirty_ = true;
-            dragMode_ = DragMode::None;
-            dragSourceNodeId_.clear();
-            dragRouteId_.clear();
-            dragOutcome_.clear();
-            routeObjects_.clear();
-            portObjects_.clear();
+            CancelDrag({});
             RefreshProjection();
         }
 
@@ -69,15 +66,17 @@ namespace renegade::studio
             workspace_ = nullptr;
             journeyModel_.Clear();
             routeObjects_.clear();
+            routeOrder_.clear();
             portObjects_.clear();
+            portOutcomesByNode_.clear();
+            hoveredRouteId_.clear();
+            hoveredPortKey_.clear();
             projectionDirty_ = true;
             portsDirty_ = true;
             dragMode_ = DragMode::None;
             dragSourceNodeId_.clear();
             dragRouteId_.clear();
             dragOutcome_.clear();
-            hoveredRouteId_.clear();
-            hoveredPortKey_.clear();
         }
 
         void MarkProjectionDirty() noexcept
@@ -92,10 +91,8 @@ namespace renegade::studio
             portsDirty_ = true;
         }
 
-        // Registered for rendering only. Wicked GUI updates widgets in
-        // registration order; processing routing input here would race the
-        // established workspace. RenegadeStoryFlowRenderPath calls
-        // UpdateRouting() explicitly after the workspace GUI update instead.
+        // Rendering registration only. The render path explicitly invokes
+        // UpdateRouting after the established workspace has processed input.
         void Update(const wi::Canvas&, float) override
         {
         }
@@ -139,7 +136,6 @@ namespace renegade::studio
                 }
                 return;
             }
-
             if (layout_->activeView != bridge::StoryFlowViewMode::Journey)
                 return;
 
@@ -172,13 +168,9 @@ namespace renegade::studio
                 {
                     const bridge::StableId destination = HitTestDestination(pointer);
                     if (destination.empty())
-                    {
                         CancelDrag("ROUTE DRAG CANCELLED // DROP ON A DESTINATION CARD");
-                    }
                     else
-                    {
                         CommitDrag(destination);
-                    }
                 }
                 return;
             }
@@ -186,8 +178,7 @@ namespace renegade::studio
             if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
                 return;
 
-            // Destination handles win over route bodies so dragging the handle
-            // can never be mistaken for a simple route-selection click.
+            // Destination handles win over route body selection.
             for (const auto& [id, route] : routeObjects_)
             {
                 if (!route || !Contains(route->DestinationHandleBounds(), pointer))
@@ -248,20 +239,15 @@ namespace renegade::studio
             if (layout_->activeView != bridge::StoryFlowViewMode::Journey)
                 return;
 
-            // Routes are rendered before ports within this overlay. The overlay
-            // itself is above the existing card renderer, but orthogonal route
-            // geometry terminates outside card bounds so it does not paint over
-            // card content.
-            for (const auto& route : routeOrder_)
+            for (const auto& routeId : routeOrder_)
             {
-                const auto found = routeObjects_.find(route);
-                if (found != routeObjects_.end() && found->second)
-                {
-                    found->second->SetPresentation(
-                        route == workspace_->SelectedRouteId(),
-                        route == hoveredRouteId_);
-                    found->second->Render(canvas, cmd);
-                }
+                const auto found = routeObjects_.find(routeId);
+                if (found == routeObjects_.end() || !found->second)
+                    continue;
+                found->second->SetPresentation(
+                    routeId == workspace_->SelectedRouteId(),
+                    routeId == hoveredRouteId_);
+                found->second->Render(canvas, cmd);
             }
 
             for (const auto& [key, port] : portObjects_)
@@ -295,7 +281,6 @@ namespace renegade::studio
         static constexpr float JourneyTrackTop = 58.0f;
 
         static constexpr wi::Color Surface0 = wi::Color(8, 12, 16, 255);
-        static constexpr wi::Color Surface2 = wi::Color(16, 23, 28, 255);
         static constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
         static constexpr wi::Color Muted = wi::Color(142, 151, 156, 255);
         static constexpr wi::Color Text = wi::Color(214, 214, 214, 255);
@@ -315,10 +300,7 @@ namespace renegade::studio
         class PortObject final : public wi::gui::Widget
         {
         public:
-            void Create(
-                bridge::StableId nodeId,
-                std::string outcome,
-                std::string label)
+            void Create(bridge::StableId nodeId, std::string outcome, std::string label)
             {
                 nodeId_ = std::move(nodeId);
                 outcome_ = std::move(outcome);
@@ -330,68 +312,31 @@ namespace renegade::studio
             void SetBounds(const XMFLOAT4& bounds)
             {
                 SetPos(XMFLOAT2(bounds.x, bounds.y));
-                SetSize(XMFLOAT2(
-                    std::max(1.0f, bounds.z),
-                    std::max(1.0f, bounds.w)));
+                SetSize(XMFLOAT2(std::max(1.0f, bounds.z), std::max(1.0f, bounds.w)));
             }
 
-            void SetHovered(const bool hovered) noexcept
-            {
-                hovered_ = hovered;
-            }
-
-            [[nodiscard]] const bridge::StableId& NodeId() const noexcept
-            {
-                return nodeId_;
-            }
-
-            [[nodiscard]] const std::string& Outcome() const noexcept
-            {
-                return outcome_;
-            }
-
+            void SetHovered(const bool hovered) noexcept { hovered_ = hovered; }
+            [[nodiscard]] const bridge::StableId& NodeId() const noexcept { return nodeId_; }
+            [[nodiscard]] const std::string& Outcome() const noexcept { return outcome_; }
             [[nodiscard]] XMFLOAT2 Center() const noexcept
             {
-                return XMFLOAT2(
-                    translation.x + scale.x * 0.5f,
-                    translation.y + scale.y * 0.5f);
+                return XMFLOAT2(translation.x + scale.x * 0.5f, translation.y + scale.y * 0.5f);
             }
-
             [[nodiscard]] bool HitTest(const XMFLOAT4& pointer) const noexcept
             {
-                const XMFLOAT4 expanded(
-                    translation.x - 4.0f,
-                    translation.y - 4.0f,
-                    scale.x + 8.0f,
-                    scale.y + 8.0f);
-                return Contains(expanded, pointer);
+                return Contains(
+                    XMFLOAT4(translation.x - 4.0f, translation.y - 4.0f,
+                        scale.x + 8.0f, scale.y + 8.0f),
+                    pointer);
             }
 
-            void Render(
-                const wi::Canvas&,
-                const wi::graphics::CommandList cmd) const override
+            void Render(const wi::Canvas&, const wi::graphics::CommandList cmd) const override
             {
-                if (!IsVisible())
-                    return;
+                if (!IsVisible()) return;
                 const wi::Color edge = hovered_ ? Forge : BranchColor;
-                DrawPanel(
-                    translation.x,
-                    translation.y,
-                    scale.x,
-                    scale.y,
-                    Surface0,
-                    edge,
-                    cmd);
-                if (!label_.empty())
-                {
-                    DrawText(
-                        label_,
-                        translation.x + scale.x + 5.0f,
-                        translation.y - 1.0f,
-                        7,
-                        hovered_ ? TextStrong : Muted,
-                        cmd);
-                }
+                DrawPanel(translation.x, translation.y, scale.x, scale.y, Surface0, edge, cmd);
+                DrawText(label_, translation.x + scale.x + 5.0f, translation.y - 1.0f,
+                    7, hovered_ ? TextStrong : Muted, cmd);
             }
 
             const char* GetWidgetTypeName() const override
@@ -429,26 +374,20 @@ namespace renegade::studio
                 BuildPath(start_, end_, points_, pointCount_);
             }
 
-            void SetPresentation(const bool selected, const bool hovered) const noexcept
+            void SetPresentation(const bool selected, const bool hovered) noexcept
             {
                 selected_ = selected;
                 hovered_ = hovered;
             }
 
-            [[nodiscard]] XMFLOAT2 StartPoint() const noexcept
-            {
-                return start_;
-            }
-
+            [[nodiscard]] XMFLOAT2 StartPoint() const noexcept { return start_; }
             [[nodiscard]] XMFLOAT4 DestinationHandleBounds() const noexcept
             {
                 return XMFLOAT4(end_.x - 6.0f, end_.y - 6.0f, 12.0f, 12.0f);
             }
-
             [[nodiscard]] bool HitTest(const XMFLOAT4& pointer) const noexcept
             {
-                if (Contains(DestinationHandleBounds(), pointer))
-                    return true;
+                if (Contains(DestinationHandleBounds(), pointer)) return true;
                 const XMFLOAT2 point(pointer.x, pointer.y);
                 for (std::size_t i = 1; i < pointCount_; ++i)
                 {
@@ -458,9 +397,7 @@ namespace renegade::studio
                 return false;
             }
 
-            void Render(
-                const wi::Canvas&,
-                const wi::graphics::CommandList cmd) const override
+            void Render(const wi::Canvas&, const wi::graphics::CommandList cmd) const override
             {
                 const wi::Color color = selected_
                     ? Forge
@@ -472,18 +409,9 @@ namespace renegade::studio
 
                 if ((selected_ || hovered_) && !outcome_.empty())
                 {
-                    const XMFLOAT2 labelPoint = pointCount_ >= 3
-                        ? points_[1]
-                        : XMFLOAT2(
-                            (start_.x + end_.x) * 0.5f,
-                            (start_.y + end_.y) * 0.5f);
-                    DrawText(
-                        Shorten(outcome_, 22),
-                        labelPoint.x + 5.0f,
-                        labelPoint.y - 15.0f,
-                        7,
-                        color,
-                        cmd);
+                    const XMFLOAT2 labelPoint = points_[1];
+                    DrawText(Shorten(outcome_, 22), labelPoint.x + 5.0f,
+                        labelPoint.y - 15.0f, 7, color, cmd);
                 }
             }
 
@@ -500,56 +428,40 @@ namespace renegade::studio
             std::size_t pointCount_ = 0;
             std::string outcome_;
             bool primary_ = true;
-            mutable bool selected_ = false;
-            mutable bool hovered_ = false;
+            bool selected_ = false;
+            bool hovered_ = false;
         };
 
         [[nodiscard]] float GraphWidth() const noexcept
         {
-            const float reserved = std::min(InspectorWidth, width_ * 0.42f);
-            return std::max(1.0f, width_ - reserved);
+            return std::max(1.0f, width_ - std::min(InspectorWidth, width_ * 0.42f));
         }
 
         [[nodiscard]] XMFLOAT4 GraphConnectButtonBounds() const noexcept
         {
             const float graphRight = translation.x + GraphWidth();
             const float available = std::max(1.0f, width_ - GraphWidth() - 28.0f);
-            return XMFLOAT4(
-                graphRight + 14.0f,
+            return XMFLOAT4(graphRight + 14.0f,
                 translation.y + HeaderHeight + 286.0f,
-                std::min(available, 136.0f),
-                28.0f);
+                std::min(available, 136.0f), 28.0f);
         }
 
         void RenderGraphConnectControl(const wi::graphics::CommandList cmd) const
         {
-            if (!workspace_ || !model_)
-                return;
-            const auto* selected = model_->FindNode(workspace_->SelectedNodeId());
+            const auto* selected = model_ ? model_->FindNode(workspace_->SelectedNodeId()) : nullptr;
             const bool connecting = workspace_->IsConnectionModeActive();
             const bool canConnect = connecting ||
                 (selected != nullptr && !IsTerminalKind(selected->kind));
-            if (!canConnect)
-                return;
+            if (!canConnect) return;
 
             const XMFLOAT4 bounds = GraphConnectButtonBounds();
-            const XMFLOAT4 pointer = wi::input::GetPointer();
-            const bool hovered = Contains(bounds, pointer);
-            DrawPanel(
-                bounds.x,
-                bounds.y,
-                bounds.z,
-                bounds.w,
+            const bool hovered = Contains(bounds, wi::input::GetPointer());
+            DrawPanel(bounds.x, bounds.y, bounds.z, bounds.w,
                 hovered ? wi::Color(35, 24, 18, 255) : Surface0,
-                connecting || hovered ? Forge : Border,
-                cmd);
-            DrawText(
-                connecting ? "CANCEL LINK" : "CONNECT",
-                bounds.x + bounds.z * 0.5f,
-                bounds.y + 8.0f,
-                8,
-                connecting || hovered ? Forge : Text,
-                cmd,
+                connecting || hovered ? Forge : Border, cmd);
+            DrawText(connecting ? "CANCEL LINK" : "CONNECT",
+                bounds.x + bounds.z * 0.5f, bounds.y + 8.0f, 8,
+                connecting || hovered ? Forge : Text, cmd,
                 wi::font::WIFALIGN_CENTER);
         }
 
@@ -567,8 +479,7 @@ namespace renegade::studio
             std::string error;
             if (!journeyModel_.Build(*model_, error))
             {
-                if (workspace_)
-                    workspace_->SetRoutingStatus("ROUTING PROJECTION ERROR // " + error);
+                workspace_->SetRoutingStatus("ROUTING PROJECTION ERROR // " + error);
                 return;
             }
 
@@ -584,81 +495,51 @@ namespace renegade::studio
 
         void RebuildPorts()
         {
-            if (!model_ || !journeyModel_.IsLoaded())
-            {
-                portObjects_.clear();
-                return;
-            }
+            portObjects_.clear();
+            portOutcomesByNode_.clear();
+            if (!model_ || !journeyModel_.IsLoaded()) return;
 
-            std::unordered_set<std::string> expected;
             for (const auto& node : model_->Nodes())
             {
-                if (IsTerminalKind(node.kind))
-                    continue;
-                const std::vector<std::string> outcomes = OutcomesForNode(node);
+                std::vector<std::string> outcomes = OutcomesForNode(node);
+                if (outcomes.empty()) continue;
+                portOutcomesByNode_[node.id] = outcomes;
                 for (const auto& outcome : outcomes)
                 {
-                    const std::string key = PortKey(node.id, outcome);
-                    expected.insert(key);
-                    if (portObjects_.find(key) != portObjects_.end())
-                        continue;
                     auto object = std::make_unique<PortObject>();
                     object->Create(node.id, outcome, PortLabel(node.kind, outcome));
-                    portObjects_.emplace(key, std::move(object));
+                    portObjects_.emplace(PortKey(node.id, outcome), std::move(object));
                 }
-            }
-
-            for (auto it = portObjects_.begin(); it != portObjects_.end();)
-            {
-                if (expected.find(it->first) == expected.end())
-                    it = portObjects_.erase(it);
-                else
-                    ++it;
             }
         }
 
         void UpdateGeometry()
         {
-            if (!model_ || !layout_ || !journeyModel_.IsLoaded())
-                return;
-
-            std::unordered_map<bridge::StableId, std::vector<std::string>> outcomesByNode;
-            for (const auto& node : model_->Nodes())
-                outcomesByNode[node.id] = OutcomesForNode(node);
+            if (!model_ || !layout_ || !journeyModel_.IsLoaded()) return;
 
             for (const auto& node : model_->Nodes())
             {
                 const auto* card = journeyModel_.FindCard(node.id);
-                if (!card)
-                    continue;
-                const XMFLOAT4 bounds = CardBounds(*card);
-                const auto found = outcomesByNode.find(node.id);
-                const std::vector<std::string>& outcomes = found != outcomesByNode.end()
-                    ? found->second
-                    : EmptyOutcomes();
-                const std::size_t count = outcomes.size();
-                if (count == 0)
+                const auto outcomes = portOutcomesByNode_.find(node.id);
+                if (!card || outcomes == portOutcomesByNode_.end() || outcomes->second.empty())
                     continue;
 
+                const XMFLOAT4 bounds = CardBounds(*card);
+                const std::size_t count = outcomes->second.size();
                 const float portSize = std::clamp(bounds.w * 0.055f, 8.0f, 11.0f);
                 const float top = bounds.y + std::max(34.0f, bounds.w * 0.26f);
                 const float available = std::max(18.0f, bounds.w - 62.0f);
-                const float spacing = count <= 1
-                    ? 0.0f
-                    : std::clamp(
-                        available / static_cast<float>(count - 1),
-                        13.0f,
-                        22.0f);
+                const float spacing = count <= 1 ? 0.0f :
+                    std::clamp(available / static_cast<float>(count - 1), 13.0f, 22.0f);
                 for (std::size_t i = 0; i < count; ++i)
                 {
-                    const auto port = portObjects_.find(PortKey(node.id, outcomes[i]));
-                    if (port == portObjects_.end() || !port->second)
-                        continue;
+                    const auto port = portObjects_.find(
+                        PortKey(node.id, outcomes->second[i]));
+                    if (port == portObjects_.end() || !port->second) continue;
                     port->second->SetBounds(XMFLOAT4(
                         bounds.x + bounds.z + 5.0f,
                         top + static_cast<float>(i) * spacing - portSize * 0.5f,
-                        portSize,
-                        portSize));
+                        portSize, portSize));
                     port->second->SetVisible(true);
                 }
             }
@@ -670,26 +551,19 @@ namespace renegade::studio
                 const auto object = routeObjects_.find(route.id);
                 if (!sourceCard || !destinationCard ||
                     object == routeObjects_.end() || !object->second)
-                {
                     continue;
-                }
 
                 const XMFLOAT4 sourceBounds = CardBounds(*sourceCard);
                 const XMFLOAT4 destinationBounds = CardBounds(*destinationCard);
-                XMFLOAT2 start(
-                    sourceBounds.x + sourceBounds.z + 10.0f,
+                XMFLOAT2 start(sourceBounds.x + sourceBounds.z + 10.0f,
                     sourceBounds.y + sourceBounds.w * 0.5f);
                 const auto port = portObjects_.find(PortKey(route.sourceNodeId, route.outcome));
                 if (port != portObjects_.end() && port->second)
                     start = port->second->Center();
-                const XMFLOAT2 end(
-                    destinationBounds.x - 7.0f,
+                const XMFLOAT2 end(destinationBounds.x - 7.0f,
                     destinationBounds.y + destinationBounds.w * 0.5f);
                 object->second->SetGeometry(
-                    start,
-                    end,
-                    route.outcome,
-                    IsPrimaryRoute(route.id));
+                    start, end, route.outcome, IsPrimaryRoute(route.id));
             }
         }
 
@@ -704,39 +578,27 @@ namespace renegade::studio
                 (offset ? offset->offsetY : 0.0f);
             const float zoom = layout_ ? layout_->journeyCanvas.zoom : 1.0f;
             return XMFLOAT4(
-                translation.x + Padding + (layout_ ? layout_->journeyCanvas.panX : 0.0f) +
-                    x * zoom,
-                translation.y + HeaderHeight + Padding +
-                    (layout_ ? layout_->journeyCanvas.panY : 0.0f) + y * zoom,
-                JourneyCardWidth * zoom,
-                JourneyCardHeight * zoom);
+                translation.x + Padding + layout_->journeyCanvas.panX + x * zoom,
+                translation.y + HeaderHeight + Padding + layout_->journeyCanvas.panY + y * zoom,
+                JourneyCardWidth * zoom, JourneyCardHeight * zoom);
         }
 
         [[nodiscard]] const bridge::StoryFlowJourneyCardLayout* FindJourneyLayout(
             const bridge::StableId& nodeId) const noexcept
         {
-            if (!layout_)
-                return nullptr;
-            const auto found = std::find_if(
-                layout_->journeyCards.begin(),
-                layout_->journeyCards.end(),
-                [&](const bridge::StoryFlowJourneyCardLayout& item)
-                {
-                    return item.nodeId == nodeId;
-                });
+            if (!layout_) return nullptr;
+            const auto found = std::find_if(layout_->journeyCards.begin(), layout_->journeyCards.end(),
+                [&](const bridge::StoryFlowJourneyCardLayout& item) { return item.nodeId == nodeId; });
             return found == layout_->journeyCards.end() ? nullptr : &*found;
         }
 
-        [[nodiscard]] bridge::StableId HitTestDestination(
-            const XMFLOAT4& pointer) const
+        [[nodiscard]] bridge::StableId HitTestDestination(const XMFLOAT4& pointer) const
         {
             for (const auto& node : model_->Nodes())
             {
-                if (node.kind == bridge::FlowNodeKind::GameStart)
-                    continue;
+                if (node.kind == bridge::FlowNodeKind::GameStart) continue;
                 const auto* card = journeyModel_.FindCard(node.id);
-                if (card && Contains(CardBounds(*card), pointer))
-                    return node.id;
+                if (card && Contains(CardBounds(*card), pointer)) return node.id;
             }
             return {};
         }
@@ -764,8 +626,7 @@ namespace renegade::studio
                 route.destinationNodeId = destinationNodeId;
                 if (destination->kind == bridge::FlowNodeKind::Level)
                 {
-                    if (route.destinationEntry.empty())
-                        route.destinationEntry = "player_entry";
+                    if (route.destinationEntry.empty()) route.destinationEntry = "player_entry";
                 }
                 else
                 {
@@ -789,11 +650,9 @@ namespace renegade::studio
                 if (source->kind == bridge::FlowNodeKind::Screen &&
                     !IsCurrentScreenOutcome(source->id, dragOutcome_))
                 {
-                    CancelDrag(
-                        "CONNECT REJECTED // SCREEN ACTION CHANGED DURING ROUTE DRAG");
+                    CancelDrag("CONNECT REJECTED // SCREEN ACTION CHANGED DURING ROUTE DRAG");
                     return;
                 }
-
                 bridge::FlowRoute route;
                 route.sourceNodeId = source->id;
                 route.outcome = dragOutcome_;
@@ -811,8 +670,7 @@ namespace renegade::studio
             dragRouteId_.clear();
             dragSourceNodeId_.clear();
             dragOutcome_.clear();
-            if (!workspace_->RefreshAfterExternalRoutingChange())
-                return;
+            if (!workspace_->RefreshAfterExternalRoutingChange()) return;
             workspace_->SelectRouteFromRouting(resultingRouteId);
             workspace_->SetRoutingStatus(
                 "ROUTE COMMITTED // JOURNEY AND GRAPH SHARE THE SAME TOPOLOGY");
@@ -825,51 +683,40 @@ namespace renegade::studio
             dragRouteId_.clear();
             dragSourceNodeId_.clear();
             dragOutcome_.clear();
-            if (workspace_)
-                workspace_->SetRoutingStatus(std::move(status));
+            if (workspace_ && !status.empty()) workspace_->SetRoutingStatus(std::move(status));
         }
 
         void DeleteSelectedRoute()
         {
-            if (!workspace_ || !session_)
-                return;
             const bridge::StableId routeId = workspace_->SelectedRouteId();
-            if (routeId.empty())
-                return;
+            if (routeId.empty()) return;
             std::string error;
             if (!session_->DeleteRoute(routeId, error))
             {
                 workspace_->SetRoutingStatus("ROUTE DELETE REJECTED // " + error);
                 return;
             }
-            if (!workspace_->RefreshAfterExternalRoutingChange())
-                return;
+            if (!workspace_->RefreshAfterExternalRoutingChange()) return;
             workspace_->SelectRouteFromRouting({});
             workspace_->SetRoutingStatus(
                 "ROUTE DELETED // UNDO RESTORES THE SAME ROUTE IDENTITY");
             MarkProjectionDirty();
         }
 
-        [[nodiscard]] const bridge::FlowNode* FindNode(
-            const bridge::StableId& nodeId) const noexcept
+        [[nodiscard]] const bridge::FlowNode* FindNode(const bridge::StableId& nodeId) const noexcept
         {
-            if (!session_ || !session_->IsLoaded())
-                return nullptr;
+            if (!session_ || !session_->IsLoaded()) return nullptr;
             const auto& nodes = session_->Document().nodes;
-            const auto found = std::find_if(
-                nodes.begin(), nodes.end(),
+            const auto found = std::find_if(nodes.begin(), nodes.end(),
                 [&](const bridge::FlowNode& node) { return node.id == nodeId; });
             return found == nodes.end() ? nullptr : &*found;
         }
 
-        [[nodiscard]] const bridge::FlowRoute* FindRoute(
-            const bridge::StableId& routeId) const noexcept
+        [[nodiscard]] const bridge::FlowRoute* FindRoute(const bridge::StableId& routeId) const noexcept
         {
-            if (!session_ || !session_->IsLoaded())
-                return nullptr;
+            if (!session_ || !session_->IsLoaded()) return nullptr;
             const auto& routes = session_->Document().routes;
-            const auto found = std::find_if(
-                routes.begin(), routes.end(),
+            const auto found = std::find_if(routes.begin(), routes.end(),
                 [&](const bridge::FlowRoute& route) { return route.id == routeId; });
             return found == routes.end() ? nullptr : &*found;
         }
@@ -877,24 +724,15 @@ namespace renegade::studio
         [[nodiscard]] std::vector<std::string> OutcomesForNode(
             const bridge::StoryFlowNodeView& node) const
         {
-            if (IsTerminalKind(node.kind))
-                return {};
-            if (node.kind == bridge::FlowNodeKind::GameStart)
-                return {bridge::GameStartOutcome};
-            if (node.kind == bridge::FlowNodeKind::Level)
-                return {"next"};
-            if (node.kind != bridge::FlowNodeKind::Screen || !screenOutcomeQuery_)
-                return {};
+            if (IsTerminalKind(node.kind)) return {};
+            if (node.kind == bridge::FlowNodeKind::GameStart) return {bridge::GameStartOutcome};
+            if (node.kind == bridge::FlowNodeKind::Level) return {"next"};
+            if (node.kind != bridge::FlowNodeKind::Screen || !screenOutcomeQuery_) return {};
 
             std::vector<std::string> outcomes;
             std::string error;
-            if (!screenOutcomeQuery_(node.id, outcomes, error))
-                return {};
-            outcomes.erase(
-                std::remove_if(
-                    outcomes.begin(), outcomes.end(),
-                    [](const std::string& value) { return value.empty(); }),
-                outcomes.end());
+            if (!screenOutcomeQuery_(node.id, outcomes, error)) return {};
+            outcomes.erase(std::remove(outcomes.begin(), outcomes.end(), std::string{}), outcomes.end());
             std::sort(outcomes.begin(), outcomes.end());
             outcomes.erase(std::unique(outcomes.begin(), outcomes.end()), outcomes.end());
             return outcomes;
@@ -905,8 +743,7 @@ namespace renegade::studio
             const std::string& outcome) const
         {
             const auto* node = model_ ? model_->FindNode(nodeId) : nullptr;
-            if (!node)
-                return false;
+            if (!node) return false;
             const auto outcomes = OutcomesForNode(*node);
             return std::find(outcomes.begin(), outcomes.end(), outcome) != outcomes.end();
         }
@@ -915,14 +752,12 @@ namespace renegade::studio
         {
             for (const auto& exit : journeyModel_.Exits())
             {
-                if (exit.routeId == routeId)
-                    return exit.primary;
+                if (exit.routeId == routeId) return exit.primaryContinuation;
             }
             return true;
         }
 
-        [[nodiscard]] static bool IsTerminalKind(
-            const bridge::FlowNodeKind kind) noexcept
+        [[nodiscard]] static bool IsTerminalKind(const bridge::FlowNodeKind kind) noexcept
         {
             return kind == bridge::FlowNodeKind::CompleteGame ||
                 kind == bridge::FlowNodeKind::ReturnToMainMenu ||
@@ -940,17 +775,9 @@ namespace renegade::studio
             const bridge::FlowNodeKind kind,
             const std::string& outcome)
         {
-            if (kind == bridge::FlowNodeKind::GameStart)
-                return "START";
-            if (kind == bridge::FlowNodeKind::Level && outcome == "next")
-                return "NEXT";
+            if (kind == bridge::FlowNodeKind::GameStart) return "START";
+            if (kind == bridge::FlowNodeKind::Level && outcome == "next") return "NEXT";
             return Shorten(outcome, 16);
-        }
-
-        [[nodiscard]] static const std::vector<std::string>& EmptyOutcomes()
-        {
-            static const std::vector<std::string> empty;
-            return empty;
         }
 
         static void BuildPath(
@@ -959,24 +786,14 @@ namespace renegade::studio
             std::array<XMFLOAT2, 4>& points,
             std::size_t& count)
         {
-            if (end.x >= start.x + 36.0f)
-            {
-                const float middleX = (start.x + end.x) * 0.5f;
-                points[0] = start;
-                points[1] = XMFLOAT2(middleX, start.y);
-                points[2] = XMFLOAT2(middleX, end.y);
-                points[3] = end;
-                count = 4;
-            }
-            else
-            {
-                const float gutterX = std::max(start.x, end.x) + 46.0f;
-                points[0] = start;
-                points[1] = XMFLOAT2(gutterX, start.y);
-                points[2] = XMFLOAT2(gutterX, end.y);
-                points[3] = end;
-                count = 4;
-            }
+            const float middleX = end.x >= start.x + 36.0f
+                ? (start.x + end.x) * 0.5f
+                : std::max(start.x, end.x) + 46.0f;
+            points[0] = start;
+            points[1] = XMFLOAT2(middleX, start.y);
+            points[2] = XMFLOAT2(middleX, end.y);
+            points[3] = end;
+            count = 4;
         }
 
         static void DrawOrthogonalPreview(
@@ -1001,23 +818,13 @@ namespace renegade::studio
         {
             if (std::abs(a.y - b.y) <= 0.5f)
             {
-                DrawRect(
-                    std::min(a.x, b.x),
-                    a.y - thickness * 0.5f,
-                    std::max(1.0f, std::abs(b.x - a.x)),
-                    thickness,
-                    color,
-                    cmd);
+                DrawRect(std::min(a.x, b.x), a.y - thickness * 0.5f,
+                    std::max(1.0f, std::abs(b.x - a.x)), thickness, color, cmd);
             }
             else
             {
-                DrawRect(
-                    a.x - thickness * 0.5f,
-                    std::min(a.y, b.y),
-                    thickness,
-                    std::max(1.0f, std::abs(b.y - a.y)),
-                    color,
-                    cmd);
+                DrawRect(a.x - thickness * 0.5f, std::min(a.y, b.y), thickness,
+                    std::max(1.0f, std::abs(b.y - a.y)), color, cmd);
             }
         }
 
@@ -1037,8 +844,7 @@ namespace renegade::studio
             const wi::Color color,
             const wi::graphics::CommandList cmd)
         {
-            if (width <= 0.0f || height <= 0.0f)
-                return;
+            if (width <= 0.0f || height <= 0.0f) return;
             wi::image::Params params(x, y, width, height, color);
             params.blendFlag = wi::enums::BLENDMODE_ALPHA;
             wi::image::Draw(nullptr, params, cmd);
@@ -1054,13 +860,8 @@ namespace renegade::studio
             const wi::graphics::CommandList cmd)
         {
             DrawRect(x, y, width, height, edge, cmd);
-            DrawRect(
-                x + 1.0f,
-                y + 1.0f,
-                std::max(0.0f, width - 2.0f),
-                std::max(0.0f, height - 2.0f),
-                fill,
-                cmd);
+            DrawRect(x + 1.0f, y + 1.0f,
+                std::max(0.0f, width - 2.0f), std::max(0.0f, height - 2.0f), fill, cmd);
         }
 
         static void DrawText(
@@ -1072,14 +873,8 @@ namespace renegade::studio
             const wi::graphics::CommandList cmd,
             const wi::font::Alignment align = wi::font::WIFALIGN_LEFT)
         {
-            wi::font::Params params(
-                x,
-                y,
-                size,
-                align,
-                wi::font::WIFALIGN_TOP,
-                color,
-                wi::Color::Transparent());
+            wi::font::Params params(x, y, size, align, wi::font::WIFALIGN_TOP,
+                color, wi::Color::Transparent());
             params.bolden = 0.12f;
             wi::font::Draw(text, params, cmd);
         }
@@ -1090,8 +885,7 @@ namespace renegade::studio
         {
             return bounds.z > 0.0f && bounds.w > 0.0f &&
                 pointer.x >= bounds.x && pointer.y >= bounds.y &&
-                pointer.x < bounds.x + bounds.z &&
-                pointer.y < bounds.y + bounds.w;
+                pointer.x < bounds.x + bounds.z && pointer.y < bounds.y + bounds.w;
         }
 
         [[nodiscard]] static float DistanceToSegment(
@@ -1109,14 +903,10 @@ namespace renegade::studio
                 return std::sqrt(px * px + py * py);
             }
             const float t = std::clamp(
-                ((point.x - start.x) * dx + (point.y - start.y) * dy) /
-                    lengthSquared,
-                0.0f,
-                1.0f);
-            const float nearestX = start.x + t * dx;
-            const float nearestY = start.y + t * dy;
-            const float px = point.x - nearestX;
-            const float py = point.y - nearestY;
+                ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+                0.0f, 1.0f);
+            const float px = point.x - (start.x + t * dx);
+            const float py = point.y - (start.y + t * dy);
             return std::sqrt(px * px + py * py);
         }
 
@@ -1124,10 +914,8 @@ namespace renegade::studio
             std::string value,
             const std::size_t maximum)
         {
-            if (value.size() <= maximum)
-                return value;
-            if (maximum <= 3)
-                return value.substr(0, maximum);
+            if (value.size() <= maximum) return value;
+            if (maximum <= 3) return value.substr(0, maximum);
             value.resize(maximum - 3);
             value += "...";
             return value;
@@ -1142,6 +930,7 @@ namespace renegade::studio
         std::unordered_map<bridge::StableId, std::unique_ptr<RouteObject>> routeObjects_;
         std::vector<bridge::StableId> routeOrder_;
         std::unordered_map<std::string, std::unique_ptr<PortObject>> portObjects_;
+        std::unordered_map<bridge::StableId, std::vector<std::string>> portOutcomesByNode_;
         bridge::StableId hoveredRouteId_;
         std::string hoveredPortKey_;
         DragMode dragMode_ = DragMode::None;
