@@ -1,46 +1,45 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-22
+**Date:** 2026-08-23
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`fe5871091ccb74a417081c4e4abe38ed86010f53`
-(`Story Flow Gate 8B: shared Screen renderer (#88)`).
+`e9c63e47f897ffb9408f9fdd377795f44affb41b`
+(`Story Flow Gate 8D: creator controls (#90)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow Gate 8C Screen Editor authoring shell
+## Active work — Story Flow Gate 8E outcome and package parity
 
-Branch: `feature/story-flow-gate8c-screen-editor-shell`.
+Branch: `feature/story-flow-gate8e-outcome-parity`.
 
-Gate 8B/PR #88 is merged at the authoritative main above. Its corrected schema-v2
-Release fixture received owner visual/behavioural acceptance: rounded borders,
-hover/focus/pressed states, Play and Quit all behaved as authored.
+Gate 8D/PR #90 is merged and owner-accepted at the authoritative main above.
+The accepted Screen Editor now has direct manipulation, complete creator
+controls, governed resources, symbolic action authoring, focus order,
+parent/layout, presets/components and Screen-specific persistence/history.
 
-Gate 8C now implements the first real Screen Editor UI:
+Gate 8E is deliberately bounded to the Screen-action / Story Flow routing seam:
 
-- `ScreenAuthoringSession` with validated mutations, bounded history, dirty
-  state and transactional Save/Open;
-- first-class `RenegadeScreenEditorRenderPath` consuming the Gate 5 handoff;
-- hierarchy and preview selection over stable widget IDs;
-- Inspector editing for name, Text/Button content, resolved X/Y/size and
-  visible/enabled state;
-- anchored edits preserve anchors by updating parent-relative offsets;
-- the central preview uses the exact Gate 8B renderer inside an editor viewport;
-- visible Save/Undo/Redo and a Return action that refuses silent dirty loss.
+- Screen Buttons continue to author symbolic action IDs only;
+- Story Flow remains the sole destination/condition/priority authority;
+- outgoing Screen routes are constrained to currently authored Screen actions;
+- return/reopen and Story Flow semantic edits rerun a non-mutating cross-document
+  parity audit;
+- removed/renamed Screen actions create visible stale-route/unrouted-Button
+  diagnostics rather than silently rewriting Flow destinations;
+- reachable broken Screen/Flow mappings fail closed before Runtime execution;
+- detached draft Screens do not block Runtime;
+- packaged Release instructions require save/reopen, Runtime and Windows
+  standalone parity proof.
 
-Focused GNU C++17 syntax checks cover the new session, test, shared renderer,
-workspace, render path, integration header and full Studio translation unit.
-Windows Debug/Release CI and owner inspection of the exact packaged Studio are
-still required.
+The implementation contract and owner audit are in
+`docs/STORY_FLOW_GATE8E_OUTCOME_PARITY.md`.
 
-Acceptance and owner-test instructions are locked in
-`docs/STORY_FLOW_GATE8C_SCREEN_EDITOR_SHELL.md`.
-
-Do not merge automatically. CI must pass and the owner retains the merge
-decision.
+Do not merge automatically. Exact-head Windows Debug/Release CI and owner
+acceptance of the packaged Release remain required. Gate 9 is Journey View UI/UX
+and scale; Gate 10 is the broader final Runtime/build/standalone closeout.
 
 ## Gate 6 accepted evidence
 

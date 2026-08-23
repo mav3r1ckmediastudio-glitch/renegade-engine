@@ -1,14 +1,14 @@
 # Renegade Story Flow — Journey View Implementation Plan
 
-**Status:** Locked product direction. Gate 1 implementation and owner visual/interaction acceptance are complete; final Gate 1 documentation/exact-head closeout remains before merge.
+**Status:** Locked product direction. Functional Gates 1-7 and Screen Editor Gates 8A-8D are accepted and merged; Gate 8E outcome/package parity is active. Gate 9 remains the planned Journey View UI/UX implementation and scale programme.
 
 **Prepared:** 2026-08-20
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Audited implementation baseline:**
-`02df129f96c860dd3a7d6b6e065c928bef0f8907`
-(`hub: expose Exit Renegade action (#65)`).
+**Current implementation baseline:**
+`e9c63e47f897ffb9408f9fdd377795f44affb41b`
+(`Story Flow Gate 8D: creator controls (#90)`).
 
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 

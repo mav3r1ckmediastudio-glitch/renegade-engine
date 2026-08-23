@@ -1,8 +1,8 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`fe5871091ccb74a417081c4e4abe38ed86010f53`
-(`Story Flow Gate 8B: shared Screen renderer (#88)`).
+`e9c63e47f897ffb9408f9fdd377795f44affb41b`
+(`Story Flow Gate 8D: creator controls (#90)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -91,8 +91,8 @@ templates/migration policy around permanent Game Start. The locked contract is
 Native Screen Editor with image/background/text/button/layout/action authoring,
 preview, validation, Save/Undo/Redo and Return to Story Flow.
 
-**Status:** Gates 8A and 8B are accepted and merged through PR #88. Gate 8C
-implementation is active on `feature/story-flow-gate8c-screen-editor-shell`.
+**Status:** Gates 8A, 8B, 8C and 8D are accepted and merged. Gate 8E is
+active on `feature/story-flow-gate8e-outcome-parity`.
 
 Gate 8 is delivered as bounded internal slices so the editor is not built on
 the old runtime-proof schema:
@@ -105,15 +105,20 @@ the old runtime-proof schema:
    layout/presentation core used by editor preview and Runtime, including
    remaining shape/border fidelity and removal of Wicked's implicit disabled
    fade.
-3. **8C — authoring shell (active):** first-class Screen Editor path, canvas,
-   hierarchy, stable selection, transform/layout tools, Inspector, shared
-   Runtime preview, Save/Undo/Redo and guarded Return to Story Flow. Contract:
+3. **8C — authoring shell (accepted):** first-class Screen Editor path,
+   hierarchy, stable selection, exact shared Runtime preview, Screen-specific
+   history, transactional Save/Open and guarded Return to Story Flow. Contract:
    `docs/STORY_FLOW_GATE8C_SCREEN_EDITOR_SHELL.md`.
-4. **8D — creator controls:** image/background/text/button plus the broader
-   control catalogue, reusable components, state editing and typed data/action
-   binding.
-5. **8E — Story Flow and packaging acceptance:** named outcomes remain Story
-   Flow routing authority; save/reopen/Runtime/standalone parity is proven.
+4. **8D — creator controls (accepted):** direct move/resize, editable
+   image/background/text/button controls, complete visual states/typography,
+   governed resource selection, symbolic actions, focus order, parent/layout,
+   presets/components and creator Undo/Redo/Save/Open. Contract:
+   `docs/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md`.
+5. **8E — Story Flow and packaging acceptance (active):** Screen Button action
+   IDs remain symbolic while Story Flow exclusively owns destinations; invalid
+   action/route mappings are diagnosed in Studio, fail closed for reachable
+   Runtime Screens and are proven through save/reopen and packaged standalone
+   parity. Contract: `docs/STORY_FLOW_GATE8E_OUTCOME_PARITY.md`.
 
 ### Gate 9 — Journey View UI/UX implementation and scale
 
