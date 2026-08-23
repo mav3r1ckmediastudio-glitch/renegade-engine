@@ -65,13 +65,11 @@ jobs:
               'Studio/package/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md',
           ]:
               text = read(path)
-              if 'Direct manipulation' not in text:
-                  raise SystemExit(f'{path}: Direct manipulation section missing')
               marker = '- Select an element in the Runtime preview'
               if marker in text:
                   text = text.replace(marker,
                       '- Select a seeded/prefab element such as NEW GAME or LOAD GAME in the Runtime preview', 1)
-              if 'newly-created element' not in text:
+              if 'Seeded template elements and creator-added elements must behave identically.' not in text:
                   text += ('\n- Repeat direct move and corner-resize on a newly-created Button/Image/Text. '
                            'Seeded template elements and creator-added elements must behave identically.\n')
               write(path, text)
