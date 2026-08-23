@@ -8,6 +8,71 @@
 
 namespace renegade::studio
 {
+    void RenegadeStoryFlowGraphEditor::ResetTransientInteractionState() noexcept
+    {
+        pendingReconnectRouteId_.clear();
+        linkStartedAtPin_ = 0;
+        rejectNewLinkFromInput_ = false;
+
+        if (!initialized_ || !imnodesContext_)
+            return;
+
+        ImNodes::SetCurrentContext(imnodesContext_);
+
+        // Build the replacement before releasing the old context. Story Flow
+        // and the Renegade layout remain authoritative, so replacing ImNodes'
+        // transient editor state cannot lose semantic or persisted layout data.
+        ImNodesEditorContext* replacement = ImNodes::EditorContextCreate();
+        if (!replacement)
+            return;
+
+        if (editorContext_)
+            ImNodes::EditorContextFree(editorContext_);
+        editorContext_ = replacement;
+        ImNodes::EditorContextSet(editorContext_);
+
+        if (layout_)
+        {
+            ImNodes::EditorContextResetPanning(
+                ImVec2(layout_->canvas.panX, layout_->canvas.panY));
+        }
+
+        initializedNodePositions_.clear();
+        bindingsDirty_ = true;
+        observedUndoCount_ = static_cast<std::size_t>(-1);
+        observedRedoCount_ = static_cast<std::size_t>(-1);
+    }
+
+    void RenegadeStoryFlowGraphEditor::RecoverTransientInteractionIfIdle()
+    {
+        if (!initialized_ || !imnodesContext_ || !editorContext_)
+            return;
+
+        if (wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) ||
+            wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT) ||
+            wi::input::Down(wi::input::MOUSE_BUTTON_MIDDLE))
+        {
+            return;
+        }
+
+        ImNodes::SetCurrentContext(imnodesContext_);
+        ImNodes::EditorContextSet(editorContext_);
+
+        int startedPin = 0;
+        int activeAttribute = 0;
+        const bool linkStillLatched = ImNodes::IsLinkStarted(&startedPin);
+        const bool attributeStillLatched =
+            ImNodes::IsAnyAttributeActive(&activeAttribute);
+        const bool hostStateStillLatched =
+            !pendingReconnectRouteId_.empty() || linkStartedAtPin_ != 0;
+
+        if (!linkStillLatched && !attributeStillLatched && !hostStateStillLatched)
+            return;
+
+        ResetTransientInteractionState();
+        SetStatus("GRAPH INTERACTION RECOVERED // AUTHORITATIVE ROUTES PRESERVED");
+    }
+
     void RenegadeStoryFlowGraphEditor::ReconcileHostInteractions(
         const bool allowDeleteShortcut)
     {
@@ -23,10 +88,9 @@ namespace renegade::studio
         if (!pendingReconnectRouteId_.empty() &&
             !wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
         {
-            pendingReconnectRouteId_.clear();
-            linkStartedAtPin_ = 0;
-            rejectNewLinkFromInput_ = false;
+            ResetTransientInteractionState();
             SetStatus("REWIRE CANCELLED // ORIGINAL ROUTE RESTORED");
+            return;
         }
 
         if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))

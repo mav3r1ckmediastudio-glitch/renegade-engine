@@ -55,6 +55,14 @@ namespace renegade::studio
         // session.
         void ReconcileHostInteractions(bool allowDeleteShortcut);
 
+        // ImNodes click/link state is transient UI state, never Story Flow
+        // authority. Rebuild only the editor context when native controls take
+        // ownership or a completed gesture remains latched. Node positions,
+        // pan, selection authority and all Flow routes survive through the
+        // Renegade layout/session model.
+        void ResetTransientInteractionState() noexcept;
+        void RecoverTransientInteractionIfIdle();
+
     private:
         struct OutputBinding
         {

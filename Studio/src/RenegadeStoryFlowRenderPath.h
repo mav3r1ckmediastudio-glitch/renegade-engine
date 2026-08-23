@@ -16,9 +16,98 @@
 
 namespace renegade::studio
 {
-    // Story Flow is a first-class 2D RenderPath. wiGUI remains Renegade's
-    // production editor UI. Gate 9C embeds ImNodes only over the Graph canvas;
-    // Journey View remains the native 9B card/reel surface with no wires.
+    // Native wiGUI host for the ImNodes Graph canvas. This gives Graph a stable
+    // place in the same z/input stack as the rest of Story Flow instead of
+    // composing it as a second full-screen overlay after wiGUI.
+    class RenegadeStoryFlowGraphLayer final : public wi::gui::Widget
+    {
+    public:
+        void Create(RenegadeStoryFlowGraphEditor* editor)
+        {
+            editor_ = editor;
+            SetName("Story Flow Graph canvas");
+            SetShadowRadius(0.0f);
+            SetVisible(false);
+            SetEnabled(false);
+        }
+
+        void SetViewport(const XMFLOAT4& bounds)
+        {
+            bounds_ = bounds;
+            SetPos(XMFLOAT2(bounds.x, bounds.y));
+            SetSize(XMFLOAT2(
+                std::max(1.0f, bounds.z),
+                std::max(1.0f, bounds.w)));
+        }
+
+        [[nodiscard]] bool OwnsPointer() const noexcept
+        {
+            return IsVisible() && IsEnabled() && GetState() > wi::gui::IDLE;
+        }
+
+        void Update(const wi::Canvas& canvas, const float dt) override
+        {
+            wi::gui::Widget::Update(canvas, dt);
+            if (!IsVisible() || !IsEnabled() || force_disable)
+            {
+                state = wi::gui::IDLE;
+                return;
+            }
+
+            const XMFLOAT4 pointer = wi::input::GetPointer();
+            const bool inside = pointer.x >= bounds_.x &&
+                pointer.y >= bounds_.y &&
+                pointer.x < bounds_.x + bounds_.z &&
+                pointer.y < bounds_.y + bounds_.w;
+            if (!inside)
+            {
+                state = wi::gui::IDLE;
+                return;
+            }
+
+            const bool mouseDown =
+                wi::input::Down(wi::input::MOUSE_BUTTON_LEFT) ||
+                wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT) ||
+                wi::input::Down(wi::input::MOUSE_BUTTON_MIDDLE);
+            state = mouseDown ? wi::gui::ACTIVE : wi::gui::FOCUS;
+        }
+
+        void Render(
+            const wi::Canvas&,
+            const wi::graphics::CommandList cmd) const override
+        {
+            if (!IsVisible())
+                return;
+
+            // Opaque ownership of the Graph viewport means the retired legacy
+            // Graph projection can never leak through if ImNodes has no frame.
+            wi::image::Params background(
+                translation.x,
+                translation.y,
+                scale.x,
+                scale.y,
+                wi::Color(8, 12, 16, 255));
+            background.blendFlag = wi::enums::BLENDMODE_OPAQUE;
+            wi::image::Draw(nullptr, background, cmd);
+
+            if (editor_)
+                editor_->Render(cmd);
+        }
+
+        const char* GetWidgetTypeName() const override
+        {
+            return "RenegadeStoryFlowGraphLayer";
+        }
+
+    private:
+        RenegadeStoryFlowGraphEditor* editor_ = nullptr;
+        XMFLOAT4 bounds_ = {};
+    };
+
+    // Story Flow is a first-class 2D RenderPath. Journey remains the native 9B
+    // card/reel presentation. Graph has one visible and interactive canvas:
+    // ImNodes hosted by RenegadeStoryFlowGraphLayer. Native lifecycle/header/
+    // inspector controls remain wiGUI and always sit above that canvas.
     class RenegadeStoryFlowRenderPath final : public wi::RenderPath2D
     {
     public:
@@ -29,6 +118,7 @@ namespace renegade::studio
                 GetGUI().RemoveWidget(&deleteSelectionButton_);
                 GetGUI().RemoveWidget(&conditionEditor_);
                 GetGUI().RemoveWidget(&journeyChrome_);
+                GetGUI().RemoveWidget(&graphLayer_);
                 GetGUI().RemoveWidget(&workspace_);
             }
         }
@@ -41,6 +131,8 @@ namespace renegade::studio
             workspace_.Create();
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
+
+            graphLayer_.Create(&graphEditor_);
 
             journeyChrome_.Create();
             journeyChrome_.SetVisible(false);
@@ -62,14 +154,14 @@ namespace renegade::studio
                 workspace_.DeleteSelection();
             });
 
-            // Wicked paints widgets in reverse registration order. Keep the
-            // semantic workspace at the back, then native Journey chrome, then
-            // the modal condition editor. The compact delete command is added
-            // before these layers so it remains a real native control above the
-            // shared Story Flow surface in both Journey and Graph.
+            // GUI renders back-to-front. Before lifecycle controls are attached,
+            // establish the invariant order: workspace -> Graph -> Journey ->
+            // condition modal -> delete command. Attach() later moves only the
+            // three background layers behind lifecycle controls exactly once.
             GetGUI().AddWidget(&deleteSelectionButton_);
             GetGUI().AddWidget(&conditionEditor_);
             GetGUI().AddWidget(&journeyChrome_);
+            GetGUI().AddWidget(&graphLayer_);
             GetGUI().AddWidget(&workspace_);
 
             loaded_ = true;
@@ -90,6 +182,10 @@ namespace renegade::studio
             journeyChrome_.SetVisible(workspaceActive_);
             conditionEditor_.SetVisible(workspaceActive_);
             conditionEditor_.SetEnabled(workspaceActive_);
+            const bool graphActive = workspaceActive_ &&
+                workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
+            graphLayer_.SetVisible(graphActive);
+            graphLayer_.SetEnabled(graphActive);
             deleteSelectionButton_.SetVisible(
                 workspaceActive_ && workspace_.CanDeleteSelection());
             deleteSelectionButton_.SetEnabled(
@@ -101,11 +197,15 @@ namespace renegade::studio
             if (!loaded_)
                 return;
 
+            graphEditor_.ResetTransientInteractionState();
+            graphInputBlockedLastFrame_ = false;
             deleteSelectionButton_.SetVisible(false);
             deleteSelectionButton_.SetEnabled(false);
             conditionEditor_.SetVisible(false);
             conditionEditor_.SetEnabled(false);
             journeyChrome_.SetVisible(false);
+            graphLayer_.SetVisible(false);
+            graphLayer_.SetEnabled(false);
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
         }
@@ -121,66 +221,84 @@ namespace renegade::studio
             EnsureLoaded();
             LayoutWorkspace();
 
+            const bool graphBeforeUpdate = workspaceActive_ &&
+                workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
+            graphLayer_.SetVisible(graphBeforeUpdate);
+            graphLayer_.SetEnabled(graphBeforeUpdate);
+
             const bool canDeleteBeforeUpdate =
                 workspaceActive_ && workspace_.CanDeleteSelection();
             deleteSelectionButton_.SetVisible(canDeleteBeforeUpdate);
             deleteSelectionButton_.SetEnabled(canDeleteBeforeUpdate);
 
-            const XMFLOAT4 pointer = wi::input::GetPointer();
-            const bool graphActive = workspaceActive_ &&
-                workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
-            const bool graphOwnsPointer = graphActive &&
-                graphEditor_.ContainsPointer(pointer);
-
-            // The legacy Graph implementation is still part of the shared
-            // workspace because Journey/Inspector/header depend on that class.
-            // While the pointer is inside the Graph canvas, disable workspace
-            // canvas input for this frame so only ImNodes can interpret socket
-            // and link gestures. Header/Inspector input remains available when
-            // the pointer is outside the Graph viewport.
-            workspace_.SetEnabled(workspaceActive_ && !graphOwnsPointer);
+            // One stable wiGUI update. The shared workspace still contains the
+            // pre-9C Graph hit-testing code used by Journey/Inspector chrome,
+            // so suppress only that compatibility surface while the pointer is
+            // inside the ImNodes viewport. Header and Inspector remain native
+            // and available whenever the pointer is outside the Graph canvas.
+            const XMFLOAT4 pointerBeforeGui = wi::input::GetPointer();
+            const bool graphOwnsCanvas = graphBeforeUpdate &&
+                graphEditor_.ContainsPointer(pointerBeforeGui);
+            workspace_.SetEnabled(workspaceActive_ && !graphOwnsCanvas);
             wi::RenderPath2D::Update(dt);
             workspace_.SetEnabled(workspaceActive_);
 
-            // A native Wicked ComboBox opens down into the Graph viewport. The
-            // ImNodes canvas is composed after wiGUI, so rendering or accepting
-            // Graph input while that popup is active would cover/intercept the
-            // dropdown. Suspend the Graph overlay for the popup's active span;
-            // the synchronized legacy projection remains underneath for those
-            // few frames and the native dropdown stays authoritative.
-            bool nativePopupActive = false;
-            if (auto* widget = GetGUI().GetWidget("Story Flow Screen Template"))
-            {
-                nativePopupActive = widget->IsVisible() &&
-                    widget->GetState() >= wi::gui::ACTIVE;
-            }
+            const bool graphActive = workspaceActive_ &&
+                workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
+            graphLayer_.SetVisible(graphActive);
+            graphLayer_.SetEnabled(graphActive);
 
-            graphEditor_.Update(*this, dt, graphActive && !nativePopupActive);
-            if (graphActive && !nativePopupActive)
+            const XMFLOAT4 pointer = wi::input::GetPointer();
+            const bool pointerInsideGraph = graphActive &&
+                graphEditor_.ContainsPointer(pointer);
+            const bool graphInputBlocked = pointerInsideGraph &&
+                !graphLayer_.OwnsPointer();
+
+            if (graphActive)
             {
-                graphEditor_.ReconcileHostInteractions(!GetGUI().IsTyping());
+                if (graphInputBlocked)
+                {
+                    // A higher native control (notably the Screen template
+                    // dropdown) owns this pointer. Keep the last Graph frame
+                    // visible underneath it and cancel any transient Graph
+                    // gesture exactly once when ownership changes.
+                    if (!graphInputBlockedLastFrame_)
+                        graphEditor_.ResetTransientInteractionState();
+                }
+                else
+                {
+                    graphEditor_.Update(*this, dt, true);
+                    graphEditor_.ReconcileHostInteractions(!GetGUI().IsTyping());
+                    graphEditor_.RecoverTransientInteractionIfIdle();
+                }
             }
-            else if (workspaceActive_ &&
-                workspace_.ActiveView() == bridge::StoryFlowViewMode::Journey &&
-                !GetGUI().IsTyping() &&
-                wi::input::Press(wi::input::KEYBOARD_BUTTON_DELETE))
+            else
             {
-                workspace_.DeleteSelection();
+                if (graphBeforeUpdate)
+                    graphEditor_.ResetTransientInteractionState();
+                graphEditor_.Update(*this, dt, false);
+
+                if (workspaceActive_ &&
+                    workspace_.ActiveView() == bridge::StoryFlowViewMode::Journey &&
+                    !GetGUI().IsTyping() &&
+                    wi::input::Press(wi::input::KEYBOARD_BUTTON_DELETE))
+                {
+                    workspace_.DeleteSelection();
+                }
             }
+            graphInputBlockedLastFrame_ = graphInputBlocked;
 
             const bool canDeleteAfterUpdate =
                 workspaceActive_ && workspace_.CanDeleteSelection();
             deleteSelectionButton_.SetVisible(canDeleteAfterUpdate);
             deleteSelectionButton_.SetEnabled(canDeleteAfterUpdate);
-
-            if (lifecycleLayeringReady_)
-                PlaceJourneyLayersBehindLifecycleControls();
         }
 
         void Compose(const wi::graphics::CommandList cmd) const override
         {
+            // Graph is now a wiGUI layer and is composed in the same stable stack
+            // as native Story Flow controls. Never compose a second overlay here.
             wi::RenderPath2D::Compose(cmd);
-            graphEditor_.Render(cmd);
         }
 
         void SyncCanvas(const wi::Canvas& canvas)
@@ -198,6 +316,7 @@ namespace renegade::studio
             EnsureLoaded();
             workspace_.Bind(session, model, layout);
             graphEditor_.Bind(session, model, layout, &workspace_);
+            graphEditor_.ResetTransientInteractionState();
             conditionEditor_.Bind(session, model, &workspace_);
         }
 
@@ -208,8 +327,11 @@ namespace renegade::studio
                 conditionEditor_.Clear();
                 graphEditor_.Clear();
                 workspace_.Clear();
+                graphLayer_.SetVisible(false);
+                graphLayer_.SetEnabled(false);
                 deleteSelectionButton_.SetVisible(false);
                 deleteSelectionButton_.SetEnabled(false);
+                graphInputBlockedLastFrame_ = false;
             }
         }
 
@@ -227,18 +349,28 @@ namespace renegade::studio
 
         void SetWorkspaceActive(const bool active)
         {
+            const bool wasActive = workspaceActive_;
             workspaceActive_ = active;
             if (!loaded_)
                 return;
+
+            if (wasActive && !active)
+                graphEditor_.ResetTransientInteractionState();
 
             workspace_.SetVisible(active);
             workspace_.SetEnabled(active);
             journeyChrome_.SetVisible(active);
             conditionEditor_.SetVisible(active);
             conditionEditor_.SetEnabled(active);
+            const bool graphActive = active &&
+                workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
+            graphLayer_.SetVisible(graphActive);
+            graphLayer_.SetEnabled(graphActive);
             const bool canDelete = active && workspace_.CanDeleteSelection();
             deleteSelectionButton_.SetVisible(canDelete);
             deleteSelectionButton_.SetEnabled(canDelete);
+            if (!active)
+                graphInputBlockedLastFrame_ = false;
         }
 
         void OnLayoutChanged(std::function<void()> callback)
@@ -290,7 +422,18 @@ namespace renegade::studio
         void PlaceWorkspaceBehindLifecycleControls()
         {
             EnsureLoaded();
-            PlaceJourneyLayersBehindLifecycleControls();
+            if (lifecycleLayeringReady_)
+                return;
+
+            auto& gui = GetGUI();
+            // Leave condition/delete at the front. Move only background/shared
+            // layers after the lifecycle widgets that Attach() has registered.
+            gui.RemoveWidget(&journeyChrome_);
+            gui.RemoveWidget(&graphLayer_);
+            gui.RemoveWidget(&workspace_);
+            gui.AddWidget(&journeyChrome_);
+            gui.AddWidget(&graphLayer_);
+            gui.AddWidget(&workspace_);
             lifecycleLayeringReady_ = true;
         }
 
@@ -310,20 +453,6 @@ namespace renegade::studio
         }
 
     private:
-        void PlaceJourneyLayersBehindLifecycleControls()
-        {
-            if (!loaded_)
-                return;
-
-            auto& gui = GetGUI();
-            gui.RemoveWidget(&conditionEditor_);
-            gui.RemoveWidget(&journeyChrome_);
-            gui.RemoveWidget(&workspace_);
-            gui.AddWidget(&conditionEditor_);
-            gui.AddWidget(&journeyChrome_);
-            gui.AddWidget(&workspace_);
-        }
-
         void LayoutWorkspace()
         {
             if (!loaded_)
@@ -352,13 +481,15 @@ namespace renegade::studio
                 RenegadeStoryFlowJourneyChrome::PreferredInspectorWidth,
                 workspaceWidth * 0.42f);
             const float graphWidth = std::max(1.0f, workspaceWidth - inspectorWidth);
-            graphEditor_.SetViewport(XMFLOAT4(
+            const XMFLOAT4 graphViewport(
                 workspaceLeft,
                 RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight,
                 graphWidth,
                 std::max(
                     1.0f,
-                    height - RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight)));
+                    height - RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight));
+            graphEditor_.SetViewport(graphViewport);
+            graphLayer_.SetViewport(graphViewport);
 
             deleteSelectionButton_.SetPos(XMFLOAT2(
                 workspaceLeft + graphWidth + std::max(0.0f, inspectorWidth - 88.0f),
@@ -370,12 +501,14 @@ namespace renegade::studio
 
         RenegadeStoryFlowWorkspace workspace_;
         RenegadeStoryFlowGraphEditor graphEditor_;
+        RenegadeStoryFlowGraphLayer graphLayer_;
         RenegadeStoryFlowJourneyChrome journeyChrome_;
         RenegadeStoryFlowConditionEditor conditionEditor_;
         RenegadeButton deleteSelectionButton_;
         bool loaded_ = false;
         bool workspaceActive_ = false;
         bool lifecycleLayeringReady_ = false;
+        bool graphInputBlockedLastFrame_ = false;
         float lastLogicalWidth_ = -1.0f;
         float lastLogicalHeight_ = -1.0f;
     };

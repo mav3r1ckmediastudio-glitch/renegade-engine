@@ -11,9 +11,9 @@
 
 namespace renegade::studio
 {
-    // Small native Gate 4 content-lifecycle surface hosted by Story Flow.
-    // It owns no semantic state: every action delegates to the lifecycle
-    // coordinator and refreshes from the authoritative Flow session afterward.
+    // Native Story Flow Level lifecycle surface. Creation/adoption always uses
+    // the text currently visible in the field; it never requires focus loss or
+    // an implicit text commit before the creator presses the action button.
     class RenegadeStoryFlowLevelPanel final : public wi::gui::Widget
     {
     public:
@@ -32,14 +32,14 @@ namespace renegade::studio
             newLevel_.SetText("+ NEW LEVEL");
             newLevel_.OnClick([this](const wi::gui::EventArgs&)
             {
-                if (addNew_) addNew_(levelName_.GetValue());
+                if (addNew_) addNew_(levelName_.GetCurrentInputValue());
             });
 
             existingLevel_.Create("Story Flow Add Existing Level");
             existingLevel_.SetText("+ EXISTING...");
             existingLevel_.OnClick([this](const wi::gui::EventArgs&)
             {
-                if (addExisting_) addExisting_(levelName_.GetValue());
+                if (addExisting_) addExisting_(levelName_.GetCurrentInputValue());
             });
 
             openLevel_.Create("Story Flow Open Level");

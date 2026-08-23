@@ -11,8 +11,9 @@
 
 namespace renegade::studio
 {
-    // Gate 5C native Story Flow surface for governed Screen creation and the
-    // explicit Screen Editor handoff. The visual editor itself remains Gate 8.
+    // Native Story Flow surface for governed Screen creation and explicit
+    // Screen Editor handoff. Creation always consumes the live text buffer so
+    // clicking + SCREEN never depends on a prior focus/commit transition.
     class RenegadeStoryFlowScreenPanel final : public wi::gui::Widget
     {
     public:
@@ -50,13 +51,14 @@ namespace renegade::studio
                 "Create a governed Runtime Screen document and add it to Story Flow atomically.");
             newScreen_.OnClick([this](const wi::gui::EventArgs&)
             {
-                if (addNew_) addNew_(screenName_.GetValue(), selectedTemplate_);
+                if (addNew_)
+                    addNew_(screenName_.GetCurrentInputValue(), selectedTemplate_);
             });
 
             openScreen_.Create("Story Flow Open Screen");
             openScreen_.SetText("OPEN SCREEN");
             openScreen_.SetTooltip(
-                "Resolve this Screen by stable identity and prepare the Screen Editor handoff. The visual editor arrives in Gate 8.");
+                "Resolve this Screen by stable identity and prepare the Screen Editor handoff.");
             openScreen_.OnClick([this](const wi::gui::EventArgs&)
             {
                 if (open_ && !selectedScreenNodeId_.empty())
