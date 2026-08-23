@@ -5,7 +5,6 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 #include <WickedEngine.h>
@@ -21,6 +20,8 @@
 
 namespace renegade::studio
 {
+    class RenegadeStoryFlowGraphEditor;
+
     // Native synchronized Journey/Graph authoring surface. Semantic edits are
     // delegated to StoryFlowAuthoringSession; this widget owns presentation
     // state, shared selection, activation and native editor controls only.
@@ -74,35 +75,6 @@ namespace renegade::studio
                 : bridge::StoryFlowViewMode::Journey;
         }
 
-        // Gate 9C routing overlay bridge. These are deliberately thin calls
-        // into the established workspace/session path so visual wires and the
-        // Inspector remain one semantic/history system rather than parallel
-        // route authoring implementations.
-        void SelectRouteFromRouting(const bridge::StableId& routeId)
-        {
-            SelectRoute(routeId);
-        }
-
-        void BeginGraphConnectFromRouting()
-        {
-            BeginConnect();
-        }
-
-        [[nodiscard]] bool IsConnectionModeActive() const noexcept
-        {
-            return !connectionSourceNodeId_.empty();
-        }
-
-        [[nodiscard]] bool RefreshAfterExternalRoutingChange()
-        {
-            return RefreshPresentationAfterSemanticChange();
-        }
-
-        void SetRoutingStatus(std::string message)
-        {
-            SetStatus(std::move(message));
-        }
-
         void Update(const wi::Canvas& canvas, float dt) override;
         void Render(
             const wi::Canvas& canvas,
@@ -113,6 +85,8 @@ namespace renegade::studio
         }
 
     private:
+        friend class RenegadeStoryFlowGraphEditor;
+
         static constexpr float InspectorWidth = 320.0f;
 
         [[nodiscard]] const bridge::StoryFlowNodeLayout* FindLayout(
