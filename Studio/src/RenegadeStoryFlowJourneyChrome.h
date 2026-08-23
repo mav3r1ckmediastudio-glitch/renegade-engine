@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <string>
+#include <utility>
 
 #include <WickedEngine.h>
 
@@ -26,7 +27,7 @@ namespace renegade::studio
             navigationRail_.Create("Story Flow navigation rail", true, "RENEGADE");
             topBarGuide_.Create("Story Flow top bar", false, {});
             journeyViewport_.Create("Story Flow Journey viewport", false, {});
-            inspector_.Create("Story Flow Inspector frame", false, "INSPECTOR");
+            inspector_.Create("Story Flow Inspector frame", false, {});
             overviewHost_.Create("Story Flow overview host", false, "STORY OVERVIEW");
             zoomHost_.Create("Story Flow zoom host", false, {});
 
@@ -114,8 +115,10 @@ namespace renegade::studio
             if (!IsVisible())
                 return;
 
-            ApplyScissor(canvas, scissorRect, cmd);
-
+            // The parent chrome spans the whole Story Flow surface, so there is
+            // no child scissor dependency. This keeps the region objects safe
+            // even though they are composed and rendered by the chrome rather
+            // than individually registered with Wicked's GUI manager.
             navigationRail_.Render(canvas, cmd);
             topBarGuide_.Render(canvas, cmd);
             journeyViewport_.Render(canvas, cmd);
@@ -137,7 +140,6 @@ namespace renegade::studio
 
     private:
         static constexpr wi::Color RailSurface = wi::Color(7, 10, 12, 255);
-        static constexpr wi::Color PanelSurface = wi::Color(13, 19, 23, 255);
         static constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
         static constexpr wi::Color Text = wi::Color(239, 242, 243, 255);
         static constexpr wi::Color Muted = wi::Color(122, 135, 142, 255);
@@ -193,12 +195,11 @@ namespace renegade::studio
             }
 
             void Render(
-                const wi::Canvas& canvas,
+                const wi::Canvas&,
                 const wi::graphics::CommandList cmd) const override
             {
                 if (!IsVisible())
                     return;
-                ApplyScissor(canvas, scissorRect, cmd);
 
                 if (filled_)
                 {
@@ -274,12 +275,11 @@ namespace renegade::studio
             }
 
             void Render(
-                const wi::Canvas& canvas,
+                const wi::Canvas&,
                 const wi::graphics::CommandList cmd) const override
             {
                 if (!IsVisible())
                     return;
-                ApplyScissor(canvas, scissorRect, cmd);
 
                 if (active_)
                 {
