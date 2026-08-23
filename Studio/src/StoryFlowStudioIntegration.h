@@ -515,6 +515,7 @@ namespace renegade::studio
                 const std::string levelName = Trim(pendingLevelName_);
                 if (levelName.empty())
                 {
+                    storyFlow.SetExternalStatus("LEVEL CREATE REJECTED // LEVEL NAME REQUIRED");
                     ReportSemanticFailure("Add New Level requires a Level name.");
                     return;
                 }
@@ -528,10 +529,12 @@ namespace renegade::studio
                 request.scenePathHint = "Content/Scenes/" +
                     SafeFileStem(levelName, "Level") + ".wiscene";
 
+                storyFlow.SetExternalStatus("CREATING LEVEL // " + levelName);
                 bridge::StoryFlowLevelLifecycleService service;
                 const auto result = service.CreateNewLevel(request);
                 if (!result.succeeded)
                 {
+                    storyFlow.SetExternalStatus("LEVEL CREATE FAILED // " + result.message);
                     ReportSemanticFailure("Add New Level failed: " + result.message);
                     return;
                 }
@@ -549,11 +552,13 @@ namespace renegade::studio
                 const std::string levelName = Trim(pendingLevelName_);
                 if (levelName.empty())
                 {
+                    storyFlow.SetExternalStatus("LEVEL ADOPT REJECTED // LEVEL NAME REQUIRED");
                     ReportSemanticFailure("Add Existing Level requires a Level name.");
                     return;
                 }
                 if (pendingExistingScenePath_.empty())
                 {
+                    storyFlow.SetExternalStatus("LEVEL ADOPT FAILED // WISCENE PATH MISSING");
                     ReportSemanticFailure("Add Existing Level did not receive a WISCENE path.");
                     return;
                 }
@@ -567,10 +572,12 @@ namespace renegade::studio
                 request.scenePath = pendingExistingScenePath_;
                 pendingExistingScenePath_.clear();
 
+                storyFlow.SetExternalStatus("ADOPTING LEVEL // " + levelName);
                 bridge::StoryFlowLevelReferenceService service;
                 const auto result = service.AddExistingLevel(request);
                 if (!result.succeeded)
                 {
+                    storyFlow.SetExternalStatus("LEVEL ADOPT FAILED // " + result.message);
                     ReportSemanticFailure("Add Existing Level failed: " + result.message);
                     return;
                 }
@@ -593,6 +600,7 @@ namespace renegade::studio
                     pendingLevelNodeId_);
                 if (!resolved.succeeded)
                 {
+                    storyFlow.SetExternalStatus("OPEN LEVEL FAILED // " + resolved.message);
                     ReportSemanticFailure("Open Level failed: " + resolved.message);
                     pendingLevelNodeId_.clear();
                     return;
@@ -601,6 +609,8 @@ namespace renegade::studio
                 FlushLayout(true);
                 if (!session.LoadScene(resolved.resolvedPath))
                 {
+                    storyFlow.SetExternalStatus(
+                        "OPEN LEVEL FAILED // " + session.Scenes().LastError());
                     ReportSemanticFailure(
                         "Open Level failed while loading WISCENE: " +
                         session.Scenes().LastError());
@@ -638,6 +648,7 @@ namespace renegade::studio
                 const std::string screenName = Trim(pendingScreenName_);
                 if (screenName.empty())
                 {
+                    storyFlow.SetExternalStatus("SCREEN CREATE REJECTED // SCREEN NAME REQUIRED");
                     ReportSemanticFailure("Add Screen requires a Screen name.");
                     return;
                 }
@@ -652,10 +663,12 @@ namespace renegade::studio
                     SafeFileStem(screenName, "Screen") + ".renegade-screen";
                 request.screenTemplate = pendingScreenTemplate_;
 
+                storyFlow.SetExternalStatus("CREATING SCREEN // " + screenName);
                 bridge::StoryFlowScreenLifecycleService service;
                 const auto result = service.CreateNewScreen(request);
                 if (!result.succeeded)
                 {
+                    storyFlow.SetExternalStatus("SCREEN CREATE FAILED // " + result.message);
                     ReportSemanticFailure("Add Screen failed: " + result.message);
                     return;
                 }
@@ -679,6 +692,7 @@ namespace renegade::studio
                     pendingScreenNodeId_);
                 if (!resolved.succeeded)
                 {
+                    storyFlow.SetExternalStatus("OPEN SCREEN FAILED // " + resolved.message);
                     ReportSemanticFailure("Open Screen failed: " + resolved.message);
                     pendingScreenNodeId_.clear();
                     return;
@@ -688,6 +702,7 @@ namespace renegade::studio
                 std::string error;
                 if (!BuildStoryFlowScreenEditorHandoff(resolved, handoff, error))
                 {
+                    storyFlow.SetExternalStatus("OPEN SCREEN FAILED // " + error);
                     ReportSemanticFailure("Open Screen handoff failed: " + error);
                     pendingScreenNodeId_.clear();
                     return;
@@ -759,16 +774,32 @@ namespace renegade::studio
             if (!authoringSession_.Open(
                     authoringSession_.FilePath(), project.projectId, error))
             {
-                ReportSemanticFailure(
-                    "Content transaction committed but Story Flow reload failed: " + error);
+                const std::string message =
+                    "Content transaction committed but Story Flow reload failed: " + error;
+                storyFlow.SetExternalStatus("CONTENT RELOAD FAILED // " + error);
+                ReportSemanticFailure(message);
                 return false;
             }
             if (!model_.Load(authoringSession_.Document(), project.projectId, error))
             {
-                ReportSemanticFailure(
-                    "Content transaction committed but Story Flow model reload failed: " + error);
+                const std::string message =
+                    "Content transaction committed but Story Flow model reload failed: " + error;
+                storyFlow.SetExternalStatus("CONTENT MODEL RELOAD FAILED // " + error);
+                ReportSemanticFailure(message);
                 return false;
             }
+
+            const auto* createdNode = model_.FindNode(createdNodeId);
+            if (!createdNode)
+            {
+                storyFlow.SetExternalStatus(
+                    "CONTENT CREATE FAILED // COMMITTED NODE MISSING AFTER RELOAD");
+                ReportSemanticFailure(
+                    "Content transaction reported success but the created Story Flow node was missing after reload: " +
+                    createdNodeId);
+                return false;
+            }
+
             if (!bridge::ReconcileStoryFlowLayout(
                     model_, project.projectId, project.startupFlowId, layout_, error))
             {
@@ -781,12 +812,11 @@ namespace renegade::studio
             layoutDirty_ = true;
             FlushLayout(true);
 
-            const auto* node = model_.FindNode(createdNodeId);
             levelPanel_.SetSelectedLevelNode(
-                node && node->kind == bridge::FlowNodeKind::Level
+                createdNode->kind == bridge::FlowNodeKind::Level
                     ? createdNodeId : bridge::StableId{});
             screenPanel_.SetSelectedScreenNode(
-                node && node->kind == bridge::FlowNodeKind::Screen
+                createdNode->kind == bridge::FlowNodeKind::Screen
                     ? createdNodeId : bridge::StableId{});
             return true;
         }

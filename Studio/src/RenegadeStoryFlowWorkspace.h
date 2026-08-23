@@ -20,6 +20,8 @@
 
 namespace renegade::studio
 {
+    class RenegadeStoryFlowGraphEditor;
+
     // Native synchronized Journey/Graph authoring surface. Semantic edits are
     // delegated to StoryFlowAuthoringSession; this widget owns presentation
     // state, shared selection, activation and native editor controls only.
@@ -52,6 +54,11 @@ namespace renegade::studio
         void OnSemanticChanged(std::function<void()> callback);
         void SetExternalStatus(std::string message);
 
+        // Shared Journey/Graph deletion entry point. Game Start remains
+        // protected by the authoritative authoring-session invariant.
+        [[nodiscard]] bool CanDeleteSelection() const noexcept;
+        void DeleteSelection();
+
         [[nodiscard]] const bridge::StableId& SelectedNodeId() const noexcept
         {
             return selectedNodeId_;
@@ -83,6 +90,8 @@ namespace renegade::studio
         }
 
     private:
+        friend class RenegadeStoryFlowGraphEditor;
+
         static constexpr float InspectorWidth = 320.0f;
 
         [[nodiscard]] const bridge::StoryFlowNodeLayout* FindLayout(

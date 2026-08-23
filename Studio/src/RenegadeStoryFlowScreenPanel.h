@@ -11,8 +11,9 @@
 
 namespace renegade::studio
 {
-    // Gate 5C native Story Flow surface for governed Screen creation and the
-    // explicit Screen Editor handoff. The visual editor itself remains Gate 8.
+    // Native Story Flow surface for governed Screen creation and explicit
+    // Screen Editor handoff. The panel owns the user's live draft name so
+    // creation never depends on a TextInputField focus/commit transition.
     class RenegadeStoryFlowScreenPanel final : public wi::gui::Widget
     {
     public:
@@ -26,6 +27,14 @@ namespace renegade::studio
             screenName_.SetPlaceholder("Screen name...");
             screenName_.SetValue("");
             screenName_.SetCancelInputEnabled(false);
+            screenName_.OnInput([this](const wi::gui::EventArgs& args)
+            {
+                screenNameDraft_ = args.sValue;
+            });
+            screenName_.OnInputAccepted([this](const wi::gui::EventArgs& args)
+            {
+                screenNameDraft_ = args.sValue;
+            });
 
             screenTemplate_.Create("Story Flow Screen Template");
             screenTemplate_.AddItem("CUSTOM", static_cast<int>(bridge::StoryFlowScreenTemplate::Custom));
@@ -50,13 +59,16 @@ namespace renegade::studio
                 "Create a governed Runtime Screen document and add it to Story Flow atomically.");
             newScreen_.OnClick([this](const wi::gui::EventArgs&)
             {
-                if (addNew_) addNew_(screenName_.GetValue(), selectedTemplate_);
+                if (!addNew_) return;
+                const std::string live = screenName_.GetCurrentInputValue();
+                addNew_(live == screenName_.GetValue() ? screenNameDraft_ : live,
+                    selectedTemplate_);
             });
 
             openScreen_.Create("Story Flow Open Screen");
             openScreen_.SetText("OPEN SCREEN");
             openScreen_.SetTooltip(
-                "Resolve this Screen by stable identity and prepare the Screen Editor handoff. The visual editor arrives in Gate 8.");
+                "Resolve this Screen by stable identity and prepare the Screen Editor handoff.");
             openScreen_.OnClick([this](const wi::gui::EventArgs&)
             {
                 if (open_ && !selectedScreenNodeId_.empty())
@@ -142,6 +154,7 @@ namespace renegade::studio
         RenegadeComboBox screenTemplate_;
         RenegadeButton newScreen_;
         RenegadeButton openScreen_;
+        std::string screenNameDraft_;
         bridge::StableId selectedScreenNodeId_;
         bridge::StoryFlowScreenTemplate selectedTemplate_ =
             bridge::StoryFlowScreenTemplate::Title;

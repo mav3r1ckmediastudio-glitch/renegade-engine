@@ -44,8 +44,16 @@ execute_process(
     OUTPUT_VARIABLE RENEGADE_WICKED_REVISION
     OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+execute_process(
+    COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/ThirdParty/imnodes"
+    RESULT_VARIABLE RENEGADE_IMNODES_REVISION_RESULT
+    OUTPUT_VARIABLE RENEGADE_IMNODES_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
 string(LENGTH "${RENEGADE_SOURCE_REVISION}" RENEGADE_SOURCE_REVISION_LENGTH)
 string(LENGTH "${RENEGADE_WICKED_REVISION}" RENEGADE_WICKED_REVISION_LENGTH)
+string(LENGTH "${RENEGADE_IMNODES_REVISION}" RENEGADE_IMNODES_REVISION_LENGTH)
 if(NOT RENEGADE_REVISION_RESULT EQUAL 0 OR
    NOT RENEGADE_SOURCE_REVISION_LENGTH EQUAL 40 OR
    NOT RENEGADE_SOURCE_REVISION MATCHES "^[0-9a-f]+$")
@@ -56,14 +64,29 @@ if(NOT RENEGADE_WICKED_REVISION_RESULT EQUAL 0 OR
    NOT RENEGADE_WICKED_REVISION MATCHES "^[0-9a-f]+$")
     message(FATAL_ERROR "Renegade Studio requires the exact pinned Wicked revision for LP06 builds.")
 endif()
+if(NOT RENEGADE_IMNODES_REVISION_RESULT EQUAL 0 OR
+   NOT RENEGADE_IMNODES_REVISION_LENGTH EQUAL 40 OR
+   NOT RENEGADE_IMNODES_REVISION MATCHES "^[0-9a-f]+$")
+    message(FATAL_ERROR "Renegade Studio requires the exact pinned ImNodes revision for Graph Flow.")
+endif()
 
 add_executable(RenegadeStudio WIN32
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/DummyVisualizer.cpp"
     "${CMAKE_SOURCE_DIR}/WickedEngine/Editor/Translator.cpp"
+    "${CMAKE_SOURCE_DIR}/WickedEngine/Samples/Example_ImGui/ImGui/imgui.cpp"
+    "${CMAKE_SOURCE_DIR}/WickedEngine/Samples/Example_ImGui/ImGui/imgui_draw.cpp"
+    "${CMAKE_SOURCE_DIR}/WickedEngine/Samples/Example_ImGui/ImGui/imgui_tables.cpp"
+    "${CMAKE_SOURCE_DIR}/WickedEngine/Samples/Example_ImGui/ImGui/imgui_widgets.cpp"
+    "${CMAKE_SOURCE_DIR}/ThirdParty/imnodes/imnodes.cpp"
     src/CreatorAssetDragPreview.cpp
+    src/RenegadeImGuiBridge.cpp
+    src/RenegadeImGuiBridge.h
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioChrome.h
+    src/RenegadeStoryFlowGraphEditor.cpp
+    src/RenegadeStoryFlowGraphEditor.h
+    src/RenegadeStoryFlowGate9COwnerRecovery.cpp
     src/RenegadeStoryFlowWorkspace.cpp
     src/RenegadeStoryFlowWorkspace.h
     src/RenegadeScreenEditorWorkspace.cpp
@@ -99,6 +122,8 @@ add_dependencies(RenegadeStudio RenegadeTerrainSurfacePacker)
 target_include_directories(RenegadeStudio
     PRIVATE
         "${CMAKE_SOURCE_DIR}/WickedEngine/Editor"
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Samples/Example_ImGui/ImGui"
+        "${CMAKE_SOURCE_DIR}/ThirdParty/imnodes"
 )
 
 target_link_libraries(RenegadeStudio
@@ -120,6 +145,7 @@ target_compile_definitions(RenegadeStudio
         _UNICODE
         RENEGADE_SOURCE_REVISION="${RENEGADE_SOURCE_REVISION}"
         RENEGADE_WICKED_REVISION="${RENEGADE_WICKED_REVISION}"
+        RENEGADE_IMNODES_REVISION="${RENEGADE_IMNODES_REVISION}"
 )
 
 target_compile_options(RenegadeStudio
@@ -162,6 +188,12 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeGridPS.hlsl"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeGridPS.hlsl"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeImGuiVS.hlsl"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeImGuiVS.hlsl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeImGuiPS.hlsl"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeImGuiPS.hlsl"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -176,6 +208,9 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/third_party_software.txt"
         "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs/WickedEngine-third_party_software.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/ThirdParty/imnodes/LICENSE.md"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/BuildInputs/ImNodes-LICENSE.md"
     COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_ao.tga"
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/terrain/default_grass/default_grass_roughness.tga"
