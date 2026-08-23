@@ -309,6 +309,7 @@ namespace renegade::screen
         std::unordered_map<bridge::StableId, bridge::ScreenRect> logicalRects;
         bridge::ScreenRect viewport;
         bool hasViewport = false;
+        bool inputEnabled = true;
         bool loaded = false;
     };
 
@@ -362,6 +363,7 @@ namespace renegade::screen
             surface->authored = widget;
             surface->SetVisible(widget.visible);
             surface->SetEnabled(
+                impl_->inputEnabled &&
                 widget.kind == bridge::ScreenWidgetKind::Button && widget.enabled);
             surface->SetText(widget.text);
             surface->SetShadowRadius(0.0f);
@@ -487,6 +489,23 @@ namespace renegade::screen
         }
     }
 
+    void ScreenRenderer::SetInputEnabled(const bool enabled) noexcept
+    {
+        impl_->inputEnabled = enabled;
+        for (const auto& [id, surface] : impl_->byId)
+        {
+            surface->SetEnabled(
+                enabled &&
+                surface->authored.kind == bridge::ScreenWidgetKind::Button &&
+                surface->authored.enabled);
+        }
+    }
+
+    bool ScreenRenderer::IsInputEnabled() const noexcept
+    {
+        return impl_->inputEnabled;
+    }
+
     void ScreenRenderer::SetFocusedWidget(const bridge::StableId& widgetId)
     {
         for (const auto& [id, surface] : impl_->byId)
@@ -504,6 +523,7 @@ namespace renegade::screen
         found->second->authored.enabled = enabled;
         found->second->SetVisible(visible);
         found->second->SetEnabled(
+            impl_->inputEnabled &&
             found->second->authored.kind == bridge::ScreenWidgetKind::Button &&
             enabled);
     }

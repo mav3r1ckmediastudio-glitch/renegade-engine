@@ -25,6 +25,16 @@ int main()
 {
     using namespace renegade;
 
+    screen::ScreenRenderer inputModeProbe;
+    if (!inputModeProbe.IsInputEnabled())
+        return Fail("Screen renderer Runtime input must default enabled");
+    inputModeProbe.SetInputEnabled(false);
+    if (inputModeProbe.IsInputEnabled())
+        return Fail("Screen renderer authoring input suppression did not latch");
+    inputModeProbe.SetInputEnabled(true);
+    if (!inputModeProbe.IsInputEnabled())
+        return Fail("Screen renderer input could not be restored for Runtime use");
+
     bridge::ScreenDocument document;
     document.envelope = bridge::CreateDocumentEnvelope(
         bridge::GenerateStableId(),

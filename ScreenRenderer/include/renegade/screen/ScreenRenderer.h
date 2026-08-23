@@ -94,6 +94,11 @@ namespace renegade::screen
         void SetViewport(const bridge::ScreenRect& viewport) noexcept;
         void ClearViewport() noexcept;
         void ApplyLayout(wi::RenderPath2D& renderPath);
+        // Runtime keeps renderer surfaces interactive. Screen Editor disables
+        // only GUI input ownership so the authoring workspace exclusively owns
+        // selection, drag and resize while drawing the same authored surfaces.
+        void SetInputEnabled(bool enabled) noexcept;
+        [[nodiscard]] bool IsInputEnabled() const noexcept;
         void SetFocusedWidget(const bridge::StableId& widgetId);
         void SetWidgetState(
             const bridge::StableId& widgetId,

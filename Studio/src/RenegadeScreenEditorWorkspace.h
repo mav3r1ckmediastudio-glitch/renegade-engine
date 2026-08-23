@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -11,9 +12,9 @@
 
 namespace renegade::studio
 {
-    // Gate 8C's visible Screen authoring shell. It owns editor selection and
-    // controls only; document mutations stay in ScreenAuthoringSession and the
-    // central preview is always the shared Gate 8B ScreenRenderer.
+    // Native Screen authoring workspace. Gate 8C established selection,
+    // Inspector editing and shared Runtime preview; Gate 8D adds creator-level
+    // element transactions while keeping ScreenAuthoringSession authoritative.
     class RenegadeScreenEditorWorkspace final : public wi::gui::Widget
     {
     public:
@@ -24,6 +25,43 @@ namespace renegade::studio
             screen::ScreenRenderer* renderer);
         void Clear() noexcept;
         void SelectWidget(const bridge::StableId& widgetId);
+        void SetInspectorSuppressed(const bool suppressed) noexcept
+        {
+            if (inspectorSuppressed_ == suppressed) return;
+            inspectorSuppressed_ = suppressed;
+
+            for (wi::gui::Widget* widget : {
+                    static_cast<wi::gui::Widget*>(&nameInput_),
+                    static_cast<wi::gui::Widget*>(&textInput_),
+                    static_cast<wi::gui::Widget*>(&applyButton_),
+                    static_cast<wi::gui::Widget*>(&visibleButton_),
+                    static_cast<wi::gui::Widget*>(&enabledButton_)})
+            {
+                widget->SetEnabled(!suppressed);
+                if (suppressed) widget->SetVisible(false);
+            }
+
+            // The accepted 8C workspace still updates its controls each frame.
+            // Guard every basic-Inspector mutation callback as well as disabling
+            // the widgets so an advanced-panel click can never create a second
+            // mutation through a covered 8C control.
+            applyButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                if (!inspectorSuppressed_) ApplySelectedWidget();
+            });
+            visibleButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                if (!inspectorSuppressed_) ToggleVisible();
+            });
+            enabledButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                if (!inspectorSuppressed_) ToggleEnabled();
+            });
+            textInput_.OnInputAccepted([this](const wi::gui::EventArgs&)
+            {
+                if (!inspectorSuppressed_) ApplySelectedWidget();
+            });
+        }
 
         void OnDocumentChanged(std::function<void()> callback);
         void OnReturnRequested(std::function<void()> callback);
@@ -32,6 +70,10 @@ namespace renegade::studio
         [[nodiscard]] const bridge::StableId& SelectedWidgetId() const noexcept
         {
             return selectedWidgetId_;
+        }
+        [[nodiscard]] bool IsInspectorSuppressed() const noexcept
+        {
+            return inspectorSuppressed_;
         }
 
         void Update(const wi::Canvas& canvas, float dt) override;
@@ -58,9 +100,23 @@ namespace renegade::studio
         void RedoScreen();
         void ToggleVisible();
         void ToggleEnabled();
+        void CreateElement(bridge::ScreenWidgetKind kind, bool background);
+        void DuplicateSelectedWidget();
+        void DeleteSelectedWidget();
+        void MoveSelectedWidgetToBack();
+        void MoveSelectedWidgetToFront();
         void ReturnToStoryFlow();
         void RefreshAfterMutation(std::string status);
         void SetStatus(std::string status);
+
+        enum class DirectManipulationMode : std::uint8_t
+        {
+            None, Move, ResizeTopLeft, ResizeTopRight, ResizeBottomLeft, ResizeBottomRight,
+        };
+        [[nodiscard]] DirectManipulationMode HitResizeHandle(const XMFLOAT4& pointer) const noexcept;
+        void BeginDirectManipulation(DirectManipulationMode mode, const XMFLOAT4& pointer);
+        void UpdateDirectManipulation(const XMFLOAT4& pointer);
+        void EndDirectManipulation();
 
         bridge::ScreenAuthoringSession* session_ = nullptr;
         screen::ScreenRenderer* renderer_ = nullptr;
@@ -71,19 +127,30 @@ namespace renegade::studio
         float width_ = 1.0f;
         float height_ = 1.0f;
         std::size_t hierarchyScroll_ = 0;
+        bool inspectorSuppressed_ = false;
+        DirectManipulationMode directManipulationMode_ = DirectManipulationMode::None;
+        XMFLOAT2 directManipulationStartPointer_ = {};
+        bridge::ScreenRect directManipulationStartRect_;
+        float directManipulationScaleX_ = 1.0f;
+        float directManipulationScaleY_ = 1.0f;
+        bool directManipulationChanged_ = false;
 
         RenegadeButton returnButton_;
         RenegadeButton saveButton_;
         RenegadeButton undoButton_;
         RenegadeButton redoButton_;
+        RenegadeButton addTextButton_;
+        RenegadeButton addButtonButton_;
+        RenegadeButton addImageButton_;
+        RenegadeButton addBackgroundButton_;
+        RenegadeButton duplicateButton_;
+        RenegadeButton deleteButton_;
+        RenegadeButton backButton_;
+        RenegadeButton frontButton_;
         RenegadeButton applyButton_;
         RenegadeButton visibleButton_;
         RenegadeButton enabledButton_;
         RenegadeTextInputField nameInput_;
         RenegadeTextInputField textInput_;
-        RenegadeTextInputField xInput_;
-        RenegadeTextInputField yInput_;
-        RenegadeTextInputField widthInput_;
-        RenegadeTextInputField heightInput_;
     };
 }
