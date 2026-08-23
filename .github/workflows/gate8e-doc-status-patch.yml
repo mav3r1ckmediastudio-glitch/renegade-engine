@@ -1,0 +1,82 @@
+name: Gate 8E one-shot documentation status refresh
+
+on:
+  push:
+    branches:
+      - feature/story-flow-gate8e-outcome-parity
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/story-flow-gate8e-outcome-parity
+          fetch-depth: 0
+      - shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8', newline='\n')
+          def once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one anchor, found {count}')
+              return text.replace(old, new, 1)
+
+          path = 'docs/ROADMAP.md'
+          text = read(path)
+          text = once(text,
+              '''**Current authoritative main:**\n`fe5871091ccb74a417081c4e4abe38ed86010f53`\n(`Story Flow Gate 8B: shared Screen renderer (#88)`).\n''',
+              '''**Current authoritative main:**\n`e9c63e47f897ffb9408f9fdd377795f44affb41b`\n(`Story Flow Gate 8D: creator controls (#90)`).\n''',
+              'Roadmap main baseline')
+          text = once(text,
+              '''**Status:** Gates 8A and 8B are accepted and merged through PR #88. Gate 8C\nimplementation is active on `feature/story-flow-gate8c-screen-editor-shell`.\n''',
+              '''**Status:** Gates 8A, 8B, 8C and 8D are accepted and merged. Gate 8E is\nactive on `feature/story-flow-gate8e-outcome-parity`.\n''',
+              'Roadmap Gate 8 status')
+          text = once(text,
+              '''3. **8C — authoring shell (active):** first-class Screen Editor path, canvas,\n   hierarchy, stable selection, transform/layout tools, Inspector, shared\n   Runtime preview, Save/Undo/Redo and guarded Return to Story Flow. Contract:\n   `docs/STORY_FLOW_GATE8C_SCREEN_EDITOR_SHELL.md`.\n4. **8D — creator controls:** image/background/text/button plus the broader\n   control catalogue, reusable components, state editing and typed data/action\n   binding.\n5. **8E — Story Flow and packaging acceptance:** named outcomes remain Story\n   Flow routing authority; save/reopen/Runtime/standalone parity is proven.\n''',
+              '''3. **8C — authoring shell (accepted):** first-class Screen Editor path,\n   hierarchy, stable selection, exact shared Runtime preview, Screen-specific\n   history, transactional Save/Open and guarded Return to Story Flow. Contract:\n   `docs/STORY_FLOW_GATE8C_SCREEN_EDITOR_SHELL.md`.\n4. **8D — creator controls (accepted):** direct move/resize, editable\n   image/background/text/button controls, complete visual states/typography,\n   governed resource selection, symbolic actions, focus order, parent/layout,\n   presets/components and creator Undo/Redo/Save/Open. Contract:\n   `docs/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md`.\n5. **8E — Story Flow and packaging acceptance (active):** Screen Button action\n   IDs remain symbolic while Story Flow exclusively owns destinations; invalid\n   action/route mappings are diagnosed in Studio, fail closed for reachable\n   Runtime Screens and are proven through save/reopen and packaged standalone\n   parity. Contract: `docs/STORY_FLOW_GATE8E_OUTCOME_PARITY.md`.\n''',
+              'Roadmap Gate 8 slices')
+          write(path, text)
+
+          path = 'docs/STORY_FLOW_JOURNEY_VIEW_IMPLEMENTATION_PLAN.md'
+          text = read(path)
+          text = once(text,
+              '''**Status:** Locked product direction. Gate 1 implementation and owner visual/interaction acceptance are complete; final Gate 1 documentation/exact-head closeout remains before merge.\n''',
+              '''**Status:** Locked product direction. Functional Gates 1-7 and Screen Editor Gates 8A-8D are accepted and merged; Gate 8E outcome/package parity is active. Gate 9 remains the planned Journey View UI/UX implementation and scale programme.\n''',
+              'Journey plan status')
+          text = once(text,
+              '''**Audited implementation baseline:**\n`02df129f96c860dd3a7d6b6e065c928bef0f8907`\n(`hub: expose Exit Renegade action (#65)`).\n''',
+              '''**Current implementation baseline:**\n`e9c63e47f897ffb9408f9fdd377795f44affb41b`\n(`Story Flow Gate 8D: creator controls (#90)`).\n''',
+              'Journey plan baseline')
+          write(path, text)
+
+          path = 'HANDOFF.md'
+          text = read(path)
+          text = once(text,
+              '''**Date:** 2026-08-22\n\n**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`\n\n**Authoritative main:**\n`fe5871091ccb74a417081c4e4abe38ed86010f53`\n(`Story Flow Gate 8B: shared Screen renderer (#88)`).\n''',
+              '''**Date:** 2026-08-23\n\n**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`\n\n**Authoritative main:**\n`e9c63e47f897ffb9408f9fdd377795f44affb41b`\n(`Story Flow Gate 8D: creator controls (#90)`).\n''',
+              'Handoff baseline')
+          start = text.index('## Active work — Story Flow Gate 8C Screen Editor authoring shell')
+          end = text.index('## Gate 6 accepted evidence', start)
+          active = '''## Active work — Story Flow Gate 8E outcome and package parity\n\nBranch: `feature/story-flow-gate8e-outcome-parity`.\n\nGate 8D/PR #90 is merged and owner-accepted at the authoritative main above.\nThe accepted Screen Editor now has direct manipulation, complete creator\ncontrols, governed resources, symbolic action authoring, focus order,\nparent/layout, presets/components and Screen-specific persistence/history.\n\nGate 8E is deliberately bounded to the Screen-action / Story Flow routing seam:\n\n- Screen Buttons continue to author symbolic action IDs only;\n- Story Flow remains the sole destination/condition/priority authority;\n- outgoing Screen routes are constrained to currently authored Screen actions;\n- return/reopen and Story Flow semantic edits rerun a non-mutating cross-document\n  parity audit;\n- removed/renamed Screen actions create visible stale-route/unrouted-Button\n  diagnostics rather than silently rewriting Flow destinations;\n- reachable broken Screen/Flow mappings fail closed before Runtime execution;\n- detached draft Screens do not block Runtime;\n- packaged Release instructions require save/reopen, Runtime and Windows\n  standalone parity proof.\n\nThe implementation contract and owner audit are in\n`docs/STORY_FLOW_GATE8E_OUTCOME_PARITY.md`.\n\nDo not merge automatically. Exact-head Windows Debug/Release CI and owner\nacceptance of the packaged Release remain required. Gate 9 is Journey View UI/UX\nand scale; Gate 10 is the broader final Runtime/build/standalone closeout.\n\n'''
+          text = text[:start] + active + text[end:]
+          write(path, text)
+          PY
+
+          rm -f .github/gate8e-doc-trigger
+          rm -f .github/workflows/gate8e-doc-status-patch.yml
+          git config user.name "renegade-gate8e-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Story Flow Gate 8E: refresh programme status"
+          git push origin HEAD:feature/story-flow-gate8e-outcome-parity
