@@ -27,9 +27,18 @@ namespace renegade::studio
         constexpr ImU32 LinkHover = IM_COL32(211, 218, 221, 255);
         constexpr ImU32 Warning = IM_COL32(224, 165, 82, 255);
 
+        constexpr float MinGraphZoom = 0.50f;
+        constexpr float MaxGraphZoom = 2.00f;
+        constexpr float GraphZoomStep = 1.12f;
+
         bool AlmostEqual(const float a, const float b) noexcept
         {
             return std::abs(a - b) < 0.05f;
+        }
+
+        float ClampGraphZoom(const float zoom) noexcept
+        {
+            return std::clamp(zoom, MinGraphZoom, MaxGraphZoom);
         }
 
         ImVec4 ToVec4(const ImU32 color)
@@ -80,6 +89,8 @@ namespace renegade::studio
     {
         frameActive_ = false;
         initialized_ = false;
+        zoomGeometryReady_ = false;
+        appliedGraphZoom_ = 1.0f;
         if (imnodesContext_)
         {
             ImNodes::SetCurrentContext(imnodesContext_);
@@ -109,6 +120,8 @@ namespace renegade::studio
         observedRedoCount_ = static_cast<std::size_t>(-1);
         bindingsDirty_ = true;
         initializedNodePositions_.clear();
+        zoomGeometryReady_ = false;
+        appliedGraphZoom_ = 1.0f;
     }
 
     void RenegadeStoryFlowGraphEditor::Clear() noexcept
@@ -131,6 +144,8 @@ namespace renegade::studio
         rejectNewLinkFromInput_ = false;
         bindingsDirty_ = true;
         frameActive_ = false;
+        zoomGeometryReady_ = false;
+        appliedGraphZoom_ = 1.0f;
         observedUndoCount_ = static_cast<std::size_t>(-1);
         observedRedoCount_ = static_cast<std::size_t>(-1);
     }
@@ -410,13 +425,14 @@ namespace renegade::studio
         const bridge::StoryFlowNodeView& node,
         NodeBinding& binding)
     {
+        const float zoom = ClampGraphZoom(appliedGraphZoom_);
         if (initializedNodePositions_.insert(binding.nodeId).second)
         {
             if (const auto* position = workspace_->FindLayout(node.id))
             {
                 ImNodes::SetNodeGridSpacePos(
                     binding.nodeId,
-                    ImVec2(position->x, position->y));
+                    ImVec2(position->x * zoom, position->y * zoom));
             }
         }
 
@@ -447,11 +463,12 @@ namespace renegade::studio
             ImNodes::PopAttributeFlag();
         }
 
+        const float contentWidth = 188.0f * zoom;
         ImNodes::BeginStaticAttribute(binding.staticAttributeId);
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 188.0f);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + contentWidth);
         ImGui::TextColored(ToVec4(TextStrong), "%s", node.name.c_str());
         ImGui::PopTextWrapPos();
-        ImGui::Dummy(ImVec2(188.0f, 1.0f));
+        ImGui::Dummy(ImVec2(contentWidth, std::max(0.5f, zoom)));
         ImNodes::EndStaticAttribute();
 
         for (const auto& output : binding.outputs)
@@ -466,7 +483,7 @@ namespace renegade::studio
                 ? output.label
                 : "STALE // " + output.label;
             const float textWidth = ImGui::CalcTextSize(label.c_str()).x;
-            ImGui::Indent(std::max(0.0f, 188.0f - textWidth));
+            ImGui::Indent(std::max(0.0f, contentWidth - textWidth));
             ImGui::TextColored(color, "%s", label.c_str());
             ImNodes::EndOutputAttribute();
         }
@@ -513,6 +530,20 @@ namespace renegade::studio
 
         ImNodes::SetCurrentContext(imnodesContext_);
         ImNodes::EditorContextSet(editorContext_);
+
+        const float zoom = ClampGraphZoom(appliedGraphZoom_);
+        auto& style = ImNodes::GetStyle();
+        style.GridSpacing = 28.0f * zoom;
+        style.NodeCornerRounding = 4.0f * zoom;
+        style.NodePadding = ImVec2(12.0f * zoom, 9.0f * zoom);
+        style.NodeBorderThickness = std::max(0.75f, zoom);
+        style.LinkThickness = std::max(1.25f, 2.5f * zoom);
+        style.LinkHoverDistance = std::max(5.0f, 10.0f * zoom);
+        style.PinCircleRadius = std::max(2.5f, 4.5f * zoom);
+        style.PinHoverRadius = std::max(5.0f, 10.0f * zoom);
+        style.PinOffset = std::max(0.5f, zoom);
+        ImGui::SetWindowFontScale(zoom);
+
         ImNodes::BeginNodeEditor();
 
         for (auto& binding : nodes_)
@@ -873,17 +904,20 @@ namespace renegade::studio
         if (!layout_ || !workspace_)
             return;
         bool changed = false;
+        const float zoom = std::max(0.001f, ClampGraphZoom(appliedGraphZoom_));
         for (const auto& binding : nodes_)
         {
             auto* layout = workspace_->FindLayout(binding.stableId);
             if (!layout)
                 continue;
             const ImVec2 position = ImNodes::GetNodeGridSpacePos(binding.nodeId);
-            if (!AlmostEqual(layout->x, position.x) ||
-                !AlmostEqual(layout->y, position.y))
+            const float logicalX = position.x / zoom;
+            const float logicalY = position.y / zoom;
+            if (!AlmostEqual(layout->x, logicalX) ||
+                !AlmostEqual(layout->y, logicalY))
             {
-                layout->x = position.x;
-                layout->y = position.y;
+                layout->x = logicalX;
+                layout->y = logicalY;
                 changed = true;
             }
         }
@@ -934,11 +968,88 @@ namespace renegade::studio
             return;
         }
 
+        const float requestedZoom = ClampGraphZoom(layout_->canvas.zoom);
+        if (!zoomGeometryReady_)
+        {
+            appliedGraphZoom_ = requestedZoom;
+            zoomGeometryReady_ = true;
+        }
+        else if (!AlmostEqual(appliedGraphZoom_, requestedZoom))
+        {
+            appliedGraphZoom_ = requestedZoom;
+            initializedNodePositions_.clear();
+            for (const auto& binding : nodes_)
+            {
+                if (const auto* position = workspace_->FindLayout(binding.stableId))
+                {
+                    ImNodes::SetNodeGridSpacePos(
+                        binding.nodeId,
+                        ImVec2(
+                            position->x * appliedGraphZoom_,
+                            position->y * appliedGraphZoom_));
+                }
+            }
+            ImNodes::EditorContextResetPanning(
+                ImVec2(layout_->canvas.panX, layout_->canvas.panY));
+        }
+
+        if (!AlmostEqual(layout_->canvas.zoom, appliedGraphZoom_))
+        {
+            layout_->canvas.zoom = appliedGraphZoom_;
+            workspace_->NotifyLayoutChanged();
+        }
+
         // Direct socket linking supersedes the legacy CONNECT button and closes
         // the Gate 9B layout collision instead of moving the old state machine.
         workspace_->connectButton_.SetVisible(false);
 
-        const bool acceptMouse = ContainsPointer(wi::input::GetPointer());
+        const XMFLOAT4 pointer = wi::input::GetPointer();
+        const bool acceptMouse = ContainsPointer(pointer);
+        if (acceptMouse && std::abs(pointer.z) > 0.001f)
+        {
+            const float oldZoom = ClampGraphZoom(appliedGraphZoom_);
+            const float zoomFactor = pointer.z > 0.0f
+                ? GraphZoomStep
+                : 1.0f / GraphZoomStep;
+            const float newZoom = ClampGraphZoom(oldZoom * zoomFactor);
+            if (!AlmostEqual(oldZoom, newZoom))
+            {
+                const ImVec2 currentPan = ImNodes::EditorContextGetPanning();
+                const ImVec2 localPointer(
+                    pointer.x - viewport_.x,
+                    pointer.y - viewport_.y);
+                const ImVec2 logicalUnderPointer(
+                    (localPointer.x - currentPan.x) / oldZoom,
+                    (localPointer.y - currentPan.y) / oldZoom);
+                const ImVec2 newPan(
+                    localPointer.x - logicalUnderPointer.x * newZoom,
+                    localPointer.y - logicalUnderPointer.y * newZoom);
+
+                appliedGraphZoom_ = newZoom;
+                layout_->canvas.zoom = newZoom;
+                layout_->canvas.panX = newPan.x;
+                layout_->canvas.panY = newPan.y;
+                initializedNodePositions_.clear();
+                for (const auto& binding : nodes_)
+                {
+                    if (const auto* position = workspace_->FindLayout(binding.stableId))
+                    {
+                        ImNodes::SetNodeGridSpacePos(
+                            binding.nodeId,
+                            ImVec2(
+                                position->x * newZoom,
+                                position->y * newZoom));
+                    }
+                }
+                ImNodes::EditorContextResetPanning(newPan);
+                workspace_->NotifyLayoutChanged();
+                SetStatus(
+                    "GRAPH ZOOM // " +
+                    std::to_string(static_cast<int>(std::round(newZoom * 100.0f))) +
+                    "%");
+            }
+        }
+
         if (!imgui_.BeginFrame(canvas, dt, acceptMouse, error))
         {
             SetStatus("GRAPH FRAME FAILED // " + error);
