@@ -108,6 +108,14 @@ namespace renegade::studio
             return NavigationRailWidth;
         }
 
+        // The chrome is deliberately presentation-only in 9A. Wicked's GUI
+        // manager treats any visible widget hitbox as GUI focus even when the
+        // widget is disabled, so do not call Widget::Update() here: that would
+        // make this full-canvas decorative shell swallow viewport input.
+        void Update(const wi::Canvas&, float) override
+        {
+        }
+
         void Render(
             const wi::Canvas& canvas,
             const wi::graphics::CommandList cmd) const override
