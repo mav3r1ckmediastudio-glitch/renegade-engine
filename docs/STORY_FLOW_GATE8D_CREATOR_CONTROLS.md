@@ -189,3 +189,5 @@ Windows Debug/Release CI remains authoritative for compilation and regression pr
 9. Confirm Runtime preview parity and Hub → Story Flow → Screen/Level navigation remain intact.
 
 Gate 8D is not merge-ready until exact-head CI and this owner audit pass.
+
+- Repeat direct move and corner-resize on a newly-created Button/Image/Text. Seeded template elements and creator-added elements must behave identically.

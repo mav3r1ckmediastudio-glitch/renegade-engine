@@ -114,3 +114,5 @@ Gate 8D is accepted only when this exact packaged Release passes the full owner 
 9. Confirm Runtime preview parity and Hub → Story Flow → Screen/Level navigation remain intact.
 
 Gate 8D is not merge-ready until exact-head CI and this owner audit pass.
+
+- Repeat direct move and corner-resize on a newly-created Button/Image/Text. Seeded template elements and creator-added elements must behave identically.

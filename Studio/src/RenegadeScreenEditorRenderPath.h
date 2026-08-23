@@ -265,7 +265,10 @@ namespace renegade::studio
                 },
                 error);
             if (loaded)
+            {
+                renderer_.SetInputEnabled(false);
                 renderer_.ApplyLayout(*this);
+            }
             return loaded;
         }
 
