@@ -9,22 +9,16 @@
 #include <WickedEngine.h>
 
 #include "RenegadeStoryFlowConditionEditor.h"
+#include "RenegadeStoryFlowGraphEditor.h"
 #include "RenegadeStoryFlowJourneyChrome.h"
-#include "RenegadeStoryFlowJourneyRoutingOverlay.h"
 #include "RenegadeStoryFlowWorkspace.h"
 #include "StoryFlowGuiLayerPolicy.h"
 
 namespace renegade::studio
 {
-    // Gate 3 promotes Story Flow out of the 3D Level Editor overlay and into
-    // its own first-class 2D RenderPath. Wicked only updates and renders the
-    // application's active RenderPath, so the Level Editor scene is dormant
-    // while this path owns the application.
-    //
-    // Gate 9A adds a native Journey chrome layer around that proven workspace.
-    // Gate 9C adds a Renegade-owned visual routing layer over the same
-    // authoritative Story Flow session/model. No concept bitmap or stock Wicked
-    // Editor route UX is used.
+    // Story Flow is a first-class 2D RenderPath. wiGUI remains Renegade's
+    // production editor UI. Gate 9C embeds ImNodes only over the Graph canvas;
+    // Journey View remains the native 9B card/reel surface with no wires.
     class RenegadeStoryFlowRenderPath final : public wi::RenderPath2D
     {
     public:
@@ -34,7 +28,6 @@ namespace renegade::studio
             {
                 GetGUI().RemoveWidget(&conditionEditor_);
                 GetGUI().RemoveWidget(&journeyChrome_);
-                GetGUI().RemoveWidget(&routingOverlay_);
                 GetGUI().RemoveWidget(&workspace_);
             }
         }
@@ -48,26 +41,21 @@ namespace renegade::studio
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
 
-            routingOverlay_.Create();
-            routingOverlay_.SetVisible(false);
-
             journeyChrome_.Create();
             journeyChrome_.SetVisible(false);
-            // Gate 9A chrome is visual structure only. It must not intercept
-            // the established Story Flow authoring/lifecycle input paths.
             journeyChrome_.SetEnabled(false);
 
             conditionEditor_.Create();
             conditionEditor_.SetVisible(false);
             conditionEditor_.SetEnabled(false);
 
-            // Wicked paints widgets in reverse registration order. Register
-            // the semantic workspace last so it paints first, then the Gate 9C
-            // route overlay, then Journey chrome, then the modal condition
-            // editor. External lifecycle controls attach later and stay frontmost.
+            // Wicked paints widgets in reverse registration order. Keep the
+            // semantic workspace at the back, then native Journey chrome, then
+            // the modal condition editor. The Graph canvas is composed later by
+            // RenegadeStoryFlowGraphEditor and never registers a full-screen
+            // wiGUI widget.
             GetGUI().AddWidget(&conditionEditor_);
             GetGUI().AddWidget(&journeyChrome_);
-            GetGUI().AddWidget(&routingOverlay_);
             GetGUI().AddWidget(&workspace_);
 
             loaded_ = true;
@@ -85,7 +73,6 @@ namespace renegade::studio
             LayoutWorkspace();
             workspace_.SetVisible(workspaceActive_);
             workspace_.SetEnabled(workspaceActive_);
-            routingOverlay_.SetVisible(workspaceActive_);
             journeyChrome_.SetVisible(workspaceActive_);
             conditionEditor_.SetVisible(workspaceActive_);
             conditionEditor_.SetEnabled(workspaceActive_);
@@ -99,7 +86,6 @@ namespace renegade::studio
             conditionEditor_.SetVisible(false);
             conditionEditor_.SetEnabled(false);
             journeyChrome_.SetVisible(false);
-            routingOverlay_.SetVisible(false);
             workspace_.SetVisible(false);
             workspace_.SetEnabled(false);
         }
@@ -114,21 +100,33 @@ namespace renegade::studio
         {
             EnsureLoaded();
             LayoutWorkspace();
-            wi::RenderPath2D::Update(dt);
 
-            // The route overlay intentionally skips normal GUI input update so
-            // the established workspace processes its interaction first. This
-            // explicit second phase lets route/port hits refine that result
-            // without a second competing GUI focus surface.
-            routingOverlay_.UpdateRouting(dt, GetGUI().IsTyping());
+            const XMFLOAT4 pointer = wi::input::GetPointer();
+            const bool graphActive = workspaceActive_ &&
+                workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
+            const bool graphOwnsPointer = graphActive &&
+                graphEditor_.ContainsPointer(pointer);
+
+            // The legacy Graph implementation is still part of the shared
+            // workspace because Journey/Inspector/header depend on that class.
+            // While the pointer is inside the Graph canvas, disable workspace
+            // canvas input for this frame so only ImNodes can interpret socket
+            // and link gestures. Header/Inspector input remains available when
+            // the pointer is outside the Graph viewport.
+            workspace_.SetEnabled(workspaceActive_ && !graphOwnsPointer);
+            wi::RenderPath2D::Update(dt);
+            workspace_.SetEnabled(workspaceActive_);
+
+            graphEditor_.Update(*this, dt, graphActive);
 
             if (lifecycleLayeringReady_)
-            {
-                // Widget interaction can reprioritize Wicked GUI registrations.
-                // Reassert: semantic workspace -> visual routing -> Journey
-                // chrome -> condition editor -> lifecycle controls.
                 PlaceJourneyLayersBehindLifecycleControls();
-            }
+        }
+
+        void Compose(const wi::graphics::CommandList cmd) const override
+        {
+            wi::RenderPath2D::Compose(cmd);
+            graphEditor_.Render(cmd);
         }
 
         void SyncCanvas(const wi::Canvas& canvas)
@@ -145,7 +143,7 @@ namespace renegade::studio
         {
             EnsureLoaded();
             workspace_.Bind(session, model, layout);
-            routingOverlay_.Bind(session, model, layout, &workspace_);
+            graphEditor_.Bind(session, model, layout, &workspace_);
             conditionEditor_.Bind(session, model, &workspace_);
         }
 
@@ -154,7 +152,7 @@ namespace renegade::studio
             if (loaded_)
             {
                 conditionEditor_.Clear();
-                routingOverlay_.Clear();
+                graphEditor_.Clear();
                 workspace_.Clear();
             }
         }
@@ -179,7 +177,6 @@ namespace renegade::studio
 
             workspace_.SetVisible(active);
             workspace_.SetEnabled(active);
-            routingOverlay_.SetVisible(active);
             journeyChrome_.SetVisible(active);
             conditionEditor_.SetVisible(active);
             conditionEditor_.SetEnabled(active);
@@ -201,20 +198,14 @@ namespace renegade::studio
         void OnSemanticChanged(std::function<void()> callback)
         {
             EnsureLoaded();
-            workspace_.OnSemanticChanged(
-                [this, callback = std::move(callback)]() mutable
-                {
-                    routingOverlay_.MarkProjectionDirty();
-                    if (callback)
-                        callback();
-                });
+            workspace_.OnSemanticChanged(std::move(callback));
         }
 
         void OnScreenOutcomeQuery(
             RenegadeStoryFlowWorkspace::ScreenOutcomeQuery callback)
         {
             EnsureLoaded();
-            routingOverlay_.OnScreenOutcomeQuery(callback);
+            graphEditor_.OnScreenOutcomeQuery(callback);
             workspace_.OnScreenOutcomeQuery(std::move(callback));
         }
 
@@ -237,11 +228,6 @@ namespace renegade::studio
             workspace_.SelectAndFocusNode(nodeId);
         }
 
-        // External Level/Screen lifecycle controls are added after this path
-        // is loaded. Re-register the Story Flow layers in reverse paint order
-        // so the opaque semantic workspace remains at the back, the Gate 9C
-        // routing overlay sits over cards/wires, Journey chrome frames it, and
-        // lifecycle controls remain frontmost.
         void PlaceWorkspaceBehindLifecycleControls()
         {
             EnsureLoaded();
@@ -273,11 +259,9 @@ namespace renegade::studio
             auto& gui = GetGUI();
             gui.RemoveWidget(&conditionEditor_);
             gui.RemoveWidget(&journeyChrome_);
-            gui.RemoveWidget(&routingOverlay_);
             gui.RemoveWidget(&workspace_);
             gui.AddWidget(&conditionEditor_);
             gui.AddWidget(&journeyChrome_);
-            gui.AddWidget(&routingOverlay_);
             gui.AddWidget(&workspace_);
         }
 
@@ -305,16 +289,23 @@ namespace renegade::studio
             workspace_.SetPos(XMFLOAT2(workspaceLeft, 0.0f));
             workspace_.SetLayout(workspaceWidth, height);
 
-            routingOverlay_.SetPos(XMFLOAT2(workspaceLeft, 0.0f));
-            routingOverlay_.SetLayout(workspaceWidth, height);
+            const float inspectorWidth = std::min(
+                RenegadeStoryFlowJourneyChrome::PreferredInspectorWidth,
+                workspaceWidth * 0.42f);
+            const float graphWidth = std::max(1.0f, workspaceWidth - inspectorWidth);
+            graphEditor_.SetViewport(XMFLOAT4(
+                workspaceLeft,
+                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight,
+                graphWidth,
+                std::max(
+                    1.0f,
+                    height - RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight)));
 
-            // The condition editor remains full-canvas because it is a modal
-            // authoring surface, not part of the Journey rail geometry.
             conditionEditor_.SetLayout(width, height);
         }
 
         RenegadeStoryFlowWorkspace workspace_;
-        RenegadeStoryFlowJourneyRoutingOverlay routingOverlay_;
+        RenegadeStoryFlowGraphEditor graphEditor_;
         RenegadeStoryFlowJourneyChrome journeyChrome_;
         RenegadeStoryFlowConditionEditor conditionEditor_;
         bool loaded_ = false;
