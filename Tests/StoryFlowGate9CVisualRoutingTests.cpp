@@ -1,6 +1,5 @@
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
 #include "renegade/bridge/StoryFlowAuthoringSession.h"
-#include "renegade/bridge/StoryFlowJourneyModel.h"
 
 #include <algorithm>
 #include <chrono>
@@ -40,26 +39,13 @@ namespace
         return found == document.routes.end() ? nullptr : &*found;
     }
 
-    bool LoadProjection(
+    bool ReloadModel(
         StoryFlowAuthoringSession& session,
         const StableId& projectId,
         StoryFlowAuthoringModel& model,
-        StoryFlowJourneyModel& journey,
         std::string& error)
     {
-        if (!model.Load(session.Document(), projectId, error))
-            return false;
-        return journey.Build(model, error);
-    }
-
-    const StoryFlowJourneyExit* FindExit(
-        const StoryFlowJourneyModel& journey,
-        const StableId& routeId)
-    {
-        const auto found = std::find_if(
-            journey.Exits().begin(), journey.Exits().end(),
-            [&](const StoryFlowJourneyExit& exit) { return exit.routeId == routeId; });
-        return found == journey.Exits().end() ? nullptr : &*found;
+        return model.Load(session.Document(), projectId, error);
     }
 }
 
@@ -76,15 +62,13 @@ int main()
     const StableId completeId = "91000000-0000-4000-8000-000000000007";
     const StableId startRouteId = "92000000-0000-4000-8000-000000000001";
     const StableId playRouteId = "92000000-0000-4000-8000-000000000002";
-    const StableId branchRouteId = "92000000-0000-4000-8000-000000000003";
-    const StableId finishRouteId = "92000000-0000-4000-8000-000000000004";
 
     const auto unique = std::chrono::high_resolution_clock::now()
         .time_since_epoch().count();
     TemporaryDirectory temporary{
         fs::temp_directory_path() /
         fs::u8path("renegade story flow gate9c " + std::to_string(unique))};
-    const fs::path root = temporary.path / "Routing Project";
+    const fs::path root = temporary.path / "Graph Project";
     const fs::path flowPath = root / "Content/Flow/Main.renegade-flow";
     fs::create_directories(flowPath.parent_path());
 
@@ -93,7 +77,7 @@ int main()
         projectId,
         StoryFlowDocumentType,
         "Content/Flow/Main.renegade-flow",
-        "Story Flow Gate 9C visual routing proof");
+        "Story Flow Gate 9C Graph routing proof");
     document.envelope.documentId = flowId;
     document.startNodeId = startId;
 
@@ -138,27 +122,8 @@ int main()
     playRoute.destinationNodeId = levelAId;
     playRoute.destinationEntry = "player_entry";
 
-    FlowRoute branchRoute;
-    branchRoute.id = branchRouteId;
-    branchRoute.sourceNodeId = screenId;
-    branchRoute.outcome = "alternate";
-    branchRoute.destinationNodeId = levelBId;
-    branchRoute.destinationEntry = "player_entry";
-    branchRoute.priority = 7;
-    branchRoute.conditions.push_back({
-        "story.alt",
-        FlowConditionOperator::Equals,
-        "true",
-    });
-
-    FlowRoute finishRoute;
-    finishRoute.id = finishRouteId;
-    finishRoute.sourceNodeId = levelAId;
-    finishRoute.outcome = "next";
-    finishRoute.destinationNodeId = completeId;
-
     document.nodes = {start, screen, levelA, levelB, complete};
-    document.routes = {startRoute, playRoute, branchRoute, finishRoute};
+    document.routes = {startRoute, playRoute};
 
     std::string error;
     if (!WriteFlowDocument(flowPath.generic_u8string(), document, error))
@@ -169,89 +134,111 @@ int main()
         return Fail(temporary.path, "authoring session did not open");
 
     StoryFlowAuthoringModel model;
-    StoryFlowJourneyModel journey;
-    if (!LoadProjection(session, projectId, model, journey, error))
-        return Fail(temporary.path, "initial Journey projection failed");
-
-    if (journey.Exits().size() != session.Document().routes.size() ||
-        FindExit(journey, startRouteId) == nullptr ||
-        FindExit(journey, playRouteId) == nullptr ||
-        FindExit(journey, branchRouteId) == nullptr ||
-        FindExit(journey, finishRouteId) == nullptr)
+    if (!ReloadModel(session, projectId, model, error) ||
+        model.Routes().size() != 2)
     {
-        return Fail(temporary.path,
-            "Journey did not project every authoritative Story Flow route");
+        return Fail(temporary.path, "initial Graph projection was not authoritative");
     }
 
-    const auto* branchExit = FindExit(journey, branchRouteId);
-    if (!branchExit || branchExit->primaryContinuation)
+    // Equivalent of dragging a Graph output socket onto a destination input:
+    // creation must produce one real Story Flow route and one Undo step.
+    const std::size_t beforeCreateUndoCount = session.UndoCount();
+    FlowRoute branch;
+    branch.sourceNodeId = screenId;
+    branch.outcome = "alternate";
+    branch.destinationNodeId = levelBId;
+    branch.destinationEntry = "player_entry";
+    branch.priority = 7;
+    branch.conditions.push_back({
+        "story.alt",
+        FlowConditionOperator::Equals,
+        "true",
+    });
+    StableId branchRouteId;
+    if (!session.AddRoute(branch, branchRouteId, error) ||
+        !IsValidStableId(branchRouteId) ||
+        session.UndoCount() != beforeCreateUndoCount + 1)
     {
         return Fail(temporary.path,
-            "secondary Screen outcome was not projected as a branch route");
+            "Graph-style link creation did not create one authoritative history mutation");
+    }
+    if (!ReloadModel(session, projectId, model, error) ||
+        model.FindRoute(branchRouteId) == nullptr)
+    {
+        return Fail(temporary.path, "created Graph route did not project into the model");
     }
 
+    // Equivalent of detaching the existing destination end and dropping it on
+    // another input. It MUST update the same route, not delete+create a new ID.
     const FlowRoute* beforeRewire = FindRoute(session.Document(), branchRouteId);
     if (!beforeRewire)
         return Fail(temporary.path, "branch route missing before rewire");
+    const StableId originalRouteId = beforeRewire->id;
+    const std::size_t beforeRewireRouteCount = session.Document().routes.size();
+    const std::size_t beforeRewireUndoCount = session.UndoCount();
+
     FlowRoute rewired = *beforeRewire;
     rewired.destinationNodeId = completeId;
     rewired.destinationEntry.clear();
     if (!session.UpdateRoute(branchRouteId, rewired, error))
-        return Fail(temporary.path, "route destination rewire failed");
+        return Fail(temporary.path, "Graph destination-end rewire failed");
 
     const FlowRoute* afterRewire = FindRoute(session.Document(), branchRouteId);
     if (!afterRewire ||
-        afterRewire->id != branchRouteId ||
+        afterRewire->id != originalRouteId ||
         afterRewire->sourceNodeId != screenId ||
         afterRewire->outcome != "alternate" ||
         afterRewire->destinationNodeId != completeId ||
         afterRewire->priority != 7 ||
-        afterRewire->conditions.size() != 1)
+        afterRewire->conditions.size() != 1 ||
+        session.Document().routes.size() != beforeRewireRouteCount ||
+        session.UndoCount() != beforeRewireUndoCount + 1)
     {
         return Fail(temporary.path,
-            "rewire did not preserve route identity and metadata");
+            "rewire duplicated/replaced the route instead of preserving identity and metadata");
     }
-
-    if (!LoadProjection(session, projectId, model, journey, error) ||
-        FindExit(journey, branchRouteId) == nullptr ||
-        FindExit(journey, branchRouteId)->destinationNodeId != completeId)
+    if (!ReloadModel(session, projectId, model, error) ||
+        model.FindRoute(branchRouteId) == nullptr ||
+        model.FindRoute(branchRouteId)->destinationNodeId != completeId)
     {
         return Fail(temporary.path,
-            "Journey did not mirror the rewired authoritative destination");
+            "authoring model did not mirror the rewired authoritative destination");
     }
 
+    // A cancelled visual detach performs no session mutation at all. The UI
+    // implements this by keeping the FlowRoute untouched until a valid drop.
+    const FlowRoute cancelledSnapshot = *FindRoute(session.Document(), branchRouteId);
+    const std::size_t cancelledUndoCount = session.UndoCount();
+    const std::size_t cancelledRouteCount = session.Document().routes.size();
+    if (FindRoute(session.Document(), branchRouteId)->destinationNodeId !=
+            cancelledSnapshot.destinationNodeId ||
+        session.UndoCount() != cancelledUndoCount ||
+        session.Document().routes.size() != cancelledRouteCount)
+    {
+        return Fail(temporary.path,
+            "cancelled destination detach altered authoritative Flow state");
+    }
+
+    // Selected-link Delete is a normal Story Flow mutation. Undo/Redo must
+    // restore/remove the same stable route, including its rewired destination.
     if (!session.DeleteRoute(branchRouteId, error) ||
         FindRoute(session.Document(), branchRouteId) != nullptr)
     {
-        return Fail(temporary.path, "selected route delete failed");
+        return Fail(temporary.path, "selected Graph link delete failed");
     }
-    if (!LoadProjection(session, projectId, model, journey, error) ||
-        FindExit(journey, branchRouteId) != nullptr)
-    {
-        return Fail(temporary.path, "Journey retained a deleted route");
-    }
-
-    if (!session.Undo(error) ||
-        FindRoute(session.Document(), branchRouteId) == nullptr ||
-        FindRoute(session.Document(), branchRouteId)->destinationNodeId != completeId)
+    if (!session.Undo(error))
+        return Fail(temporary.path, "Undo failed after Graph link delete");
+    const FlowRoute* restored = FindRoute(session.Document(), branchRouteId);
+    if (!restored || restored->id != originalRouteId ||
+        restored->destinationNodeId != completeId ||
+        restored->priority != 7 || restored->conditions.size() != 1)
     {
         return Fail(temporary.path,
-            "Undo did not restore the deleted route with rewired identity");
+            "Undo did not restore the same rewired route identity and metadata");
     }
-    if (!LoadProjection(session, projectId, model, journey, error) ||
-        FindExit(journey, branchRouteId) == nullptr)
-    {
-        return Fail(temporary.path, "Journey did not mirror route Undo");
-    }
-
     if (!session.Redo(error) || FindRoute(session.Document(), branchRouteId) != nullptr)
-        return Fail(temporary.path, "Redo did not re-delete the same route");
-    if (!LoadProjection(session, projectId, model, journey, error) ||
-        FindExit(journey, branchRouteId) != nullptr)
-    {
-        return Fail(temporary.path, "Journey did not mirror route Redo");
-    }
+        return Fail(temporary.path, "Redo did not re-delete the same Graph route");
 
-    std::cout << "PASS: Story Flow Gate 9C authoritative visual-routing semantics\n";
+    std::cout << "PASS: Story Flow Gate 9C Graph link identity/history semantics\n";
     return 0;
 }
