@@ -300,15 +300,34 @@ namespace renegade::bridge
                 {
                     const fs::path relative = ManagedRelativePath(nodeId, extension);
                     const fs::path candidate = (root / relative).lexically_normal();
-                    const bool exists = fs::is_regular_file(candidate, pathError);
-                    if (pathError)
+
+                    // On Windows, querying is_regular_file() directly for a
+                    // missing variant can populate the supplied error_code.
+                    // Missing extensions are normal while scanning the one
+                    // deterministic managed slot, so test existence first with
+                    // a fresh error_code and continue cleanly when absent.
+                    std::error_code candidateError;
+                    const bool exists = fs::exists(candidate, candidateError);
+                    if (candidateError)
                     {
                         error = "Could not inspect the Journey thumbnail slot: " +
-                            pathError.message();
+                            candidateError.message();
                         return false;
                     }
                     if (!exists)
                         continue;
+
+                    candidateError.clear();
+                    const bool regular = fs::is_regular_file(candidate, candidateError);
+                    if (candidateError || !regular)
+                    {
+                        error = candidateError
+                            ? "Could not inspect the Journey thumbnail file: " +
+                                candidateError.message()
+                            : "Journey thumbnail slot contains a non-file entry.";
+                        return false;
+                    }
+
                     ++matches;
                     foundRelative = relative;
                     foundAbsolute = candidate;
