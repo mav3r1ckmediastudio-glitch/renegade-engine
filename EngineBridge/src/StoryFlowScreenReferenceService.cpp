@@ -244,14 +244,16 @@ namespace renegade::bridge
             !audit.unroutedButtonActionIds.empty())
         {
             std::ostringstream message;
+            bool hasMessage = false;
             if (!audit.invalidRouteOutcomes.empty())
             {
                 message << "Story Flow routes use Screen outcomes that are no longer authored: "
                         << Join(audit.invalidRouteOutcomes) << '.';
+                hasMessage = true;
             }
             if (!audit.unroutedButtonActionIds.empty())
             {
-                if (message.tellp() > 0) message << ' ';
+                if (hasMessage) message << ' ';
                 message << "Button actions have no Story Flow destination: "
                         << Join(audit.unroutedButtonActionIds) << '.';
             }

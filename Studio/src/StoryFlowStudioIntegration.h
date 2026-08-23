@@ -317,6 +317,10 @@ namespace renegade::studio
                 levelPanel_.SetSelectedLevelNode(std::move(levelId));
                 screenPanel_.SetSelectedScreenNode(std::move(screenId));
             });
+            storyFlow.OnSemanticChanged([this]()
+            {
+                screenOutcomeAuditPending_ = true;
+            });
             storyFlow.OnScreenOutcomeQuery([this](
                 const bridge::StableId& nodeId,
                 std::vector<std::string>& outcomes,
@@ -773,6 +777,7 @@ namespace renegade::studio
             }
             storyFlow.Bind(&authoringSession_, &model_, &layout_);
             storyFlow.SelectAndFocusNode(createdNodeId);
+            AuditScreenOutcomeParity(project, storyFlow, createdNodeId);
             layoutDirty_ = true;
             FlushLayout(true);
 

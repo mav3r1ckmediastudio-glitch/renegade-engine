@@ -44,6 +44,7 @@ namespace renegade::studio
         void OnNodeActivated(
             std::function<void(const bridge::StableId&)> callback);
         void OnScreenOutcomeQuery(ScreenOutcomeQuery callback);
+        void OnSemanticChanged(std::function<void()> callback);
         void SetExternalStatus(std::string message);
 
         [[nodiscard]] const bridge::StableId& SelectedNodeId() const noexcept
@@ -160,6 +161,7 @@ namespace renegade::studio
         std::function<void(const bridge::StableId&)> nodeActivated_;
         std::function<void()> layoutChanged_;
         ScreenOutcomeQuery screenOutcomeQuery_;
+        std::function<void()> semanticChanged_;
         std::string statusMessage_ = "READY";
         float width_ = 1.0f;
         float height_ = 1.0f;

@@ -3,6 +3,7 @@
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 
+#include <unordered_set>
 #include <utility>
 
 namespace
@@ -65,10 +66,26 @@ namespace renegade::runtime
             return false;
         }
 
+        std::unordered_set<bridge::StableId> reachableNodes;
+        reachableNodes.insert(document.startNodeId);
+        bool expanded = true;
+        while (expanded)
+        {
+            expanded = false;
+            for (const auto& route : document.routes)
+            {
+                if (reachableNodes.count(route.sourceNodeId) == 0) continue;
+                expanded = reachableNodes.insert(route.destinationNodeId).second ||
+                    expanded;
+            }
+        }
+
         bridge::StoryFlowScreenReferenceService screenReferences;
         for (const auto& node : document.nodes)
         {
-            if (node.kind != bridge::FlowNodeKind::Screen) continue;
+            if (node.kind != bridge::FlowNodeKind::Screen ||
+                reachableNodes.count(node.id) == 0)
+                continue;
             const auto audit = screenReferences.AuditScreenOutcomes(
                 bootstrap.project.rootPath,
                 bootstrap.project.projectId,

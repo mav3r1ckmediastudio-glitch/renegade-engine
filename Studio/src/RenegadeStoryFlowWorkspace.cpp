@@ -228,6 +228,12 @@ namespace renegade::studio
         screenOutcomeQuery_ = std::move(callback);
     }
 
+    void RenegadeStoryFlowWorkspace::OnSemanticChanged(
+        std::function<void()> callback)
+    {
+        semanticChanged_ = std::move(callback);
+    }
+
     void RenegadeStoryFlowWorkspace::SetExternalStatus(std::string message)
     {
         SetStatus(std::move(message));
@@ -897,6 +903,7 @@ namespace renegade::studio
         EnsureSelectionValid();
         RefreshInspectorControls();
         NotifyLayoutChanged();
+        if (semanticChanged_) semanticChanged_();
         return true;
     }
 
