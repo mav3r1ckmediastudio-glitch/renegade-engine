@@ -11,9 +11,8 @@
 
 namespace renegade::studio
 {
-    // Native Story Flow Level lifecycle surface. Creation/adoption always uses
-    // the text currently visible in the field; it never requires focus loss or
-    // an implicit text commit before the creator presses the action button.
+    // Native Story Flow Level lifecycle surface. The panel owns the user's live
+    // draft name so creation/adoption never depends on a focus/commit transition.
     class RenegadeStoryFlowLevelPanel final : public wi::gui::Widget
     {
     public:
@@ -27,19 +26,35 @@ namespace renegade::studio
             levelName_.SetPlaceholder("Level name...");
             levelName_.SetValue("");
             levelName_.SetCancelInputEnabled(false);
+            levelName_.OnInput([this](const wi::gui::EventArgs& args)
+            {
+                levelNameDraft_ = args.sValue;
+            });
+            levelName_.OnInputAccepted([this](const wi::gui::EventArgs& args)
+            {
+                levelNameDraft_ = args.sValue;
+            });
 
             newLevel_.Create("Story Flow Add New Level");
             newLevel_.SetText("+ NEW LEVEL");
             newLevel_.OnClick([this](const wi::gui::EventArgs&)
             {
-                if (addNew_) addNew_(levelName_.GetCurrentInputValue());
+                if (addNew_)
+                {
+                    const std::string live = levelName_.GetCurrentInputValue();
+                    addNew_(live == levelName_.GetValue() ? levelNameDraft_ : live);
+                }
             });
 
             existingLevel_.Create("Story Flow Add Existing Level");
             existingLevel_.SetText("+ EXISTING...");
             existingLevel_.OnClick([this](const wi::gui::EventArgs&)
             {
-                if (addExisting_) addExisting_(levelName_.GetCurrentInputValue());
+                if (addExisting_)
+                {
+                    const std::string live = levelName_.GetCurrentInputValue();
+                    addExisting_(live == levelName_.GetValue() ? levelNameDraft_ : live);
+                }
             });
 
             openLevel_.Create("Story Flow Open Level");
@@ -133,6 +148,7 @@ namespace renegade::studio
         RenegadeButton newLevel_;
         RenegadeButton existingLevel_;
         RenegadeButton openLevel_;
+        std::string levelNameDraft_;
         bridge::StableId selectedLevelNodeId_;
         std::function<void(const std::string&)> addNew_;
         std::function<void(const std::string&)> addExisting_;
