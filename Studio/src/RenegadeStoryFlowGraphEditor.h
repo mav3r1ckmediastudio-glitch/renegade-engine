@@ -49,6 +49,12 @@ namespace renegade::studio
         void Update(const wi::Canvas& canvas, float dt, bool active);
         void Render(wi::graphics::CommandList cmd) const;
 
+        // Host/UI reconciliation that must run after the ImNodes frame. This
+        // keeps native Story Flow controls and ImNodes interaction state in
+        // lock-step without moving semantic ownership out of the authoring
+        // session.
+        void ReconcileHostInteractions(bool allowDeleteShortcut);
+
     private:
         struct OutputBinding
         {
