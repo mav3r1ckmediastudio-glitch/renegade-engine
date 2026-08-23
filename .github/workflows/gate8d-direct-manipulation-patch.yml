@@ -1,0 +1,85 @@
+name: Gate 8D final prefab manipulation patch
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8', newline='\n')
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 anchor, found {count}')
+              return text.replace(old, new, 1)
+
+          # Shared renderer: authoring can suppress GUI input without changing
+          # authored enabled state or Runtime visual rules.
+          path = 'ScreenRenderer/src/ScreenRenderer.cpp'
+          text = read(path)
+          text = replace_once(text,
+          '''        bridge::ScreenRect viewport;\n        bool hasViewport = false;\n        bool loaded = false;\n''',
+          '''        bridge::ScreenRect viewport;\n        bool hasViewport = false;\n        bool inputEnabled = true;\n        bool loaded = false;\n''', 'renderer input state')
+          text = replace_once(text,
+          '''            surface->SetEnabled(\n                widget.kind == bridge::ScreenWidgetKind::Button && widget.enabled);\n''',
+          '''            surface->SetEnabled(\n                impl_->inputEnabled &&\n                widget.kind == bridge::ScreenWidgetKind::Button && widget.enabled);\n''', 'renderer load input gate')
+          insert_after = '''    void ScreenRenderer::ApplyLayout(wi::RenderPath2D& renderPath)\n    {\n        if (!impl_->loaded) return;\n        std::unordered_map<bridge::StableId, ScreenInteractionState> states;\n        for (const auto& [id, surface] : impl_->byId)\n            states.emplace(id, surface->Interaction());\n        std::vector<ScreenRenderItem> items;\n        std::string error;\n        const bool built = impl_->hasViewport ?\n            BuildScreenRenderItemsInViewport(\n                impl_->document, impl_->viewport, states, items, error) :\n            BuildScreenRenderItems(\n                impl_->document, renderPath.GetLogicalWidth(),\n                renderPath.GetLogicalHeight(), states, items, error);\n        if (!built) return;\n\n        impl_->logicalRects.clear();\n        for (const auto& item : items)\n        {\n            const auto found = impl_->byId.find(item.widgetId);\n            if (found == impl_->byId.end()) continue;\n            auto* surface = found->second;\n            surface->SetPos(XMFLOAT2(\n                item.logicalRect.x, item.logicalRect.y));\n            surface->SetSize(XMFLOAT2(\n                item.logicalRect.width, item.logicalRect.height));\n            surface->scaleX = item.scaleX;\n            surface->scaleY = item.scaleY;\n            impl_->logicalRects.emplace(item.widgetId, item.logicalRect);\n        }\n    }\n\n'''
+          methods = insert_after + '''    void ScreenRenderer::SetInputEnabled(const bool enabled) noexcept\n    {\n        impl_->inputEnabled = enabled;\n        for (const auto& [id, surface] : impl_->byId)\n        {\n            surface->SetEnabled(\n                enabled &&\n                surface->authored.kind == bridge::ScreenWidgetKind::Button &&\n                surface->authored.enabled);\n        }\n    }\n\n    bool ScreenRenderer::IsInputEnabled() const noexcept\n    {\n        return impl_->inputEnabled;\n    }\n\n'''
+          text = replace_once(text, insert_after, methods, 'renderer input methods')
+          text = replace_once(text,
+          '''        found->second->SetEnabled(\n            found->second->authored.kind == bridge::ScreenWidgetKind::Button &&\n            enabled);\n''',
+          '''        found->second->SetEnabled(\n            impl_->inputEnabled &&\n            found->second->authored.kind == bridge::ScreenWidgetKind::Button &&\n            enabled);\n''', 'renderer state input gate')
+          write(path, text)
+
+          # Screen Editor remains the sole pointer owner while its preview uses
+          # the same shared renderer for appearance/layout.
+          path = 'Studio/src/RenegadeScreenEditorRenderPath.h'
+          text = read(path)
+          text = replace_once(text,
+          '''            if (loaded)\n                renderer_.ApplyLayout(*this);\n            return loaded;\n''',
+          '''            if (loaded)\n            {\n                renderer_.SetInputEnabled(false);\n                renderer_.ApplyLayout(*this);\n            }\n            return loaded;\n''', 'editor passive preview input')
+          write(path, text)
+
+          # Cheap regression evidence for the renderer mode itself.
+          path = 'Tests/ScreenRendererTests.cpp'
+          text = read(path)
+          anchor = '''int main()\n{\n'''
+          addition = '''int main()\n{\n    ScreenRenderer inputModeProbe;\n    if (!inputModeProbe.IsInputEnabled())\n        return Fail("Screen renderer Runtime input must default enabled");\n    inputModeProbe.SetInputEnabled(false);\n    if (inputModeProbe.IsInputEnabled())\n        return Fail("Screen renderer authoring input suppression did not latch");\n    inputModeProbe.SetInputEnabled(true);\n    if (!inputModeProbe.IsInputEnabled())\n        return Fail("Screen renderer input could not be restored for Runtime use");\n\n'''
+          text = replace_once(text, anchor, addition, 'renderer input regression test')
+          write(path, text)
+
+          # Owner acceptance must explicitly cover seeded/prefab and new items.
+          for path in [
+              'docs/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md',
+              'Studio/package/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md',
+          ]:
+              text = read(path)
+              needle = 'Direct manipulation'
+              if needle not in text:
+                  raise SystemExit(f'{path}: Direct manipulation section missing')
+              marker = '- Select an element in the Runtime preview'
+              if marker in text:
+                  text = text.replace(marker,
+                      '- Select a seeded/prefab element such as NEW GAME or LOAD GAME in the Runtime preview', 1)
+              if 'newly-created element' not in text:
+                  text += ('\n- Repeat direct move and corner-resize on a newly-created Button/Image/Text. '
+                           'Seeded template elements and creator-added elements must behave identically.\n')
+              write(path, text)
+          PY
