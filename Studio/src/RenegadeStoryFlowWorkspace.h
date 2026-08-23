@@ -2,7 +2,9 @@
 
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <WickedEngine.h>
@@ -10,7 +12,9 @@
 #include "renegade/bridge/StoryFlowAuthoringModel.h"
 #include "renegade/bridge/StoryFlowAuthoringSession.h"
 #include "renegade/bridge/StoryFlowJourneyModel.h"
+#include "renegade/bridge/StoryFlowJourneyThumbnailService.h"
 #include "renegade/bridge/StoryFlowLayoutService.h"
+#include "RenegadeStoryFlowJourneyCard.h"
 #include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
@@ -124,6 +128,14 @@ namespace renegade::studio
         void EnsureSelectionValid();
         void SetActiveView(bridge::StoryFlowViewMode view);
         [[nodiscard]] bool RebuildJourneyProjection();
+        void RebuildJourneyCardObjects();
+        void UpdateJourneyCardObjects(const wi::Canvas& canvas, float dt);
+        void LoadJourneyThumbnailState();
+        void RefreshJourneyThumbnailResources();
+        [[nodiscard]] bool PersistJourneyThumbnailState(std::string& error);
+        void ChooseLevelThumbnail(const bridge::StableId& nodeId);
+        [[nodiscard]] std::string JourneyCardSubtitle(
+            const bridge::StoryFlowNodeView& node) const;
         void RememberOrActivateNodeClick(
             const bridge::StoryFlowNodeView& node,
             const XMFLOAT4& pointer);
@@ -153,6 +165,14 @@ namespace renegade::studio
         bridge::StoryFlowAuthoringModel* model_ = nullptr;
         bridge::StoryFlowJourneyModel journeyModel_;
         bridge::StoryFlowLayoutDocument* layout_ = nullptr;
+        bridge::StoryFlowJourneyThumbnailService journeyThumbnailService_;
+        bridge::StoryFlowJourneyThumbnailMap journeyThumbnailPaths_;
+        std::unordered_map<bridge::StableId, wi::Resource>
+            journeyThumbnailResources_;
+        std::unordered_map<
+            bridge::StableId,
+            std::unique_ptr<RenegadeStoryFlowJourneyCard>> journeyCardObjects_;
+        std::string projectRoot_;
         bridge::StableId selectedNodeId_;
         bridge::StableId selectedRouteId_;
         bridge::StableId connectionSourceNodeId_;
