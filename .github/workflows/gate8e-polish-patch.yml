@@ -1,0 +1,111 @@
+name: Gate 8E one-shot parity refresh polish
+
+on:
+  push:
+    branches:
+      - feature/story-flow-gate8e-outcome-parity
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/story-flow-gate8e-outcome-parity
+          fetch-depth: 0
+      - name: Apply Gate 8E parity refresh polish
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8', newline='\n')
+
+          def once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one anchor, found {count}')
+              return text.replace(old, new, 1)
+
+          # Avoid stream-position comparison portability in diagnostic assembly.
+          path = 'EngineBridge/src/StoryFlowScreenReferenceService.cpp'
+          text = read(path)
+          old = '''        if (!audit.invalidRouteOutcomes.empty() ||\n            !audit.unroutedButtonActionIds.empty())\n        {\n            std::ostringstream message;\n            if (!audit.invalidRouteOutcomes.empty())\n            {\n                message << "Story Flow routes use Screen outcomes that are no longer authored: "\n                        << Join(audit.invalidRouteOutcomes) << '.';\n            }\n            if (!audit.unroutedButtonActionIds.empty())\n            {\n                if (message.tellp() > 0) message << ' ';\n                message << "Button actions have no Story Flow destination: "\n                        << Join(audit.unroutedButtonActionIds) << '.';\n            }\n            audit.message = message.str();\n            return audit;\n        }\n'''
+          new = '''        if (!audit.invalidRouteOutcomes.empty() ||\n            !audit.unroutedButtonActionIds.empty())\n        {\n            std::ostringstream message;\n            bool hasMessage = false;\n            if (!audit.invalidRouteOutcomes.empty())\n            {\n                message << "Story Flow routes use Screen outcomes that are no longer authored: "\n                        << Join(audit.invalidRouteOutcomes) << '.';\n                hasMessage = true;\n            }\n            if (!audit.unroutedButtonActionIds.empty())\n            {\n                if (hasMessage) message << ' ';\n                message << "Button actions have no Story Flow destination: "\n                        << Join(audit.unroutedButtonActionIds) << '.';\n            }\n            audit.message = message.str();\n            return audit;\n        }\n'''
+          text = once(text, old, new, 'Audit diagnostic assembly')
+          write(path, text)
+
+          # Runtime only blocks parity defects that can actually be reached from
+          # Game Start. Detached authoring drafts remain legal project content.
+          path = 'Runtime/src/RuntimeFlow.cpp'
+          text = read(path)
+          text = once(
+              text,
+              '#include <utility>\n',
+              '#include <unordered_set>\n#include <utility>\n',
+              'Runtime reachable include')
+          old = '''        bridge::StoryFlowScreenReferenceService screenReferences;\n        for (const auto& node : document.nodes)\n        {\n            if (node.kind != bridge::FlowNodeKind::Screen) continue;\n            const auto audit = screenReferences.AuditScreenOutcomes(\n                bootstrap.project.rootPath,\n                bootstrap.project.projectId,\n                document,\n                node.id);\n            if (!audit.succeeded)\n            {\n                error = "Story Flow Screen outcome parity failed for '" +\n                    node.name + "': " + audit.message;\n                return false;\n            }\n        }\n'''
+          new = '''        std::unordered_set<bridge::StableId> reachableNodes;\n        reachableNodes.insert(document.startNodeId);\n        bool expanded = true;\n        while (expanded)\n        {\n            expanded = false;\n            for (const auto& route : document.routes)\n            {\n                if (reachableNodes.count(route.sourceNodeId) == 0) continue;\n                expanded = reachableNodes.insert(route.destinationNodeId).second ||\n                    expanded;\n            }\n        }\n\n        bridge::StoryFlowScreenReferenceService screenReferences;\n        for (const auto& node : document.nodes)\n        {\n            if (node.kind != bridge::FlowNodeKind::Screen ||\n                reachableNodes.count(node.id) == 0)\n                continue;\n            const auto audit = screenReferences.AuditScreenOutcomes(\n                bootstrap.project.rootPath,\n                bootstrap.project.projectId,\n                document,\n                node.id);\n            if (!audit.succeeded)\n            {\n                error = "Story Flow Screen outcome parity failed for '" +\n                    node.name + "': " + audit.message;\n                return false;\n            }\n        }\n'''
+          text = once(text, old, new, 'Runtime reachable Screen audit')
+          write(path, text)
+
+          # Story Flow workspace emits one semantic-change signal after any
+          # successful validated edit/undo/redo. Integration re-audits on the
+          # next frame, so diagnostics stay current while the creator repairs.
+          path = 'Studio/src/RenegadeStoryFlowWorkspace.h'
+          text = read(path)
+          text = once(
+              text,
+              '''        void OnScreenOutcomeQuery(ScreenOutcomeQuery callback);\n        void SetExternalStatus(std::string message);\n''',
+              '''        void OnScreenOutcomeQuery(ScreenOutcomeQuery callback);\n        void OnSemanticChanged(std::function<void()> callback);\n        void SetExternalStatus(std::string message);\n''',
+              'Workspace semantic callback public')
+          text = once(
+              text,
+              '''        ScreenOutcomeQuery screenOutcomeQuery_;\n        std::string statusMessage_ = "READY";\n''',
+              '''        ScreenOutcomeQuery screenOutcomeQuery_;\n        std::function<void()> semanticChanged_;\n        std::string statusMessage_ = "READY";\n''',
+              'Workspace semantic callback member')
+          write(path, text)
+
+          path = 'Studio/src/RenegadeStoryFlowWorkspace.cpp'
+          text = read(path)
+          text = once(
+              text,
+              '''    void RenegadeStoryFlowWorkspace::SetExternalStatus(std::string message)\n    {\n        SetStatus(std::move(message));\n    }\n''',
+              '''    void RenegadeStoryFlowWorkspace::OnSemanticChanged(\n        std::function<void()> callback)\n    {\n        semanticChanged_ = std::move(callback);\n    }\n\n    void RenegadeStoryFlowWorkspace::SetExternalStatus(std::string message)\n    {\n        SetStatus(std::move(message));\n    }\n''',
+              'Workspace semantic callback implementation')
+          text = once(
+              text,
+              '''        RefreshInspectorControls();\n        NotifyLayoutChanged();\n        return true;\n    }\n\n    void RenegadeStoryFlowWorkspace::SaveFlow()\n''',
+              '''        RefreshInspectorControls();\n        NotifyLayoutChanged();\n        if (semanticChanged_) semanticChanged_();\n        return true;\n    }\n\n    void RenegadeStoryFlowWorkspace::SaveFlow()\n''',
+              'Workspace semantic callback dispatch')
+          write(path, text)
+
+          path = 'Studio/src/StoryFlowStudioIntegration.h'
+          text = read(path)
+          text = once(
+              text,
+              '''            storyFlow.OnScreenOutcomeQuery([this](\n''',
+              '''            storyFlow.OnSemanticChanged([this]()\n            {\n                screenOutcomeAuditPending_ = true;\n            });\n            storyFlow.OnScreenOutcomeQuery([this](\n''',
+              'Integration semantic callback binding')
+          text = once(
+              text,
+              '''            storyFlow.Bind(&authoringSession_, &model_, &layout_);\n            storyFlow.SelectAndFocusNode(createdNodeId);\n            layoutDirty_ = true;\n''',
+              '''            storyFlow.Bind(&authoringSession_, &model_, &layout_);\n            storyFlow.SelectAndFocusNode(createdNodeId);\n            AuditScreenOutcomeParity(project, storyFlow, createdNodeId);\n            layoutDirty_ = true;\n''',
+              'Integration content mutation parity audit')
+          write(path, text)
+          PY
+
+          rm -f .github/workflows/gate8e-polish-patch.yml
+          git config user.name "renegade-gate8e-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Story Flow Gate 8E: keep parity diagnostics live"
+          git push origin HEAD:feature/story-flow-gate8e-outcome-parity
