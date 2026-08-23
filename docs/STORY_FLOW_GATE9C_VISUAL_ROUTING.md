@@ -1,4 +1,4 @@
-# Story Flow Gate 9C — Visual Routing, Branch Lanes & Inspector
+# Story Flow Gate 9C — Graph Flow Node Editing
 
 ## Baseline
 
@@ -6,119 +6,173 @@ Gate 9C is based on merged Gate 9B main:
 
 `f72a7b992d42bd5697ec4414d1c0edb32205e938`
 
-Gate 9B established native Journey lane/card objects and governed Level thumbnails. Gate 9C adds route authoring to that same native Journey surface. It does not introduce a second Flow model or use the approved concept image as rendered media.
+Gate 9B established the native Journey reel/card/lane surface and governed Level thumbnails. Gate 9C does **not** add wires to Journey View. It upgrades the separate technical **Graph View** into a real node editor.
 
-## Product contract
+## Hard product split
 
-Journey View must make Story Flow routing visible and directly understandable. Route wires are not decoration: each visible wire represents one authoritative `FlowRoute` from the active `StoryFlowAuthoringSession`.
+### Journey View
+
+Journey remains the higher-level creator view established in Gate 9B:
+
+- ordered cards/reels/lanes;
+- Level thumbnails and Screen/Level activation;
+- no visible route wires;
+- no input/output sockets;
+- no link dragging or node-graph interaction.
+
+### Graph View
+
+Graph is the only Story Flow view with wired nodes. Its behavioural reference is Blender's node editor: not Blender's skin, but its predictable node/socket/link interaction model.
 
 The creator must be able to:
 
-- see every authoritative route in Journey View;
-- distinguish the primary continuation from secondary branch exits;
-- hover and select a route wire;
-- inspect/edit the selected route through the existing Story Flow Inspector;
-- drag a route destination handle to another valid destination while preserving route identity and metadata;
-- drag from a source output/action port to create a new authoritative route;
-- delete a selected route and restore/re-delete it through normal Story Flow Undo/Redo;
-- switch to Graph View and observe the exact same topology;
-- continue using Graph connection authoring without the Gate 9B header collision hiding the control.
+- see Story Flow nodes as real node-editor nodes;
+- see authoritative `FlowRoute`s as links;
+- drag from an output socket to a destination input to create one route;
+- grab the destination end of an existing link, detach that end, and attach the **same route** to another destination;
+- drop a detached existing route on empty/invalid space and get the original route back unchanged;
+- never create a semantic route merely by dragging an input/destination socket;
+- select nodes and links;
+- select a link and inspect/edit that exact route in the existing Renegade Inspector;
+- delete selected links and restore/re-delete them through Story Flow Undo/Redo;
+- drag nodes and persist Graph layout;
+- pan the graph canvas;
+- double-click Level/Screen nodes and retain the existing editor handoff behaviour.
+
+## Established node-editor foundation
+
+Gate 9C uses the upstream MIT-licensed **Nelarius/imnodes** library as a pinned Studio-only dependency.
+
+Pinned revision:
+
+`eb36902c892548ef94f88f51ad7e7c9c7058a71c`
+
+This is the same class of node-editor foundation used by GameGuru MAX. Renegade does not copy MAX source or MAX UI.
+
+ImNodes supplies established node-editor mechanics such as:
+
+- nodes and input/output attributes;
+- links;
+- link/node selection and hit testing;
+- link-start/create/drop/destroy events;
+- `ImNodesAttributeFlags_EnableLinkDetachWithDragClick` for dragging an existing connected link end;
+- panning and editor context state.
+
+## UI architecture
+
+The accepted Renegade UI decision remains unchanged:
+
+- Wicked `wiGUI` is the production editor UI foundation;
+- Renegade owns the visual language, navigation, Inspector, toolbars and workflows;
+- EngineBridge remains UI-toolkit independent.
+
+Gate 9C introduces a tightly bounded exception only for the Graph canvas:
+
+`Renegade wiGUI shell -> Graph viewport -> Dear ImGui + ImNodes mechanics -> Wicked renderer`
+
+Dear ImGui sources are the already-pinned copy present in Wicked's `Example_ImGui` sample. Renegade supplies a small Wicked renderer/input bridge and Renegade-owned HLSL shaders. ImNodes is linked only into `RenegadeStudio`.
+
+Runtime and standalone game targets do **not** link Dear ImGui or ImNodes.
 
 ## One route authority
 
-Gate 9C does not serialize route geometry or route semantics in the Journey UI.
+Graph UI never owns Runtime route semantics.
 
-All semantic mutations continue through `StoryFlowAuthoringSession`:
+All semantic changes continue through `StoryFlowAuthoringSession`:
 
-- create: `AddRoute`
-- rewire/edit: `UpdateRoute`
-- delete: `DeleteRoute`
-- history: existing Story Flow Undo/Redo
+- output socket -> input socket: `AddRoute`;
+- existing destination-end reconnect: `UpdateRoute`;
+- delete selected link: `DeleteRoute`;
+- history: existing Story Flow Undo/Redo.
 
-Journey View, Graph View, Inspector, Runtime and packaging therefore continue to read one Flow document.
+The Inspector, Graph, Journey projection, Runtime and packaging therefore continue to read one Flow document.
 
-A destination-handle rewire changes only the destination fields required by the destination convention. The existing route ID, source node, outcome/action, priority and conditions remain on the same route object.
+## Transactional reconnect rule
 
-## Native Renegade routing objects
+The destination-end drag is deliberately transactional.
 
-Gate 9C introduces `RenegadeStoryFlowJourneyRoutingOverlay`, composed from Renegade-owned route and port widget objects using Wicked's low-level GUI/render/input infrastructure.
+When ImNodes reports that an existing link was detached, Renegade records the stable `FlowRoute` ID but does **not** delete or mutate the route yet.
 
-The following hard rules apply:
+- valid new destination -> `UpdateRoute(existingRouteId, ...)`;
+- invalid/empty drop -> no semantic mutation; the authoritative route is rendered again;
+- no delete+create substitution is permitted.
 
-- no concept-art background is loaded or rendered;
-- no route hotspots are placed over a screenshot;
-- no stock Wicked Editor node/graph UI is exposed;
-- every visible Journey route is represented by a route object bound to a stable `FlowRoute` ID;
-- every visible source port is represented by a port object bound to a stable source node ID and exact outcome/action string.
+A successful rewire preserves:
 
-## Source ports
+- stable route ID;
+- source node;
+- outcome/action;
+- priority;
+- conditions;
+- every other route field except destination/destination-entry fields required by the new destination convention.
 
-Source ports expose existing semantic conventions rather than inventing Runtime behaviour:
+This directly prevents the failed prototype behaviour where dragging either end merely spawned another wire.
 
-- Game Start: `renegade.flow.start`
-- Level: `next`
-- Screen: current authored Screen actions returned through the existing Screen outcome query
-- terminal nodes: no output ports
+## Socket conventions
 
-For Screen nodes, the selected port's authored action becomes the new route outcome. The action is revalidated when the drag is committed so an action changed during the gesture cannot silently create a stale route.
+### Inputs
 
-## Wire presentation
+Every valid destination node gets an input socket. Permanent Game Start cannot be a destination.
 
-Journey routes use clean orthogonal routing rather than free diagonal lines.
+### Outputs
 
-- primary continuation: restrained route colour;
-- secondary branch: branch treatment;
-- hover: raised neutral emphasis;
-- selected: Renegade Forge orange;
-- selected/hovered wires expose their outcome label;
-- destination handles are visually explicit and draggable.
+- Game Start: `renegade.flow.start` displayed as `START`;
+- Level: `next` displayed as `NEXT`, plus existing authored outcome slots needed to represent current topology;
+- Screen: actual authored Screen action IDs from the established Screen outcome query;
+- terminal nodes: no outputs.
 
-Backward/return relationships use an outside gutter path instead of cutting directly through card content.
-
-This is the Gate 9C routing foundation. Gate 9D still owns semantic zoom, Story Overview/minimap, search and navigation polish. Gate 9E owns broader nonlinear authoring conveniences such as advanced splicing/hubs/loop workflows.
+A stale Screen route outcome remains visible so existing topology is never hidden, but its stale socket is not authorable as a new route source.
 
 ## Gate 9B Connect regression closure
 
-Gate 9B did not delete Graph `CONNECT`; the new 9A workspace inset caused the old hardcoded Level lifecycle name field to cover it.
+The old `CONNECT` button was not deleted in Gate 9B; the 9A rail inset caused the hardcoded Level lifecycle field to cover it.
 
-Gate 9C must restore accessible Graph connection authoring. The 9C implementation supplies a Graph-only Renegade `CONNECT / CANCEL LINK` control in clear Inspector space and delegates directly to the existing `BeginConnect`/`CommitConnectionTo` path. The old covered toolbar control is not treated as the user-facing solution.
+Gate 9C supersedes that old two-step button workflow with direct Graph socket linking. The legacy `CONNECT` control is hidden while the Graph node editor is active rather than moved to another arbitrary location.
 
-Gate 9C fails if Graph View still has no accessible way to create a route.
+Graph View therefore regains connection authoring through the normal node-editor interaction itself.
+
+## Rendering and performance boundary
+
+The Graph node editor is editor-only and does not affect packaged-game performance.
+
+Renegade uses Wicked's native graphics device to render ImGui draw data and keeps the graph bounded to the Graph viewport. Journey never creates or renders ImNodes content.
+
+The implementation intentionally does not add Node.js, Electron, a web view or a browser runtime.
 
 ## Automated proof
 
 `RenegadeStoryFlowGate9CVisualRoutingTests` proves the semantic boundary independently of UI rendering:
 
-1. a branched Flow projects every authoritative route into Journey exits;
-2. a secondary Screen route is projected as a branch rather than the primary continuation;
-3. rewiring a route preserves its stable ID, source, outcome, priority and conditions;
-4. Journey projection immediately reflects the rewired destination;
-5. deleting the route removes it from both Flow and Journey;
-6. Undo restores the same route identity/topology;
-7. Redo removes it again from both views.
+1. Graph-style link creation creates exactly one authoritative route/history mutation;
+2. destination rewiring keeps the same stable route ID and route count;
+3. source, outcome, priority and conditions survive the rewire;
+4. the authoring model immediately mirrors the new destination;
+5. a cancelled visual detach requires no Story Flow mutation;
+6. link Delete removes the route;
+7. Undo restores the same rewired route identity/metadata;
+8. Redo removes it again.
 
-## Owner Release acceptance
+## Owner packaged Release acceptance
 
 Use the packaged Release build from the exact passing PR head.
 
-1. Open a project containing at least Game Start, one Screen and two Level/destination nodes.
-2. In **Graph View**, select a non-terminal node. Confirm an accessible `CONNECT` control exists and is not covered by Level/Screen lifecycle controls.
-3. Use Graph `CONNECT` to create a route. Confirm the route appears in Graph and Journey without reopening the project.
-4. Switch to **Journey View**. Confirm every existing route is visibly wired between cards.
-5. Hover a wire. Confirm it highlights without selecting or moving a card.
-6. Click a wire. Confirm the Inspector switches to that exact route and its outcome/destination metadata are editable.
-7. Drag that wire's destination handle to another destination card. Confirm the wire moves, the Inspector remains on the same route, and Graph View shows the same new destination.
-8. From a Level `NEXT` port, drag to a destination and confirm a new `next` route is created.
-9. For a Screen with authored actions, confirm output ports represent those actions. Drag from a specific action port and verify the selected route's outcome equals that action.
-10. Select a wire and press **Delete**. Confirm it disappears from Journey and Graph.
-11. Press **Undo**. Confirm the same route returns. Press **Redo** and confirm it disappears again.
-12. Create or inspect a branched route and confirm secondary branch wiring is visually distinguishable from the primary continuation.
-13. Save, close Renegade, reopen the project and confirm the authored topology persists identically in Journey and Graph.
-14. Recheck Gate 9B behaviour: Level thumbnails remain visible/persistent, Level double-click opens the Level Editor, and Screen double-click opens the Screen Editor.
-15. Confirm no approved concept image is present as a rendered background and no stock Wicked Editor window has appeared.
+1. Open Story Flow and inspect **Journey** first. Confirm it remains the Gate 9B card/reel view and contains **no wires or sockets**.
+2. Switch to **Graph**. Confirm nodes have clear input/output sockets and routes are visible as node-editor links.
+3. Drag from a Level `NEXT` output socket to another valid destination input. Confirm exactly one route/link is created.
+4. Grab the **destination/input end of that existing link** and drag it away. Confirm that end detaches from the node instead of creating another link.
+5. Drop that detached end on another destination input. Confirm the same link is rewired and no duplicate link remains.
+6. Repeat the detach, but release in empty graph space. Confirm the original link snaps/restores and no route is created/deleted.
+7. Start a new drag from an input/destination socket. Confirm it cannot commit a new Story Flow route.
+8. On a Screen node, confirm output sockets correspond to that Screen's authored action IDs. Create a link from one action and confirm the Inspector outcome matches it.
+9. Click a link. Confirm the existing Renegade Inspector selects that exact route.
+10. Press **Delete** on a selected link. Confirm it disappears. Press **Undo** and confirm the same route returns; **Redo** removes it again.
+11. Drag Graph nodes and pan the canvas. Save/close/reopen and confirm node layout/topology remain correct.
+12. Double-click Level and Screen Graph nodes and confirm the established Level Editor / Screen Editor handoffs still work.
+13. Return to Journey and confirm it still has no wires and Gate 9B thumbnails/activation remain intact.
+14. Confirm there is no concept-art background, no stock Wicked Editor window, and no visible generic ImGui window chrome.
 
-Gate 9C passes only when exact-head Debug/Release CI is green **and** the packaged Release owner audit above passes.
+Gate 9C passes only when exact-head Debug/Release CI is green **and** this packaged Release owner audit passes.
 
 ## Gate boundary
 
-Gate 9C does not close Gate 9 visual polish. Current cards/typography/spacing may still be visibly pre-polish. The gate closes routing comprehension and manipulation on the real Renegade Journey component architecture so later visual refinement is applied to the correct interaction model.
+Gate 9D still owns semantic zoom, Story Overview/minimap, search and navigation polish. Gate 9E owns broader nonlinear authoring conveniences. Gate 9C is specifically the Graph node/link interaction foundation.
