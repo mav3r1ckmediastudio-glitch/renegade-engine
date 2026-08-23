@@ -1,0 +1,185 @@
+name: Gate 8E one-shot integration patch
+
+on:
+  push:
+    branches:
+      - feature/story-flow-gate8e-outcome-parity
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/story-flow-gate8e-outcome-parity
+          fetch-depth: 0
+      - name: Apply bounded Gate 8E integration
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text(encoding='utf-8')
+
+          def write(path, text):
+              Path(path).write_text(text, encoding='utf-8', newline='\n')
+
+          def once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one anchor, found {count}')
+              return text.replace(old, new, 1)
+
+          # Runtime: standalone uses the same Flow/Screen parity contract and
+          # fails closed before FlowInterpreter begins executing the journey.
+          path = 'Runtime/src/RuntimeFlow.cpp'
+          text = read(path)
+          text = once(
+              text,
+              '#include "renegade/bridge/ScreenService.h"\n',
+              '#include "renegade/bridge/ScreenService.h"\n#include "renegade/bridge/StoryFlowScreenReferenceService.h"\n',
+              'Runtime include')
+          anchor = '''        if (document.envelope.documentId != bootstrap.project.startupFlowId)\n        {\n            error = "Resolved Story Flow document ID does not match the project manifest.";\n            return false;\n        }\n        if (!interpreter_.Initialize(std::move(document), error))\n'''
+          replacement = '''        if (document.envelope.documentId != bootstrap.project.startupFlowId)\n        {\n            error = "Resolved Story Flow document ID does not match the project manifest.";\n            return false;\n        }\n\n        bridge::StoryFlowScreenReferenceService screenReferences;\n        for (const auto& node : document.nodes)\n        {\n            if (node.kind != bridge::FlowNodeKind::Screen) continue;\n            const auto audit = screenReferences.AuditScreenOutcomes(\n                bootstrap.project.rootPath,\n                bootstrap.project.projectId,\n                document,\n                node.id);\n            if (!audit.succeeded)\n            {\n                error = "Story Flow Screen outcome parity failed for '" +\n                    node.name + "': " + audit.message;\n                return false;\n            }\n        }\n\n        if (!interpreter_.Initialize(std::move(document), error))\n'''
+          text = once(text, anchor, replacement, 'Runtime parity audit')
+          write(path, text)
+
+          # Story Flow workspace: Screen-route outcome edits must use a real
+          # action exposed by the governed Screen. Non-Screen sources retain
+          # the existing free symbolic outcome contract.
+          path = 'Studio/src/RenegadeStoryFlowWorkspace.h'
+          text = read(path)
+          text = once(text, '#include <string>\n', '#include <string>\n#include <vector>\n', 'Workspace vector include')
+          text = once(
+              text,
+              '''    public:\n        void Create();\n''',
+              '''    public:\n        using ScreenOutcomeQuery = std::function<bool(\n            const bridge::StableId&,\n            std::vector<std::string>&,\n            std::string&)>;\n\n        void Create();\n''',
+              'Workspace query type')
+          text = once(
+              text,
+              '''        void OnNodeActivated(\n            std::function<void(const bridge::StableId&)> callback);\n\n''',
+              '''        void OnNodeActivated(\n            std::function<void(const bridge::StableId&)> callback);\n        void OnScreenOutcomeQuery(ScreenOutcomeQuery callback);\n        void SetExternalStatus(std::string message);\n\n''',
+              'Workspace public parity seam')
+          text = once(
+              text,
+              '''        [[nodiscard]] const bridge::FlowRoute* FindDocumentRoute(\n            const bridge::StableId& routeId) const noexcept;\n''',
+              '''        [[nodiscard]] const bridge::FlowRoute* FindDocumentRoute(\n            const bridge::StableId& routeId) const noexcept;\n        [[nodiscard]] bool QueryScreenOutcomes(\n            const bridge::StableId& sourceNodeId,\n            std::vector<std::string>& outcomes,\n            std::string& error) const;\n        [[nodiscard]] bool ValidateRouteOutcomeForSource(\n            const bridge::StableId& sourceNodeId,\n            const std::string& outcome,\n            std::string& error) const;\n''',
+              'Workspace private parity helpers')
+          text = once(
+              text,
+              '''        std::function<void(const bridge::StableId&)> nodeActivated_;\n        std::function<void()> layoutChanged_;\n''',
+              '''        std::function<void(const bridge::StableId&)> nodeActivated_;\n        std::function<void()> layoutChanged_;\n        ScreenOutcomeQuery screenOutcomeQuery_;\n''',
+              'Workspace query member')
+          write(path, text)
+
+          path = 'Studio/src/RenegadeStoryFlowWorkspace.cpp'
+          text = read(path)
+          text = once(
+              text,
+              '''    void RenegadeStoryFlowWorkspace::OnNodeActivated(\n        std::function<void(const bridge::StableId&)> callback)\n    {\n        nodeActivated_ = std::move(callback);\n    }\n\n''',
+              '''    void RenegadeStoryFlowWorkspace::OnNodeActivated(\n        std::function<void(const bridge::StableId&)> callback)\n    {\n        nodeActivated_ = std::move(callback);\n    }\n\n    void RenegadeStoryFlowWorkspace::OnScreenOutcomeQuery(\n        ScreenOutcomeQuery callback)\n    {\n        screenOutcomeQuery_ = std::move(callback);\n    }\n\n    void RenegadeStoryFlowWorkspace::SetExternalStatus(std::string message)\n    {\n        SetStatus(std::move(message));\n    }\n\n''',
+              'Workspace parity callback implementation')
+
+          apply_start = text.index('    void RenegadeStoryFlowWorkspace::ApplySelectedRoute()')
+          apply_end = text.index('    void RenegadeStoryFlowWorkspace::DeleteSelectedRoute()', apply_start)
+          apply = text[apply_start:apply_end]
+          apply = once(
+              apply,
+              '''        route.outcome = Trim(routeOutcomeInput_.GetValue());\n        route.destinationEntry = Trim(routeEntryInput_.GetValue());\n\n        const std::string priorityText = Trim(routePriorityInput_.GetValue());\n''',
+              '''        route.outcome = Trim(routeOutcomeInput_.GetValue());\n        route.destinationEntry = Trim(routeEntryInput_.GetValue());\n\n        std::string error;\n        if (!ValidateRouteOutcomeForSource(\n                route.sourceNodeId, route.outcome, error))\n        {\n            SetStatus("ROUTE EDIT REJECTED // " + error);\n            RefreshInspectorControls();\n            return;\n        }\n\n        const std::string priorityText = Trim(routePriorityInput_.GetValue());\n''',
+              'Apply route Screen outcome validation')
+          apply = once(
+              apply,
+              '''\n        std::string error;\n        if (!session_->UpdateRoute(selectedRouteId_, std::move(route), error))\n''',
+              '''\n        if (!session_->UpdateRoute(selectedRouteId_, std::move(route), error))\n''',
+              'Apply route duplicate error')
+          text = text[:apply_start] + apply + text[apply_end:]
+
+          helper_anchor = '    void RenegadeStoryFlowWorkspace::ApplySelectedRoute()\n'
+          helpers = '''    bool RenegadeStoryFlowWorkspace::QueryScreenOutcomes(\n        const bridge::StableId& sourceNodeId,\n        std::vector<std::string>& outcomes,\n        std::string& error) const\n    {\n        outcomes.clear();\n        const auto* source = FindDocumentNode(sourceNodeId);\n        if (!source)\n        {\n            error = "route source no longer exists";\n            return false;\n        }\n        if (source->kind != bridge::FlowNodeKind::Screen)\n        {\n            error.clear();\n            return true;\n        }\n        if (!screenOutcomeQuery_)\n        {\n            error = "Screen outcome authority is unavailable";\n            return false;\n        }\n        return screenOutcomeQuery_(sourceNodeId, outcomes, error);\n    }\n\n    bool RenegadeStoryFlowWorkspace::ValidateRouteOutcomeForSource(\n        const bridge::StableId& sourceNodeId,\n        const std::string& outcome,\n        std::string& error) const\n    {\n        const auto* source = FindDocumentNode(sourceNodeId);\n        if (!source)\n        {\n            error = "route source no longer exists";\n            return false;\n        }\n        if (source->kind != bridge::FlowNodeKind::Screen)\n        {\n            error.clear();\n            return true;\n        }\n\n        std::vector<std::string> outcomes;\n        if (!QueryScreenOutcomes(sourceNodeId, outcomes, error))\n            return false;\n        if (outcomes.empty())\n        {\n            error = "Screen has no authored actions";\n            return false;\n        }\n        if (std::find(outcomes.begin(), outcomes.end(), outcome) == outcomes.end())\n        {\n            error = "'" + outcome + "' IS NOT AN AUTHORED SCREEN ACTION";\n            return false;\n        }\n        error.clear();\n        return true;\n    }\n\n'''
+          text = once(text, helper_anchor, helpers + helper_anchor, 'Workspace parity helpers insert')
+
+          connect_start = text.index('    void RenegadeStoryFlowWorkspace::CommitConnectionTo(')
+          connect_end = text.index('    void RenegadeStoryFlowWorkspace::Update(', connect_start)
+          connect = text[connect_start:connect_end]
+          connect = once(
+              connect,
+              '''            bridge::FlowRoute route;\n            route.sourceNodeId = connectionSourceNodeId_;\n            route.outcome = source->kind == bridge::FlowNodeKind::GameStart\n                ? bridge::GameStartOutcome : "next";\n            route.destinationNodeId = destinationNodeId;\n''',
+              '''            bridge::FlowRoute route;\n            route.sourceNodeId = connectionSourceNodeId_;\n            if (source->kind == bridge::FlowNodeKind::GameStart)\n            {\n                route.outcome = bridge::GameStartOutcome;\n            }\n            else if (source->kind == bridge::FlowNodeKind::Screen)\n            {\n                std::vector<std::string> outcomes;\n                if (!QueryScreenOutcomes(source->id, outcomes, error))\n                {\n                    SetStatus("CONNECT REJECTED // " + error);\n                    return;\n                }\n                if (outcomes.empty())\n                {\n                    SetStatus("CONNECT REJECTED // SCREEN HAS NO AUTHORED ACTIONS");\n                    return;\n                }\n                route.outcome = outcomes.front();\n            }\n            else\n            {\n                route.outcome = "next";\n            }\n            route.destinationNodeId = destinationNodeId;\n''',
+              'Screen connection initial outcome')
+          text = text[:connect_start] + connect + text[connect_end:]
+          write(path, text)
+
+          # Studio integration: outcome authority query, reopen audit and
+          # explicit diagnostic after returning from Screen Editor.
+          path = 'Studio/src/StoryFlowStudioIntegration.h'
+          text = read(path)
+          text = once(
+              text,
+              '''        void RequestStoryFlow() noexcept\n        {\n            desiredWorkspace_ = Workspace::StoryFlow;\n        }\n''',
+              '''        void RequestStoryFlow() noexcept\n        {\n            if (desiredWorkspace_ == Workspace::ScreenEditor)\n                screenOutcomeAuditPending_ = true;\n            desiredWorkspace_ = Workspace::StoryFlow;\n        }\n''',
+              'Integration return audit marker')
+          text = once(
+              text,
+              '''            storyFlow.OnNodeActivated([this](const bridge::StableId& nodeId)\n''',
+              '''            storyFlow.OnScreenOutcomeQuery([this](\n                const bridge::StableId& nodeId,\n                std::vector<std::string>& outcomes,\n                std::string& error)\n            {\n                outcomes.clear();\n                if (activeProjectRoot_.empty() || !authoringSession_.IsLoaded())\n                {\n                    error = "No active Story Flow project is available for Screen outcome resolution.";\n                    return false;\n                }\n                bridge::StoryFlowScreenReferenceService service;\n                const auto resolved = service.ResolveScreen(\n                    activeProjectRoot_,\n                    authoringSession_.ProjectId(),\n                    authoringSession_.Document(),\n                    nodeId);\n                if (!resolved.succeeded)\n                {\n                    error = resolved.message;\n                    return false;\n                }\n                outcomes = resolved.actionIds;\n                error.clear();\n                return true;\n            });\n            storyFlow.OnNodeActivated([this](const bridge::StableId& nodeId)\n''',
+              'Integration Screen action query')
+          text = once(
+              text,
+              '''            hubOwnedLastTick_ = false;\n\n            if (!loadAttempted_)\n''',
+              '''            hubOwnedLastTick_ = false;\n            activeProjectRoot_ = project.rootPath;\n\n            if (!loadAttempted_)\n''',
+              'Integration active project root')
+          text = once(
+              text,
+              '''            ProcessPendingLevelAction(levelEditor, storyFlow, session, project);\n            ProcessPendingScreenAction(storyFlow, project);\n\n            if (desiredWorkspace_ == Workspace::ScreenEditor)\n''',
+              '''            ProcessPendingLevelAction(levelEditor, storyFlow, session, project);\n            ProcessPendingScreenAction(storyFlow, project);\n\n            if (screenOutcomeAuditPending_ &&\n                desiredWorkspace_ == Workspace::StoryFlow)\n            {\n                screenOutcomeAuditPending_ = false;\n                AuditScreenOutcomeParity(\n                    project, storyFlow, screenEditorHandoff_.screenNodeId);\n            }\n\n            if (desiredWorkspace_ == Workspace::ScreenEditor)\n''',
+              'Integration return parity audit')
+
+          helper_anchor = '''        template <typename Project, typename StoryFlowPath>\n        bool ReloadAfterContentMutation(\n'''
+          helper = '''        template <typename Project, typename StoryFlowPath>\n        bool AuditScreenOutcomeParity(\n            const Project& project,\n            StoryFlowPath& storyFlow,\n            const bridge::StableId& preferredNodeId)\n        {\n            if (!authoringSession_.IsLoaded()) return false;\n\n            bridge::StoryFlowScreenReferenceService service;\n            bool sawScreen = false;\n            for (const auto& node : authoringSession_.Document().nodes)\n            {\n                if (node.kind != bridge::FlowNodeKind::Screen) continue;\n                sawScreen = true;\n                const auto audit = service.AuditScreenOutcomes(\n                    project.rootPath,\n                    project.projectId,\n                    authoringSession_.Document(),\n                    node.id);\n                if (!audit.succeeded)\n                {\n                    storyFlow.SelectAndFocusNode(node.id);\n                    storyFlow.SetExternalStatus(\n                        "SCREEN ROUTING INVALID // " + audit.message);\n                    ReportSemanticFailure(\n                        "Screen outcome parity failed for '" + node.name +\n                        "': " + audit.message);\n                    return false;\n                }\n            }\n\n            if (sawScreen)\n            {\n                if (!preferredNodeId.empty())\n                    storyFlow.SelectAndFocusNode(preferredNodeId);\n                storyFlow.SetExternalStatus(\n                    "SCREEN OUTCOMES SYNCHRONIZED // STORY FLOW ROUTING READY");\n            }\n            return true;\n        }\n\n'''
+          text = once(text, helper_anchor, helper + helper_anchor, 'Integration parity helper')
+          text = once(
+              text,
+              '''            storyFlow.Bind(&authoringSession_, &model_, &layout_);\n            if (!restoredSavedLayout)\n''',
+              '''            storyFlow.Bind(&authoringSession_, &model_, &layout_);\n            AuditScreenOutcomeParity(project, storyFlow, {});\n            if (!restoredSavedLayout)\n''',
+              'Integration reopen parity audit')
+          text = once(
+              text,
+              '''            screenEditorHandoff_ = {};\n            loadAttempted_ = false;\n''',
+              '''            screenEditorHandoff_ = {};\n            activeProjectRoot_.clear();\n            screenOutcomeAuditPending_ = false;\n            loadAttempted_ = false;\n''',
+              'Integration parity reset')
+          text = once(
+              text,
+              '''        std::string pendingExistingScenePath_;\n        std::chrono::steady_clock::time_point lastLayoutWrite_{};\n''',
+              '''        std::string pendingExistingScenePath_;\n        std::string activeProjectRoot_;\n        std::chrono::steady_clock::time_point lastLayoutWrite_{};\n''',
+              'Integration active root member')
+          text = once(
+              text,
+              '''        bool layoutDirty_ = false;\n        bool hubOwnedLastTick_ = true;\n''',
+              '''        bool layoutDirty_ = false;\n        bool hubOwnedLastTick_ = true;\n        bool screenOutcomeAuditPending_ = false;\n''',
+              'Integration audit member')
+          write(path, text)
+
+          # Register the bounded Gate 8E proof without disturbing the historical
+          # monolithic Tests/CMakeLists.
+          path = 'CMakeLists.txt'
+          text = read(path)
+          text = once(
+              text,
+              '''    include(Tests/StoryFlowGate5Recovery.cmake)\n    include(Tests/LP06Gate1.cmake)\n''',
+              '''    include(Tests/StoryFlowGate5Recovery.cmake)\n    include(Tests/StoryFlowGate8E.cmake)\n    include(Tests/LP06Gate1.cmake)\n''',
+              'Root Gate 8E test registration')
+          write(path, text)
+          PY
+
+          rm -f .github/workflows/gate8e-one-shot-patch.yml
+          git config user.name "renegade-gate8e-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Story Flow Gate 8E: integrate outcome parity"
+          git push origin HEAD:feature/story-flow-gate8e-outcome-parity
