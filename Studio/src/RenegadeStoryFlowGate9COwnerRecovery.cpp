@@ -85,6 +85,40 @@ namespace renegade::studio
         ImNodes::SetCurrentContext(imnodesContext_);
         ImNodes::EditorContextSet(editorContext_);
 
+        // Host-driven selection (notably governed Level/Screen creation and
+        // Journey -> Graph handoff) must become a real ImNodes selection and
+        // focus. The previous path only moved the retired legacy canvas, which
+        // meant a newly created Screen could be valid in Story Flow but remain
+        // completely off-screen in Graph. A node selected directly inside
+        // ImNodes is already selected here, so normal graph clicks never cause
+        // surprise recentering.
+        const bridge::StableId& hostSelectedNodeId = workspace_->SelectedNodeId();
+        if (!hostSelectedNodeId.empty())
+        {
+            const auto found = nodeIndexByStableId_.find(hostSelectedNodeId);
+            if (found != nodeIndexByStableId_.end())
+            {
+                const int editorNodeId = nodes_[found->second].nodeId;
+                if (!ImNodes::IsNodeSelected(editorNodeId))
+                {
+                    ImNodes::ClearLinkSelection();
+                    ImNodes::ClearNodeSelection();
+                    ImNodes::SelectNode(editorNodeId);
+                    ImNodes::EditorContextMoveToNode(editorNodeId);
+
+                    if (layout_)
+                    {
+                        const ImVec2 panning = ImNodes::EditorContextGetPanning();
+                        layout_->canvas.panX = panning.x;
+                        layout_->canvas.panY = panning.y;
+                    }
+                    workspace_->NotifyLayoutChanged();
+                    SetStatus("GRAPH FOCUS // SELECTED NODE CENTERED");
+                    return;
+                }
+            }
+        }
+
         if (!pendingReconnectRouteId_.empty() &&
             !wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
         {
