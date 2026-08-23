@@ -1,4 +1,4 @@
-# Story Flow Gate 9C — visible/manipulable Journey routes over authoritative Flow history.
+# Story Flow Gate 9C — Graph-only direct link authoring over authoritative Flow history.
 add_executable(RenegadeStoryFlowGate9CVisualRoutingTests
     ${CMAKE_CURRENT_LIST_DIR}/StoryFlowGate9CVisualRoutingTests.cpp
 )
