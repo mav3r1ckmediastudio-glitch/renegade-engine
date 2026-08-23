@@ -54,6 +54,11 @@ namespace renegade::studio
         void OnSemanticChanged(std::function<void()> callback);
         void SetExternalStatus(std::string message);
 
+        // Shared Journey/Graph deletion entry point. Game Start remains
+        // protected by the authoritative authoring-session invariant.
+        [[nodiscard]] bool CanDeleteSelection() const noexcept;
+        void DeleteSelection();
+
         [[nodiscard]] const bridge::StableId& SelectedNodeId() const noexcept
         {
             return selectedNodeId_;
