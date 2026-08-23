@@ -29,6 +29,9 @@ namespace renegade::studio
             SetName("Renegade Story Flow Journey routing overlay");
             SetShadowRadius(0.0f);
             SetEnabled(false);
+
+            graphConnectControl_.Create();
+            graphConnectControl_.SetVisible(false);
         }
 
         void SetLayout(const float width, const float height)
@@ -36,6 +39,7 @@ namespace renegade::studio
             width_ = std::max(1.0f, width);
             height_ = std::max(1.0f, height);
             SetSize(XMFLOAT2(width_, height_));
+            LayoutGraphConnectControl();
         }
 
         void Bind(
@@ -56,6 +60,7 @@ namespace renegade::studio
             portsDirty_ = true;
             CancelDrag({});
             RefreshProjection();
+            LayoutGraphConnectControl();
         }
 
         void Clear() noexcept
@@ -71,6 +76,7 @@ namespace renegade::studio
             portOutcomesByNode_.clear();
             hoveredRouteId_.clear();
             hoveredPortKey_.clear();
+            graphConnectControl_.SetVisible(false);
             projectionDirty_ = true;
             portsDirty_ = true;
             dragMode_ = DragMode::None;
@@ -93,6 +99,8 @@ namespace renegade::studio
 
         // Rendering registration only. The render path explicitly invokes
         // UpdateRouting after the established workspace has processed input.
+        // Avoid Widget::Update() here so this full-workspace presentation layer
+        // never creates a competing Wicked GUI focus hitbox.
         void Update(const wi::Canvas&, float) override
         {
         }
@@ -102,6 +110,7 @@ namespace renegade::studio
             if (!IsVisible() || !session_ || !model_ || !layout_ || !workspace_ ||
                 !session_->IsLoaded() || !model_->IsLoaded())
             {
+                graphConnectControl_.SetVisible(false);
                 return;
             }
 
@@ -116,6 +125,7 @@ namespace renegade::studio
                 screenOutcomeRefresh_ = 0.0f;
             }
             UpdateGeometry();
+            UpdateGraphConnectControl();
 
             if (!guiTyping && !workspace_->SelectedRouteId().empty() &&
                 wi::input::Press(wi::input::KEYBOARD_BUTTON_DELETE))
@@ -130,12 +140,15 @@ namespace renegade::studio
                 hoveredRouteId_.clear();
                 hoveredPortKey_.clear();
                 if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) &&
-                    Contains(GraphConnectButtonBounds(), pointer))
+                    graphConnectControl_.HitTest(pointer))
                 {
                     workspace_->BeginGraphConnectFromRouting();
+                    UpdateGraphConnectControl();
                 }
                 return;
             }
+
+            graphConnectControl_.SetVisible(false);
             if (layout_->activeView != bridge::StoryFlowViewMode::Journey)
                 return;
 
@@ -151,11 +164,13 @@ namespace renegade::studio
                         break;
                     }
                 }
-                for (const auto& [id, route] : routeObjects_)
+                for (const auto& routeId : routeOrder_)
                 {
-                    if (route && route->HitTest(pointer))
+                    const auto found = routeObjects_.find(routeId);
+                    if (found != routeObjects_.end() && found->second &&
+                        found->second->HitTest(pointer))
                     {
-                        hoveredRouteId_ = id;
+                        hoveredRouteId_ = routeId;
                         break;
                     }
                 }
@@ -179,19 +194,24 @@ namespace renegade::studio
                 return;
 
             // Destination handles win over route body selection.
-            for (const auto& [id, route] : routeObjects_)
+            for (const auto& routeId : routeOrder_)
             {
-                if (!route || !Contains(route->DestinationHandleBounds(), pointer))
+                const auto found = routeObjects_.find(routeId);
+                if (found == routeObjects_.end() || !found->second ||
+                    !Contains(found->second->DestinationHandleBounds(), pointer))
+                {
                     continue;
-                const bridge::FlowRoute* semantic = FindRoute(id);
+                }
+
+                const bridge::FlowRoute* semantic = FindRoute(routeId);
                 if (!semantic)
                     continue;
-                workspace_->SelectRouteFromRouting(id);
+                workspace_->SelectRouteFromRouting(routeId);
                 dragMode_ = DragMode::ReconnectDestination;
-                dragRouteId_ = id;
+                dragRouteId_ = routeId;
                 dragSourceNodeId_ = semantic->sourceNodeId;
                 dragOutcome_ = semantic->outcome;
-                dragStart_ = route->StartPoint();
+                dragStart_ = found->second->StartPoint();
                 dragPointer_ = XMFLOAT2(pointer.x, pointer.y);
                 workspace_->SetRoutingStatus(
                     "REWIRE ROUTE // DRAG DESTINATION HANDLE TO A NEW CARD");
@@ -213,11 +233,15 @@ namespace renegade::studio
                 return;
             }
 
-            for (const auto& [id, route] : routeObjects_)
+            for (const auto& routeId : routeOrder_)
             {
-                if (!route || !route->HitTest(pointer))
+                const auto found = routeObjects_.find(routeId);
+                if (found == routeObjects_.end() || !found->second ||
+                    !found->second->HitTest(pointer))
+                {
                     continue;
-                workspace_->SelectRouteFromRouting(id);
+                }
+                workspace_->SelectRouteFromRouting(routeId);
                 workspace_->SetRoutingStatus(
                     "ROUTE SELECTED // INSPECTOR EDITS THE SAME STORY FLOW ROUTE");
                 return;
@@ -233,7 +257,7 @@ namespace renegade::studio
 
             if (layout_->activeView == bridge::StoryFlowViewMode::Graph)
             {
-                RenderGraphConnectControl(cmd);
+                graphConnectControl_.Render(canvas, cmd);
                 return;
             }
             if (layout_->activeView != bridge::StoryFlowViewMode::Journey)
@@ -295,6 +319,71 @@ namespace renegade::studio
             None,
             CreateRoute,
             ReconnectDestination,
+        };
+
+        class GraphConnectControl final : public wi::gui::Widget
+        {
+        public:
+            void Create()
+            {
+                SetName("Story Flow Graph Connect control");
+                SetShadowRadius(0.0f);
+            }
+
+            void SetBounds(const XMFLOAT4& bounds)
+            {
+                SetPos(XMFLOAT2(bounds.x, bounds.y));
+                SetSize(XMFLOAT2(
+                    std::max(1.0f, bounds.z),
+                    std::max(1.0f, bounds.w)));
+            }
+
+            void SetPresentation(const bool connecting, const bool enabled)
+            {
+                connecting_ = connecting;
+                enabled_ = enabled;
+                SetVisible(enabled);
+            }
+
+            [[nodiscard]] bool HitTest(const XMFLOAT4& pointer) const noexcept
+            {
+                return IsVisible() && enabled_ && Contains(
+                    XMFLOAT4(translation.x, translation.y, scale.x, scale.y), pointer);
+            }
+
+            void Render(
+                const wi::Canvas&,
+                const wi::graphics::CommandList cmd) const override
+            {
+                if (!IsVisible())
+                    return;
+                const bool hovered = HitTest(wi::input::GetPointer());
+                DrawPanel(
+                    translation.x,
+                    translation.y,
+                    scale.x,
+                    scale.y,
+                    hovered ? wi::Color(35, 24, 18, 255) : Surface0,
+                    connecting_ || hovered ? Forge : Border,
+                    cmd);
+                DrawText(
+                    connecting_ ? "CANCEL LINK" : "CONNECT",
+                    translation.x + scale.x * 0.5f,
+                    translation.y + 8.0f,
+                    8,
+                    connecting_ || hovered ? Forge : Text,
+                    cmd,
+                    wi::font::WIFALIGN_CENTER);
+            }
+
+            const char* GetWidgetTypeName() const override
+            {
+                return "RenegadeStoryFlowGraphConnectControl";
+            }
+
+        private:
+            bool connecting_ = false;
+            bool enabled_ = false;
         };
 
         class PortObject final : public wi::gui::Widget
@@ -437,32 +526,31 @@ namespace renegade::studio
             return std::max(1.0f, width_ - std::min(InspectorWidth, width_ * 0.42f));
         }
 
-        [[nodiscard]] XMFLOAT4 GraphConnectButtonBounds() const noexcept
+        void LayoutGraphConnectControl()
         {
             const float graphRight = translation.x + GraphWidth();
             const float available = std::max(1.0f, width_ - GraphWidth() - 28.0f);
-            return XMFLOAT4(graphRight + 14.0f,
+            graphConnectControl_.SetBounds(XMFLOAT4(
+                graphRight + 14.0f,
                 translation.y + HeaderHeight + 286.0f,
-                std::min(available, 136.0f), 28.0f);
+                std::min(available, 136.0f),
+                28.0f));
         }
 
-        void RenderGraphConnectControl(const wi::graphics::CommandList cmd) const
+        void UpdateGraphConnectControl()
         {
-            const auto* selected = model_ ? model_->FindNode(workspace_->SelectedNodeId()) : nullptr;
+            LayoutGraphConnectControl();
+            if (!model_ || !workspace_ || !layout_ ||
+                layout_->activeView != bridge::StoryFlowViewMode::Graph)
+            {
+                graphConnectControl_.SetVisible(false);
+                return;
+            }
+            const auto* selected = model_->FindNode(workspace_->SelectedNodeId());
             const bool connecting = workspace_->IsConnectionModeActive();
-            const bool canConnect = connecting ||
+            const bool enabled = connecting ||
                 (selected != nullptr && !IsTerminalKind(selected->kind));
-            if (!canConnect) return;
-
-            const XMFLOAT4 bounds = GraphConnectButtonBounds();
-            const bool hovered = Contains(bounds, wi::input::GetPointer());
-            DrawPanel(bounds.x, bounds.y, bounds.z, bounds.w,
-                hovered ? wi::Color(35, 24, 18, 255) : Surface0,
-                connecting || hovered ? Forge : Border, cmd);
-            DrawText(connecting ? "CANCEL LINK" : "CONNECT",
-                bounds.x + bounds.z * 0.5f, bounds.y + 8.0f, 8,
-                connecting || hovered ? Forge : Text, cmd,
-                wi::font::WIFALIGN_CENTER);
+            graphConnectControl_.SetPresentation(connecting, enabled);
         }
 
         void RefreshProjection()
@@ -479,7 +567,8 @@ namespace renegade::studio
             std::string error;
             if (!journeyModel_.Build(*model_, error))
             {
-                workspace_->SetRoutingStatus("ROUTING PROJECTION ERROR // " + error);
+                if (workspace_)
+                    workspace_->SetRoutingStatus("ROUTING PROJECTION ERROR // " + error);
                 return;
             }
 
@@ -688,6 +777,7 @@ namespace renegade::studio
 
         void DeleteSelectedRoute()
         {
+            if (!workspace_ || !session_) return;
             const bridge::StableId routeId = workspace_->SelectedRouteId();
             if (routeId.empty()) return;
             std::string error;
@@ -927,6 +1017,7 @@ namespace renegade::studio
         RenegadeStoryFlowWorkspace* workspace_ = nullptr;
         bridge::StoryFlowJourneyModel journeyModel_;
         ScreenOutcomeQuery screenOutcomeQuery_;
+        GraphConnectControl graphConnectControl_;
         std::unordered_map<bridge::StableId, std::unique_ptr<RouteObject>> routeObjects_;
         std::vector<bridge::StableId> routeOrder_;
         std::unordered_map<std::string, std::unique_ptr<PortObject>> portObjects_;
