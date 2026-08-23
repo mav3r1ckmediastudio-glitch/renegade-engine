@@ -30,8 +30,6 @@ jobs:
                   raise SystemExit(f'{label}: expected 1 anchor, found {count}')
               return text.replace(old, new, 1)
 
-          # Shared renderer: authoring can suppress GUI input without changing
-          # authored enabled state or Runtime visual rules.
           path = 'ScreenRenderer/src/ScreenRenderer.cpp'
           text = read(path)
           text = replace_once(text,
@@ -48,8 +46,6 @@ jobs:
           '''        found->second->SetEnabled(\n            impl_->inputEnabled &&\n            found->second->authored.kind == bridge::ScreenWidgetKind::Button &&\n            enabled);\n''', 'renderer state input gate')
           write(path, text)
 
-          # Screen Editor remains the sole pointer owner while its preview uses
-          # the same shared renderer for appearance/layout.
           path = 'Studio/src/RenegadeScreenEditorRenderPath.h'
           text = read(path)
           text = replace_once(text,
@@ -57,22 +53,19 @@ jobs:
           '''            if (loaded)\n            {\n                renderer_.SetInputEnabled(false);\n                renderer_.ApplyLayout(*this);\n            }\n            return loaded;\n''', 'editor passive preview input')
           write(path, text)
 
-          # Cheap regression evidence for the renderer mode itself.
           path = 'Tests/ScreenRendererTests.cpp'
           text = read(path)
-          anchor = '''int main()\n{\n'''
-          addition = '''int main()\n{\n    ScreenRenderer inputModeProbe;\n    if (!inputModeProbe.IsInputEnabled())\n        return Fail("Screen renderer Runtime input must default enabled");\n    inputModeProbe.SetInputEnabled(false);\n    if (inputModeProbe.IsInputEnabled())\n        return Fail("Screen renderer authoring input suppression did not latch");\n    inputModeProbe.SetInputEnabled(true);\n    if (!inputModeProbe.IsInputEnabled())\n        return Fail("Screen renderer input could not be restored for Runtime use");\n\n'''
+          anchor = '''int main()\n{\n    using namespace renegade;\n'''
+          addition = '''int main()\n{\n    using namespace renegade;\n\n    screen::ScreenRenderer inputModeProbe;\n    if (!inputModeProbe.IsInputEnabled())\n        return Fail("Screen renderer Runtime input must default enabled");\n    inputModeProbe.SetInputEnabled(false);\n    if (inputModeProbe.IsInputEnabled())\n        return Fail("Screen renderer authoring input suppression did not latch");\n    inputModeProbe.SetInputEnabled(true);\n    if (!inputModeProbe.IsInputEnabled())\n        return Fail("Screen renderer input could not be restored for Runtime use");\n'''
           text = replace_once(text, anchor, addition, 'renderer input regression test')
           write(path, text)
 
-          # Owner acceptance must explicitly cover seeded/prefab and new items.
           for path in [
               'docs/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md',
               'Studio/package/STORY_FLOW_GATE8D_CREATOR_CONTROLS.md',
           ]:
               text = read(path)
-              needle = 'Direct manipulation'
-              if needle not in text:
+              if 'Direct manipulation' not in text:
                   raise SystemExit(f'{path}: Direct manipulation section missing')
               marker = '- Select an element in the Runtime preview'
               if marker in text:
