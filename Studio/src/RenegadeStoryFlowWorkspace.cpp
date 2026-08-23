@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <filesystem>
 #include <limits>
 #include <utility>
 
@@ -14,11 +15,11 @@ namespace
     constexpr float Padding = 28.0f;
     constexpr float NodeWidth = 210.0f;
     constexpr float NodeHeight = 112.0f;
-    constexpr float JourneyCardWidth = 244.0f;
-    constexpr float JourneyCardHeight = 156.0f;
-    constexpr float JourneyColumnSpacing = 304.0f;
-    constexpr float JourneyTrackSpacing = 228.0f;
-    constexpr float JourneyTrackTop = 44.0f;
+    constexpr float JourneyCardWidth = 256.0f;
+    constexpr float JourneyCardHeight = 188.0f;
+    constexpr float JourneyColumnSpacing = 324.0f;
+    constexpr float JourneyTrackSpacing = 252.0f;
+    constexpr float JourneyTrackTop = 58.0f;
     constexpr float MinZoom = 0.20f;
     constexpr float MaxZoom = 2.50f;
 
@@ -30,7 +31,6 @@ namespace
     constexpr wi::Color Accent(210, 91, 29, 255);
     constexpr wi::Color Route(76, 96, 106, 255);
     constexpr wi::Color Error(229, 92, 92, 255);
-    constexpr wi::Color JourneyRail(45, 61, 70, 255);
 
     void Rect(float x, float y, float w, float h, wi::Color color,
         wi::graphics::CommandList cmd)
@@ -167,8 +167,24 @@ namespace renegade::studio
         selectedRouteId_.clear();
         connectionSourceNodeId_.clear();
         reconnectRouteId_.clear();
+        projectRoot_.clear();
+        journeyThumbnailResources_.clear();
+        journeyCardObjects_.clear();
+        journeyLaneObjects_.clear();
+
         if (session_ && model_ && layout_ && session_->IsLoaded() && model_->IsLoaded())
         {
+            std::string thumbnailError;
+            if (!bridge::StoryFlowJourneyThumbnailService::ResolveProjectRootFromFlowPath(
+                    session_->FilePath(), projectRoot_, thumbnailError))
+            {
+                projectRoot_.clear();
+                wi::backlog::post(
+                    "Renegade Story Flow Gate 9B: Level thumbnails unavailable: " +
+                        thumbnailError,
+                    wi::backlog::LogLevel::Warning);
+            }
+
             const bool journeyReady = RebuildJourneyProjection();
             selectedNodeId_ = model_->GameStartNodeId();
             if (journeyReady)
@@ -176,6 +192,8 @@ namespace renegade::studio
                 statusMessage_ = layout_->activeView == bridge::StoryFlowViewMode::Journey
                     ? "JOURNEY READY // GRAPH SYNCHRONIZED"
                     : "GRAPH READY // JOURNEY SYNCHRONIZED";
+                if (projectRoot_.empty())
+                    statusMessage_ += " // THUMBNAILS UNAVAILABLE";
             }
         }
         else
@@ -192,6 +210,10 @@ namespace renegade::studio
         model_ = nullptr;
         layout_ = nullptr;
         journeyModel_.Clear();
+        journeyCardObjects_.clear();
+        journeyLaneObjects_.clear();
+        journeyThumbnailResources_.clear();
+        projectRoot_.clear();
         selectedNodeId_.clear();
         selectedRouteId_.clear();
         connectionSourceNodeId_.clear();
@@ -483,6 +505,9 @@ namespace renegade::studio
         if (!model_ || !model_->IsLoaded())
         {
             journeyModel_.Clear();
+            journeyCardObjects_.clear();
+            journeyLaneObjects_.clear();
+            journeyThumbnailResources_.clear();
             return false;
         }
         std::string error;
@@ -491,7 +516,280 @@ namespace renegade::studio
             SetStatus("JOURNEY PROJECTION ERROR // " + error);
             return false;
         }
+        RebuildJourneyObjects();
+        RefreshJourneyThumbnailResources();
         return true;
+    }
+
+    void RenegadeStoryFlowWorkspace::RebuildJourneyObjects()
+    {
+        for (const auto& card : journeyModel_.Cards())
+        {
+            if (journeyCardObjects_.find(card.nodeId) != journeyCardObjects_.end())
+                continue;
+            auto object = std::make_unique<RenegadeStoryFlowJourneyCard>();
+            object->Create(card.nodeId);
+            journeyCardObjects_.emplace(card.nodeId, std::move(object));
+        }
+        for (auto it = journeyCardObjects_.begin(); it != journeyCardObjects_.end();)
+        {
+            if (journeyModel_.FindCard(it->first) == nullptr)
+                it = journeyCardObjects_.erase(it);
+            else
+                ++it;
+        }
+
+        for (const auto& track : journeyModel_.Tracks())
+        {
+            if (journeyLaneObjects_.find(track.index) != journeyLaneObjects_.end())
+                continue;
+            auto object = std::make_unique<RenegadeStoryFlowJourneyLane>();
+            object->Create(track.index);
+            journeyLaneObjects_.emplace(track.index, std::move(object));
+        }
+        for (auto it = journeyLaneObjects_.begin(); it != journeyLaneObjects_.end();)
+        {
+            const bool exists = std::any_of(
+                journeyModel_.Tracks().begin(), journeyModel_.Tracks().end(),
+                [&](const bridge::StoryFlowJourneyTrack& track)
+                {
+                    return track.index == it->first;
+                });
+            if (!exists)
+                it = journeyLaneObjects_.erase(it);
+            else
+                ++it;
+        }
+    }
+
+    std::string RenegadeStoryFlowWorkspace::JourneyCardSubtitle(
+        const bridge::StoryFlowNodeView& node) const
+    {
+        try
+        {
+            if (node.kind == bridge::FlowNodeKind::Level)
+            {
+                const std::string stem = std::filesystem::u8path(node.scenePathHint)
+                    .stem().generic_u8string();
+                return stem.empty() ? "GOVERNED LEVEL" : stem;
+            }
+            if (node.kind == bridge::FlowNodeKind::Screen)
+            {
+                const std::string stem = std::filesystem::u8path(node.screenPathHint)
+                    .stem().generic_u8string();
+                return stem.empty() ? "GOVERNED SCREEN" : stem;
+            }
+        }
+        catch (...)
+        {
+        }
+
+        switch (node.kind)
+        {
+        case bridge::FlowNodeKind::GameStart: return "PROJECT ENTRY";
+        case bridge::FlowNodeKind::CompleteGame: return "TERMINAL OUTCOME";
+        case bridge::FlowNodeKind::ReturnToMainMenu: return "RETURN DESTINATION";
+        case bridge::FlowNodeKind::Quit: return "APPLICATION EXIT";
+        default: return {};
+        }
+    }
+
+    void RenegadeStoryFlowWorkspace::RefreshJourneyThumbnailResources()
+    {
+        journeyThumbnailResources_.clear();
+        if (projectRoot_.empty() || !model_)
+            return;
+
+        for (const auto& card : journeyModel_.Cards())
+        {
+            const auto* node = model_->FindNode(card.nodeId);
+            if (!node || node->kind != bridge::FlowNodeKind::Level)
+                continue;
+
+            std::string relativePath;
+            std::string resolvedPath;
+            std::string error;
+            if (!journeyThumbnailService_.ResolveManaged(
+                    projectRoot_, node->id,
+                    relativePath, resolvedPath, error))
+            {
+                wi::backlog::post(
+                    "Renegade Story Flow: thumbnail slot for '" + node->name +
+                        "' is invalid: " + error,
+                    wi::backlog::LogLevel::Warning);
+                continue;
+            }
+            if (resolvedPath.empty())
+                continue;
+
+            wi::Resource resource = wi::resourcemanager::Load(resolvedPath);
+            if (!resource.IsValid())
+            {
+                wi::backlog::post(
+                    "Renegade Story Flow: could not load Level thumbnail '" +
+                        relativePath + "'.",
+                    wi::backlog::LogLevel::Warning);
+                continue;
+            }
+            journeyThumbnailResources_.emplace(node->id, std::move(resource));
+        }
+    }
+
+    void RenegadeStoryFlowWorkspace::UpdateJourneyObjects(
+        const wi::Canvas& canvas,
+        const float dt)
+    {
+        if (!model_ || !layout_ ||
+            layout_->activeView != bridge::StoryFlowViewMode::Journey)
+        {
+            return;
+        }
+
+        std::size_t visibleLane = 0;
+        for (const auto& track : journeyModel_.Tracks())
+        {
+            auto laneIt = journeyLaneObjects_.find(track.index);
+            if (laneIt == journeyLaneObjects_.end() || track.cardNodeIds.empty())
+                continue;
+
+            float minX = std::numeric_limits<float>::max();
+            float minY = std::numeric_limits<float>::max();
+            float maxX = std::numeric_limits<float>::lowest();
+            float maxY = std::numeric_limits<float>::lowest();
+            for (const auto& nodeId : track.cardNodeIds)
+            {
+                const auto* card = journeyModel_.FindCard(nodeId);
+                if (!card) continue;
+                const XMFLOAT4 bounds = JourneyCardScreenBounds(*card);
+                minX = std::min(minX, bounds.x);
+                minY = std::min(minY, bounds.y);
+                maxX = std::max(maxX, bounds.x + bounds.z);
+                maxY = std::max(maxY, bounds.y + bounds.w);
+            }
+            if (minX > maxX || minY > maxY)
+                continue;
+
+            auto& lane = *laneIt->second;
+            lane.SetBounds(XMFLOAT4(
+                minX - 22.0f,
+                minY - 34.0f,
+                std::max(1.0f, maxX - minX + 44.0f),
+                std::max(1.0f, maxY - minY + 52.0f)));
+            lane.SetPresentation(
+                visibleLane++, track.mainTrack, track.detached, {});
+            lane.SetVisible(true);
+            lane.Update(canvas, dt);
+        }
+
+        for (const auto& card : journeyModel_.Cards())
+        {
+            const auto* node = model_->FindNode(card.nodeId);
+            const auto objectIt = journeyCardObjects_.find(card.nodeId);
+            if (!node || objectIt == journeyCardObjects_.end())
+                continue;
+
+            bool hasError = false;
+            bool hasWarning = !card.reachableFromStart;
+            for (const auto& diagnostic : model_->Diagnostics())
+            {
+                if (diagnostic.nodeId != node->id)
+                    continue;
+                if (diagnostic.severity == bridge::StoryFlowDiagnosticSeverity::Error)
+                    hasError = true;
+                else if (diagnostic.severity == bridge::StoryFlowDiagnosticSeverity::Warning)
+                    hasWarning = true;
+            }
+
+            wi::Resource thumbnail;
+            const auto thumbnailIt = journeyThumbnailResources_.find(node->id);
+            if (thumbnailIt != journeyThumbnailResources_.end())
+                thumbnail = thumbnailIt->second;
+
+            auto& object = *objectIt->second;
+            object.SetBounds(JourneyCardScreenBounds(card));
+            object.SetPresentation(
+                node->kind,
+                card.sequenceIndex,
+                node->name,
+                JourneyCardSubtitle(*node),
+                node->outgoingRouteIds.size(),
+                node->id == selectedNodeId_,
+                hasError,
+                hasWarning,
+                layout_->journeyCanvas.zoom >= 0.48f,
+                node->kind == bridge::FlowNodeKind::Level && !projectRoot_.empty(),
+                std::move(thumbnail));
+            object.SetVisible(true);
+            object.Update(canvas, dt);
+        }
+    }
+
+    void RenegadeStoryFlowWorkspace::ChooseLevelThumbnail(
+        const bridge::StableId& nodeId)
+    {
+        const auto* node = model_ ? model_->FindNode(nodeId) : nullptr;
+        if (!node || node->kind != bridge::FlowNodeKind::Level)
+        {
+            SetStatus("THUMBNAIL REJECTED // SELECT A LEVEL CARD");
+            return;
+        }
+        if (projectRoot_.empty() || !session_ || !session_->IsLoaded())
+        {
+            SetStatus("THUMBNAIL REJECTED // PROJECT RESOURCE ROOT UNAVAILABLE");
+            return;
+        }
+
+        SelectNode(nodeId);
+        previousClickedNodeId_.clear();
+        secondsSincePreviousNodeClick_ = 1000.0f;
+        const std::string expectedRoot = projectRoot_;
+        const bridge::StableId expectedFlowId =
+            session_->Document().envelope.documentId;
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Choose Journey Level Thumbnail";
+        params.extensions = {"jpg", "jpeg", "png", "bmp", "tga"};
+        wi::helper::FileDialog(
+            params,
+            [this, nodeId, expectedRoot, expectedFlowId](
+                const std::string& selectedPath)
+            {
+                if (selectedPath.empty())
+                    return;
+                if (!session_ || !session_->IsLoaded() || !model_ ||
+                    projectRoot_ != expectedRoot ||
+                    session_->Document().envelope.documentId != expectedFlowId ||
+                    model_->FindNode(nodeId) == nullptr)
+                {
+                    SetStatus("THUMBNAIL CANCELLED // STORY FLOW CONTEXT CHANGED");
+                    return;
+                }
+
+                const auto imported = journeyThumbnailService_.Import(
+                    expectedRoot, nodeId, selectedPath);
+                if (!imported.succeeded)
+                {
+                    SetStatus("THUMBNAIL FAILED // " + imported.message);
+                    return;
+                }
+
+                const auto old = journeyThumbnailResources_.find(nodeId);
+                if (old != journeyThumbnailResources_.end() && old->second.IsValid())
+                    old->second.SetOutdated();
+
+                wi::Resource resource = wi::resourcemanager::Load(imported.resolvedPath);
+                if (!resource.IsValid())
+                {
+                    journeyThumbnailResources_.erase(nodeId);
+                    SetStatus(
+                        "THUMBNAIL IMPORTED // PREVIEW LOAD FAILED // " +
+                        imported.relativePath);
+                    return;
+                }
+                journeyThumbnailResources_[nodeId] = std::move(resource);
+                SetStatus("LEVEL THUMBNAIL UPDATED // PROJECT RESOURCE COMMITTED");
+            });
     }
 
     void RenegadeStoryFlowWorkspace::RememberOrActivateNodeClick(
@@ -1265,6 +1563,7 @@ namespace renegade::studio
             1000.0f, secondsSincePreviousNodeClick_ + std::max(0.0f, dt));
         pointerConsumed_ = false;
         UpdateAuthoringControls(canvas, dt);
+        UpdateJourneyObjects(canvas, dt);
         if (!IsVisible() || !IsEnabled() || !model_ || !layout_) return;
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
@@ -1352,6 +1651,30 @@ namespace renegade::studio
             activeCanvas.panX += pointer.x - after.x;
             activeCanvas.panY += pointer.y - after.y;
             NotifyLayoutChanged();
+        }
+
+        // The Level thumbnail utility is deliberately hit-tested before the
+        // card body. It cannot count as card selection/double-click activation
+        // or begin a Journey card drag.
+        if (inside &&
+            layout_->activeView == bridge::StoryFlowViewMode::Journey &&
+            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            for (const auto& card : journeyModel_.Cards())
+            {
+                const auto* node = model_->FindNode(card.nodeId);
+                const auto objectIt = journeyCardObjects_.find(card.nodeId);
+                if (!node || node->kind != bridge::FlowNodeKind::Level ||
+                    objectIt == journeyCardObjects_.end())
+                {
+                    continue;
+                }
+                if (Contains(objectIt->second->ThumbnailButtonBounds(), pointer))
+                {
+                    ChooseLevelThumbnail(node->id);
+                    return;
+                }
+            }
         }
 
         if (inside && wi::input::Press(wi::input::MOUSE_BUTTON_MIDDLE))
@@ -1571,53 +1894,20 @@ namespace renegade::studio
         }
         else
         {
+            // 9B Journey presentation is composed from real reusable lane and
+            // card widgets. The old primitive BorderedRect card renderer is no
+            // longer used in Journey View.
             for (const auto& track : journeyModel_.Tracks())
             {
-                if (track.cardNodeIds.empty()) continue;
-                const auto* firstCard = journeyModel_.FindCard(track.cardNodeIds.front());
-                const auto* lastCard = journeyModel_.FindCard(track.cardNodeIds.back());
-                if (!firstCard || !lastCard) continue;
-                const XMFLOAT4 first = JourneyCardScreenBounds(*firstCard);
-                const XMFLOAT4 last = JourneyCardScreenBounds(*lastCard);
-                const float railY = first.y + first.w * 0.5f;
-                Line(XMFLOAT2(first.x - 18.0f, railY),
-                    XMFLOAT2(last.x + last.z + 18.0f, railY), JourneyRail);
-                Label(
-                    track.mainTrack ? "MAIN JOURNEY" :
-                        (track.detached ? "DETACHED" : "ALTERNATE"),
-                    first.x, first.y - 20.0f, 8,
-                    track.mainTrack ? Accent : Muted, cmd);
+                const auto laneIt = journeyLaneObjects_.find(track.index);
+                if (laneIt != journeyLaneObjects_.end())
+                    laneIt->second->Render(canvas, cmd);
             }
-
             for (const auto& card : journeyModel_.Cards())
             {
-                const auto* node = model_->FindNode(card.nodeId);
-                if (!node) continue;
-                const XMFLOAT4 b = JourneyCardScreenBounds(card);
-                const bool selected = node->id == selectedNodeId_;
-                const bool start = node->kind == bridge::FlowNodeKind::GameStart;
-                BorderedRect(b.x, b.y, b.z, b.w,
-                    selected ? wi::Color(28, 20, 16, 255) : Raised,
-                    selected || start ? Accent : Border, cmd);
-                Rect(b.x, b.y, b.z, std::max(2.0f, b.w * 0.24f),
-                    start ? wi::Color(48, 27, 18, 255) : wi::Color(18, 27, 32, 255), cmd);
-                if (layout_->journeyCanvas.zoom >= 0.42f)
-                {
-                    Label(KindLabel(node->kind), b.x + 12.0f, b.y + 10.0f, 8,
-                        start ? Accent : Muted, cmd);
-                    Label(node->name, b.x + 12.0f, b.y + 38.0f, 12, Text, cmd);
-                    const std::string reference = node->kind == bridge::FlowNodeKind::Level
-                        ? node->scenePathHint
-                        : (node->kind == bridge::FlowNodeKind::Screen
-                            ? node->screenPathHint : std::string{});
-                    if (!reference.empty())
-                        Label(Shorten(reference, 34), b.x + 12.0f, b.y + 64.0f, 8, Muted, cmd);
-                    Label(
-                        std::to_string(node->outgoingRouteIds.size()) + " EXIT" +
-                            (node->outgoingRouteIds.size() == 1 ? "" : "S"),
-                        b.x + 12.0f, b.y + b.w - 24.0f, 8,
-                        node->outgoingRouteIds.empty() ? Muted : Accent, cmd);
-                }
+                const auto objectIt = journeyCardObjects_.find(card.nodeId);
+                if (objectIt != journeyCardObjects_.end())
+                    objectIt->second->Render(canvas, cmd);
             }
         }
 
