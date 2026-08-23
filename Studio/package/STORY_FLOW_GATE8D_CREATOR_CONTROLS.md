@@ -19,10 +19,10 @@ This package is the owner-acceptance candidate for Gate 8D creator controls. Gre
 
 ## B. Basic vs Advanced Inspector
 
-1. Select an element and confirm the accepted basic name/text/X/Y/W/H/visibility workflow still works.
+1. Select an element and confirm the basic Inspector provides name/text/visibility/enabled editing; geometry is authored directly in the preview rather than through X/Y/W/H fields.
 2. Click **ADVANCED**.
 3. Confirm only the Advanced Inspector is interactive in the right-hand Inspector area. There must be no visible bleed-through or double Apply/input behaviour from the basic Inspector underneath.
-4. Click `< BASIC` and confirm the accepted basic Inspector returns normally.
+4. Click `< BASIC` and confirm the basic Inspector returns normally.
 
 ## C. STYLE
 
@@ -103,16 +103,15 @@ Gate 8D is accepted only when this exact packaged Release passes the full owner 
 
 ## Owner acceptance — complete Gate 8D
 
-1. Open a governed Screen and create Text, Button, Image and Background elements.
-2. Select an element in the preview and drag it; it must follow the pointer live.
-3. Use all four corner resize handles and confirm live resizing.
-4. Confirm normal X/Y/W/H coordinate-entry fields are gone.
-5. Undo/Redo a move and resize; each full gesture is one Undo step.
-6. Parent an element and switch Absolute/Anchored mode; direct movement must not jump.
-7. Recheck Advanced style/state, colour, typography/font, governed resource, action, focus, parent/layout, presets and component controls.
-8. Save, return to Story Flow, reopen and confirm geometry plus authored state persists.
-9. Confirm Runtime preview parity and Hub → Story Flow → Screen/Level navigation remain intact.
+1. Open a governed Screen containing seeded/template controls such as `NEW GAME` and `LOAD GAME`.
+2. Select a seeded/template element in the preview and drag it; it must follow the pointer live.
+3. Use all four corner resize handles on that seeded/template element and confirm live resizing.
+4. Create new Button, Image and Text elements and repeat move/resize. Seeded template elements and creator-added elements must behave identically.
+5. Confirm normal X/Y/W/H coordinate-entry fields are gone.
+6. Undo/Redo a move and resize; each full gesture is one Undo step.
+7. Parent an element and switch Absolute/Anchored mode; direct movement must not jump.
+8. Recheck Advanced style/state, colour, typography/font, governed resource, action, focus, parent/layout, presets and component controls.
+9. Save, return to Story Flow, reopen and confirm geometry plus authored state persists.
+10. Confirm Runtime preview parity and Hub → Story Flow → Screen/Level navigation remain intact.
 
 Gate 8D is not merge-ready until exact-head CI and this owner audit pass.
-
-- Repeat direct move and corner-resize on a newly-created Button/Image/Text. Seeded template elements and creator-added elements must behave identically.

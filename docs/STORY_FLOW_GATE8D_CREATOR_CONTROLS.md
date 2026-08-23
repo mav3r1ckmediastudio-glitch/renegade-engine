@@ -46,9 +46,11 @@ This includes:
 
 The Screen Editor continues to preview the live authoring document through the shared `screen::ScreenRenderer`. Gate 8D introduces no editor-only approximation and does not expose Wicked Editor windows.
 
+Runtime keeps the renderer's GUI surfaces interactive. Screen Editor switches only renderer input ownership off while authoring so the shared surfaces remain the exact presentation source without competing with Studio for pointer selection, drag or resize. This applies uniformly to seeded/template widgets and creator-added widgets.
+
 ### Basic and Advanced Inspector coexistence
 
-Gate 8C's basic Inspector remains available unchanged for fast content/geometry editing. Gate 8D adds an **ADVANCED** surface for style, typography and binding controls. While Advanced is open, basic Inspector mutation controls are suppressed so covered controls cannot receive the same creator action or generate a second history entry. Closing Advanced returns directly to the accepted basic workflow.
+Gate 8C's basic Inspector remains available for fast name/text/visibility/enabled editing. Gate 8D moves normal geometry authoring into direct preview manipulation rather than X/Y/W/H entry. Gate 8D also adds an **ADVANCED** surface for style, typography and binding controls. While Advanced is open, basic Inspector mutation controls are suppressed so covered controls cannot receive the same creator action or generate a second history entry. Closing Advanced returns directly to the basic workflow.
 
 ### Governed resources
 
@@ -103,6 +105,7 @@ Preset values are starting values only. The creator can edit every resulting pro
 9. Image visibility is authored state; validation does not force it true.
 10. An Image may exist before a resource is chosen. A non-empty resource remains project-contained and must come from the governed creator catalogue for normal creator workflows.
 11. Every persistent advanced edit participates in Undo/Redo and Save/Open.
+12. Seeded/template and creator-added widgets use the same authoring transaction and direct-manipulation path; no template widget is locked merely because it came from a Screen preset.
 
 ## Creator UX
 
@@ -172,22 +175,23 @@ Image, Font, Action and Parent choices open direct scrollable creator lists with
 - component Undo/Redo;
 - action Add/Rename/Delete reference integrity;
 - creator focus-order moves;
-- transactional Save/Open preserving advanced style, binding, component, action and focus state.
+- direct move/resize gesture coalescing into one Undo entry;
+- renderer input mode defaults to Runtime-interactive and can be suppressed/restored for authoring;
+- transactional Save/Open preserving advanced style, binding, component, action, focus and geometry state.
 
 Windows Debug/Release CI remains authoritative for compilation and regression proof.
 
 ## Owner acceptance — complete Gate 8D
 
-1. Open a governed Screen and create Text, Button, Image and Background elements.
-2. Select an element in the preview and drag it; it must follow the pointer live.
-3. Use all four corner resize handles and confirm live resizing.
-4. Confirm normal X/Y/W/H coordinate-entry fields are gone.
-5. Undo/Redo a move and resize; each full gesture is one Undo step.
-6. Parent an element and switch Absolute/Anchored mode; direct movement must not jump.
-7. Recheck Advanced style/state, colour, typography/font, governed resource, action, focus, parent/layout, presets and component controls.
-8. Save, return to Story Flow, reopen and confirm geometry plus authored state persists.
-9. Confirm Runtime preview parity and Hub → Story Flow → Screen/Level navigation remain intact.
+1. Open a governed Screen containing seeded/template controls such as `NEW GAME` and `LOAD GAME`.
+2. Select a seeded/template element in the preview and drag it; it must follow the pointer live.
+3. Use all four corner resize handles on that seeded/template element and confirm live resizing.
+4. Create new Button, Image and Text elements and repeat move/resize. Seeded template elements and creator-added elements must behave identically.
+5. Confirm normal X/Y/W/H coordinate-entry fields are gone.
+6. Undo/Redo a move and resize; each full gesture is one Undo step.
+7. Parent an element and switch Absolute/Anchored mode; direct movement must not jump.
+8. Recheck Advanced style/state, colour, typography/font, governed resource, action, focus, parent/layout, presets and component controls.
+9. Save, return to Story Flow, reopen and confirm geometry plus authored state persists.
+10. Confirm Runtime preview parity and Hub → Story Flow → Screen/Level navigation remain intact.
 
 Gate 8D is not merge-ready until exact-head CI and this owner audit pass.
-
-- Repeat direct move and corner-resize on a newly-created Button/Image/Text. Seeded template elements and creator-added elements must behave identically.
