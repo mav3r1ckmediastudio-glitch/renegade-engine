@@ -6,10 +6,17 @@
 #include <array>
 #include <cctype>
 #include <filesystem>
+#include <fstream>
 #include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace renegade::bridge
 {
+    using StoryFlowJourneyThumbnailMap =
+        std::unordered_map<StableId, std::string>;
+
     struct StoryFlowJourneyThumbnailImportResult
     {
         bool succeeded = false;
@@ -21,10 +28,16 @@ namespace renegade::bridge
     // Gate 9B presentation-resource boundary. Journey thumbnails are project
     // resources owned by the stable Story Flow node ID; the creator's original
     // machine path is never serialized. Runtime Story Flow semantics do not
-    // depend on this service or on these images.
+    // depend on this service, its state file, or these images.
     class StoryFlowJourneyThumbnailService final
     {
     public:
+        inline static constexpr const char* StateFormat =
+            "renegade-story-flow-journey-thumbnails";
+        inline static constexpr unsigned StateVersion = 1;
+        inline static constexpr const char* StateExtension =
+            ".journey-thumbnails";
+
         [[nodiscard]] static bool IsSupportedExtension(std::string extension)
         {
             std::transform(
@@ -119,6 +132,261 @@ namespace renegade::bridge
 
             error = "Could not locate a .renegade project descriptor above the Story Flow document.";
             return false;
+        }
+
+        [[nodiscard]] static std::string ResolveStatePath(
+            const std::string& projectRoot,
+            const StableId& flowDocumentId)
+        {
+            namespace fs = std::filesystem;
+            if (projectRoot.empty() || !IsValidStableId(flowDocumentId))
+                return {};
+            return (fs::u8path(projectRoot) /
+                "Saved" /
+                "EditorState" /
+                "StoryFlow" /
+                fs::u8path(flowDocumentId + StateExtension))
+                .lexically_normal()
+                .generic_u8string();
+        }
+
+        [[nodiscard]] bool ReadState(
+            const std::string& projectRoot,
+            const StableId& expectedProjectId,
+            const StableId& expectedFlowDocumentId,
+            StoryFlowJourneyThumbnailMap& thumbnails,
+            std::string& error) const
+        {
+            namespace fs = std::filesystem;
+            thumbnails.clear();
+            if (projectRoot.empty() ||
+                !IsValidStableId(expectedProjectId) ||
+                !IsValidStableId(expectedFlowDocumentId))
+            {
+                error = "Valid project and Flow identities are required for Journey thumbnail state.";
+                return false;
+            }
+
+            const std::string filePath =
+                ResolveStatePath(projectRoot, expectedFlowDocumentId);
+            if (filePath.empty())
+            {
+                error = "Could not resolve the Journey thumbnail state path.";
+                return false;
+            }
+
+            try
+            {
+                std::error_code existsError;
+                if (!fs::exists(fs::u8path(filePath), existsError))
+                {
+                    if (existsError)
+                    {
+                        error = "Could not inspect Journey thumbnail state: " +
+                            existsError.message();
+                        return false;
+                    }
+                    error.clear();
+                    return true;
+                }
+
+                std::ifstream stream(fs::u8path(filePath), std::ios::binary);
+                if (!stream)
+                {
+                    error = "Could not open Journey thumbnail state.";
+                    return false;
+                }
+
+                std::string format;
+                std::string version;
+                std::string projectId;
+                std::string flowId;
+                if (!ReadKeyValue(stream, "format", format) ||
+                    !ReadKeyValue(stream, "version", version) ||
+                    !ReadKeyValue(stream, "project_id", projectId) ||
+                    !ReadKeyValue(stream, "flow_document_id", flowId))
+                {
+                    error = "Journey thumbnail state has an invalid header.";
+                    return false;
+                }
+                if (format != StateFormat ||
+                    version != std::to_string(StateVersion) ||
+                    projectId != expectedProjectId ||
+                    flowId != expectedFlowDocumentId)
+                {
+                    error = "Journey thumbnail state belongs to a different or unsupported Flow.";
+                    return false;
+                }
+
+                std::string line;
+                while (std::getline(stream, line))
+                {
+                    if (!line.empty() && line.back() == '\r')
+                        line.pop_back();
+                    if (line.empty())
+                        continue;
+                    const std::size_t separator = line.find('=');
+                    if (separator == std::string::npos)
+                    {
+                        error = "Journey thumbnail state contains a malformed card record.";
+                        return false;
+                    }
+                    const StableId nodeId = line.substr(0, separator);
+                    const std::string relativePath = line.substr(separator + 1);
+                    if (!IsValidStableId(nodeId) ||
+                        relativePath.empty() ||
+                        !IsSafeProjectRelativePath(std::filesystem::u8path(relativePath)) ||
+                        !IsSupportedExtension(
+                            std::filesystem::u8path(relativePath).extension().generic_u8string()) ||
+                        !thumbnails.emplace(nodeId, relativePath).second)
+                    {
+                        error = "Journey thumbnail state contains an invalid or duplicate card record.";
+                        return false;
+                    }
+                }
+                if (!stream.eof())
+                {
+                    error = "Journey thumbnail state could not be read completely.";
+                    return false;
+                }
+
+                error.clear();
+                return true;
+            }
+            catch (const std::exception& exception)
+            {
+                error = std::string("Could not read Journey thumbnail state: ") +
+                    exception.what();
+                return false;
+            }
+        }
+
+        [[nodiscard]] bool WriteState(
+            const std::string& projectRoot,
+            const StableId& projectId,
+            const StableId& flowDocumentId,
+            const StoryFlowJourneyThumbnailMap& thumbnails,
+            std::string& error) const
+        {
+            namespace fs = std::filesystem;
+            if (projectRoot.empty() ||
+                !IsValidStableId(projectId) ||
+                !IsValidStableId(flowDocumentId))
+            {
+                error = "Valid project and Flow identities are required for Journey thumbnail state.";
+                return false;
+            }
+
+            std::vector<std::pair<StableId, std::string>> ordered;
+            ordered.reserve(thumbnails.size());
+            for (const auto& item : thumbnails)
+            {
+                const fs::path hint = fs::u8path(item.second);
+                if (!IsValidStableId(item.first) || item.second.empty() ||
+                    !IsSafeProjectRelativePath(hint) ||
+                    !IsSupportedExtension(hint.extension().generic_u8string()))
+                {
+                    error = "Journey thumbnail state contains an invalid card resource.";
+                    return false;
+                }
+                ordered.push_back(item);
+            }
+            std::sort(
+                ordered.begin(), ordered.end(),
+                [](const auto& a, const auto& b) { return a.first < b.first; });
+
+            const fs::path destination =
+                fs::u8path(ResolveStatePath(projectRoot, flowDocumentId));
+            if (destination.empty())
+            {
+                error = "Could not resolve the Journey thumbnail state path.";
+                return false;
+            }
+
+            try
+            {
+                std::error_code pathError;
+                fs::create_directories(destination.parent_path(), pathError);
+                if (pathError)
+                {
+                    error = "Could not create the Journey thumbnail state folder: " +
+                        pathError.message();
+                    return false;
+                }
+
+                const fs::path temporary = destination.parent_path() /
+                    fs::u8path(destination.filename().generic_u8string() +
+                        ".tmp-" + GenerateStableId());
+                const fs::path backup = destination.parent_path() /
+                    fs::u8path(destination.filename().generic_u8string() + ".bak");
+
+                {
+                    std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
+                    if (!stream)
+                    {
+                        error = "Could not create Journey thumbnail state.";
+                        return false;
+                    }
+                    stream << "format=" << StateFormat << '\n';
+                    stream << "version=" << StateVersion << '\n';
+                    stream << "project_id=" << projectId << '\n';
+                    stream << "flow_document_id=" << flowDocumentId << '\n';
+                    for (const auto& item : ordered)
+                        stream << item.first << '=' << item.second << '\n';
+                    stream.flush();
+                    if (!stream)
+                    {
+                        RemoveWithoutThrow(temporary);
+                        error = "Could not write complete Journey thumbnail state.";
+                        return false;
+                    }
+                }
+
+                const bool destinationExists = fs::exists(destination, pathError);
+                if (pathError)
+                {
+                    RemoveWithoutThrow(temporary);
+                    error = "Could not inspect existing Journey thumbnail state: " +
+                        pathError.message();
+                    return false;
+                }
+                if (destinationExists)
+                {
+                    RemoveWithoutThrow(backup);
+                    fs::rename(destination, backup, pathError);
+                    if (pathError)
+                    {
+                        RemoveWithoutThrow(temporary);
+                        error = "Could not preserve previous Journey thumbnail state: " +
+                            pathError.message();
+                        return false;
+                    }
+                }
+
+                fs::rename(temporary, destination, pathError);
+                if (pathError)
+                {
+                    RemoveWithoutThrow(temporary);
+                    if (destinationExists)
+                    {
+                        std::error_code rollbackError;
+                        fs::rename(backup, destination, rollbackError);
+                    }
+                    error = "Could not promote Journey thumbnail state: " +
+                        pathError.message();
+                    return false;
+                }
+                if (destinationExists)
+                    RemoveWithoutThrow(backup);
+                error.clear();
+                return true;
+            }
+            catch (const std::exception& exception)
+            {
+                error = std::string("Could not write Journey thumbnail state: ") +
+                    exception.what();
+                return false;
+            }
         }
 
         [[nodiscard]] StoryFlowJourneyThumbnailImportResult Import(
@@ -247,9 +515,6 @@ namespace renegade::bridge
                 if (destinationExists)
                     RemoveWithoutThrow(backup);
 
-                // One governed thumbnail slot per stable node. If the creator
-                // changed image format, remove the old managed variant only
-                // after the new file has been promoted successfully.
                 static constexpr std::array<const char*, 5> Supported = {
                     ".jpg", ".jpeg", ".png", ".bmp", ".tga",
                 };
@@ -336,6 +601,23 @@ namespace renegade::bridge
         {
             std::error_code ignored;
             std::filesystem::remove(path, ignored);
+        }
+
+        [[nodiscard]] static bool ReadKeyValue(
+            std::istream& stream,
+            const char* expectedKey,
+            std::string& value)
+        {
+            std::string line;
+            if (!std::getline(stream, line))
+                return false;
+            if (!line.empty() && line.back() == '\r')
+                line.pop_back();
+            const std::string prefix = std::string(expectedKey) + '=';
+            if (line.rfind(prefix, 0) != 0)
+                return false;
+            value = line.substr(prefix.size());
+            return true;
         }
 
         [[nodiscard]] static bool IsSafeProjectRelativePath(
