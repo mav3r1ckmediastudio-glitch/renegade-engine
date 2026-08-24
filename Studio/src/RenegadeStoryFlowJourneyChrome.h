@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <string>
 #include <utility>
 
@@ -15,6 +16,12 @@ namespace renegade::studio
     class RenegadeStoryFlowJourneyChrome final : public wi::gui::Widget
     {
     public:
+        enum class Action
+        {
+            Hub, StoryFlow, Levels, Screens, Assets, Variables, TestPlay,
+            Select, Arrange, Filter, Search, Preview, Validate,
+        };
+
         static constexpr float NavigationRailWidth = 86.0f;
         static constexpr float WorkspaceHeaderHeight = 78.0f;
         static constexpr float PreferredInspectorWidth = 320.0f;
@@ -24,18 +31,27 @@ namespace renegade::studio
             SetName("Renegade Story Flow Journey chrome");
             SetShadowRadius(0.0f);
 
-            navigationRail_.Create("Story Flow navigation rail", true, "RENEGADE");
-            topBarGuide_.Create("Story Flow top bar", false, {});
+            navigationRail_.Create("Story Flow navigation rail", true, {});
+            topBarGuide_.Create("Story Flow top bar", true, {});
             journeyViewport_.Create("Story Flow Journey viewport", false, {});
             inspector_.Create("Story Flow Inspector frame", false, {});
             overviewHost_.Create("Story Flow overview host", false, "STORY OVERVIEW");
             zoomHost_.Create("Story Flow zoom host", false, {});
 
-            navItems_[0].Create("PROJECT", false);
+            navItems_[0].Create("HUB", false);
             navItems_[1].Create("STORY FLOW", true);
-            navItems_[2].Create("ASSETS", false);
-            navItems_[3].Create("BUILD", false);
-            navItems_[4].Create("SETTINGS", false);
+            navItems_[2].Create("LEVELS", false);
+            navItems_[3].Create("SCREENS", false);
+            navItems_[4].Create("ASSETS", false);
+            navItems_[5].Create("VARIABLES", false);
+            navItems_[6].Create("TEST PLAY", false);
+
+            topCommands_[0].Create("SELECT", true);
+            topCommands_[1].Create("ARRANGE", false);
+            topCommands_[2].Create("FILTER", false);
+            topCommands_[3].Create("SEARCH", false);
+            topCommands_[4].Create("PREVIEW", false);
+            topCommands_[5].Create("VALIDATE", false);
 
             // 9D will activate the real overview and navigation controls. The
             // objects exist now so later gates add behaviour rather than paint
@@ -44,6 +60,11 @@ namespace renegade::studio
             zoomHost_.SetVisible(false);
 
             SetLayout(width_, height_);
+        }
+
+        void OnAction(std::function<void(Action)> callback)
+        {
+            action_ = std::move(callback);
         }
 
         void SetLayout(const float width, const float height)
@@ -93,13 +114,30 @@ namespace renegade::studio
                     height_ - 52.0f)));
             zoomHost_.SetSize(XMFLOAT2(178.0f, 34.0f));
 
-            const float navTop = 108.0f;
+            const float availableNavHeight = std::max(
+                1.0f, height_ - WorkspaceHeaderHeight - 24.0f);
+            const float navStep = std::clamp(
+                availableNavHeight / static_cast<float>(navItems_.size()),
+                52.0f, 74.0f);
+            const float navTop = WorkspaceHeaderHeight + 16.0f;
             for (std::size_t i = 0; i < navItems_.size(); ++i)
             {
                 navItems_[i].SetPos(XMFLOAT2(
                     8.0f,
-                    navTop + static_cast<float>(i) * 62.0f));
-                navItems_[i].SetSize(XMFLOAT2(NavigationRailWidth - 16.0f, 48.0f));
+                    navTop + static_cast<float>(i) * navStep));
+                navItems_[i].SetSize(XMFLOAT2(
+                    NavigationRailWidth - 16.0f,
+                    std::min(56.0f, navStep - 4.0f)));
+            }
+
+            const float commandStart = NavigationRailWidth + 470.0f;
+            const float commandWidth = 70.0f;
+            for (std::size_t i = 0; i < topCommands_.size(); ++i)
+            {
+                topCommands_[i].SetPos(XMFLOAT2(
+                    commandStart + static_cast<float>(i) * commandWidth,
+                    8.0f));
+                topCommands_[i].SetSize(XMFLOAT2(commandWidth - 4.0f, 54.0f));
             }
         }
 
@@ -108,12 +146,36 @@ namespace renegade::studio
             return NavigationRailWidth;
         }
 
-        // The chrome is deliberately presentation-only in 9A. Wicked's GUI
-        // manager treats any visible widget hitbox as GUI focus even when the
-        // widget is disabled, so do not call Widget::Update() here: that would
-        // make this full-canvas decorative shell swallow viewport input.
         void Update(const wi::Canvas&, float) override
         {
+            if (!IsVisible() || !IsEnabled() || !action_ ||
+                !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+                return;
+
+            const XMFLOAT4 pointer = wi::input::GetPointer();
+            for (std::size_t i = 0; i < navItems_.size(); ++i)
+            {
+                if (Contains(navItems_[i], pointer))
+                {
+                    static constexpr std::array<Action, 7> actions = {
+                        Action::Hub, Action::StoryFlow, Action::Levels,
+                        Action::Screens, Action::Assets, Action::Variables,
+                        Action::TestPlay};
+                    action_(actions[i]);
+                    return;
+                }
+            }
+            for (std::size_t i = 0; i < topCommands_.size(); ++i)
+            {
+                if (Contains(topCommands_[i], pointer))
+                {
+                    static constexpr std::array<Action, 6> actions = {
+                        Action::Select, Action::Arrange, Action::Filter,
+                        Action::Search, Action::Preview, Action::Validate};
+                    action_(actions[i]);
+                    return;
+                }
+            }
         }
 
         void Render(
@@ -134,6 +196,8 @@ namespace renegade::studio
 
             for (const auto& item : navItems_)
                 item.Render(canvas, cmd);
+            for (const auto& command : topCommands_)
+                command.Render(canvas, cmd);
 
             if (overviewHost_.IsVisible())
                 overviewHost_.Render(canvas, cmd);
@@ -147,6 +211,15 @@ namespace renegade::studio
         }
 
     private:
+        [[nodiscard]] static bool Contains(
+            const wi::gui::Widget& widget, const XMFLOAT4& pointer) noexcept
+        {
+            const XMFLOAT2 position = widget.GetPos();
+            const XMFLOAT2 size = widget.GetSize();
+            return pointer.x >= position.x && pointer.y >= position.y &&
+                pointer.x < position.x + size.x &&
+                pointer.y < position.y + size.y;
+        }
         static constexpr wi::Color RailSurface = wi::Color(7, 10, 12, 255);
         static constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
         static constexpr wi::Color Text = wi::Color(239, 242, 243, 255);
@@ -309,7 +382,7 @@ namespace renegade::studio
 
                 const std::string compact = label_ == "STORY FLOW"
                     ? "STORY\nFLOW"
-                    : label_;
+                    : (label_ == "TEST PLAY" ? "TEST\nPLAY" : label_);
                 const std::size_t breakAt = compact.find('\n');
                 if (breakAt == std::string::npos)
                 {
@@ -358,6 +431,8 @@ namespace renegade::studio
         Region inspector_;
         Region overviewHost_;
         Region zoomHost_;
-        std::array<NavItem, 5> navItems_;
+        std::array<NavItem, 7> navItems_;
+        std::array<NavItem, 6> topCommands_;
+        std::function<void(Action)> action_;
     };
 }

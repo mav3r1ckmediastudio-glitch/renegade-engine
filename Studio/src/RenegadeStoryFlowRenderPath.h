@@ -155,6 +155,42 @@ namespace renegade::studio
             journeyChrome_.Create();
             journeyChrome_.SetVisible(false);
             journeyChrome_.SetEnabled(false);
+            journeyChrome_.OnAction(
+                [this](const RenegadeStoryFlowJourneyChrome::Action action)
+                {
+                    using Action = RenegadeStoryFlowJourneyChrome::Action;
+                    switch (action)
+                    {
+                    case Action::StoryFlow:
+                    case Action::Select:
+                        pendingNativeCommand_ = NativeCommand::Journey;
+                        break;
+                    case Action::Arrange:
+                        pendingNativeCommand_ = NativeCommand::Fit;
+                        break;
+                    case Action::Search:
+                        pendingNativeCommand_ = NativeCommand::Find;
+                        break;
+                    case Action::Validate:
+                        workspace_.SetExternalStatus(
+                            "JOURNEY VALIDATION // SEE INSPECTOR DIAGNOSTICS");
+                        break;
+                    case Action::Filter:
+                        workspace_.SetExternalStatus(
+                            "JOURNEY FILTERS // AVAILABLE IN THE 9A SHELL RECOVERY");
+                        break;
+                    case Action::Hub:
+                    case Action::Levels:
+                    case Action::Screens:
+                    case Action::Assets:
+                    case Action::Variables:
+                    case Action::TestPlay:
+                    case Action::Preview:
+                        if (journeyShellAction_)
+                            journeyShellAction_(action);
+                        break;
+                    }
+                });
 
             conditionEditor_.Create();
             conditionEditor_.SetVisible(false);
@@ -266,6 +302,7 @@ namespace renegade::studio
             workspace_.SetVisible(workspaceActive_);
             workspace_.SetEnabled(workspaceActive_ && !graphActive);
             journeyChrome_.SetVisible(workspaceActive_);
+            journeyChrome_.SetEnabled(workspaceActive_);
             conditionEditor_.SetVisible(workspaceActive_);
             conditionEditor_.SetEnabled(workspaceActive_);
             graphLayer_.SetVisible(graphActive);
@@ -288,6 +325,7 @@ namespace renegade::studio
             conditionEditor_.SetVisible(false);
             conditionEditor_.SetEnabled(false);
             journeyChrome_.SetVisible(false);
+            journeyChrome_.SetEnabled(false);
             graphLayer_.SetVisible(false);
             graphLayer_.SetEnabled(false);
             workspace_.SetVisible(false);
@@ -445,6 +483,7 @@ namespace renegade::studio
             workspace_.SetVisible(active);
             workspace_.SetEnabled(active && !graphActive);
             journeyChrome_.SetVisible(active);
+            journeyChrome_.SetEnabled(active);
             conditionEditor_.SetVisible(active);
             conditionEditor_.SetEnabled(active);
             graphLayer_.SetVisible(graphActive);
@@ -496,6 +535,12 @@ namespace renegade::studio
         {
             EnsureLoaded();
             workspace_.OnNodeActivated(std::move(callback));
+        }
+
+        void OnJourneyShellAction(std::function<void(
+            RenegadeStoryFlowJourneyChrome::Action)> callback)
+        {
+            journeyShellAction_ = std::move(callback);
         }
 
         void SelectAndFocusNode(const bridge::StableId& nodeId)
@@ -704,6 +749,8 @@ namespace renegade::studio
         RenegadeTextInputField findInput_;
         RenegadeButton findButton_;
         RenegadeButton deleteSelectionButton_;
+        std::function<void(RenegadeStoryFlowJourneyChrome::Action)>
+            journeyShellAction_;
         std::string findDraft_;
         XMFLOAT4 canvasNavigationBounds_ = {};
         NativeCommand pendingNativeCommand_ = NativeCommand::None;

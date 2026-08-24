@@ -59,6 +59,9 @@ namespace renegade::studio
         void RefreshAssetBrowser();
         void RestoreGovernedMaterialTextures();
 
+        void RequestProjectHubFromStoryFlow();
+        void RequestAssetBrowserFromStoryFlow();
+
         // Gate 1 exposes only the presentation/lifecycle seams required by the
         // Story Flow adapter. Semantic Flow state remains in EngineBridge.
         [[nodiscard]] bool IsProjectHubVisible() const noexcept

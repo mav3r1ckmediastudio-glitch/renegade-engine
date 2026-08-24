@@ -365,6 +365,42 @@ namespace renegade::studio
                     pendingScreenAction_ = PendingScreenAction::Open;
                 }
             });
+            storyFlow.OnJourneyShellAction(
+                [this, &levelEditor, &storyFlow](
+                    const RenegadeStoryFlowJourneyChrome::Action action)
+                {
+                    using Action = RenegadeStoryFlowJourneyChrome::Action;
+                    switch (action)
+                    {
+                    case Action::Hub:
+                        levelEditor.RequestProjectHubFromStoryFlow();
+                        desiredWorkspace_ = Workspace::LevelEditor;
+                        break;
+                    case Action::Assets:
+                        levelEditor.RequestAssetBrowserFromStoryFlow();
+                        desiredWorkspace_ = Workspace::LevelEditor;
+                        break;
+                    case Action::Levels:
+                        storyFlow.SetExternalStatus(
+                            "LEVELS // USE THE GOVERNED LEVEL COMMANDS");
+                        break;
+                    case Action::Screens:
+                        storyFlow.SetExternalStatus(
+                            "SCREENS // USE THE GOVERNED SCREEN COMMANDS");
+                        break;
+                    case Action::Variables:
+                        storyFlow.SetExternalStatus(
+                            "VARIABLES // PROJECT VARIABLE WORKSPACE NOT YET AVAILABLE");
+                        break;
+                    case Action::TestPlay:
+                    case Action::Preview:
+                        storyFlow.SetExternalStatus(
+                            "PREVIEW // JOURNEY RUNTIME PREVIEW NOT YET AVAILABLE");
+                        break;
+                    default:
+                        break;
+                    }
+                });
 
             levelPanel_.Create();
             levelPanel_.Attach(storyFlow.GetGUI());
