@@ -111,6 +111,17 @@ namespace renegade::studio
     // controls are native wiGUI objects above both presentations.
     class RenegadeStoryFlowRenderPath final : public wi::RenderPath2D
     {
+        enum class NativeCommand
+        {
+            None,
+            Journey,
+            Graph,
+            Fit,
+            Start,
+            Find,
+            DeleteSelection,
+        };
+
     public:
         ~RenegadeStoryFlowRenderPath() override
         {
@@ -155,9 +166,7 @@ namespace renegade::studio
             journeyViewButton_.SetShadowRadius(0.0f);
             journeyViewButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                graphEditor_.ResetTransientInteractionState();
-                workspace_.ActivateView(bridge::StoryFlowViewMode::Journey);
-                graphInputBlockedLastFrame_ = false;
+                pendingNativeCommand_ = NativeCommand::Journey;
             });
 
             graphViewButton_.Create("Story Flow Graph View");
@@ -166,8 +175,7 @@ namespace renegade::studio
             graphViewButton_.SetShadowRadius(0.0f);
             graphViewButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                workspace_.ActivateView(bridge::StoryFlowViewMode::Graph);
-                graphInputBlockedLastFrame_ = false;
+                pendingNativeCommand_ = NativeCommand::Graph;
             });
 
             fitButton_.Create("Story Flow Fit");
@@ -176,7 +184,7 @@ namespace renegade::studio
             fitButton_.SetShadowRadius(0.0f);
             fitButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                FitToContent();
+                pendingNativeCommand_ = NativeCommand::Fit;
             });
 
             startButton_.Create("Story Flow Start");
@@ -185,7 +193,7 @@ namespace renegade::studio
             startButton_.SetShadowRadius(0.0f);
             startButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                CenterOnGameStart();
+                pendingNativeCommand_ = NativeCommand::Start;
             });
 
             findInput_.Create("Story Flow Find Node");
@@ -200,7 +208,7 @@ namespace renegade::studio
             findInput_.OnInputAccepted([this](const wi::gui::EventArgs& args)
             {
                 findDraft_ = args.sValue;
-                RunFind();
+                pendingNativeCommand_ = NativeCommand::Find;
             });
 
             findButton_.Create("Story Flow Find");
@@ -209,7 +217,7 @@ namespace renegade::studio
             findButton_.SetShadowRadius(0.0f);
             findButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                RunFind();
+                pendingNativeCommand_ = NativeCommand::Find;
             });
 
             deleteSelectionButton_.Create("Story Flow Delete Selection");
@@ -221,7 +229,7 @@ namespace renegade::studio
             deleteSelectionButton_.SetEnabled(false);
             deleteSelectionButton_.OnClick([this](const wi::gui::EventArgs&)
             {
-                workspace_.DeleteSelection();
+                pendingNativeCommand_ = NativeCommand::DeleteSelection;
             });
 
             // Wicked updates in registration order and renders in reverse. Keep
@@ -273,6 +281,7 @@ namespace renegade::studio
 
             graphEditor_.ResetTransientInteractionState();
             graphInputBlockedLastFrame_ = false;
+            pendingNativeCommand_ = NativeCommand::None;
             SetNativeControlsActive(false);
             deleteSelectionButton_.SetVisible(false);
             deleteSelectionButton_.SetEnabled(false);
@@ -300,16 +309,26 @@ namespace renegade::studio
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
             graphLayer_.SetVisible(graphBeforeUpdate);
             graphLayer_.SetEnabled(graphBeforeUpdate);
-            workspace_.SetEnabled(workspaceActive_ && !graphBeforeUpdate);
             SetNativeControlsActive(workspaceActive_);
             UpdateDeleteControl(graphBeforeUpdate);
 
-            // One GUI update. In Graph View the shared workspace remains visible
-            // for its header/Inspector rendering but is disabled as a canvas
-            // interaction surface. This removes the old Graph hit-test/drag/
-            // connect path from runtime ownership instead of trying to arbitrate
-            // two canvas implementations by pointer position.
+            // FIT/START live in the lower-left canvas navigation host. Journey
+            // uses raw canvas input, so the shared workspace must not receive the
+            // same press when one of those native controls owns the pointer.
+            // Graph already disables the shared workspace entirely.
+            const XMFLOAT4 pointerBeforeGui = wi::input::GetPointer();
+            const bool nativeCanvasNavigationOwnsPointer =
+                workspaceActive_ && !graphBeforeUpdate &&
+                Contains(canvasNavigationBounds_, pointerBeforeGui);
+            workspace_.SetEnabled(
+                workspaceActive_ && !graphBeforeUpdate &&
+                !nativeCanvasNavigationOwnsPointer);
+
+            // Native callbacks queue intent only. Execute the command after the
+            // complete wiGUI update so Story Flow never mutates canvas/view/
+            // semantic state re-entrantly while Wicked is traversing widgets.
             wi::RenderPath2D::Update(dt);
+            ProcessPendingNativeCommand();
 
             const bool graphActive = workspaceActive_ &&
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
@@ -387,6 +406,7 @@ namespace renegade::studio
                 deleteSelectionButton_.SetVisible(false);
                 deleteSelectionButton_.SetEnabled(false);
                 graphInputBlockedLastFrame_ = false;
+                pendingNativeCommand_ = NativeCommand::None;
                 findDraft_.clear();
                 findInput_.SetValue("");
             }
@@ -432,7 +452,10 @@ namespace renegade::studio
             SetNativeControlsActive(active);
             UpdateDeleteControl(graphActive);
             if (!active)
+            {
                 graphInputBlockedLastFrame_ = false;
+                pendingNativeCommand_ = NativeCommand::None;
+            }
         }
 
         void OnLayoutChanged(std::function<void()> callback)
@@ -515,6 +538,48 @@ namespace renegade::studio
         }
 
     private:
+        [[nodiscard]] static bool Contains(
+            const XMFLOAT4& bounds,
+            const XMFLOAT4& pointer) noexcept
+        {
+            return pointer.x >= bounds.x &&
+                pointer.y >= bounds.y &&
+                pointer.x < bounds.x + bounds.z &&
+                pointer.y < bounds.y + bounds.w;
+        }
+
+        void ProcessPendingNativeCommand()
+        {
+            const NativeCommand command = std::exchange(
+                pendingNativeCommand_, NativeCommand::None);
+            switch (command)
+            {
+            case NativeCommand::Journey:
+                workspace_.ActivateView(bridge::StoryFlowViewMode::Journey);
+                graphInputBlockedLastFrame_ = false;
+                break;
+            case NativeCommand::Graph:
+                workspace_.ActivateView(bridge::StoryFlowViewMode::Graph);
+                graphInputBlockedLastFrame_ = false;
+                break;
+            case NativeCommand::Fit:
+                FitToContent();
+                break;
+            case NativeCommand::Start:
+                CenterOnGameStart();
+                break;
+            case NativeCommand::Find:
+                RunFind();
+                break;
+            case NativeCommand::DeleteSelection:
+                workspace_.DeleteSelection();
+                break;
+            case NativeCommand::None:
+            default:
+                break;
+            }
+        }
+
         void SetNativeControlsActive(const bool active)
         {
             for (wi::gui::Widget* widget : {
@@ -591,7 +656,7 @@ namespace renegade::studio
 
             // Canvas navigation lives in the existing lower-left navigation
             // host area, away from Level/Screen lifecycle controls in the two
-            // header rows. This remains stable even at the 1280x720 owner size.
+            // header rows. The complete host is reserved from Journey raw input.
             const float canvasNavY = std::max(
                 RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 18.0f,
                 height - 52.0f);
@@ -599,6 +664,11 @@ namespace renegade::studio
             fitButton_.SetSize(XMFLOAT2(52.0f, 28.0f));
             startButton_.SetPos(XMFLOAT2(workspaceLeft + 76.0f, canvasNavY));
             startButton_.SetSize(XMFLOAT2(64.0f, 28.0f));
+            canvasNavigationBounds_ = XMFLOAT4(
+                workspaceLeft + 18.0f,
+                canvasNavY,
+                122.0f,
+                28.0f);
 
             const float inspectorX = workspaceLeft + graphWidth + 14.0f;
             const float findY = std::max(
@@ -635,6 +705,8 @@ namespace renegade::studio
         RenegadeButton findButton_;
         RenegadeButton deleteSelectionButton_;
         std::string findDraft_;
+        XMFLOAT4 canvasNavigationBounds_ = {};
+        NativeCommand pendingNativeCommand_ = NativeCommand::None;
         bool loaded_ = false;
         bool workspaceActive_ = false;
         bool lifecycleLayeringReady_ = false;
