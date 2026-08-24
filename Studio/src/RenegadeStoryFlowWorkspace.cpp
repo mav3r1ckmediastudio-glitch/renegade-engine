@@ -1263,6 +1263,15 @@ namespace renegade::studio
         addJourneyActionButton_.SetText("+ ADD ACTION");
         addJourneyActionButton_.SetTooltip(
             "Create a governed exit and configure its destination here in the Inspector.");
+        addJourneyActionButton_.SetColor(Raised, wi::gui::IDLE);
+        addJourneyActionButton_.SetColor(
+            wi::Color(18, 45, 66, 255), wi::gui::FOCUS);
+        addJourneyActionButton_.SetColor(
+            wi::Color(25, 72, 105, 255), wi::gui::ACTIVE);
+        addJourneyActionButton_.SetColor(Raised, wi::gui::DEACTIVATING);
+        addJourneyActionButton_.font.params.color = Text;
+        addJourneyActionButton_.font.params.shadowColor =
+            wi::Color::Transparent();
         addJourneyActionButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             pendingAddJourneyAction_ = true;
@@ -1405,7 +1414,7 @@ namespace renegade::studio
 
         addJourneyActionButton_.SetPos(XMFLOAT2(
             inspectorX + std::max(0.0f, fieldWidth - 91.0f),
-            generalY + 106.0f));
+            generalY + 104.0f));
         addJourneyActionButton_.SetSize(XMFLOAT2(91.0f, 23.0f));
 
         const float exitDestinationX = inspectorX + 133.0f;
@@ -1494,12 +1503,9 @@ namespace renegade::studio
         const std::size_t journeyExitCount = std::min<std::size_t>(
             selectedNodeView ? selectedNodeView->outgoingRouteIds.size() : 0,
             inspectorExitCapacity);
-        const bool journeySourceCanRoute = selectedNode &&
-            !IsTerminalKind(selectedNode->kind) &&
-            selectedNodeView &&
-            selectedNodeView->outgoingRouteIds.size() < MaxJourneyInspectorExits;
         addJourneyActionButton_.SetVisible(journeyMode && nodeSelected);
-        addJourneyActionButton_.SetEnabled(journeyMode && journeySourceCanRoute);
+        addJourneyActionButton_.SetEnabled(
+            journeyMode && journeyAddActionAvailable_);
         for (std::size_t index = 0;
             index < journeyExitDestinationCombos_.size(); ++index)
         {
@@ -1620,6 +1626,7 @@ namespace renegade::studio
 
     void RenegadeStoryFlowWorkspace::RefreshJourneyExitControls()
     {
+        journeyAddActionAvailable_ = false;
         journeyExitDestinationIds_.clear();
         for (auto& routeId : journeyExitRouteIds_) routeId.clear();
         for (auto& combo : journeyExitDestinationCombos_)
@@ -1638,6 +1645,43 @@ namespace renegade::studio
 
         const auto* source = model_->FindNode(selectedNodeId_);
         if (!source) return;
+
+        const auto* sourceDocument = FindDocumentNode(selectedNodeId_);
+        if (sourceDocument && !IsTerminalKind(sourceDocument->kind) &&
+            source->outgoingRouteIds.size() < MaxJourneyInspectorExits)
+        {
+            if (sourceDocument->kind == bridge::FlowNodeKind::GameStart)
+            {
+                journeyAddActionAvailable_ = source->outgoingRouteIds.empty();
+            }
+            else if (sourceDocument->kind == bridge::FlowNodeKind::Screen)
+            {
+                std::vector<std::string> authoredOutcomes;
+                std::string ignoredError;
+                if (QueryScreenOutcomes(
+                        sourceDocument->id, authoredOutcomes, ignoredError))
+                {
+                    std::unordered_set<std::string> usedOutcomes;
+                    for (const auto& routeId : source->outgoingRouteIds)
+                    {
+                        const auto* route = model_->FindRoute(routeId);
+                        if (route) usedOutcomes.insert(route->outcome);
+                    }
+                    journeyAddActionAvailable_ = std::any_of(
+                        authoredOutcomes.begin(), authoredOutcomes.end(),
+                        [&](const std::string& outcome)
+                        {
+                            return usedOutcomes.find(outcome) ==
+                                usedOutcomes.end();
+                        });
+                }
+            }
+            else
+            {
+                journeyAddActionAvailable_ = true;
+            }
+        }
+
         const std::size_t exitCount = std::min<std::size_t>(
             source->outgoingRouteIds.size(), MaxJourneyInspectorExits);
         for (std::size_t exitIndex = 0; exitIndex < exitCount; ++exitIndex)

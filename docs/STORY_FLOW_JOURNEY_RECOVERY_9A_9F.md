@@ -73,6 +73,12 @@ annotations, not controls. Journey renders no node wires.
 - unsupported semantic mutations fail closed and leave the Inspector synced to
   the authoritative document.
 
+The dedicated `RenegadeStoryFlowGate9ENonlinearAuthoringTests` executable proves
+branch creation, merge projection, stable-ID loop rewiring, shared Undo/Redo and
+save/reopen parity between Journey and the common authoring/Graph model. The
+packaged owner procedure is recorded in
+`STORY_FLOW_GATE9E_NONLINEAR_JOURNEY_AUTHORING.md`.
+
 Presentation-only chapters and automatic insertion/splicing remain separate
 follow-up authoring operations; they must not be simulated by decorative UI or
 by mutating Runtime semantics implicitly.

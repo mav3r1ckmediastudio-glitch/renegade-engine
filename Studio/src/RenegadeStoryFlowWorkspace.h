@@ -275,6 +275,7 @@ namespace renegade::studio
         std::array<bridge::StableId, MaxJourneyInspectorExits>
             journeyExitRouteIds_;
         std::vector<bridge::StableId> journeyExitDestinationIds_;
+        bool journeyAddActionAvailable_ = false;
         std::size_t pendingJourneyExitIndex_ = MaxJourneyInspectorExits;
         std::size_t pendingJourneyDestinationIndex_ = 0;
         bool pendingAddJourneyAction_ = false;

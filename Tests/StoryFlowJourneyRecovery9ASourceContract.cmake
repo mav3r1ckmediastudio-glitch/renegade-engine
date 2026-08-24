@@ -105,6 +105,10 @@ require_text(workspace_source "RewireJourneyExit" "Inspector route destination a
 require_text(workspace_source "pendingJourneyExitIndex_ = index;" "deferred Inspector rewire intent")
 require_text(workspace_source "session_->UpdateRoute(routeId, std::move(replacement), error)" "stable-ID Journey rewire")
 require_text(workspace_source "AddJourneyAction" "Inspector action authoring")
+require_text(workspace_source "addJourneyActionButton_.SetVisible(journeyMode && nodeSelected)" "visible Journey Add Action control")
+require_text(workspace_source "journeyMode && journeyAddActionAvailable_" "honest Journey Add Action enablement")
+require_text(workspace_source "journeyAddActionAvailable_ = source->outgoingRouteIds.empty();" "single Game Start entry enforcement")
+require_text(workspace_source "usedOutcomes.find(outcome) ==" "unused Screen action availability")
 require_text(workspace_source "session_->AddRoute(std::move(route), createdRouteId, error)" "governed Journey route creation")
 forbid_text(workspace_source "JOURNEY EXIT // OPENED IN GRAPH" "Journey-to-Graph exit routing")
 
