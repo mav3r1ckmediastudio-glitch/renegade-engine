@@ -78,7 +78,7 @@ namespace renegade::studio
         void Update(const wi::Canvas&, float) override {}
 
         void Render(
-            const wi::Canvas&,
+            const wi::Canvas& canvas,
             const wi::graphics::CommandList cmd) const override
         {
             if (!IsVisible()) return;
@@ -98,7 +98,7 @@ namespace renegade::studio
 
             DrawBrand(cmd);
             for (const auto& item : navItems_)
-                item.Render({}, cmd);
+                item.Render(canvas, cmd);
         }
 
         const char* GetWidgetTypeName() const override
