@@ -159,10 +159,9 @@ set_target_properties(RenegadeStudio PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeStudio>"
 )
 
-# Renegade-owned shaders are compiled at runtime from source shipped beside the
-# executable, so they must land under Content/ where Build-Studio-Windows.ps1
-# already packages the whole directory. They are deliberately NOT added to
-# Wicked's shader dump: they belong to Studio, not to the engine.
+# Renegade-owned shaders and UI assets are copied beside Studio at build time.
+# Story Flow Gate 9E deliberately ships its visual theme as editable data: the
+# approved branding and presentation configuration are not baked into widgets.
 add_custom_command(
     TARGET RenegadeStudio POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -196,6 +195,12 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-story-flow-logo.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-story-flow-logo.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/story-flow-theme.cfg"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/story-flow-theme.cfg"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/creator-human-reference.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/creator-human-reference.png"
