@@ -207,14 +207,24 @@ namespace renegade::studio
         if (!IsVisible())
             return;
 
-        elapsed_ += dt;
+        // READY relinquishes blocking ownership only after the current Level
+        // Editor frame has already been covered. The Story Flow integration
+        // runs after Application::Run(), sees Idle, and switches render paths
+        // for the following frame. If the Level Editor is deliberately entered
+        // later, this stale visual cover removes itself before that frame renders.
         const Phase phase = CurrentPhase();
+        if (phase == Phase::Idle)
+        {
+            SetVisible(false);
+            return;
+        }
+
+        elapsed_ += dt;
         if (phase == Phase::Ready)
         {
             readyElapsed_ += dt;
             if (readyElapsed_ >= 0.85f)
             {
-                SetVisible(false);
                 phase_.store(static_cast<int>(Phase::Idle), std::memory_order_release);
             }
             return;
@@ -262,7 +272,11 @@ namespace renegade::studio
         DrawRect(panelX + ss(1.0f), panelY + ss(1.0f),
             panelW - ss(2.0f), panelH - ss(2.0f), Panel, cmd);
 
-        const Phase phase = CurrentPhase();
+        // Idle while still visible is the one-frame project-home handoff state.
+        // Keep presenting the completed loader rather than exposing the 3D
+        // editor or flashing an empty overlay while Story Flow takes ownership.
+        const Phase storedPhase = CurrentPhase();
+        const Phase phase = storedPhase == Phase::Idle ? Phase::Ready : storedPhase;
         const std::size_t completed = completed_.load(std::memory_order_relaxed);
         const std::size_t total = total_.load(std::memory_order_relaxed);
         const float progress = PhaseProgress(phase, completed, total);
