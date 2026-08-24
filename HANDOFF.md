@@ -1,45 +1,61 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-23
+**Date:** 2026-08-24
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`e9c63e47f897ffb9408f9fdd377795f44affb41b`
-(`Story Flow Gate 8D: creator controls (#90)`).
+`1c1d580df3c40de2fbd68dee41c0c8a74e32f831`
+(`Story Flow Gate 9D: navigation and Graph cleanup (#98)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow Gate 8E outcome and package parity
+## Active work — Journey recovery Gate 9A
 
-Branch: `feature/story-flow-gate8e-outcome-parity`.
+Draft PR: `#100`, branch `recovery/story-flow-journey-9a-shell`.
 
-Gate 8D/PR #90 is merged and owner-accepted at the authoritative main above.
-The accepted Screen Editor now has direct manipulation, complete creator
-controls, governed resources, symbolic action authoring, focus order,
-parent/layout, presets/components and Screen-specific persistence/history.
+The recovery starts from accepted Gate 9D main, not rejected PR #99. Graph Flow
+is frozen and out of scope. The owner-approved sequence remains 9A through 9F;
+this branch is still an incomplete 9A implementation and is not an owner
+candidate.
 
-Gate 8E is deliberately bounded to the Screen-action / Story Flow routing seam:
+Implementation commit `09ac627cbebb7e9dc1b370e2baa071917653aa2f`
+removes the legacy Level/Screen presentation rather than hiding it:
 
-- Screen Buttons continue to author symbolic action IDs only;
-- Story Flow remains the sole destination/condition/priority authority;
-- outgoing Screen routes are constrained to currently authored Screen actions;
-- return/reopen and Story Flow semantic edits rerun a non-mutating cross-document
-  parity audit;
-- removed/renamed Screen actions create visible stale-route/unrouted-Button
-  diagnostics rather than silently rewriting Flow destinations;
-- reachable broken Screen/Flow mappings fail closed before Runtime execution;
-- detached draft Screens do not block Runtime;
-- packaged Release instructions require save/reopen, Runtime and Windows
-  standalone parity proof.
+- deleted `RenegadeStoryFlowLevelPanel.h` and
+  `RenegadeStoryFlowScreenPanel.h`;
+- removed their integration-owned panel state, GUI registration, layout and
+  lifecycle-layer reordering;
+- added one compact Journey-native `Add Destination` sheet opened by the Levels
+  or Screens rail item;
+- retained governed New Level, Existing Level, New Screen, selected-card open,
+  stable-ID resolution and Level/Screen Editor handoffs through the existing
+  EngineBridge services;
+- retained card double-click activation and Return to Story Flow;
+- added a source contract that rejects reintroduction of either legacy panel or
+  bypass of the accepted lifecycle/reference services.
 
-The implementation contract and owner audit are in
-`docs/STORY_FLOW_GATE8E_OUTCOME_PARITY.md`.
+Local evidence:
 
-Do not merge automatically. Exact-head Windows Debug/Release CI and owner
-acceptance of the packaged Release remain required. Gate 9 is Journey View UI/UX
-and scale; Gate 10 is the broader final Runtime/build/standalone closeout.
+- `git diff --check` — PASS;
+- Journey recovery source assertions using `test`/`rg` — PASS;
+- `cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/StoryFlowJourneyRecovery9ASourceContract.cmake`
+  — NOT RUN because CMake is unavailable in the Linux scratch environment.
+
+Windows exact-head evidence and run IDs must be recorded after the source
+contract/documentation follow-up commit. Visual acceptance remains explicitly
+open: green CI proves compilation only. Required proof is a real packaged
+Release screenshot at 1920x1080 and 1280x720, compared against the approved
+concept. No merge or Gate 9A completion claim is permitted before owner visual
+acceptance.
+
+Next bounded work after this cleanup is the remaining 9A shell fidelity and
+real top/left command wiring. 9B then owns the approved large rounded/shadowed
+main reel cards and thumbnails; 9C owns role-coloured alternate branch rows and
+Inspector routing; 9D owns constrained Journey navigation and the fixed-size
+overview; 9E owns nonlinear Journey authoring; 9F owns diagnostics and final
+acceptance.
 
 ## Gate 6 accepted evidence
 
