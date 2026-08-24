@@ -11,9 +11,9 @@
 
 namespace renegade::studio
 {
-    // Gate 9E shell only. It owns branding, header, rail and separators but does
-    // not repaint the Journey canvas or Graph Inspector, so proven authoring
-    // surfaces remain visible and keep their existing input ownership.
+    // Gate 9E shell only. It owns branding, header brand slot, rail and
+    // separators but never paints over the proven Story Flow native authoring
+    // controls. Journey/Graph semantics and input ownership remain unchanged.
     class RenegadeStoryFlowJourneyChrome final : public wi::gui::Widget
     {
     public:
@@ -84,7 +84,12 @@ namespace renegade::studio
             if (!IsVisible()) return;
             const auto& theme = StoryFlowVisualTheme::Get();
 
-            DrawRect(0.0f, 0.0f, width_, WorkspaceHeaderHeight,
+            // The Workspace already owns the header surface and its Save/Undo/
+            // Redo controls. Gate 9E paints only the reserved brand slot here;
+            // an opaque full-width overlay would hide those real controls.
+            const float brandSlotWidth = std::min(
+                width_, theme.headerBrandWidth + theme.shellPadding * 2.0f);
+            DrawRect(0.0f, 0.0f, brandSlotWidth, WorkspaceHeaderHeight,
                 theme.header, cmd);
             DrawRect(0.0f, WorkspaceHeaderHeight,
                 NavigationRailWidth,
