@@ -240,7 +240,7 @@ namespace renegade::studio
             color("color.selection", selection);
             color("color.selection_surface", selectionSurface);
             color("color.success", success);
-            color("color.warning", warning);
+            color("color.warning", this->warning);
             color("color.error", error);
             color("route.main", routeMain);
             color("route.failure", routeFailure);
