@@ -1,13 +1,79 @@
 #include "RenegadeStoryFlowGraphEditor.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <limits>
 #include <vector>
 
-#include "RenegadeStoryFlowJourneyChrome.h"
 #include "RenegadeStoryFlowWorkspace.h"
 
 namespace renegade::studio
 {
+    namespace
+    {
+        constexpr float OverviewNodeWidth = 210.0f;
+        constexpr float OverviewNodeHeight = 112.0f;
+        constexpr float GraphNavigationMinZoom = 0.50f;
+        constexpr float GraphNavigationMaxZoom = 2.00f;
+        constexpr float GraphFitMargin = 64.0f;
+        constexpr float GraphExtraOutputHeight = 24.0f;
+        constexpr wi::Color OverviewSurface(8, 12, 16, 232);
+        constexpr wi::Color OverviewBorder(38, 52, 61, 255);
+        constexpr wi::Color OverviewNode(98, 116, 126, 255);
+        constexpr wi::Color OverviewRoute(65, 82, 91, 255);
+        constexpr wi::Color OverviewAccent(210, 91, 29, 255);
+        constexpr wi::Color OverviewText(174, 184, 189, 255);
+
+        std::string LowerTrimmed(std::string value)
+        {
+            const auto whitespace = [](const unsigned char c)
+            {
+                return std::isspace(c) != 0;
+            };
+            while (!value.empty() && whitespace(value.front())) value.erase(value.begin());
+            while (!value.empty() && whitespace(value.back())) value.pop_back();
+            std::transform(
+                value.begin(), value.end(), value.begin(),
+                [](const unsigned char c)
+                {
+                    return static_cast<char>(std::tolower(c));
+                });
+            return value;
+        }
+
+        void OverviewRect(
+            const float x,
+            const float y,
+            const float width,
+            const float height,
+            const wi::Color color,
+            const wi::graphics::CommandList cmd)
+        {
+            if (width <= 0.0f || height <= 0.0f)
+                return;
+            wi::image::Params params(x, y, width, height, color);
+            params.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            wi::image::Draw(nullptr, params, cmd);
+        }
+
+        void OverviewBorderedRect(
+            const float x,
+            const float y,
+            const float width,
+            const float height,
+            const wi::Color fill,
+            const wi::Color border,
+            const wi::graphics::CommandList cmd)
+        {
+            OverviewRect(x, y, width, height, fill, cmd);
+            OverviewRect(x, y, width, 1.0f, border, cmd);
+            OverviewRect(x, y + height - 1.0f, width, 1.0f, border, cmd);
+            OverviewRect(x, y, 1.0f, height, border, cmd);
+            OverviewRect(x + width - 1.0f, y, 1.0f, height, border, cmd);
+        }
+    }
+
     void RenegadeStoryFlowGraphEditor::ResetTransientInteractionState() noexcept
     {
         pendingReconnectRouteId_.clear();
@@ -19,9 +85,9 @@ namespace renegade::studio
 
         ImNodes::SetCurrentContext(imnodesContext_);
 
-        // Build the replacement before releasing the old context. Story Flow
-        // and the Renegade layout remain authoritative, so replacing ImNodes'
-        // transient editor state cannot lose semantic or persisted layout data.
+        // Story Flow and the Renegade layout are authoritative. Rebuilding only
+        // ImNodes' editor context discards a poisoned click/link gesture without
+        // losing semantic routes or persisted node positions.
         ImNodesEditorContext* replacement = ImNodes::EditorContextCreate();
         if (!replacement)
             return;
@@ -73,6 +139,322 @@ namespace renegade::studio
         SetStatus("GRAPH INTERACTION RECOVERED // AUTHORITATIVE ROUTES PRESERVED");
     }
 
+    void RenegadeStoryFlowGraphEditor::FitToContent()
+    {
+        if (!layout_ || !workspace_ || !model_ || !model_->IsLoaded())
+            return;
+
+        // Native navigation is allowed to run while a higher wiGUI control owns
+        // the pointer. Therefore it must not query the transient ImNodes object
+        // pool: that pool can legitimately be empty immediately after recovery.
+        // Fit against durable Story Flow layout coordinates instead.
+        float minX = std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::lowest();
+        float maxY = std::numeric_limits<float>::lowest();
+        bool haveBounds = false;
+
+        for (const auto& nodeLayout : layout_->nodes)
+        {
+            if (!model_->FindNode(nodeLayout.nodeId))
+                continue;
+
+            float logicalHeight = OverviewNodeHeight;
+            const auto binding = nodeIndexByStableId_.find(nodeLayout.nodeId);
+            if (binding != nodeIndexByStableId_.end())
+            {
+                const std::size_t outputCount = nodes_[binding->second].outputs.size();
+                if (outputCount > 1)
+                {
+                    logicalHeight += static_cast<float>(outputCount - 1) *
+                        GraphExtraOutputHeight;
+                }
+            }
+
+            minX = std::min(minX, nodeLayout.x);
+            minY = std::min(minY, nodeLayout.y);
+            maxX = std::max(maxX, nodeLayout.x + OverviewNodeWidth);
+            maxY = std::max(maxY, nodeLayout.y + logicalHeight);
+            haveBounds = true;
+        }
+
+        if (!haveBounds)
+            return;
+
+        const float contentWidth = std::max(1.0f, maxX - minX);
+        const float contentHeight = std::max(1.0f, maxY - minY);
+        const float availableWidth = std::max(1.0f, viewport_.z - GraphFitMargin * 2.0f);
+        const float availableHeight = std::max(1.0f, viewport_.w - GraphFitMargin * 2.0f);
+        const float zoom = std::clamp(
+            std::min(availableWidth / contentWidth, availableHeight / contentHeight),
+            GraphNavigationMinZoom,
+            GraphNavigationMaxZoom);
+
+        const float centerX = (minX + maxX) * 0.5f;
+        const float centerY = (minY + maxY) * 0.5f;
+        layout_->canvas.zoom = zoom;
+        layout_->canvas.panX = viewport_.z * 0.5f - centerX * zoom;
+        layout_->canvas.panY = viewport_.w * 0.5f - centerY * zoom;
+        initializedNodePositions_.clear();
+        workspace_->NotifyLayoutChanged();
+
+        if (initialized_ && imnodesContext_ && editorContext_)
+        {
+            ImNodes::SetCurrentContext(imnodesContext_);
+            ImNodes::EditorContextSet(editorContext_);
+            ImNodes::EditorContextResetPanning(
+                ImVec2(layout_->canvas.panX, layout_->canvas.panY));
+        }
+
+        SetStatus("GRAPH FIT // CONTENT FRAMED");
+    }
+
+    void RenegadeStoryFlowGraphEditor::CenterOnGameStart()
+    {
+        if (!model_ || !layout_ || !workspace_ || !model_->IsLoaded())
+            return;
+
+        const bridge::StableId startId = model_->GameStartNodeId();
+        const auto* nodeLayout = workspace_->FindLayout(startId);
+        if (!nodeLayout)
+            return;
+
+        const float zoom = std::clamp(
+            layout_->canvas.zoom,
+            GraphNavigationMinZoom,
+            GraphNavigationMaxZoom);
+        layout_->canvas.zoom = zoom;
+        layout_->canvas.panX = viewport_.z * 0.5f -
+            (nodeLayout->x + OverviewNodeWidth * 0.5f) * zoom;
+        layout_->canvas.panY = viewport_.w * 0.5f -
+            (nodeLayout->y + OverviewNodeHeight * 0.5f) * zoom;
+        workspace_->SelectNode(startId);
+        workspace_->NotifyLayoutChanged();
+
+        if (initialized_ && imnodesContext_ && editorContext_)
+        {
+            ImNodes::SetCurrentContext(imnodesContext_);
+            ImNodes::EditorContextSet(editorContext_);
+            ImNodes::EditorContextResetPanning(
+                ImVec2(layout_->canvas.panX, layout_->canvas.panY));
+        }
+
+        SetStatus("GRAPH START // GAME START CENTERED");
+    }
+
+    bool RenegadeStoryFlowGraphEditor::FocusNodeByName(const std::string& query)
+    {
+        if (!model_ || !workspace_ || !model_->IsLoaded())
+            return false;
+
+        const std::string needle = LowerTrimmed(query);
+        if (needle.empty())
+        {
+            SetStatus("FIND REJECTED // ENTER A NODE NAME");
+            return false;
+        }
+
+        const bridge::StoryFlowNodeView* match = nullptr;
+        for (const auto& node : model_->Nodes())
+        {
+            if (LowerTrimmed(node.name) == needle)
+            {
+                match = &node;
+                break;
+            }
+        }
+        if (!match)
+        {
+            for (const auto& node : model_->Nodes())
+            {
+                if (LowerTrimmed(node.name).find(needle) != std::string::npos)
+                {
+                    match = &node;
+                    break;
+                }
+            }
+        }
+        if (!match)
+        {
+            SetStatus("FIND // NO STORY FLOW NODE MATCHES '" + query + "'");
+            return false;
+        }
+
+        if (layout_ && layout_->activeView == bridge::StoryFlowViewMode::Journey)
+        {
+            workspace_->SelectAndFocusNode(match->id);
+            SetStatus("JOURNEY FIND // " + match->name);
+            return true;
+        }
+
+        if (!layout_)
+            return false;
+        const auto* nodeLayout = workspace_->FindLayout(match->id);
+        if (!nodeLayout)
+            return false;
+
+        float logicalHeight = OverviewNodeHeight;
+        const auto binding = nodeIndexByStableId_.find(match->id);
+        if (binding != nodeIndexByStableId_.end())
+        {
+            const std::size_t outputCount = nodes_[binding->second].outputs.size();
+            if (outputCount > 1)
+            {
+                logicalHeight += static_cast<float>(outputCount - 1) *
+                    GraphExtraOutputHeight;
+            }
+        }
+
+        const float zoom = std::clamp(
+            layout_->canvas.zoom,
+            GraphNavigationMinZoom,
+            GraphNavigationMaxZoom);
+        layout_->canvas.zoom = zoom;
+        layout_->canvas.panX = viewport_.z * 0.5f -
+            (nodeLayout->x + OverviewNodeWidth * 0.5f) * zoom;
+        layout_->canvas.panY = viewport_.w * 0.5f -
+            (nodeLayout->y + logicalHeight * 0.5f) * zoom;
+        workspace_->SelectNode(match->id);
+        workspace_->NotifyLayoutChanged();
+
+        if (initialized_ && imnodesContext_ && editorContext_)
+        {
+            ImNodes::SetCurrentContext(imnodesContext_);
+            ImNodes::EditorContextSet(editorContext_);
+            ImNodes::EditorContextResetPanning(
+                ImVec2(layout_->canvas.panX, layout_->canvas.panY));
+        }
+
+        SetStatus("GRAPH FIND // " + match->name);
+        return true;
+    }
+
+    void RenegadeStoryFlowGraphEditor::RenderOverview(
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!frameActive_ || !model_ || !layout_ || !workspace_ ||
+            viewport_.z < 260.0f || viewport_.w < 220.0f)
+        {
+            return;
+        }
+
+        float minX = std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::lowest();
+        float maxY = std::numeric_limits<float>::lowest();
+        bool haveBounds = false;
+        for (const auto& node : layout_->nodes)
+        {
+            if (!model_->FindNode(node.nodeId))
+                continue;
+            minX = std::min(minX, node.x);
+            minY = std::min(minY, node.y);
+            maxX = std::max(maxX, node.x + OverviewNodeWidth);
+            maxY = std::max(maxY, node.y + OverviewNodeHeight);
+            haveBounds = true;
+        }
+        if (!haveBounds)
+            return;
+
+        const float panelWidth = std::clamp(viewport_.z * 0.19f, 170.0f, 238.0f);
+        const float panelHeight = std::clamp(viewport_.w * 0.17f, 112.0f, 156.0f);
+        const float panelX = viewport_.x + viewport_.z - panelWidth - 14.0f;
+        const float panelY = viewport_.y + viewport_.w - panelHeight - 14.0f;
+        OverviewBorderedRect(
+            panelX, panelY, panelWidth, panelHeight,
+            OverviewSurface, OverviewBorder, cmd);
+
+        wi::font::Params label(
+            panelX + 9.0f,
+            panelY + 7.0f,
+            7,
+            wi::font::WIFALIGN_LEFT,
+            wi::font::WIFALIGN_TOP,
+            OverviewText,
+            wi::Color::Transparent());
+        label.bolden = 0.14f;
+        wi::font::Draw("GRAPH OVERVIEW", label, cmd);
+
+        const float contentX = panelX + 9.0f;
+        const float contentY = panelY + 23.0f;
+        const float contentW = panelWidth - 18.0f;
+        const float contentH = panelHeight - 32.0f;
+        const float worldW = std::max(1.0f, maxX - minX);
+        const float worldH = std::max(1.0f, maxY - minY);
+        const float scale = std::min(contentW / worldW, contentH / worldH);
+        const float offsetX = contentX + (contentW - worldW * scale) * 0.5f;
+        const float offsetY = contentY + (contentH - worldH * scale) * 0.5f;
+        const auto mapPoint = [&](const float x, const float y)
+        {
+            return XMFLOAT2(
+                offsetX + (x - minX) * scale,
+                offsetY + (y - minY) * scale);
+        };
+
+        for (const auto& route : model_->Routes())
+        {
+            const auto source = std::find_if(
+                layout_->nodes.begin(), layout_->nodes.end(),
+                [&](const bridge::StoryFlowNodeLayout& item)
+                {
+                    return item.nodeId == route.sourceNodeId;
+                });
+            const auto destination = std::find_if(
+                layout_->nodes.begin(), layout_->nodes.end(),
+                [&](const bridge::StoryFlowNodeLayout& item)
+                {
+                    return item.nodeId == route.destinationNodeId;
+                });
+            if (source == layout_->nodes.end() || destination == layout_->nodes.end())
+                continue;
+
+            wi::renderer::RenderableLine2D line;
+            line.start = mapPoint(
+                source->x + OverviewNodeWidth * 0.5f,
+                source->y + OverviewNodeHeight * 0.5f);
+            line.end = mapPoint(
+                destination->x + OverviewNodeWidth * 0.5f,
+                destination->y + OverviewNodeHeight * 0.5f);
+            line.color_start = OverviewRoute;
+            line.color_end = OverviewRoute;
+            wi::renderer::DrawLine(line);
+        }
+
+        const bridge::StableId selected = workspace_->SelectedNodeId();
+        for (const auto& node : layout_->nodes)
+        {
+            if (!model_->FindNode(node.nodeId))
+                continue;
+            const XMFLOAT2 p = mapPoint(node.x, node.y);
+            const float w = std::max(3.0f, OverviewNodeWidth * scale);
+            const float h = std::max(2.0f, OverviewNodeHeight * scale);
+            OverviewRect(
+                p.x, p.y, w, h,
+                node.nodeId == selected ? OverviewAccent : OverviewNode,
+                cmd);
+        }
+
+        const float zoom = std::max(0.001f, layout_->canvas.zoom);
+        const float visibleX = -layout_->canvas.panX / zoom;
+        const float visibleY = -layout_->canvas.panY / zoom;
+        const float visibleW = viewport_.z / zoom;
+        const float visibleH = viewport_.w / zoom;
+        const XMFLOAT2 visibleTopLeft = mapPoint(visibleX, visibleY);
+        const float mappedW = visibleW * scale;
+        const float mappedH = visibleH * scale;
+        if (mappedW > 1.0f && mappedH > 1.0f)
+        {
+            OverviewBorderedRect(
+                visibleTopLeft.x,
+                visibleTopLeft.y,
+                mappedW,
+                mappedH,
+                wi::Color(0, 0, 0, 0),
+                OverviewAccent,
+                cmd);
+        }
+    }
+
     void RenegadeStoryFlowGraphEditor::ReconcileHostInteractions(
         const bool allowDeleteShortcut)
     {
@@ -85,13 +467,9 @@ namespace renegade::studio
         ImNodes::SetCurrentContext(imnodesContext_);
         ImNodes::EditorContextSet(editorContext_);
 
-        // Host-driven selection (notably governed Level/Screen creation and
-        // Journey -> Graph handoff) must become a real ImNodes selection and
-        // focus. The previous path only moved the retired legacy canvas, which
-        // meant a newly created Screen could be valid in Story Flow but remain
-        // completely off-screen in Graph. A node selected directly inside
-        // ImNodes is already selected here, so normal graph clicks never cause
-        // surprise recentering.
+        // Host selection/focus already changed the authoritative canvas. Mirror
+        // only the selection into ImNodes; never let reconciliation overwrite
+        // FIT, START, FIND, or lifecycle focus panning.
         const bridge::StableId& hostSelectedNodeId = workspace_->SelectedNodeId();
         if (!hostSelectedNodeId.empty())
         {
@@ -104,16 +482,12 @@ namespace renegade::studio
                     ImNodes::ClearLinkSelection();
                     ImNodes::ClearNodeSelection();
                     ImNodes::SelectNode(editorNodeId);
-                    ImNodes::EditorContextMoveToNode(editorNodeId);
-
                     if (layout_)
                     {
-                        const ImVec2 panning = ImNodes::EditorContextGetPanning();
-                        layout_->canvas.panX = panning.x;
-                        layout_->canvas.panY = panning.y;
+                        ImNodes::EditorContextResetPanning(
+                            ImVec2(layout_->canvas.panX, layout_->canvas.panY));
                     }
-                    workspace_->NotifyLayoutChanged();
-                    SetStatus("GRAPH FOCUS // SELECTED NODE CENTERED");
+                    SetStatus("GRAPH SELECTION // HOST NODE SYNCHRONIZED");
                     return;
                 }
             }
@@ -125,89 +499,6 @@ namespace renegade::studio
             ResetTransientInteractionState();
             SetStatus("REWIRE CANCELLED // ORIGINAL ROUTE RESTORED");
             return;
-        }
-
-        if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
-        {
-            const XMFLOAT4 pointer = wi::input::GetPointer();
-            const float headerTop = viewport_.y -
-                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight;
-            const float graphRight = viewport_.x + viewport_.z;
-            const XMFLOAT4 fitBounds(
-                graphRight - 136.0f,
-                headerTop + 10.0f,
-                52.0f,
-                28.0f);
-            const XMFLOAT4 startBounds(
-                graphRight - 76.0f,
-                headerTop + 10.0f,
-                64.0f,
-                28.0f);
-            const auto contains = [&](const XMFLOAT4& bounds)
-            {
-                return pointer.x >= bounds.x &&
-                    pointer.y >= bounds.y &&
-                    pointer.x < bounds.x + bounds.z &&
-                    pointer.y < bounds.y + bounds.w;
-            };
-
-            if (contains(fitBounds) && !nodes_.empty())
-            {
-                bool haveBounds = false;
-                float minX = 0.0f;
-                float minY = 0.0f;
-                float maxX = 0.0f;
-                float maxY = 0.0f;
-                for (const auto& node : nodes_)
-                {
-                    const ImVec2 position = ImNodes::GetNodeGridSpacePos(node.nodeId);
-                    const ImVec2 dimensions = ImNodes::GetNodeDimensions(node.nodeId);
-                    if (!haveBounds)
-                    {
-                        minX = position.x;
-                        minY = position.y;
-                        maxX = position.x + dimensions.x;
-                        maxY = position.y + dimensions.y;
-                        haveBounds = true;
-                    }
-                    else
-                    {
-                        minX = std::min(minX, position.x);
-                        minY = std::min(minY, position.y);
-                        maxX = std::max(maxX, position.x + dimensions.x);
-                        maxY = std::max(maxY, position.y + dimensions.y);
-                    }
-                }
-
-                if (haveBounds)
-                {
-                    const ImVec2 panning(
-                        viewport_.z * 0.5f - (minX + maxX) * 0.5f,
-                        viewport_.w * 0.5f - (minY + maxY) * 0.5f);
-                    ImNodes::EditorContextResetPanning(panning);
-                    if (layout_)
-                    {
-                        layout_->canvas.panX = panning.x;
-                        layout_->canvas.panY = panning.y;
-                    }
-                    workspace_->NotifyLayoutChanged();
-                    SetStatus("GRAPH FIT // CONTENT CENTERED");
-                }
-                return;
-            }
-
-            if (contains(startBounds))
-            {
-                const auto found = nodeIndexByStableId_.find(
-                    model_->GameStartNodeId());
-                if (found != nodeIndexByStableId_.end())
-                {
-                    ImNodes::EditorContextMoveToNode(nodes_[found->second].nodeId);
-                    workspace_->SelectNode(model_->GameStartNodeId());
-                    SetStatus("GRAPH START // GAME START CENTERED");
-                }
-                return;
-            }
         }
 
         if (!allowDeleteShortcut ||

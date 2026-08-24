@@ -18,9 +18,9 @@ namespace renegade::studio
 {
     class RenegadeStoryFlowWorkspace;
 
-    // Gate 9C Graph-only node editor. Journey View never calls or renders this
-    // class. ImNodes owns proven node/link mechanics; StoryFlowAuthoringSession
-    // remains the sole semantic/history authority.
+    // Graph-only node editor. Journey View never calls or renders this class.
+    // ImNodes owns node/link mechanics; StoryFlowAuthoringSession remains the
+    // sole semantic/history authority.
     class RenegadeStoryFlowGraphEditor final
     {
     public:
@@ -48,6 +48,14 @@ namespace renegade::studio
 
         void Update(const wi::Canvas& canvas, float dt, bool active);
         void Render(wi::graphics::CommandList cmd) const;
+
+        // Gate 9D navigation is Graph-owned. Native Story Flow chrome calls
+        // these commands directly instead of synthesizing clicks against the
+        // retired pre-ImNodes Graph surface.
+        void FitToContent();
+        void CenterOnGameStart();
+        [[nodiscard]] bool FocusNodeByName(const std::string& query);
+        void RenderOverview(wi::graphics::CommandList cmd) const;
 
         // Host/UI reconciliation that must run after the ImNodes frame. This
         // keeps native Story Flow controls and ImNodes interaction state in
@@ -160,10 +168,10 @@ namespace renegade::studio
         bool frameActive_ = false;
         bool initialized_ = false;
 
-        // ImNodes has no main-canvas zoom. Renegade therefore maintains the
-        // persisted Story Flow node coordinates as logical coordinates and
-        // applies a bounded presentation scale to the ImNodes editor geometry.
-        // Gate 9D can build semantic LOD/minimap behaviour on this stable base.
+        // ImNodes has no main-canvas zoom. Renegade maintains persisted Story
+        // Flow coordinates as logical coordinates and applies a bounded
+        // presentation scale to ImNodes geometry. Gate 9D's overview is derived
+        // from the same logical coordinates and never becomes semantic state.
         bool zoomGeometryReady_ = false;
         float appliedGraphZoom_ = 1.0f;
 

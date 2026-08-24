@@ -45,6 +45,14 @@ namespace renegade::studio
         void CenterOnGameStart();
         void SelectAndFocusNode(const bridge::StableId& nodeId);
 
+        // Gate 9D promotes Journey/Graph switching to real native chrome. The
+        // workspace remains the presentation-state authority, but callers no
+        // longer have to synthesize clicks against its legacy painted tabs.
+        void ActivateView(const bridge::StoryFlowViewMode view)
+        {
+            SetActiveView(view);
+        }
+
         void OnSelectionChanged(
             std::function<void(const bridge::StableId&)> callback);
         void OnLayoutChanged(std::function<void()> callback);
@@ -54,8 +62,9 @@ namespace renegade::studio
         void OnSemanticChanged(std::function<void()> callback);
         void SetExternalStatus(std::string message);
 
-        // Shared Journey/Graph deletion entry point. Game Start remains
-        // protected by the authoritative authoring-session invariant.
+        // Shared semantic deletion entry point. Gate 9D exposes this command
+        // only while Graph View is active; Journey remains a navigation and
+        // presentation surface rather than a second topology editor.
         [[nodiscard]] bool CanDeleteSelection() const noexcept;
         void DeleteSelection();
 
