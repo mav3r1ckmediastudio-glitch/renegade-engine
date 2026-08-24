@@ -47,12 +47,19 @@ Local evidence:
   now explicitly forbids both legacy member names. Superseding exact-head CI is
   required; the failed runs are not acceptance evidence.
 
-Windows exact-head evidence and run IDs must be recorded after the source
-contract/documentation follow-up commit. Visual acceptance remains explicitly
-open: green CI proves compilation only. Required proof is a real packaged
-Release screenshot at 1920x1080 and 1280x720, compared against the approved
-concept. No merge or Gate 9A completion claim is permitted before owner visual
-acceptance.
+Corrected implementation head
+`8b74d9ae022fea51acfbd694fc51541d81a34907` is mergeable and has exact-head
+Windows evidence:
+
+- Renegade Studio run `32760938835` / run 786 — Debug PASS, Release PASS;
+- Windows baseline run `32760938832` / run 1365 — Debug PASS, Release PASS;
+- Release artifact `9533799744`, digest
+  `sha256:18da1a50a360afd57db2c726776505180548cf0bf9225d23bc0672f514cfd11f`.
+
+Visual acceptance remains explicitly open: green CI proves compilation only.
+Required proof is a real packaged Release screenshot at 1920x1080 and
+1280x720, compared against the approved concept. No merge or Gate 9A completion
+claim is permitted before owner visual acceptance.
 
 Next bounded work after this cleanup is the remaining 9A shell fidelity and
 real top/left command wiring. 9B then owns the approved large rounded/shadowed
