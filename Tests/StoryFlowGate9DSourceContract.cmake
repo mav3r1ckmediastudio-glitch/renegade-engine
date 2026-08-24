@@ -43,8 +43,15 @@ require_text(workspace_source "Graph is intentionally not rendered here." "singl
 forbid_text(workspace_source "Line(start, end, routeColor);" "primitive legacy Graph route renderer")
 forbid_text(workspace_source "if (Contains(fitBounds, pointer))" "legacy header FIT hit testing")
 forbid_text(workspace_source "if (Contains(startBounds, pointer))" "legacy header START hit testing")
-require_text(render_path_source "workspace_.SetEnabled(workspaceActive_ && !graphBeforeUpdate);" "Graph workspace ownership cutoff")
+require_text(render_path_source "nativeCanvasNavigationOwnsPointer" "Journey native-navigation input ownership")
+require_text(render_path_source "!nativeCanvasNavigationOwnsPointer" "Journey canvas click-through cutoff")
 forbid_text(render_path_source "KEYBOARD_BUTTON_DELETE" "Journey-level Delete shortcut")
+
+# Native commands queue intent and execute only after the complete wiGUI update.
+require_text(render_path_source "pendingNativeCommand_ = NativeCommand::Fit;" "deferred FIT command")
+require_text(render_path_source "pendingNativeCommand_ = NativeCommand::Start;" "deferred START command")
+require_text(render_path_source "ProcessPendingNativeCommand();" "post-GUI native command execution")
+require_text(render_path_source "std::exchange(\n                pendingNativeCommand_, NativeCommand::None)" "single-consumption command queue")
 
 # Gate 9D navigation is native and presentation-only.
 require_text(render_path_source "Story Flow Journey View" "native Journey view control")
