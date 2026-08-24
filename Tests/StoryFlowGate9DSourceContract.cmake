@@ -5,8 +5,9 @@ endif()
 set(WORKSPACE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowWorkspace.cpp")
 set(RENDER_PATH "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowRenderPath.h")
 set(GRAPH_EDITOR "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowGraphEditor.h")
+set(PROJECT_LOADING_OVERLAY "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeProjectLoadingOverlay.cpp")
 
-foreach(path IN ITEMS "${WORKSPACE}" "${RENDER_PATH}" "${GRAPH_EDITOR}")
+foreach(path IN ITEMS "${WORKSPACE}" "${RENDER_PATH}" "${GRAPH_EDITOR}" "${PROJECT_LOADING_OVERLAY}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "Gate 9D source contract input is missing: ${path}")
     endif()
@@ -15,6 +16,7 @@ endforeach()
 file(READ "${WORKSPACE}" workspace_source)
 file(READ "${RENDER_PATH}" render_path_source)
 file(READ "${GRAPH_EDITOR}" graph_editor_source)
+file(READ "${PROJECT_LOADING_OVERLAY}" project_loading_overlay_source)
 
 function(require_text haystack_var needle description)
     string(FIND "${${haystack_var}}" "${needle}" found)
@@ -52,6 +54,13 @@ require_text(render_path_source "pendingNativeCommand_ = NativeCommand::Fit;" "d
 require_text(render_path_source "pendingNativeCommand_ = NativeCommand::Start;" "deferred START command")
 require_text(render_path_source "ProcessPendingNativeCommand();" "post-GUI native command execution")
 require_text(render_path_source "std::exchange(\n                pendingNativeCommand_, NativeCommand::None)" "single-consumption command queue")
+
+# Project Hub -> Story Flow handoff remains visually opaque for the final
+# Level Editor frame while becoming non-blocking for the post-frame path switch.
+require_text(project_loading_overlay_source "if (phase == Phase::Idle)" "stale handoff-cover cleanup")
+require_text(project_loading_overlay_source "phase_.store(static_cast<int>(Phase::Idle), std::memory_order_release);" "post-frame handoff release")
+require_text(project_loading_overlay_source "storedPhase == Phase::Idle ? Phase::Ready : storedPhase" "opaque final handoff frame")
+forbid_text(project_loading_overlay_source "SetVisible(false);\n                phase_.store(static_cast<int>(Phase::Idle)" "same-frame loader removal before Story Flow handoff")
 
 # Gate 9D navigation is native and presentation-only.
 require_text(render_path_source "Story Flow Journey View" "native Journey view control")
