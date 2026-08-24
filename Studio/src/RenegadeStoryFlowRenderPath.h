@@ -9,6 +9,7 @@
 #include <WickedEngine.h>
 
 #include "RenegadeStoryFlowConditionEditor.h"
+#include "RenegadeStoryFlowConceptLayer.h"
 #include "RenegadeStoryFlowGraphEditor.h"
 #include "RenegadeStoryFlowJourneyChrome.h"
 #include "RenegadeStoryFlowWorkspace.h"
@@ -16,9 +17,6 @@
 
 namespace renegade::studio
 {
-    // Native wiGUI host for the ImNodes Graph canvas. Graph rendering and input
-    // live in one stable GUI layer; the shared workspace never interprets Graph
-    // canvas gestures underneath it.
     class RenegadeStoryFlowGraphLayer final : public wi::gui::Widget
     {
     public:
@@ -105,10 +103,6 @@ namespace renegade::studio
         XMFLOAT4 bounds_ = {};
     };
 
-    // Story Flow is a first-class 2D RenderPath. Journey remains the native
-    // card/reel presentation. Graph has exactly one canvas implementation:
-    // ImNodes hosted by RenegadeStoryFlowGraphLayer. Lifecycle/header/search
-    // controls are native wiGUI objects above both presentations.
     class RenegadeStoryFlowRenderPath final : public wi::RenderPath2D
     {
         enum class NativeCommand
@@ -135,6 +129,7 @@ namespace renegade::studio
                 GetGUI().RemoveWidget(&graphViewButton_);
                 GetGUI().RemoveWidget(&journeyViewButton_);
                 GetGUI().RemoveWidget(&conditionEditor_);
+                GetGUI().RemoveWidget(&conceptLayer_);
                 GetGUI().RemoveWidget(&journeyChrome_);
                 GetGUI().RemoveWidget(&graphLayer_);
                 GetGUI().RemoveWidget(&workspace_);
@@ -155,6 +150,10 @@ namespace renegade::studio
             journeyChrome_.Create();
             journeyChrome_.SetVisible(false);
             journeyChrome_.SetEnabled(false);
+
+            conceptLayer_.Create();
+            conceptLayer_.SetVisible(false);
+            conceptLayer_.SetEnabled(false);
 
             conditionEditor_.Create();
             conditionEditor_.SetVisible(false);
@@ -232,9 +231,6 @@ namespace renegade::studio
                 pendingNativeCommand_ = NativeCommand::DeleteSelection;
             });
 
-            // Wicked updates in registration order and renders in reverse. Keep
-            // modal/native commands at the front; background presentation layers
-            // are moved behind lifecycle controls once those controls attach.
             GetGUI().AddWidget(&deleteSelectionButton_);
             GetGUI().AddWidget(&conditionEditor_);
             GetGUI().AddWidget(&findButton_);
@@ -243,6 +239,7 @@ namespace renegade::studio
             GetGUI().AddWidget(&fitButton_);
             GetGUI().AddWidget(&graphViewButton_);
             GetGUI().AddWidget(&journeyViewButton_);
+            GetGUI().AddWidget(&conceptLayer_);
             GetGUI().AddWidget(&journeyChrome_);
             GetGUI().AddWidget(&graphLayer_);
             GetGUI().AddWidget(&workspace_);
@@ -266,6 +263,8 @@ namespace renegade::studio
             workspace_.SetVisible(workspaceActive_);
             workspace_.SetEnabled(workspaceActive_ && !graphActive);
             journeyChrome_.SetVisible(workspaceActive_);
+            conceptLayer_.SetVisible(workspaceActive_);
+            conceptLayer_.SetEnabled(workspaceActive_);
             conditionEditor_.SetVisible(workspaceActive_);
             conditionEditor_.SetEnabled(workspaceActive_);
             graphLayer_.SetVisible(graphActive);
@@ -287,6 +286,8 @@ namespace renegade::studio
             deleteSelectionButton_.SetEnabled(false);
             conditionEditor_.SetVisible(false);
             conditionEditor_.SetEnabled(false);
+            conceptLayer_.SetVisible(false);
+            conceptLayer_.SetEnabled(false);
             journeyChrome_.SetVisible(false);
             graphLayer_.SetVisible(false);
             graphLayer_.SetEnabled(false);
@@ -309,13 +310,12 @@ namespace renegade::studio
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
             graphLayer_.SetVisible(graphBeforeUpdate);
             graphLayer_.SetEnabled(graphBeforeUpdate);
+            conceptLayer_.SetVisible(workspaceActive_);
+            conceptLayer_.SetEnabled(workspaceActive_);
+            conceptLayer_.SetSelection(workspace_.SelectedNodeId(), {});
             SetNativeControlsActive(workspaceActive_);
             UpdateDeleteControl(graphBeforeUpdate);
 
-            // FIT/START live in the lower-left canvas navigation host. Journey
-            // uses raw canvas input, so the shared workspace must not receive the
-            // same press when one of those native controls owns the pointer.
-            // Graph already disables the shared workspace entirely.
             const XMFLOAT4 pointerBeforeGui = wi::input::GetPointer();
             const bool nativeCanvasNavigationOwnsPointer =
                 workspaceActive_ && !graphBeforeUpdate &&
@@ -324,9 +324,6 @@ namespace renegade::studio
                 workspaceActive_ && !graphBeforeUpdate &&
                 !nativeCanvasNavigationOwnsPointer);
 
-            // Native callbacks queue intent only. Execute the command after the
-            // complete wiGUI update so Story Flow never mutates canvas/view/
-            // semantic state re-entrantly while Wicked is traversing widgets.
             wi::RenderPath2D::Update(dt);
             ProcessPendingNativeCommand();
 
@@ -335,6 +332,7 @@ namespace renegade::studio
             graphLayer_.SetVisible(graphActive);
             graphLayer_.SetEnabled(graphActive);
             workspace_.SetEnabled(workspaceActive_ && !graphActive);
+            conceptLayer_.SetSelection(workspace_.SelectedNodeId(), {});
 
             const XMFLOAT4 pointer = wi::input::GetPointer();
             const bool pointerInsideGraph = graphActive &&
@@ -346,9 +344,6 @@ namespace renegade::studio
             {
                 if (graphInputBlocked)
                 {
-                    // A higher native control (notably a lifecycle dropdown)
-                    // owns the pointer. Keep the last Graph frame visible and
-                    // terminate only transient ImNodes interaction state once.
                     if (!graphInputBlockedLastFrame_)
                         graphEditor_.ResetTransientInteractionState();
                 }
@@ -392,6 +387,8 @@ namespace renegade::studio
             graphEditor_.Bind(session, model, layout, &workspace_);
             graphEditor_.ResetTransientInteractionState();
             conditionEditor_.Bind(session, model, &workspace_);
+            conceptLayer_.Bind(session, model, layout);
+            conceptLayer_.SetSelection(workspace_.SelectedNodeId(), {});
         }
 
         void Clear() noexcept
@@ -399,6 +396,7 @@ namespace renegade::studio
             if (loaded_)
             {
                 conditionEditor_.Clear();
+                conceptLayer_.Clear();
                 graphEditor_.Clear();
                 workspace_.Clear();
                 graphLayer_.SetVisible(false);
@@ -445,6 +443,8 @@ namespace renegade::studio
             workspace_.SetVisible(active);
             workspace_.SetEnabled(active && !graphActive);
             journeyChrome_.SetVisible(active);
+            conceptLayer_.SetVisible(active);
+            conceptLayer_.SetEnabled(active);
             conditionEditor_.SetVisible(active);
             conditionEditor_.SetEnabled(active);
             graphLayer_.SetVisible(graphActive);
@@ -511,11 +511,14 @@ namespace renegade::studio
                 return;
 
             auto& gui = GetGUI();
-            // Native header/search/modal commands stay in front. Move only the
-            // three presentation backgrounds behind lifecycle widgets once.
+            gui.RemoveWidget(&conceptLayer_);
             gui.RemoveWidget(&journeyChrome_);
             gui.RemoveWidget(&graphLayer_);
             gui.RemoveWidget(&workspace_);
+            // Wicked renders in reverse registration order. Re-add presentation
+            // surfaces so Workspace/Graph draw first, chrome next, 9E concept
+            // overlay next, and lifecycle/native controls remain on top.
+            gui.AddWidget(&conceptLayer_);
             gui.AddWidget(&journeyChrome_);
             gui.AddWidget(&graphLayer_);
             gui.AddWidget(&workspace_);
@@ -639,27 +642,29 @@ namespace renegade::studio
                 RenegadeStoryFlowJourneyChrome::PreferredInspectorWidth,
                 workspaceWidth * 0.42f);
             const float graphWidth = std::max(1.0f, workspaceWidth - inspectorWidth);
+            const float headerHeight =
+                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight;
             const XMFLOAT4 graphViewport(
                 workspaceLeft,
-                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight,
+                headerHeight,
                 graphWidth,
-                std::max(
-                    1.0f,
-                    height - RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight));
+                std::max(1.0f, height - headerHeight));
             graphEditor_.SetViewport(graphViewport);
             graphLayer_.SetViewport(graphViewport);
+            conceptLayer_.SetViewport(
+                graphViewport,
+                XMFLOAT4(
+                    workspaceLeft + graphWidth,
+                    headerHeight,
+                    inspectorWidth,
+                    std::max(1.0f, height - headerHeight)));
 
             journeyViewButton_.SetPos(XMFLOAT2(workspaceLeft + 112.0f, 10.0f));
             journeyViewButton_.SetSize(XMFLOAT2(58.0f, 28.0f));
             graphViewButton_.SetPos(XMFLOAT2(workspaceLeft + 174.0f, 10.0f));
             graphViewButton_.SetSize(XMFLOAT2(44.0f, 28.0f));
 
-            // Canvas navigation lives in the existing lower-left navigation
-            // host area, away from Level/Screen lifecycle controls in the two
-            // header rows. The complete host is reserved from Journey raw input.
-            const float canvasNavY = std::max(
-                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 18.0f,
-                height - 52.0f);
+            const float canvasNavY = std::max(headerHeight + 18.0f, height - 52.0f);
             fitButton_.SetPos(XMFLOAT2(workspaceLeft + 18.0f, canvasNavY));
             fitButton_.SetSize(XMFLOAT2(52.0f, 28.0f));
             startButton_.SetPos(XMFLOAT2(workspaceLeft + 76.0f, canvasNavY));
@@ -671,9 +676,7 @@ namespace renegade::studio
                 28.0f);
 
             const float inspectorX = workspaceLeft + graphWidth + 14.0f;
-            const float findY = std::max(
-                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 300.0f,
-                height - 66.0f);
+            const float findY = std::max(headerHeight + 300.0f, height - 66.0f);
             const float findButtonWidth = 62.0f;
             const float findFieldWidth = std::max(
                 94.0f,
@@ -686,7 +689,7 @@ namespace renegade::studio
 
             deleteSelectionButton_.SetPos(XMFLOAT2(
                 workspaceLeft + graphWidth + std::max(0.0f, inspectorWidth - 88.0f),
-                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 9.0f));
+                headerHeight + 9.0f));
             deleteSelectionButton_.SetSize(XMFLOAT2(74.0f, 26.0f));
 
             conditionEditor_.SetLayout(width, height);
@@ -696,6 +699,7 @@ namespace renegade::studio
         RenegadeStoryFlowGraphEditor graphEditor_;
         RenegadeStoryFlowGraphLayer graphLayer_;
         RenegadeStoryFlowJourneyChrome journeyChrome_;
+        RenegadeStoryFlowConceptLayer conceptLayer_;
         RenegadeStoryFlowConditionEditor conditionEditor_;
         RenegadeButton journeyViewButton_;
         RenegadeButton graphViewButton_;
