@@ -72,6 +72,11 @@ annotations, not controls. Journey renders no node wires.
 - screen actions remain governed by the Runtime Screen action list;
 - unsupported semantic mutations fail closed and leave the Inspector synced to
   the authoritative document.
+- the real Add Action and exit destination controls restore the workspace clip
+  before rendering, remain visible in the packaged UI and expose readable
+  10–12px control text;
+- non-functional Inspector pseudo-tabs are removed; one readable Destination
+  Details surface remains until distinct tab workflows are implemented.
 
 The dedicated `RenegadeStoryFlowGate9ENonlinearAuthoringTests` executable proves
 branch creation, merge projection, stable-ID loop rewiring, shared Undo/Redo and

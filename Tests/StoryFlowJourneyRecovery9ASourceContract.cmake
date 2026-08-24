@@ -71,6 +71,7 @@ require_text(layout_source "layout.storyOverview" "fixed story overview host")
 require_text(chrome_source "Select, Arrange, Filter, Search, Preview, Validate" "complete Journey toolbar actions")
 require_text(chrome_source "Undo, Redo, ProjectSelector, Settings, MainMenu" "complete Journey utility actions")
 require_text(chrome_source "Hub, StoryFlow, Levels, Screens, Assets, Variables, TestPlay" "complete Journey rail actions")
+require_text(chrome_source "shell_.inspector.y + 14.0f, 13, TextStrong" "readable Inspector title")
 require_text(render_path_source "journeyChrome_.CanvasOverlayOwnsPointer" "fixed chrome input ownership")
 require_text(render_path_source "workspace_.FindAndFocusJourneyNode(findDraft_)" "Journey-native search/focus")
 require_text(render_path_source "graphViewButton_.SetVisible(active);" "restored Graph editor access")
@@ -111,6 +112,16 @@ require_text(workspace_source "journeyAddActionAvailable_ = source->outgoingRout
 require_text(workspace_source "usedOutcomes.find(outcome) ==" "unused Screen action availability")
 require_text(workspace_source "session_->AddRoute(std::move(route), createdRouteId, error)" "governed Journey route creation")
 forbid_text(workspace_source "JOURNEY EXIT // OPENED IN GRAPH" "Journey-to-Graph exit routing")
+
+# The real Inspector must remain readable and must not surface decorative
+# pseudo-tabs. Manual native controls are each rendered from a restored
+# workspace scissor so a preceding TextInput cannot clip Add Action/combos.
+require_text(workspace_source "DESTINATION DETAILS" "readable Inspector details hierarchy")
+forbid_text(workspace_source "\"i\", \"=\", \"IMG\", \">\", \"</>\"" "non-functional Inspector pseudo-tabs")
+require_text(workspace_source "preceding field can never clip Add Action" "per-control Inspector scissor restoration")
+require_text(workspace_source "nodeNameInput_.SetRenderTextSize(12)" "readable Inspector display-name control")
+require_text(workspace_source "addJourneyActionButton_.SetRenderTextSize(11)" "readable Journey Add Action control")
+require_text(workspace_source "No unused authored Screen actions available." "honest disabled Screen action reason")
 
 # The replacement UI must continue to queue the accepted governed lifecycle
 # services and stable-ID editor handoffs rather than implementing new semantics.

@@ -34,7 +34,15 @@ does not exist in its governed action list.
 
 The Journey recovery source contract additionally requires a real, visible and
 honestly enabled **+ ADD ACTION** button, governed route creation, stable-ID
-rewiring and Journey-only Inspector routing.
+rewiring and Journey-only Inspector routing. The packaged Inspector restores
+its workspace scissor before every manually rendered native control so a text
+field cannot clip the following button or destination selectors.
+
+The Inspector uses an explicit readable hierarchy: 13–14px Inspector and
+destination titles, 12px section headings, and 10–12px labels, values and
+controls with high-contrast secondary text. The former non-functional
+`i / = / IMG / > / </>` pseudo-tab strip is removed. Until real tab surfaces
+exist, the Inspector exposes one honest **Destination Details** section.
 
 ## Packaged Release owner acceptance
 
@@ -43,21 +51,24 @@ Use the packaged Release artifact from the exact passing PR head.
 1. Open Story Flow in **Journey** and select a non-terminal card.
 2. Confirm **+ ADD ACTION** is visible beside **ACTIONS / EXITS**. Terminal cards
    may show it disabled, never deceptively active.
-3. Add an action. Confirm a real exit row appears immediately and its initial
+3. Confirm the Inspector title, destination name, General fields, Actions/Exits,
+   Notes, Validation and status are comfortably readable at normal viewing
+   distance. There must be no cryptic pseudo-tab strip under the preview.
+4. Add an action. Confirm a real exit row appears immediately and its initial
    destination can be changed in the Inspector.
-4. Route the action to a new alternate destination. Confirm the card appears in
+5. Route the action to a new alternate destination. Confirm the card appears in
    a colour-coded branch row; main cards retain neutral borders.
-5. Route that branch back to an existing main card. Confirm the existing card is
+6. Route that branch back to an existing main card. Confirm the existing card is
    reused rather than duplicated.
-6. Route an exit back to an earlier card. Confirm the loop is represented
+7. Route an exit back to an earlier card. Confirm the loop is represented
    without wires and without duplicating cards.
-7. Collapse and expand each alternate branch row. Confirm only presentation
+8. Collapse and expand each alternate branch row. Confirm only presentation
    changes and the Inspector remains usable.
-8. Undo and Redo the last route change from the top toolbar. Confirm Journey and
+9. Undo and Redo the last route change from the top toolbar. Confirm Journey and
    Inspector update together.
-9. Switch to **Graph**. Confirm it shows the same branch, merge and loop. Switch
+10. Switch to **Graph**. Confirm it shows the same branch, merge and loop. Switch
    back to Journey and confirm no topology changes.
-10. Save, close and reopen the project. Confirm the same routes, branch rows and
+11. Save, close and reopen the project. Confirm the same routes, branch rows and
     destinations return.
 
 Gate 9E is complete only when exact-head Debug and Release CI are green and this

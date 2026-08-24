@@ -36,6 +36,7 @@ namespace
     constexpr wi::Color Border(38, 52, 61, 255);
     constexpr wi::Color Text(244, 244, 244, 255);
     constexpr wi::Color Muted(132, 143, 149, 255);
+    constexpr wi::Color InspectorSecondary(205, 214, 220, 255);
     constexpr wi::Color Accent(210, 91, 29, 255);
     constexpr wi::Color Error(229, 92, 92, 255);
 
@@ -1237,20 +1238,24 @@ namespace renegade::studio
         nodeNameInput_.Create("Story Flow Node Name");
         nodeNameInput_.SetDescription("DISPLAY NAME  ");
         nodeNameInput_.SetPlaceholder("Destination name...");
+        nodeNameInput_.SetRenderTextSize(12);
         nodeNameInput_.SetCancelInputEnabled(false);
         nodeNameInput_.OnInputAccepted([this](const wi::gui::EventArgs&) { ApplySelectedNode(); });
 
         applyNodeButton_.Create("Story Flow Apply Node");
         applyNodeButton_.SetText("APPLY NAME");
+        applyNodeButton_.SetRenderTextSize(11);
         applyNodeButton_.OnClick([this](const wi::gui::EventArgs&) { ApplySelectedNode(); });
 
         deleteNodeButton_.Create("Story Flow Delete Node");
         deleteNodeButton_.SetText("DELETE NODE");
+        deleteNodeButton_.SetRenderTextSize(11);
         deleteNodeButton_.SetTooltip("Delete this Graph node and its connected routes as one semantic edit.");
         deleteNodeButton_.OnClick([this](const wi::gui::EventArgs&) { DeleteSelectedNode(); });
 
         openDestinationButton_.Create("Story Flow Open Selected Destination");
         openDestinationButton_.SetText("OPEN EDITOR");
+        openDestinationButton_.SetRenderTextSize(11);
         openDestinationButton_.SetTooltip(
             "Open the selected governed Level or Screen editor.");
         openDestinationButton_.OnClick([this](const wi::gui::EventArgs&)
@@ -1261,17 +1266,9 @@ namespace renegade::studio
 
         addJourneyActionButton_.Create("Story Flow Add Journey Action");
         addJourneyActionButton_.SetText("+ ADD ACTION");
+        addJourneyActionButton_.SetRenderTextSize(11);
         addJourneyActionButton_.SetTooltip(
             "Create a governed exit and configure its destination here in the Inspector.");
-        addJourneyActionButton_.SetColor(Raised, wi::gui::IDLE);
-        addJourneyActionButton_.SetColor(
-            wi::Color(18, 45, 66, 255), wi::gui::FOCUS);
-        addJourneyActionButton_.SetColor(
-            wi::Color(25, 72, 105, 255), wi::gui::ACTIVE);
-        addJourneyActionButton_.SetColor(Raised, wi::gui::DEACTIVATING);
-        addJourneyActionButton_.font.params.color = Text;
-        addJourneyActionButton_.font.params.shadowColor =
-            wi::Color::Transparent();
         addJourneyActionButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             pendingAddJourneyAction_ = true;
@@ -1283,6 +1280,7 @@ namespace renegade::studio
             auto& combo = journeyExitDestinationCombos_[index];
             combo.Create("Story Flow Journey Exit Destination " +
                 std::to_string(index + 1));
+            combo.SetRenderTextSize(11);
             combo.SetTooltip(
                 "Route this authored action directly to a governed Journey destination.");
             combo.OnSelect([this, index](const wi::gui::EventArgs& args)
@@ -1296,21 +1294,25 @@ namespace renegade::studio
         routeOutcomeInput_.Create("Story Flow Route Outcome");
         routeOutcomeInput_.SetDescription("OUTCOME  ");
         routeOutcomeInput_.SetPlaceholder("next / failed / new_game...");
+        routeOutcomeInput_.SetRenderTextSize(11);
         routeOutcomeInput_.SetCancelInputEnabled(false);
 
         routeEntryInput_.Create("Story Flow Route Player Entry");
         routeEntryInput_.SetDescription("ENTRY  ");
         routeEntryInput_.SetPlaceholder("player_entry");
+        routeEntryInput_.SetRenderTextSize(11);
         routeEntryInput_.SetCancelInputEnabled(false);
 
         routePriorityInput_.Create("Story Flow Route Priority");
         routePriorityInput_.SetDescription("PRIORITY  ");
         routePriorityInput_.SetPlaceholder("0");
+        routePriorityInput_.SetRenderTextSize(11);
         routePriorityInput_.SetCancelInputEnabled(false);
         routePriorityInput_.OnInputAccepted([this](const wi::gui::EventArgs&) { ApplySelectedRoute(); });
 
         applyRouteButton_.Create("Story Flow Apply Route");
         applyRouteButton_.SetText("APPLY ROUTE");
+        applyRouteButton_.SetRenderTextSize(11);
         applyRouteButton_.OnClick([this](const wi::gui::EventArgs&) { ApplySelectedRoute(); });
 
         reconnectRouteButton_.Create("Story Flow Reconnect Route");
@@ -1320,10 +1322,12 @@ namespace renegade::studio
 
         deleteRouteButton_.Create("Story Flow Delete Route");
         deleteRouteButton_.SetText("DELETE ROUTE");
+        deleteRouteButton_.SetRenderTextSize(11);
         deleteRouteButton_.OnClick([this](const wi::gui::EventArgs&) { DeleteSelectedRoute(); });
 
         addCompleteButton_.Create("Story Flow Add Complete Game");
         addCompleteButton_.SetText("+ COMPLETE");
+        addCompleteButton_.SetRenderTextSize(11);
         addCompleteButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             AddTerminalNode(bridge::FlowNodeKind::CompleteGame, "Complete Game");
@@ -1331,6 +1335,7 @@ namespace renegade::studio
 
         addReturnButton_.Create("Story Flow Add Return To Menu");
         addReturnButton_.SetText("+ RETURN MENU");
+        addReturnButton_.SetRenderTextSize(11);
         addReturnButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             AddTerminalNode(bridge::FlowNodeKind::ReturnToMainMenu, "Return To Main Menu");
@@ -1338,6 +1343,7 @@ namespace renegade::studio
 
         addQuitButton_.Create("Story Flow Add Quit");
         addQuitButton_.SetText("+ QUIT");
+        addQuitButton_.SetRenderTextSize(11);
         addQuitButton_.OnClick([this](const wi::gui::EventArgs&)
         {
             AddTerminalNode(bridge::FlowNodeKind::Quit, "Quit");
@@ -1412,23 +1418,24 @@ namespace renegade::studio
                 (height_ >= 850.0f ? 167.0f : 55.0f)));
         openDestinationButton_.SetSize(XMFLOAT2(fieldWidth, 34.0f));
 
+        constexpr float addActionWidth = 110.0f;
         addJourneyActionButton_.SetPos(XMFLOAT2(
-            inspectorX + std::max(0.0f, fieldWidth - 91.0f),
-            generalY + 104.0f));
-        addJourneyActionButton_.SetSize(XMFLOAT2(91.0f, 23.0f));
+            inspectorX + std::max(0.0f, fieldWidth - addActionWidth),
+            generalY + 108.0f));
+        addJourneyActionButton_.SetSize(XMFLOAT2(addActionWidth, 27.0f));
 
         const float exitDestinationX = inspectorX + 133.0f;
         const float exitDestinationWidth = std::max(80.0f,
             fieldWidth - 133.0f);
-        const float exitsY = generalY + 114.0f;
+        const float exitsY = generalY + 120.0f;
         for (std::size_t index = 0;
             index < journeyExitDestinationCombos_.size(); ++index)
         {
             journeyExitDestinationCombos_[index].SetPos(XMFLOAT2(
                 exitDestinationX,
-                exitsY + 20.0f + static_cast<float>(index) * 27.0f));
+                exitsY + 24.0f + static_cast<float>(index) * 31.0f));
             journeyExitDestinationCombos_[index].SetSize(XMFLOAT2(
-                exitDestinationWidth, 23.0f));
+                exitDestinationWidth, 27.0f));
         }
 
         routeOutcomeInput_.SetPos(XMFLOAT2(inspectorX, y0));
@@ -1499,7 +1506,7 @@ namespace renegade::studio
         const auto* selectedNodeView = journeyMode && model_
             ? model_->FindNode(selectedNodeId_) : nullptr;
         const std::size_t inspectorExitCapacity = height_ < 800.0f
-            ? std::size_t{4} : MaxJourneyInspectorExits;
+            ? std::size_t{3} : MaxJourneyInspectorExits;
         const std::size_t journeyExitCount = std::min<std::size_t>(
             selectedNodeView ? selectedNodeView->outgoingRouteIds.size() : 0,
             inspectorExitCapacity);
@@ -1600,13 +1607,22 @@ namespace renegade::studio
             static_cast<const wi::gui::Widget*>(&addReturnButton_),
             static_cast<const wi::gui::Widget*>(&addQuitButton_)})
         {
-            if (widget->IsVisible()) widget->Render(canvas, cmd);
+            if (!widget->IsVisible()) continue;
+            // TextInputField binds its own narrow scissor and the custom
+            // RenegadeButton/ComboBox renderers intentionally do not. Restore
+            // the workspace clip before every manually rendered control so a
+            // preceding field can never clip Add Action or exit destinations.
+            ApplyScissor(canvas, scissorRect, cmd);
+            widget->Render(canvas, cmd);
         }
         for (auto combo = journeyExitDestinationCombos_.rbegin();
             combo != journeyExitDestinationCombos_.rend(); ++combo)
         {
-            if (combo->IsVisible()) combo->Render(canvas, cmd);
+            if (!combo->IsVisible()) continue;
+            ApplyScissor(canvas, scissorRect, cmd);
+            combo->Render(canvas, cmd);
         }
+        ApplyScissor(canvas, scissorRect, cmd);
     }
 
     void RenegadeStoryFlowWorkspace::RefreshInspectorControls()
@@ -2447,29 +2463,32 @@ namespace renegade::studio
             if (layout_->activeView == bridge::StoryFlowViewMode::Graph)
             {
                 Label(KindLabel(node->kind), inspectorX,
-                    translation.y + HeaderHeight + 35.0f, 8,
+                    translation.y + HeaderHeight + 35.0f, 10,
                     node->kind == bridge::FlowNodeKind::GameStart
-                        ? Accent : Muted, cmd);
+                        ? Accent : InspectorSecondary, cmd);
                 Label("STABLE ID // " + Shorten(node->id, 30), inspectorX,
-                    translation.y + HeaderHeight + 181.0f, 8, Muted, cmd);
+                    translation.y + HeaderHeight + 181.0f,
+                    10, InspectorSecondary, cmd);
                 if (node->kind == bridge::FlowNodeKind::Level)
                 {
                     Label("SCENE // " + Shorten(node->scenePathHint, 35), inspectorX,
-                        translation.y + HeaderHeight + 198.0f, 8, Muted, cmd);
+                        translation.y + HeaderHeight + 201.0f,
+                        10, InspectorSecondary, cmd);
                 }
                 else if (node->kind == bridge::FlowNodeKind::Screen)
                 {
                     Label("SCREEN // " + Shorten(node->screenPathHint, 35), inspectorX,
-                        translation.y + HeaderHeight + 198.0f, 8, Muted, cmd);
+                        translation.y + HeaderHeight + 201.0f,
+                        10, InspectorSecondary, cmd);
                 }
             }
             else
             {
                 const float inspectorTop = translation.y + 108.0f;
                 Label(Shorten(node->name, 34), inspectorX,
-                    inspectorTop, 10, Text, cmd);
+                    inspectorTop, 14, Text, cmd);
                 Label(KindLabel(node->kind), inspectorX,
-                    inspectorTop + 18.0f, 7, Muted, cmd);
+                    inspectorTop + 22.0f, 10, InspectorSecondary, cmd);
 
                 const float previewY = inspectorTop + 46.0f;
                 const float previewHeight = std::clamp(
@@ -2495,47 +2514,43 @@ namespace renegade::studio
                         inspectorX +
                             std::max(1.0f, width_ - GraphWidth() - 28.0f) * 0.5f,
                         previewY + previewHeight * 0.48f,
-                        7, Muted, cmd);
+                        10, InspectorSecondary, cmd);
                 }
 
                 const float tabsY = previewY + previewHeight + 9.0f;
                 Rect(inspectorX, tabsY + 27.0f,
                     std::max(1.0f, width_ - GraphWidth() - 28.0f),
                     1.0f, Border, cmd);
-                constexpr std::array<const char*, 5> inspectorTabs = {
-                    "i", "=", "IMG", ">", "</>"};
-                for (std::size_t tab = 0; tab < inspectorTabs.size(); ++tab)
-                {
-                    const float tabX = inspectorX + 22.0f +
-                        static_cast<float>(tab) * 52.0f;
-                    Label(inspectorTabs[tab], tabX, tabsY + 7.0f,
-                        tab == 0 ? 9 : 7,
-                        tab == 0 ? wi::Color(65, 158, 230, 255) : Muted, cmd);
-                }
+                // Until real Inspector tabs own distinct functional surfaces,
+                // expose one honest readable details section. Cryptic pseudo-
+                // tabs are worse than no tabs and violate the staged UI plan.
+                Label("DESTINATION DETAILS", inspectorX + 4.0f,
+                    tabsY + 6.0f, 11, Text, cmd);
                 Rect(inspectorX + 4.0f, tabsY + 26.0f,
-                    40.0f, 2.0f, wi::Color(65, 158, 230, 255), cmd);
+                    118.0f, 2.0f, wi::Color(65, 158, 230, 255), cmd);
 
                 const float generalY =
                     tabsY + 45.0f;
-                Label("GENERAL", inspectorX, generalY, 8, Text, cmd);
-                Label("Type", inspectorX, generalY + 58.0f, 7, Muted, cmd);
+                Label("GENERAL", inspectorX, generalY, 12, Text, cmd);
+                Label("Type", inspectorX, generalY + 60.0f,
+                    10, InspectorSecondary, cmd);
                 Label(KindLabel(node->kind), inspectorX + 104.0f,
-                    generalY + 58.0f, 7, Text, cmd);
+                    generalY + 60.0f, 10, Text, cmd);
                 Label(node->kind == bridge::FlowNodeKind::Level
                         ? "Scene Document"
                         : (node->kind == bridge::FlowNodeKind::Screen
                             ? "Screen Document" : "Flow Destination"),
-                    inspectorX, generalY + 80.0f, 7, Muted, cmd);
+                    inspectorX, generalY + 84.0f,
+                    10, InspectorSecondary, cmd);
                 Label(Shorten(node->kind == bridge::FlowNodeKind::Level
-                        ? node->scenePathHint
-                        : node->screenPathHint, 35),
-                    inspectorX + 104.0f, generalY + 80.0f, 7, Text, cmd);
+                        ? node->scenePathHint : node->screenPathHint, 28),
+                    inspectorX + 120.0f, generalY + 84.0f, 10, Text, cmd);
 
-                const float exitsY = generalY + 114.0f;
-                Label("ACTIONS / EXITS", inspectorX, exitsY, 8, Text, cmd);
+                const float exitsY = generalY + 120.0f;
+                Label("ACTIONS / EXITS", inspectorX, exitsY, 12, Text, cmd);
                 const auto* nodeView = model_->FindNode(node->id);
                 const std::size_t inspectorExitCapacity = height_ < 800.0f
-                    ? std::size_t{4} : MaxJourneyInspectorExits;
+                    ? std::size_t{3} : MaxJourneyInspectorExits;
                 const std::size_t count = std::min<std::size_t>(
                     nodeView ? nodeView->outgoingRouteIds.size() : 0,
                     inspectorExitCapacity);
@@ -2546,34 +2561,55 @@ namespace renegade::studio
                     const auto* destination = route
                         ? model_->FindNode(route->destinationNodeId) : nullptr;
                     if (!route) continue;
-                    const float y = exitsY + 20.0f +
-                        static_cast<float>(i) * 27.0f;
+                    const float y = exitsY + 24.0f +
+                        static_cast<float>(i) * 31.0f;
                     const JourneyBranchRole role = JourneyRoleForOutcome(
                         route->outcome, false);
                     RoundedRect(inspectorX + 2.0f, y + 7.0f,
                         8.0f, 8.0f, 4.0f, JourneyRoleColor(role), cmd);
-                    Label(Shorten(route->outcome, 16),
-                        inspectorX + 19.0f, y + 4.0f, 7, Text, cmd);
-                    Label("->", inspectorX + 111.0f, y + 4.0f, 7, Muted, cmd);
+                    Label(Shorten(route->outcome, 14),
+                        inspectorX + 19.0f, y + 4.0f, 10, Text, cmd);
+                    Label("->", inspectorX + 111.0f, y + 4.0f,
+                        10, InspectorSecondary, cmd);
                     BorderedRect(inspectorX + 133.0f, y,
                         std::max(1.0f,
-                            width_ - GraphWidth() - 161.0f), 23.0f,
+                            width_ - GraphWidth() - 161.0f), 27.0f,
                         Surface, Border, cmd);
                     Label(Shorten(destination ? destination->name
-                            : route->destinationNodeId, 19),
-                        inspectorX + 141.0f, y + 6.0f, 7, Text, cmd);
+                            : route->destinationNodeId, 16),
+                        inspectorX + 141.0f, y + 6.0f, 10, Text, cmd);
+                }
+
+                if (count == 0)
+                {
+                    const std::string emptyState = IsTerminalKind(node->kind)
+                        ? "Terminal destination - no outgoing actions."
+                        : (node->kind == bridge::FlowNodeKind::Screen &&
+                            !journeyAddActionAvailable_)
+                            ? "No unused authored Screen actions available."
+                            : (node->kind == bridge::FlowNodeKind::GameStart &&
+                                !journeyAddActionAvailable_)
+                                ? "The project entry route is already configured."
+                                : "No exits yet - use Add Action.";
+                    Label(emptyState, inspectorX,
+                        exitsY + 31.0f, 10, InspectorSecondary, cmd);
                 }
 
                 if (height_ >= 850.0f)
                 {
-                    const float notesY = exitsY + 28.0f +
-                        static_cast<float>(count) * 27.0f;
-                    Label("NOTES", inspectorX, notesY, 8, Text, cmd);
+                    const float notesY = exitsY +
+                        (count == 0 ? 62.0f : 34.0f +
+                            static_cast<float>(count) * 31.0f);
+                    Label("NOTES", inspectorX, notesY, 12, Text, cmd);
                     RoundedRect(inspectorX, notesY + 18.0f,
                         std::max(1.0f, width_ - GraphWidth() - 28.0f),
-                        44.0f, 4.0f, wi::Color(13, 21, 27, 255), cmd);
-                    Label("Production notes are not yet stored for this destination.",
-                        inspectorX + 9.0f, notesY + 30.0f, 6, Muted, cmd);
+                        58.0f, 4.0f, wi::Color(13, 21, 27, 255), cmd);
+                    Label("Production notes are not yet stored",
+                        inspectorX + 9.0f, notesY + 29.0f,
+                        10, InspectorSecondary, cmd);
+                    Label("for this destination.",
+                        inspectorX + 9.0f, notesY + 46.0f,
+                        10, InspectorSecondary, cmd);
                 }
             }
         }
@@ -2581,30 +2617,38 @@ namespace renegade::studio
         {
             if (const auto* route = FindDocumentRoute(selectedRouteId_))
             {
-                Label("ROUTE", inspectorX, translation.y + HeaderHeight + 35.0f, 8, Accent, cmd);
+                Label("ROUTE", inspectorX,
+                    translation.y + HeaderHeight + 35.0f, 12, Text, cmd);
                 Label("ID // " + Shorten(route->id, 31), inspectorX,
-                    translation.y + HeaderHeight + 235.0f, 8, Muted, cmd);
+                    translation.y + HeaderHeight + 235.0f,
+                    10, InspectorSecondary, cmd);
                 Label("CONDITIONS // " + std::to_string(route->conditions.size()), inspectorX,
-                    translation.y + HeaderHeight + 252.0f, 8, Muted, cmd);
+                    translation.y + HeaderHeight + 255.0f,
+                    10, InspectorSecondary, cmd);
             }
             else
             {
                 Label("SELECT A NODE OR ROUTE", inspectorX,
-                    translation.y + HeaderHeight + 38.0f, 9, Muted, cmd);
+                    translation.y + HeaderHeight + 38.0f,
+                    11, InspectorSecondary, cmd);
             }
         }
         else
         {
             Label("SELECT A JOURNEY CARD", inspectorX,
-                translation.y + 112.0f, 9, Muted, cmd);
+                translation.y + 112.0f, 11, InspectorSecondary, cmd);
         }
 
         if (layout_->activeView == bridge::StoryFlowViewMode::Graph)
         {
             Label("ADD TERMINAL DESTINATION", inspectorX,
-                translation.y + HeaderHeight + 334.0f, 8, Muted, cmd);
-            Label("LEVEL/SCREEN CREATION USES GOVERNED LIFECYCLE CONTROLS", inspectorX,
-                translation.y + HeaderHeight + 460.0f, 7, Muted, cmd);
+                translation.y + HeaderHeight + 334.0f, 11, Text, cmd);
+            Label("LEVEL/SCREEN CREATION USES GOVERNED", inspectorX,
+                translation.y + HeaderHeight + 460.0f,
+                9, InspectorSecondary, cmd);
+            Label("LIFECYCLE CONTROLS", inspectorX,
+                translation.y + HeaderHeight + 477.0f,
+                9, InspectorSecondary, cmd);
         }
 
         const float validationY = layout_->activeView == bridge::StoryFlowViewMode::Journey
@@ -2612,16 +2656,16 @@ namespace renegade::studio
                 (height_ >= 850.0f ? 235.0f : 150.0f)
             : translation.y + HeaderHeight + 498.0f;
         Label("VALIDATION", inspectorX,
-            validationY, 8, Text, cmd);
+            validationY, 12, Text, cmd);
         if (model_->Diagnostics().empty())
         {
             RoundedRect(inspectorX, validationY + 20.0f,
                 8.0f, 8.0f, 4.0f, wi::Color(113, 205, 111, 255), cmd);
             Label("Valid", inspectorX + 16.0f,
-                validationY + 16.0f, 8,
+                validationY + 16.0f, 10,
                 wi::Color(113, 205, 111, 255), cmd);
             Label("All governed references resolve correctly.", inspectorX,
-                validationY + 34.0f, 7, Muted, cmd);
+                validationY + 36.0f, 10, InspectorSecondary, cmd);
         }
         else
         {
@@ -2631,19 +2675,19 @@ namespace renegade::studio
             {
                 const auto& diagnostic = model_->Diagnostics()[i];
                 const wi::Color color = diagnostic.severity == bridge::StoryFlowDiagnosticSeverity::Error
-                    ? Error : Muted;
+                    ? Error : InspectorSecondary;
                 Label(Shorten(diagnostic.code + " // " + diagnostic.message, 42),
-                    inspectorX, diagnosticY, 8, color, cmd);
-                diagnosticY += 17.0f;
+                    inspectorX, diagnosticY, 10, color, cmd);
+                diagnosticY += 20.0f;
             }
         }
 
         Label("STATUS // " + Shorten(statusMessage_, 42), inspectorX,
-            translation.y + scale.y - 80.0f, 7,
+            translation.y + scale.y - 80.0f, 9,
             statusMessage_.find("FAILED") != std::string::npos ||
             statusMessage_.find("REJECTED") != std::string::npos ||
             statusMessage_.find("ERROR") != std::string::npos
-                ? Error : Muted,
+                ? Error : InspectorSecondary,
             cmd);
 
         RenderAuthoringControls(canvas, cmd);

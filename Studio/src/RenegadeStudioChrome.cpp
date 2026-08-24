@@ -201,6 +201,11 @@ namespace renegade::studio
         placeholder_ = std::move(placeholder);
     }
 
+    void RenegadeTextInputField::SetRenderTextSize(const int size) noexcept
+    {
+        renderTextSize_ = std::clamp(size, 8, 18);
+    }
+
     void RenegadeTextInputField::Render(
         const wi::Canvas& canvas,
         const wi::graphics::CommandList cmd) const
@@ -230,22 +235,26 @@ namespace renegade::studio
             DrawText(
                 description,
                 translation.x + 8.0f,
-                translation.y + 8.0f,
-                10,
+                translation.y + std::max(4.0f,
+                    (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+                renderTextSize_,
                 TextStrong,
                 cmd,
                 0.2f,
                 0.16f);
         }
         const float valueX = translation.x + 8.0f +
-            (description.empty() ? 0.0f : description.size() * 6.5f + 5.0f);
+            (description.empty() ? 0.0f :
+                static_cast<float>(description.size()) *
+                    static_cast<float>(renderTextSize_) * 0.65f + 5.0f);
         if (!value.empty())
         {
             DrawText(
                 value,
                 valueX,
-                translation.y + 8.0f,
-                10,
+                translation.y + std::max(4.0f,
+                    (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+                renderTextSize_,
                 TextStrong,
                 cmd,
                 0.15f,
@@ -256,13 +265,19 @@ namespace renegade::studio
             DrawText(
                 placeholder_,
                 valueX,
-                translation.y + 8.0f,
-                10,
+                translation.y + std::max(4.0f,
+                    (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+                renderTextSize_,
                 TextSecondary,
                 cmd,
                 0.35f,
                 0.14f);
         }
+    }
+
+    void RenegadeButton::SetRenderTextSize(const int size) noexcept
+    {
+        renderTextSize_ = std::clamp(size, 8, 18);
     }
 
     void RenegadeButton::Render(
@@ -284,12 +299,14 @@ namespace renegade::studio
             engaged ? Forge : Border,
             cmd);
         const std::string text = GetText();
-        const float textWidth = static_cast<float>(text.size()) * 7.0f;
+        const float textWidth = static_cast<float>(text.size()) *
+            static_cast<float>(renderTextSize_) * 0.7f;
         DrawText(
             text,
             translation.x + std::max(8.0f, (scale.x - textWidth) * 0.5f),
-            translation.y + 8.0f,
-            10,
+            translation.y + std::max(4.0f,
+                (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+            renderTextSize_,
             IsEnabled() ? TextStrong : Muted,
             cmd,
             0.25f,
@@ -334,6 +351,11 @@ namespace renegade::studio
             0.16f);
     }
 
+    void RenegadeComboBox::SetRenderTextSize(const int size) noexcept
+    {
+        renderTextSize_ = std::clamp(size, 8, 18);
+    }
+
     void RenegadeComboBox::Render(
         const wi::Canvas&,
         const wi::graphics::CommandList cmd) const
@@ -358,8 +380,9 @@ namespace renegade::studio
         DrawText(
             value,
             translation.x + 10.0f,
-            translation.y + 8.0f,
-            10,
+            translation.y + std::max(4.0f,
+                (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+            renderTextSize_,
             TextStrong,
             cmd,
             0.35f,
@@ -367,8 +390,9 @@ namespace renegade::studio
         DrawText(
             open ? "▲" : "▼",
             translation.x + scale.x - 21.0f,
-            translation.y + 8.0f,
-            9,
+            translation.y + std::max(4.0f,
+                (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+            std::max(9, renderTextSize_ - 1),
             open ? Forge : Muted,
             cmd);
         if (!open)
@@ -392,8 +416,9 @@ namespace renegade::studio
             DrawText(
                 items[static_cast<std::size_t>(index)].name,
                 translation.x + 10.0f,
-                y + 8.0f,
-                10,
+                y + std::max(4.0f,
+                    (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+                renderTextSize_,
                 index == hovered ? TextStrong : TextSecondary,
                 cmd,
                 0.35f,

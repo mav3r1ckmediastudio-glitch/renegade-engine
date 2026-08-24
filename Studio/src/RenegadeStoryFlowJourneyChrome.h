@@ -257,7 +257,7 @@ namespace renegade::studio
                 shell_.workspaceTitle.y + 50.0f, 10, TextSecondary, cmd);
 
             Text("INSPECTOR", shell_.inspector.x + 16.0f,
-                shell_.inspector.y + 16.0f, 10, TextSecondary, cmd);
+                shell_.inspector.y + 14.0f, 13, TextStrong, cmd);
             Text("x", shell_.inspector.Right() - 21.0f,
                 shell_.inspector.y + 14.0f, 11, Muted, cmd);
             Rect(shell_.inspector.x, shell_.inspector.y + 34.0f,
