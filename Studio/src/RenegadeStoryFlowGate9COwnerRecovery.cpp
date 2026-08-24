@@ -14,6 +14,10 @@ namespace renegade::studio
     {
         constexpr float OverviewNodeWidth = 210.0f;
         constexpr float OverviewNodeHeight = 112.0f;
+        constexpr float GraphNavigationMinZoom = 0.50f;
+        constexpr float GraphNavigationMaxZoom = 2.00f;
+        constexpr float GraphFitMargin = 64.0f;
+        constexpr float GraphExtraOutputHeight = 24.0f;
         constexpr wi::Color OverviewSurface(8, 12, 16, 232);
         constexpr wi::Color OverviewBorder(38, 52, 61, 255);
         constexpr wi::Color OverviewNode(98, 116, 126, 255);
@@ -140,11 +144,59 @@ namespace renegade::studio
         if (!layout_ || !workspace_ || !model_ || !model_->IsLoaded())
             return;
 
-        // Native Graph navigation must never depend on transient ImNodes node
-        // objects being alive. The shared Story Flow workspace owns the durable
-        // canvas layout and already has view-aware fit math, so update that
-        // authority first and copy only the resulting pan into ImNodes.
-        workspace_->FitToContent();
+        // Native navigation is allowed to run while a higher wiGUI control owns
+        // the pointer. Therefore it must not query the transient ImNodes object
+        // pool: that pool can legitimately be empty immediately after recovery.
+        // Fit against durable Story Flow layout coordinates instead.
+        float minX = std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::lowest();
+        float maxY = std::numeric_limits<float>::lowest();
+        bool haveBounds = false;
+
+        for (const auto& nodeLayout : layout_->nodes)
+        {
+            if (!model_->FindNode(nodeLayout.nodeId))
+                continue;
+
+            float logicalHeight = OverviewNodeHeight;
+            const auto binding = nodeIndexByStableId_.find(nodeLayout.nodeId);
+            if (binding != nodeIndexByStableId_.end())
+            {
+                const std::size_t outputCount = nodes_[binding->second].outputs.size();
+                if (outputCount > 1)
+                {
+                    logicalHeight += static_cast<float>(outputCount - 1) *
+                        GraphExtraOutputHeight;
+                }
+            }
+
+            minX = std::min(minX, nodeLayout.x);
+            minY = std::min(minY, nodeLayout.y);
+            maxX = std::max(maxX, nodeLayout.x + OverviewNodeWidth);
+            maxY = std::max(maxY, nodeLayout.y + logicalHeight);
+            haveBounds = true;
+        }
+
+        if (!haveBounds)
+            return;
+
+        const float contentWidth = std::max(1.0f, maxX - minX);
+        const float contentHeight = std::max(1.0f, maxY - minY);
+        const float availableWidth = std::max(1.0f, viewport_.z - GraphFitMargin * 2.0f);
+        const float availableHeight = std::max(1.0f, viewport_.w - GraphFitMargin * 2.0f);
+        const float zoom = std::clamp(
+            std::min(availableWidth / contentWidth, availableHeight / contentHeight),
+            GraphNavigationMinZoom,
+            GraphNavigationMaxZoom);
+
+        const float centerX = (minX + maxX) * 0.5f;
+        const float centerY = (minY + maxY) * 0.5f;
+        layout_->canvas.zoom = zoom;
+        layout_->canvas.panX = viewport_.z * 0.5f - centerX * zoom;
+        layout_->canvas.panY = viewport_.w * 0.5f - centerY * zoom;
+        initializedNodePositions_.clear();
+        workspace_->NotifyLayoutChanged();
 
         if (initialized_ && imnodesContext_ && editorContext_)
         {
@@ -154,7 +206,7 @@ namespace renegade::studio
                 ImVec2(layout_->canvas.panX, layout_->canvas.panY));
         }
 
-        SetStatus("GRAPH FIT // CONTENT CENTERED");
+        SetStatus("GRAPH FIT // CONTENT FRAMED");
     }
 
     void RenegadeStoryFlowGraphEditor::CenterOnGameStart()
@@ -163,8 +215,21 @@ namespace renegade::studio
             return;
 
         const bridge::StableId startId = model_->GameStartNodeId();
+        const auto* nodeLayout = workspace_->FindLayout(startId);
+        if (!nodeLayout)
+            return;
+
+        const float zoom = std::clamp(
+            layout_->canvas.zoom,
+            GraphNavigationMinZoom,
+            GraphNavigationMaxZoom);
+        layout_->canvas.zoom = zoom;
+        layout_->canvas.panX = viewport_.z * 0.5f -
+            (nodeLayout->x + OverviewNodeWidth * 0.5f) * zoom;
+        layout_->canvas.panY = viewport_.w * 0.5f -
+            (nodeLayout->y + OverviewNodeHeight * 0.5f) * zoom;
         workspace_->SelectNode(startId);
-        workspace_->CenterOnGameStart();
+        workspace_->NotifyLayoutChanged();
 
         if (initialized_ && imnodesContext_ && editorContext_)
         {
@@ -222,17 +287,44 @@ namespace renegade::studio
             return true;
         }
 
-        // Graph focus follows the same durable-layout rule as FIT and START.
-        // SelectAndFocusNode updates the authoritative Graph canvas even when a
-        // native control has temporarily forced ImNodes to rebuild its context.
-        workspace_->SelectAndFocusNode(match->id);
-        if (layout_ && initialized_ && imnodesContext_ && editorContext_)
+        if (!layout_)
+            return false;
+        const auto* nodeLayout = workspace_->FindLayout(match->id);
+        if (!nodeLayout)
+            return false;
+
+        float logicalHeight = OverviewNodeHeight;
+        const auto binding = nodeIndexByStableId_.find(match->id);
+        if (binding != nodeIndexByStableId_.end())
+        {
+            const std::size_t outputCount = nodes_[binding->second].outputs.size();
+            if (outputCount > 1)
+            {
+                logicalHeight += static_cast<float>(outputCount - 1) *
+                    GraphExtraOutputHeight;
+            }
+        }
+
+        const float zoom = std::clamp(
+            layout_->canvas.zoom,
+            GraphNavigationMinZoom,
+            GraphNavigationMaxZoom);
+        layout_->canvas.zoom = zoom;
+        layout_->canvas.panX = viewport_.z * 0.5f -
+            (nodeLayout->x + OverviewNodeWidth * 0.5f) * zoom;
+        layout_->canvas.panY = viewport_.w * 0.5f -
+            (nodeLayout->y + logicalHeight * 0.5f) * zoom;
+        workspace_->SelectNode(match->id);
+        workspace_->NotifyLayoutChanged();
+
+        if (initialized_ && imnodesContext_ && editorContext_)
         {
             ImNodes::SetCurrentContext(imnodesContext_);
             ImNodes::EditorContextSet(editorContext_);
             ImNodes::EditorContextResetPanning(
                 ImVec2(layout_->canvas.panX, layout_->canvas.panY));
         }
+
         SetStatus("GRAPH FIND // " + match->name);
         return true;
     }
@@ -375,9 +467,9 @@ namespace renegade::studio
         ImNodes::SetCurrentContext(imnodesContext_);
         ImNodes::EditorContextSet(editorContext_);
 
-        // Host selection and focus are already represented by the authoritative
-        // Story Flow layout. Reconciliation mirrors selection into ImNodes only;
-        // it must not independently move the canvas and override FIT/START/FIND.
+        // Host selection/focus already changed the authoritative canvas. Mirror
+        // only the selection into ImNodes; never let reconciliation overwrite
+        // FIT, START, FIND, or lifecycle focus panning.
         const bridge::StableId& hostSelectedNodeId = workspace_->SelectedNodeId();
         if (!hostSelectedNodeId.empty())
         {
