@@ -9,8 +9,6 @@
 #include "renegade/bridge/StoryFlowProjectHomeService.h"
 #include "renegade/bridge/StoryFlowScreenLifecycleService.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
-#include "RenegadeStoryFlowLevelPanel.h"
-#include "RenegadeStoryFlowScreenPanel.h"
 #include "StoryFlowScreenEditorHandoff.h"
 #include "RenegadeStudioChrome.h"
 
@@ -91,10 +89,6 @@ namespace renegade::studio
             Attach(levelEditor, storyFlow);
             storyFlow.SyncCanvas(application.canvas);
             screenEditor.SyncCanvas(application.canvas);
-            const float storyWidth = std::max(1.0f, storyFlow.GetLogicalWidth());
-            const float storyHeight = std::max(1.0f, storyFlow.GetLogicalHeight());
-            levelPanel_.SetLayout(storyWidth, storyHeight);
-            screenPanel_.SetLayout(storyWidth, storyHeight);
             LayoutReturnButton(levelEditor);
 
             if (!session.Projects().HasProject())
@@ -291,13 +285,6 @@ namespace renegade::studio
             Open,
         };
 
-        enum class JourneyPanel
-        {
-            None,
-            Levels,
-            Screens,
-        };
-
         template <typename LevelEditor, typename StoryFlowPath>
         void Attach(LevelEditor& levelEditor, StoryFlowPath& storyFlow)
         {
@@ -309,21 +296,7 @@ namespace renegade::studio
             {
                 layoutDirty_ = true;
             });
-            storyFlow.OnSelectionChanged([this](const bridge::StableId& nodeId)
-            {
-                bridge::StableId levelId;
-                bridge::StableId screenId;
-                if (model_.IsLoaded())
-                {
-                    const auto* node = model_.FindNode(nodeId);
-                    if (node && node->kind == bridge::FlowNodeKind::Level)
-                        levelId = nodeId;
-                    else if (node && node->kind == bridge::FlowNodeKind::Screen)
-                        screenId = nodeId;
-                }
-                levelPanel_.SetSelectedLevelNode(std::move(levelId));
-                screenPanel_.SetSelectedScreenNode(std::move(screenId));
-            });
+            storyFlow.OnSelectionChanged([](const bridge::StableId&) {});
             storyFlow.OnSemanticChanged([this]()
             {
                 screenOutcomeAuditPending_ = true;
@@ -356,21 +329,7 @@ namespace renegade::studio
             });
             storyFlow.OnNodeActivated([this](const bridge::StableId& nodeId)
             {
-                if (!model_.IsLoaded()) return;
-                const auto* node = model_.FindNode(nodeId);
-                if (!node) return;
-                const auto target =
-                    bridge::StoryFlowActivationTargetForKind(node->kind);
-                if (target == bridge::StoryFlowActivationTarget::LevelEditor)
-                {
-                    pendingLevelNodeId_ = nodeId;
-                    pendingLevelAction_ = PendingLevelAction::Open;
-                }
-                else if (target == bridge::StoryFlowActivationTarget::ScreenEditor)
-                {
-                    pendingScreenNodeId_ = nodeId;
-                    pendingScreenAction_ = PendingScreenAction::Open;
-                }
+                QueueOpenDestination(nodeId);
             });
             storyFlow.OnJourneyShellAction(
                 [this, &levelEditor, &storyFlow](
@@ -387,16 +346,6 @@ namespace renegade::studio
                         levelEditor.RequestAssetBrowserFromStoryFlow();
                         desiredWorkspace_ = Workspace::LevelEditor;
                         break;
-                    case Action::Levels:
-                        journeyPanel_ = JourneyPanel::Levels;
-                        storyFlow.SetExternalStatus(
-                            "LEVELS // GOVERNED LEVEL COMMANDS OPEN");
-                        break;
-                    case Action::Screens:
-                        journeyPanel_ = JourneyPanel::Screens;
-                        storyFlow.SetExternalStatus(
-                            "SCREENS // GOVERNED SCREEN COMMANDS OPEN");
-                        break;
                     case Action::Variables:
                         storyFlow.SetExternalStatus(
                             "VARIABLES // PROJECT VARIABLE WORKSPACE NOT YET AVAILABLE");
@@ -411,15 +360,12 @@ namespace renegade::studio
                     }
                 });
 
-            levelPanel_.Create();
-            levelPanel_.Attach(storyFlow.GetGUI());
-            levelPanel_.SetActive(false);
-            levelPanel_.OnAddNew([this](const std::string& name)
+            storyFlow.OnCreateLevel([this](const std::string& name)
             {
                 pendingLevelName_ = name;
                 pendingLevelAction_ = PendingLevelAction::AddNew;
             });
-            levelPanel_.OnAddExisting([this](const std::string& name)
+            storyFlow.OnAdoptLevel([this](const std::string& name)
             {
                 pendingLevelName_ = name;
                 wi::helper::FileDialogParams params;
@@ -434,16 +380,7 @@ namespace renegade::studio
                         pendingLevelAction_ = PendingLevelAction::AddExisting;
                     });
             });
-            levelPanel_.OnOpen([this](const bridge::StableId& nodeId)
-            {
-                pendingLevelNodeId_ = nodeId;
-                pendingLevelAction_ = PendingLevelAction::Open;
-            });
-
-            screenPanel_.Create();
-            screenPanel_.Attach(storyFlow.GetGUI());
-            screenPanel_.SetActive(false);
-            screenPanel_.OnAddNew([this](
+            storyFlow.OnCreateScreen([this](
                 const std::string& name,
                 const bridge::StoryFlowScreenTemplate screenTemplate)
             {
@@ -451,16 +388,11 @@ namespace renegade::studio
                 pendingScreenTemplate_ = screenTemplate;
                 pendingScreenAction_ = PendingScreenAction::AddNew;
             });
-            screenPanel_.OnOpen([this](const bridge::StableId& nodeId)
+            storyFlow.OnOpenSelectedDestination(
+                [this](const bridge::StableId& nodeId)
             {
-                pendingScreenNodeId_ = nodeId;
-                pendingScreenAction_ = PendingScreenAction::Open;
+                QueueOpenDestination(nodeId);
             });
-
-            // The Story Flow workspace is an opaque full-screen widget.
-            // Wicked renders GUI registrations back-to-front, so finalize the
-            // order only after both lifecycle panels have attached.
-            storyFlow.PlaceWorkspaceBehindLifecycleControls();
 
             returnToStoryFlowButton_.Create("Return to Story Flow");
             returnToStoryFlowButton_.SetText("< STORY FLOW");
@@ -492,15 +424,31 @@ namespace renegade::studio
         }
 
         void SetContentControlsActive(
-            const bool storyFlowActive,
+            const bool,
             const bool levelEditorActive)
         {
-            levelPanel_.SetActive(
-                storyFlowActive && journeyPanel_ == JourneyPanel::Levels);
-            screenPanel_.SetActive(
-                storyFlowActive && journeyPanel_ == JourneyPanel::Screens);
             returnToStoryFlowButton_.SetVisible(levelEditorActive);
             returnToStoryFlowButton_.SetEnabled(levelEditorActive);
+        }
+
+        void QueueOpenDestination(const bridge::StableId& nodeId)
+        {
+            if (!model_.IsLoaded()) return;
+            const auto* node = model_.FindNode(nodeId);
+            if (!node) return;
+
+            const auto target =
+                bridge::StoryFlowActivationTargetForKind(node->kind);
+            if (target == bridge::StoryFlowActivationTarget::LevelEditor)
+            {
+                pendingLevelNodeId_ = nodeId;
+                pendingLevelAction_ = PendingLevelAction::Open;
+            }
+            else if (target == bridge::StoryFlowActivationTarget::ScreenEditor)
+            {
+                pendingScreenNodeId_ = nodeId;
+                pendingScreenAction_ = PendingScreenAction::Open;
+            }
         }
 
         template <typename Application, typename Path>
@@ -1007,8 +955,6 @@ namespace renegade::studio
             screenOutcomeAuditPending_ = false;
             loadAttempted_ = false;
             layoutDirty_ = false;
-            levelPanel_.SetSelectedLevelNode({});
-            screenPanel_.SetSelectedScreenNode({});
         }
 
         void FlushLayout(const bool force)
@@ -1050,8 +996,6 @@ namespace renegade::studio
         bridge::StoryFlowAuthoringSession authoringSession_;
         bridge::StoryFlowAuthoringModel model_;
         bridge::StoryFlowLayoutDocument layout_;
-        RenegadeStoryFlowLevelPanel levelPanel_;
-        RenegadeStoryFlowScreenPanel screenPanel_;
         RenegadeButton returnToStoryFlowButton_;
         StoryFlowScreenEditorHandoff screenEditorHandoff_;
         std::function<void(const StoryFlowScreenEditorHandoff&)> screenEditorOpen_;
@@ -1069,7 +1013,6 @@ namespace renegade::studio
         Workspace desiredWorkspace_ = Workspace::StoryFlow;
         PendingLevelAction pendingLevelAction_ = PendingLevelAction::None;
         PendingScreenAction pendingScreenAction_ = PendingScreenAction::None;
-        JourneyPanel journeyPanel_ = JourneyPanel::None;
         bridge::StoryFlowScreenTemplate pendingScreenTemplate_ =
             bridge::StoryFlowScreenTemplate::Title;
         bool attached_ = false;

@@ -9,6 +9,7 @@
 #include <WickedEngine.h>
 
 #include "RenegadeStoryFlowConditionEditor.h"
+#include "RenegadeStoryFlowDestinationComposer.h"
 #include "RenegadeStoryFlowGraphEditor.h"
 #include "RenegadeStoryFlowJourneyChrome.h"
 #include "RenegadeStoryFlowWorkspace.h"
@@ -127,6 +128,7 @@ namespace renegade::studio
         {
             if (loaded_)
             {
+                destinationComposer_.Detach(GetGUI());
                 GetGUI().RemoveWidget(&deleteSelectionButton_);
                 GetGUI().RemoveWidget(&findButton_);
                 GetGUI().RemoveWidget(&findInput_);
@@ -180,8 +182,6 @@ namespace renegade::studio
                             "JOURNEY FILTERS // AVAILABLE IN THE 9A SHELL RECOVERY");
                         break;
                     case Action::Hub:
-                    case Action::Levels:
-                    case Action::Screens:
                     case Action::Assets:
                     case Action::Variables:
                     case Action::TestPlay:
@@ -189,8 +189,25 @@ namespace renegade::studio
                         if (journeyShellAction_)
                             journeyShellAction_(action);
                         break;
+                    case Action::Levels:
+                        pendingNativeCommand_ = NativeCommand::Journey;
+                        destinationComposer_.Toggle(
+                            RenegadeStoryFlowDestinationComposer::Mode::Level);
+                        workspace_.SetExternalStatus(
+                            "ADD DESTINATION // LEVEL LIFECYCLE");
+                        break;
+                    case Action::Screens:
+                        pendingNativeCommand_ = NativeCommand::Journey;
+                        destinationComposer_.Toggle(
+                            RenegadeStoryFlowDestinationComposer::Mode::Screen);
+                        workspace_.SetExternalStatus(
+                            "ADD DESTINATION // SCREEN LIFECYCLE");
+                        break;
                     }
                 });
+
+            destinationComposer_.Create();
+            destinationComposer_.Attach(GetGUI());
 
             conditionEditor_.Create();
             conditionEditor_.SetVisible(false);
@@ -269,8 +286,7 @@ namespace renegade::studio
             });
 
             // Wicked updates in registration order and renders in reverse. Keep
-            // modal/native commands at the front; background presentation layers
-            // are moved behind lifecycle controls once those controls attach.
+            // native commands in front of the background presentation layers.
             GetGUI().AddWidget(&deleteSelectionButton_);
             GetGUI().AddWidget(&conditionEditor_);
             GetGUI().AddWidget(&findButton_);
@@ -300,9 +316,11 @@ namespace renegade::studio
             const bool graphActive = workspaceActive_ &&
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
             workspace_.SetVisible(workspaceActive_);
-            workspace_.SetEnabled(workspaceActive_ && !graphActive);
+            workspace_.SetEnabled(
+                workspaceActive_ && !graphActive && !destinationComposer_.IsOpen());
             journeyChrome_.SetVisible(workspaceActive_);
             journeyChrome_.SetEnabled(workspaceActive_);
+            destinationComposer_.SetWorkspaceActive(workspaceActive_ && !graphActive);
             conditionEditor_.SetVisible(workspaceActive_);
             conditionEditor_.SetEnabled(workspaceActive_);
             graphLayer_.SetVisible(graphActive);
@@ -320,6 +338,7 @@ namespace renegade::studio
             graphInputBlockedLastFrame_ = false;
             pendingNativeCommand_ = NativeCommand::None;
             SetNativeControlsActive(false);
+            destinationComposer_.SetWorkspaceActive(false);
             deleteSelectionButton_.SetVisible(false);
             deleteSelectionButton_.SetEnabled(false);
             conditionEditor_.SetVisible(false);
@@ -360,7 +379,8 @@ namespace renegade::studio
                 Contains(canvasNavigationBounds_, pointerBeforeGui);
             workspace_.SetEnabled(
                 workspaceActive_ && !graphBeforeUpdate &&
-                !nativeCanvasNavigationOwnsPointer);
+                !nativeCanvasNavigationOwnsPointer &&
+                !destinationComposer_.IsOpen());
 
             // Native callbacks queue intent only. Execute the command after the
             // complete wiGUI update so Story Flow never mutates canvas/view/
@@ -372,7 +392,9 @@ namespace renegade::studio
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
             graphLayer_.SetVisible(graphActive);
             graphLayer_.SetEnabled(graphActive);
-            workspace_.SetEnabled(workspaceActive_ && !graphActive);
+            destinationComposer_.SetWorkspaceActive(workspaceActive_ && !graphActive);
+            workspace_.SetEnabled(
+                workspaceActive_ && !graphActive && !destinationComposer_.IsOpen());
 
             const XMFLOAT4 pointer = wi::input::GetPointer();
             const bool pointerInsideGraph = graphActive &&
@@ -426,7 +448,9 @@ namespace renegade::studio
             bridge::StoryFlowLayoutDocument* layout)
         {
             EnsureLoaded();
+            boundModel_ = model;
             workspace_.Bind(session, model, layout);
+            UpdateDestinationSelection(workspace_.SelectedNodeId());
             graphEditor_.Bind(session, model, layout, &workspace_);
             graphEditor_.ResetTransientInteractionState();
             conditionEditor_.Bind(session, model, &workspace_);
@@ -447,6 +471,8 @@ namespace renegade::studio
                 pendingNativeCommand_ = NativeCommand::None;
                 findDraft_.clear();
                 findInput_.SetValue("");
+                destinationComposer_.Clear();
+                boundModel_ = nullptr;
             }
         }
 
@@ -481,7 +507,9 @@ namespace renegade::studio
             const bool graphActive = active &&
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
             workspace_.SetVisible(active);
-            workspace_.SetEnabled(active && !graphActive);
+            destinationComposer_.SetWorkspaceActive(active && !graphActive);
+            workspace_.SetEnabled(
+                active && !graphActive && !destinationComposer_.IsOpen());
             journeyChrome_.SetVisible(active);
             journeyChrome_.SetEnabled(active);
             conditionEditor_.SetVisible(active);
@@ -507,7 +535,13 @@ namespace renegade::studio
             std::function<void(const bridge::StableId&)> callback)
         {
             EnsureLoaded();
-            workspace_.OnSelectionChanged(std::move(callback));
+            workspace_.OnSelectionChanged(
+                [this, callback = std::move(callback)](
+                    const bridge::StableId& nodeId)
+                {
+                    UpdateDestinationSelection(nodeId);
+                    if (callback) callback(nodeId);
+                });
         }
 
         void OnSemanticChanged(std::function<void()> callback)
@@ -543,33 +577,36 @@ namespace renegade::studio
             journeyShellAction_ = std::move(callback);
         }
 
+        void OnCreateLevel(std::function<void(const std::string&)> callback)
+        {
+            EnsureLoaded();
+            destinationComposer_.OnCreateLevel(std::move(callback));
+        }
+
+        void OnAdoptLevel(std::function<void(const std::string&)> callback)
+        {
+            EnsureLoaded();
+            destinationComposer_.OnAdoptLevel(std::move(callback));
+        }
+
+        void OnCreateScreen(std::function<void(
+            const std::string&, bridge::StoryFlowScreenTemplate)> callback)
+        {
+            EnsureLoaded();
+            destinationComposer_.OnCreateScreen(std::move(callback));
+        }
+
+        void OnOpenSelectedDestination(
+            std::function<void(const bridge::StableId&)> callback)
+        {
+            EnsureLoaded();
+            destinationComposer_.OnOpenSelected(std::move(callback));
+        }
+
         void SelectAndFocusNode(const bridge::StableId& nodeId)
         {
             EnsureLoaded();
             workspace_.SelectAndFocusNode(nodeId);
-        }
-
-        void PlaceWorkspaceBehindLifecycleControls()
-        {
-            EnsureLoaded();
-            if (lifecycleLayeringReady_)
-                return;
-
-            auto& gui = GetGUI();
-            // Native header/search/modal commands stay in front. Move only the
-            // three presentation backgrounds behind lifecycle widgets once.
-            gui.RemoveWidget(&journeyChrome_);
-            gui.RemoveWidget(&graphLayer_);
-            gui.RemoveWidget(&workspace_);
-            gui.AddWidget(&journeyChrome_);
-            gui.AddWidget(&graphLayer_);
-            gui.AddWidget(&workspace_);
-            lifecycleLayeringReady_ = true;
-        }
-
-        [[nodiscard]] bool IsLifecycleLayeringReady() const noexcept
-        {
-            return lifecycleLayeringReady_;
         }
 
         [[nodiscard]] const bridge::StableId& SelectedNodeId() const noexcept
@@ -660,6 +697,21 @@ namespace renegade::studio
             (void)graphEditor_.FocusNodeByName(findDraft_);
         }
 
+        void UpdateDestinationSelection(const bridge::StableId& nodeId)
+        {
+            using Mode = RenegadeStoryFlowDestinationComposer::Mode;
+            Mode mode = Mode::Closed;
+            if (boundModel_)
+            {
+                const auto* node = boundModel_->FindNode(nodeId);
+                if (node && node->kind == bridge::FlowNodeKind::Level)
+                    mode = Mode::Level;
+                else if (node && node->kind == bridge::FlowNodeKind::Screen)
+                    mode = Mode::Screen;
+            }
+            destinationComposer_.SetSelectedNode(nodeId, mode);
+        }
+
         void LayoutWorkspace()
         {
             if (!loaded_)
@@ -688,6 +740,10 @@ namespace renegade::studio
                 RenegadeStoryFlowJourneyChrome::PreferredInspectorWidth,
                 workspaceWidth * 0.42f);
             const float graphWidth = std::max(1.0f, workspaceWidth - inspectorWidth);
+            destinationComposer_.SetLayout(
+                workspaceLeft,
+                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight,
+                graphWidth);
             const XMFLOAT4 graphViewport(
                 workspaceLeft,
                 RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight,
@@ -743,7 +799,9 @@ namespace renegade::studio
         RenegadeStoryFlowGraphEditor graphEditor_;
         RenegadeStoryFlowGraphLayer graphLayer_;
         RenegadeStoryFlowJourneyChrome journeyChrome_;
+        RenegadeStoryFlowDestinationComposer destinationComposer_;
         RenegadeStoryFlowConditionEditor conditionEditor_;
+        bridge::StoryFlowAuthoringModel* boundModel_ = nullptr;
         RenegadeButton journeyViewButton_;
         RenegadeButton graphViewButton_;
         RenegadeButton fitButton_;
@@ -758,7 +816,6 @@ namespace renegade::studio
         NativeCommand pendingNativeCommand_ = NativeCommand::None;
         bool loaded_ = false;
         bool workspaceActive_ = false;
-        bool lifecycleLayeringReady_ = false;
         bool graphInputBlockedLastFrame_ = false;
         bool searchOpen_ = false;
         float lastLogicalWidth_ = -1.0f;
