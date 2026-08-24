@@ -123,7 +123,7 @@ namespace renegade::studio
             fitBounds_ = {nav.x + nav.width - 39.0f, controlY, 36.0f, 34.0f};
             zoomTrackBounds_ = {
                 zoomOutBounds_.Right() + 12.0f,
-                bounds.y + 17.0f,
+                nav.y + 17.0f,
                 std::max(34.0f,
                     zoomInBounds_.x - zoomOutBounds_.Right() - 24.0f),
                 13.0f};
