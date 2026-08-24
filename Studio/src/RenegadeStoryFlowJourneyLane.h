@@ -1,5 +1,7 @@
 #pragma once
 
+#include "RenegadeStoryFlowVisualTheme.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <iomanip>
@@ -11,8 +13,9 @@
 
 namespace renegade::studio
 {
-    // Gate 9B reel/lane object. Lanes are presentation-only containers derived
-    // from the Journey projection; they never own routes or Runtime semantics.
+    // Presentation-only Journey lane. Gate 9E intentionally removes the heavy
+    // boxed-track look: the approved concept is an open map/canvas where branch
+    // structure is carried by cards and coloured route paths.
     class RenegadeStoryFlowJourneyLane final : public wi::gui::Widget
     {
     public:
@@ -50,47 +53,43 @@ namespace renegade::studio
             if (!IsVisible())
                 return;
             ApplyScissor(canvas, scissorRect, cmd);
+            const auto& theme = StoryFlowVisualTheme::Get();
+
+            const wi::Color laneColor = mainTrack_
+                ? theme.routeMain
+                : (detached_ ? theme.muted : theme.routeSystem);
 
             DrawRect(
                 translation.x,
-                translation.y,
-                scale.x,
-                scale.y,
-                mainTrack_
-                    ? wi::Color(10, 15, 19, 150)
-                    : wi::Color(9, 14, 18, 112),
-                cmd);
-            DrawRect(
-                translation.x,
-                translation.y,
+                translation.y + 18.0f,
                 scale.x,
                 1.0f,
-                mainTrack_ ? Forge : Border,
+                theme.borderSoft,
                 cmd);
             DrawRect(
                 translation.x,
-                translation.y,
-                mainTrack_ ? 3.0f : 1.0f,
-                scale.y,
-                mainTrack_ ? Forge : BorderSoft,
+                translation.y + 18.0f,
+                std::min(36.0f, scale.x),
+                2.0f,
+                laneColor,
                 cmd);
 
             DrawText(
                 TwoDigit(visibleIndex_ + 1),
-                translation.x + 12.0f,
-                translation.y + 10.0f,
-                7,
-                mainTrack_ ? Forge : Muted,
+                translation.x,
+                translation.y,
+                theme.fontCardMeta,
+                laneColor,
                 cmd);
             DrawText(
                 title_.empty()
                     ? (mainTrack_ ? "MAIN JOURNEY" :
-                        (detached_ ? "DETACHED JOURNEY" : "ALTERNATE BRANCH"))
+                        (detached_ ? "DETACHED" : "ALTERNATE BRANCH"))
                     : title_,
-                translation.x + 38.0f,
-                translation.y + 9.0f,
-                8,
-                mainTrack_ ? TextStrong : Muted,
+                translation.x + 27.0f,
+                translation.y - 1.0f,
+                theme.fontCardMeta,
+                mainTrack_ ? theme.text : theme.muted,
                 cmd);
         }
 
@@ -100,12 +99,6 @@ namespace renegade::studio
         }
 
     private:
-        static constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
-        static constexpr wi::Color BorderSoft = wi::Color(25, 36, 43, 255);
-        static constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
-        static constexpr wi::Color Muted = wi::Color(142, 151, 156, 255);
-        static constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
-
         static void DrawRect(
             const float x,
             const float y,
@@ -129,6 +122,7 @@ namespace renegade::studio
             const wi::Color color,
             const wi::graphics::CommandList cmd)
         {
+            const auto& theme = StoryFlowVisualTheme::Get();
             wi::font::Params params(
                 x,
                 y,
@@ -137,8 +131,9 @@ namespace renegade::studio
                 wi::font::WIFALIGN_TOP,
                 color,
                 wi::Color::Transparent());
-            params.spacingX = 0.25f;
-            params.bolden = 0.12f;
+            params.style = theme.fontStyle;
+            params.spacingX = theme.fontTracking;
+            params.bolden = theme.fontBolden;
             wi::font::Draw(text, params, cmd);
         }
 
