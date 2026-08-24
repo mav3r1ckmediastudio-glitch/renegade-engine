@@ -15,11 +15,11 @@ namespace
     constexpr float Padding = 28.0f;
     constexpr float NodeWidth = 210.0f;
     constexpr float NodeHeight = 112.0f;
-    constexpr float JourneyCardWidth = 256.0f;
-    constexpr float JourneyCardHeight = 188.0f;
-    constexpr float JourneyColumnSpacing = 324.0f;
-    constexpr float JourneyTrackSpacing = 252.0f;
-    constexpr float JourneyTrackTop = 58.0f;
+    constexpr float JourneyCardWidth = 186.0f;
+    constexpr float JourneyCardHeight = 210.0f;
+    constexpr float JourneyColumnSpacing = 198.0f;
+    constexpr float JourneyTrackSpacing = 290.0f;
+    constexpr float JourneyTrackTop = 86.0f;
     constexpr float MinZoom = 0.20f;
     constexpr float MaxZoom = 2.50f;
 
@@ -327,9 +327,12 @@ namespace renegade::studio
             (offset ? offset->offsetY : 0.0f);
         const XMFLOAT2 position = CanvasToScreen(x, y);
         const float zoom = layout_ ? layout_->journeyCanvas.zoom : 1.0f;
+        const bool compact = card.trackIndex > 0;
+        const auto& theme = renegade::studio::StoryFlowVisualTheme::Get();
         return XMFLOAT4(
             position.x, position.y,
-            JourneyCardWidth * zoom, JourneyCardHeight * zoom);
+            (compact ? theme.journeyCompactWidth : JourneyCardWidth) * zoom,
+            (compact ? theme.journeyCompactHeight : JourneyCardHeight) * zoom);
     }
 
     XMFLOAT4 RenegadeStoryFlowWorkspace::NodeBounds(
@@ -680,7 +683,7 @@ namespace renegade::studio
                 node->id == selectedNodeId_,
                 hasError,
                 hasWarning,
-                layout_->journeyCanvas.zoom >= 0.48f,
+                card.trackIndex == 0 && layout_->journeyCanvas.zoom >= 0.48f,
                 node->kind == bridge::FlowNodeKind::Level && !projectRoot_.empty(),
                 std::move(thumbnail));
             object.SetVisible(true);
@@ -787,6 +790,7 @@ namespace renegade::studio
         float maxY = std::numeric_limits<float>::lowest();
         if (layout_->activeView == bridge::StoryFlowViewMode::Journey)
         {
+            const auto& theme = StoryFlowVisualTheme::Get();
             for (const auto& card : journeyModel_.Cards())
             {
                 const auto* offset = FindJourneyLayout(card.nodeId);
@@ -796,8 +800,10 @@ namespace renegade::studio
                     static_cast<float>(card.trackIndex) * JourneyTrackSpacing +
                     (offset ? offset->offsetY : 0.0f);
                 minX = std::min(minX, x); minY = std::min(minY, y);
-                maxX = std::max(maxX, x + JourneyCardWidth);
-                maxY = std::max(maxY, y + JourneyCardHeight);
+                maxX = std::max(maxX, x +
+                    (card.trackIndex > 0 ? theme.journeyCompactWidth : JourneyCardWidth));
+                maxY = std::max(maxY, y +
+                    (card.trackIndex > 0 ? theme.journeyCompactHeight : JourneyCardHeight));
             }
         }
         else
@@ -1059,7 +1065,7 @@ namespace renegade::studio
         const auto* selectedNode = FindDocumentNode(selectedNodeId_);
         const auto* selectedRoute = FindDocumentRoute(selectedRouteId_);
 
-        const bool nodeSelected = loaded && selectedNode != nullptr;
+        const bool nodeSelected = graphMode && selectedNode != nullptr;
         nodeNameInput_.SetVisible(nodeSelected);
         applyNodeButton_.SetVisible(nodeSelected);
         deleteNodeButton_.SetVisible(nodeSelected && graphMode);
@@ -1474,6 +1480,18 @@ namespace renegade::studio
                 const auto* selected = model_->FindNode(selectedNodeId_);
                 if (selected)
                 {
+                    const XMFLOAT4 openEditorBounds(
+                        graphRight + 14.0f,
+                        translation.y + height_ - 48.0f,
+                        std::max(1.0f, width_ - GraphWidth() - 28.0f),
+                        34.0f);
+                    if (Contains(openEditorBounds, pointer) && nodeActivated_ &&
+                        (selected->kind == bridge::FlowNodeKind::Level ||
+                         selected->kind == bridge::FlowNodeKind::Screen))
+                    {
+                        nodeActivated_(selected->id);
+                        return;
+                    }
                     const float exitX = graphRight + 14.0f;
                     const float exitY = translation.y + HeaderHeight + 156.0f;
                     const std::size_t count = std::min<std::size_t>(

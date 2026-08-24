@@ -37,6 +37,7 @@ namespace renegade::studio
         float journeyColumnSpacing = 208.0f;
         float journeyTrackSpacing = 210.0f;
         float journeyTrackTop = 72.0f;
+        float journeyCompactWidth = 270.0f;
         float journeyCompactHeight = 58.0f;
         float cardRadius = 5.0f;
         float routeThickness = 3.0f;
@@ -202,6 +203,7 @@ namespace renegade::studio
             number("journey.column_spacing", journeyColumnSpacing);
             number("journey.track_spacing", journeyTrackSpacing);
             number("journey.track_top", journeyTrackTop);
+            number("journey.compact_width", journeyCompactWidth);
             number("journey.compact_height", journeyCompactHeight);
             number("journey.card_radius", cardRadius);
             number("journey.route_thickness", routeThickness);
@@ -260,6 +262,8 @@ namespace renegade::studio
             journeyCardHeight = std::clamp(journeyCardHeight, 96.0f, 360.0f);
             journeyColumnSpacing = std::max(journeyCardWidth + 20.0f, journeyColumnSpacing);
             journeyTrackSpacing = std::max(journeyCardHeight + 18.0f, journeyTrackSpacing);
+            journeyCompactWidth = std::clamp(journeyCompactWidth, 140.0f, 560.0f);
+            journeyCompactHeight = std::clamp(journeyCompactHeight, 48.0f, 180.0f);
             routeThickness = std::clamp(routeThickness, 1.0f, 12.0f);
             routeGlowThickness = std::max(routeThickness, routeGlowThickness);
 
