@@ -163,6 +163,7 @@ namespace renegade::studio
             const bridge::StoryFlowNodeLayout& node) const noexcept;
         [[nodiscard]] XMFLOAT4 JourneyCardScreenBounds(
             const bridge::StoryFlowJourneyCard& card) const noexcept;
+        [[nodiscard]] wi::graphics::Rect JourneyCanvasScissorRect() const noexcept;
         [[nodiscard]] XMFLOAT4 NodeBounds(
             const bridge::StableId& nodeId) const noexcept;
         [[nodiscard]] bridge::StoryFlowCanvasLayout& ActiveCanvas() noexcept;

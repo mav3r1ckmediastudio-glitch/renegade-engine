@@ -1,6 +1,6 @@
 # Story Flow Journey Recovery — Gates 9A through 9F
 
-**Status:** implementation recovery active; Windows visual acceptance pending.
+**Status:** bounded interim closeout candidate; pre-release visual revisit required.
 
 **Approved visual reference:** `storyflow concept(3).png` supplied by the
 project owner on 2026-08-24.
@@ -9,7 +9,8 @@ project owner on 2026-08-24.
 
 This recovery changes Journey Flow only. Graph Flow remains synchronized with
 the same authoritative Story Flow document but is frozen and is not a visual or
-interaction target for this sequence.
+interaction redesign target for this sequence. The existing Graph editor remains
+available through the restored Journey/Graph view switch.
 
 The reference image is an acceptance target for hierarchy, density, card
 language and fixed chrome. Its handwritten blue notes and arrows are design
@@ -98,3 +99,18 @@ by mutating Runtime semantics implicitly.
 5. No legacy Level/Screen management rows beneath the Journey shell.
 6. No surfaced control that is neither functional nor visibly disabled.
 7. A failed owner screenshot overrides all automated build results.
+
+## Interim closeout boundary
+
+The 2026-08-24 owner review reduced the immediate blocking acceptance scope to:
+
+- Journey cards and lanes are hard-clipped at the Inspector boundary;
+- the fixed bottom-right Story Overview renders its miniature journey content
+  and viewport indicator after card rendering;
+- the existing synchronized Graph editor is reachable through a real view
+  switch.
+
+Remaining concept-fidelity work is deliberately deferred, not accepted as
+complete. It must be reopened and owner-reviewed before a release candidate is
+declared. CI compilation and startup remain necessary evidence, but do not
+constitute that future visual acceptance.

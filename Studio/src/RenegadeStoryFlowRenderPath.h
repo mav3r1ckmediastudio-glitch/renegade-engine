@@ -403,6 +403,7 @@ namespace renegade::studio
 
             const bool graphBeforeUpdate = workspaceActive_ &&
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
+            journeyChrome_.SetGraphViewActive(graphBeforeUpdate);
             graphLayer_.SetVisible(graphBeforeUpdate);
             graphLayer_.SetEnabled(graphBeforeUpdate);
             SetNativeControlsActive(workspaceActive_);
@@ -429,6 +430,7 @@ namespace renegade::studio
 
             const bool graphActive = workspaceActive_ &&
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
+            journeyChrome_.SetGraphViewActive(graphActive);
             graphLayer_.SetVisible(graphActive);
             graphLayer_.SetEnabled(graphActive);
             destinationComposer_.SetWorkspaceActive(workspaceActive_ && !graphActive);
@@ -738,13 +740,13 @@ namespace renegade::studio
 
         void SetNativeControlsActive(const bool active)
         {
-            // Journey recovery deliberately removes the engineering
-            // Journey/Graph mode toggle from the concept-facing header. Graph
-            // remains intact but is outside the current product surface.
-            journeyViewButton_.SetVisible(false);
-            journeyViewButton_.SetEnabled(false);
-            graphViewButton_.SetVisible(false);
-            graphViewButton_.SetEnabled(false);
+            // Graph remains the existing synchronized topology editor. The
+            // compact switch restores deliberate access without making Graph
+            // part of the Journey visual-recovery scope.
+            journeyViewButton_.SetVisible(active);
+            journeyViewButton_.SetEnabled(active);
+            graphViewButton_.SetVisible(active);
+            graphViewButton_.SetEnabled(active);
             fitButton_.SetVisible(false);
             fitButton_.SetEnabled(false);
             startButton_.SetVisible(false);
@@ -831,10 +833,15 @@ namespace renegade::studio
             graphEditor_.SetViewport(graphViewport);
             graphLayer_.SetViewport(graphViewport);
 
-            journeyViewButton_.SetPos(XMFLOAT2(workspaceLeft + 112.0f, 10.0f));
-            journeyViewButton_.SetSize(XMFLOAT2(58.0f, 28.0f));
-            graphViewButton_.SetPos(XMFLOAT2(workspaceLeft + 174.0f, 10.0f));
-            graphViewButton_.SetSize(XMFLOAT2(44.0f, 28.0f));
+            const auto& shell = journeyChrome_.ShellLayout();
+            const float viewSwitchY =
+                shell.workspaceTitle.Bottom() - 34.0f;
+            journeyViewButton_.SetPos(XMFLOAT2(
+                shell.workspaceTitle.x + 20.0f, viewSwitchY));
+            journeyViewButton_.SetSize(XMFLOAT2(82.0f, 26.0f));
+            graphViewButton_.SetPos(XMFLOAT2(
+                shell.workspaceTitle.x + 108.0f, viewSwitchY));
+            graphViewButton_.SetSize(XMFLOAT2(62.0f, 26.0f));
 
             // Canvas navigation lives in the existing lower-left navigation
             // host area, away from Level/Screen lifecycle controls in the two
@@ -853,7 +860,6 @@ namespace renegade::studio
                 28.0f);
 
             const float inspectorX = workspaceLeft + graphWidth + 14.0f;
-            const auto& shell = journeyChrome_.ShellLayout();
             const float findY = shell.workspaceTitle.y + 22.0f;
             const float findButtonWidth = 62.0f;
             const float findFieldWidth = std::clamp(

@@ -443,6 +443,20 @@ namespace renegade::studio
             (mainCard ? JourneyCardHeight : JourneyBranchCardHeight) * zoom);
     }
 
+    wi::graphics::Rect
+    RenegadeStoryFlowWorkspace::JourneyCanvasScissorRect() const noexcept
+    {
+        wi::graphics::Rect clip;
+        clip.left = static_cast<std::int32_t>(std::floor(translation.x));
+        clip.top = static_cast<std::int32_t>(
+            std::floor(translation.y + HeaderHeight));
+        clip.right = static_cast<std::int32_t>(
+            std::ceil(translation.x + GraphWidth()));
+        clip.bottom = static_cast<std::int32_t>(
+            std::ceil(translation.y + scale.y));
+        return clip;
+    }
+
     XMFLOAT4 RenegadeStoryFlowWorkspace::NodeBounds(
         const bridge::StableId& nodeId) const noexcept
     {
@@ -765,6 +779,8 @@ namespace renegade::studio
             return;
         }
 
+        const wi::graphics::Rect journeyClip = JourneyCanvasScissorRect();
+
         std::size_t visibleLane = 0;
         for (const auto& track : journeyModel_.Tracks())
         {
@@ -834,6 +850,11 @@ namespace renegade::studio
                     collapsedJourneyTracks_.end(), {});
             lane.SetVisible(true);
             lane.Update(canvas, dt);
+            // These presentation objects are rendered manually rather than as
+            // parented wiGUI children. Restore the Journey viewport clip after
+            // Widget::Update computes each object's own bounds so no lane can
+            // paint through the fixed Inspector.
+            lane.scissorRect = journeyClip;
         }
 
         for (const auto& card : journeyModel_.Cards())
@@ -886,6 +907,7 @@ namespace renegade::studio
                 std::move(thumbnail));
             object.SetVisible(true);
             object.Update(canvas, dt);
+            object.scissorRect = journeyClip;
         }
     }
 
@@ -2277,6 +2299,12 @@ namespace renegade::studio
                 if (objectIt != journeyCardObjects_.end())
                     objectIt->second->Render(canvas, cmd);
             }
+
+            // Lane/card renderers bind the Journey-only scissor. Rebind the
+            // workspace clip before fixed overlays and Inspector details are
+            // painted; otherwise the last card also clips the Story Overview
+            // contents and selected-node Inspector presentation.
+            ApplyScissor(canvas, scissorRect, cmd);
 
             float mainTrackRight = 0.0f;
             float mainTrackCenterY = 0.0f;

@@ -66,6 +66,11 @@ namespace renegade::studio
             filterActive_ = filterActive;
         }
 
+        void SetGraphViewActive(const bool active) noexcept
+        {
+            graphViewActive_ = active;
+        }
+
         void SetLayout(const float width, const float height)
         {
             width_ = std::max(1.0f, width);
@@ -144,8 +149,9 @@ namespace renegade::studio
             return Contains(shell_.topBar, pointer) ||
                 Contains(shell_.navigationRail, pointer) ||
                 Contains(shell_.inspector, pointer) ||
-                Contains(shell_.canvasNavigation, pointer) ||
-                Contains(shell_.storyOverview, pointer);
+                (!graphViewActive_ &&
+                    (Contains(shell_.canvasNavigation, pointer) ||
+                        Contains(shell_.storyOverview, pointer)));
         }
 
         [[nodiscard]] bool CanvasOverlayOwnsPointer(
@@ -153,8 +159,9 @@ namespace renegade::studio
         {
             return Contains(shell_.topBar, pointer) ||
                 Contains(shell_.navigationRail, pointer) ||
-                Contains(shell_.canvasNavigation, pointer) ||
-                Contains(shell_.storyOverview, pointer);
+                (!graphViewActive_ &&
+                    (Contains(shell_.canvasNavigation, pointer) ||
+                        Contains(shell_.storyOverview, pointer)));
         }
 
         void Update(const wi::Canvas&, float) override
@@ -195,11 +202,12 @@ namespace renegade::studio
                 action_(Action::Redo);
             else if (Contains(projectBounds_, pointer))
                 action_(Action::ProjectSelector);
-            else if (Contains(startBounds_, pointer))
+            else if (!graphViewActive_ && Contains(startBounds_, pointer))
                 action_(Action::Start);
-            else if (Contains(zoomOutBounds_, pointer))
+            else if (!graphViewActive_ && Contains(zoomOutBounds_, pointer))
                 action_(Action::ZoomOut);
-            else if (Contains(zoomTrackBounds_, pointer) && zoomRequested_)
+            else if (!graphViewActive_ &&
+                Contains(zoomTrackBounds_, pointer) && zoomRequested_)
             {
                 const float fraction = std::clamp(
                     (pointer.x - zoomTrackBounds_.x) /
@@ -207,9 +215,9 @@ namespace renegade::studio
                     0.0f, 1.0f);
                 zoomRequested_(0.82f + fraction * (1.18f - 0.82f));
             }
-            else if (Contains(zoomInBounds_, pointer))
+            else if (!graphViewActive_ && Contains(zoomInBounds_, pointer))
                 action_(Action::ZoomIn);
-            else if (Contains(fitBounds_, pointer))
+            else if (!graphViewActive_ && Contains(fitBounds_, pointer))
                 action_(Action::Fit);
         }
 
@@ -255,8 +263,11 @@ namespace renegade::studio
             Rect(shell_.inspector.x, shell_.inspector.y + 34.0f,
                 shell_.inspector.width, 1.0f, BorderSoft, cmd);
 
-            RenderCanvasNavigation(cmd);
-            RenderOverviewFrame(cmd);
+            if (!graphViewActive_)
+            {
+                RenderCanvasNavigation(cmd);
+                RenderOverviewFrame(cmd);
+            }
         }
 
         const char* GetWidgetTypeName() const override
@@ -637,6 +648,7 @@ namespace renegade::studio
         bool canRedo_ = false;
         float zoom_ = 1.0f;
         bool filterActive_ = false;
+        bool graphViewActive_ = false;
         std::function<void(Action)> action_;
         std::function<void(float)> zoomRequested_;
     };

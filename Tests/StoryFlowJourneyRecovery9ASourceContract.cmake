@@ -73,6 +73,8 @@ require_text(chrome_source "Undo, Redo, ProjectSelector, Settings, MainMenu" "co
 require_text(chrome_source "Hub, StoryFlow, Levels, Screens, Assets, Variables, TestPlay" "complete Journey rail actions")
 require_text(render_path_source "journeyChrome_.CanvasOverlayOwnsPointer" "fixed chrome input ownership")
 require_text(render_path_source "workspace_.FindAndFocusJourneyNode(findDraft_)" "Journey-native search/focus")
+require_text(render_path_source "graphViewButton_.SetVisible(active);" "restored Graph editor access")
+require_text(render_path_source "workspace_.ActivateView(bridge::StoryFlowViewMode::Graph)" "real Graph view activation")
 
 # Main cards are neutral rounded image surfaces with shadow. Validation is a
 # footer state mark; only selection may colour the frame blue.
@@ -86,6 +88,9 @@ forbid_text(card_source "TypeColor" "type-coloured card frames")
 require_text(lane_source "mainTrack_ ? Border : roleColour" "neutral main lane and role-coloured branch lanes")
 require_text(role_source "One classification seam drives both branch-lane accents and Inspector" "shared role colour authority")
 require_text(workspace_source "JourneyRoleColor(role)" "Inspector/overview role colour consumption")
+require_text(workspace_source "JourneyCanvasScissorRect" "hard Journey-to-Inspector render boundary")
+require_text(workspace_source "object.scissorRect = journeyClip;" "card viewport clipping")
+require_text(workspace_source "ApplyScissor(canvas, scissorRect, cmd);" "fixed overlay scissor restoration")
 
 # Semantic zoom remains readable and obsolete tiny persisted layouts migrate.
 require_text(workspace_source "constexpr float MinZoom = 0.82f;" "readable semantic minimum zoom")
