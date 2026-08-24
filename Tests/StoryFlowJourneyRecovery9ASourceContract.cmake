@@ -46,6 +46,8 @@ require_text(composer_source "Mode::Level" "Level destination mode")
 require_text(composer_source "Mode::Screen" "Screen destination mode")
 forbid_text(integration_source "JourneyPanel" "legacy Level/Screen panel state switch")
 forbid_text(integration_source "PlaceWorkspaceBehindLifecycleControls" "legacy lifecycle layering repair")
+forbid_text(integration_source "levelPanel_" "legacy Level panel dependency")
+forbid_text(integration_source "screenPanel_" "legacy Screen panel dependency")
 
 # The replacement UI must continue to queue the accepted governed lifecycle
 # services and stable-ID editor handoffs rather than implementing new semantics.

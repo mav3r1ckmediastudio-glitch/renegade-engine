@@ -42,6 +42,10 @@ Local evidence:
 - Journey recovery source assertions using `test`/`rg` — PASS;
 - `cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/StoryFlowJourneyRecovery9ASourceContract.cmake`
   — NOT RUN because CMake is unavailable in the Linux scratch environment.
+- Studio runs 784 Debug/Release exposed two stale post-create references to the
+  deleted panel objects; those references were removed and the source contract
+  now explicitly forbids both legacy member names. Superseding exact-head CI is
+  required; the failed runs are not acceptance evidence.
 
 Windows exact-head evidence and run IDs must be recorded after the source
 contract/documentation follow-up commit. Visual acceptance remains explicitly

@@ -807,12 +807,6 @@ namespace renegade::studio
             layoutDirty_ = true;
             FlushLayout(true);
 
-            levelPanel_.SetSelectedLevelNode(
-                createdNode->kind == bridge::FlowNodeKind::Level
-                    ? createdNodeId : bridge::StableId{});
-            screenPanel_.SetSelectedScreenNode(
-                createdNode->kind == bridge::FlowNodeKind::Screen
-                    ? createdNodeId : bridge::StableId{});
             return true;
         }
 
