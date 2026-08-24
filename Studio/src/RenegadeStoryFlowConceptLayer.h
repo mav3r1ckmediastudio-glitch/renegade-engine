@@ -96,7 +96,7 @@ namespace renegade::studio
             }
 
             ApplyScissor(canvas, ToScissor(journeyViewport_), cmd);
-            RenderJourneyStructure(cmd);
+            RenderJourneyRoutes(cmd);
             RenderJourneyOverview(cmd);
 
             ApplyScissor(canvas, ToScissor(inspectorBounds_), cmd);
@@ -176,14 +176,13 @@ namespace renegade::studio
                 static_cast<float>(card.trackIndex) * theme.journeyTrackSpacing +
                 (offset ? offset->offsetY : 0.0f);
             const float zoom = std::max(0.001f, layout_->journeyCanvas.zoom);
-            const bool compact = card.trackIndex > 0;
             return XMFLOAT4(
                 journeyViewport_.x + theme.shellPadding +
                     layout_->journeyCanvas.panX + x * zoom,
                 journeyViewport_.y + theme.shellPadding +
                     layout_->journeyCanvas.panY + y * zoom,
-                (compact ? theme.journeyCompactWidth : theme.journeyCardWidth) * zoom,
-                (compact ? theme.journeyCompactHeight : theme.journeyCardHeight) * zoom);
+                theme.journeyCardWidth * zoom,
+                theme.journeyCardHeight * zoom);
         }
 
         [[nodiscard]] wi::Color RouteColor(
@@ -215,31 +214,48 @@ namespace renegade::studio
             return StoryFlowVisualTheme::Get().routeOther;
         }
 
-        void RenderJourneyStructure(const wi::graphics::CommandList cmd) const
+        void RenderJourneyRoutes(const wi::graphics::CommandList cmd) const
         {
             if (!projection_.IsLoaded()) return;
             const auto& theme = StoryFlowVisualTheme::Get();
-            const float x = journeyViewport_.x + theme.shellPadding;
-            const float right = journeyViewport_.x + journeyViewport_.z -
-                theme.shellPadding;
-            const float top = journeyViewport_.y + 15.0f;
-            DrawText("STORY FLOW", x, top, theme.fontHeaderTitle,
-                theme.textStrong, cmd);
-            DrawText("Journey overview", x, top + 25.0f,
-                theme.fontHeaderMeta, theme.muted, cmd);
 
-            const float mainY = journeyViewport_.y + 74.0f;
-            DrawOutline(XMFLOAT4(x, mainY, right - x, 272.0f),
-                theme.borderSoft, 1.0f, cmd);
-            DrawText("01    MAIN JOURNEY", x + 12.0f, mainY + 9.0f,
-                theme.fontCardMeta, theme.text, cmd);
+            for (const auto& exit : projection_.Exits())
+            {
+                const auto* source = projection_.FindCard(exit.sourceNodeId);
+                const auto* destination = projection_.FindCard(exit.destinationNodeId);
+                if (!source || !destination) continue;
 
-            const float alternateY = mainY + 292.0f;
-            DrawText("02    ALTERNATE BRANCHES", x + 12.0f, alternateY,
-                theme.fontCardMeta, theme.text, cmd);
-            DrawLine(XMFLOAT2(x, alternateY + 20.0f),
-                XMFLOAT2(right, alternateY + 20.0f), 1.0f,
-                theme.borderSoft, cmd);
+                const XMFLOAT4 a = CardBounds(*source);
+                const XMFLOAT4 b = CardBounds(*destination);
+                const XMFLOAT2 p0(a.x + a.z, a.y + a.w * 0.5f);
+                const XMFLOAT2 p3(b.x, b.y + b.w * 0.5f);
+                const float bend = std::max(34.0f, std::abs(p3.x - p0.x) * 0.42f);
+                const XMFLOAT2 p1(p0.x + bend, p0.y);
+                const XMFLOAT2 p2(p3.x - bend, p3.y);
+                const wi::Color color = RouteColor(exit);
+
+                constexpr int Segments = 18;
+                XMFLOAT2 previous = p0;
+                for (int i = 1; i <= Segments; ++i)
+                {
+                    const float t = static_cast<float>(i) / Segments;
+                    const XMFLOAT2 current = Cubic(p0, p1, p2, p3, t);
+                    DrawLine(previous, current, theme.routeGlowThickness,
+                        WithAlpha(color, 46), cmd);
+                    DrawLine(previous, current, theme.routeThickness, color, cmd);
+                    previous = current;
+                }
+
+                const auto* route = model_->FindRoute(exit.routeId);
+                if (route && !route->outcome.empty())
+                {
+                    const XMFLOAT2 middle = Cubic(p0, p1, p2, p3, 0.5f);
+                    DrawText(Upper(route->outcome), middle.x,
+                        middle.y - theme.routeLabelOffset,
+                        theme.fontRouteLabel, color, cmd,
+                        wi::font::WIFALIGN_CENTER);
+                }
+            }
         }
 
         void RenderJourneyOverview(const wi::graphics::CommandList cmd) const
@@ -273,10 +289,8 @@ namespace renegade::studio
                     (offset ? offset->offsetY : 0.0f);
                 minX = std::min(minX, x);
                 minY = std::min(minY, y);
-                maxX = std::max(maxX, x + (card.trackIndex > 0
-                    ? theme.journeyCompactWidth : theme.journeyCardWidth));
-                maxY = std::max(maxY, y + (card.trackIndex > 0
-                    ? theme.journeyCompactHeight : theme.journeyCardHeight));
+                maxX = std::max(maxX, x + theme.journeyCardWidth);
+                maxY = std::max(maxY, y + theme.journeyCardHeight);
             }
             if (minX > maxX || minY > maxY) return;
 
@@ -302,10 +316,8 @@ namespace renegade::studio
                 DrawRoundedRect(
                     ox + (x - minX) * scale,
                     oy + (y - minY) * scale,
-                    std::max(3.0f, (card.trackIndex > 0
-                        ? theme.journeyCompactWidth : theme.journeyCardWidth) * scale),
-                    std::max(2.0f, (card.trackIndex > 0
-                        ? theme.journeyCompactHeight : theme.journeyCardHeight) * scale),
+                    std::max(3.0f, theme.journeyCardWidth * scale),
+                    std::max(2.0f, theme.journeyCardHeight * scale),
                     1.5f,
                     node ? DestinationColor(node->kind) : theme.routeOther,
                     cmd);
@@ -361,7 +373,7 @@ namespace renegade::studio
                 }
 
                 y += 7.0f;
-                DrawSection("ACTIONS / EXITS", x, y, cmd);
+                DrawSection("ACTIONS / EXITS  //  OPEN IN GRAPH", x, y, cmd);
                 y += 22.0f;
                 const std::size_t count = std::min<std::size_t>(
                     node->outgoingRouteIds.size(), 6);
@@ -387,15 +399,6 @@ namespace renegade::studio
                     DrawText("No exits", x, y, theme.fontInspectorBody,
                         theme.muted, cmd);
                 }
-
-                y += 8.0f;
-                DrawSection("NOTES", x, y, cmd);
-                y += 24.0f;
-                DrawPanel(XMFLOAT4(x, y, width, 50.0f), theme.panel,
-                    theme.borderSoft, 4.0f, cmd);
-                DrawText("Add production notes for this destination...",
-                    x + 9.0f, y + 9.0f, theme.fontInspectorBody,
-                    theme.muted, cmd);
             }
             else
             {
@@ -403,7 +406,7 @@ namespace renegade::studio
                     theme.fontInspectorBody, theme.muted, cmd);
             }
 
-            const float validationY = inspectorBounds_.y + inspectorBounds_.w - 142.0f;
+            const float validationY = inspectorBounds_.y + inspectorBounds_.w - 86.0f;
             DrawSection("VALIDATION", x, validationY, cmd);
             const bool valid = model_->Diagnostics().empty();
             DrawRoundedRect(x, validationY + 27.0f, 8.0f, 8.0f, 4.0f,
@@ -418,19 +421,6 @@ namespace renegade::studio
                 theme.fontInspectorBody,
                 session_ && session_->IsDirty() ? theme.warning : theme.success,
                 cmd, wi::font::WIFALIGN_RIGHT);
-
-            if (node && (node->kind == bridge::FlowNodeKind::Screen ||
-                node->kind == bridge::FlowNodeKind::Level))
-            {
-                const float buttonY = inspectorBounds_.y + inspectorBounds_.w - 48.0f;
-                DrawPanel(XMFLOAT4(x, buttonY, width, 34.0f),
-                    theme.selectionSurface, theme.selection, 4.0f, cmd);
-                DrawText(node->kind == bridge::FlowNodeKind::Screen
-                        ? "OPEN SCREEN EDITOR" : "OPEN LEVEL EDITOR",
-                    x + width * 0.5f, buttonY + 9.0f,
-                    theme.fontInspectorBody, theme.textStrong, cmd,
-                    wi::font::WIFALIGN_CENTER);
-            }
         }
 
         void DrawDestinationHeader(

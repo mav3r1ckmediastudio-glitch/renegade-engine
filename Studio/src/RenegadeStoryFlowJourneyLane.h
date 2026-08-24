@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -14,8 +13,9 @@
 
 namespace renegade::studio
 {
-    // Presentation-only Journey lane. Branch membership is communicated by a
-    // framed track and colour accent, never by editable-looking node wires.
+    // Presentation-only Journey lane. Gate 9E intentionally removes the heavy
+    // boxed-track look: the approved concept is an open map/canvas where branch
+    // structure is carried by cards and coloured route paths.
     class RenegadeStoryFlowJourneyLane final : public wi::gui::Widget
     {
     public:
@@ -59,16 +59,13 @@ namespace renegade::studio
                 ? theme.routeMain
                 : (detached_ ? theme.muted : theme.routeSystem);
 
-            if (!mainTrack_)
-            {
-                DrawRect(translation.x, translation.y + 18.0f,
-                    scale.x, std::max(1.0f, scale.y - 18.0f),
-                    WithAlpha(theme.panel, 176), cmd);
-                DrawRect(translation.x, translation.y + 18.0f,
-                    5.0f, std::max(1.0f, scale.y - 18.0f), laneColor, cmd);
-            }
-            DrawRect(translation.x, translation.y + 18.0f,
-                scale.x, 1.0f, theme.borderSoft, cmd);
+            DrawRect(
+                translation.x,
+                translation.y + 18.0f,
+                scale.x,
+                1.0f,
+                theme.borderSoft,
+                cmd);
             DrawRect(
                 translation.x,
                 translation.y + 18.0f,
@@ -102,11 +99,6 @@ namespace renegade::studio
         }
 
     private:
-        [[nodiscard]] static wi::Color WithAlpha(
-            const wi::Color color, const std::uint8_t alpha) noexcept
-        {
-            return wi::Color(color.getR(), color.getG(), color.getB(), alpha);
-        }
         static void DrawRect(
             const float x,
             const float y,
