@@ -169,7 +169,7 @@ namespace renegade::studio
                         pendingNativeCommand_ = NativeCommand::Fit;
                         break;
                     case Action::Search:
-                        pendingNativeCommand_ = NativeCommand::Find;
+                        searchOpen_ = !searchOpen_;
                         break;
                     case Action::Validate:
                         workspace_.SetExternalStatus(
@@ -627,17 +627,21 @@ namespace renegade::studio
 
         void SetNativeControlsActive(const bool active)
         {
-            for (wi::gui::Widget* widget : {
-                static_cast<wi::gui::Widget*>(&journeyViewButton_),
-                static_cast<wi::gui::Widget*>(&graphViewButton_),
-                static_cast<wi::gui::Widget*>(&fitButton_),
-                static_cast<wi::gui::Widget*>(&startButton_),
-                static_cast<wi::gui::Widget*>(&findInput_),
-                static_cast<wi::gui::Widget*>(&findButton_)})
-            {
-                widget->SetVisible(active);
-                widget->SetEnabled(active);
-            }
+            // Journey recovery deliberately removes the engineering
+            // Journey/Graph mode toggle from the concept-facing header. Graph
+            // remains intact but is outside the current product surface.
+            journeyViewButton_.SetVisible(false);
+            journeyViewButton_.SetEnabled(false);
+            graphViewButton_.SetVisible(false);
+            graphViewButton_.SetEnabled(false);
+            fitButton_.SetVisible(active);
+            fitButton_.SetEnabled(active);
+            startButton_.SetVisible(active);
+            startButton_.SetEnabled(active);
+            findInput_.SetVisible(active && searchOpen_);
+            findInput_.SetEnabled(active && searchOpen_);
+            findButton_.SetVisible(active && searchOpen_);
+            findButton_.SetEnabled(active && searchOpen_);
         }
 
         void UpdateDeleteControl(const bool graphActive)
@@ -716,9 +720,7 @@ namespace renegade::studio
                 28.0f);
 
             const float inspectorX = workspaceLeft + graphWidth + 14.0f;
-            const float findY = std::max(
-                RenegadeStoryFlowJourneyChrome::WorkspaceHeaderHeight + 300.0f,
-                height - 66.0f);
+            const float findY = 44.0f;
             const float findButtonWidth = 62.0f;
             const float findFieldWidth = std::max(
                 94.0f,
@@ -758,6 +760,7 @@ namespace renegade::studio
         bool workspaceActive_ = false;
         bool lifecycleLayeringReady_ = false;
         bool graphInputBlockedLastFrame_ = false;
+        bool searchOpen_ = false;
         float lastLogicalWidth_ = -1.0f;
         float lastLogicalHeight_ = -1.0f;
     };

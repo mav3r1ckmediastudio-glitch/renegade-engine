@@ -130,8 +130,21 @@ namespace renegade::studio
                     std::min(56.0f, navStep - 4.0f)));
             }
 
-            const float commandStart = NavigationRailWidth + 470.0f;
-            const float commandWidth = 70.0f;
+            const float inspectorReserve = std::min(
+                PreferredInspectorWidth,
+                std::max(1.0f, width_ - NavigationRailWidth) * 0.42f);
+            const float commandRight = std::max(
+                NavigationRailWidth + 520.0f,
+                width_ - inspectorReserve - 16.0f);
+            const float commandStart = std::clamp(
+                NavigationRailWidth + width_ * 0.25f,
+                NavigationRailWidth + 330.0f,
+                commandRight - 360.0f);
+            const float commandWidth = std::max(
+                56.0f,
+                std::min(74.0f,
+                    (commandRight - commandStart) /
+                        static_cast<float>(topCommands_.size())));
             for (std::size_t i = 0; i < topCommands_.size(); ++i)
             {
                 topCommands_[i].SetPos(XMFLOAT2(
@@ -193,6 +206,9 @@ namespace renegade::studio
             topBarGuide_.Render(canvas, cmd);
             journeyViewport_.Render(canvas, cmd);
             inspector_.Render(canvas, cmd);
+
+            Label("RENEGADE", 14.0f, 22.0f, 10, Text, cmd);
+            Label("STUDIO", 14.0f, 39.0f, 7, Muted, cmd);
 
             for (const auto& item : navItems_)
                 item.Render(canvas, cmd);
@@ -353,6 +369,9 @@ namespace renegade::studio
                 SetShadowRadius(0.0f);
                 label_ = std::move(label);
                 active_ = active;
+                command_ = label_ == "SELECT" || label_ == "ARRANGE" ||
+                    label_ == "FILTER" || label_ == "SEARCH" ||
+                    label_ == "PREVIEW" || label_ == "VALIDATE";
             }
 
             void Render(
@@ -380,6 +399,44 @@ namespace renegade::studio
                         cmd);
                 }
 
+                if (command_)
+                {
+                    const std::string glyph = label_ == "SELECT" ? ">" :
+                        (label_ == "ARRANGE" ? "::" :
+                        (label_ == "FILTER" ? "Y" :
+                        (label_ == "SEARCH" ? "O" :
+                        (label_ == "PREVIEW" ? ">|" : "OK"))));
+                    RenegadeStoryFlowJourneyChrome::Label(
+                        glyph,
+                        translation.x + scale.x * 0.5f - 6.0f,
+                        translation.y + 7.0f,
+                        9,
+                        active_ ? Text : Muted,
+                        cmd);
+                    RenegadeStoryFlowJourneyChrome::Label(
+                        label_,
+                        translation.x + 7.0f,
+                        translation.y + 34.0f,
+                        6,
+                        active_ ? Text : Muted,
+                        cmd);
+                    return;
+                }
+
+                const std::string glyph = label_ == "HUB" ? "H" :
+                    (label_ == "STORY FLOW" ? "<>" :
+                    (label_ == "LEVELS" ? "L" :
+                    (label_ == "SCREENS" ? "S" :
+                    (label_ == "ASSETS" ? "A" :
+                    (label_ == "VARIABLES" ? "{}" : ">")))));
+                RenegadeStoryFlowJourneyChrome::Label(
+                    glyph,
+                    translation.x + scale.x * 0.5f - 6.0f,
+                    translation.y + 7.0f,
+                    9,
+                    active_ ? Text : Muted,
+                    cmd);
+
                 const std::string compact = label_ == "STORY FLOW"
                     ? "STORY\nFLOW"
                     : (label_ == "TEST PLAY" ? "TEST\nPLAY" : label_);
@@ -389,7 +446,7 @@ namespace renegade::studio
                     RenegadeStoryFlowJourneyChrome::Label(
                         compact,
                         translation.x + 10.0f,
-                        translation.y + 18.0f,
+                        translation.y + scale.y - 16.0f,
                         7,
                         active_ ? Text : Muted,
                         cmd);
@@ -399,14 +456,14 @@ namespace renegade::studio
                     RenegadeStoryFlowJourneyChrome::Label(
                         compact.substr(0, breakAt),
                         translation.x + 10.0f,
-                        translation.y + 10.0f,
+                        translation.y + scale.y - 25.0f,
                         7,
                         active_ ? Text : Muted,
                         cmd);
                     RenegadeStoryFlowJourneyChrome::Label(
                         compact.substr(breakAt + 1),
                         translation.x + 10.0f,
-                        translation.y + 24.0f,
+                        translation.y + scale.y - 14.0f,
                         7,
                         active_ ? Accent : Muted,
                         cmd);
@@ -421,6 +478,7 @@ namespace renegade::studio
         private:
             std::string label_;
             bool active_ = false;
+            bool command_ = false;
         };
 
         float width_ = 1920.0f;

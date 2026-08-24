@@ -291,6 +291,13 @@ namespace renegade::studio
             Open,
         };
 
+        enum class JourneyPanel
+        {
+            None,
+            Levels,
+            Screens,
+        };
+
         template <typename LevelEditor, typename StoryFlowPath>
         void Attach(LevelEditor& levelEditor, StoryFlowPath& storyFlow)
         {
@@ -381,12 +388,14 @@ namespace renegade::studio
                         desiredWorkspace_ = Workspace::LevelEditor;
                         break;
                     case Action::Levels:
+                        journeyPanel_ = JourneyPanel::Levels;
                         storyFlow.SetExternalStatus(
-                            "LEVELS // USE THE GOVERNED LEVEL COMMANDS");
+                            "LEVELS // GOVERNED LEVEL COMMANDS OPEN");
                         break;
                     case Action::Screens:
+                        journeyPanel_ = JourneyPanel::Screens;
                         storyFlow.SetExternalStatus(
-                            "SCREENS // USE THE GOVERNED SCREEN COMMANDS");
+                            "SCREENS // GOVERNED SCREEN COMMANDS OPEN");
                         break;
                     case Action::Variables:
                         storyFlow.SetExternalStatus(
@@ -486,8 +495,10 @@ namespace renegade::studio
             const bool storyFlowActive,
             const bool levelEditorActive)
         {
-            levelPanel_.SetActive(storyFlowActive);
-            screenPanel_.SetActive(storyFlowActive);
+            levelPanel_.SetActive(
+                storyFlowActive && journeyPanel_ == JourneyPanel::Levels);
+            screenPanel_.SetActive(
+                storyFlowActive && journeyPanel_ == JourneyPanel::Screens);
             returnToStoryFlowButton_.SetVisible(levelEditorActive);
             returnToStoryFlowButton_.SetEnabled(levelEditorActive);
         }
@@ -1058,6 +1069,7 @@ namespace renegade::studio
         Workspace desiredWorkspace_ = Workspace::StoryFlow;
         PendingLevelAction pendingLevelAction_ = PendingLevelAction::None;
         PendingScreenAction pendingScreenAction_ = PendingScreenAction::None;
+        JourneyPanel journeyPanel_ = JourneyPanel::None;
         bridge::StoryFlowScreenTemplate pendingScreenTemplate_ =
             bridge::StoryFlowScreenTemplate::Title;
         bool attached_ = false;

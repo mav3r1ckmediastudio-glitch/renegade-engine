@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <utility>
@@ -91,14 +92,15 @@ namespace renegade::studio
         {
             width_ = width;
             height_ = height;
-            const float y = 10.0f;
-            levelName_.SetPos(XMFLOAT2(470.0f, y));
+            const float y = 88.0f;
+            const float x = std::clamp(width * 0.30f, 250.0f, 560.0f);
+            levelName_.SetPos(XMFLOAT2(x, y));
             levelName_.SetSize(XMFLOAT2(220.0f, 27.0f));
-            newLevel_.SetPos(XMFLOAT2(700.0f, y));
+            newLevel_.SetPos(XMFLOAT2(x + 230.0f, y));
             newLevel_.SetSize(XMFLOAT2(108.0f, 27.0f));
-            existingLevel_.SetPos(XMFLOAT2(816.0f, y));
+            existingLevel_.SetPos(XMFLOAT2(x + 346.0f, y));
             existingLevel_.SetSize(XMFLOAT2(124.0f, 27.0f));
-            openLevel_.SetPos(XMFLOAT2(948.0f, y));
+            openLevel_.SetPos(XMFLOAT2(x + 478.0f, y));
             openLevel_.SetSize(XMFLOAT2(108.0f, 27.0f));
         }
 

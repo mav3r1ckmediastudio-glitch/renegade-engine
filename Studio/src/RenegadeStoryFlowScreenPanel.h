@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <utility>
@@ -101,14 +102,15 @@ namespace renegade::studio
         {
             width_ = width;
             height_ = height;
-            const float y = 43.0f;
-            screenName_.SetPos(XMFLOAT2(470.0f, y));
+            const float y = 88.0f;
+            const float x = std::clamp(width * 0.27f, 230.0f, 520.0f);
+            screenName_.SetPos(XMFLOAT2(x, y));
             screenName_.SetSize(XMFLOAT2(220.0f, 27.0f));
-            screenTemplate_.SetPos(XMFLOAT2(700.0f, y));
+            screenTemplate_.SetPos(XMFLOAT2(x + 230.0f, y));
             screenTemplate_.SetSize(XMFLOAT2(170.0f, 27.0f));
-            newScreen_.SetPos(XMFLOAT2(878.0f, y));
+            newScreen_.SetPos(XMFLOAT2(x + 408.0f, y));
             newScreen_.SetSize(XMFLOAT2(86.0f, 27.0f));
-            openScreen_.SetPos(XMFLOAT2(972.0f, y));
+            openScreen_.SetPos(XMFLOAT2(x + 502.0f, y));
             openScreen_.SetSize(XMFLOAT2(116.0f, 27.0f));
         }
 
