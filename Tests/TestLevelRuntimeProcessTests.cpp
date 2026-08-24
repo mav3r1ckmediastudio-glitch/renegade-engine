@@ -187,6 +187,25 @@ int main(int argc, char** argv)
     }
 
     {
+        // Story Flow Preview launches the governed project directly. It must
+        // use the same supervised Runtime lifecycle without inventing or
+        // deleting an LP04 Test Level snapshot.
+        TestLevelRuntimeProcess process;
+        TestLevelSnapshot noSnapshot;
+        std::string error;
+        auto options = Options(fixturePath, "ready-exit0");
+        options.ownsSnapshot = false;
+        Expect(process.Launch(options, noSnapshot, error),
+            "governed project preview launches without snapshot metadata");
+        const auto result = PollUntilFinished(process);
+        Expect(result.state == TestLevelProcessState::Completed &&
+                result.succeeded && result.ready,
+            "governed project preview preserves Runtime supervision");
+        Expect(!result.cleanupAttempted && result.cleanupSucceeded,
+            "governed project preview performs no snapshot cleanup");
+    }
+
+    {
         const fs::path root = MakeRoot("runtime-failure");
         const auto snapshot = MakeSnapshot(root, "session");
         TestLevelRuntimeProcess process;

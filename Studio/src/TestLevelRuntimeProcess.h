@@ -50,6 +50,9 @@ namespace renegade::studio
         std::string workingDirectory;
         std::vector<std::string> arguments;
         std::chrono::milliseconds startupTimeout{15000};
+        // Story Flow project Preview launches the governed project descriptor
+        // directly and therefore owns no temporary LP04 snapshot to clean.
+        bool ownsSnapshot = true;
         TestLevelProcessFailureInjection failureInjection =
             TestLevelProcessFailureInjection::None;
     };
@@ -57,7 +60,8 @@ namespace renegade::studio
     // Windows-owned LP04 Gate 3A primitive. It launches a separate process in
     // CREATE_SUSPENDED state, tries to attach it to a kill-on-close Job Object,
     // resumes it, waits non-blockingly for an explicit startup-ready event,
-    // classifies exit codes, and owns snapshot cleanup on every terminal path.
+    // classifies exit codes, and owns snapshot cleanup when options declare a
+    // temporary LP04 snapshot.
     //
     // Job assignment is defense in depth: failure is recorded as a warning and
     // launch continues. Snapshot cleanup and explicit child termination remain

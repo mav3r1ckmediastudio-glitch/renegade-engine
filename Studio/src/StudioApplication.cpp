@@ -5652,6 +5652,9 @@ namespace renegade::studio
         case EditorAction::StartTestLevel:
             StartTestLevel();
             break;
+        case EditorAction::StartProjectPlay:
+            StartProjectPlay();
+            break;
         case EditorAction::StopTestLevel:
             StopTestLevel();
             break;
@@ -8988,6 +8991,7 @@ wi::eventhandler::Subscribe_Once(
 
     void StudioRenderPath::StartTestLevel()
     {
+        projectPreviewActive_ = false;
         if (session_ == nullptr || !session_->Projects().HasProject())
         {
             wi::helper::messageBox(
@@ -9073,6 +9077,61 @@ wi::eventhandler::Subscribe_Once(
             "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
     }
 
+    void StudioRenderPath::StartProjectPlay()
+    {
+        projectPreviewActive_ = false;
+        if (session_ == nullptr || !session_->Projects().HasProject())
+        {
+            wi::helper::messageBox(
+                "Open or create a Renegade project before previewing Story Flow.",
+                "Story Flow Preview");
+            return;
+        }
+        if (testLevelRuntime_.IsActive())
+            return;
+
+        const std::string runtimePath = ResolveTestLevelRuntimePath();
+        if (runtimePath.empty())
+        {
+            studioChrome_.SetStatusText("STORY FLOW PREVIEW // RUNTIME NOT FOUND");
+            wi::helper::messageBox(
+                "RenegadeRuntime.exe was not found beside this Studio build.",
+                "Story Flow Preview");
+            return;
+        }
+
+        const auto& project = session_->Projects().CurrentProject();
+        TestLevelLaunchOptions options;
+        options.executablePath = runtimePath;
+        options.workingDirectory =
+            fs::u8path(runtimePath).parent_path().generic_u8string();
+        options.arguments = {
+            TestLevelBackendArgument(),
+            "--project",
+            project.descriptorPath,
+        };
+        options.startupTimeout = std::chrono::milliseconds(60000);
+        options.ownsSnapshot = false;
+        projectPreviewActive_ = true;
+
+        bridge::TestLevelSnapshot noSnapshot;
+        std::string error;
+        if (!testLevelRuntime_.Launch(
+                std::move(options), std::move(noSnapshot), error))
+        {
+            projectPreviewActive_ = false;
+            studioChrome_.SetStatusText("STORY FLOW PREVIEW // LAUNCH FAILED");
+            wi::helper::messageBox(
+                "Renegade could not launch Story Flow Preview.\n\n" + error,
+                "Story Flow Preview");
+            return;
+        }
+
+        studioChrome_.SetTestLevelState(
+            RenegadeStudioChrome::TestLevelState::Starting);
+        studioChrome_.SetStatusText("STORY FLOW PREVIEW // STARTING");
+    }
+
     void StudioRenderPath::PollTestLevel()
     {
         if (!testLevelRuntime_.IsActive())
@@ -9085,8 +9144,9 @@ wi::eventhandler::Subscribe_Once(
         {
             studioChrome_.SetTestLevelState(
                 RenegadeStudioChrome::TestLevelState::Running);
-            studioChrome_.SetStatusText(
-                "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT");
+            studioChrome_.SetStatusText(projectPreviewActive_
+                ? "STORY FLOW PREVIEW // RUNNING"
+                : "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT");
             return;
         }
         if (!result.finished)
@@ -9100,19 +9160,29 @@ wi::eventhandler::Subscribe_Once(
             RenegadeStudioChrome::TestLevelState::Idle);
         if (result.succeeded)
         {
-            studioChrome_.SetStatusText("TEST LEVEL // COMPLETED");
+            studioChrome_.SetStatusText(projectPreviewActive_
+                ? "STORY FLOW PREVIEW // COMPLETED"
+                : "TEST LEVEL // COMPLETED");
+            projectPreviewActive_ = false;
             return;
         }
 
-        studioChrome_.SetStatusText("TEST LEVEL // FAILED");
+        const bool wasProjectPreview = projectPreviewActive_;
+        studioChrome_.SetStatusText(wasProjectPreview
+            ? "STORY FLOW PREVIEW // FAILED"
+            : "TEST LEVEL // FAILED");
+        projectPreviewActive_ = false;
         std::string message = result.message.empty()
-            ? "The Test Level Runtime stopped before it became ready."
+            ? (wasProjectPreview
+                ? "The Story Flow Preview Runtime stopped before it became ready."
+                : "The Test Level Runtime stopped before it became ready.")
             : result.message;
         if (!result.warning.empty())
         {
             message += "\n\nWarning: " + result.warning;
         }
-        wi::helper::messageBox(message, "Test Level");
+        wi::helper::messageBox(message,
+            wasProjectPreview ? "Story Flow Preview" : "Test Level");
     }
 
     void StudioRenderPath::StopTestLevel()
@@ -9124,16 +9194,20 @@ wi::eventhandler::Subscribe_Once(
             return;
         }
 
+        const bool wasProjectPreview = projectPreviewActive_;
         const TestLevelProcessResult result = testLevelRuntime_.Stop();
+        projectPreviewActive_ = false;
         studioChrome_.SetTestLevelState(
             RenegadeStudioChrome::TestLevelState::Idle);
-        studioChrome_.SetStatusText(
-            result.cleanupSucceeded
+        studioChrome_.SetStatusText(wasProjectPreview
+            ? "STORY FLOW PREVIEW // STOPPED"
+            : (result.cleanupSucceeded
                 ? "TEST LEVEL // STOPPED // SNAPSHOT CLEAN"
-                : "TEST LEVEL // STOPPED // CLEANUP WARNING");
+                : "TEST LEVEL // STOPPED // CLEANUP WARNING"));
         if (!result.warning.empty())
         {
-            wi::helper::messageBox(result.warning, "Test Level");
+            wi::helper::messageBox(result.warning,
+                wasProjectPreview ? "Story Flow Preview" : "Test Level");
         }
     }
 
@@ -9167,6 +9241,11 @@ wi::eventhandler::Subscribe_Once(
     void StudioRenderPath::RequestAssetBrowserFromStoryFlow()
     {
         RefreshAssetBrowser();
+    }
+
+    void StudioRenderPath::RequestProjectPlayFromStoryFlow()
+    {
+        pendingAction_ = EditorAction::StartProjectPlay;
     }
 
     void StudioRenderPath::RefreshAssetBrowser()

@@ -117,6 +117,7 @@ namespace renegade::studio
             }
 
             const auto& project = session.Projects().CurrentProject();
+            storyFlow.SetProjectName(project.name);
             const bool hasStartupFlow =
                 bridge::IsValidStableId(project.startupFlowId) &&
                 !project.startupFlow.empty();
@@ -339,6 +340,7 @@ namespace renegade::studio
                     switch (action)
                     {
                     case Action::Hub:
+                    case Action::ProjectSelector:
                         levelEditor.RequestProjectHubFromStoryFlow();
                         desiredWorkspace_ = Workspace::LevelEditor;
                         break;
@@ -352,8 +354,17 @@ namespace renegade::studio
                         break;
                     case Action::TestPlay:
                     case Action::Preview:
+                        levelEditor.RequestProjectPlayFromStoryFlow();
                         storyFlow.SetExternalStatus(
-                            "PREVIEW // JOURNEY RUNTIME PREVIEW NOT YET AVAILABLE");
+                            "PREVIEW // LAUNCHING GOVERNED PROJECT RUNTIME");
+                        break;
+                    case Action::Settings:
+                        storyFlow.SetExternalStatus(
+                            "SETTINGS // NO JOURNEY-SPECIFIC SETTINGS YET");
+                        break;
+                    case Action::MainMenu:
+                        storyFlow.SetExternalStatus(
+                            "MAIN MENU // GLOBAL MENU SURFACE NOT YET AVAILABLE");
                         break;
                     default:
                         break;

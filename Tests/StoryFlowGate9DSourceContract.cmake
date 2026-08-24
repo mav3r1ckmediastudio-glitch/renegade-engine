@@ -34,9 +34,12 @@ function(forbid_text haystack_var needle description)
     endif()
 endfunction()
 
-# Journey is a high-level navigation surface, never a second topology editor.
-require_text(workspace_source "EXITS // OPEN IN GRAPH" "Journey-to-Graph exit affordance")
-forbid_text(workspace_source "EXITS // CLICK TO EDIT" "legacy Journey route-edit affordance")
+# Journey is the primary no-wire authoring surface. Destination changes use the
+# Inspector and the same StoryFlowAuthoringSession route identity; Graph-only
+# topology widgets remain isolated to the frozen Graph presentation.
+require_text(workspace_source "RewireJourneyExit" "Journey Inspector route authoring")
+require_text(workspace_source "session_->UpdateRoute(routeId, std::move(replacement), error)" "stable route rewire")
+forbid_text(workspace_source "JOURNEY EXIT // OPENED IN GRAPH" "obsolete Journey-to-Graph exit handoff")
 require_text(workspace_source "deleteNodeButton_.SetVisible(nodeSelected && graphMode);" "Graph-only node deletion")
 require_text(workspace_source "const bool routeSelected = graphMode && selectedRoute != nullptr;" "Graph-only route editing")
 require_text(workspace_source "connectButton_.SetVisible(false);" "retired legacy CONNECT control")
@@ -78,7 +81,8 @@ forbid_text(project_loading_overlay_source "SetVisible(false);\n                
 require_text(render_path_source "Story Flow Journey View" "native Journey view control")
 require_text(render_path_source "Story Flow Graph View" "native Graph view control")
 require_text(render_path_source "Story Flow Find Node" "native node-name search")
-require_text(graph_editor_source "bool FocusNodeByName" "Graph/Journey focus navigation API")
+require_text(render_path_source "workspace_.FindAndFocusJourneyNode(findDraft_)" "Journey focus navigation API")
+require_text(graph_editor_source "bool FocusNodeByName" "Graph focus navigation API")
 require_text(graph_editor_source "void RenderOverview" "presentation-only Graph overview API")
 
 message(STATUS "Story Flow Gate 9D source ownership contract passed")

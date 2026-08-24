@@ -16,12 +16,12 @@
 Draft PR: `#100`, branch `recovery/story-flow-journey-9a-shell`.
 
 The recovery starts from accepted Gate 9D main, not rejected PR #99. Graph Flow
-is frozen and out of scope. The owner-approved sequence remains 9A through 9F;
-this branch is still an incomplete 9A implementation and is not an owner
-candidate.
+is frozen and out of scope. The owner-approved sequence remains 9A through 9F.
+The implementation has now replaced the failed legacy-scale presentation, but
+the branch is not an owner candidate until exact-head Windows CI and packaged
+Release visual acceptance pass.
 
-Implementation commit `09ac627cbebb7e9dc1b370e2baa071917653aa2f`
-removes the legacy Level/Screen presentation rather than hiding it:
+The current recovery implementation:
 
 - deleted `RenegadeStoryFlowLevelPanel.h` and
   `RenegadeStoryFlowScreenPanel.h`;
@@ -33,40 +33,39 @@ removes the legacy Level/Screen presentation rather than hiding it:
   stable-ID resolution and Level/Screen Editor handoffs through the existing
   EngineBridge services;
 - retained card double-click activation and Return to Story Flow;
-- added a source contract that rejects reintroduction of either legacy panel or
-  bypass of the accepted lifecycle/reference services.
+- installs a fixed 70-pixel top bar, 96-pixel rail, bounded Inspector, fixed
+  bottom navigation and fixed Story Overview;
+- renders 164x214 rounded/shadowed image-led main cards with neutral borders,
+  cover-cropped governed thumbnails and blue selection only;
+- renders compact alternate cards inside purple/turquoise/red role rows and
+  uses the same role classification for Inspector bullets;
+- authors new actions and stable-ID destination rewires directly in the
+  Inspector without opening Graph or drawing Journey wires;
+- wires Journey search/focus, detached filtering, fit/start navigation,
+  82-118% semantic zoom including the visible slider, Preview, Save and
+  Undo/Redo;
+- launches Story Flow Preview from the governed project descriptor through the
+  supervised Runtime process without creating or cleaning an LP04 snapshot;
+- replaces letter-placeholder rail/toolbar glyphs with native icon shapes;
+- adds source/layout contracts that reject legacy panels, coloured card frames,
+  thumbnail overflow, tiny zoom and Journey-to-Graph exit routing.
 
-Local evidence:
+Current local evidence:
 
 - `git diff --check` — PASS;
-- Journey recovery source assertions using `test`/`rg` — PASS;
+- `g++ -std=c++17 -IStudio/src Tests/StoryFlowJourneyUiLayoutTests.cpp ...`
+  — PASS at 1680x945, 1920x1080 and 1280x720;
+- Journey recovery and updated Gate 9D source assertions using `rg` — PASS;
 - `cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/StoryFlowJourneyRecovery9ASourceContract.cmake`
   — NOT RUN because CMake is unavailable in the Linux scratch environment.
-- Studio runs 784 Debug/Release exposed two stale post-create references to the
-  deleted panel objects; those references were removed and the source contract
-  now explicitly forbids both legacy member names. Superseding exact-head CI is
-  required; the failed runs are not acceptance evidence.
-
-Corrected implementation head
-`8b74d9ae022fea51acfbd694fc51541d81a34907` is mergeable and has exact-head
-Windows evidence:
-
-- Renegade Studio run `32760938835` / run 786 — Debug PASS, Release PASS;
-- Windows baseline run `32760938832` / run 1365 — Debug PASS, Release PASS;
-- Release artifact `9533799744`, digest
-  `sha256:18da1a50a360afd57db2c726776505180548cf0bf9225d23bc0672f514cfd11f`.
 
 Visual acceptance remains explicitly open: green CI proves compilation only.
 Required proof is a real packaged Release screenshot at 1920x1080 and
 1280x720, compared against the approved concept. No merge or Gate 9A completion
 claim is permitted before owner visual acceptance.
 
-Next bounded work after this cleanup is the remaining 9A shell fidelity and
-real top/left command wiring. 9B then owns the approved large rounded/shadowed
-main reel cards and thumbnails; 9C owns role-coloured alternate branch rows and
-Inspector routing; 9D owns constrained Journey navigation and the fixed-size
-overview; 9E owns nonlinear Journey authoring; 9F owns diagnostics and final
-acceptance.
+The locked recovery contract and stage ownership are recorded in
+`docs/STORY_FLOW_JOURNEY_RECOVERY_9A_9F.md`.
 
 ## Gate 6 accepted evidence
 
@@ -400,10 +399,12 @@ related.
 
 A new implementation session should:
 
-1. inspect current `main` and PR #66 live head;
-2. verify final closeout docs are present;
-3. verify exact-head CI after the documentation commits;
-4. report whether PR #66 is genuinely merge-ready;
-5. stop for the owner's merge decision;
-6. after merge, start Gate 2 from the new exact main and re-audit Flow/Screen
-   semantics before editing.
+1. inspect current `main` and draft PR #100 live head;
+2. confirm Graph files have not drifted beyond shared synchronization seams;
+3. run exact-head Windows Debug and Release CI;
+4. download the packaged Release artifact and capture Journey at 1920x1080 and
+   1280x720 using the owner's representative project;
+5. compare those screenshots against `storyflow concept(3).png` and the locked
+   rules in `docs/STORY_FLOW_JOURNEY_RECOVERY_9A_9F.md`;
+6. fix every visible mismatch before requesting owner acceptance;
+7. keep PR #100 draft and stop for the owner's merge decision.

@@ -61,6 +61,7 @@ namespace renegade::studio
 
         void RequestProjectHubFromStoryFlow();
         void RequestAssetBrowserFromStoryFlow();
+        void RequestProjectPlayFromStoryFlow();
 
         // Gate 1 exposes only the presentation/lifecycle seams required by the
         // Story Flow adapter. Semantic Flow state remains in EngineBridge.
@@ -108,6 +109,7 @@ namespace renegade::studio
             OpenTerrainWorkspace,
             OpenSceneWorkspace,
             StartTestLevel,
+            StartProjectPlay,
             StopTestLevel,
             StartSunPreview,
             PauseSunPreview,
@@ -391,6 +393,7 @@ namespace renegade::studio
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
         void StartTestLevel();
+        void StartProjectPlay();
         void PollTestLevel();
         void StopTestLevel();
         [[nodiscard]] std::string ResolveTestLevelRuntimePath() const;
@@ -572,6 +575,7 @@ namespace renegade::studio
         RenegadeButton importScaleDismissButton_;
         CreatorAssetStudioChrome studioChrome_;
         TestLevelRuntimeProcess testLevelRuntime_;
+        bool projectPreviewActive_ = false;
         Translator gizmo_;
         wi::graphics::Shader gridVertexShader_;
         wi::graphics::Shader gridPixelShader_;

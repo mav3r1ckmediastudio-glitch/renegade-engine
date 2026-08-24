@@ -121,6 +121,12 @@ namespace renegade::studio
             Start,
             Find,
             DeleteSelection,
+            Undo,
+            Redo,
+            ZoomOut,
+            ZoomIn,
+            Preview,
+            Filter,
         };
 
     public:
@@ -177,15 +183,37 @@ namespace renegade::studio
                         workspace_.SetExternalStatus(
                             "JOURNEY VALIDATION // SEE INSPECTOR DIAGNOSTICS");
                         break;
+                    case Action::Undo:
+                        pendingNativeCommand_ = NativeCommand::Undo;
+                        break;
+                    case Action::Redo:
+                        pendingNativeCommand_ = NativeCommand::Redo;
+                        break;
+                    case Action::ZoomOut:
+                        pendingNativeCommand_ = NativeCommand::ZoomOut;
+                        break;
+                    case Action::ZoomIn:
+                        pendingNativeCommand_ = NativeCommand::ZoomIn;
+                        break;
+                    case Action::TestPlay:
+                    case Action::Preview:
+                        pendingNativeCommand_ = NativeCommand::Preview;
+                        break;
+                    case Action::Fit:
+                        pendingNativeCommand_ = NativeCommand::Fit;
+                        break;
+                    case Action::Start:
+                        pendingNativeCommand_ = NativeCommand::Start;
+                        break;
                     case Action::Filter:
-                        workspace_.SetExternalStatus(
-                            "JOURNEY FILTERS // AVAILABLE IN THE 9A SHELL RECOVERY");
+                        pendingNativeCommand_ = NativeCommand::Filter;
                         break;
                     case Action::Hub:
                     case Action::Assets:
                     case Action::Variables:
-                    case Action::TestPlay:
-                    case Action::Preview:
+                    case Action::ProjectSelector:
+                    case Action::Settings:
+                    case Action::MainMenu:
                         if (journeyShellAction_)
                             journeyShellAction_(action);
                         break;
@@ -205,6 +233,10 @@ namespace renegade::studio
                         break;
                     }
                 });
+            journeyChrome_.OnZoomRequested([this](const float zoom)
+            {
+                workspace_.SetJourneyZoom(zoom);
+            });
 
             destinationComposer_.Create();
             destinationComposer_.Attach(GetGUI());
@@ -361,6 +393,13 @@ namespace renegade::studio
         {
             EnsureLoaded();
             LayoutWorkspace();
+            journeyChrome_.SetProjectContext(
+                projectName_,
+                workspace_.IsDirty(),
+                workspace_.CanUndo(),
+                workspace_.CanRedo(),
+                workspace_.JourneyZoom(),
+                workspace_.JourneyFilterActive());
 
             const bool graphBeforeUpdate = workspaceActive_ &&
                 workspace_.ActiveView() == bridge::StoryFlowViewMode::Graph;
@@ -376,7 +415,7 @@ namespace renegade::studio
             const XMFLOAT4 pointerBeforeGui = wi::input::GetPointer();
             const bool nativeCanvasNavigationOwnsPointer =
                 workspaceActive_ && !graphBeforeUpdate &&
-                Contains(canvasNavigationBounds_, pointerBeforeGui);
+                journeyChrome_.CanvasOverlayOwnsPointer(pointerBeforeGui);
             workspace_.SetEnabled(
                 workspaceActive_ && !graphBeforeUpdate &&
                 !nativeCanvasNavigationOwnsPointer &&
@@ -564,6 +603,11 @@ namespace renegade::studio
             workspace_.SetExternalStatus(std::move(message));
         }
 
+        void SetProjectName(std::string name)
+        {
+            projectName_ = std::move(name);
+        }
+
         void OnNodeActivated(
             std::function<void(const bridge::StableId&)> callback)
         {
@@ -656,6 +700,36 @@ namespace renegade::studio
             case NativeCommand::DeleteSelection:
                 workspace_.DeleteSelection();
                 break;
+            case NativeCommand::Undo:
+                workspace_.UndoJourney();
+                break;
+            case NativeCommand::Redo:
+                workspace_.RedoJourney();
+                break;
+            case NativeCommand::ZoomOut:
+                workspace_.AdjustJourneyZoom(1.0f / 1.1f);
+                break;
+            case NativeCommand::ZoomIn:
+                workspace_.AdjustJourneyZoom(1.1f);
+                break;
+            case NativeCommand::Preview:
+                if (workspace_.IsDirty())
+                    workspace_.SaveJourney();
+                if (workspace_.IsDirty())
+                {
+                    workspace_.SetExternalStatus(
+                        "PREVIEW BLOCKED // STORY FLOW SAVE FAILED");
+                    break;
+                }
+                if (journeyShellAction_)
+                {
+                    journeyShellAction_(
+                        RenegadeStoryFlowJourneyChrome::Action::Preview);
+                }
+                break;
+            case NativeCommand::Filter:
+                workspace_.ToggleJourneyFilter();
+                break;
             case NativeCommand::None:
             default:
                 break;
@@ -671,10 +745,10 @@ namespace renegade::studio
             journeyViewButton_.SetEnabled(false);
             graphViewButton_.SetVisible(false);
             graphViewButton_.SetEnabled(false);
-            fitButton_.SetVisible(active);
-            fitButton_.SetEnabled(active);
-            startButton_.SetVisible(active);
-            startButton_.SetEnabled(active);
+            fitButton_.SetVisible(false);
+            fitButton_.SetEnabled(false);
+            startButton_.SetVisible(false);
+            startButton_.SetEnabled(false);
             findInput_.SetVisible(active && searchOpen_);
             findInput_.SetEnabled(active && searchOpen_);
             findButton_.SetVisible(active && searchOpen_);
@@ -694,7 +768,10 @@ namespace renegade::studio
             const std::string live = findInput_.GetCurrentInputValue();
             if (!live.empty())
                 findDraft_ = live;
-            (void)graphEditor_.FocusNodeByName(findDraft_);
+            if (workspace_.ActiveView() == bridge::StoryFlowViewMode::Journey)
+                (void)workspace_.FindAndFocusJourneyNode(findDraft_);
+            else
+                (void)graphEditor_.FocusNodeByName(findDraft_);
         }
 
         void UpdateDestinationSelection(const bridge::StableId& nodeId)
@@ -776,15 +853,17 @@ namespace renegade::studio
                 28.0f);
 
             const float inspectorX = workspaceLeft + graphWidth + 14.0f;
-            const float findY = 44.0f;
+            const auto& shell = journeyChrome_.ShellLayout();
+            const float findY = shell.workspaceTitle.y + 22.0f;
             const float findButtonWidth = 62.0f;
-            const float findFieldWidth = std::max(
-                94.0f,
-                inspectorWidth - 28.0f - findButtonWidth - 6.0f);
-            findInput_.SetPos(XMFLOAT2(inspectorX, findY));
+            const float findFieldWidth = std::clamp(
+                graphWidth * 0.28f, 210.0f, 320.0f);
+            const float findX = workspaceLeft +
+                std::max(220.0f, graphWidth - findFieldWidth - findButtonWidth - 30.0f);
+            findInput_.SetPos(XMFLOAT2(findX, findY));
             findInput_.SetSize(XMFLOAT2(findFieldWidth, 27.0f));
             findButton_.SetPos(XMFLOAT2(
-                inspectorX + findFieldWidth + 6.0f, findY));
+                findX + findFieldWidth + 6.0f, findY));
             findButton_.SetSize(XMFLOAT2(findButtonWidth, 27.0f));
 
             deleteSelectionButton_.SetPos(XMFLOAT2(
@@ -812,6 +891,7 @@ namespace renegade::studio
         std::function<void(RenegadeStoryFlowJourneyChrome::Action)>
             journeyShellAction_;
         std::string findDraft_;
+        std::string projectName_ = "Renegade Project";
         XMFLOAT4 canvasNavigationBounds_ = {};
         NativeCommand pendingNativeCommand_ = NativeCommand::None;
         bool loaded_ = false;

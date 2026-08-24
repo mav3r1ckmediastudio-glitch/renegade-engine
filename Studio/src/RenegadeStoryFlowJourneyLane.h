@@ -9,6 +9,8 @@
 
 #include <WickedEngine.h>
 
+#include "RenegadeStoryFlowJourneyRole.h"
+
 namespace renegade::studio
 {
     // Gate 9B reel/lane object. Lanes are presentation-only containers derived
@@ -35,11 +37,15 @@ namespace renegade::studio
             const std::size_t visibleIndex,
             const bool mainTrack,
             const bool detached,
+            const JourneyBranchRole role,
+            const bool collapsed,
             std::string title)
         {
             visibleIndex_ = visibleIndex;
             mainTrack_ = mainTrack;
             detached_ = detached;
+            role_ = role;
+            collapsed_ = collapsed;
             title_ = std::move(title);
         }
 
@@ -51,47 +57,53 @@ namespace renegade::studio
                 return;
             ApplyScissor(canvas, scissorRect, cmd);
 
+            const wi::Color roleColour = RoleColor(role_);
             DrawRect(
                 translation.x,
                 translation.y,
                 scale.x,
                 scale.y,
                 mainTrack_
-                    ? wi::Color(10, 15, 19, 150)
-                    : wi::Color(9, 14, 18, 112),
+                    ? wi::Color(12, 20, 27, 218)
+                    : RoleSurface(role_),
                 cmd);
             DrawRect(
                 translation.x,
                 translation.y,
                 scale.x,
                 1.0f,
-                mainTrack_ ? Forge : Border,
+                Border,
                 cmd);
             DrawRect(
                 translation.x,
                 translation.y,
-                mainTrack_ ? 3.0f : 1.0f,
+                mainTrack_ ? 1.0f : 6.0f,
                 scale.y,
-                mainTrack_ ? Forge : BorderSoft,
+                mainTrack_ ? Border : roleColour,
                 cmd);
 
-            DrawText(
-                TwoDigit(visibleIndex_ + 1),
-                translation.x + 12.0f,
-                translation.y + 10.0f,
-                7,
-                mainTrack_ ? Forge : Muted,
-                cmd);
-            DrawText(
-                title_.empty()
-                    ? (mainTrack_ ? "MAIN JOURNEY" :
-                        (detached_ ? "DETACHED JOURNEY" : "ALTERNATE BRANCH"))
-                    : title_,
-                translation.x + 38.0f,
-                translation.y + 9.0f,
-                8,
-                mainTrack_ ? TextStrong : Muted,
-                cmd);
+            if (mainTrack_)
+            {
+                DrawText(TwoDigit(visibleIndex_ + 1),
+                    translation.x + 12.0f, translation.y + 10.0f,
+                    7, Muted, cmd);
+                DrawText(title_.empty() ? "MAIN JOURNEY" : title_,
+                    translation.x + 38.0f, translation.y + 9.0f,
+                    8, TextStrong, cmd);
+            }
+            else
+            {
+                const char laneLetter = static_cast<char>(
+                    'A' + std::min<std::size_t>(25, visibleIndex_ - 1));
+                DrawText(std::string(1, laneLetter),
+                    translation.x + 9.0f,
+                    translation.y + scale.y * 0.5f - 4.0f,
+                    7, roleColour, cmd);
+                DrawText(collapsed_ ? ">" : "v",
+                    translation.x + scale.x - 17.0f,
+                    translation.y + scale.y * 0.5f - 5.0f,
+                    9, Muted, cmd);
+            }
         }
 
         const char* GetWidgetTypeName() const override
@@ -104,7 +116,47 @@ namespace renegade::studio
         static constexpr wi::Color BorderSoft = wi::Color(25, 36, 43, 255);
         static constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
         static constexpr wi::Color Muted = wi::Color(142, 151, 156, 255);
-        static constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
+        static constexpr wi::Color Purple = wi::Color(143, 73, 205, 255);
+        static constexpr wi::Color Turquoise = wi::Color(53, 166, 174, 255);
+        static constexpr wi::Color Red = wi::Color(205, 67, 61, 255);
+        static constexpr wi::Color Amber = wi::Color(210, 157, 62, 255);
+        static constexpr wi::Color Blue = wi::Color(65, 158, 230, 255);
+
+        [[nodiscard]] static wi::Color RoleColor(
+            const JourneyBranchRole role) noexcept
+        {
+            switch (role)
+            {
+            case JourneyBranchRole::Options: return Purple;
+            case JourneyBranchRole::LoadSave: return Turquoise;
+            case JourneyBranchRole::Failure: return Red;
+            case JourneyBranchRole::Detached: return Amber;
+            case JourneyBranchRole::Custom: return Blue;
+            case JourneyBranchRole::Main:
+            default: return Border;
+            }
+        }
+
+        [[nodiscard]] static wi::Color RoleSurface(
+            const JourneyBranchRole role) noexcept
+        {
+            switch (role)
+            {
+            case JourneyBranchRole::Options:
+                return wi::Color(22, 17, 30, 238);
+            case JourneyBranchRole::LoadSave:
+                return wi::Color(12, 27, 31, 238);
+            case JourneyBranchRole::Failure:
+                return wi::Color(30, 16, 19, 238);
+            case JourneyBranchRole::Detached:
+                return wi::Color(29, 25, 14, 238);
+            case JourneyBranchRole::Custom:
+                return wi::Color(13, 23, 31, 238);
+            case JourneyBranchRole::Main:
+            default:
+                return wi::Color(12, 20, 27, 238);
+            }
+        }
 
         static void DrawRect(
             const float x,
@@ -153,6 +205,8 @@ namespace renegade::studio
         std::size_t visibleIndex_ = 0;
         bool mainTrack_ = false;
         bool detached_ = false;
+        JourneyBranchRole role_ = JourneyBranchRole::Custom;
+        bool collapsed_ = false;
         std::string title_;
     };
 }
