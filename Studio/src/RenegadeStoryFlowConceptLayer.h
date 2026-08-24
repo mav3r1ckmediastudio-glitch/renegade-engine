@@ -9,7 +9,7 @@
 #include "RenegadeStoryFlowVisualTheme.h"
 
 #include <algorithm>
-#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -20,9 +20,9 @@
 
 namespace renegade::studio
 {
-    // Gate 9E is a presentation pass only. This layer consumes the shared model,
-    // deterministic Journey projection and persisted layout. It has no semantic
-    // mutation callbacks and therefore cannot become a second route authority.
+    // Read-only Gate 9E presentation. It deliberately exposes no semantic
+    // callback: Journey routes, Inspector rows and the overview are projections
+    // of StoryFlowAuthoringModel only. Graph remains the topology editor.
     class RenegadeStoryFlowConceptLayer final : public wi::gui::Widget
     {
     public:
@@ -53,7 +53,6 @@ namespace renegade::studio
             model_ = nullptr;
             layout_ = nullptr;
             selectedNodeId_.clear();
-            selectedRouteId_.clear();
             projection_.Clear();
             fingerprint_ = 0;
         }
@@ -74,14 +73,13 @@ namespace renegade::studio
                     inspectorBounds.y + inspectorBounds.w)));
         }
 
-        void SetSelection(
-            bridge::StableId nodeId,
-            bridge::StableId routeId)
+        void SetSelection(bridge::StableId nodeId, const bridge::StableId&)
         {
             selectedNodeId_ = std::move(nodeId);
-            selectedRouteId_ = std::move(routeId);
         }
 
+        // Do not call Widget::Update(): this full-surface decorative layer must
+        // never acquire wiGUI focus or pointer ownership.
         void Update(const wi::Canvas&, float) override
         {
             RefreshProjection();
@@ -91,23 +89,18 @@ namespace renegade::studio
             const wi::Canvas& canvas,
             const wi::graphics::CommandList cmd) const override
         {
-            if (!IsVisible() || !model_ || !layout_ || !model_->IsLoaded())
-                return;
-
-            const auto& theme = StoryFlowVisualTheme::Get();
-            if (layout_->activeView == bridge::StoryFlowViewMode::Journey)
+            if (!IsVisible() || !model_ || !layout_ || !model_->IsLoaded() ||
+                layout_->activeView != bridge::StoryFlowViewMode::Journey)
             {
-                ApplyScissor(canvas, RectToScissor(journeyViewport_), cmd);
-                RenderJourneyRoutes(cmd);
-                RenderJourneyOverview(cmd);
+                return;
             }
 
-            // The concept Inspector deliberately covers the old debug-looking
-            // workspace Inspector. Graph semantic editor controls are still real
-            // native controls and render after this layer, so functionality is
-            // preserved while the shell becomes coherent.
-            ApplyScissor(canvas, RectToScissor(inspectorBounds_), cmd);
-            RenderInspector(theme, cmd);
+            ApplyScissor(canvas, ToScissor(journeyViewport_), cmd);
+            RenderJourneyRoutes(cmd);
+            RenderJourneyOverview(cmd);
+
+            ApplyScissor(canvas, ToScissor(inspectorBounds_), cmd);
+            RenderJourneyInspector(cmd);
         }
 
         const char* GetWidgetTypeName() const override
@@ -116,10 +109,10 @@ namespace renegade::studio
         }
 
     private:
-        [[nodiscard]] static wi::primitive::Rect RectToScissor(
+        [[nodiscard]] static wi::graphics::Rect ToScissor(
             const XMFLOAT4& value) noexcept
         {
-            wi::primitive::Rect rect;
+            wi::graphics::Rect rect;
             rect.left = static_cast<int>(std::floor(value.x));
             rect.top = static_cast<int>(std::floor(value.y));
             rect.right = static_cast<int>(std::ceil(value.x + value.z));
@@ -164,8 +157,7 @@ namespace renegade::studio
         {
             if (!layout_) return nullptr;
             const auto iterator = std::find_if(
-                layout_->journeyCards.begin(),
-                layout_->journeyCards.end(),
+                layout_->journeyCards.begin(), layout_->journeyCards.end(),
                 [&](const bridge::StoryFlowJourneyCardLayout& item)
                 {
                     return item.nodeId == nodeId;
@@ -199,29 +191,27 @@ namespace renegade::studio
             const auto& theme = StoryFlowVisualTheme::Get();
             const auto* route = model_ ? model_->FindRoute(exit.routeId) : nullptr;
             if (!route) return theme.routeOther;
-            std::string outcome = route->outcome;
-            std::transform(outcome.begin(), outcome.end(), outcome.begin(),
-                [](const unsigned char c)
-                {
-                    return static_cast<char>(std::tolower(c));
-                });
-            if (outcome.find("death") != std::string::npos ||
-                outcome.find("fail") != std::string::npos ||
-                outcome.find("quit") != std::string::npos ||
-                outcome.find("restart") != std::string::npos)
+            std::string outcome = Lower(route->outcome);
+            if (ContainsAny(outcome, {"death", "fail", "quit", "restart"}))
                 return theme.routeFailure;
-            if (outcome.find("load") != std::string::npos ||
-                outcome.find("continue") != std::string::npos)
+            if (ContainsAny(outcome, {"load", "continue"}))
                 return theme.routeLoad;
-            if (outcome.find("option") != std::string::npos ||
-                outcome.find("setting") != std::string::npos ||
-                outcome.find("menu") != std::string::npos)
+            if (ContainsAny(outcome, {"option", "setting", "menu"}))
                 return theme.routeSystem;
-            if (outcome.find("victory") != std::string::npos ||
-                outcome.find("complete") != std::string::npos ||
-                outcome.find("ending") != std::string::npos)
+            if (ContainsAny(outcome, {"victory", "complete", "ending"}))
                 return theme.routeEnding;
             return exit.primaryContinuation ? theme.routeMain : theme.routeOther;
+        }
+
+        [[nodiscard]] wi::Color RouteColor(
+            const bridge::StoryFlowRouteView& route) const
+        {
+            for (const auto& exit : projection_.Exits())
+            {
+                if (exit.routeId == route.id)
+                    return RouteColor(exit);
+            }
+            return StoryFlowVisualTheme::Get().routeOther;
         }
 
         void RenderJourneyRoutes(const wi::graphics::CommandList cmd) const
@@ -237,31 +227,21 @@ namespace renegade::studio
 
                 const XMFLOAT4 a = CardBounds(*source);
                 const XMFLOAT4 b = CardBounds(*destination);
-                const float ax = a.x + a.z;
-                const float ay = a.y + a.w * 0.5f;
-                const float bx = b.x;
-                const float by = b.y + b.w * 0.5f;
-                const float horizontal = std::max(36.0f, std::abs(bx - ax) * 0.42f);
-                const XMFLOAT2 p0(ax, ay);
-                const XMFLOAT2 p1(ax + horizontal, ay);
-                const XMFLOAT2 p2(bx - horizontal, by);
-                const XMFLOAT2 p3(bx, by);
+                const XMFLOAT2 p0(a.x + a.z, a.y + a.w * 0.5f);
+                const XMFLOAT2 p3(b.x, b.y + b.w * 0.5f);
+                const float bend = std::max(34.0f, std::abs(p3.x - p0.x) * 0.42f);
+                const XMFLOAT2 p1(p0.x + bend, p0.y);
+                const XMFLOAT2 p2(p3.x - bend, p3.y);
                 const wi::Color color = RouteColor(exit);
 
                 constexpr int Segments = 18;
                 XMFLOAT2 previous = p0;
                 for (int i = 1; i <= Segments; ++i)
                 {
-                    const float t = static_cast<float>(i) /
-                        static_cast<float>(Segments);
-                    const float u = 1.0f - t;
-                    const XMFLOAT2 current(
-                        u * u * u * p0.x + 3.0f * u * u * t * p1.x +
-                            3.0f * u * t * t * p2.x + t * t * t * p3.x,
-                        u * u * u * p0.y + 3.0f * u * u * t * p1.y +
-                            3.0f * u * t * t * p2.y + t * t * t * p3.y);
+                    const float t = static_cast<float>(i) / Segments;
+                    const XMFLOAT2 current = Cubic(p0, p1, p2, p3, t);
                     DrawLine(previous, current, theme.routeGlowThickness,
-                        WithAlpha(color, 42), cmd);
+                        WithAlpha(color, 46), cmd);
                     DrawLine(previous, current, theme.routeThickness, color, cmd);
                     previous = current;
                 }
@@ -269,20 +249,10 @@ namespace renegade::studio
                 const auto* route = model_->FindRoute(exit.routeId);
                 if (route && !route->outcome.empty())
                 {
-                    const float t = 0.5f;
-                    const float u = 1.0f - t;
-                    const XMFLOAT2 mid(
-                        u * u * u * p0.x + 3.0f * u * u * t * p1.x +
-                            3.0f * u * t * t * p2.x + t * t * t * p3.x,
-                        u * u * u * p0.y + 3.0f * u * u * t * p1.y +
-                            3.0f * u * t * t * p2.y + t * t * t * p3.y);
-                    DrawText(
-                        Upper(route->outcome),
-                        mid.x,
-                        mid.y - theme.routeLabelOffset,
-                        theme.fontRouteLabel,
-                        color,
-                        cmd,
+                    const XMFLOAT2 middle = Cubic(p0, p1, p2, p3, 0.5f);
+                    DrawText(Upper(route->outcome), middle.x,
+                        middle.y - theme.routeLabelOffset,
+                        theme.fontRouteLabel, color, cmd,
                         wi::font::WIFALIGN_CENTER);
                 }
             }
@@ -292,11 +262,9 @@ namespace renegade::studio
         {
             if (!projection_.IsLoaded() || projection_.Cards().empty()) return;
             const auto& theme = StoryFlowVisualTheme::Get();
-            const float width = std::min(
-                theme.minimapWidth,
+            const float width = std::min(theme.minimapWidth,
                 std::max(150.0f, journeyViewport_.z * 0.28f));
-            const float height = std::min(
-                theme.minimapHeight,
+            const float height = std::min(theme.minimapHeight,
                 std::max(88.0f, journeyViewport_.w * 0.22f));
             const XMFLOAT4 panel(
                 journeyViewport_.x + journeyViewport_.z - width - theme.shellPadding,
@@ -358,57 +326,41 @@ namespace renegade::studio
             const float zoom = std::max(0.001f, layout_->journeyCanvas.zoom);
             const float visibleLeft = (-theme.shellPadding - layout_->journeyCanvas.panX) / zoom;
             const float visibleTop = (-theme.shellPadding - layout_->journeyCanvas.panY) / zoom;
-            const float visibleRight = visibleLeft + journeyViewport_.z / zoom;
-            const float visibleBottom = visibleTop + journeyViewport_.w / zoom;
             const XMFLOAT4 visible(
                 ox + (visibleLeft - minX) * scale,
                 oy + (visibleTop - minY) * scale,
-                (visibleRight - visibleLeft) * scale,
-                (visibleBottom - visibleTop) * scale);
+                journeyViewport_.z / zoom * scale,
+                journeyViewport_.w / zoom * scale);
             DrawOutline(visible, theme.selection, 1.0f, cmd);
         }
 
-        void RenderInspector(
-            const StoryFlowVisualTheme& theme,
-            const wi::graphics::CommandList cmd) const
+        void RenderJourneyInspector(const wi::graphics::CommandList cmd) const
         {
-            DrawRoundedRect(
-                inspectorBounds_.x,
-                inspectorBounds_.y,
-                inspectorBounds_.z,
-                inspectorBounds_.w,
-                0.0f,
-                theme.inspector,
-                cmd);
-            DrawLine(
-                XMFLOAT2(inspectorBounds_.x, inspectorBounds_.y),
+            const auto& theme = StoryFlowVisualTheme::Get();
+            DrawRoundedRect(inspectorBounds_.x, inspectorBounds_.y,
+                inspectorBounds_.z, inspectorBounds_.w, 0.0f,
+                theme.inspector, cmd);
+            DrawLine(XMFLOAT2(inspectorBounds_.x, inspectorBounds_.y),
                 XMFLOAT2(inspectorBounds_.x, inspectorBounds_.y + inspectorBounds_.w),
-                1.0f,
-                theme.border,
-                cmd);
+                1.0f, theme.border, cmd);
 
             const float x = inspectorBounds_.x + theme.shellPadding;
             const float width = std::max(1.0f,
                 inspectorBounds_.z - theme.shellPadding * 2.0f);
             float y = inspectorBounds_.y + 12.0f;
-
             DrawText("INSPECTOR", x, y, theme.fontInspectorTitle,
                 theme.textStrong, cmd);
             y += 28.0f;
 
             const auto* node = model_->FindNode(selectedNodeId_);
-            const auto* route = model_->FindRoute(selectedRouteId_);
             if (node)
             {
                 DrawDestinationHeader(*node, x, y, width, cmd);
                 y += 72.0f;
-
-                DrawSectionTitle("GENERAL", x, y, cmd);
-                y += 19.0f;
-                DrawKeyValue("Display Name", node->name, x, y, width, cmd);
-                y += 24.0f;
-                DrawKeyValue("Type", KindLabel(node->kind), x, y, width, cmd);
-                y += 24.0f;
+                DrawSection("GENERAL", x, y, cmd);
+                y += 21.0f;
+                DrawKeyValue("Display Name", node->name, x, y, width, cmd); y += 24.0f;
+                DrawKeyValue("Type", KindLabel(node->kind), x, y, width, cmd); y += 24.0f;
                 if (node->kind == bridge::FlowNodeKind::Level)
                 {
                     DrawKeyValue("Scene", Shorten(node->scenePathHint, 31), x, y, width, cmd);
@@ -420,112 +372,55 @@ namespace renegade::studio
                     y += 24.0f;
                 }
 
-                y += 8.0f;
-                DrawSectionTitle(
-                    layout_->activeView == bridge::StoryFlowViewMode::Journey
-                        ? "ACTIONS / EXITS  //  OPEN IN GRAPH"
-                        : "CONNECTIONS",
-                    x, y, cmd);
-                y += 21.0f;
-                const std::size_t maximum = std::min<std::size_t>(
+                y += 7.0f;
+                DrawSection("ACTIONS / EXITS  //  OPEN IN GRAPH", x, y, cmd);
+                y += 22.0f;
+                const std::size_t count = std::min<std::size_t>(
                     node->outgoingRouteIds.size(), 6);
-                for (std::size_t i = 0; i < maximum; ++i)
+                for (std::size_t i = 0; i < count; ++i)
                 {
-                    const auto* outgoing = model_->FindRoute(node->outgoingRouteIds[i]);
-                    if (!outgoing) continue;
-                    const auto* destination = model_->FindNode(outgoing->destinationNodeId);
-                    const wi::Color routeColor = RouteColorForRoute(*outgoing);
-                    DrawRoundedRect(x, y + 5.0f, 7.0f, 7.0f, 3.5f, routeColor, cmd);
-                    DrawText(
-                        Shorten(outgoing->outcome.empty() ? "DEFAULT" :
-                            Upper(outgoing->outcome), 15),
-                        x + 14.0f,
-                        y,
-                        theme.fontInspectorBody,
-                        theme.text,
-                        cmd);
-                    DrawText(
-                        "→  " + Shorten(destination ? destination->name :
-                            outgoing->destinationNodeId, 18),
-                        x + width,
-                        y,
-                        theme.fontInspectorBody,
-                        theme.muted,
-                        cmd,
+                    const auto* route = model_->FindRoute(node->outgoingRouteIds[i]);
+                    if (!route) continue;
+                    const auto* destination = model_->FindNode(route->destinationNodeId);
+                    const wi::Color routeColor = RouteColor(*route);
+                    DrawRoundedRect(x, y + 5.0f, 7.0f, 7.0f, 3.5f,
+                        routeColor, cmd);
+                    DrawText(Shorten(route->outcome.empty() ? "DEFAULT" :
+                        Upper(route->outcome), 15), x + 14.0f, y,
+                        theme.fontInspectorBody, theme.text, cmd);
+                    DrawText("→  " + Shorten(destination ? destination->name :
+                        route->destinationNodeId, 18), x + width, y,
+                        theme.fontInspectorBody, theme.muted, cmd,
                         wi::font::WIFALIGN_RIGHT);
                     y += 22.0f;
                 }
-                if (maximum == 0)
+                if (count == 0)
                 {
                     DrawText("No exits", x, y, theme.fontInspectorBody,
                         theme.muted, cmd);
-                    y += 22.0f;
                 }
-            }
-            else if (route)
-            {
-                DrawSectionTitle("ROUTE", x, y, cmd);
-                y += 22.0f;
-                const auto* source = model_->FindNode(route->sourceNodeId);
-                const auto* destination = model_->FindNode(route->destinationNodeId);
-                DrawKeyValue("From", source ? source->name : route->sourceNodeId,
-                    x, y, width, cmd);
-                y += 24.0f;
-                DrawKeyValue("Outcome", route->outcome, x, y, width, cmd);
-                y += 24.0f;
-                DrawKeyValue("To", destination ? destination->name : route->destinationNodeId,
-                    x, y, width, cmd);
-                y += 24.0f;
-                DrawKeyValue("Priority", std::to_string(route->priority),
-                    x, y, width, cmd);
-                y += 24.0f;
-                DrawKeyValue("Conditions", std::to_string(route->conditionCount),
-                    x, y, width, cmd);
-                y += 24.0f;
             }
             else
             {
-                DrawText(
-                    layout_->activeView == bridge::StoryFlowViewMode::Journey
-                        ? "Select a Journey card"
-                        : "Select a Graph node or route",
-                    x,
-                    y,
-                    theme.fontInspectorBody,
-                    theme.muted,
-                    cmd);
-                y += 24.0f;
+                DrawText("Select a Journey card", x, y,
+                    theme.fontInspectorBody, theme.muted, cmd);
             }
 
-            const float validationTop = std::min(
-                inspectorBounds_.y + inspectorBounds_.w - 118.0f,
-                std::max(y + 14.0f, inspectorBounds_.y + inspectorBounds_.w * 0.66f));
-            DrawSectionTitle("VALIDATION", x, validationTop, cmd);
+            const float validationY = inspectorBounds_.y + inspectorBounds_.w - 86.0f;
+            DrawSection("VALIDATION", x, validationY, cmd);
             const bool valid = model_->Diagnostics().empty();
-            DrawRoundedRect(
-                x,
-                validationTop + 25.0f,
-                8.0f,
-                8.0f,
-                4.0f,
-                valid ? theme.success : theme.warning,
-                cmd);
-            DrawText(
-                valid ? "Valid" :
-                    (std::to_string(model_->Diagnostics().size()) + " issue(s)"),
-                x + 15.0f,
-                validationTop + 19.0f,
+            DrawRoundedRect(x, validationY + 27.0f, 8.0f, 8.0f, 4.0f,
+                valid ? theme.success : theme.warning, cmd);
+            DrawText(valid ? "Valid" :
+                (std::to_string(model_->Diagnostics().size()) + " issue(s)"),
+                x + 15.0f, validationY + 21.0f,
                 theme.fontInspectorBody,
-                valid ? theme.success : theme.warning,
-                cmd);
-            DrawText(
-                session_ && session_->IsDirty() ? "UNSAVED CHANGES" : "SAVED",
-                x + width,
-                validationTop + 19.0f,
+                valid ? theme.success : theme.warning, cmd);
+            DrawText(session_ && session_->IsDirty() ? "UNSAVED" : "SAVED",
+                x + width, validationY + 21.0f,
                 theme.fontInspectorBody,
                 session_ && session_->IsDirty() ? theme.warning : theme.success,
-                cmd,
-                wi::font::WIFALIGN_RIGHT);
+                cmd, wi::font::WIFALIGN_RIGHT);
         }
 
         void DrawDestinationHeader(
@@ -538,56 +433,28 @@ namespace renegade::studio
             const auto& theme = StoryFlowVisualTheme::Get();
             DrawPanel(XMFLOAT4(x, y, width, 60.0f), theme.panel,
                 theme.borderSoft, 4.0f, cmd);
-            DrawRoundedRect(
-                x + 10.0f,
-                y + 12.0f,
-                34.0f,
-                34.0f,
-                4.0f,
-                WithAlpha(DestinationColor(node.kind), 72),
-                cmd);
+            DrawRoundedRect(x + 10.0f, y + 12.0f, 34.0f, 34.0f, 4.0f,
+                WithAlpha(DestinationColor(node.kind), 72), cmd);
             DrawOutline(XMFLOAT4(x + 10.0f, y + 12.0f, 34.0f, 34.0f),
                 DestinationColor(node.kind), 1.0f, cmd);
-            DrawText(
-                Shorten(node.name, 25),
-                x + 55.0f,
-                y + 10.0f,
-                theme.fontCardTitle,
-                theme.textStrong,
-                cmd);
-            DrawText(
-                KindLabel(node.kind),
-                x + 55.0f,
-                y + 31.0f,
-                theme.fontInspectorBody,
-                theme.muted,
-                cmd);
+            DrawText(Shorten(node.name, 25), x + 55.0f, y + 10.0f,
+                theme.fontCardTitle, theme.textStrong, cmd);
+            DrawText(KindLabel(node.kind), x + 55.0f, y + 31.0f,
+                theme.fontInspectorBody, theme.muted, cmd);
         }
 
-        void DrawSectionTitle(
-            const std::string& title,
-            const float x,
-            const float y,
+        void DrawSection(const std::string& title, const float x, const float y,
             const wi::graphics::CommandList cmd) const
         {
             const auto& theme = StoryFlowVisualTheme::Get();
-            DrawText(title, x, y, theme.fontInspectorBody,
-                theme.textStrong, cmd);
-            DrawLine(
-                XMFLOAT2(x, y + 16.0f),
+            DrawText(title, x, y, theme.fontInspectorBody, theme.textStrong, cmd);
+            DrawLine(XMFLOAT2(x, y + 16.0f),
                 XMFLOAT2(inspectorBounds_.x + inspectorBounds_.z - theme.shellPadding,
-                    y + 16.0f),
-                1.0f,
-                theme.borderSoft,
-                cmd);
+                    y + 16.0f), 1.0f, theme.borderSoft, cmd);
         }
 
-        void DrawKeyValue(
-            const std::string& key,
-            const std::string& value,
-            const float x,
-            const float y,
-            const float width,
+        void DrawKeyValue(const std::string& key, const std::string& value,
+            const float x, const float y, const float width,
             const wi::graphics::CommandList cmd) const
         {
             const auto& theme = StoryFlowVisualTheme::Get();
@@ -595,20 +462,6 @@ namespace renegade::studio
             DrawText(Shorten(value, 28), x + width, y,
                 theme.fontInspectorBody, theme.text, cmd,
                 wi::font::WIFALIGN_RIGHT);
-        }
-
-        [[nodiscard]] wi::Color RouteColorForRoute(
-            const bridge::StoryFlowRouteView& route) const
-        {
-            bridge::StoryFlowJourneyExit temporary;
-            temporary.routeId = route.id;
-            temporary.primaryContinuation = false;
-            for (const auto& exit : projection_.Exits())
-            {
-                if (exit.routeId == route.id)
-                    return RouteColor(exit);
-            }
-            return StoryFlowVisualTheme::Get().routeOther;
         }
 
         [[nodiscard]] wi::Color DestinationColor(
@@ -621,17 +474,23 @@ namespace renegade::studio
             case bridge::FlowNodeKind::Level: return theme.level;
             case bridge::FlowNodeKind::Screen: return theme.screen;
             case bridge::FlowNodeKind::CompleteGame: return theme.success;
-            case bridge::FlowNodeKind::ReturnToMainMenu: return theme.routeOther;
             case bridge::FlowNodeKind::Quit: return theme.terminal;
             default: return theme.routeOther;
             }
         }
 
-        static void DrawLine(
-            const XMFLOAT2 a,
-            const XMFLOAT2 b,
-            const float thickness,
-            const wi::Color color,
+        [[nodiscard]] static XMFLOAT2 Cubic(const XMFLOAT2 p0,
+            const XMFLOAT2 p1, const XMFLOAT2 p2, const XMFLOAT2 p3,
+            const float t) noexcept
+        {
+            const float u = 1.0f - t;
+            return XMFLOAT2(
+                u*u*u*p0.x + 3.0f*u*u*t*p1.x + 3.0f*u*t*t*p2.x + t*t*t*p3.x,
+                u*u*u*p0.y + 3.0f*u*u*t*p1.y + 3.0f*u*t*t*p2.y + t*t*t*p3.y);
+        }
+
+        static void DrawLine(const XMFLOAT2 a, const XMFLOAT2 b,
+            const float thickness, const wi::Color color,
             const wi::graphics::CommandList cmd)
         {
             const float dx = b.x - a.x;
@@ -648,14 +507,9 @@ namespace renegade::studio
             wi::image::Draw(nullptr, params, cmd);
         }
 
-        static void DrawRoundedRect(
-            const float x,
-            const float y,
-            const float width,
-            const float height,
-            const float radius,
-            const wi::Color color,
-            const wi::graphics::CommandList cmd)
+        static void DrawRoundedRect(const float x, const float y,
+            const float width, const float height, const float radius,
+            const wi::Color color, const wi::graphics::CommandList cmd)
         {
             if (width <= 0.0f || height <= 0.0f) return;
             wi::image::Params params(x, y, width, height, color);
@@ -672,11 +526,8 @@ namespace renegade::studio
             wi::image::Draw(nullptr, params, cmd);
         }
 
-        static void DrawOutline(
-            const XMFLOAT4 bounds,
-            const wi::Color color,
-            const float thickness,
-            const wi::graphics::CommandList cmd)
+        static void DrawOutline(const XMFLOAT4 bounds, const wi::Color color,
+            const float thickness, const wi::graphics::CommandList cmd)
         {
             DrawRoundedRect(bounds.x, bounds.y, bounds.z, thickness, 0.0f, color, cmd);
             DrawRoundedRect(bounds.x, bounds.y + bounds.w - thickness,
@@ -686,11 +537,8 @@ namespace renegade::studio
                 thickness, bounds.w, 0.0f, color, cmd);
         }
 
-        static void DrawPanel(
-            const XMFLOAT4 bounds,
-            const wi::Color fill,
-            const wi::Color border,
-            const float radius,
+        static void DrawPanel(const XMFLOAT4 bounds, const wi::Color fill,
+            const wi::Color border, const float radius,
             const wi::graphics::CommandList cmd)
         {
             DrawRoundedRect(bounds.x, bounds.y, bounds.z, bounds.w, radius, border, cmd);
@@ -700,24 +548,14 @@ namespace renegade::studio
                 std::max(0.0f, radius - 1.0f), fill, cmd);
         }
 
-        static void DrawText(
-            const std::string& text,
-            const float x,
-            const float y,
-            const int size,
-            const wi::Color color,
+        static void DrawText(const std::string& text, const float x,
+            const float y, const int size, const wi::Color color,
             const wi::graphics::CommandList cmd,
             const wi::font::Alignment align = wi::font::WIFALIGN_LEFT)
         {
             const auto& theme = StoryFlowVisualTheme::Get();
-            wi::font::Params params(
-                x,
-                y,
-                size,
-                align,
-                wi::font::WIFALIGN_TOP,
-                color,
-                wi::Color::Transparent());
+            wi::font::Params params(x, y, size, align,
+                wi::font::WIFALIGN_TOP, color, wi::Color::Transparent());
             params.style = theme.fontStyle;
             params.spacingX = theme.fontTracking;
             params.bolden = theme.fontBolden;
@@ -725,10 +563,17 @@ namespace renegade::studio
         }
 
         [[nodiscard]] static wi::Color WithAlpha(
-            const wi::Color color,
-            const std::uint8_t alpha) noexcept
+            const wi::Color color, const std::uint8_t alpha) noexcept
         {
             return wi::Color(color.getR(), color.getG(), color.getB(), alpha);
+        }
+
+        [[nodiscard]] static bool ContainsAny(const std::string& value,
+            const std::initializer_list<const char*> needles)
+        {
+            for (const char* needle : needles)
+                if (value.find(needle) != std::string::npos) return true;
+            return false;
         }
 
         [[nodiscard]] static const char* KindLabel(
@@ -746,18 +591,21 @@ namespace renegade::studio
             }
         }
 
-        [[nodiscard]] static std::string Upper(std::string value)
+        [[nodiscard]] static std::string Lower(std::string value)
         {
             std::transform(value.begin(), value.end(), value.begin(),
-                [](const unsigned char c)
-                {
-                    return static_cast<char>(std::toupper(c));
-                });
+                [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
             return value;
         }
 
-        [[nodiscard]] static std::string Shorten(
-            std::string value,
+        [[nodiscard]] static std::string Upper(std::string value)
+        {
+            std::transform(value.begin(), value.end(), value.begin(),
+                [](const unsigned char c) { return static_cast<char>(std::toupper(c)); });
+            return value;
+        }
+
+        [[nodiscard]] static std::string Shorten(std::string value,
             const std::size_t maximum)
         {
             if (value.size() <= maximum) return value;
@@ -772,7 +620,6 @@ namespace renegade::studio
         bridge::StoryFlowLayoutDocument* layout_ = nullptr;
         bridge::StoryFlowJourneyModel projection_;
         bridge::StableId selectedNodeId_;
-        bridge::StableId selectedRouteId_;
         XMFLOAT4 journeyViewport_ = {};
         XMFLOAT4 inspectorBounds_ = {};
         std::size_t fingerprint_ = 0;
