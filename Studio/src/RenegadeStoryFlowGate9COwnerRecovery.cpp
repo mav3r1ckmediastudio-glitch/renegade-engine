@@ -137,81 +137,43 @@ namespace renegade::studio
 
     void RenegadeStoryFlowGraphEditor::FitToContent()
     {
-        if (!initialized_ || !editorContext_ || !layout_ || !workspace_ ||
-            nodes_.empty())
-        {
-            return;
-        }
-
-        ImNodes::SetCurrentContext(imnodesContext_);
-        ImNodes::EditorContextSet(editorContext_);
-
-        bool haveBounds = false;
-        float minX = 0.0f;
-        float minY = 0.0f;
-        float maxX = 0.0f;
-        float maxY = 0.0f;
-        for (const auto& node : nodes_)
-        {
-            const ImVec2 position = ImNodes::GetNodeGridSpacePos(node.nodeId);
-            const ImVec2 dimensions = ImNodes::GetNodeDimensions(node.nodeId);
-            if (!haveBounds)
-            {
-                minX = position.x;
-                minY = position.y;
-                maxX = position.x + dimensions.x;
-                maxY = position.y + dimensions.y;
-                haveBounds = true;
-            }
-            else
-            {
-                minX = std::min(minX, position.x);
-                minY = std::min(minY, position.y);
-                maxX = std::max(maxX, position.x + dimensions.x);
-                maxY = std::max(maxY, position.y + dimensions.y);
-            }
-        }
-        if (!haveBounds)
+        if (!layout_ || !workspace_ || !model_ || !model_->IsLoaded())
             return;
 
-        const ImVec2 panning(
-            viewport_.z * 0.5f - (minX + maxX) * 0.5f,
-            viewport_.w * 0.5f - (minY + maxY) * 0.5f);
-        ImNodes::EditorContextResetPanning(panning);
-        layout_->canvas.panX = panning.x;
-        layout_->canvas.panY = panning.y;
-        workspace_->NotifyLayoutChanged();
+        // Native Graph navigation must never depend on transient ImNodes node
+        // objects being alive. The shared Story Flow workspace owns the durable
+        // canvas layout and already has view-aware fit math, so update that
+        // authority first and copy only the resulting pan into ImNodes.
+        workspace_->FitToContent();
+
+        if (initialized_ && imnodesContext_ && editorContext_)
+        {
+            ImNodes::SetCurrentContext(imnodesContext_);
+            ImNodes::EditorContextSet(editorContext_);
+            ImNodes::EditorContextResetPanning(
+                ImVec2(layout_->canvas.panX, layout_->canvas.panY));
+        }
+
         SetStatus("GRAPH FIT // CONTENT CENTERED");
     }
 
     void RenegadeStoryFlowGraphEditor::CenterOnGameStart()
     {
-        if (!model_ || !workspace_)
+        if (!model_ || !layout_ || !workspace_ || !model_->IsLoaded())
             return;
 
         const bridge::StableId startId = model_->GameStartNodeId();
         workspace_->SelectNode(startId);
+        workspace_->CenterOnGameStart();
 
-        if (!initialized_ || !editorContext_)
-            return;
-        const auto found = nodeIndexByStableId_.find(startId);
-        if (found == nodeIndexByStableId_.end())
-            return;
-
-        ImNodes::SetCurrentContext(imnodesContext_);
-        ImNodes::EditorContextSet(editorContext_);
-        const int editorNodeId = nodes_[found->second].nodeId;
-        ImNodes::ClearLinkSelection();
-        ImNodes::ClearNodeSelection();
-        ImNodes::SelectNode(editorNodeId);
-        ImNodes::EditorContextMoveToNode(editorNodeId);
-        if (layout_)
+        if (initialized_ && imnodesContext_ && editorContext_)
         {
-            const ImVec2 panning = ImNodes::EditorContextGetPanning();
-            layout_->canvas.panX = panning.x;
-            layout_->canvas.panY = panning.y;
-            workspace_->NotifyLayoutChanged();
+            ImNodes::SetCurrentContext(imnodesContext_);
+            ImNodes::EditorContextSet(editorContext_);
+            ImNodes::EditorContextResetPanning(
+                ImVec2(layout_->canvas.panX, layout_->canvas.panY));
         }
+
         SetStatus("GRAPH START // GAME START CENTERED");
     }
 
@@ -253,8 +215,6 @@ namespace renegade::studio
             return false;
         }
 
-        // Journey uses its own card layout; Graph uses ImNodes. Search chooses
-        // the shared semantic node, then lets the active presentation center it.
         if (layout_ && layout_->activeView == bridge::StoryFlowViewMode::Journey)
         {
             workspace_->SelectAndFocusNode(match->id);
@@ -262,30 +222,16 @@ namespace renegade::studio
             return true;
         }
 
-        workspace_->SelectNode(match->id);
-        if (!initialized_ || !editorContext_)
-        {
-            SetStatus("GRAPH FIND // " + match->name);
-            return true;
-        }
-
-        const auto found = nodeIndexByStableId_.find(match->id);
-        if (found != nodeIndexByStableId_.end())
+        // Graph focus follows the same durable-layout rule as FIT and START.
+        // SelectAndFocusNode updates the authoritative Graph canvas even when a
+        // native control has temporarily forced ImNodes to rebuild its context.
+        workspace_->SelectAndFocusNode(match->id);
+        if (layout_ && initialized_ && imnodesContext_ && editorContext_)
         {
             ImNodes::SetCurrentContext(imnodesContext_);
             ImNodes::EditorContextSet(editorContext_);
-            const int editorNodeId = nodes_[found->second].nodeId;
-            ImNodes::ClearLinkSelection();
-            ImNodes::ClearNodeSelection();
-            ImNodes::SelectNode(editorNodeId);
-            ImNodes::EditorContextMoveToNode(editorNodeId);
-            if (layout_)
-            {
-                const ImVec2 panning = ImNodes::EditorContextGetPanning();
-                layout_->canvas.panX = panning.x;
-                layout_->canvas.panY = panning.y;
-                workspace_->NotifyLayoutChanged();
-            }
+            ImNodes::EditorContextResetPanning(
+                ImVec2(layout_->canvas.panX, layout_->canvas.panY));
         }
         SetStatus("GRAPH FIND // " + match->name);
         return true;
@@ -429,9 +375,9 @@ namespace renegade::studio
         ImNodes::SetCurrentContext(imnodesContext_);
         ImNodes::EditorContextSet(editorContext_);
 
-        // Governed content creation and Journey -> Graph handoff select through
-        // the shared workspace. Mirror that selection into ImNodes and center it
-        // once; normal ImNodes selections already match and are left untouched.
+        // Host selection and focus are already represented by the authoritative
+        // Story Flow layout. Reconciliation mirrors selection into ImNodes only;
+        // it must not independently move the canvas and override FIT/START/FIND.
         const bridge::StableId& hostSelectedNodeId = workspace_->SelectedNodeId();
         if (!hostSelectedNodeId.empty())
         {
@@ -444,16 +390,12 @@ namespace renegade::studio
                     ImNodes::ClearLinkSelection();
                     ImNodes::ClearNodeSelection();
                     ImNodes::SelectNode(editorNodeId);
-                    ImNodes::EditorContextMoveToNode(editorNodeId);
-
                     if (layout_)
                     {
-                        const ImVec2 panning = ImNodes::EditorContextGetPanning();
-                        layout_->canvas.panX = panning.x;
-                        layout_->canvas.panY = panning.y;
+                        ImNodes::EditorContextResetPanning(
+                            ImVec2(layout_->canvas.panX, layout_->canvas.panY));
                     }
-                    workspace_->NotifyLayoutChanged();
-                    SetStatus("GRAPH FOCUS // SELECTED NODE CENTERED");
+                    SetStatus("GRAPH SELECTION // HOST NODE SYNCHRONIZED");
                     return;
                 }
             }
