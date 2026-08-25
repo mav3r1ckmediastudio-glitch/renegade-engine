@@ -234,14 +234,7 @@ namespace renegade::studio
 
         if (session_ && model_ && layout_ && session_->IsLoaded() && model_->IsLoaded())
         {
-            // Journey is the locked project-home surface for this recovery.
-            // Graph remains synchronized and intact, but never steals the
-            // default workspace from a persisted legacy view flag.
             layout_->activeView = bridge::StoryFlowViewMode::Journey;
-            // Layouts written by the rejected legacy canvas allowed Journey to
-            // reopen as an unreadable 20-35% strip. Gate 9D uses bounded
-            // semantic zoom: migrate that obsolete state once, then preserve
-            // all valid modern Journey navigation normally.
             if (layout_->journeyCanvas.zoom < MinZoom ||
                 layout_->journeyCanvas.zoom > MaxZoom)
             {
@@ -534,7 +527,6 @@ namespace renegade::studio
     bridge::StableId RenegadeStoryFlowWorkspace::HitTestRoute(
         const XMFLOAT4&) const
     {
-        // Graph route hit-testing is owned exclusively by ImNodes from Gate 9D.
         return {};
     }
 
@@ -593,10 +585,6 @@ namespace renegade::studio
         const bridge::StoryFlowViewMode view)
     {
         if (!layout_ || layout_->activeView == view) return;
-
-        // If the creator leaves Graph while a wire is selected, preserve useful
-        // context by selecting the route's source card. Journey edits that
-        // route's destination in the Inspector without exposing topology wires.
         if (view == bridge::StoryFlowViewMode::Journey && !selectedRouteId_.empty())
         {
             const auto* route = FindDocumentRoute(selectedRouteId_);
@@ -605,7 +593,6 @@ namespace renegade::studio
             RefreshInspectorControls();
             if (selectionChanged_) selectionChanged_(selectedNodeId_);
         }
-
         connectionSourceNodeId_.clear();
         reconnectRouteId_.clear();
         layout_->activeView = view;
@@ -671,7 +658,7 @@ namespace renegade::studio
                 journeyModel_.Tracks().begin(), journeyModel_.Tracks().end(),
                 [&](const bridge::StoryFlowJourneyTrack& track)
                 {
-                    return item.index == it->first;
+                    return track.index == it->first;
                 });
             if (!exists)
                 it = journeyLaneObjects_.erase(it);
@@ -701,7 +688,6 @@ namespace renegade::studio
         catch (...)
         {
         }
-
         switch (node.kind)
         {
         case bridge::FlowNodeKind::GameStart: return "PROJECT ENTRY";
@@ -717,14 +703,12 @@ namespace renegade::studio
         journeyThumbnailResources_.clear();
         if (projectRoot_.empty() || !model_)
             return;
-
         for (const auto& card : journeyModel_.Cards())
         {
             const auto* node = model_->FindNode(card.nodeId);
             if (!node || (node->kind != bridge::FlowNodeKind::Level &&
                     node->kind != bridge::FlowNodeKind::Screen))
                 continue;
-
             std::string relativePath;
             std::string resolvedPath;
             std::string error;
@@ -779,7 +763,6 @@ namespace renegade::studio
                 }
             }
             if (resolvedPath.empty()) continue;
-
             wi::Resource resource = wi::resourcemanager::Load(resolvedPath);
             if (!resource.IsValid())
             {
@@ -799,12 +782,8 @@ namespace renegade::studio
     {
         if (!model_ || !layout_ ||
             layout_->activeView != bridge::StoryFlowViewMode::Journey)
-        {
             return;
-        }
-
         const wi::graphics::Rect journeyClip = JourneyCanvasScissorRect();
-
         std::size_t visibleLane = 0;
         for (const auto& track : journeyModel_.Tracks())
         {
@@ -816,7 +795,6 @@ namespace renegade::studio
                 laneIt->second->SetVisible(false);
                 continue;
             }
-
             float minX = std::numeric_limits<float>::max();
             float minY = std::numeric_limits<float>::max();
             float maxX = std::numeric_limits<float>::lowest();
@@ -833,7 +811,6 @@ namespace renegade::studio
             }
             if (minX > maxX || minY > maxY)
                 continue;
-
             auto& lane = *laneIt->second;
             JourneyBranchRole role = track.mainTrack
                 ? JourneyBranchRole::Main
@@ -876,7 +853,6 @@ namespace renegade::studio
             lane.Update(canvas, dt);
             lane.scissorRect = journeyClip;
         }
-
         for (const auto& card : journeyModel_.Cards())
         {
             const auto* node = model_->FindNode(card.nodeId);
@@ -890,7 +866,6 @@ namespace renegade::studio
                 objectIt->second->SetVisible(false);
                 continue;
             }
-
             bool hasError = false;
             bool hasWarning = !card.reachableFromStart;
             for (const auto& diagnostic : model_->Diagnostics())
@@ -902,12 +877,10 @@ namespace renegade::studio
                 else if (diagnostic.severity == bridge::StoryFlowDiagnosticSeverity::Warning)
                     hasWarning = true;
             }
-
             wi::Resource thumbnail;
             const auto thumbnailIt = journeyThumbnailResources_.find(node->id);
             if (thumbnailIt != journeyThumbnailResources_.end())
                 thumbnail = thumbnailIt->second;
-
             auto& object = *objectIt->second;
             object.SetBounds(JourneyCardScreenBounds(card));
             object.SetPresentation(
@@ -946,14 +919,12 @@ namespace renegade::studio
             SetStatus("THUMBNAIL REJECTED // PROJECT RESOURCE ROOT UNAVAILABLE");
             return;
         }
-
         SelectNode(nodeId);
         previousClickedNodeId_.clear();
         secondsSincePreviousNodeClick_ = 1000.0f;
         const std::string expectedRoot = projectRoot_;
         const bridge::StableId expectedFlowId =
             session_->Document().envelope.documentId;
-
         wi::helper::FileDialogParams params;
         params.type = wi::helper::FileDialogParams::OPEN;
         params.description = "Choose Journey Level Thumbnail";
@@ -963,8 +934,7 @@ namespace renegade::studio
             [this, nodeId, expectedRoot, expectedFlowId](
                 const std::string& selectedPath)
             {
-                if (selectedPath.empty())
-                    return;
+                if (selectedPath.empty()) return;
                 if (!session_ || !session_->IsLoaded() || !model_ ||
                     projectRoot_ != expectedRoot ||
                     session_->Document().envelope.documentId != expectedFlowId ||
@@ -973,7 +943,6 @@ namespace renegade::studio
                     SetStatus("THUMBNAIL CANCELLED // STORY FLOW CONTEXT CHANGED");
                     return;
                 }
-
                 const auto imported = journeyThumbnailService_.Import(
                     expectedRoot, nodeId, selectedPath);
                 if (!imported.succeeded)
@@ -981,11 +950,9 @@ namespace renegade::studio
                     SetStatus("THUMBNAIL FAILED // " + imported.message);
                     return;
                 }
-
                 const auto old = journeyThumbnailResources_.find(nodeId);
                 if (old != journeyThumbnailResources_.end() && old->second.IsValid())
                     old->second.SetOutdated();
-
                 wi::Resource resource = wi::resourcemanager::Load(imported.resolvedPath);
                 if (!resource.IsValid())
                 {
@@ -1012,12 +979,9 @@ namespace renegade::studio
             previousClickedNodeId_ == node.id,
             secondsSincePreviousNodeClick_,
             distance);
-
         previousClickedNodeId_ = node.id;
         previousClickPointer_ = XMFLOAT2(pointer.x, pointer.y);
-        secondsSincePreviousNodeClick_ = activate
-            ? 1000.0f
-            : 0.0f;
+        secondsSincePreviousNodeClick_ = activate ? 1000.0f : 0.0f;
         if (activate && nodeActivated_)
             nodeActivated_(node.id);
     }
@@ -1092,16 +1056,11 @@ namespace renegade::studio
     void RenegadeStoryFlowWorkspace::AdjustJourneyZoom(const float factor)
     {
         if (!layout_ || layout_->activeView != bridge::StoryFlowViewMode::Journey ||
-            factor <= 0.0f)
-        {
-            return;
-        }
+            factor <= 0.0f) return;
         auto& canvas = layout_->journeyCanvas;
         const float oldZoom = std::clamp(canvas.zoom, MinZoom, MaxZoom);
         const float newZoom = std::clamp(oldZoom * factor, MinZoom, MaxZoom);
-        if (std::abs(newZoom - oldZoom) < 0.0001f)
-            return;
-
+        if (std::abs(newZoom - oldZoom) < 0.0001f) return;
         const float viewportCenterX = GraphWidth() * 0.5f;
         const float viewportCenterY = (height_ - HeaderHeight) * 0.5f;
         const float canvasCenterX =
@@ -1193,8 +1152,7 @@ namespace renegade::studio
             const auto* offset = FindJourneyLayout(card->nodeId);
             x = static_cast<float>(card->columnIndex) * JourneyColumnSpacing +
                 (offset ? offset->offsetX : 0.0f);
-            y = JourneyTrackTop +
-                (offset ? offset->offsetY : 0.0f);
+            y = JourneyTrackTop + (offset ? offset->offsetY : 0.0f);
             width = JourneyCardWidth;
             height = JourneyCardHeight;
         }
@@ -1263,40 +1221,33 @@ namespace renegade::studio
         saveButton_.SetText("SAVE");
         saveButton_.SetTooltip("Transactionally save the authoritative Story Flow document.");
         saveButton_.OnClick([this](const wi::gui::EventArgs&) { SaveFlow(); });
-
         undoButton_.Create("Story Flow Undo");
         undoButton_.SetText("UNDO");
         undoButton_.SetTooltip("Undo the previous Story Flow semantic edit.");
         undoButton_.OnClick([this](const wi::gui::EventArgs&) { UndoFlow(); });
-
         redoButton_.Create("Story Flow Redo");
         redoButton_.SetText("REDO");
         redoButton_.SetTooltip("Redo the next Story Flow semantic edit.");
         redoButton_.OnClick([this](const wi::gui::EventArgs&) { RedoFlow(); });
-
         connectButton_.Create("Story Flow Connect");
         connectButton_.SetText("CONNECT");
         connectButton_.SetVisible(false);
         connectButton_.SetEnabled(false);
-
         nodeNameInput_.Create("Story Flow Node Name");
         nodeNameInput_.SetDescription("DISPLAY NAME  ");
         nodeNameInput_.SetPlaceholder("Destination name...");
         nodeNameInput_.SetRenderTextSize(12);
         nodeNameInput_.SetCancelInputEnabled(false);
         nodeNameInput_.OnInputAccepted([this](const wi::gui::EventArgs&) { ApplySelectedNode(); });
-
         applyNodeButton_.Create("Story Flow Apply Node");
         applyNodeButton_.SetText("APPLY NAME");
         applyNodeButton_.SetRenderTextSize(11);
         applyNodeButton_.OnClick([this](const wi::gui::EventArgs&) { ApplySelectedNode(); });
-
         deleteNodeButton_.Create("Story Flow Delete Node");
         deleteNodeButton_.SetText("DELETE NODE");
         deleteNodeButton_.SetRenderTextSize(11);
         deleteNodeButton_.SetTooltip("Delete this Graph node and its connected routes as one semantic edit.");
         deleteNodeButton_.OnClick([this](const wi::gui::EventArgs&) { DeleteSelectedNode(); });
-
         openDestinationButton_.Create("Story Flow Open Selected Destination");
         openDestinationButton_.SetText("OPEN EDITOR");
         openDestinationButton_.SetRenderTextSize(11);
@@ -1307,7 +1258,6 @@ namespace renegade::studio
             if (nodeActivated_ && !selectedNodeId_.empty())
                 nodeActivated_(selectedNodeId_);
         });
-
         addJourneyActionButton_.Create("Story Flow Add Journey Action");
         addJourneyActionButton_.SetText("+ ADD ACTION");
         addJourneyActionButton_.SetRenderTextSize(11);
@@ -1317,7 +1267,6 @@ namespace renegade::studio
         {
             pendingAddJourneyAction_ = true;
         });
-
         for (std::size_t index = 0;
             index < journeyExitDestinationCombos_.size(); ++index)
         {
@@ -1334,41 +1283,34 @@ namespace renegade::studio
                     static_cast<std::size_t>(args.userdata);
             });
         }
-
         routeOutcomeInput_.Create("Story Flow Route Outcome");
         routeOutcomeInput_.SetDescription("OUTCOME  ");
         routeOutcomeInput_.SetPlaceholder("next / failed / new_game...");
         routeOutcomeInput_.SetRenderTextSize(11);
         routeOutcomeInput_.SetCancelInputEnabled(false);
-
         routeEntryInput_.Create("Story Flow Route Player Entry");
         routeEntryInput_.SetDescription("ENTRY  ");
         routeEntryInput_.SetPlaceholder("player_entry");
         routeEntryInput_.SetRenderTextSize(11);
         routeEntryInput_.SetCancelInputEnabled(false);
-
         routePriorityInput_.Create("Story Flow Route Priority");
         routePriorityInput_.SetDescription("PRIORITY  ");
         routePriorityInput_.SetPlaceholder("0");
         routePriorityInput_.SetRenderTextSize(11);
         routePriorityInput_.SetCancelInputEnabled(false);
         routePriorityInput_.OnInputAccepted([this](const wi::gui::EventArgs&) { ApplySelectedRoute(); });
-
         applyRouteButton_.Create("Story Flow Apply Route");
         applyRouteButton_.SetText("APPLY ROUTE");
         applyRouteButton_.SetRenderTextSize(11);
         applyRouteButton_.OnClick([this](const wi::gui::EventArgs&) { ApplySelectedRoute(); });
-
         reconnectRouteButton_.Create("Story Flow Reconnect Route");
         reconnectRouteButton_.SetText("RECONNECT");
         reconnectRouteButton_.SetVisible(false);
         reconnectRouteButton_.SetEnabled(false);
-
         deleteRouteButton_.Create("Story Flow Delete Route");
         deleteRouteButton_.SetText("DELETE ROUTE");
         deleteRouteButton_.SetRenderTextSize(11);
         deleteRouteButton_.OnClick([this](const wi::gui::EventArgs&) { DeleteSelectedRoute(); });
-
         addCompleteButton_.Create("Story Flow Add Complete Game");
         addCompleteButton_.SetText("+ COMPLETE");
         addCompleteButton_.SetRenderTextSize(11);
@@ -1376,7 +1318,6 @@ namespace renegade::studio
         {
             AddTerminalNode(bridge::FlowNodeKind::CompleteGame, "Complete Game");
         });
-
         addReturnButton_.Create("Story Flow Add Return To Menu");
         addReturnButton_.SetText("+ RETURN MENU");
         addReturnButton_.SetRenderTextSize(11);
@@ -1384,7 +1325,6 @@ namespace renegade::studio
         {
             AddTerminalNode(bridge::FlowNodeKind::ReturnToMainMenu, "Return To Main Menu");
         });
-
         addQuitButton_.Create("Story Flow Add Quit");
         addQuitButton_.SetText("+ QUIT");
         addQuitButton_.SetRenderTextSize(11);
@@ -1392,7 +1332,6 @@ namespace renegade::studio
         {
             AddTerminalNode(bridge::FlowNodeKind::Quit, "Quit");
         });
-
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&saveButton_),
             static_cast<wi::gui::Widget*>(&undoButton_),
@@ -1437,7 +1376,6 @@ namespace renegade::studio
         headerButton(redoButton_, 56.0f);
         headerButton(saveButton_, 56.0f);
         headerButton(connectButton_, 78.0f);
-
         const float inspectorX = translation.x + GraphWidth() + 14.0f;
         const float inspectorWidth = std::max(90.0f, width_ - GraphWidth() - 28.0f);
         const float fieldWidth = inspectorWidth;
@@ -1454,7 +1392,6 @@ namespace renegade::studio
         const float routeY0 = journeyView
             ? generalY + 22.0f
             : translation.y + 350.0f;
-
         nodeNameInput_.SetPos(XMFLOAT2(inspectorX, nodeY0));
         nodeNameInput_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
         applyNodeButton_.SetPos(XMFLOAT2(inspectorX, nodeY0 + 38.0f));
@@ -1465,13 +1402,11 @@ namespace renegade::studio
             inspectorX, translation.y + height_ -
                 (height_ >= 850.0f ? 167.0f : 55.0f)));
         openDestinationButton_.SetSize(XMFLOAT2(fieldWidth, 34.0f));
-
         constexpr float addActionWidth = 110.0f;
         addJourneyActionButton_.SetPos(XMFLOAT2(
             inspectorX + std::max(0.0f, fieldWidth - addActionWidth),
             generalY + 108.0f));
         addJourneyActionButton_.SetSize(XMFLOAT2(addActionWidth, 27.0f));
-
         const float exitDestinationX = inspectorX + 133.0f;
         const float exitDestinationWidth = std::max(80.0f,
             fieldWidth - 133.0f);
@@ -1485,7 +1420,6 @@ namespace renegade::studio
             journeyExitDestinationCombos_[index].SetSize(XMFLOAT2(
                 exitDestinationWidth, 27.0f));
         }
-
         routeOutcomeInput_.SetPos(XMFLOAT2(inspectorX, routeY0));
         routeOutcomeInput_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
         routeEntryInput_.SetPos(XMFLOAT2(inspectorX, routeY0 + 38.0f));
@@ -1498,7 +1432,6 @@ namespace renegade::studio
         reconnectRouteButton_.SetSize(XMFLOAT2(fieldWidth * 0.52f - 3.0f, 28.0f));
         deleteRouteButton_.SetPos(XMFLOAT2(inspectorX, routeY0 + 152.0f));
         deleteRouteButton_.SetSize(XMFLOAT2(fieldWidth, 28.0f));
-
         const float addY = translation.y + HeaderHeight + 356.0f;
         addCompleteButton_.SetPos(XMFLOAT2(inspectorX, addY));
         addCompleteButton_.SetSize(XMFLOAT2(fieldWidth, 27.0f));
@@ -1517,7 +1450,6 @@ namespace renegade::studio
             session_->IsLoaded() && model_->IsLoaded();
         const bool graphMode = loaded &&
             layout_->activeView == bridge::StoryFlowViewMode::Graph;
-
         saveButton_.SetVisible(graphMode);
         undoButton_.SetVisible(graphMode);
         redoButton_.SetVisible(graphMode);
@@ -1526,10 +1458,8 @@ namespace renegade::studio
         saveButton_.SetEnabled(graphMode && session_->IsDirty());
         undoButton_.SetEnabled(graphMode && session_->CanUndo());
         redoButton_.SetEnabled(graphMode && session_->CanRedo());
-
         const auto* selectedNode = FindDocumentNode(selectedNodeId_);
         const auto* selectedRoute = FindDocumentRoute(selectedRouteId_);
-
         const bool nodeSelected = loaded && selectedNode != nullptr;
         nodeNameInput_.SetVisible(nodeSelected);
         applyNodeButton_.SetVisible(nodeSelected && graphMode);
@@ -1544,7 +1474,6 @@ namespace renegade::studio
             activatableNode && layout_->activeView == bridge::StoryFlowViewMode::Journey);
         openDestinationButton_.SetEnabled(
             activatableNode && layout_->activeView == bridge::StoryFlowViewMode::Journey);
-
         const bool journeyMode = loaded &&
             layout_->activeView == bridge::StoryFlowViewMode::Journey;
         const auto* selectedNodeView = journeyMode && model_
@@ -1565,7 +1494,6 @@ namespace renegade::studio
             journeyExitDestinationCombos_[index].SetEnabled(
                 index < journeyExitCount && journeyExitDestinationIds_.size() > 1);
         }
-
         const bool routeSelected = graphMode && selectedRoute != nullptr;
         routeOutcomeInput_.SetVisible(routeSelected);
         routeEntryInput_.SetVisible(routeSelected);
@@ -1580,11 +1508,9 @@ namespace renegade::studio
             routeEntryInput_.SetEnabled(
                 destination && destination->kind == bridge::FlowNodeKind::Level);
         }
-
         addCompleteButton_.SetVisible(graphMode);
         addReturnButton_.SetVisible(graphMode);
         addQuitButton_.SetVisible(graphMode);
-
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&saveButton_),
             static_cast<wi::gui::Widget*>(&undoButton_),
@@ -1608,9 +1534,7 @@ namespace renegade::studio
             if (widget->IsVisible()) widget->Update(canvas, dt);
         }
         for (auto& combo : journeyExitDestinationCombos_)
-        {
             if (combo.IsVisible()) combo.Update(canvas, dt);
-        }
         if (pendingAddJourneyAction_)
         {
             pendingAddJourneyAction_ = false;
@@ -1668,9 +1592,7 @@ namespace renegade::studio
     void RenegadeStoryFlowWorkspace::RefreshInspectorControls()
     {
         if (const auto* node = FindDocumentNode(selectedNodeId_))
-        {
             nodeNameInput_.SetValue(node->name);
-        }
         if (const auto* route = FindDocumentRoute(selectedRouteId_))
         {
             routeOutcomeInput_.SetValue(route->outcome);
@@ -1694,17 +1616,14 @@ namespace renegade::studio
             combo.SetSelectedWithoutCallback(-1);
         }
         if (!model_ || !model_->IsLoaded() || selectedNodeId_.empty()) return;
-
         for (const auto& destination : model_->Nodes())
         {
             if (destination.kind == bridge::FlowNodeKind::GameStart)
                 continue;
             journeyExitDestinationIds_.push_back(destination.id);
         }
-
         const auto* source = model_->FindNode(selectedNodeId_);
         if (!source) return;
-
         const auto* sourceDocument = FindDocumentNode(selectedNodeId_);
         if (!sourceDocument) return;
         if (IsTerminalKind(sourceDocument->kind))
@@ -1769,7 +1688,6 @@ namespace renegade::studio
         {
             journeyAddActionAvailable_ = true;
         }
-
         const std::size_t exitCount = std::min<std::size_t>(
             source->outgoingRouteIds.size(), MaxJourneyInspectorExits);
         for (std::size_t exitIndex = 0; exitIndex < exitCount; ++exitIndex)
@@ -1809,7 +1727,6 @@ namespace renegade::studio
             runtimeValidationMessage_ = "Project root is unavailable for Runtime validation.";
             return;
         }
-
         bridge::StoryFlowScreenReferenceService service;
         for (const auto& node : session_->Document().nodes)
         {
@@ -1832,21 +1749,16 @@ namespace renegade::studio
         const std::size_t destinationIndex)
     {
         if (!session_ || exitIndex >= journeyExitRouteIds_.size() ||
-            destinationIndex >= journeyExitDestinationIds_.size())
-        {
-            return;
-        }
+            destinationIndex >= journeyExitDestinationIds_.size()) return;
         const bridge::StableId routeId = journeyExitRouteIds_[exitIndex];
         const auto* current = FindDocumentRoute(routeId);
         if (!current) return;
-
         bridge::FlowRoute replacement = *current;
         replacement.destinationNodeId =
             journeyExitDestinationIds_[destinationIndex];
         const auto* destination = FindDocumentNode(replacement.destinationNodeId);
         if (!destination || destination->kind != bridge::FlowNodeKind::Level)
             replacement.destinationEntry.clear();
-
         std::string error;
         if (!session_->UpdateRoute(routeId, std::move(replacement), error))
         {
@@ -1868,14 +1780,12 @@ namespace renegade::studio
             SetStatus("ADD ACTION REJECTED // SELECT A NON-TERMINAL DESTINATION");
             return;
         }
-
         std::unordered_set<std::string> usedOutcomes;
         for (const auto& routeId : sourceView->outgoingRouteIds)
         {
             const auto* route = model_->FindRoute(routeId);
             if (route) usedOutcomes.insert(route->outcome);
         }
-
         std::string outcome;
         std::string error;
         if (source->kind == bridge::FlowNodeKind::Screen)
@@ -1915,35 +1825,28 @@ namespace renegade::studio
             while (usedOutcomes.find(outcome) != usedOutcomes.end())
                 outcome = "branch_" + std::to_string(branch++);
         }
-
         const bridge::StoryFlowNodeView* destination = nullptr;
         for (const auto& candidate : model_->Nodes())
         {
             if (candidate.id == source->id ||
                 candidate.kind == bridge::FlowNodeKind::GameStart)
-            {
                 continue;
-            }
             if (!destination ||
                 (candidate.presentationColumn > sourceView->presentationColumn &&
                  destination->presentationColumn <= sourceView->presentationColumn))
-            {
                 destination = &candidate;
-            }
         }
         if (!destination)
         {
             SetStatus("ADD ACTION REJECTED // ADD ANOTHER DESTINATION FIRST");
             return;
         }
-
         bridge::FlowRoute route;
         route.sourceNodeId = source->id;
         route.outcome = std::move(outcome);
         route.destinationNodeId = destination->id;
         if (destination->kind == bridge::FlowNodeKind::Level)
             route.destinationEntry = "player_entry";
-
         bridge::StableId createdRouteId;
         if (!session_->AddRoute(std::move(route), createdRouteId, error))
         {
@@ -1963,7 +1866,6 @@ namespace renegade::studio
             SetStatus("PRESENTATION ERROR // " + error);
             return false;
         }
-
         const bridge::StableId flowId = session_->Document().envelope.documentId;
         if (!bridge::ReconcileStoryFlowLayout(
                 *model_, session_->ProjectId(), flowId, *layout_, error))
@@ -1972,8 +1874,7 @@ namespace renegade::studio
                 *model_, session_->ProjectId(), flowId);
             SetStatus("LAYOUT REBUILT // " + error);
         }
-        if (!RebuildJourneyProjection())
-            return false;
+        if (!RebuildJourneyProjection()) return false;
         EnsureSelectionValid();
         RefreshInspectorControls();
         RefreshRuntimeValidation();
@@ -2092,10 +1993,8 @@ namespace renegade::studio
             error.clear();
             return true;
         }
-
         std::vector<std::string> outcomes;
-        if (!QueryScreenOutcomes(sourceNodeId, outcomes, error))
-            return false;
+        if (!QueryScreenOutcomes(sourceNodeId, outcomes, error)) return false;
         if (outcomes.empty())
         {
             error = "Screen has no authored actions";
@@ -2118,7 +2017,6 @@ namespace renegade::studio
         bridge::FlowRoute route = *current;
         route.outcome = Trim(routeOutcomeInput_.GetValue());
         route.destinationEntry = Trim(routeEntryInput_.GetValue());
-
         std::string error;
         if (!ValidateRouteOutcomeForSource(
                 route.sourceNodeId, route.outcome, error))
@@ -2127,7 +2025,6 @@ namespace renegade::studio
             RefreshInspectorControls();
             return;
         }
-
         const std::string priorityText = Trim(routePriorityInput_.GetValue());
         try
         {
@@ -2146,7 +2043,6 @@ namespace renegade::studio
             RefreshInspectorControls();
             return;
         }
-
         if (!session_->UpdateRoute(selectedRouteId_, std::move(route), error))
         {
             SetStatus("ROUTE EDIT REJECTED // " + error);
@@ -2176,9 +2072,7 @@ namespace renegade::studio
         const bridge::FlowNodeKind kind,
         const char* defaultName)
     {
-        if (!session_ || !layout_)
-            return;
-
+        if (!session_ || !layout_) return;
         XMFLOAT2 anchor(0.0f, 0.0f);
         bool hasAnchor = false;
         if (const auto* selectedLayout = FindLayout(selectedNodeId_))
@@ -2186,7 +2080,6 @@ namespace renegade::studio
             anchor = XMFLOAT2(selectedLayout->x, selectedLayout->y);
             hasAnchor = true;
         }
-
         bridge::FlowNode node;
         node.kind = kind;
         node.name = defaultName;
@@ -2241,10 +2134,7 @@ namespace renegade::studio
         UpdateAuthoringControls(canvas, dt);
         UpdateJourneyObjects(canvas, dt);
         if (!IsVisible() || !IsEnabled() || !model_ || !layout_) return;
-
-        if (layout_->activeView != bridge::StoryFlowViewMode::Journey)
-            return;
-
+        if (layout_->activeView != bridge::StoryFlowViewMode::Journey) return;
         const XMFLOAT4 pointer = wi::input::GetPointer();
         const float graphRight = translation.x + GraphWidth();
         const bool insideHeader =
@@ -2254,19 +2144,16 @@ namespace renegade::studio
             pointer.x < translation.x + scale.x &&
             pointer.y >= translation.y + HeaderHeight &&
             pointer.y < translation.y + scale.y;
-
         if (insideHeader)
         {
             pointerConsumed_ = true;
             return;
         }
-
         if (insideInspector)
         {
             pointerConsumed_ = true;
             return;
         }
-
         const bool inside = PointerInsideGraph(pointer);
         pointerConsumed_ = pointerConsumed_ || inside;
         if (inside && std::abs(pointer.z) > 0.001f)
@@ -2282,7 +2169,6 @@ namespace renegade::studio
             activeCanvas.panY += pointer.y - after.y;
             NotifyLayoutChanged();
         }
-
         if (inside && wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
             for (const auto& card : journeyModel_.Cards())
@@ -2293,9 +2179,7 @@ namespace renegade::studio
                     (node->kind != bridge::FlowNodeKind::Level &&
                         node->kind != bridge::FlowNodeKind::Screen) ||
                     objectIt == journeyCardObjects_.end())
-                {
                     continue;
-                }
                 if (Contains(objectIt->second->ThumbnailButtonBounds(), pointer))
                 {
                     ChooseLevelThumbnail(node->id);
@@ -2303,7 +2187,6 @@ namespace renegade::studio
                 }
             }
         }
-
         if (inside && wi::input::Press(wi::input::MOUSE_BUTTON_MIDDLE))
         {
             panning_ = true;
@@ -2320,7 +2203,6 @@ namespace renegade::studio
         {
             panning_ = false;
         }
-
         if (nodeDragging_ && wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
         {
             const float zoom = std::max(0.001f, ActiveCanvas().zoom);
@@ -2338,9 +2220,7 @@ namespace renegade::studio
             nodeDragging_ = false;
             draggedNodeId_.clear();
         }
-
         if (!inside || !wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) return;
-
         for (const auto& track : journeyModel_.Tracks())
         {
             if (track.mainTrack) continue;
@@ -2363,15 +2243,13 @@ namespace renegade::studio
                 : "BRANCH LANE // EXPANDED");
             return;
         }
-
         for (const auto& node : model_->Nodes())
         {
             const XMFLOAT4 bounds = NodeBounds(node.id);
             if (bounds.z <= 0.0f || !Contains(bounds, pointer)) continue;
             SelectNode(node.id);
             RememberOrActivateNodeClick(node, pointer);
-            if (secondsSincePreviousNodeClick_ >= 999.0f)
-                return;
+            if (secondsSincePreviousNodeClick_ >= 999.0f) return;
             nodeDragging_ = true;
             draggedNodeId_ = node.id;
             nodeDragPointerAnchor_ = XMFLOAT2(pointer.x, pointer.y);
@@ -2381,7 +2259,6 @@ namespace renegade::studio
                 : XMFLOAT2{};
             return;
         }
-
         SelectNode({});
     }
 
@@ -2394,20 +2271,16 @@ namespace renegade::studio
         const float graphWidth = GraphWidth();
         const float graphRight = translation.x + graphWidth;
         const float inspectorWidth = std::max(0.0f, scale.x - graphWidth);
-
         Rect(translation.x, translation.y, graphWidth, scale.y, Surface, cmd);
         Rect(graphRight, translation.y, inspectorWidth, scale.y, Raised, cmd);
         Rect(translation.x, translation.y, scale.x, HeaderHeight, Raised, cmd);
         Rect(graphRight, translation.y + HeaderHeight, 1.0f, scale.y - HeaderHeight, Border, cmd);
-
         Label("STORY FLOW", translation.x + 18, translation.y + 13, 14, Text, cmd);
-
         if (!model_ || !layout_ || !session_)
         {
             RenderAuthoringControls(canvas, cmd);
             return;
         }
-
         const int zoomPercent = static_cast<int>(std::round(ActiveCanvas().zoom * 100.0f));
         const std::string dirty = session_->IsDirty() ? "DIRTY" : "SAVED";
         Label(
@@ -2419,7 +2292,6 @@ namespace renegade::studio
             10,
             session_->IsDirty() ? Accent : InspectorSecondary,
             cmd);
-
         if (layout_->activeView == bridge::StoryFlowViewMode::Journey)
         {
             const float branchHeaderY =
@@ -2435,7 +2307,6 @@ namespace renegade::studio
                 branchHeaderY + 8.0f, 9, InspectorSecondary, cmd);
             Label("ALTERNATE BRANCHES", translation.x + 60.0f,
                 branchHeaderY + 7.0f, 10, Text, cmd);
-
             for (const auto& track : journeyModel_.Tracks())
             {
                 const auto laneIt = journeyLaneObjects_.find(track.index);
@@ -2448,9 +2319,7 @@ namespace renegade::studio
                 if (objectIt != journeyCardObjects_.end())
                     objectIt->second->Render(canvas, cmd);
             }
-
             ApplyScissor(canvas, scissorRect, cmd);
-
             float mainTrackRight = 0.0f;
             float mainTrackCenterY = 0.0f;
             for (const auto& card : journeyModel_.Cards())
@@ -2467,7 +2336,6 @@ namespace renegade::studio
                 Label(">", graphRight - 29.0f,
                     mainTrackCenterY - 7.0f, 10, Muted, cmd);
             }
-
             const auto shell = ComputeJourneyShellLayout(
                 translation.x + width_, height_);
             const auto& overview = shell.storyOverview;
@@ -2533,7 +2401,6 @@ namespace renegade::studio
                 wi::Color(40, 92, 127, 28),
                 wi::Color(103, 171, 219, 220), cmd);
         }
-
         const float inspectorX = graphRight + 14.0f;
         if (layout_->activeView == bridge::StoryFlowViewMode::Graph)
         {
@@ -2571,7 +2438,6 @@ namespace renegade::studio
                     inspectorTop, 14, Text, cmd);
                 Label(KindLabel(node->kind), inspectorX,
                     inspectorTop + 22.0f, 10, InspectorSecondary, cmd);
-
                 const float previewY = inspectorTop + 46.0f;
                 const float previewHeight = std::clamp(
                     height_ * 0.16f, 100.0f, 150.0f);
@@ -2598,7 +2464,6 @@ namespace renegade::studio
                         previewY + previewHeight * 0.48f,
                         10, InspectorSecondary, cmd);
                 }
-
                 const float tabsY = previewY + previewHeight + 9.0f;
                 Rect(inspectorX, tabsY + 27.0f,
                     std::max(1.0f, width_ - GraphWidth() - 28.0f),
@@ -2607,9 +2472,7 @@ namespace renegade::studio
                     tabsY + 6.0f, 11, Text, cmd);
                 Rect(inspectorX + 4.0f, tabsY + 26.0f,
                     118.0f, 2.0f, wi::Color(65, 158, 230, 255), cmd);
-
-                const float generalY =
-                    tabsY + 45.0f;
+                const float generalY = tabsY + 45.0f;
                 Label("GENERAL", inspectorX, generalY, 12, Text, cmd);
                 Label("Type", inspectorX, generalY + 60.0f,
                     10, InspectorSecondary, cmd);
@@ -2624,7 +2487,6 @@ namespace renegade::studio
                 Label(Shorten(node->kind == bridge::FlowNodeKind::Level
                         ? node->scenePathHint : node->screenPathHint, 28),
                     inspectorX + 120.0f, generalY + 84.0f, 10, Text, cmd);
-
                 const float exitsY = generalY + 120.0f;
                 Label("ACTIONS / EXITS", inspectorX, exitsY, 12, Text, cmd);
                 const auto* nodeView = model_->FindNode(node->id);
@@ -2658,7 +2520,6 @@ namespace renegade::studio
                             : route->destinationNodeId, 16),
                         inspectorX + 141.0f, y + 6.0f, 10, Text, cmd);
                 }
-
                 if (count == 0)
                 {
                     const std::string emptyState = IsTerminalKind(node->kind)
@@ -2673,7 +2534,6 @@ namespace renegade::studio
                     Label(emptyState, inspectorX,
                         exitsY + 31.0f, 10, InspectorSecondary, cmd);
                 }
-
                 if (height_ >= 850.0f)
                 {
                     const float notesY = exitsY +
@@ -2717,7 +2577,6 @@ namespace renegade::studio
             Label("SELECT A JOURNEY CARD", inspectorX,
                 translation.y + 112.0f, 11, InspectorSecondary, cmd);
         }
-
         if (layout_->activeView == bridge::StoryFlowViewMode::Graph)
         {
             Label("ADD TERMINAL DESTINATION", inspectorX,
@@ -2729,7 +2588,6 @@ namespace renegade::studio
                 translation.y + HeaderHeight + 477.0f,
                 9, InspectorSecondary, cmd);
         }
-
         const float inspectorContentWidth = std::max(
             1.0f, width_ - GraphWidth() - 28.0f);
         const auto statusLines = WrapInspectorText(
@@ -2740,7 +2598,6 @@ namespace renegade::studio
             statusMessage_.find("REJECTED") != std::string::npos ||
             statusMessage_.find("ERROR") != std::string::npos
                 ? Error : InspectorSecondary;
-
         float validationY = layout_->activeView == bridge::StoryFlowViewMode::Journey
             ? translation.y + height_ -
                 (height_ >= 850.0f ? 235.0f : 150.0f)
@@ -2755,9 +2612,7 @@ namespace renegade::studio
         {
             for (auto& line : WrapInspectorText(
                     runtimeValidationMessage_, validationWrapLimit))
-            {
                 validationLines.emplace_back(std::move(line), Error);
-            }
         }
         if (!model_->Diagnostics().empty())
         {
@@ -2790,12 +2645,9 @@ namespace renegade::studio
                     ? Error : Warning;
                 for (auto& line : WrapInspectorText(
                         message, validationWrapLimit))
-                {
                     validationLines.emplace_back(std::move(line), color);
-                }
             }
         }
-
         const auto validDetailLines = WrapInspectorText(
             runtimeValidationMessage_.empty()
                 ? "Runtime readiness and governed references resolve correctly."
@@ -2813,7 +2665,6 @@ namespace renegade::studio
             statusLines.size());
         validationY = messageLayout.validationY;
         const float statusY = messageLayout.statusY;
-
         Label(diagnosticCount == 0
                 ? "VALIDATION"
                 : "VALIDATION (" + std::to_string(diagnosticCount) +
@@ -2844,7 +2695,6 @@ namespace renegade::studio
                 diagnosticY += 17.0f;
             }
         }
-
         Label("STATUS", inspectorX, statusY, 11, Text, cmd);
         for (std::size_t i = 0; i < statusLines.size(); ++i)
         {
@@ -2852,7 +2702,6 @@ namespace renegade::studio
                 statusY + 17.0f + static_cast<float>(i) * statusLineHeight,
                 10, statusColor, cmd);
         }
-
         RenderAuthoringControls(canvas, cmd);
     }
 }
