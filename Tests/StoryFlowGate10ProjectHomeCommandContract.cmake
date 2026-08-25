@@ -6,6 +6,7 @@ file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyChrome.h" c
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowRenderPath.h" render_path)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StoryFlowStudioIntegration.h" integration)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h" application)
+file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/src/BuildVerificationService.cpp" build_verification)
 
 function(require_contains haystack needle label)
     string(FIND "${${haystack}}" "${needle}" position)
@@ -46,5 +47,18 @@ require_contains(application "StartProjectPlayFromStoryFlowNow" "Studio runtime 
 require_contains(application "PollProjectPlayFromStoryFlow" "Studio runtime poll seam")
 require_contains(application "StopProjectPlayFromStoryFlowNow" "Studio runtime stop seam")
 require_contains(application "IsProjectPlayFromStoryFlowActive" "Studio runtime active-state seam")
+
+# Gate 10 packaged verification must preserve legacy startup-Screen proof while
+# accepting modern Flow-native smoke only when it explicitly proves there was
+# no fabricated legacy Screen/action and still reaches the exact Complete Game
+# Flow terminal. This is the owner-reported build failure regression.
+require_contains(build_verification "const bool legacyStartupScreen" "runtime entry-mode split")
+require_contains(build_verification "\"screen_was_loaded\", \"true\"" "legacy startup Screen evidence")
+require_contains(build_verification "\"last_action_id\", \"play\"" "legacy Play action evidence")
+require_contains(build_verification "\"screen_was_loaded\", \"false\"" "Flow-native no-screen evidence")
+require_contains(build_verification "\"last_action_id\", \"\"" "Flow-native no fabricated action")
+require_contains(build_verification "Gate 4 Flow-native Runtime evidence does not prove a governed startup Story Flow." "Flow-native startup Flow proof")
+require_contains(build_verification "runtime_entry_mode" "build report runtime entry mode")
+require_contains(build_verification "story_flow_native" "Flow-native build report value")
 
 message(STATUS "Gate 10 Story Flow project-home command contract passed")
