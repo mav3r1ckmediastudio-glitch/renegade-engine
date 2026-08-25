@@ -5,8 +5,10 @@
 #include "renegade/bridge/ReusableAssetDependencyService.h"
 
 #include <algorithm>
+#include <deque>
 #include <filesystem>
 #include <sstream>
+#include <unordered_set>
 #include <utility>
 
 namespace renegade::bridge
@@ -387,22 +389,88 @@ namespace renegade::bridge
             return true;
         }
 
-        bool ComputeTestAllTrace(
+        bool ReplaySmokePath(
+            const FlowDocument& document,
+            const std::vector<std::string>& outcomes,
+            std::vector<std::string>& trace,
+            FlowStepResult& finalStep,
+            std::string& error)
+        {
+            trace.clear();
+            finalStep = {};
+
+            FlowInterpreter interpreter;
+            if (!interpreter.Initialize(document, error))
+                return false;
+
+            FlowStepResult step = interpreter.Start();
+            if (!step.succeeded)
+            {
+                error = "could not start Story Flow: " + step.message;
+                return false;
+            }
+            trace.push_back(TraceLine(step));
+
+            step = interpreter.EmitOutcome(GameStartOutcome);
+            if (!step.succeeded)
+            {
+                error = "could not leave Game Start: " + step.message;
+                return false;
+            }
+            trace.push_back(TraceLine(step));
+
+            for (const std::string& outcome : outcomes)
+            {
+                if (step.terminalAction != FlowTerminalAction::None)
+                {
+                    error = "smoke outcome sequence continued after a terminal node";
+                    return false;
+                }
+
+                step = interpreter.EmitOutcome(outcome);
+                if (!step.succeeded)
+                {
+                    error = "outcome '" + outcome + "' was not executable: " +
+                        step.message;
+                    return false;
+                }
+                trace.push_back(TraceLine(step));
+            }
+
+            finalStep = std::move(step);
+            error.clear();
+            return true;
+        }
+
+        std::vector<std::string> OutgoingOutcomes(
+            const FlowDocument& document,
+            const StableId& nodeId)
+        {
+            std::vector<std::string> outcomes;
+            for (const FlowRoute& route : document.routes)
+            {
+                if (route.sourceNodeId == nodeId && !route.outcome.empty())
+                    outcomes.push_back(route.outcome);
+            }
+            std::sort(outcomes.begin(), outcomes.end());
+            outcomes.erase(
+                std::unique(outcomes.begin(), outcomes.end()), outcomes.end());
+            return outcomes;
+        }
+
+        bool ComputeSmokeTrace(
             const ProjectMetadata& project,
             std::vector<std::string>& trace,
+            std::vector<std::string>& smokeOutcomes,
             std::size_t& levelCompletionCount,
             std::string& error)
         {
             trace.clear();
+            smokeOutcomes.clear();
             levelCompletionCount = 0;
             if (project.startupFlowId.empty() || project.startupFlow.empty())
             {
                 error = "Build Windows Game requires a startup Story Flow.";
-                return false;
-            }
-            if (project.startupScreenId.empty() || project.startupScreen.empty())
-            {
-                error = "Build Windows Game requires a startup Runtime Screen for the LP06 standalone smoke.";
                 return false;
             }
 
@@ -429,69 +497,105 @@ namespace renegade::bridge
                 return false;
             }
 
-            FlowInterpreter interpreter;
-            if (!interpreter.Initialize(std::move(document), error))
+            std::vector<std::string> initialTrace;
+            FlowStepResult initialStep;
+            if (!ReplaySmokePath(
+                    document, {}, initialTrace, initialStep, error))
             {
-                error = "Build Windows Game rejected the startup Story Flow: " + error;
+                error = "Build Windows Game could not establish the Story Flow smoke root: " +
+                    error;
                 return false;
             }
 
-            FlowStepResult step = interpreter.Start();
-            if (!step.succeeded)
+            if (initialStep.terminalAction == FlowTerminalAction::CompleteGame)
             {
-                error = "Build Windows Game could not start Test All flow: " +
-                    step.message;
+                trace = std::move(initialTrace);
+                error.clear();
+                return true;
+            }
+            if (initialStep.terminalAction != FlowTerminalAction::None)
+            {
+                error =
+                    "Build Windows Game Story Flow reaches a non-Complete terminal directly from Game Start.";
                 return false;
             }
-            trace.push_back(TraceLine(step));
 
-            step = interpreter.EmitOutcome(GameStartOutcome);
-            if (!step.succeeded)
+            struct Candidate
             {
-                error = "Build Windows Game could not enter the first Test All level: " +
-                    step.message;
-                return false;
-            }
-            trace.push_back(TraceLine(step));
+                StableId nodeId;
+                std::vector<std::string> outcomes;
+            };
 
-            constexpr std::size_t MaximumCompletionSteps = 128;
-            while (step.terminalAction == FlowTerminalAction::None)
+            std::deque<Candidate> pending;
+            pending.push_back({initialStep.currentNodeId, {}});
+            std::unordered_set<StableId> visited;
+            visited.insert(initialStep.currentNodeId);
+
+            constexpr std::size_t MaximumSmokeSteps = 128;
+            constexpr std::size_t MaximumSmokeCandidates = 4096;
+            std::size_t expanded = 0;
+
+            while (!pending.empty() && expanded < MaximumSmokeCandidates)
             {
-                if (step.currentNodeKind != FlowNodeKind::Level)
+                Candidate candidate = std::move(pending.front());
+                pending.pop_front();
+                ++expanded;
+
+                for (const std::string& outcome :
+                        OutgoingOutcomes(document, candidate.nodeId))
                 {
-                    error = "Build Windows Game Test All route reached a non-Level node before Complete Game.";
-                    return false;
-                }
-                if (levelCompletionCount >= MaximumCompletionSteps)
-                {
-                    error = "Build Windows Game Test All route exceeded the bounded completion-step limit.";
-                    return false;
-                }
+                    std::vector<std::string> nextOutcomes = candidate.outcomes;
+                    nextOutcomes.push_back(outcome);
+                    if (nextOutcomes.size() > MaximumSmokeSteps)
+                        continue;
 
-                step = interpreter.EmitOutcome("level.complete");
-                if (!step.succeeded)
-                {
-                    error = "Build Windows Game currently requires deterministic level.complete progression for the LP06 smoke: " +
-                        step.message;
-                    return false;
+                    std::vector<std::string> candidateTrace;
+                    FlowStepResult step;
+                    std::string replayError;
+                    if (!ReplaySmokePath(
+                            document,
+                            nextOutcomes,
+                            candidateTrace,
+                            step,
+                            replayError))
+                    {
+                        // An outcome can be structurally present but unavailable
+                        // under the default Flow state (or ambiguous). It is not
+                        // a valid deterministic standalone smoke branch.
+                        continue;
+                    }
+
+                    if (step.terminalAction == FlowTerminalAction::CompleteGame)
+                    {
+                        trace = std::move(candidateTrace);
+                        smokeOutcomes = std::move(nextOutcomes);
+                        levelCompletionCount = static_cast<std::size_t>(
+                            std::count(
+                                smokeOutcomes.begin(),
+                                smokeOutcomes.end(),
+                                std::string("level.complete")));
+                        error.clear();
+                        return true;
+                    }
+                    if (step.terminalAction != FlowTerminalAction::None ||
+                        step.currentNodeId.empty())
+                    {
+                        continue;
+                    }
+
+                    if (visited.insert(step.currentNodeId).second)
+                    {
+                        pending.push_back({
+                            step.currentNodeId,
+                            std::move(nextOutcomes),
+                        });
+                    }
                 }
-                ++levelCompletionCount;
-                trace.push_back(TraceLine(step));
             }
 
-            if (step.terminalAction != FlowTerminalAction::CompleteGame)
-            {
-                error = "Build Windows Game Test All route must terminate at Complete Game for the LP06 smoke.";
-                return false;
-            }
-            if (trace.empty())
-            {
-                error = "Build Windows Game produced no Test All trace.";
-                return false;
-            }
-
-            error.clear();
-            return true;
+            error =
+                "Build Windows Game could not derive a bounded deterministic Story Flow path to Complete Game from the default Runtime state.";
+            return false;
         }
     }
 
@@ -508,9 +612,10 @@ namespace renegade::bridge
         if (!RefreshCurrentRegistry(
                 project, state.dependencyGraph, state.assetRegistry, error))
             return false;
-        if (!ComputeTestAllTrace(
+        if (!ComputeSmokeTrace(
                 project,
                 state.expectedFlowTrace,
+                state.smokeOutcomes,
                 state.levelCompletionCount,
                 error))
             return false;
