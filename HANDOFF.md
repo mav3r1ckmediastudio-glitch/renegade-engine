@@ -67,6 +67,42 @@ claim is permitted before owner visual acceptance.
 The locked recovery contract and stage ownership are recorded in
 `docs/STORY_FLOW_JOURNEY_RECOVERY_9A_9F.md`.
 
+### Gate 9F authoritative logo replacement
+
+Implementation commit
+`3d66de2983d3a1c1347aacd84fcd8f02cfb98af4` replaces the superseded narrow
+RGB wordmark with the project owner's 2026-08-25 transparent fractured-crest
+logo in Journey, the shared Studio chrome and Project Hub. The committed RGBA
+asset removes only empty transparent margins from the supplied PNG, preserves
+the complete visible artwork and is fitted proportionally into each header.
+All three consumers use alpha blending; the former additive Journey/Studio
+rendering is removed.
+
+Changed seams:
+
+- `Studio/assets/renegade-engine-fractured-crest-logo.png` and asset README;
+- Studio, Journey and Project Hub logo loading/rendering;
+- Studio package copy rule;
+- Journey recovery source/hash contract and `REN-UI-001` evidence.
+
+Local evidence for implementation tree
+`84dcb015122efd197c3d5680044bab40a247da72`:
+
+- supplied source SHA-256:
+  `1bd906dc2fabb4ef6152edcaa4764c3cab5a247ac6ef9a4a8d0de86ab3a06cb1`;
+- committed alpha-trimmed asset SHA-256:
+  `9acc347e3e46602142ec9cdceeb846d3eb96fddac0b07d10ebc33a0a912e2a05`;
+- `git diff --check` — PASS;
+- direct logo hash/path/alpha/package/legacy-removal assertions — PASS;
+- GNU C++17 `StoryFlowJourneyUiLayoutTests` — PASS with the pre-existing
+  C++20 `concept` identifier compatibility warning;
+- exact 184x70 Journey header-slot composition inspected locally — PASS;
+- CMake source contract — NOT RUN locally because CMake is unavailable.
+
+Required closeout remains exact-head Windows Debug/Release CI followed by the
+owner's packaged Release visual check. A successful build does not prove the
+logo is acceptably sized on the owner's display.
+
 ## Gate 6 accepted evidence
 
 Gate 5/PR #84 is merged and owner-accepted. New/Open projects enter the
