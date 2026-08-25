@@ -354,8 +354,8 @@ namespace renegade::studio
             return value;
         }
 
-        static void Glyph(const std::string& glyph, const JourneyUiRect& bounds,
-            wi::Color color, wi::graphics::CommandList cmd)
+        void Glyph(const std::string& glyph, const JourneyUiRect& bounds,
+            wi::Color color, wi::graphics::CommandList cmd) const
         {
             const float cx = bounds.x + bounds.width * 0.5f;
             const float cy = bounds.y + 19.0f;
