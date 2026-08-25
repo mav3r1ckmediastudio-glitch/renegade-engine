@@ -38,6 +38,7 @@ namespace
     constexpr wi::Color Muted(132, 143, 149, 255);
     constexpr wi::Color InspectorSecondary(205, 214, 220, 255);
     constexpr wi::Color Accent(210, 91, 29, 255);
+    constexpr wi::Color Warning(229, 165, 82, 255);
     constexpr wi::Color Error(229, 92, 92, 255);
 
     void Rect(float x, float y, float w, float h, wi::Color color,
@@ -172,6 +173,19 @@ namespace
         if (limit <= 3) return value.substr(0, limit);
         value.resize(limit - 3);
         value += "...";
+        return value;
+    }
+
+    std::string ReadableStatus(std::string value)
+    {
+        constexpr const char* separator = " // ";
+        std::size_t position = 0;
+        while ((position = value.find(separator, position)) !=
+            std::string::npos)
+        {
+            value.replace(position, 4, " - ");
+            position += 3;
+        }
         return value;
     }
 }
@@ -1643,6 +1657,9 @@ namespace renegade::studio
     void RenegadeStoryFlowWorkspace::RefreshJourneyExitControls()
     {
         journeyAddActionAvailable_ = false;
+        addJourneyActionButton_.SetText("+ ADD ACTION");
+        addJourneyActionButton_.SetTooltip(
+            "Create a governed exit and configure its destination here in the Inspector.");
         journeyExitDestinationIds_.clear();
         for (auto& routeId : journeyExitRouteIds_) routeId.clear();
         for (auto& combo : journeyExitDestinationCombos_)
@@ -1663,39 +1680,68 @@ namespace renegade::studio
         if (!source) return;
 
         const auto* sourceDocument = FindDocumentNode(selectedNodeId_);
-        if (sourceDocument && !IsTerminalKind(sourceDocument->kind) &&
-            source->outgoingRouteIds.size() < MaxJourneyInspectorExits)
+        if (!sourceDocument) return;
+        if (IsTerminalKind(sourceDocument->kind))
         {
-            if (sourceDocument->kind == bridge::FlowNodeKind::GameStart)
+            addJourneyActionButton_.SetText("TERMINAL");
+            addJourneyActionButton_.SetTooltip(
+                "Terminal destinations cannot own outgoing actions.");
+        }
+        else if (source->outgoingRouteIds.size() >= MaxJourneyInspectorExits)
+        {
+            addJourneyActionButton_.SetText("LIMIT REACHED");
+            addJourneyActionButton_.SetTooltip(
+                "This destination already uses the supported Inspector exit capacity.");
+        }
+        else if (sourceDocument->kind == bridge::FlowNodeKind::GameStart)
+        {
+            journeyAddActionAvailable_ = source->outgoingRouteIds.empty();
+            if (!journeyAddActionAvailable_)
             {
-                journeyAddActionAvailable_ = source->outgoingRouteIds.empty();
+                addJourneyActionButton_.SetText("ENTRY SET");
+                addJourneyActionButton_.SetTooltip(
+                    "Game Start already has its single governed entry route.");
             }
-            else if (sourceDocument->kind == bridge::FlowNodeKind::Screen)
+        }
+        else if (sourceDocument->kind == bridge::FlowNodeKind::Screen)
+        {
+            std::vector<std::string> authoredOutcomes;
+            std::string outcomeError;
+            if (QueryScreenOutcomes(
+                    sourceDocument->id, authoredOutcomes, outcomeError))
             {
-                std::vector<std::string> authoredOutcomes;
-                std::string ignoredError;
-                if (QueryScreenOutcomes(
-                        sourceDocument->id, authoredOutcomes, ignoredError))
+                std::unordered_set<std::string> usedOutcomes;
+                for (const auto& routeId : source->outgoingRouteIds)
                 {
-                    std::unordered_set<std::string> usedOutcomes;
-                    for (const auto& routeId : source->outgoingRouteIds)
+                    const auto* route = model_->FindRoute(routeId);
+                    if (route) usedOutcomes.insert(route->outcome);
+                }
+                journeyAddActionAvailable_ = std::any_of(
+                    authoredOutcomes.begin(), authoredOutcomes.end(),
+                    [&](const std::string& outcome)
                     {
-                        const auto* route = model_->FindRoute(routeId);
-                        if (route) usedOutcomes.insert(route->outcome);
-                    }
-                    journeyAddActionAvailable_ = std::any_of(
-                        authoredOutcomes.begin(), authoredOutcomes.end(),
-                        [&](const std::string& outcome)
-                        {
-                            return usedOutcomes.find(outcome) ==
-                                usedOutcomes.end();
-                        });
+                        return usedOutcomes.find(outcome) ==
+                            usedOutcomes.end();
+                    });
+                if (!journeyAddActionAvailable_)
+                {
+                    addJourneyActionButton_.SetText("NO ACTIONS");
+                    addJourneyActionButton_.SetTooltip(
+                        "Every authored Screen action is already routed.");
                 }
             }
             else
             {
-                journeyAddActionAvailable_ = true;
+                addJourneyActionButton_.SetText("UNAVAILABLE");
+                addJourneyActionButton_.SetTooltip(
+                    outcomeError.empty()
+                        ? "Screen actions could not be resolved."
+                        : outcomeError);
             }
+        }
+        else
+        {
+            journeyAddActionAvailable_ = true;
         }
 
         const std::size_t exitCount = std::min<std::size_t>(
@@ -2319,13 +2365,13 @@ namespace renegade::studio
         const int zoomPercent = static_cast<int>(std::round(ActiveCanvas().zoom * 100.0f));
         const std::string dirty = session_->IsDirty() ? "DIRTY" : "SAVED";
         Label(
-            dirty + " // " + std::to_string(model_->Nodes().size()) + " NODES // " +
-                std::to_string(model_->Routes().size()) + " ROUTES // " +
+            dirty + " | " + std::to_string(model_->Nodes().size()) + " NODES | " +
+                std::to_string(model_->Routes().size()) + " ROUTES | " +
                 std::to_string(zoomPercent) + "%",
             translation.x + 112.0f,
             translation.y + 52.0f,
-            9,
-            session_->IsDirty() ? Accent : Muted,
+            10,
+            session_->IsDirty() ? Accent : InspectorSecondary,
             cmd);
 
         // Graph is intentionally not rendered here. ImNodes is the sole Graph
@@ -2343,9 +2389,9 @@ namespace renegade::studio
             Rect(translation.x + 18.0f, branchHeaderY + 29.0f,
                 std::max(1.0f, graphWidth - 36.0f), 1.0f, Border, cmd);
             Label("02", translation.x + 30.0f,
-                branchHeaderY + 9.0f, 7, Muted, cmd);
+                branchHeaderY + 8.0f, 9, InspectorSecondary, cmd);
             Label("ALTERNATE BRANCHES", translation.x + 60.0f,
-                branchHeaderY + 8.0f, 8, Text, cmd);
+                branchHeaderY + 7.0f, 10, Text, cmd);
 
             for (const auto& track : journeyModel_.Tracks())
             {
@@ -2655,8 +2701,12 @@ namespace renegade::studio
             ? translation.y + height_ -
                 (height_ >= 850.0f ? 235.0f : 150.0f)
             : translation.y + HeaderHeight + 498.0f;
-        Label("VALIDATION", inspectorX,
-            validationY, 12, Text, cmd);
+        const std::size_t diagnosticCount = model_->Diagnostics().size();
+        Label(diagnosticCount == 0
+                ? "VALIDATION"
+                : "VALIDATION (" + std::to_string(diagnosticCount) +
+                    (diagnosticCount == 1 ? " ISSUE)" : " ISSUES)"),
+            inspectorX, validationY, 12, Text, cmd);
         if (model_->Diagnostics().empty())
         {
             RoundedRect(inspectorX, validationY + 20.0f,
@@ -2670,20 +2720,37 @@ namespace renegade::studio
         else
         {
             float diagnosticY = validationY + 20.0f;
-            const std::size_t count = std::min<std::size_t>(3, model_->Diagnostics().size());
+            const std::size_t capacity = 2;
+            const std::size_t count = std::min(capacity, diagnosticCount);
             for (std::size_t i = 0; i < count; ++i)
             {
                 const auto& diagnostic = model_->Diagnostics()[i];
+                if (i + 1 == capacity && diagnosticCount > capacity)
+                {
+                    Label("+ " + std::to_string(diagnosticCount - i) +
+                            " more issues",
+                        inspectorX, diagnosticY, 11, Warning, cmd);
+                    break;
+                }
+                std::string message = diagnostic.message;
+                if (diagnostic.code == "flow.unreachable_node")
+                {
+                    const auto* issueNode = model_->FindNode(diagnostic.nodeId);
+                    message = "Unreachable from Game Start: " +
+                        (issueNode ? issueNode->name : std::string("destination"));
+                }
                 const wi::Color color = diagnostic.severity == bridge::StoryFlowDiagnosticSeverity::Error
-                    ? Error : InspectorSecondary;
-                Label(Shorten(diagnostic.code + " // " + diagnostic.message, 42),
-                    inspectorX, diagnosticY, 10, color, cmd);
+                    ? Error : Warning;
+                Label(Shorten(std::move(message), 48),
+                    inspectorX, diagnosticY, 11, color, cmd);
                 diagnosticY += 20.0f;
             }
         }
 
-        Label("STATUS // " + Shorten(statusMessage_, 42), inspectorX,
-            translation.y + scale.y - 80.0f, 9,
+        const float statusY = translation.y + scale.y - 90.0f;
+        Label("STATUS", inspectorX, statusY, 11, Text, cmd);
+        Label(Shorten(ReadableStatus(statusMessage_), 48), inspectorX,
+            statusY + 17.0f, 10,
             statusMessage_.find("FAILED") != std::string::npos ||
             statusMessage_.find("REJECTED") != std::string::npos ||
             statusMessage_.find("ERROR") != std::string::npos

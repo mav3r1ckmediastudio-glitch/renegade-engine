@@ -13,6 +13,7 @@ set(ROLE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyRole.h")
 set(WORKSPACE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowWorkspace.cpp")
 set(STUDIO_CHROME "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp")
 set(PROJECT_HUB "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeProjectHub.cpp")
+set(STUDIO_APPLICATION "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
 set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
 set(BRAND_LOGO "${RENEGADE_SOURCE_DIR}/Studio/assets/renegade-engine-fractured-crest-logo.png")
 set(LEGACY_LEVEL "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowLevelPanel.h")
@@ -20,7 +21,8 @@ set(LEGACY_SCREEN "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowScreenPane
 
 foreach(path IN ITEMS "${RENDER_PATH}" "${INTEGRATION}" "${COMPOSER}"
         "${CHROME}" "${LAYOUT}" "${CARD}" "${LANE}" "${ROLE}" "${WORKSPACE}"
-        "${STUDIO_CHROME}" "${PROJECT_HUB}" "${STUDIO_CMAKE}" "${BRAND_LOGO}")
+        "${STUDIO_CHROME}" "${PROJECT_HUB}" "${STUDIO_APPLICATION}"
+        "${STUDIO_CMAKE}" "${BRAND_LOGO}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "Journey recovery 9A source contract input is missing: ${path}")
     endif()
@@ -43,6 +45,7 @@ file(READ "${ROLE}" role_source)
 file(READ "${WORKSPACE}" workspace_source)
 file(READ "${STUDIO_CHROME}" studio_chrome_source)
 file(READ "${PROJECT_HUB}" project_hub_source)
+file(READ "${STUDIO_APPLICATION}" studio_application_source)
 file(READ "${STUDIO_CMAKE}" studio_cmake_source)
 
 function(require_text haystack_var needle description)
@@ -79,7 +82,13 @@ require_text(layout_source "layout.storyOverview" "fixed story overview host")
 require_text(chrome_source "Select, Arrange, Filter, Search, Preview, Validate" "complete Journey toolbar actions")
 require_text(chrome_source "Undo, Redo, ProjectSelector, Settings, MainMenu" "complete Journey utility actions")
 require_text(chrome_source "Hub, StoryFlow, Levels, Screens, Assets, Variables, TestPlay" "complete Journey rail actions")
+foreach(action IN ITEMS Hub StoryFlow Levels Screens Assets Variables TestPlay
+        Select Arrange Filter Search Preview Validate Undo Redo ProjectSelector
+        Settings MainMenu ZoomOut ZoomIn Fit Start)
+    require_text(render_path_source "case Action::${action}:" "routed ${action} shell action")
+endforeach()
 require_text(chrome_source "shell_.inspector.y + 14.0f, 13, TextStrong" "readable Inspector title")
+forbid_text(chrome_source "Text(\"x\", shell_.inspector.Right()" "decorative unwired Inspector close control")
 require_text(render_path_source "journeyChrome_.CanvasOverlayOwnsPointer" "fixed chrome input ownership")
 require_text(render_path_source "workspace_.FindAndFocusJourneyNode(findDraft_)" "Journey-native search/focus")
 require_text(render_path_source "graphViewButton_.SetVisible(active);" "restored Graph editor access")
@@ -149,6 +158,33 @@ require_text(workspace_source "preceding field can never clip Add Action" "per-c
 require_text(workspace_source "nodeNameInput_.SetRenderTextSize(12)" "readable Inspector display-name control")
 require_text(workspace_source "addJourneyActionButton_.SetRenderTextSize(11)" "readable Journey Add Action control")
 require_text(workspace_source "No unused authored Screen actions available." "honest disabled Screen action reason")
+require_text(workspace_source "addJourneyActionButton_.SetText(\"TERMINAL\")" "terminal Add Action reason")
+require_text(workspace_source "addJourneyActionButton_.SetText(\"LIMIT REACHED\")" "exit-capacity Add Action reason")
+require_text(workspace_source "addJourneyActionButton_.SetText(\"ENTRY SET\")" "Game Start Add Action reason")
+require_text(workspace_source "addJourneyActionButton_.SetText(\"NO ACTIONS\")" "Screen Add Action reason")
+require_text(chrome_source "commandBounds_[i].y + 39.0f, 8" "readable top-command labels")
+require_text(chrome_source "bounds.y + 7.0f, 8, TextSecondary" "readable Story Overview title")
+require_text(chrome_source "Text(\"N/A\", settingsBounds_" "visibly unavailable Settings utility")
+require_text(chrome_source "Text(\"N/A\", menuBounds_" "visibly unavailable Main Menu utility")
+require_text(chrome_source "action_(Action::Settings);" "Settings disabled-reason routing")
+require_text(chrome_source "action_(Action::MainMenu);" "Main Menu disabled-reason routing")
+require_text(chrome_source "const bool available = !(graphViewActive_ && i == 2);" "Graph-safe Journey Filter disablement")
+require_text(render_path_source "FILTER UNAVAILABLE // JOURNEY VIEW ONLY" "Graph Filter disabled reason")
+require_text(workspace_source "Unreachable from Game Start:" "human-readable unreachable diagnostic")
+require_text(workspace_source "const std::size_t capacity = 2;" "non-overlapping validation diagnostic capacity")
+require_text(workspace_source "statusY + 17.0f, 10" "readable Inspector status body")
+forbid_text(workspace_source "diagnostic.code + \" // \" + diagnostic.message" "raw internal diagnostic codes in Inspector")
+
+# Preview saves the authoritative Flow first, blocks on save failure and then
+# requests the existing governed project Runtime launch. It never invents an
+# LP04 snapshot for Story Flow.
+require_text(render_path_source "workspace_.SaveJourney();" "Preview save-before-launch")
+require_text(render_path_source "PREVIEW BLOCKED // STORY FLOW SAVE FAILED" "Preview fail-closed status")
+require_text(integration_source "RequestProjectPlayFromStoryFlow" "governed Story Flow Runtime launch")
+require_text(studio_application_source "options.ownsSnapshot = false;" "snapshot-free Story Flow Preview")
+require_text(studio_application_source "project.descriptorPath" "project-descriptor Preview launch")
+require_text(studio_application_source "bridge::TestLevelSnapshot noSnapshot;" "empty Preview snapshot handoff")
+forbid_text(integration_source "RequestTestLevelSnapshotFromStoryFlow" "Story Flow LP04 snapshot launch")
 
 # The replacement UI must continue to queue the accepted governed lifecycle
 # services and stable-ID editor handoffs rather than implementing new semantics.

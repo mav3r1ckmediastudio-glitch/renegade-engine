@@ -206,7 +206,16 @@ namespace renegade::studio
                         pendingNativeCommand_ = NativeCommand::Start;
                         break;
                     case Action::Filter:
-                        pendingNativeCommand_ = NativeCommand::Filter;
+                        if (workspace_.ActiveView() ==
+                            bridge::StoryFlowViewMode::Graph)
+                        {
+                            workspace_.SetExternalStatus(
+                                "FILTER UNAVAILABLE // JOURNEY VIEW ONLY");
+                        }
+                        else
+                        {
+                            pendingNativeCommand_ = NativeCommand::Filter;
+                        }
                         break;
                     case Action::Hub:
                     case Action::Assets:

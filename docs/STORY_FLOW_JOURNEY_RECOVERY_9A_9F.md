@@ -94,6 +94,18 @@ by mutating Runtime semantics implicitly.
   the superseded header wordmark in Journey, the shared Studio chrome and the
   Project Hub; visible artwork is alpha-trimmed only, aspect-preserved and
   rendered with alpha rather than additive blending;
+- the remaining 5–9px Journey toolbar, rail, overview and Inspector
+  validation/status labels are raised to a readable 8–13px hierarchy with
+  high-contrast secondary text;
+- Validation presents creator-facing messages such as
+  `Unreachable from Game Start: Death Screen`, never raw internal diagnostic
+  codes, and reports additional hidden issues honestly at compact height;
+- the decorative Inspector close glyph is removed; unavailable Variables,
+  Settings and Main Menu surfaces remain visibly unavailable and route to a
+  staged reason rather than silently ignoring input;
+- Filter is visibly unavailable while Graph is active because it controls only
+  the Journey projection; Arrange, Search, Preview, Validate and shared
+  Undo/Redo continue to use their real active-view/shared-model seams;
 - source contracts reject legacy panels, type-coloured card frames, unreadable
   zoom, zoom-scaled overview chrome and Journey-to-Graph exit routing;
 - fixed-layout tests cover the approved and compact resolutions;

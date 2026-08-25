@@ -202,6 +202,10 @@ namespace renegade::studio
                 action_(Action::Redo);
             else if (Contains(projectBounds_, pointer))
                 action_(Action::ProjectSelector);
+            else if (Contains(settingsBounds_, pointer))
+                action_(Action::Settings);
+            else if (Contains(menuBounds_, pointer))
+                action_(Action::MainMenu);
             else if (!graphViewActive_ && Contains(startBounds_, pointer))
                 action_(Action::Start);
             else if (!graphViewActive_ && Contains(zoomOutBounds_, pointer))
@@ -258,8 +262,6 @@ namespace renegade::studio
 
             Text("INSPECTOR", shell_.inspector.x + 16.0f,
                 shell_.inspector.y + 14.0f, 13, TextStrong, cmd);
-            Text("x", shell_.inspector.Right() - 21.0f,
-                shell_.inspector.y + 14.0f, 11, Muted, cmd);
             Rect(shell_.inspector.x, shell_.inspector.y + 34.0f,
                 shell_.inspector.width, 1.0f, BorderSoft, cmd);
 
@@ -511,8 +513,9 @@ namespace renegade::studio
                 "SELECT", "ARRANGE", "FILTER", "SEARCH", "PREVIEW", "VALIDATE"};
             for (std::size_t i = 0; i < commandBounds_.size(); ++i)
             {
+                const bool available = !(graphViewActive_ && i == 2);
                 const bool active = i == 0 || (i == 2 && filterActive_);
-                if (active)
+                if (available && active)
                 {
                     Rounded(commandBounds_[i], 4.0f,
                         wi::Color(15, 34, 50, 255), cmd);
@@ -521,10 +524,10 @@ namespace renegade::studio
                         commandBounds_[i].width - 20.0f, 2.0f, Blue, cmd);
                 }
                 CommandGlyph(i, commandBounds_[i],
-                    active ? TextStrong : TextSecondary, cmd);
+                    !available ? Muted : (active ? TextStrong : TextSecondary), cmd);
                 Text(labels[i], commandBounds_[i].x + commandBounds_[i].width * 0.5f,
-                    commandBounds_[i].y + 39.0f, 6,
-                    active ? TextStrong : Muted, cmd,
+                    commandBounds_[i].y + 39.0f, 8,
+                    !available ? Muted : (active ? TextStrong : TextSecondary), cmd,
                     wi::font::WIFALIGN_CENTER);
             }
         }
@@ -535,7 +538,7 @@ namespace renegade::studio
             Rounded({savedBounds_.x + 10.0f, savedBounds_.y + 13.0f, 7.0f, 7.0f},
                 4.0f, dirty_ ? wi::Color(229, 165, 82, 255) : Green, cmd);
             Text(dirty_ ? "Unsaved" : "Saved", savedBounds_.x + 23.0f,
-                savedBounds_.y + 9.0f, 8,
+                savedBounds_.y + 8.0f, 9,
                 dirty_ ? TextSecondary : Green, cmd);
             Text("<", undoBounds_.x + 15.0f, undoBounds_.y + 7.0f, 12,
                 canUndo_ ? TextSecondary : Muted, cmd, wi::font::WIFALIGN_CENTER);
@@ -543,7 +546,7 @@ namespace renegade::studio
                 canRedo_ ? TextSecondary : Muted, cmd, wi::font::WIFALIGN_CENTER);
             Rounded(projectBounds_, 4.0f, Surface2, cmd);
             Text(projectName_.empty() ? "PROJECT" : projectName_,
-                projectBounds_.x + 10.0f, projectBounds_.y + 11.0f, 8,
+                projectBounds_.x + 10.0f, projectBounds_.y + 10.0f, 9,
                 TextSecondary, cmd);
             Text("v", projectBounds_.Right() - 13.0f,
                 projectBounds_.y + 10.0f, 8, Muted, cmd);
@@ -555,11 +558,11 @@ namespace renegade::studio
                 Rect(menuBounds_.x + 7.0f,
                     menuBounds_.y + 8.0f + static_cast<float>(bar) * 6.0f,
                     17.0f, 2.0f, Muted, cmd);
-            Text("-", settingsBounds_.x + 15.0f,
-                settingsBounds_.y + 23.0f, 5, Muted, cmd,
+            Text("N/A", settingsBounds_.x + 15.0f,
+                settingsBounds_.y + 21.0f, 8, Muted, cmd,
                 wi::font::WIFALIGN_CENTER);
-            Text("-", menuBounds_.x + 15.0f,
-                menuBounds_.y + 23.0f, 5, Muted, cmd,
+            Text("N/A", menuBounds_.x + 15.0f,
+                menuBounds_.y + 21.0f, 8, Muted, cmd,
                 wi::font::WIFALIGN_CENTER);
         }
 
@@ -587,13 +590,13 @@ namespace renegade::studio
                 Glyph(glyphs[i], navBounds_[i], colour, cmd);
                 Text(labels[i], navBounds_[i].x + navBounds_[i].width * 0.5f,
                     navBounds_[i].y + navBounds_[i].height - 17.0f,
-                    std::string(labels[i]).size() > 8 ? 6 : 7,
+                    8,
                     active ? TextStrong : colour, cmd, wi::font::WIFALIGN_CENTER);
                 if (unavailable)
                 {
                     Text("NOT YET", navBounds_[i].x + navBounds_[i].width * 0.5f,
                         navBounds_[i].y + navBounds_[i].height - 8.0f,
-                        5, Muted, cmd, wi::font::WIFALIGN_CENTER);
+                        8, Muted, cmd, wi::font::WIFALIGN_CENTER);
                 }
             }
         }
@@ -604,7 +607,7 @@ namespace renegade::studio
             Rounded(bounds, 6.0f, wi::Color(8, 15, 20, 242), cmd);
             Rounded(startBounds_, 4.0f, Surface2, cmd);
             Text("START", startBounds_.x + startBounds_.width * 0.5f,
-                startBounds_.y + 11.0f, 7, TextSecondary, cmd,
+                startBounds_.y + 10.0f, 9, TextSecondary, cmd,
                 wi::font::WIFALIGN_CENTER);
             Rounded(zoomOutBounds_, 4.0f, Surface2, cmd);
             Text("-", zoomOutBounds_.x + 17.0f, zoomOutBounds_.y + 7.0f,
@@ -621,14 +624,14 @@ namespace renegade::studio
                 bounds.y + 18.0f, 8.0f, 10.0f}, 4.0f, TextStrong, cmd);
             Text(std::to_string(static_cast<int>(zoom_ * 100.0f + 0.5f)) + "%",
                 zoomTrackBounds_.x + zoomTrackBounds_.width * 0.5f,
-                bounds.y + 7.0f, 6, TextSecondary, cmd,
+                bounds.y + 6.0f, 8, TextSecondary, cmd,
                 wi::font::WIFALIGN_CENTER);
             Rounded(zoomInBounds_, 4.0f, Surface2, cmd);
             Text("+", zoomInBounds_.x + 17.0f, zoomInBounds_.y + 7.0f,
                 13, TextSecondary, cmd, wi::font::WIFALIGN_CENTER);
             Rounded(fitBounds_, 4.0f, Surface2, cmd);
             Text("FIT", fitBounds_.x + fitBounds_.width * 0.5f,
-                fitBounds_.y + 11.0f, 7, TextSecondary, cmd,
+                fitBounds_.y + 10.0f, 9, TextSecondary, cmd,
                 wi::font::WIFALIGN_CENTER);
         }
 
@@ -642,7 +645,7 @@ namespace renegade::studio
             Rect(bounds.x + 1.0f, bounds.y + 1.0f,
                 bounds.width - 2.0f, 23.0f, wi::Color(8, 15, 20, 244), cmd);
             Text("STORY OVERVIEW", bounds.x + 10.0f,
-                bounds.y + 8.0f, 6, Muted, cmd);
+                bounds.y + 7.0f, 8, TextSecondary, cmd);
         }
 
         float width_ = 1920.0f;
