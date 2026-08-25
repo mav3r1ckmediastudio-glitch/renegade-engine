@@ -63,6 +63,44 @@ namespace renegade::studio
         void RequestAssetBrowserFromStoryFlow();
         void RequestProjectPlayFromStoryFlow();
 
+        // Story Flow is now the project home. Project-level runtime lifecycle
+        // must therefore be callable and pollable without asking the inactive
+        // Level Editor render path to consume one of its private action queues.
+        void StartProjectPlayFromStoryFlowNow()
+        {
+            StartProjectPlay();
+        }
+
+        void PollProjectPlayFromStoryFlow()
+        {
+            if (projectPreviewActive_ && testLevelRuntime_.IsActive())
+                PollTestLevel();
+        }
+
+        void StopProjectPlayFromStoryFlowNow()
+        {
+            if (projectPreviewActive_)
+                StopTestLevel();
+        }
+
+        [[nodiscard]] bool IsProjectPlayFromStoryFlowActive() const noexcept
+        {
+            return projectPreviewActive_ && testLevelRuntime_.IsActive();
+        }
+
+        [[nodiscard]] bool IsProjectPlayFromStoryFlowRunning() const noexcept
+        {
+            return IsProjectPlayFromStoryFlowActive() &&
+                testLevelRuntime_.LastResult().state ==
+                    TestLevelProcessState::Running;
+        }
+
+        [[nodiscard]] const TestLevelProcessResult&
+        ProjectPlayFromStoryFlowResult() const noexcept
+        {
+            return testLevelRuntime_.LastResult();
+        }
+
         // Gate 1 exposes only the presentation/lifecycle seams required by the
         // Story Flow adapter. Semantic Flow state remains in EngineBridge.
         [[nodiscard]] bool IsProjectHubVisible() const noexcept
