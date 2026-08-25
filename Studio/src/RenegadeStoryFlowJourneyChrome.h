@@ -22,7 +22,7 @@ namespace renegade::studio
         enum class Action
         {
             Hub, StoryFlow, Levels, Screens, Assets, Variables, TestPlay,
-            Select, Arrange, Filter, Search, Preview, Validate,
+            Select, Arrange, Filter, Search, BuildGame, Validate,
             Undo, Redo, ProjectSelector, Settings, MainMenu,
             ZoomOut, ZoomIn, Fit, Start,
         };
@@ -69,6 +69,14 @@ namespace renegade::studio
         void SetGraphViewActive(const bool active) noexcept
         {
             graphViewActive_ = active;
+        }
+
+        void SetProjectCommandState(
+            const bool testGameRunning,
+            const bool buildGameBusy) noexcept
+        {
+            testGameRunning_ = testGameRunning;
+            buildGameBusy_ = buildGameBusy;
         }
 
         void SetLayout(const float width, const float height)
@@ -179,19 +187,21 @@ namespace renegade::studio
             {
                 if (Contains(navBounds_[i], pointer))
                 {
-                    action_(navActions[i]);
+                    if (i != 5)
+                        action_(navActions[i]);
                     return;
                 }
             }
 
             static constexpr std::array<Action, 6> commandActions = {
                 Action::Select, Action::Arrange, Action::Filter,
-                Action::Search, Action::Preview, Action::Validate};
+                Action::Search, Action::BuildGame, Action::Validate};
             for (std::size_t i = 0; i < commandBounds_.size(); ++i)
             {
                 if (Contains(commandBounds_[i], pointer))
                 {
-                    action_(commandActions[i]);
+                    if (!(graphViewActive_ && i == 2))
+                        action_(commandActions[i]);
                     return;
                 }
             }
@@ -290,6 +300,7 @@ namespace renegade::studio
         static constexpr wi::Color Muted = wi::Color(103, 121, 132, 255);
         static constexpr wi::Color Blue = wi::Color(65, 158, 230, 255);
         static constexpr wi::Color Green = wi::Color(113, 205, 111, 255);
+        static constexpr wi::Color Orange = wi::Color(210, 91, 29, 255);
 
         static bool Contains(const JourneyUiRect& bounds, const XMFLOAT4& pointer)
         {
@@ -404,8 +415,8 @@ namespace renegade::studio
                     11.0f, color, cmd);
                 Rounded({cx - 9.0f, cy - 8.0f, 18.0f, 18.0f},
                     9.0f, RailSurface, cmd);
-                Text(">", cx + 1.0f, cy - 5.0f, 9, color, cmd,
-                    wi::font::WIFALIGN_CENTER);
+                Text(testGameRunning_ ? "■" : ">", cx + 1.0f, cy - 5.0f,
+                    9, color, cmd, wi::font::WIFALIGN_CENTER);
             }
         }
 
@@ -443,12 +454,15 @@ namespace renegade::studio
                 Rect(cx + 9.0f, cy + 5.0f, 2.0f, 6.0f, color, cmd);
                 break;
             case 4:
-                Rounded({cx - 11.0f, cy - 10.0f, 22.0f, 22.0f},
-                    11.0f, color, cmd);
-                Rounded({cx - 9.0f, cy - 8.0f, 18.0f, 18.0f},
-                    9.0f, HeaderSurface, cmd);
-                Text(">", cx + 1.0f, cy - 5.0f, 9, color, cmd,
-                    wi::font::WIFALIGN_CENTER);
+                // Build: a downward package arrow into a tray. This is
+                // deliberately distinct from the TEST GAME play glyph.
+                Rect(cx - 1.0f, cy - 10.0f, 2.0f, 12.0f, color, cmd);
+                Rect(cx - 5.0f, cy - 2.0f, 10.0f, 2.0f, color, cmd);
+                Rect(cx - 5.0f, cy - 2.0f, 2.0f, 4.0f, color, cmd);
+                Rect(cx + 3.0f, cy - 2.0f, 2.0f, 4.0f, color, cmd);
+                Rect(cx - 9.0f, cy + 6.0f, 18.0f, 2.0f, color, cmd);
+                Rect(cx - 9.0f, cy + 6.0f, 2.0f, 5.0f, color, cmd);
+                Rect(cx + 7.0f, cy + 6.0f, 2.0f, 5.0f, color, cmd);
                 break;
             case 5:
                 Rounded({cx - 10.0f, cy - 9.0f, 20.0f, 20.0f},
@@ -510,25 +524,38 @@ namespace renegade::studio
         void RenderTopCommands(wi::graphics::CommandList cmd) const
         {
             static constexpr std::array<const char*, 6> labels = {
-                "SELECT", "ARRANGE", "FILTER", "SEARCH", "PREVIEW", "VALIDATE"};
+                "SELECT", "ARRANGE", "FILTER", "SEARCH", "BUILD GAME", "VALIDATE"};
+            const XMFLOAT4 pointer = wi::input::GetPointer();
+            const bool mouseDown =
+                wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
             for (std::size_t i = 0; i < commandBounds_.size(); ++i)
             {
                 const bool available = !(graphViewActive_ && i == 2);
-                const bool active = i == 0 || (i == 2 && filterActive_);
-                if (available && active)
+                const bool active = i == 0 || (i == 2 && filterActive_) ||
+                    (i == 4 && buildGameBusy_);
+                const bool hovered = available && Contains(commandBounds_[i], pointer);
+                const bool pressed = hovered && mouseDown;
+                if (available && (active || hovered))
                 {
                     Rounded(commandBounds_[i], 4.0f,
-                        wi::Color(15, 34, 50, 255), cmd);
+                        pressed
+                            ? wi::Color(47, 25, 16, 255)
+                            : active
+                                ? wi::Color(15, 34, 50, 255)
+                                : wi::Color(15, 27, 36, 255),
+                        cmd);
                     Rect(commandBounds_[i].x + 10.0f,
                         commandBounds_[i].Bottom() - 2.0f,
-                        commandBounds_[i].width - 20.0f, 2.0f, Blue, cmd);
+                        commandBounds_[i].width - 20.0f, 2.0f,
+                        pressed ? Orange : Blue, cmd);
                 }
-                CommandGlyph(i, commandBounds_[i],
-                    !available ? Muted : (active ? TextStrong : TextSecondary), cmd);
+                const wi::Color commandColour = !available
+                    ? Muted
+                    : (active || hovered ? TextStrong : TextSecondary);
+                CommandGlyph(i, commandBounds_[i], commandColour, cmd);
                 Text(labels[i], commandBounds_[i].x + commandBounds_[i].width * 0.5f,
                     commandBounds_[i].y + 39.0f, 8,
-                    !available ? Muted : (active ? TextStrong : TextSecondary), cmd,
-                    wi::font::WIFALIGN_CENTER);
+                    commandColour, cmd, wi::font::WIFALIGN_CENTER);
             }
         }
 
@@ -570,25 +597,40 @@ namespace renegade::studio
         {
             static constexpr std::array<const char*, 7> labels = {
                 "HUB", "STORY FLOW", "LEVELS", "SCREENS",
-                "ASSETS", "VARIABLES", "TEST PLAY"};
+                "ASSETS", "VARIABLES", "TEST GAME"};
             static constexpr std::array<const char*, 7> glyphs = {
                 "home", "flow", "levels", "screen",
                 "assets", "variables", "play"};
+            const XMFLOAT4 pointer = wi::input::GetPointer();
+            const bool mouseDown =
+                wi::input::Down(wi::input::MOUSE_BUTTON_LEFT);
             for (std::size_t i = 0; i < navBounds_.size(); ++i)
             {
-                const bool active = i == 1;
+                const bool active = i == 1 || (i == 6 && testGameRunning_);
                 const bool unavailable = i == 5;
-                if (active)
+                const bool hovered = !unavailable && Contains(navBounds_[i], pointer);
+                const bool pressed = hovered && mouseDown;
+                if (active || hovered)
                 {
-                    Rounded(navBounds_[i], 5.0f, wi::Color(13, 34, 50, 255), cmd);
+                    Rounded(navBounds_[i], 5.0f,
+                        pressed
+                            ? wi::Color(47, 25, 16, 255)
+                            : active
+                                ? wi::Color(13, 34, 50, 255)
+                                : wi::Color(13, 25, 34, 255),
+                        cmd);
                     Rect(navBounds_[i].x, navBounds_[i].y,
-                        3.0f, navBounds_[i].height, Blue, cmd);
+                        3.0f, navBounds_[i].height,
+                        pressed ? Orange : Blue, cmd);
                 }
                 const wi::Color colour = unavailable
                     ? wi::Color(73, 87, 96, 255)
-                    : (active ? TextStrong : TextSecondary);
+                    : ((active || hovered) ? TextStrong : TextSecondary);
                 Glyph(glyphs[i], navBounds_[i], colour, cmd);
-                Text(labels[i], navBounds_[i].x + navBounds_[i].width * 0.5f,
+                const char* label = i == 6 && testGameRunning_
+                    ? "STOP GAME"
+                    : labels[i];
+                Text(label, navBounds_[i].x + navBounds_[i].width * 0.5f,
                     navBounds_[i].y + navBounds_[i].height - 17.0f,
                     8,
                     active ? TextStrong : colour, cmd, wi::font::WIFALIGN_CENTER);
@@ -673,6 +715,8 @@ namespace renegade::studio
         float zoom_ = 1.0f;
         bool filterActive_ = false;
         bool graphViewActive_ = false;
+        bool testGameRunning_ = false;
+        bool buildGameBusy_ = false;
         std::function<void(Action)> action_;
         std::function<void(float)> zoomRequested_;
     };
