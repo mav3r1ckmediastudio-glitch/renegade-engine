@@ -78,7 +78,7 @@ namespace renegade::studio
         {
             const std::time_t now = std::time(nullptr);
             std::tm utc{};
-            if (gmtime_s(&utc, &now) != 0)
+            if (gmtime_s(&utc) != 0)
                 return {};
             std::ostringstream stream;
             stream << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");
@@ -271,6 +271,33 @@ namespace renegade::studio
             return quoted;
         }
 
+        std::wstring Utf8ToWide(const std::string& value)
+        {
+            if (value.empty())
+                return {};
+
+            const int characterCount = MultiByteToWideChar(
+                CP_UTF8,
+                MB_ERR_INVALID_CHARS,
+                value.data(),
+                static_cast<int>(value.size()),
+                nullptr,
+                0);
+            if (characterCount <= 0)
+                return std::wstring(value.begin(), value.end());
+
+            std::wstring result(
+                static_cast<std::size_t>(characterCount), L'\0');
+            MultiByteToWideChar(
+                CP_UTF8,
+                MB_ERR_INVALID_CHARS,
+                value.data(),
+                static_cast<int>(value.size()),
+                result.data(),
+                characterCount);
+            return result;
+        }
+
         fs::path RuntimeEvidencePath(const std::string& identity)
         {
             const DWORD required = GetEnvironmentVariableW(
@@ -293,7 +320,7 @@ namespace renegade::studio
         bool RunStandaloneSmoke(
             const bridge::WindowsGameBuildPlan& plan,
             const bridge::WindowsGameBuildStageResult& stage,
-            const std::size_t completionCount,
+            const std::vector<std::string>& smokeOutcomes,
             const std::string& stagingId,
             std::string& runtimeEvidencePath,
             std::string& error)
@@ -304,11 +331,6 @@ namespace renegade::studio
             if (!IsRegularFile(executable))
             {
                 error = "Build Windows Game smoke cannot find the staged named executable.";
-                return false;
-            }
-            if (completionCount == 0)
-            {
-                error = "Build Windows Game smoke requires at least one deterministic Level completion.";
                 return false;
             }
 
@@ -352,8 +374,12 @@ namespace renegade::studio
 
             std::wstring command = QuoteArgument(executable.wstring());
             command += L" dx12";
-            for (std::size_t index = 0; index < completionCount; ++index)
-                command += L" --flow-outcome=level.complete";
+            for (const std::string& outcome : smokeOutcomes)
+            {
+                command += L" ";
+                command += QuoteArgument(
+                    Utf8ToWide("--flow-outcome=" + outcome));
+            }
             command += L" --renegade-smoke-autoplay --renegade-smoke-exit";
             std::vector<wchar_t> commandBuffer(command.begin(), command.end());
             commandBuffer.push_back(L'\0');
@@ -636,10 +662,10 @@ namespace renegade::studio
             bridge::WindowsVcRuntimePrerequisitePolicy;
         request.verification.expectedFlowTrace = projectState.expectedFlowTrace;
 
-        const std::size_t completionCount = projectState.levelCompletionCount;
+        const std::vector<std::string> smokeOutcomes = projectState.smokeOutcomes;
         bridge::WindowsGameBuildWorkflowResult result;
         const bridge::WindowsGameBuildSmokeRunner smoke =
-            [completionCount, stagingId](
+            [smokeOutcomes, stagingId](
                 const bridge::WindowsGameBuildPlan& plan,
                 const bridge::WindowsGameBuildStageResult& stage,
                 std::string& evidencePath,
@@ -648,7 +674,7 @@ namespace renegade::studio
                 return RunStandaloneSmoke(
                     plan,
                     stage,
-                    completionCount,
+                    smokeOutcomes,
                     stagingId,
                     evidencePath,
                     smokeError);
