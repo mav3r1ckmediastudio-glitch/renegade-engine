@@ -169,6 +169,30 @@ namespace renegade::runtime
             }
         }
 
+        // Gate 10 Flow-native standalone smoke: unlike the retained LP03
+        // compatibility path above, a modern project has no project-level
+        // startup Screen whose Play action can drive smoke completion. The
+        // build supplies the exact authored Story Flow outcomes on the command
+        // line, so once bootstrap has consumed them the terminal Flow state is
+        // already authoritative evidence. Record PASS/FAIL here and exit
+        // instead of waiting for a legacy Play action that will never arrive.
+        if (smokeAutoPlay_ && flowStarted_)
+        {
+            const bool complete =
+                startupResult_.flowTerminalAction ==
+                    bridge::FlowTerminalAction::CompleteGame;
+            startupResult_.smokeStatus = complete ? "PASS" : "FAIL";
+            startupResult_.smokeQuitReason = complete
+                ? "smoke_complete"
+                : "flow_not_complete";
+            exitCode_ = complete
+                ? 0
+                : static_cast<int>(RuntimeBootstrapCode::FlowExecutionFailed);
+            if (smokeExitOnComplete_)
+                quitRequested_ = true;
+            ++evidenceRevision_;
+        }
+
         renderer_.Load();
         ActivatePath(&renderer_);
     }
