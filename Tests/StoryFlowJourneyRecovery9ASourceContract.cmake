@@ -82,11 +82,11 @@ require_text(layout_source "constexpr float topBarHeight = 70.0f;" "fixed top ap
 require_text(layout_source "constexpr float railWidth = 96.0f;" "fixed left navigation rail")
 require_text(layout_source "width * 0.185f, 280.0f, 336.0f" "bounded responsive Inspector")
 require_text(layout_source "layout.storyOverview" "fixed story overview host")
-require_text(chrome_source "Select, Arrange, Filter, Search, Preview, Validate" "complete Journey toolbar actions")
+require_text(chrome_source "Select, Arrange, Filter, Search, BuildGame, Validate" "complete Journey toolbar actions")
 require_text(chrome_source "Undo, Redo, ProjectSelector, Settings, MainMenu" "complete Journey utility actions")
 require_text(chrome_source "Hub, StoryFlow, Levels, Screens, Assets, Variables, TestPlay" "complete Journey rail actions")
 foreach(action IN ITEMS Hub StoryFlow Levels Screens Assets Variables TestPlay
-        Select Arrange Filter Search Preview Validate Undo Redo ProjectSelector
+        Select Arrange Filter Search BuildGame Validate Undo Redo ProjectSelector
         Settings MainMenu ZoomOut ZoomIn Fit Start)
     require_text(render_path_source "case Action::${action}:" "routed ${action} shell action")
 endforeach()
@@ -185,15 +185,19 @@ forbid_text(workspace_source "Label(Shorten(ReadableStatus(statusMessage_)" "tru
 forbid_text(workspace_source "Label(Shorten(std::move(message), 48)" "truncated Validation message")
 forbid_text(workspace_source "diagnostic.code + \" // \" + diagnostic.message" "raw internal diagnostic codes in Inspector")
 
-# Preview saves the authoritative Flow first, blocks on save failure and then
-# requests the existing governed project Runtime launch. It never invents an
-# LP04 snapshot for Story Flow.
-require_text(render_path_source "workspace_.SaveJourney();" "Preview save-before-launch")
-require_text(render_path_source "PREVIEW BLOCKED // STORY FLOW SAVE FAILED" "Preview fail-closed status")
-require_text(integration_source "RequestProjectPlayFromStoryFlow" "governed Story Flow Runtime launch")
-require_text(studio_application_source "options.ownsSnapshot = false;" "snapshot-free Story Flow Preview")
-require_text(studio_application_source "project.descriptorPath" "project-descriptor Preview launch")
-require_text(studio_application_source "bridge::TestLevelSnapshot noSnapshot;" "empty Preview snapshot handoff")
+# Gate 10 recovery keeps project actions fail-closed and saved-first. TEST GAME
+# launches the governed project descriptor from Story Flow itself; BUILD GAME is
+# a distinct project-home command using the existing governed build controller.
+require_text(render_path_source "workspace_.SaveJourney();" "project command save-before-launch/build")
+require_text(render_path_source "TEST GAME BLOCKED // STORY FLOW SAVE FAILED" "Test Game fail-closed status")
+require_text(render_path_source "BUILD GAME BLOCKED // STORY FLOW SAVE FAILED" "Build Game fail-closed status")
+require_text(integration_source "StartProjectPlayFromStoryFlowNow" "direct Story Flow Runtime launch")
+require_text(integration_source "PollProjectPlayFromStoryFlow" "Story Flow Runtime lifecycle polling")
+require_text(integration_source "BuildActiveWindowsGame" "Story Flow governed Windows build")
+require_text(studio_application_source "options.ownsSnapshot = false;" "snapshot-free Story Flow Test Game")
+require_text(studio_application_source "project.descriptorPath" "project-descriptor Test Game launch")
+require_text(studio_application_source "bridge::TestLevelSnapshot noSnapshot;" "empty Test Game snapshot handoff")
+forbid_text(integration_source "RequestProjectPlayFromStoryFlow();" "inactive Level Editor project-play queue")
 forbid_text(integration_source "RequestTestLevelSnapshotFromStoryFlow" "Story Flow LP04 snapshot launch")
 
 # The replacement UI must continue to queue the accepted governed lifecycle
