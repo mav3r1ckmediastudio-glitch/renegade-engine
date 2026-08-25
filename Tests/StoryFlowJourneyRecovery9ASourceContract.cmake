@@ -11,11 +11,16 @@ set(CARD "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyCard.h")
 set(LANE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyLane.h")
 set(ROLE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyRole.h")
 set(WORKSPACE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowWorkspace.cpp")
+set(STUDIO_CHROME "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp")
+set(PROJECT_HUB "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeProjectHub.cpp")
+set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
+set(BRAND_LOGO "${RENEGADE_SOURCE_DIR}/Studio/assets/renegade-engine-fractured-crest-logo.png")
 set(LEGACY_LEVEL "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowLevelPanel.h")
 set(LEGACY_SCREEN "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowScreenPanel.h")
 
 foreach(path IN ITEMS "${RENDER_PATH}" "${INTEGRATION}" "${COMPOSER}"
-        "${CHROME}" "${LAYOUT}" "${CARD}" "${LANE}" "${ROLE}" "${WORKSPACE}")
+        "${CHROME}" "${LAYOUT}" "${CARD}" "${LANE}" "${ROLE}" "${WORKSPACE}"
+        "${STUDIO_CHROME}" "${PROJECT_HUB}" "${STUDIO_CMAKE}" "${BRAND_LOGO}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "Journey recovery 9A source contract input is missing: ${path}")
     endif()
@@ -36,6 +41,9 @@ file(READ "${CARD}" card_source)
 file(READ "${LANE}" lane_source)
 file(READ "${ROLE}" role_source)
 file(READ "${WORKSPACE}" workspace_source)
+file(READ "${STUDIO_CHROME}" studio_chrome_source)
+file(READ "${PROJECT_HUB}" project_hub_source)
+file(READ "${STUDIO_CMAKE}" studio_cmake_source)
 
 function(require_text haystack_var needle description)
     string(FIND "${${haystack_var}}" "${needle}" found)
@@ -76,6 +84,25 @@ require_text(render_path_source "journeyChrome_.CanvasOverlayOwnsPointer" "fixed
 require_text(render_path_source "workspace_.FindAndFocusJourneyNode(findDraft_)" "Journey-native search/focus")
 require_text(render_path_source "graphViewButton_.SetVisible(active);" "restored Graph editor access")
 require_text(render_path_source "workspace_.ActivateView(bridge::StoryFlowViewMode::Graph)" "real Graph view activation")
+
+# The owner-supplied transparent fractured-crest logo is the sole packaged
+# header brand. All consumers preserve aspect ratio and use alpha blending;
+# the superseded additive wordmark must not return.
+file(SHA256 "${BRAND_LOGO}" brand_logo_sha256)
+if(NOT brand_logo_sha256 STREQUAL "9acc347e3e46602142ec9cdceeb846d3eb96fddac0b07d10ebc33a0a912e2a05")
+    message(FATAL_ERROR "Journey recovery 9F authoritative brand logo hash changed: ${brand_logo_sha256}")
+endif()
+require_text(chrome_source "renegade-engine-fractured-crest-logo.png" "Journey fractured-crest logo")
+require_text(chrome_source "logo.blendFlag = wi::enums::BLENDMODE_ALPHA;" "Journey logo alpha blending")
+require_text(chrome_source "drawWidth = drawHeight * aspect;" "Journey logo aspect preservation")
+require_text(studio_chrome_source "renegade-engine-fractured-crest-logo.png" "Studio fractured-crest logo")
+require_text(studio_chrome_source "logo.blendFlag = wi::enums::BLENDMODE_ALPHA;" "Studio logo alpha blending")
+require_text(project_hub_source "renegade-engine-fractured-crest-logo.png" "Project Hub fractured-crest logo")
+require_text(studio_cmake_source "Content/ui/renegade-engine-fractured-crest-logo.png" "packaged fractured-crest logo")
+forbid_text(chrome_source "renegade-engine-wordmark.png" "superseded Journey wordmark")
+forbid_text(studio_chrome_source "renegade-engine-wordmark.png" "superseded Studio wordmark")
+forbid_text(project_hub_source "renegade-engine-wordmark.png" "superseded Project Hub wordmark")
+forbid_text(studio_cmake_source "renegade-engine-wordmark.png" "superseded packaged wordmark")
 
 # Main cards are neutral rounded image surfaces with shadow. Validation is a
 # footer state mark; only selection may colour the frame blue.

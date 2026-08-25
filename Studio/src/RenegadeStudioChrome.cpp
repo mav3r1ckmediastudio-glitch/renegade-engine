@@ -769,7 +769,7 @@ namespace renegade::studio
     {
         SetName("Renegade-owned Studio chrome");
         brandLockup_ = wi::resourcemanager::Load(
-            "Content/ui/renegade-engine-wordmark.png");
+            "Content/ui/renegade-engine-fractured-crest-logo.png");
         SetLayout(width_, height_);
         SetShadowRadius(0.0f);
     }
@@ -2158,13 +2158,33 @@ namespace renegade::studio
         DrawRect(7.0f, 7.0f, 1.0f, height_ - 14.0f, BorderSoft, cmd);
         DrawRect(width_ - 8.0f, 7.0f, 1.0f, height_ - 14.0f, BorderSoft, cmd);
 
-        // Official wordmark lockup supplied by the Renegade brand document.
-        // That document is logo authority only; the accepted Studio proof
-        // remains the authority for every other UX and visual decision.
+        // Owner-supplied transparent fractured-crest lockup. Preserve its
+        // aspect ratio and alpha; the logo never inherits additive UI glow.
         if (brandLockup_.IsValid())
         {
-            wi::image::Params logo(18.0f, 9.0f, 168.0f, 46.0f);
-            logo.blendFlag = wi::enums::BLENDMODE_ADDITIVE;
+            const auto desc = brandLockup_.GetTexture().GetDesc();
+            constexpr float maxWidth = 168.0f;
+            constexpr float maxHeight = 62.0f;
+            float drawWidth = maxWidth;
+            float drawHeight = maxHeight;
+            if (desc.width > 0 && desc.height > 0)
+            {
+                const float aspect =
+                    static_cast<float>(desc.width) /
+                    static_cast<float>(desc.height);
+                drawWidth = drawHeight * aspect;
+                if (drawWidth > maxWidth)
+                {
+                    drawWidth = maxWidth;
+                    drawHeight = drawWidth / aspect;
+                }
+            }
+            wi::image::Params logo(
+                18.0f,
+                (TopBarHeight - drawHeight) * 0.5f,
+                drawWidth,
+                drawHeight);
+            logo.blendFlag = wi::enums::BLENDMODE_ALPHA;
             logo.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
             wi::image::Draw(&brandLockup_.GetTexture(), logo, cmd);
         }

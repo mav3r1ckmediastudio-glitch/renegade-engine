@@ -194,8 +194,8 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeImGuiPS.hlsl"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeImGuiPS.hlsl"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-wordmark.png"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-wordmark.png"
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/renegade-engine-fractured-crest-logo.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/renegade-engine-fractured-crest-logo.png"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/creator-human-reference.png"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui/creator-human-reference.png"

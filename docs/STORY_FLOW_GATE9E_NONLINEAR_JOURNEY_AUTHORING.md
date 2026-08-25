@@ -77,7 +77,8 @@ owner authorization.
 
 ## Deliberate boundary
 
-Presentation-only chapters/groups, automatic insertion/splicing, the supplied
-brand-logo replacement and the remaining concept-fidelity pass are not claimed
-by 9E. They remain 9F/pre-release work and must not be faked by altering Runtime
-semantics or layering another visual shell over Journey.
+Presentation-only chapters/groups, automatic insertion/splicing and the
+remaining concept-fidelity pass are not claimed by 9E. They remain later
+pre-release work and must not be faked by altering Runtime semantics or
+layering another visual shell over Journey. The supplied brand-logo replacement
+is owned by 9F.

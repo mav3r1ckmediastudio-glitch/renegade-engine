@@ -90,6 +90,10 @@ by mutating Runtime semantics implicitly.
 
 ### 9F — UX Hardening, Diagnostics and Gate 9 Acceptance
 
+- the owner-supplied transparent fractured-crest Renegade Engine logo replaces
+  the superseded header wordmark in Journey, the shared Studio chrome and the
+  Project Hub; visible artwork is alpha-trimmed only, aspect-preserved and
+  rendered with alpha rather than additive blending;
 - source contracts reject legacy panels, type-coloured card frames, unreadable
   zoom, zoom-scaled overview chrome and Journey-to-Graph exit routing;
 - fixed-layout tests cover the approved and compact resolutions;
