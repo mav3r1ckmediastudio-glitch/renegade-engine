@@ -1,0 +1,64 @@
+name: Gate 10 Studio hotfix
+
+on:
+  push:
+    branches:
+      - feature/story-flow-gate10-closeout
+    paths:
+      - .github/workflows/gate10-hotfix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/story-flow-gate10-closeout
+          fetch-depth: 0
+      - name: Apply bounded Studio CI hotfix
+        shell: python
+        run: |
+          from pathlib import Path
+
+          build = Path("Studio/src/WindowsGameBuildController.cpp")
+          text = build.read_text(encoding="utf-8")
+          old = "[smokeOutcomes, stagingId, &progress]("
+          new = "[smokeOutcomes, stagingId]("
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one build progress capture, found {text.count(old)}")
+          build.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          workspace = Path("Studio/src/RenegadeStoryFlowWorkspace.cpp")
+          text = workspace.read_text(encoding="utf-8")
+
+          graph_anchor = "        if (layout_->activeView == bridge::StoryFlowViewMode::Journey)\n        {\n            const float branchHeaderY ="
+          graph_replacement = "        // Graph is intentionally not rendered here. ImNodes is the sole Graph\n        // renderer and is composed by RenegadeStoryFlowGraphLayer. Journey keeps\n        // its native lane/card projection in this shared presentation workspace.\n" + graph_anchor
+          if "Graph is intentionally not rendered here." not in text:
+              if text.count(graph_anchor) != 1:
+                  raise SystemExit(f"expected one Graph render anchor, found {text.count(graph_anchor)}")
+              text = text.replace(graph_anchor, graph_replacement, 1)
+
+          scissor_anchor = "            if (!widget->IsVisible()) continue;\n            ApplyScissor(canvas, scissorRect, cmd);\n            widget->Render(canvas, cmd);"
+          scissor_replacement = "            if (!widget->IsVisible()) continue;\n            // TextInputField binds its own narrow scissor and the custom\n            // RenegadeButton/ComboBox renderers intentionally do not. Restore\n            // the workspace clip before every manually rendered control so a\n            // preceding field can never clip Add Action or exit destinations.\n            ApplyScissor(canvas, scissorRect, cmd);\n            widget->Render(canvas, cmd);"
+          if "preceding field can never clip Add Action" not in text:
+              if text.count(scissor_anchor) != 1:
+                  raise SystemExit(f"expected one Inspector scissor anchor, found {text.count(scissor_anchor)}")
+              text = text.replace(scissor_anchor, scissor_replacement, 1)
+
+          workspace.write_text(text, encoding="utf-8")
+      - name: Verify bounded changes
+        shell: bash
+        run: |
+          git diff --check
+          git diff -- Studio/src/WindowsGameBuildController.cpp Studio/src/RenegadeStoryFlowWorkspace.cpp
+      - name: Commit hotfix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Studio/src/WindowsGameBuildController.cpp Studio/src/RenegadeStoryFlowWorkspace.cpp
+          git commit -m "Fix Gate 10 Studio CI regression"
+          git push origin HEAD:feature/story-flow-gate10-closeout
