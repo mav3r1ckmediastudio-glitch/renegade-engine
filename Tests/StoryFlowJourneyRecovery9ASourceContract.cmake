@@ -174,7 +174,7 @@ require_text(chrome_source "action_(Action::MainMenu);" "Main Menu disabled-reas
 require_text(chrome_source "const bool available = !(graphViewActive_ && i == 2);" "Graph-safe Journey Filter disablement")
 require_text(render_path_source "FILTER UNAVAILABLE // JOURNEY VIEW ONLY" "Graph Filter disabled reason")
 require_text(workspace_source "Unreachable from Game Start:" "human-readable unreachable diagnostic")
-require_text(workspace_source "const std::size_t capacity = 2;" "non-overlapping validation diagnostic capacity")
+require_text(workspace_source "constexpr std::size_t modelCapacity = 2;" "non-overlapping validation diagnostic capacity")
 require_text(inspector_text_source "WrapInspectorText" "complete Inspector message wrapping")
 require_text(inspector_text_source "word.size() > limit" "long Inspector identifier wrapping")
 require_text(inspector_text_source "ComputeInspectorMessageLayout" "non-overlapping Inspector message layout")
