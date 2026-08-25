@@ -254,17 +254,18 @@ namespace renegade::bridge
             // LP06 originally proved a legacy project-level startup Screen by
             // auto-activating its Play action before Story Flow. Gate 10 modern
             // projects are Flow-native: their packaged descriptor has no
-            // startup Screen, Runtime enters Story Flow directly, and the build
-            // supplies the exact authored outcomes required to reach Complete
-            // Game. Keep both contracts strict instead of forcing modern Flow
-            // through fabricated legacy Screen evidence.
-            const auto startupScreen = evidence.find("startup_screen");
-            if (startupScreen == evidence.end())
+            // startup Screen identity, Runtime enters Story Flow directly, and
+            // the build supplies the exact authored outcomes required to reach
+            // Complete Game. Use immutable project metadata from the evidence
+            // to distinguish the contracts: startupScreenPath is mutable and is
+            // deliberately cleared after a terminal Flow step.
+            const auto startupScreenId = evidence.find("startup_screen_id");
+            if (startupScreenId == evidence.end())
             {
-                error = "Gate 4 Runtime evidence is missing startup Screen state.";
+                error = "Gate 4 Runtime evidence is missing startup Screen identity state.";
                 return false;
             }
-            const bool legacyStartupScreen = !startupScreen->second.empty();
+            const bool legacyStartupScreen = !startupScreenId->second.empty();
             if (legacyStartupScreen)
             {
                 if (!Require(evidence, "screen_was_loaded", "true", error) ||
@@ -276,13 +277,14 @@ namespace renegade::bridge
             }
             else
             {
-                const auto startupFlow = evidence.find("startup_flow");
+                const auto startupFlowId = evidence.find("startup_flow_id");
                 const auto flowDocumentId = evidence.find("flow_document_id");
-                if (startupFlow == evidence.end() || startupFlow->second.empty() ||
-                    flowDocumentId == evidence.end() || flowDocumentId->second.empty())
+                if (startupFlowId == evidence.end() || startupFlowId->second.empty() ||
+                    flowDocumentId == evidence.end() || flowDocumentId->second.empty() ||
+                    flowDocumentId->second != startupFlowId->second)
                 {
                     error =
-                        "Gate 4 Flow-native Runtime evidence does not prove a governed startup Story Flow.";
+                        "Gate 4 Flow-native Runtime evidence does not prove the governed startup Story Flow identity.";
                     return false;
                 }
                 if (!Require(evidence, "screen_loaded", "false", error) ||
