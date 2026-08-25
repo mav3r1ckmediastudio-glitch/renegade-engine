@@ -258,23 +258,25 @@ namespace renegade::bridge
 
         // Resolve and decode every distinct required texture before touching a
         // target material. This keeps packaged Runtime replacement atomic at
-        // the scene-binding level.
+        // the scene-binding level. MaterialTextureBindingRecord's legacy
+        // baseColorTextureAssetId mirror is populated only for Base Color;
+        // package Runtime must use the slot-neutral textureAssetId.
         for (const auto& binding : bindings)
         {
-            if (loadedById.find(binding.baseColorTextureAssetId) !=
+            if (loadedById.find(binding.textureAssetId) !=
                 loadedById.end())
                 continue;
 
             PackagedResourceAsset packaged;
             if (!PreparePackagedResourceAsset(
                     packageRoot, projectId,
-                    binding.baseColorTextureAssetId, packaged, error))
+                    binding.textureAssetId, packaged, error))
                 return false;
             if (packaged.resourceClass != ResourceClass::Texture)
             {
                 error =
                     "Material texture stable ID resolves to a packaged non-texture resource: " +
-                    binding.baseColorTextureAssetId;
+                    binding.textureAssetId;
                 return false;
             }
 
@@ -306,13 +308,13 @@ namespace renegade::bridge
                 return false;
             }
             loadedById.emplace(
-                binding.baseColorTextureAssetId, std::move(loaded));
+                binding.textureAssetId, std::move(loaded));
         }
 
         for (const auto& binding : bindings)
         {
             auto* material = scene.materials.GetComponent(binding.materialEntity);
-            const auto loaded = loadedById.find(binding.baseColorTextureAssetId);
+            const auto loaded = loadedById.find(binding.textureAssetId);
             if (material == nullptr || loaded == loadedById.end())
             {
                 error =
@@ -320,14 +322,13 @@ namespace renegade::bridge
                 return false;
             }
 
-            auto& texture = material->textures[
-                wi::scene::MaterialComponent::BASECOLORMAP];
+            auto& texture = material->textures[WickedTextureSlot(binding.slot)];
             texture.name.clear();
             texture.resource = loaded->second.resource;
             material->SetDirty();
 
             PackagedMaterialTextureRefreshRecord record;
-            record.assetId = binding.baseColorTextureAssetId;
+            record.assetId = binding.textureAssetId;
             record.packagedAssetPath = loaded->second.packagedPath;
             record.payloadHash = loaded->second.prepared.payloadHash;
             record.materialEntity = binding.materialEntity;

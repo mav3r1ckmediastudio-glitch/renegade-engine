@@ -1,4 +1,5 @@
 #include "renegade/bridge/BuildService.h"
+#include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/WindowsGameBuildProjectService.h"
 
@@ -9,9 +10,12 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 namespace
@@ -108,8 +112,7 @@ namespace
         const std::string& path)
     {
         const auto found = std::find_if(
-            registry.records.begin(),
-            registry.records.end(),
+            registry.records.begin(), registry.records.end(),
             [&path](const AssetRecord& record)
             {
                 return record.projectRelativePath == path;
@@ -138,14 +141,67 @@ namespace
         const std::string& provenance)
     {
         return std::any_of(
-            graph.edges.begin(),
-            graph.edges.end(),
+            graph.edges.begin(), graph.edges.end(),
             [&](const DependencyEdge& edge)
             {
                 return edge.sourceId == sourceId &&
                     edge.targetId == targetId &&
                     edge.provenance == provenance;
             });
+    }
+
+    bool ReplaceDescriptorText(
+        const fs::path& descriptor,
+        const std::string& from,
+        const std::string& to,
+        std::string& error)
+    {
+        std::ifstream input(descriptor, std::ios::binary);
+        if (!input)
+        {
+            error = "could not open project descriptor for Gate 10 migration proof";
+            return false;
+        }
+        std::string text{
+            std::istreambuf_iterator<char>(input),
+            std::istreambuf_iterator<char>()};
+        const std::size_t found = text.find(from);
+        if (found == std::string::npos)
+        {
+            error = "Gate 10 fixture descriptor did not contain expected legacy field";
+            return false;
+        }
+        text.replace(found, from.size(), to);
+
+        std::ofstream output(descriptor, std::ios::binary | std::ios::trunc);
+        if (!output)
+        {
+            error = "could not rewrite project descriptor for Gate 10 migration proof";
+            return false;
+        }
+        output.write(text.data(), static_cast<std::streamsize>(text.size()));
+        if (!output)
+        {
+            error = "could not finish Gate 10 project descriptor rewrite";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    FlowRoute Route(
+        const StableId& source,
+        std::string outcome,
+        const StableId& destination,
+        std::string destinationEntry = {})
+    {
+        FlowRoute route;
+        route.id = GenerateStableId();
+        route.sourceNodeId = source;
+        route.outcome = std::move(outcome);
+        route.destinationNodeId = destination;
+        route.destinationEntry = std::move(destinationEntry);
+        return route;
     }
 }
 
@@ -197,6 +253,8 @@ int main(int argc, char** argv)
     if (!projects.InspectProject(descriptor.generic_u8string(), project, error))
         return Fail(root, "could not inspect disposable owner project: " + error);
 
+    // Preserve the accepted LP06 regression first. The old Level-only fixture
+    // must continue producing exactly the established deterministic smoke.
     WindowsGameBuildProjectState state;
     if (!PrepareWindowsGameBuildProjectState(project, state, error))
         return Fail(root, "owner-build project preparation failed: " + error);
@@ -255,56 +313,166 @@ int main(int argc, char** argv)
     }
 
     if (state.levelCompletionCount != 2 ||
-        state.expectedFlowTrace.size() != 4)
+        state.expectedFlowTrace.size() != 4 ||
+        state.smokeOutcomes !=
+            std::vector<std::string>{"level.complete", "level.complete"})
     {
         return Fail(root,
-            "owner-build project preparation changed the established Test All route");
+            "owner-build project preparation changed the established LP06 route");
+    }
+
+    // Gate 10: convert the disposable project to the current Story Flow-native
+    // architecture. The project descriptor no longer owns a startup Scene or
+    // startup Screen; the Screen is an executable destination inside Flow and
+    // must be discovered, packaged and traversed from there.
+    const StableId screenDocumentId = project.startupScreenId;
+    const std::string screenPath = project.startupScreen;
+    const fs::path flowPath = projectRoot / "Content/Flow/Main.renegade-flow";
+    FlowDocument flow;
+    if (!ReadFlowDocument(
+            flowPath.generic_u8string(), project.projectId, flow, error) ||
+        flow.nodes.size() != 4 || flow.routes.size() != 3)
+    {
+        return Fail(root, "could not read established Flow before Gate 10 conversion: " + error);
+    }
+
+    const StableId gameStartId = flow.startNodeId;
+    const StableId levelOneId = flow.nodes[1].id;
+    const StableId levelTwoId = flow.nodes[2].id;
+    const StableId completeId = flow.nodes[3].id;
+    const FlowRoute levelOneComplete = flow.routes[1];
+    const FlowRoute levelTwoComplete = flow.routes[2];
+
+    FlowNode titleScreen;
+    titleScreen.id = GenerateStableId();
+    titleScreen.kind = FlowNodeKind::Screen;
+    titleScreen.name = "Title Screen";
+    titleScreen.screenDocumentId = screenDocumentId;
+    titleScreen.screenPathHint = screenPath;
+
+    FlowNode quit;
+    quit.id = GenerateStableId();
+    quit.kind = FlowNodeKind::Quit;
+    quit.name = "Quit";
+
+    flow.nodes.push_back(titleScreen);
+    flow.nodes.push_back(quit);
+    flow.routes = {
+        Route(gameStartId, GameStartOutcome, titleScreen.id),
+        Route(titleScreen.id, "play", levelOneId, "default"),
+        Route(titleScreen.id, "quit", quit.id),
+        levelOneComplete,
+        levelTwoComplete,
+    };
+    if (!WriteFlowDocument(flowPath.generic_u8string(), flow, error))
+        return Fail(root, "could not persist Gate 10 Screen/Level Story Flow: " + error);
+
+    if (!ReplaceDescriptorText(
+            descriptor,
+            "startup_scene = Content/Scenes/LevelOne.wiscene",
+            "startup_scene = ",
+            error) ||
+        !ReplaceDescriptorText(
+            descriptor,
+            "startup_screen_id = " + screenDocumentId,
+            "startup_screen_id = ",
+            error) ||
+        !ReplaceDescriptorText(
+            descriptor,
+            "startup_screen = " + screenPath,
+            "startup_screen = ",
+            error))
+    {
+        return Fail(root, error);
+    }
+
+    ProjectMetadata gate10Project;
+    if (!projects.InspectProject(
+            descriptor.generic_u8string(), gate10Project, error) ||
+        !gate10Project.startupScene.empty() ||
+        !gate10Project.startupScreen.empty() ||
+        gate10Project.startupFlowId != project.startupFlowId)
+    {
+        return Fail(root,
+            "Gate 10 Flow-native project descriptor did not reopen cleanly: " + error);
+    }
+
+    WindowsGameBuildProjectState gate10State;
+    if (!PrepareWindowsGameBuildProjectState(
+            gate10Project, gate10State, error))
+    {
+        return Fail(root,
+            "Gate 10 build preparation rejected a Story Flow Screen/Level journey: " + error);
+    }
+
+    const std::vector<std::string> expectedOutcomes = {
+        "play",
+        "level.complete",
+        "level.complete",
+    };
+    if (gate10State.smokeOutcomes != expectedOutcomes ||
+        gate10State.levelCompletionCount != 2 ||
+        gate10State.expectedFlowTrace.size() != 5)
+    {
+        return Fail(root,
+            "Gate 10 did not derive the exact Screen/Level standalone smoke path");
+    }
+
+    if (FindNode(gate10State.dependencyGraph, "Content/Flow/Main.renegade-flow") == nullptr ||
+        FindNode(gate10State.dependencyGraph, screenPath) == nullptr ||
+        FindNode(gate10State.dependencyGraph, levelOnePath) == nullptr ||
+        FindNode(gate10State.dependencyGraph, levelTwoPath) == nullptr)
+    {
+        return Fail(root,
+            "Gate 10 Flow-native dependency closure omitted Screen or Level content");
     }
 
     WindowsGameBuildRequest request;
-    request.gameName = project.name;
-    request.executableBaseName = project.name;
-    request.saveDataId = project.projectId;
+    request.gameName = gate10Project.name;
+    request.executableBaseName = gate10Project.name;
+    request.saveDataId = gate10Project.projectId;
 
     const std::vector<WindowsRuntimeSupportInput> runtimeSupport = {
         {
             "renegade-runtime",
-            project.name + ".exe",
+            gate10Project.name + ".exe",
             1,
             std::string(64, 'a'),
-            "repo:gate5-owner-regression",
+            "repo:gate10-owner-regression",
         },
         {
             "directx-shader-compiler",
             "dxcompiler.dll",
             1,
             std::string(64, 'b'),
-            "pinned:gate5-owner-regression",
+            "pinned:gate10-owner-regression",
         },
     };
 
     WindowsGameBuildPlan plan;
     if (!CreateWindowsGameBuildPlan(
-            project,
-            state.dependencyGraph,
-            state.assetRegistry,
+            gate10Project,
+            gate10State.dependencyGraph,
+            gate10State.assetRegistry,
             request,
             runtimeSupport,
             plan,
             error))
     {
-        return Fail(root, "owner-build plan rejected corrected project state: " + error);
+        return Fail(root, "Gate 10 build plan rejected corrected project state: " + error);
     }
 
     if (FindPlanFile(plan, "GameData/" + levelOneMeta) == nullptr ||
-        FindPlanFile(plan, "GameData/" + levelTwoMeta) == nullptr)
+        FindPlanFile(plan, "GameData/" + levelTwoMeta) == nullptr ||
+        FindPlanFile(plan, "GameData/Content/Flow/Main.renegade-flow") == nullptr ||
+        FindPlanFile(plan, "GameData/" + screenPath) == nullptr)
     {
         return Fail(root,
-            "owner-build plan omitted scene identity companions required by Runtime");
+            "Gate 10 build plan omitted governed Flow/Screen/Scene runtime content");
     }
 
     fs::remove_all(root, ignored);
     std::cout
-        << "PASS: LP06 Gate 5 owner build retains reachable scene identity companions\n";
+        << "PASS: Gate 10 Windows build follows Story Flow Screen/Level authority\n";
     return 0;
 }

@@ -53,6 +53,8 @@ namespace renegade::studio
         void SaveJourney();
         void UndoJourney();
         void RedoJourney();
+        void ValidateRuntimeReadiness();
+        void AddJourneyTerminal(bridge::FlowNodeKind kind);
 
         [[nodiscard]] bool IsDirty() const noexcept
         {
@@ -200,6 +202,7 @@ namespace renegade::studio
             wi::graphics::CommandList cmd) const;
         void RefreshInspectorControls();
         void RefreshJourneyExitControls();
+        void RefreshRuntimeValidation();
         void RewireJourneyExit(
             std::size_t exitIndex,
             std::size_t destinationIndex);
@@ -242,6 +245,9 @@ namespace renegade::studio
         ScreenOutcomeQuery screenOutcomeQuery_;
         std::function<void()> semanticChanged_;
         std::string statusMessage_ = "READY";
+        bool runtimeValidationReady_ = true;
+        std::string runtimeValidationMessage_ =
+            "Runtime readiness checks passed.";
         float width_ = 1.0f;
         float height_ = 1.0f;
         bool panning_ = false;
