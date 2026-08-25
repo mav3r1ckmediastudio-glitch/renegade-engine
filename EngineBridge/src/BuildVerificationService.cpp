@@ -237,7 +237,6 @@ namespace renegade::bridge
                 !Require(evidence, "status", "PASS", error) ||
                 !Require(evidence, "code", "SUCCESS", error) ||
                 !Require(evidence, "package_integrity", "PASS", error) ||
-                !Require(evidence, "screen_was_loaded", "true", error) ||
                 !Require(evidence, "graphics_backend_requested",
                     request.expectedGraphicsBackend, error) ||
                 !Require(evidence, "graphics_backend",
@@ -247,11 +246,53 @@ namespace renegade::bridge
                     request.windowsPrerequisitePolicy, error) ||
                 !Require(evidence, "smoke_status", "PASS", error) ||
                 !Require(evidence, "smoke_quit_reason", "smoke_complete", error) ||
-                !Require(evidence, "flow_terminal", "complete_game", error) ||
-                !Require(evidence, "last_action_id", "play", error) ||
-                !Require(evidence, "last_action_code", "success", error))
+                !Require(evidence, "flow_terminal", "complete_game", error))
             {
                 return false;
+            }
+
+            // LP06 originally proved a legacy project-level startup Screen by
+            // auto-activating its Play action before Story Flow. Gate 10 modern
+            // projects are Flow-native: their packaged descriptor has no
+            // startup Screen, Runtime enters Story Flow directly, and the build
+            // supplies the exact authored outcomes required to reach Complete
+            // Game. Keep both contracts strict instead of forcing modern Flow
+            // through fabricated legacy Screen evidence.
+            const auto startupScreen = evidence.find("startup_screen");
+            if (startupScreen == evidence.end())
+            {
+                error = "Gate 4 Runtime evidence is missing startup Screen state.";
+                return false;
+            }
+            const bool legacyStartupScreen = !startupScreen->second.empty();
+            if (legacyStartupScreen)
+            {
+                if (!Require(evidence, "screen_was_loaded", "true", error) ||
+                    !Require(evidence, "last_action_id", "play", error) ||
+                    !Require(evidence, "last_action_code", "success", error))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                const auto startupFlow = evidence.find("startup_flow");
+                const auto flowDocumentId = evidence.find("flow_document_id");
+                if (startupFlow == evidence.end() || startupFlow->second.empty() ||
+                    flowDocumentId == evidence.end() || flowDocumentId->second.empty())
+                {
+                    error =
+                        "Gate 4 Flow-native Runtime evidence does not prove a governed startup Story Flow.";
+                    return false;
+                }
+                if (!Require(evidence, "screen_loaded", "false", error) ||
+                    !Require(evidence, "screen_was_loaded", "false", error) ||
+                    !Require(evidence, "last_action_id", "", error) ||
+                    !Require(evidence, "last_action_code", "", error) ||
+                    !Require(evidence, "last_action_sequence", "0", error))
+                {
+                    return false;
+                }
             }
 
             const auto packageRootEvidence = evidence.find("package_root");
@@ -338,6 +379,9 @@ namespace renegade::bridge
             buildReport["distribution_ready"] = false;
             buildReport["smoke_test"] = "passed_gate4";
             buildReport["smoke_backend"] = request.expectedGraphicsBackend;
+            buildReport["runtime_entry_mode"] = legacyStartupScreen
+                ? "legacy_startup_screen"
+                : "story_flow_native";
             buildReport["windows_prerequisite_policy"] =
                 request.windowsPrerequisitePolicy;
             buildReport["package_isolation"] = "passed_gate4";
