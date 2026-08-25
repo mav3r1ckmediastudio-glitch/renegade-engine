@@ -193,6 +193,13 @@ int main(int argc, char** argv)
     metadata.string_values.set(
         MaterialBaseColorTextureAssetIdMetadataKey,
         texture.assetId);
+    // Regression: Creator Recovery persists governed texture IDs independently
+    // for every material slot. Package Runtime must never read the Gate 1-era
+    // baseColorTextureAssetId compatibility mirror for a Normal/Surface/etc
+    // binding, and must restore the resource to the authored Wicked slot.
+    metadata.string_values.set(
+        MaterialNormalTextureAssetIdMetadataKey,
+        texture.assetId);
 
     const fs::path scenePath = root / "Content/Scenes/Gate5.wiscene";
     std::string error;
@@ -334,18 +341,23 @@ int main(int argc, char** argv)
             scene, packageRoot.generic_u8string(), ProjectId,
             refreshed, error, FakeLoader),
             "packaged material texture refresh failed: " + error) ||
-        !Require(refreshed.discoveredBindingCount == 1 &&
-                refreshed.refreshedBindingCount == 1 &&
-                refreshed.records.size() == 1 &&
-                refreshed.records.front().assetId == texture.assetId &&
-                refreshed.records.front().payloadHash == texture.sourceHash,
-            "Runtime refresh evidence did not identify the current stable texture payload") ||
+        !Require(refreshed.discoveredBindingCount == 2 &&
+                refreshed.refreshedBindingCount == 2 &&
+                refreshed.records.size() == 2 &&
+                std::all_of(refreshed.records.begin(), refreshed.records.end(),
+                    [&texture](const PackagedMaterialTextureRefreshRecord& record)
+                    { return record.assetId == texture.assetId &&
+                        record.payloadHash == texture.sourceHash; }),
+            "Runtime refresh evidence did not identify both authored texture-slot bindings") ||
         !Require(scene.materials.GetComponent(materialEntity)->textures[
                 wi::scene::MaterialComponent::BASECOLORMAP].resource.IsValid(),
-            "packaged Runtime did not install the governed texture resource"))
+            "packaged Runtime did not install the governed Base Color resource") ||
+        !Require(scene.materials.GetComponent(materialEntity)->textures[
+                wi::scene::MaterialComponent::NORMALMAP].resource.IsValid(),
+            "packaged Runtime did not install the governed Normal resource"))
         return 1;
 
     fs::remove_all(root, ec);
-    std::cout << "LP08 GATE 5 PACKAGE RUNTIME PASS // stable_texture_dependency no_source_leak packaged_texture generic_audio_script_video_font runtime_refresh\n";
+    std::cout << "LP08 GATE 5 PACKAGE RUNTIME PASS // stable_texture_dependency no_source_leak packaged_texture generic_audio_script_video_font multi_slot_runtime_refresh\n";
     return 0;
 }
