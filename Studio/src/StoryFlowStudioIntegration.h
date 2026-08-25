@@ -11,6 +11,7 @@
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
 #include "StoryFlowScreenEditorHandoff.h"
 #include "RenegadeStudioChrome.h"
+#include "WindowsGameBuildController.h"
 
 #include <algorithm>
 #include <chrono>
@@ -235,6 +236,10 @@ namespace renegade::studio
                 return;
             }
 
+            // Project-level actions belong to the project home, not the Level
+            // Editor render path. Keep their Runtime/build lifecycle alive while
+            // Story Flow remains the active surface.
+            ProcessProjectCommands(levelEditor, storyFlow);
             ProcessPendingLevelAction(levelEditor, storyFlow, session, project);
             ProcessPendingScreenAction(storyFlow, project);
 
@@ -353,10 +358,20 @@ namespace renegade::studio
                             "VARIABLES // PROJECT VARIABLE WORKSPACE NOT YET AVAILABLE");
                         break;
                     case Action::TestPlay:
-                    case Action::Preview:
-                        levelEditor.RequestProjectPlayFromStoryFlow();
+                        pendingProjectPlay_ = true;
                         storyFlow.SetExternalStatus(
-                            "PREVIEW // LAUNCHING GOVERNED PROJECT RUNTIME");
+                            levelEditor.IsProjectPlayFromStoryFlowActive()
+                                ? "TEST GAME // STOP REQUESTED"
+                                : "TEST GAME // QUEUED // SAVED STORY FLOW");
+                        break;
+                    case Action::BuildGame:
+                        pendingBuildGame_ = true;
+                        buildGameBusy_ = true;
+                        buildGameDispatchArmed_ = false;
+                        storyFlow.SetProjectCommandState(
+                            levelEditor.IsProjectPlayFromStoryFlowActive(), true);
+                        storyFlow.SetExternalStatus(
+                            "BUILD GAME // QUEUED // SAVED STORY FLOW");
                         break;
                     case Action::Settings:
                         storyFlow.SetExternalStatus(
@@ -503,6 +518,103 @@ namespace renegade::studio
             while (!result.empty() && result.back() == '-') result.pop_back();
             if (result.empty()) result = fallback;
             return result;
+        }
+
+        template <typename LevelEditor, typename StoryFlowPath>
+        void ProcessProjectCommands(
+            LevelEditor& levelEditor,
+            StoryFlowPath& storyFlow)
+        {
+            if (pendingProjectPlay_)
+            {
+                pendingProjectPlay_ = false;
+                if (levelEditor.IsProjectPlayFromStoryFlowActive())
+                {
+                    levelEditor.StopProjectPlayFromStoryFlowNow();
+                    storyFlow.SetExternalStatus("TEST GAME // STOPPED");
+                }
+                else
+                {
+                    storyFlow.SetExternalStatus(
+                        "TEST GAME // STARTING GOVERNED PROJECT RUNTIME");
+                    levelEditor.StartProjectPlayFromStoryFlowNow();
+                    if (!levelEditor.IsProjectPlayFromStoryFlowActive())
+                    {
+                        const auto& result =
+                            levelEditor.ProjectPlayFromStoryFlowResult();
+                        storyFlow.SetExternalStatus(
+                            result.message.empty()
+                                ? "TEST GAME // LAUNCH FAILED"
+                                : "TEST GAME // LAUNCH FAILED // " +
+                                    result.message);
+                    }
+                }
+            }
+
+            if (levelEditor.IsProjectPlayFromStoryFlowActive())
+            {
+                levelEditor.PollProjectPlayFromStoryFlow();
+                if (levelEditor.IsProjectPlayFromStoryFlowActive())
+                {
+                    storyFlow.SetExternalStatus(
+                        levelEditor.IsProjectPlayFromStoryFlowRunning()
+                            ? "TEST GAME // RUNNING // CLICK STOP GAME TO END"
+                            : "TEST GAME // STARTING");
+                }
+                else
+                {
+                    const auto& result =
+                        levelEditor.ProjectPlayFromStoryFlowResult();
+                    storyFlow.SetExternalStatus(
+                        result.succeeded
+                            ? "TEST GAME // COMPLETED"
+                            : (result.message.empty()
+                                ? "TEST GAME // FAILED"
+                                : "TEST GAME // FAILED // " + result.message));
+                }
+            }
+
+            // Give BUILD GAME one complete rendered frame in its queued/busy
+            // state before starting the synchronous existing build controller.
+            // This avoids another apparently dead control during a long build.
+            if (pendingBuildGame_ && !buildGameDispatchArmed_)
+            {
+                buildGameDispatchArmed_ = true;
+                storyFlow.SetProjectCommandState(
+                    levelEditor.IsProjectPlayFromStoryFlowActive(), true);
+                storyFlow.SetExternalStatus(
+                    "BUILD GAME // QUEUED // STARTING NEXT FRAME");
+                return;
+            }
+
+            if (pendingBuildGame_ && buildGameDispatchArmed_)
+            {
+                pendingBuildGame_ = false;
+                buildGameDispatchArmed_ = false;
+                if (levelEditor.IsProjectPlayFromStoryFlowActive())
+                {
+                    buildGameBusy_ = false;
+                    storyFlow.SetExternalStatus(
+                        "BUILD GAME // BLOCKED // TEST GAME RUNNING");
+                }
+                else
+                {
+                    storyFlow.SetExternalStatus(
+                        "BUILD GAME // BUILDING WINDOWS GAME");
+                    const WindowsGameBuildUiResult build =
+                        BuildActiveWindowsGame();
+                    buildGameBusy_ = false;
+                    storyFlow.SetExternalStatus(
+                        build.succeeded
+                            ? "BUILD GAME // COMPLETE // " +
+                                build.finalOutputPath
+                            : "BUILD GAME // FAILED // " + build.message);
+                }
+            }
+
+            storyFlow.SetProjectCommandState(
+                levelEditor.IsProjectPlayFromStoryFlowActive(),
+                buildGameBusy_);
         }
 
         template <typename LevelEditor, typename StoryFlowPath, typename Session, typename Project>
@@ -955,6 +1067,10 @@ namespace renegade::studio
             pendingExistingScenePath_.clear();
             pendingLevelAction_ = PendingLevelAction::None;
             pendingScreenAction_ = PendingScreenAction::None;
+            pendingProjectPlay_ = false;
+            pendingBuildGame_ = false;
+            buildGameDispatchArmed_ = false;
+            buildGameBusy_ = false;
             screenEditorHandoff_ = {};
             activeProjectRoot_.clear();
             screenOutcomeAuditPending_ = false;
@@ -1020,6 +1136,10 @@ namespace renegade::studio
         PendingScreenAction pendingScreenAction_ = PendingScreenAction::None;
         bridge::StoryFlowScreenTemplate pendingScreenTemplate_ =
             bridge::StoryFlowScreenTemplate::Title;
+        bool pendingProjectPlay_ = false;
+        bool pendingBuildGame_ = false;
+        bool buildGameDispatchArmed_ = false;
+        bool buildGameBusy_ = false;
         bool attached_ = false;
         bool loadAttempted_ = false;
         bool layoutDirty_ = false;
