@@ -11,15 +11,18 @@
 #include <Windows.h>
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -298,6 +301,291 @@ namespace renegade::studio
             return result;
         }
 
+        class WindowsBuildProgressWindow final
+        {
+        public:
+            ~WindowsBuildProgressWindow()
+            {
+                Close();
+            }
+
+            void Begin(const std::string& projectName)
+            {
+                Close();
+                {
+                    std::scoped_lock lock(mutex_);
+                    projectName_ = projectName;
+                    stage_ = "STARTING WINDOWS BUILD";
+                    detail_ = "Preparing governed build workflow...";
+                    percent_ = 2;
+                    completed_ = false;
+                    succeeded_ = false;
+                    startedAt_ = std::chrono::steady_clock::now();
+                }
+                thread_ = std::thread([this]() { ThreadMain(); });
+                for (int attempt = 0; attempt < 200 && hwnd_.load() == nullptr;
+                    ++attempt)
+                {
+                    Sleep(1);
+                }
+            }
+
+            void Stage(
+                const int percent,
+                std::string stage,
+                std::string detail = {})
+            {
+                {
+                    std::scoped_lock lock(mutex_);
+                    percent_ = std::clamp(percent, 0, 100);
+                    stage_ = std::move(stage);
+                    detail_ = std::move(detail);
+                }
+                if (const HWND window = hwnd_.load())
+                    PostMessageW(window, ProgressChangedMessage, 0, 0);
+            }
+
+            void Complete(const bool succeeded, std::string detail)
+            {
+                {
+                    std::scoped_lock lock(mutex_);
+                    percent_ = 100;
+                    completed_ = true;
+                    succeeded_ = succeeded;
+                    stage_ = succeeded ? "BUILD COMPLETE" : "BUILD FAILED";
+                    detail_ = std::move(detail);
+                }
+                if (const HWND window = hwnd_.load())
+                    PostMessageW(window, ProgressChangedMessage, 0, 0);
+            }
+
+        private:
+            static constexpr UINT ProgressChangedMessage = WM_APP + 73;
+            static constexpr wchar_t WindowClassName[] =
+                L"RenegadeWindowsBuildProgressWindow";
+
+            static LRESULT CALLBACK WindowProc(
+                HWND window,
+                UINT message,
+                WPARAM wParam,
+                LPARAM lParam)
+            {
+                WindowsBuildProgressWindow* self =
+                    reinterpret_cast<WindowsBuildProgressWindow*>(
+                        GetWindowLongPtrW(window, GWLP_USERDATA));
+                if (message == WM_NCCREATE)
+                {
+                    const auto* create =
+                        reinterpret_cast<const CREATESTRUCTW*>(lParam);
+                    self = reinterpret_cast<WindowsBuildProgressWindow*>(
+                        create->lpCreateParams);
+                    SetWindowLongPtrW(
+                        window, GWLP_USERDATA,
+                        reinterpret_cast<LONG_PTR>(self));
+                }
+
+                switch (message)
+                {
+                case ProgressChangedMessage:
+                case WM_TIMER:
+                    InvalidateRect(window, nullptr, FALSE);
+                    return 0;
+                case WM_ERASEBKGND:
+                    return 1;
+                case WM_PAINT:
+                    if (self)
+                        self->Paint(window);
+                    return 0;
+                case WM_CLOSE:
+                    DestroyWindow(window);
+                    return 0;
+                case WM_DESTROY:
+                    if (self)
+                        self->hwnd_.store(nullptr);
+                    PostQuitMessage(0);
+                    return 0;
+                default:
+                    return DefWindowProcW(window, message, wParam, lParam);
+                }
+            }
+
+            void ThreadMain()
+            {
+                const HINSTANCE instance = GetModuleHandleW(nullptr);
+                WNDCLASSEXW windowClass{};
+                windowClass.cbSize = sizeof(windowClass);
+                windowClass.lpfnWndProc = WindowProc;
+                windowClass.hInstance = instance;
+                windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+                windowClass.lpszClassName = WindowClassName;
+                if (RegisterClassExW(&windowClass) == 0 &&
+                    GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+                {
+                    return;
+                }
+
+                const HWND window = CreateWindowExW(
+                    WS_EX_APPWINDOW,
+                    WindowClassName,
+                    L"Renegade Studio - Build Windows Game",
+                    WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+                    CW_USEDEFAULT,
+                    CW_USEDEFAULT,
+                    620,
+                    300,
+                    nullptr,
+                    nullptr,
+                    instance,
+                    this);
+                if (!window)
+                    return;
+
+                hwnd_.store(window);
+                SetTimer(window, 1, 250, nullptr);
+                ShowWindow(window, SW_SHOWNORMAL);
+                UpdateWindow(window);
+
+                MSG message{};
+                while (GetMessageW(&message, nullptr, 0, 0) > 0)
+                {
+                    TranslateMessage(&message);
+                    DispatchMessageW(&message);
+                }
+            }
+
+            void Paint(const HWND window)
+            {
+                PAINTSTRUCT paint{};
+                HDC dc = BeginPaint(window, &paint);
+                if (!dc)
+                    return;
+
+                RECT client{};
+                GetClientRect(window, &client);
+                HBRUSH background = CreateSolidBrush(RGB(8, 13, 18));
+                FillRect(dc, &client, background);
+                DeleteObject(background);
+
+                std::string projectName;
+                std::string stage;
+                std::string detail;
+                int percent = 0;
+                bool completed = false;
+                bool succeeded = false;
+                std::chrono::steady_clock::time_point started;
+                {
+                    std::scoped_lock lock(mutex_);
+                    projectName = projectName_;
+                    stage = stage_;
+                    detail = detail_;
+                    percent = percent_;
+                    completed = completed_;
+                    succeeded = succeeded_;
+                    started = startedAt_;
+                }
+
+                SetBkMode(dc, TRANSPARENT);
+                SetTextColor(dc, RGB(235, 241, 245));
+                HFONT titleFont = CreateFontW(
+                    24, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                    L"Segoe UI");
+                HFONT bodyFont = CreateFontW(
+                    17, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                    L"Segoe UI");
+                HFONT oldFont = static_cast<HFONT>(SelectObject(dc, titleFont));
+
+                RECT titleRect{26, 20, client.right - 26, 55};
+                const std::wstring title = Utf8ToWide(
+                    projectName.empty()
+                        ? "BUILD WINDOWS GAME"
+                        : "BUILD WINDOWS GAME - " + projectName);
+                DrawTextW(dc, title.c_str(), -1, &titleRect,
+                    DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+                SelectObject(dc, bodyFont);
+                SetTextColor(dc,
+                    completed
+                        ? (succeeded ? RGB(113, 205, 111) : RGB(229, 92, 92))
+                        : RGB(203, 214, 222));
+                RECT stageRect{26, 69, client.right - 26, 96};
+                const std::wstring stageText = Utf8ToWide(stage);
+                DrawTextW(dc, stageText.c_str(), -1, &stageRect,
+                    DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+                const int barLeft = 26;
+                const int barTop = 111;
+                const int barRight = client.right - 26;
+                const int barBottom = 139;
+                HBRUSH track = CreateSolidBrush(RGB(27, 38, 47));
+                RECT trackRect{barLeft, barTop, barRight, barBottom};
+                FillRect(dc, &trackRect, track);
+                DeleteObject(track);
+
+                const int fillRight = barLeft +
+                    (barRight - barLeft) * std::clamp(percent, 0, 100) / 100;
+                HBRUSH fill = CreateSolidBrush(
+                    completed && !succeeded
+                        ? RGB(165, 54, 54)
+                        : RGB(65, 158, 230));
+                RECT fillRect{barLeft, barTop, fillRight, barBottom};
+                FillRect(dc, &fillRect, fill);
+                DeleteObject(fill);
+
+                SetTextColor(dc, RGB(235, 241, 245));
+                const std::wstring percentText =
+                    std::to_wstring(std::clamp(percent, 0, 100)) + L"%";
+                RECT percentRect{barLeft, barTop + 3, barRight - 8, barBottom};
+                DrawTextW(dc, percentText.c_str(), -1, &percentRect,
+                    DT_RIGHT | DT_SINGLELINE);
+
+                SetTextColor(dc, RGB(164, 178, 188));
+                RECT detailRect{26, 156, client.right - 26, 205};
+                const std::wstring detailText = Utf8ToWide(detail);
+                DrawTextW(dc, detailText.c_str(), -1, &detailRect,
+                    DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+
+                const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - started).count();
+                std::ostringstream elapsedStream;
+                elapsedStream << "Elapsed: " << elapsed << "s";
+                const std::wstring elapsedText = Utf8ToWide(elapsedStream.str());
+                RECT elapsedRect{26, client.bottom - 38, client.right - 26,
+                    client.bottom - 14};
+                DrawTextW(dc, elapsedText.c_str(), -1, &elapsedRect,
+                    DT_LEFT | DT_SINGLELINE);
+
+                SelectObject(dc, oldFont);
+                DeleteObject(titleFont);
+                DeleteObject(bodyFont);
+                EndPaint(window, &paint);
+            }
+
+            void Close()
+            {
+                if (const HWND window = hwnd_.load())
+                    PostMessageW(window, WM_CLOSE, 0, 0);
+                if (thread_.joinable())
+                    thread_.join();
+                hwnd_.store(nullptr);
+            }
+
+            std::atomic<HWND> hwnd_{nullptr};
+            std::thread thread_;
+            std::mutex mutex_;
+            std::string projectName_;
+            std::string stage_;
+            std::string detail_;
+            int percent_ = 0;
+            bool completed_ = false;
+            bool succeeded_ = false;
+            std::chrono::steady_clock::time_point startedAt_ =
+                std::chrono::steady_clock::now();
+        };
+
         fs::path RuntimeEvidencePath(const std::string& identity)
         {
             const DWORD required = GetEnvironmentVariableW(
@@ -499,20 +787,32 @@ namespace renegade::studio
         }
 
         const bridge::ProjectMetadata project = session->Projects().CurrentProject();
+        static WindowsBuildProgressWindow progress;
+        progress.Begin(project.name);
+        const auto fail = [&](std::string message)
+        {
+            ui.message = std::move(message);
+            progress.Complete(false, ui.message);
+            return ui;
+        };
+
+        progress.Stage(10, "VALIDATING STORYFLOW",
+            "Checking the authoritative project and StoryFlow build state.");
         bridge::WindowsGameBuildProjectState projectState;
         std::string error;
         if (!bridge::PrepareWindowsGameBuildProjectState(
                 project, projectState, error))
         {
-            ui.message = std::move(error);
-            return ui;
+            return fail(std::move(error));
         }
 
+        progress.Stage(25, "RESOLVING DEPENDENCIES",
+            "StoryFlow route and governed dependency closure resolved.");
         const fs::path studioDirectory = StudioDirectory();
         if (studioDirectory.empty())
         {
-            ui.message = "Build Windows Game could not resolve the Studio installation directory.";
-            return ui;
+            return fail(
+                "Build Windows Game could not resolve the Studio installation directory.");
         }
 
         fs::path runtimeExecutable;
@@ -524,9 +824,8 @@ namespace renegade::studio
                 },
                 runtimeExecutable))
         {
-            ui.message =
-                "Build Windows Game requires the Release RenegadeRuntime.exe beside the Studio package or build tree.";
-            return ui;
+            return fail(
+                "Build Windows Game requires the Release RenegadeRuntime.exe beside the Studio package or build tree.");
         }
 
         fs::path dxCompiler;
@@ -537,18 +836,20 @@ namespace renegade::studio
                 },
                 dxCompiler))
         {
-            ui.message = "Build Windows Game could not find the governed dxcompiler.dll Runtime support.";
-            return ui;
+            return fail(
+                "Build Windows Game could not find the governed dxcompiler.dll Runtime support.");
         }
 
+        progress.Stage(38, "PREPARING RUNTIME SUPPORT",
+            "Hashing the governed Runtime and DirectX shader compiler inputs.");
         const std::string renegadeRevision = RENEGADE_SOURCE_REVISION;
         const std::string wickedRevision = RENEGADE_WICKED_REVISION;
         const std::string stagingId = UniqueStagingId();
         const std::string timestamp = UtcTimestamp();
         if (timestamp.empty())
         {
-            ui.message = "Build Windows Game could not produce a UTC build timestamp.";
-            return ui;
+            return fail(
+                "Build Windows Game could not produce a UTC build timestamp.");
         }
 
         bridge::WindowsGameBuildWorkflowRequest request;
@@ -580,10 +881,11 @@ namespace renegade::studio
                 request.staging.runtimeSupportSources,
                 error))
         {
-            ui.message = std::move(error);
-            return ui;
+            return fail(std::move(error));
         }
 
+        progress.Stage(50, "STAGING PACKAGE INPUTS",
+            "Collecting Runtime support, licences and governed package documents.");
         request.staging.projectRootPath = project.rootPath;
         request.staging.outputParentPath =
             (fs::u8path(project.rootPath) / "Builds" / "Windows")
@@ -636,18 +938,18 @@ namespace renegade::studio
                 request.staging.packageDocuments,
                 error))
         {
-            ui.message = std::move(error);
-            return ui;
+            return fail(std::move(error));
         }
 
         fs::path iconPath;
         if (!WriteDefaultGameIcon(
                 fs::u8path(project.rootPath), iconPath, error))
         {
-            ui.message = std::move(error);
-            return ui;
+            return fail(std::move(error));
         }
 
+        progress.Stage(62, "PREPARING EXECUTABLE",
+            "Applying deterministic Windows executable identity and build metadata.");
         request.identity.developerPublisher = DeveloperPublisher;
         request.identity.description = project.name + " standalone game";
         request.identity.copyrightNotice =
@@ -665,12 +967,14 @@ namespace renegade::studio
         const std::vector<std::string> smokeOutcomes = projectState.smokeOutcomes;
         bridge::WindowsGameBuildWorkflowResult result;
         const bridge::WindowsGameBuildSmokeRunner smoke =
-            [smokeOutcomes, stagingId](
+            [smokeOutcomes, stagingId, &progress](
                 const bridge::WindowsGameBuildPlan& plan,
                 const bridge::WindowsGameBuildStageResult& stage,
                 std::string& evidencePath,
                 std::string& smokeError)
             {
+                progress.Stage(82, "VALIDATING PACKAGED RUNTIME",
+                    "Running the staged standalone against the exact authored StoryFlow path.");
                 return RunStandaloneSmoke(
                     plan,
                     stage,
@@ -680,17 +984,19 @@ namespace renegade::studio
                     smokeError);
             };
 
+        progress.Stage(70, "BUILDING WINDOWS PACKAGE",
+            "Staging content, writing manifests and preparing verification evidence.");
         if (!bridge::BuildWindowsGame(
                 request, smoke, result, error))
         {
-            ui.message = std::move(error);
-            return ui;
+            return fail(std::move(error));
         }
 
         ui.succeeded = true;
         ui.finalOutputPath = result.finalOutputPath;
         ui.message = "Windows game build promoted successfully: " +
             result.finalOutputPath;
+        progress.Complete(true, result.finalOutputPath);
         return ui;
 #endif
     }
