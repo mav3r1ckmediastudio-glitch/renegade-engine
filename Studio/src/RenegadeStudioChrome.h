@@ -18,18 +18,24 @@ namespace renegade::studio
     {
     public:
         void SetPlaceholder(std::string placeholder);
+        void SetRenderTextSize(int size) noexcept;
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override { return "RenegadeTextInputField"; }
 
     private:
         std::string placeholder_;
+        int renderTextSize_ = 10;
     };
 
     class RenegadeButton final : public wi::gui::Button
     {
     public:
+        void SetRenderTextSize(int size) noexcept;
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override { return "RenegadeButton"; }
+
+    private:
+        int renderTextSize_ = 10;
     };
 
     class RenegadeCheckBox final : public wi::gui::CheckBox
@@ -42,8 +48,12 @@ namespace renegade::studio
     class RenegadeComboBox final : public wi::gui::ComboBox
     {
     public:
+        void SetRenderTextSize(int size) noexcept;
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override { return "RenegadeComboBox"; }
+
+    private:
+        int renderTextSize_ = 10;
     };
 
     class RenegadeSlider final : public wi::gui::Slider

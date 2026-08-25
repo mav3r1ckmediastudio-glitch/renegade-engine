@@ -1,10 +1,12 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <WickedEngine.h>
@@ -44,6 +46,38 @@ namespace renegade::studio
         void FitToContent();
         void CenterOnGameStart();
         void SelectAndFocusNode(const bridge::StableId& nodeId);
+        [[nodiscard]] bool FindAndFocusJourneyNode(const std::string& query);
+        void AdjustJourneyZoom(float factor);
+        void SetJourneyZoom(float zoom);
+        void ToggleJourneyFilter();
+        void SaveJourney();
+        void UndoJourney();
+        void RedoJourney();
+
+        [[nodiscard]] bool IsDirty() const noexcept
+        {
+            return session_ && session_->IsDirty();
+        }
+
+        [[nodiscard]] bool CanUndo() const noexcept
+        {
+            return session_ && session_->CanUndo();
+        }
+
+        [[nodiscard]] bool CanRedo() const noexcept
+        {
+            return session_ && session_->CanRedo();
+        }
+
+        [[nodiscard]] float JourneyZoom() const noexcept
+        {
+            return layout_ ? layout_->journeyCanvas.zoom : 1.0f;
+        }
+
+        [[nodiscard]] bool JourneyFilterActive() const noexcept
+        {
+            return hideDetached_;
+        }
 
         // Gate 9D promotes Journey/Graph switching to real native chrome. The
         // workspace remains the presentation-state authority, but callers no
@@ -129,6 +163,7 @@ namespace renegade::studio
             const bridge::StoryFlowNodeLayout& node) const noexcept;
         [[nodiscard]] XMFLOAT4 JourneyCardScreenBounds(
             const bridge::StoryFlowJourneyCard& card) const noexcept;
+        [[nodiscard]] wi::graphics::Rect JourneyCanvasScissorRect() const noexcept;
         [[nodiscard]] XMFLOAT4 NodeBounds(
             const bridge::StableId& nodeId) const noexcept;
         [[nodiscard]] bridge::StoryFlowCanvasLayout& ActiveCanvas() noexcept;
@@ -164,6 +199,11 @@ namespace renegade::studio
             const wi::Canvas& canvas,
             wi::graphics::CommandList cmd) const;
         void RefreshInspectorControls();
+        void RefreshJourneyExitControls();
+        void RewireJourneyExit(
+            std::size_t exitIndex,
+            std::size_t destinationIndex);
+        void AddJourneyAction();
 
         [[nodiscard]] bool RefreshPresentationAfterSemanticChange();
         void SaveFlow();
@@ -215,6 +255,8 @@ namespace renegade::studio
         XMFLOAT2 previousClickPointer_ = {};
         float secondsSincePreviousNodeClick_ = 1000.0f;
         bool pointerConsumed_ = false;
+        bool hideDetached_ = false;
+        std::unordered_set<std::size_t> collapsedJourneyTracks_;
 
         RenegadeButton saveButton_;
         RenegadeButton undoButton_;
@@ -224,6 +266,19 @@ namespace renegade::studio
         RenegadeTextInputField nodeNameInput_;
         RenegadeButton applyNodeButton_;
         RenegadeButton deleteNodeButton_;
+        RenegadeButton openDestinationButton_;
+        RenegadeButton addJourneyActionButton_;
+
+        static constexpr std::size_t MaxJourneyInspectorExits = 5;
+        std::array<RenegadeComboBox, MaxJourneyInspectorExits>
+            journeyExitDestinationCombos_;
+        std::array<bridge::StableId, MaxJourneyInspectorExits>
+            journeyExitRouteIds_;
+        std::vector<bridge::StableId> journeyExitDestinationIds_;
+        bool journeyAddActionAvailable_ = false;
+        std::size_t pendingJourneyExitIndex_ = MaxJourneyInspectorExits;
+        std::size_t pendingJourneyDestinationIndex_ = 0;
+        bool pendingAddJourneyAction_ = false;
 
         RenegadeTextInputField routeOutcomeInput_;
         RenegadeTextInputField routeEntryInput_;

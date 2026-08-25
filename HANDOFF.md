@@ -1,45 +1,184 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-23
+**Date:** 2026-08-25
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`e9c63e47f897ffb9408f9fdd377795f44affb41b`
-(`Story Flow Gate 8D: creator controls (#90)`).
+`1c1d580df3c40de2fbd68dee41c0c8a74e32f831`
+(`Story Flow Gate 9D: navigation and Graph cleanup (#98)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Story Flow Gate 8E outcome and package parity
+## Active work — Journey recovery Gate 9A
 
-Branch: `feature/story-flow-gate8e-outcome-parity`.
+Draft PR: `#100`, branch `recovery/story-flow-journey-9a-shell`.
 
-Gate 8D/PR #90 is merged and owner-accepted at the authoritative main above.
-The accepted Screen Editor now has direct manipulation, complete creator
-controls, governed resources, symbolic action authoring, focus order,
-parent/layout, presets/components and Screen-specific persistence/history.
+The recovery starts from accepted Gate 9D main, not rejected PR #99. Graph Flow
+is frozen and out of scope. The owner-approved sequence remains 9A through 9F.
+The implementation has now replaced the failed legacy-scale presentation, but
+the branch is not an owner candidate until exact-head Windows CI and packaged
+Release visual acceptance pass.
 
-Gate 8E is deliberately bounded to the Screen-action / Story Flow routing seam:
+The current recovery implementation:
 
-- Screen Buttons continue to author symbolic action IDs only;
-- Story Flow remains the sole destination/condition/priority authority;
-- outgoing Screen routes are constrained to currently authored Screen actions;
-- return/reopen and Story Flow semantic edits rerun a non-mutating cross-document
-  parity audit;
-- removed/renamed Screen actions create visible stale-route/unrouted-Button
-  diagnostics rather than silently rewriting Flow destinations;
-- reachable broken Screen/Flow mappings fail closed before Runtime execution;
-- detached draft Screens do not block Runtime;
-- packaged Release instructions require save/reopen, Runtime and Windows
-  standalone parity proof.
+- deleted `RenegadeStoryFlowLevelPanel.h` and
+  `RenegadeStoryFlowScreenPanel.h`;
+- removed their integration-owned panel state, GUI registration, layout and
+  lifecycle-layer reordering;
+- added one compact Journey-native `Add Destination` sheet opened by the Levels
+  or Screens rail item;
+- retained governed New Level, Existing Level, New Screen, selected-card open,
+  stable-ID resolution and Level/Screen Editor handoffs through the existing
+  EngineBridge services;
+- retained card double-click activation and Return to Story Flow;
+- installs a fixed 70-pixel top bar, 96-pixel rail, bounded Inspector, fixed
+  bottom navigation and fixed Story Overview;
+- renders 164x214 rounded/shadowed image-led main cards with neutral borders,
+  cover-cropped governed thumbnails and blue selection only;
+- renders compact alternate cards inside purple/turquoise/red role rows and
+  uses the same role classification for Inspector bullets;
+- authors new actions and stable-ID destination rewires directly in the
+  Inspector without opening Graph or drawing Journey wires;
+- wires Journey search/focus, detached filtering, fit/start navigation,
+  82-118% semantic zoom including the visible slider, Preview, Save and
+  Undo/Redo;
+- launches Story Flow Preview from the governed project descriptor through the
+  supervised Runtime process without creating or cleaning an LP04 snapshot;
+- replaces letter-placeholder rail/toolbar glyphs with native icon shapes;
+- adds source/layout contracts that reject legacy panels, coloured card frames,
+  thumbnail overflow, tiny zoom and Journey-to-Graph exit routing.
 
-The implementation contract and owner audit are in
-`docs/STORY_FLOW_GATE8E_OUTCOME_PARITY.md`.
+Current local evidence:
 
-Do not merge automatically. Exact-head Windows Debug/Release CI and owner
-acceptance of the packaged Release remain required. Gate 9 is Journey View UI/UX
-and scale; Gate 10 is the broader final Runtime/build/standalone closeout.
+- `git diff --check` — PASS;
+- `g++ -std=c++17 -IStudio/src Tests/StoryFlowJourneyUiLayoutTests.cpp ...`
+  — PASS at 1680x945, 1920x1080 and 1280x720;
+- Journey recovery and updated Gate 9D source assertions using `rg` — PASS;
+- `cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/StoryFlowJourneyRecovery9ASourceContract.cmake`
+  — NOT RUN because CMake is unavailable in the Linux scratch environment.
+
+Visual acceptance remains explicitly open: green CI proves compilation only.
+Required proof is a real packaged Release screenshot at 1920x1080 and
+1280x720, compared against the approved concept. No merge or Gate 9A completion
+claim is permitted before owner visual acceptance.
+
+The locked recovery contract and stage ownership are recorded in
+`docs/STORY_FLOW_JOURNEY_RECOVERY_9A_9F.md`.
+
+### Gate 9F authoritative logo replacement
+
+Implementation commit
+`3d66de2983d3a1c1347aacd84fcd8f02cfb98af4` replaces the superseded narrow
+RGB wordmark with the project owner's 2026-08-25 transparent fractured-crest
+logo in Journey, the shared Studio chrome and Project Hub. The committed RGBA
+asset removes only empty transparent margins from the supplied PNG, preserves
+the complete visible artwork and is fitted proportionally into each header.
+All three consumers use alpha blending; the former additive Journey/Studio
+rendering is removed.
+
+Changed seams:
+
+- `Studio/assets/renegade-engine-fractured-crest-logo.png` and asset README;
+- Studio, Journey and Project Hub logo loading/rendering;
+- Studio package copy rule;
+- Journey recovery source/hash contract and `REN-UI-001` evidence.
+
+Local evidence for implementation tree
+`84dcb015122efd197c3d5680044bab40a247da72`:
+
+- supplied source SHA-256:
+  `1bd906dc2fabb4ef6152edcaa4764c3cab5a247ac6ef9a4a8d0de86ab3a06cb1`;
+- committed alpha-trimmed asset SHA-256:
+  `9acc347e3e46602142ec9cdceeb846d3eb96fddac0b07d10ebc33a0a912e2a05`;
+- `git diff --check` — PASS;
+- direct logo hash/path/alpha/package/legacy-removal assertions — PASS;
+- GNU C++17 `StoryFlowJourneyUiLayoutTests` — PASS with the pre-existing
+  C++20 `concept` identifier compatibility warning;
+- exact 184x70 Journey header-slot composition inspected locally — PASS;
+- CMake source contract — NOT RUN locally because CMake is unavailable.
+
+Required closeout remains exact-head Windows Debug/Release CI followed by the
+owner's packaged Release visual check. A successful build does not prove the
+logo is acceptably sized on the owner's display.
+
+### Gate 9F consolidated UX-hardening candidate
+
+Implementation commit
+`20cf9a23ba7f2a873b71c09bed5064834e7fa550` (tree
+`2533598922d8d179780e03db3f4745c49c3e13cb`) supersedes the earlier
+logo-only build as a Gate 9F candidate. The supplied fractured-crest logo is
+one item in this consolidated pass, not a separate gate.
+
+The candidate also:
+
+- raises the remaining Journey toolbar, rail, overview and Inspector copy to a
+  readable high-contrast hierarchy;
+- replaces raw validation codes with creator-facing diagnostics and a bounded
+  honest remaining-issue count;
+- removes the decorative unwired Inspector close glyph;
+- routes Settings and Main Menu to explicit staged-unavailability reasons and
+  visibly disables Journey-only Filter while Graph is active;
+- gives an unavailable Add Action control an explicit reason (`TERMINAL`,
+  `ENTRY SET`, `NO ACTIONS`, `LIMIT REACHED` or `UNAVAILABLE`);
+- retains dirty-Flow save-before-Preview and blocks Runtime launch when save
+  fails;
+- strengthens 1920x1080 and 1280x720 hard-boundary and fixed-chrome layout
+  regressions; and
+- records the control and owner-acceptance matrix in
+  `docs/STORY_FLOW_GATE9F_UX_HARDENING.md`.
+
+Local evidence for that implementation tree:
+
+- `git diff --check` — PASS;
+- GNU C++17 `StoryFlowJourneyUiLayoutTests` — PASS at the locked concept,
+  1920x1080 and 1280x720 geometries;
+- manual Gate 9F source assertions for all surfaced shell actions, logo hash,
+  Preview lifecycle, readable diagnostics and removed fake controls — PASS;
+- CMake source contract — NOT RUN locally because CMake is unavailable and the
+  Wicked submodule is not initialized in the Linux scratch workspace.
+
+Exact-head Windows Debug/Release CI is intentionally deferred until the
+handoff/documentation commit is published, so the next workflow cycle tests the
+complete Gate 9F candidate once. Green CI will still leave owner packaged visual
+and interaction acceptance open; PR #100 remains draft and must not be merged
+automatically.
+
+### Gate 9F wrapped Inspector-message correction
+
+Owner testing of the consolidated candidate found that Status and Validation
+used hard 48-character ellipsizing, leaving no way to read the complete
+message. Implementation commit
+`122cea3308fac6ad40edb3d77e95090539ec6aae` (tree
+`0c09b8af48232a03fc6eab38b498caa1ce32cd92`) removes both truncation paths.
+
+The correction:
+
+- preserves complete Status and visible Validation text and wraps it at word
+  boundaries inside the real Inspector width;
+- safely splits a single long identifier/path rather than allowing it to clip;
+- moves Graph Status directly below Validation instead of leaving it isolated
+  at the bottom of the Inspector;
+- computes a non-overlapping Validation/Status stack for Journey, including
+  compact height; and
+- adds deterministic reconstruction and 1920x1080/1280x720 placement tests plus
+  source-contract rejection of the former ellipsis calls.
+
+Local evidence for that implementation tree:
+
+- `git diff --check` — PASS;
+- GNU C++17 layout/wrapping test with `-Wall -Wextra -Werror` — PASS;
+- complete ordinary-message and long-identifier reconstruction — PASS;
+- manual wrapped-message source contract — PASS;
+- CMake/Windows compile and packaged visual confirmation — pending exact-head
+  CI and owner retest.
+
+The previous consolidated head `27d260b8fd43e5efd938c8bfcd2db7f32914d88d`
+passed Studio Debug/Release and baseline Debug/Release, including both Studio
+startup checks, but is superseded because it still contained the owner-reported
+message truncation. Gate 9F remains unaccepted until the corrected packaged
+Release passes owner visual confirmation.
 
 ## Gate 6 accepted evidence
 
@@ -373,10 +512,12 @@ related.
 
 A new implementation session should:
 
-1. inspect current `main` and PR #66 live head;
-2. verify final closeout docs are present;
-3. verify exact-head CI after the documentation commits;
-4. report whether PR #66 is genuinely merge-ready;
-5. stop for the owner's merge decision;
-6. after merge, start Gate 2 from the new exact main and re-audit Flow/Screen
-   semantics before editing.
+1. inspect current `main` and draft PR #100 live head;
+2. confirm Graph files have not drifted beyond shared synchronization seams;
+3. run exact-head Windows Debug and Release CI;
+4. download the packaged Release artifact and capture Journey at 1920x1080 and
+   1280x720 using the owner's representative project;
+5. compare those screenshots against `storyflow concept(3).png` and the locked
+   rules in `docs/STORY_FLOW_JOURNEY_RECOVERY_9A_9F.md`;
+6. fix every visible mismatch before requesting owner acceptance;
+7. keep PR #100 draft and stop for the owner's merge decision.

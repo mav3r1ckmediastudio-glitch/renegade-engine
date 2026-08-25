@@ -174,7 +174,8 @@ namespace renegade::studio
     void RenegadeProjectHub::Create()
     {
         SetName("Renegade-owned Project Hub");
-        wordmark_ = wi::resourcemanager::Load("Content/ui/renegade-engine-wordmark.png");
+        brandLogo_ = wi::resourcemanager::Load(
+            "Content/ui/renegade-engine-fractured-crest-logo.png");
         SetShadowRadius(0.0f);
         SetLayout(width_, height_);
     }
@@ -731,9 +732,9 @@ namespace renegade::studio
         panel(DetailsPanel, Panel, Border);
         panel(Footer, PanelDeep, Border);
 
-        if (wordmark_.IsValid())
+        if (brandLogo_.IsValid())
         {
-            const auto desc = wordmark_.GetTexture().GetDesc();
+            const auto desc = brandLogo_.GetTexture().GetDesc();
             const float targetWidth = sw(205.0f);
             const float targetHeight = sw(58.0f);
             float drawWidth = targetWidth;
@@ -755,7 +756,7 @@ namespace renegade::studio
                 drawHeight);
             logo.blendFlag = wi::enums::BLENDMODE_ALPHA;
             logo.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
-            wi::image::Draw(&wordmark_.GetTexture(), logo, cmd);
+            wi::image::Draw(&brandLogo_.GetTexture(), logo, cmd);
         }
 
         line(520.0f, 70.0f, 150.0f, BorderBright);

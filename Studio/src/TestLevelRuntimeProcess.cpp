@@ -326,6 +326,7 @@ namespace renegade::studio
             TestLevelProcessFailureInjection::None;
         bool cleanupDone = false;
         bool watcherFailureInjected = false;
+        bool ownsSnapshot = true;
 
         void CloseHandles() noexcept
         {
@@ -353,6 +354,12 @@ namespace renegade::studio
                 return;
             }
             cleanupDone = true;
+            if (!ownsSnapshot)
+            {
+                result.cleanupAttempted = false;
+                result.cleanupSucceeded = true;
+                return;
+            }
             result.cleanupAttempted = true;
             std::string cleanupError;
             result.cleanupSucceeded =
@@ -498,6 +505,7 @@ namespace renegade::studio
         implementation_->cleanupDone = false;
         implementation_->watcherFailureInjected = false;
         implementation_->failureInjection = options.failureInjection;
+        implementation_->ownsSnapshot = options.ownsSnapshot;
         implementation_->startupTimeout = std::max(
             std::chrono::milliseconds(1),
             options.startupTimeout);
@@ -519,15 +527,15 @@ namespace renegade::studio
         {
             return failLaunch("The Test Level Runtime executable path is empty.");
         }
-        if (implementation_->snapshot.projectRoot.empty() ||
-            implementation_->snapshot.sessionDirectory.empty())
+        if (options.ownsSnapshot &&
+            (implementation_->snapshot.projectRoot.empty() ||
+                implementation_->snapshot.sessionDirectory.empty()))
         {
             return failLaunch("The Test Level snapshot is missing cleanup ownership metadata.");
         }
 
-        if (!WriteOwnershipMarker(
-                implementation_->snapshot.sessionDirectory,
-                error))
+        if (options.ownsSnapshot && !WriteOwnershipMarker(
+                implementation_->snapshot.sessionDirectory, error))
         {
             return failLaunch(error);
         }

@@ -102,7 +102,7 @@ namespace renegade::studio
         bool newProjectMode_ = false;
         int selectedIndex_ = -1;
         HoverTarget hovered_ = HoverTarget::None;
-        wi::Resource wordmark_;
+        wi::Resource brandLogo_;
         wi::Resource projectArtwork_;
         std::vector<wi::Resource> projectArtworkCache_;
         std::string developerIdentity_ = "DEVELOPER";

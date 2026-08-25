@@ -201,6 +201,11 @@ namespace renegade::studio
         placeholder_ = std::move(placeholder);
     }
 
+    void RenegadeTextInputField::SetRenderTextSize(const int size) noexcept
+    {
+        renderTextSize_ = std::clamp(size, 8, 18);
+    }
+
     void RenegadeTextInputField::Render(
         const wi::Canvas& canvas,
         const wi::graphics::CommandList cmd) const
@@ -230,22 +235,26 @@ namespace renegade::studio
             DrawText(
                 description,
                 translation.x + 8.0f,
-                translation.y + 8.0f,
-                10,
+                translation.y + std::max(4.0f,
+                    (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+                renderTextSize_,
                 TextStrong,
                 cmd,
                 0.2f,
                 0.16f);
         }
         const float valueX = translation.x + 8.0f +
-            (description.empty() ? 0.0f : description.size() * 6.5f + 5.0f);
+            (description.empty() ? 0.0f :
+                static_cast<float>(description.size()) *
+                    static_cast<float>(renderTextSize_) * 0.65f + 5.0f);
         if (!value.empty())
         {
             DrawText(
                 value,
                 valueX,
-                translation.y + 8.0f,
-                10,
+                translation.y + std::max(4.0f,
+                    (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+                renderTextSize_,
                 TextStrong,
                 cmd,
                 0.15f,
@@ -256,13 +265,19 @@ namespace renegade::studio
             DrawText(
                 placeholder_,
                 valueX,
-                translation.y + 8.0f,
-                10,
+                translation.y + std::max(4.0f,
+                    (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+                renderTextSize_,
                 TextSecondary,
                 cmd,
                 0.35f,
                 0.14f);
         }
+    }
+
+    void RenegadeButton::SetRenderTextSize(const int size) noexcept
+    {
+        renderTextSize_ = std::clamp(size, 8, 18);
     }
 
     void RenegadeButton::Render(
@@ -284,12 +299,14 @@ namespace renegade::studio
             engaged ? Forge : Border,
             cmd);
         const std::string text = GetText();
-        const float textWidth = static_cast<float>(text.size()) * 7.0f;
+        const float textWidth = static_cast<float>(text.size()) *
+            static_cast<float>(renderTextSize_) * 0.7f;
         DrawText(
             text,
             translation.x + std::max(8.0f, (scale.x - textWidth) * 0.5f),
-            translation.y + 8.0f,
-            10,
+            translation.y + std::max(4.0f,
+                (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+            renderTextSize_,
             IsEnabled() ? TextStrong : Muted,
             cmd,
             0.25f,
@@ -334,6 +351,11 @@ namespace renegade::studio
             0.16f);
     }
 
+    void RenegadeComboBox::SetRenderTextSize(const int size) noexcept
+    {
+        renderTextSize_ = std::clamp(size, 8, 18);
+    }
+
     void RenegadeComboBox::Render(
         const wi::Canvas&,
         const wi::graphics::CommandList cmd) const
@@ -358,8 +380,9 @@ namespace renegade::studio
         DrawText(
             value,
             translation.x + 10.0f,
-            translation.y + 8.0f,
-            10,
+            translation.y + std::max(4.0f,
+                (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+            renderTextSize_,
             TextStrong,
             cmd,
             0.35f,
@@ -367,8 +390,9 @@ namespace renegade::studio
         DrawText(
             open ? "▲" : "▼",
             translation.x + scale.x - 21.0f,
-            translation.y + 8.0f,
-            9,
+            translation.y + std::max(4.0f,
+                (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+            std::max(9, renderTextSize_ - 1),
             open ? Forge : Muted,
             cmd);
         if (!open)
@@ -392,8 +416,9 @@ namespace renegade::studio
             DrawText(
                 items[static_cast<std::size_t>(index)].name,
                 translation.x + 10.0f,
-                y + 8.0f,
-                10,
+                y + std::max(4.0f,
+                    (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+                renderTextSize_,
                 index == hovered ? TextStrong : TextSecondary,
                 cmd,
                 0.35f,
@@ -744,7 +769,7 @@ namespace renegade::studio
     {
         SetName("Renegade-owned Studio chrome");
         brandLockup_ = wi::resourcemanager::Load(
-            "Content/ui/renegade-engine-wordmark.png");
+            "Content/ui/renegade-engine-fractured-crest-logo.png");
         SetLayout(width_, height_);
         SetShadowRadius(0.0f);
     }
@@ -2133,13 +2158,33 @@ namespace renegade::studio
         DrawRect(7.0f, 7.0f, 1.0f, height_ - 14.0f, BorderSoft, cmd);
         DrawRect(width_ - 8.0f, 7.0f, 1.0f, height_ - 14.0f, BorderSoft, cmd);
 
-        // Official wordmark lockup supplied by the Renegade brand document.
-        // That document is logo authority only; the accepted Studio proof
-        // remains the authority for every other UX and visual decision.
+        // Owner-supplied transparent fractured-crest lockup. Preserve its
+        // aspect ratio and alpha; the logo never inherits additive UI glow.
         if (brandLockup_.IsValid())
         {
-            wi::image::Params logo(18.0f, 9.0f, 168.0f, 46.0f);
-            logo.blendFlag = wi::enums::BLENDMODE_ADDITIVE;
+            const auto desc = brandLockup_.GetTexture().GetDesc();
+            constexpr float maxWidth = 168.0f;
+            constexpr float maxHeight = 62.0f;
+            float drawWidth = maxWidth;
+            float drawHeight = maxHeight;
+            if (desc.width > 0 && desc.height > 0)
+            {
+                const float aspect =
+                    static_cast<float>(desc.width) /
+                    static_cast<float>(desc.height);
+                drawWidth = drawHeight * aspect;
+                if (drawWidth > maxWidth)
+                {
+                    drawWidth = maxWidth;
+                    drawHeight = drawWidth / aspect;
+                }
+            }
+            wi::image::Params logo(
+                18.0f,
+                (TopBarHeight - drawHeight) * 0.5f,
+                drawWidth,
+                drawHeight);
+            logo.blendFlag = wi::enums::BLENDMODE_ALPHA;
             logo.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
             wi::image::Draw(&brandLockup_.GetTexture(), logo, cmd);
         }
