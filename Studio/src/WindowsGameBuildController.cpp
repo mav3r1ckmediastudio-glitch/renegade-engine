@@ -78,7 +78,7 @@ namespace renegade::studio
         {
             const std::time_t now = std::time(nullptr);
             std::tm utc{};
-            if (gmtime_s(&utc) != 0)
+            if (gmtime_s(&utc, &now) != 0)
                 return {};
             std::ostringstream stream;
             stream << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");
