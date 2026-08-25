@@ -1,0 +1,68 @@
+name: Gate 10 contract repair
+
+on:
+  push:
+    branches:
+      - feature/story-flow-gate10-closeout
+    paths:
+      - .github/workflows/gate10-contract-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/story-flow-gate10-closeout
+          fetch-depth: 0
+      - name: Restore Gate 9A diagnostic capacity contract
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("Studio/src/RenegadeStoryFlowWorkspace.cpp")
+          text = path.read_text(encoding="utf-8")
+          old = '''        if (!model_->Diagnostics().empty())
+        {
+            constexpr std::size_t modelCapacity = 2;
+            const std::size_t count = std::min(
+                modelCapacity, model_->Diagnostics().size());
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (i + 1 == modelCapacity &&
+                    model_->Diagnostics().size() > modelCapacity)
+'''
+          new = '''        if (!model_->Diagnostics().empty())
+        {
+            const std::size_t capacity = 2;
+            const std::size_t count = std::min(
+                capacity, model_->Diagnostics().size());
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (i + 1 == capacity &&
+                    model_->Diagnostics().size() > capacity)
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one Gate 9A diagnostic block, found {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+      - name: Verify exact source contracts before commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/StoryFlowJourneyRecovery9ASourceContract.cmake
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/StoryFlowGate10ProjectHomeCommandContract.cmake
+      - name: Commit bounded repair and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/gate10-contract-repair.yml
+          git add Studio/src/RenegadeStoryFlowWorkspace.cpp
+          git diff --cached --check
+          git commit -m "Restore Gate 9A validation capacity contract"
+          git push origin HEAD:feature/story-flow-gate10-closeout
