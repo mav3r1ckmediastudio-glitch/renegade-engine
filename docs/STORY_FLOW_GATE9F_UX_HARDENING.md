@@ -46,6 +46,11 @@ left with an inert button carrying an apparently valid command label.
 - secondary Inspector text remains high contrast;
 - internal diagnostic codes are not creator-facing copy;
 - unreachable content names the affected destination and Game Start;
+- Status and visible Validation messages preserve their complete text and wrap
+  at word boundaries; long identifiers split safely instead of ellipsizing;
+- Graph places Status directly below Validation rather than at the remote
+  bottom edge of the Inspector; Journey reserves a non-overlapping wrapped
+  message stack above its fixed lower controls;
 - compact height shows the available messages plus an honest remaining count;
 - status copy is separated from its heading and uses readable text;
 - 1280x720 and 1920x1080 keep cards, controls and overview out of the Inspector.
@@ -54,6 +59,7 @@ left with an inert button carrying an apparently valid command label.
 
 The Journey recovery source contract pins the authoritative logo hash and
 rejects the old wordmark, additive logo blending, raw diagnostic codes,
+Status/Validation ellipsizing,
 decorative Inspector controls, legacy lifecycle panels, type-coloured card
 frames, tiny zoom, zoom-scaled overview chrome and Journey-to-Graph exit
 routing. The layout test verifies both target resolutions, the hard

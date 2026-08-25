@@ -11,6 +11,7 @@ set(CARD "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyCard.h")
 set(LANE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyLane.h")
 set(ROLE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyRole.h")
 set(WORKSPACE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowWorkspace.cpp")
+set(INSPECTOR_TEXT "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowInspectorText.h")
 set(STUDIO_CHROME "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp")
 set(PROJECT_HUB "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeProjectHub.cpp")
 set(STUDIO_APPLICATION "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
@@ -21,6 +22,7 @@ set(LEGACY_SCREEN "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowScreenPane
 
 foreach(path IN ITEMS "${RENDER_PATH}" "${INTEGRATION}" "${COMPOSER}"
         "${CHROME}" "${LAYOUT}" "${CARD}" "${LANE}" "${ROLE}" "${WORKSPACE}"
+        "${INSPECTOR_TEXT}"
         "${STUDIO_CHROME}" "${PROJECT_HUB}" "${STUDIO_APPLICATION}"
         "${STUDIO_CMAKE}" "${BRAND_LOGO}")
     if(NOT EXISTS "${path}")
@@ -43,6 +45,7 @@ file(READ "${CARD}" card_source)
 file(READ "${LANE}" lane_source)
 file(READ "${ROLE}" role_source)
 file(READ "${WORKSPACE}" workspace_source)
+file(READ "${INSPECTOR_TEXT}" inspector_text_source)
 file(READ "${STUDIO_CHROME}" studio_chrome_source)
 file(READ "${PROJECT_HUB}" project_hub_source)
 file(READ "${STUDIO_APPLICATION}" studio_application_source)
@@ -172,7 +175,14 @@ require_text(chrome_source "const bool available = !(graphViewActive_ && i == 2)
 require_text(render_path_source "FILTER UNAVAILABLE // JOURNEY VIEW ONLY" "Graph Filter disabled reason")
 require_text(workspace_source "Unreachable from Game Start:" "human-readable unreachable diagnostic")
 require_text(workspace_source "const std::size_t capacity = 2;" "non-overlapping validation diagnostic capacity")
-require_text(workspace_source "statusY + 17.0f, 10" "readable Inspector status body")
+require_text(inspector_text_source "WrapInspectorText" "complete Inspector message wrapping")
+require_text(inspector_text_source "word.size() > limit" "long Inspector identifier wrapping")
+require_text(inspector_text_source "ComputeInspectorMessageLayout" "non-overlapping Inspector message layout")
+require_text(workspace_source "for (const auto& line : validationLines)" "wrapped Validation rendering")
+require_text(workspace_source "for (std::size_t i = 0; i < statusLines.size(); ++i)" "wrapped Status rendering")
+require_text(workspace_source "const auto messageLayout = ComputeInspectorMessageLayout(" "raised wrapped Status placement")
+forbid_text(workspace_source "Label(Shorten(ReadableStatus(statusMessage_)" "truncated Inspector Status message")
+forbid_text(workspace_source "Label(Shorten(std::move(message), 48)" "truncated Validation message")
 forbid_text(workspace_source "diagnostic.code + \" // \" + diagnostic.message" "raw internal diagnostic codes in Inspector")
 
 # Preview saves the authoritative Flow first, blocks on save failure and then

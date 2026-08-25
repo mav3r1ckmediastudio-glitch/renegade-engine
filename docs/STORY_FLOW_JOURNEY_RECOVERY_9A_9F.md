@@ -99,7 +99,11 @@ by mutating Runtime semantics implicitly.
   high-contrast secondary text;
 - Validation presents creator-facing messages such as
   `Unreachable from Game Start: Death Screen`, never raw internal diagnostic
-  codes, and reports additional hidden issues honestly at compact height;
+  codes, wraps complete visible messages without ellipsizing and reports
+  additional hidden issues honestly at compact height;
+- Status preserves and word-wraps its complete message; Graph moves the block
+  directly below Validation while Journey reserves a non-overlapping wrapped
+  message stack above its lower controls;
 - the decorative Inspector close glyph is removed; unavailable Variables,
   Settings and Main Menu surfaces remain visibly unavailable and route to a
   staged reason rather than silently ignoring input;

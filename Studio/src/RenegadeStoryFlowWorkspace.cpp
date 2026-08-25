@@ -10,6 +10,7 @@
 
 #include "renegade/bridge/StoryFlowInteractionPolicy.h"
 #include "renegade/bridge/ScreenService.h"
+#include "RenegadeStoryFlowInspectorText.h"
 #include "RenegadeStoryFlowJourneyLayout.h"
 
 namespace
@@ -2697,11 +2698,75 @@ namespace renegade::studio
                 9, InspectorSecondary, cmd);
         }
 
-        const float validationY = layout_->activeView == bridge::StoryFlowViewMode::Journey
+        const float inspectorContentWidth = std::max(
+            1.0f, width_ - GraphWidth() - 28.0f);
+        const auto statusLines = WrapInspectorText(
+            ReadableStatus(statusMessage_),
+            InspectorWrapCharacterLimit(inspectorContentWidth, 10));
+        const wi::Color statusColor =
+            statusMessage_.find("FAILED") != std::string::npos ||
+            statusMessage_.find("REJECTED") != std::string::npos ||
+            statusMessage_.find("ERROR") != std::string::npos
+                ? Error : InspectorSecondary;
+
+        float validationY = layout_->activeView == bridge::StoryFlowViewMode::Journey
             ? translation.y + height_ -
                 (height_ >= 850.0f ? 235.0f : 150.0f)
             : translation.y + HeaderHeight + 498.0f;
         const std::size_t diagnosticCount = model_->Diagnostics().size();
+        const std::size_t validationWrapLimit =
+            InspectorWrapCharacterLimit(inspectorContentWidth, 11);
+        std::vector<std::pair<std::string, wi::Color>> validationLines;
+        if (diagnosticCount != 0)
+        {
+            const std::size_t capacity = 2;
+            const std::size_t count = std::min(capacity, diagnosticCount);
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (i + 1 == capacity && diagnosticCount > capacity)
+                {
+                    validationLines.emplace_back(
+                        "+ " + std::to_string(diagnosticCount - i) +
+                            " more issues",
+                        Warning);
+                    break;
+                }
+                const auto& diagnostic = model_->Diagnostics()[i];
+                std::string message = diagnostic.message;
+                if (diagnostic.code == "flow.unreachable_node")
+                {
+                    const auto* issueNode = model_->FindNode(diagnostic.nodeId);
+                    message = "Unreachable from Game Start: " +
+                        (issueNode ? issueNode->name : std::string("destination"));
+                }
+                const wi::Color color =
+                    diagnostic.severity ==
+                        bridge::StoryFlowDiagnosticSeverity::Error
+                    ? Error : Warning;
+                for (auto& line : WrapInspectorText(
+                        message, validationWrapLimit))
+                {
+                    validationLines.emplace_back(std::move(line), color);
+                }
+            }
+        }
+
+        const auto validDetailLines = WrapInspectorText(
+            "All governed references resolve correctly.",
+            InspectorWrapCharacterLimit(inspectorContentWidth, 10));
+        const float validationBlockHeight = diagnosticCount == 0
+            ? 36.0f + static_cast<float>(validDetailLines.size()) * 17.0f
+            : 20.0f + static_cast<float>(validationLines.size()) * 17.0f;
+        constexpr float statusLineHeight = 17.0f;
+        const auto messageLayout = ComputeInspectorMessageLayout(
+            layout_->activeView == bridge::StoryFlowViewMode::Graph,
+            validationY,
+            validationBlockHeight,
+            translation.y + scale.y,
+            statusLines.size());
+        validationY = messageLayout.validationY;
+        const float statusY = messageLayout.statusY;
+
         Label(diagnosticCount == 0
                 ? "VALIDATION"
                 : "VALIDATION (" + std::to_string(diagnosticCount) +
@@ -2714,48 +2779,32 @@ namespace renegade::studio
             Label("Valid", inspectorX + 16.0f,
                 validationY + 16.0f, 10,
                 wi::Color(113, 205, 111, 255), cmd);
-            Label("All governed references resolve correctly.", inspectorX,
-                validationY + 36.0f, 10, InspectorSecondary, cmd);
+            for (std::size_t i = 0; i < validDetailLines.size(); ++i)
+            {
+                Label(validDetailLines[i], inspectorX,
+                    validationY + 36.0f +
+                        static_cast<float>(i) * 17.0f,
+                    10, InspectorSecondary, cmd);
+            }
         }
         else
         {
             float diagnosticY = validationY + 20.0f;
-            const std::size_t capacity = 2;
-            const std::size_t count = std::min(capacity, diagnosticCount);
-            for (std::size_t i = 0; i < count; ++i)
+            for (const auto& line : validationLines)
             {
-                const auto& diagnostic = model_->Diagnostics()[i];
-                if (i + 1 == capacity && diagnosticCount > capacity)
-                {
-                    Label("+ " + std::to_string(diagnosticCount - i) +
-                            " more issues",
-                        inspectorX, diagnosticY, 11, Warning, cmd);
-                    break;
-                }
-                std::string message = diagnostic.message;
-                if (diagnostic.code == "flow.unreachable_node")
-                {
-                    const auto* issueNode = model_->FindNode(diagnostic.nodeId);
-                    message = "Unreachable from Game Start: " +
-                        (issueNode ? issueNode->name : std::string("destination"));
-                }
-                const wi::Color color = diagnostic.severity == bridge::StoryFlowDiagnosticSeverity::Error
-                    ? Error : Warning;
-                Label(Shorten(std::move(message), 48),
-                    inspectorX, diagnosticY, 11, color, cmd);
-                diagnosticY += 20.0f;
+                Label(line.first, inspectorX, diagnosticY,
+                    11, line.second, cmd);
+                diagnosticY += 17.0f;
             }
         }
 
-        const float statusY = translation.y + scale.y - 90.0f;
         Label("STATUS", inspectorX, statusY, 11, Text, cmd);
-        Label(Shorten(ReadableStatus(statusMessage_), 48), inspectorX,
-            statusY + 17.0f, 10,
-            statusMessage_.find("FAILED") != std::string::npos ||
-            statusMessage_.find("REJECTED") != std::string::npos ||
-            statusMessage_.find("ERROR") != std::string::npos
-                ? Error : InspectorSecondary,
-            cmd);
+        for (std::size_t i = 0; i < statusLines.size(); ++i)
+        {
+            Label(statusLines[i], inspectorX,
+                statusY + 17.0f + static_cast<float>(i) * statusLineHeight,
+                10, statusColor, cmd);
+        }
 
         RenderAuthoringControls(canvas, cmd);
     }
