@@ -432,7 +432,8 @@ namespace renegade::studio
                 pendingLevelAction_ = PendingLevelAction::None;
                 desiredWorkspace_ = Workspace::StoryFlow;
             });
-            levelEditor.StoryFlowGui().AddWidget(&returnToStoryFlowButton_);
+            levelEditor.RegisterStoryFlowLifecycleControl(
+                returnToStoryFlowButton_);
 
             lastLayoutWrite_ = std::chrono::steady_clock::now();
             attached_ = true;
@@ -443,10 +444,26 @@ namespace renegade::studio
         {
             if (!attached_) return;
             const XMFLOAT4 bounds = levelEditor.StoryFlowWorkspaceBounds();
-            returnToStoryFlowButton_.SetPos(XMFLOAT2(
-                bounds.x + 12.0f,
-                bounds.y + 12.0f));
-            returnToStoryFlowButton_.SetSize(XMFLOAT2(132.0f, 30.0f));
+
+            // The Scene chrome owns the first 230 px of the scene-tab strip and
+            // the viewport starts immediately below it. Keep Story Flow return
+            // in that strip, right-aligned before the Inspector, so it cannot
+            // collide with the viewport's PERSPECTIVE/LIT/SHOW chips. The
+            // registration helper also keeps it above the chrome in Wicked's
+            // reverse top-level render order.
+            constexpr float ReturnButtonWidth = 132.0f;
+            constexpr float ReturnButtonHeight = 28.0f;
+            constexpr float SceneTabSafeOffset = 242.0f;
+            const float rightAlignedX =
+                bounds.z - ReturnButtonWidth - 12.0f;
+            const float x = std::max(
+                bounds.x + SceneTabSafeOffset,
+                rightAlignedX);
+            const float y = std::max(0.0f, bounds.y - 31.0f);
+            returnToStoryFlowButton_.SetPos(XMFLOAT2(x, y));
+            returnToStoryFlowButton_.SetSize(XMFLOAT2(
+                ReturnButtonWidth,
+                ReturnButtonHeight));
         }
 
         void SetContentControlsActive(
