@@ -125,7 +125,8 @@ namespace renegade::studio
             Redo,
             ZoomOut,
             ZoomIn,
-            Preview,
+            TestGame,
+            BuildGame,
             Filter,
         };
 
@@ -196,8 +197,10 @@ namespace renegade::studio
                         pendingNativeCommand_ = NativeCommand::ZoomIn;
                         break;
                     case Action::TestPlay:
-                    case Action::Preview:
-                        pendingNativeCommand_ = NativeCommand::Preview;
+                        pendingNativeCommand_ = NativeCommand::TestGame;
+                        break;
+                    case Action::BuildGame:
+                        pendingNativeCommand_ = NativeCommand::BuildGame;
                         break;
                     case Action::Fit:
                         pendingNativeCommand_ = NativeCommand::Fit;
@@ -619,6 +622,16 @@ namespace renegade::studio
             projectName_ = std::move(name);
         }
 
+        void SetProjectCommandState(
+            const bool testGameRunning,
+            const bool buildGameBusy)
+        {
+            EnsureLoaded();
+            journeyChrome_.SetProjectCommandState(
+                testGameRunning,
+                buildGameBusy);
+        }
+
         void OnNodeActivated(
             std::function<void(const bridge::StableId&)> callback)
         {
@@ -723,19 +736,34 @@ namespace renegade::studio
             case NativeCommand::ZoomIn:
                 workspace_.AdjustJourneyZoom(1.1f);
                 break;
-            case NativeCommand::Preview:
+            case NativeCommand::TestGame:
                 if (workspace_.IsDirty())
                     workspace_.SaveJourney();
                 if (workspace_.IsDirty())
                 {
                     workspace_.SetExternalStatus(
-                        "PREVIEW BLOCKED // STORY FLOW SAVE FAILED");
+                        "TEST GAME BLOCKED // STORY FLOW SAVE FAILED");
                     break;
                 }
                 if (journeyShellAction_)
                 {
                     journeyShellAction_(
-                        RenegadeStoryFlowJourneyChrome::Action::Preview);
+                        RenegadeStoryFlowJourneyChrome::Action::TestPlay);
+                }
+                break;
+            case NativeCommand::BuildGame:
+                if (workspace_.IsDirty())
+                    workspace_.SaveJourney();
+                if (workspace_.IsDirty())
+                {
+                    workspace_.SetExternalStatus(
+                        "BUILD GAME BLOCKED // STORY FLOW SAVE FAILED");
+                    break;
+                }
+                if (journeyShellAction_)
+                {
+                    journeyShellAction_(
+                        RenegadeStoryFlowJourneyChrome::Action::BuildGame);
                 }
                 break;
             case NativeCommand::Filter:
