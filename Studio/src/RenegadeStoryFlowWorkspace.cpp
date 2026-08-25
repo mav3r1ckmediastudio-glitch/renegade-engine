@@ -1576,6 +1576,10 @@ namespace renegade::studio
             static_cast<const wi::gui::Widget*>(&addQuitButton_)})
         {
             if (!widget->IsVisible()) continue;
+            // TextInputField binds its own narrow scissor and the custom
+            // RenegadeButton/ComboBox renderers intentionally do not. Restore
+            // the workspace clip before every manually rendered control so a
+            // preceding field can never clip Add Action or exit destinations.
             ApplyScissor(canvas, scissorRect, cmd);
             widget->Render(canvas, cmd);
         }
@@ -2292,6 +2296,9 @@ namespace renegade::studio
             10,
             session_->IsDirty() ? Accent : InspectorSecondary,
             cmd);
+        // Graph is intentionally not rendered here. ImNodes is the sole Graph
+        // renderer and is composed by RenegadeStoryFlowGraphLayer. Journey keeps
+        // its native lane/card projection in this shared presentation workspace.
         if (layout_->activeView == bridge::StoryFlowViewMode::Journey)
         {
             const float branchHeaderY =

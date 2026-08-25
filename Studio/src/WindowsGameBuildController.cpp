@@ -967,7 +967,7 @@ namespace renegade::studio
         const std::vector<std::string> smokeOutcomes = projectState.smokeOutcomes;
         bridge::WindowsGameBuildWorkflowResult result;
         const bridge::WindowsGameBuildSmokeRunner smoke =
-            [smokeOutcomes, stagingId, &progress](
+            [smokeOutcomes, stagingId](
                 const bridge::WindowsGameBuildPlan& plan,
                 const bridge::WindowsGameBuildStageResult& stage,
                 std::string& evidencePath,
