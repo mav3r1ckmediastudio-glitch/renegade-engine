@@ -51,13 +51,17 @@ require_contains(application "IsProjectPlayFromStoryFlowActive" "Studio runtime 
 # Gate 10 packaged verification must preserve legacy startup-Screen proof while
 # accepting modern Flow-native smoke only when it explicitly proves there was
 # no fabricated legacy Screen/action and still reaches the exact Complete Game
-# Flow terminal. This is the owner-reported build failure regression.
+# Flow terminal. The immutable project startup_screen_id, not mutable resolved
+# startup_screen state, discriminates the two contracts.
+require_contains(build_verification "evidence.find(\"startup_screen_id\")" "immutable startup Screen identity discriminator")
 require_contains(build_verification "const bool legacyStartupScreen" "runtime entry-mode split")
 require_contains(build_verification "\"screen_was_loaded\", \"true\"" "legacy startup Screen evidence")
 require_contains(build_verification "\"last_action_id\", \"play\"" "legacy Play action evidence")
+require_contains(build_verification "evidence.find(\"startup_flow_id\")" "Flow-native startup Flow identity")
+require_contains(build_verification "flowDocumentId->second != startupFlowId->second" "Flow document identity parity")
 require_contains(build_verification "\"screen_was_loaded\", \"false\"" "Flow-native no-screen evidence")
 require_contains(build_verification "\"last_action_id\", \"\"" "Flow-native no fabricated action")
-require_contains(build_verification "Gate 4 Flow-native Runtime evidence does not prove a governed startup Story Flow." "Flow-native startup Flow proof")
+require_contains(build_verification "Gate 4 Flow-native Runtime evidence does not prove the governed startup Story Flow identity." "Flow-native startup Flow proof")
 require_contains(build_verification "runtime_entry_mode" "build report runtime entry mode")
 require_contains(build_verification "story_flow_native" "Flow-native build report value")
 
