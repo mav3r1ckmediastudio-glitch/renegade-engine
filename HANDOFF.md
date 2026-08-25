@@ -1,6 +1,6 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-24
+**Date:** 2026-08-25
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
@@ -102,6 +102,48 @@ Local evidence for implementation tree
 Required closeout remains exact-head Windows Debug/Release CI followed by the
 owner's packaged Release visual check. A successful build does not prove the
 logo is acceptably sized on the owner's display.
+
+### Gate 9F consolidated UX-hardening candidate
+
+Implementation commit
+`20cf9a23ba7f2a873b71c09bed5064834e7fa550` (tree
+`2533598922d8d179780e03db3f4745c49c3e13cb`) supersedes the earlier
+logo-only build as a Gate 9F candidate. The supplied fractured-crest logo is
+one item in this consolidated pass, not a separate gate.
+
+The candidate also:
+
+- raises the remaining Journey toolbar, rail, overview and Inspector copy to a
+  readable high-contrast hierarchy;
+- replaces raw validation codes with creator-facing diagnostics and a bounded
+  honest remaining-issue count;
+- removes the decorative unwired Inspector close glyph;
+- routes Settings and Main Menu to explicit staged-unavailability reasons and
+  visibly disables Journey-only Filter while Graph is active;
+- gives an unavailable Add Action control an explicit reason (`TERMINAL`,
+  `ENTRY SET`, `NO ACTIONS`, `LIMIT REACHED` or `UNAVAILABLE`);
+- retains dirty-Flow save-before-Preview and blocks Runtime launch when save
+  fails;
+- strengthens 1920x1080 and 1280x720 hard-boundary and fixed-chrome layout
+  regressions; and
+- records the control and owner-acceptance matrix in
+  `docs/STORY_FLOW_GATE9F_UX_HARDENING.md`.
+
+Local evidence for that implementation tree:
+
+- `git diff --check` — PASS;
+- GNU C++17 `StoryFlowJourneyUiLayoutTests` — PASS at the locked concept,
+  1920x1080 and 1280x720 geometries;
+- manual Gate 9F source assertions for all surfaced shell actions, logo hash,
+  Preview lifecycle, readable diagnostics and removed fake controls — PASS;
+- CMake source contract — NOT RUN locally because CMake is unavailable and the
+  Wicked submodule is not initialized in the Linux scratch workspace.
+
+Exact-head Windows Debug/Release CI is intentionally deferred until the
+handoff/documentation commit is published, so the next workflow cycle tests the
+complete Gate 9F candidate once. Green CI will still leave owner packaged visual
+and interaction acceptance open; PR #100 remains draft and must not be merged
+automatically.
 
 ## Gate 6 accepted evidence
 
