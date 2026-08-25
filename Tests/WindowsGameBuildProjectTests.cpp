@@ -162,9 +162,9 @@ namespace
             error = "could not open project descriptor for Gate 10 migration proof";
             return false;
         }
-        std::string text(
+        std::string text{
             std::istreambuf_iterator<char>(input),
-            std::istreambuf_iterator<char>());
+            std::istreambuf_iterator<char>()};
         const std::size_t found = text.find(from);
         if (found == std::string::npos)
         {
