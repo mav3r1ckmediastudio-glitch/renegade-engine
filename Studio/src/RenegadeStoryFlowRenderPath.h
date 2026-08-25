@@ -121,13 +121,18 @@ namespace renegade::studio
             Start,
             Find,
             DeleteSelection,
+            Save,
             Undo,
             Redo,
             ZoomOut,
             ZoomIn,
             TestGame,
             BuildGame,
+            Validate,
             Filter,
+            AddCompleteTerminal,
+            AddReturnTerminal,
+            AddQuitTerminal,
         };
 
     public:
@@ -136,6 +141,10 @@ namespace renegade::studio
             if (loaded_)
             {
                 destinationComposer_.Detach(GetGUI());
+                GetGUI().RemoveWidget(&addQuitTerminalButton_);
+                GetGUI().RemoveWidget(&addReturnTerminalButton_);
+                GetGUI().RemoveWidget(&addCompleteTerminalButton_);
+                GetGUI().RemoveWidget(&saveFlowButton_);
                 GetGUI().RemoveWidget(&deleteSelectionButton_);
                 GetGUI().RemoveWidget(&findButton_);
                 GetGUI().RemoveWidget(&findInput_);
@@ -181,8 +190,7 @@ namespace renegade::studio
                         searchOpen_ = !searchOpen_;
                         break;
                     case Action::Validate:
-                        workspace_.SetExternalStatus(
-                            "JOURNEY VALIDATION // SEE INSPECTOR DIAGNOSTICS");
+                        pendingNativeCommand_ = NativeCommand::Validate;
                         break;
                     case Action::Undo:
                         pendingNativeCommand_ = NativeCommand::Undo;
@@ -275,6 +283,46 @@ namespace renegade::studio
                 pendingNativeCommand_ = NativeCommand::Graph;
             });
 
+            saveFlowButton_.Create("Story Flow Save");
+            saveFlowButton_.SetText("SAVE");
+            saveFlowButton_.SetTooltip(
+                "Save the authoritative StoryFlow document. Shortcut: Ctrl+S.");
+            saveFlowButton_.SetShadowRadius(0.0f);
+            saveFlowButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                pendingNativeCommand_ = NativeCommand::Save;
+            });
+
+            addCompleteTerminalButton_.Create("Story Flow Journey Add Complete Game");
+            addCompleteTerminalButton_.SetText("+ COMPLETE");
+            addCompleteTerminalButton_.SetTooltip(
+                "Add a Complete Game terminal destination to StoryFlow.");
+            addCompleteTerminalButton_.SetShadowRadius(0.0f);
+            addCompleteTerminalButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                pendingNativeCommand_ = NativeCommand::AddCompleteTerminal;
+            });
+
+            addReturnTerminalButton_.Create("Story Flow Journey Add Return Menu");
+            addReturnTerminalButton_.SetText("+ RETURN");
+            addReturnTerminalButton_.SetTooltip(
+                "Add a Return To Main Menu terminal destination to StoryFlow.");
+            addReturnTerminalButton_.SetShadowRadius(0.0f);
+            addReturnTerminalButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                pendingNativeCommand_ = NativeCommand::AddReturnTerminal;
+            });
+
+            addQuitTerminalButton_.Create("Story Flow Journey Add Quit");
+            addQuitTerminalButton_.SetText("+ QUIT");
+            addQuitTerminalButton_.SetTooltip(
+                "Add a Quit terminal destination to StoryFlow.");
+            addQuitTerminalButton_.SetShadowRadius(0.0f);
+            addQuitTerminalButton_.OnClick([this](const wi::gui::EventArgs&)
+            {
+                pendingNativeCommand_ = NativeCommand::AddQuitTerminal;
+            });
+
             fitButton_.Create("Story Flow Fit");
             fitButton_.SetText("FIT");
             fitButton_.SetTooltip("Frame all content in the active Story Flow view.");
@@ -331,6 +379,10 @@ namespace renegade::studio
 
             // Wicked updates in registration order and renders in reverse. Keep
             // native commands in front of the background presentation layers.
+            GetGUI().AddWidget(&addQuitTerminalButton_);
+            GetGUI().AddWidget(&addReturnTerminalButton_);
+            GetGUI().AddWidget(&addCompleteTerminalButton_);
+            GetGUI().AddWidget(&saveFlowButton_);
             GetGUI().AddWidget(&deleteSelectionButton_);
             GetGUI().AddWidget(&conditionEditor_);
             GetGUI().AddWidget(&findButton_);
@@ -438,6 +490,19 @@ namespace renegade::studio
             // complete wiGUI update so Story Flow never mutates canvas/view/
             // semantic state re-entrantly while Wicked is traversing widgets.
             wi::RenderPath2D::Update(dt);
+
+            // StoryFlow now owns an explicit manual save path in both Journey
+            // and Graph. The shortcut is suppressed while a text field owns
+            // keyboard input so Ctrl+S can never corrupt an active edit.
+            const bool controlDown =
+                wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL) ||
+                wi::input::Down(wi::input::KEYBOARD_BUTTON_RCONTROL);
+            if (workspaceActive_ && !GetGUI().IsTyping() && controlDown &&
+                wi::input::Press(static_cast<wi::input::BUTTON>('S')))
+            {
+                pendingNativeCommand_ = NativeCommand::Save;
+            }
+
             ProcessPendingNativeCommand();
 
             const bool graphActive = workspaceActive_ &&
@@ -724,6 +789,9 @@ namespace renegade::studio
             case NativeCommand::DeleteSelection:
                 workspace_.DeleteSelection();
                 break;
+            case NativeCommand::Save:
+                workspace_.SaveJourney();
+                break;
             case NativeCommand::Undo:
                 workspace_.UndoJourney();
                 break;
@@ -766,8 +834,20 @@ namespace renegade::studio
                         RenegadeStoryFlowJourneyChrome::Action::BuildGame);
                 }
                 break;
+            case NativeCommand::Validate:
+                workspace_.ValidateRuntimeReadiness();
+                break;
             case NativeCommand::Filter:
                 workspace_.ToggleJourneyFilter();
+                break;
+            case NativeCommand::AddCompleteTerminal:
+                workspace_.AddJourneyTerminal(bridge::FlowNodeKind::CompleteGame);
+                break;
+            case NativeCommand::AddReturnTerminal:
+                workspace_.AddJourneyTerminal(bridge::FlowNodeKind::ReturnToMainMenu);
+                break;
+            case NativeCommand::AddQuitTerminal:
+                workspace_.AddJourneyTerminal(bridge::FlowNodeKind::Quit);
                 break;
             case NativeCommand::None:
             default:
@@ -784,6 +864,18 @@ namespace renegade::studio
             journeyViewButton_.SetEnabled(active);
             graphViewButton_.SetVisible(active);
             graphViewButton_.SetEnabled(active);
+            saveFlowButton_.SetVisible(active);
+            saveFlowButton_.SetEnabled(active && workspace_.IsDirty());
+
+            const bool journeyActive = active &&
+                workspace_.ActiveView() == bridge::StoryFlowViewMode::Journey;
+            addCompleteTerminalButton_.SetVisible(journeyActive);
+            addCompleteTerminalButton_.SetEnabled(journeyActive);
+            addReturnTerminalButton_.SetVisible(journeyActive);
+            addReturnTerminalButton_.SetEnabled(journeyActive);
+            addQuitTerminalButton_.SetVisible(journeyActive);
+            addQuitTerminalButton_.SetEnabled(journeyActive);
+
             fitButton_.SetVisible(false);
             fitButton_.SetEnabled(false);
             startButton_.SetVisible(false);
@@ -879,6 +971,18 @@ namespace renegade::studio
             graphViewButton_.SetPos(XMFLOAT2(
                 shell.workspaceTitle.x + 108.0f, viewSwitchY));
             graphViewButton_.SetSize(XMFLOAT2(62.0f, 26.0f));
+            saveFlowButton_.SetPos(XMFLOAT2(
+                shell.workspaceTitle.x + 178.0f, viewSwitchY));
+            saveFlowButton_.SetSize(XMFLOAT2(64.0f, 26.0f));
+            addCompleteTerminalButton_.SetPos(XMFLOAT2(
+                shell.workspaceTitle.x + 250.0f, viewSwitchY));
+            addCompleteTerminalButton_.SetSize(XMFLOAT2(86.0f, 26.0f));
+            addReturnTerminalButton_.SetPos(XMFLOAT2(
+                shell.workspaceTitle.x + 342.0f, viewSwitchY));
+            addReturnTerminalButton_.SetSize(XMFLOAT2(82.0f, 26.0f));
+            addQuitTerminalButton_.SetPos(XMFLOAT2(
+                shell.workspaceTitle.x + 430.0f, viewSwitchY));
+            addQuitTerminalButton_.SetSize(XMFLOAT2(62.0f, 26.0f));
 
             // Canvas navigation lives in the existing lower-left navigation
             // host area, away from Level/Screen lifecycle controls in the two
@@ -926,6 +1030,10 @@ namespace renegade::studio
         bridge::StoryFlowAuthoringModel* boundModel_ = nullptr;
         RenegadeButton journeyViewButton_;
         RenegadeButton graphViewButton_;
+        RenegadeButton saveFlowButton_;
+        RenegadeButton addCompleteTerminalButton_;
+        RenegadeButton addReturnTerminalButton_;
+        RenegadeButton addQuitTerminalButton_;
         RenegadeButton fitButton_;
         RenegadeButton startButton_;
         RenegadeTextInputField findInput_;
