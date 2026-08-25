@@ -145,6 +145,41 @@ complete Gate 9F candidate once. Green CI will still leave owner packaged visual
 and interaction acceptance open; PR #100 remains draft and must not be merged
 automatically.
 
+### Gate 9F wrapped Inspector-message correction
+
+Owner testing of the consolidated candidate found that Status and Validation
+used hard 48-character ellipsizing, leaving no way to read the complete
+message. Implementation commit
+`122cea3308fac6ad40edb3d77e95090539ec6aae` (tree
+`0c09b8af48232a03fc6eab38b498caa1ce32cd92`) removes both truncation paths.
+
+The correction:
+
+- preserves complete Status and visible Validation text and wraps it at word
+  boundaries inside the real Inspector width;
+- safely splits a single long identifier/path rather than allowing it to clip;
+- moves Graph Status directly below Validation instead of leaving it isolated
+  at the bottom of the Inspector;
+- computes a non-overlapping Validation/Status stack for Journey, including
+  compact height; and
+- adds deterministic reconstruction and 1920x1080/1280x720 placement tests plus
+  source-contract rejection of the former ellipsis calls.
+
+Local evidence for that implementation tree:
+
+- `git diff --check` — PASS;
+- GNU C++17 layout/wrapping test with `-Wall -Wextra -Werror` — PASS;
+- complete ordinary-message and long-identifier reconstruction — PASS;
+- manual wrapped-message source contract — PASS;
+- CMake/Windows compile and packaged visual confirmation — pending exact-head
+  CI and owner retest.
+
+The previous consolidated head `27d260b8fd43e5efd938c8bfcd2db7f32914d88d`
+passed Studio Debug/Release and baseline Debug/Release, including both Studio
+startup checks, but is superseded because it still contained the owner-reported
+message truncation. Gate 9F remains unaccepted until the corrected packaged
+Release passes owner visual confirmation.
+
 ## Gate 6 accepted evidence
 
 Gate 5/PR #84 is merged and owner-accepted. New/Open projects enter the
