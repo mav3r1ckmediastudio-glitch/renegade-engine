@@ -14,6 +14,12 @@
 
 namespace renegade::studio
 {
+    // Gate 4 keeps Asset Browser readability isolated from the shared Studio
+    // control defaults. The search field invokes the read-only browser overlay
+    // after base chrome has rendered its cards/folders.
+    void RenderCreatorAssetBrowserReadabilityOverlay(
+        wi::graphics::CommandList cmd);
+
     class RenegadeTextInputField : public wi::gui::TextInputField
     {
     public:
@@ -145,6 +151,53 @@ namespace renegade::studio
         const char* GetWidgetTypeName() const override
         {
             return "SceneInspectorSlider";
+        }
+    };
+
+    class CreatorAssetTextInputField final : public RenegadeTextInputField
+    {
+    public:
+        CreatorAssetTextInputField() { SetRenderTextSize(12); }
+        const char* GetWidgetTypeName() const override
+        {
+            return "CreatorAssetTextInputField";
+        }
+    };
+
+    class CreatorAssetSearchField final : public RenegadeTextInputField
+    {
+    public:
+        CreatorAssetSearchField() { SetRenderTextSize(12); }
+        void Render(
+            const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const override
+        {
+            RenegadeTextInputField::Render(canvas, cmd);
+            RenderCreatorAssetBrowserReadabilityOverlay(cmd);
+        }
+        const char* GetWidgetTypeName() const override
+        {
+            return "CreatorAssetSearchField";
+        }
+    };
+
+    class CreatorAssetComboBox final : public RenegadeComboBox
+    {
+    public:
+        CreatorAssetComboBox() { SetRenderTextSize(11); }
+        const char* GetWidgetTypeName() const override
+        {
+            return "CreatorAssetComboBox";
+        }
+    };
+
+    class CreatorAssetButton final : public RenegadeButton
+    {
+    public:
+        CreatorAssetButton() { SetRenderTextSize(10); }
+        const char* GetWidgetTypeName() const override
+        {
+            return "CreatorAssetButton";
         }
     };
 
@@ -310,6 +363,40 @@ namespace renegade::studio
         [[nodiscard]] const std::string& AssetBrowserDragPath() const noexcept
         {
             return assetBrowserDragPath_;
+        }
+
+        // Gate 4 exposes read-only browser presentation state so the creator
+        // overlay can improve readability without duplicating or mutating the
+        // Asset Browser's selection, scrolling, filtering or drag ownership.
+        [[nodiscard]] float LayoutWidth() const noexcept { return width_; }
+        [[nodiscard]] float LayoutHeight() const noexcept { return height_; }
+        [[nodiscard]] bool AssetBrowserFoldersVisible() const noexcept
+        {
+            return assetBrowserFoldersVisible_;
+        }
+        [[nodiscard]] std::size_t AssetBrowserFolderScrollRow() const noexcept
+        {
+            return assetBrowserFolderScrollRow_;
+        }
+        [[nodiscard]] std::size_t AssetBrowserAssetScrollRow() const noexcept
+        {
+            return assetBrowserAssetScrollRow_;
+        }
+        [[nodiscard]] const std::vector<AssetFolderRow>& AssetBrowserFolders() const noexcept
+        {
+            return assetBrowserFolders_;
+        }
+        [[nodiscard]] const std::vector<std::size_t>& VisibleAssetFolderRows() const noexcept
+        {
+            return visibleAssetFolderRows_;
+        }
+        [[nodiscard]] const std::vector<AssetCard>& AssetBrowserAssets() const noexcept
+        {
+            return assetBrowserAssets_;
+        }
+        [[nodiscard]] const std::string& AssetBrowserSelectedPath() const noexcept
+        {
+            return assetBrowserSelectedPath_;
         }
 
         void Update(const wi::Canvas& canvas, float dt) override;
@@ -528,15 +615,15 @@ namespace renegade::studio
             float,
             float)> creatorAssetDropped_;
         wi::jobsystem::context creatorAssetWorkload_;
-        RenegadeTextInputField creatorAssetSearch_;
-        RenegadeTextInputField creatorAssetTags_;
-        RenegadeComboBox creatorAssetStateCombo_;
-        RenegadeComboBox creatorAssetFormatCombo_;
-        RenegadeComboBox creatorAssetRigCombo_;
-        RenegadeButton creatorAssetImportButton_;
-        RenegadeButton creatorAssetPlaceButton_;
-        RenegadeButton creatorAssetReimportButton_;
-        RenegadeButton creatorAssetSaveTagsButton_;
+        CreatorAssetSearchField creatorAssetSearch_;
+        CreatorAssetTextInputField creatorAssetTags_;
+        CreatorAssetComboBox creatorAssetStateCombo_;
+        CreatorAssetComboBox creatorAssetFormatCombo_;
+        CreatorAssetComboBox creatorAssetRigCombo_;
+        CreatorAssetButton creatorAssetImportButton_;
+        CreatorAssetButton creatorAssetPlaceButton_;
+        CreatorAssetButton creatorAssetReimportButton_;
+        CreatorAssetButton creatorAssetSaveTagsButton_;
         float creatorLayoutWidth_ = 1920.0f;
         float creatorLayoutHeight_ = 1080.0f;
         std::vector<AssetFolderRow> creatorFilesystemFolders_;
