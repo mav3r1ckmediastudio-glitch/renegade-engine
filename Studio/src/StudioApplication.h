@@ -18,6 +18,7 @@
 #include "renegade/bridge/PrecipitationService.h"
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/TerrainService.h"
+#include "CreatorImportPreviewWindow.h"
 #include "RenegadeStudioChrome.h"
 #include "RenegadeProjectHub.h"
 #include "RenegadeProjectLoadingOverlay.h"
@@ -619,7 +620,7 @@ namespace renegade::studio
         RenegadeButton hubNewProjectConfirmButton_;
         RenegadeButton hubNewProjectCancelButton_;
         wi::gui::Button gridToggleButton_;
-        wi::gui::Window importScalePanel_;
+        CreatorImportPreviewWindow importScalePanel_;
         wi::gui::Label importScaleTitleLabel_;
         wi::gui::Label importScaleReadoutLabel_;
         RenegadeComboBox importScaleModeCombo_;
