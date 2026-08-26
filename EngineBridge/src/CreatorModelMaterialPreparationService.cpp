@@ -176,6 +176,17 @@ namespace renegade::bridge
             return path;
         }
 
+        bool CanPassThroughPrepackedSurface(const fs::path& surface)
+        {
+            // Wicked can load authored DDS Surface maps directly. Renegade's
+            // CPU Surface builder is intentionally used for channel packing,
+            // but its image decoder does not decode DDS. Do not destroy a
+            // valid prepacked Wicked Surface merely to repack it through an
+            // unsupported decoder; govern/load the DDS as-authored instead.
+            return !surface.empty() &&
+                LowerAscii(surface.extension().generic_u8string()) == ".dds";
+        }
+
         std::string BuildPreviewSurfaceRevision(
             const fs::path& surface,
             const fs::path& roughness,
@@ -322,8 +333,11 @@ namespace renegade::bridge
                 {}, stems, "_metalness", error);
             if (!error.empty()) return false;
 
-            if (!surface.empty() || !roughness.empty() ||
-                !metalness.empty() || !occlusion.empty())
+            const bool prepackedSurfacePassThrough =
+                CanPassThroughPrepackedSurface(surface);
+            if (!prepackedSurfacePassThrough &&
+                (!surface.empty() || !roughness.empty() ||
+                    !metalness.empty() || !occlusion.empty()))
             {
                 CreatorSurfaceBuildRequest request;
                 request.surfacePath = surface.generic_u8string();
@@ -499,8 +513,11 @@ namespace renegade::bridge
             if (!result.error.empty()) return result;
 
             bool surfaceWasGenerated = false;
-            if (!surface.empty() || !roughness.empty() ||
-                !metalness.empty() || !occlusion.empty())
+            const bool prepackedSurfacePassThrough =
+                CanPassThroughPrepackedSurface(surface);
+            if (!prepackedSurfacePassThrough &&
+                (!surface.empty() || !roughness.empty() ||
+                    !metalness.empty() || !occlusion.empty()))
             {
                 const fs::path generatedDirectory =
                     fs::u8path(request.projectRoot) /
