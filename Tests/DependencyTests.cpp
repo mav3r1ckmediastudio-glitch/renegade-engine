@@ -911,26 +911,21 @@ int main()
         auto& terrainMaterial =
             terrainWorld.materials.Create(terrainMaterialEntity);
         const fs::path baseColor =
-            root / "Content/terrain/default_grass/default_grass_basecolor.dds";
+            root / "Content/terrain/default_grass/default_grass_basecolor.tga";
         const fs::path surface =
-            root / "Content/terrain/default_grass/default_grass_surface.dds";
+            root / "Content/terrain/default_grass/default_grass_surface.tga";
         fs::create_directories(baseColor.parent_path());
-        const fs::path bundledTerrain = fs::path(RENEGADE_SOURCE_DIR) /
-            "Studio/assets/terrain/default_grass";
-        fs::copy_file(
-            bundledTerrain / "default_grass_basecolor.dds",
-            baseColor,
-            fs::copy_options::overwrite_existing);
-        fs::copy_file(
-            bundledTerrain / "default_grass_surface.dds",
-            surface,
-            fs::copy_options::overwrite_existing);
+        // Dependency discovery only needs stable, project-owned paths. Keep
+        // these fixtures inert: loading production DDS data here would ask
+        // Wicked to create GPU resources in this device-free unit test.
+        std::ofstream(baseColor) << "base";
+        std::ofstream(surface) << "surface";
         terrainMaterial.textures[wi::scene::MaterialComponent::BASECOLORMAP]
             .name = baseColor.generic_u8string();
         terrainMaterial.textures[wi::scene::MaterialComponent::SURFACEMAP]
             .name = surface.generic_u8string();
         const std::string runtimeAbsoluteGrassPath =
-            (outside / "Content/terrain/default_grass/default_grass_normal.dds")
+            (outside / "Content/terrain/default_grass/default_grass_normal.tga")
                 .generic_u8string();
         terrainMaterial.textures[wi::scene::MaterialComponent::NORMALMAP]
             .name = runtimeAbsoluteGrassPath;
