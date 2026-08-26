@@ -1,6 +1,8 @@
 #pragma once
 
+#include <functional>
 #include <string>
+#include <utility>
 
 #include <WickedEngine.h>
 
@@ -20,8 +22,17 @@ namespace renegade::studio
     class CreatorImportPreviewWindow final : public wi::gui::Window
     {
     public:
+        using HiddenCallback = std::function<void()>;
+
+        CreatorImportPreviewWindow() = default;
+        explicit CreatorImportPreviewWindow(HiddenCallback callback)
+            : hiddenCallback_(std::move(callback))
+        {
+        }
+
         void SetVisible(const bool visible)
         {
+            const bool closingPreview = !visible && previewWeatherCaptured_;
             if (visible && !previewWeatherCaptured_)
             {
                 CaptureAndNeutralizePreviewWeather();
@@ -32,6 +43,28 @@ namespace renegade::studio
             }
 
             wi::gui::Window::SetVisible(visible);
+
+            // Import cancellation performs its command rollback after hiding
+            // this window. Defer the host refresh to Wicked's safe point so it
+            // runs after that rollback and after creatorModelImporter is reset.
+            // This also gives successful import exits the same deterministic
+            // Scene/Environment/Terrain visibility reconciliation.
+            if (closingPreview && hiddenCallback_)
+            {
+                const HiddenCallback callback = hiddenCallback_;
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [callback](std::uint64_t)
+                    {
+                        callback();
+                    });
+            }
+        }
+
+        void Update(const wi::Canvas& canvas, const float dt) override
+        {
+            ReflowFinalImportPage();
+            wi::gui::Window::Update(canvas, dt);
         }
 
     private:
@@ -47,6 +80,65 @@ namespace renegade::studio
             std::string skyMapName;
             wi::Resource skyMap;
         };
+
+        void ReflowFinalImportPage()
+        {
+            // The final IMPORT page also shows Asset Name and Content/Models.
+            // The old fixed thumbnail block began at y=178/214, physically
+            // underneath those fields (190..262). Keep the accepted square
+            // preview size but place the whole final block after the fields.
+            constexpr float actionBarY = 276.0f;
+            constexpr float previewY = 312.0f;
+
+            float previewSide = 244.0f;
+            for (wi::gui::Widget* widget : widgets)
+            {
+                if (widget != nullptr &&
+                    widget->GetName() == "Final Asset Thumbnail Preview")
+                {
+                    previewSide = std::max(1.0f, widget->GetSize().y);
+                    break;
+                }
+            }
+
+            const float captureY = previewY + previewSide + 10.0f;
+            const float statusY = captureY + 48.0f;
+            const float confirmY = captureY + 96.0f;
+            const float cancelY = captureY + 150.0f;
+
+            for (wi::gui::Widget* widget : widgets)
+            {
+                if (widget == nullptr)
+                    continue;
+
+                const std::string& name = widget->GetName();
+                const XMFLOAT2 current = widget->GetPos();
+                if (name == "THUMBNAIL & IMPORT")
+                {
+                    widget->SetPos(XMFLOAT2(current.x, actionBarY));
+                }
+                else if (name == "Final Asset Thumbnail Preview")
+                {
+                    widget->SetPos(XMFLOAT2(current.x, previewY));
+                }
+                else if (name == "Capture Asset Thumbnail")
+                {
+                    widget->SetPos(XMFLOAT2(current.x, captureY));
+                }
+                else if (name == "THUMBNAIL NOT CAPTURED")
+                {
+                    widget->SetPos(XMFLOAT2(current.x, statusY));
+                }
+                else if (name == "Import Model Commit")
+                {
+                    widget->SetPos(XMFLOAT2(current.x, confirmY));
+                }
+                else if (name == "Cancel Model Import")
+                {
+                    widget->SetPos(XMFLOAT2(current.x, cancelY));
+                }
+            }
+        }
 
         static WeatherPresentationState Capture(
             const wi::scene::WeatherComponent& weather)
@@ -139,6 +231,7 @@ namespace renegade::studio
             entityWeatherBefore_ = {};
         }
 
+        HiddenCallback hiddenCallback_;
         bool previewWeatherCaptured_ = false;
         wi::ecs::Entity weatherEntity_ = wi::ecs::INVALID_ENTITY;
         WeatherPresentationState sceneWeatherBefore_;
