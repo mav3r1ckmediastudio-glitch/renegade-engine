@@ -14,7 +14,7 @@
 
 namespace renegade::studio
 {
-    class RenegadeTextInputField final : public wi::gui::TextInputField
+    class RenegadeTextInputField : public wi::gui::TextInputField
     {
     public:
         void SetPlaceholder(std::string placeholder);
@@ -27,7 +27,7 @@ namespace renegade::studio
         int renderTextSize_ = 10;
     };
 
-    class RenegadeButton final : public wi::gui::Button
+    class RenegadeButton : public wi::gui::Button
     {
     public:
         void SetRenderTextSize(int size) noexcept;
@@ -38,14 +38,18 @@ namespace renegade::studio
         int renderTextSize_ = 10;
     };
 
-    class RenegadeCheckBox final : public wi::gui::CheckBox
+    class RenegadeCheckBox : public wi::gui::CheckBox
     {
     public:
+        void SetRenderTextSize(int size) noexcept;
         void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const override;
         const char* GetWidgetTypeName() const override { return "RenegadeCheckBox"; }
+
+    private:
+        int renderTextSize_ = 10;
     };
 
-    class RenegadeComboBox final : public wi::gui::ComboBox
+    class RenegadeComboBox : public wi::gui::ComboBox
     {
     public:
         void SetRenderTextSize(int size) noexcept;
@@ -56,7 +60,7 @@ namespace renegade::studio
         int renderTextSize_ = 10;
     };
 
-    class RenegadeSlider final : public wi::gui::Slider
+    class RenegadeSlider : public wi::gui::Slider
     {
     public:
         void Create(
@@ -66,6 +70,7 @@ namespace renegade::studio
             float steps,
             const std::string& name,
             std::string label);
+        void SetRenderTextSizes(int labelSize, int valueSize) noexcept;
         void OnDragStarted(std::function<void(float)> callback);
         void OnValuePreview(std::function<void(float)> callback);
         void OnValueCommitted(std::function<void(float)> callback);
@@ -82,9 +87,65 @@ namespace renegade::studio
         std::string label_;
         float valueBeforeUpdate_ = 0.0f;
         bool dragging_ = false;
+        int labelTextSize_ = 9;
+        int valueTextSize_ = 10;
         std::function<void(float)> dragStarted_;
         std::function<void(float)> valuePreview_;
         std::function<void(float)> valueCommitted_;
+    };
+
+    // Scene UI Gate 3 keeps the accepted shared controls backwards compatible
+    // while giving the Level Editor Inspector an explicit readable typography
+    // policy. Story Flow, Screen Editor, Project Hub and creator-import surfaces
+    // keep their own established sizes unless they opt in independently.
+    class SceneInspectorTextInputField final : public RenegadeTextInputField
+    {
+    public:
+        SceneInspectorTextInputField() { SetRenderTextSize(12); }
+        const char* GetWidgetTypeName() const override
+        {
+            return "SceneInspectorTextInputField";
+        }
+    };
+
+    class SceneInspectorButton final : public RenegadeButton
+    {
+    public:
+        SceneInspectorButton() { SetRenderTextSize(11); }
+        const char* GetWidgetTypeName() const override
+        {
+            return "SceneInspectorButton";
+        }
+    };
+
+    class SceneInspectorCheckBox final : public RenegadeCheckBox
+    {
+    public:
+        SceneInspectorCheckBox() { SetRenderTextSize(11); }
+        const char* GetWidgetTypeName() const override
+        {
+            return "SceneInspectorCheckBox";
+        }
+    };
+
+    class SceneInspectorComboBox final : public RenegadeComboBox
+    {
+    public:
+        SceneInspectorComboBox() { SetRenderTextSize(12); }
+        const char* GetWidgetTypeName() const override
+        {
+            return "SceneInspectorComboBox";
+        }
+    };
+
+    class SceneInspectorSlider final : public RenegadeSlider
+    {
+    public:
+        SceneInspectorSlider() { SetRenderTextSizes(11, 11); }
+        const char* GetWidgetTypeName() const override
+        {
+            return "SceneInspectorSlider";
+        }
     };
 
     class RenegadeTextureMapList final : public wi::gui::Widget
