@@ -4122,6 +4122,10 @@ namespace renegade::studio
             return;
         }
 
+        if (session_ != nullptr)
+        {
+            bridge::RefreshPrecipitationVisual(session_->Scenes().GetScene());
+        }
         RenderPath3D::Update(dt);
 
         if (session_ == nullptr || projectHubVisible_)
