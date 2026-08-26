@@ -11,6 +11,11 @@
 
 namespace renegade::bridge
 {
+    constexpr int DefaultTerrainChunkRadius = 9;
+    constexpr int MaximumTerrainChunkRadius = 16;
+    constexpr float TerrainChunkSpanInVertices =
+        static_cast<float>(wi::terrain::chunk_width - 1);
+
     // Curated, serializable authoring view of Wicked's streamed terrain.
     // Material assets and painted chunk data deliberately remain owned by the
     // native Terrain component and survive state edits untouched.
@@ -20,7 +25,7 @@ namespace renegade::bridge
         bool removeDistantChunks = false;
         bool physics = true;
         bool tessellation = false;
-        int visibleChunkRadius = 6;
+        int visibleChunkRadius = DefaultTerrainChunkRadius;
         int propChunkRadius = 4;
         int physicsChunkRadius = 3;
         // World-space vertex spacing. One metre is Renegade's standard
@@ -38,6 +43,10 @@ namespace renegade::bridge
 
     [[nodiscard]] TerrainState CaptureTerrain(
         const wi::terrain::Terrain& terrain) noexcept;
+    [[nodiscard]] int TerrainChunkCountPerSide(int chunkRadius) noexcept;
+    [[nodiscard]] float TerrainWidthMeters(
+        int chunkRadius,
+        float vertexSpacing) noexcept;
     void ApplyTerrain(
         wi::terrain::Terrain& terrain,
         const TerrainState& state,
@@ -168,6 +177,25 @@ namespace renegade::bridge
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
         TerrainState before_;
         TerrainState after_;
+    };
+
+    // Adds one generated chunk ring without restarting Wicked terrain. Existing
+    // chunk height/blend data remains the serialized authority. Undo removes
+    // only chunks outside the previous radius; shrinking is not creator-facing.
+    class ExpandTerrainCommand final : public ICommand
+    {
+    public:
+        ExpandTerrainCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity terrainEntity);
+        bool Execute() override;
+        void Undo() override;
+    private:
+        bool ApplyExpandedRadius();
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity terrainEntity_ = wi::ecs::INVALID_ENTITY;
+        int beforeRadius_ = 0;
+        int afterRadius_ = 0;
     };
 
     enum class TerrainSculptMode { Raise, Lower, Smooth, Flatten };

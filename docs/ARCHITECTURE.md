@@ -187,12 +187,23 @@ native per-chunk 16-bit height data remains the serialized authority and a
 whole multi-chunk stroke remains one `SculptTerrainCommand`.
 
 Until material importing exists, new terrain uses a bundled grass PBR default.
-Source AO and roughness TGAs are packed at build time into Wicked's surface-map
-layout (R=AO, G=roughness, B=metalness, A=reflectance), while base colour and
-normal are pre-tiled consistently for the fixed native chunk UVs. Studio and
-Runtime ship the generated maps beside their executables. Scene load rebinds
-only filenames identifying this bundled default, so later creator-assigned
-terrain materials are never overwritten.
+The accepted payload is three prebuilt 1024-pixel mipmapped DDS maps: base
+colour, normal data and Wicked's packed surface layout (R=AO, G=roughness,
+B=metalness, A=reflectance). Studio and Runtime copy the same immutable maps
+beside their executables; no build-time TGA conversion or large source-texture
+payload remains. Scene load rebinds only filenames identifying this bundled
+default, so later creator-assigned terrain materials are never overwritten.
+
+Renegade finite terrain uses a fixed authored centre and retains native chunk
+height/blend data as the WISCENE authority. The standard extent is radius 9:
+19x19 chunks at 66 metres per chunk and one-metre vertex spacing, producing a
+1.254 km square. Expansion increments the radius without calling Wicked's
+`Generation_Restart()`; the generator fills only missing outer coordinates.
+Undo cancels active generation and removes only chunks beyond the former
+radius. Wicked's stock camera-following removal is deliberately disabled for
+authored terrain because it erases the authoritative chunk entry, not merely
+its render/physics residency. A future residency layer must preserve authored
+height/blend data separately before enabling that removal path.
 
 ### Renegade-owned shaders
 

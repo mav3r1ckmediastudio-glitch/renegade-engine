@@ -170,6 +170,7 @@ namespace renegade::studio
             SetOceanResolution,
             ApplyOceanPreset,
             CreateTerrain,
+            ExpandTerrain,
             ApplyTerrainMaterialPreset,
             ApplyDefaultGrass,
             ReloadTerrainMaterial,
@@ -260,7 +261,6 @@ namespace renegade::studio
 
         enum class TerrainField
         {
-            VisibleChunkRadius,
             ChunkScale,
             MinimumHeight,
             MaximumHeight,
@@ -343,6 +343,7 @@ namespace renegade::studio
             float value) noexcept;
         bool CommitOcean(const bridge::OceanState& ocean);
         void CreateTerrain();
+        void ExpandTerrain();
         void BeginTerrainSlider(TerrainField field);
         void PreviewTerrainSlider(TerrainField field, float value);
         void CommitTerrainSlider(TerrainField field, float value);
@@ -567,7 +568,8 @@ namespace renegade::studio
         SceneInspectorSlider oceanExtinctionBlue_;
         wi::gui::Label terrainLabel_;
         SceneInspectorButton createTerrainButton_;
-        SceneInspectorSlider terrainVisibleRadius_;
+        wi::gui::Label terrainSizeReadout_;
+        SceneInspectorButton expandTerrainButton_;
         SceneInspectorSlider terrainChunkScale_;
         SceneInspectorSlider terrainMinimumHeight_;
         SceneInspectorSlider terrainMaximumHeight_;
@@ -681,7 +683,7 @@ namespace renegade::studio
         int pendingOceanResolution_ = 512;
         bridge::OceanPreset pendingOceanPreset_ = bridge::OceanPreset::Calm;
         bool terrainSliderActive_ = false;
-        TerrainField terrainSliderField_ = TerrainField::VisibleChunkRadius;
+        TerrainField terrainSliderField_ = TerrainField::ChunkScale;
         wi::ecs::Entity terrainSliderEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::TerrainState terrainSliderBefore_;
         bridge::TerrainState terrainSliderAfter_;

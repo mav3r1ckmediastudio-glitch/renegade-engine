@@ -480,6 +480,19 @@ namespace
 
 namespace renegade::bridge
 {
+    int TerrainChunkCountPerSide(const int chunkRadius) noexcept
+    {
+        return std::max(0, chunkRadius) * 2 + 1;
+    }
+
+    float TerrainWidthMeters(
+        const int chunkRadius,
+        const float vertexSpacing) noexcept
+    {
+        return static_cast<float>(TerrainChunkCountPerSide(chunkRadius)) *
+            TerrainChunkSpanInVertices * std::max(0.0f, vertexSpacing);
+    }
+
     TerrainState CaptureTerrain(const wi::terrain::Terrain& terrain) noexcept
     {
         TerrainState state;
@@ -511,7 +524,10 @@ namespace renegade::bridge
         terrain.SetRemovalEnabled(state.removeDistantChunks);
         terrain.SetPhysicsEnabled(state.physics);
         terrain.SetTessellationEnabled(state.tessellation);
-        terrain.generation = std::clamp(state.visibleChunkRadius, 1, 16);
+        terrain.generation = std::clamp(
+            state.visibleChunkRadius,
+            1,
+            MaximumTerrainChunkRadius);
         terrain.prop_generation = std::clamp(state.propChunkRadius, 0, 16);
         terrain.physics_generation = std::clamp(state.physicsChunkRadius, 0, 8);
         terrain.chunk_scale = std::clamp(state.chunkScale, 0.25f, 16.0f);
@@ -892,6 +908,81 @@ namespace renegade::bridge
             return false;
         }
         ApplyTerrain(*terrain, state);
+        return true;
+    }
+
+    ExpandTerrainCommand::ExpandTerrainCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity terrainEntity)
+        : scene_(&scene)
+        , terrainEntity_(terrainEntity)
+    {
+        const auto* terrain = scene.terrains.GetComponent(terrainEntity);
+        if (terrain != nullptr && !terrain->IsCenterToCamEnabled() &&
+            !terrain->IsRemovalEnabled())
+        {
+            beforeRadius_ = terrain->generation;
+            afterRadius_ = std::min(
+                beforeRadius_ + 1,
+                MaximumTerrainChunkRadius);
+        }
+    }
+
+    bool ExpandTerrainCommand::Execute()
+    {
+        return afterRadius_ > beforeRadius_ && ApplyExpandedRadius();
+    }
+
+    void ExpandTerrainCommand::Undo()
+    {
+        if (scene_ == nullptr)
+        {
+            return;
+        }
+        auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
+        if (terrain == nullptr)
+        {
+            return;
+        }
+
+        terrain->Generation_Cancel();
+        for (auto it = terrain->chunks.begin(); it != terrain->chunks.end();)
+        {
+            const int distance = std::max(
+                std::abs(it->first.x - terrain->center_chunk.x),
+                std::abs(it->first.z - terrain->center_chunk.z));
+            if (distance > beforeRadius_)
+            {
+                if (it->second.vt != nullptr)
+                {
+                    it->second.vt->free(terrain->atlas);
+                }
+                if (it->second.entity != wi::ecs::INVALID_ENTITY)
+                {
+                    scene_->Entity_Remove(it->second.entity);
+                }
+                it = terrain->chunks.erase(it);
+                continue;
+            }
+            ++it;
+        }
+        terrain->generation = beforeRadius_;
+    }
+
+    bool ExpandTerrainCommand::ApplyExpandedRadius()
+    {
+        if (scene_ == nullptr)
+        {
+            return false;
+        }
+        auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
+        if (terrain == nullptr || terrain->generation != beforeRadius_ ||
+            terrain->IsCenterToCamEnabled() || terrain->IsRemovalEnabled())
+        {
+            return false;
+        }
+        terrain->Generation_Cancel();
+        terrain->generation = afterRadius_;
         return true;
     }
 

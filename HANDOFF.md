@@ -1,15 +1,59 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-25
+**Date:** 2026-08-26
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`1c1d580df3c40de2fbd68dee41c0c8a74e32f831`
-(`Story Flow Gate 9D: navigation and Graph cleanup (#98)`).
+`628cf26574a4a2a6e8eb0a5a522d94966ad8917e`
+(`Scene UI Gate 4: recover Asset Browser and placement UX (#104)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
+
+## Active work — Scene UI Gate 5 Environment and Terrain recovery
+
+Draft PR: `#105`, branch
+`recovery/scene-ui-gate5-environment-terrain`.
+
+The published foundation head `ac2827ac1bfc36d21fb285925661bf8c16cf84bf`
+passes Windows baseline and Renegade Studio Debug/Release. It contains the
+one-metre terrain spacing, three 1024 DDS default-grass maps, native Stars and
+the dedicated snowflake DDS while retaining the accepted snow movement.
+
+The continuation candidate adds the part that was still absent:
+
+- standard radius 9 gives 19x19 chunks and an honest 1.254 km square;
+- the raw generation-radius slider is removed from creator UI;
+- the Terrain panel reports current dimensions;
+- `EXPAND TERRAIN // +1 RING` increments the finite authored radius without
+  `Generation_Restart()`;
+- expansion Undo cancels generation and removes only the added outer ring;
+- Redo asks Wicked to regenerate only missing ring coordinates;
+- `RenegadeTerrainTests` covers dimensions and inner-chunk preservation;
+- a Gate 5 source contract locks the DDS/Stars/snow/expansion seams;
+- architecture, terrain documentation and `REN-WLD-001` record the boundary.
+
+Pinned Wicked source inspection also found that stock distant removal calls
+`chunks.erase(it)`. Those chunk entries contain the serialized height and blend
+authority, so enabling `centerToCamera/removeDistantChunks` would destroy
+sculpting rather than safely unload it. Gate 5 keeps authored CPU chunks
+resident while native LOD, frustum/occlusion culling and the smaller physics
+radius remain active. A true edited-chunk residency cache is a later terrain
+architecture task; no false streaming claim is made in this gate.
+
+Local evidence for the continuation:
+
+- `git diff --check` — PASS;
+- source/path assertions for radius 9, expansion ownership, removed raw radius,
+  DDS packaging, Stars and snow — PASS;
+- CMake/Windows compile — not run locally because CMake is unavailable;
+- exact-head PR CI — pending publication;
+- packaged Release visual/interaction/save/reopen/Runtime owner acceptance —
+  pending and required before merge.
+
+Acceptance and the exact owner sequence are in
+`docs/SCENE_UI_GATE5_ENVIRONMENT_TERRAIN.md`.
 
 ## Active work — Journey recovery Gate 9A
 

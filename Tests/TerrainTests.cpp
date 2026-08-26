@@ -48,6 +48,17 @@ int main()
     }
 
     const renegade::bridge::TerrainState standard;
+    if (standard.visibleChunkRadius != 9 ||
+        renegade::bridge::TerrainChunkCountPerSide(
+            standard.visibleChunkRadius) != 19 ||
+        !NearlyEqual(
+            renegade::bridge::TerrainWidthMeters(
+                standard.visibleChunkRadius,
+                standard.chunkScale),
+            1254.0f))
+    {
+        return Fail("standard terrain dimensions were not 19 chunks / 1.254 km");
+    }
     renegade::bridge::CommandService commands;
     if (!commands.Execute(
             std::make_unique<renegade::bridge::SetTerrainCommand>(
@@ -60,7 +71,7 @@ int main()
 
     const auto applied = renegade::bridge::CaptureTerrain(terrain);
     if (applied.centerToCamera || applied.removeDistantChunks ||
-        !applied.physics || applied.visibleChunkRadius != 6 ||
+        !applied.physics || applied.visibleChunkRadius != 9 ||
         !NearlyEqual(applied.minimumHeight, -20.0f) ||
         !NearlyEqual(applied.maximumHeight, 120.0f) ||
         !NearlyEqual(applied.chunkScale, 1.0f))
@@ -108,6 +119,48 @@ int main()
         return Fail("identical terrain state polluted Undo history");
     }
 
+    // Expansion changes only the authored extent. Existing inner chunk data
+    // must survive Execute/Undo/Redo without Generation_Restart().
+    terrain.generation = renegade::bridge::DefaultTerrainChunkRadius;
+    terrain.center_chunk = {0, 0};
+    wi::terrain::Chunk innerChunk = {0, 0};
+    terrain.chunks[innerChunk].heightmap_data = {123, 456};
+    renegade::bridge::CommandService expansionCommands;
+    if (!expansionCommands.Execute(
+            std::make_unique<renegade::bridge::ExpandTerrainCommand>(
+                scene,
+                entity)) ||
+        terrain.generation != 10 ||
+        terrain.chunks[innerChunk].heightmap_data !=
+            std::vector<std::uint16_t>({123, 456}))
+    {
+        return Fail("terrain expansion restarted or changed existing chunks");
+    }
+    wi::terrain::Chunk generatedOuter = {10, 0};
+    terrain.chunks[generatedOuter].heightmap_data = {789};
+    if (!expansionCommands.Undo() || terrain.generation != 9 ||
+        terrain.chunks.find(generatedOuter) != terrain.chunks.end() ||
+        terrain.chunks[innerChunk].heightmap_data !=
+            std::vector<std::uint16_t>({123, 456}))
+    {
+        return Fail("terrain expansion Undo did not remove only the outer ring");
+    }
+    if (!expansionCommands.Redo() || terrain.generation != 10 ||
+        terrain.chunks[innerChunk].heightmap_data !=
+            std::vector<std::uint16_t>({123, 456}))
+    {
+        return Fail("terrain expansion Redo did not preserve existing chunks");
+    }
+    terrain.SetCenterToCamEnabled(true);
+    renegade::bridge::ExpandTerrainCommand movingTerrainExpansion(
+        scene,
+        entity);
+    if (movingTerrainExpansion.Execute())
+    {
+        return Fail("camera-following terrain accepted finite authored expansion");
+    }
+    terrain.SetCenterToCamEnabled(false);
+
     renegade::bridge::TerrainMaterialState material;
     renegade::bridge::SetTerrainTextureScale(material, 8.0f);
     if (!NearlyEqual(material.slots[0].texMulAdd.x, 0.25f) ||
@@ -130,6 +183,6 @@ int main()
         return Fail("completed preview was not retained for Undo/Redo");
     }
 
-    std::cout << "PASS: standard terrain state, material scale, preview history and Undo/Redo\n";
+    std::cout << "PASS: 1.254 km standard terrain, non-destructive expansion, material scale, preview history and Undo/Redo\n";
     return 0;
 }
