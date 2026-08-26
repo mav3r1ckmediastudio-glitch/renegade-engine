@@ -346,6 +346,21 @@ namespace renegade::studio
         void OnLayoutChanged(
             std::function<void(float, float, float, bool)> callback);
 
+        // Importer close uses this to replay the active workspace through the
+        // same action path as the Scene/Environment/Terrain headings. The
+        // StudioRenderPath action handler then performs the authoritative
+        // Inspector visibility refresh on the following update.
+        void RequestCurrentWorkspaceReconcile()
+        {
+            if (!action_)
+                return;
+            action_(environmentWorkspaceActive_
+                ? Action::EnvironmentWorkspace
+                : terrainWorkspaceActive_
+                    ? Action::TerrainWorkspace
+                    : Action::SceneWorkspace);
+        }
+
         [[nodiscard]] XMFLOAT4 ViewportBounds() const noexcept;
         [[nodiscard]] float HierarchyWidth() const noexcept;
         [[nodiscard]] float InspectorWidth() const noexcept;
