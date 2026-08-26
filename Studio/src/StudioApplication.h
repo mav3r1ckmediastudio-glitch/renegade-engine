@@ -123,6 +123,20 @@ namespace renegade::studio
             return GetGUI();
         }
 
+        // Wicked renders top-level wiGUI widgets in reverse registration order.
+        // Story Flow lifecycle controls are attached after Studio creation, so
+        // a normal AddWidget() would put them behind the full Scene chrome.
+        // Register the control, then deliberately move the chrome to the end:
+        // reverse rendering paints the chrome first and the lifecycle control
+        // afterwards, keeping the control visible and interactive above it.
+        void RegisterStoryFlowLifecycleControl(wi::gui::Widget& control)
+        {
+            auto& gui = GetGUI();
+            gui.AddWidget(&control);
+            gui.RemoveWidget(&studioChrome_);
+            gui.AddWidget(&studioChrome_);
+        }
+
     private:
         enum class EditorAction
         {
