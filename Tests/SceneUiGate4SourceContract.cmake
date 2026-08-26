@@ -113,6 +113,34 @@ require_text(readability_source
     "\"FOLDER\""
     "readable folder card fallback")
 
+# Captured thumbnails must never be stretched or squashed to the fixed card
+# well. Gate 4 uses native texture dimensions, uniform aspect-fit scaling and
+# centered letterbox/pillarbox space inside the existing 134x68 preview area.
+require_text(readability_source
+    "const auto desc = texture.GetDesc();"
+    "native thumbnail dimensions")
+require_text(readability_source
+    "const float sourceAspect ="
+    "source thumbnail aspect calculation")
+require_text(readability_source
+    "const float targetAspect ="
+    "card preview aspect calculation")
+require_text(readability_source
+    "drawHeight = drawWidth / sourceAspect;"
+    "wide thumbnail aspect fit")
+require_text(readability_source
+    "drawWidth = drawHeight * sourceAspect;"
+    "tall thumbnail aspect fit")
+require_text(readability_source
+    "thumbnailX + (thumbnailWidth - drawWidth) * 0.5f"
+    "horizontal thumbnail centering")
+require_text(readability_source
+    "thumbnailY + (thumbnailHeight - drawHeight) * 0.5f"
+    "vertical thumbnail centering")
+require_text(readability_source
+    "thumbnailParams.sampleFlag = wi::image::SAMPLEMODE_CLAMP;"
+    "bounded thumbnail sampling")
+
 # Preserve the governed import -> reveal -> thumbnail -> stable-ID handoff.
 require_text(asset_source
     "bool CreatorAssetStudioChrome::RevealCreatorAsset("
