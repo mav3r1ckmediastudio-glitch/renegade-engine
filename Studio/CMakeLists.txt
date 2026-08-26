@@ -83,6 +83,7 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeImGuiBridge.h
     src/RenegadeStudioChrome.cpp
     src/RenegadeStudioChromeAssets.cpp
+    src/RenegadeStudioAssetBrowserReadability.cpp
     src/RenegadeStudioChrome.h
     src/RenegadeStoryFlowGraphEditor.cpp
     src/RenegadeStoryFlowGraphEditor.h

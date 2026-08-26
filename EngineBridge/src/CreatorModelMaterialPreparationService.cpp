@@ -52,6 +52,21 @@ namespace renegade::bridge
                 ClassifyResourceSourceFormat(format) == ResourceClass::Texture;
         }
 
+        bool UsePackedSurfaceDirectly(
+            const fs::path& surface,
+            const fs::path& roughness,
+            const fs::path& metalness,
+            const fs::path& occlusion)
+        {
+            // Wicked loads DDS natively, but the CPU Surface builder uses the
+            // ordinary image decoder and cannot decode DDS. If the source is
+            // already a complete packed Wicked Surface map and there are no
+            // component maps to combine, preserve and govern it directly.
+            return !surface.empty() && roughness.empty() && metalness.empty() &&
+                occlusion.empty() &&
+                LowerAscii(surface.extension().generic_u8string()) == ".dds";
+        }
+
         fs::path ResolveTexturePath(
             const fs::path& modelDirectory,
             const std::string& value)
@@ -322,8 +337,11 @@ namespace renegade::bridge
                 {}, stems, "_metalness", error);
             if (!error.empty()) return false;
 
-            if (!surface.empty() || !roughness.empty() ||
-                !metalness.empty() || !occlusion.empty())
+            const bool usePackedSurfaceDirectly = UsePackedSurfaceDirectly(
+                surface, roughness, metalness, occlusion);
+            if ((!surface.empty() || !roughness.empty() ||
+                !metalness.empty() || !occlusion.empty()) &&
+                !usePackedSurfaceDirectly)
             {
                 CreatorSurfaceBuildRequest request;
                 request.surfacePath = surface.generic_u8string();
@@ -499,8 +517,11 @@ namespace renegade::bridge
             if (!result.error.empty()) return result;
 
             bool surfaceWasGenerated = false;
-            if (!surface.empty() || !roughness.empty() ||
-                !metalness.empty() || !occlusion.empty())
+            const bool usePackedSurfaceDirectly = UsePackedSurfaceDirectly(
+                surface, roughness, metalness, occlusion);
+            if ((!surface.empty() || !roughness.empty() ||
+                !metalness.empty() || !occlusion.empty()) &&
+                !usePackedSurfaceDirectly)
             {
                 const fs::path generatedDirectory =
                     fs::u8path(request.projectRoot) /
