@@ -17,6 +17,10 @@ add_executable(RenegadeDependencyTests
     DependencyTests.cpp
 )
 target_link_libraries(RenegadeDependencyTests PRIVATE Renegade::EngineBridge)
+target_compile_definitions(RenegadeDependencyTests
+    PRIVATE
+        RENEGADE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
 set_target_properties(RenegadeDependencyTests PROPERTIES FOLDER "Renegade/Tests")
 add_dependencies(RenegadeBridgeTests RenegadeDependencyTests)
 add_test(NAME RenegadeDependencyTests COMMAND RenegadeDependencyTests)

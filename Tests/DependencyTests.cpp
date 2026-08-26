@@ -915,8 +915,16 @@ int main()
         const fs::path surface =
             root / "Content/terrain/default_grass/default_grass_surface.dds";
         fs::create_directories(baseColor.parent_path());
-        std::ofstream(baseColor) << "base";
-        std::ofstream(surface) << "surface";
+        const fs::path bundledTerrain = fs::path(RENEGADE_SOURCE_DIR) /
+            "Studio/assets/terrain/default_grass";
+        fs::copy_file(
+            bundledTerrain / "default_grass_basecolor.dds",
+            baseColor,
+            fs::copy_options::overwrite_existing);
+        fs::copy_file(
+            bundledTerrain / "default_grass_surface.dds",
+            surface,
+            fs::copy_options::overwrite_existing);
         terrainMaterial.textures[wi::scene::MaterialComponent::BASECOLORMAP]
             .name = baseColor.generic_u8string();
         terrainMaterial.textures[wi::scene::MaterialComponent::SURFACEMAP]
