@@ -1,8 +1,6 @@
 #pragma once
 
-#include <functional>
 #include <string>
-#include <utility>
 
 #include <WickedEngine.h>
 
@@ -22,14 +20,6 @@ namespace renegade::studio
     class CreatorImportPreviewWindow final : public wi::gui::Window
     {
     public:
-        using HiddenCallback = std::function<void()>;
-
-        CreatorImportPreviewWindow() = default;
-        explicit CreatorImportPreviewWindow(HiddenCallback callback)
-            : hiddenCallback_(std::move(callback))
-        {
-        }
-
         void SetVisible(const bool visible)
         {
             const bool closingPreview = !visible && previewWeatherCaptured_;
@@ -43,22 +33,24 @@ namespace renegade::studio
             }
 
             wi::gui::Window::SetVisible(visible);
-
-            // Import cancellation performs its command rollback after hiding
-            // this window. Defer the host refresh to Wicked's safe point so it
-            // runs after that rollback and after creatorModelImporter is reset.
-            // This also gives successful import exits the same deterministic
-            // Scene/Environment/Terrain visibility reconciliation.
-            if (closingPreview && hiddenCallback_)
+            if (closingPreview)
             {
-                const HiddenCallback callback = hiddenCallback_;
-                wi::eventhandler::Subscribe_Once(
-                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [callback](std::uint64_t)
-                    {
-                        callback();
-                    });
+                // DismissImportScalePanel refreshes the Inspector and then
+                // makes its parent Window visible again. Wicked propagates that
+                // visibility to the Window children, which can temporarily
+                // reveal both Environment and Terrain specialist controls.
+                // Ask the owned Scene chrome to replay the current workspace
+                // action on the next update; this deliberately uses the exact
+                // same authoritative path as clicking the workspace heading.
+                hostWorkspaceReconcileRequested_ = true;
             }
+        }
+
+        [[nodiscard]] static bool ConsumeHostWorkspaceReconcileRequest() noexcept
+        {
+            const bool requested = hostWorkspaceReconcileRequested_;
+            hostWorkspaceReconcileRequested_ = false;
+            return requested;
         }
 
         void Update(const wi::Canvas& canvas, const float dt) override
@@ -233,7 +225,7 @@ namespace renegade::studio
             entityWeatherBefore_ = {};
         }
 
-        HiddenCallback hiddenCallback_;
+        inline static bool hostWorkspaceReconcileRequested_ = false;
         bool previewWeatherCaptured_ = false;
         wi::ecs::Entity weatherEntity_ = wi::ecs::INVALID_ENTITY;
         WeatherPresentationState sceneWeatherBefore_;
