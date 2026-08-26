@@ -24,9 +24,8 @@ already-implemented end-to-end placement path. It deliberately preserves:
 - the existing command stack, scene format and Wicked runtime integration.
 
 The audit found the backend substantially healthier than the historical UI bug
-reports. The remaining bounded regression is primarily presentation/readability,
-so Gate 4 adds a read-only Asset Browser presentation seam instead of replacing
-working lifecycle code.
+reports. Gate 4 therefore keeps the accepted asset-governance and placement
+services and repairs the creator-facing presentation/lifecycle seams around them.
 
 ## Readability recovery
 
@@ -73,6 +72,8 @@ storage. The readability overlay now:
 
 No thumbnail is cropped and no axis is scaled independently. The Asset Browser
 therefore presents the same proportions that were captured by the importer.
+Existing stored thumbnails benefit immediately because the correction is in the
+browser renderer rather than the capture transaction.
 
 Missing previews are represented honestly as `NO PREVIEW`; folder cards use
 `FOLDER`. A missing thumbnail is not presented as a valid image.
@@ -133,6 +134,34 @@ The audit confirms that it already provides:
 
 Gate 4 does not duplicate or rewrite this placement implementation.
 
+### Save / leave / reopen texture persistence regression
+
+Owner runtime review found a blocker after the initial Gate 4 candidate: a
+textured reusable model was correct immediately after placement, but after
+saving the Level, leaving it and reopening it, the model returned without its
+textures.
+
+The persisted data was not being lost. Renegade's governed texture contract
+intentionally stores stable texture asset IDs in each material's serializable
+WISCENE metadata while leaving Wicked `TextureMap::name` empty. The live Wicked
+`Resource` handle is not serializable. Consequently every loaded Level must run
+`RestoreMaterialTextureBindings()` against the active project to resolve those
+stable IDs back to governed `.rasset` payloads and recreate the live texture
+resources.
+
+LP08 Gate 3 originally wired that idempotent restore into
+`CreatorAssetStudioChrome::Update()`. The hook was later lost while the creator
+chrome was reworked; placement still restored textures before merging the
+prepared reusable model, which hid the omission until the next Save/Open cycle.
+Gate 4 restores the established lifecycle hook. Current restoration already
+deduplicates repeated StableIds and skips already-live resources, so the normal
+per-frame Studio call does not reload a healthy texture on every frame.
+
+This is deliberately a lifecycle wiring repair, not a new material persistence
+format. Existing saved Levels that still contain their governed stable-ID
+metadata can rehydrate again when opened; they do not require asset reimport or
+texture reassignment.
+
 ## Source regression contract
 
 `RenegadeSceneUiGate4SourceContract` locks both sides of the recovery:
@@ -141,13 +170,18 @@ Gate 4 does not duplicate or rewrite this placement implementation.
 - accepted card geometry must remain bounded;
 - thumbnail rendering must use native texture dimensions, uniform aspect-fit
   scaling and centered letterbox/pillarbox space;
+- creator chrome update must rehydrate governed material textures from the
+  active Scene/project stable-ID metadata after load;
 - import/reveal/thumbnail/filter/enable-state wiring must remain;
 - drag preparation, queued drop, surface picking, grounding, cancellation and
   command-owned placement must remain; and
 - the new readability source must stay part of the Renegade Studio target.
 
 The contract intentionally uses semantic source anchors rather than fragile
-indentation-sensitive blocks.
+indentation-sensitive blocks. Existing LP08 material-texture tests remain the
+service-level proof that WISCENE preserves stable IDs and that an explicit
+restore reconstructs the live resource; Gate 4 now also protects the Studio
+lifecycle call that had regressed.
 
 ## Owner Release acceptance
 
@@ -169,16 +203,22 @@ sufficient; resize the same window rather than requesting separate packages.
 7. Import one model through the guided importer. After final commit, its card is
    revealed/selected in the Asset Browser with the captured thumbnail at the
    correct aspect ratio.
-8. Drag a placeable model card into the Scene. The live preview follows the
-   resolved surface, release places it, and Undo/Redo removes/restores it.
-9. A cold drag/release while preparation is still running queues rather than
-   silently losing the drop.
-10. Escape, right click, or dropping outside the viewport cancels cleanly with
+8. Drag a textured placeable model card into the Scene. The live preview follows
+   the resolved surface, release places it with its textures, and Undo/Redo
+   removes/restores it.
+9. Save the Level, leave it for Story Flow, then reopen the same Level. The
+   placed model must retain every governed material texture without reimport,
+   reassignment or touching the Asset Browser.
+10. Use the normal Scene Reopen/Open lifecycle where practical and confirm the
+    same textured model rehydrates there as well.
+11. A cold drag/release while preparation is still running queues rather than
+    silently losing the drop.
+12. Escape, right click, or dropping outside the viewport cancels cleanly with
     no ghost preview entities.
-11. Resize Hierarchy, Inspector and bottom drawer. The browser remains bounded,
+13. Resize Hierarchy, Inspector and bottom drawer. The browser remains bounded,
     controls stay reachable, and the minimum drawer still shows one complete
     card row.
-12. Reimport and creator-tag save retain their existing behaviour.
+14. Reimport and creator-tag save retain their existing behaviour.
 
 If these checks pass, Gate 4 is owner-accepted. Do not expand Gate 4 into Terrain,
 Environment, grid/snapping or new asset-governance features.

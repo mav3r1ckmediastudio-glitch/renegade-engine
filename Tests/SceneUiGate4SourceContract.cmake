@@ -141,6 +141,23 @@ require_text(readability_source
     "thumbnailParams.sampleFlag = wi::image::SAMPLEMODE_CLAMP;"
     "bounded thumbnail sampling")
 
+# Governed material textures serialize stable IDs in WISCENE metadata while
+# Wicked Resource handles remain live-only. The creator chrome must therefore
+# rehydrate those stable-ID bindings whenever a loaded Level becomes active.
+# RestoreMaterialTextureBindings is idempotent and deduplicates repeated StableIds.
+require_text(asset_source
+    "void CreatorAssetStudioChrome::Update("
+    "creator chrome lifecycle update")
+require_text(asset_source
+    "bridge::RestoreMaterialTextureBindings("
+    "governed texture rehydration after Scene load")
+require_text(asset_source
+    "session->Scenes().GetScene(), project.rootPath, project.projectId"
+    "texture restore uses the active Scene and project identity")
+require_text(asset_source
+    "restored.succeeded && restored.restored > 0"
+    "successful texture restore acknowledgement")
+
 # Preserve the governed import -> reveal -> thumbnail -> stable-ID handoff.
 require_text(asset_source
     "bool CreatorAssetStudioChrome::RevealCreatorAsset("
