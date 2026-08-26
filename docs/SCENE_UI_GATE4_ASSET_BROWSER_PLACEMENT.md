@@ -162,6 +162,29 @@ format. Existing saved Levels that still contain their governed stable-ID
 metadata can rehydrate again when opened; they do not require asset reimport or
 texture reassignment.
 
+### Final owner-found importer and hierarchy regressions
+
+The final owner Release pass found five remaining presentation/state regressions.
+The Gate 4 candidate now also includes all five corrections:
+
+1. the importer human scale-reference artwork is restored to the last known
+   visible transparent asset;
+2. the final Import page reflows the `THUMBNAIL & IMPORT`, thumbnail preview,
+   capture, status, confirm and cancel block below the Asset Name and
+   `Content/Models` fields so those controls no longer overlap;
+3. closing/cancelling the importer re-submits the current Scene workspace action
+   after preview-weather restoration so Environment and Terrain specialist
+   controls cannot remain simultaneously exposed;
+4. hierarchy parent rows now have disclosure state, with `Reusable Asset Instance`
+   roots collapsed on first sight and expandable/collapsible by the user; and
+5. the Scene Hierarchy scrollbar retains wheel support and now owns an LMB
+   press-drag-release gesture with a wider invisible hit target around the
+   narrow visual thumb.
+
+These corrections are intentionally bounded to importer presentation/lifecycle
+and Scene Hierarchy interaction. They do not alter reusable-model placement,
+asset identity, scene serialization or command ownership.
+
 ## Source regression contract
 
 `RenegadeSceneUiGate4SourceContract` locks both sides of the recovery:
@@ -219,6 +242,17 @@ sufficient; resize the same window rather than requesting separate packages.
     controls stay reachable, and the minimum drawer still shows one complete
     card row.
 14. Reimport and creator-tag save retain their existing behaviour.
+15. Open the model importer and confirm the 1.82 m human reference is visible;
+    on the final Import page, `Content/Models` and the thumbnail/capture block do
+    not overlap.
+16. Cancel the importer while Environment or Terrain is active. The Inspector
+    must return to exactly one active specialist panel without requiring an
+    extra heading click.
+17. Reusable Asset Instance roots begin collapsed, can be expanded/collapsed,
+    and long descendants remain bounded inside the Scene Hierarchy.
+18. With enough hierarchy rows to show the scrollbar, drag its thumb with LMB
+    and confirm the visible row range tracks the drag while mouse-wheel scrolling
+    still works.
 
 If these checks pass, Gate 4 is owner-accepted. Do not expand Gate 4 into Terrain,
 Environment, grid/snapping or new asset-governance features.
