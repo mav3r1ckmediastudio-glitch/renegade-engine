@@ -953,9 +953,79 @@ namespace renegade::studio
             collapsedHierarchyCategories_[
                 static_cast<std::size_t>(selected->category)] = false;
         }
+
+        // Preserve disclosure state by stable scene entity while rows refresh.
+        // Reusable Asset Instance roots are the one hierarchy product that is
+        // intentionally collapsed on first sight: their generated mesh/material
+        // descendants are useful when requested, but should not flood the scene
+        // tree by default.
+        std::unordered_set<std::uint64_t> parentEntities;
+        for (std::size_t index = 0; index + 1 < rows.size(); ++index)
+        {
+            const auto& row = rows[index];
+            const auto& next = rows[index + 1];
+            if (row.entity == 0 || row.category != next.category ||
+                next.depth <= row.depth)
+            {
+                continue;
+            }
+            parentEntities.insert(row.entity);
+            if (row.name == "Reusable Asset Instance" &&
+                initializedHierarchyDisclosureEntities_.insert(row.entity).second)
+            {
+                collapsedHierarchyEntities_.insert(row.entity);
+            }
+        }
+        for (auto item = collapsedHierarchyEntities_.begin();
+            item != collapsedHierarchyEntities_.end();)
+        {
+            item = parentEntities.count(*item) == 0
+                ? collapsedHierarchyEntities_.erase(item)
+                : std::next(item);
+        }
+        for (auto item = initializedHierarchyDisclosureEntities_.begin();
+            item != initializedHierarchyDisclosureEntities_.end();)
+        {
+            item = parentEntities.count(*item) == 0
+                ? initializedHierarchyDisclosureEntities_.erase(item)
+                : std::next(item);
+        }
+
+        // A viewport-selected descendant must remain reachable. Open only its
+        // ancestor chain; selecting the instance root itself does not expand it.
+        if (selected != rows.end() && selectedEntity != lastHierarchySelection_ &&
+            selected->depth > 0)
+        {
+            const std::size_t selectedIndex = static_cast<std::size_t>(
+                std::distance(rows.begin(), selected));
+            int ancestorDepth = selected->depth;
+            for (std::size_t index = selectedIndex; index-- > 0 && ancestorDepth > 0;)
+            {
+                const auto& ancestor = rows[index];
+                if (ancestor.category == selected->category &&
+                    ancestor.depth < ancestorDepth)
+                {
+                    collapsedHierarchyEntities_.erase(ancestor.entity);
+                    ancestorDepth = ancestor.depth;
+                }
+            }
+        }
+
         lastHierarchySelection_ = selectedEntity;
         hierarchyRows_ = std::move(rows);
         SetHierarchyFilter(hierarchyFilter_);
+    }
+
+    bool RenegadeStudioChrome::HierarchyRowHasChildren(
+        const std::size_t rowIndex) const noexcept
+    {
+        if (rowIndex + 1 >= hierarchyRows_.size())
+        {
+            return false;
+        }
+        const auto& row = hierarchyRows_[rowIndex];
+        const auto& next = hierarchyRows_[rowIndex + 1];
+        return row.category == next.category && next.depth > row.depth;
     }
 
     void RenegadeStudioChrome::SetAssetBrowserData(
@@ -1142,10 +1212,27 @@ namespace renegade::studio
             if (!hierarchyFilter_.empty() ||
                 !collapsedHierarchyCategories_[categoryIndex])
             {
+                int hiddenBelowDepth = -1;
                 for (const auto rowIndex : matchingRows)
                 {
+                    const auto& row = hierarchyRows_[rowIndex];
+                    if (hierarchyFilter_.empty() && hiddenBelowDepth >= 0)
+                    {
+                        if (row.depth > hiddenBelowDepth)
+                        {
+                            continue;
+                        }
+                        hiddenBelowDepth = -1;
+                    }
+
                     visibleHierarchyRows_.push_back(
                         {false, category, rowIndex});
+                    if (hierarchyFilter_.empty() &&
+                        HierarchyRowHasChildren(rowIndex) &&
+                        collapsedHierarchyEntities_.count(row.entity) != 0)
+                    {
+                        hiddenBelowDepth = row.depth;
+                    }
                 }
             }
         }
@@ -1412,17 +1499,90 @@ namespace renegade::studio
             TopBarHeight + PanelHeaderHeight + 10.0f;
         const float hierarchyRowsTop = hierarchySearchY + 42.0f;
         const float hierarchyRowsBottom = height_ - StatusBarHeight - 8.0f;
+        const std::size_t hierarchyCapacity = HierarchyRowCapacity(height_);
+        const std::size_t hierarchyMaximumScroll =
+            visibleHierarchyRows_.size() > hierarchyCapacity
+                ? visibleHierarchyRows_.size() - hierarchyCapacity
+                : 0;
+
+        // The visual hierarchy thumb is intentionally narrow, but its drag hit
+        // target is wider. It stays clear of the panel-resize splitter and owns
+        // the pointer for the complete LMB gesture so row selection cannot fire
+        // underneath a scrollbar drag.
+        if (hierarchyMaximumScroll > 0)
+        {
+            const float trackHeight = hierarchyRowsBottom - hierarchyRowsTop;
+            const float thumbHeight = std::max(
+                24.0f,
+                trackHeight * static_cast<float>(hierarchyCapacity) /
+                    static_cast<float>(visibleHierarchyRows_.size()));
+            const float thumbY = hierarchyRowsTop +
+                (trackHeight - thumbHeight) *
+                    static_cast<float>(hierarchyScrollRow_) /
+                    static_cast<float>(hierarchyMaximumScroll);
+            constexpr float scrollbarHitWidth = 10.0f;
+            const float scrollbarHitLeft = hierarchyWidth_ - 16.0f;
+            const float scrollbarHitRight =
+                scrollbarHitLeft + scrollbarHitWidth;
+
+            if (hierarchyScrollbarDragging_)
+            {
+                if (wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+                {
+                    const float travel = std::max(1.0f,
+                        trackHeight - thumbHeight);
+                    const float localY = std::clamp(
+                        layoutPointer.y - hierarchyScrollbarDragOffsetY_ -
+                            hierarchyRowsTop,
+                        0.0f,
+                        travel);
+                    hierarchyScrollRow_ = std::min(
+                        hierarchyMaximumScroll,
+                        static_cast<std::size_t>(std::lround(
+                            localY / travel *
+                            static_cast<float>(hierarchyMaximumScroll))));
+                    wi::input::SetCursor(wi::input::CURSOR_HAND);
+                    pointerConsumed_ = true;
+                    hitBox = wi::primitive::Hitbox2D(
+                        XMFLOAT2(-1.0f, -1.0f),
+                        XMFLOAT2(0.0f, 0.0f));
+                    return;
+                }
+                hierarchyScrollbarDragging_ = false;
+                pointerConsumed_ = true;
+                hitBox = wi::primitive::Hitbox2D(
+                    XMFLOAT2(-1.0f, -1.0f),
+                    XMFLOAT2(0.0f, 0.0f));
+                return;
+            }
+
+            if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) &&
+                layoutPointer.x >= scrollbarHitLeft &&
+                layoutPointer.x < scrollbarHitRight &&
+                layoutPointer.y >= thumbY &&
+                layoutPointer.y < thumbY + thumbHeight)
+            {
+                hierarchyScrollbarDragging_ = true;
+                hierarchyScrollbarDragOffsetY_ = layoutPointer.y - thumbY;
+                wi::input::SetCursor(wi::input::CURSOR_HAND);
+                pointerConsumed_ = true;
+                hitBox = wi::primitive::Hitbox2D(
+                    XMFLOAT2(-1.0f, -1.0f),
+                    XMFLOAT2(0.0f, 0.0f));
+                return;
+            }
+        }
+        else
+        {
+            hierarchyScrollbarDragging_ = false;
+        }
+
         if (layoutPointer.x >= 8.0f &&
             layoutPointer.x < hierarchyWidth_ - 8.0f &&
             layoutPointer.y >= hierarchyRowsTop &&
             layoutPointer.y < hierarchyRowsBottom &&
             std::abs(layoutPointer.z) > 0.1f)
         {
-            const std::size_t capacity = HierarchyRowCapacity(height_);
-            const std::size_t maximumScroll =
-                visibleHierarchyRows_.size() > capacity
-                    ? visibleHierarchyRows_.size() - capacity
-                    : 0;
             if (layoutPointer.z > 0.0f)
             {
                 hierarchyScrollRow_ = hierarchyScrollRow_ > 0
@@ -1433,7 +1593,7 @@ namespace renegade::studio
             {
                 hierarchyScrollRow_ = std::min(
                     hierarchyScrollRow_ + 1,
-                    maximumScroll);
+                    hierarchyMaximumScroll);
             }
             pointerConsumed_ = true;
         }
@@ -1802,10 +1962,25 @@ namespace renegade::studio
                             !collapsedHierarchyCategories_[categoryIndex];
                         SetHierarchyFilter(hierarchyFilter_);
                     }
-                    else if (hierarchySelected_)
+                    else
                     {
-                        hierarchySelected_(
-                            hierarchyRows_[item.rowIndex].entity);
+                        const auto& row = hierarchyRows_[item.rowIndex];
+                        if (HierarchyRowHasChildren(item.rowIndex))
+                        {
+                            if (collapsedHierarchyEntities_.count(row.entity) != 0)
+                            {
+                                collapsedHierarchyEntities_.erase(row.entity);
+                            }
+                            else
+                            {
+                                collapsedHierarchyEntities_.insert(row.entity);
+                            }
+                            SetHierarchyFilter(hierarchyFilter_);
+                        }
+                        if (hierarchySelected_)
+                        {
+                            hierarchySelected_(row.entity);
+                        }
                     }
                     consumed = true;
                 }
@@ -2654,12 +2829,15 @@ namespace renegade::studio
                     cmd);
             }
             const float indent = 14.0f + std::max(0, row.depth) * 16.0f;
+            const bool hasChildren = HierarchyRowHasChildren(item.rowIndex);
+            const bool collapsed = hasChildren &&
+                collapsedHierarchyEntities_.count(row.entity) != 0;
             DrawText(
-                row.depth == 0 ? "▼" : "",
+                hasChildren ? (collapsed ? "▶" : "▼") : "",
                 indent,
                 rowY + 8.0f,
                 SceneChromeSmallTextSize,
-                Muted,
+                collapsed ? Muted : Forge,
                 cmd);
             DrawText(
                 "◇",
@@ -2692,7 +2870,7 @@ namespace renegade::studio
         const std::size_t capacity = HierarchyRowCapacity(height_);
         if (visibleHierarchyRows_.size() > capacity)
         {
-            const float trackX = hierarchyWidth_ - 6.0f;
+            const float trackX = hierarchyWidth_ - 10.0f;
             const float trackHeight = rowsBottom - rowsTop;
             const float thumbHeight = std::max(
                 24.0f,
@@ -2704,8 +2882,8 @@ namespace renegade::studio
                 (trackHeight - thumbHeight) *
                     static_cast<float>(hierarchyScrollRow_) /
                     static_cast<float>(maximumScroll);
-            DrawRect(trackX, rowsTop, 2.0f, trackHeight, BorderSoft, cmd);
-            DrawRect(trackX, thumbY, 2.0f, thumbHeight, Forge, cmd);
+            DrawRect(trackX, rowsTop, 3.0f, trackHeight, BorderSoft, cmd);
+            DrawRect(trackX, thumbY, 3.0f, thumbHeight, Forge, cmd);
         }
 
         // Scene tab strip and viewport framing:
