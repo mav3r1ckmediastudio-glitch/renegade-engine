@@ -159,8 +159,10 @@ namespace renegade::studio
         }
 
         // Cards keep the accepted 148x112 footprint so the Gate 2 minimum
-        // drawer still exposes a complete first row. Only the text band and
-        // missing-thumbnail fallback are repainted at a readable floor.
+        // drawer still exposes a complete first row. Gate 4 repaints the
+        // thumbnail well after base chrome, aspect-fits the captured texture
+        // without cropping or distortion, and raises the text band to a
+        // readable floor.
         const float gridX = hierarchyX + folderPaneWidth + 12.0f;
         const float gridWidth = inspectorX - gridX - 12.0f;
         const int columns = std::max(
@@ -200,15 +202,64 @@ namespace renegade::studio
                 cardFill,
                 cmd);
 
-            if (!asset.thumbnail.IsValid())
+            constexpr float thumbnailXOffset = 7.0f;
+            constexpr float thumbnailYOffset = 7.0f;
+            constexpr float thumbnailWidth = AssetCardWidth - 14.0f;
+            constexpr float thumbnailHeight = 68.0f;
+            const float thumbnailX = x + thumbnailXOffset;
+            const float thumbnailY = y + thumbnailYOffset;
+
+            // Cover the base browser's stretched thumbnail first. The same
+            // neutral well becomes letterbox/pillarbox space when the captured
+            // thumbnail's native aspect does not match the card preview area.
+            DrawRect(
+                thumbnailX,
+                thumbnailY,
+                thumbnailWidth,
+                thumbnailHeight,
+                ThumbnailSurface,
+                cmd);
+
+            if (asset.thumbnail.IsValid())
             {
-                DrawRect(
-                    x + 9.0f,
-                    y + 11.0f,
-                    AssetCardWidth - 18.0f,
-                    20.0f,
-                    ThumbnailSurface,
-                    cmd);
+                const auto& texture = asset.thumbnail.GetTexture();
+                const auto desc = texture.GetDesc();
+                float drawWidth = thumbnailWidth;
+                float drawHeight = thumbnailHeight;
+                if (desc.width > 0 && desc.height > 0)
+                {
+                    const float sourceAspect =
+                        static_cast<float>(desc.width) /
+                        static_cast<float>(desc.height);
+                    const float targetAspect =
+                        thumbnailWidth / thumbnailHeight;
+                    if (sourceAspect > targetAspect)
+                    {
+                        drawWidth = thumbnailWidth;
+                        drawHeight = drawWidth / sourceAspect;
+                    }
+                    else
+                    {
+                        drawHeight = thumbnailHeight;
+                        drawWidth = drawHeight * sourceAspect;
+                    }
+                }
+
+                const float drawX =
+                    thumbnailX + (thumbnailWidth - drawWidth) * 0.5f;
+                const float drawY =
+                    thumbnailY + (thumbnailHeight - drawHeight) * 0.5f;
+                wi::image::Params thumbnailParams(
+                    drawX,
+                    drawY,
+                    drawWidth,
+                    drawHeight);
+                thumbnailParams.blendFlag = wi::enums::BLENDMODE_OPAQUE;
+                thumbnailParams.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
+                wi::image::Draw(&texture, thumbnailParams, cmd);
+            }
+            else
+            {
                 DrawText(
                     asset.directory ? "FOLDER" : "NO PREVIEW",
                     x + 12.0f,
