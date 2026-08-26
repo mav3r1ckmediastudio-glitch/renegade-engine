@@ -47,6 +47,7 @@ namespace
         return before.skyMode != after.skyMode ||
             before.aerialPerspective != after.aerialPerspective ||
             !NearlyEqual(before.skyExposure, after.skyExposure) ||
+            !NearlyEqual(before.stars, after.stars) ||
             !NearlyEqual(before.ambientIntensity, after.ambientIntensity) ||
             !NearlyEqual(before.fogStart, after.fogStart) ||
             !NearlyEqual(before.fogDensity, after.fogDensity) ||
@@ -106,6 +107,7 @@ namespace renegade::bridge
 
         state.aerialPerspective = weather.IsRealisticSkyAerialPerspective();
         state.skyExposure = weather.skyExposure;
+        state.stars = weather.stars;
 
         // Ambient is authored as a neutral scalar. Renegade keeps the cool
         // tint it generates and scales it, rather than making the creator
@@ -147,6 +149,7 @@ namespace renegade::bridge
         weather.SetVolumetricCloudsCastShadow(clouds && state.cloudsCastShadow);
 
         weather.skyExposure = state.skyExposure;
+        weather.stars = std::clamp(state.stars, 0.0f, 1.0f);
 
         // Preserve the authored ambient hue, rescaled to the requested
         // intensity. Falling back to a neutral grey keeps a fully black

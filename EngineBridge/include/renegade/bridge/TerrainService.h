@@ -23,7 +23,10 @@ namespace renegade::bridge
         int visibleChunkRadius = 6;
         int propChunkRadius = 4;
         int physicsChunkRadius = 3;
-        float chunkScale = 2.0f;
+        // World-space vertex spacing. One metre is Renegade's standard
+        // authoring resolution; coarser values remain available for large
+        // landscapes created deliberately by the user.
+        float chunkScale = 1.0f;
         std::uint32_t seed = 3926;
         float minimumHeight = -20.0f;
         float maximumHeight = 120.0f;

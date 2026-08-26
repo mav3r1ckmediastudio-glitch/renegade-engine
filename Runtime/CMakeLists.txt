@@ -37,8 +37,6 @@ add_executable(RenegadeRuntime WIN32
     src/RuntimeApplication.h
     src/main_Windows.cpp
 )
-add_dependencies(RenegadeRuntime RenegadeTerrainSurfacePacker)
-
 target_link_libraries(RenegadeRuntime
     PRIVATE
         Renegade::RuntimeBootstrap
@@ -163,14 +161,8 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/package/Run-LP03-Screen-Proof.cmd"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Run-LP03-Screen-Proof.cmd"
-    COMMAND $<TARGET_FILE:RenegadeTerrainSurfacePacker>
-        "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_ao.tga"
-        "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_roughness.tga"
-        "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_basecolor.tga"
-        "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass/default_grass_normal.tga"
-        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass/default_grass_basecolor.tga"
-        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass/default_grass_normal.tga"
-        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass/default_grass_surface.tga"
-        "32"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/Studio/assets/terrain/default_grass"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass"
     VERBATIM
 )

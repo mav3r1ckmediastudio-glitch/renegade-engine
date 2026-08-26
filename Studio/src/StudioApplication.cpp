@@ -2142,6 +2142,15 @@ namespace renegade::studio
             4.0f,
             400.0f);
         createWeatherSlider(
+            stars_,
+            "Stars",
+            "STARS",
+            "Procedural star visibility in the native realistic sky.",
+            WeatherField::Stars,
+            0.0f,
+            1.0f,
+            100.0f);
+        createWeatherSlider(
             ambientIntensity_,
             "Ambient Intensity",
             "AMBIENT",
@@ -2646,8 +2655,10 @@ namespace renegade::studio
         createTerrainSlider(terrainVisibleRadius_, "Terrain Visible Radius",
             "VISIBLE CHUNKS", "Generated chunk radius around the terrain origin.",
             TerrainField::VisibleChunkRadius, 1.0f, 16.0f, 15.0f);
-        createTerrainSlider(terrainChunkScale_, "Terrain Chunk Scale",
-            "CHUNK SCALE", "World scale of each streamed terrain chunk.",
+        createTerrainSlider(terrainChunkScale_, "Terrain Resolution",
+            "VERTEX SPACING (M)",
+            "Distance between sculptable terrain samples. 1 m is standard; "
+            "larger spacing trades local detail for world coverage.",
             TerrainField::ChunkScale, 0.25f, 16.0f, 1575.0f);
         createTerrainSlider(terrainMinimumHeight_, "Terrain Minimum Height",
             "MIN HEIGHT", "Lowest generated terrain elevation.",
@@ -4487,63 +4498,64 @@ namespace renegade::studio
         positionEnvironmentWidget(skyMode_, 98.0f);
         positionEnvironmentWidget(aerialPerspective_, 132.0f);
         positionEnvironmentWidget(skyExposure_, 164.0f);
-        positionEnvironmentWidget(ambientIntensity_, 198.0f);
-        positionEnvironmentWidget(environmentFogLabel_, 232.0f, 20.0f);
-        positionEnvironmentWidget(fogStart_, 252.0f);
-        positionEnvironmentWidget(fogDensity_, 286.0f);
-        positionEnvironmentWidget(heightFog_, 320.0f);
-        positionEnvironmentWidget(fogHeightStart_, 352.0f);
-        positionEnvironmentWidget(fogHeightEnd_, 386.0f);
-        positionEnvironmentWidget(environmentCloudLabel_, 420.0f, 20.0f);
-        positionEnvironmentWidget(cloudCoverage_, 440.0f);
-        positionEnvironmentWidget(cloudStartHeight_, 474.0f);
-        positionEnvironmentWidget(cloudThickness_, 508.0f);
-        positionEnvironmentWidget(cloudsCastShadow_, 542.0f);
-        positionEnvironmentWidget(precipitationLabel_, 576.0f, 20.0f);
-        positionEnvironmentWidget(precipitationMode_, 596.0f);
-        positionEnvironmentWidget(precipitationIntensity_, 630.0f);
-        positionEnvironmentWidget(precipitationFallSpeed_, 664.0f);
-        positionEnvironmentWidget(precipitationParticleScale_, 698.0f);
-        positionEnvironmentWidget(precipitationWindAzimuth_, 732.0f);
-        positionEnvironmentWidget(precipitationWindSpeed_, 766.0f);
-        positionEnvironmentWidget(precipitationTurbulence_, 800.0f);
-        positionEnvironmentWidget(sunLabel_, 834.0f, 20.0f);
-        positionEnvironmentWidget(sunPreset_, 854.0f);
-        positionEnvironmentWidget(sunTime_, 888.0f);
-        positionEnvironmentWidget(sunAzimuth_, 922.0f);
-        positionEnvironmentWidget(sunElevation_, 956.0f);
-        positionEnvironmentWidget(sunPreviewSpeed_, 990.0f);
-        sunPlayButton_.SetPos(XMFLOAT2(12.0f, 1024.0f));
+        positionEnvironmentWidget(stars_, 198.0f);
+        positionEnvironmentWidget(ambientIntensity_, 232.0f);
+        positionEnvironmentWidget(environmentFogLabel_, 266.0f, 20.0f);
+        positionEnvironmentWidget(fogStart_, 286.0f);
+        positionEnvironmentWidget(fogDensity_, 320.0f);
+        positionEnvironmentWidget(heightFog_, 354.0f);
+        positionEnvironmentWidget(fogHeightStart_, 386.0f);
+        positionEnvironmentWidget(fogHeightEnd_, 420.0f);
+        positionEnvironmentWidget(environmentCloudLabel_, 454.0f, 20.0f);
+        positionEnvironmentWidget(cloudCoverage_, 474.0f);
+        positionEnvironmentWidget(cloudStartHeight_, 508.0f);
+        positionEnvironmentWidget(cloudThickness_, 542.0f);
+        positionEnvironmentWidget(cloudsCastShadow_, 576.0f);
+        positionEnvironmentWidget(precipitationLabel_, 610.0f, 20.0f);
+        positionEnvironmentWidget(precipitationMode_, 630.0f);
+        positionEnvironmentWidget(precipitationIntensity_, 664.0f);
+        positionEnvironmentWidget(precipitationFallSpeed_, 698.0f);
+        positionEnvironmentWidget(precipitationParticleScale_, 732.0f);
+        positionEnvironmentWidget(precipitationWindAzimuth_, 766.0f);
+        positionEnvironmentWidget(precipitationWindSpeed_, 800.0f);
+        positionEnvironmentWidget(precipitationTurbulence_, 834.0f);
+        positionEnvironmentWidget(sunLabel_, 868.0f, 20.0f);
+        positionEnvironmentWidget(sunPreset_, 888.0f);
+        positionEnvironmentWidget(sunTime_, 922.0f);
+        positionEnvironmentWidget(sunAzimuth_, 956.0f);
+        positionEnvironmentWidget(sunElevation_, 990.0f);
+        positionEnvironmentWidget(sunPreviewSpeed_, 1024.0f);
+        sunPlayButton_.SetPos(XMFLOAT2(12.0f, 1058.0f));
         sunPauseButton_.SetPos(XMFLOAT2(
             20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
-            1024.0f));
+            1058.0f));
         sunPlayButton_.SetSize(XMFLOAT2(
             (environmentFieldWidth - 8.0f) * 0.5f,
             28.0f));
         sunPauseButton_.SetSize(XMFLOAT2(
             (environmentFieldWidth - 8.0f) * 0.5f,
             28.0f));
-        positionEnvironmentWidget(oceanLabel_, 1060.0f, 20.0f);
-        positionEnvironmentWidget(oceanEnabled_, 1080.0f);
-        positionEnvironmentWidget(oceanPreset_, 1114.0f);
-        positionEnvironmentWidget(oceanResolution_, 1148.0f);
-        positionEnvironmentWidget(oceanWaterHeight_, 1182.0f);
-        positionEnvironmentWidget(oceanPatchLength_, 1216.0f);
-        positionEnvironmentWidget(oceanWaveAmplitude_, 1250.0f);
-        positionEnvironmentWidget(oceanChoppyScale_, 1284.0f);
-        positionEnvironmentWidget(oceanTimeScale_, 1318.0f);
-        positionEnvironmentWidget(oceanWindAzimuth_, 1352.0f);
-        positionEnvironmentWidget(oceanWindSpeed_, 1386.0f);
-        positionEnvironmentWidget(oceanWindDependency_, 1420.0f);
-        positionEnvironmentWidget(oceanSurfaceDetail_, 1454.0f);
-        positionEnvironmentWidget(oceanDisplacementTolerance_, 1488.0f);
-        positionEnvironmentWidget(oceanWaterRed_, 1522.0f);
-        positionEnvironmentWidget(oceanWaterGreen_, 1556.0f);
-        positionEnvironmentWidget(oceanWaterBlue_, 1590.0f);
-        positionEnvironmentWidget(oceanWaterOpacity_, 1624.0f);
-        positionEnvironmentWidget(oceanExtinctionRed_, 1658.0f);
-        positionEnvironmentWidget(oceanExtinctionGreen_, 1692.0f);
-        positionEnvironmentWidget(oceanExtinctionBlue_, 1726.0f);
+        positionEnvironmentWidget(oceanLabel_, 1094.0f, 20.0f);
+        positionEnvironmentWidget(oceanEnabled_, 1114.0f);
+        positionEnvironmentWidget(oceanPreset_, 1148.0f);
+        positionEnvironmentWidget(oceanResolution_, 1182.0f);
+        positionEnvironmentWidget(oceanWaterHeight_, 1216.0f);
+        positionEnvironmentWidget(oceanPatchLength_, 1250.0f);
+        positionEnvironmentWidget(oceanWaveAmplitude_, 1284.0f);
+        positionEnvironmentWidget(oceanChoppyScale_, 1318.0f);
+        positionEnvironmentWidget(oceanTimeScale_, 1352.0f);
+        positionEnvironmentWidget(oceanWindAzimuth_, 1386.0f);
+        positionEnvironmentWidget(oceanWindSpeed_, 1420.0f);
+        positionEnvironmentWidget(oceanWindDependency_, 1454.0f);
+        positionEnvironmentWidget(oceanSurfaceDetail_, 1488.0f);
+        positionEnvironmentWidget(oceanDisplacementTolerance_, 1522.0f);
+        positionEnvironmentWidget(oceanWaterRed_, 1556.0f);
+        positionEnvironmentWidget(oceanWaterGreen_, 1590.0f);
+        positionEnvironmentWidget(oceanWaterBlue_, 1624.0f);
+        positionEnvironmentWidget(oceanWaterOpacity_, 1658.0f);
+        positionEnvironmentWidget(oceanExtinctionRed_, 1692.0f);
+        positionEnvironmentWidget(oceanExtinctionGreen_, 1726.0f);
+        positionEnvironmentWidget(oceanExtinctionBlue_, 1760.0f);
 
         positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);
         positionEnvironmentWidget(createTerrainButton_, 64.0f);
@@ -5107,6 +5119,7 @@ namespace renegade::studio
         setEnvironmentVisible(skyMode_);
         setEnvironmentVisible(aerialPerspective_);
         setEnvironmentVisible(skyExposure_);
+        setEnvironmentVisible(stars_);
         setEnvironmentVisible(ambientIntensity_);
         setEnvironmentVisible(environmentFogLabel_);
         setEnvironmentVisible(fogStart_);
@@ -5228,6 +5241,7 @@ namespace renegade::studio
                 static_cast<std::uint64_t>(state.skyMode));
             aerialPerspective_.SetCheck(state.aerialPerspective);
             skyExposure_.SetValue(state.skyExposure);
+            stars_.SetValue(state.stars);
             ambientIntensity_.SetValue(state.ambientIntensity);
             fogStart_.SetValue(state.fogStart);
             fogDensity_.SetValue(state.fogDensity);
@@ -6836,6 +6850,9 @@ namespace renegade::studio
         {
         case WeatherField::SkyExposure:
             weather.skyExposure = std::clamp(value, 0.0f, 8.0f);
+            break;
+        case WeatherField::Stars:
+            weather.stars = std::clamp(value, 0.0f, 1.0f);
             break;
         case WeatherField::AmbientIntensity:
             weather.ambientIntensity = std::clamp(value, 0.0f, 8.0f);

@@ -253,6 +253,7 @@ int main()
         weather.ambient = XMFLOAT3(0.02f, 0.04f, 0.08f);
         weather.horizon = XMFLOAT3(0.11f, 0.12f, 0.13f);
         weather.windSpeed = 3.5f;
+        weather.stars = 0.15f;
         weather.volumetricCloudParameters.layerFirst.coverageAmount = 0.2f;
         weather.volumetricCloudParameters.layerSecond.coverageAmount = 0.73f;
         weatherScenes.GetScene().weather = weather;
@@ -267,6 +268,7 @@ int main()
         after.skyMode =
             renegade::bridge::WeatherState::SkyMode::RealisticWithClouds;
         after.skyExposure = 1.25f;
+        after.stars = 0.7f;
         after.ambientIntensity = 0.16f;
         after.fogStart = 24.0f;
         after.fogDensity = 0.031f;
@@ -291,6 +293,7 @@ int main()
         if (!weather.IsVolumetricClouds() ||
             !weather.IsVolumetricCloudsCastShadow() ||
             !NearlyEqual(weather.skyExposure, 1.25f) ||
+            !NearlyEqual(weather.stars, 0.7f) ||
             !NearlyEqual(weather.ambient.z, 0.16f) ||
             !NearlyEqual(weather.ambient.x, 0.04f) ||
             !NearlyEqual(weather.fogDensity, 0.031f) ||
@@ -321,6 +324,7 @@ int main()
         if (!weatherCommands.Undo() ||
             weather.IsVolumetricClouds() ||
             !NearlyEqual(weather.skyExposure, 0.8f) ||
+            !NearlyEqual(weather.stars, 0.15f) ||
             !NearlyEqual(weather.ambient.z, 0.08f) ||
             !NearlyEqual(
                 weather.volumetricCloudParameters.layerFirst.coverageAmount,
@@ -331,7 +335,8 @@ int main()
 
         if (!weatherCommands.Redo() ||
             !weather.IsVolumetricClouds() ||
-            !NearlyEqual(weather.skyExposure, 1.25f))
+            !NearlyEqual(weather.skyExposure, 1.25f) ||
+            !NearlyEqual(weather.stars, 0.7f))
         {
             return Fail("weather redo did not restore the edited state");
         }

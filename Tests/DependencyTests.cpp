@@ -911,9 +911,9 @@ int main()
         auto& terrainMaterial =
             terrainWorld.materials.Create(terrainMaterialEntity);
         const fs::path baseColor =
-            root / "Content/terrain/default_grass/default_grass_basecolor.tga";
+            root / "Content/terrain/default_grass/default_grass_basecolor.dds";
         const fs::path surface =
-            root / "Content/terrain/default_grass/default_grass_surface.tga";
+            root / "Content/terrain/default_grass/default_grass_surface.dds";
         fs::create_directories(baseColor.parent_path());
         std::ofstream(baseColor) << "base";
         std::ofstream(surface) << "surface";
@@ -922,7 +922,7 @@ int main()
         terrainMaterial.textures[wi::scene::MaterialComponent::SURFACEMAP]
             .name = surface.generic_u8string();
         const std::string runtimeAbsoluteGrassPath =
-            (outside / "Content/terrain/default_grass/default_grass_normal.tga")
+            (outside / "Content/terrain/default_grass/default_grass_normal.dds")
                 .generic_u8string();
         terrainMaterial.textures[wi::scene::MaterialComponent::NORMALMAP]
             .name = runtimeAbsoluteGrassPath;

@@ -39,6 +39,7 @@ namespace renegade::bridge
         bool aerialPerspective = true;
 
         float skyExposure = 1.0f;
+        float stars = 0.0f;
         float ambientIntensity = 0.0f;
 
         float fogStart = 100.0f;

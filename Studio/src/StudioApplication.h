@@ -202,6 +202,7 @@ namespace renegade::studio
         enum class WeatherField
         {
             SkyExposure,
+            Stars,
             AmbientIntensity,
             FogStart,
             FogDensity,
@@ -514,6 +515,7 @@ namespace renegade::studio
         SceneInspectorComboBox skyMode_;
         SceneInspectorCheckBox aerialPerspective_;
         SceneInspectorSlider skyExposure_;
+        SceneInspectorSlider stars_;
         SceneInspectorSlider ambientIntensity_;
         wi::gui::Label environmentFogLabel_;
         SceneInspectorSlider fogStart_;

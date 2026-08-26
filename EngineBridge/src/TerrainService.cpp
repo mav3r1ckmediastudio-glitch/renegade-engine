@@ -350,11 +350,11 @@ namespace
             0.0f,
             0.0f);
         material.textures[wi::scene::MaterialComponent::BASECOLORMAP].name =
-            std::string(root) + "default_grass_basecolor.tga";
+            std::string(root) + "default_grass_basecolor.dds";
         material.textures[wi::scene::MaterialComponent::NORMALMAP].name =
-            std::string(root) + "default_grass_normal.tga";
+            std::string(root) + "default_grass_normal.dds";
         material.textures[wi::scene::MaterialComponent::SURFACEMAP].name =
-            std::string(root) + "default_grass_surface.tga";
+            std::string(root) + "default_grass_surface.dds";
         material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource =
             wi::resourcemanager::Load(material.textures[
                 wi::scene::MaterialComponent::BASECOLORMAP].name);
@@ -587,8 +587,10 @@ namespace renegade::bridge
                 }
                 const auto& baseColor = material->textures[
                     wi::scene::MaterialComponent::BASECOLORMAP].name;
-                if (wi::helper::GetFileNameFromPath(baseColor) ==
-                    "default_grass_basecolor.tga")
+                const std::string defaultName =
+                    wi::helper::GetFileNameFromPath(baseColor);
+                if (defaultName == "default_grass_basecolor.dds" ||
+                    defaultName == "default_grass_basecolor.tga")
                 {
                     const float textureScale = std::clamp(
                         material->texMulAdd.x *
@@ -732,9 +734,9 @@ namespace renegade::bridge
         TerrainMaterialSlotState slot;
         const std::string root = wi::helper::GetCurrentPath() +
             "/Content/terrain/default_grass/";
-        slot.baseColorMap = root + "default_grass_basecolor.tga";
-        slot.normalMap = root + "default_grass_normal.tga";
-        slot.surfaceMap = root + "default_grass_surface.tga";
+        slot.baseColorMap = root + "default_grass_basecolor.dds";
+        slot.normalMap = root + "default_grass_normal.dds";
+        slot.surfaceMap = root + "default_grass_surface.dds";
         const float multiplier = std::clamp(
             textureScale,
             1.0f,

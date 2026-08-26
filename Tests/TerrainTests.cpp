@@ -63,7 +63,7 @@ int main()
         !applied.physics || applied.visibleChunkRadius != 6 ||
         !NearlyEqual(applied.minimumHeight, -20.0f) ||
         !NearlyEqual(applied.maximumHeight, 120.0f) ||
-        !NearlyEqual(applied.chunkScale, 2.0f))
+        !NearlyEqual(applied.chunkScale, 1.0f))
     {
         return Fail("standard terrain state did not apply");
     }
