@@ -49,9 +49,30 @@ still exposes a complete first row.
 
 `RenegadeStudioAssetBrowserReadability.cpp` is presentation-only. It reads the
 base browser's actual folder visibility, scroll rows, asset list and selected
-path, then repaints only the small text-bearing regions. The base chrome remains
-the sole owner of hit testing, selection, scrolling, folder collapse and drag
-state.
+path, then repaints the small text-bearing regions and the thumbnail well after
+base chrome. The base chrome remains the sole owner of hit testing, selection,
+scrolling, folder collapse and drag state.
+
+### Thumbnail aspect preservation
+
+The audit confirmed that the base Asset Browser previously drew every captured
+thumbnail directly into the fixed `134 x 68` preview rectangle. Because it did
+not inspect the source texture dimensions, any thumbnail whose native aspect
+ratio differed from that rectangle was stretched or squashed.
+
+Gate 4 corrects that presentation defect without changing capture or asset
+storage. The readability overlay now:
+
+1. clears the fixed preview well back to its neutral dark surface;
+2. reads the captured thumbnail texture's native width and height;
+3. calculates the source and target aspect ratios;
+4. scales the thumbnail uniformly to fit completely inside the `134 x 68`
+   preview area;
+5. centres the result horizontally and vertically; and
+6. leaves unused space as neutral letterbox/pillarbox background.
+
+No thumbnail is cropped and no axis is scaled independently. The Asset Browser
+therefore presents the same proportions that were captured by the importer.
 
 Missing previews are represented honestly as `NO PREVIEW`; folder cards use
 `FOLDER`. A missing thumbnail is not presented as a valid image.
@@ -118,6 +139,8 @@ Gate 4 does not duplicate or rewrite this placement implementation.
 
 - readable Asset Browser typography and the read-only overlay must remain;
 - accepted card geometry must remain bounded;
+- thumbnail rendering must use native texture dimensions, uniform aspect-fit
+  scaling and centered letterbox/pillarbox space;
 - import/reveal/thumbnail/filter/enable-state wiring must remain;
 - drag preparation, queued drop, surface picking, grounding, cancellation and
   command-owned placement must remain; and
@@ -135,24 +158,27 @@ sufficient; resize the same window rather than requesting separate packages.
    `1920x1080`.
 2. Folder names, card names, card metadata, search/tags and filter text are
    comfortably readable and do not overlap.
-3. Existing thumbnails are visible. A missing thumbnail says `NO PREVIEW` and
-   a folder fallback says `FOLDER`.
-4. Search plus state / format / rig filters visibly change the shown assets.
-5. Selecting a current placeable model enables `PLACE`; inappropriate products
+3. Existing thumbnails are visible and retain the same proportions as the
+   thumbnails captured in the importer; tall, square and wide subjects must not
+   appear stretched or squashed. Unused preview space may letterbox/pillarbox.
+4. A missing thumbnail says `NO PREVIEW` and a folder fallback says `FOLDER`.
+5. Search plus state / format / rig filters visibly change the shown assets.
+6. Selecting a current placeable model enables `PLACE`; inappropriate products
    do not expose a fake placement action. A governed texture uses `ASSIGN BASE`
    only when there is a valid editable material target.
-6. Import one model through the guided importer. After final commit, its card is
-   revealed/selected in the Asset Browser with the captured thumbnail.
-7. Drag a placeable model card into the Scene. The live preview follows the
+7. Import one model through the guided importer. After final commit, its card is
+   revealed/selected in the Asset Browser with the captured thumbnail at the
+   correct aspect ratio.
+8. Drag a placeable model card into the Scene. The live preview follows the
    resolved surface, release places it, and Undo/Redo removes/restores it.
-8. A cold drag/release while preparation is still running queues rather than
+9. A cold drag/release while preparation is still running queues rather than
    silently losing the drop.
-9. Escape, right click, or dropping outside the viewport cancels cleanly with no
-   ghost preview entities.
-10. Resize Hierarchy, Inspector and bottom drawer. The browser remains bounded,
+10. Escape, right click, or dropping outside the viewport cancels cleanly with
+    no ghost preview entities.
+11. Resize Hierarchy, Inspector and bottom drawer. The browser remains bounded,
     controls stay reachable, and the minimum drawer still shows one complete
     card row.
-11. Reimport and creator-tag save retain their existing behaviour.
+12. Reimport and creator-tag save retain their existing behaviour.
 
 If these checks pass, Gate 4 is owner-accepted. Do not expand Gate 4 into Terrain,
 Environment, grid/snapping or new asset-governance features.
