@@ -416,6 +416,8 @@ namespace renegade::studio
             std::size_t rowIndex = 0;
         };
 
+        [[nodiscard]] bool HierarchyRowHasChildren(
+            std::size_t rowIndex) const noexcept;
         void RebuildVisibleAssetFolders();
         void RenderAssetBrowser(
             float drawerTop,
@@ -446,6 +448,8 @@ namespace renegade::studio
         std::vector<std::size_t> visibleAssetFolderRows_;
         std::vector<AssetCard> assetBrowserAssets_;
         std::unordered_set<std::string> collapsedAssetFolders_;
+        std::unordered_set<std::uint64_t> collapsedHierarchyEntities_;
+        std::unordered_set<std::uint64_t> initializedHierarchyDisclosureEntities_;
         std::array<bool,
             static_cast<std::size_t>(HierarchyCategory::Count)>
             collapsedHierarchyCategories_ = {};
@@ -453,6 +457,8 @@ namespace renegade::studio
         std::size_t assetBrowserFolderScrollRow_ = 0;
         std::size_t assetBrowserAssetScrollRow_ = 0;
         std::uint64_t lastHierarchySelection_ = 0;
+        bool hierarchyScrollbarDragging_ = false;
+        float hierarchyScrollbarDragOffsetY_ = 0.0f;
         std::string sceneName_ = "PROVING GROUND";
         bool sceneDirty_ = false;
         std::string statusText_ = "STUDIO READY";
