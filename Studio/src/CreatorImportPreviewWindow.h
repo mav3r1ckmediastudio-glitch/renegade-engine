@@ -101,6 +101,9 @@ namespace renegade::studio
                 }
             }
 
+            const float panelWidth = GetSize().x;
+            const float previewX =
+                std::max(12.0f, (panelWidth - previewSide) * 0.5f);
             const float captureY = previewY + previewSide + 10.0f;
             const float statusY = captureY + 48.0f;
             const float confirmY = captureY + 96.0f;
@@ -112,30 +115,29 @@ namespace renegade::studio
                     continue;
 
                 const std::string& name = widget->GetName();
-                const XMFLOAT2 current = widget->GetPos();
                 if (name == "THUMBNAIL & IMPORT")
                 {
-                    widget->SetPos(XMFLOAT2(current.x, actionBarY));
+                    widget->SetPos(XMFLOAT2(12.0f, actionBarY));
                 }
                 else if (name == "Final Asset Thumbnail Preview")
                 {
-                    widget->SetPos(XMFLOAT2(current.x, previewY));
+                    widget->SetPos(XMFLOAT2(previewX, previewY));
                 }
                 else if (name == "Capture Asset Thumbnail")
                 {
-                    widget->SetPos(XMFLOAT2(current.x, captureY));
+                    widget->SetPos(XMFLOAT2(12.0f, captureY));
                 }
                 else if (name == "THUMBNAIL NOT CAPTURED")
                 {
-                    widget->SetPos(XMFLOAT2(current.x, statusY));
+                    widget->SetPos(XMFLOAT2(12.0f, statusY));
                 }
                 else if (name == "Import Model Commit")
                 {
-                    widget->SetPos(XMFLOAT2(current.x, confirmY));
+                    widget->SetPos(XMFLOAT2(12.0f, confirmY));
                 }
                 else if (name == "Cancel Model Import")
                 {
-                    widget->SetPos(XMFLOAT2(current.x, cancelY));
+                    widget->SetPos(XMFLOAT2(12.0f, cancelY));
                 }
             }
         }
