@@ -39,6 +39,22 @@ namespace
             std::floor((rowsBottom - rowsTop) / HierarchyRowHeight)));
     }
 
+    std::size_t HierarchyTextCapacity(
+        const float hierarchyWidth,
+        const float textX) noexcept
+    {
+        constexpr float RightSideGutter = 36.0f;
+        constexpr float ApproximateGlyphWidth =
+            static_cast<float>(SceneHierarchyEntityTextSize) * 0.72f;
+        const float available = std::max(
+            24.0f,
+            hierarchyWidth - RightSideGutter - textX);
+        return std::max<std::size_t>(
+            3,
+            static_cast<std::size_t>(
+                std::floor(available / ApproximateGlyphWidth)));
+    }
+
     using HierarchyCategory =
         renegade::studio::RenegadeStudioChrome::HierarchyCategory;
 
@@ -427,7 +443,7 @@ namespace renegade::studio
     }
 
     void RenegadeComboBox::Render(
-        const wi::Canvas&,
+        const wi::Canvas& canvas,
         const wi::graphics::CommandList cmd) const
     {
         if (!IsVisible())
@@ -469,29 +485,78 @@ namespace renegade::studio
         {
             return;
         }
-        const int count = std::min(
-            static_cast<int>(items.size()),
-            maxVisibleItemCount);
-        for (int index = 0; index < count; ++index)
+
+        // Wicked's ComboBox interaction code owns a fixed 20 px item hitbox
+        // plus its 20 px filter row. Render against those exact native
+        // coordinates rather than stretching visible rows to this widget's
+        // taller closed-control height. This keeps what the creator sees and
+        // what the pointer can actually select in perfect agreement.
+        constexpr float NativeDropItemHeight = 20.0f;
+        const float dropWidth = fixed_drop_width > 0.0f
+            ? fixed_drop_width
+            : std::max(1.0f, scale.x - 1.0f - scale.y);
+        const float dropX = GetDropX(canvas);
+        const float dropOffset = GetDropOffset(canvas);
+        const float filterY = translation.y + scale.y +
+            dropOffset - NativeDropItemHeight;
+        DrawBorderedRect(
+            dropX,
+            filterY,
+            dropWidth,
+            NativeDropItemHeight,
+            Surface0,
+            BorderSoft,
+            cmd);
+        DrawText(
+            filterText.empty() ? "FILTER..." : filterText,
+            dropX + 8.0f,
+            filterY + 5.0f,
+            std::max(9, renderTextSize_ - 1),
+            filterText.empty() ? Muted : TextSecondary,
+            cmd,
+            0.2f,
+            0.12f);
+
+        int visibleItems = 0;
+        for (int index = firstItemVisible;
+            index < static_cast<int>(items.size()) &&
+            visibleItems < maxVisibleItemCount;
+            ++index)
         {
-            const float y = translation.y + scale.y * (index + 1);
+            if (!filterText.empty())
+            {
+                std::string upperName = items[static_cast<std::size_t>(index)].name;
+                std::transform(
+                    upperName.begin(), upperName.end(), upperName.begin(),
+                    [](const unsigned char character)
+                    {
+                        return static_cast<char>(std::toupper(character));
+                    });
+                if (upperName.find(filterText) == std::string::npos)
+                {
+                    continue;
+                }
+            }
+            ++visibleItems;
+            const float y = translation.y + GetItemOffset(canvas, index);
             DrawBorderedRect(
-                translation.x,
+                dropX,
                 y,
-                scale.x,
-                scale.y,
+                dropWidth,
+                NativeDropItemHeight,
                 index == hovered ? Surface2 : Surface0,
                 index == hovered ? HoverEdge : BorderSoft,
                 cmd);
             DrawText(
                 items[static_cast<std::size_t>(index)].name,
-                translation.x + 10.0f,
-                y + std::max(4.0f,
-                    (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
+                dropX + 8.0f,
+                y + std::max(3.0f,
+                    (NativeDropItemHeight -
+                        static_cast<float>(renderTextSize_)) * 0.5f),
                 renderTextSize_,
                 index == hovered ? TextStrong : TextSecondary,
                 cmd,
-                0.35f,
+                0.2f,
                 0.16f);
         }
     }
@@ -2603,9 +2668,12 @@ namespace renegade::studio
                 SceneChromeSmallTextSize,
                 row.selected ? Forge : wi::Color(198, 118, 41, 255),
                 cmd);
+            const float hierarchyNameX = indent + 36.0f;
             DrawText(
-                row.name,
-                indent + 36.0f,
+                Ellipsize(
+                    row.name,
+                    HierarchyTextCapacity(hierarchyWidth_, hierarchyNameX)),
+                hierarchyNameX,
                 rowY + 6.0f,
                 SceneHierarchyEntityTextSize,
                 row.selected ? TextStrong : TextSecondary,
