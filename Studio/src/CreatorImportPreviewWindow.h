@@ -5,6 +5,7 @@
 #include <WickedEngine.h>
 
 #include "renegade/bridge/StudioSession.h"
+#include "RenegadeStudioChrome.h"
 
 namespace renegade::studio
 {
@@ -39,18 +40,15 @@ namespace renegade::studio
                 // makes its parent Window visible again. Wicked propagates that
                 // visibility to the Window children, which can temporarily
                 // reveal both Environment and Terrain specialist controls.
-                // Ask the owned Scene chrome to replay the current workspace
-                // action on the next update; this deliberately uses the exact
-                // same authoritative path as clicking the workspace heading.
-                hostWorkspaceReconcileRequested_ = true;
+                // Re-submit the already-active workspace action here. The
+                // Studio action queue processes it after the importer dismiss
+                // action completes, exactly matching the user's manual heading
+                // click that restores the correct specialist visibility.
+                if (auto* chrome = CreatorAssetStudioChrome::Current())
+                {
+                    chrome->RequestCurrentWorkspaceReconcile();
+                }
             }
-        }
-
-        [[nodiscard]] static bool ConsumeHostWorkspaceReconcileRequest() noexcept
-        {
-            const bool requested = hostWorkspaceReconcileRequested_;
-            hostWorkspaceReconcileRequested_ = false;
-            return requested;
         }
 
         void Update(const wi::Canvas& canvas, const float dt) override
@@ -225,7 +223,6 @@ namespace renegade::studio
             entityWeatherBefore_ = {};
         }
 
-        inline static bool hostWorkspaceReconcileRequested_ = false;
         bool previewWeatherCaptured_ = false;
         wi::ecs::Entity weatherEntity_ = wi::ecs::INVALID_ENTITY;
         WeatherPresentationState sceneWeatherBefore_;
