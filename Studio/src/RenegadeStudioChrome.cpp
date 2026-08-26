@@ -22,6 +22,13 @@ namespace
     constexpr float AssetCardHeight = 112.0f;
     constexpr float AssetCardGap = 10.0f;
 
+    // Scene UI Gate 3 typography. Creator-critical Scene chrome no longer
+    // falls below 10 px; hierarchy entity names are given the strongest
+    // readable treatment while compact secondary shell text remains 10 px.
+    constexpr int SceneChromeSmallTextSize = 10;
+    constexpr int SceneChromeStandardTextSize = 11;
+    constexpr int SceneHierarchyEntityTextSize = 12;
+
     std::size_t HierarchyRowCapacity(const float height) noexcept
     {
         const float searchY = TopBarHeight + PanelHeaderHeight + 10.0f;
@@ -184,6 +191,63 @@ namespace
         return value;
     }
 
+    std::vector<std::string> WrapTextLines(
+        const std::string& value,
+        const std::size_t maximumCharacters)
+    {
+        std::vector<std::string> lines;
+        if (value.empty())
+        {
+            return lines;
+        }
+
+        const std::size_t limit = std::max<std::size_t>(1, maximumCharacters);
+        std::size_t begin = 0;
+        while (begin < value.size())
+        {
+            const std::size_t remaining = value.size() - begin;
+            if (remaining <= limit)
+            {
+                lines.push_back(value.substr(begin));
+                break;
+            }
+
+            const std::size_t hardEnd = begin + limit;
+            std::size_t breakAt = value.rfind(' ', hardEnd);
+            if (breakAt == std::string::npos || breakAt < begin)
+            {
+                breakAt = hardEnd;
+            }
+            lines.push_back(value.substr(begin, breakAt - begin));
+            begin = breakAt;
+            while (begin < value.size() && value[begin] == ' ')
+            {
+                ++begin;
+            }
+        }
+        return lines;
+    }
+
+    std::size_t StatusTextCapacity(const float width) noexcept
+    {
+        // The FPS/ownership group starts at width - 402. Leave a 12 px gutter
+        // before that divider and derive a conservative character budget for
+        // the primary status text. The complete status string remains stored
+        // and is also available in the Output drawer; only the single-line
+        // footer summary is ellipsized.
+        constexpr float StatusTextX = 105.0f;
+        constexpr float RightGroupOffset = 402.0f;
+        constexpr float SafetyGutter = 12.0f;
+        constexpr float ApproximateGlyphWidth = 7.2f;
+        const float available = std::max(
+            24.0f,
+            width - RightGroupOffset - SafetyGutter - StatusTextX);
+        return std::max<std::size_t>(
+            3,
+            static_cast<std::size_t>(
+                std::floor(available / ApproximateGlyphWidth)));
+    }
+
     bool IsAssetDescendant(
         const std::string& path,
         const std::string& parent)
@@ -313,6 +377,11 @@ namespace renegade::studio
             0.16f);
     }
 
+    void RenegadeCheckBox::SetRenderTextSize(const int size) noexcept
+    {
+        renderTextSize_ = std::clamp(size, 8, 18);
+    }
+
     void RenegadeCheckBox::Render(
         const wi::Canvas&,
         const wi::graphics::CommandList cmd) const
@@ -343,8 +412,9 @@ namespace renegade::studio
         DrawText(
             GetName(),
             translation.x + box + 9.0f,
-            translation.y + 8.0f,
-            10,
+            translation.y + std::max(4.0f,
+                (scale.y - static_cast<float>(renderTextSize_)) * 0.5f - 1.0f),
+            renderTextSize_,
             IsEnabled() ? TextStrong : Muted,
             cmd,
             0.25f,
@@ -464,6 +534,14 @@ namespace renegade::studio
         });
     }
 
+    void RenegadeSlider::SetRenderTextSizes(
+        const int labelSize,
+        const int valueSize) noexcept
+    {
+        labelTextSize_ = std::clamp(labelSize, 8, 18);
+        valueTextSize_ = std::clamp(valueSize, 8, 18);
+    }
+
     void RenegadeSlider::OnDragStarted(
         std::function<void(float)> callback)
     {
@@ -528,7 +606,7 @@ namespace renegade::studio
             label_,
             translation.x + 3.0f,
             translation.y + 3.0f,
-            9,
+            labelTextSize_,
             TextStrong,
             cmd,
             0.2f,
@@ -575,8 +653,9 @@ namespace renegade::studio
         DrawText(
             valueInputField.GetText(),
             inputPos.x + 7.0f,
-            inputPos.y + 8.0f,
-            10,
+            inputPos.y + std::max(4.0f,
+                (inputSize.y - static_cast<float>(valueTextSize_)) * 0.5f - 1.0f),
+            valueTextSize_,
             TextStrong,
             cmd,
             0.0f,
@@ -2202,7 +2281,7 @@ namespace renegade::studio
                 menu,
                 menuX,
                 25.0f,
-                11,
+                SceneChromeStandardTextSize,
                 active ? TextStrong : TextSecondary,
                 cmd,
                 0.55f,
@@ -2251,7 +2330,7 @@ namespace renegade::studio
                 tools[index],
                 toolX + 11.0f,
                 26.0f,
-                10,
+                SceneChromeSmallTextSize,
                 active ? TextStrong : TextSecondary,
                 cmd,
                 0.45f,
@@ -2294,7 +2373,7 @@ namespace renegade::studio
             transportLabel,
             sceneMetaX - 70.0f,
             26.0f,
-            9,
+            SceneChromeSmallTextSize,
             testLevelStarting ? Muted : TextStrong,
             cmd,
             0.75f,
@@ -2310,7 +2389,7 @@ namespace renegade::studio
             sceneName_,
             sceneMetaX + 20.0f,
             17.0f,
-            11,
+            SceneChromeStandardTextSize,
             Text,
             cmd,
             1.25f,
@@ -2326,7 +2405,7 @@ namespace renegade::studio
             "SCENE",
             sceneMetaX + 20.0f,
             38.0f,
-            9,
+            SceneChromeSmallTextSize,
             sceneWorkspaceColor,
             cmd,
             1.3f,
@@ -2336,7 +2415,7 @@ namespace renegade::studio
             "ENVIRONMENT",
             sceneMetaX + 86.0f,
             38.0f,
-            9,
+            SceneChromeSmallTextSize,
             environmentWorkspaceColor,
             cmd,
             1.1f,
@@ -2345,7 +2424,7 @@ namespace renegade::studio
             "TERRAIN",
             sceneMetaX + 212.0f,
             38.0f,
-            9,
+            SceneChromeSmallTextSize,
             terrainWorkspaceColor,
             cmd,
             1.15f,
@@ -2397,7 +2476,7 @@ namespace renegade::studio
             "SCENE HIERARCHY",
             14.0f,
             TopBarHeight + 15.0f,
-            11,
+            SceneHierarchyEntityTextSize,
             TextSecondary,
             cmd,
             1.45f,
@@ -2406,7 +2485,7 @@ namespace renegade::studio
             "+   ...",
             hierarchyWidth_ - 62.0f,
             TopBarHeight + 15.0f,
-            11,
+            SceneChromeStandardTextSize,
             Muted,
             cmd,
             1.0f);
@@ -2424,7 +2503,7 @@ namespace renegade::studio
             "SEARCH SCENE...",
             40.0f,
             searchY + 9.0f,
-            10,
+            SceneChromeStandardTextSize,
             TextSecondary,
             cmd,
             0.7f,
@@ -2469,14 +2548,14 @@ namespace renegade::studio
                     expanded ? "▼" : "▶",
                     16.0f,
                     rowY + 8.0f,
-                    9,
+                    SceneChromeSmallTextSize,
                     Forge,
                     cmd);
                 DrawText(
                     HierarchyCategoryLabel(item.category),
                     34.0f,
                     rowY + 7.0f,
-                    10,
+                    SceneChromeStandardTextSize,
                     TextStrong,
                     cmd,
                     1.0f,
@@ -2485,7 +2564,7 @@ namespace renegade::studio
                     std::to_string(itemCount),
                     hierarchyWidth_ - 35.0f,
                     rowY + 7.0f,
-                    10,
+                    SceneChromeSmallTextSize,
                     Muted,
                     cmd);
                 continue;
@@ -2514,21 +2593,21 @@ namespace renegade::studio
                 row.depth == 0 ? "▼" : "",
                 indent,
                 rowY + 8.0f,
-                9,
+                SceneChromeSmallTextSize,
                 Muted,
                 cmd);
             DrawText(
                 "◇",
                 indent + 15.0f,
                 rowY + 7.0f,
-                9,
+                SceneChromeSmallTextSize,
                 row.selected ? Forge : wi::Color(198, 118, 41, 255),
                 cmd);
             DrawText(
                 row.name,
                 indent + 36.0f,
-                rowY + 7.0f,
-                11,
+                rowY + 6.0f,
+                SceneHierarchyEntityTextSize,
                 row.selected ? TextStrong : TextSecondary,
                 cmd,
                 0.0f,
@@ -2537,7 +2616,7 @@ namespace renegade::studio
                 "◉",
                 hierarchyWidth_ - 25.0f,
                 rowY + 7.0f,
-                10,
+                SceneChromeSmallTextSize,
                 Muted,
                 cmd);
         }
@@ -2594,7 +2673,7 @@ namespace renegade::studio
             sceneName_ + ".WISCENE" + (sceneDirty_ ? " *" : ""),
             hierarchyWidth_ + 14.0f,
             TopBarHeight + 12.0f,
-            10,
+            SceneChromeStandardTextSize,
             Text,
             cmd,
             0.55f);
@@ -2602,7 +2681,7 @@ namespace renegade::studio
             "×",
             hierarchyWidth_ + 211.0f,
             TopBarHeight + 10.0f,
-            11,
+            SceneChromeStandardTextSize,
             Muted,
             cmd);
         DrawRect(
@@ -2637,8 +2716,8 @@ namespace renegade::studio
             DrawText(
                 chip,
                 chipX + 10.0f,
-                viewportTop + 19.0f,
-                9,
+                viewportTop + 18.0f,
+                SceneChromeSmallTextSize,
                 TextSecondary,
                 cmd,
                 0.65f,
@@ -2666,8 +2745,8 @@ namespace renegade::studio
             DrawText(
                 "SELECTED: " + selectionName_,
                 hierarchyWidth_ + 25.0f,
-                tagY + 8.0f,
-                9,
+                tagY + 7.0f,
+                SceneChromeSmallTextSize,
                 TextSecondary,
                 cmd,
                 1.0f);
@@ -2688,12 +2767,12 @@ namespace renegade::studio
             DrawText(
                 drawerTitles[activeBottomTab_],
                 hierarchyWidth_ + 16.0f, drawerTop + 15.0f,
-                11, TextStrong, cmd, 1.1f, 0.18f);
+                SceneChromeStandardTextSize, TextStrong, cmd, 1.1f, 0.18f);
             DrawText(
                 "▼",
                 inspectorX - 31.0f,
                 drawerTop + 15.0f,
-                11,
+                SceneChromeStandardTextSize,
                 TextStrong,
                 cmd,
                 0.0f,
@@ -2706,19 +2785,50 @@ namespace renegade::studio
             {
                 RenderAssetBrowser(drawerTop, inspectorX, cmd);
             }
+            else if (activeBottomTab_ == 2)
+            {
+                const std::string outputStatus = statusText_.empty()
+                    ? "Build output will appear here."
+                    : statusText_;
+                const float outputWidth = std::max(
+                    120.0f,
+                    inspectorX - hierarchyWidth_ - 32.0f);
+                const std::size_t outputCharacters =
+                    std::max<std::size_t>(
+                        20,
+                        static_cast<std::size_t>(
+                            std::floor(outputWidth / 7.2f)));
+                const auto lines = WrapTextLines(
+                    outputStatus,
+                    outputCharacters);
+                float lineY = drawerTop + 55.0f;
+                for (const auto& line : lines)
+                {
+                    if (lineY + 14.0f >= bottomTabsTop - 6.0f)
+                    {
+                        break;
+                    }
+                    DrawText(
+                        line,
+                        hierarchyWidth_ + 16.0f,
+                        lineY,
+                        SceneChromeSmallTextSize,
+                        TextSecondary,
+                        cmd,
+                        0.0f,
+                        0.18f);
+                    lineY += 14.0f;
+                }
+            }
             else
             {
                 const std::string message = activeBottomTab_ == 1
                     ? "Console connected. No messages in this session."
-                    : activeBottomTab_ == 2
-                        ? (statusText_.empty()
-                            ? "Build output will appear here."
-                            : statusText_)
-                        : "Runtime diagnostics are shown here when available.";
+                    : "Runtime diagnostics are shown here when available.";
                 DrawText(
                     message,
                     hierarchyWidth_ + 16.0f, drawerTop + 55.0f,
-                    10, TextSecondary, cmd, 0.0f, 0.18f);
+                    SceneChromeSmallTextSize, TextSecondary, cmd, 0.0f, 0.18f);
             }
         }
 
@@ -2752,8 +2862,8 @@ namespace renegade::studio
             DrawText(
                 tab,
                 bottomX,
-                bottomTabsTop + 11.0f,
-                9,
+                bottomTabsTop + 10.0f,
+                SceneChromeSmallTextSize,
                 TextSecondary,
                 cmd,
                 0.9f,
@@ -2771,8 +2881,8 @@ namespace renegade::studio
         DrawText(
             activeBottomTab_ >= 0 ? "▼" : "▲",
             inspectorX - 27.0f,
-            bottomTabsTop + 11.0f,
-            10,
+            bottomTabsTop + 10.0f,
+            SceneChromeSmallTextSize,
             TextStrong,
             cmd,
             0.0f,
@@ -2864,7 +2974,7 @@ namespace renegade::studio
                     items[index].first,
                     x + 12.0f,
                     itemY + 10.0f,
-                    10,
+                    SceneChromeSmallTextSize,
                     items[index].second ? TextStrong : Muted,
                     cmd,
                     0.35f,
@@ -2948,16 +3058,26 @@ namespace renegade::studio
             }
         }
 
-        // Status is secondary information, never a second toolbar.
+        // Status is secondary information, never a second toolbar. The footer
+        // summary is bounded before the FPS group so long errors cannot collide
+        // with right-side status. The complete status remains in statusText_
+        // and is presented unabridged by the wrapped Output drawer.
         DrawRect(0.0f, statusTop, width_, StatusBarHeight, Surface0, cmd);
         DrawRect(0.0f, statusTop, width_, 1.0f, Border, cmd);
         DrawRect(16.0f, statusTop + 10.0f, 7.0f, 7.0f, Success, cmd);
-        DrawText("READY", 31.0f, statusTop + 9.0f, 9, Muted, cmd, 1.15f);
         DrawText(
-            statusText_,
+            "READY",
+            31.0f,
+            statusTop + 8.0f,
+            SceneChromeSmallTextSize,
+            Muted,
+            cmd,
+            1.15f);
+        DrawText(
+            Ellipsize(statusText_, StatusTextCapacity(width_)),
             105.0f,
-            statusTop + 9.0f,
-            9,
+            statusTop + 8.0f,
+            SceneChromeSmallTextSize,
             Muted,
             cmd,
             0.75f);
@@ -2975,16 +3095,16 @@ namespace renegade::studio
         DrawText(
             fpsText,
             width_ - 386.0f,
-            statusTop + 9.0f,
-            9,
+            statusTop + 8.0f,
+            SceneChromeSmallTextSize,
             TextStrong,
             cmd,
             0.75f);
         DrawText(
             "RENEGADE STUDIO // OWNED CHROME",
             width_ - 285.0f,
-            statusTop + 9.0f,
-            9,
+            statusTop + 8.0f,
+            SceneChromeSmallTextSize,
             TextSecondary,
             cmd,
             0.9f);
