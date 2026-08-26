@@ -141,7 +141,7 @@ require_text(studio_source
     "positionEnvironmentWidget(environmentSkyLabel_, 44.0f, 20.0f);"
     "Environment content remains owned by Inspector layout")
 require_text(studio_source
-    "positionEnvironmentWidget(terrainSculptLabel_, 476.0f, 20.0f);"
+    "positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);"
     "Terrain content remains owned by Inspector layout")
 
 # Scene-owned chrome has a named readability floor. Asset Browser card/detail
