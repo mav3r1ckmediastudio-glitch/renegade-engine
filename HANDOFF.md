@@ -1,6 +1,6 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-26
+**Date:** 2026-08-27
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
@@ -16,10 +16,28 @@
 Draft PR: `#105`, branch
 `recovery/scene-ui-gate5-environment-terrain`.
 
-The published foundation head `ac2827ac1bfc36d21fb285925661bf8c16cf84bf`
-passes Windows baseline and Renegade Studio Debug/Release. It contains the
-one-metre terrain spacing, three 1024 DDS default-grass maps, native Stars and
-the dedicated snowflake DDS while retaining the accepted snow movement.
+Published head `cdd4dea6934438745faaa8f0bfc54ec167838641`
+passed Windows baseline and Renegade Studio Debug/Release but is owner-rejected.
+In a newly governed blank Level the Environment workspace stayed inactive, and
+creating Terrain crashed Studio. PR #105 remains draft and must not merge from
+that head.
+
+The approximately 205 MiB Release artifact is expected for this branch: the
+foundation artifact at `ac2827ac1bfc36d21fb285925661bf8c16cf84bf` is the same
+size, and the roughly 29 MiB reduction from older packages is the compressed
+DDS replacement for five large source TGA terrain maps. The published artifact
+contains the complete 10,315-line `StudioApplication.cpp` build and runtime
+payload; artifact size and the lifecycle regression are separate facts.
+
+The local correction identifies and closes the actual owner failure:
+
+- blank Level creation now serializes one dedicated Environment/Weather carrier;
+- legacy blank Levels create that carrier through `CreateEnvironmentCommand`;
+- Studio establishes Environment before native Terrain generation;
+- `CreateTerrain` rejects a missing carrier at the EngineBridge boundary;
+- Inspector routing keeps Weather and Terrain mutually exclusive;
+- legacy dual-role Terrain/Weather entities remain visible for recovery;
+- command, lifecycle and Gate 5 source contracts cover the new invariant.
 
 The continuation candidate adds the part that was still absent:
 
@@ -42,13 +60,17 @@ resident while native LOD, frustum/occlusion culling and the smaller physics
 radius remain active. A true edited-chunk residency cache is a later terrain
 architecture task; no false streaming claim is made in this gate.
 
-Local evidence for the continuation:
+Local evidence for the corrected continuation:
 
 - `git diff --check` — PASS;
-- source/path assertions for radius 9, expansion ownership, removed raw radius,
-  DDS packaging, Stars and snow — PASS;
+- direct GNU C++17 syntax checks for `CommandService.cpp`,
+  `StoryFlowLevelLifecycleService.cpp`, the command/lifecycle tests, and the
+  full `StudioApplication.cpp` translation unit — PASS (with local SDL/Win32
+  declaration stubs only for unavailable platform headers);
+- Gate 5 source assertions now include dedicated Environment creation, the
+  terrain precondition, Inspector isolation and legacy hierarchy recovery;
 - CMake/Windows compile — not run locally because CMake is unavailable;
-- exact-head PR CI — pending publication;
+- exact-head PR CI — pending correction publication;
 - packaged Release visual/interaction/save/reopen/Runtime owner acceptance —
   pending and required before merge.
 

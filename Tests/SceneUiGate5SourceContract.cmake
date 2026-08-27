@@ -4,7 +4,9 @@ endif()
 
 set(TERRAIN_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/TerrainService.h")
 set(TERRAIN_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/TerrainService.cpp")
+set(COMMAND_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/CommandService.h")
 set(PRECIPITATION_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/PrecipitationService.cpp")
+set(LEVEL_LIFECYCLE_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/StoryFlowLevelLifecycleService.cpp")
 set(STUDIO_SOURCE "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
 set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
 set(RUNTIME_CMAKE "${RENEGADE_SOURCE_DIR}/Runtime/CMakeLists.txt")
@@ -12,7 +14,9 @@ set(RUNTIME_CMAKE "${RENEGADE_SOURCE_DIR}/Runtime/CMakeLists.txt")
 foreach(path IN ITEMS
     "${TERRAIN_HEADER}"
     "${TERRAIN_SOURCE}"
+    "${COMMAND_HEADER}"
     "${PRECIPITATION_SOURCE}"
+    "${LEVEL_LIFECYCLE_SOURCE}"
     "${STUDIO_SOURCE}"
     "${STUDIO_CMAKE}"
     "${RUNTIME_CMAKE}")
@@ -23,7 +27,9 @@ endforeach()
 
 file(READ "${TERRAIN_HEADER}" terrain_header)
 file(READ "${TERRAIN_SOURCE}" terrain_source)
+file(READ "${COMMAND_HEADER}" command_header)
 file(READ "${PRECIPITATION_SOURCE}" precipitation_source)
+file(READ "${LEVEL_LIFECYCLE_SOURCE}" level_lifecycle_source)
 file(READ "${STUDIO_SOURCE}" studio_source)
 file(READ "${STUDIO_CMAKE}" studio_cmake)
 file(READ "${RUNTIME_CMAKE}" runtime_cmake)
@@ -51,6 +57,12 @@ reject_text(studio_source "Terrain Visible Radius" "raw destructive radius contr
 require_text(studio_source "EXPAND TERRAIN // +1 RING" "creator expansion control")
 require_text(studio_source "CURRENT TERRAIN //" "honest terrain dimensions")
 require_text(studio_source "WeatherField::Stars" "native Stars authoring")
+require_text(command_header "class CreateEnvironmentCommand final" "undoable dedicated Environment creation")
+require_text(level_lifecycle_source "CreateEnvironment(" "new Level Environment carrier")
+require_text(terrain_source "scene.weathers.GetCount() == 0" "terrain creation Environment precondition")
+require_text(studio_source "hasSession && !terrainWorkspaceActive_" "Terrain and Environment Inspector ownership isolation")
+require_text(studio_source "std::make_unique<bridge::CreateEnvironmentCommand>" "legacy blank-Level Environment recovery")
+require_text(studio_source "!scene.terrains.Contains(entity.entity)" "legacy dual-role terrain hierarchy recovery")
 
 foreach(map IN ITEMS basecolor normal surface)
     require_text(terrain_source "default_grass_${map}.dds" "DDS ${map} runtime binding")

@@ -242,6 +242,43 @@ int main()
             return Fail("an empty scene reported a weather entity");
         }
 
+        const auto clearEnvironment =
+            renegade::bridge::MakeWeatherPreset(
+                renegade::bridge::WeatherState{},
+                renegade::bridge::WeatherPreset::Clear);
+        renegade::bridge::CommandService environmentCommands;
+        auto createEnvironment = std::make_unique<
+            renegade::bridge::CreateEnvironmentCommand>(
+                weatherScenes.GetScene(),
+                clearEnvironment,
+                "Environment");
+        auto* createEnvironmentResult = createEnvironment.get();
+        if (!environmentCommands.Execute(std::move(createEnvironment)))
+        {
+            return Fail("dedicated Environment creation did not execute");
+        }
+        const auto createdEnvironment =
+            createEnvironmentResult->CreatedEntity();
+        if (createdEnvironment == wi::ecs::INVALID_ENTITY ||
+            weatherScenes.WeatherEntity() != createdEnvironment ||
+            weatherScenes.GetScene().terrains.Contains(createdEnvironment) ||
+            !NearlyEqual(
+                weatherScenes.GetScene().weather.fogDensity,
+                clearEnvironment.fogDensity))
+        {
+            return Fail("Environment creation did not establish a dedicated runtime carrier");
+        }
+        if (!environmentCommands.Undo() ||
+            weatherScenes.WeatherEntity() != wi::ecs::INVALID_ENTITY ||
+            !environmentCommands.Redo() ||
+            weatherScenes.WeatherEntity() != createdEnvironment ||
+            weatherScenes.GetScene().weathers.GetComponent(
+                createdEnvironment) == nullptr ||
+            !environmentCommands.Undo())
+        {
+            return Fail("Environment creation Undo/Redo did not preserve identity");
+        }
+
         const auto environment = wi::ecs::CreateEntity();
         weatherScenes.GetScene().names.Create(environment) = "Environment";
         auto& weather =

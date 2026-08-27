@@ -249,6 +249,24 @@ namespace renegade::bridge
         return result;
     }
 
+    wi::ecs::Entity CreateEnvironment(
+        wi::scene::Scene& scene,
+        const WeatherState& weatherState,
+        const char* name)
+    {
+        if (scene.weathers.GetCount() > 0)
+        {
+            return wi::ecs::INVALID_ENTITY;
+        }
+
+        const wi::ecs::Entity entity = wi::ecs::CreateEntity();
+        scene.names.Create(entity) = name == nullptr ? "Environment" : name;
+        auto& weather = scene.weathers.Create(entity);
+        ApplyWeather(weather, weatherState);
+        scene.weather = weather;
+        return entity;
+    }
+
     SetWeatherCommand::SetWeatherCommand(
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity,
@@ -314,6 +332,69 @@ namespace renegade::bridge
         }
 
         return true;
+    }
+
+    CreateEnvironmentCommand::CreateEnvironmentCommand(
+        wi::scene::Scene& scene,
+        const WeatherState& weather,
+        const char* name)
+        : scene_(&scene)
+        , weather_(weather)
+        , name_(name == nullptr ? "Environment" : name)
+    {
+    }
+
+    bool CreateEnvironmentCommand::Execute()
+    {
+        if (scene_ == nullptr || scene_->weathers.GetCount() > 0)
+        {
+            return false;
+        }
+        if (entity_ == wi::ecs::INVALID_ENTITY)
+        {
+            entity_ = CreateEnvironment(*scene_, weather_, name_.c_str());
+            return entity_ != wi::ecs::INVALID_ENTITY;
+        }
+        if (!hasSnapshot_ || EntityExists(*scene_, entity_))
+        {
+            return false;
+        }
+
+        snapshot_.SetReadModeAndResetPos(true);
+        wi::ecs::EntitySerializer serializer;
+        serializer.allow_remap = false;
+        const auto restored = scene_->Entity_Serialize(snapshot_, serializer);
+        auto* weather = scene_->weathers.GetComponent(restored);
+        if (restored != entity_ || weather == nullptr)
+        {
+            return false;
+        }
+        scene_->weather = *weather;
+        return true;
+    }
+
+    void CreateEnvironmentCommand::Undo()
+    {
+        if (scene_ == nullptr || !EntityExists(*scene_, entity_))
+        {
+            return;
+        }
+        if (!hasSnapshot_)
+        {
+            snapshot_.SetReadModeAndResetPos(false);
+            wi::ecs::EntitySerializer serializer;
+            scene_->Entity_Serialize(snapshot_, serializer, entity_);
+            hasSnapshot_ = true;
+        }
+        scene_->Entity_Remove(entity_);
+        scene_->weather = scene_->weathers.GetCount() > 0
+            ? scene_->weathers[0]
+            : wi::scene::WeatherComponent{};
+    }
+
+    wi::ecs::Entity CreateEnvironmentCommand::CreatedEntity() const noexcept
+    {
+        return entity_;
     }
 
     bool CommandService::Execute(std::unique_ptr<ICommand> command)

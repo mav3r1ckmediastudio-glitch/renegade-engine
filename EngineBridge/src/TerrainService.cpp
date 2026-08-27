@@ -554,6 +554,15 @@ namespace renegade::bridge
         const TerrainState& state,
         const char* name)
     {
+        // Wicked's Generation_Restart() creates Weather on terrainEntity when
+        // the scene has no Weather component. Renegade requires Environment
+        // and Terrain to remain distinct authoring owners, so fail before any
+        // partial terrain state is created if that invariant is not ready.
+        if (scene.weathers.GetCount() == 0)
+        {
+            return wi::ecs::INVALID_ENTITY;
+        }
+
         const wi::ecs::Entity entity = wi::ecs::CreateEntity();
         auto& terrain = scene.terrains.Create(entity);
         terrain.terrainEntity = entity;

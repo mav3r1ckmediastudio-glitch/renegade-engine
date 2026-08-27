@@ -480,8 +480,22 @@ the viewport responsive without turning every rendered frame into an Undo
 entry. Workspace splitters are shell state, persisted through ProjectService
 editor preferences rather than scene serialization.
 
-The Environment workspace resolves `SceneService::WeatherEntity()` directly;
-the serialized Weather entity is deliberately omitted from hierarchy rows.
+The Environment workspace resolves `SceneService::WeatherEntity()` directly.
+Every governed new Level WISCENE is seeded with one dedicated serialized
+`Environment` entity before its archive is written. A legacy blank Level that
+has no Weather component creates that carrier through
+`CreateEnvironmentCommand` when Environment is first opened; Terrain creation
+establishes the same command-backed precondition before it calls Wicked terrain
+generation. The bridge-level `CreateTerrain` boundary rejects a blank scene so
+Wicked cannot silently attach its fallback Weather component to the Terrain
+entity and collapse the two workspace owners.
+
+The dedicated Weather carrier is deliberately omitted from hierarchy rows.
+For compatibility with a scene saved by the rejected Gate 5 candidate, an
+entity carrying both Weather and Terrain remains visible, and Inspector
+resolution filters Weather out of Terrain mode and Terrain out of Environment
+mode. This is recovery behavior only; newly created Levels keep the two
+components on separate entities.
 Native precipitation is isolated behind `PrecipitationService`: rain maps to
 Wicked's GPU rain emitter and snow is a distinct Renegade-authored visual
 profile over that emitter. This preserves an upgrade path to a snow-specific

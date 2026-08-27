@@ -34,6 +34,17 @@ namespace
 
 int main()
 {
+    wi::scene::Scene blankScene;
+    if (renegade::bridge::CreateTerrain(
+            blankScene,
+            renegade::bridge::TerrainState{},
+            "Unsafe Terrain") != wi::ecs::INVALID_ENTITY ||
+        blankScene.terrains.GetCount() != 0 ||
+        blankScene.weathers.GetCount() != 0)
+    {
+        return Fail("terrain creation accepted a scene without a dedicated Environment");
+    }
+
     wi::scene::Scene scene;
     const auto entity = wi::ecs::CreateEntity();
     auto& terrain = scene.terrains.Create(entity);

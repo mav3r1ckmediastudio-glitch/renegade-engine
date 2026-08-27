@@ -1,5 +1,6 @@
 #include "renegade/bridge/StoryFlowLevelLifecycleService.h"
 
+#include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
@@ -271,6 +272,17 @@ namespace
             }
 
             wi::scene::Scene scene;
+            const auto environmentState = MakeWeatherPreset(
+                WeatherState{},
+                WeatherPreset::Clear);
+            if (CreateEnvironment(
+                    scene,
+                    environmentState,
+                    "Environment") == wi::ecs::INVALID_ENTITY)
+            {
+                error = "Could not create the Level Environment carrier.";
+                return false;
+            }
             wi::Archive archive(path.generic_u8string(), false, false);
             if (!archive.IsOpen())
             {

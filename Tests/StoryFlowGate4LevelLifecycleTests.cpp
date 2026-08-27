@@ -152,6 +152,13 @@ namespace
             PrepareWickedSceneOpen(scenePath.generic_u8string());
         Check(prepared.IsReady(),
             "created Level is not a valid WISCENE archive");
+        const auto* preparedScene = prepared.ReadOnlyScene();
+        Check(preparedScene != nullptr &&
+                preparedScene->weathers.GetCount() == 1 &&
+                preparedScene->terrains.GetCount() == 0 &&
+                !preparedScene->terrains.Contains(
+                    preparedScene->weathers.GetEntity(0)),
+            "created Level did not contain a dedicated Environment carrier");
 
         DocumentEnvelope sceneEnvelope;
         std::string error;

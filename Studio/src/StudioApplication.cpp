@@ -4963,9 +4963,14 @@ namespace renegade::studio
 
         const auto selected = session_->Selection().SelectedEntity();
         const auto weatherEntity = session_->Scenes().WeatherEntity();
+        const auto& scene = session_->Scenes().GetScene();
         for (const auto& entity : session_->Scenes().ListEntities())
         {
-            if (entity.entity == weatherEntity)
+            // A broken Gate 5 build could serialize Wicked's fallback Weather
+            // onto the Terrain entity. Hide only the dedicated Environment
+            // carrier; legacy dual-role terrain must remain discoverable.
+            if (entity.entity == weatherEntity &&
+                !scene.terrains.Contains(entity.entity))
             {
                 continue;
             }
@@ -5060,7 +5065,10 @@ namespace renegade::studio
                     ? wi::ecs::INVALID_ENTITY
                     : selectedEntity)
             : nullptr;
-        auto* weather = hasSession
+        // Terrain generation in an older blank Level can leave Weather on the
+        // Terrain entity. Terrain mode must still resolve only Terrain controls;
+        // Environment owns Weather presentation in its dedicated workspace.
+        auto* weather = hasSession && !terrainWorkspaceActive_
             ? session_->Scenes().GetScene().weathers.GetComponent(entity)
             : nullptr;
         auto* terrain = hasSession && !environmentWorkspaceActive_
@@ -5796,6 +5804,18 @@ namespace renegade::studio
         if (!active && sunPreviewPlaying_)
         {
             StopSunPreview(true);
+        }
+        if (active && session_ != nullptr &&
+            session_->Scenes().WeatherEntity() == wi::ecs::INVALID_ENTITY)
+        {
+            const auto environmentState = bridge::MakeWeatherPreset(
+                bridge::WeatherState{},
+                bridge::WeatherPreset::Clear);
+            session_->Commands().Execute(
+                std::make_unique<bridge::CreateEnvironmentCommand>(
+                    session_->Scenes().GetScene(),
+                    environmentState,
+                    "Environment"));
         }
         environmentWorkspaceActive_ = active && session_ != nullptr &&
             session_->Scenes().WeatherEntity() != wi::ecs::INVALID_ENTITY;
@@ -7812,6 +7832,23 @@ namespace renegade::studio
             return;
         }
         auto& scene = session_->Scenes().GetScene();
+        // Wicked creates Weather on the Terrain entity when generation starts
+        // in a blank scene. Establish Renegade's dedicated Environment carrier
+        // first so the two Inspector workspaces never acquire the same owner.
+        if (scene.weathers.GetCount() == 0)
+        {
+            const auto environmentState = bridge::MakeWeatherPreset(
+                bridge::WeatherState{},
+                bridge::WeatherPreset::Clear);
+            if (!session_->Commands().Execute(
+                    std::make_unique<bridge::CreateEnvironmentCommand>(
+                        scene,
+                        environmentState,
+                        "Environment")))
+            {
+                return;
+            }
+        }
         if (scene.terrains.GetCount() > 0)
         {
             session_->Selection().Select(scene.terrains.GetEntity(0));
