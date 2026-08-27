@@ -4,6 +4,7 @@
 
 #include "renegade/bridge/ConstraintService.h"
 #include "renegade/bridge/CharacterPhysicsService.h"
+#include "renegade/bridge/VehiclePhysicsService.h"
 
 namespace renegade::bridge
 {
