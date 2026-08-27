@@ -90,6 +90,18 @@ present only inside `physicsChunkRadius`, but authored CPU chunk data remains
 resident. Claiming safe edited-chunk unloading would be false until Renegade
 adds a separate authored-data cache or adopts an explicit Wicked core patch.
 
+## Accepted result
+
+Corrected head `93659c274fa1ce6edf68e2478dfbfa8c9e3298a4` passed all four
+required Windows checks. The project owner then accepted the packaged Release
+after exercising the corrected Environment, realistic sky, stars, Sun, Terrain
+creation, old-project open, sculpting, expansion, Undo/Redo, dirty state and
+save/reopen paths. PR #105 was merged to `main` as
+`1e0470a9e530dd20c42ddf16662c3771aaede825` on 2026-08-27.
+
+The rejected heads and incomplete approximately 205 MiB artifact remain failure
+evidence only; they are not accepted Gate 5 builds.
+
 ## Required owner acceptance
 
 Use one exact-head packaged Release build:

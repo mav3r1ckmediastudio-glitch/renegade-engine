@@ -20,10 +20,16 @@ framework.
 > Runtime screen and Story Flow entered Level One successfully. Renegade is still
 > a development project, not a distribution-ready v1 game engine.
 
+Scene UI Gate 5 is also accepted and merged. The recovered Scene Editor now has
+independent Environment and Terrain ownership, complete realistic-sky/Sun
+startup, finite one-metre Terrain creation and non-destructive ring expansion,
+cross-chunk sculpting, validated packaged terrain materials and matching Studio
+and Runtime weather/terrain resources.
+
 ## Current baseline
 
-- Current main baseline: `628cf26574a4a2a6e8eb0a5a522d94966ad8917e`
-  (Scene UI Gate 4 Asset Browser and placement recovery, PR #104)
+- Current main baseline: `1e0470a9e530dd20c42ddf16662c3771aaede825`
+  (Scene UI Gate 5 Environment and Terrain recovery, PR #105)
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
 - Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -74,28 +80,15 @@ The Windows reference build and evidence workflow is documented in
 
 ## What comes next
 
-The immediate programme is **LP07 — Reusable Project Asset Workflow**. Its goal
-is to turn model import into a real reusable project-asset workflow while also
-broadening Renegade's accepted model-format surface.
+The immediate stabilization gate is **Scene UI Gate 6 — Consolidated
+Whole-Editor Acceptance**. It does not add another editor feature set. It locks
+the accepted Project Hub, Story Flow, Level Editor, Screen Editor, Asset Browser,
+Environment, Terrain, Test Level and Build Game paths together, then proves them
+through exact-head four-way CI and one packaged Release owner pass at all three
+supported review resolutions.
 
-**FBX is the P0 format for LP07, including skinned and animated FBX.** GLB/GLTF
-remains a required regression/secondary path. OBJ and PLY are planned behind the
-same common import contract where the pinned Wicked converter seams prove clean;
-VRM/VRMA receives an exact seam audit before Renegade claims support.
-
-Target lifecycle:
-
-**import once -> stable project asset -> browse -> place repeatedly -> detect a
-source change -> reimport safely -> reopen/build without broken identity.**
-
-The exact pinned Wicked FBX importer already uses the bundled `ufbx` loader and
-converts meshes, materials/textures, armatures/skinning, morph data and animation
-stacks into native Wicked scene components. LP07 will first expose and prove that
-existing path through Renegade-owned services rather than adding a second FBX
-stack. External libraries such as Assimp remain an evidence-driven fallback only
-when a required format/FBX capability is proven missing.
-
-See [`docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md`](docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md).
+See
+[`docs/SCENE_UI_GATE6_CONSOLIDATED_ACCEPTANCE.md`](docs/SCENE_UI_GATE6_CONSOLIDATED_ACCEPTANCE.md).
 
 ## Product layers
 
