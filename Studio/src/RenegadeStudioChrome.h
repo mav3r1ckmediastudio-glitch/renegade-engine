@@ -533,8 +533,9 @@ namespace renegade::studio
     // existing custom chrome. The base chrome remains the rendering/interaction
     // authority for the rest of Studio; this subtype only intercepts the
     // existing Import Model and asset-card callbacks and adds creator controls
-    // inside the already-owned Assets drawer.
-    class CreatorAssetStudioChrome final : public RenegadeStudioChrome
+    // inside the already-owned Assets drawer. It remains extensible so bounded
+    // Renegade-owned workspaces can layer on the established creator shell.
+    class CreatorAssetStudioChrome : public RenegadeStudioChrome
     {
     public:
         CreatorAssetStudioChrome()
