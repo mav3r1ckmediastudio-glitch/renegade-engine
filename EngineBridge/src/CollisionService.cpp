@@ -42,6 +42,15 @@ namespace
         }
     }
 
+    bool IsMeshDerivedShape(
+        const wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept
+    {
+        using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
+        return shape == Shape::CONVEX_HULL ||
+            shape == Shape::TRIANGLE_MESH ||
+            shape == Shape::HEIGHTFIELD;
+    }
+
     bool RequiresPhysicsObjectRecreation(
         const renegade::bridge::CollisionState& before,
         const renegade::bridge::CollisionState& after) noexcept
@@ -74,6 +83,84 @@ namespace
 
 namespace renegade::bridge
 {
+    CollisionTargetStatus CheckCollisionTarget(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept
+    {
+        using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
+
+        if (entity == wi::ecs::INVALID_ENTITY)
+        {
+            return CollisionTargetStatus::InvalidEntity;
+        }
+        if (!scene.transforms.Contains(entity))
+        {
+            return CollisionTargetStatus::MissingTransform;
+        }
+        if (!IsSupportedShape(shape))
+        {
+            return CollisionTargetStatus::InvalidMeshData;
+        }
+        if (!IsMeshDerivedShape(shape))
+        {
+            return CollisionTargetStatus::Supported;
+        }
+
+        // Match Wicked's actual RunPhysicsUpdateSystem path: mesh-derived
+        // rigid bodies are attached to an ObjectComponent entity and obtain
+        // geometry from that object's meshID.
+        const auto* object = scene.objects.GetComponent(entity);
+        if (object == nullptr || object->meshID == wi::ecs::INVALID_ENTITY)
+        {
+            return CollisionTargetStatus::MissingMesh;
+        }
+        const auto* mesh = scene.meshes.GetComponent(object->meshID);
+        if (mesh == nullptr)
+        {
+            return CollisionTargetStatus::MissingMesh;
+        }
+
+        if (shape == Shape::CONVEX_HULL)
+        {
+            return mesh->vertex_positions.empty()
+                ? CollisionTargetStatus::InvalidMeshData
+                : CollisionTargetStatus::Supported;
+        }
+
+        if (shape == Shape::TRIANGLE_MESH)
+        {
+            if (mesh->vertex_positions.empty() ||
+                mesh->indices.size() < 3 ||
+                mesh->subsets.empty())
+            {
+                return CollisionTargetStatus::InvalidMeshData;
+            }
+            return CollisionTargetStatus::Supported;
+        }
+
+        // Wicked's HeightField path computes dim = sqrt(vertex_count) and
+        // gives Jolt a dim x dim sample grid. Require a genuine square grid
+        // instead of allowing malformed data to reach the backend.
+        const size_t vertexCount = mesh->vertex_positions.size();
+        const size_t dimension = static_cast<size_t>(
+            std::sqrt(static_cast<double>(vertexCount)));
+        if (dimension < 2 || dimension * dimension != vertexCount)
+        {
+            return CollisionTargetStatus::InvalidHeightFieldGrid;
+        }
+        return CollisionTargetStatus::Supported;
+    }
+
+    bool CanAuthorCollisionShape(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept
+    {
+        return CheckCollisionTarget(scene, entity, shape) ==
+            CollisionTargetStatus::Supported;
+    }
+
     CollisionState CaptureCollision(
         const wi::scene::RigidBodyPhysicsComponent& rigidbody) noexcept
     {
@@ -206,8 +293,8 @@ namespace renegade::bridge
     bool CreateCollisionCommand::Execute()
     {
         if (scene_ == nullptr ||
-            entity_ == wi::ecs::INVALID_ENTITY ||
-            scene_->rigidbodies.Contains(entity_))
+            scene_->rigidbodies.Contains(entity_) ||
+            !CanAuthorCollisionShape(*scene_, entity_, initial_.shape))
         {
             return false;
         }
@@ -262,7 +349,8 @@ namespace renegade::bridge
 
     bool SetCollisionCommand::Apply(const CollisionState& state) noexcept
     {
-        if (scene_ == nullptr)
+        if (scene_ == nullptr ||
+            !CanAuthorCollisionShape(*scene_, entity_, state.shape))
         {
             return false;
         }

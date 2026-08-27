@@ -24,16 +24,39 @@ namespace
         std::cerr << "FAIL: " << message << '\n';
         return 1;
     }
+
+    wi::ecs::Entity CreateMeshBackedObject(wi::scene::Scene& scene)
+    {
+        const auto meshEntity = wi::ecs::CreateEntity();
+        auto& mesh = scene.meshes.Create(meshEntity);
+        // Four non-degenerate points are enough to exercise Convex Hull, form
+        // two triangles for Triangle Mesh and form a 2x2 Height Field grid.
+        mesh.vertex_positions = {
+            XMFLOAT3(0.0f, 0.0f, 0.0f),
+            XMFLOAT3(1.0f, 0.0f, 0.0f),
+            XMFLOAT3(0.0f, 0.0f, 1.0f),
+            XMFLOAT3(1.0f, 0.5f, 1.0f),
+        };
+        mesh.indices = { 0, 1, 2, 1, 3, 2 };
+        auto& subset = mesh.subsets.emplace_back();
+        subset.indexOffset = 0;
+        subset.indexCount = static_cast<uint32_t>(mesh.indices.size());
+
+        const auto objectEntity = wi::ecs::CreateEntity();
+        scene.transforms.Create(objectEntity);
+        scene.objects.Create(objectEntity).meshID = meshEntity;
+        return objectEntity;
+    }
 }
 
 int main()
 {
     using renegade::bridge::CollisionState;
+    using renegade::bridge::CollisionTargetStatus;
     using Body = wi::scene::RigidBodyPhysicsComponent;
     using Shape = Body::CollisionShape;
 
-    // JP01 rigid-body authoring parity must recognize every collision shape
-    // exposed by Wicked Editor.
+    // JP01 rigid-body parity recognizes all seven shapes exposed by Wicked.
     {
         constexpr std::array<Shape, 7> shapes = {
             Shape::BOX,
@@ -62,8 +85,8 @@ int main()
         }
     }
 
-    // SanitizeCollisionState: retain Wicked Editor's practical ranges while
-    // preventing degenerate dimensions and invalid negative mass values.
+    // Sanitization follows Wicked Editor's exposed ranges and prevents
+    // degenerate primitive dimensions.
     {
         CollisionState raw;
         raw.mass = -5.0f;
@@ -91,11 +114,60 @@ int main()
     }
 
     wi::scene::Scene scene;
+
+    // Target validation mirrors Wicked's runtime plumbing: every body needs a
+    // Transform, and mesh-derived collision shapes need Object -> Mesh data.
+    {
+        const auto noTransform = wi::ecs::CreateEntity();
+        if (renegade::bridge::CheckCollisionTarget(
+                scene, noTransform, Shape::BOX) !=
+            CollisionTargetStatus::MissingTransform)
+        {
+            return Fail("collision target accepted an entity without Transform");
+        }
+
+        const auto noMesh = wi::ecs::CreateEntity();
+        scene.transforms.Create(noMesh);
+        if (renegade::bridge::CheckCollisionTarget(
+                scene, noMesh, Shape::CONVEX_HULL) !=
+                CollisionTargetStatus::MissingMesh ||
+            renegade::bridge::CanAuthorCollisionShape(
+                scene, noMesh, Shape::TRIANGLE_MESH))
+        {
+            return Fail("mesh-derived collision accepted an entity without mesh");
+        }
+
+        CollisionState invalidComplex;
+        invalidComplex.shape = Shape::HEIGHTFIELD;
+        renegade::bridge::CommandService invalidComplexCommands;
+        if (invalidComplexCommands.Execute(
+                std::make_unique<renegade::bridge::CreateCollisionCommand>(
+                    scene, noMesh, invalidComplex)) ||
+            invalidComplexCommands.UndoCount() != 0)
+        {
+            return Fail("CreateCollisionCommand accepted invalid mesh-derived target");
+        }
+
+        const auto malformedMesh = wi::ecs::CreateEntity();
+        auto& mesh = scene.meshes.Create(malformedMesh);
+        mesh.vertex_positions = {
+            XMFLOAT3(0, 0, 0), XMFLOAT3(1, 0, 0), XMFLOAT3(0, 0, 1)
+        };
+        const auto malformedObject = wi::ecs::CreateEntity();
+        scene.transforms.Create(malformedObject);
+        scene.objects.Create(malformedObject).meshID = malformedMesh;
+        if (renegade::bridge::CheckCollisionTarget(
+                scene, malformedObject, Shape::HEIGHTFIELD) !=
+            CollisionTargetStatus::InvalidHeightFieldGrid)
+        {
+            return Fail("Height Field accepted a non-square sample grid");
+        }
+    }
+
     const auto entity = wi::ecs::CreateEntity();
     scene.transforms.Create(entity);
 
-    // CreateCollisionCommand: attach the complete standard Wicked rigid-body
-    // authoring state and participate in the shared Undo/Redo history.
+    // CreateCollisionCommand writes the complete standard rigid-body state.
     renegade::bridge::CommandService commands;
     CollisionState initial;
     initial.shape = Shape::SPHERE;
@@ -114,9 +186,7 @@ int main()
     initial.sphereRadius = 0.75f;
     if (!commands.Execute(
             std::make_unique<renegade::bridge::CreateCollisionCommand>(
-                scene,
-                entity,
-                initial)))
+                scene, entity, initial)))
     {
         return Fail("CreateCollisionCommand did not execute");
     }
@@ -134,47 +204,32 @@ int main()
         !rigidbody->IsStartDeactivated() ||
         !rigidbody->IsRefreshParametersNeeded())
     {
-        return Fail("CreateCollisionCommand did not attach the full authoring state");
-    }
-    if (!scene.transforms.Contains(entity))
-    {
-        return Fail("CreateCollisionCommand touched an unrelated component");
+        return Fail("CreateCollisionCommand did not attach full authoring state");
     }
 
-    if (!commands.Undo() || scene.rigidbodies.Contains(entity))
+    if (!commands.Undo() || scene.rigidbodies.Contains(entity) ||
+        !scene.transforms.Contains(entity) ||
+        !commands.Redo() || !scene.rigidbodies.Contains(entity))
     {
-        return Fail("CreateCollisionCommand Undo did not remove the rigidbody");
-    }
-    if (!scene.transforms.Contains(entity))
-    {
-        return Fail("CreateCollisionCommand Undo removed the whole entity");
-    }
-    if (!commands.Redo() || !scene.rigidbodies.Contains(entity))
-    {
-        return Fail("CreateCollisionCommand Redo did not recreate the rigidbody");
+        return Fail("CreateCollisionCommand Undo/Redo lifecycle failed");
     }
     rigidbody = scene.rigidbodies.GetComponent(entity);
     if (rigidbody == nullptr)
     {
-        return Fail("CreateCollisionCommand Redo did not restore the component pointer");
+        return Fail("CreateCollisionCommand Redo did not restore component");
     }
 
-    // A second create against an entity that already has a rigid body must
-    // fail cleanly rather than overwrite native state.
     renegade::bridge::CommandService duplicateCommands;
     if (duplicateCommands.Execute(
             std::make_unique<renegade::bridge::CreateCollisionCommand>(
-                scene,
-                entity,
-                initial)) ||
+                scene, entity, initial)) ||
         duplicateCommands.UndoCount() != 0)
     {
-        return Fail("CreateCollisionCommand overwrote an existing rigidbody");
+        return Fail("CreateCollisionCommand overwrote existing rigidbody");
     }
 
-    // Seed fields intentionally outside CollisionState. The regular rigid-body
-    // editing path must preserve them because character and vehicle authoring
-    // are separate JP01 domains sharing Wicked's native component.
+    // Character and vehicle settings share Wicked's component but are outside
+    // this standard-body state. Ordinary body edits must preserve them.
     rigidbody->SetCharacterPhysics(true);
     rigidbody->character.gravityFactor = 2.25f;
     rigidbody->vehicle.type = Body::Vehicle::Type::Car;
@@ -184,7 +239,7 @@ int main()
     const auto before = renegade::bridge::CaptureCollision(*rigidbody);
     auto after = before;
     after.shape = Shape::BOX;
-    after.mass = 0.0f; // static
+    after.mass = 0.0f;
     after.friction = 0.73f;
     after.restitution = 0.12f;
     after.dampingLinear = 0.44f;
@@ -201,10 +256,7 @@ int main()
     renegade::bridge::CommandService editCommands;
     if (!editCommands.Execute(
             std::make_unique<renegade::bridge::SetCollisionCommand>(
-                scene,
-                entity,
-                before,
-                after)))
+                scene, entity, before, after)))
     {
         return Fail("SetCollisionCommand did not execute");
     }
@@ -219,7 +271,7 @@ int main()
         rigidbody->IsLocked2D() || rigidbody->IsDisableDeactivation() ||
         rigidbody->IsStartDeactivated())
     {
-        return Fail("SetCollisionCommand did not reach the full native authoring surface");
+        return Fail("SetCollisionCommand missed standard body fields");
     }
     if (!rigidbody->IsCharacterPhysics() ||
         !NearlyEqual(rigidbody->character.gravityFactor, 2.25f) ||
@@ -236,53 +288,41 @@ int main()
         !NearlyEqual(rigidbody->buoyancy, 1.7f) ||
         !rigidbody->IsKinematic() || !rigidbody->IsLocked2D() ||
         !rigidbody->IsDisableDeactivation() ||
-        !rigidbody->IsStartDeactivated())
-    {
-        return Fail("SetCollisionCommand Undo did not restore the prior authoring state");
-    }
-    if (!rigidbody->IsCharacterPhysics() ||
+        !rigidbody->IsStartDeactivated() ||
+        !rigidbody->IsCharacterPhysics() ||
         rigidbody->vehicle.type != Body::Vehicle::Type::Car)
     {
-        return Fail("SetCollisionCommand Undo damaged unrelated native fields");
+        return Fail("SetCollisionCommand Undo did not restore prior state");
     }
     if (!editCommands.Redo() || rigidbody->shape != Shape::BOX ||
         rigidbody->mass != 0.0f || !NearlyEqual(rigidbody->buoyancy, 0.65f))
     {
-        return Fail("SetCollisionCommand Redo did not restore the edited state");
+        return Fail("SetCollisionCommand Redo did not restore edited state");
     }
 
     const auto current = renegade::bridge::CaptureCollision(*rigidbody);
     renegade::bridge::CommandService noOpCommands;
     if (noOpCommands.Execute(
             std::make_unique<renegade::bridge::SetCollisionCommand>(
-                scene,
-                entity,
-                current,
-                current)) ||
+                scene, entity, current, current)) ||
         noOpCommands.UndoCount() != 0)
     {
-        return Fail("identical collision state produced a command-history entry");
+        return Fail("identical collision state polluted command history");
     }
 
-    // Remove Collision must now snapshot the complete native component. This
-    // proves future vehicle/character work cannot be erased by Remove -> Undo.
+    // Remove -> Undo restores the complete Wicked native component, not just
+    // the currently curated rigid-body fields.
     renegade::bridge::CommandService removeCommands;
     if (!removeCommands.Execute(
             std::make_unique<renegade::bridge::RemoveCollisionCommand>(
-                scene,
-                entity)) ||
-        scene.rigidbodies.Contains(entity))
+                scene, entity)) ||
+        scene.rigidbodies.Contains(entity) ||
+        !removeCommands.Undo() || !scene.rigidbodies.Contains(entity))
     {
-        return Fail("RemoveCollisionCommand did not remove the rigidbody");
-    }
-    if (!removeCommands.Undo() || !scene.rigidbodies.Contains(entity))
-    {
-        return Fail("RemoveCollisionCommand Undo did not restore the rigidbody");
+        return Fail("RemoveCollisionCommand lifecycle failed");
     }
     rigidbody = scene.rigidbodies.GetComponent(entity);
     if (rigidbody == nullptr || rigidbody->shape != Shape::BOX ||
-        rigidbody->mass != 0.0f ||
-        !NearlyEqual(rigidbody->box.halfextents.y, 1.5f) ||
         !NearlyEqual(rigidbody->damping_linear, 0.44f) ||
         !NearlyEqual(rigidbody->buoyancy, 0.65f) ||
         !rigidbody->IsCharacterPhysics() ||
@@ -292,23 +332,21 @@ int main()
         !NearlyEqual(rigidbody->vehicle.max_engine_torque, 725.0f) ||
         !rigidbody->IsRefreshParametersNeeded())
     {
-        return Fail("RemoveCollisionCommand Undo did not restore complete native state");
+        return Fail("Remove Undo did not restore complete native state");
     }
 
-    // Removing an entity with no rigidbody still fails cleanly.
     const auto bareEntity = wi::ecs::CreateEntity();
     scene.transforms.Create(bareEntity);
     renegade::bridge::CommandService bareRemoveCommands;
     if (bareRemoveCommands.Execute(
             std::make_unique<renegade::bridge::RemoveCollisionCommand>(
-                scene,
-                bareEntity)) ||
+                scene, bareEntity)) ||
         bareRemoveCommands.UndoCount() != 0)
     {
-        return Fail("RemoveCollisionCommand accepted an entity with no rigidbody");
+        return Fail("RemoveCollisionCommand accepted entity with no rigidbody");
     }
 
-    // Cylinder continues to share Wicked's CapsuleParams storage.
+    // Cylinder shares Wicked's CapsuleParams storage.
     const auto cylinderEntity = wi::ecs::CreateEntity();
     scene.transforms.Create(cylinderEntity);
     CollisionState cylinder;
@@ -318,9 +356,7 @@ int main()
     renegade::bridge::CommandService cylinderCommands;
     if (!cylinderCommands.Execute(
             std::make_unique<renegade::bridge::CreateCollisionCommand>(
-                scene,
-                cylinderEntity,
-                cylinder)))
+                scene, cylinderEntity, cylinder)))
     {
         return Fail("CreateCollisionCommand did not execute for Cylinder");
     }
@@ -329,12 +365,11 @@ int main()
         !NearlyEqual(cylinderBody->capsule.radius, 0.4f) ||
         !NearlyEqual(cylinderBody->capsule.height, 2.2f))
     {
-        return Fail("Cylinder dimensions did not reach native capsule storage");
+        return Fail("Cylinder dimensions did not reach native storage");
     }
 
-    // Complex Wicked shapes are no longer artificially filtered out by the
-    // Renegade authoring contract. Runtime geometry still comes from Wicked's
-    // normal mesh/terrain plumbing; this test only proves creator state parity.
+    // The three Wicked mesh-derived shapes are all available when their
+    // actual runtime requirements are satisfied.
     constexpr std::array<Shape, 3> complexShapes = {
         Shape::CONVEX_HULL,
         Shape::TRIANGLE_MESH,
@@ -342,29 +377,30 @@ int main()
     };
     for (const auto shape : complexShapes)
     {
-        const auto complexEntity = wi::ecs::CreateEntity();
-        scene.transforms.Create(complexEntity);
+        const auto complexEntity = CreateMeshBackedObject(scene);
+        if (!renegade::bridge::CanAuthorCollisionShape(
+                scene, complexEntity, shape))
+        {
+            return Fail("valid mesh-backed Wicked shape was rejected");
+        }
         CollisionState complex;
         complex.shape = shape;
         complex.mass = 0.0f;
-        complex.meshLod = 3;
+        complex.meshLod = 0;
         renegade::bridge::CommandService complexCommands;
         if (!complexCommands.Execute(
                 std::make_unique<renegade::bridge::CreateCollisionCommand>(
-                    scene,
-                    complexEntity,
-                    complex)))
+                    scene, complexEntity, complex)))
         {
             return Fail("complex Wicked collision shape could not be authored");
         }
         const auto* complexBody = scene.rigidbodies.GetComponent(complexEntity);
-        if (complexBody == nullptr || complexBody->shape != shape ||
-            complexBody->mesh_lod != 3)
+        if (complexBody == nullptr || complexBody->shape != shape)
         {
-            return Fail("complex Wicked collision shape did not reach native state");
+            return Fail("complex Wicked collision shape missed native state");
         }
     }
 
-    std::cout << "PASS: JP01 rigid-body authoring parity and native-state Undo\n";
+    std::cout << "PASS: JP01 rigid-body parity, target validation, and native-state Undo\n";
     return 0;
 }

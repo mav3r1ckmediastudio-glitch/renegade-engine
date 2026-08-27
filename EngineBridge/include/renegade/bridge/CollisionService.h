@@ -43,6 +43,29 @@ namespace renegade::bridge
         float capsuleHeight = 1.0f;
     };
 
+    // Complex Wicked collision shapes are mesh-derived. Keep that requirement
+    // explicit in Renegade so the future Physics Lab can disable invalid
+    // choices with a useful reason instead of allowing a component that Jolt
+    // can only reject at simulation time.
+    enum class CollisionTargetStatus
+    {
+        Supported,
+        InvalidEntity,
+        MissingTransform,
+        MissingMesh,
+        InvalidMeshData,
+        InvalidHeightFieldGrid,
+    };
+
+    [[nodiscard]] CollisionTargetStatus CheckCollisionTarget(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity entity,
+        wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept;
+    [[nodiscard]] bool CanAuthorCollisionShape(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity entity,
+        wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept;
+
     [[nodiscard]] CollisionState CaptureCollision(
         const wi::scene::RigidBodyPhysicsComponent& rigidbody) noexcept;
     [[nodiscard]] CollisionState SanitizeCollisionState(
@@ -55,7 +78,8 @@ namespace renegade::bridge
     // CollisionState. Character/vehicle state and every other unrelated
     // native field remain untouched. Shape topology changes recreate Wicked's
     // implementation-owned physics object; parameter-only changes request the
-    // normal Wicked refresh path.
+    // normal Wicked refresh path. Target validity is checked by the commands
+    // because this low-level helper intentionally has no Scene/Entity context.
     void ApplyCollision(
         wi::scene::RigidBodyPhysicsComponent& rigidbody,
         const CollisionState& state) noexcept;
