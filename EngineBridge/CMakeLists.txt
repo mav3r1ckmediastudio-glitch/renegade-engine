@@ -48,6 +48,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/CollisionService.h
     include/renegade/bridge/ConstraintService.h
     include/renegade/bridge/CharacterPhysicsService.h
+    include/renegade/bridge/VehiclePhysicsService.h
     include/renegade/bridge/PhysicsService.h
     include/renegade/bridge/OceanService.h
     include/renegade/bridge/PrecipitationService.h
