@@ -726,11 +726,25 @@ namespace
 
 namespace renegade::bridge
 {
-    void BindPhysicsLua(wi::scene::Scene& scene)
+    bool BindPhysicsLua(
+        wi::scene::Scene& scene,
+        lua_State* state) noexcept
     {
+        if (state == nullptr)
+        {
+            return false;
+        }
+
+        // Wicked owns creation/destruction and initialization ordering for its
+        // global VM. JP01 only installs functions into a VM that already exists.
         boundScene = &scene;
-        wi::lua::Initialize();
-        InstallNamespace(wi::lua::GetLuaState());
+        InstallNamespace(state);
+        return true;
+    }
+
+    bool BindPhysicsLua(wi::scene::Scene& scene) noexcept
+    {
+        return BindPhysicsLua(scene, wi::lua::GetLuaState());
     }
 
     void UnbindPhysicsLua(const wi::scene::Scene* scene) noexcept
