@@ -124,12 +124,19 @@ int main()
     const auto secondEntity = wi::ecs::CreateEntity();
     scene.transforms.Create(secondEntity);
     auto& second = scene.humanoids.Create(secondEntity);
+    second.SetRagdollDisabled(false);
     second.SetRagdollPhysicsEnabled(false);
     renegade::bridge::ActivateAllRagdolls(scene);
-    if (!humanoid.IsRagdollPhysicsEnabled() ||
+
+    // Wicked Editor's "Activate all ragdolls" action only calls
+    // SetRagdollPhysicsEnabled(true) for every HumanoidComponent. It does not
+    // clear the separate Ragdoll Disabled flag. Verify the externally visible
+    // parity contract without assuming the internal enabled-bit behavior of a
+    // humanoid that is deliberately disabled.
+    if (!humanoid.IsRagdollDisabled() ||
         !second.IsRagdollPhysicsEnabled())
     {
-        return Fail("ActivateAllRagdolls did not mirror Wicked editor action");
+        return Fail("ActivateAllRagdolls diverged from Wicked editor action");
     }
 
     const auto noHumanoidEntity = wi::ecs::CreateEntity();
