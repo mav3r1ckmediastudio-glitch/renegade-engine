@@ -1,13 +1,38 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`628cf26574a4a2a6e8eb0a5a522d94966ad8917e`
-(`Scene UI Gate 4: recover Asset Browser and placement UX (#104)`).
+`1e0470a9e530dd20c42ddf16662c3771aaede825`
+(`Scene UI Gate 5: recover Environment and Terrain (#105)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Current product programme
+## Immediate stabilization programme
+
+**Scene UI Gate 6 — Consolidated Whole-Editor Acceptance is active.**
+
+Gate 6 is the final cross-workspace hardening pass over the accepted Scene UI
+recovery. It runs exact-head four-way CI and one packaged Release through
+Project Hub, Story Flow, Level and Screen editors, Asset Browser/import/place,
+Environment/Terrain, save/reopen, Test Level and Build Windows Game at
+1280x720, 1680x945 and 1920x1080. Only concrete integration defects found by
+that pass may change code.
+
+Horizon visibility, terrain/grid datum alignment and +/- terrain-ring controls
+remain a later editor-polish gate rather than expanding Gate 6.
+
+Contract: `docs/SCENE_UI_GATE6_CONSOLIDATED_ACCEPTANCE.md`.
+
+## Broader product programme
+
+Scene UI Gate 6 is blocked on an owner-reported Build Windows Game regression.
+The recovery makes every Build entry point save dirty Scene and Story Flow
+documents before the packaging controller reads disk, shares deterministic
+Story Flow route validation between Studio readiness and build preparation,
+and stages only the exact Renegade-owned Terrain/weather resources Runtime
+needs. PR #106 must not merge until exact-head Windows CI and packaged Release
+owner acceptance pass. See
+`docs/SCENE_UI_GATE6_BUILD_GAME_RECOVERY.md`.
 
 The immediate active programme is **Renegade Story Flow**.
 

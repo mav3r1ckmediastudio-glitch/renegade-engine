@@ -455,6 +455,29 @@ cannot be represented as successful build evidence.
    passes unless they are invoked from inside a documented active Wicked pass.
    Do not assume a Wicked virtual render hook returns with attachments bound.
 
+## Standalone build authoring and bundled-resource boundary
+
+Build Windows Game consumes saved project documents. Studio owns one save-first
+handoff for every entry point: dirty Scene state is committed first, dirty Story
+Flow state second, and only then may the synchronous build controller inspect
+the project. A save cancellation or error is a build failure, never permission
+to package stale disk state.
+
+The live Story Flow `Runtime Ready` indicator and standalone preparation share
+one deterministic route authority. The editor validates the in-memory document;
+the builder validates the saved document. Both require a bounded route from
+Game Start to Complete Game under the default Runtime state before Screen
+outcome parity and packaging can succeed.
+
+Creator project dependencies remain project-relative and fail closed when they
+escape the root. Renegade-owned Runtime resources that are generated or copied
+beside Studio are a separate exact-file boundary: a Scene outside-project
+diagnostic may be admitted only when its canonical filesystem identity matches
+a controller declaration that is also hashed and staged as Runtime support at
+the declared package-root `Content/...` destination. The declaration is not a
+directory allowlist. Unrelated external files remain fatal, and existing build
+plan, manifest, integrity and safe-promotion services govern the staged bytes.
+
 ## UI foundation
 
 ADR 0002 accepts Wicked's native `wiGUI` as Renegade's production integration
