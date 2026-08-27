@@ -108,7 +108,10 @@ namespace renegade::bridge
     };
 
     // Removes an existing RigidBodyPhysicsComponent (the "No Collision"
-    // choice). Undo recreates it with the complete captured authoring state.
+    // choice). Undo restores the complete native component snapshot rather
+    // than only CollisionState, so later character/vehicle settings that share
+    // Wicked's component cannot be silently lost. The live physicsobject is
+    // deliberately excluded from that snapshot and is recreated by Wicked.
     class RemoveCollisionCommand final : public ICommand
     {
     public:
@@ -122,7 +125,7 @@ namespace renegade::bridge
     private:
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
-        CollisionState removed_;
+        wi::scene::RigidBodyPhysicsComponent removedNative_;
         bool hasRemoved_ = false;
     };
 }

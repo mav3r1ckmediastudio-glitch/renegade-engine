@@ -294,7 +294,14 @@ namespace renegade::bridge
         {
             return false;
         }
-        removed_ = CaptureCollision(*existing);
+
+        // Preserve the complete Wicked-owned component so an Undo cannot lose
+        // fields that live outside CollisionState (notably character/vehicle
+        // authoring). Do not retain the implementation-owned live Jolt object:
+        // removing the real component must destroy it normally.
+        removedNative_ = *existing;
+        removedNative_.physicsobject.reset();
+        removedNative_.SetRefreshParametersNeeded(true);
         hasRemoved_ = true;
         scene_->rigidbodies.Remove(entity_);
         return true;
@@ -308,7 +315,10 @@ namespace renegade::bridge
         {
             return;
         }
+
         auto& rigidbody = scene_->rigidbodies.Create(entity_);
-        ApplyCollision(rigidbody, removed_);
+        rigidbody = removedNative_;
+        rigidbody.physicsobject.reset();
+        rigidbody.SetRefreshParametersNeeded(true);
     }
 }
