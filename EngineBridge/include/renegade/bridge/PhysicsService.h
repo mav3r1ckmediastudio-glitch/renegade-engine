@@ -3,6 +3,7 @@
 #include <WickedEngine.h>
 
 #include "renegade/bridge/ConstraintService.h"
+#include "renegade/bridge/CharacterPhysicsService.h"
 
 namespace renegade::bridge
 {
