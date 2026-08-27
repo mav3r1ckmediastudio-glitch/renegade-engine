@@ -3,12 +3,15 @@ if(NOT DEFINED RENEGADE_SOURCE_DIR)
 endif()
 
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowJourneyChrome.h" chrome)
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp" scene_chrome)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowRenderPath.h" render_path)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStoryFlowWorkspace.cpp" workspace)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StoryFlowStudioIntegration.h" integration)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h" application)
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp" application_source)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/WindowsGameBuildController.cpp" build_controller)
 file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/src/BuildVerificationService.cpp" build_verification)
+file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/src/WindowsGameBuildProjectService.cpp" build_project)
 
 function(require_contains haystack needle label)
     string(FIND "${${haystack}}" "${needle}" position)
@@ -61,6 +64,7 @@ require_contains(workspace "AuditScreenOutcomes" "Runtime-parity outcome audit")
 require_contains(workspace "runtimeValidationReady_" "Runtime readiness state")
 require_contains(workspace "VALIDATION FAILED //" "visible Runtime-readiness failure")
 require_contains(workspace "Runtime Ready" "honest green Runtime-ready state")
+require_contains(workspace "ResolveStoryFlowRuntimeRoute" "deterministic Runtime route validation")
 
 # The Graph Inspector must reserve a dedicated row beneath stable/document IDs
 # before node action buttons, preventing the owner-observed SCENE/APPLY overlap.
@@ -79,6 +83,13 @@ require_contains(build_controller "BUILD COMPLETE" "successful build completion 
 require_contains(build_controller "BUILD FAILED" "failed build completion state")
 require_contains(build_controller "progress.Complete(true" "successful progress completion")
 require_contains(build_controller "progress.Complete(false" "failed progress completion")
+require_contains(build_controller "renegade-terrain-default-grass-basecolor" "bundled Terrain base-colour support")
+require_contains(build_controller "renegade-terrain-default-grass-normal" "bundled Terrain normal support")
+require_contains(build_controller "renegade-terrain-default-grass-surface" "bundled Terrain surface support")
+require_contains(build_controller "renegade-weather-snowflake" "bundled weather support")
+require_contains(build_controller "projectState.bundledResources" "validated bundled resource staging handoff")
+require_contains(build_project "WindowsGameBundledResource" "exact bundled Runtime resource policy")
+require_contains(build_project "fs::equivalent" "filesystem-identity bundled resource admission")
 
 # The project home must own runtime lifecycle and build dispatch. Reintroducing
 # the old inactive-Level-Editor pending action would recreate the owner's dead
@@ -87,12 +98,19 @@ require_contains(integration "StartProjectPlayFromStoryFlowNow" "direct project 
 require_contains(integration "PollProjectPlayFromStoryFlow" "project runtime polling")
 require_contains(integration "StopProjectPlayFromStoryFlowNow" "project runtime stop")
 require_contains(integration "BuildActiveWindowsGame" "project-home Windows build dispatch")
+require_contains(integration "ConsumeWindowsGameBuildRequest" "Scene Editor build request handoff")
+require_contains(integration "authoringSession_.Save(saveError)" "dirty StoryFlow save before Scene build")
+require_contains(integration "levelEditor.RequestWindowsGameBuild();" "shared save-first Story Flow build entry")
 require_not_contains(integration "RequestProjectPlayFromStoryFlow();" "inactive Level Editor play queue")
 
 require_contains(application "StartProjectPlayFromStoryFlowNow" "Studio runtime lifecycle seam")
 require_contains(application "PollProjectPlayFromStoryFlow" "Studio runtime poll seam")
 require_contains(application "StopProjectPlayFromStoryFlowNow" "Studio runtime stop seam")
 require_contains(application "IsProjectPlayFromStoryFlowActive" "Studio runtime active-state seam")
+require_contains(application "BuildWindowsGame" "Scene Editor build action")
+require_contains(application_source "SaveSceneAfterTransientCleanup(scenePath, finishScenePreparation)" "dirty Scene save before build")
+require_contains(application_source "windowsGameBuildRequested_ = true" "saved Scene build handoff")
+require_not_contains(scene_chrome "BuildActiveWindowsGame" "direct stale-disk Scene chrome build")
 
 # Gate 10 packaged verification must preserve legacy startup-Screen proof while
 # accepting modern Flow-native smoke only when it explicitly proves there was

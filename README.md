@@ -17,8 +17,11 @@ framework.
 > smoke-test the staged package on DX12, validate its exact contents and safely
 > promote it without destroying the previous successful build. The project owner
 > then launched the promoted executable directly from Explorer and confirmed the
-> Runtime screen and Story Flow entered Level One successfully. Renegade is still
-> a development project, not a distribution-ready v1 game engine.
+> Runtime screen and Story Flow entered Level One successfully. Scene UI Gate 6
+> acceptance has since exposed save-order and bundled-Terrain regressions in that
+> owner-facing build path; recovery is active and Gate 6 must not merge until its
+> packaged Release retest passes. Renegade is still a development project, not a
+> distribution-ready v1 game engine.
 
 Scene UI Gate 5 is also accepted and merged. The recovered Scene Editor now has
 independent Environment and Terrain ownership, complete realistic-sky/Sun

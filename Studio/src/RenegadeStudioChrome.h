@@ -278,6 +278,7 @@ namespace renegade::studio
             SceneWorkspace,
             TestLevelPlay,
             TestLevelStop,
+            BuildWindowsGame,
             ValidateModelImport,
         };
 

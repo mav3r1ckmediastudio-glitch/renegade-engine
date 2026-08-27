@@ -25,6 +25,15 @@ Contract: `docs/SCENE_UI_GATE6_CONSOLIDATED_ACCEPTANCE.md`.
 
 ## Broader product programme
 
+Scene UI Gate 6 is blocked on an owner-reported Build Windows Game regression.
+The recovery makes every Build entry point save dirty Scene and Story Flow
+documents before the packaging controller reads disk, shares deterministic
+Story Flow route validation between Studio readiness and build preparation,
+and stages only the exact Renegade-owned Terrain/weather resources Runtime
+needs. PR #106 must not merge until exact-head Windows CI and packaged Release
+owner acceptance pass. See
+`docs/SCENE_UI_GATE6_BUILD_GAME_RECOVERY.md`.
+
 The immediate active programme is **Renegade Story Flow**.
 
 Story Flow is the project-level authoring home for the complete player journey.

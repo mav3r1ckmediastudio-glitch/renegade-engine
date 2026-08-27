@@ -239,6 +239,36 @@ namespace renegade::studio
             // Project-level actions belong to the project home, not the Level
             // Editor render path. Keep their Runtime/build lifecycle alive while
             // Story Flow remains the active surface.
+            if (levelEditor.ConsumeWindowsGameBuildRequest())
+            {
+                std::string saveError;
+                if (authoringSession_.IsDirty() &&
+                    !authoringSession_.Save(saveError))
+                {
+                    const std::string message =
+                        "BUILD GAME // BLOCKED // STORY FLOW SAVE FAILED // " +
+                        saveError;
+                    storyFlow.SetExternalStatus(message);
+                    levelEditor.SetWindowsGameBuildStatus(message);
+                }
+                else if (buildGameBusy_ || pendingBuildGame_)
+                {
+                    levelEditor.SetWindowsGameBuildStatus(
+                        "BUILD WINDOWS GAME // ALREADY RUNNING");
+                }
+                else
+                {
+                    pendingBuildGame_ = true;
+                    buildGameBusy_ = true;
+                    buildGameDispatchArmed_ = false;
+                    storyFlow.SetProjectCommandState(
+                        levelEditor.IsProjectPlayFromStoryFlowActive(), true);
+                    storyFlow.SetExternalStatus(
+                        "BUILD GAME // QUEUED // DIRTY DOCUMENTS SAVED");
+                    levelEditor.SetWindowsGameBuildStatus(
+                        "BUILD WINDOWS GAME // QUEUED // DIRTY DOCUMENTS SAVED");
+                }
+            }
             ProcessProjectCommands(levelEditor, storyFlow);
             ProcessPendingLevelAction(levelEditor, storyFlow, session, project);
             ProcessPendingScreenAction(storyFlow, project);
@@ -365,13 +395,9 @@ namespace renegade::studio
                                 : "TEST GAME // QUEUED // SAVED STORY FLOW");
                         break;
                     case Action::BuildGame:
-                        pendingBuildGame_ = true;
-                        buildGameBusy_ = true;
-                        buildGameDispatchArmed_ = false;
-                        storyFlow.SetProjectCommandState(
-                            levelEditor.IsProjectPlayFromStoryFlowActive(), true);
+                        levelEditor.RequestWindowsGameBuild();
                         storyFlow.SetExternalStatus(
-                            "BUILD GAME // QUEUED // SAVED STORY FLOW");
+                            "BUILD GAME // SAVING DIRTY PROJECT DOCUMENTS");
                         break;
                     case Action::Settings:
                         storyFlow.SetExternalStatus(
@@ -613,6 +639,8 @@ namespace renegade::studio
                     buildGameBusy_ = false;
                     storyFlow.SetExternalStatus(
                         "BUILD GAME // BLOCKED // TEST GAME RUNNING");
+                    levelEditor.SetWindowsGameBuildStatus(
+                        "BUILD GAME // BLOCKED // TEST GAME RUNNING");
                 }
                 else
                 {
@@ -621,11 +649,11 @@ namespace renegade::studio
                     const WindowsGameBuildUiResult build =
                         BuildActiveWindowsGame();
                     buildGameBusy_ = false;
-                    storyFlow.SetExternalStatus(
-                        build.succeeded
-                            ? "BUILD GAME // COMPLETE // " +
-                                build.finalOutputPath
-                            : "BUILD GAME // FAILED // " + build.message);
+                    const std::string status = build.succeeded
+                        ? "BUILD GAME // COMPLETE // " + build.finalOutputPath
+                        : "BUILD GAME // FAILED // " + build.message;
+                    storyFlow.SetExternalStatus(status);
+                    levelEditor.SetWindowsGameBuildStatus(status);
                 }
             }
 

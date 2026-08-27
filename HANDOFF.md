@@ -21,6 +21,38 @@ Windows checks, the packaged Release passed project-owner runtime testing, and
 PR #105 merged as `1e0470a9e530dd20c42ddf16662c3771aaede825` on
 2026-08-27. The rejected truncated-package heads remain failure evidence only.
 
+### Build Windows Game blocker repaired in this candidate
+
+Implementation commit:
+`a2f65c3173d796f8dda08f8a8a7332017178408f` (tree
+`ac121145dee8c76907847636ce736fec572c16ca`). Changed code and regressions are
+bounded to `EngineBridge` standalone project preparation, the Studio chrome /
+application / Story Flow build handoff, the Windows build controller and the
+two focused build/source-contract tests.
+
+The owner found two independent standalone-build blockers during Gate 6
+acceptance. The Scene BUILD menu bypassed authoring saves and read a stale
+on-disk Story Flow, while generated Terrain scenes referenced Renegade's
+default grass beside Studio and were correctly rejected as outside-project.
+
+The recovery candidate:
+
+- routes both Scene and Story Flow Build buttons through one save-first Scene
+  then Story Flow handoff;
+- blocks packaging on save cancellation/failure;
+- makes Story Flow `Runtime Ready` and saved build preparation use the same
+  deterministic Game Start-to-Complete Game route authority;
+- admits only exact filesystem-equivalent Scene references to four declared
+  Renegade Terrain/weather resources;
+- hashes and stages those same declarations at package-root `Content/...`
+  destinations; and
+- retains fatal rejection for arbitrary outside-project dependencies.
+
+Focused tests cover the shared route, stale direct-call rejection, exact-file
+admission, unrelated-file rejection and package-plan destination. PR #106 must
+not merge until the sequence in
+`docs/SCENE_UI_GATE6_BUILD_GAME_RECOVERY.md` passes.
+
 Gate 6 is the final whole-editor integration/acceptance pass, not another
 feature gate. The current source audit confirms the established wiring remains:
 
@@ -61,18 +93,19 @@ Local evidence:
 - `docs/FEATURE_MATRIX.csv` parsed as 36 structurally consistent 16-column rows
   — PASS;
 - modified Markdown local-link target validation — PASS;
-- no Studio, EngineBridge, Runtime, shader, asset or Wicked source changed;
-- local CMake/Windows build — not run because CMake and the Windows toolchain are
-  unavailable in this Linux scratch environment; exact-head CI is authoritative.
+- direct Gate 6 Build Game recovery source-seam assertions with `rg -Fq` — PASS;
+- direct GNU C++17 Journey fixed-shell/role regression — PASS;
+- local CMake/Windows build and `RenegadeWindowsGameBuildProjectTests` — not run
+  because CMake, Wicked and the Windows toolchain are unavailable in this Linux
+  scratch environment; exact-head CI is authoritative.
 
 Required next evidence:
 
-1. publish one complete Gate 6 candidate;
-2. require exact-head Studio Debug/Release and baseline Debug/Release CI;
-3. download one packaged Release;
-4. run the consolidated owner sequence at 1280x720, 1680x945 and 1920x1080 by
+1. require exact-head Studio Debug/Release and baseline Debug/Release CI;
+2. download one packaged Release;
+3. run the consolidated owner sequence at 1280x720, 1680x945 and 1920x1080 by
    resizing the same build; and
-5. do not merge before explicit project-owner acceptance.
+4. do not merge before explicit project-owner acceptance.
 
 Horizon visibility, terrain/grid datum alignment and +/- terrain-ring controls
 are deliberately deferred to a subsequent editor-polish gate.

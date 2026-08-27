@@ -3012,6 +3012,9 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::TestLevelStop:
                 pendingAction_ = EditorAction::StopTestLevel;
                 break;
+            case RenegadeStudioChrome::Action::BuildWindowsGame:
+                pendingAction_ = EditorAction::BuildWindowsGame;
+                break;
             case RenegadeStudioChrome::Action::ValidateModelImport:
                 pendingAction_ = EditorAction::ValidateModelImport;
                 break;
@@ -5707,6 +5710,9 @@ namespace renegade::studio
             break;
         case EditorAction::StopTestLevel:
             StopTestLevel();
+            break;
+        case EditorAction::BuildWindowsGame:
+            RequestWindowsGameBuild();
             break;
         case EditorAction::StartSunPreview:
             StartSunPreview();
@@ -9367,6 +9373,72 @@ wi::eventhandler::Subscribe_Once(
     void StudioRenderPath::RequestProjectPlayFromStoryFlow()
     {
         pendingAction_ = EditorAction::StartProjectPlay;
+    }
+
+    void StudioRenderPath::RequestWindowsGameBuild()
+    {
+        if (session_ == nullptr || !session_->Projects().HasProject())
+        {
+            SetWindowsGameBuildStatus(
+                "BUILD FAILED // AN ACTIVE RENEGADE PROJECT IS REQUIRED");
+            return;
+        }
+        if (windowsGameBuildPreparationActive_ || windowsGameBuildRequested_)
+        {
+            SetWindowsGameBuildStatus(
+                "BUILD WINDOWS GAME // ALREADY QUEUED");
+            return;
+        }
+
+        windowsGameBuildPreparationActive_ = true;
+        SetWindowsGameBuildStatus(
+            "BUILD WINDOWS GAME // SAVING DIRTY PROJECT DOCUMENTS");
+        StopSunPreview(true);
+
+        const auto finishScenePreparation = [this](const bool saved)
+        {
+            windowsGameBuildPreparationActive_ = false;
+            if (!saved)
+            {
+                const std::string detail = session_ == nullptr
+                    ? std::string{}
+                    : session_->Scenes().LastError();
+                SetWindowsGameBuildStatus(
+                    detail.empty()
+                        ? "BUILD FAILED // SCENE SAVE WAS CANCELLED OR FAILED"
+                        : "BUILD FAILED // SCENE SAVE FAILED // " + detail);
+                return;
+            }
+
+            windowsGameBuildRequested_ = true;
+            SetWindowsGameBuildStatus(
+                "BUILD WINDOWS GAME // QUEUED // SCENE SAVED");
+        };
+
+        if (!session_->Commands().IsDirty())
+        {
+            finishScenePreparation(true);
+            return;
+        }
+
+        const std::string scenePath = session_->Scenes().CurrentPath();
+        if (scenePath.empty())
+        {
+            SaveSceneAs(finishScenePreparation);
+            return;
+        }
+        SaveSceneAfterTransientCleanup(scenePath, finishScenePreparation);
+    }
+
+    bool StudioRenderPath::ConsumeWindowsGameBuildRequest() noexcept
+    {
+        return std::exchange(windowsGameBuildRequested_, false);
+    }
+
+    void StudioRenderPath::SetWindowsGameBuildStatus(std::string message)
+    {
+        studioChrome_.SetStatusText(std::move(message));
+        studioChrome_.SetActiveBottomTab(2, true);
     }
 
     void StudioRenderPath::RefreshAssetBrowser()

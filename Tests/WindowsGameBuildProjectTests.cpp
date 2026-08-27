@@ -364,8 +364,61 @@ int main(int argc, char** argv)
         levelOneComplete,
         levelTwoComplete,
     };
+
+    StoryFlowRuntimeRoute liveRoute;
+    if (!ResolveStoryFlowRuntimeRoute(flow, liveRoute, error) ||
+        liveRoute.outcomes !=
+            std::vector<std::string>{
+                "play", "level.complete", "level.complete"})
+    {
+        return Fail(root,
+            "shared live Story Flow Runtime readiness rejected the valid journey: " +
+                error);
+    }
+    FlowDocument unrouted = flow;
+    unrouted.routes.erase(
+        std::remove_if(
+            unrouted.routes.begin(),
+            unrouted.routes.end(),
+            [&](const FlowRoute& route)
+            {
+                return route.sourceNodeId == gameStartId;
+            }),
+        unrouted.routes.end());
+    if (ResolveStoryFlowRuntimeRoute(unrouted, liveRoute, error) ||
+        error.find("could not leave Game Start") == std::string::npos)
+    {
+        return Fail(root,
+            "shared live Story Flow Runtime readiness accepted an unrouted Game Start");
+    }
+
     if (!WriteFlowDocument(flowPath.generic_u8string(), flow, error))
         return Fail(root, "could not persist Gate 10 Screen/Level Story Flow: " + error);
+
+    // Scene UI Gate 6 recovery: new Terrain binds Renegade's bundled default
+    // grass through an absolute Studio-package path. It remains outside the
+    // creator project, but the exact file is safe only when the controller
+    // also stages it as hashed Runtime support at its governed destination.
+    const fs::path bundledBaseColor = root / "StudioPackage" / "Content" /
+        "terrain" / "default_grass" / "default_grass_basecolor.tga";
+    fs::create_directories(bundledBaseColor.parent_path(), ec);
+    if (ec)
+        return Fail(root, "could not create bundled Terrain resource fixture");
+    std::ofstream(bundledBaseColor, std::ios::binary) << "bundled-grass";
+
+    wi::scene::Scene terrainScene;
+    auto& terrainMaterial =
+        terrainScene.materials.Create(wi::ecs::CreateEntity());
+    terrainMaterial.textures[
+        wi::scene::MaterialComponent::BASECOLORMAP].name =
+            bundledBaseColor.generic_u8string();
+    wi::Archive terrainArchive(levelOne.generic_u8string(), false, false);
+    if (!terrainArchive.IsOpen())
+        return Fail(root, "could not open Terrain build regression archive");
+    terrainScene.Serialize(terrainArchive);
+    if (!terrainArchive.SaveFile(levelOne.generic_u8string()))
+        return Fail(root, "could not save Terrain build regression archive");
+    terrainArchive = wi::Archive();
 
     if (!ReplaceDescriptorText(
             descriptor,
@@ -397,12 +450,78 @@ int main(int argc, char** argv)
             "Gate 10 Flow-native project descriptor did not reopen cleanly: " + error);
     }
 
+    WindowsGameBuildProjectState unsafeTerrainState;
+    if (!PrepareWindowsGameBuildProjectState(
+            gate10Project, unsafeTerrainState, error))
+    {
+        return Fail(root,
+            "unmapped Terrain dependency could not be inspected: " + error);
+    }
+    const auto hasOutsideProject = [](const DependencyGraph& graph)
+    {
+        return std::any_of(
+            graph.diagnostics.begin(),
+            graph.diagnostics.end(),
+            [](const DependencyDiagnostic& diagnostic)
+            {
+                return diagnostic.code ==
+                    DependencyDiagnosticCode::OutsideProject;
+            });
+    };
+    if (!hasOutsideProject(unsafeTerrainState.dependencyGraph))
+    {
+        return Fail(root,
+            "unmapped Studio-package Terrain resource was not rejected as external");
+    }
+
+    const fs::path unrelatedBundled = root / "StudioPackage" / "Content" /
+        "terrain" / "unrelated.tga";
+    std::ofstream(unrelatedBundled, std::ios::binary) << "unrelated";
+    const std::vector<WindowsGameBundledResource> wrongBundledResources = {
+        {
+            "renegade-unrelated-resource",
+            unrelatedBundled.generic_u8string(),
+            "Content/terrain/unrelated.tga",
+        },
+    };
+    WindowsGameBuildProjectState wrongTerrainState;
+    if (!PrepareWindowsGameBuildProjectState(
+            gate10Project, wrongBundledResources, wrongTerrainState, error) ||
+        !hasOutsideProject(wrongTerrainState.dependencyGraph))
+    {
+        return Fail(root,
+            "an unrelated bundled file admitted an arbitrary external Scene dependency");
+    }
+
+    const std::vector<WindowsGameBundledResource> bundledResources = {
+        {
+            "renegade-terrain-default-grass-basecolor",
+            bundledBaseColor.generic_u8string(),
+            "Content/terrain/default_grass/default_grass_basecolor.tga",
+        },
+    };
     WindowsGameBuildProjectState gate10State;
     if (!PrepareWindowsGameBuildProjectState(
-            gate10Project, gate10State, error))
+            gate10Project, bundledResources, gate10State, error))
     {
         return Fail(root,
             "Gate 10 build preparation rejected a Story Flow Screen/Level journey: " + error);
+    }
+    if (hasOutsideProject(gate10State.dependencyGraph))
+    {
+        return Fail(root,
+            "exact governed Terrain Runtime resource remained an external dependency");
+    }
+    if (gate10State.bundledResources.size() != 1 ||
+        gate10State.bundledResources.front().logicalName !=
+            bundledResources.front().logicalName ||
+        gate10State.bundledResources.front().sourcePath !=
+            bundledResources.front().sourcePath ||
+        gate10State.bundledResources.front().destinationPath !=
+            bundledResources.front().destinationPath)
+    {
+        return Fail(root,
+            "build preparation did not preserve the validated Runtime resource declaration");
     }
 
     const std::vector<std::string> expectedOutcomes = {
@@ -447,6 +566,13 @@ int main(int argc, char** argv)
             std::string(64, 'b'),
             "pinned:gate10-owner-regression",
         },
+        {
+            "renegade-terrain-default-grass-basecolor",
+            "Content/terrain/default_grass/default_grass_basecolor.tga",
+            13,
+            std::string(64, 'c'),
+            "repo:gate10-owner-regression",
+        },
     };
 
     WindowsGameBuildPlan plan;
@@ -469,6 +595,14 @@ int main(int argc, char** argv)
     {
         return Fail(root,
             "Gate 10 build plan omitted governed Flow/Screen/Scene runtime content");
+    }
+    const WindowsGameBuildFile* bundledTerrain = FindPlanFile(
+        plan, "Content/terrain/default_grass/default_grass_basecolor.tga");
+    if (bundledTerrain == nullptr ||
+        bundledTerrain->kind != WindowsGameBuildFileKind::RuntimeSupport)
+    {
+        return Fail(root,
+            "Gate 6 build recovery omitted governed Terrain Runtime support");
     }
 
     fs::remove_all(root, ignored);
