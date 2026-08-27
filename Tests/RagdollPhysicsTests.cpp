@@ -126,10 +126,17 @@ int main()
     auto& second = scene.humanoids.Create(secondEntity);
     second.SetRagdollPhysicsEnabled(false);
     renegade::bridge::ActivateAllRagdolls(scene);
-    if (!humanoid.IsRagdollPhysicsEnabled() ||
+
+    // Wicked Editor's "Activate all ragdolls" action only requests dynamic
+    // ragdoll physics on each HumanoidComponent. It deliberately does not
+    // clear Ragdoll Disabled, and Wicked's setter refuses to activate a
+    // disabled humanoid. Mirror that exact behavior: eligible humanoids are
+    // activated, while an explicitly disabled humanoid remains disabled.
+    if (!humanoid.IsRagdollDisabled() ||
+        humanoid.IsRagdollPhysicsEnabled() ||
         !second.IsRagdollPhysicsEnabled())
     {
-        return Fail("ActivateAllRagdolls did not mirror Wicked editor action");
+        return Fail("ActivateAllRagdolls diverged from Wicked editor disabled-state semantics");
     }
 
     const auto noHumanoidEntity = wi::ecs::CreateEntity();
