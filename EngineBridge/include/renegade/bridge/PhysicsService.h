@@ -2,6 +2,8 @@
 
 #include <WickedEngine.h>
 
+#include "renegade/bridge/ConstraintService.h"
+
 namespace renegade::bridge
 {
     // JP01 foundation contract. Renegade owns this API; Wicked remains the
