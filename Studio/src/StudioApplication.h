@@ -20,6 +20,7 @@
 #include "renegade/bridge/TerrainService.h"
 #include "CreatorImportPreviewWindow.h"
 #include "RenegadeStudioChrome.h"
+#include "RenegadePhysicsLabStudioChrome.h"
 #include "RenegadeProjectHub.h"
 #include "RenegadeProjectLoadingOverlay.h"
 #include "RenegadeStoryFlowRenderPath.h"
@@ -634,7 +635,7 @@ namespace renegade::studio
         RenegadeComboBox importScaleModeCombo_;
         RenegadeButton importScaleApplyButton_;
         RenegadeButton importScaleDismissButton_;
-        CreatorAssetStudioChrome studioChrome_;
+        RenegadePhysicsLabStudioChrome studioChrome_;
         TestLevelRuntimeProcess testLevelRuntime_;
         bool projectPreviewActive_ = false;
         Translator gizmo_;
