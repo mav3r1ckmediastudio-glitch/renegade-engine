@@ -6,34 +6,39 @@
 
 namespace renegade::bridge
 {
-    // A curated view of wi::scene::RigidBodyPhysicsComponent, mirroring the
-    // MaterialState/LightState pattern: fields a creator actually reaches
-    // for, applied non-destructively over whatever else is on the
-    // component. Deliberately scoped to the four primitive shapes that are
-    // sized from explicit dimensions rather than derived from mesh
-    // geometry (Box/Sphere/Capsule/Cylinder), so any of them can attach to
-    // any entity with a TransformComponent. Convex Hull and Triangle Mesh
-    // need a MeshComponent-bearing entity and a mesh_lod to derive their
-    // shape from instead -- a different, not-yet-designed targeting
-    // problem (which entity in a multi-node imported hierarchy owns the
-    // collider?), and Triangle Mesh is only physically valid for a static
-    // body in most physics backends. Heightfield is a regular-grid terrain
-    // shape and out of scope entirely -- Renegade already covers that
-    // domain through TerrainService, not an imported prop's collider.
+    // Creator-facing rigid-body authoring state for JP01. This mirrors the
+    // standard rigid-body controls exposed by Wicked Editor while leaving
+    // character and vehicle configuration to their dedicated JP01 domains.
+    // Wicked's RigidBodyPhysicsComponent remains the serialized source of
+    // truth; this type is only the Renegade command/UI façade over it.
     struct CollisionState
     {
         wi::scene::RigidBodyPhysicsComponent::CollisionShape shape =
             wi::scene::RigidBodyPhysicsComponent::CollisionShape::BOX;
-        // 0 makes the body static, matching Wicked's own field comment.
+
+        // Standard body properties exposed by Wicked Editor.
+        // mass == 0 creates a static body.
         float mass = 1.0f;
         float friction = 0.2f;
         float restitution = 0.1f;
+        float dampingLinear = 0.05f;
+        float dampingAngular = 0.05f;
+        float buoyancy = 1.2f;
+        XMFLOAT3 localOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        uint32_t meshLod = 0;
+
+        bool kinematic = false;
+        bool locked2D = false;
+        bool disableDeactivation = false;
+        bool startDeactivated = false;
+
+        // Primitive shape parameters. Convex Hull, Triangle Mesh and Height
+        // Field derive their geometry from Wicked's normal scene/mesh/terrain
+        // plumbing rather than inventing a Renegade-side geometry format.
         XMFLOAT3 boxHalfExtents = XMFLOAT3(1.0f, 1.0f, 1.0f);
         float sphereRadius = 1.0f;
         // Wicked stores Capsule and Cylinder dimensions in the same
-        // underlying CapsuleParams (see RigidBodyPhysicsComponent's own
-        // "also cylinder params" comment) -- one radius/height pair here
-        // serves both shapes, selected by CollisionState::shape.
+        // underlying CapsuleParams structure.
         float capsuleRadius = 1.0f;
         float capsuleHeight = 1.0f;
     };
@@ -46,21 +51,18 @@ namespace renegade::bridge
         const CollisionState& before,
         const CollisionState& after) noexcept;
 
-    // Applies shape, mass, friction, restitution, and only the dimension
-    // fields relevant to the chosen shape. Vehicle/character physics and
-    // every other unexposed field on the component remain untouched. Marks
-    // the component for a physics-parameter refresh so a live simulation
-    // rebuilds the underlying collision shape, matching the component's own
-    // documented purpose for SetRefreshParametersNeeded().
+    // Applies only the standard rigid-body authoring surface represented by
+    // CollisionState. Character/vehicle state and every other unrelated
+    // native field remain untouched. Shape topology changes recreate Wicked's
+    // implementation-owned physics object; parameter-only changes request the
+    // normal Wicked refresh path.
     void ApplyCollision(
         wi::scene::RigidBodyPhysicsComponent& rigidbody,
         const CollisionState& state) noexcept;
 
     // Attaches a new RigidBodyPhysicsComponent to targetEntity if it does
-    // not already have one. Unlike CreateLightCommand, this never creates a
-    // new entity -- targetEntity must already exist and persist for the
-    // life of this command -- so Undo/Redo is a plain component
-    // add/remove, not an entity-level snapshot.
+    // not already have one. This never creates a new entity, so Undo/Redo is
+    // a component add/remove rather than an entity snapshot.
     class CreateCollisionCommand final : public ICommand
     {
     public:
@@ -78,8 +80,8 @@ namespace renegade::bridge
         CollisionState initial_;
     };
 
-    // Edits an existing RigidBodyPhysicsComponent. Mirrors SetMaterialCommand/
-    // SetLightCommand exactly.
+    // Edits an existing RigidBodyPhysicsComponent through the shared Renegade
+    // command history.
     class SetCollisionCommand final : public ICommand
     {
     public:
@@ -106,8 +108,7 @@ namespace renegade::bridge
     };
 
     // Removes an existing RigidBodyPhysicsComponent (the "No Collision"
-    // choice). Undo recreates it with the captured prior state, the inverse
-    // of CreateCollisionCommand.
+    // choice). Undo recreates it with the complete captured authoring state.
     class RemoveCollisionCommand final : public ICommand
     {
     public:
