@@ -20,6 +20,40 @@ namespace
 
 int main()
 {
+    {
+        wi::scene::Scene weatherOnlyScene;
+        const auto weatherOnlyEnvironment = wi::ecs::CreateEntity();
+        auto& weatherOnly =
+            weatherOnlyScene.weathers.Create(weatherOnlyEnvironment);
+        weatherOnly.SetRealisticSky(true);
+        weatherOnlyScene.weather = weatherOnly;
+
+        renegade::bridge::CommandService recoveryCommands;
+        auto createSun =
+            std::make_unique<renegade::bridge::CreateSunCommand>(
+                weatherOnlyScene,
+                weatherOnlyEnvironment);
+        auto* createSunResult = createSun.get();
+        if (!recoveryCommands.Execute(std::move(createSun)))
+        {
+            return Fail("Weather-only Level Sun recovery did not execute");
+        }
+        const auto recoveredSun = createSunResult->CreatedEntity();
+        if (recoveredSun == wi::ecs::INVALID_ENTITY ||
+            renegade::bridge::FindPrimarySunLight(weatherOnlyScene) !=
+                recoveredSun ||
+            weatherOnlyScene.weather.sunColor.x <= 0.0f ||
+            !recoveryCommands.Undo() ||
+            renegade::bridge::FindPrimarySunLight(weatherOnlyScene) !=
+                wi::ecs::INVALID_ENTITY ||
+            !recoveryCommands.Redo() ||
+            renegade::bridge::FindPrimarySunLight(weatherOnlyScene) !=
+                recoveredSun)
+        {
+            return Fail("Weather-only Level Sun recovery Undo/Redo failed");
+        }
+    }
+
     wi::scene::Scene scene;
     const auto environment = wi::ecs::CreateEntity();
     auto& weather = scene.weathers.Create(environment);

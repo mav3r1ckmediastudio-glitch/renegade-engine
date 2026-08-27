@@ -350,11 +350,11 @@ namespace
             0.0f,
             0.0f);
         material.textures[wi::scene::MaterialComponent::BASECOLORMAP].name =
-            std::string(root) + "default_grass_basecolor.dds";
+            std::string(root) + "default_grass_basecolor.tga";
         material.textures[wi::scene::MaterialComponent::NORMALMAP].name =
-            std::string(root) + "default_grass_normal.dds";
+            std::string(root) + "default_grass_normal.tga";
         material.textures[wi::scene::MaterialComponent::SURFACEMAP].name =
-            std::string(root) + "default_grass_surface.dds";
+            std::string(root) + "default_grass_surface.tga";
         material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource =
             wi::resourcemanager::Load(material.textures[
                 wi::scene::MaterialComponent::BASECOLORMAP].name);
@@ -614,8 +614,7 @@ namespace renegade::bridge
                     wi::scene::MaterialComponent::BASECOLORMAP].name;
                 const std::string defaultName =
                     wi::helper::GetFileNameFromPath(baseColor);
-                if (defaultName == "default_grass_basecolor.dds" ||
-                    defaultName == "default_grass_basecolor.tga")
+                if (defaultName == "default_grass_basecolor.tga")
                 {
                     const float textureScale = std::clamp(
                         material->texMulAdd.x *
@@ -759,9 +758,9 @@ namespace renegade::bridge
         TerrainMaterialSlotState slot;
         const std::string root = wi::helper::GetCurrentPath() +
             "/Content/terrain/default_grass/";
-        slot.baseColorMap = root + "default_grass_basecolor.dds";
-        slot.normalMap = root + "default_grass_normal.dds";
-        slot.surfaceMap = root + "default_grass_surface.dds";
+        slot.baseColorMap = root + "default_grass_basecolor.tga";
+        slot.normalMap = root + "default_grass_normal.tga";
+        slot.surfaceMap = root + "default_grass_surface.tga";
         const float multiplier = std::clamp(
             textureScale,
             1.0f,

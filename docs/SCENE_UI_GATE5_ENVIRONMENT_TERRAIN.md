@@ -15,8 +15,8 @@ Delivered in the draft candidate:
 - existing native per-chunk height/blend WISCENE persistence retained;
 - physics remains bounded by Wicked's smaller physics radius;
 - native distance LOD, frustum and occlusion culling remain active;
-- three prebuilt 1024 mipmapped DDS default-grass maps replace the former
-  generated 4K TGA payload;
+- the accepted 4K TGA grass sources and build-time surface packer remain the
+  validated default-material payload;
 - native realistic-sky Stars authoring through the weather command;
 - the accepted snow motion retained with a dedicated static snowflake DDS;
 - Studio and Runtime package the same terrain and snow resources.
@@ -35,22 +35,33 @@ When Terrain generation ran in that same blank scene, pinned Wicked created its
 fallback Weather component on `terrainEntity`, making one entity own both
 Environment and Terrain presentation.
 
-The correction enforces a dedicated owner at every entry point:
+The first lifecycle correction was still owner-rejected at published head
+`901d3b90e1fe5666dacaebbc89e3e067a897d00d`. It created a partial Clear Weather
+component when Environment was clicked but did not create a directional Sun.
+Stars therefore rendered at midnight while the realistic atmosphere stayed
+black at midday. The same candidate replaced the accepted terrain TGAs with
+malformed DXT5 files. Each DXT5 file was shorter than its declared top mip, and
+the shared binding was used by both new Terrain and old terrain-project open.
 
-- new governed Level WISCENEs serialize one named Environment carrier;
-- opening Environment on an older blank Level creates it through an undoable
-  command;
+The corrected boundary enforces a complete owner and validated assets at every
+entry point:
+
+- new governed Level WISCENEs serialize one named Environment carrier and Sun;
+- opening Environment on an older blank Level captures the live atmosphere and
+  creates Environment and Sun through one undoable command;
+- existing authored directional lights are preserved;
 - Studio establishes the carrier before terrain creation;
 - the EngineBridge terrain boundary rejects creation if the precondition is
   absent;
 - Terrain and Environment Inspector resolution is mutually exclusive, and a
   legacy dual-role terrain remains visible in the hierarchy for recovery.
+- Studio and Runtime use the accepted TGA surface-packer output for Terrain
+  creation and old-project material rebinding.
 
-The approximately 205 MiB Release artifact is not evidence of missing Studio
-code. The Gate 5 foundation artifact is the same size; the reduction from the
-older approximately 234 MiB package comes from replacing five large source TGA
-terrain maps with three compressed mipmapped DDS runtime maps. The rejected
-artifact still contains the complete Studio executable and runtime payload.
+The approximately 205 MiB Release artifact was materially incomplete: it had
+lost the three approximately 64 MiB packed TGA runtime maps. The restored packer
+produces complete 4096x4096 RGBA outputs of 67,108,882 bytes each. Artifact size
+is therefore part of the exact-head package audit for this correction.
 
 ## Expansion contract
 
@@ -83,7 +94,8 @@ adds a separate authored-data cache or adopts an explicit Wicked core patch.
 
 Use one exact-head packaged Release build:
 
-1. Create a new governed Level and confirm Environment opens immediately.
+1. Create a new governed Level and confirm Environment opens immediately with
+   realistic sky at midday, stars at midnight, and a named Sun in hierarchy.
 2. Open Terrain, create it, and confirm Studio stays alive and shows Terrain
    controls rather than Environment controls.
 3. Confirm Environment still opens and remains independent after Terrain exists.
@@ -94,7 +106,8 @@ Use one exact-head packaged Release build:
 8. Redo expansion and sculpt the new outer land.
 9. Exercise Stars, rain, snow, Sun and Ocean.
 10. Save, return to Story Flow, reopen and confirm terrain/environment state.
-11. Launch Runtime and confirm DDS materials and snow presentation match Studio.
+11. Open a pre-Gate5 terrain project, then launch Runtime and confirm TGA
+    materials and snow presentation match Studio.
 12. Resize the same build to 1280x720, 1680x945 and 1920x1080.
 
 Green compilation is necessary but cannot replace this visual/behavioural pass.

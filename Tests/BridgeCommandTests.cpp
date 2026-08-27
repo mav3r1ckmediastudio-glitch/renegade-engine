@@ -14,6 +14,7 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/SunService.h"
 
 namespace
 {
@@ -247,6 +248,9 @@ int main()
                 renegade::bridge::WeatherState{},
                 renegade::bridge::WeatherPreset::Clear);
         renegade::bridge::CommandService environmentCommands;
+        weatherScenes.GetScene().weather.SetRealisticSky(true);
+        weatherScenes.GetScene().weather.horizon =
+            XMFLOAT3(0.12f, 0.23f, 0.34f);
         auto createEnvironment = std::make_unique<
             renegade::bridge::CreateEnvironmentCommand>(
                 weatherScenes.GetScene(),
@@ -259,9 +263,24 @@ int main()
         }
         const auto createdEnvironment =
             createEnvironmentResult->CreatedEntity();
+        const auto createdSun = renegade::bridge::FindPrimarySunLight(
+            weatherScenes.GetScene());
+        const auto* sunName =
+            weatherScenes.GetScene().names.GetComponent(createdSun);
+        const auto* sunLight =
+            weatherScenes.GetScene().lights.GetComponent(createdSun);
         if (createdEnvironment == wi::ecs::INVALID_ENTITY ||
             weatherScenes.WeatherEntity() != createdEnvironment ||
             weatherScenes.GetScene().terrains.Contains(createdEnvironment) ||
+            createdSun == wi::ecs::INVALID_ENTITY ||
+            sunName == nullptr || sunName->name != "Sun" ||
+            sunLight == nullptr ||
+            sunLight->GetType() !=
+                wi::scene::LightComponent::DIRECTIONAL ||
+            sunLight->intensity <= 0.0f ||
+            !weatherScenes.GetScene().weather.IsRealisticSky() ||
+            !NearlyEqual(weatherScenes.GetScene().weather.horizon.y, 0.23f) ||
+            weatherScenes.GetScene().weather.sunColor.x <= 0.0f ||
             !NearlyEqual(
                 weatherScenes.GetScene().weather.fogDensity,
                 clearEnvironment.fogDensity))
@@ -270,11 +289,17 @@ int main()
         }
         if (!environmentCommands.Undo() ||
             weatherScenes.WeatherEntity() != wi::ecs::INVALID_ENTITY ||
+            weatherScenes.GetScene().lights.GetCount() != 0 ||
             !environmentCommands.Redo() ||
             weatherScenes.WeatherEntity() != createdEnvironment ||
+            renegade::bridge::FindPrimarySunLight(
+                weatherScenes.GetScene()) != createdSun ||
             weatherScenes.GetScene().weathers.GetComponent(
                 createdEnvironment) == nullptr ||
-            !environmentCommands.Undo())
+            !environmentCommands.Undo() ||
+            weatherScenes.GetScene().lights.GetCount() != 0 ||
+            !weatherScenes.GetScene().weather.IsRealisticSky() ||
+            !NearlyEqual(weatherScenes.GetScene().weather.horizon.y, 0.23f))
         {
             return Fail("Environment creation Undo/Redo did not preserve identity");
         }

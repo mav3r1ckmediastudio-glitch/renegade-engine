@@ -84,7 +84,8 @@ namespace renegade::bridge
     [[nodiscard]] wi::ecs::Entity CreateEnvironment(
         wi::scene::Scene& scene,
         const WeatherState& weather,
-        const char* name = "Environment");
+        const char* name = "Environment",
+        wi::ecs::Entity* createdSun = nullptr);
 
     class ICommand
     {
@@ -213,7 +214,10 @@ namespace renegade::bridge
         WeatherState weather_;
         std::string name_;
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+        wi::scene::WeatherComponent resolvedWeatherBefore_;
         wi::Archive snapshot_;
+        wi::ecs::Entity createdSun_ = wi::ecs::INVALID_ENTITY;
+        wi::Archive sunSnapshot_;
         bool hasSnapshot_ = false;
     };
 

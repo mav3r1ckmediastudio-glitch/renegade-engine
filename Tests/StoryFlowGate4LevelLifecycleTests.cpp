@@ -3,6 +3,7 @@
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/SunService.h"
 
 #include <chrono>
 #include <filesystem>
@@ -155,10 +156,12 @@ namespace
         const auto* preparedScene = prepared.ReadOnlyScene();
         Check(preparedScene != nullptr &&
                 preparedScene->weathers.GetCount() == 1 &&
+                FindPrimarySunLight(*preparedScene) !=
+                    wi::ecs::INVALID_ENTITY &&
                 preparedScene->terrains.GetCount() == 0 &&
                 !preparedScene->terrains.Contains(
                     preparedScene->weathers.GetEntity(0)),
-            "created Level did not contain a dedicated Environment carrier");
+            "created Level did not contain a dedicated Environment and Sun");
 
         DocumentEnvelope sceneEnvelope;
         std::string error;

@@ -5808,14 +5808,27 @@ namespace renegade::studio
         if (active && session_ != nullptr &&
             session_->Scenes().WeatherEntity() == wi::ecs::INVALID_ENTITY)
         {
-            const auto environmentState = bridge::MakeWeatherPreset(
-                bridge::WeatherState{},
-                bridge::WeatherPreset::Clear);
+            const auto environmentState = bridge::CaptureWeather(
+                session_->Scenes().GetScene().weather);
             session_->Commands().Execute(
                 std::make_unique<bridge::CreateEnvironmentCommand>(
                     session_->Scenes().GetScene(),
                     environmentState,
                     "Environment"));
+        }
+        if (active && session_ != nullptr)
+        {
+            auto& scene = session_->Scenes().GetScene();
+            const auto weatherEntity = session_->Scenes().WeatherEntity();
+            if (weatherEntity != wi::ecs::INVALID_ENTITY &&
+                bridge::FindPrimarySunLight(scene) ==
+                    wi::ecs::INVALID_ENTITY)
+            {
+                session_->Commands().Execute(
+                    std::make_unique<bridge::CreateSunCommand>(
+                        scene,
+                        weatherEntity));
+            }
         }
         environmentWorkspaceActive_ = active && session_ != nullptr &&
             session_->Scenes().WeatherEntity() != wi::ecs::INVALID_ENTITY;
@@ -7837,14 +7850,23 @@ namespace renegade::studio
         // first so the two Inspector workspaces never acquire the same owner.
         if (scene.weathers.GetCount() == 0)
         {
-            const auto environmentState = bridge::MakeWeatherPreset(
-                bridge::WeatherState{},
-                bridge::WeatherPreset::Clear);
+            const auto environmentState = bridge::CaptureWeather(
+                scene.weather);
             if (!session_->Commands().Execute(
                     std::make_unique<bridge::CreateEnvironmentCommand>(
                         scene,
                         environmentState,
                         "Environment")))
+            {
+                return;
+            }
+        }
+        if (bridge::FindPrimarySunLight(scene) == wi::ecs::INVALID_ENTITY)
+        {
+            if (!session_->Commands().Execute(
+                    std::make_unique<bridge::CreateSunCommand>(
+                        scene,
+                        session_->Scenes().WeatherEntity())))
             {
                 return;
             }

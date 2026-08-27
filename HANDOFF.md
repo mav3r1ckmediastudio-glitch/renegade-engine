@@ -16,24 +16,30 @@
 Draft PR: `#105`, branch
 `recovery/scene-ui-gate5-environment-terrain`.
 
-Published head `cdd4dea6934438745faaa8f0bfc54ec167838641`
-passed Windows baseline and Renegade Studio Debug/Release but is owner-rejected.
-In a newly governed blank Level the Environment workspace stayed inactive, and
-creating Terrain crashed Studio. PR #105 remains draft and must not merge from
-that head.
+Published head `901d3b90e1fe5666dacaebbc89e3e067a897d00d` passed Windows
+baseline and Renegade Studio Debug/Release but is owner-rejected. Opening
+Environment in a blank Level turns the realistic daytime sky black, Terrain
+creation crashes Studio, and older terrain projects crash during open. PR #105
+remains draft and must not merge from that head.
 
-The approximately 205 MiB Release artifact is expected for this branch: the
-foundation artifact at `ac2827ac1bfc36d21fb285925661bf8c16cf84bf` is the same
-size, and the roughly 29 MiB reduction from older packages is the compressed
-DDS replacement for five large source TGA terrain maps. The published artifact
-contains the complete 10,315-line `StudioApplication.cpp` build and runtime
-payload; artifact size and the lifecycle regression are separate facts.
+The approximately 205 MiB Release artifact was a valid warning, not an expected
+compression-only change. The replacement DXT5 normal and surface DDS files
+each declare a 1,048,576-byte top mip but are only 786,444 bytes including the
+header. Both are truncated. New Terrain creation and old-project material
+rebinding load those same files. The repair restores the accepted build-time
+surface packer and 4K TGA source/runtime path; its three complete packed outputs
+are 67,108,882 bytes each, restoring the terrain payload removed from packaging.
 
-The local correction identifies and closes the actual owner failure:
+The owner correction closes both concrete failure seams:
 
-- blank Level creation now serializes one dedicated Environment/Weather carrier;
-- legacy blank Levels create that carrier through `CreateEnvironmentCommand`;
+- blank Level creation serializes one dedicated Environment/Weather carrier and
+  a named directional `Sun`;
+- legacy blank Levels preserve the live resolved atmosphere and create the
+  Environment/Sun pair through one undoable `CreateEnvironmentCommand`;
+- opening Environment no longer replaces the visible sky with a partial Clear
+  Weather component;
 - Studio establishes Environment before native Terrain generation;
+- new Terrain creation and old-project rebinding use the validated TGA payload;
 - `CreateTerrain` rejects a missing carrier at the EngineBridge boundary;
 - Inspector routing keeps Weather and Terrain mutually exclusive;
 - legacy dual-role Terrain/Weather entities remain visible for recovery;
@@ -49,7 +55,8 @@ The continuation candidate adds the part that was still absent:
 - expansion Undo cancels generation and removes only the added outer ring;
 - Redo asks Wicked to regenerate only missing ring coordinates;
 - `RenegadeTerrainTests` covers dimensions and inner-chunk preservation;
-- a Gate 5 source contract locks the DDS/Stars/snow/expansion seams;
+- a Gate 5 source contract rejects the truncated DDS path and locks the
+  TGA/Stars/snow/expansion seams;
 - architecture, terrain documentation and `REN-WLD-001` record the boundary.
 
 Pinned Wicked source inspection also found that stock distant removal calls
@@ -63,10 +70,10 @@ architecture task; no false streaming claim is made in this gate.
 Local evidence for the corrected continuation:
 
 - `git diff --check` — PASS;
-- direct GNU C++17 syntax checks for `CommandService.cpp`,
-  `StoryFlowLevelLifecycleService.cpp`, the command/lifecycle tests, and the
-  full `StudioApplication.cpp` translation unit — PASS (with local SDL/Win32
-  declaration stubs only for unavailable platform headers);
+- direct GNU C++17 syntax checks for `CommandService.cpp`, `SunService.cpp`,
+  and the focused command/Sun/Terrain tests — PASS;
+- restored terrain packer compile with `-Wall -Wextra -Werror` and exact asset
+  execution — PASS; all three outputs are complete 4096x4096 RGBA TGAs;
 - Gate 5 source assertions now include dedicated Environment creation, the
   terrain precondition, Inspector isolation and legacy hierarchy recovery;
 - CMake/Windows compile — not run locally because CMake is unavailable;

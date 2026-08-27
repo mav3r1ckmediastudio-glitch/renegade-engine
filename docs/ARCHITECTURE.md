@@ -187,12 +187,14 @@ native per-chunk 16-bit height data remains the serialized authority and a
 whole multi-chunk stroke remains one `SculptTerrainCommand`.
 
 Until material importing exists, new terrain uses a bundled grass PBR default.
-The accepted payload is three prebuilt 1024-pixel mipmapped DDS maps: base
-colour, normal data and Wicked's packed surface layout (R=AO, G=roughness,
-B=metalness, A=reflectance). Studio and Runtime copy the same immutable maps
-beside their executables; no build-time TGA conversion or large source-texture
-payload remains. Scene load rebinds only filenames identifying this bundled
-default, so later creator-assigned terrain materials are never overwritten.
+The accepted source maps remain 4096-pixel RLE TGAs. The
+`RenegadeTerrainSurfacePacker` tiles base colour and normal data and packs
+Wicked's surface layout (R=AO, G=roughness, B=metalness, A=reflectance) into
+three complete RGBA TGAs beside both executables. The rejected Gate 5 DDS
+replacement was truncated and was shared by new-Terrain creation and
+old-project rebinding. Scene load rebinds only filenames identifying the
+bundled TGA default, so later creator-assigned terrain materials are never
+overwritten.
 
 Renegade finite terrain uses a fixed authored centre and retains native chunk
 height/blend data as the WISCENE authority. The standard extent is radius 9:
@@ -482,13 +484,15 @@ editor preferences rather than scene serialization.
 
 The Environment workspace resolves `SceneService::WeatherEntity()` directly.
 Every governed new Level WISCENE is seeded with one dedicated serialized
-`Environment` entity before its archive is written. A legacy blank Level that
-has no Weather component creates that carrier through
-`CreateEnvironmentCommand` when Environment is first opened; Terrain creation
-establishes the same command-backed precondition before it calls Wicked terrain
-generation. The bridge-level `CreateTerrain` boundary rejects a blank scene so
-Wicked cannot silently attach its fallback Weather component to the Terrain
-entity and collapse the two workspace owners.
+`Environment` entity and named directional `Sun` before its archive is written.
+A legacy blank Level that has no Weather component captures the complete live
+resolved atmosphere and creates the Environment/Sun pair through
+`CreateEnvironmentCommand` when Environment is first opened. Existing authored
+directional lighting is never replaced. Terrain creation establishes the same
+command-backed precondition before it calls Wicked terrain generation. The
+bridge-level `CreateTerrain` boundary rejects a blank scene so Wicked cannot
+silently attach its fallback Weather component to the Terrain entity and
+collapse the two workspace owners.
 
 The dedicated Weather carrier is deliberately omitted from hierarchy rows.
 For compatibility with a scene saved by the rejected Gate 5 candidate, an
