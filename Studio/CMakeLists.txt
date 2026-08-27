@@ -85,6 +85,10 @@ add_executable(RenegadeStudio WIN32
     src/RenegadeStudioChromeAssets.cpp
     src/RenegadeStudioAssetBrowserReadability.cpp
     src/RenegadeStudioChrome.h
+    src/RenegadePhysicsLabWorkspace.cpp
+    src/RenegadePhysicsLabWorkspace.h
+    src/RenegadePhysicsLabStudioChrome.cpp
+    src/RenegadePhysicsLabStudioChrome.h
     src/RenegadeStoryFlowGraphEditor.cpp
     src/RenegadeStoryFlowGraphEditor.h
     src/RenegadeStoryFlowGate9COwnerRecovery.cpp
@@ -158,6 +162,17 @@ target_compile_options(RenegadeStudio
 set_target_properties(RenegadeStudio PROPERTIES
     FOLDER "Renegade"
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:RenegadeStudio>"
+)
+
+# JP01 Physics Lab source contract. This is intentionally cheap and runs as
+# part of the normal CTest suite before owner validation. It proves the Studio
+# integration boundary and Wicked-editor parity surface without requiring an
+# extra manual build.
+add_test(
+    NAME RenegadeJP01PhysicsLabSourceContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_SOURCE_DIR}/Tests/JP01PhysicsLabSourceContract.cmake
 )
 
 # Renegade-owned shaders are compiled at runtime from source shipped beside the
