@@ -1,9 +1,11 @@
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
 
 #include "renegade/bridge/CollisionService.h"
+#include "renegade/bridge/PhysicsService.h"
 
 namespace
 {
@@ -55,6 +57,121 @@ int main()
     using renegade::bridge::CollisionTargetStatus;
     using Body = wi::scene::RigidBodyPhysicsComponent;
     using Shape = Body::CollisionShape;
+
+    // JP01 runtime façade: use Wicked's real pinned defaults, keep gravity on
+    // the serialized Scene, and never claim a component-only body is live.
+    {
+        renegade::bridge::PhysicsWorldState dirtyWorld;
+        dirtyWorld.accuracy = -20;
+        dirtyWorld.frameRate = std::numeric_limits<float>::quiet_NaN();
+        dirtyWorld.constraintDebugSize = -5.0f;
+        dirtyWorld.debugDrawMaxDistance = std::numeric_limits<float>::quiet_NaN();
+        dirtyWorld.characterCollisionTolerance = std::numeric_limits<float>::quiet_NaN();
+        const auto safeWorld =
+            renegade::bridge::SanitizePhysicsWorldState(dirtyWorld);
+        if (safeWorld.accuracy != 1 || !NearlyEqual(safeWorld.frameRate, 60.0f) ||
+            safeWorld.constraintDebugSize != 0.0f ||
+            !NearlyEqual(safeWorld.debugDrawMaxDistance, 500.0f) ||
+            !NearlyEqual(safeWorld.characterCollisionTolerance, 0.05f))
+        {
+            return Fail("physics world sanitization diverged from pinned Wicked defaults");
+        }
+
+        wi::scene::Scene physicsScene;
+        renegade::bridge::SetPhysicsGravity(
+            physicsScene,
+            XMFLOAT3(0.0f, 0.0f, 0.0f));
+        if (!NearlyEqual(
+                renegade::bridge::GetPhysicsGravity(physicsScene),
+                XMFLOAT3(0.0f, 0.0f, 0.0f)))
+        {
+            return Fail("zero gravity did not reach Wicked scene state");
+        }
+        renegade::bridge::SetPhysicsGravity(
+            physicsScene,
+            XMFLOAT3(12345.0f, -0.25f, 77.0f));
+        if (!NearlyEqual(
+                renegade::bridge::GetPhysicsGravity(physicsScene),
+                XMFLOAT3(12345.0f, -0.25f, 77.0f)))
+        {
+            return Fail("physics gravity was unnecessarily magnitude-clamped");
+        }
+        const auto safeGravity = renegade::bridge::SanitizePhysicsGravity(
+            XMFLOAT3(
+                std::numeric_limits<float>::quiet_NaN(),
+                std::numeric_limits<float>::quiet_NaN(),
+                std::numeric_limits<float>::quiet_NaN()));
+        if (!NearlyEqual(safeGravity, XMFLOAT3(0.0f, -10.0f, 0.0f)))
+        {
+            return Fail("non-finite gravity did not fall back safely");
+        }
+
+        const auto componentOnlyEntity = wi::ecs::CreateEntity();
+        physicsScene.transforms.Create(componentOnlyEntity);
+        physicsScene.rigidbodies.Create(componentOnlyEntity);
+        XMFLOAT3 vectorOut(9.0f, 9.0f, 9.0f);
+        XMFLOAT4 rotationOut(9.0f, 9.0f, 9.0f, 9.0f);
+        if (renegade::bridge::HasLivePhysicsBody(
+                physicsScene, componentOnlyEntity) ||
+            renegade::bridge::SetPhysicsPosition(
+                physicsScene, componentOnlyEntity, XMFLOAT3(1, 2, 3)) ||
+            renegade::bridge::SetPhysicsPositionAndRotation(
+                physicsScene,
+                componentOnlyEntity,
+                XMFLOAT3(1, 2, 3),
+                XMFLOAT4(0, 0, 0, 1)) ||
+            renegade::bridge::GetPhysicsPosition(
+                physicsScene, componentOnlyEntity, vectorOut) ||
+            renegade::bridge::GetPhysicsRotation(
+                physicsScene, componentOnlyEntity, rotationOut) ||
+            renegade::bridge::SetLinearVelocity(
+                physicsScene, componentOnlyEntity, XMFLOAT3(1, 0, 0)) ||
+            renegade::bridge::GetLinearVelocity(
+                physicsScene, componentOnlyEntity, vectorOut) ||
+            renegade::bridge::SetAngularVelocity(
+                physicsScene, componentOnlyEntity, XMFLOAT3(0, 1, 0)) ||
+            renegade::bridge::ApplyForce(
+                physicsScene, componentOnlyEntity, XMFLOAT3(0, 1, 0)) ||
+            renegade::bridge::ApplyForceAt(
+                physicsScene,
+                componentOnlyEntity,
+                XMFLOAT3(0, 1, 0),
+                XMFLOAT3(1, 0, 0)) ||
+            renegade::bridge::ApplyImpulse(
+                physicsScene, componentOnlyEntity, XMFLOAT3(0, 1, 0)) ||
+            renegade::bridge::ApplyImpulseAt(
+                physicsScene,
+                componentOnlyEntity,
+                XMFLOAT3(0, 1, 0),
+                XMFLOAT3(1, 0, 0)) ||
+            renegade::bridge::ApplyTorque(
+                physicsScene, componentOnlyEntity, XMFLOAT3(0, 1, 0)) ||
+            renegade::bridge::SetBodyActive(
+                physicsScene, componentOnlyEntity, true) ||
+            renegade::bridge::SetGhostMode(
+                physicsScene, componentOnlyEntity, true) ||
+            renegade::bridge::ActivateAllRigidBodies(physicsScene) ||
+            renegade::bridge::OptimizePhysicsBroadPhase(physicsScene) ||
+            renegade::bridge::ResetPhysicsObjects(physicsScene))
+        {
+            return Fail("runtime façade treated an uncreated native body as live");
+        }
+        if (!NearlyEqual(vectorOut, XMFLOAT3(9.0f, 9.0f, 9.0f)) ||
+            !NearlyEqual(rotationOut.x, 9.0f))
+        {
+            return Fail("failed physics readback modified its output value");
+        }
+
+        const auto miss = renegade::bridge::Raycast(
+            physicsScene,
+            wi::primitive::Ray(
+                XMFLOAT3(0, 0, 0),
+                XMFLOAT3(0, -1, 0)));
+        if (miss.IsValid())
+        {
+            return Fail("raycast reported a hit without a native physics scene");
+        }
+    }
 
     // JP01 rigid-body parity recognizes all seven shapes exposed by Wicked.
     {
@@ -167,7 +284,6 @@ int main()
     const auto entity = wi::ecs::CreateEntity();
     scene.transforms.Create(entity);
 
-    // CreateCollisionCommand writes the complete standard rigid-body state.
     renegade::bridge::CommandService commands;
     CollisionState initial;
     initial.shape = Shape::SPHERE;
@@ -228,8 +344,6 @@ int main()
         return Fail("CreateCollisionCommand overwrote existing rigidbody");
     }
 
-    // Character and vehicle settings share Wicked's component but are outside
-    // this standard-body state. Ordinary body edits must preserve them.
     rigidbody->SetCharacterPhysics(true);
     rigidbody->character.gravityFactor = 2.25f;
     rigidbody->vehicle.type = Body::Vehicle::Type::Car;
@@ -310,8 +424,6 @@ int main()
         return Fail("identical collision state polluted command history");
     }
 
-    // Remove -> Undo restores the complete Wicked native component, not just
-    // the currently curated rigid-body fields.
     renegade::bridge::CommandService removeCommands;
     if (!removeCommands.Execute(
             std::make_unique<renegade::bridge::RemoveCollisionCommand>(
@@ -346,7 +458,6 @@ int main()
         return Fail("RemoveCollisionCommand accepted entity with no rigidbody");
     }
 
-    // Cylinder shares Wicked's CapsuleParams storage.
     const auto cylinderEntity = wi::ecs::CreateEntity();
     scene.transforms.Create(cylinderEntity);
     CollisionState cylinder;
@@ -368,8 +479,6 @@ int main()
         return Fail("Cylinder dimensions did not reach native storage");
     }
 
-    // The three Wicked mesh-derived shapes are all available when their
-    // actual runtime requirements are satisfied.
     constexpr std::array<Shape, 3> complexShapes = {
         Shape::CONVEX_HULL,
         Shape::TRIANGLE_MESH,
@@ -401,6 +510,6 @@ int main()
         }
     }
 
-    std::cout << "PASS: JP01 rigid-body parity, target validation, and native-state Undo\n";
+    std::cout << "PASS: JP01 physics façade and rigid-body authoring parity\n";
     return 0;
 }
