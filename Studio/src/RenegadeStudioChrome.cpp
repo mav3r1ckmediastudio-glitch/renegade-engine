@@ -1,6 +1,4 @@
 #include "RenegadeStudioChrome.h"
-#include "WindowsGameBuildController.h"
-
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -1812,13 +1810,7 @@ namespace renegade::studio
                     {
                         if (item == 0)
                         {
-                            statusText_ = "BUILDING WINDOWS GAME...";
-                            const WindowsGameBuildUiResult build =
-                                BuildActiveWindowsGame();
-                            statusText_ = build.succeeded
-                                ? "BUILD COMPLETE // " + build.finalOutputPath
-                                : "BUILD FAILED // " + build.message;
-                            SetActiveBottomTab(2, true);
+                            invoke(Action::BuildWindowsGame);
                         }
                         else
                         {

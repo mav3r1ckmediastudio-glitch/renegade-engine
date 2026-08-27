@@ -254,6 +254,7 @@ namespace renegade::bridge
 
         bool CollectCurrentDependencies(
             const ProjectMetadata& project,
+            const std::vector<WindowsGameBundledResource>& bundledResources,
             DependencyGraph& graph,
             std::string& error)
         {
@@ -314,6 +315,76 @@ namespace renegade::bridge
                 return false;
 
             graph = collector.Graph();
+
+            std::vector<fs::path> governedSources;
+            governedSources.reserve(bundledResources.size());
+            for (const WindowsGameBundledResource& resource : bundledResources)
+            {
+                if (resource.logicalName.empty() || resource.sourcePath.empty() ||
+                    resource.destinationPath.empty())
+                {
+                    error = "Build Windows Game received an incomplete bundled Runtime resource declaration.";
+                    return false;
+                }
+
+                std::error_code ec;
+                const fs::path source = fs::weakly_canonical(
+                    fs::u8path(resource.sourcePath), ec);
+                if (ec || !fs::is_regular_file(source, ec) || ec)
+                {
+                    error = "Build Windows Game could not validate bundled Runtime resource: " +
+                        resource.sourcePath;
+                    return false;
+                }
+                governedSources.push_back(source);
+            }
+
+            graph.diagnostics.erase(
+                std::remove_if(
+                    graph.diagnostics.begin(),
+                    graph.diagnostics.end(),
+                    [&](const DependencyDiagnostic& diagnostic)
+                    {
+                        if (diagnostic.code !=
+                                DependencyDiagnosticCode::OutsideProject ||
+                            diagnostic.sourceId.empty())
+                        {
+                            return false;
+                        }
+
+                        const auto sourceNode = std::find_if(
+                            graph.nodes.begin(),
+                            graph.nodes.end(),
+                            [&](const DependencyNode& node)
+                            {
+                                return node.id == diagnostic.sourceId;
+                            });
+                        if (sourceNode == graph.nodes.end() ||
+                            sourceNode->dependencyClass != DependencyClass::Scene)
+                        {
+                            return false;
+                        }
+
+                        fs::path declared = fs::u8path(diagnostic.path);
+                        if (!declared.is_absolute())
+                            declared = fs::u8path(project.rootPath) / declared;
+                        std::error_code ec;
+                        declared = fs::weakly_canonical(declared, ec);
+                        if (ec || !fs::is_regular_file(declared, ec) || ec)
+                            return false;
+
+                        return std::any_of(
+                            governedSources.begin(),
+                            governedSources.end(),
+                            [&](const fs::path& governed)
+                            {
+                                std::error_code equivalentError;
+                                return fs::equivalent(
+                                    declared, governed, equivalentError) &&
+                                    !equivalentError;
+                            });
+                    }),
+                graph.diagnostics.end());
             error.clear();
             return true;
         }
@@ -497,106 +568,125 @@ namespace renegade::bridge
                 return false;
             }
 
-            std::vector<std::string> initialTrace;
-            FlowStepResult initialStep;
-            if (!ReplaySmokePath(
-                    document, {}, initialTrace, initialStep, error))
+            StoryFlowRuntimeRoute resolved;
+            if (!ResolveStoryFlowRuntimeRoute(document, resolved, error))
             {
-                error = "Build Windows Game could not establish the Story Flow smoke root: " +
+                error = "Build Windows Game could not establish a deterministic Story Flow route: " +
                     error;
                 return false;
             }
 
-            if (initialStep.terminalAction == FlowTerminalAction::CompleteGame)
-            {
-                trace = std::move(initialTrace);
-                error.clear();
-                return true;
-            }
-            if (initialStep.terminalAction != FlowTerminalAction::None)
-            {
-                error =
-                    "Build Windows Game Story Flow reaches a non-Complete terminal directly from Game Start.";
-                return false;
-            }
+            trace = std::move(resolved.trace);
+            smokeOutcomes = std::move(resolved.outcomes);
+            levelCompletionCount = resolved.levelCompletionCount;
+            error.clear();
+            return true;
+        }
+    }
 
-            struct Candidate
-            {
-                StableId nodeId;
-                std::vector<std::string> outcomes;
-            };
+    bool ResolveStoryFlowRuntimeRoute(
+        const FlowDocument& document,
+        StoryFlowRuntimeRoute& route,
+        std::string& error)
+    {
+        route = {};
 
-            std::deque<Candidate> pending;
-            pending.push_back({initialStep.currentNodeId, {}});
-            std::unordered_set<StableId> visited;
-            visited.insert(initialStep.currentNodeId);
-
-            constexpr std::size_t MaximumSmokeSteps = 128;
-            constexpr std::size_t MaximumSmokeCandidates = 4096;
-            std::size_t expanded = 0;
-
-            while (!pending.empty() && expanded < MaximumSmokeCandidates)
-            {
-                Candidate candidate = std::move(pending.front());
-                pending.pop_front();
-                ++expanded;
-
-                for (const std::string& outcome :
-                        OutgoingOutcomes(document, candidate.nodeId))
-                {
-                    std::vector<std::string> nextOutcomes = candidate.outcomes;
-                    nextOutcomes.push_back(outcome);
-                    if (nextOutcomes.size() > MaximumSmokeSteps)
-                        continue;
-
-                    std::vector<std::string> candidateTrace;
-                    FlowStepResult step;
-                    std::string replayError;
-                    if (!ReplaySmokePath(
-                            document,
-                            nextOutcomes,
-                            candidateTrace,
-                            step,
-                            replayError))
-                    {
-                        // An outcome can be structurally present but unavailable
-                        // under the default Flow state (or ambiguous). It is not
-                        // a valid deterministic standalone smoke branch.
-                        continue;
-                    }
-
-                    if (step.terminalAction == FlowTerminalAction::CompleteGame)
-                    {
-                        trace = std::move(candidateTrace);
-                        smokeOutcomes = std::move(nextOutcomes);
-                        levelCompletionCount = static_cast<std::size_t>(
-                            std::count(
-                                smokeOutcomes.begin(),
-                                smokeOutcomes.end(),
-                                std::string("level.complete")));
-                        error.clear();
-                        return true;
-                    }
-                    if (step.terminalAction != FlowTerminalAction::None ||
-                        step.currentNodeId.empty())
-                    {
-                        continue;
-                    }
-
-                    if (visited.insert(step.currentNodeId).second)
-                    {
-                        pending.push_back({
-                            step.currentNodeId,
-                            std::move(nextOutcomes),
-                        });
-                    }
-                }
-            }
-
-            error =
-                "Build Windows Game could not derive a bounded deterministic Story Flow path to Complete Game from the default Runtime state.";
+        std::vector<std::string> initialTrace;
+        FlowStepResult initialStep;
+        if (!ReplaySmokePath(
+                document, {}, initialTrace, initialStep, error))
+        {
             return false;
         }
+
+        if (initialStep.terminalAction == FlowTerminalAction::CompleteGame)
+        {
+            route.trace = std::move(initialTrace);
+            error.clear();
+            return true;
+        }
+        if (initialStep.terminalAction != FlowTerminalAction::None)
+        {
+            error =
+                "Story Flow reaches a non-Complete terminal directly from Game Start.";
+            return false;
+        }
+
+        struct Candidate
+        {
+            StableId nodeId;
+            std::vector<std::string> outcomes;
+        };
+
+        std::deque<Candidate> pending;
+        pending.push_back({initialStep.currentNodeId, {}});
+        std::unordered_set<StableId> visited;
+        visited.insert(initialStep.currentNodeId);
+
+        constexpr std::size_t MaximumSmokeSteps = 128;
+        constexpr std::size_t MaximumSmokeCandidates = 4096;
+        std::size_t expanded = 0;
+
+        while (!pending.empty() && expanded < MaximumSmokeCandidates)
+        {
+            Candidate candidate = std::move(pending.front());
+            pending.pop_front();
+            ++expanded;
+
+            for (const std::string& outcome :
+                    OutgoingOutcomes(document, candidate.nodeId))
+            {
+                std::vector<std::string> nextOutcomes = candidate.outcomes;
+                nextOutcomes.push_back(outcome);
+                if (nextOutcomes.size() > MaximumSmokeSteps)
+                    continue;
+
+                std::vector<std::string> candidateTrace;
+                FlowStepResult step;
+                std::string replayError;
+                if (!ReplaySmokePath(
+                        document,
+                        nextOutcomes,
+                        candidateTrace,
+                        step,
+                        replayError))
+                {
+                    // A structurally declared outcome can still be unavailable
+                    // or ambiguous under the default Runtime state.
+                    continue;
+                }
+
+                if (step.terminalAction == FlowTerminalAction::CompleteGame)
+                {
+                    route.trace = std::move(candidateTrace);
+                    route.outcomes = std::move(nextOutcomes);
+                    route.levelCompletionCount = static_cast<std::size_t>(
+                        std::count(
+                            route.outcomes.begin(),
+                            route.outcomes.end(),
+                            std::string("level.complete")));
+                    error.clear();
+                    return true;
+                }
+                if (step.terminalAction != FlowTerminalAction::None ||
+                    step.currentNodeId.empty())
+                {
+                    continue;
+                }
+
+                if (visited.insert(step.currentNodeId).second)
+                {
+                    pending.push_back({
+                        step.currentNodeId,
+                        std::move(nextOutcomes),
+                    });
+                }
+            }
+        }
+
+        error =
+            "Story Flow has no bounded deterministic route from Game Start to Complete Game under the default Runtime state.";
+        return false;
     }
 
     bool PrepareWindowsGameBuildProjectState(
@@ -604,11 +694,26 @@ namespace renegade::bridge
         WindowsGameBuildProjectState& state,
         std::string& error)
     {
+        return PrepareWindowsGameBuildProjectState(
+            project, {}, state, error);
+    }
+
+    bool PrepareWindowsGameBuildProjectState(
+        const ProjectMetadata& project,
+        const std::vector<WindowsGameBundledResource>& bundledResources,
+        WindowsGameBuildProjectState& state,
+        std::string& error)
+    {
         state = {};
         error.clear();
 
-        if (!CollectCurrentDependencies(project, state.dependencyGraph, error))
+        if (!CollectCurrentDependencies(
+                project,
+                bundledResources,
+                state.dependencyGraph,
+                error))
             return false;
+        state.bundledResources = bundledResources;
         if (!RefreshCurrentRegistry(
                 project, state.dependencyGraph, state.assetRegistry, error))
             return false;

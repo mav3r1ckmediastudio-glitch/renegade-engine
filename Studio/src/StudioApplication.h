@@ -63,6 +63,9 @@ namespace renegade::studio
         void RequestProjectHubFromStoryFlow();
         void RequestAssetBrowserFromStoryFlow();
         void RequestProjectPlayFromStoryFlow();
+        void RequestWindowsGameBuild();
+        [[nodiscard]] bool ConsumeWindowsGameBuildRequest() noexcept;
+        void SetWindowsGameBuildStatus(std::string message);
 
         // Story Flow is now the project home. Project-level runtime lifecycle
         // must therefore be callable and pollable without asking the inactive
@@ -164,6 +167,7 @@ namespace renegade::studio
             StartTestLevel,
             StartProjectPlay,
             StopTestLevel,
+            BuildWindowsGame,
             StartSunPreview,
             PauseSunPreview,
             SetOceanEnabled,
@@ -723,6 +727,8 @@ namespace renegade::studio
         std::function<void()> exitRequestHandler_;
         int selectedRecentProject_ = -1;
         EditorAction pendingAction_ = EditorAction::None;
+        bool windowsGameBuildPreparationActive_ = false;
+        bool windowsGameBuildRequested_ = false;
         wi::jobsystem::context sceneOpenWorkload_;
         wi::jobsystem::context projectLoadWorkload_;
         wi::jobsystem::context modelImportWorkload_;

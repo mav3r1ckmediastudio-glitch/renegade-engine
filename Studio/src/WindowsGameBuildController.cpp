@@ -796,18 +796,6 @@ namespace renegade::studio
             return ui;
         };
 
-        progress.Stage(10, "VALIDATING STORYFLOW",
-            "Checking the authoritative project and StoryFlow build state.");
-        bridge::WindowsGameBuildProjectState projectState;
-        std::string error;
-        if (!bridge::PrepareWindowsGameBuildProjectState(
-                project, projectState, error))
-        {
-            return fail(std::move(error));
-        }
-
-        progress.Stage(25, "RESOLVING DEPENDENCIES",
-            "StoryFlow route and governed dependency closure resolved.");
         const fs::path studioDirectory = StudioDirectory();
         if (studioDirectory.empty())
         {
@@ -839,6 +827,47 @@ namespace renegade::studio
             return fail(
                 "Build Windows Game could not find the governed dxcompiler.dll Runtime support.");
         }
+
+        const std::vector<bridge::WindowsGameBundledResource>
+            bundledResources = {
+                {
+                    "renegade-terrain-default-grass-basecolor",
+                    (studioDirectory / "Content/terrain/default_grass/default_grass_basecolor.tga")
+                        .generic_u8string(),
+                    "Content/terrain/default_grass/default_grass_basecolor.tga",
+                },
+                {
+                    "renegade-terrain-default-grass-normal",
+                    (studioDirectory / "Content/terrain/default_grass/default_grass_normal.tga")
+                        .generic_u8string(),
+                    "Content/terrain/default_grass/default_grass_normal.tga",
+                },
+                {
+                    "renegade-terrain-default-grass-surface",
+                    (studioDirectory / "Content/terrain/default_grass/default_grass_surface.tga")
+                        .generic_u8string(),
+                    "Content/terrain/default_grass/default_grass_surface.tga",
+                },
+                {
+                    "renegade-weather-snowflake",
+                    (studioDirectory / "Content/weather/snowflake.dds")
+                        .generic_u8string(),
+                    "Content/weather/snowflake.dds",
+                },
+            };
+
+        progress.Stage(10, "VALIDATING STORYFLOW",
+            "Checking the saved project, StoryFlow route and governed Runtime resources.");
+        bridge::WindowsGameBuildProjectState projectState;
+        std::string error;
+        if (!bridge::PrepareWindowsGameBuildProjectState(
+                project, bundledResources, projectState, error))
+        {
+            return fail(std::move(error));
+        }
+
+        progress.Stage(25, "RESOLVING DEPENDENCIES",
+            "StoryFlow route and governed dependency closure resolved.");
 
         progress.Stage(38, "PREPARING RUNTIME SUPPORT",
             "Hashing the governed Runtime and DirectX shader compiler inputs.");
@@ -882,6 +911,21 @@ namespace renegade::studio
                 error))
         {
             return fail(std::move(error));
+        }
+        for (const bridge::WindowsGameBundledResource& resource :
+                projectState.bundledResources)
+        {
+            if (!AddRuntimeSupport(
+                    resource.logicalName,
+                    resource.destinationPath,
+                    fs::u8path(resource.sourcePath),
+                    "repo:" + renegadeRevision,
+                    request.runtimeSupport,
+                    request.staging.runtimeSupportSources,
+                    error))
+            {
+                return fail(std::move(error));
+            }
         }
 
         progress.Stage(50, "STAGING PACKAGE INPUTS",

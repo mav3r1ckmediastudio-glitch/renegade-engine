@@ -10,6 +10,7 @@
 
 #include "renegade/bridge/StoryFlowInteractionPolicy.h"
 #include "renegade/bridge/StoryFlowScreenReferenceService.h"
+#include "renegade/bridge/WindowsGameBuildProjectService.h"
 #include "renegade/bridge/ScreenService.h"
 #include "RenegadeStoryFlowInspectorText.h"
 #include "RenegadeStoryFlowJourneyLayout.h"
@@ -1731,6 +1732,17 @@ namespace renegade::studio
             runtimeValidationMessage_ = "Project root is unavailable for Runtime validation.";
             return;
         }
+
+        bridge::StoryFlowRuntimeRoute runtimeRoute;
+        std::string routeError;
+        if (!bridge::ResolveStoryFlowRuntimeRoute(
+                session_->Document(), runtimeRoute, routeError))
+        {
+            runtimeValidationReady_ = false;
+            runtimeValidationMessage_ = routeError;
+            return;
+        }
+
         bridge::StoryFlowScreenReferenceService service;
         for (const auto& node : session_->Document().nodes)
         {
