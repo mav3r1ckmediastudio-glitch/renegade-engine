@@ -5,8 +5,19 @@ Status: **READY FOR WINDOWS CI / OWNER VALIDATION**
 Audit boundary:
 - Backend checkpoint: `044671852ba53aae66de05786def7d01c95b3aa7`
 - Physics Lab staging branch: `staging/jp01-physics-lab-ui`
-- Physics Lab staging head at audit start: `b90f4dd35647f9da025737d8da849a0b24b6a1cd`
-- The staging history is a strict continuation of the backend checkpoint: no divergence, no merge commit and no replacement physics branch.
+- Physics Lab UI/audit checkpoint before main synchronization: `aab20f593f234ac134e5386baf668b2357723e31`
+- Current-main synchronization merge: `13573f2a6f7e30363e6ba6a31f5bcfde552794fb`
+- Current `main` synchronized into staging: `c1486b9caa66452385d6f7c0358e9b424a364b11`
+- The JP01 first-parent history remains a direct continuation of the backend checkpoint. Current `main` is additionally recorded as the merge's second parent so PR #107 is not validated against a stale base.
+
+## Current-main synchronization
+
+`main` had advanced by two commits after PR #107 was opened. The drift was inspected before the PR branch was moved:
+
+1. `8d56e40799d65dacc048751010106219c90fd682` accidentally added a one-character scratch file named `tmp-never`.
+2. `c1486b9caa66452385d6f7c0358e9b424a364b11` immediately removed that scratch file.
+
+The two commits have a net-zero tree effect relative to the JP01 base. Therefore the synchronization merge deliberately reused the already-audited staging tree unchanged and only recorded current `main` as an additional parent. There were no code/content conflicts and no JP01 file was modified to perform the synchronization.
 
 ## Architectural checks
 
