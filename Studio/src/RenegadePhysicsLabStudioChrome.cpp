@@ -1,5 +1,8 @@
 #include "RenegadePhysicsLabStudioChrome.h"
 
+#include "renegade/bridge/PhysicsLuaService.h"
+#include "renegade/bridge/StudioSession.h"
+
 #include <algorithm>
 #include <utility>
 
@@ -49,6 +52,16 @@ namespace renegade::studio
     void RenegadePhysicsLabStudioChrome::Create()
     {
         CreatorAssetStudioChrome::Create();
+
+        // Studio reaches this point only after wi::Application::Initialize()
+        // has let Wicked initialize its one Lua VM on the main thread. JP01
+        // installs the Renegade namespace into that existing VM; it never
+        // bootstraps Lua from SceneService construction.
+        if (auto* session = bridge::StudioSession::Current(); session != nullptr)
+        {
+            (void)bridge::BindPhysicsLua(session->Scenes().GetScene());
+        }
+
         physicsLab_.Create();
         physicsLab_.SetBounds(ViewportBounds());
         physicsLab_.SetActive(false);
