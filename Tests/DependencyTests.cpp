@@ -915,6 +915,9 @@ int main()
         const fs::path surface =
             root / "Content/terrain/default_grass/default_grass_surface.tga";
         fs::create_directories(baseColor.parent_path());
+        // Dependency discovery only needs stable, project-owned paths. Keep
+        // these fixtures inert: loading production DDS data here would ask
+        // Wicked to create GPU resources in this device-free unit test.
         std::ofstream(baseColor) << "base";
         std::ofstream(surface) << "surface";
         terrainMaterial.textures[wi::scene::MaterialComponent::BASECOLORMAP]

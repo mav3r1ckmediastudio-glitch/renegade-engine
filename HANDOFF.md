@@ -1,15 +1,88 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-25
+**Date:** 2026-08-27
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`1c1d580df3c40de2fbd68dee41c0c8a74e32f831`
-(`Story Flow Gate 9D: navigation and Graph cleanup (#98)`).
+`628cf26574a4a2a6e8eb0a5a522d94966ad8917e`
+(`Scene UI Gate 4: recover Asset Browser and placement UX (#104)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
+
+## Active work — Scene UI Gate 5 Environment and Terrain recovery
+
+Draft PR: `#105`, branch
+`recovery/scene-ui-gate5-environment-terrain`.
+
+Published head `901d3b90e1fe5666dacaebbc89e3e067a897d00d` passed Windows
+baseline and Renegade Studio Debug/Release but is owner-rejected. Opening
+Environment in a blank Level turns the realistic daytime sky black, Terrain
+creation crashes Studio, and older terrain projects crash during open. PR #105
+remains draft and must not merge from that head.
+
+The approximately 205 MiB Release artifact was a valid warning, not an expected
+compression-only change. The replacement DXT5 normal and surface DDS files
+each declare a 1,048,576-byte top mip but are only 786,444 bytes including the
+header. Both are truncated. New Terrain creation and old-project material
+rebinding load those same files. The repair restores the accepted build-time
+surface packer and 4K TGA source/runtime path; its three complete packed outputs
+are 67,108,882 bytes each, restoring the terrain payload removed from packaging.
+
+The owner correction closes both concrete failure seams:
+
+- blank Level creation serializes one dedicated Environment/Weather carrier and
+  a named directional `Sun`;
+- legacy blank Levels preserve the live resolved atmosphere and create the
+  Environment/Sun pair through one undoable `CreateEnvironmentCommand`;
+- opening Environment no longer replaces the visible sky with a partial Clear
+  Weather component;
+- Studio establishes Environment before native Terrain generation;
+- new Terrain creation and old-project rebinding use the validated TGA payload;
+- `CreateTerrain` rejects a missing carrier at the EngineBridge boundary;
+- Inspector routing keeps Weather and Terrain mutually exclusive;
+- legacy dual-role Terrain/Weather entities remain visible for recovery;
+- command, lifecycle and Gate 5 source contracts cover the new invariant.
+
+The continuation candidate adds the part that was still absent:
+
+- standard radius 9 gives 19x19 chunks and an honest 1.254 km square;
+- the raw generation-radius slider is removed from creator UI;
+- the Terrain panel reports current dimensions;
+- `EXPAND TERRAIN // +1 RING` increments the finite authored radius without
+  `Generation_Restart()`;
+- expansion Undo cancels generation and removes only the added outer ring;
+- Redo asks Wicked to regenerate only missing ring coordinates;
+- `RenegadeTerrainTests` covers dimensions and inner-chunk preservation;
+- a Gate 5 source contract rejects the truncated DDS path and locks the
+  TGA/Stars/snow/expansion seams;
+- architecture, terrain documentation and `REN-WLD-001` record the boundary.
+
+Pinned Wicked source inspection also found that stock distant removal calls
+`chunks.erase(it)`. Those chunk entries contain the serialized height and blend
+authority, so enabling `centerToCamera/removeDistantChunks` would destroy
+sculpting rather than safely unload it. Gate 5 keeps authored CPU chunks
+resident while native LOD, frustum/occlusion culling and the smaller physics
+radius remain active. A true edited-chunk residency cache is a later terrain
+architecture task; no false streaming claim is made in this gate.
+
+Local evidence for the corrected continuation:
+
+- `git diff --check` — PASS;
+- direct GNU C++17 syntax checks for `CommandService.cpp`, `SunService.cpp`,
+  and the focused command/Sun/Terrain tests — PASS;
+- restored terrain packer compile with `-Wall -Wextra -Werror` and exact asset
+  execution — PASS; all three outputs are complete 4096x4096 RGBA TGAs;
+- Gate 5 source assertions now include dedicated Environment creation, the
+  terrain precondition, Inspector isolation and legacy hierarchy recovery;
+- CMake/Windows compile — not run locally because CMake is unavailable;
+- exact-head PR CI — pending correction publication;
+- packaged Release visual/interaction/save/reopen/Runtime owner acceptance —
+  pending and required before merge.
+
+Acceptance and the exact owner sequence are in
+`docs/SCENE_UI_GATE5_ENVIRONMENT_TERRAIN.md`.
 
 ## Active work — Journey recovery Gate 9A
 

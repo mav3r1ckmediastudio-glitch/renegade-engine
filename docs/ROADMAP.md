@@ -1,8 +1,8 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`e9c63e47f897ffb9408f9fdd377795f44affb41b`
-(`Story Flow Gate 8D: creator controls (#90)`).
+`628cf26574a4a2a6e8eb0a5a522d94966ad8917e`
+(`Scene UI Gate 4: recover Asset Browser and placement UX (#104)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`

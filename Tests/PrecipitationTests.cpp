@@ -54,6 +54,13 @@ int main()
     {
         return Fail("snow profile did not reach native weather state");
     }
+    if (wi::helper::GetFileNameFromPath(
+            scene.rainMaterial.textures[
+                wi::scene::MaterialComponent::BASECOLORMAP].name) !=
+        "snowflake.dds")
+    {
+        return Fail("snow profile did not bind the dedicated flake texture");
+    }
 
     if (!commands.Undo() || weather.rain_amount != 0.0f)
     {
@@ -78,11 +85,20 @@ int main()
         renegade::bridge::CapturePrecipitation(weather),
         renegade::bridge::PrecipitationMode::Rain);
     renegade::bridge::ApplyPrecipitation(weather, rain);
+    scene.weather = weather;
+    renegade::bridge::RefreshPrecipitationVisual(scene);
     if (renegade::bridge::CapturePrecipitation(weather).mode !=
             renegade::bridge::PrecipitationMode::Rain ||
         weather.rain_length <= 0.005f || weather.rain_splash_scale <= 0.0f)
     {
         return Fail("rain profile did not restore streak and splash behavior");
+    }
+    if (wi::helper::GetFileNameFromPath(
+            scene.rainMaterial.textures[
+                wi::scene::MaterialComponent::BASECOLORMAP].name) ==
+        "snowflake.dds")
+    {
+        return Fail("rain profile retained the snowflake texture");
     }
 
     const auto preserved = renegade::bridge::CapturePrecipitation(weather);

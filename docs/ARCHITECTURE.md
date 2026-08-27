@@ -187,12 +187,25 @@ native per-chunk 16-bit height data remains the serialized authority and a
 whole multi-chunk stroke remains one `SculptTerrainCommand`.
 
 Until material importing exists, new terrain uses a bundled grass PBR default.
-Source AO and roughness TGAs are packed at build time into Wicked's surface-map
-layout (R=AO, G=roughness, B=metalness, A=reflectance), while base colour and
-normal are pre-tiled consistently for the fixed native chunk UVs. Studio and
-Runtime ship the generated maps beside their executables. Scene load rebinds
-only filenames identifying this bundled default, so later creator-assigned
-terrain materials are never overwritten.
+The accepted source maps remain 4096-pixel RLE TGAs. The
+`RenegadeTerrainSurfacePacker` tiles base colour and normal data and packs
+Wicked's surface layout (R=AO, G=roughness, B=metalness, A=reflectance) into
+three complete RGBA TGAs beside both executables. The rejected Gate 5 DDS
+replacement was truncated and was shared by new-Terrain creation and
+old-project rebinding. Scene load rebinds only filenames identifying the
+bundled TGA default, so later creator-assigned terrain materials are never
+overwritten.
+
+Renegade finite terrain uses a fixed authored centre and retains native chunk
+height/blend data as the WISCENE authority. The standard extent is radius 9:
+19x19 chunks at 66 metres per chunk and one-metre vertex spacing, producing a
+1.254 km square. Expansion increments the radius without calling Wicked's
+`Generation_Restart()`; the generator fills only missing outer coordinates.
+Undo cancels active generation and removes only chunks beyond the former
+radius. Wicked's stock camera-following removal is deliberately disabled for
+authored terrain because it erases the authoritative chunk entry, not merely
+its render/physics residency. A future residency layer must preserve authored
+height/blend data separately before enabling that removal path.
 
 ### Renegade-owned shaders
 
@@ -469,8 +482,24 @@ the viewport responsive without turning every rendered frame into an Undo
 entry. Workspace splitters are shell state, persisted through ProjectService
 editor preferences rather than scene serialization.
 
-The Environment workspace resolves `SceneService::WeatherEntity()` directly;
-the serialized Weather entity is deliberately omitted from hierarchy rows.
+The Environment workspace resolves `SceneService::WeatherEntity()` directly.
+Every governed new Level WISCENE is seeded with one dedicated serialized
+`Environment` entity and named directional `Sun` before its archive is written.
+A legacy blank Level that has no Weather component captures the complete live
+resolved atmosphere and creates the Environment/Sun pair through
+`CreateEnvironmentCommand` when Environment is first opened. Existing authored
+directional lighting is never replaced. Terrain creation establishes the same
+command-backed precondition before it calls Wicked terrain generation. The
+bridge-level `CreateTerrain` boundary rejects a blank scene so Wicked cannot
+silently attach its fallback Weather component to the Terrain entity and
+collapse the two workspace owners.
+
+The dedicated Weather carrier is deliberately omitted from hierarchy rows.
+For compatibility with a scene saved by the rejected Gate 5 candidate, an
+entity carrying both Weather and Terrain remains visible, and Inspector
+resolution filters Weather out of Terrain mode and Terrain out of Environment
+mode. This is recovery behavior only; newly created Levels keep the two
+components on separate entities.
 Native precipitation is isolated behind `PrecipitationService`: rain maps to
 Wicked's GPU rain emitter and snow is a distinct Renegade-authored visual
 profile over that emitter. This preserves an upgrade path to a snow-specific

@@ -14,6 +14,7 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 #include "renegade/bridge/StudioSession.h"
+#include "renegade/bridge/SunService.h"
 
 namespace
 {
@@ -242,6 +243,67 @@ int main()
             return Fail("an empty scene reported a weather entity");
         }
 
+        const auto clearEnvironment =
+            renegade::bridge::MakeWeatherPreset(
+                renegade::bridge::WeatherState{},
+                renegade::bridge::WeatherPreset::Clear);
+        renegade::bridge::CommandService environmentCommands;
+        weatherScenes.GetScene().weather.SetRealisticSky(true);
+        weatherScenes.GetScene().weather.horizon =
+            XMFLOAT3(0.12f, 0.23f, 0.34f);
+        auto createEnvironment = std::make_unique<
+            renegade::bridge::CreateEnvironmentCommand>(
+                weatherScenes.GetScene(),
+                clearEnvironment,
+                "Environment");
+        auto* createEnvironmentResult = createEnvironment.get();
+        if (!environmentCommands.Execute(std::move(createEnvironment)))
+        {
+            return Fail("dedicated Environment creation did not execute");
+        }
+        const auto createdEnvironment =
+            createEnvironmentResult->CreatedEntity();
+        const auto createdSun = renegade::bridge::FindPrimarySunLight(
+            weatherScenes.GetScene());
+        const auto* sunName =
+            weatherScenes.GetScene().names.GetComponent(createdSun);
+        const auto* sunLight =
+            weatherScenes.GetScene().lights.GetComponent(createdSun);
+        if (createdEnvironment == wi::ecs::INVALID_ENTITY ||
+            weatherScenes.WeatherEntity() != createdEnvironment ||
+            weatherScenes.GetScene().terrains.Contains(createdEnvironment) ||
+            createdSun == wi::ecs::INVALID_ENTITY ||
+            sunName == nullptr || sunName->name != "Sun" ||
+            sunLight == nullptr ||
+            sunLight->GetType() !=
+                wi::scene::LightComponent::DIRECTIONAL ||
+            sunLight->intensity <= 0.0f ||
+            !weatherScenes.GetScene().weather.IsRealisticSky() ||
+            !NearlyEqual(weatherScenes.GetScene().weather.horizon.y, 0.23f) ||
+            weatherScenes.GetScene().weather.sunColor.x <= 0.0f ||
+            !NearlyEqual(
+                weatherScenes.GetScene().weather.fogDensity,
+                clearEnvironment.fogDensity))
+        {
+            return Fail("Environment creation did not establish a dedicated runtime carrier");
+        }
+        if (!environmentCommands.Undo() ||
+            weatherScenes.WeatherEntity() != wi::ecs::INVALID_ENTITY ||
+            weatherScenes.GetScene().lights.GetCount() != 0 ||
+            !environmentCommands.Redo() ||
+            weatherScenes.WeatherEntity() != createdEnvironment ||
+            renegade::bridge::FindPrimarySunLight(
+                weatherScenes.GetScene()) != createdSun ||
+            weatherScenes.GetScene().weathers.GetComponent(
+                createdEnvironment) == nullptr ||
+            !environmentCommands.Undo() ||
+            weatherScenes.GetScene().lights.GetCount() != 0 ||
+            !weatherScenes.GetScene().weather.IsRealisticSky() ||
+            !NearlyEqual(weatherScenes.GetScene().weather.horizon.y, 0.23f))
+        {
+            return Fail("Environment creation Undo/Redo did not preserve identity");
+        }
+
         const auto environment = wi::ecs::CreateEntity();
         weatherScenes.GetScene().names.Create(environment) = "Environment";
         auto& weather =
@@ -253,6 +315,7 @@ int main()
         weather.ambient = XMFLOAT3(0.02f, 0.04f, 0.08f);
         weather.horizon = XMFLOAT3(0.11f, 0.12f, 0.13f);
         weather.windSpeed = 3.5f;
+        weather.stars = 0.15f;
         weather.volumetricCloudParameters.layerFirst.coverageAmount = 0.2f;
         weather.volumetricCloudParameters.layerSecond.coverageAmount = 0.73f;
         weatherScenes.GetScene().weather = weather;
@@ -267,6 +330,7 @@ int main()
         after.skyMode =
             renegade::bridge::WeatherState::SkyMode::RealisticWithClouds;
         after.skyExposure = 1.25f;
+        after.stars = 0.7f;
         after.ambientIntensity = 0.16f;
         after.fogStart = 24.0f;
         after.fogDensity = 0.031f;
@@ -291,6 +355,7 @@ int main()
         if (!weather.IsVolumetricClouds() ||
             !weather.IsVolumetricCloudsCastShadow() ||
             !NearlyEqual(weather.skyExposure, 1.25f) ||
+            !NearlyEqual(weather.stars, 0.7f) ||
             !NearlyEqual(weather.ambient.z, 0.16f) ||
             !NearlyEqual(weather.ambient.x, 0.04f) ||
             !NearlyEqual(weather.fogDensity, 0.031f) ||
@@ -321,6 +386,7 @@ int main()
         if (!weatherCommands.Undo() ||
             weather.IsVolumetricClouds() ||
             !NearlyEqual(weather.skyExposure, 0.8f) ||
+            !NearlyEqual(weather.stars, 0.15f) ||
             !NearlyEqual(weather.ambient.z, 0.08f) ||
             !NearlyEqual(
                 weather.volumetricCloudParameters.layerFirst.coverageAmount,
@@ -331,7 +397,8 @@ int main()
 
         if (!weatherCommands.Redo() ||
             !weather.IsVolumetricClouds() ||
-            !NearlyEqual(weather.skyExposure, 1.25f))
+            !NearlyEqual(weather.skyExposure, 1.25f) ||
+            !NearlyEqual(weather.stars, 0.7f))
         {
             return Fail("weather redo did not restore the edited state");
         }

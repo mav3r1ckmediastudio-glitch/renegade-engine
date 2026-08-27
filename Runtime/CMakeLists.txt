@@ -67,6 +67,8 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass"
     COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/weather"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Valid Project/Content/Scenes"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/LP01/Invalid Version"
@@ -172,5 +174,8 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass/default_grass_normal.tga"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass/default_grass_surface.tga"
         "32"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/Studio/assets/weather/snowflake.dds"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/weather/snowflake.dds"
     VERBATIM
 )

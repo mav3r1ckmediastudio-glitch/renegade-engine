@@ -30,6 +30,38 @@ namespace renegade::bridge
 
     [[nodiscard]] wi::ecs::Entity FindPrimarySunLight(
         const wi::scene::Scene& scene) noexcept;
+    // Creates the canonical serialized Sun only when the scene has no
+    // directional light. Existing authored lighting is never replaced.
+    [[nodiscard]] wi::ecs::Entity EnsurePrimarySunLight(
+        wi::scene::Scene& scene,
+        wi::ecs::Entity weatherEntity,
+        bool* created = nullptr);
+
+    // Repairs a serialized Weather-only Level without replacing an existing
+    // directional light. The Sun and Weather runtime state share one Undo step.
+    class CreateSunCommand final : public ICommand
+    {
+    public:
+        CreateSunCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity weatherEntity);
+
+        bool Execute() override;
+        void Undo() override;
+
+        [[nodiscard]] wi::ecs::Entity CreatedEntity() const noexcept;
+
+    private:
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity weatherEntity_ = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+        wi::scene::WeatherComponent weatherBefore_;
+        wi::scene::WeatherComponent weatherAfter_;
+        wi::scene::WeatherComponent resolvedBefore_;
+        wi::scene::WeatherComponent resolvedAfter_;
+        wi::Archive snapshot_;
+        bool hasSnapshot_ = false;
+    };
     [[nodiscard]] SunState CaptureSun(
         const wi::scene::Scene& scene,
         wi::ecs::Entity weatherEntity) noexcept;

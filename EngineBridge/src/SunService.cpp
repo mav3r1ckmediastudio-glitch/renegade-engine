@@ -100,6 +100,150 @@ namespace renegade::bridge
         return fallback;
     }
 
+    wi::ecs::Entity EnsurePrimarySunLight(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity weatherEntity,
+        bool* created)
+    {
+        if (created != nullptr)
+        {
+            *created = false;
+        }
+        const auto existing = FindPrimarySunLight(scene);
+        if (existing != wi::ecs::INVALID_ENTITY)
+        {
+            return existing;
+        }
+        if (!scene.weathers.Contains(weatherEntity))
+        {
+            return wi::ecs::INVALID_ENTITY;
+        }
+
+        constexpr float intensity = 5.5f;
+        const XMFLOAT3 color(1.0f, 0.95f, 0.86f);
+        const auto entity = scene.Entity_CreateLight(
+            "Sun",
+            XMFLOAT3(0.0f, 24.0f, -6.0f),
+            color,
+            intensity,
+            1000.0f,
+            wi::scene::LightComponent::DIRECTIONAL);
+        auto* light = scene.lights.GetComponent(entity);
+        if (entity == wi::ecs::INVALID_ENTITY || light == nullptr)
+        {
+            return wi::ecs::INVALID_ENTITY;
+        }
+        light->SetCastShadow(true);
+        light->SetVolumetricsEnabled(true);
+        light->volumetric_boost = 0.55f;
+        light->cascade_distances = wi::vector<float>{ 14.0f, 55.0f, 180.0f };
+
+        auto midday = CaptureSun(scene, weatherEntity);
+        midday.lightEntity = entity;
+        SetSunTime(midday, 12.0f);
+        if (!ApplySun(scene, weatherEntity, midday))
+        {
+            scene.Entity_Remove(entity);
+            return wi::ecs::INVALID_ENTITY;
+        }
+
+        // Scene::Update() will resolve these from the prioritized directional
+        // light every frame. Seed them now as well so opening Environment
+        // cannot render one black frame before that update runs.
+        auto* weather = scene.weathers.GetComponent(weatherEntity);
+        weather->sunColor = XMFLOAT3(
+            color.x * intensity,
+            color.y * intensity,
+            color.z * intensity);
+        scene.weather = *weather;
+        if (created != nullptr)
+        {
+            *created = true;
+        }
+        return entity;
+    }
+
+    CreateSunCommand::CreateSunCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity weatherEntity)
+        : scene_(&scene)
+        , weatherEntity_(weatherEntity)
+        , resolvedBefore_(scene.weather)
+    {
+        if (const auto* weather = scene.weathers.GetComponent(weatherEntity))
+        {
+            weatherBefore_ = *weather;
+        }
+    }
+
+    bool CreateSunCommand::Execute()
+    {
+        if (scene_ == nullptr ||
+            !scene_->weathers.Contains(weatherEntity_) ||
+            FindPrimarySunLight(*scene_) != wi::ecs::INVALID_ENTITY)
+        {
+            return false;
+        }
+
+        if (entity_ == wi::ecs::INVALID_ENTITY)
+        {
+            bool created = false;
+            entity_ = EnsurePrimarySunLight(
+                *scene_,
+                weatherEntity_,
+                &created);
+            if (!created || entity_ == wi::ecs::INVALID_ENTITY)
+            {
+                entity_ = wi::ecs::INVALID_ENTITY;
+                return false;
+            }
+            weatherAfter_ = *scene_->weathers.GetComponent(weatherEntity_);
+            resolvedAfter_ = scene_->weather;
+            return true;
+        }
+
+        if (!hasSnapshot_)
+        {
+            return false;
+        }
+        snapshot_.SetReadModeAndResetPos(true);
+        wi::ecs::EntitySerializer serializer;
+        serializer.allow_remap = false;
+        if (scene_->Entity_Serialize(snapshot_, serializer) != entity_)
+        {
+            return false;
+        }
+        *scene_->weathers.GetComponent(weatherEntity_) = weatherAfter_;
+        scene_->weather = resolvedAfter_;
+        return true;
+    }
+
+    void CreateSunCommand::Undo()
+    {
+        if (scene_ == nullptr || !scene_->lights.Contains(entity_))
+        {
+            return;
+        }
+        if (!hasSnapshot_)
+        {
+            snapshot_.SetReadModeAndResetPos(false);
+            wi::ecs::EntitySerializer serializer;
+            scene_->Entity_Serialize(snapshot_, serializer, entity_);
+            hasSnapshot_ = true;
+        }
+        scene_->Entity_Remove(entity_);
+        if (auto* weather = scene_->weathers.GetComponent(weatherEntity_))
+        {
+            *weather = weatherBefore_;
+        }
+        scene_->weather = resolvedBefore_;
+    }
+
+    wi::ecs::Entity CreateSunCommand::CreatedEntity() const noexcept
+    {
+        return entity_;
+    }
+
     SunState CaptureSun(
         const wi::scene::Scene& scene,
         const wi::ecs::Entity weatherEntity) noexcept

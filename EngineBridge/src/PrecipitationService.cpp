@@ -117,6 +117,34 @@ namespace renegade::bridge
 
     }
 
+    void RefreshPrecipitationVisual(wi::scene::Scene& scene)
+    {
+        const PrecipitationState state = CapturePrecipitation(scene.weather);
+        auto& baseColor = scene.rainMaterial.textures[
+            wi::scene::MaterialComponent::BASECOLORMAP];
+        constexpr const char* SnowflakeFile = "snowflake.dds";
+
+        if (state.mode == PrecipitationMode::Snow)
+        {
+            const std::string path = wi::helper::GetCurrentPath() +
+                "/Content/weather/" + SnowflakeFile;
+            if (wi::helper::GetFileNameFromPath(baseColor.name) != SnowflakeFile)
+            {
+                baseColor.name = path;
+                baseColor.resource = wi::resourcemanager::Load(path);
+            }
+            return;
+        }
+
+        // Wicked lazily recreates its native circular rain mask during the
+        // following Scene update. Clear only a Renegade snow binding; never
+        // overwrite an unrelated native/custom precipitation resource.
+        if (wi::helper::GetFileNameFromPath(baseColor.name) == SnowflakeFile)
+        {
+            baseColor = {};
+        }
+    }
+
     PrecipitationState MakePrecipitationProfile(
         const PrecipitationState& current,
         const PrecipitationMode mode) noexcept
@@ -204,6 +232,7 @@ namespace renegade::bridge
         }
         ApplyPrecipitation(*weather, state);
         RefreshRuntimeWeather(*scene_, entity_, *weather);
+        RefreshPrecipitationVisual(*scene_);
         return true;
     }
 }

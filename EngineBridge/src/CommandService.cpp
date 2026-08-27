@@ -1,6 +1,7 @@
 #include "renegade/bridge/CommandService.h"
 
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/SunService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -47,6 +48,7 @@ namespace
         return before.skyMode != after.skyMode ||
             before.aerialPerspective != after.aerialPerspective ||
             !NearlyEqual(before.skyExposure, after.skyExposure) ||
+            !NearlyEqual(before.stars, after.stars) ||
             !NearlyEqual(before.ambientIntensity, after.ambientIntensity) ||
             !NearlyEqual(before.fogStart, after.fogStart) ||
             !NearlyEqual(before.fogDensity, after.fogDensity) ||
@@ -106,6 +108,7 @@ namespace renegade::bridge
 
         state.aerialPerspective = weather.IsRealisticSkyAerialPerspective();
         state.skyExposure = weather.skyExposure;
+        state.stars = weather.stars;
 
         // Ambient is authored as a neutral scalar. Renegade keeps the cool
         // tint it generates and scales it, rather than making the creator
@@ -147,6 +150,7 @@ namespace renegade::bridge
         weather.SetVolumetricCloudsCastShadow(clouds && state.cloudsCastShadow);
 
         weather.skyExposure = state.skyExposure;
+        weather.stars = std::clamp(state.stars, 0.0f, 1.0f);
 
         // Preserve the authored ambient hue, rescaled to the requested
         // intensity. Falling back to a neutral grey keeps a fully black
@@ -246,6 +250,51 @@ namespace renegade::bridge
         return result;
     }
 
+    wi::ecs::Entity CreateEnvironment(
+        wi::scene::Scene& scene,
+        const WeatherState& weatherState,
+        const char* name,
+        wi::ecs::Entity* createdSun)
+    {
+        if (createdSun != nullptr)
+        {
+            *createdSun = wi::ecs::INVALID_ENTITY;
+        }
+        if (scene.weathers.GetCount() > 0)
+        {
+            return wi::ecs::INVALID_ENTITY;
+        }
+
+        // A blank WISCENE still has a live resolved WeatherComponent used by
+        // the renderer. Start from that complete state so opening the
+        // Environment workspace does not replace the visible atmosphere with
+        // a partially initialized component.
+        const auto resolvedWeather = scene.weather;
+        const wi::ecs::Entity entity = wi::ecs::CreateEntity();
+        scene.names.Create(entity) = name == nullptr ? "Environment" : name;
+        auto& weather = scene.weathers.Create(entity);
+        weather = resolvedWeather;
+        ApplyWeather(weather, weatherState);
+        scene.weather = weather;
+
+        bool sunWasCreated = false;
+        const auto sun = EnsurePrimarySunLight(
+            scene,
+            entity,
+            &sunWasCreated);
+        if (sun == wi::ecs::INVALID_ENTITY)
+        {
+            scene.Entity_Remove(entity);
+            scene.weather = resolvedWeather;
+            return wi::ecs::INVALID_ENTITY;
+        }
+        if (sunWasCreated && createdSun != nullptr)
+        {
+            *createdSun = sun;
+        }
+        return entity;
+    }
+
     SetWeatherCommand::SetWeatherCommand(
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity,
@@ -311,6 +360,100 @@ namespace renegade::bridge
         }
 
         return true;
+    }
+
+    CreateEnvironmentCommand::CreateEnvironmentCommand(
+        wi::scene::Scene& scene,
+        const WeatherState& weather,
+        const char* name)
+        : scene_(&scene)
+        , weather_(weather)
+        , name_(name == nullptr ? "Environment" : name)
+        , resolvedWeatherBefore_(scene.weather)
+    {
+    }
+
+    bool CreateEnvironmentCommand::Execute()
+    {
+        if (scene_ == nullptr || scene_->weathers.GetCount() > 0)
+        {
+            return false;
+        }
+        if (entity_ == wi::ecs::INVALID_ENTITY)
+        {
+            entity_ = CreateEnvironment(
+                *scene_,
+                weather_,
+                name_.c_str(),
+                &createdSun_);
+            return entity_ != wi::ecs::INVALID_ENTITY;
+        }
+        if (!hasSnapshot_ || EntityExists(*scene_, entity_))
+        {
+            return false;
+        }
+
+        snapshot_.SetReadModeAndResetPos(true);
+        wi::ecs::EntitySerializer serializer;
+        serializer.allow_remap = false;
+        const auto restored = scene_->Entity_Serialize(snapshot_, serializer);
+        auto* weather = scene_->weathers.GetComponent(restored);
+        if (restored != entity_ || weather == nullptr)
+        {
+            return false;
+        }
+        if (createdSun_ != wi::ecs::INVALID_ENTITY)
+        {
+            sunSnapshot_.SetReadModeAndResetPos(true);
+            wi::ecs::EntitySerializer sunSerializer;
+            sunSerializer.allow_remap = false;
+            if (scene_->Entity_Serialize(sunSnapshot_, sunSerializer) !=
+                createdSun_)
+            {
+                scene_->Entity_Remove(entity_);
+                return false;
+            }
+        }
+        scene_->weather = *weather;
+        return true;
+    }
+
+    void CreateEnvironmentCommand::Undo()
+    {
+        if (scene_ == nullptr || !EntityExists(*scene_, entity_))
+        {
+            return;
+        }
+        if (!hasSnapshot_)
+        {
+            snapshot_.SetReadModeAndResetPos(false);
+            wi::ecs::EntitySerializer serializer;
+            scene_->Entity_Serialize(snapshot_, serializer, entity_);
+            if (createdSun_ != wi::ecs::INVALID_ENTITY &&
+                EntityExists(*scene_, createdSun_))
+            {
+                sunSnapshot_.SetReadModeAndResetPos(false);
+                wi::ecs::EntitySerializer sunSerializer;
+                scene_->Entity_Serialize(
+                    sunSnapshot_,
+                    sunSerializer,
+                    createdSun_);
+            }
+            hasSnapshot_ = true;
+        }
+        if (createdSun_ != wi::ecs::INVALID_ENTITY)
+        {
+            scene_->Entity_Remove(createdSun_);
+        }
+        scene_->Entity_Remove(entity_);
+        scene_->weather = scene_->weathers.GetCount() > 0
+            ? scene_->weathers[0]
+            : resolvedWeatherBefore_;
+    }
+
+    wi::ecs::Entity CreateEnvironmentCommand::CreatedEntity() const noexcept
+    {
+        return entity_;
     }
 
     bool CommandService::Execute(std::unique_ptr<ICommand> command)

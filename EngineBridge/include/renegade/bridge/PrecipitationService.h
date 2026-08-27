@@ -36,6 +36,11 @@ namespace renegade::bridge
     void ApplyPrecipitation(
         wi::scene::WeatherComponent& weather,
         const PrecipitationState& state) noexcept;
+    // Keeps Wicked's native precipitation simulation and swaps only its
+    // transient billboard material. Call before the Scene update so a loaded
+    // Snow profile receives Renegade's static flake instead of Wicked's
+    // procedural circular rain mask.
+    void RefreshPrecipitationVisual(wi::scene::Scene& scene);
     [[nodiscard]] PrecipitationState MakePrecipitationProfile(
         const PrecipitationState& current,
         PrecipitationMode mode) noexcept;

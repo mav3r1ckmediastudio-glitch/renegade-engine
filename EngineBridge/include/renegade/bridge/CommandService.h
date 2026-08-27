@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <WickedEngine.h>
@@ -39,6 +40,7 @@ namespace renegade::bridge
         bool aerialPerspective = true;
 
         float skyExposure = 1.0f;
+        float stars = 0.0f;
         float ambientIntensity = 0.0f;
 
         float fogStart = 100.0f;
@@ -74,6 +76,16 @@ namespace renegade::bridge
     [[nodiscard]] WeatherState MakeWeatherPreset(
         const WeatherState& current,
         WeatherPreset preset) noexcept;
+
+    // Creates the dedicated serialized carrier used by Renegade's Environment
+    // workspace. Returning INVALID_ENTITY when a Weather component already
+    // exists prevents terrain generation from silently becoming the scene's
+    // Environment owner.
+    [[nodiscard]] wi::ecs::Entity CreateEnvironment(
+        wi::scene::Scene& scene,
+        const WeatherState& weather,
+        const char* name = "Environment",
+        wi::ecs::Entity* createdSun = nullptr);
 
     class ICommand
     {
@@ -182,6 +194,31 @@ namespace renegade::bridge
         wi::ecs::Entity entity_;
         WeatherState before_;
         WeatherState after_;
+    };
+
+    class CreateEnvironmentCommand final : public ICommand
+    {
+    public:
+        CreateEnvironmentCommand(
+            wi::scene::Scene& scene,
+            const WeatherState& weather,
+            const char* name = "Environment");
+
+        bool Execute() override;
+        void Undo() override;
+
+        [[nodiscard]] wi::ecs::Entity CreatedEntity() const noexcept;
+
+    private:
+        wi::scene::Scene* scene_ = nullptr;
+        WeatherState weather_;
+        std::string name_;
+        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+        wi::scene::WeatherComponent resolvedWeatherBefore_;
+        wi::Archive snapshot_;
+        wi::ecs::Entity createdSun_ = wi::ecs::INVALID_ENTITY;
+        wi::Archive sunSnapshot_;
+        bool hasSnapshot_ = false;
     };
 
     class DuplicateEntityCommand final : public ICommand

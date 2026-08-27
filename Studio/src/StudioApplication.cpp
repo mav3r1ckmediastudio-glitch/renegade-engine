@@ -2142,6 +2142,15 @@ namespace renegade::studio
             4.0f,
             400.0f);
         createWeatherSlider(
+            stars_,
+            "Stars",
+            "STARS",
+            "Procedural star visibility in the native realistic sky.",
+            WeatherField::Stars,
+            0.0f,
+            1.0f,
+            100.0f);
+        createWeatherSlider(
             ambientIntensity_,
             "Ambient Intensity",
             "AMBIENT",
@@ -2617,6 +2626,22 @@ namespace renegade::studio
         });
         inspectorPanel_.AddWidget(&createTerrainButton_);
 
+        terrainSizeReadout_.Create("Current Terrain Size");
+        terrainSizeReadout_.SetText("CURRENT TERRAIN // 1.25 KM x 1.25 KM");
+        terrainSizeReadout_.SetTooltip(
+            "Authored finite terrain size. Expansion preserves every existing chunk.");
+        inspectorPanel_.AddWidget(&terrainSizeReadout_);
+
+        expandTerrainButton_.Create("Expand Terrain");
+        expandTerrainButton_.SetText("EXPAND TERRAIN // +1 RING");
+        expandTerrainButton_.SetTooltip(
+            "Add one 66 m chunk ring on every side without restarting or erasing sculpting.");
+        expandTerrainButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            pendingAction_ = EditorAction::ExpandTerrain;
+        });
+        inspectorPanel_.AddWidget(&expandTerrainButton_);
+
         const auto createTerrainSlider = [this](
             RenegadeSlider& input,
             const char* name,
@@ -2643,11 +2668,10 @@ namespace renegade::studio
             });
             inspectorPanel_.AddWidget(&input);
         };
-        createTerrainSlider(terrainVisibleRadius_, "Terrain Visible Radius",
-            "VISIBLE CHUNKS", "Generated chunk radius around the terrain origin.",
-            TerrainField::VisibleChunkRadius, 1.0f, 16.0f, 15.0f);
-        createTerrainSlider(terrainChunkScale_, "Terrain Chunk Scale",
-            "CHUNK SCALE", "World scale of each streamed terrain chunk.",
+        createTerrainSlider(terrainChunkScale_, "Terrain Resolution",
+            "VERTEX SPACING (M)",
+            "Distance between sculptable terrain samples. 1 m is standard; "
+            "larger spacing trades local detail for world coverage.",
             TerrainField::ChunkScale, 0.25f, 16.0f, 1575.0f);
         createTerrainSlider(terrainMinimumHeight_, "Terrain Minimum Height",
             "MIN HEIGHT", "Lowest generated terrain elevation.",
@@ -4111,6 +4135,10 @@ namespace renegade::studio
             return;
         }
 
+        if (session_ != nullptr)
+        {
+            bridge::RefreshPrecipitationVisual(session_->Scenes().GetScene());
+        }
         RenderPath3D::Update(dt);
 
         if (session_ == nullptr || projectHubVisible_)
@@ -4487,94 +4515,96 @@ namespace renegade::studio
         positionEnvironmentWidget(skyMode_, 98.0f);
         positionEnvironmentWidget(aerialPerspective_, 132.0f);
         positionEnvironmentWidget(skyExposure_, 164.0f);
-        positionEnvironmentWidget(ambientIntensity_, 198.0f);
-        positionEnvironmentWidget(environmentFogLabel_, 232.0f, 20.0f);
-        positionEnvironmentWidget(fogStart_, 252.0f);
-        positionEnvironmentWidget(fogDensity_, 286.0f);
-        positionEnvironmentWidget(heightFog_, 320.0f);
-        positionEnvironmentWidget(fogHeightStart_, 352.0f);
-        positionEnvironmentWidget(fogHeightEnd_, 386.0f);
-        positionEnvironmentWidget(environmentCloudLabel_, 420.0f, 20.0f);
-        positionEnvironmentWidget(cloudCoverage_, 440.0f);
-        positionEnvironmentWidget(cloudStartHeight_, 474.0f);
-        positionEnvironmentWidget(cloudThickness_, 508.0f);
-        positionEnvironmentWidget(cloudsCastShadow_, 542.0f);
-        positionEnvironmentWidget(precipitationLabel_, 576.0f, 20.0f);
-        positionEnvironmentWidget(precipitationMode_, 596.0f);
-        positionEnvironmentWidget(precipitationIntensity_, 630.0f);
-        positionEnvironmentWidget(precipitationFallSpeed_, 664.0f);
-        positionEnvironmentWidget(precipitationParticleScale_, 698.0f);
-        positionEnvironmentWidget(precipitationWindAzimuth_, 732.0f);
-        positionEnvironmentWidget(precipitationWindSpeed_, 766.0f);
-        positionEnvironmentWidget(precipitationTurbulence_, 800.0f);
-        positionEnvironmentWidget(sunLabel_, 834.0f, 20.0f);
-        positionEnvironmentWidget(sunPreset_, 854.0f);
-        positionEnvironmentWidget(sunTime_, 888.0f);
-        positionEnvironmentWidget(sunAzimuth_, 922.0f);
-        positionEnvironmentWidget(sunElevation_, 956.0f);
-        positionEnvironmentWidget(sunPreviewSpeed_, 990.0f);
-        sunPlayButton_.SetPos(XMFLOAT2(12.0f, 1024.0f));
+        positionEnvironmentWidget(stars_, 198.0f);
+        positionEnvironmentWidget(ambientIntensity_, 232.0f);
+        positionEnvironmentWidget(environmentFogLabel_, 266.0f, 20.0f);
+        positionEnvironmentWidget(fogStart_, 286.0f);
+        positionEnvironmentWidget(fogDensity_, 320.0f);
+        positionEnvironmentWidget(heightFog_, 354.0f);
+        positionEnvironmentWidget(fogHeightStart_, 386.0f);
+        positionEnvironmentWidget(fogHeightEnd_, 420.0f);
+        positionEnvironmentWidget(environmentCloudLabel_, 454.0f, 20.0f);
+        positionEnvironmentWidget(cloudCoverage_, 474.0f);
+        positionEnvironmentWidget(cloudStartHeight_, 508.0f);
+        positionEnvironmentWidget(cloudThickness_, 542.0f);
+        positionEnvironmentWidget(cloudsCastShadow_, 576.0f);
+        positionEnvironmentWidget(precipitationLabel_, 610.0f, 20.0f);
+        positionEnvironmentWidget(precipitationMode_, 630.0f);
+        positionEnvironmentWidget(precipitationIntensity_, 664.0f);
+        positionEnvironmentWidget(precipitationFallSpeed_, 698.0f);
+        positionEnvironmentWidget(precipitationParticleScale_, 732.0f);
+        positionEnvironmentWidget(precipitationWindAzimuth_, 766.0f);
+        positionEnvironmentWidget(precipitationWindSpeed_, 800.0f);
+        positionEnvironmentWidget(precipitationTurbulence_, 834.0f);
+        positionEnvironmentWidget(sunLabel_, 868.0f, 20.0f);
+        positionEnvironmentWidget(sunPreset_, 888.0f);
+        positionEnvironmentWidget(sunTime_, 922.0f);
+        positionEnvironmentWidget(sunAzimuth_, 956.0f);
+        positionEnvironmentWidget(sunElevation_, 990.0f);
+        positionEnvironmentWidget(sunPreviewSpeed_, 1024.0f);
+        sunPlayButton_.SetPos(XMFLOAT2(12.0f, 1058.0f));
         sunPauseButton_.SetPos(XMFLOAT2(
             20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
-            1024.0f));
+            1058.0f));
         sunPlayButton_.SetSize(XMFLOAT2(
             (environmentFieldWidth - 8.0f) * 0.5f,
             28.0f));
         sunPauseButton_.SetSize(XMFLOAT2(
             (environmentFieldWidth - 8.0f) * 0.5f,
             28.0f));
-        positionEnvironmentWidget(oceanLabel_, 1060.0f, 20.0f);
-        positionEnvironmentWidget(oceanEnabled_, 1080.0f);
-        positionEnvironmentWidget(oceanPreset_, 1114.0f);
-        positionEnvironmentWidget(oceanResolution_, 1148.0f);
-        positionEnvironmentWidget(oceanWaterHeight_, 1182.0f);
-        positionEnvironmentWidget(oceanPatchLength_, 1216.0f);
-        positionEnvironmentWidget(oceanWaveAmplitude_, 1250.0f);
-        positionEnvironmentWidget(oceanChoppyScale_, 1284.0f);
-        positionEnvironmentWidget(oceanTimeScale_, 1318.0f);
-        positionEnvironmentWidget(oceanWindAzimuth_, 1352.0f);
-        positionEnvironmentWidget(oceanWindSpeed_, 1386.0f);
-        positionEnvironmentWidget(oceanWindDependency_, 1420.0f);
-        positionEnvironmentWidget(oceanSurfaceDetail_, 1454.0f);
-        positionEnvironmentWidget(oceanDisplacementTolerance_, 1488.0f);
-        positionEnvironmentWidget(oceanWaterRed_, 1522.0f);
-        positionEnvironmentWidget(oceanWaterGreen_, 1556.0f);
-        positionEnvironmentWidget(oceanWaterBlue_, 1590.0f);
-        positionEnvironmentWidget(oceanWaterOpacity_, 1624.0f);
-        positionEnvironmentWidget(oceanExtinctionRed_, 1658.0f);
-        positionEnvironmentWidget(oceanExtinctionGreen_, 1692.0f);
-        positionEnvironmentWidget(oceanExtinctionBlue_, 1726.0f);
+        positionEnvironmentWidget(oceanLabel_, 1094.0f, 20.0f);
+        positionEnvironmentWidget(oceanEnabled_, 1114.0f);
+        positionEnvironmentWidget(oceanPreset_, 1148.0f);
+        positionEnvironmentWidget(oceanResolution_, 1182.0f);
+        positionEnvironmentWidget(oceanWaterHeight_, 1216.0f);
+        positionEnvironmentWidget(oceanPatchLength_, 1250.0f);
+        positionEnvironmentWidget(oceanWaveAmplitude_, 1284.0f);
+        positionEnvironmentWidget(oceanChoppyScale_, 1318.0f);
+        positionEnvironmentWidget(oceanTimeScale_, 1352.0f);
+        positionEnvironmentWidget(oceanWindAzimuth_, 1386.0f);
+        positionEnvironmentWidget(oceanWindSpeed_, 1420.0f);
+        positionEnvironmentWidget(oceanWindDependency_, 1454.0f);
+        positionEnvironmentWidget(oceanSurfaceDetail_, 1488.0f);
+        positionEnvironmentWidget(oceanDisplacementTolerance_, 1522.0f);
+        positionEnvironmentWidget(oceanWaterRed_, 1556.0f);
+        positionEnvironmentWidget(oceanWaterGreen_, 1590.0f);
+        positionEnvironmentWidget(oceanWaterBlue_, 1624.0f);
+        positionEnvironmentWidget(oceanWaterOpacity_, 1658.0f);
+        positionEnvironmentWidget(oceanExtinctionRed_, 1692.0f);
+        positionEnvironmentWidget(oceanExtinctionGreen_, 1726.0f);
+        positionEnvironmentWidget(oceanExtinctionBlue_, 1760.0f);
 
         positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);
         positionEnvironmentWidget(createTerrainButton_, 64.0f);
-        positionEnvironmentWidget(terrainVisibleRadius_, 64.0f);
-        positionEnvironmentWidget(terrainChunkScale_, 98.0f);
-        positionEnvironmentWidget(terrainMinimumHeight_, 132.0f);
-        positionEnvironmentWidget(terrainMaximumHeight_, 166.0f);
-        positionEnvironmentWidget(terrainLowAltitudeBlend_, 200.0f);
-        positionEnvironmentWidget(terrainBaseBlend_, 234.0f);
-        positionEnvironmentWidget(terrainSlopeBlend_, 268.0f);
-        positionEnvironmentWidget(terrainLodBias_, 302.0f);
-        positionEnvironmentWidget(terrainMaterialLabel_, 346.0f, 20.0f);
-        positionEnvironmentWidget(terrainMaterialPreset_, 366.0f);
-        positionEnvironmentWidget(terrainTextureScale_, 400.0f);
-        terrainApplyDefaultGrassButton_.SetPos(XMFLOAT2(12.0f, 434.0f));
+        positionEnvironmentWidget(terrainSizeReadout_, 64.0f, 20.0f);
+        positionEnvironmentWidget(expandTerrainButton_, 88.0f);
+        positionEnvironmentWidget(terrainChunkScale_, 122.0f);
+        positionEnvironmentWidget(terrainMinimumHeight_, 156.0f);
+        positionEnvironmentWidget(terrainMaximumHeight_, 190.0f);
+        positionEnvironmentWidget(terrainLowAltitudeBlend_, 224.0f);
+        positionEnvironmentWidget(terrainBaseBlend_, 258.0f);
+        positionEnvironmentWidget(terrainSlopeBlend_, 292.0f);
+        positionEnvironmentWidget(terrainLodBias_, 326.0f);
+        positionEnvironmentWidget(terrainMaterialLabel_, 370.0f, 20.0f);
+        positionEnvironmentWidget(terrainMaterialPreset_, 390.0f);
+        positionEnvironmentWidget(terrainTextureScale_, 424.0f);
+        terrainApplyDefaultGrassButton_.SetPos(XMFLOAT2(12.0f, 458.0f));
         terrainReloadMaterialButton_.SetPos(XMFLOAT2(
             20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
-            434.0f));
+            458.0f));
         terrainApplyDefaultGrassButton_.SetSize(XMFLOAT2(
             (environmentFieldWidth - 8.0f) * 0.5f,
             28.0f));
         terrainReloadMaterialButton_.SetSize(XMFLOAT2(
             (environmentFieldWidth - 8.0f) * 0.5f,
             28.0f));
-        positionEnvironmentWidget(terrainSculptLabel_, 476.0f, 20.0f);
-        positionEnvironmentWidget(terrainSculptMode_, 496.0f);
-        positionEnvironmentWidget(terrainBrushRadius_, 530.0f);
-        positionEnvironmentWidget(terrainBrushStrength_, 564.0f);
-        positionEnvironmentWidget(terrainBrushFalloff_, 598.0f);
-        positionEnvironmentWidget(terrainBrushReadout_, 632.0f, 20.0f);
-        positionEnvironmentWidget(terrainStrokeDiagnostic_, 652.0f, 20.0f);
+        positionEnvironmentWidget(terrainSculptLabel_, 500.0f, 20.0f);
+        positionEnvironmentWidget(terrainSculptMode_, 520.0f);
+        positionEnvironmentWidget(terrainBrushRadius_, 554.0f);
+        positionEnvironmentWidget(terrainBrushStrength_, 588.0f);
+        positionEnvironmentWidget(terrainBrushFalloff_, 622.0f);
+        positionEnvironmentWidget(terrainBrushReadout_, 656.0f, 20.0f);
+        positionEnvironmentWidget(terrainStrokeDiagnostic_, 676.0f, 20.0f);
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
@@ -4933,9 +4963,14 @@ namespace renegade::studio
 
         const auto selected = session_->Selection().SelectedEntity();
         const auto weatherEntity = session_->Scenes().WeatherEntity();
+        const auto& scene = session_->Scenes().GetScene();
         for (const auto& entity : session_->Scenes().ListEntities())
         {
-            if (entity.entity == weatherEntity)
+            // A broken Gate 5 build could serialize Wicked's fallback Weather
+            // onto the Terrain entity. Hide only the dedicated Environment
+            // carrier; legacy dual-role terrain must remain discoverable.
+            if (entity.entity == weatherEntity &&
+                !scene.terrains.Contains(entity.entity))
             {
                 continue;
             }
@@ -5030,7 +5065,10 @@ namespace renegade::studio
                     ? wi::ecs::INVALID_ENTITY
                     : selectedEntity)
             : nullptr;
-        auto* weather = hasSession
+        // Terrain generation in an older blank Level can leave Weather on the
+        // Terrain entity. Terrain mode must still resolve only Terrain controls;
+        // Environment owns Weather presentation in its dedicated workspace.
+        auto* weather = hasSession && !terrainWorkspaceActive_
             ? session_->Scenes().GetScene().weathers.GetComponent(entity)
             : nullptr;
         auto* terrain = hasSession && !environmentWorkspaceActive_
@@ -5107,6 +5145,7 @@ namespace renegade::studio
         setEnvironmentVisible(skyMode_);
         setEnvironmentVisible(aerialPerspective_);
         setEnvironmentVisible(skyExposure_);
+        setEnvironmentVisible(stars_);
         setEnvironmentVisible(ambientIntensity_);
         setEnvironmentVisible(environmentFogLabel_);
         setEnvironmentVisible(fogStart_);
@@ -5165,7 +5204,8 @@ namespace renegade::studio
             terrainWorkspaceActive_);
         createTerrainButton_.SetVisible(
             hasSession && terrainWorkspaceActive_ && !hasTerrain);
-        setTerrainVisible(terrainVisibleRadius_);
+        setTerrainVisible(terrainSizeReadout_);
+        setTerrainVisible(expandTerrainButton_);
         setTerrainVisible(terrainChunkScale_);
         setTerrainVisible(terrainMinimumHeight_);
         setTerrainVisible(terrainMaximumHeight_);
@@ -5228,6 +5268,7 @@ namespace renegade::studio
                 static_cast<std::uint64_t>(state.skyMode));
             aerialPerspective_.SetCheck(state.aerialPerspective);
             skyExposure_.SetValue(state.skyExposure);
+            stars_.SetValue(state.stars);
             ambientIntensity_.SetValue(state.ambientIntensity);
             fogStart_.SetValue(state.fogStart);
             fogDensity_.SetValue(state.fogDensity);
@@ -5342,8 +5383,17 @@ namespace renegade::studio
                     ? name->name
                     : "ENTITY " + std::to_string(entity)));
             const auto state = bridge::CaptureTerrain(*terrain);
-            terrainVisibleRadius_.SetValue(
-                static_cast<float>(state.visibleChunkRadius));
+            const float terrainWidthKm = bridge::TerrainWidthMeters(
+                state.visibleChunkRadius,
+                state.chunkScale) / 1000.0f;
+            std::ostringstream terrainSize;
+            terrainSize << "CURRENT TERRAIN // " << std::fixed
+                        << std::setprecision(2) << terrainWidthKm
+                        << " KM x " << terrainWidthKm << " KM";
+            terrainSizeReadout_.SetText(terrainSize.str());
+            expandTerrainButton_.SetEnabled(
+                !state.centerToCamera && !state.removeDistantChunks &&
+                state.visibleChunkRadius < bridge::MaximumTerrainChunkRadius);
             terrainChunkScale_.SetValue(state.chunkScale);
             terrainMinimumHeight_.SetValue(state.minimumHeight);
             terrainMaximumHeight_.SetValue(state.maximumHeight);
@@ -5676,6 +5726,9 @@ namespace renegade::studio
         case EditorAction::CreateTerrain:
             CreateTerrain();
             break;
+        case EditorAction::ExpandTerrain:
+            ExpandTerrain();
+            break;
         case EditorAction::ApplyTerrainMaterialPreset:
             ApplyTerrainMaterialPreset(pendingTerrainMaterialPreset_);
             break;
@@ -5751,6 +5804,31 @@ namespace renegade::studio
         if (!active && sunPreviewPlaying_)
         {
             StopSunPreview(true);
+        }
+        if (active && session_ != nullptr &&
+            session_->Scenes().WeatherEntity() == wi::ecs::INVALID_ENTITY)
+        {
+            const auto environmentState = bridge::CaptureWeather(
+                session_->Scenes().GetScene().weather);
+            session_->Commands().Execute(
+                std::make_unique<bridge::CreateEnvironmentCommand>(
+                    session_->Scenes().GetScene(),
+                    environmentState,
+                    "Environment"));
+        }
+        if (active && session_ != nullptr)
+        {
+            auto& scene = session_->Scenes().GetScene();
+            const auto weatherEntity = session_->Scenes().WeatherEntity();
+            if (weatherEntity != wi::ecs::INVALID_ENTITY &&
+                bridge::FindPrimarySunLight(scene) ==
+                    wi::ecs::INVALID_ENTITY)
+            {
+                session_->Commands().Execute(
+                    std::make_unique<bridge::CreateSunCommand>(
+                        scene,
+                        weatherEntity));
+            }
         }
         environmentWorkspaceActive_ = active && session_ != nullptr &&
             session_->Scenes().WeatherEntity() != wi::ecs::INVALID_ENTITY;
@@ -6837,6 +6915,9 @@ namespace renegade::studio
         case WeatherField::SkyExposure:
             weather.skyExposure = std::clamp(value, 0.0f, 8.0f);
             break;
+        case WeatherField::Stars:
+            weather.stars = std::clamp(value, 0.0f, 1.0f);
+            break;
         case WeatherField::AmbientIntensity:
             weather.ambientIntensity = std::clamp(value, 0.0f, 8.0f);
             break;
@@ -7764,6 +7845,32 @@ namespace renegade::studio
             return;
         }
         auto& scene = session_->Scenes().GetScene();
+        // Wicked creates Weather on the Terrain entity when generation starts
+        // in a blank scene. Establish Renegade's dedicated Environment carrier
+        // first so the two Inspector workspaces never acquire the same owner.
+        if (scene.weathers.GetCount() == 0)
+        {
+            const auto environmentState = bridge::CaptureWeather(
+                scene.weather);
+            if (!session_->Commands().Execute(
+                    std::make_unique<bridge::CreateEnvironmentCommand>(
+                        scene,
+                        environmentState,
+                        "Environment")))
+            {
+                return;
+            }
+        }
+        if (bridge::FindPrimarySunLight(scene) == wi::ecs::INVALID_ENTITY)
+        {
+            if (!session_->Commands().Execute(
+                    std::make_unique<bridge::CreateSunCommand>(
+                        scene,
+                        session_->Scenes().WeatherEntity())))
+            {
+                return;
+            }
+        }
         if (scene.terrains.GetCount() > 0)
         {
             session_->Selection().Select(scene.terrains.GetEntity(0));
@@ -7782,6 +7889,24 @@ namespace renegade::studio
         }
         session_->Selection().Select(createCommand->CreatedEntity());
         RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::ExpandTerrain()
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+        const auto entity = session_->Selection().SelectedEntity();
+        auto& scene = session_->Scenes().GetScene();
+        if (!scene.terrains.Contains(entity))
+        {
+            return;
+        }
+        session_->Commands().Execute(
+            std::make_unique<bridge::ExpandTerrainCommand>(scene, entity));
         RefreshInspector();
         RefreshStatus();
     }
@@ -7815,10 +7940,6 @@ namespace renegade::studio
     {
         switch (field)
         {
-        case TerrainField::VisibleChunkRadius:
-            terrain.visibleChunkRadius = static_cast<int>(
-                std::clamp(std::lround(value), 1l, 16l));
-            break;
         case TerrainField::ChunkScale:
             terrain.chunkScale = std::clamp(value, 0.25f, 16.0f);
             break;

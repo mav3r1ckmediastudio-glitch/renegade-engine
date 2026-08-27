@@ -22,8 +22,8 @@ framework.
 
 ## Current baseline
 
-- Current main baseline: `fe5871091ccb74a417081c4e4abe38ed86010f53`
-  (Story Flow Gate 8B shared Screen renderer, PR #88)
+- Current main baseline: `628cf26574a4a2a6e8eb0a5a522d94966ad8917e`
+  (Scene UI Gate 4 Asset Browser and placement recovery, PR #104)
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
 - Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`

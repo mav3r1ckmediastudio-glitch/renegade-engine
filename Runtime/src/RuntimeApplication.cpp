@@ -1,6 +1,7 @@
 #include "RuntimeApplication.h"
 
 #include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/PrecipitationService.h"
 
 #include <utility>
 
@@ -202,6 +203,7 @@ namespace renegade::runtime
         // Wicked refreshes device state and runs the active path GUI from the
         // base application update. Renegade reads that current-frame state
         // afterwards so keyboard and gamepad activation are not one frame stale.
+        bridge::RefreshPrecipitationVisual(scenes_.GetScene());
         wi::Application::Update(dt);
 
         if (screenPresenter_.IsLoaded())

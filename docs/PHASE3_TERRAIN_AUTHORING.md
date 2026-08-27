@@ -2,9 +2,10 @@
 
 ## Current result
 
-Terrain remains Wicked's native streamed WISCENE component and is authored
-through Renegade-owned controls. The standard configuration creates 13 x 13
-chunks at 132 m per chunk: 1,716 x 1,716 m, or about 2.945 km2.
+Terrain remains Wicked's native WISCENE component and is authored through
+Renegade-owned controls. Scene UI Gate 5 changes the standard configuration to
+19 x 19 chunks at 66 m per chunk: 1,254 x 1,254 m (about 1.573 km2) with one
+metre between sculptable samples.
 
 The project owner has verified in the packaged DX12 editor that a sculpted
 169-chunk terrain survives Save, close, Open, and the first terrain generation
@@ -15,7 +16,10 @@ cleanup base commit `0a1d0b6`.
 
 - `TerrainState`, `SetTerrainCommand`, and `CreateTerrainCommand` provide
   bounded native creation, no-op filtering, and Undo/Redo.
-- The permanent Terrain workspace exposes generation values directly.
+- The permanent Terrain workspace presents resolution and honest current
+  dimensions rather than exposing Wicked's raw generation radius.
+- `EXPAND TERRAIN // +1 RING` adds one 66 m chunk on every side without
+  restarting or altering any existing chunk; expansion is one Undo/Redo item.
 - Raise, Lower, Smooth, and Flatten operate across shared chunk edges and
   corners as one stroke and one Undo/Redo item.
 - Native per-chunk height and blend data remain the serialized authority.
@@ -60,6 +64,9 @@ after the packaged DX12 proof held at 169 chunks.
 4. Validated 16-bit PNG/RAW heightmap import and export.
 5. Real terrain-shape presets, only if each has distinct generated output and
    visual regression evidence.
+6. A separate authored-chunk residency store before camera-following removal is
+   enabled. Wicked's pinned removal path erases `terrain.chunks`, including the
+   serialized sculpt/blend authority, so it cannot safely unload edited chunks.
 
 Procedural worlds, runtime deformation, rivers, roads, landscape splines,
 foliage scattering, and biome generation remain out of this slice.
