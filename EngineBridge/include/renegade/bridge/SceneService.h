@@ -100,12 +100,10 @@ namespace renegade::bridge
     class SceneService
     {
     public:
-        SceneService()
-        {
-            // JP01 installs Renegade's entity-oriented physics namespace into
-            // Wicked's one Lua VM and binds it to this authoritative Scene.
-            BindPhysicsLua(scene_);
-        }
+        // Scene ownership must stay inert during object construction. Wicked's
+        // Application/initializer owns Lua startup order; JP01 binds scripting
+        // explicitly only after that VM exists.
+        SceneService() = default;
         ~SceneService()
         {
             UnbindPhysicsLua(&scene_);

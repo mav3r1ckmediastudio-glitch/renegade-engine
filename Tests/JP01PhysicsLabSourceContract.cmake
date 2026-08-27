@@ -10,6 +10,11 @@ set(STUDIO_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h")
 set(STUDIO_SOURCE "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
 set(CHROME_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.h")
 set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
+set(PHYSICS_LUA_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/PhysicsLuaService.cpp")
+set(SCENE_SERVICE_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/SceneService.h")
+set(RUNTIME_SOURCE "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
+set(PHYSICS_LUA_TEST "${RENEGADE_SOURCE_DIR}/Tests/PhysicsLuaTests.cpp")
+set(PHYSICS_LUA_CMAKE "${RENEGADE_SOURCE_DIR}/Tests/JP01PhysicsLua.cmake")
 
 foreach(path IN ITEMS
     "${PHYSICS_WORKSPACE_HEADER}"
@@ -19,7 +24,12 @@ foreach(path IN ITEMS
     "${STUDIO_HEADER}"
     "${STUDIO_SOURCE}"
     "${CHROME_HEADER}"
-    "${STUDIO_CMAKE}")
+    "${STUDIO_CMAKE}"
+    "${PHYSICS_LUA_SOURCE}"
+    "${SCENE_SERVICE_HEADER}"
+    "${RUNTIME_SOURCE}"
+    "${PHYSICS_LUA_TEST}"
+    "${PHYSICS_LUA_CMAKE}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "JP01 Physics Lab source contract input is missing: ${path}")
     endif()
@@ -33,6 +43,11 @@ file(READ "${STUDIO_HEADER}" studio_header)
 file(READ "${STUDIO_SOURCE}" studio_source)
 file(READ "${CHROME_HEADER}" chrome_header)
 file(READ "${STUDIO_CMAKE}" studio_cmake)
+file(READ "${PHYSICS_LUA_SOURCE}" physics_lua_source)
+file(READ "${SCENE_SERVICE_HEADER}" scene_service_header)
+file(READ "${RUNTIME_SOURCE}" runtime_source)
+file(READ "${PHYSICS_LUA_TEST}" physics_lua_test)
+file(READ "${PHYSICS_LUA_CMAKE}" physics_lua_cmake)
 
 function(require_text haystack_var needle description)
     string(FIND "${${haystack_var}}" "${needle}" found)
@@ -90,6 +105,36 @@ require_text(physics_chrome_source
 require_text(physics_chrome_source
     "\"PHYSICS\""
     "Physics workspace tab")
+
+# Lua lifecycle ownership: SceneService construction must be inert, and the
+# Renegade binding layer must never bootstrap Wicked's global VM itself.
+require_text(scene_service_header
+    "SceneService() = default;"
+    "Lua-inert SceneService construction")
+forbid_text(scene_service_header
+    "BindPhysicsLua(scene_);"
+    "Lua binding during SceneService construction")
+forbid_text(physics_lua_source
+    "wi::lua::Initialize()"
+    "Renegade-owned Wicked Lua initialization")
+require_text(physics_lua_source
+    "return BindPhysicsLua(scene, wi::lua::GetLuaState());"
+    "non-owning production Lua-state lookup")
+require_text(runtime_source
+    "bridge::BindPhysicsLua(scenes_.GetScene())"
+    "Runtime post-Wicked Lua binding")
+require_text(physics_chrome_source
+    "bridge::BindPhysicsLua(session->Scenes().GetScene())"
+    "Studio post-Wicked Lua binding")
+require_text(physics_lua_test
+    "luaL_newstate()"
+    "isolated Lua contract state")
+forbid_text(physics_lua_test
+    "wi::lua::RunText"
+    "full Wicked global Lua execution in isolated contract test")
+require_text(physics_lua_cmake
+    "set_tests_properties(RenegadePhysicsLuaTests PROPERTIES TIMEOUT 30)"
+    "fail-fast Lua contract timeout")
 
 # Eight curated creator-facing pages, matching the JP01 bounded scope.
 foreach(page IN ITEMS
