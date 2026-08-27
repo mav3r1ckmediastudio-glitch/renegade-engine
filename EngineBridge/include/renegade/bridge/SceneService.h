@@ -7,6 +7,8 @@
 
 #include <WickedEngine.h>
 
+#include "renegade/bridge/PhysicsLuaService.h"
+
 namespace renegade::bridge
 {
     class SceneDocumentService;
@@ -98,6 +100,19 @@ namespace renegade::bridge
     class SceneService
     {
     public:
+        SceneService()
+        {
+            // JP01 installs Renegade's entity-oriented physics namespace into
+            // Wicked's one Lua VM and binds it to this authoritative Scene.
+            BindPhysicsLua(scene_);
+        }
+        ~SceneService()
+        {
+            UnbindPhysicsLua(&scene_);
+        }
+        SceneService(const SceneService&) = delete;
+        SceneService& operator=(const SceneService&) = delete;
+
         void NewScene();
         void CreateProvingGround();
         // Runtime startup load. Studio scene replacement goes through
