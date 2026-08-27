@@ -1,5 +1,5 @@
 add_executable(RenegadeConstraintTests
-    ConstraintTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/ConstraintTests.cpp
 )
 
 target_link_libraries(RenegadeConstraintTests

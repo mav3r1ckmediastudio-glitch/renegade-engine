@@ -1,5 +1,5 @@
 add_executable(RenegadePhysicsLuaTests
-    PhysicsLuaTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/PhysicsLuaTests.cpp
 )
 
 target_link_libraries(RenegadePhysicsLuaTests

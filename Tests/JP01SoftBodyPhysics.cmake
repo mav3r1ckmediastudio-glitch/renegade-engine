@@ -1,5 +1,5 @@
 add_executable(RenegadeSoftBodyPhysicsTests
-    SoftBodyPhysicsTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/SoftBodyPhysicsTests.cpp
 )
 
 target_link_libraries(RenegadeSoftBodyPhysicsTests

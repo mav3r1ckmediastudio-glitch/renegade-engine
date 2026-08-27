@@ -1,5 +1,5 @@
 add_executable(RenegadeVehiclePhysicsTests
-    VehiclePhysicsTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/VehiclePhysicsTests.cpp
 )
 
 target_link_libraries(RenegadeVehiclePhysicsTests

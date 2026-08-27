@@ -1,5 +1,5 @@
 add_executable(RenegadeWickedColliderTests
-    WickedColliderTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/WickedColliderTests.cpp
 )
 
 target_link_libraries(RenegadeWickedColliderTests

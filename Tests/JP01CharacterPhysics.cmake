@@ -1,5 +1,5 @@
 add_executable(RenegadeCharacterPhysicsTests
-    CharacterPhysicsTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CharacterPhysicsTests.cpp
 )
 
 target_link_libraries(RenegadeCharacterPhysicsTests
