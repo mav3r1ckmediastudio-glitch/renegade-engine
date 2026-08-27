@@ -17,7 +17,6 @@
 #include <cmath>
 #include <cstdint>
 #include <functional>
-#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -739,11 +738,10 @@ namespace renegade::studio
             constraintType.AddItem("SLIDER", Userdata(Type::Slider));
             constraintType.OnSelect([this](const wi::gui::EventArgs& args) { EditConstraint([&](auto& state) { state.type = static_cast<Type>(args.userdata); }); });
 
-            for (auto* combo : {&constraintBodyA, &constraintBodyB})
-            {
-                combo->Create(combo == &constraintBodyA ? "Constraint Body A" : "Constraint Body B");
-                combo->SetMaxVisibleItemCount(12);
-            }
+            constraintBodyA.Create("Constraint Body A");
+            constraintBodyA.SetMaxVisibleItemCount(12);
+            constraintBodyB.Create("Constraint Body B");
+            constraintBodyB.SetMaxVisibleItemCount(12);
             constraintBodyA.OnSelect([this](const wi::gui::EventArgs& args) { EditConstraint([&](auto& state) { state.bodyA = static_cast<wi::ecs::Entity>(args.userdata); }); });
             constraintBodyB.OnSelect([this](const wi::gui::EventArgs& args) { EditConstraint([&](auto& state) { state.bodyB = static_cast<wi::ecs::Entity>(args.userdata); }); });
             constraintNoSelfCollision.Create("DISABLE SELF COLLISION");
@@ -970,35 +968,53 @@ namespace renegade::studio
 
         void RegisterAllControls()
         {
-            auto add = [this](wi::gui::Widget& widget) { allControls.push_back(&widget); };
-            for (auto* widget : {static_cast<wi::gui::Widget*>(&worldEnabled), &worldSimulation, &worldInterpolation, &worldDebug,
-                &worldGravityX, &worldGravityY, &worldGravityZ, &worldAccuracy, &worldFrameRate, &worldConstraintDebugSize,
-                &worldDebugDistance, &worldCharacterTolerance, &worldActivateAll, &worldOptimize, &worldReset,
-                &rigidAdd, &rigidRemove, &rigidShape, &rigidBoxX, &rigidBoxY, &rigidBoxZ, &rigidSphereRadius,
-                &rigidCapsuleHeight, &rigidCapsuleRadius, &rigidMass, &rigidFriction, &rigidRestitution,
-                &rigidLinearDamping, &rigidAngularDamping, &rigidBuoyancy, &rigidMeshLod, &rigidOffsetX, &rigidOffsetY,
-                &rigidOffsetZ, &rigidKinematic, &rigid2D, &rigidDisableDeactivation, &rigidStartDeactivated,
-                &constraintAdd, &constraintRemove, &constraintRebind, &constraintType, &constraintBodyA, &constraintBodyB,
-                &constraintNoSelfCollision, &constraintBreak, &constraintDisableBreaking, &distanceMin, &distanceMax,
-                &hingeMin, &hingeMax, &hingeVelocity, &coneHalfAngle, &swingNormalCone, &swingPlaneCone, &swingMinTwist,
-                &swingMaxTwist, &sliderMin, &sliderMax, &sliderVelocity, &sliderMaxForce,
-                &characterEnabled, &characterSlope, &characterGravity,
-                &vehicleType, &vehicleCollision, &vehicleChassisWidth, &vehicleChassisHeight, &vehicleChassisLength,
-                &vehicleFrontOffset, &vehicleRearOffset, &vehicleWheelRadius, &vehicleWheelWidth, &vehicleEngineTorque,
-                &vehicleClutch, &vehicleRoll, &vehicleSteering, &vehicleFrontSuspMin, &vehicleFrontSuspMax,
-                &vehicleFrontSuspFrequency, &vehicleFrontSuspDamping, &vehicleRearSuspMin, &vehicleRearSuspMax,
-                &vehicleRearSuspFrequency, &vehicleRearSuspDamping, &vehicle4WD, &vehicleMotoAngle, &vehicleMotoFrontBrake,
-                &vehicleMotoRearBrake, &vehicleMotoLean, &vehicleTestThrottle, &vehicleTestSteer, &vehicleTestBrake,
-                &vehicleTestHandbrake, &vehicleSendTestInput, &vehicleUpdateWheels,
-                &ragdollDisabled, &ragdollPhysics, &ragdoll2D, &ragdollFatness, &ragdollHeadSize, &ragdollActivateAll,
-                &softAdd, &softRemove, &softReset, &softWake, &softDetail, &softMass, &softFriction, &softRestitution,
-                &softPressure, &softVertexRadius, &softWind,
-                &colliderAdd, &colliderRemove, &colliderShape, &colliderCPU, &colliderGPU, &colliderRadius,
-                &colliderOffsetX, &colliderOffsetY, &colliderOffsetZ, &colliderTailX, &colliderTailY, &colliderTailZ})
-                add(*widget);
+            auto add = [this](wi::gui::Widget& widget)
+            {
+                allControls.push_back(&widget);
+            };
+
+            add(worldEnabled); add(worldSimulation); add(worldInterpolation); add(worldDebug);
+            add(worldGravityX); add(worldGravityY); add(worldGravityZ); add(worldAccuracy);
+            add(worldFrameRate); add(worldConstraintDebugSize); add(worldDebugDistance);
+            add(worldCharacterTolerance); add(worldActivateAll); add(worldOptimize); add(worldReset);
+
+            add(rigidAdd); add(rigidRemove); add(rigidShape); add(rigidBoxX); add(rigidBoxY); add(rigidBoxZ);
+            add(rigidSphereRadius); add(rigidCapsuleHeight); add(rigidCapsuleRadius); add(rigidMass);
+            add(rigidFriction); add(rigidRestitution); add(rigidLinearDamping); add(rigidAngularDamping);
+            add(rigidBuoyancy); add(rigidMeshLod); add(rigidOffsetX); add(rigidOffsetY); add(rigidOffsetZ);
+            add(rigidKinematic); add(rigid2D); add(rigidDisableDeactivation); add(rigidStartDeactivated);
+
+            add(constraintAdd); add(constraintRemove); add(constraintRebind); add(constraintType);
+            add(constraintBodyA); add(constraintBodyB); add(constraintNoSelfCollision); add(constraintBreak);
+            add(constraintDisableBreaking); add(distanceMin); add(distanceMax); add(hingeMin); add(hingeMax);
+            add(hingeVelocity); add(coneHalfAngle); add(swingNormalCone); add(swingPlaneCone);
+            add(swingMinTwist); add(swingMaxTwist); add(sliderMin); add(sliderMax);
+            add(sliderVelocity); add(sliderMaxForce);
             for (auto& widget : sixDof) add(widget);
             for (auto& widget : sixDofFix) add(widget);
+
+            add(characterEnabled); add(characterSlope); add(characterGravity);
+
+            add(vehicleType); add(vehicleCollision); add(vehicleChassisWidth); add(vehicleChassisHeight);
+            add(vehicleChassisLength); add(vehicleFrontOffset); add(vehicleRearOffset); add(vehicleWheelRadius);
+            add(vehicleWheelWidth); add(vehicleEngineTorque); add(vehicleClutch); add(vehicleRoll);
+            add(vehicleSteering); add(vehicleFrontSuspMin); add(vehicleFrontSuspMax); add(vehicleFrontSuspFrequency);
+            add(vehicleFrontSuspDamping); add(vehicleRearSuspMin); add(vehicleRearSuspMax);
+            add(vehicleRearSuspFrequency); add(vehicleRearSuspDamping); add(vehicle4WD); add(vehicleMotoAngle);
+            add(vehicleMotoFrontBrake); add(vehicleMotoRearBrake); add(vehicleMotoLean);
             for (auto& widget : vehicleWheels) add(widget);
+            add(vehicleTestThrottle); add(vehicleTestSteer); add(vehicleTestBrake); add(vehicleTestHandbrake);
+            add(vehicleSendTestInput); add(vehicleUpdateWheels);
+
+            add(ragdollDisabled); add(ragdollPhysics); add(ragdoll2D); add(ragdollFatness);
+            add(ragdollHeadSize); add(ragdollActivateAll);
+
+            add(softAdd); add(softRemove); add(softReset); add(softWake); add(softDetail); add(softMass);
+            add(softFriction); add(softRestitution); add(softPressure); add(softVertexRadius); add(softWind);
+
+            add(colliderAdd); add(colliderRemove); add(colliderShape); add(colliderCPU); add(colliderGPU);
+            add(colliderRadius); add(colliderOffsetX); add(colliderOffsetY); add(colliderOffsetZ);
+            add(colliderTailX); add(colliderTailY); add(colliderTailZ);
             HideAll();
         }
 
@@ -1128,8 +1144,8 @@ namespace renegade::studio
                     continue;
                 widget->Render(canvas, cmd);
             }
-            // Combo dropdowns must paint last. Reverse order mirrors Wicked's
-            // own manual-workspace pattern and prevents later controls masking lists.
+            // Combo dropdowns paint last, in reverse declaration order, matching
+            // the established manual-workspace pattern used elsewhere in Studio.
             for (auto it = activeControls.rbegin(); it != activeControls.rend(); ++it)
             {
                 const auto* widget = *it;
@@ -1231,6 +1247,17 @@ namespace renegade::studio
             {
                 if (bridge::HasCharacterVehiclePhysicsConflict(*scene, selectedEntity))
                     DrawText("CONFLICT // CHARACTER AND VEHICLE MODES ARE BOTH ENABLED", x, y, 9, Error, cmd);
+                else
+                {
+                    bridge::CharacterGroundInfo ground;
+                    if (bridge::GetCharacterGroundInfo(*scene, selectedEntity, ground))
+                    {
+                        const char* state = ground.state == bridge::CharacterGroundState::OnGround ? "ON GROUND" :
+                            ground.state == bridge::CharacterGroundState::OnSteepGround ? "STEEP GROUND" :
+                            ground.state == bridge::CharacterGroundState::InAir ? "IN AIR" : "NOT SUPPORTED";
+                        DrawText(std::string("LIVE GROUND STATE // ") + state, x, y, 9, Success, cmd);
+                    }
+                }
             }
             else if (page == Page::Vehicle)
             {
@@ -1299,6 +1326,15 @@ namespace renegade::studio
             const auto* body = scene != nullptr && HasSelection() ? scene->rigidbodies.GetComponent(selectedEntity) : nullptr;
             rigidAdd.SetEnabled(body == nullptr && HasSelection());
             rigidRemove.SetEnabled(body != nullptr);
+            const bool enabled = body != nullptr;
+            rigidShape.SetEnabled(enabled);
+            rigidBoxX.SetEnabled(enabled); rigidBoxY.SetEnabled(enabled); rigidBoxZ.SetEnabled(enabled);
+            rigidSphereRadius.SetEnabled(enabled); rigidCapsuleHeight.SetEnabled(enabled); rigidCapsuleRadius.SetEnabled(enabled);
+            rigidMass.SetEnabled(enabled); rigidFriction.SetEnabled(enabled); rigidRestitution.SetEnabled(enabled);
+            rigidLinearDamping.SetEnabled(enabled); rigidAngularDamping.SetEnabled(enabled); rigidBuoyancy.SetEnabled(enabled);
+            rigidMeshLod.SetEnabled(enabled); rigidOffsetX.SetEnabled(enabled); rigidOffsetY.SetEnabled(enabled); rigidOffsetZ.SetEnabled(enabled);
+            rigidKinematic.SetEnabled(enabled); rigid2D.SetEnabled(enabled); rigidDisableDeactivation.SetEnabled(enabled);
+            rigidStartDeactivated.SetEnabled(enabled);
             if (body == nullptr)
                 return;
             const auto state = bridge::CaptureCollision(*body);
@@ -1329,9 +1365,18 @@ namespace renegade::studio
         {
             auto* scene = Scene();
             const auto* component = scene != nullptr && HasSelection() ? scene->constraints.GetComponent(selectedEntity) : nullptr;
-            constraintAdd.SetEnabled(component == nullptr && HasSelection() && scene != nullptr && scene->transforms.Contains(selectedEntity));
-            constraintRemove.SetEnabled(component != nullptr);
-            constraintRebind.SetEnabled(component != nullptr);
+            const bool enabled = component != nullptr;
+            constraintAdd.SetEnabled(!enabled && HasSelection() && scene != nullptr && scene->transforms.Contains(selectedEntity));
+            constraintRemove.SetEnabled(enabled);
+            constraintRebind.SetEnabled(enabled);
+            constraintType.SetEnabled(enabled); constraintBodyA.SetEnabled(enabled); constraintBodyB.SetEnabled(enabled);
+            constraintNoSelfCollision.SetEnabled(enabled); constraintBreak.SetEnabled(enabled); constraintDisableBreaking.SetEnabled(enabled);
+            distanceMin.SetEnabled(enabled); distanceMax.SetEnabled(enabled); hingeMin.SetEnabled(enabled); hingeMax.SetEnabled(enabled);
+            hingeVelocity.SetEnabled(enabled); coneHalfAngle.SetEnabled(enabled); swingNormalCone.SetEnabled(enabled);
+            swingPlaneCone.SetEnabled(enabled); swingMinTwist.SetEnabled(enabled); swingMaxTwist.SetEnabled(enabled);
+            sliderMin.SetEnabled(enabled); sliderMax.SetEnabled(enabled); sliderVelocity.SetEnabled(enabled); sliderMaxForce.SetEnabled(enabled);
+            for (auto& widget : sixDof) widget.SetEnabled(enabled);
+            for (auto& widget : sixDofFix) widget.SetEnabled(enabled);
             RebuildConstraintBodies();
             if (component == nullptr)
                 return;
@@ -1395,8 +1440,14 @@ namespace renegade::studio
             RebuildVehicleWheels();
             const bool enabled = body != nullptr;
             for (auto* widget : VehicleAuthoringControls()) widget->SetEnabled(enabled);
+            vehicleTestThrottle.SetEnabled(enabled); vehicleTestSteer.SetEnabled(enabled);
+            vehicleTestBrake.SetEnabled(enabled); vehicleTestHandbrake.SetEnabled(enabled);
             if (!enabled)
+            {
+                vehicleSendTestInput.SetEnabled(false);
+                vehicleUpdateWheels.SetEnabled(false);
                 return;
+            }
             const auto state = bridge::CaptureVehiclePhysics(*body);
             vehicleType.SetSelectedByUserdataWithoutCallback(Userdata(state.type));
             vehicleCollision.SetSelectedByUserdataWithoutCallback(Userdata(state.collisionMode));
@@ -1438,8 +1489,11 @@ namespace renegade::studio
             auto* scene = Scene();
             const auto* humanoid = scene != nullptr && HasSelection() ? scene->humanoids.GetComponent(selectedEntity) : nullptr;
             const bool enabled = humanoid != nullptr;
-            for (auto* widget : {static_cast<wi::gui::Widget*>(&ragdollDisabled), &ragdollPhysics, &ragdoll2D, &ragdollFatness, &ragdollHeadSize})
-                widget->SetEnabled(enabled);
+            ragdollDisabled.SetEnabled(enabled);
+            ragdollPhysics.SetEnabled(enabled);
+            ragdoll2D.SetEnabled(enabled);
+            ragdollFatness.SetEnabled(enabled);
+            ragdollHeadSize.SetEnabled(enabled);
             if (!enabled)
                 return;
             const auto state = bridge::CaptureRagdollPhysics(*humanoid);
@@ -1455,13 +1509,19 @@ namespace renegade::studio
             auto* scene = Scene();
             const auto mesh = scene != nullptr && HasSelection() ? bridge::ResolveSoftBodyMeshEntity(*scene, selectedEntity) : wi::ecs::INVALID_ENTITY;
             const auto* body = scene != nullptr ? scene->softbodies.GetComponent(mesh) : nullptr;
-            softAdd.SetEnabled(mesh != wi::ecs::INVALID_ENTITY && body == nullptr);
-            softRemove.SetEnabled(body != nullptr);
-            softReset.SetEnabled(body != nullptr);
-            softWake.SetEnabled(body != nullptr && scene != nullptr && bridge::HasLiveSoftBodyPhysics(*scene, selectedEntity));
-            for (auto* widget : {static_cast<wi::gui::Widget*>(&softDetail), &softMass, &softFriction, &softRestitution, &softPressure, &softVertexRadius, &softWind})
-                widget->SetEnabled(body != nullptr);
-            if (body == nullptr)
+            const bool enabled = body != nullptr;
+            softAdd.SetEnabled(mesh != wi::ecs::INVALID_ENTITY && !enabled);
+            softRemove.SetEnabled(enabled);
+            softReset.SetEnabled(enabled);
+            softWake.SetEnabled(enabled && scene != nullptr && bridge::HasLiveSoftBodyPhysics(*scene, selectedEntity));
+            softDetail.SetEnabled(enabled);
+            softMass.SetEnabled(enabled);
+            softFriction.SetEnabled(enabled);
+            softRestitution.SetEnabled(enabled);
+            softPressure.SetEnabled(enabled);
+            softVertexRadius.SetEnabled(enabled);
+            softWind.SetEnabled(enabled);
+            if (!enabled)
                 return;
             const auto state = bridge::CaptureSoftBodyPhysics(*body);
             softDetail.SetValue(state.detail);
@@ -1477,12 +1537,20 @@ namespace renegade::studio
         {
             auto* scene = Scene();
             const auto* collider = scene != nullptr && HasSelection() ? scene->colliders.GetComponent(selectedEntity) : nullptr;
-            colliderAdd.SetEnabled(collider == nullptr && HasSelection());
-            colliderRemove.SetEnabled(collider != nullptr);
-            for (auto* widget : {static_cast<wi::gui::Widget*>(&colliderShape), &colliderCPU, &colliderGPU, &colliderRadius,
-                &colliderOffsetX, &colliderOffsetY, &colliderOffsetZ, &colliderTailX, &colliderTailY, &colliderTailZ})
-                widget->SetEnabled(collider != nullptr);
-            if (collider == nullptr)
+            const bool enabled = collider != nullptr;
+            colliderAdd.SetEnabled(!enabled && HasSelection());
+            colliderRemove.SetEnabled(enabled);
+            colliderShape.SetEnabled(enabled);
+            colliderCPU.SetEnabled(enabled);
+            colliderGPU.SetEnabled(enabled);
+            colliderRadius.SetEnabled(enabled);
+            colliderOffsetX.SetEnabled(enabled);
+            colliderOffsetY.SetEnabled(enabled);
+            colliderOffsetZ.SetEnabled(enabled);
+            colliderTailX.SetEnabled(enabled);
+            colliderTailY.SetEnabled(enabled);
+            colliderTailZ.SetEnabled(enabled);
+            if (!enabled)
                 return;
             const auto state = bridge::CaptureWickedCollider(*collider);
             colliderShape.SetSelectedByUserdataWithoutCallback(Userdata(state.shape));
@@ -1513,17 +1581,18 @@ namespace renegade::studio
         void RebuildConstraintBodies()
         {
             auto* scene = Scene();
-            for (auto* combo : {&constraintBodyA, &constraintBodyB})
+            constraintBodyA.ClearItems();
+            constraintBodyB.ClearItems();
+            constraintBodyA.AddItem("<NONE>", static_cast<std::uint64_t>(wi::ecs::INVALID_ENTITY));
+            constraintBodyB.AddItem("<NONE>", static_cast<std::uint64_t>(wi::ecs::INVALID_ENTITY));
+            if (scene == nullptr)
+                return;
+            for (std::size_t i = 0; i < scene->rigidbodies.GetCount(); ++i)
             {
-                combo->ClearItems();
-                combo->AddItem("<NONE>", static_cast<std::uint64_t>(wi::ecs::INVALID_ENTITY));
-                if (scene == nullptr)
-                    continue;
-                for (std::size_t i = 0; i < scene->rigidbodies.GetCount(); ++i)
-                {
-                    const auto entity = scene->rigidbodies.GetEntity(i);
-                    combo->AddItem(EntityLabel(*scene, entity), static_cast<std::uint64_t>(entity));
-                }
+                const auto entity = scene->rigidbodies.GetEntity(i);
+                const auto label = EntityLabel(*scene, entity);
+                constraintBodyA.AddItem(label, static_cast<std::uint64_t>(entity));
+                constraintBodyB.AddItem(label, static_cast<std::uint64_t>(entity));
             }
         }
 
