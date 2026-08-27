@@ -1,13 +1,22 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`628cf26574a4a2a6e8eb0a5a522d94966ad8917e`
-(`Scene UI Gate 4: recover Asset Browser and placement UX (#104)`).
+`1e0470a9e530dd20c42ddf16662c3771aaede825`
+(`Recovery/scene UI gate5 environment terrain (#105)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current product programme
+
+Scene UI Gate 6 is blocked on an owner-reported Build Windows Game regression.
+The recovery makes every Build entry point save dirty Scene and Story Flow
+documents before the packaging controller reads disk, shares deterministic
+Story Flow route validation between Studio readiness and build preparation,
+and stages only the exact Renegade-owned Terrain/weather resources Runtime
+needs. PR #106 must not merge until exact-head Windows CI and packaged Release
+owner acceptance pass. See
+`docs/SCENE_UI_GATE6_BUILD_GAME_RECOVERY.md`.
 
 The immediate active programme is **Renegade Story Flow**.
 

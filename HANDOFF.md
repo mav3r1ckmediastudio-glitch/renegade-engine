@@ -5,22 +5,69 @@
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`628cf26574a4a2a6e8eb0a5a522d94966ad8917e`
-(`Scene UI Gate 4: recover Asset Browser and placement UX (#104)`).
+`1e0470a9e530dd20c42ddf16662c3771aaede825`
+(`Recovery/scene UI gate5 environment terrain (#105)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Scene UI Gate 5 Environment and Terrain recovery
+## Active blocker — Scene UI Gate 6 Build Windows Game recovery
 
-Draft PR: `#105`, branch
-`recovery/scene-ui-gate5-environment-terrain`.
+Branch: `recovery/gate6-build-game-blockers`, based directly on merged Gate 5
+main `1e0470a9e530dd20c42ddf16662c3771aaede825`.
 
-Published head `901d3b90e1fe5666dacaebbc89e3e067a897d00d` passed Windows
-baseline and Renegade Studio Debug/Release but is owner-rejected. Opening
+Implementation commit:
+`a2f65c3173d796f8dda08f8a8a7332017178408f` (tree
+`ac121145dee8c76907847636ce736fec572c16ca`). Changed code and regressions are
+bounded to `EngineBridge` standalone project preparation, the Studio chrome /
+application / Story Flow build handoff, the Windows build controller and the
+two focused build/source-contract tests.
+
+The owner found two independent standalone-build blockers during Gate 6
+acceptance. The Scene BUILD menu bypassed authoring saves and read a stale
+on-disk Story Flow, while generated Terrain scenes referenced Renegade's
+default grass beside Studio and were correctly rejected as outside-project.
+
+The recovery candidate:
+
+- routes both Scene and Story Flow Build buttons through one save-first Scene
+  then Story Flow handoff;
+- blocks packaging on save cancellation/failure;
+- makes Story Flow `Runtime Ready` and saved build preparation use the same
+  deterministic Game Start-to-Complete Game route authority;
+- admits only exact filesystem-equivalent Scene references to four declared
+  Renegade Terrain/weather resources;
+- hashes and stages those same declarations at package-root `Content/...`
+  destinations; and
+- retains fatal rejection for arbitrary outside-project dependencies.
+
+Focused tests cover the shared route, stale direct-call rejection, exact-file
+admission, unrelated-file rejection and package plan destination. Local
+evidence:
+
+- `git diff --check` — PASS;
+- direct Gate 6 recovery source-seam assertions with `rg -Fq` — PASS;
+- `g++ -std=c++17 -Wall -Wextra -Werror -IStudio/src
+  Tests/StoryFlowJourneyUiLayoutTests.cpp` followed by the produced executable
+  — PASS (`PASS: Journey UI fixed shell and role contract`);
+- CMake/Windows compile and `RenegadeWindowsGameBuildProjectTests` — not run
+  locally because CMake and the Wicked submodule are unavailable in this Linux
+  scratch checkout.
+
+Next task: publish this branch, require exact-head Windows Debug/Release CI,
+then run the packaged Release owner sequence. PR #106 must not merge until the
+sequence in `docs/SCENE_UI_GATE6_BUILD_GAME_RECOVERY.md` passes.
+
+## Accepted work — Scene UI Gate 5 Environment and Terrain recovery
+
+PR `#105` is merged on authoritative main as
+`1e0470a9e530dd20c42ddf16662c3771aaede825`.
+
+Earlier published head `901d3b90e1fe5666dacaebbc89e3e067a897d00d` passed Windows
+baseline and Renegade Studio Debug/Release but was owner-rejected. Opening
 Environment in a blank Level turns the realistic daytime sky black, Terrain
-creation crashes Studio, and older terrain projects crash during open. PR #105
-remains draft and must not merge from that head.
+creation crashed Studio, and older terrain projects crashed during open. That
+head is historical and must never be restored.
 
 The approximately 205 MiB Release artifact was a valid warning, not an expected
 compression-only change. The replacement DXT5 normal and surface DDS files
@@ -76,10 +123,9 @@ Local evidence for the corrected continuation:
   execution — PASS; all three outputs are complete 4096x4096 RGBA TGAs;
 - Gate 5 source assertions now include dedicated Environment creation, the
   terrain precondition, Inspector isolation and legacy hierarchy recovery;
-- CMake/Windows compile — not run locally because CMake is unavailable;
-- exact-head PR CI — pending correction publication;
+- CMake/Windows compile and exact-head PR CI — accepted before PR #105 merge;
 - packaged Release visual/interaction/save/reopen/Runtime owner acceptance —
-  pending and required before merge.
+  accepted before PR #105 merge.
 
 Acceptance and the exact owner sequence are in
 `docs/SCENE_UI_GATE5_ENVIRONMENT_TERRAIN.md`.

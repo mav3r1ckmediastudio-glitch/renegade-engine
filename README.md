@@ -17,13 +17,16 @@ framework.
 > smoke-test the staged package on DX12, validate its exact contents and safely
 > promote it without destroying the previous successful build. The project owner
 > then launched the promoted executable directly from Explorer and confirmed the
-> Runtime screen and Story Flow entered Level One successfully. Renegade is still
-> a development project, not a distribution-ready v1 game engine.
+> Runtime screen and Story Flow entered Level One successfully. Scene UI Gate 6
+> acceptance has since exposed save-order and bundled-Terrain regressions in that
+> owner-facing build path; recovery is active and Gate 6 must not merge until its
+> packaged Release retest passes. Renegade is still a development project, not a
+> distribution-ready v1 game engine.
 
 ## Current baseline
 
-- Current main baseline: `628cf26574a4a2a6e8eb0a5a522d94966ad8917e`
-  (Scene UI Gate 4 Asset Browser and placement recovery, PR #104)
+- Current main baseline: `1e0470a9e530dd20c42ddf16662c3771aaede825`
+  (Scene UI Gate 5 Environment and Terrain recovery, PR #105)
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
 - Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
