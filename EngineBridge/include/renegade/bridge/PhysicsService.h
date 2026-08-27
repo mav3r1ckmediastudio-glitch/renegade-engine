@@ -7,6 +7,7 @@
 #include "renegade/bridge/VehiclePhysicsService.h"
 #include "renegade/bridge/RagdollPhysicsService.h"
 #include "renegade/bridge/SoftBodyPhysicsService.h"
+#include "renegade/bridge/WickedColliderService.h"
 
 namespace renegade::bridge
 {
