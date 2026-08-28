@@ -1,0 +1,66 @@
+name: Phase 5 Gate 3 build wiring
+
+on:
+  push:
+    branches:
+      - phase5/scene-render-gate3-decals-probes
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wire Gate 3 bridge and regression
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'EngineBridge/CMakeLists.txt',
+              '    include/renegade/bridge/CameraService.h\n',
+              '    include/renegade/bridge/CameraService.h\n    include/renegade/bridge/DecalProbeService.h\n')
+          replace_once(
+              'EngineBridge/CMakeLists.txt',
+              '    src/CameraService.cpp\n',
+              '    src/CameraService.cpp\n    src/DecalProbeService.cpp\n')
+          replace_once(
+              'CMakeLists.txt',
+              '    include(Tests/Phase5Gate2.cmake)\n',
+              '    include(Tests/Phase5Gate2.cmake)\n    include(Tests/Phase5Gate3.cmake)\n')
+
+      - name: Verify bounded build diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected=$'CMakeLists.txt\nEngineBridge/CMakeLists.txt'
+          test "$changed" = "$expected"
+          grep -q 'DecalProbeService.h' EngineBridge/CMakeLists.txt
+          grep -q 'DecalProbeService.cpp' EngineBridge/CMakeLists.txt
+          grep -q 'Phase5Gate3.cmake' CMakeLists.txt
+
+      - name: Commit clean wiring tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/phase5-g3-wire.yml
+          git add CMakeLists.txt EngineBridge/CMakeLists.txt
+          git commit -m "Phase 5 Gate 3: wire decal and probe regression"
+          git push
