@@ -13,6 +13,7 @@
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
+#include "renegade/bridge/SceneComponentService.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
@@ -301,6 +302,14 @@ namespace renegade::studio
             Volumetrics,
         };
 
+        void CommitSelectedSceneName(const std::string& name);
+        void ApplySelectedLayerBit(std::uint32_t bit, bool enabled);
+        void ApplySelectedLayerMask(std::uint32_t mask);
+        void ApplySelectedMetadataPreset(
+            wi::scene::MetadataComponent::Preset preset);
+        void ApplySelectedObjectParticipation(
+            bridge::ObjectParticipationProperty property,
+            bool value);
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -506,6 +515,21 @@ namespace renegade::studio
         SceneInspectorTextInputField scaleX_;
         SceneInspectorTextInputField scaleY_;
         SceneInspectorTextInputField scaleZ_;
+        wi::gui::Label sceneIdentityLabel_;
+        SceneInspectorTextInputField sceneNameInput_;
+        wi::gui::Label sceneLayerLabel_;
+        SceneInspectorButton sceneLayerAllButton_;
+        SceneInspectorButton sceneLayerNoneButton_;
+        std::array<SceneInspectorCheckBox, 32> sceneLayerBits_;
+        wi::gui::Label sceneMetadataLabel_;
+        SceneInspectorComboBox sceneMetadataPreset_;
+        wi::gui::Label sceneObjectLabel_;
+        SceneInspectorCheckBox sceneObjectRenderable_;
+        SceneInspectorCheckBox sceneObjectCastShadow_;
+        SceneInspectorCheckBox sceneObjectForeground_;
+        SceneInspectorCheckBox sceneObjectMainCamera_;
+        SceneInspectorCheckBox sceneObjectReflections_;
+        SceneInspectorCheckBox sceneObjectWetmap_;
         wi::gui::Label lightLabel_;
         SceneInspectorComboBox lightType_;
         SceneInspectorSlider lightColorRed_;

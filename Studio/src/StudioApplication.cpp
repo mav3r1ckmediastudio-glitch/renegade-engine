@@ -1906,6 +1906,113 @@ namespace renegade::studio
             2);
 
         createSectionLabel(
+            sceneIdentityLabel_,
+            "Scene Identity Section",
+            "SCENE // IDENTITY");
+        sceneNameInput_.Create("Scene Entity Name");
+        sceneNameInput_.SetPlaceholder("ENTITY NAME");
+        sceneNameInput_.SetTooltip(
+            "Creator-facing name. Reusable imported assets rename their stable top-level root, not an internal glTF node.");
+        sceneNameInput_.OnInputAccepted([this](const wi::gui::EventArgs& args)
+        {
+            CommitSelectedSceneName(args.sValue);
+        });
+        inspectorPanel_.AddWidget(&sceneNameInput_);
+
+        createSectionLabel(
+            sceneLayerLabel_,
+            "Scene Layer Section",
+            "LAYERS // 32-BIT MASK");
+        sceneLayerAllButton_.Create("Enable All Scene Layers");
+        sceneLayerAllButton_.SetText("ALL");
+        sceneLayerAllButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            ApplySelectedLayerMask(~0u);
+        });
+        inspectorPanel_.AddWidget(&sceneLayerAllButton_);
+        sceneLayerNoneButton_.Create("Disable All Scene Layers");
+        sceneLayerNoneButton_.SetText("NONE");
+        sceneLayerNoneButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            ApplySelectedLayerMask(0u);
+        });
+        inspectorPanel_.AddWidget(&sceneLayerNoneButton_);
+        for (std::uint32_t bit = 0; bit < sceneLayerBits_.size(); ++bit)
+        {
+            auto& checkbox = sceneLayerBits_[bit];
+            // The CheckBox Create() label is creator-visible. Keep it compact
+            // so all 32 native layer bits remain readable in the 8-column grid.
+            checkbox.Create(std::to_string(bit));
+            checkbox.SetTooltip(
+                "Wicked layer bit " + std::to_string(bit) +
+                ". Reusable assets apply the bit to the stable root and descendant render objects.");
+            checkbox.OnClick([this, bit](const wi::gui::EventArgs& args)
+            {
+                ApplySelectedLayerBit(bit, args.bValue);
+            });
+            inspectorPanel_.AddWidget(&checkbox);
+        }
+
+        createSectionLabel(
+            sceneMetadataLabel_,
+            "Scene Metadata Section",
+            "METADATA // PRESET");
+        sceneMetadataPreset_.Create("Metadata Preset");
+        sceneMetadataPreset_.AddItem("CUSTOM", static_cast<std::uint64_t>(wi::scene::MetadataComponent::Preset::Custom));
+        sceneMetadataPreset_.AddItem("WAYPOINT", static_cast<std::uint64_t>(wi::scene::MetadataComponent::Preset::Waypoint));
+        sceneMetadataPreset_.AddItem("PLAYER", static_cast<std::uint64_t>(wi::scene::MetadataComponent::Preset::Player));
+        sceneMetadataPreset_.AddItem("ENEMY", static_cast<std::uint64_t>(wi::scene::MetadataComponent::Preset::Enemy));
+        sceneMetadataPreset_.AddItem("NPC", static_cast<std::uint64_t>(wi::scene::MetadataComponent::Preset::NPC));
+        sceneMetadataPreset_.AddItem("PICKUP", static_cast<std::uint64_t>(wi::scene::MetadataComponent::Preset::Pickup));
+        sceneMetadataPreset_.AddItem("VEHICLE", static_cast<std::uint64_t>(wi::scene::MetadataComponent::Preset::Vehicle));
+        sceneMetadataPreset_.AddItem("POINT OF INTEREST", static_cast<std::uint64_t>(wi::scene::MetadataComponent::Preset::PointOfInterest));
+        sceneMetadataPreset_.SetTooltip(
+            "Native Wicked semantic preset. Existing typed metadata and Renegade asset identity are preserved.");
+        sceneMetadataPreset_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            ApplySelectedMetadataPreset(
+                static_cast<wi::scene::MetadataComponent::Preset>(args.userdata));
+        });
+        inspectorPanel_.AddWidget(&sceneMetadataPreset_);
+
+        createSectionLabel(
+            sceneObjectLabel_,
+            "Scene Object Section",
+            "OBJECT // RENDER PARTICIPATION");
+        const auto createObjectToggle = [this](
+            SceneInspectorCheckBox& checkbox,
+            const char* name,
+            const char* tooltip,
+            const bridge::ObjectParticipationProperty property)
+        {
+            checkbox.Create(name);
+            checkbox.SetTooltip(tooltip);
+            checkbox.OnClick([this, property](const wi::gui::EventArgs& args)
+            {
+                ApplySelectedObjectParticipation(property, args.bValue);
+            });
+            inspectorPanel_.AddWidget(&checkbox);
+        };
+        createObjectToggle(sceneObjectRenderable_, "Renderable: ",
+            "Participate in normal scene rendering.",
+            bridge::ObjectParticipationProperty::Renderable);
+        createObjectToggle(sceneObjectCastShadow_, "Cast shadow: ",
+            "Allow this object to cast native Wicked shadows.",
+            bridge::ObjectParticipationProperty::CastShadow);
+        createObjectToggle(sceneObjectForeground_, "Foreground: ",
+            "Render as foreground geometry.",
+            bridge::ObjectParticipationProperty::Foreground);
+        createObjectToggle(sceneObjectMainCamera_, "Main camera: ",
+            "Visible to the main camera.",
+            bridge::ObjectParticipationProperty::VisibleInMainCamera);
+        createObjectToggle(sceneObjectReflections_, "Reflections: ",
+            "Visible to reflection rendering.",
+            bridge::ObjectParticipationProperty::VisibleInReflections);
+        createObjectToggle(sceneObjectWetmap_, "Wetmap: ",
+            "Enable native Wicked wetmap participation.",
+            bridge::ObjectParticipationProperty::Wetmap);
+
+        createSectionLabel(
             lightLabel_,
             "Light Section",
             "LIGHT // NATIVE WICKED");
@@ -4542,21 +4649,62 @@ namespace renegade::studio
             widget.SetPos(XMFLOAT2(12.0f, rowY));
             widget.SetSize(XMFLOAT2(environmentFieldWidth, height));
         };
-        positionEnvironmentWidget(lightLabel_, 224.0f, 20.0f);
-        positionEnvironmentWidget(lightType_, 244.0f);
-        positionEnvironmentWidget(lightColorRed_, 278.0f);
-        positionEnvironmentWidget(lightColorGreen_, 312.0f);
-        positionEnvironmentWidget(lightColorBlue_, 346.0f);
-        positionEnvironmentWidget(lightIntensity_, 380.0f);
-        positionEnvironmentWidget(lightRange_, 414.0f);
-        positionEnvironmentWidget(lightOuterCone_, 448.0f);
-        positionEnvironmentWidget(lightInnerCone_, 482.0f);
-        positionEnvironmentWidget(lightRadius_, 516.0f);
-        positionEnvironmentWidget(lightLength_, 550.0f);
-        positionEnvironmentWidget(lightHeight_, 584.0f);
-        positionEnvironmentWidget(lightCastShadow_, 618.0f);
-        positionEnvironmentWidget(lightVolumetrics_, 650.0f);
-        positionEnvironmentWidget(lightVolumetricBoost_, 682.0f);
+        positionEnvironmentWidget(sceneIdentityLabel_, 224.0f, 20.0f);
+        positionEnvironmentWidget(sceneNameInput_, 244.0f);
+        positionEnvironmentWidget(sceneLayerLabel_, 282.0f, 20.0f);
+        const float layerActionWidth = (environmentFieldWidth - 8.0f) * 0.5f;
+        sceneLayerAllButton_.SetPos(XMFLOAT2(12.0f, 302.0f));
+        sceneLayerNoneButton_.SetPos(XMFLOAT2(20.0f + layerActionWidth, 302.0f));
+        sceneLayerAllButton_.SetSize(XMFLOAT2(layerActionWidth, 28.0f));
+        sceneLayerNoneButton_.SetSize(XMFLOAT2(layerActionWidth, 28.0f));
+        const float layerBitGap = 4.0f;
+        const float layerBitWidth =
+            (environmentFieldWidth - layerBitGap * 7.0f) / 8.0f;
+        for (std::size_t bit = 0; bit < sceneLayerBits_.size(); ++bit)
+        {
+            const float x = 12.0f +
+                static_cast<float>(bit % 8u) * (layerBitWidth + layerBitGap);
+            const float y = 336.0f +
+                static_cast<float>(bit / 8u) * 26.0f;
+            sceneLayerBits_[bit].SetPos(XMFLOAT2(x, y));
+            sceneLayerBits_[bit].SetSize(XMFLOAT2(layerBitWidth, 22.0f));
+        }
+        positionEnvironmentWidget(sceneMetadataLabel_, 446.0f, 20.0f);
+        positionEnvironmentWidget(sceneMetadataPreset_, 466.0f);
+        positionEnvironmentWidget(sceneObjectLabel_, 506.0f, 20.0f);
+        const float objectToggleWidth = (environmentFieldWidth - 8.0f) * 0.5f;
+        const auto layoutObjectToggle = [objectToggleWidth](
+            wi::gui::Widget& widget,
+            const int column,
+            const float y)
+        {
+            widget.SetPos(XMFLOAT2(
+                12.0f + static_cast<float>(column) * (objectToggleWidth + 8.0f),
+                y));
+            widget.SetSize(XMFLOAT2(objectToggleWidth, 28.0f));
+        };
+        layoutObjectToggle(sceneObjectRenderable_, 0, 526.0f);
+        layoutObjectToggle(sceneObjectCastShadow_, 1, 526.0f);
+        layoutObjectToggle(sceneObjectForeground_, 0, 558.0f);
+        layoutObjectToggle(sceneObjectMainCamera_, 1, 558.0f);
+        layoutObjectToggle(sceneObjectReflections_, 0, 590.0f);
+        layoutObjectToggle(sceneObjectWetmap_, 1, 590.0f);
+
+        positionEnvironmentWidget(lightLabel_, 630.0f, 20.0f);
+        positionEnvironmentWidget(lightType_, 650.0f);
+        positionEnvironmentWidget(lightColorRed_, 684.0f);
+        positionEnvironmentWidget(lightColorGreen_, 718.0f);
+        positionEnvironmentWidget(lightColorBlue_, 752.0f);
+        positionEnvironmentWidget(lightIntensity_, 786.0f);
+        positionEnvironmentWidget(lightRange_, 820.0f);
+        positionEnvironmentWidget(lightOuterCone_, 854.0f);
+        positionEnvironmentWidget(lightInnerCone_, 888.0f);
+        positionEnvironmentWidget(lightRadius_, 922.0f);
+        positionEnvironmentWidget(lightLength_, 956.0f);
+        positionEnvironmentWidget(lightHeight_, 990.0f);
+        positionEnvironmentWidget(lightCastShadow_, 1024.0f);
+        positionEnvironmentWidget(lightVolumetrics_, 1056.0f);
+        positionEnvironmentWidget(lightVolumetricBoost_, 1088.0f);
         positionEnvironmentWidget(environmentSkyLabel_, 44.0f, 20.0f);
         positionEnvironmentWidget(environmentPreset_, 64.0f);
         positionEnvironmentWidget(skyMode_, 98.0f);
@@ -5053,8 +5201,8 @@ namespace renegade::studio
             : terrain
                 ? 726.0f
                 : light
-                    ? 726.0f
-                    : 230.0f;
+                    ? 1130.0f
+                    : 630.0f;
         const float historyRow = environment
             ? actionStart
             : actionStart + 40.0f;
@@ -5131,6 +5279,45 @@ namespace renegade::studio
         const bool hasWeather = weather != nullptr;
         const bool hasTerrain = terrain != nullptr;
         const bool hasLight = light != nullptr;
+        const bool sceneComponentsVisible =
+            hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
+            !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
+            !hasWeather && !hasTerrain;
+        wi::ecs::Entity sceneAuthoringRoot = wi::ecs::INVALID_ENTITY;
+        bridge::SceneLayerMaskState sceneLayerState;
+        bridge::ObjectParticipationState objectRenderableState;
+        bridge::ObjectParticipationState objectCastShadowState;
+        bridge::ObjectParticipationState objectForegroundState;
+        bridge::ObjectParticipationState objectMainCameraState;
+        bridge::ObjectParticipationState objectReflectionsState;
+        bridge::ObjectParticipationState objectWetmapState;
+        if (sceneComponentsVisible)
+        {
+            const auto& currentScene = session_->Scenes().GetScene();
+            sceneAuthoringRoot = bridge::ResolveSceneComponentAuthoringRoot(
+                currentScene, selectedEntity);
+            sceneLayerState = bridge::InspectSceneLayerMask(
+                currentScene, selectedEntity);
+            objectRenderableState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::Renderable);
+            objectCastShadowState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::CastShadow);
+            objectForegroundState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::Foreground);
+            objectMainCameraState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::VisibleInMainCamera);
+            objectReflectionsState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::VisibleInReflections);
+            objectWetmapState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::Wetmap);
+        }
+        const bool hasObjectTargets = objectRenderableState.targetCount > 0;
         if (hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
             !environmentWorkspaceActive_ && !terrainWorkspaceActive_)
         {
@@ -5145,6 +5332,57 @@ namespace renegade::studio
             studioChrome_.SetSelectionName({});
         }
         LayoutInspectorActions(hasWeather, hasTerrain, hasLight);
+
+        sceneIdentityLabel_.SetVisible(sceneComponentsVisible);
+        sceneNameInput_.SetVisible(sceneComponentsVisible);
+        sceneLayerLabel_.SetVisible(sceneComponentsVisible);
+        sceneLayerAllButton_.SetVisible(sceneComponentsVisible);
+        sceneLayerNoneButton_.SetVisible(sceneComponentsVisible);
+        for (auto& bit : sceneLayerBits_)
+            bit.SetVisible(sceneComponentsVisible);
+        sceneMetadataLabel_.SetVisible(sceneComponentsVisible);
+        sceneMetadataPreset_.SetVisible(sceneComponentsVisible);
+        sceneObjectLabel_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectRenderable_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectCastShadow_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectForeground_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectMainCamera_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectReflections_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectWetmap_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+
+        if (sceneComponentsVisible && sceneAuthoringRoot != wi::ecs::INVALID_ENTITY)
+        {
+            const auto& currentScene = session_->Scenes().GetScene();
+            const auto* sceneName = currentScene.names.GetComponent(sceneAuthoringRoot);
+            sceneNameInput_.SetValue(sceneName != nullptr ? sceneName->name : std::string{});
+            sceneLayerLabel_.SetText(sceneLayerState.mixed
+                ? "LAYERS // MIXED // EDITING PRESERVES OTHER BITS"
+                : "LAYERS // 32-BIT MASK");
+            for (std::uint32_t bit = 0; bit < sceneLayerBits_.size(); ++bit)
+            {
+                sceneLayerBits_[bit].SetCheck(
+                    (sceneLayerState.mask & (std::uint32_t{1} << bit)) != 0u);
+            }
+            const auto* metadata = currentScene.metadatas.GetComponent(sceneAuthoringRoot);
+            sceneMetadataPreset_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(metadata != nullptr
+                    ? metadata->preset
+                    : wi::scene::MetadataComponent::Preset::Custom));
+            const bool objectMixed = objectRenderableState.mixed ||
+                objectCastShadowState.mixed || objectForegroundState.mixed ||
+                objectMainCameraState.mixed || objectReflectionsState.mixed ||
+                objectWetmapState.mixed;
+            sceneObjectLabel_.SetText(objectMixed
+                ? "OBJECT // MIXED // WHOLE-ASSET EDIT"
+                : "OBJECT // RENDER PARTICIPATION");
+            sceneObjectRenderable_.SetCheck(objectRenderableState.value);
+            sceneObjectCastShadow_.SetCheck(objectCastShadowState.value);
+            sceneObjectForeground_.SetCheck(objectForegroundState.value);
+            sceneObjectMainCamera_.SetCheck(objectMainCameraState.value);
+            sceneObjectReflections_.SetCheck(objectReflectionsState.value);
+            sceneObjectWetmap_.SetCheck(objectWetmapState.value);
+        }
+
         const auto setTransformVisible = [this, hasWeather, hasTerrain](wi::gui::Widget& widget)
         {
             widget.SetVisible(!environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !hasWeather && !hasTerrain);
@@ -7703,6 +7941,79 @@ namespace renegade::studio
                 oceanSliderAfter_));
         oceanSliderActive_ = false;
         oceanSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::CommitSelectedSceneName(const std::string& name)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        const auto selected = session_->Selection().SelectedEntity();
+        const auto target = bridge::ResolveSceneComponentAuthoringRoot(scene, selected);
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetSceneNameCommand>(scene, selected, name));
+        if (changed && target != wi::ecs::INVALID_ENTITY)
+            session_->Selection().Select(target);
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::ApplySelectedLayerBit(
+        const std::uint32_t bit,
+        const bool enabled)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        const auto selected = session_->Selection().SelectedEntity();
+        (void)session_->Commands().Execute(
+            std::make_unique<bridge::SetSceneLayerBitCommand>(
+                scene, selected, bit, enabled));
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::ApplySelectedLayerMask(const std::uint32_t mask)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        const auto selected = session_->Selection().SelectedEntity();
+        (void)session_->Commands().Execute(
+            std::make_unique<bridge::SetSceneLayerMaskCommand>(
+                scene, selected, mask));
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::ApplySelectedMetadataPreset(
+        const wi::scene::MetadataComponent::Preset preset)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        const auto selected = session_->Selection().SelectedEntity();
+        (void)session_->Commands().Execute(
+            std::make_unique<bridge::SetMetadataPresetCommand>(
+                scene, selected, preset));
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::ApplySelectedObjectParticipation(
+        const bridge::ObjectParticipationProperty property,
+        const bool value)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        const auto selected = session_->Selection().SelectedEntity();
+        (void)session_->Commands().Execute(
+            std::make_unique<bridge::SetObjectParticipationCommand>(
+                scene, selected, property, value));
         RefreshInspector();
         RefreshStatus();
     }
