@@ -27,3 +27,13 @@ add_test(
     NAME RenegadeJP01ReusableAssetPhysicsTests
     COMMAND RenegadeJP01ReusableAssetPhysicsTests
 )
+
+# Cheap structural guard for the end-to-end owner hardening. The executable
+# above proves behavior; this prevents a future refactor from quietly restoring
+# the old per-frame scale tracker or anonymous-wrapper UI path.
+add_test(
+    NAME RenegadeJP01OwnerHardeningContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_SOURCE_DIR}/Tests/JP01OwnerHardeningContract.cmake
+)
