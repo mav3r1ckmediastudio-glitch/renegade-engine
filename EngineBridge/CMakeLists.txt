@@ -59,6 +59,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/ProjectService.h
     include/renegade/bridge/ProjectDocumentTransaction.h
     include/renegade/bridge/SceneService.h
+    include/renegade/bridge/SceneComponentService.h
     include/renegade/bridge/SceneDocumentService.h
     include/renegade/bridge/SelectionService.h
     include/renegade/bridge/StudioSession.h
@@ -118,6 +119,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ProjectService.cpp
     src/ProjectDocumentTransaction.cpp
     src/SceneService.cpp
+    src/SceneComponentService.cpp
     src/SceneDocumentService.cpp
     src/SelectionService.cpp
     src/TestLevelSnapshotService.cpp

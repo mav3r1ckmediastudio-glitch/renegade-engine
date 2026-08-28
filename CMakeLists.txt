@@ -65,6 +65,7 @@ if(WIN32)
             -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
             -P ${CMAKE_SOURCE_DIR}/Tests/JP01HardeningSourceContract.cmake
     )
+    include(Tests/Phase5Gate1.cmake)
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)

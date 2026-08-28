@@ -111,6 +111,36 @@ namespace renegade::bridge
         std::uint32_t after_ = ~0u;
     };
 
+    class SetSceneLayerBitCommand final : public ICommand
+    {
+    public:
+        SetSceneLayerBitCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity selected,
+            std::uint32_t bit,
+            bool enabled);
+
+        bool Execute() override;
+        void Undo() override;
+
+    private:
+        struct TargetState
+        {
+            wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
+            std::uint32_t mask = ~0u;
+            std::uint32_t hierarchyBind = ~0u;
+            bool hadLayer = false;
+            bool hadHierarchy = false;
+        };
+
+        bool Apply(bool enabled);
+
+        wi::scene::Scene* scene_ = nullptr;
+        std::vector<TargetState> before_;
+        std::uint32_t bit_ = 0;
+        bool after_ = false;
+    };
+
     class SetMetadataPresetCommand final : public ICommand
     {
     public:

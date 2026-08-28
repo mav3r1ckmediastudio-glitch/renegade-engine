@@ -96,6 +96,27 @@ int main()
 
     auto& existingChildLayer = fixture.scene.layers.Create(fixture.objectA);
     existingChildLayer.layerMask = 0x00000004u;
+    commands.Clear();
+    ok &= Check(
+        commands.Execute(std::make_unique<renegade::bridge::SetSceneLayerBitCommand>(
+            fixture.scene,
+            fixture.objectB,
+            1u,
+            false)),
+        "layer-bit command failed");
+    ok &= Check(
+        fixture.scene.layers.GetComponent(fixture.objectA)->layerMask == 0x00000004u,
+        "layer-bit edit destroyed unrelated bits on existing child");
+    ok &= Check(
+        fixture.scene.layers.GetComponent(fixture.objectB) != nullptr &&
+            fixture.scene.layers.GetComponent(fixture.objectB)->layerMask == 0xFFFFFFFDu,
+        "layer-bit edit did not preserve default bits on missing child layer");
+    ok &= Check(commands.Undo(), "layer-bit Undo failed");
+    ok &= Check(
+        fixture.scene.layers.GetComponent(fixture.objectA)->layerMask == 0x00000004u &&
+            fixture.scene.layers.GetComponent(fixture.objectB) == nullptr,
+        "layer-bit Undo did not restore exact component state");
+
     const std::uint32_t authoredMask = 0x00000012u;
     commands.Clear();
     ok &= Check(

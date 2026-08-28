@@ -370,6 +370,114 @@ namespace renegade::bridge
         }
     }
 
+    SetSceneLayerBitCommand::SetSceneLayerBitCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity selected,
+        const std::uint32_t bit,
+        const bool enabled)
+        : scene_(&scene)
+        , bit_(bit)
+        , after_(enabled)
+    {
+        if (bit_ >= 32u)
+            return;
+        const auto targets = CollectLayerTargets(scene, selected);
+        before_.reserve(targets.size());
+        for (const wi::ecs::Entity entity : targets)
+        {
+            TargetState state;
+            state.entity = entity;
+            if (const auto* layer = scene.layers.GetComponent(entity); layer != nullptr)
+            {
+                state.hadLayer = true;
+                state.mask = layer->layerMask;
+            }
+            if (const auto* hierarchy = scene.hierarchy.GetComponent(entity);
+                hierarchy != nullptr)
+            {
+                state.hadHierarchy = true;
+                state.hierarchyBind = hierarchy->layerMask_bind;
+            }
+            before_.push_back(state);
+        }
+    }
+
+    bool SetSceneLayerBitCommand::Apply(const bool enabled)
+    {
+        if (scene_ == nullptr || before_.empty() || bit_ >= 32u)
+            return false;
+        const std::uint32_t flag = std::uint32_t{1} << bit_;
+        for (const auto& target : before_)
+        {
+            std::uint32_t mask = target.hadLayer ? target.mask : ~0u;
+            mask = enabled ? (mask | flag) : (mask & ~flag);
+            auto* layer = scene_->layers.GetComponent(target.entity);
+            if (layer == nullptr)
+                layer = &scene_->layers.Create(target.entity);
+            layer->layerMask = mask;
+            if (auto* hierarchy = scene_->hierarchy.GetComponent(target.entity);
+                hierarchy != nullptr)
+            {
+                hierarchy->layerMask_bind = mask;
+            }
+            if (auto* material = scene_->materials.GetComponent(target.entity);
+                material != nullptr)
+            {
+                material->SetDirty();
+            }
+        }
+        return true;
+    }
+
+    bool SetSceneLayerBitCommand::Execute()
+    {
+        if (before_.empty() || bit_ >= 32u)
+            return false;
+        const std::uint32_t flag = std::uint32_t{1} << bit_;
+        const bool changed = std::any_of(
+            before_.begin(),
+            before_.end(),
+            [this, flag](const TargetState& target)
+            {
+                const std::uint32_t mask = target.hadLayer ? target.mask : ~0u;
+                return ((mask & flag) != 0u) != after_;
+            });
+        return changed && Apply(after_);
+    }
+
+    void SetSceneLayerBitCommand::Undo()
+    {
+        if (scene_ == nullptr)
+            return;
+        for (const auto& target : before_)
+        {
+            if (!target.hadLayer)
+            {
+                scene_->layers.Remove(target.entity);
+            }
+            else
+            {
+                auto* layer = scene_->layers.GetComponent(target.entity);
+                if (layer == nullptr)
+                    layer = &scene_->layers.Create(target.entity);
+                layer->layerMask = target.mask;
+            }
+            if (target.hadHierarchy)
+            {
+                if (auto* hierarchy = scene_->hierarchy.GetComponent(target.entity);
+                    hierarchy != nullptr)
+                {
+                    hierarchy->layerMask_bind = target.hierarchyBind;
+                }
+            }
+            if (auto* material = scene_->materials.GetComponent(target.entity);
+                material != nullptr)
+            {
+                material->SetDirty();
+            }
+        }
+    }
+
     SetMetadataPresetCommand::SetMetadataPresetCommand(
         wi::scene::Scene& scene,
         const wi::ecs::Entity selected,
