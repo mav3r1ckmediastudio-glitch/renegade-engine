@@ -1,5 +1,6 @@
 #include "RenegadePhysicsLabStudioChrome.h"
 
+#include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/PhysicsLuaService.h"
 #include "renegade/bridge/StudioSession.h"
 
@@ -155,6 +156,33 @@ namespace renegade::studio
             if (studioAction_)
                 studioAction_(Action::SceneWorkspace);
             SetPhysicsLabActive(true);
+        }
+
+        if (physicsLab_.IsActive())
+        {
+            // Creator-facing reusable assets own physics on their stable
+            // instance wrapper, never on a replaceable imported payload node.
+            // CreateCollisionCommand resolves a nested Add request to that
+            // wrapper. Follow the selection to the real body owner before the
+            // Lab refreshes so the controls immediately edit what was created.
+            if (auto* session = bridge::StudioSession::Current();
+                session != nullptr && session->Selection().HasSelection())
+            {
+                auto& scene = session->Scenes().GetScene();
+                const wi::ecs::Entity selected =
+                    session->Selection().SelectedEntity();
+                const wi::ecs::Entity target =
+                    bridge::ResolveCollisionAuthoringTarget(scene, selected);
+                if (target != selected &&
+                    target != wi::ecs::INVALID_ENTITY &&
+                    !scene.rigidbodies.Contains(selected) &&
+                    scene.rigidbodies.Contains(target))
+                {
+                    session->Selection().Select(target);
+                    SetStatusText(
+                        "PHYSICS LAB // REUSABLE ASSET ROOT SELECTED");
+                }
+            }
         }
 
         // Do not call SetBounds here. Physics Lab controls are stateful Wicked
