@@ -1,0 +1,45 @@
+name: JP01 staging outline compile fix
+
+on:
+  push:
+    branches:
+      - staging/jp01-owner-validation-fixes
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging/jp01-owner-validation-fixes
+          fetch-depth: 0
+      - name: Replace stale outline member references
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('Studio/src/StudioApplication.cpp')
+          text = path.read_text(encoding='utf-8')
+          count = text.count('outlinedEntity_')
+          if count != 2:
+              raise SystemExit(f'expected exactly 2 stale outlinedEntity_ references, found {count}')
+          text = text.replace('outlinedEntity_', 'outlinedSelection_')
+          if 'outlinedEntity_' in text:
+              raise SystemExit('stale outlinedEntity_ reference remains')
+          path.write_text(text, encoding='utf-8', newline='')
+          PY
+          rm -f .github/workflows/jp01-staging-outline-compile-fix.yml
+          git diff --check
+          git diff -- Studio/src/StudioApplication.cpp
+      - name: Commit compile repair
+        shell: bash
+        run: |
+          git config user.name 'mav3r1ckmediastudio-glitch'
+          git config user.email 'mav3r1ckmediastudio@gmail.com'
+          git add Studio/src/StudioApplication.cpp .github/workflows/jp01-staging-outline-compile-fix.yml
+          git commit -m 'JP01 hardening: repair multi-object outline compile state'
+          git push origin HEAD:staging/jp01-owner-validation-fixes
