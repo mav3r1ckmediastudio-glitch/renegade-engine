@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <vector>
 
 namespace
 {
@@ -135,45 +134,46 @@ namespace renegade::bridge
     {
         ReusableAssetCollisionRepairResult result;
 
-        std::vector<wi::ecs::Entity> wrappers;
-        wrappers.reserve(scene.metadatas.GetCount());
-        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        // Mutating rigidbodies does not mutate the metadata component manager,
+        // so wrappers can be processed directly without allocating a temporary
+        // collection. This keeps the pre-physics recovery genuinely noexcept.
+        for (std::size_t metadataIndex = 0;
+            metadataIndex < scene.metadatas.GetCount(); ++metadataIndex)
         {
-            const wi::ecs::Entity wrapper = scene.metadatas.GetEntity(index);
-            if (IsReusableAssetWrapper(scene, wrapper))
+            const wi::ecs::Entity wrapper =
+                scene.metadatas.GetEntity(metadataIndex);
+            if (!IsReusableAssetWrapper(scene, wrapper))
             {
-                wrappers.push_back(wrapper);
+                continue;
             }
-        }
 
-        for (const wi::ecs::Entity wrapper : wrappers)
-        {
-            std::vector<wi::ecs::Entity> nestedBodies;
-            nestedBodies.reserve(2);
-            for (std::size_t index = 0; index < scene.rigidbodies.GetCount(); ++index)
+            wi::ecs::Entity nestedBody = wi::ecs::INVALID_ENTITY;
+            std::size_t nestedBodyCount = 0;
+            for (std::size_t bodyIndex = 0;
+                bodyIndex < scene.rigidbodies.GetCount(); ++bodyIndex)
             {
                 const wi::ecs::Entity bodyEntity =
-                    scene.rigidbodies.GetEntity(index);
+                    scene.rigidbodies.GetEntity(bodyIndex);
                 if (bodyEntity != wrapper &&
                     scene.Entity_IsDescendant(bodyEntity, wrapper))
                 {
-                    nestedBodies.push_back(bodyEntity);
+                    nestedBody = bodyEntity;
+                    ++nestedBodyCount;
                 }
             }
 
-            if (nestedBodies.empty())
+            if (nestedBodyCount == 0)
             {
                 continue;
             }
 
-            if (scene.rigidbodies.Contains(wrapper) || nestedBodies.size() != 1)
+            if (scene.rigidbodies.Contains(wrapper) || nestedBodyCount != 1)
             {
-                result.conflictCount += nestedBodies.size();
+                result.conflictCount += nestedBodyCount;
                 continue;
             }
 
-            const auto* nested = scene.rigidbodies.GetComponent(
-                nestedBodies.front());
+            const auto* nested = scene.rigidbodies.GetComponent(nestedBody);
             if (nested == nullptr)
             {
                 ++result.conflictCount;
@@ -184,11 +184,12 @@ namespace renegade::bridge
             // character/vehicle fields) but never carry a live Jolt object to
             // a different entity. Wicked recreates that implementation-owned
             // body against the stable root on its next normal update.
-            wi::scene::RigidBodyPhysicsComponent migrated = *nested;
+            wi::scene::RigidBodyPhysicsComponent migrated;
+            migrated = *nested;
             migrated.physicsobject.reset();
             migrated.SetRefreshParametersNeeded(true);
 
-            scene.rigidbodies.Remove(nestedBodies.front());
+            scene.rigidbodies.Remove(nestedBody);
             auto& rootBody = scene.rigidbodies.Create(wrapper);
             rootBody = migrated;
             rootBody.physicsobject.reset();
