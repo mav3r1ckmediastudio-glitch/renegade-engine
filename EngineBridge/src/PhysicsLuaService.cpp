@@ -609,7 +609,12 @@ namespace
             lua_pushnil(L);
             return 1;
         }
-        PushBool(L, wi::physics::IsConstraintBroken(*constraint));
+
+        // Pinned upstream currently returns the native constraint's enabled
+        // state from IsConstraintBroken(), while SetConstraintBroken(true)
+        // disables that same constraint. Renegade's public contract keeps the
+        // word "broken" semantically consistent without patching upstream.
+        PushBool(L, !wi::physics::IsConstraintBroken(*constraint));
         return 1;
     }
 
@@ -735,8 +740,8 @@ namespace renegade::bridge
             return false;
         }
 
-        // Wicked owns creation/destruction and initialization ordering for its
-        // global VM. JP01 only installs functions into a VM that already exists.
+        // The engine owns creation/destruction and initialization ordering for
+        // its global VM. JP01 only installs functions into a VM that exists.
         boundScene = &scene;
         InstallNamespace(state);
         return true;
@@ -750,9 +755,7 @@ namespace renegade::bridge
     void UnbindPhysicsLua(const wi::scene::Scene* scene) noexcept
     {
         if (scene == nullptr || scene == boundScene)
-        {
             boundScene = nullptr;
-        }
     }
 
     bool IsPhysicsLuaBound() noexcept
