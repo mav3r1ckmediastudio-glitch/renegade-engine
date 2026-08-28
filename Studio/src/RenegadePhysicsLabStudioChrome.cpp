@@ -119,7 +119,7 @@ namespace renegade::studio
         physicsLab_.SetActive(active);
         physicsLab_.SetBounds(ViewportBounds());
         if (active)
-            SetStatusText("PHYSICS LAB // WICKED EDITOR PARITY");
+            SetStatusText("PHYSICS LAB");
     }
 
     bool RenegadePhysicsLabStudioChrome::PhysicsTabHit(
@@ -180,7 +180,7 @@ namespace renegade::studio
                 {
                     session->Selection().Select(target);
                     SetStatusText(
-                        "PHYSICS LAB // REUSABLE ASSET ROOT SELECTED");
+                        "PHYSICS LAB // ASSET ROOT SELECTED");
                 }
             }
         }
