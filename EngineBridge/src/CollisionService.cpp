@@ -288,6 +288,12 @@ namespace renegade::bridge
         auto* rigidbody = scene.rigidbodies.GetComponent(target);
         if (rigidbody == nullptr)
             return false;
+
+        // Transform scale is consumed when the backend creates its native
+        // collision shape. A refresh flag alone only updates live parameters;
+        // destroy the implementation-owned body handle so the next physics
+        // update recreates the shape from the current authored root scale.
+        rigidbody->physicsobject.reset();
         rigidbody->SetRefreshParametersNeeded(true);
         return true;
     }
@@ -296,6 +302,11 @@ namespace renegade::bridge
         wi::scene::Scene& scene) noexcept
     {
         ReusableAssetCollisionRepairResult result;
+
+        // The same load/save canonicalization boundary also repairs only old
+        // implementation-generated wrapper labels. Creator-authored names are
+        // preserved by RepairReusableAssetInstanceNames().
+        (void)RepairReusableAssetInstanceNames(scene);
 
         for (std::size_t metadataIndex = 0;
             metadataIndex < scene.metadatas.GetCount(); ++metadataIndex)
@@ -556,10 +567,10 @@ namespace renegade::bridge
         const wi::ecs::Entity entity,
         const CollisionState& collision)
         : scene_(&scene)
-        , entity_(entity)
+        , entity_(ResolveCollisionAuthoringTarget(scene, entity))
         , after_(SanitizeCollisionState(collision))
     {
-        if (const auto* existing = scene.rigidbodies.GetComponent(entity))
+        if (const auto* existing = scene.rigidbodies.GetComponent(entity_))
             before_ = CaptureCollision(*existing);
     }
 
@@ -569,7 +580,7 @@ namespace renegade::bridge
         const CollisionState& before,
         const CollisionState& after)
         : scene_(&scene)
-        , entity_(entity)
+        , entity_(ResolveCollisionAuthoringTarget(scene, entity))
         , before_(SanitizeCollisionState(before))
         , after_(SanitizeCollisionState(after))
     {
@@ -603,7 +614,7 @@ namespace renegade::bridge
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity)
         : scene_(&scene)
-        , entity_(entity)
+        , entity_(ResolveCollisionAuthoringTarget(scene, entity))
     {
     }
 
