@@ -12,6 +12,9 @@ set(CHROME_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.h")
 set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
 set(PHYSICS_LUA_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/PhysicsLuaService.cpp")
 set(SCENE_SERVICE_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/SceneService.h")
+set(SCENE_DOCUMENT_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/SceneDocumentService.cpp")
+set(COLLISION_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/CollisionService.h")
+set(COLLISION_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/CollisionService.cpp")
 set(RUNTIME_SOURCE "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
 set(PHYSICS_LUA_TEST "${RENEGADE_SOURCE_DIR}/Tests/PhysicsLuaTests.cpp")
 set(PHYSICS_LUA_CMAKE "${RENEGADE_SOURCE_DIR}/Tests/JP01PhysicsLua.cmake")
@@ -28,6 +31,9 @@ foreach(path IN ITEMS
     "${STUDIO_CMAKE}"
     "${PHYSICS_LUA_SOURCE}"
     "${SCENE_SERVICE_HEADER}"
+    "${SCENE_DOCUMENT_SOURCE}"
+    "${COLLISION_HEADER}"
+    "${COLLISION_SOURCE}"
     "${RUNTIME_SOURCE}"
     "${PHYSICS_LUA_TEST}"
     "${PHYSICS_LUA_CMAKE}"
@@ -47,6 +53,9 @@ file(READ "${CHROME_HEADER}" chrome_header)
 file(READ "${STUDIO_CMAKE}" studio_cmake)
 file(READ "${PHYSICS_LUA_SOURCE}" physics_lua_source)
 file(READ "${SCENE_SERVICE_HEADER}" scene_service_header)
+file(READ "${SCENE_DOCUMENT_SOURCE}" scene_document_source)
+file(READ "${COLLISION_HEADER}" collision_header)
+file(READ "${COLLISION_SOURCE}" collision_source)
 file(READ "${RUNTIME_SOURCE}" runtime_source)
 file(READ "${PHYSICS_LUA_TEST}" physics_lua_test)
 file(READ "${PHYSICS_LUA_CMAKE}" physics_lua_cmake)
@@ -145,6 +154,52 @@ require_text(studio_header
 require_text(studio_header
     "PhysicsLabStudioRenderPath renderer_;"
     "Physics-aware renderer ownership")
+
+# Owner validation exposed a severe imported-asset failure: attaching a dynamic
+# body to an internal GLTF/FBX node lets Wicked's parented rigid-body feedback
+# repeatedly decompose the imported transform chain, producing runaway scale,
+# clipping and flicker. Reusable assets must resolve rigid-body ownership to the
+# stable creator wrapper and old unambiguous scenes must be repaired before the
+# first physics update.
+require_text(collision_header
+    "bool startDeactivated = true;"
+    "Wicked-editor start-deactivated rigid-body default")
+require_text(collision_header
+    "ResolveCollisionAuthoringTarget("
+    "creator-safe rigid-body target resolver")
+require_text(collision_header
+    "RepairReusableAssetCollisionTargets"
+    "serialized nested-body recovery API")
+require_text(collision_source
+    "ReusableAssetInstanceIdMetadataKey"
+    "stable reusable wrapper identification")
+require_text(collision_source
+    "entity_(ResolveCollisionAuthoringTarget(scene, targetEntity))"
+    "CreateCollisionCommand stable-wrapper targeting")
+require_text(collision_source
+    "scene.rigidbodies.Remove(nestedBodies.front());"
+    "nested reusable rigid-body removal during migration")
+require_text(collision_source
+    "auto& rootBody = scene.rigidbodies.Create(wrapper);"
+    "stable-wrapper rigid-body migration")
+require_text(collision_source
+    "rootBody.physicsobject.reset();"
+    "no live Jolt handle migration between entities")
+require_text(scene_document_source
+    "(void)RepairReusableAssetCollisionTargets(*prepared.scene_);"
+    "pre-physics WISCENE reusable-body repair")
+require_text(scene_document_source
+    "RepairReusableAssetCollisionTargets(scenes_.scene_);"
+    "pre-save active-scene reusable-body canonicalization")
+require_text(physics_chrome_source
+    "bridge::ResolveCollisionAuthoringTarget(scene, selected);"
+    "Physics Lab stable-root selection follow")
+require_text(physics_chrome_source
+    "session->Selection().Select(target);"
+    "Physics Lab selection transfer to body owner")
+forbid_text(collision_source
+    "JPH::PhysicsSystem"
+    "new/raw Jolt world ownership in collision recovery")
 
 # Lua lifecycle ownership: SceneService construction must be inert, and the
 # Renegade binding layer must never bootstrap Wicked's global VM itself.
