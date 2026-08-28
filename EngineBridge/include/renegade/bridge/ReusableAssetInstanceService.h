@@ -36,6 +36,13 @@ namespace renegade::bridge
         std::vector<ReusableAssetInstanceRecord>& instances,
         std::string& error);
 
+    // Repairs only implementation-generated wrapper names. Existing creator
+    // names are never overwritten. Anonymous instances receive deterministic,
+    // unique names derived from their visible imported model hierarchy:
+    // crate002, crate002 (2), crate002 (3), ...
+    [[nodiscard]] std::size_t RepairReusableAssetInstanceNames(
+        wi::scene::Scene& scene) noexcept;
+
     // Reusable-asset placement command. Unlike direct format import, the
     // creator-facing reusable workflow needs a durable stable-ID wrapper so a
     // future packaged Runtime can refresh only the payload from the current
