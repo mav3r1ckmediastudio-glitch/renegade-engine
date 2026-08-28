@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #include <WickedEngine.h>
 
 #include "renegade/bridge/CommandService.h"
@@ -30,7 +32,10 @@ namespace renegade::bridge
         bool kinematic = false;
         bool locked2D = false;
         bool disableDeactivation = false;
-        bool startDeactivated = false;
+        // Wicked Editor starts newly added rigid bodies deactivated. This also
+        // prevents an authored body from immediately falling while the creator
+        // is still configuring it in Physics Lab.
+        bool startDeactivated = true;
 
         // Primitive shape parameters. Convex Hull, Triangle Mesh and Height
         // Field derive their geometry from Wicked's normal scene/mesh/terrain
@@ -44,9 +49,9 @@ namespace renegade::bridge
     };
 
     // Complex Wicked collision shapes are mesh-derived. Keep that requirement
-    // explicit in Renegade so the future Physics Lab can disable invalid
-    // choices with a useful reason instead of allowing a component that Jolt
-    // can only reject at simulation time.
+    // explicit in Renegade so the Physics Lab can disable invalid choices with
+    // a useful reason instead of allowing a component that Jolt can only
+    // reject at simulation time.
     enum class CollisionTargetStatus
     {
         Supported,
@@ -56,6 +61,29 @@ namespace renegade::bridge
         InvalidMeshData,
         InvalidHeightFieldGrid,
     };
+
+    // A reusable asset deliberately keeps creator-owned transform/state on its
+    // stable instance wrapper while the imported payload below it is
+    // replaceable. Dynamic Jolt bodies must therefore live on that wrapper,
+    // not on an arbitrary nested GLTF/FBX transform where Wicked's dynamic
+    // parent detach/re-attach path can repeatedly decompose import scale/shear.
+    [[nodiscard]] wi::ecs::Entity ResolveCollisionAuthoringTarget(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity selectedEntity) noexcept;
+
+    struct ReusableAssetCollisionRepairResult
+    {
+        std::size_t migratedBodyCount = 0;
+        std::size_t conflictCount = 0;
+    };
+
+    // Repairs the unambiguous legacy/JP01-owner-failure case where exactly one
+    // rigid body was serialized on a descendant of a reusable asset wrapper.
+    // The complete Wicked component is moved to the stable wrapper before the
+    // first physics update. Ambiguous multi-body/root-conflict cases are left
+    // untouched and counted instead of being destructively guessed at.
+    [[nodiscard]] ReusableAssetCollisionRepairResult
+    RepairReusableAssetCollisionTargets(wi::scene::Scene& scene) noexcept;
 
     [[nodiscard]] CollisionTargetStatus CheckCollisionTarget(
         const wi::scene::Scene& scene,
@@ -84,9 +112,10 @@ namespace renegade::bridge
         wi::scene::RigidBodyPhysicsComponent& rigidbody,
         const CollisionState& state) noexcept;
 
-    // Attaches a new RigidBodyPhysicsComponent to targetEntity if it does
-    // not already have one. This never creates a new entity, so Undo/Redo is
-    // a component add/remove rather than an entity snapshot.
+    // Attaches a new RigidBodyPhysicsComponent to the creator-safe target. For
+    // normal scene entities that is targetEntity itself; for reusable assets
+    // any selected payload descendant resolves to the stable instance wrapper.
+    // Undo/Redo therefore remains a component add/remove, never an entity copy.
     class CreateCollisionCommand final : public ICommand
     {
     public:
