@@ -66,6 +66,7 @@ if(WIN32)
             -P ${CMAKE_SOURCE_DIR}/Tests/JP01HardeningSourceContract.cmake
     )
     include(Tests/Phase5Gate1.cmake)
+    include(Tests/Phase5Gate2.cmake)
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)

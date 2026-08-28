@@ -270,6 +270,7 @@ namespace renegade::studio
             CreateSpotLight,
             CreateDirectionalLight,
             CreateRectangleLight,
+            CreateCamera,
             ImportModel,
             Focus,
             ToggleGrid,

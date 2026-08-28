@@ -13,6 +13,7 @@
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
+#include "renegade/bridge/CameraService.h"
 #include "renegade/bridge/SceneComponentService.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
@@ -158,6 +159,7 @@ namespace renegade::studio
             DuplicateSelection,
             DeleteSelection,
             CreateLight,
+            CreateCamera,
             OpenScene,
             SaveScene,
             SaveSceneAs,
@@ -302,6 +304,16 @@ namespace renegade::studio
             Volumetrics,
         };
 
+        enum class CameraField
+        {
+            FieldOfView,
+            NearPlane,
+            FarPlane,
+            FocalLength,
+            ApertureSize,
+            OrthoVerticalSize,
+        };
+
         void CommitSelectedSceneName(const std::string& name);
         void ApplySelectedLayerBit(std::uint32_t bit, bool enabled);
         void ApplySelectedLayerMask(std::uint32_t mask);
@@ -404,6 +416,19 @@ namespace renegade::studio
             LightField field,
             float value) noexcept;
         bool CommitSelectedLight(const bridge::LightState& light);
+        bool CommitSelectedCamera(const bridge::CameraState& cameraState);
+        void ApplySelectedCameraProjection(bool orthographic);
+        void BeginCameraSlider(CameraField field);
+        void PreviewCameraSlider(CameraField field, float value);
+        void CommitCameraSlider(CameraField field, float value);
+        static void SetCameraFieldValue(
+            bridge::CameraState& cameraState,
+            CameraField field,
+            float value) noexcept;
+        [[nodiscard]] bridge::TransformState CaptureEditorCameraTransform() const;
+        void CreateCameraFromView();
+        void AlignSelectedCameraToView();
+        void ViewFromSelectedCamera();
         void CreateLight(
             wi::scene::LightComponent::LightType type);
         void PlaceLight(
@@ -422,6 +447,7 @@ namespace renegade::studio
             float screenY);
         bool HandleCreatorAssetPlacement(const XMFLOAT4& pointer);
         void CancelCreatorAssetPlacement();
+        bool HandleCameraSceneIcons(const XMFLOAT4& pointer);
         bool HandleLightSceneIcons(const XMFLOAT4& pointer);
         [[nodiscard]] bool ProjectEditorPoint(
             const XMFLOAT3& world,
@@ -435,7 +461,8 @@ namespace renegade::studio
         void LayoutInspectorActions(
             bool environment,
             bool terrain = false,
-            bool light = false);
+            bool light = false,
+            bool sceneCamera = false);
         void DrawEditorGrid(wi::graphics::CommandList cmd) const;
         void SetGridVisible(bool visible);
         void CreateProjectHub();
@@ -530,6 +557,16 @@ namespace renegade::studio
         SceneInspectorCheckBox sceneObjectMainCamera_;
         SceneInspectorCheckBox sceneObjectReflections_;
         SceneInspectorCheckBox sceneObjectWetmap_;
+        wi::gui::Label cameraLabel_;
+        SceneInspectorComboBox cameraProjection_;
+        SceneInspectorSlider cameraFieldOfView_;
+        SceneInspectorSlider cameraNearPlane_;
+        SceneInspectorSlider cameraFarPlane_;
+        SceneInspectorSlider cameraFocalLength_;
+        SceneInspectorSlider cameraApertureSize_;
+        SceneInspectorSlider cameraOrthoVerticalSize_;
+        SceneInspectorButton cameraAlignToView_;
+        SceneInspectorButton cameraViewFrom_;
         wi::gui::Label lightLabel_;
         SceneInspectorComboBox lightType_;
         SceneInspectorSlider lightColorRed_;
@@ -684,6 +721,7 @@ namespace renegade::studio
         float cameraMoveSpeed_ = 5.0f;
         bool gizmoDragActive_ = false;
         bool flyCameraActive_ = false;
+        bool gizmoSuppressedForCameraView_ = false;
         bool gridVisible_ = true;
         int lastDrawerTab_ = 0;
         bool workspaceLayoutDirty_ = false;
@@ -743,6 +781,11 @@ namespace renegade::studio
         wi::ecs::Entity lightSliderEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::LightState lightSliderBefore_;
         bridge::LightState lightSliderAfter_;
+        bool cameraSliderActive_ = false;
+        CameraField cameraSliderField_ = CameraField::FieldOfView;
+        wi::ecs::Entity cameraSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::CameraState cameraSliderBefore_;
+        bridge::CameraState cameraSliderAfter_;
         wi::scene::LightComponent::LightType pendingLightType_ =
             wi::scene::LightComponent::POINT;
         wi::scene::LightComponent::LightType lightPlacementType_ =
