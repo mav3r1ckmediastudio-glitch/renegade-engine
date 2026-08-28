@@ -70,6 +70,64 @@ namespace renegade::bridge
             }
             return wi::ecs::INVALID_ENTITY;
         }
+
+        bool IsCreatorFacingName(const std::string& value) noexcept
+        {
+            if (value.empty() || value.rfind("__renegade_", 0) == 0)
+                return false;
+            return value != "Reusable Asset Instance" &&
+                value != "Reusable Asset Drag Preview" &&
+                value != "Imported Payload Root" &&
+                value != "Scene" && value != "Root" && value != "RootNode";
+        }
+
+        std::string DeriveReusableAssetName(
+            const wi::scene::Scene& scene,
+            const wi::ecs::Entity payloadRoot)
+        {
+            // Prefer a render-object name: this is normally the authored/imported
+            // model name and avoids exposing Renegade's payload-wrapper nodes.
+            for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)
+            {
+                const wi::ecs::Entity entity = scene.objects.GetEntity(index);
+                if (entity != payloadRoot &&
+                    !scene.Entity_IsDescendant(entity, payloadRoot))
+                {
+                    continue;
+                }
+                const auto* name = scene.names.GetComponent(entity);
+                if (name != nullptr && IsCreatorFacingName(name->name))
+                    return name->name;
+            }
+
+            // Some imports keep the useful source name on a transform-only
+            // node above their render object. Use the first deterministic
+            // creator-facing descendant as the fallback.
+            for (std::size_t index = 0; index < scene.names.GetCount(); ++index)
+            {
+                const wi::ecs::Entity entity = scene.names.GetEntity(index);
+                if (entity != payloadRoot &&
+                    !scene.Entity_IsDescendant(entity, payloadRoot))
+                {
+                    continue;
+                }
+                if (IsCreatorFacingName(scene.names[index].name))
+                    return scene.names[index].name;
+            }
+            return "Asset";
+        }
+
+        void ApplyReusableAssetName(
+            wi::scene::Scene& scene,
+            const wi::ecs::Entity wrapper,
+            const wi::ecs::Entity payloadRoot)
+        {
+            const std::string name = DeriveReusableAssetName(scene, payloadRoot);
+            if (auto* existing = scene.names.GetComponent(wrapper))
+                existing->name = name;
+            else
+                scene.names.Create(wrapper).name = name;
+        }
     }
 
     bool InspectReusableAssetInstances(
@@ -179,10 +237,7 @@ namespace renegade::bridge
             {
                 const auto& resource = material.textures[slot].resource;
                 if (resource.IsValid())
-                {
-                    materialResources_.push_back(
-                        {materialEntity, slot, resource});
-                }
+                    materialResources_.push_back({materialEntity, slot, resource});
             }
         }
     }
@@ -194,8 +249,7 @@ namespace renegade::bridge
 
         for (const auto& captured : materialResources_)
         {
-            auto* material = scene_->materials.GetComponent(
-                captured.materialEntity);
+            auto* material = scene_->materials.GetComponent(captured.materialEntity);
             if (material == nullptr ||
                 captured.slot >= wi::scene::MaterialComponent::TEXTURESLOT_COUNT)
             {
@@ -222,10 +276,7 @@ namespace renegade::bridge
                     return false;
                 }
 
-                if (auto* name = scene_->names.GetComponent(entity_))
-                    name->name = "Reusable Asset Instance";
-                else
-                    scene_->names.Create(entity_).name = "Reusable Asset Instance";
+                ApplyReusableAssetName(*scene_, entity_, payloadRoot_);
 
                 auto& instanceMetadata = scene_->metadatas.Create(entity_);
                 instanceMetadata.string_values.set(
@@ -253,34 +304,22 @@ namespace renegade::bridge
 
             wi::unordered_set<wi::ecs::Entity> entitiesBefore;
             scene_->FindAllEntities(entitiesBefore);
-            const std::size_t transformCountBefore =
-                scene_->transforms.GetCount();
-            const std::size_t animationCountBefore =
-                scene_->animations.GetCount();
-            const std::size_t materialCountBefore =
-                scene_->materials.GetCount();
+            const std::size_t transformCountBefore = scene_->transforms.GetCount();
+            const std::size_t animationCountBefore = scene_->animations.GetCount();
+            const std::size_t materialCountBefore = scene_->materials.GetCount();
 
             scene_->Merge(*preparedScene_);
             preparedScene_.reset();
             if (scene_->transforms.GetCount() <= transformCountBefore)
                 return false;
 
-            // Creator-authored products deliberately carry their approved
-            // transform on one marked root. That root is the replaceable
-            // payload boundary and must remain intact below the instance
-            // wrapper. Legacy products predate the marker and retain the Gate
-            // 6 normalization behavior.
             payloadRoot_ = FindNewCreatorAuthoredRoot(*scene_, entitiesBefore);
             const bool creatorAuthoredPayload =
                 payloadRoot_ != wi::ecs::INVALID_ENTITY;
             if (!creatorAuthoredPayload)
-            {
-                payloadRoot_ =
-                    scene_->transforms.GetEntity(transformCountBefore);
-            }
+                payloadRoot_ = scene_->transforms.GetEntity(transformCountBefore);
 
-            auto* payloadTransform =
-                scene_->transforms.GetComponent(payloadRoot_);
+            auto* payloadTransform = scene_->transforms.GetComponent(payloadRoot_);
             if (payloadTransform == nullptr)
                 return false;
 
@@ -291,7 +330,7 @@ namespace renegade::bridge
                 payloadTransform->SetDirty();
             }
 
-            entity_ = scene_->Entity_CreateTransform("Reusable Asset Instance");
+            entity_ = scene_->Entity_CreateTransform("Asset");
             auto* instanceTransform = scene_->transforms.GetComponent(entity_);
             if (instanceTransform == nullptr)
                 return false;
@@ -313,10 +352,8 @@ namespace renegade::bridge
             payloadMetadata->bool_values.set(
                 ReusableAssetPayloadRootMetadataKey, true);
 
-            // Both the legacy normalized root and the creator-authored root are
-            // already in the local space Renegade wants to preserve below the
-            // stable instance wrapper.
             scene_->Component_Attach(payloadRoot_, entity_, true);
+            ApplyReusableAssetName(*scene_, entity_, payloadRoot_);
 
             for (std::size_t index = animationCountBefore;
                 index < scene_->animations.GetCount(); ++index)
@@ -324,10 +361,6 @@ namespace renegade::bridge
                 scene_->animations[index].Play();
             }
 
-            // Wicked Resource handles are deliberately non-serialized. Keep
-            // the governed resources loaded by placement preparation alive so
-            // Undo/Redo can restore the exact same live material state instead
-            // of producing a grey instance until the next project reopen.
             CaptureMaterialResources(materialCountBefore);
 
             snapshot_.SetReadModeAndResetPos(false);
@@ -343,8 +376,7 @@ namespace renegade::bridge
         snapshot_.SetReadModeAndResetPos(true);
         wi::ecs::EntitySerializer serializer;
         serializer.allow_remap = false;
-        const wi::ecs::Entity restored =
-            scene_->Entity_Serialize(snapshot_, serializer);
+        const wi::ecs::Entity restored = scene_->Entity_Serialize(snapshot_, serializer);
         if (restored != entity_)
             return false;
 
