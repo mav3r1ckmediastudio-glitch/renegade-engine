@@ -59,6 +59,12 @@ if(WIN32)
     include(Tests/JP01PhysicsLua.cmake)
     include(Tests/JP01WickedCollider.cmake)
     include(Tests/JP01ReusableAssetPhysics.cmake)
+    add_test(
+        NAME RenegadeJP01HardeningSourceContract
+        COMMAND ${CMAKE_COMMAND}
+            -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P ${CMAKE_SOURCE_DIR}/Tests/JP01HardeningSourceContract.cmake
+    )
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)
