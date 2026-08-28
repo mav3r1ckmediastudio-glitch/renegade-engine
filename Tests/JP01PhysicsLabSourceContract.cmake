@@ -130,6 +130,40 @@ require_text(physics_chrome_source
     "\"PHYSICS\""
     "Physics workspace tab")
 
+# Creator-facing product language belongs to Renegade. Upstream implementation
+# attribution remains in source comments, audits and licence notices rather than
+# occupying the authoring workspace itself.
+require_text(physics_workspace_source
+    "\"PHYSICS AUTHORING\""
+    "Renegade Physics Lab subtitle")
+require_text(physics_workspace_source
+    "\"SECONDARY COLLIDER\""
+    "creator-facing secondary collider label")
+require_text(physics_workspace_source
+    "Lightweight CPU/GPU collision for particles, hair and other secondary systems."
+    "secondary collider creator explanation")
+require_text(physics_chrome_source
+    "SetStatusText(\"PHYSICS LAB\")"
+    "plain Physics Lab chrome status")
+forbid_text(physics_workspace_source
+    "WICKED EDITOR PARITY"
+    "developer provenance in creator-facing Physics Lab")
+forbid_text(physics_workspace_source
+    "JOLT-POWERED"
+    "implementation branding in creator-facing Physics Lab")
+forbid_text(physics_workspace_source
+    "WICKED COLLIDER // NOT JOLT"
+    "implementation distinction in creator-facing heading")
+forbid_text(physics_workspace_source
+    "All seven Wicked shapes"
+    "upstream parity wording in creator-facing rigid-body hint")
+forbid_text(physics_workspace_source
+    "matching Wicked"
+    "upstream parity wording in creator-facing world hint")
+forbid_text(physics_chrome_source
+    "PHYSICS LAB // WICKED EDITOR PARITY"
+    "developer provenance in creator-facing chrome status")
+
 # Owner-validation interaction regression: layout may change widget visibility,
 # but it must never be driven every frame from Update(). Wicked resets hidden
 # widget state to IDLE, which otherwise makes the Lab look live while all
@@ -271,7 +305,7 @@ foreach(page IN ITEMS
     require_text(physics_workspace_header "${page}," "Physics Lab page ${page}")
 endforeach()
 
-# Wicked editor parity: all seven rigid shapes and all eight exposed constraints.
+# Backend coverage: all seven rigid shapes and all eight exposed constraints.
 foreach(shape IN ITEMS
     "Shape::BOX"
     "Shape::SPHERE"
@@ -326,16 +360,8 @@ require_text(physics_workspace_source
     "bridge::SetPhysicsGravity"
     "scene-authoritative gravity bridge")
 
-# Important semantic split: Wicked Collider is secondary-system collision, not Jolt.
-require_text(physics_workspace_source
-    "WICKED COLLIDER // NOT JOLT"
-    "honest Wicked Collider labelling")
-require_text(physics_workspace_source
-    "particles, hair and springs"
-    "Wicked Collider secondary-system explanation")
-
-# Physics Lab must expose the advanced runtime escape hatch without implementing
-# scripting in the Studio shell itself.
+# Physics Lab keeps the advanced Renegade runtime escape hatch visible without
+# exposing implementation provenance in the creator-facing labels.
 require_text(physics_workspace_source
     "ADVANCED RUNTIME // renegade.physics"
     "advanced Lua runtime signpost")
