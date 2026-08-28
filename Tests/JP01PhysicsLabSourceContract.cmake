@@ -12,6 +12,8 @@ set(CHROME_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.h")
 set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
 set(PHYSICS_LUA_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/PhysicsLuaService.cpp")
 set(SCENE_SERVICE_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/SceneService.h")
+set(COLLISION_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/CollisionService.h")
+set(COLLISION_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/CollisionService.cpp")
 set(RUNTIME_SOURCE "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
 set(PHYSICS_LUA_TEST "${RENEGADE_SOURCE_DIR}/Tests/PhysicsLuaTests.cpp")
 set(PHYSICS_LUA_CMAKE "${RENEGADE_SOURCE_DIR}/Tests/JP01PhysicsLua.cmake")
@@ -28,6 +30,8 @@ foreach(path IN ITEMS
     "${STUDIO_CMAKE}"
     "${PHYSICS_LUA_SOURCE}"
     "${SCENE_SERVICE_HEADER}"
+    "${COLLISION_HEADER}"
+    "${COLLISION_SOURCE}"
     "${RUNTIME_SOURCE}"
     "${PHYSICS_LUA_TEST}"
     "${PHYSICS_LUA_CMAKE}"
@@ -47,6 +51,8 @@ file(READ "${CHROME_HEADER}" chrome_header)
 file(READ "${STUDIO_CMAKE}" studio_cmake)
 file(READ "${PHYSICS_LUA_SOURCE}" physics_lua_source)
 file(READ "${SCENE_SERVICE_HEADER}" scene_service_header)
+file(READ "${COLLISION_HEADER}" collision_header)
+file(READ "${COLLISION_SOURCE}" collision_source)
 file(READ "${RUNTIME_SOURCE}" runtime_source)
 file(READ "${PHYSICS_LUA_TEST}" physics_lua_test)
 file(READ "${PHYSICS_LUA_CMAKE}" physics_lua_cmake)
@@ -125,6 +131,51 @@ require_text(physics_chrome_source
 require_text(physics_chrome_source
     "physicsLab_.Update(canvas, dt);"
     "stateful Physics Lab widget update")
+
+# Reusable-asset rigid-body hardening. The stable wrapper is the physics owner,
+# primitive dimensions come from exact root-local descendant geometry, wrapper
+# scale is cancelled out of those dimensions, and scale edits recreate only the
+# Wicked-owned native body. Physics Lab redirects payload selection only on the
+# Rigid Body page so mesh-owned Soft Body authoring remains unaffected.
+require_text(collision_header
+    "ResolveCollisionAuthoringEntity"
+    "reusable physics-owner resolver contract")
+require_text(collision_header
+    "FitPrimitiveCollisionToHierarchy"
+    "root-local primitive fit contract")
+require_text(collision_header
+    "RefreshCollisionShapeForScaleChange"
+    "Wicked shape refresh contract")
+require_text(collision_source
+    "ReusableAssetInstanceIdMetadataKey"
+    "stable reusable wrapper identity")
+require_text(collision_source
+    "const XMMATRIX objectToRoot = objectWorld * rootInverse;"
+    "wrapper transform cancellation during fit")
+require_text(collision_source
+    "scene.Entity_IsDescendant(objectEntity, rootEntity)"
+    "descendant geometry traversal")
+require_text(collision_source
+    "IsReusableAssetRoot(scene, entity_)"
+    "primitive fitting only for reusable wrapper ownership")
+require_text(collision_source
+    "rigidbody->physicsobject.reset();"
+    "authoritative Wicked/Jolt shape recreation")
+require_text(physics_chrome_source
+    "RenegadePhysicsLabWorkspace::Page::RigidBody"
+    "Rigid Body-only selection redirect")
+require_text(physics_chrome_source
+    "bridge::ResolveCollisionAuthoringEntity(scene, selected)"
+    "Physics Lab reusable-root selection resolution")
+require_text(physics_chrome_source
+    "session->Selection().Select(target);"
+    "stable wrapper selection ownership")
+require_text(physics_chrome_source
+    "bridge::RefreshCollisionShapeForScaleChange("
+    "root-scale physics refresh")
+require_text(physics_chrome_header
+    "XMFLOAT3 trackedPhysicsScale_"
+    "separate authored-scale tracking")
 
 # Owner-validation overlay regression: Physics Lab keeps authoritative Scene
 # selection, but Scene-only post passes must not render above its opaque GUI.

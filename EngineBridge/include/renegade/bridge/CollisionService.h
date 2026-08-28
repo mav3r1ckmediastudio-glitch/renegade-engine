@@ -44,9 +44,9 @@ namespace renegade::bridge
     };
 
     // Complex Wicked collision shapes are mesh-derived. Keep that requirement
-    // explicit in Renegade so the future Physics Lab can disable invalid
-    // choices with a useful reason instead of allowing a component that Jolt
-    // can only reject at simulation time.
+    // explicit in Renegade so the Physics Lab can disable invalid choices with
+    // a useful reason instead of allowing a component that Jolt can only reject
+    // at simulation time.
     enum class CollisionTargetStatus
     {
         Supported,
@@ -66,6 +66,30 @@ namespace renegade::bridge
         wi::ecs::Entity entity,
         wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept;
 
+    // JP01 reusable-asset hardening. Physics authoring belongs to the stable
+    // reusable-asset instance wrapper, never to a replaceable payload child.
+    // Ordinary non-reusable entities are returned unchanged.
+    [[nodiscard]] wi::ecs::Entity ResolveCollisionAuthoringEntity(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity selectedEntity) noexcept;
+
+    // Fits a primitive collider around every mesh object below rootEntity in
+    // root-local space. The root's authored transform (including scale) is
+    // cancelled out of the stored dimensions; descendant transforms remain
+    // part of the fit. Returns false if no valid descendant geometry exists.
+    [[nodiscard]] bool FitPrimitiveCollisionToHierarchy(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity rootEntity,
+        CollisionState& state) noexcept;
+
+    // Wicked/Jolt owns the actual physics shape. When the reusable wrapper's
+    // authored scale changes, force the existing native body to be recreated
+    // so Wicked reapplies that transform scale without baking it into the
+    // creator-authored primitive dimensions.
+    bool RefreshCollisionShapeForScaleChange(
+        wi::scene::Scene& scene,
+        wi::ecs::Entity entity) noexcept;
+
     [[nodiscard]] CollisionState CaptureCollision(
         const wi::scene::RigidBodyPhysicsComponent& rigidbody) noexcept;
     [[nodiscard]] CollisionState SanitizeCollisionState(
@@ -84,9 +108,10 @@ namespace renegade::bridge
         wi::scene::RigidBodyPhysicsComponent& rigidbody,
         const CollisionState& state) noexcept;
 
-    // Attaches a new RigidBodyPhysicsComponent to targetEntity if it does
-    // not already have one. This never creates a new entity, so Undo/Redo is
-    // a component add/remove rather than an entity snapshot.
+    // Attaches a new RigidBodyPhysicsComponent to the collision-authoring
+    // target. Reusable payload selections resolve to their stable wrapper root;
+    // ordinary entities are unchanged. This never creates a new entity, so
+    // Undo/Redo is a component add/remove rather than an entity snapshot.
     class CreateCollisionCommand final : public ICommand
     {
     public:

@@ -1,5 +1,7 @@
 #include "renegade/bridge/CollisionService.h"
 
+#include "renegade/bridge/ReusableAssetInstanceService.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -42,6 +44,16 @@ namespace
         }
     }
 
+    bool IsPrimitiveShape(
+        const wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept
+    {
+        using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
+        return shape == Shape::BOX ||
+            shape == Shape::SPHERE ||
+            shape == Shape::CAPSULE ||
+            shape == Shape::CYLINDER;
+    }
+
     bool IsMeshDerivedShape(
         const wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept
     {
@@ -49,6 +61,162 @@ namespace
         return shape == Shape::CONVEX_HULL ||
             shape == Shape::TRIANGLE_MESH ||
             shape == Shape::HEIGHTFIELD;
+    }
+
+    bool IsReusableAssetRoot(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        const auto* metadata = scene.metadatas.GetComponent(entity);
+        return metadata != nullptr &&
+            metadata->string_values.has(
+                renegade::bridge::ReusableAssetInstanceIdMetadataKey);
+    }
+
+    bool ResolveHierarchyWorldMatrix(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        XMMATRIX& world,
+        wi::unordered_set<wi::ecs::Entity>& visiting,
+        const std::size_t depth = 0) noexcept
+    {
+        if (entity == wi::ecs::INVALID_ENTITY || depth >= 256)
+            return false;
+
+        const auto* transform = scene.transforms.GetComponent(entity);
+        if (transform == nullptr)
+            return false;
+        world = transform->GetLocalMatrix();
+
+        const auto* hierarchy = scene.hierarchy.GetComponent(entity);
+        if (hierarchy == nullptr ||
+            hierarchy->parentID == wi::ecs::INVALID_ENTITY)
+        {
+            return true;
+        }
+        if (!visiting.insert(entity).second)
+            return false;
+
+        XMMATRIX parentWorld;
+        if (!ResolveHierarchyWorldMatrix(
+                scene,
+                hierarchy->parentID,
+                parentWorld,
+                visiting,
+                depth + 1))
+        {
+            visiting.erase(entity);
+            return false;
+        }
+        visiting.erase(entity);
+        world = world * parentWorld;
+        return true;
+    }
+
+    struct RootLocalBounds
+    {
+        XMFLOAT3 minimum = {};
+        XMFLOAT3 maximum = {};
+        bool valid = false;
+
+        void Add(const XMVECTOR point) noexcept
+        {
+            XMFLOAT3 value;
+            XMStoreFloat3(&value, point);
+            if (!std::isfinite(value.x) ||
+                !std::isfinite(value.y) ||
+                !std::isfinite(value.z))
+            {
+                return;
+            }
+            if (!valid)
+            {
+                minimum = value;
+                maximum = value;
+                valid = true;
+                return;
+            }
+            minimum.x = std::min(minimum.x, value.x);
+            minimum.y = std::min(minimum.y, value.y);
+            minimum.z = std::min(minimum.z, value.z);
+            maximum.x = std::max(maximum.x, value.x);
+            maximum.y = std::max(maximum.y, value.y);
+            maximum.z = std::max(maximum.z, value.z);
+        }
+    };
+
+    bool ComputeRootLocalDescendantBounds(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity rootEntity,
+        RootLocalBounds& bounds) noexcept
+    {
+        bounds = {};
+        if (rootEntity == wi::ecs::INVALID_ENTITY ||
+            !scene.transforms.Contains(rootEntity))
+        {
+            return false;
+        }
+
+        wi::unordered_set<wi::ecs::Entity> rootVisiting;
+        XMMATRIX rootWorld;
+        if (!ResolveHierarchyWorldMatrix(
+                scene, rootEntity, rootWorld, rootVisiting))
+        {
+            return false;
+        }
+
+        XMVECTOR determinant;
+        const XMMATRIX rootInverse = XMMatrixInverse(&determinant, rootWorld);
+        const float determinantValue = XMVectorGetX(determinant);
+        if (!std::isfinite(determinantValue) ||
+            std::abs(determinantValue) <= Epsilon)
+        {
+            return false;
+        }
+
+        for (std::size_t objectIndex = 0;
+            objectIndex < scene.objects.GetCount(); ++objectIndex)
+        {
+            const wi::ecs::Entity objectEntity =
+                scene.objects.GetEntity(objectIndex);
+            if (objectEntity != rootEntity &&
+                !scene.Entity_IsDescendant(objectEntity, rootEntity))
+            {
+                continue;
+            }
+
+            const auto* objectTransform =
+                scene.transforms.GetComponent(objectEntity);
+            const auto& object = scene.objects[objectIndex];
+            const auto* mesh = scene.meshes.GetComponent(object.meshID);
+            if (objectTransform == nullptr ||
+                mesh == nullptr || mesh->vertex_positions.empty())
+            {
+                continue;
+            }
+
+            wi::unordered_set<wi::ecs::Entity> objectVisiting;
+            XMMATRIX objectWorld;
+            if (!ResolveHierarchyWorldMatrix(
+                    scene, objectEntity, objectWorld, objectVisiting))
+            {
+                continue;
+            }
+
+            // Wicked uses row-vector transforms. Moving object-local vertices
+            // through object world and then inverse root world gives the exact
+            // root-local descendant geometry. The wrapper's translation,
+            // rotation and authored scale therefore cancel out of the stored
+            // primitive dimensions while descendant transforms remain.
+            const XMMATRIX objectToRoot = objectWorld * rootInverse;
+            for (const auto& position : mesh->vertex_positions)
+            {
+                bounds.Add(XMVector3TransformCoord(
+                    XMLoadFloat3(&position), objectToRoot));
+            }
+        }
+
+        return bounds.valid;
     }
 
     bool RequiresPhysicsObjectRecreation(
@@ -109,7 +277,9 @@ namespace renegade::bridge
 
         // Match Wicked's actual RunPhysicsUpdateSystem path: mesh-derived
         // rigid bodies are attached to an ObjectComponent entity and obtain
-        // geometry from that object's meshID.
+        // geometry from that object's meshID. Reusable wrappers deliberately
+        // remain transform-only stable owners, so mesh-derived shapes are not
+        // silently redirected to replaceable payload children.
         const auto* object = scene.objects.GetComponent(entity);
         if (object == nullptr || object->meshID == wi::ecs::INVALID_ENTITY)
         {
@@ -159,6 +329,113 @@ namespace renegade::bridge
     {
         return CheckCollisionTarget(scene, entity, shape) ==
             CollisionTargetStatus::Supported;
+    }
+
+    wi::ecs::Entity ResolveCollisionAuthoringEntity(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity selectedEntity) noexcept
+    {
+        wi::ecs::Entity current = selectedEntity;
+        for (std::size_t depth = 0;
+            current != wi::ecs::INVALID_ENTITY && depth < 256; ++depth)
+        {
+            if (IsReusableAssetRoot(scene, current))
+                return current;
+
+            const auto* hierarchy = scene.hierarchy.GetComponent(current);
+            if (hierarchy == nullptr ||
+                hierarchy->parentID == wi::ecs::INVALID_ENTITY)
+            {
+                break;
+            }
+            current = hierarchy->parentID;
+        }
+        return selectedEntity;
+    }
+
+    bool FitPrimitiveCollisionToHierarchy(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity rootEntity,
+        CollisionState& state) noexcept
+    {
+        if (!IsPrimitiveShape(state.shape))
+            return false;
+
+        RootLocalBounds bounds;
+        if (!ComputeRootLocalDescendantBounds(scene, rootEntity, bounds))
+            return false;
+
+        const XMFLOAT3 halfExtents(
+            std::max((bounds.maximum.x - bounds.minimum.x) * 0.5f,
+                MinimumDimension),
+            std::max((bounds.maximum.y - bounds.minimum.y) * 0.5f,
+                MinimumDimension),
+            std::max((bounds.maximum.z - bounds.minimum.z) * 0.5f,
+                MinimumDimension));
+        state.localOffset = XMFLOAT3(
+            (bounds.minimum.x + bounds.maximum.x) * 0.5f,
+            (bounds.minimum.y + bounds.maximum.y) * 0.5f,
+            (bounds.minimum.z + bounds.maximum.z) * 0.5f);
+
+        using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
+        switch (state.shape)
+        {
+        case Shape::BOX:
+            state.boxHalfExtents = halfExtents;
+            break;
+        case Shape::SPHERE:
+            // Conservatively contain the complete fitted root-local AABB.
+            state.sphereRadius = std::max(
+                std::sqrt(
+                    halfExtents.x * halfExtents.x +
+                    halfExtents.y * halfExtents.y +
+                    halfExtents.z * halfExtents.z),
+                MinimumDimension);
+            break;
+        case Shape::CAPSULE:
+            // Wicked/Jolt stores capsule height as the half-height of the
+            // cylindrical section. Using the fitted Y half-extent and the XZ
+            // corner radius is conservative and cannot clip descendant mesh.
+            state.capsuleRadius = std::max(
+                std::sqrt(
+                    halfExtents.x * halfExtents.x +
+                    halfExtents.z * halfExtents.z),
+                MinimumDimension);
+            state.capsuleHeight = halfExtents.y;
+            break;
+        case Shape::CYLINDER:
+            state.capsuleRadius = std::max(
+                std::sqrt(
+                    halfExtents.x * halfExtents.x +
+                    halfExtents.z * halfExtents.z),
+                MinimumDimension);
+            state.capsuleHeight = halfExtents.y;
+            break;
+        default:
+            return false;
+        }
+
+        state = SanitizeCollisionState(state);
+        return true;
+    }
+
+    bool RefreshCollisionShapeForScaleChange(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        const wi::ecs::Entity target =
+            ResolveCollisionAuthoringEntity(scene, entity);
+        auto* rigidbody = scene.rigidbodies.GetComponent(target);
+        if (rigidbody == nullptr)
+            return false;
+
+        // Do not rewrite the fitted root-local dimensions. Wicked creates the
+        // native shape from those values plus the current Transform scale, so
+        // destroying only the implementation-owned handle is the correct way
+        // to make a creator scale edit reach the authoritative Jolt body.
+        rigidbody->physicsobject.reset();
+        rigidbody->SetRefreshParametersNeeded(true);
+        return true;
     }
 
     CollisionState CaptureCollision(
@@ -285,14 +562,24 @@ namespace renegade::bridge
         const wi::ecs::Entity targetEntity,
         const CollisionState& initial)
         : scene_(&scene)
-        , entity_(targetEntity)
+        , entity_(ResolveCollisionAuthoringEntity(scene, targetEntity))
         , initial_(SanitizeCollisionState(initial))
     {
+        // Stable reusable wrappers own primitive physics. Fit once from the
+        // replaceable descendant payload in wrapper-local space so Undo/Redo
+        // preserves exactly the creator-visible dimensions of this command.
+        if (IsReusableAssetRoot(scene, entity_) &&
+            IsPrimitiveShape(initial_.shape) &&
+            !FitPrimitiveCollisionToHierarchy(scene, entity_, initial_))
+        {
+            entity_ = wi::ecs::INVALID_ENTITY;
+        }
     }
 
     bool CreateCollisionCommand::Execute()
     {
         if (scene_ == nullptr ||
+            entity_ == wi::ecs::INVALID_ENTITY ||
             scene_->rigidbodies.Contains(entity_) ||
             !CanAuthorCollisionShape(*scene_, entity_, initial_.shape))
         {
@@ -305,7 +592,7 @@ namespace renegade::bridge
 
     void CreateCollisionCommand::Undo()
     {
-        if (scene_ != nullptr)
+        if (scene_ != nullptr && entity_ != wi::ecs::INVALID_ENTITY)
         {
             scene_->rigidbodies.Remove(entity_);
         }
@@ -316,10 +603,10 @@ namespace renegade::bridge
         const wi::ecs::Entity entity,
         const CollisionState& collision)
         : scene_(&scene)
-        , entity_(entity)
+        , entity_(ResolveCollisionAuthoringEntity(scene, entity))
         , after_(SanitizeCollisionState(collision))
     {
-        if (const auto* existing = scene.rigidbodies.GetComponent(entity))
+        if (const auto* existing = scene.rigidbodies.GetComponent(entity_))
         {
             before_ = CaptureCollision(*existing);
         }
@@ -331,7 +618,7 @@ namespace renegade::bridge
         const CollisionState& before,
         const CollisionState& after)
         : scene_(&scene)
-        , entity_(entity)
+        , entity_(ResolveCollisionAuthoringEntity(scene, entity))
         , before_(SanitizeCollisionState(before))
         , after_(SanitizeCollisionState(after))
     {
@@ -367,7 +654,7 @@ namespace renegade::bridge
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity)
         : scene_(&scene)
-        , entity_(entity)
+        , entity_(ResolveCollisionAuthoringEntity(scene, entity))
     {
     }
 
