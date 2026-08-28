@@ -1,0 +1,31 @@
+name: Phase 5 Gate 2 camera integration
+
+on:
+  push:
+    branches:
+      - staging/phase5-g2-cameras-impl
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply guarded camera integration
+        run: python Tools/phase5_gate2_camera_patch.py
+      - name: Verify source contract
+        run: cmake -DRENEGADE_SOURCE_DIR="$GITHUB_WORKSPACE" -P Tests/Phase5Gate2SourceContract.cmake
+      - name: Commit bounded Gate 2 tree
+        shell: bash
+        run: |
+          git rm .github/workflows/phase5-g2-camera-integration.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Phase 5 Gate 2: author native scene cameras"
+          git push origin HEAD:staging/phase5-g2-cameras-impl
