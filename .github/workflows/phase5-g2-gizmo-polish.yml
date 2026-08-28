@@ -1,0 +1,82 @@
+name: Phase 5 Gate 2 gizmo polish
+
+on:
+  push:
+    branches:
+      - staging/phase5-g2-gizmo-polish
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply camera-view gizmo suppression
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected 1 match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'Studio/src/StudioApplication.h',
+              '        bool gizmoDragActive_ = false;\n        bool flyCameraActive_ = false;\n        bool gridVisible_ = true;',
+              '        bool gizmoDragActive_ = false;\n        bool flyCameraActive_ = false;\n        bool gizmoSuppressedForCameraView_ = false;\n        bool gridVisible_ = true;')
+
+          replace_once(
+              'Studio/src/StudioApplication.cpp',
+              '        if (!projectHubVisible_ &&\n            !creatorModelImporter.thumbnailCapturePending &&\n            gizmoEntity_ != wi::ecs::INVALID_ENTITY)\n        {\n            gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);\n        }',
+              '        if (!projectHubVisible_ &&\n            !creatorModelImporter.thumbnailCapturePending &&\n            !gizmoSuppressedForCameraView_ &&\n            gizmoEntity_ != wi::ecs::INVALID_ENTITY)\n        {\n            gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);\n        }')
+
+          replace_once(
+              'Studio/src/StudioApplication.cpp',
+              '        if (!flyCameraActive_ &&\n            pointerOverViewport &&\n            !GetGUI().HasFocus() &&\n            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))\n        {\n            flyCameraActive_ = true;\n            cameraPointerAnchor_ = pointer;\n        }',
+              '        if (!flyCameraActive_ &&\n            pointerOverViewport &&\n            !GetGUI().HasFocus() &&\n            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))\n        {\n            gizmoSuppressedForCameraView_ = false;\n            flyCameraActive_ = true;\n            cameraPointerAnchor_ = pointer;\n        }')
+
+          replace_once(
+              'Studio/src/StudioApplication.cpp',
+              '            if (auto* transform = scene.transforms.GetComponent(entity))\n            {\n                authoredCamera->TransformCamera(*transform);\n                authoredCamera->UpdateCamera();\n            }\n            RefreshInspector();\n            RefreshStatus();',
+              '            if (auto* transform = scene.transforms.GetComponent(entity))\n            {\n                authoredCamera->TransformCamera(*transform);\n                authoredCamera->UpdateCamera();\n            }\n            gizmoSuppressedForCameraView_ = true;\n            RefreshInspector();\n            RefreshStatus();')
+
+          replace_once(
+              'Studio/src/StudioApplication.cpp',
+              '        bridge::ApplyCamera(*camera, bridge::CaptureCamera(*authoredCamera));\n        camera->TransformCamera(*transform);\n        camera->UpdateCamera();\n        RefreshStatus();',
+              '        bridge::ApplyCamera(*camera, bridge::CaptureCamera(*authoredCamera));\n        camera->TransformCamera(*transform);\n        camera->UpdateCamera();\n        gizmoSuppressedForCameraView_ = true;\n        RefreshStatus();')
+
+          replace_once(
+              'Studio/src/StudioApplication.cpp',
+              '    void StudioRenderPath::SyncGizmoSelection()\n    {\n        gizmo_.selected.clear();',
+              '    void StudioRenderPath::SyncGizmoSelection()\n    {\n        gizmoSuppressedForCameraView_ = false;\n        gizmo_.selected.clear();')
+
+      - name: Verify bounded diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected=$'Studio/src/StudioApplication.cpp\nStudio/src/StudioApplication.h'
+          test "$changed" = "$expected"
+          grep -q 'gizmoSuppressedForCameraView_' Studio/src/StudioApplication.cpp
+          grep -q 'gizmoSuppressedForCameraView_' Studio/src/StudioApplication.h
+
+      - name: Commit polish tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/phase5-g2-gizmo-polish.yml
+          git add Studio/src/StudioApplication.cpp Studio/src/StudioApplication.h
+          git commit -m "Phase 5 Gate 2: hide gizmo at camera viewpoint"
+          git push
