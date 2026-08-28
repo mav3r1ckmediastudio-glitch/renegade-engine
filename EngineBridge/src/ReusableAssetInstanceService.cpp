@@ -71,38 +71,97 @@ namespace renegade::bridge
             return wi::ecs::INVALID_ENTITY;
         }
 
+        bool IsGeneratedWrapperName(const std::string& value) noexcept
+        {
+            return value.empty() ||
+                value == "Asset" ||
+                value == "Reusable Asset Instance" ||
+                value == "Reusable Asset Drag Preview";
+        }
+
         bool IsCreatorFacingName(const std::string& value) noexcept
         {
             if (value.empty() || value.rfind("__renegade_", 0) == 0)
                 return false;
-            return value != "Reusable Asset Instance" &&
+            return value != "Asset" &&
+                value != "Reusable Asset Instance" &&
                 value != "Reusable Asset Drag Preview" &&
                 value != "Imported Payload Root" &&
                 value != "Scene" && value != "Root" && value != "RootNode";
+        }
+
+        bool IsPreferredModelName(const std::string& value) noexcept
+        {
+            if (!IsCreatorFacingName(value))
+                return false;
+
+            const std::string upper = wi::helper::toUpper(value);
+            if (upper == "SKETCHFAB_MODEL" ||
+                upper.rfind("OBJECT_", 0) == 0 ||
+                upper.rfind("MATERIAL_", 0) == 0 ||
+                upper.find("__MATERIAL") != std::string::npos ||
+                upper.find("MATERIAL #") != std::string::npos ||
+                upper.find(".GLTF") != std::string::npos ||
+                upper.find(".GLB") != std::string::npos ||
+                upper.find(".FBX") != std::string::npos ||
+                upper.find(".OBJ") != std::string::npos)
+            {
+                return false;
+            }
+
+            // Sketchfab imports commonly introduce a long hash-only node
+            // between RootNode and the actual model name. Do not expose that
+            // implementation/import identifier as the creator's asset label.
+            if (value.size() > 20 &&
+                value.front() >= '0' && value.front() <= '9')
+            {
+                return false;
+            }
+            return true;
         }
 
         std::string DeriveReusableAssetName(
             const wi::scene::Scene& scene,
             const wi::ecs::Entity payloadRoot)
         {
-            // Prefer a render-object name: this is normally the authored/imported
-            // model name and avoids exposing Renegade's payload-wrapper nodes.
+            // Start at each visible render object and walk toward the payload
+            // root. This reliably skips material/Object_N leaves and picks the
+            // nearest meaningful model transform (for example crate002).
             for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)
             {
-                const wi::ecs::Entity entity = scene.objects.GetEntity(index);
-                if (entity != payloadRoot &&
-                    !scene.Entity_IsDescendant(entity, payloadRoot))
+                const wi::ecs::Entity objectEntity = scene.objects.GetEntity(index);
+                if (objectEntity != payloadRoot &&
+                    !scene.Entity_IsDescendant(objectEntity, payloadRoot))
                 {
                     continue;
                 }
-                const auto* name = scene.names.GetComponent(entity);
-                if (name != nullptr && IsCreatorFacingName(name->name))
-                    return name->name;
+
+                wi::ecs::Entity current = objectEntity;
+                const std::size_t maximumDepth = scene.hierarchy.GetCount() + 1;
+                for (std::size_t depth = 0;
+                    current != wi::ecs::INVALID_ENTITY && depth <= maximumDepth;
+                    ++depth)
+                {
+                    if (const auto* name = scene.names.GetComponent(current);
+                        name != nullptr && IsPreferredModelName(name->name))
+                    {
+                        return name->name;
+                    }
+                    if (current == payloadRoot)
+                        break;
+                    const auto* hierarchy = scene.hierarchy.GetComponent(current);
+                    if (hierarchy == nullptr ||
+                        hierarchy->parentID == wi::ecs::INVALID_ENTITY ||
+                        hierarchy->parentID == current)
+                    {
+                        break;
+                    }
+                    current = hierarchy->parentID;
+                }
             }
 
-            // Some imports keep the useful source name on a transform-only
-            // node above their render object. Use the first deterministic
-            // creator-facing descendant as the fallback.
+            // Fallback for transform-only assets: use the first meaningful
+            // descendant name in component order.
             for (std::size_t index = 0; index < scene.names.GetCount(); ++index)
             {
                 const wi::ecs::Entity entity = scene.names.GetEntity(index);
@@ -111,22 +170,70 @@ namespace renegade::bridge
                 {
                     continue;
                 }
-                if (IsCreatorFacingName(scene.names[index].name))
+                if (IsPreferredModelName(scene.names[index].name))
                     return scene.names[index].name;
             }
             return "Asset";
         }
 
-        void ApplyReusableAssetName(
+        bool ReusableWrapperNameInUse(
+            const wi::scene::Scene& scene,
+            const wi::ecs::Entity except,
+            const std::string& candidate) noexcept
+        {
+            for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+            {
+                const wi::ecs::Entity entity = scene.metadatas.GetEntity(index);
+                if (entity == except)
+                    continue;
+                const auto& metadata = scene.metadatas[index];
+                if (!metadata.string_values.has(ReusableAssetInstanceIdMetadataKey))
+                    continue;
+                const auto* name = scene.names.GetComponent(entity);
+                if (name != nullptr && name->name == candidate)
+                    return true;
+            }
+            return false;
+        }
+
+        std::string MakeUniqueReusableAssetName(
+            const wi::scene::Scene& scene,
+            const wi::ecs::Entity wrapper,
+            const std::string& base)
+        {
+            if (!ReusableWrapperNameInUse(scene, wrapper, base))
+                return base;
+
+            for (std::size_t suffix = 2; suffix < 100000; ++suffix)
+            {
+                const std::string candidate =
+                    base + " (" + std::to_string(suffix) + ")";
+                if (!ReusableWrapperNameInUse(scene, wrapper, candidate))
+                    return candidate;
+            }
+            return base;
+        }
+
+        bool ApplyReusableAssetName(
             wi::scene::Scene& scene,
             const wi::ecs::Entity wrapper,
             const wi::ecs::Entity payloadRoot)
         {
-            const std::string name = DeriveReusableAssetName(scene, payloadRoot);
-            if (auto* existing = scene.names.GetComponent(wrapper))
-                existing->name = name;
+            auto* existing = scene.names.GetComponent(wrapper);
+            if (existing != nullptr && !IsGeneratedWrapperName(existing->name))
+            {
+                // Never overwrite an explicit creator-authored wrapper name.
+                return false;
+            }
+
+            const std::string base = DeriveReusableAssetName(scene, payloadRoot);
+            const std::string unique =
+                MakeUniqueReusableAssetName(scene, wrapper, base);
+            if (existing != nullptr)
+                existing->name = unique;
             else
-                scene.names.Create(wrapper).name = name;
+                scene.names.Create(wrapper).name = unique;
+            return true;
         }
     }
 
@@ -188,6 +295,25 @@ namespace renegade::bridge
 
         error.clear();
         return true;
+    }
+
+    std::size_t RepairReusableAssetInstanceNames(wi::scene::Scene& scene) noexcept
+    {
+        std::vector<ReusableAssetInstanceRecord> instances;
+        std::string error;
+        if (!InspectReusableAssetInstances(scene, instances, error))
+            return 0;
+
+        std::size_t renamed = 0;
+        for (const auto& instance : instances)
+        {
+            if (ApplyReusableAssetName(
+                    scene, instance.instanceRoot, instance.payloadRoot))
+            {
+                ++renamed;
+            }
+        }
+        return renamed;
     }
 
     PlaceReusableModelCommand::PlaceReusableModelCommand(
@@ -276,8 +402,6 @@ namespace renegade::bridge
                     return false;
                 }
 
-                ApplyReusableAssetName(*scene_, entity_, payloadRoot_);
-
                 auto& instanceMetadata = scene_->metadatas.Create(entity_);
                 instanceMetadata.string_values.set(
                     ReusableAssetInstanceIdMetadataKey, assetId_);
@@ -290,6 +414,8 @@ namespace renegade::bridge
                     payloadMetadata = &scene_->metadatas.Create(payloadRoot_);
                 payloadMetadata->bool_values.set(
                     ReusableAssetPayloadRootMetadataKey, true);
+
+                ApplyReusableAssetName(*scene_, entity_, payloadRoot_);
 
                 CaptureMaterialResources(firstMaterialIndex_);
                 snapshot_.SetReadModeAndResetPos(false);
