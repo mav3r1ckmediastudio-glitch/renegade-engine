@@ -5,7 +5,6 @@
 #include "renegade/bridge/StudioSession.h"
 
 #include <algorithm>
-#include <cmath>
 #include <utility>
 
 namespace
@@ -14,14 +13,6 @@ namespace
     constexpr wi::Color TextSecondary = wi::Color(226, 226, 226, 255);
     constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
-
-    bool SameScale(const XMFLOAT3& left, const XMFLOAT3& right) noexcept
-    {
-        constexpr float epsilon = 0.00001f;
-        return std::abs(left.x - right.x) <= epsilon &&
-            std::abs(left.y - right.y) <= epsilon &&
-            std::abs(left.z - right.z) <= epsilon;
-    }
 
     void DrawRect(
         const float x,
@@ -118,50 +109,44 @@ namespace renegade::studio
     {
         physicsLab_.SetActive(active);
         physicsLab_.SetBounds(ViewportBounds());
-        observedPhysicsScaleEntity_ = wi::ecs::INVALID_ENTITY;
-        observedPhysicsScaleValid_ = false;
         if (active)
             SetStatusText("PHYSICS LAB");
     }
 
-    void RenegadePhysicsLabStudioChrome::RefreshSelectedCollisionScale()
+    void RenegadePhysicsLabStudioChrome::SynchronizeRigidBodyOwnerSelection()
     {
-        auto* session = bridge::StudioSession::Current();
-        if (session == nullptr || !session->Selection().HasSelection())
+        if (!physicsLab_.IsActive())
+            return;
+
+        using Page = RenegadePhysicsLabWorkspace::Page;
+        const Page page = physicsLab_.ActivePage();
+        if (page != Page::RigidBody &&
+            page != Page::Character &&
+            page != Page::Vehicle)
         {
-            observedPhysicsScaleEntity_ = wi::ecs::INVALID_ENTITY;
-            observedPhysicsScaleValid_ = false;
+            // Soft Body, Ragdoll and Secondary Collider can legitimately target
+            // mesh/humanoid descendants. Do not globally promote every Physics
+            // Lab selection to the reusable wrapper.
             return;
         }
+
+        auto* session = bridge::StudioSession::Current();
+        if (session == nullptr || !session->Selection().HasSelection())
+            return;
 
         auto& scene = session->Scenes().GetScene();
         const wi::ecs::Entity selected = session->Selection().SelectedEntity();
         const wi::ecs::Entity target =
             bridge::ResolveCollisionAuthoringTarget(scene, selected);
-        const auto* transform = scene.transforms.GetComponent(target);
-        const auto* body = scene.rigidbodies.GetComponent(target);
-        if (transform == nullptr || body == nullptr)
+        if (target != selected && target != wi::ecs::INVALID_ENTITY)
         {
-            observedPhysicsScaleEntity_ = wi::ecs::INVALID_ENTITY;
-            observedPhysicsScaleValid_ = false;
-            return;
+            // Rigid Body, Character and Vehicle all share the same native
+            // RigidBodyPhysicsComponent. Imported child nodes are therefore
+            // promoted to the stable reusable root before any of those pages
+            // can create or edit body state.
+            session->Selection().Select(target);
+            SetStatusText("PHYSICS LAB // ASSET ROOT SELECTED");
         }
-
-        const XMFLOAT3 scale = transform->scale_local;
-        const bool firstObservation =
-            !observedPhysicsScaleValid_ || observedPhysicsScaleEntity_ != target;
-        const bool scaleChanged =
-            !firstObservation && !SameScale(observedPhysicsScale_, scale);
-
-        if (firstObservation || scaleChanged)
-            (void)bridge::RequestCollisionShapeRefresh(scene, target);
-
-        observedPhysicsScaleEntity_ = target;
-        observedPhysicsScale_ = scale;
-        observedPhysicsScaleValid_ = true;
-
-        if (scaleChanged)
-            SetStatusText("PHYSICS LAB // COLLIDER UPDATED FOR SCALE");
     }
 
     bool RenegadePhysicsLabStudioChrome::PhysicsTabHit(
@@ -197,30 +182,7 @@ namespace renegade::studio
             SetPhysicsLabActive(true);
         }
 
-        if (physicsLab_.IsActive())
-        {
-            // Whole reusable assets expose one creator-facing physics owner:
-            // their stable asset root. Imported child nodes are implementation
-            // detail for ordinary authoring, so selecting any of them in the
-            // Lab immediately promotes selection to the root before a control
-            // can create or edit a body.
-            if (auto* session = bridge::StudioSession::Current();
-                session != nullptr && session->Selection().HasSelection())
-            {
-                auto& scene = session->Scenes().GetScene();
-                const wi::ecs::Entity selected =
-                    session->Selection().SelectedEntity();
-                const wi::ecs::Entity target =
-                    bridge::ResolveCollisionAuthoringTarget(scene, selected);
-                if (target != selected &&
-                    target != wi::ecs::INVALID_ENTITY)
-                {
-                    session->Selection().Select(target);
-                    SetStatusText("PHYSICS LAB // ASSET ROOT SELECTED");
-                }
-            }
-            RefreshSelectedCollisionScale();
-        }
+        SynchronizeRigidBodyOwnerSelection();
 
         // Do not call SetBounds here. Physics Lab controls are stateful widgets;
         // relayout during Update cancels click and slider state mid-interaction.
