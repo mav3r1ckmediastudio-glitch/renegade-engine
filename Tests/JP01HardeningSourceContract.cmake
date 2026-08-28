@@ -140,6 +140,12 @@ require_text(physics_chrome_source
 require_text(reusable_header
     "RepairReusableAssetInstanceNames"
     "legacy wrapper-name repair API")
+require_text(reusable_header
+    "ReusableAssetInstanceDisplayNameMetadataKey"
+    "persisted import/product display title")
+require_text(reusable_instance_source
+    "NormalizeReusableAssetDisplayName"
+    "import/product title normalization")
 require_text(reusable_instance_source
     "std::string DeriveReusableAssetName("
     "creator-facing reusable root name derivation")
@@ -219,8 +225,8 @@ require_text(reusable_test
     "std::array<ReusableFixture, 3> three"
     "three same-asset instance regression")
 require_text(reusable_test
-    "\"crate002\", \"crate002 (2)\", \"crate002 (3)\""
-    "unique creator root-name regression")
+    "\"Imported Crate\", \"Imported Crate (2)\", \"Imported Crate (3)\""
+    "import-title creator root-name regression")
 require_text(reusable_test
     "scale Undo did not rebuild"
     "scale Undo rebuild regression")

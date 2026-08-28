@@ -205,8 +205,8 @@ require_text(studio_header
 # stable creator wrapper and old unambiguous scenes must be repaired before the
 # first physics update.
 require_text(collision_header
-    "bool startDeactivated = true;"
-    "Wicked-editor start-deactivated rigid-body default")
+    "bool startDeactivated = false;"
+    "creator dynamic rigid bodies start active by default")
 require_text(collision_header
     "ResolveCollisionAuthoringTarget("
     "creator-safe rigid-body target resolver")
@@ -231,6 +231,16 @@ require_text(collision_source
 require_text(scene_document_source
     "(void)RepairReusableAssetCollisionTargets(*prepared.scene_);"
     "pre-physics WISCENE reusable-body repair")
+require_text(studio_source
+    "ResolveReusableSelectionRoot(scene, selection)"
+    "viewport reusable-child selection promotion")
+require_text(studio_source
+    "CollectReusableSelectionObjects(scene, reusableRoot, renderObjects)"
+    "whole reusable-root descendant outline")
+require_text(studio_header
+    "outlinedEntityPreviousStencils_"
+    "multi-object selection stencil restoration")
+
 require_text(scene_document_source
     "RepairReusableAssetCollisionTargets(scenes_.scene_);"
     "pre-save active-scene reusable-body canonicalization")

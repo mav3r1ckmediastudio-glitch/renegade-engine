@@ -110,7 +110,8 @@ namespace
     bool AdoptFixture(
         wi::scene::Scene& scene,
         renegade::bridge::CommandService& commands,
-        const ReusableFixture& fixture)
+        const ReusableFixture& fixture,
+        const char* displayName = "Imported Crate.rasset")
     {
         if (auto* name = scene.names.GetComponent(fixture.wrapper))
             name->name = "Reusable Asset Drag Preview";
@@ -120,7 +121,8 @@ namespace
                 AssetId,
                 fixture.wrapper,
                 fixture.payload,
-                0));
+                0,
+                displayName));
     }
 }
 
@@ -272,13 +274,24 @@ int main()
     }
 
     const std::array<const char*, 3> expectedNames = {
-        "crate002", "crate002 (2)", "crate002 (3)"
+        "Imported Crate", "Imported Crate (2)", "Imported Crate (3)"
     };
     for (std::size_t index = 0; index < three.size(); ++index)
     {
         const auto* name = threeScene.names.GetComponent(three[index].wrapper);
         if (name == nullptr || name->name != expectedNames[index])
-            return Fail("three same-asset instances did not receive unique creator names");
+            return Fail("three same-asset instances did not receive import-title creator names");
+        const auto* nestedName = threeScene.names.GetComponent(three[index].nested);
+        if (nestedName == nullptr || nestedName->name != "crate002")
+            return Fail("imported render child name was rewritten by root naming");
+        const auto* metadata = threeScene.metadatas.GetComponent(three[index].wrapper);
+        if (metadata == nullptr || !metadata->string_values.has(
+                ReusableAssetInstanceDisplayNameMetadataKey) ||
+            metadata->string_values.get(
+                ReusableAssetInstanceDisplayNameMetadataKey) != "Imported Crate")
+        {
+            return Fail("reusable root did not persist its governed display title");
+        }
 
         auto* transform = threeScene.transforms.GetComponent(three[index].wrapper);
         if (transform == nullptr)

@@ -651,8 +651,9 @@ namespace renegade::studio
         wi::graphics::Texture selectionOutlineMaskMsaa_;
         wi::scene::TransformComponent editorCameraTransform_;
         wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;
-        wi::ecs::Entity outlinedEntity_ = wi::ecs::INVALID_ENTITY;
-        std::uint8_t outlinedEntityPreviousStencil_ = 0;
+        wi::ecs::Entity outlinedSelection_ = wi::ecs::INVALID_ENTITY;
+        std::vector<wi::ecs::Entity> outlinedEntities_;
+        std::vector<std::uint8_t> outlinedEntityPreviousStencils_;
         bridge::TransformState gizmoTransformBefore_;
         XMFLOAT4 viewportBounds_ = {};
         XMFLOAT4 cameraPointerAnchor_ = {};

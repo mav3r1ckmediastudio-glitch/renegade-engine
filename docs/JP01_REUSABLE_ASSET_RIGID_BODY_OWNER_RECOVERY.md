@@ -30,13 +30,13 @@ Renegade already had the correct stable boundary: reusable placement creates a w
 
 ### Creator-facing asset root
 
-Reusable wrappers are no longer intended to present as repeated `Reusable Asset Instance` labels. New placements derive a meaningful model name from the imported hierarchy and make it unique among reusable roots, for example:
+Reusable wrappers are no longer intended to present as repeated `Reusable Asset Instance` labels. New placements use the governed imported asset/product title as the reusable root name and make it unique among reusable roots, for example:
 
-- `crate002`
-- `crate002 (2)`
-- `crate002 (3)`
+- `Imported Crate`
+- `Imported Crate (2)`
+- `Imported Crate (3)`
 
-Old anonymous/generated wrapper names are repaired on the normal load/save canonicalization path. Explicit creator-renamed wrapper names are preserved.
+The imported glTF/FBX hierarchy remains beneath that root and is not flattened or renamed. Selecting the reusable root represents the whole asset: Studio outlines every descendant render object, while viewport clicks on those descendants promote selection back to the reusable root. Old anonymous/generated wrapper names are repaired on the normal load/save canonicalization path. Explicit creator-renamed wrapper names are preserved.
 
 ### Rigid-body ownership
 
