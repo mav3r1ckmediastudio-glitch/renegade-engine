@@ -1598,7 +1598,7 @@ namespace renegade::studio
         const auto* depthStencil = GetDepthStencil();
         if (projectHubVisible_ ||
             creatorModelImporter.thumbnailCapturePending ||
-            outlinedEntity_ == wi::ecs::INVALID_ENTITY ||
+            outlinedSelection_ == wi::ecs::INVALID_ENTITY ||
             depthStencil == nullptr ||
             !selectionOutlineMask_.IsValid())
         {
@@ -4391,7 +4391,7 @@ namespace renegade::studio
 
         if (!projectHubVisible_ &&
             !creatorModelImporter.thumbnailCapturePending &&
-            outlinedEntity_ != wi::ecs::INVALID_ENTITY &&
+            outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
             wi::renderer::BindCommonResources(cmd);
