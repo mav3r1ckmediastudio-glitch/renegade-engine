@@ -38,7 +38,7 @@ namespace
 
 namespace renegade::studio
 {
-    class StudioRenderPath final : public wi::RenderPath3D
+    class StudioRenderPath : public wi::RenderPath3D
     {
     public:
         void BindSession(bridge::StudioSession& session) noexcept;
@@ -116,6 +116,11 @@ namespace renegade::studio
         [[nodiscard]] bool IsProjectLoadBlocking() const noexcept
         {
             return projectLoadingOverlay_.IsBlocking();
+        }
+
+        [[nodiscard]] bool IsPhysicsLabActive() const noexcept
+        {
+            return studioChrome_.IsPhysicsLabActive();
         }
 
         [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
@@ -741,6 +746,34 @@ namespace renegade::studio
             bridge::ModelScaleMode::Original;
     };
 
+    // The Physics Lab is a GUI workspace over the authoritative Scene render
+    // path. When it owns the viewport, bypass only Studio's post-3D editor
+    // overlays (selection outline and transform gizmo). The 3D scene itself,
+    // shared hierarchy/selection state and Wicked GUI continue to run normally.
+    class PhysicsLabStudioRenderPath final : public StudioRenderPath
+    {
+    public:
+        void Render() const override
+        {
+            if (IsPhysicsLabActive())
+            {
+                wi::RenderPath3D::Render();
+                return;
+            }
+            StudioRenderPath::Render();
+        }
+
+        void Compose(wi::graphics::CommandList cmd) const override
+        {
+            if (IsPhysicsLabActive())
+            {
+                wi::RenderPath3D::Compose(cmd);
+                return;
+            }
+            StudioRenderPath::Compose(cmd);
+        }
+    };
+
     class StudioApplication final : public wi::Application
     {
     public:
@@ -767,7 +800,7 @@ namespace renegade::studio
         void PrepareProvingGround();
 
         bridge::StudioSession session_;
-        StudioRenderPath renderer_;
+        PhysicsLabStudioRenderPath renderer_;
         RenegadeStoryFlowRenderPath storyFlowRenderer_;
         RenegadeScreenEditorRenderPath screenEditorRenderer_;
         StoryFlowStudioIntegration storyFlowIntegration_;
