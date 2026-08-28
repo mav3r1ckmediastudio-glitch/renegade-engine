@@ -2,12 +2,14 @@
 
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 
+#include <filesystem>
 #include <utility>
 
 namespace renegade::bridge
 {
     namespace
     {
+        namespace fs = std::filesystem;
         bool WrapperExists(
             const wi::scene::Scene& scene,
             const wi::ecs::Entity entity) noexcept
@@ -69,6 +71,20 @@ namespace renegade::bridge
                 }
             }
             return wi::ecs::INVALID_ENTITY;
+        }
+
+        std::string NormalizeReusableAssetDisplayName(const std::string& value)
+        {
+            if (value.empty())
+                return {};
+            const fs::path input = fs::u8path(value);
+            std::string filename = input.filename().generic_u8string();
+            if (filename.empty())
+                filename = value;
+            const fs::path title = fs::u8path(filename);
+            if (wi::helper::toUpper(title.extension().generic_u8string()) == ".RASSET")
+                return title.stem().generic_u8string();
+            return filename;
         }
 
         bool IsGeneratedWrapperName(const std::string& value) noexcept
@@ -217,7 +233,8 @@ namespace renegade::bridge
         bool ApplyReusableAssetName(
             wi::scene::Scene& scene,
             const wi::ecs::Entity wrapper,
-            const wi::ecs::Entity payloadRoot)
+            const wi::ecs::Entity payloadRoot,
+            const std::string& requestedDisplayName = {})
         {
             auto* existing = scene.names.GetComponent(wrapper);
             if (existing != nullptr && !IsGeneratedWrapperName(existing->name))
@@ -226,7 +243,27 @@ namespace renegade::bridge
                 return false;
             }
 
-            const std::string base = DeriveReusableAssetName(scene, payloadRoot);
+            std::string base = NormalizeReusableAssetDisplayName(requestedDisplayName);
+            if (base.empty())
+            {
+                const auto* metadata = scene.metadatas.GetComponent(wrapper);
+                if (metadata != nullptr && metadata->string_values.has(
+                        ReusableAssetInstanceDisplayNameMetadataKey))
+                {
+                    base = NormalizeReusableAssetDisplayName(
+                        metadata->string_values.get(
+                            ReusableAssetInstanceDisplayNameMetadataKey));
+                }
+            }
+            if (base.empty())
+            {
+                // Compatibility only for scenes created before the product title
+                // was persisted on the reusable root.
+                base = DeriveReusableAssetName(scene, payloadRoot);
+            }
+            if (base.empty())
+                base = "Asset";
+
             const std::string unique =
                 MakeUniqueReusableAssetName(scene, wrapper, base);
             if (existing != nullptr)
@@ -321,10 +358,12 @@ namespace renegade::bridge
         wi::allocator::shared_ptr<wi::scene::Scene> preparedScene,
         StableId assetId,
         const XMFLOAT3& placementPosition,
-        const float scaleFactor)
+        const float scaleFactor,
+        std::string displayName)
         : scene_(&targetScene)
         , preparedScene_(std::move(preparedScene))
         , assetId_(std::move(assetId))
+        , displayName_(NormalizeReusableAssetDisplayName(displayName))
         , placementPosition_(placementPosition)
         , scaleFactor_(scaleFactor > 0.0f ? scaleFactor : 1.0f)
     {
@@ -335,9 +374,11 @@ namespace renegade::bridge
         StableId assetId,
         const wi::ecs::Entity existingInstanceRoot,
         const wi::ecs::Entity existingPayloadRoot,
-        const std::size_t firstMaterialIndex)
+        const std::size_t firstMaterialIndex,
+        std::string displayName)
         : scene_(&targetScene)
         , assetId_(std::move(assetId))
+        , displayName_(NormalizeReusableAssetDisplayName(displayName))
         , entity_(existingInstanceRoot)
         , payloadRoot_(existingPayloadRoot)
         , firstMaterialIndex_(firstMaterialIndex)
@@ -408,6 +449,11 @@ namespace renegade::bridge
                 instanceMetadata.int_values.set(
                     ReusableAssetInstanceVersionMetadataKey,
                     ReusableAssetInstanceVersion);
+                if (!displayName_.empty())
+                {
+                    instanceMetadata.string_values.set(
+                        ReusableAssetInstanceDisplayNameMetadataKey, displayName_);
+                }
 
                 auto* payloadMetadata = scene_->metadatas.GetComponent(payloadRoot_);
                 if (payloadMetadata == nullptr)
@@ -415,7 +461,7 @@ namespace renegade::bridge
                 payloadMetadata->bool_values.set(
                     ReusableAssetPayloadRootMetadataKey, true);
 
-                ApplyReusableAssetName(*scene_, entity_, payloadRoot_);
+                ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);
 
                 CaptureMaterialResources(firstMaterialIndex_);
                 snapshot_.SetReadModeAndResetPos(false);
@@ -471,6 +517,11 @@ namespace renegade::bridge
             instanceMetadata.int_values.set(
                 ReusableAssetInstanceVersionMetadataKey,
                 ReusableAssetInstanceVersion);
+                if (!displayName_.empty())
+                {
+                    instanceMetadata.string_values.set(
+                        ReusableAssetInstanceDisplayNameMetadataKey, displayName_);
+                }
 
             auto* payloadMetadata = scene_->metadatas.GetComponent(payloadRoot_);
             if (payloadMetadata == nullptr)
@@ -479,7 +530,7 @@ namespace renegade::bridge
                 ReusableAssetPayloadRootMetadataKey, true);
 
             scene_->Component_Attach(payloadRoot_, entity_, true);
-            ApplyReusableAssetName(*scene_, entity_, payloadRoot_);
+            ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);
 
             for (std::size_t index = animationCountBefore;
                 index < scene_->animations.GetCount(); ++index)
