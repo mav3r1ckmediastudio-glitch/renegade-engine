@@ -1940,8 +1940,9 @@ namespace renegade::studio
         for (std::uint32_t bit = 0; bit < sceneLayerBits_.size(); ++bit)
         {
             auto& checkbox = sceneLayerBits_[bit];
-            checkbox.Create("Scene Layer Bit " + std::to_string(bit));
-            checkbox.SetText(std::to_string(bit));
+            // The CheckBox Create() label is creator-visible. Keep it compact
+            // so all 32 native layer bits remain readable in the 8-column grid.
+            checkbox.Create(std::to_string(bit));
             checkbox.SetTooltip(
                 "Wicked layer bit " + std::to_string(bit) +
                 ". Reusable assets apply the bit to the stable root and descendant render objects.");
