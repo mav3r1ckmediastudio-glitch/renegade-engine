@@ -46,7 +46,7 @@ Old anonymous/generated wrapper names are repaired on the normal load/save canon
 
 Physics Lab promotes descendant selection to the stable asset root on the three pages that share `RigidBodyPhysicsComponent`: **Rigid Body**, **Character** and **Vehicle**. Soft Body, Ragdoll and Secondary Collider keep legitimate descendant selection and are not globally redirected.
 
-New bodies default `startDeactivated` to `true` so adding physics does not immediately throw the selected asset into simulation.
+Creator-added dynamic bodies default `startDeactivated` to `false`, matching the previously validated Renegade workflow: adding a rigid body immediately participates in simulation. **START DEACTIVATED** remains available as an explicit authoring option when a creator wants a body to begin asleep.
 
 ### Primitive auto-fit
 
@@ -106,7 +106,7 @@ Physics Lab uses Renegade-facing language such as **PHYSICS AUTHORING** and **SE
 - Add/Set/Remove remain root-owned,
 - primitive auto-fit excludes root scale,
 - direct root selection also auto-fits,
-- new bodies start deactivated,
+- new dynamic bodies start active by default while the explicit deactivation flag remains supported,
 - Undo/Redo keeps root ownership,
 - Character and Vehicle routes cannot fabricate an unsafe nested body,
 - three copies are named `crate002`, `crate002 (2)` and `crate002 (3)`,
@@ -130,11 +130,12 @@ Use three instances of the same crate:
 1. confirm their hierarchy roots are meaningful and unique rather than three anonymous reusable-wrapper labels,
 2. select a visible imported crate descendant and open **Physics -> Rigid Body**,
 3. press **Add Rigid Body** and confirm authoring resolves to that asset's stable root,
-4. enable **Physics Visualizer** and confirm the green primitive surrounds the visible crate,
-5. repeat on the other two crate instances,
-6. scale one crate root in Scene and confirm only that crate and its green collision shape scale together,
-7. Undo and Redo the scale and confirm the collision shape follows both operations,
-8. activate the bodies when ready and verify normal motion, water interaction and buoyancy,
-9. save/reopen and verify the ownership, names and proportions remain stable.
+4. confirm the newly added dynamic body immediately participates in simulation without requiring **Activate All**,
+5. enable **Physics Visualizer** and confirm the green primitive surrounds the visible crate,
+6. repeat on the other two crate instances,
+7. scale one crate root in Scene and confirm only that crate and its green collision shape scale together,
+8. Undo and Redo the scale and confirm the collision shape follows both operations,
+9. verify normal motion, water interaction and buoyancy,
+10. save/reopen and verify the ownership, names and proportions remain stable.
 
 Then reopen a scene saved by the faulty build. The single nested-body case should be repaired in memory before physics runs. If the old file itself captured an already-corrupted payload transform before it was saved, body ownership will still be repaired but the damaged authored transform cannot be reconstructed safely from the rigid-body component alone; use the automatic pre-save WISCENE backup or re-place that asset rather than guessing at transform data.
