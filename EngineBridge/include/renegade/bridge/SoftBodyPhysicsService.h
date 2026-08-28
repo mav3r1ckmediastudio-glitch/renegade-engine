@@ -34,28 +34,31 @@ namespace renegade::bridge
         {
             return std::abs(left - right) <= Epsilon;
         }
+
+        inline void RefreshMeshRenderData(wi::scene::MeshComponent& mesh)
+        {
+            // The editor has a graphics device and must immediately rebuild the
+            // mesh after soft-body-only bone streams change. JP01 unit tests are
+            // intentionally GPU-free, so keep the data cleanup testable without
+            // manufacturing a renderer just to exercise this command path.
+            if (wi::graphics::GetDevice() != nullptr)
+                mesh.CreateRenderData();
+        }
     }
 
-    // Wicked stores soft-body physics on the Mesh entity. Match Wicked Editor's
-    // selection convenience by accepting either the mesh itself or an Object
-    // whose meshID points at it.
+    // Soft-body physics is stored on the Mesh entity. Accept either the mesh
+    // itself or an Object whose meshID points at it.
     [[nodiscard]] inline wi::ecs::Entity ResolveSoftBodyMeshEntity(
         const wi::scene::Scene& scene,
         const wi::ecs::Entity entity) noexcept
     {
         if (entity == wi::ecs::INVALID_ENTITY)
-        {
             return wi::ecs::INVALID_ENTITY;
-        }
         if (scene.meshes.Contains(entity))
-        {
             return entity;
-        }
         const auto* object = scene.objects.GetComponent(entity);
         if (object != nullptr && scene.meshes.Contains(object->meshID))
-        {
             return object->meshID;
-        }
         return wi::ecs::INVALID_ENTITY;
     }
 
@@ -131,13 +134,9 @@ namespace renegade::bridge
         const auto safe = SanitizeSoftBodyPhysicsState(state);
 
         if (!softbody_physics_detail::NearlyEqual(before.detail, safe.detail))
-        {
-            body.SetDetail(safe.detail); // Wicked Reset + detail assignment
-        }
+            body.SetDetail(safe.detail);
         else
-        {
             body.detail = safe.detail;
-        }
 
         if (!softbody_physics_detail::NearlyEqual(before.mass, safe.mass) ||
             !softbody_physics_detail::NearlyEqual(before.pressure, safe.pressure) ||
@@ -145,7 +144,6 @@ namespace renegade::bridge
                 before.vertexRadius,
                 safe.vertexRadius))
         {
-            // Wicked Editor explicitly rebuilds the soft body for these fields.
             body.physicsobject.reset();
         }
 
@@ -173,9 +171,7 @@ namespace renegade::bridge
         bool Execute() override
         {
             if (scene_ == nullptr)
-            {
                 return false;
-            }
             meshEntity_ = ResolveSoftBodyMeshEntity(*scene_, selectedEntity_);
             if (meshEntity_ == wi::ecs::INVALID_ENTITY ||
                 scene_->softbodies.Contains(meshEntity_))
@@ -190,9 +186,7 @@ namespace renegade::bridge
         void Undo() override
         {
             if (scene_ != nullptr && meshEntity_ != wi::ecs::INVALID_ENTITY)
-            {
                 scene_->softbodies.Remove(meshEntity_);
-            }
         }
 
     private:
@@ -215,9 +209,7 @@ namespace renegade::bridge
         {
             meshEntity_ = ResolveSoftBodyMeshEntity(scene, selectedEntity);
             if (const auto* body = scene.softbodies.GetComponent(meshEntity_))
-            {
                 before_ = CaptureSoftBodyPhysics(*body);
-            }
         }
 
         SetSoftBodyPhysicsCommand(
@@ -247,14 +239,10 @@ namespace renegade::bridge
         bool Apply(const SoftBodyPhysicsState& state) noexcept
         {
             if (scene_ == nullptr || meshEntity_ == wi::ecs::INVALID_ENTITY)
-            {
                 return false;
-            }
             auto* body = scene_->softbodies.GetComponent(meshEntity_);
             if (body == nullptr)
-            {
                 return false;
-            }
             ApplySoftBodyPhysics(*body, state);
             return true;
         }
@@ -280,19 +268,37 @@ namespace renegade::bridge
         bool Execute() override
         {
             if (scene_ == nullptr)
-            {
                 return false;
-            }
             meshEntity_ = ResolveSoftBodyMeshEntity(*scene_, selectedEntity_);
             const auto* existing = scene_->softbodies.GetComponent(meshEntity_);
             if (existing == nullptr)
-            {
                 return false;
-            }
+
             removedNative_ = *existing;
             removedNative_.physicsobject.reset();
             hasRemoved_ = true;
             scene_->softbodies.Remove(meshEntity_);
+
+            // Soft-body simulation uses temporary bone streams on an unrigged
+            // mesh. Removing the component must clear those streams just like
+            // the editor does, otherwise stale soft-body skinning data remains
+            // on a now-static mesh. Capture it so Renegade Undo is lossless.
+            meshCleanupApplied_ = false;
+            auto* mesh = scene_->meshes.GetComponent(meshEntity_);
+            if (mesh != nullptr && mesh->armatureID == wi::ecs::INVALID_ENTITY)
+            {
+                removedBoneIndices_ = mesh->vertex_boneindices;
+                removedBoneWeights_ = mesh->vertex_boneweights;
+                removedBoneIndices2_ = mesh->vertex_boneindices2;
+                removedBoneWeights2_ = mesh->vertex_boneweights2;
+
+                mesh->vertex_boneindices.clear();
+                mesh->vertex_boneweights.clear();
+                mesh->vertex_boneindices2.clear();
+                mesh->vertex_boneweights2.clear();
+                softbody_physics_detail::RefreshMeshRenderData(*mesh);
+                meshCleanupApplied_ = true;
+            }
             return true;
         }
 
@@ -305,6 +311,19 @@ namespace renegade::bridge
             {
                 return;
             }
+
+            if (meshCleanupApplied_)
+            {
+                if (auto* mesh = scene_->meshes.GetComponent(meshEntity_))
+                {
+                    mesh->vertex_boneindices = removedBoneIndices_;
+                    mesh->vertex_boneweights = removedBoneWeights_;
+                    mesh->vertex_boneindices2 = removedBoneIndices2_;
+                    mesh->vertex_boneweights2 = removedBoneWeights2_;
+                    softbody_physics_detail::RefreshMeshRenderData(*mesh);
+                }
+            }
+
             auto& body = scene_->softbodies.Create(meshEntity_);
             body = removedNative_;
             body.physicsobject.reset();
@@ -315,7 +334,12 @@ namespace renegade::bridge
         wi::ecs::Entity selectedEntity_ = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity meshEntity_ = wi::ecs::INVALID_ENTITY;
         wi::scene::SoftBodyPhysicsComponent removedNative_;
+        wi::vector<XMUINT4> removedBoneIndices_;
+        wi::vector<XMFLOAT4> removedBoneWeights_;
+        wi::vector<XMUINT4> removedBoneIndices2_;
+        wi::vector<XMFLOAT4> removedBoneWeights2_;
         bool hasRemoved_ = false;
+        bool meshCleanupApplied_ = false;
     };
 
     [[nodiscard]] inline bool ResetSoftBodyPhysics(
@@ -325,9 +349,7 @@ namespace renegade::bridge
         const auto meshEntity = ResolveSoftBodyMeshEntity(scene, selectedEntity);
         auto* body = scene.softbodies.GetComponent(meshEntity);
         if (body == nullptr)
-        {
             return false;
-        }
         body->Reset();
         return true;
     }
@@ -349,9 +371,7 @@ namespace renegade::bridge
         const auto meshEntity = ResolveSoftBodyMeshEntity(scene, selectedEntity);
         auto* body = scene.softbodies.GetComponent(meshEntity);
         if (body == nullptr || body->physicsobject == nullptr)
-        {
             return false;
-        }
         wi::physics::SetActivationState(
             *body,
             active ? wi::physics::ActivationState::Active
