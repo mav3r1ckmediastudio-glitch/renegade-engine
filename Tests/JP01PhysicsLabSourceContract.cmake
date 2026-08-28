@@ -15,6 +15,7 @@ set(SCENE_SERVICE_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/b
 set(RUNTIME_SOURCE "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
 set(PHYSICS_LUA_TEST "${RENEGADE_SOURCE_DIR}/Tests/PhysicsLuaTests.cpp")
 set(PHYSICS_LUA_CMAKE "${RENEGADE_SOURCE_DIR}/Tests/JP01PhysicsLua.cmake")
+set(TERRAIN_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/TerrainService.cpp")
 
 foreach(path IN ITEMS
     "${PHYSICS_WORKSPACE_HEADER}"
@@ -29,7 +30,8 @@ foreach(path IN ITEMS
     "${SCENE_SERVICE_HEADER}"
     "${RUNTIME_SOURCE}"
     "${PHYSICS_LUA_TEST}"
-    "${PHYSICS_LUA_CMAKE}")
+    "${PHYSICS_LUA_CMAKE}"
+    "${TERRAIN_SOURCE}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "JP01 Physics Lab source contract input is missing: ${path}")
     endif()
@@ -48,6 +50,7 @@ file(READ "${SCENE_SERVICE_HEADER}" scene_service_header)
 file(READ "${RUNTIME_SOURCE}" runtime_source)
 file(READ "${PHYSICS_LUA_TEST}" physics_lua_test)
 file(READ "${PHYSICS_LUA_CMAKE}" physics_lua_cmake)
+file(READ "${TERRAIN_SOURCE}" terrain_source)
 
 function(require_text haystack_var needle description)
     string(FIND "${${haystack_var}}" "${needle}" found)
@@ -93,6 +96,9 @@ require_text(physics_chrome_header
 require_text(physics_chrome_header
     "RenegadePhysicsLabWorkspace physicsLab_;"
     "Physics Lab workspace ownership")
+require_text(physics_chrome_header
+    "bool IsPhysicsLabActive() const noexcept"
+    "Physics Lab active-state query")
 require_text(physics_chrome_source
     "SetPhysicsLabActive(true);"
     "Physics workspace activation")
@@ -105,6 +111,40 @@ require_text(physics_chrome_source
 require_text(physics_chrome_source
     "\"PHYSICS\""
     "Physics workspace tab")
+
+# Owner-validation interaction regression: layout may change widget visibility,
+# but it must never be driven every frame from Update(). Wicked resets hidden
+# widget state to IDLE, which otherwise makes the Lab look live while all
+# clicks and slider drags are cancelled before completion.
+require_text(physics_chrome_source
+    "Bounds only change when Studio layout changes."
+    "layout-only Physics Lab bounds refresh")
+require_text(physics_chrome_source
+    "Do not call SetBounds here."
+    "per-frame relayout prohibition")
+require_text(physics_chrome_source
+    "physicsLab_.Update(canvas, dt);"
+    "stateful Physics Lab widget update")
+
+# Owner-validation overlay regression: Physics Lab keeps authoritative Scene
+# selection, but Scene-only post passes must not render above its opaque GUI.
+# The derived render path bypasses only the selection-mask/gizmo post passes;
+# normal RenderPath3D scene rendering and the shared GUI continue unchanged.
+require_text(studio_header
+    "class PhysicsLabStudioRenderPath final : public StudioRenderPath"
+    "Physics-aware Studio render path")
+require_text(studio_header
+    "return studioChrome_.IsPhysicsLabActive();"
+    "Physics Lab render-path state forwarding")
+require_text(studio_header
+    "wi::RenderPath3D::Render();"
+    "Physics Lab selection-mask suppression")
+require_text(studio_header
+    "wi::RenderPath3D::Compose(cmd);"
+    "Physics Lab gizmo/outline composition suppression")
+require_text(studio_header
+    "PhysicsLabStudioRenderPath renderer_;"
+    "Physics-aware renderer ownership")
 
 # Lua lifecycle ownership: SceneService construction must be inert, and the
 # Renegade binding layer must never bootstrap Wicked's global VM itself.
@@ -217,6 +257,29 @@ require_text(physics_workspace_source
 require_text(physics_workspace_source
     "ADVANCED RUNTIME // renegade.physics"
     "advanced Lua runtime signpost")
+
+# Existing-project terrain reload must anchor bundled default-grass resources to
+# the executable/install location, not a working directory that native Windows
+# file dialogs can mutate. Rebinding a clean deserialized material must also
+# preserve its clean state so load cannot trigger an unwanted terrain restart.
+require_text(terrain_source
+    "std::string BundledDefaultGrassRoot()"
+    "stable bundled terrain resource root")
+require_text(terrain_source
+    "wi::helper::GetExecutablePath()"
+    "executable-relative bundled terrain root")
+require_text(terrain_source
+    "const std::string root = BundledDefaultGrassRoot();"
+    "default grass material stable-root use")
+forbid_text(terrain_source
+    "const std::string root = wi::helper::GetCurrentPath()"
+    "CWD-owned default grass texture root")
+require_text(terrain_source
+    "const bool wasDirty = material->IsDirty();"
+    "terrain material dirty-state capture on rebind")
+require_text(terrain_source
+    "material->SetDirty(false);"
+    "terrain material clean-state restoration on rebind")
 
 # Explicit Studio build ownership. No accidental header-only inclusion.
 foreach(source IN ITEMS
