@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace
 {
@@ -59,9 +60,7 @@ namespace
     {
         using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
         if (before.shape != after.shape)
-        {
             return true;
-        }
 
         switch (after.shape)
         {
@@ -96,6 +95,101 @@ namespace
             metadata->string_values.has(
                 renegade::bridge::ReusableAssetInstanceIdMetadataKey);
     }
+
+    bool RelativeMatrixToTarget(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const wi::ecs::Entity target,
+        XMMATRIX& relative) noexcept
+    {
+        relative = XMMatrixIdentity();
+        if (entity == target)
+            return scene.transforms.Contains(entity);
+
+        wi::ecs::Entity current = entity;
+        const std::size_t maximumDepth = scene.hierarchy.GetCount() + 1;
+        for (std::size_t depth = 0;
+            current != wi::ecs::INVALID_ENTITY && depth <= maximumDepth; ++depth)
+        {
+            if (current == target)
+                return true;
+
+            const auto* transform = scene.transforms.GetComponent(current);
+            if (transform == nullptr)
+                return false;
+            relative = relative * transform->GetLocalMatrix();
+
+            const auto* hierarchy = scene.hierarchy.GetComponent(current);
+            if (hierarchy == nullptr ||
+                hierarchy->parentID == wi::ecs::INVALID_ENTITY ||
+                hierarchy->parentID == current)
+            {
+                return false;
+            }
+            current = hierarchy->parentID;
+        }
+        return false;
+    }
+
+    bool MeasureTargetGeometryBounds(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity target,
+        XMFLOAT3& minimum,
+        XMFLOAT3& maximum) noexcept
+    {
+        if (target == wi::ecs::INVALID_ENTITY ||
+            !scene.transforms.Contains(target))
+        {
+            return false;
+        }
+
+        const float highest = (std::numeric_limits<float>::max)();
+        minimum = XMFLOAT3(highest, highest, highest);
+        maximum = XMFLOAT3(-highest, -highest, -highest);
+        bool found = false;
+
+        for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)
+        {
+            const wi::ecs::Entity objectEntity = scene.objects.GetEntity(index);
+            if (objectEntity != target &&
+                !scene.Entity_IsDescendant(objectEntity, target))
+            {
+                continue;
+            }
+
+            const auto& object = scene.objects[index];
+            if (object.meshID == wi::ecs::INVALID_ENTITY)
+                continue;
+            const auto* mesh = scene.meshes.GetComponent(object.meshID);
+            if (mesh == nullptr || mesh->vertex_positions.empty())
+                continue;
+
+            XMMATRIX localToTarget;
+            if (!RelativeMatrixToTarget(
+                    scene, objectEntity, target, localToTarget))
+            {
+                continue;
+            }
+
+            for (const auto& vertex : mesh->vertex_positions)
+            {
+                XMFLOAT3 point;
+                XMStoreFloat3(
+                    &point,
+                    XMVector3TransformCoord(
+                        XMLoadFloat3(&vertex),
+                        localToTarget));
+                minimum.x = std::min(minimum.x, point.x);
+                minimum.y = std::min(minimum.y, point.y);
+                minimum.z = std::min(minimum.z, point.z);
+                maximum.x = std::max(maximum.x, point.x);
+                maximum.y = std::max(maximum.y, point.y);
+                maximum.z = std::max(maximum.z, point.z);
+                found = true;
+            }
+        }
+        return found;
+    }
 }
 
 namespace renegade::bridge
@@ -105,22 +199,17 @@ namespace renegade::bridge
         const wi::ecs::Entity selectedEntity) noexcept
     {
         if (selectedEntity == wi::ecs::INVALID_ENTITY)
-        {
             return wi::ecs::INVALID_ENTITY;
-        }
 
         // Walk upward so nested reusable assets resolve to their nearest stable
-        // wrapper rather than whichever metadata component happens to be
-        // encountered first in storage order.
+        // root rather than whichever metadata component happens to appear first.
         wi::ecs::Entity current = selectedEntity;
         const std::size_t maximumDepth = scene.hierarchy.GetCount() + 1;
         for (std::size_t depth = 0;
             current != wi::ecs::INVALID_ENTITY && depth <= maximumDepth; ++depth)
         {
             if (IsReusableAssetWrapper(scene, current))
-            {
                 return current;
-            }
             const auto* hierarchy = scene.hierarchy.GetComponent(current);
             if (hierarchy == nullptr ||
                 hierarchy->parentID == wi::ecs::INVALID_ENTITY ||
@@ -133,23 +222,88 @@ namespace renegade::bridge
         return selectedEntity;
     }
 
+    bool FitPrimitiveCollisionStateToTarget(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        CollisionState& state) noexcept
+    {
+        using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
+        if (IsMeshDerivedShape(state.shape) || !IsSupportedShape(state.shape))
+            return false;
+
+        const wi::ecs::Entity target =
+            ResolveCollisionAuthoringTarget(scene, entity);
+        XMFLOAT3 minimum;
+        XMFLOAT3 maximum;
+        if (!MeasureTargetGeometryBounds(scene, target, minimum, maximum))
+            return false;
+
+        // Keep the body centred on the stable transform origin. This avoids
+        // relying on backend local-offset semantics when the asset is rotated;
+        // extents are conservatively expanded to contain an off-centre pivot.
+        const XMFLOAT3 half(
+            std::max(std::abs(minimum.x), std::abs(maximum.x)),
+            std::max(std::abs(minimum.y), std::abs(maximum.y)),
+            std::max(std::abs(minimum.z), std::abs(maximum.z)));
+
+        CollisionState fitted = state;
+        switch (state.shape)
+        {
+        case Shape::BOX:
+            fitted.boxHalfExtents = half;
+            break;
+        case Shape::SPHERE:
+            fitted.sphereRadius = std::sqrt(
+                half.x * half.x + half.y * half.y + half.z * half.z);
+            break;
+        case Shape::CAPSULE:
+        {
+            const float radius = std::max(half.x, half.z);
+            fitted.capsuleRadius = radius;
+            // Jolt's capsule setting stores half-height of the cylinder portion.
+            fitted.capsuleHeight = std::max(
+                MinimumDimension,
+                half.y - radius);
+            break;
+        }
+        case Shape::CYLINDER:
+            fitted.capsuleRadius = std::max(half.x, half.z);
+            // The shared height field maps to Jolt CylinderShapeSettings half-height.
+            fitted.capsuleHeight = half.y;
+            break;
+        default:
+            return false;
+        }
+
+        state = SanitizeCollisionState(fitted);
+        return true;
+    }
+
+    bool RequestCollisionShapeRefresh(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        const wi::ecs::Entity target =
+            ResolveCollisionAuthoringTarget(scene, entity);
+        auto* rigidbody = scene.rigidbodies.GetComponent(target);
+        if (rigidbody == nullptr)
+            return false;
+        rigidbody->SetRefreshParametersNeeded(true);
+        return true;
+    }
+
     ReusableAssetCollisionRepairResult RepairReusableAssetCollisionTargets(
         wi::scene::Scene& scene) noexcept
     {
         ReusableAssetCollisionRepairResult result;
 
-        // Mutating rigidbodies does not mutate the metadata component manager,
-        // so wrappers can be processed directly without allocating a temporary
-        // collection. This keeps the pre-physics recovery genuinely noexcept.
         for (std::size_t metadataIndex = 0;
             metadataIndex < scene.metadatas.GetCount(); ++metadataIndex)
         {
             const wi::ecs::Entity wrapper =
                 scene.metadatas.GetEntity(metadataIndex);
             if (!IsReusableAssetWrapper(scene, wrapper))
-            {
                 continue;
-            }
 
             wi::ecs::Entity nestedBody = wi::ecs::INVALID_ENTITY;
             std::size_t nestedBodyCount = 0;
@@ -167,9 +321,7 @@ namespace renegade::bridge
             }
 
             if (nestedBodyCount == 0)
-            {
                 continue;
-            }
 
             if (scene.rigidbodies.Contains(wrapper) || nestedBodyCount != 1)
             {
@@ -184,10 +336,6 @@ namespace renegade::bridge
                 continue;
             }
 
-            // Preserve the complete Wicked-owned component (including any
-            // character/vehicle fields) but never carry a live Jolt object to
-            // a different entity. Wicked recreates that implementation-owned
-            // body against the stable root on its next normal update.
             wi::scene::RigidBodyPhysicsComponent migrated;
             migrated = *nested;
             migrated.physicsobject.reset();
@@ -212,35 +360,20 @@ namespace renegade::bridge
         using Shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape;
 
         if (entity == wi::ecs::INVALID_ENTITY)
-        {
             return CollisionTargetStatus::InvalidEntity;
-        }
         if (!scene.transforms.Contains(entity))
-        {
             return CollisionTargetStatus::MissingTransform;
-        }
         if (!IsSupportedShape(shape))
-        {
             return CollisionTargetStatus::InvalidMeshData;
-        }
         if (!IsMeshDerivedShape(shape))
-        {
             return CollisionTargetStatus::Supported;
-        }
 
-        // Match Wicked's actual RunPhysicsUpdateSystem path: mesh-derived
-        // rigid bodies are attached to an ObjectComponent entity and obtain
-        // geometry from that object's meshID.
         const auto* object = scene.objects.GetComponent(entity);
         if (object == nullptr || object->meshID == wi::ecs::INVALID_ENTITY)
-        {
             return CollisionTargetStatus::MissingMesh;
-        }
         const auto* mesh = scene.meshes.GetComponent(object->meshID);
         if (mesh == nullptr)
-        {
             return CollisionTargetStatus::MissingMesh;
-        }
 
         if (shape == Shape::CONVEX_HULL)
         {
@@ -260,16 +393,11 @@ namespace renegade::bridge
             return CollisionTargetStatus::Supported;
         }
 
-        // Wicked's HeightField path computes dim = sqrt(vertex_count) and
-        // gives Jolt a dim x dim sample grid. Require a genuine square grid
-        // instead of allowing malformed data to reach the backend.
         const size_t vertexCount = mesh->vertex_positions.size();
         const size_t dimension = static_cast<size_t>(
             std::sqrt(static_cast<double>(vertexCount)));
         if (dimension < 2 || dimension * dimension != vertexCount)
-        {
             return CollisionTargetStatus::InvalidHeightFieldGrid;
-        }
         return CollisionTargetStatus::Supported;
     }
 
@@ -322,22 +450,12 @@ namespace renegade::bridge
         result.buoyancy = std::clamp(result.buoyancy, 0.0f, 2.0f);
         result.meshLod = std::min(result.meshLod, MaximumEditorMeshLod);
 
-        result.boxHalfExtents.x = std::max(
-            result.boxHalfExtents.x,
-            MinimumDimension);
-        result.boxHalfExtents.y = std::max(
-            result.boxHalfExtents.y,
-            MinimumDimension);
-        result.boxHalfExtents.z = std::max(
-            result.boxHalfExtents.z,
-            MinimumDimension);
+        result.boxHalfExtents.x = std::max(result.boxHalfExtents.x, MinimumDimension);
+        result.boxHalfExtents.y = std::max(result.boxHalfExtents.y, MinimumDimension);
+        result.boxHalfExtents.z = std::max(result.boxHalfExtents.z, MinimumDimension);
         result.sphereRadius = std::max(result.sphereRadius, MinimumDimension);
-        result.capsuleRadius = std::max(
-            result.capsuleRadius,
-            MinimumDimension);
-        result.capsuleHeight = std::max(
-            result.capsuleHeight,
-            MinimumDimension);
+        result.capsuleRadius = std::max(result.capsuleRadius, MinimumDimension);
+        result.capsuleHeight = std::max(result.capsuleHeight, MinimumDimension);
         return result;
     }
 
@@ -374,12 +492,7 @@ namespace renegade::bridge
         const auto safe = SanitizeCollisionState(state);
 
         if (RequiresPhysicsObjectRecreation(before, safe))
-        {
-            // Wicked Editor resets this implementation-owned handle whenever
-            // shape topology changes. The Jolt wrapper then recreates the body
-            // against the same Wicked-owned physics scene on the next update.
             rigidbody.physicsobject.reset();
-        }
 
         rigidbody.shape = safe.shape;
         rigidbody.mass = safe.mass;
@@ -404,11 +517,19 @@ namespace renegade::bridge
     CreateCollisionCommand::CreateCollisionCommand(
         wi::scene::Scene& scene,
         const wi::ecs::Entity targetEntity,
-        const CollisionState& initial)
+        const CollisionState& initial,
+        const bool autoFitPrimitive)
         : scene_(&scene)
         , entity_(ResolveCollisionAuthoringTarget(scene, targetEntity))
         , initial_(SanitizeCollisionState(initial))
+        , autoFitPrimitive_(autoFitPrimitive)
     {
+        if (autoFitPrimitive_)
+        {
+            CollisionState fitted = initial_;
+            if (FitPrimitiveCollisionStateToTarget(scene, entity_, fitted))
+                initial_ = SanitizeCollisionState(fitted);
+        }
     }
 
     bool CreateCollisionCommand::Execute()
@@ -427,9 +548,7 @@ namespace renegade::bridge
     void CreateCollisionCommand::Undo()
     {
         if (scene_ != nullptr)
-        {
             scene_->rigidbodies.Remove(entity_);
-        }
     }
 
     SetCollisionCommand::SetCollisionCommand(
@@ -441,9 +560,7 @@ namespace renegade::bridge
         , after_(SanitizeCollisionState(collision))
     {
         if (const auto* existing = scene.rigidbodies.GetComponent(entity))
-        {
             before_ = CaptureCollision(*existing);
-        }
     }
 
     SetCollisionCommand::SetCollisionCommand(
@@ -477,9 +594,7 @@ namespace renegade::bridge
         }
         auto* rigidbody = scene_->rigidbodies.GetComponent(entity_);
         if (rigidbody == nullptr)
-        {
             return false;
-        }
         ApplyCollision(*rigidbody, state);
         return true;
     }
@@ -495,19 +610,11 @@ namespace renegade::bridge
     bool RemoveCollisionCommand::Execute()
     {
         if (scene_ == nullptr)
-        {
             return false;
-        }
         const auto* existing = scene_->rigidbodies.GetComponent(entity_);
         if (existing == nullptr)
-        {
             return false;
-        }
 
-        // Preserve the complete Wicked-owned component so an Undo cannot lose
-        // fields that live outside CollisionState (notably character/vehicle
-        // authoring). Do not retain the implementation-owned live Jolt object:
-        // removing the real component must destroy it normally.
         removedNative_ = *existing;
         removedNative_.physicsobject.reset();
         removedNative_.SetRefreshParametersNeeded(true);
