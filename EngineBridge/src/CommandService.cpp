@@ -651,15 +651,17 @@ namespace renegade::bridge
         {
             return false;
         }
-        return Apply(after_);
+        return Apply(after_, before_.scale);
     }
 
     void SetTransformCommand::Undo()
     {
-        Apply(before_);
+        Apply(before_, after_.scale);
     }
 
-    bool SetTransformCommand::Apply(const TransformState& transformState)
+    bool SetTransformCommand::Apply(
+        const TransformState& transformState,
+        const XMFLOAT3& expectedPreviousScale)
     {
         auto* transform = scene_->transforms.GetComponent(entity_);
         if (transform == nullptr)
@@ -667,7 +669,6 @@ namespace renegade::bridge
             return false;
         }
 
-        const XMFLOAT3 previousScale = transform->scale_local;
         transform->translation_local = transformState.translation;
         transform->rotation_local = transformState.rotation;
         transform->scale_local = transformState.scale;
@@ -675,11 +676,11 @@ namespace renegade::bridge
         transform->UpdateTransform();
 
         // Primitive dimensions on a reusable asset are authored in root-local
-        // space. Wicked applies Transform scale when creating the native shape,
-        // so a committed scale edit must invalidate that native body. Keep this
-        // in the central transform command so Execute, Undo and Redo all follow
-        // the same path. Descendant-only scale edits are deliberately excluded:
-        // only the actual rigid-body owner can trigger this refresh.
+        // space. The renderer's gizmo previews its after-state before this
+        // command is executed, so compare command history rather than the live
+        // transform to decide whether scale changed. Execute, Undo and Redo all
+        // share this same Apply path.
+        const XMFLOAT3 previousScale = expectedPreviousScale;
         if (IsMeaningfulScale(previousScale, transformState.scale) &&
             scene_->rigidbodies.Contains(entity_))
         {
