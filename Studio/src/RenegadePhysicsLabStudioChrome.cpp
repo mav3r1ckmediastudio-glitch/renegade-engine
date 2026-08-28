@@ -72,6 +72,10 @@ namespace renegade::studio
         const float height)
     {
         CreatorAssetStudioChrome::SetLayout(width, height);
+        // Bounds only change when Studio layout changes. Relaying out every
+        // frame would hide/show every Physics Lab widget and Wicked resets a
+        // widget to IDLE when SetVisible(false) is called, destroying active
+        // mouse-down/drag state before a click or slider drag can complete.
         physicsLab_.SetBounds(ViewportBounds());
     }
 
@@ -153,7 +157,11 @@ namespace renegade::studio
             SetPhysicsLabActive(true);
         }
 
-        physicsLab_.SetBounds(ViewportBounds());
+        // Do not call SetBounds here. Physics Lab controls are stateful Wicked
+        // widgets: SetBounds -> Layout -> HideAll toggles visibility and resets
+        // ACTIVE/DEACTIVATING every frame, which makes every control appear
+        // correctly while preventing buttons, sliders and combos from ever
+        // completing an interaction. SetLayout/activation own relayout instead.
         physicsLab_.Update(canvas, dt);
     }
 
