@@ -2013,6 +2013,85 @@ namespace renegade::studio
             bridge::ObjectParticipationProperty::Wetmap);
 
         createSectionLabel(
+            cameraLabel_,
+            "Camera Section",
+            "CAMERA // NATIVE WICKED");
+        cameraProjection_.Create("Camera Projection");
+        cameraProjection_.AddItem("PERSPECTIVE", 0);
+        cameraProjection_.AddItem("ORTHOGRAPHIC", 1);
+        cameraProjection_.SetTooltip(
+            "Choose the selected scene camera's native projection mode.");
+        cameraProjection_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            ApplySelectedCameraProjection(args.userdata == 1);
+        });
+        inspectorPanel_.AddWidget(&cameraProjection_);
+
+        const auto createCameraSlider = [this](
+            SceneInspectorSlider& input,
+            const char* name,
+            const char* label,
+            const char* tooltip,
+            const CameraField field,
+            const float minimum,
+            const float maximum,
+            const float steps)
+        {
+            input.Create(minimum, maximum, 0.0f, steps, name, label);
+            input.SetTooltip(tooltip);
+            input.OnDragStarted([this, field](const float)
+            {
+                BeginCameraSlider(field);
+            });
+            input.OnValuePreview([this, field](const float value)
+            {
+                PreviewCameraSlider(field, value);
+            });
+            input.OnValueCommitted([this, field](const float value)
+            {
+                CommitCameraSlider(field, value);
+            });
+            inspectorPanel_.AddWidget(&input);
+        };
+        createCameraSlider(cameraFieldOfView_, "Camera FOV", "FIELD OF VIEW",
+            "Perspective field of view in degrees.",
+            CameraField::FieldOfView, 1.0f, 179.0f, 1780.0f);
+        createCameraSlider(cameraNearPlane_, "Camera Near Plane", "NEAR CLIP",
+            "Geometry nearer than this distance is clipped.",
+            CameraField::NearPlane, 0.001f, 10.0f, 10000.0f);
+        createCameraSlider(cameraFarPlane_, "Camera Far Plane", "FAR CLIP",
+            "Geometry farther than this distance is clipped.",
+            CameraField::FarPlane, 10.0f, 100000.0f, 100000.0f);
+        createCameraSlider(cameraFocalLength_, "Camera Focal Length", "FOCAL DISTANCE",
+            "Depth-of-field focus distance.",
+            CameraField::FocalLength, 0.001f, 1000.0f, 10000.0f);
+        createCameraSlider(cameraApertureSize_, "Camera Aperture", "APERTURE",
+            "Depth-of-field aperture strength.",
+            CameraField::ApertureSize, 0.0f, 1.0f, 1000.0f);
+        createCameraSlider(cameraOrthoVerticalSize_, "Camera Ortho Size", "ORTHO // VERTICAL SIZE",
+            "Vertical size of the orthographic camera volume.",
+            CameraField::OrthoVerticalSize, 0.01f, 10000.0f, 100000.0f);
+
+        cameraAlignToView_.Create("Align Camera To View");
+        cameraAlignToView_.SetText("ALIGN CAMERA TO VIEW");
+        cameraAlignToView_.SetTooltip(
+            "Move the selected scene camera to the current editor viewpoint.");
+        cameraAlignToView_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            AlignSelectedCameraToView();
+        });
+        inspectorPanel_.AddWidget(&cameraAlignToView_);
+        cameraViewFrom_.Create("View From Camera");
+        cameraViewFrom_.SetText("VIEW FROM CAMERA");
+        cameraViewFrom_.SetTooltip(
+            "Move the transient editor view to the selected scene camera without changing the scene.");
+        cameraViewFrom_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            ViewFromSelectedCamera();
+        });
+        inspectorPanel_.AddWidget(&cameraViewFrom_);
+
+        createSectionLabel(
             lightLabel_,
             "Light Section",
             "LIGHT // NATIVE WICKED");
@@ -3142,6 +3221,9 @@ namespace renegade::studio
                 pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
                 pendingAction_ = EditorAction::CreateLight;
                 break;
+            case RenegadeStudioChrome::Action::CreateCamera:
+                pendingAction_ = EditorAction::CreateCamera;
+                break;
             case RenegadeStudioChrome::Action::Focus:
                 pendingAction_ = EditorAction::FocusSelection;
                 break;
@@ -4097,6 +4179,7 @@ namespace renegade::studio
         ownLabel(positionLabel_);
         ownLabel(rotationLabel_);
         ownLabel(scaleLabel_);
+        ownLabel(cameraLabel_);
         ownLabel(lightLabel_);
         ownLabel(environmentSkyLabel_);
         ownLabel(environmentFogLabel_);
@@ -4690,6 +4773,20 @@ namespace renegade::studio
         layoutObjectToggle(sceneObjectReflections_, 0, 590.0f);
         layoutObjectToggle(sceneObjectWetmap_, 1, 590.0f);
 
+        positionEnvironmentWidget(cameraLabel_, 506.0f, 20.0f);
+        positionEnvironmentWidget(cameraProjection_, 526.0f);
+        positionEnvironmentWidget(cameraFieldOfView_, 560.0f);
+        positionEnvironmentWidget(cameraNearPlane_, 594.0f);
+        positionEnvironmentWidget(cameraFarPlane_, 628.0f);
+        positionEnvironmentWidget(cameraFocalLength_, 662.0f);
+        positionEnvironmentWidget(cameraApertureSize_, 696.0f);
+        positionEnvironmentWidget(cameraOrthoVerticalSize_, 730.0f);
+        const float cameraActionWidth = (environmentFieldWidth - 8.0f) * 0.5f;
+        cameraAlignToView_.SetPos(XMFLOAT2(12.0f, 764.0f));
+        cameraViewFrom_.SetPos(XMFLOAT2(20.0f + cameraActionWidth, 764.0f));
+        cameraAlignToView_.SetSize(XMFLOAT2(cameraActionWidth, 28.0f));
+        cameraViewFrom_.SetSize(XMFLOAT2(cameraActionWidth, 28.0f));
+
         positionEnvironmentWidget(lightLabel_, 630.0f, 20.0f);
         positionEnvironmentWidget(lightType_, 650.0f);
         positionEnvironmentWidget(lightColorRed_, 684.0f);
@@ -5190,7 +5287,8 @@ namespace renegade::studio
     void StudioRenderPath::LayoutInspectorActions(
         const bool environment,
         const bool terrain,
-        const bool light)
+        const bool light,
+        const bool sceneCamera)
     {
         const float width = inspectorPanel_.GetSize().x;
         constexpr float gap = 8.0f;
@@ -5202,7 +5300,9 @@ namespace renegade::studio
                 ? 726.0f
                 : light
                     ? 1130.0f
-                    : 630.0f;
+                    : sceneCamera
+                        ? 804.0f
+                        : 630.0f;
         const float historyRow = environment
             ? actionStart
             : actionStart + 40.0f;
@@ -5273,12 +5373,17 @@ namespace renegade::studio
             !terrainWorkspaceActive_
             ? session_->Scenes().GetScene().lights.GetComponent(entity)
             : nullptr;
+        auto* authoredCamera = hasSession && !environmentWorkspaceActive_ &&
+            !terrainWorkspaceActive_
+            ? session_->Scenes().GetScene().cameras.GetComponent(entity)
+            : nullptr;
         SyncSelectionOutline();
 
         const bool hasTransform = transform != nullptr;
         const bool hasWeather = weather != nullptr;
         const bool hasTerrain = terrain != nullptr;
         const bool hasLight = light != nullptr;
+        const bool hasCamera = authoredCamera != nullptr;
         const bool sceneComponentsVisible =
             hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
             !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
@@ -5331,7 +5436,7 @@ namespace renegade::studio
         {
             studioChrome_.SetSelectionName({});
         }
-        LayoutInspectorActions(hasWeather, hasTerrain, hasLight);
+        LayoutInspectorActions(hasWeather, hasTerrain, hasLight, hasCamera);
 
         sceneIdentityLabel_.SetVisible(sceneComponentsVisible);
         sceneNameInput_.SetVisible(sceneComponentsVisible);
@@ -5349,6 +5454,31 @@ namespace renegade::studio
         sceneObjectMainCamera_.SetVisible(sceneComponentsVisible && hasObjectTargets);
         sceneObjectReflections_.SetVisible(sceneComponentsVisible && hasObjectTargets);
         sceneObjectWetmap_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+
+        cameraLabel_.SetVisible(hasCamera);
+        cameraProjection_.SetVisible(hasCamera);
+        cameraFieldOfView_.SetVisible(hasCamera);
+        cameraNearPlane_.SetVisible(hasCamera);
+        cameraFarPlane_.SetVisible(hasCamera);
+        cameraFocalLength_.SetVisible(hasCamera);
+        cameraApertureSize_.SetVisible(hasCamera);
+        cameraOrthoVerticalSize_.SetVisible(hasCamera);
+        cameraAlignToView_.SetVisible(hasCamera);
+        cameraViewFrom_.SetVisible(hasCamera);
+        if (hasCamera)
+        {
+            const auto cameraState = bridge::CaptureCamera(*authoredCamera);
+            cameraProjection_.SetSelectedByUserdataWithoutCallback(
+                cameraState.orthographic ? 1u : 0u);
+            cameraFieldOfView_.SetValue(cameraState.fieldOfViewDegrees);
+            cameraNearPlane_.SetValue(cameraState.nearPlane);
+            cameraFarPlane_.SetValue(cameraState.farPlane);
+            cameraFocalLength_.SetValue(cameraState.focalLength);
+            cameraApertureSize_.SetValue(cameraState.apertureSize);
+            cameraOrthoVerticalSize_.SetValue(cameraState.orthoVerticalSize);
+            cameraFieldOfView_.SetEnabled(!cameraState.orthographic);
+            cameraOrthoVerticalSize_.SetEnabled(cameraState.orthographic);
+        }
 
         if (sceneComponentsVisible && sceneAuthoringRoot != wi::ecs::INVALID_ENTITY)
         {
@@ -5935,6 +6065,9 @@ namespace renegade::studio
             break;
         case EditorAction::CreateLight:
             CreateLight(pendingLightType_);
+            break;
+        case EditorAction::CreateCamera:
+            CreateCameraFromView();
             break;
         case EditorAction::OpenScene:
             OpenScene();
@@ -8015,6 +8148,196 @@ namespace renegade::studio
             std::make_unique<bridge::SetObjectParticipationCommand>(
                 scene, selected, property, value));
         RefreshInspector();
+        RefreshStatus();
+    }
+
+
+    bridge::TransformState StudioRenderPath::CaptureEditorCameraTransform() const
+    {
+        bridge::TransformState state;
+        if (camera == nullptr)
+            return state;
+        wi::scene::TransformComponent transform;
+        transform.MatrixTransform(camera->GetInvView());
+        transform.UpdateTransform();
+        return bridge::CaptureTransform(transform);
+    }
+
+    void StudioRenderPath::CreateCameraFromView()
+    {
+        if (session_ == nullptr || camera == nullptr)
+            return;
+        auto command = std::make_unique<bridge::CreateCameraCommand>(
+            session_->Scenes().GetScene(),
+            bridge::CaptureCamera(*camera),
+            CaptureEditorCameraTransform(),
+            camera->width,
+            camera->height);
+        auto* created = command.get();
+        if (session_->Commands().Execute(std::move(command)))
+        {
+            session_->Selection().Select(created->CreatedEntity());
+            SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+        }
+    }
+
+    bool StudioRenderPath::CommitSelectedCamera(
+        const bridge::CameraState& cameraState)
+    {
+        if (session_ == nullptr)
+            return false;
+        const auto entity = session_->Selection().SelectedEntity();
+        auto& scene = session_->Scenes().GetScene();
+        if (!scene.cameras.Contains(entity))
+            return false;
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetCameraCommand>(
+                scene, entity, cameraState));
+        RefreshInspector();
+        RefreshStatus();
+        return changed;
+    }
+
+    void StudioRenderPath::ApplySelectedCameraProjection(
+        const bool orthographic)
+    {
+        if (session_ == nullptr)
+            return;
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* authoredCamera =
+            session_->Scenes().GetScene().cameras.GetComponent(entity);
+        if (authoredCamera == nullptr)
+            return;
+        auto state = bridge::CaptureCamera(*authoredCamera);
+        state.orthographic = orthographic;
+        CommitSelectedCamera(state);
+    }
+
+    void StudioRenderPath::SetCameraFieldValue(
+        bridge::CameraState& cameraState,
+        const CameraField field,
+        const float value) noexcept
+    {
+        switch (field)
+        {
+        case CameraField::FieldOfView:
+            cameraState.fieldOfViewDegrees = value;
+            break;
+        case CameraField::NearPlane:
+            cameraState.nearPlane = value;
+            break;
+        case CameraField::FarPlane:
+            cameraState.farPlane = value;
+            break;
+        case CameraField::FocalLength:
+            cameraState.focalLength = value;
+            break;
+        case CameraField::ApertureSize:
+            cameraState.apertureSize = value;
+            break;
+        case CameraField::OrthoVerticalSize:
+            cameraState.orthoVerticalSize = value;
+            break;
+        }
+        cameraState = bridge::SanitizeCameraState(cameraState);
+    }
+
+    void StudioRenderPath::BeginCameraSlider(const CameraField field)
+    {
+        cameraSliderActive_ = false;
+        if (session_ == nullptr)
+            return;
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto* authoredCamera =
+            session_->Scenes().GetScene().cameras.GetComponent(entity);
+        if (authoredCamera == nullptr)
+            return;
+        cameraSliderActive_ = true;
+        cameraSliderField_ = field;
+        cameraSliderEntity_ = entity;
+        cameraSliderBefore_ = bridge::CaptureCamera(*authoredCamera);
+        cameraSliderAfter_ = cameraSliderBefore_;
+    }
+
+    void StudioRenderPath::PreviewCameraSlider(
+        const CameraField field,
+        const float value)
+    {
+        if (!cameraSliderActive_ || cameraSliderField_ != field ||
+            session_ == nullptr)
+            return;
+        cameraSliderAfter_ = cameraSliderBefore_;
+        SetCameraFieldValue(cameraSliderAfter_, field, value);
+        auto* authoredCamera = session_->Scenes().GetScene().cameras.GetComponent(
+            cameraSliderEntity_);
+        if (authoredCamera != nullptr)
+            bridge::ApplyCamera(*authoredCamera, cameraSliderAfter_);
+    }
+
+    void StudioRenderPath::CommitCameraSlider(
+        const CameraField field,
+        const float value)
+    {
+        if (!cameraSliderActive_ || cameraSliderField_ != field ||
+            session_ == nullptr)
+            return;
+        SetCameraFieldValue(cameraSliderAfter_, field, value);
+        auto& scene = session_->Scenes().GetScene();
+        auto* authoredCamera = scene.cameras.GetComponent(cameraSliderEntity_);
+        if (authoredCamera != nullptr)
+            bridge::ApplyCamera(*authoredCamera, cameraSliderBefore_);
+        (void)session_->Commands().Execute(
+            std::make_unique<bridge::SetCameraCommand>(
+                scene,
+                cameraSliderEntity_,
+                cameraSliderBefore_,
+                cameraSliderAfter_));
+        cameraSliderActive_ = false;
+        cameraSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::AlignSelectedCameraToView()
+    {
+        if (session_ == nullptr || camera == nullptr)
+            return;
+        const auto entity = session_->Selection().SelectedEntity();
+        auto& scene = session_->Scenes().GetScene();
+        auto* authoredCamera = scene.cameras.GetComponent(entity);
+        if (authoredCamera == nullptr)
+            return;
+        if (session_->Commands().Execute(
+                std::make_unique<bridge::SetTransformCommand>(
+                    scene, entity, CaptureEditorCameraTransform())))
+        {
+            if (auto* transform = scene.transforms.GetComponent(entity))
+            {
+                authoredCamera->TransformCamera(*transform);
+                authoredCamera->UpdateCamera();
+            }
+            RefreshInspector();
+            RefreshStatus();
+        }
+    }
+
+    void StudioRenderPath::ViewFromSelectedCamera()
+    {
+        if (session_ == nullptr || camera == nullptr)
+            return;
+        const auto entity = session_->Selection().SelectedEntity();
+        const auto& scene = session_->Scenes().GetScene();
+        const auto* authoredCamera = scene.cameras.GetComponent(entity);
+        const auto* transform = scene.transforms.GetComponent(entity);
+        if (authoredCamera == nullptr || transform == nullptr)
+            return;
+        bridge::ApplyCamera(*camera, bridge::CaptureCamera(*authoredCamera));
+        camera->TransformCamera(*transform);
+        camera->UpdateCamera();
         RefreshStatus();
     }
 
