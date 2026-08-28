@@ -23,6 +23,13 @@ namespace
         return std::fabs(left - right) < 0.0001f;
     }
 
+    bool Near(const XMFLOAT3& left, const XMFLOAT3& right)
+    {
+        return Near(left.x, right.x) &&
+            Near(left.y, right.y) &&
+            Near(left.z, right.z);
+    }
+
     struct ReusableFixture
     {
         wi::ecs::Entity wrapper = wi::ecs::INVALID_ENTITY;
@@ -30,28 +37,41 @@ namespace
         wi::ecs::Entity nested = wi::ecs::INVALID_ENTITY;
     };
 
-    ReusableFixture CreateReusableFixture(wi::scene::Scene& scene)
+    ReusableFixture CreateReusableFixture(
+        wi::scene::Scene& scene,
+        const bool stampInstanceMetadata = true)
     {
         ReusableFixture fixture;
         fixture.wrapper = scene.Entity_CreateTransform("Reusable Asset Instance");
         fixture.payload = scene.Entity_CreateTransform("Imported Payload Root");
-        fixture.nested = scene.Entity_CreateTransform("crate002");
+        fixture.nested = scene.Entity_CreateCube("crate002");
 
         scene.Component_Attach(fixture.payload, fixture.wrapper, true);
         scene.Component_Attach(fixture.nested, fixture.payload, true);
 
-        auto& wrapperMetadata = scene.metadatas.Create(fixture.wrapper);
-        wrapperMetadata.string_values.set(
-            renegade::bridge::ReusableAssetInstanceIdMetadataKey,
-            AssetId);
-        wrapperMetadata.int_values.set(
-            renegade::bridge::ReusableAssetInstanceVersionMetadataKey,
-            renegade::bridge::ReusableAssetInstanceVersion);
+        if (auto* transform = scene.transforms.GetComponent(fixture.nested))
+        {
+            // Deliberately non-uniform imported geometry. Auto-fit must account
+            // for this child-local scale but must not bake the wrapper scale in.
+            transform->scale_local = XMFLOAT3(2.0f, 0.75f, 0.5f);
+            transform->SetDirty();
+        }
 
-        auto& payloadMetadata = scene.metadatas.Create(fixture.payload);
-        payloadMetadata.bool_values.set(
-            renegade::bridge::ReusableAssetPayloadRootMetadataKey,
-            true);
+        if (stampInstanceMetadata)
+        {
+            auto& wrapperMetadata = scene.metadatas.Create(fixture.wrapper);
+            wrapperMetadata.string_values.set(
+                renegade::bridge::ReusableAssetInstanceIdMetadataKey,
+                AssetId);
+            wrapperMetadata.int_values.set(
+                renegade::bridge::ReusableAssetInstanceVersionMetadataKey,
+                renegade::bridge::ReusableAssetInstanceVersion);
+
+            auto& payloadMetadata = scene.metadatas.Create(fixture.payload);
+            payloadMetadata.bool_values.set(
+                renegade::bridge::ReusableAssetPayloadRootMetadataKey,
+                true);
+        }
         return fixture;
     }
 }
@@ -61,9 +81,6 @@ int main()
     using namespace renegade::bridge;
     using Body = wi::scene::RigidBodyPhysicsComponent;
 
-    // Creator-facing target resolution must never attach a dynamic Jolt body
-    // to an arbitrary imported child of a reusable asset. The stable wrapper
-    // owns authored transform/state and is the only safe whole-asset target.
     wi::scene::Scene scene;
     const auto fixture = CreateReusableFixture(scene);
     const auto outside = scene.Entity_CreateTransform("Standalone Object");
@@ -73,14 +90,43 @@ int main()
         ResolveCollisionAuthoringTarget(scene, fixture.wrapper) != fixture.wrapper ||
         ResolveCollisionAuthoringTarget(scene, outside) != outside)
     {
-        return Fail("reusable asset collision target did not resolve to stable wrapper");
+        return Fail("reusable asset collision target did not resolve to stable root");
+    }
+
+    // Primitive fit is measured below the asset root, excluding the root's own
+    // authored scale because the backend applies that scale when creating the
+    // actual physics shape. Changing root scale must therefore leave authored
+    // primitive dimensions unchanged.
+    CollisionState fitted;
+    auto* wrapperTransform = scene.transforms.GetComponent(fixture.wrapper);
+    if (wrapperTransform == nullptr)
+        return Fail("fixture root transform missing");
+    wrapperTransform->scale_local = XMFLOAT3(3.0f, 3.0f, 3.0f);
+    CollisionState firstFit = fitted;
+    if (!FitPrimitiveCollisionStateToTarget(
+            scene, fixture.wrapper, firstFit))
+    {
+        return Fail("primitive auto-fit could not measure reusable geometry");
+    }
+    if (firstFit.boxHalfExtents.x <= 0.01f ||
+        firstFit.boxHalfExtents.y <= 0.01f ||
+        firstFit.boxHalfExtents.z <= 0.01f)
+    {
+        return Fail("primitive auto-fit produced invalid dimensions");
+    }
+
+    wrapperTransform->scale_local = XMFLOAT3(7.0f, 5.0f, 4.0f);
+    CollisionState secondFit = fitted;
+    if (!FitPrimitiveCollisionStateToTarget(
+            scene, fixture.wrapper, secondFit) ||
+        !Near(firstFit.boxHalfExtents, secondFit.boxHalfExtents))
+    {
+        return Fail("root scale was baked into fitted collider dimensions");
     }
 
     CollisionState initial;
     if (!initial.startDeactivated)
-    {
-        return Fail("new rigid bodies no longer match Wicked Editor start-deactivated default");
-    }
+        return Fail("new rigid bodies no longer start deactivated");
     initial.mass = 3.25f;
     initial.friction = 0.42f;
     initial.buoyancy = 1.35f;
@@ -94,27 +140,68 @@ int main()
     if (scene.rigidbodies.Contains(fixture.nested) ||
         !scene.rigidbodies.Contains(fixture.wrapper))
     {
-        return Fail("CreateCollisionCommand attached body to imported child instead of wrapper");
+        return Fail("CreateCollisionCommand attached body to imported child instead of root");
     }
 
     const auto* created = scene.rigidbodies.GetComponent(fixture.wrapper);
     if (created == nullptr || !created->IsStartDeactivated() ||
         !Near(created->mass, 3.25f) ||
         !Near(created->friction, 0.42f) ||
-        !Near(created->buoyancy, 1.35f))
+        !Near(created->buoyancy, 1.35f) ||
+        !Near(created->box.halfextents, secondFit.boxHalfExtents))
     {
-        return Fail("wrapper-owned rigid body lost creator authoring state");
+        return Fail("root-owned rigid body lost fitted creator authoring state");
+    }
+
+    auto* mutableCreated = scene.rigidbodies.GetComponent(fixture.wrapper);
+    if (mutableCreated == nullptr)
+        return Fail("created rigid body disappeared");
+    mutableCreated->SetRefreshParametersNeeded(false);
+    if (!RequestCollisionShapeRefresh(scene, fixture.nested) ||
+        !mutableCreated->IsRefreshParametersNeeded())
+    {
+        return Fail("scale refresh did not reach the root-owned rigid body");
     }
 
     if (!commands.Undo() || scene.rigidbodies.Contains(fixture.wrapper) ||
         !commands.Redo() || !scene.rigidbodies.Contains(fixture.wrapper))
     {
-        return Fail("wrapper-owned rigid body Undo/Redo lifecycle failed");
+        return Fail("root-owned rigid body Undo/Redo lifecycle failed");
     }
 
+    // A placed reusable asset must expose a creator-facing root name rather
+    // than the implementation wrapper label. The imported render-object name
+    // is the deterministic fallback when no separate product display name is
+    // persisted in the scene payload.
+    wi::scene::Scene namingScene;
+    const auto naming = CreateReusableFixture(namingScene, false);
+    if (auto* name = namingScene.names.GetComponent(naming.wrapper))
+        name->name = "Reusable Asset Drag Preview";
+    CommandService namingCommands;
+    if (!namingCommands.Execute(std::make_unique<PlaceReusableModelCommand>(
+            namingScene,
+            AssetId,
+            naming.wrapper,
+            naming.payload,
+            0)))
+    {
+        return Fail("reusable placement naming command did not execute");
+    }
+    const auto* rootName = namingScene.names.GetComponent(naming.wrapper);
+    if (rootName == nullptr || rootName->name != "crate002")
+        return Fail("reusable root retained an implementation-facing name");
+    if (!namingCommands.Undo() ||
+        namingScene.transforms.Contains(naming.wrapper) ||
+        !namingCommands.Redo())
+    {
+        return Fail("named reusable root Undo/Redo failed");
+    }
+    rootName = namingScene.names.GetComponent(naming.wrapper);
+    if (rootName == nullptr || rootName->name != "crate002")
+        return Fail("creator-facing root name did not survive Redo");
+
     // Recovery boundary for scenes saved by the bad owner-validation build:
-    // exactly one nested body is moved intact to the stable wrapper before
-    // Wicked's first physics update can run its parent matrix feedback loop.
+    // exactly one nested body moves intact to the stable root before physics.
     wi::scene::Scene recoveryScene;
     const auto recovery = CreateReusableFixture(recoveryScene);
     auto& badBody = recoveryScene.rigidbodies.Create(recovery.nested);
@@ -153,12 +240,9 @@ int main()
         !migrated->IsRefreshParametersNeeded() ||
         migrated->physicsobject != nullptr)
     {
-        return Fail("nested-body migration did not preserve complete Wicked authoring state safely");
+        return Fail("nested-body migration did not preserve authoring state safely");
     }
 
-    // Never guess when the reusable asset already has a root body and also
-    // contains a nested body. That is an explicit multi-body authoring case,
-    // not the one-body corruption signature this recovery is allowed to fix.
     wi::scene::Scene conflictScene;
     const auto conflict = CreateReusableFixture(conflictScene);
     conflictScene.rigidbodies.Create(conflict.wrapper).mass = 1.0f;
@@ -173,6 +257,6 @@ int main()
     }
 
     std::cout <<
-        "JP01 REUSABLE PHYSICS PASS // stable wrapper targeting, Undo/Redo, and pre-physics nested-body recovery\n";
+        "JP01 REUSABLE PHYSICS PASS // root authoring, creator naming, primitive fit, scale refresh, Undo/Redo, recovery\n";
     return 0;
 }
