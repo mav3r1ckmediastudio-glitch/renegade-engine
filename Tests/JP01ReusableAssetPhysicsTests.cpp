@@ -170,8 +170,8 @@ int main()
     }
 
     CollisionState initial;
-    if (!initial.startDeactivated)
-        return Fail("new rigid bodies no longer start deactivated");
+    if (initial.startDeactivated)
+        return Fail("new rigid bodies no longer start active");
     initial.mass = 3.25f;
     initial.friction = 0.42f;
     initial.buoyancy = 1.35f;
@@ -189,7 +189,7 @@ int main()
     }
 
     const auto* created = scene.rigidbodies.GetComponent(fixture.wrapper);
-    if (created == nullptr || !created->IsStartDeactivated() ||
+    if (created == nullptr || created->IsStartDeactivated() ||
         !Near(created->mass, 3.25f) ||
         !Near(created->friction, 0.42f) ||
         !Near(created->buoyancy, 1.35f) ||

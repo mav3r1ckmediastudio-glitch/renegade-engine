@@ -30,9 +30,9 @@ namespace renegade::bridge
         bool kinematic = false;
         bool locked2D = false;
         bool disableDeactivation = false;
-        // Newly added bodies start deactivated so authoring does not
-        // immediately throw a selected asset into simulation.
-        bool startDeactivated = true;
+        // Creator-added dynamic bodies participate in simulation immediately.
+        // START DEACTIVATED remains available as an explicit authoring option.
+        bool startDeactivated = false;
 
         // Primitive shape parameters. Convex Hull, Triangle Mesh and Height
         // Field derive their geometry from the normal scene/mesh/terrain path.
