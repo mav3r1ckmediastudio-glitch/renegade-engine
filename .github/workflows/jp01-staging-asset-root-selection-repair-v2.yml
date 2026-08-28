@@ -1,0 +1,175 @@
+name: JP01 staging asset-root selection repair v2
+
+on:
+  push:
+    branches:
+      - staging/jp01-owner-validation-fixes
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging/jp01-owner-validation-fixes
+          fetch-depth: 0
+      - name: Apply creator-root naming and selection repair
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def load(p): return Path(p).read_text(encoding='utf-8')
+          def save(p,s): Path(p).write_text(s, encoding='utf-8', newline='')
+          def one(p,a,b):
+              s=load(p); n=s.count(a)
+              if n!=1: raise SystemExit(f'{p}: expected 1 match, got {n}: {a[:90]!r}')
+              save(p,s.replace(a,b,1))
+          def rx(p,a,b):
+              s=load(p); t,n=re.subn(a,b,s,count=1,flags=re.S)
+              if n!=1: raise SystemExit(f'{p}: regex expected 1 match, got {n}: {a[:100]!r}')
+              save(p,t)
+
+          # ---- reusable root gets the governed import/product title ----
+          h='EngineBridge/include/renegade/bridge/ReusableAssetInstanceService.h'
+          one(h,
+              '    inline constexpr const char* ReusableAssetPayloadRootMetadataKey =\n        "renegade.reusable_asset_payload_root";\n    inline constexpr int ReusableAssetInstanceVersion = 1;\n',
+              '    inline constexpr const char* ReusableAssetPayloadRootMetadataKey =\n        "renegade.reusable_asset_payload_root";\n    inline constexpr const char* ReusableAssetInstanceDisplayNameMetadataKey =\n        "renegade.reusable_asset_display_name";\n    inline constexpr int ReusableAssetInstanceVersion = 1;\n')
+          one(h,
+              '            const XMFLOAT3& placementPosition,\n            float scaleFactor);\n',
+              '            const XMFLOAT3& placementPosition,\n            float scaleFactor,\n            std::string displayName = {});\n')
+          one(h,
+              '            wi::ecs::Entity existingPayloadRoot,\n            std::size_t firstMaterialIndex);\n',
+              '            wi::ecs::Entity existingPayloadRoot,\n            std::size_t firstMaterialIndex,\n            std::string displayName = {});\n')
+          one(h,
+              '        StableId assetId_;\n        XMFLOAT3 placementPosition_ = {};\n',
+              '        StableId assetId_;\n        std::string displayName_;\n        XMFLOAT3 placementPosition_ = {};\n')
+          one(h,
+              '    // Repairs only implementation-generated wrapper names. Existing creator\n    // names are never overwritten. Anonymous instances receive deterministic,\n    // unique names derived from their visible imported model hierarchy:\n    // crate002, crate002 (2), crate002 (3), ...\n',
+              '    // Repairs only implementation-generated wrapper names. New placements use\n    // the governed import/product title persisted on the stable wrapper; old scenes\n    // without that metadata retain the hierarchy-derived compatibility fallback.\n    // Explicit creator-authored names are never overwritten.\n')
+
+          c='EngineBridge/src/ReusableAssetInstanceService.cpp'
+          one(c,'#include <utility>\n','#include <filesystem>\n#include <utility>\n')
+          one(c,'    namespace\n    {\n','    namespace\n    {\n        namespace fs = std::filesystem;\n',)
+          one(c,
+              '        bool IsGeneratedWrapperName(const std::string& value) noexcept\n        {\n',
+              '        std::string NormalizeReusableAssetDisplayName(const std::string& value)\n        {\n            if (value.empty())\n                return {};\n            const fs::path input = fs::u8path(value);\n            std::string filename = input.filename().generic_u8string();\n            if (filename.empty())\n                filename = value;\n            const fs::path title = fs::u8path(filename);\n            if (wi::helper::toUpper(title.extension().generic_u8string()) == ".RASSET")\n                return title.stem().generic_u8string();\n            return filename;\n        }\n\n        bool IsGeneratedWrapperName(const std::string& value) noexcept\n        {\n')
+          rx(c,
+             r'        bool ApplyReusableAssetName\(\n            wi::scene::Scene& scene,\n            const wi::ecs::Entity wrapper,\n            const wi::ecs::Entity payloadRoot\)\n        \{.*?            return true;\n        \}\n',
+             '''        bool ApplyReusableAssetName(\n            wi::scene::Scene& scene,\n            const wi::ecs::Entity wrapper,\n            const wi::ecs::Entity payloadRoot,\n            const std::string& requestedDisplayName = {})\n        {\n            auto* existing = scene.names.GetComponent(wrapper);\n            if (existing != nullptr && !IsGeneratedWrapperName(existing->name))\n            {\n                // Never overwrite an explicit creator-authored wrapper name.\n                return false;\n            }\n\n            std::string base = NormalizeReusableAssetDisplayName(requestedDisplayName);\n            if (base.empty())\n            {\n                const auto* metadata = scene.metadatas.GetComponent(wrapper);\n                if (metadata != nullptr && metadata->string_values.has(\n                        ReusableAssetInstanceDisplayNameMetadataKey))\n                {\n                    base = NormalizeReusableAssetDisplayName(\n                        metadata->string_values.get(\n                            ReusableAssetInstanceDisplayNameMetadataKey));\n                }\n            }\n            if (base.empty())\n            {\n                // Compatibility only for scenes created before the product title\n                // was persisted on the reusable root.\n                base = DeriveReusableAssetName(scene, payloadRoot);\n            }\n            if (base.empty())\n                base = "Asset";\n\n            const std::string unique =\n                MakeUniqueReusableAssetName(scene, wrapper, base);\n            if (existing != nullptr)\n                existing->name = unique;\n            else\n                scene.names.Create(wrapper).name = unique;\n            return true;\n        }\n''')
+          one(c,
+              '        const XMFLOAT3& placementPosition,\n        const float scaleFactor)\n        : scene_(&targetScene)\n        , preparedScene_(std::move(preparedScene))\n        , assetId_(std::move(assetId))\n',
+              '        const XMFLOAT3& placementPosition,\n        const float scaleFactor,\n        std::string displayName)\n        : scene_(&targetScene)\n        , preparedScene_(std::move(preparedScene))\n        , assetId_(std::move(assetId))\n        , displayName_(NormalizeReusableAssetDisplayName(displayName))\n')
+          one(c,
+              '        const wi::ecs::Entity existingPayloadRoot,\n        const std::size_t firstMaterialIndex)\n        : scene_(&targetScene)\n        , assetId_(std::move(assetId))\n',
+              '        const wi::ecs::Entity existingPayloadRoot,\n        const std::size_t firstMaterialIndex,\n        std::string displayName)\n        : scene_(&targetScene)\n        , assetId_(std::move(assetId))\n        , displayName_(NormalizeReusableAssetDisplayName(displayName))\n')
+          s=load(c)
+          pattern=r'(instanceMetadata\.int_values\.set\(\n\s*ReusableAssetInstanceVersionMetadataKey,\n\s*ReusableAssetInstanceVersion\);)'
+          def stamp(m):
+              return m.group(1)+'\n                if (!displayName_.empty())\n                {\n                    instanceMetadata.string_values.set(\n                        ReusableAssetInstanceDisplayNameMetadataKey, displayName_);\n                }'
+          s,n=re.subn(pattern,stamp,s)
+          if n!=2: raise SystemExit(f'{c}: expected 2 version stamp sites, got {n}')
+          old='ApplyReusableAssetName(*scene_, entity_, payloadRoot_);'
+          if s.count(old)!=2: raise SystemExit(f'{c}: expected 2 naming calls, got {s.count(old)}')
+          s=s.replace(old,'ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);')
+          save(c,s)
+
+          # ---- both placement routes pass the actual governed asset title ----
+          d='Studio/src/CreatorAssetDragPreview.cpp'
+          one(d,
+              '                preview.payloadRoot,\n                preview.firstMaterialIndex);\n',
+              '                preview.payloadRoot,\n                preview.firstMaterialIndex,\n                preview.assetPath);\n')
+
+          sapp='Studio/src/StudioApplication.cpp'
+          one(sapp,
+              '            assetId,\n            position,\n            scale);\n',
+              '            assetId,\n            position,\n            scale,\n            creatorAssetPlacementLabel_);\n')
+
+          # Local reusable-root resolver keeps this UX change out of physics internals.
+          one(sapp,
+              '    const char* PlacementLightName(\n',
+              '''    wi::ecs::Entity ResolveReusableSelectionRoot(\n        const wi::scene::Scene& scene,\n        const wi::ecs::Entity selected) noexcept\n    {\n        if (selected == wi::ecs::INVALID_ENTITY)\n            return wi::ecs::INVALID_ENTITY;\n        wi::ecs::Entity current = selected;\n        const std::size_t maximumDepth = scene.hierarchy.GetCount() + 1;\n        for (std::size_t depth = 0;\n            current != wi::ecs::INVALID_ENTITY && depth <= maximumDepth; ++depth)\n        {\n            const auto* metadata = scene.metadatas.GetComponent(current);\n            if (metadata != nullptr && metadata->string_values.has(\n                    renegade::bridge::ReusableAssetInstanceIdMetadataKey))\n            {\n                return current;\n            }\n            const auto* hierarchy = scene.hierarchy.GetComponent(current);\n            if (hierarchy == nullptr || hierarchy->parentID == wi::ecs::INVALID_ENTITY ||\n                hierarchy->parentID == current)\n            {\n                break;\n            }\n            current = hierarchy->parentID;\n        }\n        return wi::ecs::INVALID_ENTITY;\n    }\n\n    void CollectReusableSelectionObjects(\n        const wi::scene::Scene& scene,\n        const wi::ecs::Entity root,\n        std::vector<wi::ecs::Entity>& objects)\n    {\n        objects.clear();\n        if (root == wi::ecs::INVALID_ENTITY)\n            return;\n        for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)\n        {\n            const wi::ecs::Entity entity = scene.objects.GetEntity(index);\n            if (entity == root || scene.Entity_IsDescendant(entity, root))\n                objects.push_back(entity);\n        }\n    }\n\n    const char* PlacementLightName(\n''')
+
+          # Viewport picking promotes imported leaves to the creator root.
+          rx(sapp,
+             r'        const auto picked = wi::scene::Pick\(\n            pickRay,\n            wi::enums::FILTER_OBJECT_ALL,\n            ~0u,\n            session_->Scenes\(\)\.GetScene\(\)\);\n        const auto current = session_->Selection\(\)\.SelectedEntity\(\);\n        if \(picked\.entity == current && !environmentWorkspaceActive_\)\n        \{\n            return false;\n        \}',
+             '''        auto& scene = session_->Scenes().GetScene();\n        const auto picked = wi::scene::Pick(\n            pickRay,\n            wi::enums::FILTER_OBJECT_ALL,\n            ~0u,\n            scene);\n        wi::ecs::Entity selection = picked.entity;\n        if (selection != wi::ecs::INVALID_ENTITY)\n        {\n            const wi::ecs::Entity reusableRoot =\n                ResolveReusableSelectionRoot(scene, selection);\n            if (reusableRoot != wi::ecs::INVALID_ENTITY)\n                selection = reusableRoot;\n        }\n        const auto current = session_->Selection().SelectedEntity();\n        if (selection == current && !environmentWorkspaceActive_)\n        {\n            return false;\n        }''')
+          one(sapp,
+              '        if (picked.entity == wi::ecs::INVALID_ENTITY ||\n            !session_->Scenes().IsHierarchyVisible(picked.entity))\n        {\n            session_->Selection().Clear();\n        }\n        else\n        {\n            session_->Selection().Select(picked.entity);\n        }\n',
+              '        if (selection == wi::ecs::INVALID_ENTITY ||\n            !session_->Scenes().IsHierarchyVisible(selection))\n        {\n            session_->Selection().Clear();\n        }\n        else\n        {\n            session_->Selection().Select(selection);\n        }\n')
+
+          # Root selection stencils every descendant ObjectComponent as one asset.
+          rx(sapp,
+             r'    void StudioRenderPath::ClearSelectionOutline\(\) noexcept\n    \{.*?\n    \}\n\n    void StudioRenderPath::SyncSelectionOutline\(\)\n    \{.*?\n    \}\n\n    void StudioRenderPath::SaveSceneAfterTransientCleanup',
+             '''    void StudioRenderPath::ClearSelectionOutline() noexcept\n    {\n        if (session_ != nullptr)\n        {\n            auto& scene = session_->Scenes().GetScene();\n            const std::size_t count = std::min(\n                outlinedEntities_.size(), outlinedEntityPreviousStencils_.size());\n            for (std::size_t index = 0; index < count; ++index)\n            {\n                auto* object = scene.objects.GetComponent(outlinedEntities_[index]);\n                if (object != nullptr)\n                    object->SetUserStencilRef(outlinedEntityPreviousStencils_[index]);\n            }\n        }\n        outlinedSelection_ = wi::ecs::INVALID_ENTITY;\n        outlinedEntities_.clear();\n        outlinedEntityPreviousStencils_.clear();\n    }\n\n    void StudioRenderPath::SyncSelectionOutline()\n    {\n        if (environmentWorkspaceActive_)\n        {\n            ClearSelectionOutline();\n            return;\n        }\n        const auto selected = session_ != nullptr\n            ? session_->Selection().SelectedEntity()\n            : wi::ecs::INVALID_ENTITY;\n        if (selected == outlinedSelection_)\n            return;\n\n        ClearSelectionOutline();\n        if (session_ == nullptr || selected == wi::ecs::INVALID_ENTITY)\n            return;\n\n        auto& scene = session_->Scenes().GetScene();\n        const wi::ecs::Entity reusableRoot =\n            ResolveReusableSelectionRoot(scene, selected);\n        if (reusableRoot == selected)\n        {\n            std::vector<wi::ecs::Entity> renderObjects;\n            CollectReusableSelectionObjects(scene, reusableRoot, renderObjects);\n            for (const wi::ecs::Entity entity : renderObjects)\n            {\n                auto* object = scene.objects.GetComponent(entity);\n                if (object == nullptr)\n                    continue;\n                outlinedEntities_.push_back(entity);\n                outlinedEntityPreviousStencils_.push_back(object->userStencilRef);\n                object->SetUserStencilRef(SelectionStencilReference);\n            }\n            if (!outlinedEntities_.empty())\n                outlinedSelection_ = selected;\n            return;\n        }\n\n        auto* object = scene.objects.GetComponent(selected);\n        if (object == nullptr)\n            return;\n        outlinedSelection_ = selected;\n        outlinedEntities_.push_back(selected);\n        outlinedEntityPreviousStencils_.push_back(object->userStencilRef);\n        object->SetUserStencilRef(SelectionStencilReference);\n    }\n\n    void StudioRenderPath::SaveSceneAfterTransientCleanup''')
+
+          sh='Studio/src/StudioApplication.h'
+          one(sh,
+              '        wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;\n        wi::ecs::Entity outlinedEntity_ = wi::ecs::INVALID_ENTITY;\n        std::uint8_t outlinedEntityPreviousStencil_ = 0;\n',
+              '        wi::ecs::Entity gizmoEntity_ = wi::ecs::INVALID_ENTITY;\n        wi::ecs::Entity outlinedSelection_ = wi::ecs::INVALID_ENTITY;\n        std::vector<wi::ecs::Entity> outlinedEntities_;\n        std::vector<std::uint8_t> outlinedEntityPreviousStencils_;\n')
+
+          # ---- regression: product title != internal glTF node name ----
+          t='Tests/JP01ReusableAssetPhysicsTests.cpp'
+          one(t,
+              '        const ReusableFixture& fixture)\n    {\n        if (auto* name = scene.names.GetComponent(fixture.wrapper))\n',
+              '        const ReusableFixture& fixture,\n        const char* displayName = "Imported Crate.rasset")\n    {\n        if (auto* name = scene.names.GetComponent(fixture.wrapper))\n')
+          one(t,
+              '                fixture.payload,\n                0));\n',
+              '                fixture.payload,\n                0,\n                displayName));\n')
+          one(t,
+              '        "crate002", "crate002 (2)", "crate002 (3)"\n',
+              '        "Imported Crate", "Imported Crate (2)", "Imported Crate (3)"\n')
+          one(t,
+              '            return Fail("three same-asset instances did not receive unique creator names");\n',
+              '            return Fail("three same-asset instances did not receive import-title creator names");\n        const auto* nestedName = threeScene.names.GetComponent(three[index].nested);\n        if (nestedName == nullptr || nestedName->name != "crate002")\n            return Fail("imported render child name was rewritten by root naming");\n        const auto* metadata = threeScene.metadatas.GetComponent(three[index].wrapper);\n        if (metadata == nullptr || !metadata->string_values.has(\n                ReusableAssetInstanceDisplayNameMetadataKey) ||\n            metadata->string_values.get(\n                ReusableAssetInstanceDisplayNameMetadataKey) != "Imported Crate")\n        {\n            return Fail("reusable root did not persist its governed display title");\n        }\n')
+
+          # ---- source contracts: active-on-add + root presentation ----
+          p='Tests/JP01PhysicsLabSourceContract.cmake'
+          one(p,
+              '    "bool startDeactivated = true;"\n    "Wicked-editor start-deactivated rigid-body default")\n',
+              '    "bool startDeactivated = false;"\n    "creator dynamic rigid bodies start active by default")\n')
+          marker='require_text(scene_document_source\n    "RepairReusableAssetCollisionTargets(scenes_.scene_);"'
+          # Insert selection assertions just before the existing owner-repair continuation.
+          s=load(p)
+          if marker not in s: raise SystemExit(f'{p}: owner-repair anchor missing')
+          assertions='''require_text(studio_source\n    "ResolveReusableSelectionRoot(scene, selection)"\n    "viewport reusable-child selection promotion")\nrequire_text(studio_source\n    "CollectReusableSelectionObjects(scene, reusableRoot, renderObjects)"\n    "whole reusable-root descendant outline")\nrequire_text(studio_header\n    "outlinedEntityPreviousStencils_"\n    "multi-object selection stencil restoration")\n\n'''
+          s=s.replace(marker,assertions+marker,1)
+          save(p,s)
+
+          hp='Tests/JP01HardeningSourceContract.cmake'
+          s=load(hp)
+          s=s.replace('"\\\"crate002\\\", \\\"crate002 (2)\\\", \\\"crate002 (3)\\\""',
+                      '"\\\"Imported Crate\\\", \\\"Imported Crate (2)\\\", \\\"Imported Crate (3)\\\""')
+          s=s.replace('"unique creator root-name regression"','"import-title creator root-name regression"')
+          anchor='require_text(reusable_header\n    "RepairReusableAssetInstanceNames"\n    "legacy wrapper-name repair API")\n'
+          if anchor not in s: raise SystemExit(f'{hp}: naming contract anchor missing')
+          s=s.replace(anchor,anchor+'require_text(reusable_header\n    "ReusableAssetInstanceDisplayNameMetadataKey"\n    "persisted import/product display title")\nrequire_text(reusable_instance_source\n    "NormalizeReusableAssetDisplayName"\n    "import/product title normalization")\n',1)
+          save(hp,s)
+
+          doc='docs/JP01_REUSABLE_ASSET_RIGID_BODY_OWNER_RECOVERY.md'
+          s=load(doc)
+          s=s.replace('New placements derive a meaningful model name from the imported hierarchy and make it unique among reusable roots, for example:',
+                      'New placements use the governed imported asset/product title as the reusable root name and make it unique among reusable roots, for example:')
+          s=s.replace('- `crate002`\n- `crate002 (2)`\n- `crate002 (3)`','- `Imported Crate`\n- `Imported Crate (2)`\n- `Imported Crate (3)`')
+          s=s.replace('Old anonymous/generated wrapper names are repaired on the normal load/save canonicalization path. Explicit creator-renamed wrapper names are preserved.',
+                      'The imported glTF/FBX hierarchy remains beneath that root and is not flattened or renamed. Selecting the reusable root represents the whole asset: Studio outlines every descendant render object, while viewport clicks on those descendants promote selection back to the reusable root. Old anonymous/generated wrapper names are repaired on the normal load/save canonicalization path. Explicit creator-renamed wrapper names are preserved.')
+          save(doc,s)
+
+          print('bounded creator-root repair applied')
+          PY
+      - name: Commit repair and remove temporary workflows
+        shell: bash
+        run: |
+          git config user.name "mav3r1ckmediastudio-glitch"
+          git config user.email "mav3r1ckmediastudio@gmail.com"
+          git rm .github/workflows/jp01-staging-asset-root-selection-repair.yml
+          git rm .github/workflows/jp01-staging-asset-root-selection-repair-v2.yml
+          git add EngineBridge Studio Tests docs
+          git diff --cached --check
+          git commit -m "JP01 hardening: restore creator asset-root selection"
+          git push origin HEAD:staging/jp01-owner-validation-fixes
