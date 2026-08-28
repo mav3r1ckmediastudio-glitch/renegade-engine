@@ -1,7 +1,10 @@
 #include "renegade/bridge/CollisionService.h"
 
+#include "renegade/bridge/ReusableAssetInstanceService.h"
+
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace
 {
@@ -79,10 +82,123 @@ namespace
             return false;
         }
     }
+
+    bool IsReusableAssetWrapper(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        if (entity == wi::ecs::INVALID_ENTITY ||
+            !scene.transforms.Contains(entity))
+        {
+            return false;
+        }
+        const auto* metadata = scene.metadatas.GetComponent(entity);
+        return metadata != nullptr &&
+            metadata->string_values.has(
+                renegade::bridge::ReusableAssetInstanceIdMetadataKey);
+    }
 }
 
 namespace renegade::bridge
 {
+    wi::ecs::Entity ResolveCollisionAuthoringTarget(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity selectedEntity) noexcept
+    {
+        if (selectedEntity == wi::ecs::INVALID_ENTITY)
+        {
+            return wi::ecs::INVALID_ENTITY;
+        }
+
+        if (IsReusableAssetWrapper(scene, selectedEntity))
+        {
+            return selectedEntity;
+        }
+
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        {
+            const wi::ecs::Entity wrapper = scene.metadatas.GetEntity(index);
+            if (!IsReusableAssetWrapper(scene, wrapper))
+            {
+                continue;
+            }
+            if (scene.Entity_IsDescendant(selectedEntity, wrapper))
+            {
+                return wrapper;
+            }
+        }
+        return selectedEntity;
+    }
+
+    ReusableAssetCollisionRepairResult RepairReusableAssetCollisionTargets(
+        wi::scene::Scene& scene) noexcept
+    {
+        ReusableAssetCollisionRepairResult result;
+
+        std::vector<wi::ecs::Entity> wrappers;
+        wrappers.reserve(scene.metadatas.GetCount());
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        {
+            const wi::ecs::Entity wrapper = scene.metadatas.GetEntity(index);
+            if (IsReusableAssetWrapper(scene, wrapper))
+            {
+                wrappers.push_back(wrapper);
+            }
+        }
+
+        for (const wi::ecs::Entity wrapper : wrappers)
+        {
+            std::vector<wi::ecs::Entity> nestedBodies;
+            nestedBodies.reserve(2);
+            for (std::size_t index = 0; index < scene.rigidbodies.GetCount(); ++index)
+            {
+                const wi::ecs::Entity bodyEntity =
+                    scene.rigidbodies.GetEntity(index);
+                if (bodyEntity != wrapper &&
+                    scene.Entity_IsDescendant(bodyEntity, wrapper))
+                {
+                    nestedBodies.push_back(bodyEntity);
+                }
+            }
+
+            if (nestedBodies.empty())
+            {
+                continue;
+            }
+
+            if (scene.rigidbodies.Contains(wrapper) || nestedBodies.size() != 1)
+            {
+                result.conflictCount += nestedBodies.size();
+                continue;
+            }
+
+            const auto* nested = scene.rigidbodies.GetComponent(
+                nestedBodies.front());
+            if (nested == nullptr)
+            {
+                ++result.conflictCount;
+                continue;
+            }
+
+            // Preserve the complete Wicked-owned component (including any
+            // character/vehicle fields) but never carry a live Jolt object to
+            // a different entity. Wicked recreates that implementation-owned
+            // body against the stable root on its next normal update.
+            wi::scene::RigidBodyPhysicsComponent migrated = *nested;
+            migrated.physicsobject.reset();
+            migrated.SetRefreshParametersNeeded(true);
+
+            scene.rigidbodies.Remove(nestedBodies.front());
+            auto& rootBody = scene.rigidbodies.Create(wrapper);
+            rootBody = migrated;
+            rootBody.physicsobject.reset();
+            rootBody.SetRefreshParametersNeeded(true);
+            ++result.migratedBodyCount;
+        }
+
+        return result;
+    }
+
     CollisionTargetStatus CheckCollisionTarget(
         const wi::scene::Scene& scene,
         const wi::ecs::Entity entity,
@@ -285,7 +401,7 @@ namespace renegade::bridge
         const wi::ecs::Entity targetEntity,
         const CollisionState& initial)
         : scene_(&scene)
-        , entity_(targetEntity)
+        , entity_(ResolveCollisionAuthoringTarget(scene, targetEntity))
         , initial_(SanitizeCollisionState(initial))
     {
     }
