@@ -1,5 +1,6 @@
 #include "renegade/bridge/CommandService.h"
 
+#include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/SunService.h"
 
@@ -25,6 +26,15 @@ namespace
             !NearlyEqual(after.z, before.z);
     }
 
+    bool IsMeaningfulScale(
+        const XMFLOAT3& before,
+        const XMFLOAT3& after) noexcept
+    {
+        return !NearlyEqual(after.x, before.x) ||
+            !NearlyEqual(after.y, before.y) ||
+            !NearlyEqual(after.z, before.z);
+    }
+
     bool IsMeaningfulTransform(
         const renegade::bridge::TransformState& before,
         const renegade::bridge::TransformState& after) noexcept
@@ -36,9 +46,7 @@ namespace
             !NearlyEqual(before.rotation.y, after.rotation.y) ||
             !NearlyEqual(before.rotation.z, after.rotation.z) ||
             !NearlyEqual(before.rotation.w, after.rotation.w) ||
-            !NearlyEqual(before.scale.x, after.scale.x) ||
-            !NearlyEqual(before.scale.y, after.scale.y) ||
-            !NearlyEqual(before.scale.z, after.scale.z);
+            IsMeaningfulScale(before.scale, after.scale);
     }
 
     bool IsMeaningfulWeather(
@@ -659,11 +667,24 @@ namespace renegade::bridge
             return false;
         }
 
+        const XMFLOAT3 previousScale = transform->scale_local;
         transform->translation_local = transformState.translation;
         transform->rotation_local = transformState.rotation;
         transform->scale_local = transformState.scale;
         transform->SetDirty();
         transform->UpdateTransform();
+
+        // Primitive dimensions on a reusable asset are authored in root-local
+        // space. Wicked applies Transform scale when creating the native shape,
+        // so a committed scale edit must invalidate that native body. Keep this
+        // in the central transform command so Execute, Undo and Redo all follow
+        // the same path. Descendant-only scale edits are deliberately excluded:
+        // only the actual rigid-body owner can trigger this refresh.
+        if (IsMeaningfulScale(previousScale, transformState.scale) &&
+            scene_->rigidbodies.Contains(entity_))
+        {
+            (void)RequestCollisionShapeRefresh(*scene_, entity_);
+        }
         return true;
     }
 
