@@ -163,7 +163,13 @@ namespace renegade::bridge
         void Undo() override;
 
     private:
-        bool Apply(const TransformState& transform);
+        // expectedPreviousScale is command history, not necessarily the value
+        // currently live on the Transform. Studio's gizmo previews its after
+        // state before Execute(), so relying on the live value would miss the
+        // committed collision-shape rebuild.
+        bool Apply(
+            const TransformState& transform,
+            const XMFLOAT3& expectedPreviousScale);
 
         wi::scene::Scene* scene_;
         wi::ecs::Entity entity_;
