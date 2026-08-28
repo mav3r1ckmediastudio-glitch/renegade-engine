@@ -46,6 +46,12 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/MaterialService.h
     include/renegade/bridge/MaterialTextureAssetService.h
     include/renegade/bridge/CollisionService.h
+    include/renegade/bridge/ConstraintService.h
+    include/renegade/bridge/CharacterPhysicsService.h
+    include/renegade/bridge/VehiclePhysicsService.h
+    include/renegade/bridge/RagdollPhysicsService.h
+    include/renegade/bridge/SoftBodyPhysicsService.h
+    include/renegade/bridge/PhysicsService.h
     include/renegade/bridge/OceanService.h
     include/renegade/bridge/PrecipitationService.h
     include/renegade/bridge/SunService.h
@@ -104,6 +110,7 @@ add_library(RenegadeEngineBridge STATIC
     src/MaterialTextureAssetService.cpp
     src/MaterialTextureReimportRefreshService.cpp
     src/CollisionService.cpp
+    src/PhysicsService.cpp
     src/OceanService.cpp
     src/PrecipitationService.cpp
     src/SunService.cpp

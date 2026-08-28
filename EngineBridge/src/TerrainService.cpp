@@ -4,12 +4,14 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <unordered_set>
 #include <unordered_map>
 #include <utility>
 
 namespace
 {
+    namespace fs = std::filesystem;
     constexpr float Epsilon = 0.00001f;
 
     bool NearlyEqual(float left, float right) noexcept
@@ -49,6 +51,25 @@ namespace
         wi::unordered_set<wi::ecs::Entity> entities;
         scene.FindAllEntities(entities);
         return entities.count(entity) != 0;
+    }
+
+    std::string BundledDefaultGrassRoot()
+    {
+        const std::string executablePath = wi::helper::GetExecutablePath();
+        if (!executablePath.empty())
+        {
+            return (fs::u8path(executablePath).parent_path() /
+                    "Content" / "terrain" / "default_grass")
+                       .lexically_normal()
+                       .generic_u8string() +
+                "/";
+        }
+
+        // The executable path is stable across native Open/Save dialogs. Keep
+        // current_path only as a platform fallback; Windows dialogs can mutate
+        // it and must never be the normal source of bundled terrain assets.
+        return wi::helper::GetCurrentPath() +
+            "/Content/terrain/default_grass/";
     }
 
     constexpr std::int64_t TerrainChunkStride =
@@ -167,10 +188,6 @@ namespace
                 }
                 else
                 {
-                    // A shared edge or corner can already be split by a
-                    // previous broken stroke. Average the duplicates before
-                    // applying the next edit so that touching the seam also
-                    // repairs it without a visible jump to either side.
                     const float count = static_cast<float>(
                         vertex.referenceCount);
                     vertex.height =
@@ -331,8 +348,7 @@ namespace
         const float textureScale =
             renegade::bridge::DefaultGrassTextureScale)
     {
-        const std::string root = wi::helper::GetCurrentPath() +
-            "/Content/terrain/default_grass/";
+        const std::string root = BundledDefaultGrassRoot();
         material.SetBaseColor(XMFLOAT4(1, 1, 1, 1));
         material.SetRoughness(1.0f);
         material.SetMetalness(0.0f);
@@ -350,11 +366,11 @@ namespace
             0.0f,
             0.0f);
         material.textures[wi::scene::MaterialComponent::BASECOLORMAP].name =
-            std::string(root) + "default_grass_basecolor.tga";
+            root + "default_grass_basecolor.tga";
         material.textures[wi::scene::MaterialComponent::NORMALMAP].name =
-            std::string(root) + "default_grass_normal.tga";
+            root + "default_grass_normal.tga";
         material.textures[wi::scene::MaterialComponent::SURFACEMAP].name =
-            std::string(root) + "default_grass_surface.tga";
+            root + "default_grass_surface.tga";
         material.textures[wi::scene::MaterialComponent::BASECOLORMAP].resource =
             wi::resourcemanager::Load(material.textures[
                 wi::scene::MaterialComponent::BASECOLORMAP].name);
@@ -490,7 +506,7 @@ namespace renegade::bridge
         const float vertexSpacing) noexcept
     {
         return static_cast<float>(TerrainChunkCountPerSide(chunkRadius)) *
-            TerrainChunkSpanInVertices * std::max(0.0f, vertexSpacing);
+        TerrainChunkSpanInVertices * std::max(0.0f, vertexSpacing);
     }
 
     TerrainState CaptureTerrain(const wi::terrain::Terrain& terrain) noexcept
@@ -554,10 +570,6 @@ namespace renegade::bridge
         const TerrainState& state,
         const char* name)
     {
-        // Wicked's Generation_Restart() creates Weather on terrainEntity when
-        // the scene has no Weather component. Renegade requires Environment
-        // and Terrain to remain distinct authoring owners, so fail before any
-        // partial terrain state is created if that invariant is not ready.
         if (scene.weathers.GetCount() == 0)
         {
             return wi::ecs::INVALID_ENTITY;
@@ -618,31 +630,9 @@ namespace renegade::bridge
                 {
                     const float textureScale = std::clamp(
                         material->texMulAdd.x *
-                            DefaultGrassPackedTileCount,
+                        DefaultGrassPackedTileCount,
                         1.0f,
                         DefaultGrassPackedTileCount);
-
-                    // ConfigureDefaultGrassMaterial() re-points the
-                    // default-grass texture paths to the current install
-                    // (they are absolute and machine-specific) and calls
-                    // appearance setters that each flip the material's
-                    // DIRTY flag. When this runs as part of Open Scene,
-                    // the material was just deserialized clean with its
-                    // textures already resolved, so the reconfigure is a
-                    // no-op in practice - but the DIRTY flag it leaves
-                    // behind makes the terrain's next Generation_Update
-                    // treat the material as edited and call
-                    // Generation_Restart(), which clears every chunk and
-                    // regenerates the terrain procedurally. That silently
-                    // discards authored/sculpted heightmap data even
-                    // though the archive round-trip was correct.
-                    //
-                    // Preserve the material's pre-reconfigure dirty state
-                    // so a load does not force a terrain restart. Every
-                    // other caller of RebindDefaultTerrainMaterials()
-                    // issues its own explicit Generation_Restart()
-                    // afterward, so nothing that intends to rebuild is
-                    // affected.
                     const bool wasDirty = material->IsDirty();
                     ConfigureDefaultGrassMaterial(*material, textureScale);
                     if (!wasDirty)
@@ -756,8 +746,7 @@ namespace renegade::bridge
     {
         TerrainMaterialState state;
         TerrainMaterialSlotState slot;
-        const std::string root = wi::helper::GetCurrentPath() +
-            "/Content/terrain/default_grass/";
+        const std::string root = BundledDefaultGrassRoot();
         slot.baseColorMap = root + "default_grass_basecolor.tga";
         slot.normalMap = root + "default_grass_normal.tga";
         slot.surfaceMap = root + "default_grass_surface.tga";
@@ -1220,9 +1209,6 @@ namespace renegade::bridge
                 changedChunks.insert(reference.chunk);
             }
 
-            // Adjacent vertex normals depend on this height. Include every
-            // chunk that owns the surrounding canonical grid points, which
-            // also catches the opposite side of a shared edge or corner.
             for (std::int64_t z = -1; z <= 1; ++z)
             {
                 for (std::int64_t x = -1; x <= 1; ++x)

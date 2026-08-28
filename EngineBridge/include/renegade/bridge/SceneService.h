@@ -7,6 +7,8 @@
 
 #include <WickedEngine.h>
 
+#include "renegade/bridge/PhysicsLuaService.h"
+
 namespace renegade::bridge
 {
     class SceneDocumentService;
@@ -98,6 +100,17 @@ namespace renegade::bridge
     class SceneService
     {
     public:
+        // Scene ownership must stay inert during object construction. Wicked's
+        // Application/initializer owns Lua startup order; JP01 binds scripting
+        // explicitly only after that VM exists.
+        SceneService() = default;
+        ~SceneService()
+        {
+            UnbindPhysicsLua(&scene_);
+        }
+        SceneService(const SceneService&) = delete;
+        SceneService& operator=(const SceneService&) = delete;
+
         void NewScene();
         void CreateProvingGround();
         // Runtime startup load. Studio scene replacement goes through

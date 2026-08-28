@@ -765,7 +765,8 @@ namespace renegade::studio::detail
                 placedAssetId,
                 preview.wrapper,
                 preview.payloadRoot,
-                preview.firstMaterialIndex);
+                preview.firstMaterialIndex,
+                preview.assetPath);
             auto* placed = command.get();
             if (!session->Commands().Execute(std::move(command)))
             {

@@ -20,6 +20,8 @@ namespace renegade::bridge
         "renegade.reusable_asset_instance_version";
     inline constexpr const char* ReusableAssetPayloadRootMetadataKey =
         "renegade.reusable_asset_payload_root";
+    inline constexpr const char* ReusableAssetInstanceDisplayNameMetadataKey =
+        "renegade.reusable_asset_display_name";
     inline constexpr int ReusableAssetInstanceVersion = 1;
 
     struct ReusableAssetInstanceRecord
@@ -36,6 +38,13 @@ namespace renegade::bridge
         std::vector<ReusableAssetInstanceRecord>& instances,
         std::string& error);
 
+    // Repairs only implementation-generated wrapper names. New placements use
+    // the governed import/product title persisted on the stable wrapper; old scenes
+    // without that metadata retain the hierarchy-derived compatibility fallback.
+    // Explicit creator-authored names are never overwritten.
+    [[nodiscard]] std::size_t RepairReusableAssetInstanceNames(
+        wi::scene::Scene& scene) noexcept;
+
     // Reusable-asset placement command. Unlike direct format import, the
     // creator-facing reusable workflow needs a durable stable-ID wrapper so a
     // future packaged Runtime can refresh only the payload from the current
@@ -48,7 +57,8 @@ namespace renegade::bridge
             wi::allocator::shared_ptr<wi::scene::Scene> preparedScene,
             StableId assetId,
             const XMFLOAT3& placementPosition,
-            float scaleFactor);
+            float scaleFactor,
+            std::string displayName = {});
 
         // Adopt a live cursor instance without cloning, reparsing or moving it.
         // The first Execute() only stamps stable Renegade metadata and captures
@@ -58,7 +68,8 @@ namespace renegade::bridge
             StableId assetId,
             wi::ecs::Entity existingInstanceRoot,
             wi::ecs::Entity existingPayloadRoot,
-            std::size_t firstMaterialIndex);
+            std::size_t firstMaterialIndex,
+            std::string displayName = {});
 
         bool Execute() override;
         void Undo() override;
@@ -81,6 +92,7 @@ namespace renegade::bridge
         wi::scene::Scene* scene_ = nullptr;
         wi::allocator::shared_ptr<wi::scene::Scene> preparedScene_;
         StableId assetId_;
+        std::string displayName_;
         XMFLOAT3 placementPosition_ = {};
         float scaleFactor_ = 1.0f;
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;

@@ -43,6 +43,7 @@ set(WICKED_EMBED_SHADERS ${RENEGADE_EMBED_SHADERS} CACHE BOOL "" FORCE)
 
 add_subdirectory(WickedEngine)
 add_subdirectory(EngineBridge)
+include(EngineBridge/JP01PhysicsLua.cmake)
 
 if(WIN32)
     add_subdirectory(ScreenRenderer)
@@ -50,6 +51,20 @@ if(WIN32)
     add_subdirectory(Runtime)
     include(Runtime/LP06Gate3.cmake)
     add_subdirectory(Tests)
+    include(Tests/JP01Constraints.cmake)
+    include(Tests/JP01CharacterPhysics.cmake)
+    include(Tests/JP01VehiclePhysics.cmake)
+    include(Tests/JP01RagdollPhysics.cmake)
+    include(Tests/JP01SoftBodyPhysics.cmake)
+    include(Tests/JP01PhysicsLua.cmake)
+    include(Tests/JP01WickedCollider.cmake)
+    include(Tests/JP01ReusableAssetPhysics.cmake)
+    add_test(
+        NAME RenegadeJP01HardeningSourceContract
+        COMMAND ${CMAKE_COMMAND}
+            -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P ${CMAKE_SOURCE_DIR}/Tests/JP01HardeningSourceContract.cmake
+    )
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)

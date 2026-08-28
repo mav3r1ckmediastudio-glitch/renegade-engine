@@ -86,6 +86,50 @@ namespace
         return rotation;
     }
 
+    wi::ecs::Entity ResolveReusableSelectionRoot(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity selected) noexcept
+    {
+        if (selected == wi::ecs::INVALID_ENTITY)
+            return wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity current = selected;
+        const std::size_t maximumDepth = scene.hierarchy.GetCount() + 1;
+        for (std::size_t depth = 0;
+            current != wi::ecs::INVALID_ENTITY && depth <= maximumDepth; ++depth)
+        {
+            const auto* metadata = scene.metadatas.GetComponent(current);
+            if (metadata != nullptr && metadata->string_values.has(
+                    renegade::bridge::ReusableAssetInstanceIdMetadataKey))
+            {
+                return current;
+            }
+            const auto* hierarchy = scene.hierarchy.GetComponent(current);
+            if (hierarchy == nullptr || hierarchy->parentID == wi::ecs::INVALID_ENTITY ||
+                hierarchy->parentID == current)
+            {
+                break;
+            }
+            current = hierarchy->parentID;
+        }
+        return wi::ecs::INVALID_ENTITY;
+    }
+
+    void CollectReusableSelectionObjects(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity root,
+        std::vector<wi::ecs::Entity>& objects)
+    {
+        objects.clear();
+        if (root == wi::ecs::INVALID_ENTITY)
+            return;
+        for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)
+        {
+            const wi::ecs::Entity entity = scene.objects.GetEntity(index);
+            if (entity == root || scene.Entity_IsDescendant(entity, root))
+                objects.push_back(entity);
+        }
+    }
+
     const char* PlacementLightName(
         const wi::scene::LightComponent::LightType type) noexcept
     {
@@ -1554,7 +1598,7 @@ namespace renegade::studio
         const auto* depthStencil = GetDepthStencil();
         if (projectHubVisible_ ||
             creatorModelImporter.thumbnailCapturePending ||
-            outlinedEntity_ == wi::ecs::INVALID_ENTITY ||
+            outlinedSelection_ == wi::ecs::INVALID_ENTITY ||
             depthStencil == nullptr ||
             !selectionOutlineMask_.IsValid())
         {
@@ -4347,7 +4391,7 @@ namespace renegade::studio
 
         if (!projectHubVisible_ &&
             !creatorModelImporter.thumbnailCapturePending &&
-            outlinedEntity_ != wi::ecs::INVALID_ENTITY &&
+            outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
             selectionOutlineMask_.IsValid())
         {
             wi::renderer::BindCommonResources(cmd);
@@ -6188,7 +6232,8 @@ namespace renegade::studio
             prepared.ReleaseScene(),
             assetId,
             position,
-            scale);
+            scale,
+            creatorAssetPlacementLabel_);
         auto* placed = command.get();
         if (!session_->Commands().Execute(std::move(command)))
         {
@@ -6731,13 +6776,22 @@ namespace renegade::studio
             static_cast<long>(pointer.y),
             *this,
             *camera);
+        auto& scene = session_->Scenes().GetScene();
         const auto picked = wi::scene::Pick(
             pickRay,
             wi::enums::FILTER_OBJECT_ALL,
             ~0u,
-            session_->Scenes().GetScene());
+            scene);
+        wi::ecs::Entity selection = picked.entity;
+        if (selection != wi::ecs::INVALID_ENTITY)
+        {
+            const wi::ecs::Entity reusableRoot =
+                ResolveReusableSelectionRoot(scene, selection);
+            if (reusableRoot != wi::ecs::INVALID_ENTITY)
+                selection = reusableRoot;
+        }
         const auto current = session_->Selection().SelectedEntity();
-        if (picked.entity == current && !environmentWorkspaceActive_)
+        if (selection == current && !environmentWorkspaceActive_)
         {
             return false;
         }
@@ -6747,14 +6801,14 @@ namespace renegade::studio
         terrainWorkspaceActive_ = false;
         studioChrome_.SetTerrainWorkspaceActive(false);
 
-        if (picked.entity == wi::ecs::INVALID_ENTITY ||
-            !session_->Scenes().IsHierarchyVisible(picked.entity))
+        if (selection == wi::ecs::INVALID_ENTITY ||
+            !session_->Scenes().IsHierarchyVisible(selection))
         {
             session_->Selection().Clear();
         }
         else
         {
-            session_->Selection().Select(picked.entity);
+            session_->Selection().Select(selection);
         }
 
         RefreshHierarchy();
@@ -10207,22 +10261,21 @@ wi::eventhandler::Subscribe_Once(
 
     void StudioRenderPath::ClearSelectionOutline() noexcept
     {
-        if (session_ != nullptr &&
-            outlinedEntity_ != wi::ecs::INVALID_ENTITY)
+        if (session_ != nullptr)
         {
-            auto* object = session_->Scenes()
-                .GetScene()
-                .objects
-                .GetComponent(outlinedEntity_);
-            if (object != nullptr)
+            auto& scene = session_->Scenes().GetScene();
+            const std::size_t count = std::min(
+                outlinedEntities_.size(), outlinedEntityPreviousStencils_.size());
+            for (std::size_t index = 0; index < count; ++index)
             {
-                object->SetUserStencilRef(
-                    outlinedEntityPreviousStencil_);
+                auto* object = scene.objects.GetComponent(outlinedEntities_[index]);
+                if (object != nullptr)
+                    object->SetUserStencilRef(outlinedEntityPreviousStencils_[index]);
             }
         }
-
-        outlinedEntity_ = wi::ecs::INVALID_ENTITY;
-        outlinedEntityPreviousStencil_ = 0;
+        outlinedSelection_ = wi::ecs::INVALID_ENTITY;
+        outlinedEntities_.clear();
+        outlinedEntityPreviousStencils_.clear();
     }
 
     void StudioRenderPath::SyncSelectionOutline()
@@ -10235,27 +10288,40 @@ wi::eventhandler::Subscribe_Once(
         const auto selected = session_ != nullptr
             ? session_->Selection().SelectedEntity()
             : wi::ecs::INVALID_ENTITY;
-        if (selected == outlinedEntity_)
-        {
+        if (selected == outlinedSelection_)
             return;
-        }
 
         ClearSelectionOutline();
-        if (session_ == nullptr ||
-            selected == wi::ecs::INVALID_ENTITY)
+        if (session_ == nullptr || selected == wi::ecs::INVALID_ENTITY)
+            return;
+
+        auto& scene = session_->Scenes().GetScene();
+        const wi::ecs::Entity reusableRoot =
+            ResolveReusableSelectionRoot(scene, selected);
+        if (reusableRoot == selected)
         {
+            std::vector<wi::ecs::Entity> renderObjects;
+            CollectReusableSelectionObjects(scene, reusableRoot, renderObjects);
+            for (const wi::ecs::Entity entity : renderObjects)
+            {
+                auto* object = scene.objects.GetComponent(entity);
+                if (object == nullptr)
+                    continue;
+                outlinedEntities_.push_back(entity);
+                outlinedEntityPreviousStencils_.push_back(object->userStencilRef);
+                object->SetUserStencilRef(SelectionStencilReference);
+            }
+            if (!outlinedEntities_.empty())
+                outlinedSelection_ = selected;
             return;
         }
 
-        auto* object =
-            session_->Scenes().GetScene().objects.GetComponent(selected);
+        auto* object = scene.objects.GetComponent(selected);
         if (object == nullptr)
-        {
             return;
-        }
-
-        outlinedEntity_ = selected;
-        outlinedEntityPreviousStencil_ = object->userStencilRef;
+        outlinedSelection_ = selected;
+        outlinedEntities_.push_back(selected);
+        outlinedEntityPreviousStencils_.push_back(object->userStencilRef);
         object->SetUserStencilRef(SelectionStencilReference);
     }
 

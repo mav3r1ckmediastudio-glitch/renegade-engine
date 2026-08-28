@@ -1,42 +1,104 @@
 #pragma once
 
+#include <cstddef>
+
 #include <WickedEngine.h>
 
 #include "renegade/bridge/CommandService.h"
 
 namespace renegade::bridge
 {
-    // A curated view of wi::scene::RigidBodyPhysicsComponent, mirroring the
-    // MaterialState/LightState pattern: fields a creator actually reaches
-    // for, applied non-destructively over whatever else is on the
-    // component. Deliberately scoped to the four primitive shapes that are
-    // sized from explicit dimensions rather than derived from mesh
-    // geometry (Box/Sphere/Capsule/Cylinder), so any of them can attach to
-    // any entity with a TransformComponent. Convex Hull and Triangle Mesh
-    // need a MeshComponent-bearing entity and a mesh_lod to derive their
-    // shape from instead -- a different, not-yet-designed targeting
-    // problem (which entity in a multi-node imported hierarchy owns the
-    // collider?), and Triangle Mesh is only physically valid for a static
-    // body in most physics backends. Heightfield is a regular-grid terrain
-    // shape and out of scope entirely -- Renegade already covers that
-    // domain through TerrainService, not an imported prop's collider.
+    // Creator-facing rigid-body authoring state for JP01. Wicked's
+    // RigidBodyPhysicsComponent remains the serialized source of truth; this
+    // type is only the Renegade command/UI facade over it.
     struct CollisionState
     {
         wi::scene::RigidBodyPhysicsComponent::CollisionShape shape =
             wi::scene::RigidBodyPhysicsComponent::CollisionShape::BOX;
-        // 0 makes the body static, matching Wicked's own field comment.
+
+        // Standard body properties.
+        // mass == 0 creates a static body.
         float mass = 1.0f;
         float friction = 0.2f;
         float restitution = 0.1f;
+        float dampingLinear = 0.05f;
+        float dampingAngular = 0.05f;
+        float buoyancy = 1.2f;
+        XMFLOAT3 localOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        uint32_t meshLod = 0;
+
+        bool kinematic = false;
+        bool locked2D = false;
+        bool disableDeactivation = false;
+        // Creator-added dynamic bodies participate in simulation immediately.
+        // START DEACTIVATED remains available as an explicit authoring option.
+        bool startDeactivated = false;
+
+        // Primitive shape parameters. Convex Hull, Triangle Mesh and Height
+        // Field derive their geometry from the normal scene/mesh/terrain path.
         XMFLOAT3 boxHalfExtents = XMFLOAT3(1.0f, 1.0f, 1.0f);
         float sphereRadius = 1.0f;
-        // Wicked stores Capsule and Cylinder dimensions in the same
-        // underlying CapsuleParams (see RigidBodyPhysicsComponent's own
-        // "also cylinder params" comment) -- one radius/height pair here
-        // serves both shapes, selected by CollisionState::shape.
+        // Capsule and Cylinder dimensions share the same underlying params.
         float capsuleRadius = 1.0f;
         float capsuleHeight = 1.0f;
     };
+
+    enum class CollisionTargetStatus
+    {
+        Supported,
+        InvalidEntity,
+        MissingTransform,
+        MissingMesh,
+        InvalidMeshData,
+        InvalidHeightFieldGrid,
+    };
+
+    // Reusable assets keep creator-owned transform/state on their stable
+    // instance root while imported payload nodes below it remain replaceable.
+    // Whole-asset rigid-body authoring therefore resolves to that root.
+    [[nodiscard]] wi::ecs::Entity ResolveCollisionAuthoringTarget(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity selectedEntity) noexcept;
+
+    // Fits BOX/SPHERE/CAPSULE/CYLINDER authoring state to descendant render
+    // geometry in the resolved target's local space. The target's own scale is
+    // deliberately excluded: the physics backend applies transform scale when
+    // it creates the real shape, so baking it into dimensions here would scale
+    // the collider twice. Returns false when no usable render geometry exists
+    // or the selected shape is mesh-derived.
+    [[nodiscard]] bool FitPrimitiveCollisionStateToTarget(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity entity,
+        CollisionState& state) noexcept;
+
+    // Requests the normal backend-owned body recreation path. This is used by
+    // creator tooling after an authored transform scale changes so the live
+    // primitive shape is rebuilt from the current transform without creating
+    // a second physics representation.
+    [[nodiscard]] bool RequestCollisionShapeRefresh(
+        wi::scene::Scene& scene,
+        wi::ecs::Entity entity) noexcept;
+
+    struct ReusableAssetCollisionRepairResult
+    {
+        std::size_t migratedBodyCount = 0;
+        std::size_t conflictCount = 0;
+    };
+
+    // Repairs the unambiguous legacy/owner-failure case where exactly one
+    // rigid body was serialized on a descendant of a reusable asset root.
+    // Ambiguous multi-body/root-conflict cases are left untouched.
+    [[nodiscard]] ReusableAssetCollisionRepairResult
+    RepairReusableAssetCollisionTargets(wi::scene::Scene& scene) noexcept;
+
+    [[nodiscard]] CollisionTargetStatus CheckCollisionTarget(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity entity,
+        wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept;
+    [[nodiscard]] bool CanAuthorCollisionShape(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity entity,
+        wi::scene::RigidBodyPhysicsComponent::CollisionShape shape) noexcept;
 
     [[nodiscard]] CollisionState CaptureCollision(
         const wi::scene::RigidBodyPhysicsComponent& rigidbody) noexcept;
@@ -46,28 +108,24 @@ namespace renegade::bridge
         const CollisionState& before,
         const CollisionState& after) noexcept;
 
-    // Applies shape, mass, friction, restitution, and only the dimension
-    // fields relevant to the chosen shape. Vehicle/character physics and
-    // every other unexposed field on the component remain untouched. Marks
-    // the component for a physics-parameter refresh so a live simulation
-    // rebuilds the underlying collision shape, matching the component's own
-    // documented purpose for SetRefreshParametersNeeded().
+    // Applies only the standard rigid-body authoring surface represented by
+    // CollisionState. Character/vehicle state and every unrelated native field
+    // remain untouched.
     void ApplyCollision(
         wi::scene::RigidBodyPhysicsComponent& rigidbody,
         const CollisionState& state) noexcept;
 
-    // Attaches a new RigidBodyPhysicsComponent to targetEntity if it does
-    // not already have one. Unlike CreateLightCommand, this never creates a
-    // new entity -- targetEntity must already exist and persist for the
-    // life of this command -- so Undo/Redo is a plain component
-    // add/remove, not an entity-level snapshot.
+    // Adds a rigid body to the creator-safe target. Primitive shapes auto-fit
+    // by default when usable geometry exists. Advanced/native callers can opt
+    // out and supply exact dimensions.
     class CreateCollisionCommand final : public ICommand
     {
     public:
         CreateCollisionCommand(
             wi::scene::Scene& scene,
             wi::ecs::Entity targetEntity,
-            const CollisionState& initial);
+            const CollisionState& initial,
+            bool autoFitPrimitive = true);
 
         bool Execute() override;
         void Undo() override;
@@ -76,10 +134,9 @@ namespace renegade::bridge
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
         CollisionState initial_;
+        bool autoFitPrimitive_ = true;
     };
 
-    // Edits an existing RigidBodyPhysicsComponent. Mirrors SetMaterialCommand/
-    // SetLightCommand exactly.
     class SetCollisionCommand final : public ICommand
     {
     public:
@@ -105,9 +162,6 @@ namespace renegade::bridge
         CollisionState after_;
     };
 
-    // Removes an existing RigidBodyPhysicsComponent (the "No Collision"
-    // choice). Undo recreates it with the captured prior state, the inverse
-    // of CreateCollisionCommand.
     class RemoveCollisionCommand final : public ICommand
     {
     public:
@@ -121,7 +175,7 @@ namespace renegade::bridge
     private:
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
-        CollisionState removed_;
+        wi::scene::RigidBodyPhysicsComponent removedNative_;
         bool hasRemoved_ = false;
     };
 }

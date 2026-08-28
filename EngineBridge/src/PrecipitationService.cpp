@@ -1,5 +1,7 @@
 #include "renegade/bridge/PrecipitationService.h"
 
+#include <wiInitializer.h>
+
 #include <algorithm>
 #include <cmath>
 
@@ -128,9 +130,21 @@ namespace renegade::bridge
         {
             const std::string path = wi::helper::GetCurrentPath() +
                 "/Content/weather/" + SnowflakeFile;
+
+            // Authoring and command tests are allowed to manipulate weather
+            // state before Wicked's application subsystems exist. Record the
+            // intended texture identity immediately, but never enter the
+            // resource manager until Wicked has completed initialization.
+            // Runtime/Studio refreshes call this again after initialization,
+            // at which point an unresolved resource is loaded exactly once.
             if (wi::helper::GetFileNameFromPath(baseColor.name) != SnowflakeFile)
             {
                 baseColor.name = path;
+                baseColor.resource = {};
+            }
+            if (!baseColor.resource.IsValid() &&
+                wi::initializer::IsInitializeFinished())
+            {
                 baseColor.resource = wi::resourcemanager::Load(path);
             }
             return;

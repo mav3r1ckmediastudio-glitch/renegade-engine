@@ -1,5 +1,6 @@
 #include "RuntimeApplication.h"
 
+#include "renegade/bridge/PhysicsLuaService.h"
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/PrecipitationService.h"
 
@@ -77,6 +78,16 @@ namespace renegade::runtime
     void RuntimeApplication::Initialize()
     {
         wi::Application::Initialize();
+
+        // Wicked's Application::Initialize() owns global subsystem startup and
+        // initializes Lua synchronously on the main thread. Only now is it safe
+        // for Renegade to install its entity-oriented physics namespace.
+        if (!bridge::BindPhysicsLua(scenes_.GetScene()))
+        {
+            wi::backlog::post(
+                "Renegade Runtime: renegade.physics could not bind to Wicked Lua after application initialization.",
+                wi::backlog::LogLevel::Error);
+        }
 
         infoDisplay.active = true;
         infoDisplay.watermark = false;

@@ -1,5 +1,6 @@
 #include "renegade/bridge/CommandService.h"
 
+#include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/SunService.h"
 
@@ -25,6 +26,15 @@ namespace
             !NearlyEqual(after.z, before.z);
     }
 
+    bool IsMeaningfulScale(
+        const XMFLOAT3& before,
+        const XMFLOAT3& after) noexcept
+    {
+        return !NearlyEqual(after.x, before.x) ||
+            !NearlyEqual(after.y, before.y) ||
+            !NearlyEqual(after.z, before.z);
+    }
+
     bool IsMeaningfulTransform(
         const renegade::bridge::TransformState& before,
         const renegade::bridge::TransformState& after) noexcept
@@ -36,9 +46,7 @@ namespace
             !NearlyEqual(before.rotation.y, after.rotation.y) ||
             !NearlyEqual(before.rotation.z, after.rotation.z) ||
             !NearlyEqual(before.rotation.w, after.rotation.w) ||
-            !NearlyEqual(before.scale.x, after.scale.x) ||
-            !NearlyEqual(before.scale.y, after.scale.y) ||
-            !NearlyEqual(before.scale.z, after.scale.z);
+            IsMeaningfulScale(before.scale, after.scale);
     }
 
     bool IsMeaningfulWeather(
@@ -643,15 +651,17 @@ namespace renegade::bridge
         {
             return false;
         }
-        return Apply(after_);
+        return Apply(after_, before_.scale);
     }
 
     void SetTransformCommand::Undo()
     {
-        Apply(before_);
+        Apply(before_, after_.scale);
     }
 
-    bool SetTransformCommand::Apply(const TransformState& transformState)
+    bool SetTransformCommand::Apply(
+        const TransformState& transformState,
+        const XMFLOAT3& expectedPreviousScale)
     {
         auto* transform = scene_->transforms.GetComponent(entity_);
         if (transform == nullptr)
@@ -664,6 +674,18 @@ namespace renegade::bridge
         transform->scale_local = transformState.scale;
         transform->SetDirty();
         transform->UpdateTransform();
+
+        // Primitive dimensions on a reusable asset are authored in root-local
+        // space. The renderer's gizmo previews its after-state before this
+        // command is executed, so compare command history rather than the live
+        // transform to decide whether scale changed. Execute, Undo and Redo all
+        // share this same Apply path.
+        const XMFLOAT3 previousScale = expectedPreviousScale;
+        if (IsMeaningfulScale(previousScale, transformState.scale) &&
+            scene_->rigidbodies.Contains(entity_))
+        {
+            (void)RequestCollisionShapeRefresh(*scene_, entity_);
+        }
         return true;
     }
 
