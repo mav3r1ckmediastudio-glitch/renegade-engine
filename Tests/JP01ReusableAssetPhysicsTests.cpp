@@ -34,6 +34,34 @@ namespace
             Near(left.z, right.z);
     }
 
+    wi::ecs::Entity CreateHeadlessBoxObject(
+        wi::scene::Scene& scene,
+        const char* name)
+    {
+        // Do not use Scene::Entity_CreateCube() here. Wicked's primitive
+        // factory builds GPU render data and these acceptance tests deliberately
+        // run without a graphics device. A mesh/object component pair is enough
+        // to exercise the exact hierarchy bounds and collision-authoring path.
+        const wi::ecs::Entity meshEntity = wi::ecs::CreateEntity();
+        auto& mesh = scene.meshes.Create(meshEntity);
+        mesh.vertex_positions = {
+            XMFLOAT3(-0.5f, -0.5f, -0.5f),
+            XMFLOAT3( 0.5f, -0.5f, -0.5f),
+            XMFLOAT3(-0.5f,  0.5f, -0.5f),
+            XMFLOAT3( 0.5f,  0.5f, -0.5f),
+            XMFLOAT3(-0.5f, -0.5f,  0.5f),
+            XMFLOAT3( 0.5f, -0.5f,  0.5f),
+            XMFLOAT3(-0.5f,  0.5f,  0.5f),
+            XMFLOAT3( 0.5f,  0.5f,  0.5f),
+        };
+
+        const wi::ecs::Entity objectEntity = wi::ecs::CreateEntity();
+        scene.names.Create(objectEntity).name = name == nullptr ? "Object" : name;
+        scene.transforms.Create(objectEntity);
+        scene.objects.Create(objectEntity).meshID = meshEntity;
+        return objectEntity;
+    }
+
     struct ReusableFixture
     {
         wi::ecs::Entity wrapper = wi::ecs::INVALID_ENTITY;
@@ -48,7 +76,7 @@ namespace
         ReusableFixture fixture;
         fixture.wrapper = scene.Entity_CreateTransform("Reusable Asset Instance");
         fixture.payload = scene.Entity_CreateTransform("Imported Payload Root");
-        fixture.nested = scene.Entity_CreateCube("crate002");
+        fixture.nested = CreateHeadlessBoxObject(scene, "crate002");
 
         scene.Component_Attach(fixture.payload, fixture.wrapper, true);
         scene.Component_Attach(fixture.nested, fixture.payload, true);
@@ -427,7 +455,8 @@ int main()
     // one the creator meant to promote to the whole-asset root.
     wi::scene::Scene conflictScene;
     const auto conflict = CreateReusableFixture(conflictScene);
-    const auto secondNested = conflictScene.Entity_CreateCube("crate002_part2");
+    const auto secondNested =
+        CreateHeadlessBoxObject(conflictScene, "crate002_part2");
     conflictScene.Component_Attach(secondNested, conflict.payload, true);
     conflictScene.rigidbodies.Create(conflict.nested).mass = 2.0f;
     conflictScene.rigidbodies.Create(secondNested).mass = 4.0f;
