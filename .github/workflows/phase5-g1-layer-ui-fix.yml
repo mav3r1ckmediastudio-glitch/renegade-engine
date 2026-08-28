@@ -1,0 +1,55 @@
+name: Phase 5 Gate 1 layer UI repair
+
+on:
+  push:
+    branches:
+      - 'staging/phase5-g1-layer-ui-fix'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Repair compact 0-31 layer grid
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          studio = Path('Studio/src/StudioApplication.cpp')
+          text = studio.read_text(encoding='utf-8')
+          old = '''            checkbox.Create("Scene Layer Bit " + std::to_string(bit));\n            checkbox.SetText(std::to_string(bit));\n'''
+          new = '''            // The CheckBox Create() label is creator-visible. Keep it compact\n            // so all 32 native layer bits remain readable in the 8-column grid.\n            checkbox.Create(std::to_string(bit));\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'layer checkbox patch expected 1 match, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+          studio.write_text(text, encoding='utf-8')
+
+          contract = Path('Tests/Phase5Gate1SourceContract.cmake')
+          text = contract.read_text(encoding='utf-8')
+          marker = 'require_text(studio_source "sceneLayerNoneButton_.SetText(\\\"NONE\\\")" "layer NONE action")\n'
+          addition = '''require_text(studio_source "checkbox.Create(std::to_string(bit));" "compact numbered 0-31 layer labels")\nstring(FIND "${studio_source}" "Scene Layer Bit " leaked_layer_label)\nif(NOT leaked_layer_label EQUAL -1)\n    message(FATAL_ERROR "Phase 5 Gate 1 contract forbids long internal layer labels in the compact grid")\nendif()\n'''
+          if text.count(marker) != 1:
+              raise SystemExit(f'contract patch expected 1 marker, found {text.count(marker)}')
+          text = text.replace(marker, marker + addition, 1)
+          contract.write_text(text, encoding='utf-8')
+          PY
+
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate1SourceContract.cmake
+
+      - name: Commit bounded UI repair
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/phase5-g1-layer-ui-fix.yml
+          git add Studio/src/StudioApplication.cpp Tests/Phase5Gate1SourceContract.cmake
+          git commit -m "Phase 5 Gate 1: make layer grid readable"
+          git push origin HEAD:staging/phase5-g1-layer-ui-fix
