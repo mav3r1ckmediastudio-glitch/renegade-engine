@@ -539,14 +539,14 @@ namespace renegade::studio
             const auto* collider = scene->colliders.GetComponent(selectedEntity);
             if (collider == nullptr)
             {
-                SetStatus("WICKED COLLIDER // ADD A COLLIDER BEFORE EDITING", true);
+                SetStatus("COLLIDER // ADD A COLLIDER BEFORE EDITING", true);
                 return;
             }
             const auto before = bridge::CaptureWickedCollider(*collider);
             auto after = before;
             edit(after);
             if (ExecuteCommand<bridge::SetWickedColliderCommand>(*scene, selectedEntity, before, after))
-                SetStatus("WICKED COLLIDER // APPLIED");
+                SetStatus("COLLIDER // APPLIED");
         }
 
         void Create()
@@ -722,7 +722,7 @@ namespace renegade::studio
             {
                 auto* scene = Scene();
                 const bool ok = scene != nullptr && HasSelection() && bridge::RebindConstraint(*scene, selectedEntity);
-                SetStatus(ok ? "CONSTRAINT // NATIVE BINDING RESET" : "CONSTRAINT // REBIND FAILED", !ok);
+                SetStatus(ok ? "CONSTRAINT // BINDING RESET" : "CONSTRAINT // REBIND FAILED", !ok);
                 RequestRefresh();
             });
 
@@ -931,24 +931,24 @@ namespace renegade::studio
 
         void CreateCollider()
         {
-            MakeButton(colliderAdd, "Add Wicked collider", "ADD WICKED COLLIDER", [this]()
+            MakeButton(colliderAdd, "Add collider", "ADD COLLIDER", [this]()
             {
                 auto* scene = Scene();
                 if (scene == nullptr || !HasSelection())
                     return;
                 const bool ok = ExecuteCommand<bridge::CreateWickedColliderCommand>(*scene, selectedEntity, bridge::WickedColliderState{});
-                SetStatus(ok ? "WICKED COLLIDER // ADDED" : "WICKED COLLIDER // COULD NOT ADD COMPONENT", !ok);
+                SetStatus(ok ? "COLLIDER // ADDED" : "COLLIDER // COULD NOT ADD COMPONENT", !ok);
             });
-            MakeButton(colliderRemove, "Remove Wicked collider", "REMOVE WICKED COLLIDER", [this]()
+            MakeButton(colliderRemove, "Remove collider", "REMOVE COLLIDER", [this]()
             {
                 auto* scene = Scene();
                 if (scene == nullptr || !HasSelection())
                     return;
                 const bool ok = ExecuteCommand<bridge::RemoveWickedColliderCommand>(*scene, selectedEntity);
-                SetStatus(ok ? "WICKED COLLIDER // REMOVED" : "WICKED COLLIDER // NOTHING TO REMOVE", !ok);
+                SetStatus(ok ? "COLLIDER // REMOVED" : "COLLIDER // NOTHING TO REMOVE", !ok);
             });
             using Shape = wi::scene::ColliderComponent::Shape;
-            colliderShape.Create("Wicked collider shape");
+            colliderShape.Create("Collider shape");
             colliderShape.AddItem("SPHERE", Userdata(Shape::Sphere));
             colliderShape.AddItem("CAPSULE", Userdata(Shape::Capsule));
             colliderShape.AddItem("PLANE", Userdata(Shape::Plane));
@@ -957,13 +957,13 @@ namespace renegade::studio
             colliderCPU.OnClick([this](const wi::gui::EventArgs& args) { EditCollider([&](auto& state) { state.cpuEnabled = args.bValue; }); });
             colliderGPU.Create("GPU COLLISION");
             colliderGPU.OnClick([this](const wi::gui::EventArgs& args) { EditCollider([&](auto& state) { state.gpuEnabled = args.bValue; }); });
-            MakeSlider(colliderRadius, 0.0f, 10.0f, 1.0f, 10000, "Wicked collider radius", "RADIUS", [this](const float value) { EditCollider([&](auto& state) { state.radius = value; }); });
-            MakeSlider(colliderOffsetX, -10.0f, 10.0f, 0.0f, 20000, "Wicked collider offset X", "OFFSET X", [this](const float value) { EditCollider([&](auto& state) { state.offset.x = value; }); });
-            MakeSlider(colliderOffsetY, -10.0f, 10.0f, 0.0f, 20000, "Wicked collider offset Y", "OFFSET Y", [this](const float value) { EditCollider([&](auto& state) { state.offset.y = value; }); });
-            MakeSlider(colliderOffsetZ, -10.0f, 10.0f, 0.0f, 20000, "Wicked collider offset Z", "OFFSET Z", [this](const float value) { EditCollider([&](auto& state) { state.offset.z = value; }); });
-            MakeSlider(colliderTailX, -10.0f, 10.0f, 0.0f, 20000, "Wicked collider tail X", "TAIL X", [this](const float value) { EditCollider([&](auto& state) { state.tail.x = value; }); });
-            MakeSlider(colliderTailY, -10.0f, 10.0f, 1.0f, 20000, "Wicked collider tail Y", "TAIL Y", [this](const float value) { EditCollider([&](auto& state) { state.tail.y = value; }); });
-            MakeSlider(colliderTailZ, -10.0f, 10.0f, 0.0f, 20000, "Wicked collider tail Z", "TAIL Z", [this](const float value) { EditCollider([&](auto& state) { state.tail.z = value; }); });
+            MakeSlider(colliderRadius, 0.0f, 10.0f, 1.0f, 10000, "Collider radius", "RADIUS", [this](const float value) { EditCollider([&](auto& state) { state.radius = value; }); });
+            MakeSlider(colliderOffsetX, -10.0f, 10.0f, 0.0f, 20000, "Collider offset X", "OFFSET X", [this](const float value) { EditCollider([&](auto& state) { state.offset.x = value; }); });
+            MakeSlider(colliderOffsetY, -10.0f, 10.0f, 0.0f, 20000, "Collider offset Y", "OFFSET Y", [this](const float value) { EditCollider([&](auto& state) { state.offset.y = value; }); });
+            MakeSlider(colliderOffsetZ, -10.0f, 10.0f, 0.0f, 20000, "Collider offset Z", "OFFSET Z", [this](const float value) { EditCollider([&](auto& state) { state.offset.z = value; }); });
+            MakeSlider(colliderTailX, -10.0f, 10.0f, 0.0f, 20000, "Collider tail X", "TAIL X", [this](const float value) { EditCollider([&](auto& state) { state.tail.x = value; }); });
+            MakeSlider(colliderTailY, -10.0f, 10.0f, 1.0f, 20000, "Collider tail Y", "TAIL Y", [this](const float value) { EditCollider([&](auto& state) { state.tail.y = value; }); });
+            MakeSlider(colliderTailZ, -10.0f, 10.0f, 0.0f, 20000, "Collider tail Z", "TAIL Z", [this](const float value) { EditCollider([&](auto& state) { state.tail.z = value; }); });
         }
 
         void RegisterAllControls()
@@ -1112,8 +1112,6 @@ namespace renegade::studio
                 }
             }
 
-            // Widget callbacks may request a refresh. Do not rebuild activeControls
-            // while this iteration is live; refresh is deliberately deferred.
             for (auto* widget : activeControls)
                 if (widget != nullptr && widget->IsVisible()) widget->Update(canvas, dt);
 
@@ -1131,7 +1129,7 @@ namespace renegade::studio
             DrawRect(bounds.x, bounds.y, width, 1.0f, Border, cmd);
             DrawRect(bounds.x, bounds.w - 1.0f, width, 1.0f, Border, cmd);
             DrawText("PHYSICS LAB", bounds.x + 22.0f, bounds.y + 14.0f, 17, TextStrong, cmd, 1.15f, 0.18f);
-            DrawText("WICKED EDITOR PARITY // JOLT-POWERED", bounds.x + 22.0f, bounds.y + 38.0f, 9, Forge, cmd, 0.8f, 0.16f);
+            DrawText("PHYSICS AUTHORING", bounds.x + 22.0f, bounds.y + 38.0f, 9, Forge, cmd, 0.8f, 0.16f);
             DrawText(SelectedEntityLabel(), std::max(bounds.x + 320.0f, bounds.z - 430.0f), bounds.y + 18.0f, 10, TextSecondary, cmd, 0.2f, 0.14f);
             DrawText("ADVANCED RUNTIME // renegade.physics", std::max(bounds.x + 320.0f, bounds.z - 430.0f), bounds.y + 39.0f, 9, Muted, cmd, 0.2f, 0.12f);
             RenderTabs(cmd);
@@ -1144,8 +1142,6 @@ namespace renegade::studio
                     continue;
                 widget->Render(canvas, cmd);
             }
-            // Combo dropdowns paint last, in reverse declaration order, matching
-            // the established manual-workspace pattern used elsewhere in Studio.
             for (auto it = activeControls.rbegin(); it != activeControls.rend(); ++it)
             {
                 const auto* widget = *it;
@@ -1167,7 +1163,7 @@ namespace renegade::studio
         {
             constexpr std::array<const char*, 8> labels = {
                 "WORLD", "RIGID BODY", "CONSTRAINT", "CHARACTER",
-                "VEHICLE", "RAGDOLL", "SOFT BODY", "WICKED COLLIDER"};
+                "VEHICLE", "RAGDOLL", "SOFT BODY", "SECONDARY COLLIDER"};
             const float available = std::max(1.0f, bounds.z - bounds.x - 32.0f);
             const float tabWidth = available / static_cast<float>(labels.size());
             const int textSize = tabWidth < 78.0f ? 8 : 9;
@@ -1198,14 +1194,14 @@ namespace renegade::studio
             {
             case Page::RigidBody: title = "RIGID BODY"; break;
             case Page::Constraint: title = "CONSTRAINT"; break;
-            case Page::Character: title = "PHYSICS CHARACTER"; break;
+            case Page::Character: title = "CHARACTER"; break;
             case Page::Vehicle: title = "VEHICLE"; break;
-            case Page::Ragdoll: title = "HUMANOID / RAGDOLL"; break;
+            case Page::Ragdoll: title = "RAGDOLL"; break;
             case Page::SoftBody: title = "SOFT BODY"; break;
-            case Page::WickedCollider: title = "WICKED COLLIDER // NOT JOLT"; break;
+            case Page::WickedCollider: title = "SECONDARY COLLIDER"; break;
             default: break;
             }
-            DrawText(title, x, y, 12, page == Page::WickedCollider ? Warning : TextStrong, cmd, 0.7f, 0.18f);
+            DrawText(title, x, y, 12, TextStrong, cmd, 0.7f, 0.18f);
             DrawText(PageHint(), x, y + 21.0f, 9, Muted, cmd);
             RenderLiveReadout(x, y + 38.0f, cmd);
         }
@@ -1214,14 +1210,14 @@ namespace renegade::studio
         {
             switch (page)
             {
-            case Page::World: return "Global/session controls plus scene-serialized gravity. Visualizer and debug size are global, matching Wicked.";
-            case Page::RigidBody: return "All seven Wicked shapes and creator-facing rigid-body properties. Complex shapes validate the selected mesh/terrain target.";
-            case Page::Constraint: return "Fixed, Point, Distance, Hinge, Cone, Six DOF, Swing Twist and Slider. Binding changes recreate the native constraint.";
-            case Page::Character: return "Wicked physics character mode. Capsule is recommended; mass and friction come from the rigid body.";
-            case Page::Vehicle: return "Car and Motorcycle authoring, wheel mapping, suspension and live editor drive testing.";
-            case Page::Ragdoll: return "Wicked Humanoid ragdoll authoring with recreation-safe 2D, fatness and head-size controls.";
-            case Page::SoftBody: return "Mesh-backed Wicked soft-body authoring. Object selections resolve to their mesh automatically.";
-            case Page::WickedCollider: return "Lightweight CPU/GPU collider used by particles, hair and springs. This component is deliberately separate from Jolt.";
+            case Page::World: return "Scene gravity, simulation, solver and visualisation settings.";
+            case Page::RigidBody: return "Rigid-body collision, material response, damping, buoyancy and body behaviour.";
+            case Page::Constraint: return "Constraint types, body bindings, limits, motors and break behaviour.";
+            case Page::Character: return "Character movement physics. Capsule collision is recommended; mass and friction come from the rigid body.";
+            case Page::Vehicle: return "Car and motorcycle authoring, wheel mapping, suspension and live editor drive testing.";
+            case Page::Ragdoll: return "Humanoid ragdoll behaviour, 2D locking, body proportions and activation.";
+            case Page::SoftBody: return "Mesh-backed soft-body simulation with mass, friction, pressure, vertex radius and wind.";
+            case Page::WickedCollider: return "Lightweight CPU/GPU collision for particles, hair and other secondary systems.";
             default: return {};
             }
         }
@@ -1240,7 +1236,7 @@ namespace renegade::studio
             {
                 const auto* body = scene->rigidbodies.GetComponent(selectedEntity);
                 DrawText(body == nullptr ? "NO RIGID BODY COMPONENT" :
-                    (bridge::HasLivePhysicsBody(*scene, selectedEntity) ? "LIVE NATIVE BODY // READY" : "AUTHORED BODY // NATIVE BODY PENDING"),
+                    (bridge::HasLivePhysicsBody(*scene, selectedEntity) ? "LIVE BODY // READY" : "AUTHORED BODY // PENDING"),
                     x, y, 9, body != nullptr && bridge::HasLivePhysicsBody(*scene, selectedEntity) ? Success : Muted, cmd);
             }
             else if (page == Page::Character)
@@ -1270,7 +1266,7 @@ namespace renegade::studio
             else if (page == Page::Ragdoll)
             {
                 if (scene->humanoids.Contains(selectedEntity))
-                    DrawText(bridge::HasLiveRagdollPhysics(*scene, selectedEntity) ? "LIVE RAGDOLL // READY" : "RAGDOLL AUTHORED // NATIVE RAGDOLL PENDING",
+                    DrawText(bridge::HasLiveRagdollPhysics(*scene, selectedEntity) ? "LIVE RAGDOLL // READY" : "RAGDOLL AUTHORED // PENDING",
                         x, y, 9, bridge::HasLiveRagdollPhysics(*scene, selectedEntity) ? Success : Muted, cmd);
             }
             else if (page == Page::SoftBody)

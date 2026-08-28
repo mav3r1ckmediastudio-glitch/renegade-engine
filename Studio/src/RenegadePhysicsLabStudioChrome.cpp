@@ -5,7 +5,6 @@
 #include "renegade/bridge/StudioSession.h"
 
 #include <algorithm>
-#include <cmath>
 #include <utility>
 
 namespace
@@ -14,14 +13,6 @@ namespace
     constexpr wi::Color TextSecondary = wi::Color(226, 226, 226, 255);
     constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
-    constexpr float ScaleEpsilon = 0.00001f;
-
-    bool ScaleChanged(const XMFLOAT3& left, const XMFLOAT3& right) noexcept
-    {
-        return std::abs(left.x - right.x) > ScaleEpsilon ||
-            std::abs(left.y - right.y) > ScaleEpsilon ||
-            std::abs(left.z - right.z) > ScaleEpsilon;
-    }
 
     void DrawRect(
         const float x,
@@ -64,13 +55,9 @@ namespace renegade::studio
         CreatorAssetStudioChrome::Create();
 
         // Studio reaches this point only after wi::Application::Initialize()
-        // has let Wicked initialize its one Lua VM on the main thread. JP01
-        // installs the Renegade namespace into that existing VM; it never
-        // bootstraps Lua from SceneService construction.
+        // has let the engine initialize its one Lua VM on the main thread.
         if (auto* session = bridge::StudioSession::Current(); session != nullptr)
-        {
             (void)bridge::BindPhysicsLua(session->Scenes().GetScene());
-        }
 
         physicsLab_.Create();
         physicsLab_.SetBounds(ViewportBounds());
@@ -83,9 +70,7 @@ namespace renegade::studio
     {
         CreatorAssetStudioChrome::SetLayout(width, height);
         // Bounds only change when Studio layout changes. Relaying out every
-        // frame would hide/show every Physics Lab widget and Wicked resets a
-        // widget to IDLE when SetVisible(false) is called, destroying active
-        // mouse-down/drag state before a click or slider drag can complete.
+        // frame would reset the stateful GUI controls during interaction.
         physicsLab_.SetBounds(ViewportBounds());
     }
 
@@ -115,9 +100,6 @@ namespace renegade::studio
             return;
         }
 
-        // Physics Lab overlays the Scene viewport while sharing the Scene
-        // hierarchy and command history. Reconcile the underlying Scene mode
-        // without closing the Lab when importer/workspace lifecycle asks for it.
         if (studioAction_)
             studioAction_(Action::SceneWorkspace);
         physicsLab_.SetBounds(ViewportBounds());
@@ -128,96 +110,42 @@ namespace renegade::studio
         physicsLab_.SetActive(active);
         physicsLab_.SetBounds(ViewportBounds());
         if (active)
-            SetStatusText("PHYSICS LAB // WICKED EDITOR PARITY");
+            SetStatusText("PHYSICS LAB");
     }
 
-    void RenegadePhysicsLabStudioChrome::SynchronizeRigidBodyAuthoringTarget()
+    void RenegadePhysicsLabStudioChrome::SynchronizeRigidBodyOwnerSelection()
     {
-        auto* session = bridge::StudioSession::Current();
-        if (session == nullptr)
+        if (!physicsLab_.IsActive())
+            return;
+
+        using Page = RenegadePhysicsLabWorkspace::Page;
+        const Page page = physicsLab_.ActivePage();
+        if (page != Page::RigidBody &&
+            page != Page::Character &&
+            page != Page::Vehicle)
         {
-            trackedPhysicsScaleScene_ = nullptr;
-            trackedPhysicsScaleEntity_ = wi::ecs::INVALID_ENTITY;
-            trackedPhysicsScaleValid_ = false;
+            // Soft Body, Ragdoll and Secondary Collider can legitimately target
+            // mesh/humanoid descendants. Do not globally promote every Physics
+            // Lab selection to the reusable wrapper.
             return;
         }
+
+        auto* session = bridge::StudioSession::Current();
+        if (session == nullptr || !session->Selection().HasSelection())
+            return;
 
         auto& scene = session->Scenes().GetScene();
-
-        // Once a body has been touched by Physics Lab, continue watching its
-        // wrapper scale even while Scene workspace is active. This catches the
-        // normal authoring sequence Physics -> Scene scale gizmo -> Physics
-        // without baking wrapper scale into the fitted primitive dimensions.
-        if (trackedPhysicsScaleValid_)
-        {
-            if (trackedPhysicsScaleScene_ != &scene)
-            {
-                trackedPhysicsScaleScene_ = nullptr;
-                trackedPhysicsScaleEntity_ = wi::ecs::INVALID_ENTITY;
-                trackedPhysicsScaleValid_ = false;
-            }
-            else
-            {
-                const auto* transform = scene.transforms.GetComponent(
-                    trackedPhysicsScaleEntity_);
-                if (transform == nullptr)
-                {
-                    trackedPhysicsScaleScene_ = nullptr;
-                    trackedPhysicsScaleEntity_ = wi::ecs::INVALID_ENTITY;
-                    trackedPhysicsScaleValid_ = false;
-                }
-                else if (ScaleChanged(
-                        transform->scale_local, trackedPhysicsScale_))
-                {
-                    (void)bridge::RefreshCollisionShapeForScaleChange(
-                        scene, trackedPhysicsScaleEntity_);
-                    trackedPhysicsScale_ = transform->scale_local;
-                }
-            }
-        }
-
-        if (!physicsLab_.IsActive() ||
-            physicsLab_.ActivePage() !=
-                RenegadePhysicsLabWorkspace::Page::RigidBody ||
-            !session->Selection().HasSelection())
-        {
-            return;
-        }
-
-        const wi::ecs::Entity selected =
-            session->Selection().SelectedEntity();
+        const wi::ecs::Entity selected = session->Selection().SelectedEntity();
         const wi::ecs::Entity target =
-            bridge::ResolveCollisionAuthoringEntity(scene, selected);
-        if (target == wi::ecs::INVALID_ENTITY)
-            return;
-
-        // Replaceable payload children must never become the creator-facing
-        // rigid-body owner. Selecting one while on the Rigid Body page snaps
-        // the authoritative Studio selection to the stable reusable wrapper.
-        if (target != selected)
-            session->Selection().Select(target);
-
-        const auto* transform = scene.transforms.GetComponent(target);
-        if (transform == nullptr)
-            return;
-
-        if (!trackedPhysicsScaleValid_ ||
-            trackedPhysicsScaleScene_ != &scene ||
-            trackedPhysicsScaleEntity_ != target)
+            bridge::ResolveCollisionAuthoringTarget(scene, selected);
+        if (target != selected && target != wi::ecs::INVALID_ENTITY)
         {
-            trackedPhysicsScaleScene_ = &scene;
-            trackedPhysicsScaleEntity_ = target;
-            trackedPhysicsScale_ = transform->scale_local;
-            trackedPhysicsScaleValid_ = true;
-
-            // A pre-existing body may have been scaled before Physics Lab began
-            // tracking it. One authoritative recreate on first touch guarantees
-            // Wicked/Jolt is aligned to the current wrapper transform.
-            if (scene.rigidbodies.Contains(target))
-            {
-                (void)bridge::RefreshCollisionShapeForScaleChange(
-                    scene, target);
-            }
+            // Rigid Body, Character and Vehicle all share the same native
+            // RigidBodyPhysicsComponent. Imported child nodes are therefore
+            // promoted to the stable reusable root before any of those pages
+            // can create or edit body state.
+            session->Selection().Select(target);
+            SetStatusText("PHYSICS LAB // ASSET ROOT SELECTED");
         }
     }
 
@@ -249,21 +177,15 @@ namespace renegade::studio
             wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
             physicsTabConsumed_ = true;
-            // Environment/Terrain are semantic modes in StudioRenderPath. Put
-            // the underlying editor in Scene mode first, then keep Physics Lab
-            // as the Renegade-owned overlay on that same authoritative Scene.
             if (studioAction_)
                 studioAction_(Action::SceneWorkspace);
             SetPhysicsLabActive(true);
         }
 
-        SynchronizeRigidBodyAuthoringTarget();
+        SynchronizeRigidBodyOwnerSelection();
 
-        // Do not call SetBounds here. Physics Lab controls are stateful Wicked
-        // widgets: SetBounds -> Layout -> HideAll toggles visibility and resets
-        // ACTIVE/DEACTIVATING every frame, which makes every control appear
-        // correctly while preventing buttons, sliders and combos from ever
-        // completing an interaction. SetLayout/activation own relayout instead.
+        // Do not call SetBounds here. Physics Lab controls are stateful widgets;
+        // relayout during Update cancels click and slider state mid-interaction.
         physicsLab_.Update(canvas, dt);
     }
 
@@ -291,9 +213,6 @@ namespace renegade::studio
         if (!active)
             return;
 
-        // Base chrome sees Scene as active after we reconcile its semantic
-        // mode. Cover only its 2px workspace underline, then draw Physics as
-        // the visible Renegade workspace owner. No base-shell geometry moves.
         DrawRect(sceneMetaX + 12.0f, 56.0f, 344.0f, 4.0f, Surface0, cmd);
         DrawRect(sceneMetaX + 292.0f, 57.0f, 64.0f, 2.0f, Forge, cmd);
     }

@@ -1,5 +1,6 @@
 #include "renegade/bridge/SceneDocumentService.h"
 
+#include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -163,6 +164,15 @@ namespace renegade::bridge
             return prepared;
         }
 
+        // JP01 owner-recovery boundary. A previous Physics Lab build allowed
+        // a dynamic rigid body to be serialized on a deeply nested reusable
+        // asset payload node. Wicked's parented dynamic-body transform path
+        // repeatedly decomposes the import hierarchy and can amplify scale or
+        // shear. Move the unambiguous one-body case to Renegade's stable
+        // instance wrapper before the scene ever reaches its first physics
+        // update. The repair is in-memory until the creator saves again.
+        (void)RepairReusableAssetCollisionTargets(*prepared.scene_);
+
         if (prepared.scene_->cameras.GetCount() > 0)
         {
             prepared.firstCamera_ = prepared.scene_->cameras.GetEntity(0);
@@ -303,6 +313,20 @@ namespace renegade::bridge
             return false;
         }
 
+        // Keep the active document canonical too. PrepareWickedSceneOpen()
+        // repairs loaded copies before physics runs; doing the same immediately
+        // before serialization ensures the corrected component ownership is
+        // persisted when an affected creator saves the scene again.
+        const auto physicsRepair =
+            RepairReusableAssetCollisionTargets(scenes_.scene_);
+        if (physicsRepair.conflictCount > 0)
+        {
+            lastWarning_ =
+                "Scene saved with ambiguous reusable-asset rigid-body "
+                "ownership; " + std::to_string(physicsRepair.conflictCount) +
+                " nested body/bodies require explicit creator review.";
+        }
+
         const std::string token = SaveToken();
         const fs::path temporary = parent /
             (destination.filename().generic_u8string() + ".saving-" + token +
@@ -430,7 +454,11 @@ namespace renegade::bridge
                 fileError);
             if (fileError)
             {
-                lastWarning_ = "Scene saved, but the previous backup could "
+                if (!lastWarning_.empty())
+                {
+                    lastWarning_ += " ";
+                }
+                lastWarning_ += "Scene saved, but the previous backup could "
                     "not be promoted. Its recovery copy remains at " +
                     pendingPrevious.generic_u8string() + ": " +
                     fileError.message();

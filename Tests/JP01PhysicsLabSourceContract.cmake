@@ -10,13 +10,17 @@ set(STUDIO_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h")
 set(STUDIO_SOURCE "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
 set(CHROME_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.h")
 set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
+set(ROOT_CMAKE "${RENEGADE_SOURCE_DIR}/CMakeLists.txt")
 set(PHYSICS_LUA_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/PhysicsLuaService.cpp")
 set(SCENE_SERVICE_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/SceneService.h")
+set(SCENE_DOCUMENT_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/SceneDocumentService.cpp")
 set(COLLISION_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/CollisionService.h")
 set(COLLISION_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/CollisionService.cpp")
 set(RUNTIME_SOURCE "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
 set(PHYSICS_LUA_TEST "${RENEGADE_SOURCE_DIR}/Tests/PhysicsLuaTests.cpp")
 set(PHYSICS_LUA_CMAKE "${RENEGADE_SOURCE_DIR}/Tests/JP01PhysicsLua.cmake")
+set(REUSABLE_PHYSICS_TEST "${RENEGADE_SOURCE_DIR}/Tests/JP01ReusableAssetPhysicsTests.cpp")
+set(REUSABLE_PHYSICS_CMAKE "${RENEGADE_SOURCE_DIR}/Tests/JP01ReusableAssetPhysics.cmake")
 set(TERRAIN_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/TerrainService.cpp")
 
 foreach(path IN ITEMS
@@ -28,13 +32,17 @@ foreach(path IN ITEMS
     "${STUDIO_SOURCE}"
     "${CHROME_HEADER}"
     "${STUDIO_CMAKE}"
+    "${ROOT_CMAKE}"
     "${PHYSICS_LUA_SOURCE}"
     "${SCENE_SERVICE_HEADER}"
+    "${SCENE_DOCUMENT_SOURCE}"
     "${COLLISION_HEADER}"
     "${COLLISION_SOURCE}"
     "${RUNTIME_SOURCE}"
     "${PHYSICS_LUA_TEST}"
     "${PHYSICS_LUA_CMAKE}"
+    "${REUSABLE_PHYSICS_TEST}"
+    "${REUSABLE_PHYSICS_CMAKE}"
     "${TERRAIN_SOURCE}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "JP01 Physics Lab source contract input is missing: ${path}")
@@ -49,13 +57,17 @@ file(READ "${STUDIO_HEADER}" studio_header)
 file(READ "${STUDIO_SOURCE}" studio_source)
 file(READ "${CHROME_HEADER}" chrome_header)
 file(READ "${STUDIO_CMAKE}" studio_cmake)
+file(READ "${ROOT_CMAKE}" root_cmake)
 file(READ "${PHYSICS_LUA_SOURCE}" physics_lua_source)
 file(READ "${SCENE_SERVICE_HEADER}" scene_service_header)
+file(READ "${SCENE_DOCUMENT_SOURCE}" scene_document_source)
 file(READ "${COLLISION_HEADER}" collision_header)
 file(READ "${COLLISION_SOURCE}" collision_source)
 file(READ "${RUNTIME_SOURCE}" runtime_source)
 file(READ "${PHYSICS_LUA_TEST}" physics_lua_test)
 file(READ "${PHYSICS_LUA_CMAKE}" physics_lua_cmake)
+file(READ "${REUSABLE_PHYSICS_TEST}" reusable_physics_test)
+file(READ "${REUSABLE_PHYSICS_CMAKE}" reusable_physics_cmake)
 file(READ "${TERRAIN_SOURCE}" terrain_source)
 
 function(require_text haystack_var needle description)
@@ -118,6 +130,40 @@ require_text(physics_chrome_source
     "\"PHYSICS\""
     "Physics workspace tab")
 
+# Creator-facing product language belongs to Renegade. Upstream implementation
+# attribution remains in source comments, audits and licence notices rather than
+# occupying the authoring workspace itself.
+require_text(physics_workspace_source
+    "\"PHYSICS AUTHORING\""
+    "Renegade Physics Lab subtitle")
+require_text(physics_workspace_source
+    "\"SECONDARY COLLIDER\""
+    "creator-facing secondary collider label")
+require_text(physics_workspace_source
+    "Lightweight CPU/GPU collision for particles, hair and other secondary systems."
+    "secondary collider creator explanation")
+require_text(physics_chrome_source
+    "SetStatusText(\"PHYSICS LAB\")"
+    "plain Physics Lab chrome status")
+forbid_text(physics_workspace_source
+    "WICKED EDITOR PARITY"
+    "developer provenance in creator-facing Physics Lab")
+forbid_text(physics_workspace_source
+    "JOLT-POWERED"
+    "implementation branding in creator-facing Physics Lab")
+forbid_text(physics_workspace_source
+    "WICKED COLLIDER // NOT JOLT"
+    "implementation distinction in creator-facing heading")
+forbid_text(physics_workspace_source
+    "All seven Wicked shapes"
+    "upstream parity wording in creator-facing rigid-body hint")
+forbid_text(physics_workspace_source
+    "matching Wicked"
+    "upstream parity wording in creator-facing world hint")
+forbid_text(physics_chrome_source
+    "PHYSICS LAB // WICKED EDITOR PARITY"
+    "developer provenance in creator-facing chrome status")
+
 # Owner-validation interaction regression: layout may change widget visibility,
 # but it must never be driven every frame from Update(). Wicked resets hidden
 # widget state to IDLE, which otherwise makes the Lab look live while all
@@ -131,51 +177,6 @@ require_text(physics_chrome_source
 require_text(physics_chrome_source
     "physicsLab_.Update(canvas, dt);"
     "stateful Physics Lab widget update")
-
-# Reusable-asset rigid-body hardening. The stable wrapper is the physics owner,
-# primitive dimensions come from exact root-local descendant geometry, wrapper
-# scale is cancelled out of those dimensions, and scale edits recreate only the
-# Wicked-owned native body. Physics Lab redirects payload selection only on the
-# Rigid Body page so mesh-owned Soft Body authoring remains unaffected.
-require_text(collision_header
-    "ResolveCollisionAuthoringEntity"
-    "reusable physics-owner resolver contract")
-require_text(collision_header
-    "FitPrimitiveCollisionToHierarchy"
-    "root-local primitive fit contract")
-require_text(collision_header
-    "RefreshCollisionShapeForScaleChange"
-    "Wicked shape refresh contract")
-require_text(collision_source
-    "ReusableAssetInstanceIdMetadataKey"
-    "stable reusable wrapper identity")
-require_text(collision_source
-    "const XMMATRIX objectToRoot = objectWorld * rootInverse;"
-    "wrapper transform cancellation during fit")
-require_text(collision_source
-    "scene.Entity_IsDescendant(objectEntity, rootEntity)"
-    "descendant geometry traversal")
-require_text(collision_source
-    "IsReusableAssetRoot(scene, entity_)"
-    "primitive fitting only for reusable wrapper ownership")
-require_text(collision_source
-    "rigidbody->physicsobject.reset();"
-    "authoritative Wicked/Jolt shape recreation")
-require_text(physics_chrome_source
-    "RenegadePhysicsLabWorkspace::Page::RigidBody"
-    "Rigid Body-only selection redirect")
-require_text(physics_chrome_source
-    "bridge::ResolveCollisionAuthoringEntity(scene, selected)"
-    "Physics Lab reusable-root selection resolution")
-require_text(physics_chrome_source
-    "session->Selection().Select(target);"
-    "stable wrapper selection ownership")
-require_text(physics_chrome_source
-    "bridge::RefreshCollisionShapeForScaleChange("
-    "root-scale physics refresh")
-require_text(physics_chrome_header
-    "XMFLOAT3 trackedPhysicsScale_"
-    "separate authored-scale tracking")
 
 # Owner-validation overlay regression: Physics Lab keeps authoritative Scene
 # selection, but Scene-only post passes must not render above its opaque GUI.
@@ -196,6 +197,70 @@ require_text(studio_header
 require_text(studio_header
     "PhysicsLabStudioRenderPath renderer_;"
     "Physics-aware renderer ownership")
+
+# Owner validation exposed a severe imported-asset failure: attaching a dynamic
+# body to an internal GLTF/FBX node lets Wicked's parented rigid-body feedback
+# repeatedly decompose the imported transform chain, producing runaway scale,
+# clipping and flicker. Reusable assets must resolve rigid-body ownership to the
+# stable creator wrapper and old unambiguous scenes must be repaired before the
+# first physics update.
+require_text(collision_header
+    "bool startDeactivated = true;"
+    "Wicked-editor start-deactivated rigid-body default")
+require_text(collision_header
+    "ResolveCollisionAuthoringTarget("
+    "creator-safe rigid-body target resolver")
+require_text(collision_header
+    "RepairReusableAssetCollisionTargets"
+    "serialized nested-body recovery API")
+require_text(collision_source
+    "ReusableAssetInstanceIdMetadataKey"
+    "stable reusable wrapper identification")
+require_text(collision_source
+    "entity_(ResolveCollisionAuthoringTarget(scene, targetEntity))"
+    "CreateCollisionCommand stable-wrapper targeting")
+require_text(collision_source
+    "scene.rigidbodies.Remove(nestedBody);"
+    "nested reusable rigid-body removal during migration")
+require_text(collision_source
+    "auto& rootBody = scene.rigidbodies.Create(wrapper);"
+    "stable-wrapper rigid-body migration")
+require_text(collision_source
+    "rootBody.physicsobject.reset();"
+    "no live Jolt handle migration between entities")
+require_text(scene_document_source
+    "(void)RepairReusableAssetCollisionTargets(*prepared.scene_);"
+    "pre-physics WISCENE reusable-body repair")
+require_text(scene_document_source
+    "RepairReusableAssetCollisionTargets(scenes_.scene_);"
+    "pre-save active-scene reusable-body canonicalization")
+require_text(physics_chrome_source
+    "bridge::ResolveCollisionAuthoringTarget(scene, selected);"
+    "Physics Lab stable-root selection follow")
+require_text(physics_chrome_source
+    "session->Selection().Select(target);"
+    "Physics Lab selection transfer to body owner")
+forbid_text(collision_source
+    "JPH::PhysicsSystem"
+    "new/raw Jolt world ownership in collision recovery")
+
+# A headless regression reproduces the exact wrapper -> payload -> imported-node
+# ownership pattern and proves Add/Undo/Redo plus pre-physics migration.
+require_text(root_cmake
+    "include(Tests/JP01ReusableAssetPhysics.cmake)"
+    "reusable-asset physics regression registration")
+require_text(reusable_physics_cmake
+    "RenegadeJP01ReusableAssetPhysicsTests"
+    "reusable-asset physics test target")
+require_text(reusable_physics_test
+    "ResolveCollisionAuthoringTarget(scene, fixture.nested) != fixture.wrapper"
+    "nested reusable target assertion")
+require_text(reusable_physics_test
+    "RepairReusableAssetCollisionTargets(recoveryScene)"
+    "serialized nested-body repair assertion")
+require_text(reusable_physics_test
+    "!commands.Redo()"
+    "wrapper rigid-body Redo assertion")
 
 # Lua lifecycle ownership: SceneService construction must be inert, and the
 # Renegade binding layer must never bootstrap Wicked's global VM itself.
@@ -240,7 +305,7 @@ foreach(page IN ITEMS
     require_text(physics_workspace_header "${page}," "Physics Lab page ${page}")
 endforeach()
 
-# Wicked editor parity: all seven rigid shapes and all eight exposed constraints.
+# Backend coverage: all seven rigid shapes and all eight exposed constraints.
 foreach(shape IN ITEMS
     "Shape::BOX"
     "Shape::SPHERE"
@@ -295,16 +360,8 @@ require_text(physics_workspace_source
     "bridge::SetPhysicsGravity"
     "scene-authoritative gravity bridge")
 
-# Important semantic split: Wicked Collider is secondary-system collision, not Jolt.
-require_text(physics_workspace_source
-    "WICKED COLLIDER // NOT JOLT"
-    "honest Wicked Collider labelling")
-require_text(physics_workspace_source
-    "particles, hair and springs"
-    "Wicked Collider secondary-system explanation")
-
-# Physics Lab must expose the advanced runtime escape hatch without implementing
-# scripting in the Studio shell itself.
+# Physics Lab keeps the advanced Renegade runtime escape hatch visible without
+# exposing implementation provenance in the creator-facing labels.
 require_text(physics_workspace_source
     "ADVANCED RUNTIME // renegade.physics"
     "advanced Lua runtime signpost")

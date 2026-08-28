@@ -36,7 +36,7 @@ int main()
             safe.friction != 0.0f || safe.restitution != 1.0f ||
             safe.pressure != 0.0f || !NearlyEqual(safe.vertexRadius, 1.0f))
         {
-            return Fail("soft-body sanitization diverged from Wicked Editor ranges");
+            return Fail("soft-body sanitization diverged from editor ranges");
         }
     }
 
@@ -57,7 +57,7 @@ int main()
     if (renegade::bridge::ResolveSoftBodyMeshEntity(scene, meshEntity) != meshEntity ||
         renegade::bridge::ResolveSoftBodyMeshEntity(scene, objectEntity) != meshEntity)
     {
-        return Fail("soft-body target did not mirror Wicked Object-to-Mesh mapping");
+        return Fail("soft-body target did not mirror Object-to-Mesh mapping");
     }
 
     const auto invalidEntity = wi::ecs::CreateEntity();
@@ -97,7 +97,7 @@ int main()
         !NearlyEqual(body->vertex_radius, 0.12f) ||
         !body->IsWindEnabled())
     {
-        return Fail("soft-body creator fields did not reach Wicked component");
+        return Fail("soft-body creator fields did not reach component");
     }
 
     if (!createCommands.Undo() || scene.softbodies.Contains(meshEntity) ||
@@ -107,9 +107,7 @@ int main()
     }
     body = scene.softbodies.GetComponent(meshEntity);
     if (body == nullptr)
-    {
         return Fail("soft-body Redo lost the Mesh component target");
-    }
 
     const auto before = renegade::bridge::CaptureSoftBodyPhysics(*body);
     auto after = before;
@@ -139,7 +137,7 @@ int main()
         !NearlyEqual(body->vertex_radius, 0.3f) ||
         body->IsWindEnabled() || body->physicsobject != nullptr)
     {
-        return Fail("soft-body editor fields did not update with Wicked rebuild semantics");
+        return Fail("soft-body fields did not update with rebuild semantics");
     }
 
     if (!editCommands.Undo() || !NearlyEqual(body->detail, 0.8f) ||
@@ -167,7 +165,7 @@ int main()
     if (!renegade::bridge::ResetSoftBodyPhysics(scene, objectEntity) ||
         !body->physicsIndices.empty() || body->physicsobject != nullptr)
     {
-        return Fail("soft-body Reset did not delegate to Wicked component Reset");
+        return Fail("soft-body Reset did not delegate to component Reset");
     }
 
     XMFLOAT3 position(9, 9, 9);
@@ -182,19 +180,44 @@ int main()
         return Fail("soft-body runtime API treated an uncreated body as live");
     }
     if (!NearlyEqual(position.x, 9.0f))
-    {
         return Fail("failed soft-body readback modified output state");
-    }
+
+    // Soft-body simulation owns temporary bone streams when an unrigged mesh
+    // is active. Removal must clear them, while Undo must restore them exactly.
+    mesh.armatureID = wi::ecs::INVALID_ENTITY;
+    mesh.vertex_boneindices = { XMUINT4(1, 2, 3, 4) };
+    mesh.vertex_boneweights = { XMFLOAT4(0.4f, 0.3f, 0.2f, 0.1f) };
+    mesh.vertex_boneindices2 = { XMUINT4(5, 6, 7, 8) };
+    mesh.vertex_boneweights2 = { XMFLOAT4(0.1f, 0.2f, 0.3f, 0.4f) };
 
     renegade::bridge::CommandService removeCommands;
     if (!removeCommands.Execute(
             std::make_unique<renegade::bridge::RemoveSoftBodyPhysicsCommand>(
                 scene,
                 objectEntity)) ||
-        scene.softbodies.Contains(meshEntity) ||
-        !removeCommands.Undo() || !scene.softbodies.Contains(meshEntity))
+        scene.softbodies.Contains(meshEntity))
     {
-        return Fail("RemoveSoftBodyPhysicsCommand lifecycle failed");
+        return Fail("RemoveSoftBodyPhysicsCommand did not execute");
+    }
+    if (!mesh.vertex_boneindices.empty() ||
+        !mesh.vertex_boneweights.empty() ||
+        !mesh.vertex_boneindices2.empty() ||
+        !mesh.vertex_boneweights2.empty())
+    {
+        return Fail("soft-body removal left stale unrigged bone streams");
+    }
+    if (!removeCommands.Undo() || !scene.softbodies.Contains(meshEntity))
+        return Fail("RemoveSoftBodyPhysicsCommand Undo failed");
+    if (mesh.vertex_boneindices.size() != 1 ||
+        mesh.vertex_boneweights.size() != 1 ||
+        mesh.vertex_boneindices2.size() != 1 ||
+        mesh.vertex_boneweights2.size() != 1 ||
+        mesh.vertex_boneindices[0].x != 1 ||
+        !NearlyEqual(mesh.vertex_boneweights[0].x, 0.4f) ||
+        mesh.vertex_boneindices2[0].x != 5 ||
+        !NearlyEqual(mesh.vertex_boneweights2[0].w, 0.4f))
+    {
+        return Fail("soft-body Remove Undo did not restore mesh bone streams");
     }
     body = scene.softbodies.GetComponent(meshEntity);
     if (body == nullptr || !NearlyEqual(body->detail, 0.5f) ||
@@ -214,6 +237,6 @@ int main()
         return Fail("soft-body creator accepted an entity with no mesh");
     }
 
-    std::cout << "PASS: JP01 Wicked soft-body physics parity\n";
+    std::cout << "PASS: JP01 soft-body physics parity and removal cleanup\n";
     return 0;
 }
