@@ -4441,6 +4441,7 @@ namespace renegade::studio
 
         viewportBounds_ = studioChrome_.ViewportBounds();
         const XMFLOAT4 pointer = wi::input::GetPointer();
+        const bool cameraIconConsumed = HandleCameraSceneIcons(pointer);
         const bool lightIconConsumed = HandleLightSceneIcons(pointer);
 
         if (sunPreviewPlaying_)
@@ -4476,7 +4477,7 @@ namespace renegade::studio
             return;
         }
 
-        if (lightIconConsumed)
+        if (cameraIconConsumed || lightIconConsumed)
         {
             return;
         }
@@ -4597,6 +4598,7 @@ namespace renegade::studio
 
         if (!projectHubVisible_ &&
             !creatorModelImporter.thumbnailCapturePending &&
+            !gizmoSuppressedForCameraView_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
             gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
@@ -6725,6 +6727,128 @@ namespace renegade::studio
         return IsPointerOverViewport(XMFLOAT4(screen.x, screen.y, 0, 0));
     }
 
+
+bool StudioRenderPath::HandleCameraSceneIcons(
+    const XMFLOAT4& pointer)
+{
+    if (session_ == nullptr || camera == nullptr || projectHubVisible_ ||
+        creatorModelImporter.thumbnailCapturePending)
+    {
+        return false;
+    }
+
+    auto& scene = session_->Scenes().GetScene();
+    const bool selectRequested =
+        !flyCameraActive_ && !GetGUI().HasFocus() &&
+        !gizmo_.IsInteracting() &&
+        IsPointerOverViewport(pointer) &&
+        wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+
+    for (std::size_t index = 0; index < scene.cameras.GetCount(); ++index)
+    {
+        const wi::ecs::Entity entity = scene.cameras.GetEntity(index);
+        if (!session_->Scenes().IsHierarchyVisible(entity))
+            continue;
+
+        const auto* transform = scene.transforms.GetComponent(entity);
+        if (transform == nullptr)
+            continue;
+
+        wi::scene::CameraComponent authoredCamera = scene.cameras[index];
+        authoredCamera.TransformCamera(*transform);
+        authoredCamera.UpdateCamera();
+
+        XMFLOAT3 eye = {};
+        XMFLOAT3 ahead = {};
+        const XMVECTOR eyeVector = authoredCamera.GetEye();
+        const XMVECTOR aheadVector = XMVectorAdd(
+            eyeVector,
+            XMVectorScale(authoredCamera.GetAt(), 1.0f));
+        XMStoreFloat3(&eye, eyeVector);
+        XMStoreFloat3(&ahead, aheadVector);
+
+        XMFLOAT2 center = {};
+        if (!ProjectEditorPoint(eye, center))
+            continue;
+
+        XMFLOAT2 direction = XMFLOAT2(1.0f, 0.0f);
+        XMFLOAT2 aheadScreen = {};
+        if (ProjectEditorPoint(ahead, aheadScreen))
+        {
+            const float dx = aheadScreen.x - center.x;
+            const float dy = aheadScreen.y - center.y;
+            const float length = std::sqrt(dx * dx + dy * dy);
+            if (length > 0.001f)
+            {
+                direction.x = dx / length;
+                direction.y = dy / length;
+            }
+        }
+        const XMFLOAT2 perpendicular(-direction.y, direction.x);
+
+        const bool selected =
+            session_->Selection().SelectedEntity() == entity;
+        const float pointerDx = pointer.x - center.x;
+        const float pointerDy = pointer.y - center.y;
+        const bool hovered =
+            pointerDx * pointerDx + pointerDy * pointerDy <= 18.0f * 18.0f;
+        const XMFLOAT4 color = selected
+            ? XMFLOAT4(0.58f, 0.95f, 1.0f, 1.0f)
+            : hovered
+                ? XMFLOAT4(1.0f, 0.68f, 0.30f, 1.0f)
+                : XMFLOAT4(0.20f, 0.84f, 1.0f, 0.92f);
+
+        const auto point = [&](const float forward, const float side)
+        {
+            return XMFLOAT2(
+                center.x + direction.x * forward + perpendicular.x * side,
+                center.y + direction.y * forward + perpendicular.y * side);
+        };
+
+        const XMFLOAT2 backLeft = point(-7.0f, 5.0f);
+        const XMFLOAT2 backRight = point(-7.0f, -5.0f);
+        const XMFLOAT2 frontLeft = point(6.0f, 5.0f);
+        const XMFLOAT2 frontRight = point(6.0f, -5.0f);
+        const XMFLOAT2 lensLeft = point(12.0f, 7.0f);
+        const XMFLOAT2 lensRight = point(12.0f, -7.0f);
+        const XMFLOAT2 facingEnd = point(27.0f, 0.0f);
+
+        DrawEditorLine(backLeft, frontLeft, color);
+        DrawEditorLine(frontLeft, frontRight, color);
+        DrawEditorLine(frontRight, backRight, color);
+        DrawEditorLine(backRight, backLeft, color);
+        DrawEditorLine(frontLeft, lensLeft, color);
+        DrawEditorLine(frontRight, lensRight, color);
+        DrawEditorLine(lensLeft, lensRight, color);
+        DrawEditorLine(point(12.0f, 0.0f), facingEnd, color);
+        DrawEditorLine(
+            facingEnd,
+            XMFLOAT2(
+                facingEnd.x - direction.x * 6.0f + perpendicular.x * 4.0f,
+                facingEnd.y - direction.y * 6.0f + perpendicular.y * 4.0f),
+            color);
+        DrawEditorLine(
+            facingEnd,
+            XMFLOAT2(
+                facingEnd.x - direction.x * 6.0f - perpendicular.x * 4.0f,
+                facingEnd.y - direction.y * 6.0f - perpendicular.y * 4.0f),
+            color);
+
+        if (hovered && selectRequested)
+        {
+            session_->Selection().Select(entity);
+            gizmoSuppressedForCameraView_ = false;
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+            SyncGizmoSelection();
+            SyncSelectionOutline();
+            return true;
+        }
+    }
+    return false;
+}
+
     bool StudioRenderPath::HandleLightSceneIcons(
         const XMFLOAT4& pointer)
     {
@@ -6946,6 +7070,7 @@ namespace renegade::studio
             !GetGUI().HasFocus() &&
             wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
         {
+            gizmoSuppressedForCameraView_ = false;
             flyCameraActive_ = true;
             cameraPointerAnchor_ = pointer;
         }
@@ -8320,6 +8445,7 @@ namespace renegade::studio
                 authoredCamera->TransformCamera(*transform);
                 authoredCamera->UpdateCamera();
             }
+            gizmoSuppressedForCameraView_ = true;
             RefreshInspector();
             RefreshStatus();
         }
@@ -8338,6 +8464,7 @@ namespace renegade::studio
         bridge::ApplyCamera(*camera, bridge::CaptureCamera(*authoredCamera));
         camera->TransformCamera(*transform);
         camera->UpdateCamera();
+        gizmoSuppressedForCameraView_ = true;
         RefreshStatus();
     }
 
@@ -10864,6 +10991,7 @@ wi::eventhandler::Subscribe_Once(
 
     void StudioRenderPath::SyncGizmoSelection()
     {
+        gizmoSuppressedForCameraView_ = false;
         gizmo_.selected.clear();
         gizmo_.selectedEntitiesNonRecursive.clear();
         gizmoEntity_ = wi::ecs::INVALID_ENTITY;

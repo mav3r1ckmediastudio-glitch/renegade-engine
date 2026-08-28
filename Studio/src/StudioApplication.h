@@ -447,6 +447,7 @@ namespace renegade::studio
             float screenY);
         bool HandleCreatorAssetPlacement(const XMFLOAT4& pointer);
         void CancelCreatorAssetPlacement();
+        bool HandleCameraSceneIcons(const XMFLOAT4& pointer);
         bool HandleLightSceneIcons(const XMFLOAT4& pointer);
         [[nodiscard]] bool ProjectEditorPoint(
             const XMFLOAT3& world,
@@ -720,6 +721,7 @@ namespace renegade::studio
         float cameraMoveSpeed_ = 5.0f;
         bool gizmoDragActive_ = false;
         bool flyCameraActive_ = false;
+        bool gizmoSuppressedForCameraView_ = false;
         bool gridVisible_ = true;
         int lastDrawerTab_ = 0;
         bool workspaceLayoutDirty_ = false;
