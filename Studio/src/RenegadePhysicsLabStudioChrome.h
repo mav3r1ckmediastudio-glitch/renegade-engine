@@ -35,11 +35,15 @@ namespace renegade::studio
 
     private:
         void SetPhysicsLabActive(bool active);
+        void RefreshSelectedCollisionScale();
         [[nodiscard]] bool PhysicsTabHit(const XMFLOAT4& pointer) const noexcept;
         void RenderPhysicsTab(wi::graphics::CommandList cmd) const;
 
         RenegadePhysicsLabWorkspace physicsLab_;
         std::function<void(Action)> studioAction_;
+        wi::ecs::Entity observedPhysicsScaleEntity_ = wi::ecs::INVALID_ENTITY;
+        XMFLOAT3 observedPhysicsScale_ = XMFLOAT3(1.0f, 1.0f, 1.0f);
+        bool observedPhysicsScaleValid_ = false;
         bool physicsTabConsumed_ = false;
     };
 }
