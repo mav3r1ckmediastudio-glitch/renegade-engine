@@ -10,6 +10,7 @@ set(STUDIO_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h")
 set(STUDIO_SOURCE "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
 set(CHROME_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.h")
 set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
+set(ROOT_CMAKE "${RENEGADE_SOURCE_DIR}/CMakeLists.txt")
 set(PHYSICS_LUA_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/PhysicsLuaService.cpp")
 set(SCENE_SERVICE_HEADER "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/SceneService.h")
 set(SCENE_DOCUMENT_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/SceneDocumentService.cpp")
@@ -18,6 +19,8 @@ set(COLLISION_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/CollisionService.c
 set(RUNTIME_SOURCE "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
 set(PHYSICS_LUA_TEST "${RENEGADE_SOURCE_DIR}/Tests/PhysicsLuaTests.cpp")
 set(PHYSICS_LUA_CMAKE "${RENEGADE_SOURCE_DIR}/Tests/JP01PhysicsLua.cmake")
+set(REUSABLE_PHYSICS_TEST "${RENEGADE_SOURCE_DIR}/Tests/JP01ReusableAssetPhysicsTests.cpp")
+set(REUSABLE_PHYSICS_CMAKE "${RENEGADE_SOURCE_DIR}/Tests/JP01ReusableAssetPhysics.cmake")
 set(TERRAIN_SOURCE "${RENEGADE_SOURCE_DIR}/EngineBridge/src/TerrainService.cpp")
 
 foreach(path IN ITEMS
@@ -29,6 +32,7 @@ foreach(path IN ITEMS
     "${STUDIO_SOURCE}"
     "${CHROME_HEADER}"
     "${STUDIO_CMAKE}"
+    "${ROOT_CMAKE}"
     "${PHYSICS_LUA_SOURCE}"
     "${SCENE_SERVICE_HEADER}"
     "${SCENE_DOCUMENT_SOURCE}"
@@ -37,6 +41,8 @@ foreach(path IN ITEMS
     "${RUNTIME_SOURCE}"
     "${PHYSICS_LUA_TEST}"
     "${PHYSICS_LUA_CMAKE}"
+    "${REUSABLE_PHYSICS_TEST}"
+    "${REUSABLE_PHYSICS_CMAKE}"
     "${TERRAIN_SOURCE}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "JP01 Physics Lab source contract input is missing: ${path}")
@@ -51,6 +57,7 @@ file(READ "${STUDIO_HEADER}" studio_header)
 file(READ "${STUDIO_SOURCE}" studio_source)
 file(READ "${CHROME_HEADER}" chrome_header)
 file(READ "${STUDIO_CMAKE}" studio_cmake)
+file(READ "${ROOT_CMAKE}" root_cmake)
 file(READ "${PHYSICS_LUA_SOURCE}" physics_lua_source)
 file(READ "${SCENE_SERVICE_HEADER}" scene_service_header)
 file(READ "${SCENE_DOCUMENT_SOURCE}" scene_document_source)
@@ -59,6 +66,8 @@ file(READ "${COLLISION_SOURCE}" collision_source)
 file(READ "${RUNTIME_SOURCE}" runtime_source)
 file(READ "${PHYSICS_LUA_TEST}" physics_lua_test)
 file(READ "${PHYSICS_LUA_CMAKE}" physics_lua_cmake)
+file(READ "${REUSABLE_PHYSICS_TEST}" reusable_physics_test)
+file(READ "${REUSABLE_PHYSICS_CMAKE}" reusable_physics_cmake)
 file(READ "${TERRAIN_SOURCE}" terrain_source)
 
 function(require_text haystack_var needle description)
@@ -177,7 +186,7 @@ require_text(collision_source
     "entity_(ResolveCollisionAuthoringTarget(scene, targetEntity))"
     "CreateCollisionCommand stable-wrapper targeting")
 require_text(collision_source
-    "scene.rigidbodies.Remove(nestedBodies.front());"
+    "scene.rigidbodies.Remove(nestedBody);"
     "nested reusable rigid-body removal during migration")
 require_text(collision_source
     "auto& rootBody = scene.rigidbodies.Create(wrapper);"
@@ -200,6 +209,24 @@ require_text(physics_chrome_source
 forbid_text(collision_source
     "JPH::PhysicsSystem"
     "new/raw Jolt world ownership in collision recovery")
+
+# A headless regression reproduces the exact wrapper -> payload -> imported-node
+# ownership pattern and proves Add/Undo/Redo plus pre-physics migration.
+require_text(root_cmake
+    "include(Tests/JP01ReusableAssetPhysics.cmake)"
+    "reusable-asset physics regression registration")
+require_text(reusable_physics_cmake
+    "RenegadeJP01ReusableAssetPhysicsTests"
+    "reusable-asset physics test target")
+require_text(reusable_physics_test
+    "ResolveCollisionAuthoringTarget(scene, fixture.nested) != fixture.wrapper"
+    "nested reusable target assertion")
+require_text(reusable_physics_test
+    "RepairReusableAssetCollisionTargets(recoveryScene)"
+    "serialized nested-body repair assertion")
+require_text(reusable_physics_test
+    "!commands.Redo()"
+    "wrapper rigid-body Redo assertion")
 
 # Lua lifecycle ownership: SceneService construction must be inert, and the
 # Renegade binding layer must never bootstrap Wicked's global VM itself.
