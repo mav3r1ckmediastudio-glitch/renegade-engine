@@ -109,22 +109,26 @@ namespace renegade::bridge
             return wi::ecs::INVALID_ENTITY;
         }
 
-        if (IsReusableAssetWrapper(scene, selectedEntity))
+        // Walk upward so nested reusable assets resolve to their nearest stable
+        // wrapper rather than whichever metadata component happens to be
+        // encountered first in storage order.
+        wi::ecs::Entity current = selectedEntity;
+        const std::size_t maximumDepth = scene.hierarchy.GetCount() + 1;
+        for (std::size_t depth = 0;
+            current != wi::ecs::INVALID_ENTITY && depth <= maximumDepth; ++depth)
         {
-            return selectedEntity;
-        }
-
-        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
-        {
-            const wi::ecs::Entity wrapper = scene.metadatas.GetEntity(index);
-            if (!IsReusableAssetWrapper(scene, wrapper))
+            if (IsReusableAssetWrapper(scene, current))
             {
-                continue;
+                return current;
             }
-            if (scene.Entity_IsDescendant(selectedEntity, wrapper))
+            const auto* hierarchy = scene.hierarchy.GetComponent(current);
+            if (hierarchy == nullptr ||
+                hierarchy->parentID == wi::ecs::INVALID_ENTITY ||
+                hierarchy->parentID == current)
             {
-                return wrapper;
+                break;
             }
+            current = hierarchy->parentID;
         }
         return selectedEntity;
     }
@@ -155,7 +159,7 @@ namespace renegade::bridge
                 const wi::ecs::Entity bodyEntity =
                     scene.rigidbodies.GetEntity(bodyIndex);
                 if (bodyEntity != wrapper &&
-                    scene.Entity_IsDescendant(bodyEntity, wrapper))
+                    ResolveCollisionAuthoringTarget(scene, bodyEntity) == wrapper)
                 {
                     nestedBody = bodyEntity;
                     ++nestedBodyCount;
