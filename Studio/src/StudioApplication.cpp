@@ -4597,6 +4597,7 @@ namespace renegade::studio
 
         if (!projectHubVisible_ &&
             !creatorModelImporter.thumbnailCapturePending &&
+            !gizmoSuppressedForCameraView_ &&
             gizmoEntity_ != wi::ecs::INVALID_ENTITY)
         {
             gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
@@ -6946,6 +6947,7 @@ namespace renegade::studio
             !GetGUI().HasFocus() &&
             wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
         {
+            gizmoSuppressedForCameraView_ = false;
             flyCameraActive_ = true;
             cameraPointerAnchor_ = pointer;
         }
@@ -8320,6 +8322,7 @@ namespace renegade::studio
                 authoredCamera->TransformCamera(*transform);
                 authoredCamera->UpdateCamera();
             }
+            gizmoSuppressedForCameraView_ = true;
             RefreshInspector();
             RefreshStatus();
         }
@@ -8338,6 +8341,7 @@ namespace renegade::studio
         bridge::ApplyCamera(*camera, bridge::CaptureCamera(*authoredCamera));
         camera->TransformCamera(*transform);
         camera->UpdateCamera();
+        gizmoSuppressedForCameraView_ = true;
         RefreshStatus();
     }
 
@@ -10864,6 +10868,7 @@ wi::eventhandler::Subscribe_Once(
 
     void StudioRenderPath::SyncGizmoSelection()
     {
+        gizmoSuppressedForCameraView_ = false;
         gizmo_.selected.clear();
         gizmo_.selectedEntitiesNonRecursive.clear();
         gizmoEntity_ = wi::ecs::INVALID_ENTITY;

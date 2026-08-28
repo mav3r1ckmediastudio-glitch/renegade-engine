@@ -720,6 +720,7 @@ namespace renegade::studio
         float cameraMoveSpeed_ = 5.0f;
         bool gizmoDragActive_ = false;
         bool flyCameraActive_ = false;
+        bool gizmoSuppressedForCameraView_ = false;
         bool gridVisible_ = true;
         int lastDrawerTab_ = 0;
         bool workspaceLayoutDirty_ = false;
