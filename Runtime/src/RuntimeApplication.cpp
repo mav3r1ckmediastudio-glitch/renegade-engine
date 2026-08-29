@@ -8,9 +8,12 @@
 
 namespace renegade::runtime
 {
-    void RuntimeRenderPath::BindScene(bridge::SceneService& scenes) noexcept
+    void RuntimeRenderPath::BindScene(
+        bridge::SceneService& scenes,
+        std::string projectRoot) noexcept
     {
         scenes_ = &scenes;
+        projectRoot_ = std::move(projectRoot);
         scene = &scenes.GetScene();
         renderSettingsInitialized_ = false;
     }
@@ -21,8 +24,15 @@ namespace renegade::runtime
         if (scenes_ == nullptr)
             return;
 
+        auto& activeScene = scenes_->GetScene();
+        if (!projectRoot_.empty())
+        {
+            std::string ignored;
+            (void)bridge::RefreshColorGradingLutResource(
+                activeScene, projectRoot_, ignored);
+        }
         const auto authored =
-            bridge::CaptureRenderSettings(scenes_->GetScene());
+            bridge::CaptureRenderSettings(activeScene);
         if (renderSettingsInitialized_ &&
             !bridge::HasRenderSettingsChange(renderSettings_, authored))
         {
@@ -131,7 +141,7 @@ namespace renegade::runtime
         infoDisplay.colorspace = true;
         infoDisplay.fpsinfo = true;
 
-        renderer_.BindScene(scenes_);
+        renderer_.BindScene(scenes_, startupResult_.project.rootPath);
         renderer_.init(canvas);
 
         // LP03 compatibility path: an explicitly declared project startup

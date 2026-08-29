@@ -73,6 +73,7 @@ namespace
     constexpr const char* KeyContrast = "renegade.render.contrast";
     constexpr const char* KeySaturation = "renegade.render.saturation";
     constexpr const char* KeyHDRCalibration = "renegade.render.hdr_calibration";
+    constexpr const char* KeyColorGradingEnabled = "renegade.render.color_grading.enabled";
     constexpr const char* KeyBloomEnabled = "renegade.render.bloom.enabled";
     constexpr const char* KeyBloomThreshold = "renegade.render.bloom.threshold";
     constexpr const char* KeyEyeAdaptationEnabled = "renegade.render.eye_adaptation.enabled";
@@ -133,6 +134,7 @@ namespace renegade::bridge
             !NearlyEqual(left.contrast, right.contrast) ||
             !NearlyEqual(left.saturation, right.saturation) ||
             !NearlyEqual(left.hdrCalibration, right.hdrCalibration) ||
+            left.colorGradingEnabled != right.colorGradingEnabled ||
             left.bloomEnabled != right.bloomEnabled ||
             !NearlyEqual(left.bloomThreshold, right.bloomThreshold) ||
             left.eyeAdaptationEnabled != right.eyeAdaptationEnabled ||
@@ -186,6 +188,7 @@ namespace renegade::bridge
         state.contrast = ReadValue(metadata->float_values, KeyContrast, defaults.contrast);
         state.saturation = ReadValue(metadata->float_values, KeySaturation, defaults.saturation);
         state.hdrCalibration = ReadValue(metadata->float_values, KeyHDRCalibration, defaults.hdrCalibration);
+        state.colorGradingEnabled = ReadValue(metadata->bool_values, KeyColorGradingEnabled, defaults.colorGradingEnabled);
         state.bloomEnabled = ReadValue(metadata->bool_values, KeyBloomEnabled, defaults.bloomEnabled);
         state.bloomThreshold = ReadValue(metadata->float_values, KeyBloomThreshold, defaults.bloomThreshold);
         state.eyeAdaptationEnabled = ReadValue(metadata->bool_values, KeyEyeAdaptationEnabled, defaults.eyeAdaptationEnabled);
@@ -230,6 +233,7 @@ namespace renegade::bridge
         metadata->float_values.set(KeyContrast, safe.contrast);
         metadata->float_values.set(KeySaturation, safe.saturation);
         metadata->float_values.set(KeyHDRCalibration, safe.hdrCalibration);
+        metadata->bool_values.set(KeyColorGradingEnabled, safe.colorGradingEnabled);
         metadata->bool_values.set(KeyBloomEnabled, safe.bloomEnabled);
         metadata->float_values.set(KeyBloomThreshold, safe.bloomThreshold);
         metadata->bool_values.set(KeyEyeAdaptationEnabled, safe.eyeAdaptationEnabled);
@@ -280,6 +284,7 @@ namespace renegade::bridge
         path.setContrast(safe.contrast);
         path.setSaturation(safe.saturation);
         path.setHDRCalibration(safe.hdrCalibration);
+        path.setColorGradingEnabled(safe.colorGradingEnabled);
         path.setBloomEnabled(safe.bloomEnabled);
         path.setBloomThreshold(safe.bloomThreshold);
         path.setEyeAdaptionEnabled(safe.eyeAdaptationEnabled);

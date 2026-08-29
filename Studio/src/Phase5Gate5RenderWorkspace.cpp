@@ -138,6 +138,42 @@ namespace renegade::studio
             renderWorkspacePanel_.AddWidget(&checkbox);
         };
 
+        createSection(
+            renderColorGradingLabel_,
+            "Render Color Grading Section",
+            "COLOR GRADING // LUT");
+        createToggle(
+            renderColorGradingEnabled_, "Color grading: ",
+            "Enable Wicked's native color-grading LUT stage.",
+            RenderToggle::ColorGrading);
+        renderLutLibrary_.Create("Render LUT Library");
+        renderLutLibrary_.SetTooltip(
+            "Choose one Renegade built-in or project LUT. The selected LUT is stored inside project Content and previews live.");
+        renderLutLibrary_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            ApplyRenderLutChoice(static_cast<std::size_t>(args.userdata));
+        });
+        renderWorkspacePanel_.AddWidget(&renderLutLibrary_);
+
+        renderLutImport_.Create("Render LUT Import");
+        renderLutImport_.SetText("+ IMPORT LUT");
+        renderLutImport_.SetTooltip(
+            "Add a custom 256x16 RGBA PNG LUT to this project's LUT library.");
+        renderLutImport_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            ImportRenderLut();
+        });
+        renderWorkspacePanel_.AddWidget(&renderLutImport_);
+
+        renderLutClear_.Create("Render LUT Clear");
+        renderLutClear_.SetText("CLEAR");
+        renderLutClear_.SetTooltip("Remove the current scene LUT selection.");
+        renderLutClear_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            ClearRenderLut();
+        });
+        renderWorkspacePanel_.AddWidget(&renderLutClear_);
+
         createToggle(
             renderBloomEnabled_, "Bloom enabled: ",
             "Run Wicked's native bloom pass.", RenderToggle::Bloom);
@@ -250,6 +286,16 @@ namespace renegade::studio
             widget.SetSize(XMFLOAT2(fieldWidth, 28.0f));
             y += 32.0f;
         };
+        const auto two = [fieldWidth, &y](wi::gui::Widget& left, wi::gui::Widget& right)
+        {
+            constexpr float gap = 6.0f;
+            const float width = (fieldWidth - gap) * 0.5f;
+            left.SetPos(XMFLOAT2(12.0f, y));
+            left.SetSize(XMFLOAT2(width, 28.0f));
+            right.SetPos(XMFLOAT2(12.0f + width + gap, y));
+            right.SetSize(XMFLOAT2(width, 28.0f));
+            y += 32.0f;
+        };
 
         title(renderWorkspaceTitle_);
         section(renderImageLabel_);
@@ -259,6 +305,11 @@ namespace renegade::studio
         full(renderContrast_);
         full(renderSaturation_);
         full(renderHdrCalibration_);
+
+        section(renderColorGradingLabel_);
+        full(renderColorGradingEnabled_);
+        full(renderLutLibrary_);
+        two(renderLutImport_, renderLutClear_);
 
         section(renderBloomLabel_);
         full(renderBloomEnabled_);
@@ -295,6 +346,8 @@ namespace renegade::studio
         renderContrast_.SetValue(state.contrast);
         renderSaturation_.SetValue(state.saturation);
         renderHdrCalibration_.SetValue(state.hdrCalibration);
+        renderColorGradingEnabled_.SetCheck(state.colorGradingEnabled);
+        RefreshRenderLutLibrary();
         renderBloomEnabled_.SetCheck(state.bloomEnabled);
         renderBloomThreshold_.SetValue(state.bloomThreshold);
         renderEyeAdaptationEnabled_.SetCheck(state.eyeAdaptationEnabled);
@@ -320,6 +373,168 @@ namespace renegade::studio
         renderSharpenAmount_.SetEnabled(state.sharpenEnabled);
         renderChromaticAberrationAmount_.SetEnabled(
             state.chromaticAberrationEnabled);
+    }
+
+    void StudioRenderPath::RefreshRenderLutLibrary()
+    {
+        renderLutChoices_.clear();
+        renderLutLibrary_.ClearItems();
+
+        bridge::ColorGradingLutEntry none;
+        none.displayName = "NONE";
+        renderLutChoices_.push_back(none);
+        for (std::size_t index = 1;
+            index <= bridge::BuiltInColorGradingLutCount; ++index)
+        {
+            bridge::ColorGradingLutEntry entry;
+            entry.displayName = "BUILT-IN // " + std::to_string(index);
+            entry.projectRelativePath = "Content/LUTs/BuiltIn/" +
+                std::to_string(index) + ".png";
+            entry.builtIn = true;
+            entry.builtInIndex = index;
+            renderLutChoices_.push_back(std::move(entry));
+        }
+
+        std::string current;
+        bool projectAvailable = false;
+        if (session_ != nullptr && session_->Projects().HasProject())
+        {
+            projectAvailable = true;
+            const auto& project = session_->Projects().CurrentProject();
+            const auto custom = bridge::ListProjectColorGradingLuts(project.rootPath);
+            renderLutChoices_.insert(
+                renderLutChoices_.end(), custom.begin(), custom.end());
+            const auto& scene = session_->Scenes().GetScene();
+            if (scene.weathers.GetCount() > 0)
+                current = scene.weathers[0].colorGradingMapName;
+        }
+
+        std::size_t selected = 0;
+        for (std::size_t index = 0; index < renderLutChoices_.size(); ++index)
+        {
+            renderLutLibrary_.AddItem(
+                renderLutChoices_[index].displayName,
+                static_cast<std::uint64_t>(index));
+            if (!current.empty() &&
+                renderLutChoices_[index].projectRelativePath == current)
+            {
+                selected = index;
+            }
+        }
+        renderLutLibrary_.SetSelectedByUserdataWithoutCallback(
+            static_cast<std::uint64_t>(selected));
+        renderLutLibrary_.SetEnabled(projectAvailable);
+        renderLutImport_.SetEnabled(projectAvailable);
+        renderLutClear_.SetEnabled(projectAvailable && !current.empty());
+    }
+
+    void StudioRenderPath::ApplyRenderLutChoice(const std::size_t choiceIndex)
+    {
+        if (session_ == nullptr || !session_->Projects().HasProject() ||
+            choiceIndex >= renderLutChoices_.size())
+        {
+            return;
+        }
+        if (choiceIndex == 0)
+        {
+            ClearRenderLut();
+            return;
+        }
+
+        auto entry = renderLutChoices_[choiceIndex];
+        const auto& project = session_->Projects().CurrentProject();
+        std::string path = entry.projectRelativePath;
+        std::string error;
+        if (entry.builtIn)
+        {
+            const std::string library = wi::helper::GetCurrentPath() + "/Content/luts";
+            if (!bridge::InstallBuiltInColorGradingLut(
+                    project.rootPath, library, entry.builtInIndex, path, error))
+            {
+                studioChrome_.SetStatusText("LUT // BUILT-IN INSTALL FAILED // " + error);
+                wi::helper::messageBox(error, "Color Grading LUT");
+                RefreshRenderLutLibrary();
+                return;
+            }
+        }
+
+        if (!session_->Commands().Execute(
+                std::make_unique<bridge::SetColorGradingLutCommand>(
+                    session_->Scenes().GetScene(), project.rootPath, path)))
+        {
+            RefreshRenderLutLibrary();
+            return;
+        }
+        studioChrome_.SetStatusText("LUT // APPLIED // " + entry.displayName);
+        RefreshRenderWorkspace();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::ImportRenderLut()
+    {
+        if (session_ == nullptr || !session_->Projects().HasProject())
+            return;
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Import Color Grading LUT";
+        params.extensions = {"png"};
+        wi::helper::FileDialog(params, [this](const std::string& sourcePath)
+        {
+            wi::eventhandler::Subscribe_Once(
+                wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                [this, sourcePath](std::uint64_t)
+                {
+                    if (sourcePath.empty() || session_ == nullptr ||
+                        !session_->Projects().HasProject())
+                    {
+                        return;
+                    }
+                    const auto& project = session_->Projects().CurrentProject();
+                    std::string imported;
+                    std::string error;
+                    if (!bridge::ImportCustomColorGradingLut(
+                            project.rootPath, sourcePath, imported, error))
+                    {
+                        studioChrome_.SetStatusText("LUT // IMPORT FAILED // " + error);
+                        wi::helper::messageBox(
+                            error + "
+
+Use a lossless 256x16 8-bit RGBA PNG.",
+                            "Import Color Grading LUT");
+                        return;
+                    }
+                    if (!session_->Commands().Execute(
+                            std::make_unique<bridge::SetColorGradingLutCommand>(
+                                session_->Scenes().GetScene(), project.rootPath, imported)))
+                    {
+                        studioChrome_.SetStatusText("LUT // IMPORTED // ASSIGN FAILED");
+                        RefreshRenderLutLibrary();
+                        return;
+                    }
+                    studioChrome_.SetStatusText("LUT // IMPORTED + APPLIED");
+                    RefreshRenderWorkspace();
+                    RefreshStatus();
+                });
+        });
+    }
+
+    void StudioRenderPath::ClearRenderLut()
+    {
+        if (session_ == nullptr || !session_->Projects().HasProject())
+            return;
+        const auto& project = session_->Projects().CurrentProject();
+        if (session_->Commands().Execute(
+                std::make_unique<bridge::SetColorGradingLutCommand>(
+                    session_->Scenes().GetScene(), project.rootPath, std::string{})))
+        {
+            studioChrome_.SetStatusText("LUT // CLEARED");
+            RefreshRenderWorkspace();
+            RefreshStatus();
+        }
+        else
+        {
+            RefreshRenderLutLibrary();
+        }
     }
 
     void StudioRenderPath::SetRenderWorkspaceActive(const bool active)
@@ -377,7 +592,14 @@ namespace renegade::studio
     {
         if (session_ == nullptr || renderSliderActive_)
             return;
-        const auto authored = bridge::CaptureRenderSettings(session_->Scenes().GetScene());
+        auto& scene = session_->Scenes().GetScene();
+        if (session_->Projects().HasProject())
+        {
+            std::string ignored;
+            (void)bridge::RefreshColorGradingLutResource(
+                scene, session_->Projects().CurrentProject().rootPath, ignored);
+        }
+        const auto authored = bridge::CaptureRenderSettings(scene);
         if (appliedRenderSettingsInitialized_ &&
             !bridge::HasRenderSettingsChange(appliedRenderSettings_, authored))
         {
@@ -418,6 +640,9 @@ namespace renegade::studio
         auto state = bridge::CaptureRenderSettings(session_->Scenes().GetScene());
         switch (toggle)
         {
+        case RenderToggle::ColorGrading:
+            state.colorGradingEnabled = value;
+            break;
         case RenderToggle::Bloom:
             state.bloomEnabled = value;
             break;

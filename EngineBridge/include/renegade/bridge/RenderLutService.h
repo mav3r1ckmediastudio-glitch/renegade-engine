@@ -10,13 +10,14 @@
 
 namespace renegade::bridge
 {
-    inline constexpr std::size_t BuiltInColorGradingLutCount = 50;
+    inline constexpr std::size_t BuiltInColorGradingLutCount = 3;
 
     struct ColorGradingLutEntry
     {
         std::string displayName;
         std::string projectRelativePath;
         bool builtIn = false;
+        std::size_t builtInIndex = 0;
     };
 
     // Wicked's pinned native color-grading importer requires an 8-bit

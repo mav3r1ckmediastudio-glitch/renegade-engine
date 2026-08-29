@@ -39,6 +39,7 @@ namespace renegade::bridge
         float contrast = 1.0f;
         float saturation = 1.0f;
         float hdrCalibration = 1.0f;
+        bool colorGradingEnabled = true;
 
         bool bloomEnabled = true;
         float bloomThreshold = 1.0f;

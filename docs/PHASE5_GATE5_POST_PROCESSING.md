@@ -49,6 +49,20 @@ Expose the pinned Wicked native controls:
 
 HDR calibration is exposed as Wicked's native render-path calibration value. Platform/OS HDR-output switching, swap-chain policy and monitor capability management are not invented by this gate; those remain a platform/runtime graphics-settings concern if Renegade later requires explicit output-mode selection.
 
+### COLOR GRADING // LUT
+
+Expose Wicked's native color-grading stage as a first-class creator workflow:
+
+- color grading enabled,
+- 3 representative Renegade built-in 256x16 RGBA PNG LUTs for Gate 5 proof (library expansion follows after end-to-end validation),
+- a project LUT library selector,
+- a small `+ IMPORT LUT` action for creator-supplied 256x16 RGBA PNG LUTs,
+- `CLEAR` to remove the scene LUT selection.
+
+Wicked's native `WeatherComponent::colorGradingMapName` remains the serialized LUT identity and `IMPORT_COLORGRADINGLUT` remains the decoder. Renegade copies every selected built-in or imported custom LUT into project `Content/LUTs/...` and stores only that project-relative path in WISCENE. This makes Studio preview, Test Level, dependency extraction and packaged Runtime consume the same file without retaining an editor-installation or desktop source path.
+
+The decoded `colorGradingMap` resource is non-serialized upstream state and is reconstructed from the project path after load. LUT selection/clear is command-backed and previews immediately in Studio.
+
 ### BLOOM // AUTO EXPOSURE
 
 Expose:
@@ -126,6 +140,7 @@ A scene with no Gate 5 state resolves deterministically to Renegade's documented
 - Brightness: 0.0
 - Contrast: 1.0
 - Saturation: 1.0
+- Color grading stage: enabled (no LUT selected by default)
 - Bloom: enabled
 - Bloom threshold: 1.0
 - Eye adaptation: disabled
@@ -171,7 +186,8 @@ Gate 5 is not complete until one owner build proves all of the following:
 2. Exposure changes are immediately and visibly reflected in Studio.
 3. ACES/Reinhard/Uchimura can be selected and visibly alter an appropriate high-dynamic-range scene.
 4. Brightness/contrast/saturation controls work live.
-5. Bloom can be disabled/enabled and its threshold visibly changes bright-emissive bloom response.
+5. Built-in LUTs can be selected and visibly preview immediately in Studio; a custom 256x16 RGBA PNG can be added with `+ IMPORT LUT`, selected, cleared, saved/reopened and restored.
+6. Bloom can be disabled/enabled and its threshold visibly changes bright-emissive bloom response.
 6. Eye adaptation can be enabled and visibly adapts when moving between materially different lighting levels.
 7. OFF/FXAA/TAA/MSAA 2X/4X/8X selection is deterministic and does not leave incompatible previous modes active.
 8. Depth of field works with an authored Gate 2 camera focal-distance/aperture setup.

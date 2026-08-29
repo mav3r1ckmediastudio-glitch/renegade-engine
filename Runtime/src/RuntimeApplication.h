@@ -7,6 +7,7 @@
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
 #include "renegade/bridge/RenderSettingsService.h"
+#include "renegade/bridge/RenderLutService.h"
 #include "renegade/bridge/SceneService.h"
 
 #include <cstdint>
@@ -18,7 +19,9 @@ namespace renegade::runtime
     class RuntimeRenderPath final : public wi::RenderPath3D
     {
     public:
-        void BindScene(bridge::SceneService& scenes) noexcept;
+        void BindScene(
+            bridge::SceneService& scenes,
+            std::string projectRoot) noexcept;
         void Load() override;
         void Update(float dt) override;
 
@@ -26,6 +29,7 @@ namespace renegade::runtime
         void SyncRenderSettings(bool resizeBuffersForMSAA);
 
         bridge::SceneService* scenes_ = nullptr;
+        std::string projectRoot_;
         bridge::RenderSettingsState renderSettings_;
         bool renderSettingsInitialized_ = false;
     };

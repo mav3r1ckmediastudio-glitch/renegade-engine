@@ -29,7 +29,7 @@ int main()
     if (defaults.schemaVersion != RenderSettingsSchemaVersion ||
         defaults.tonemap != RenderTonemap::ACES ||
         !NearlyEqual(defaults.exposure, 1.0f) ||
-        !defaults.bloomEnabled || defaults.eyeAdaptationEnabled ||
+        !defaults.colorGradingEnabled || !defaults.bloomEnabled || defaults.eyeAdaptationEnabled ||
         defaults.antiAliasing != AntiAliasingMode::Off ||
         defaults.motionBlurEnabled || !defaults.depthOfFieldEnabled ||
         defaults.sharpenEnabled || defaults.chromaticAberrationEnabled ||
@@ -74,6 +74,7 @@ int main()
     authored.contrast = 1.25f;
     authored.saturation = 0.85f;
     authored.hdrCalibration = 1.5f;
+    authored.colorGradingEnabled = false;
     authored.bloomEnabled = false;
     authored.bloomThreshold = 2.4f;
     authored.eyeAdaptationEnabled = true;

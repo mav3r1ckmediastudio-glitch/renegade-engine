@@ -18,13 +18,16 @@ set(settings_test "${RENEGADE_SOURCE_DIR}/Tests/Phase5Gate5RenderSettingsTests.c
 set(lut_test "${RENEGADE_SOURCE_DIR}/Tests/Phase5Gate5LutTests.cpp")
 set(gate_cmake "${RENEGADE_SOURCE_DIR}/Tests/Phase5Gate5.cmake")
 set(gate_doc "${RENEGADE_SOURCE_DIR}/docs/PHASE5_GATE5_POST_PROCESSING.md")
-set(lut_archive "${RENEGADE_SOURCE_DIR}/Studio/assets/luts/Renegade_Builtin_LUTs_1-50_RGBA.zip")
+set(lut_1 "${RENEGADE_SOURCE_DIR}/Studio/assets/luts/1.png")
+set(lut_2 "${RENEGADE_SOURCE_DIR}/Studio/assets/luts/2.png")
+set(lut_3 "${RENEGADE_SOURCE_DIR}/Studio/assets/luts/3.png")
 
 foreach(path IN ITEMS
     "${render_header}" "${render_source}" "${lut_header}" "${lut_source}"
     "${bridge_cmake}" "${studio_header}" "${studio_source}" "${studio_render}"
     "${studio_chrome}" "${studio_cmake}" "${runtime_header}" "${runtime_source}"
-    "${settings_test}" "${lut_test}" "${gate_cmake}" "${gate_doc}" "${lut_archive}")
+    "${settings_test}" "${lut_test}" "${gate_cmake}" "${gate_doc}"
+    "${lut_1}" "${lut_2}" "${lut_3}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "Gate 5 missing required source: ${path}")
     endif()
@@ -187,8 +190,11 @@ endforeach()
 
 foreach(token IN ITEMS
     "src/Phase5Gate5RenderWorkspace.cpp"
-    "Renegade_Builtin_LUTs_1-50_RGBA.zip"
-    "Content/luts")
+    "RENEGADE_LUT_INDEX IN ITEMS 1 2 3"
+    "Content/luts/1.png"
+    "Content/luts/2.png"
+    "Content/luts/3.png"
+    "copy_if_different")
     string(FIND "${studio_cmake_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Gate 5 Studio build surface missing ${token}")
@@ -256,7 +262,7 @@ endforeach()
 foreach(token IN ITEMS
     "COLOR GRADING // LUT"
     "+ IMPORT LUT"
-    "50 Renegade built-in"
+    "3 representative Renegade built-in"
     "IMPORT_COLORGRADINGLUT")
     string(FIND "${gate_doc_text}" "${token}" found)
     if(found EQUAL -1)
