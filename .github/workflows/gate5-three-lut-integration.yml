@@ -21,7 +21,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "2f15b23cf2603952d341bee143688a24bf385dee"
+          test "$(git rev-parse HEAD^)" = "38d2a2ba770fd825e8828d8e592816f4cee9549a"
           test -f .github/scripts/gate5_render_workspace.py
           test -f .github/scripts/gate5_lut_integration.py
           test -f .github/scripts/gate5_three_lut_finalize.py
@@ -48,6 +48,20 @@ jobs:
               assert data[24] == 8
               assert data[25] == 6
           print("Three Gate 5 LUTs verified as 256x16 8-bit RGBA PNGs")
+          PY
+
+      - name: Refresh bounded Studio anchor cardinality
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/gate5_render_workspace.py')
+          text = path.read_text(encoding='utf-8')
+          old = '    2,\n    "hierarchy/entity selection returns to Scene")'
+          new = '    1,\n    "hierarchy/entity selection returns to Scene")'
+          if text.count(old) != 1:
+              raise SystemExit('Gate 5 hierarchy anchor guard no longer matches exactly once')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
           PY
 
       - name: Validate integration scripts
