@@ -34,8 +34,9 @@ jobs:
         shell: bash
         run: |
           git diff --check
-          test "$(git diff --name-only | sort)" = $'.github/workflows/phase5-g3-status-fix.yml\nStudio/src/StudioApplication.cpp'
-          ! grep -q 'statusOverride_' Studio/src/StudioApplication.cpp
+          changed="$({ git diff --name-only; git diff --cached --name-only; } | sort -u)"
+          test "$changed" = $'.github/workflows/phase5-g3-status-fix.yml\nStudio/src/StudioApplication.cpp'
+          ! grep -q 'ENVIRONMENT PROBE REFRESH REQUESTED' Studio/src/StudioApplication.cpp
           cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate3SourceContract.cmake
       - name: Commit compile fix
         shell: bash
