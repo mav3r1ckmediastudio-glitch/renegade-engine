@@ -1,0 +1,215 @@
+name: Gate 5 live controls repair
+
+on:
+  push:
+    branches:
+      - staging/phase5-gate5-live-controls
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Guard exact owner-tested head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "93086a614d2dc58b4d18877849ff9e64980a1cdc"
+
+      - name: Apply bounded Gate 5 functional repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one anchor, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          # EngineBridge: expose a live native-path verifier and use Wicked's
+          # own editor ranges instead of invented oversized ranges.
+          replace_once(
+              'EngineBridge/include/renegade/bridge/RenderSettingsService.h',
+              '''    [[nodiscard]] RenderSettingsState CaptureRenderSettings(\n        const wi::scene::Scene& scene) noexcept;\n    [[nodiscard]] bool WriteRenderSettings(''',
+              '''    [[nodiscard]] RenderSettingsState CaptureRenderSettings(\n        const wi::scene::Scene& scene) noexcept;\n    [[nodiscard]] bool RenderSettingsMatchPath(\n        const wi::RenderPath3D& path,\n        const RenderSettingsState& state) noexcept;\n    [[nodiscard]] bool WriteRenderSettings(''',
+              'render header live verifier')
+
+          source = Path('EngineBridge/src/RenderSettingsService.cpp')
+          text = source.read_text(encoding='utf-8')
+          replacements = {
+              'result.exposure = ClampFinite(result.exposure, defaults.exposure, 0.0f, 16.0f);':
+                  'result.exposure = ClampFinite(result.exposure, defaults.exposure, 0.0f, 3.0f);',
+              'result.brightness = ClampFinite(result.brightness, defaults.brightness, -2.0f, 2.0f);':
+                  'result.brightness = ClampFinite(result.brightness, defaults.brightness, -1.0f, 1.0f);',
+              'result.contrast = ClampFinite(result.contrast, defaults.contrast, 0.0f, 4.0f);':
+                  'result.contrast = ClampFinite(result.contrast, defaults.contrast, 0.0f, 2.0f);',
+              'result.saturation = ClampFinite(result.saturation, defaults.saturation, 0.0f, 4.0f);':
+                  'result.saturation = ClampFinite(result.saturation, defaults.saturation, 0.0f, 2.0f);',
+              'result.hdrCalibration = ClampFinite(result.hdrCalibration, defaults.hdrCalibration, 0.01f, 16.0f);':
+                  'result.hdrCalibration = ClampFinite(result.hdrCalibration, defaults.hdrCalibration, 0.0f, 8.0f);',
+              'result.bloomThreshold = ClampFinite(result.bloomThreshold, defaults.bloomThreshold, 0.0f, 64.0f);':
+                  'result.bloomThreshold = ClampFinite(result.bloomThreshold, defaults.bloomThreshold, 0.0f, 10.0f);',
+              'result.eyeAdaptationKey = ClampFinite(result.eyeAdaptationKey, defaults.eyeAdaptationKey, 0.001f, 4.0f);':
+                  'result.eyeAdaptationKey = ClampFinite(result.eyeAdaptationKey, defaults.eyeAdaptationKey, 0.01f, 0.5f);',
+              'result.eyeAdaptationRate = ClampFinite(result.eyeAdaptationRate, defaults.eyeAdaptationRate, 0.0f, 16.0f);':
+                  'result.eyeAdaptationRate = ClampFinite(result.eyeAdaptationRate, defaults.eyeAdaptationRate, 0.01f, 4.0f);',
+              'result.depthOfFieldStrength = ClampFinite(result.depthOfFieldStrength, defaults.depthOfFieldStrength, 0.0f, 100.0f);':
+                  'result.depthOfFieldStrength = ClampFinite(result.depthOfFieldStrength, defaults.depthOfFieldStrength, 1.0f, 20.0f);',
+              'result.motionBlurStrength = ClampFinite(result.motionBlurStrength, defaults.motionBlurStrength, 0.0f, 500.0f);':
+                  'result.motionBlurStrength = ClampFinite(result.motionBlurStrength, defaults.motionBlurStrength, 0.1f, 400.0f);',
+              'result.chromaticAberrationAmount = ClampFinite(result.chromaticAberrationAmount, defaults.chromaticAberrationAmount, 0.0f, 64.0f);':
+                  'result.chromaticAberrationAmount = ClampFinite(result.chromaticAberrationAmount, defaults.chromaticAberrationAmount, 0.0f, 40.0f);',
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'render range anchor expected once: {old!r}, found {count}')
+              text = text.replace(old, new, 1)
+          source.write_text(text, encoding='utf-8', newline='\n')
+
+          replace_once(
+              'EngineBridge/src/RenderSettingsService.cpp',
+              '''    bool WriteRenderSettings(\n        wi::scene::Scene& scene,\n        const RenderSettingsState& state)\n    {''',
+              '''    bool RenderSettingsMatchPath(\n        const wi::RenderPath3D& path,\n        const RenderSettingsState& state) noexcept\n    {\n        const auto safe = SanitizeRenderSettings(state);\n\n        wi::renderer::Tonemap tonemap = wi::renderer::Tonemap::ACES;\n        switch (safe.tonemap)\n        {\n        case RenderTonemap::Reinhard:\n            tonemap = wi::renderer::Tonemap::Reinhard;\n            break;\n        case RenderTonemap::Uchimura:\n            tonemap = wi::renderer::Tonemap::Uchimura;\n            break;\n        case RenderTonemap::ACES:\n        default:\n            break;\n        }\n        if (path.getTonemap() != tonemap ||\n            !NearlyEqual(path.getExposure(), safe.exposure) ||\n            !NearlyEqual(path.getBrightness(), safe.brightness) ||\n            !NearlyEqual(path.getContrast(), safe.contrast) ||\n            !NearlyEqual(path.getSaturation(), safe.saturation) ||\n            !NearlyEqual(path.getHDRCalibration(), safe.hdrCalibration) ||\n            path.getColorGradingEnabled() != safe.colorGradingEnabled ||\n            path.getBloomEnabled() != safe.bloomEnabled ||\n            !NearlyEqual(path.getBloomThreshold(), safe.bloomThreshold) ||\n            path.getEyeAdaptionEnabled() != safe.eyeAdaptationEnabled ||\n            !NearlyEqual(path.getEyeAdaptionKey(), safe.eyeAdaptationKey) ||\n            !NearlyEqual(path.getEyeAdaptionRate(), safe.eyeAdaptationRate) ||\n            path.getDepthOfFieldEnabled() != safe.depthOfFieldEnabled ||\n            !NearlyEqual(path.getDepthOfFieldStrength(), safe.depthOfFieldStrength) ||\n            path.getMotionBlurEnabled() != safe.motionBlurEnabled ||\n            !NearlyEqual(path.getMotionBlurStrength(), safe.motionBlurStrength) ||\n            path.getSharpenFilterEnabled() !=\n                (safe.sharpenEnabled && safe.sharpenAmount > Epsilon) ||\n            !NearlyEqual(path.getSharpenFilterAmount(), safe.sharpenAmount) ||\n            path.getChromaticAberrationEnabled() != safe.chromaticAberrationEnabled ||\n            !NearlyEqual(path.getChromaticAberrationAmount(), safe.chromaticAberrationAmount) ||\n            path.getDitherEnabled() != safe.ditherEnabled)\n        {\n            return false;\n        }\n\n        const bool taa = wi::renderer::GetTemporalAAEnabled();\n        const bool fxaa = path.getFXAAEnabled();\n        const std::uint32_t msaa = path.getMSAASampleCount();\n        switch (safe.antiAliasing)\n        {\n        case AntiAliasingMode::FXAA:\n            return fxaa && !taa && msaa == 1;\n        case AntiAliasingMode::TAA:\n            return !fxaa && taa && msaa == 1;\n        case AntiAliasingMode::MSAA2X:\n            return !fxaa && !taa && msaa >= 2 && msaa <= 2;\n        case AntiAliasingMode::MSAA4X:\n            return !fxaa && !taa && msaa >= 2 && msaa <= 4;\n        case AntiAliasingMode::MSAA8X:\n            return !fxaa && !taa && msaa >= 2 && msaa <= 8;\n        case AntiAliasingMode::Off:\n        default:\n            return !fxaa && !taa && msaa == 1;\n        }\n    }\n\n    bool WriteRenderSettings(\n        wi::scene::Scene& scene,\n        const RenderSettingsState& state)\n    {''',
+              'native render-path verifier implementation')
+
+          # Studio: mirror the pinned Wicked Editor's meaningful ranges and
+          # explain controls whose visibility depends on scene/output state.
+          studio = Path('Studio/src/Phase5Gate5RenderWorkspace.cpp')
+          text = studio.read_text(encoding='utf-8')
+          replacements = {
+              '0.0f, 16.0f, 1600.0f);': '0.0f, 3.0f, 10000.0f);',
+              '-2.0f, 2.0f, 800.0f);': '-1.0f, 1.0f, 10000.0f);',
+              '0.0f, 4.0f, 800.0f);': '0.0f, 2.0f, 10000.0f);',
+              'RenderField::HdrCalibration, 0.01f, 16.0f, 1600.0f);': 'RenderField::HdrCalibration, 0.0f, 8.0f, 100.0f);',
+              'RenderField::BloomThreshold, 0.0f, 64.0f, 1280.0f);': 'RenderField::BloomThreshold, 0.0f, 10.0f, 1000.0f);',
+              'RenderField::EyeAdaptationKey, 0.001f, 4.0f, 1000.0f);': 'RenderField::EyeAdaptationKey, 0.01f, 0.5f, 10000.0f);',
+              'RenderField::EyeAdaptationRate, 0.0f, 16.0f, 1600.0f);': 'RenderField::EyeAdaptationRate, 0.01f, 4.0f, 10000.0f);',
+              '0.0f, 100.0f, 1000.0f);': '1.0f, 20.0f, 1000.0f);',
+              '0.0f, 500.0f, 1000.0f);': '0.1f, 400.0f, 10000.0f);',
+              'RenderField::ChromaticAberrationAmount, 0.0f, 64.0f, 1280.0f);': 'RenderField::ChromaticAberrationAmount, 0.0f, 40.0f, 1000.0f);',
+              '"Wicked render-path HDR calibration value. This does not switch OS HDR output mode."': '"HDR output calibration. This is intentionally subtle/inert while the viewport is running in SDR."',
+              '"Enable Wicked eye adaptation / automatic exposure."': '"Enable Wicked eye adaptation. The visible response happens over time while scene luminance changes."',
+              '"Run Wicked depth of field. Focal distance/aperture remain authored on scene cameras."': '"Run Wicked depth of field. It requires the active view camera aperture to be greater than zero; focal distance/aperture are authored on scene cameras."',
+              '"Run Wicked\'s native motion-blur pass."': '"Run Wicked\'s native motion-blur pass. The effect is visible while the camera or scene is moving."',
+              '"Enable Wicked\'s final-image dithering."': '"Enable Wicked\'s subtle final-image dithering for banding reduction."',
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Studio range/tooltip anchor expected once: {old!r}, found {count}')
+              text = text.replace(old, new, 1)
+          # Contrast and saturation share the same old range text; the first
+          # replacement above intentionally changed only one occurrence. Repair
+          # the remaining identical range explicitly and fail closed.
+          old = '0.0f, 4.0f, 800.0f);'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one remaining saturation/contrast range, found {text.count(old)}')
+          text = text.replace(old, '0.0f, 2.0f, 10000.0f);', 1)
+          studio.write_text(text, encoding='utf-8', newline='\n')
+
+          replace_once(
+              'Studio/src/Phase5Gate5RenderWorkspace.cpp',
+              '''        const auto authored = bridge::CaptureRenderSettings(scene);\n        if (appliedRenderSettingsInitialized_ &&\n            !bridge::HasRenderSettingsChange(appliedRenderSettings_, authored))\n        {\n            return;\n        }\n        ApplyRenderSettingsState(authored, resizeBuffersForMSAA);''',
+              '''        const auto authored = bridge::CaptureRenderSettings(scene);\n        if (bridge::RenderSettingsMatchPath(*this, authored))\n        {\n            appliedRenderSettings_ = authored;\n            appliedRenderSettingsInitialized_ = true;\n            return;\n        }\n        ApplyRenderSettingsState(authored, resizeBuffersForMSAA);''',
+              'Studio live path sync')
+
+          replace_once(
+              'Studio/src/Phase5Gate5RenderWorkspace.cpp',
+              '''        bridge::ApplyRenderSettingsToPath(*this, safe, resizeBuffersForMSAA);\n        appliedRenderSettings_ = safe;\n        appliedRenderSettingsInitialized_ = true;''',
+              '''        bridge::ApplyRenderSettingsToPath(*this, safe, resizeBuffersForMSAA);\n        appliedRenderSettings_ = safe;\n        appliedRenderSettingsInitialized_ = true;\n        if (!bridge::RenderSettingsMatchPath(*this, safe))\n        {\n            wi::backlog::post(\n                "Renegade Gate 5: native RenderPath did not retain the authored image-quality state.",\n                wi::backlog::LogLevel::Warning);\n        }''',
+              'Studio post-apply live verification')
+
+          # Runtime receives the same actual-native-state reconciliation.
+          replace_once(
+              'Runtime/src/RuntimeApplication.cpp',
+              '''        const auto authored =\n            bridge::CaptureRenderSettings(activeScene);\n        if (renderSettingsInitialized_ &&\n            !bridge::HasRenderSettingsChange(renderSettings_, authored))\n        {\n            return;\n        }\n\n        bridge::ApplyRenderSettingsToPath(\n            *this,\n            authored,\n            resizeBuffersForMSAA);\n        renderSettings_ = authored;\n        renderSettingsInitialized_ = true;''',
+              '''        const auto authored =\n            bridge::CaptureRenderSettings(activeScene);\n        if (bridge::RenderSettingsMatchPath(*this, authored))\n        {\n            renderSettings_ = authored;\n            renderSettingsInitialized_ = true;\n            return;\n        }\n\n        bridge::ApplyRenderSettingsToPath(\n            *this,\n            authored,\n            resizeBuffersForMSAA);\n        renderSettings_ = authored;\n        renderSettingsInitialized_ = true;''',
+              'Runtime live path sync')
+
+          # Regression: clamp to Wicked's real authoring domains and prove the
+          # native RenderPath getters match every authored Gate 5 field.
+          test = Path('Tests/Phase5Gate5RenderSettingsTests.cpp')
+          text = test.read_text(encoding='utf-8')
+          if text.count('#include <cmath>') != 1:
+              raise SystemExit('settings test include anchor changed')
+          text = text.replace('#include <cmath>', '#include <array>\n#include <cmath>', 1)
+          text = text.replace('malformed.hdrCalibration = 0.0f;', 'malformed.hdrCalibration = -100.0f;\n    malformed.saturation = 100.0f;\n    malformed.bloomThreshold = 1000.0f;\n    malformed.eyeAdaptationKey = 100.0f;\n    malformed.eyeAdaptationRate = 100.0f;\n    malformed.depthOfFieldStrength = 1000.0f;\n    malformed.motionBlurStrength = 1000.0f;\n    malformed.sharpenAmount = 100.0f;', 1)
+          old = '''        !NearlyEqual(safe.brightness, -2.0f) ||\n        !NearlyEqual(safe.contrast, 4.0f) ||\n        !NearlyEqual(safe.hdrCalibration, 0.01f) ||\n        !NearlyEqual(safe.chromaticAberrationAmount, 64.0f))'''
+          new = '''        !NearlyEqual(safe.brightness, -1.0f) ||\n        !NearlyEqual(safe.contrast, 2.0f) ||\n        !NearlyEqual(safe.saturation, 2.0f) ||\n        !NearlyEqual(safe.hdrCalibration, 0.0f) ||\n        !NearlyEqual(safe.bloomThreshold, 10.0f) ||\n        !NearlyEqual(safe.eyeAdaptationKey, 0.5f) ||\n        !NearlyEqual(safe.eyeAdaptationRate, 4.0f) ||\n        !NearlyEqual(safe.depthOfFieldStrength, 20.0f) ||\n        !NearlyEqual(safe.motionBlurStrength, 400.0f) ||\n        !NearlyEqual(safe.sharpenAmount, 4.0f) ||\n        !NearlyEqual(safe.chromaticAberrationAmount, 40.0f))'''
+          if text.count(old) != 1:
+              raise SystemExit('settings test sanitize expectation anchor changed')
+          text = text.replace(old, new, 1)
+          anchor = '''    authored.chromaticAberrationAmount = 3.5f;\n    authored.ditherEnabled = false;\n\n    if (!WriteRenderSettings(scenes.GetScene(), authored))'''
+          insert = '''    authored.chromaticAberrationAmount = 3.5f;\n    authored.ditherEnabled = false;\n\n    wi::RenderPath3D nativePath;\n    ApplyRenderSettingsToPath(nativePath, authored, false);\n    if (!RenderSettingsMatchPath(nativePath, authored))\n        return Fail("Gate 5 authored state did not reach the native Wicked RenderPath");\n\n    constexpr std::array<AntiAliasingMode, 6> aaModes = {\n        AntiAliasingMode::Off,\n        AntiAliasingMode::FXAA,\n        AntiAliasingMode::TAA,\n        AntiAliasingMode::MSAA2X,\n        AntiAliasingMode::MSAA4X,\n        AntiAliasingMode::MSAA8X,\n    };\n    for (const auto mode : aaModes)\n    {\n        auto aaState = authored;\n        aaState.antiAliasing = mode;\n        ApplyRenderSettingsToPath(nativePath, aaState, false);\n        if (!RenderSettingsMatchPath(nativePath, aaState))\n            return Fail("Gate 5 AA mode did not reach the native Wicked RenderPath");\n    }\n\n    if (!WriteRenderSettings(scenes.GetScene(), authored))'''
+          if text.count(anchor) != 1:
+              raise SystemExit('settings test native apply insertion anchor changed')
+          text = text.replace(anchor, insert, 1)
+          test.write_text(text, encoding='utf-8', newline='\n')
+
+          # Strengthen the source contract so oversized dead ranges or a
+          # persistence-only test can never silently return.
+          contract = Path('Tests/Phase5Gate5SourceContract.cmake')
+          text = contract.read_text(encoding='utf-8')
+          text = text.replace(
+              '    "SetRenderSettingsCommand")',
+              '    "SetRenderSettingsCommand"\n    "RenderSettingsMatchPath")',
+              1)
+          anchor = '''foreach(token IN ITEMS\n    "colorGradingEnabled"\n    "AntiAliasingMode::MSAA4X"\n    "SetRenderSettingsCommand")'''
+          replacement = '''foreach(token IN ITEMS\n    "colorGradingEnabled"\n    "AntiAliasingMode::MSAA4X"\n    "SetRenderSettingsCommand"\n    "RenderSettingsMatchPath(nativePath, authored)")'''
+          if text.count(anchor) != 1:
+              raise SystemExit('source contract settings-test token anchor changed')
+          text = text.replace(anchor, replacement, 1)
+          marker = 'message(STATUS "Phase 5 Gate 5 source contract passed")'
+          range_checks = '''\n# Gate 5 creator ranges mirror the pinned Wicked Editor. Oversized invented\n# domains made most of each slider visually useless during owner testing.\nforeach(token IN ITEMS\n    "0.0f, 3.0f, 10000.0f"\n    "-1.0f, 1.0f, 10000.0f"\n    "0.0f, 10.0f, 1000.0f"\n    "0.01f, 0.5f, 10000.0f"\n    "1.0f, 20.0f, 1000.0f"\n    "0.1f, 400.0f, 10000.0f"\n    "0.0f, 40.0f, 1000.0f")\n    string(FIND "${studio_render_text}" "${token}" found)\n    if(found EQUAL -1)\n        message(FATAL_ERROR "Gate 5 Wicked-native creator range missing ${token}")\n    endif()\nendforeach()\n\nforeach(forbidden IN ITEMS\n    "0.0f, 16.0f, 1600.0f"\n    "0.0f, 64.0f, 1280.0f"\n    "0.0f, 100.0f, 1000.0f"\n    "0.0f, 500.0f, 1000.0f")\n    string(FIND "${studio_render_text}" "${forbidden}" found)\n    if(NOT found EQUAL -1)\n        message(FATAL_ERROR "Gate 5 oversized dead creator range returned: ${forbidden}")\n    endif()\nendforeach()\n\n'''
+          if text.count(marker) != 1:
+              raise SystemExit('source contract final marker changed')
+          text = text.replace(marker, range_checks + marker, 1)
+          contract.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
+          git diff --check
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate5SourceContract.cmake
+
+      - name: Verify bounded product diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --name-only HEAD -- \
+            EngineBridge/include/renegade/bridge/RenderSettingsService.h \
+            EngineBridge/src/RenderSettingsService.cpp \
+            Studio/src/Phase5Gate5RenderWorkspace.cpp \
+            Runtime/src/RuntimeApplication.cpp \
+            Tests/Phase5Gate5RenderSettingsTests.cpp \
+            Tests/Phase5Gate5SourceContract.cmake
+          test "$(git diff --name-only | grep -v '^\.github/workflows/gate5-live-controls-repair.yml$' | wc -l)" -eq 6
+
+      - name: Self-clean and publish product commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/gate5-live-controls-repair.yml
+          git add \
+            EngineBridge/include/renegade/bridge/RenderSettingsService.h \
+            EngineBridge/src/RenderSettingsService.cpp \
+            Studio/src/Phase5Gate5RenderWorkspace.cpp \
+            Runtime/src/RuntimeApplication.cpp \
+            Tests/Phase5Gate5RenderSettingsTests.cpp \
+            Tests/Phase5Gate5SourceContract.cmake \
+            .github/workflows/gate5-live-controls-repair.yml
+          git diff --cached --check
+          git config user.name "mav3r1ckmediastudio-glitch"
+          git config user.email "mav3r1ckmediastudio@gmail.com"
+          git commit -m "Phase 5 Gate 5: repair live render controls"
+          git push origin HEAD:staging/phase5-gate5-live-controls
