@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.19)
 
 # CMP0141 controls how MSVC debug information format is set. It must be
-# resolved before project() so CMAKE_MSVC_DEBUG_INFORMATION_FORMAT below
-# takes effect via the generator instead of the legacy /Zi-in-flags path.
+# resolved before project() so CMAKE_MSVC_DEBUG_INFORMATION_FORMAT below takes
+# effect via the generator instead of the legacy /Zi-in-flags path.
 if(POLICY CMP0141)
     cmake_policy(SET CMP0141 NEW)
 endif()
@@ -44,6 +44,7 @@ set(WICKED_EMBED_SHADERS ${RENEGADE_EMBED_SHADERS} CACHE BOOL "" FORCE)
 add_subdirectory(WickedEngine)
 add_subdirectory(EngineBridge)
 include(EngineBridge/JP01PhysicsLua.cmake)
+include(EngineBridge/Phase5Gate5.cmake)
 
 if(WIN32)
     add_subdirectory(ScreenRenderer)
@@ -69,6 +70,7 @@ if(WIN32)
     include(Tests/Phase5Gate2.cmake)
     include(Tests/Phase5Gate3.cmake)
     include(Tests/Phase5Gate4.cmake)
+    include(Tests/Phase5Gate5.cmake)
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)
