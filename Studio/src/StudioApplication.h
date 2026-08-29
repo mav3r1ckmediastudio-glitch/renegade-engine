@@ -14,6 +14,8 @@
 #include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
 #include "renegade/bridge/CameraService.h"
+#include "renegade/bridge/DecalProbeService.h"
+#include "renegade/bridge/MaterialService.h"
 #include "renegade/bridge/SceneComponentService.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
@@ -160,6 +162,8 @@ namespace renegade::studio
             DeleteSelection,
             CreateLight,
             CreateCamera,
+            CreateDecal,
+            CreateEnvironmentProbe,
             OpenScene,
             SaveScene,
             SaveSceneAs,
@@ -429,6 +433,11 @@ namespace renegade::studio
         void CreateCameraFromView();
         void AlignSelectedCameraToView();
         void ViewFromSelectedCamera();
+        void CreateDecalFromView();
+        void CreateEnvironmentProbeFromView();
+        bool CommitSelectedDecal(const bridge::DecalState& state);
+        bool CommitSelectedEnvironmentProbe(
+            const bridge::EnvironmentProbeState& state);
         void CreateLight(
             wi::scene::LightComponent::LightType type);
         void PlaceLight(
@@ -448,6 +457,7 @@ namespace renegade::studio
         bool HandleCreatorAssetPlacement(const XMFLOAT4& pointer);
         void CancelCreatorAssetPlacement();
         bool HandleCameraSceneIcons(const XMFLOAT4& pointer);
+        bool HandleDecalProbeSceneIcons(const XMFLOAT4& pointer);
         bool HandleLightSceneIcons(const XMFLOAT4& pointer);
         [[nodiscard]] bool ProjectEditorPoint(
             const XMFLOAT3& world,
@@ -567,6 +577,21 @@ namespace renegade::studio
         SceneInspectorSlider cameraOrthoVerticalSize_;
         SceneInspectorButton cameraAlignToView_;
         SceneInspectorButton cameraViewFrom_;
+        wi::gui::Label decalLabel_;
+        SceneInspectorCheckBox decalBaseColorOnlyAlpha_;
+        SceneInspectorSlider decalSlopeBlend_;
+        wi::gui::Label decalMaterialLabel_;
+        SceneInspectorSlider decalBaseColorRed_;
+        SceneInspectorSlider decalBaseColorGreen_;
+        SceneInspectorSlider decalBaseColorBlue_;
+        SceneInspectorSlider decalOpacity_;
+        wi::gui::Label environmentProbeLabel_;
+        SceneInspectorComboBox environmentProbeResolution_;
+        SceneInspectorCheckBox environmentProbeRealtime_;
+        SceneInspectorSlider environmentProbeInterval_;
+        SceneInspectorCheckBox environmentProbeMsaa_;
+        SceneInspectorSlider environmentProbeViewDistance_;
+        SceneInspectorButton environmentProbeRefresh_;
         wi::gui::Label lightLabel_;
         SceneInspectorComboBox lightType_;
         SceneInspectorSlider lightColorRed_;

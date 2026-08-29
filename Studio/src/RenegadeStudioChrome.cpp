@@ -1783,12 +1783,14 @@ namespace renegade::studio
                     }
                     else if (activeMenu_ == 2 && item >= 0 && item < 6)
                     {
-                        constexpr std::array<Action, 6> actions = {
+                        constexpr std::array<Action, 8> actions = {
                             Action::CreatePointLight,
                             Action::CreateSpotLight,
                             Action::CreateDirectionalLight,
                             Action::CreateRectangleLight,
                             Action::CreateCamera,
+                            Action::CreateDecal,
+                            Action::CreateEnvironmentProbe,
                             Action::ImportModel};
                         invoke(actions[item]);
                     }
@@ -3247,7 +3249,8 @@ namespace renegade::studio
             {
                 items = {{"POINT LIGHT", true}, {"SPOT LIGHT", true},
                     {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
-                    {"CAMERA", true}, {"IMPORT MODEL...", true}};
+                    {"CAMERA", true}, {"DECAL", true},
+                    {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}};
             }
             else if (activeMenu_ == 3)
             {

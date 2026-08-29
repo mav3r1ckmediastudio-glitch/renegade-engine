@@ -47,19 +47,43 @@ foreach(token IN ITEMS
     endif()
 endforeach()
 
-# Studio-facing checks become active once the Gate 3 UI integration lands.
-if(EXISTS "${studio_source}" AND EXISTS "${studio_header}" AND EXISTS "${chrome_source}")
-    file(READ "${studio_source}" studio_text)
-    if(studio_text MATCHES "DECAL // NATIVE WICKED" OR
-       studio_text MATCHES "ENVIRONMENT PROBE // NATIVE WICKED")
-        foreach(token IN ITEMS
-            "DECAL // NATIVE WICKED"
-            "ENVIRONMENT PROBE // NATIVE WICKED"
-            "RefreshEnvironmentProbe")
-            string(FIND "${studio_text}" "${token}" found)
-            if(found EQUAL -1)
-                message(FATAL_ERROR "Gate 3 partial Studio integration missing ${token}")
-            endif()
-        endforeach()
+foreach(path IN ITEMS "${studio_source}" "${studio_header}" "${chrome_source}")
+    if(NOT EXISTS "${path}")
+        message(FATAL_ERROR "Gate 3 missing Studio source: ${path}")
     endif()
-endif()
+endforeach()
+file(READ "${studio_source}" studio_text)
+file(READ "${studio_header}" studio_header_text)
+file(READ "${chrome_source}" chrome_text)
+foreach(token IN ITEMS
+    "DECAL // NATIVE WICKED"
+    "ENVIRONMENT PROBE // NATIVE WICKED"
+    "CreateDecalFromView"
+    "CreateEnvironmentProbeFromView"
+    "HandleDecalProbeSceneIcons"
+    "RefreshEnvironmentProbe"
+    "SetMaterialCommand")
+    string(FIND "${studio_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 3 Studio integration missing ${token}")
+    endif()
+endforeach()
+foreach(token IN ITEMS
+    "CreateDecal"
+    "CreateEnvironmentProbe"
+    "DecalProbeService.h")
+    string(FIND "${studio_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 3 Studio header missing ${token}")
+    endif()
+endforeach()
+foreach(token IN ITEMS
+    "DECAL"
+    "ENVIRONMENT PROBE"
+    "Action::CreateDecal"
+    "Action::CreateEnvironmentProbe")
+    string(FIND "${chrome_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 3 ADD menu missing ${token}")
+    endif()
+endforeach()
