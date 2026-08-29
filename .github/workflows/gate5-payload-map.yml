@@ -1,0 +1,56 @@
+name: Gate 5 LUT payload map
+
+on:
+  push:
+    branches:
+      - staging/phase5-gate5-payload-map
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Map payload blob spans
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64, hashlib, json, os, urllib.request
+          blobs = [
+              "96b139a2e48b5f9bd6d770a67b3cf1cbfe3ccb34",
+              "38714b2beb76387994527b4248898b194b1b2a33",
+              "f9ff37e2fdee60345600cd182faf10fe5b618e65",
+              "b6b88c0230c1239a00805e03deba88c3d8b659e5",
+              "ced2f968bb9d957bf158e5d41026046d36b52cce",
+              "a09049d84cca928301b699d989e2a2e9f89d64d3",
+              "8f4da8c8429f83a93a5496249bca25428ef40b36",
+              "f9e8acabb7de46df94d66e02439c65765ff2773a",
+              "f1482d86d1dcb7ecba8cc92ce494eb7c03a0a0b8",
+              "d768677768b6661e8bda112c51d59cdb0fa664a9",
+              "c1e5f90c00bf2a226816d4054d6997ba799a1315",
+              "8e65f1d3b233691d0681d66a865f934450503d97",
+              "55509d5973079057c5269239c4998f62ddc6613c",
+              "40c2a5830ce8ea7816024a26752892c872793d3e",
+          ]
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["GH_REPOSITORY"]
+          for sha in blobs:
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/git/blobs/{sha}",
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(req) as response:
+                  payload = json.load(response)
+              raw = base64.b64decode(payload["content"])
+              text = raw.decode("ascii")
+              print(f"{sha} len={len(text)} first={text[:32]} last={text[-32:]} sha256={hashlib.sha256(raw).hexdigest()}")
+          PY
