@@ -1,0 +1,267 @@
+if(NOT DEFINED RENEGADE_SOURCE_DIR)
+    message(FATAL_ERROR "RENEGADE_SOURCE_DIR is required")
+endif()
+
+set(render_header "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/RenderSettingsService.h")
+set(render_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/RenderSettingsService.cpp")
+set(lut_header "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/RenderLutService.h")
+set(lut_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/RenderLutService.cpp")
+set(bridge_cmake "${RENEGADE_SOURCE_DIR}/EngineBridge/Phase5Gate5.cmake")
+set(studio_header "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h")
+set(studio_source "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
+set(studio_render "${RENEGADE_SOURCE_DIR}/Studio/src/Phase5Gate5RenderWorkspace.cpp")
+set(studio_chrome "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp")
+set(studio_cmake "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
+set(runtime_header "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.h")
+set(runtime_source "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
+set(settings_test "${RENEGADE_SOURCE_DIR}/Tests/Phase5Gate5RenderSettingsTests.cpp")
+set(lut_test "${RENEGADE_SOURCE_DIR}/Tests/Phase5Gate5LutTests.cpp")
+set(gate_cmake "${RENEGADE_SOURCE_DIR}/Tests/Phase5Gate5.cmake")
+set(gate_doc "${RENEGADE_SOURCE_DIR}/docs/PHASE5_GATE5_POST_PROCESSING.md")
+set(lut_archive "${RENEGADE_SOURCE_DIR}/Studio/assets/luts/Renegade_Builtin_LUTs_1-50_RGBA.zip")
+
+foreach(path IN ITEMS
+    "${render_header}" "${render_source}" "${lut_header}" "${lut_source}"
+    "${bridge_cmake}" "${studio_header}" "${studio_source}" "${studio_render}"
+    "${studio_chrome}" "${studio_cmake}" "${runtime_header}" "${runtime_source}"
+    "${settings_test}" "${lut_test}" "${gate_cmake}" "${gate_doc}" "${lut_archive}")
+    if(NOT EXISTS "${path}")
+        message(FATAL_ERROR "Gate 5 missing required source: ${path}")
+    endif()
+endforeach()
+
+file(READ "${render_header}" render_header_text)
+file(READ "${render_source}" render_source_text)
+file(READ "${lut_header}" lut_header_text)
+file(READ "${lut_source}" lut_source_text)
+file(READ "${bridge_cmake}" bridge_cmake_text)
+file(READ "${studio_header}" studio_header_text)
+file(READ "${studio_source}" studio_source_text)
+file(READ "${studio_render}" studio_render_text)
+file(READ "${studio_chrome}" studio_chrome_text)
+file(READ "${studio_cmake}" studio_cmake_text)
+file(READ "${runtime_header}" runtime_header_text)
+file(READ "${runtime_source}" runtime_source_text)
+file(READ "${settings_test}" settings_test_text)
+file(READ "${lut_test}" lut_test_text)
+file(READ "${gate_cmake}" gate_cmake_text)
+file(READ "${gate_doc}" gate_doc_text)
+
+foreach(token IN ITEMS
+    "RenderSettingsSchemaVersion"
+    "RenderTonemap"
+    "AntiAliasingMode"
+    "colorGradingEnabled"
+    "SetRenderSettingsCommand")
+    string(FIND "${render_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 render-state contract missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "setTonemap"
+    "setExposure"
+    "setBrightness"
+    "setContrast"
+    "setSaturation"
+    "setHDRCalibration"
+    "setColorGradingEnabled"
+    "setBloomEnabled"
+    "setBloomThreshold"
+    "setEyeAdaptionEnabled"
+    "SetTemporalAAEnabled"
+    "setMSAASampleCount"
+    "ResizeBuffers"
+    "setDepthOfFieldEnabled"
+    "setMotionBlurEnabled"
+    "setSharpenFilterEnabled"
+    "setChromaticAberrationEnabled"
+    "setDitherEnabled")
+    string(FIND "${render_source_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 native render mapping missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "BuiltInColorGradingLutCount"
+    "ValidateColorGradingLutPng"
+    "InstallBuiltInColorGradingLut"
+    "ImportCustomColorGradingLut"
+    "RefreshColorGradingLutResource"
+    "SetColorGradingLutCommand")
+    string(FIND "${lut_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 LUT service contract missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "IMPORT_COLORGRADINGLUT"
+    "Content"
+    "LUTs"
+    "Custom"
+    "BuiltIn"
+    "colorGradingMapName"
+    "colorGradingMap")
+    string(FIND "${lut_source_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 LUT implementation missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "RenderLutService.h"
+    "RenderLutService.cpp")
+    string(FIND "${bridge_cmake_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 LUT service is not wired into EngineBridge: ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "OpenRenderWorkspace"
+    "SetRenderWorkspaceActive"
+    "renderWorkspacePanel_"
+    "renderColorGradingEnabled_"
+    "renderLutLibrary_"
+    "renderLutImport_"
+    "renderLutClear_")
+    string(FIND "${studio_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 Studio declaration missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "CreateRenderWorkspace();"
+    "SyncRenderSettingsFromScene(false)"
+    "SyncRenderSettingsFromScene(true)"
+    "OpenRenderWorkspace")
+    string(FIND "${studio_source_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 Studio integration hook missing ${token}")
+    endif()
+endforeach()
+
+# The former hard-coded Gate 5 image defaults must not reassert themselves in
+# Studio after scene state has been applied.
+foreach(forbidden IN ITEMS
+    "setBloomThreshold(1.35f)"
+    "setFXAAEnabled(false);\n        setBloomEnabled(true)")
+    string(FIND "${studio_source_text}" "${forbidden}" found)
+    if(NOT found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 Studio still contains old hard-coded render state: ${forbidden}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "RENDER // NATIVE WICKED"
+    "IMAGE // TONEMAPPING"
+    "COLOR GRADING // LUT"
+    "+ IMPORT LUT"
+    "BUILT-IN // "
+    "BLOOM // AUTO EXPOSURE"
+    "ANTI-ALIASING // NATIVE WICKED"
+    "POST FX // CAMERA IMAGE"
+    "RefreshColorGradingLutResource"
+    "InstallBuiltInColorGradingLut"
+    "ImportCustomColorGradingLut"
+    "SetColorGradingLutCommand")
+    string(FIND "${studio_render_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 RENDER workspace missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "RENDER"
+    "Action::RenderWorkspace"
+    "SetRenderWorkspaceActive")
+    string(FIND "${studio_chrome_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 Studio chrome missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "src/Phase5Gate5RenderWorkspace.cpp"
+    "Renegade_Builtin_LUTs_1-50_RGBA.zip"
+    "Content/luts")
+    string(FIND "${studio_cmake_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 Studio build surface missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "RenderLutService.h"
+    "projectRoot_"
+    "SyncRenderSettings")
+    string(FIND "${runtime_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 Runtime declaration missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "RefreshColorGradingLutResource"
+    "CaptureRenderSettings"
+    "ApplyRenderSettingsToPath"
+    "startupResult_.project.rootPath")
+    string(FIND "${runtime_source_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 Runtime parity missing ${token}")
+    endif()
+endforeach()
+
+string(FIND "${runtime_source_text}" "setFXAAEnabled(false);" old_runtime_fxaa)
+if(NOT old_runtime_fxaa EQUAL -1)
+    message(FATAL_ERROR "Gate 5 Runtime still hard-codes FXAA off outside shared state")
+endif()
+
+foreach(token IN ITEMS
+    "colorGradingEnabled"
+    "AntiAliasingMode::MSAA4X"
+    "SetRenderSettingsCommand")
+    string(FIND "${settings_test_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 render regression missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "ValidateColorGradingLutPng"
+    "ImportCustomColorGradingLut"
+    "SetColorGradingLutCommand"
+    "colorGradingMapName"
+    "Entity_Serialize")
+    string(FIND "${lut_test_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 LUT regression missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "RenegadePhase5Gate5RenderSettingsTests"
+    "RenegadePhase5Gate5LutTests"
+    "Phase5Gate5SourceContract.cmake")
+    string(FIND "${gate_cmake_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 CTest wiring missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "COLOR GRADING // LUT"
+    "+ IMPORT LUT"
+    "50 Renegade built-in"
+    "IMPORT_COLORGRADINGLUT")
+    string(FIND "${gate_doc_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 documentation missing ${token}")
+    endif()
+endforeach()
+
+message(STATUS "Phase 5 Gate 5 source contract passed")
