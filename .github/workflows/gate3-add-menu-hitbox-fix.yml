@@ -1,0 +1,47 @@
+name: Gate 3 ADD menu hitbox staging
+
+on:
+  push:
+    branches:
+      - phase5/scene-render-gate3-decals-probes
+    paths:
+      - .github/workflows/gate3-add-menu-hitbox-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Gate 3 branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase5/scene-render-gate3-decals-probes
+          fetch-depth: 0
+
+      - name: Repair ADD popup hitbox
+        run: python .github/scripts/gate3_fix_add_menu.py
+
+      - name: Remove staging helpers
+        run: |
+          rm .github/scripts/gate3_fix_add_menu.py
+          rm .github/workflows/gate3-add-menu-hitbox-fix.yml
+
+      - name: Validate bounded repair
+        shell: bash
+        run: |
+          git diff --check
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate3SourceContract.cmake
+          changed="$(git diff --name-only 67d78a4ddc95da0d280b0766cd447e3e80db3550 | sort)"
+          expected="$(printf '%s\n' 'Studio/src/RenegadeStudioChrome.cpp' 'Tests/Phase5Gate3SourceContract.cmake' | sort)"
+          test "$changed" = "$expected"
+
+      - name: Commit clean production tree
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Gate 3: fix ADD decal and probe menu hitbox"
+          git push origin HEAD:phase5/scene-render-gate3-decals-probes
