@@ -1751,7 +1751,7 @@ namespace renegade::studio
                 constexpr float itemHeight = 30.0f;
                 const float popupX = menuPositions[activeMenu_] - 8.0f;
                 constexpr std::array<int, 6> popupItemCounts = {
-                    5, 4, 5, 4, 2, 3};
+                    5, 4, 8, 4, 2, 3};
                 const int item = static_cast<int>(
                     (y - TopBarHeight) / itemHeight);
                 const bool inPopup = x >= popupX &&
@@ -1781,14 +1781,16 @@ namespace renegade::studio
                             Action::Duplicate, Action::Delete};
                         invoke(actions[item]);
                     }
-                    else if (activeMenu_ == 2 && item >= 0 && item < 6)
+                    else if (activeMenu_ == 2 && item >= 0 && item < 8)
                     {
-                        constexpr std::array<Action, 6> actions = {
+                        constexpr std::array<Action, 8> actions = {
                             Action::CreatePointLight,
                             Action::CreateSpotLight,
                             Action::CreateDirectionalLight,
                             Action::CreateRectangleLight,
                             Action::CreateCamera,
+                            Action::CreateDecal,
+                            Action::CreateEnvironmentProbe,
                             Action::ImportModel};
                         invoke(actions[item]);
                     }
@@ -3247,7 +3249,8 @@ namespace renegade::studio
             {
                 items = {{"POINT LIGHT", true}, {"SPOT LIGHT", true},
                     {"DIRECTIONAL LIGHT", true}, {"RECTANGLE LIGHT", true},
-                    {"CAMERA", true}, {"IMPORT MODEL...", true}};
+                    {"CAMERA", true}, {"DECAL", true},
+                    {"ENVIRONMENT PROBE", true}, {"IMPORT MODEL...", true}};
             }
             else if (activeMenu_ == 3)
             {
