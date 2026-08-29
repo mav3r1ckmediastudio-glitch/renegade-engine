@@ -4629,6 +4629,14 @@ namespace renegade::studio
 
         QueueCreatorImportScaleRuler();
 
+        // Gate 3 uses Wicked's native environment-probe debug renderer so Studio
+        // shows the actual captured cubemap as a reflective sphere together with
+        // the probe's parallax-correct oriented influence box. Keep this editor-only:
+        // Test Level runs in a separate Runtime process and the Studio overlay is
+        // explicitly disabled while that process owns preview execution.
+        wi::renderer::SetToDrawDebugEnvProbes(
+            !projectHubVisible_ && !testLevelRuntime_.IsActive());
+
         if (testLevelRuntime_.IsActive())
         {
             // StopTestLevel is the only editor action that must still take

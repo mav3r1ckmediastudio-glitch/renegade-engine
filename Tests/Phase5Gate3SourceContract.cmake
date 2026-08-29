@@ -61,6 +61,7 @@ foreach(token IN ITEMS
     "CreateDecalFromView"
     "CreateEnvironmentProbeFromView"
     "HandleDecalProbeSceneIcons"
+    "SetToDrawDebugEnvProbes"
     "RefreshEnvironmentProbe"
     "SetMaterialCommand"
     "ChooseSelectedDecalTexture"
