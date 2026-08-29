@@ -62,7 +62,10 @@ foreach(token IN ITEMS
     "CreateEnvironmentProbeFromView"
     "HandleDecalProbeSceneIcons"
     "RefreshEnvironmentProbe"
-    "SetMaterialCommand")
+    "SetMaterialCommand"
+    "ChooseSelectedDecalTexture"
+    "CreatorTextureWorkflowService"
+    "SetMaterialBaseColorTextureAssetCommand")
     string(FIND "${studio_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Gate 3 Studio integration missing ${token}")
@@ -71,7 +74,8 @@ endforeach()
 foreach(token IN ITEMS
     "CreateDecal"
     "CreateEnvironmentProbe"
-    "DecalProbeService.h")
+    "DecalProbeService.h"
+    "decalBaseColorTexture_")
     string(FIND "${studio_header_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Gate 3 Studio header missing ${token}")

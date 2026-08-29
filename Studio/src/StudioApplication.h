@@ -436,6 +436,7 @@ namespace renegade::studio
         void CreateDecalFromView();
         void CreateEnvironmentProbeFromView();
         bool CommitSelectedDecal(const bridge::DecalState& state);
+        void ChooseSelectedDecalTexture();
         bool CommitSelectedEnvironmentProbe(
             const bridge::EnvironmentProbeState& state);
         void CreateLight(
@@ -585,6 +586,7 @@ namespace renegade::studio
         SceneInspectorSlider decalBaseColorGreen_;
         SceneInspectorSlider decalBaseColorBlue_;
         SceneInspectorSlider decalOpacity_;
+        SceneInspectorButton decalBaseColorTexture_;
         wi::gui::Label environmentProbeLabel_;
         SceneInspectorComboBox environmentProbeResolution_;
         SceneInspectorCheckBox environmentProbeRealtime_;
@@ -831,6 +833,7 @@ namespace renegade::studio
         wi::jobsystem::context sceneOpenWorkload_;
         wi::jobsystem::context projectLoadWorkload_;
         wi::jobsystem::context modelImportWorkload_;
+        wi::jobsystem::context decalTextureImportWorkload_;
         std::string openingScenePath_;
         bool sceneOpenInProgress_ = false;
         wi::ecs::Entity importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
