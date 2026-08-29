@@ -6,7 +6,9 @@ Implementation active on `phase5/scene-render-gate3-decals-probes`, based on pos
 
 The native bridge/backend passed its first four-job CI proof at `ace2ce244b4ffe3b93c2775a15100b3b81f4fc33`. The complete Studio decal/probe authoring pass later reached a four-green checkpoint at `7070a254172048acb0ce5406a581c02fd495006e`.
 
-Before owner acceptance, Gate 3 was deliberately extended so a creator can choose a decal image directly from local storage. That image is imported through Renegade's existing governed texture pipeline and bound to the projected decal's native Wicked material. Fresh Windows/Studio CI is required for this final texture-picker head before owner acceptance begins.
+Before owner acceptance, Gate 3 was deliberately extended so a creator can choose a decal image directly from local storage. That image is imported through Renegade's existing governed texture pipeline and bound to the projected decal's native Wicked material. The governed texture-picker head subsequently passed the Windows/Studio CI set at `67d78a4ddc95da0d280b0766cd447e3e80db3550`.
+
+Owner testing then exposed a stale ADD popup hit region: the menu rendered eight entries while only five rows participated in popup hit testing, and the dispatch guard stopped before the final entries. This caused DECAL / ENVIRONMENT PROBE / IMPORT MODEL clicks to fall through into viewport selection instead of invoking their actions. Gate 3 now sizes the ADD popup for all eight items, dispatches items 0–7, and pins both values in the source contract. Fresh Windows/Studio CI is required for this repaired menu head before owner acceptance resumes.
 
 ## Purpose
 
@@ -42,6 +44,8 @@ Renegade Studio now exposes:
 - `ADD -> ENVIRONMENT PROBE`
 
 Both use native Wicked scene creation through the Gate 3 bridge commands, become normal hierarchy/selection entities, use the existing transform gizmo, and participate in CommandService Undo/Redo and WISCENE save/open.
+
+The ADD popup hit region and dispatch range explicitly cover all eight rendered ADD entries. This is source-contract locked so Decal, Environment Probe and Import Model cannot regress into visually rendered but non-clickable menu rows or leak the click into viewport selection.
 
 New entities are created at a useful point in front of the current editor camera. A decal receives a shallow projection-volume transform; a new probe receives a larger cubic influence transform.
 
@@ -90,6 +94,8 @@ Governed decal texture bindings persist stable IDs in serializable material meta
 
 Gate 3 is not accepted on editor appearance alone. Release owner acceptance must prove:
 
+- ADD -> DECAL creates and selects a decal without selecting the viewport object behind the menu;
+- ADD -> ENVIRONMENT PROBE creates and selects a probe without menu click-through;
 - a creator can choose a local decal image and see it projected on scene geometry;
 - the chosen governed decal texture persists through save/reopen and restores without needing the original external source path;
 - transform scale/rotation visibly changes decal projection volume/result;
