@@ -1,0 +1,200 @@
+name: Gate 5 guarded render integration
+
+on:
+  push:
+    branches:
+      - staging/phase5-gate5-render-workspace-exec
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Fail closed on unexpected staging state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "84d5455d9e24854dd1d989f11a60a6ab9ce910c0"
+          test -f .github/scripts/gate5_render_workspace.py
+          test -f .github/scripts/gate5_lut_integration.py
+          test -f Tests/Phase5Gate5SourceContract.cmake
+          test ! -e Studio/assets/luts/Renegade_Builtin_LUTs_1-50_RGBA.zip
+
+      - name: Reconstruct and verify exact 50-LUT payload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import urllib.request
+          import zipfile
+
+          expected = "102e4952b4c7fe57d322f05e8a0fadac346b0a74f1a2385a028f36f6f7b7023b"
+          blobs = [
+              "96b139a2e48b5f9bd6d770a67b3cf1cbfe3ccb34",
+              "38714b2beb76387994527b4248898b194b1b2a33",
+              "f9ff37e2fdee60345600cd182faf10fe5b618e65",
+              "b6b88c0230c1239a00805e03deba88c3d8b659e5",
+              "ced2f968bb9d957bf158e5d41026046d36b52cce",
+          ]
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["GH_REPOSITORY"]
+          stored = []
+          for sha in blobs:
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/git/blobs/{sha}",
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              with urllib.request.urlopen(request) as response:
+                  payload = json.load(response)
+              stored.append(base64.b64decode(payload["content"]))
+
+          joined = b"".join(stored)
+          candidates = [("direct", joined)]
+          try:
+              candidates.append(("base64-text", base64.b64decode(joined, validate=True)))
+          except Exception:
+              pass
+
+          archive = None
+          for mode, candidate in candidates:
+              digest = hashlib.sha256(candidate).hexdigest()
+              print(f"payload mode={mode} bytes={len(candidate)} sha256={digest}")
+              if digest == expected:
+                  archive = candidate
+                  break
+          if archive is None:
+              raise SystemExit("Gate 5 LUT payload did not match the approved SHA-256")
+
+          out = pathlib.Path("Studio/assets/luts/Renegade_Builtin_LUTs_1-50_RGBA.zip")
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_bytes(archive)
+
+          with zipfile.ZipFile(out) as zf:
+              if zf.testzip() is not None:
+                  raise SystemExit("Gate 5 LUT ZIP failed CRC validation")
+              names = sorted(zf.namelist(), key=lambda name: int(pathlib.PurePosixPath(name).stem))
+              expected_names = [f"{index}.png" for index in range(1, 51)]
+              if names != expected_names:
+                  raise SystemExit(f"Gate 5 LUT ZIP members differ: {names}")
+              for name in names:
+                  data = zf.read(name)
+                  if len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+                      raise SystemExit(f"{name}: invalid PNG header")
+                  width = int.from_bytes(data[16:20], "big")
+                  height = int.from_bytes(data[20:24], "big")
+                  bit_depth = data[24]
+                  colour_type = data[25]
+                  if (width, height, bit_depth, colour_type) != (256, 16, 8, 6):
+                      raise SystemExit(
+                          f"{name}: expected 256x16 8-bit RGBA, got "
+                          f"{width}x{height} depth={bit_depth} type={colour_type}"
+                      )
+          print("Gate 5 LUT payload verified: 50 lossless 256x16 RGBA PNGs")
+          PY
+
+      - name: Validate integration patchers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            .github/scripts/gate5_render_workspace.py \
+            .github/scripts/gate5_lut_integration.py
+
+      - name: Apply exact-anchor integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/scripts/gate5_render_workspace.py
+          python .github/scripts/gate5_lut_integration.py
+
+      - name: Run Gate 5 source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate5SourceContract.cmake
+          git diff --check
+
+      - name: Verify bounded change set
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import subprocess
+          allowed = {
+              ".github/scripts/gate5_lut_integration.py",
+              ".github/scripts/gate5_render_workspace.py",
+              ".github/workflows/gate5-render-workspace.yml",
+              "EngineBridge/Phase5Gate5.cmake",
+              "EngineBridge/include/renegade/bridge/RenderLutService.h",
+              "EngineBridge/include/renegade/bridge/RenderSettingsService.h",
+              "EngineBridge/src/RenderLutService.cpp",
+              "EngineBridge/src/RenderSettingsService.cpp",
+              "Runtime/src/RuntimeApplication.cpp",
+              "Runtime/src/RuntimeApplication.h",
+              "Studio/CMakeLists.txt",
+              "Studio/assets/luts/Renegade_Builtin_LUTs_1-50_RGBA.zip",
+              "Studio/src/Phase5Gate5RenderWorkspace.cpp",
+              "Studio/src/RenegadePhysicsLabStudioChrome.cpp",
+              "Studio/src/RenegadeStudioChrome.cpp",
+              "Studio/src/RenegadeStudioChrome.h",
+              "Studio/src/StudioApplication.cpp",
+              "Studio/src/StudioApplication.h",
+              "Tests/Phase5Gate5.cmake",
+              "Tests/Phase5Gate5RenderSettingsTests.cpp",
+              "docs/PHASE5_GATE5_POST_PROCESSING.md",
+          }
+          changed = set(subprocess.check_output(
+              ["git", "diff", "--name-only"], text=True).splitlines())
+          unexpected = sorted(changed - allowed)
+          if unexpected:
+              raise SystemExit("Unexpected Gate 5 integration paths: " + ", ".join(unexpected))
+          required = {
+              "Studio/src/StudioApplication.cpp",
+              "Studio/src/StudioApplication.h",
+              "Studio/src/Phase5Gate5RenderWorkspace.cpp",
+              "Runtime/src/RuntimeApplication.cpp",
+              "EngineBridge/src/RenderSettingsService.cpp",
+              "Studio/assets/luts/Renegade_Builtin_LUTs_1-50_RGBA.zip",
+          }
+          missing = sorted(required - changed)
+          if missing:
+              raise SystemExit("Gate 5 integration did not touch required paths: " + ", ".join(missing))
+          print("Bounded Gate 5 change set verified")
+          PY
+
+      - name: Self-clean staging helpers and publish product commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f \
+            .github/scripts/gate5_render_workspace.py \
+            .github/scripts/gate5_lut_integration.py \
+            .github/workflows/gate5-render-workspace.yml
+          git add -A
+          git diff --cached --check
+          test ! -e .github/scripts/gate5_render_workspace.py
+          test ! -e .github/scripts/gate5_lut_integration.py
+          test ! -e .github/workflows/gate5-render-workspace.yml
+          git config user.name "Renegade Gate 5 Integration"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "Phase 5 Gate 5: complete guarded render integration"
+          git push origin HEAD:staging/phase5-gate5-render-workspace-exec
