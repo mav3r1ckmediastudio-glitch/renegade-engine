@@ -1,3 +1,4 @@
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -45,17 +46,31 @@ int main()
     malformed.exposure = std::numeric_limits<float>::quiet_NaN();
     malformed.brightness = -100.0f;
     malformed.contrast = 100.0f;
-    malformed.hdrCalibration = 0.0f;
+    malformed.hdrCalibration = -100.0f;
+    malformed.saturation = 100.0f;
+    malformed.bloomThreshold = 1000.0f;
+    malformed.eyeAdaptationKey = 100.0f;
+    malformed.eyeAdaptationRate = 100.0f;
+    malformed.depthOfFieldStrength = 1000.0f;
+    malformed.motionBlurStrength = 1000.0f;
+    malformed.sharpenAmount = 100.0f;
     malformed.chromaticAberrationAmount = 1000.0f;
     const auto safe = SanitizeRenderSettings(malformed);
     if (safe.schemaVersion != RenderSettingsSchemaVersion ||
         safe.tonemap != RenderTonemap::ACES ||
         safe.antiAliasing != AntiAliasingMode::Off ||
         !NearlyEqual(safe.exposure, defaults.exposure) ||
-        !NearlyEqual(safe.brightness, -2.0f) ||
-        !NearlyEqual(safe.contrast, 4.0f) ||
-        !NearlyEqual(safe.hdrCalibration, 0.01f) ||
-        !NearlyEqual(safe.chromaticAberrationAmount, 64.0f))
+        !NearlyEqual(safe.brightness, -1.0f) ||
+        !NearlyEqual(safe.contrast, 2.0f) ||
+        !NearlyEqual(safe.saturation, 2.0f) ||
+        !NearlyEqual(safe.hdrCalibration, 0.0f) ||
+        !NearlyEqual(safe.bloomThreshold, 10.0f) ||
+        !NearlyEqual(safe.eyeAdaptationKey, 0.5f) ||
+        !NearlyEqual(safe.eyeAdaptationRate, 4.0f) ||
+        !NearlyEqual(safe.depthOfFieldStrength, 20.0f) ||
+        !NearlyEqual(safe.motionBlurStrength, 400.0f) ||
+        !NearlyEqual(safe.sharpenAmount, 4.0f) ||
+        !NearlyEqual(safe.chromaticAberrationAmount, 40.0f))
     {
         return Fail("Gate 5 render state sanitization is not deterministic");
     }
@@ -90,6 +105,28 @@ int main()
     authored.chromaticAberrationEnabled = true;
     authored.chromaticAberrationAmount = 3.5f;
     authored.ditherEnabled = false;
+
+    wi::RenderPath3D nativePath;
+    ApplyRenderSettingsToPath(nativePath, authored, false);
+    if (!RenderSettingsMatchPath(nativePath, authored))
+        return Fail("Gate 5 authored state did not reach the native Wicked RenderPath");
+
+    constexpr std::array<AntiAliasingMode, 6> aaModes = {
+        AntiAliasingMode::Off,
+        AntiAliasingMode::FXAA,
+        AntiAliasingMode::TAA,
+        AntiAliasingMode::MSAA2X,
+        AntiAliasingMode::MSAA4X,
+        AntiAliasingMode::MSAA8X,
+    };
+    for (const auto mode : aaModes)
+    {
+        auto aaState = authored;
+        aaState.antiAliasing = mode;
+        ApplyRenderSettingsToPath(nativePath, aaState, false);
+        if (!RenderSettingsMatchPath(nativePath, aaState))
+            return Fail("Gate 5 AA mode did not reach the native Wicked RenderPath");
+    }
 
     if (!WriteRenderSettings(scenes.GetScene(), authored))
         return Fail("could not persist authored Gate 5 render settings");

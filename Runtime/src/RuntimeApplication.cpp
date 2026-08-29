@@ -33,9 +33,10 @@ namespace renegade::runtime
         }
         const auto authored =
             bridge::CaptureRenderSettings(activeScene);
-        if (renderSettingsInitialized_ &&
-            !bridge::HasRenderSettingsChange(renderSettings_, authored))
+        if (bridge::RenderSettingsMatchPath(*this, authored))
         {
+            renderSettings_ = authored;
+            renderSettingsInitialized_ = true;
             return;
         }
 
