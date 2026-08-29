@@ -5,6 +5,7 @@ endif()
 set(material_header "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/MaterialService.h")
 set(material_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/MaterialService.cpp")
 set(texture_header "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/MaterialTextureAssetService.h")
+set(texture_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/MaterialTextureAssetService.cpp")
 set(texture_clear "${RENEGADE_SOURCE_DIR}/EngineBridge/src/MaterialTextureClearCommand.cpp")
 set(bridge_cmake "${RENEGADE_SOURCE_DIR}/EngineBridge/CMakeLists.txt")
 set(gate_test "${RENEGADE_SOURCE_DIR}/Tests/Phase5Gate4MaterialTests.cpp")
@@ -14,6 +15,7 @@ foreach(path IN ITEMS
     "${material_header}"
     "${material_source}"
     "${texture_header}"
+    "${texture_source}"
     "${texture_clear}"
     "${bridge_cmake}"
     "${gate_test}"
@@ -26,6 +28,7 @@ endforeach()
 file(READ "${material_header}" header_text)
 file(READ "${material_source}" source_text)
 file(READ "${texture_header}" texture_header_text)
+file(READ "${texture_source}" texture_source_text)
 file(READ "${texture_clear}" texture_clear_text)
 file(READ "${bridge_cmake}" bridge_cmake_text)
 file(READ "${gate_test}" test_text)
@@ -97,15 +100,28 @@ foreach(token IN ITEMS
 endforeach()
 
 foreach(token IN ITEMS
+    "enum class MaterialTextureSlot"
+    "ClearMaterialTextureAssetCommand")
+    string(FIND "${texture_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 4 governed texture contract missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
     "MaterialTextureSlot::BaseColor"
     "MaterialTextureSlot::Normal"
     "MaterialTextureSlot::Surface"
     "MaterialTextureSlot::Emissive"
     "MaterialTextureSlot::Occlusion"
-    "ClearMaterialTextureAssetCommand")
-    string(FIND "${texture_header_text}" "${token}" found)
+    "wi::scene::MaterialComponent::BASECOLORMAP"
+    "wi::scene::MaterialComponent::NORMALMAP"
+    "wi::scene::MaterialComponent::SURFACEMAP"
+    "wi::scene::MaterialComponent::EMISSIVEMAP"
+    "wi::scene::MaterialComponent::OCCLUSIONMAP")
+    string(FIND "${texture_source_text}" "${token}" found)
     if(found EQUAL -1)
-        message(FATAL_ERROR "Gate 4 governed texture contract missing ${token}")
+        message(FATAL_ERROR "Gate 4 governed texture mapping missing ${token}")
     endif()
 endforeach()
 
