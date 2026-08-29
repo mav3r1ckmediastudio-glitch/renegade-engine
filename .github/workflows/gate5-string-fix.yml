@@ -1,0 +1,59 @@
+name: Gate 5 string literal repair
+
+on:
+  push:
+    branches:
+      - staging/phase5-gate5-string-fix
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Guard exact base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "b8020e3576a28d81b4ec35b28d7e4268d2f7d0d2"
+
+      - name: Repair malformed LUT error literal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('Studio/src/Phase5Gate5RenderWorkspace.cpp')
+          text = path.read_text(encoding='utf-8')
+          old = '''                        wi::helper::messageBox(
+                            error + "
+
+Use a lossless 256x16 8-bit RGBA PNG.",
+                            "Import Color Grading LUT");'''
+          new = '''                        wi::helper::messageBox(
+                            error + "\\n\\nUse a lossless 256x16 8-bit RGBA PNG.",
+                            "Import Color Grading LUT");'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one malformed literal, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
+          git diff --check
+          grep -Fq 'error + "\n\nUse a lossless 256x16 8-bit RGBA PNG."' Studio/src/Phase5Gate5RenderWorkspace.cpp
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate5SourceContract.cmake
+
+      - name: Self-clean and publish repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/gate5-string-fix.yml
+          git add Studio/src/Phase5Gate5RenderWorkspace.cpp .github/workflows/gate5-string-fix.yml
+          git diff --cached --check
+          git config user.name "mav3r1ckmediastudio-glitch"
+          git config user.email "mav3r1ckmediastudio@gmail.com"
+          git commit -m "Phase 5 Gate 5: repair LUT import error literal"
+          git push origin HEAD:staging/phase5-gate5-string-fix
