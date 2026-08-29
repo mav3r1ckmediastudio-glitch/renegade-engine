@@ -4,7 +4,7 @@
 
 Implementation active on `phase5/scene-render-gate3-decals-probes`, based on post-Gate-2 main `cde15e2809730df32ec234592de30963f59debb6`.
 
-The native bridge/backend passed the first four-job CI proof at `ace2ce244b4ffe3b93c2775a15100b3b81f4fc33`. The Studio authoring pass is now implemented and awaiting its own Windows/Studio CI plus Release owner acceptance.
+The native bridge/backend passed the first four-job CI proof at `ace2ce244b4ffe3b93c2775a15100b3b81f4fc33`. The Studio authoring pass is now implemented and awaiting its own Windows/Studio CI plus Release owner acceptance. The probe-refresh Studio compile defect was corrected at `cd57ad63c450de145d8f91b47ae826e51f5f395b`; this documentation commit retriggers normal PR CI from a user-authored head.
 
 ## Purpose
 
