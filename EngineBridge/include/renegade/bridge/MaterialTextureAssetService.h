@@ -57,14 +57,9 @@ namespace renegade::bridge
         const PreparedMaterialTextureAsset& prepared,
         std::string& error)>;
 
-    // Reports completed unique governed resource preparations. It is designed
-    // for UI telemetry and may be invoked from a background job.
     using MaterialTextureRestoreProgress =
         std::function<void(std::size_t completed, std::size_t total)>;
 
-    // One record represents one material/slot binding. baseColorTextureAssetId
-    // is retained as a compatibility mirror for Gate 1-era callers/tests and is
-    // populated only when slot == BaseColor; new code must use textureAssetId.
     struct MaterialTextureBindingRecord
     {
         wi::ecs::Entity materialEntity = wi::ecs::INVALID_ENTITY;
@@ -96,8 +91,6 @@ namespace renegade::bridge
         const PreparedMaterialTextureAsset& prepared,
         std::string& error);
 
-    // Apply an already-resolved governed resource to one Wicked material slot
-    // and persist its stable ID in serializable material metadata.
     [[nodiscard]] bool ApplyPreparedMaterialTextureAsset(
         wi::scene::Scene& scene,
         wi::ecs::Entity materialEntity,
@@ -168,6 +161,35 @@ namespace renegade::bridge
         bool hadAssetId_ = false;
         StableId beforeAssetId_;
         std::string error_;
+    };
+
+    // Clears one governed/native material texture slot and its stable-ID
+    // metadata while preserving an exact Undo snapshot of the previous slot.
+    class ClearMaterialTextureAssetCommand final : public ICommand
+    {
+    public:
+        ClearMaterialTextureAssetCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity materialEntity,
+            MaterialTextureSlot slot);
+
+        bool Execute() override;
+        void Undo() override;
+
+    private:
+        void CaptureBefore();
+        void RestoreBefore() noexcept;
+
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity materialEntity_ = wi::ecs::INVALID_ENTITY;
+        MaterialTextureSlot slot_ = MaterialTextureSlot::BaseColor;
+        wi::scene::MaterialComponent::TextureMap beforeTexture_;
+        bool capturedBefore_ = false;
+        bool hadMetadata_ = false;
+        bool hadVersion_ = false;
+        int beforeVersion_ = 0;
+        bool hadAssetId_ = false;
+        StableId beforeAssetId_;
     };
 
     // Compatibility command retained for existing LP08 Studio/tests. New

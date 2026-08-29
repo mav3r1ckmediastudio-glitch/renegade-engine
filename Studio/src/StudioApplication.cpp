@@ -2013,6 +2013,8 @@ namespace renegade::studio
             "Enable native Wicked wetmap participation.",
             bridge::ObjectParticipationProperty::Wetmap);
 
+        CreateMaterialInspector();
+
         createSectionLabel(
             cameraLabel_,
             "Camera Section",
@@ -4402,6 +4404,11 @@ namespace renegade::studio
         ownLabel(cameraLabel_);
         ownLabel(decalLabel_);
         ownLabel(decalMaterialLabel_);
+        ownLabel(materialLabel_);
+        ownLabel(materialCoreLabel_);
+        ownLabel(materialUvLabel_);
+        ownLabel(materialTexturesLabel_);
+        ownLabel(materialShaderSpecificLabel_);
         ownLabel(environmentProbeLabel_);
         ownLabel(lightLabel_);
         ownLabel(environmentSkyLabel_);
@@ -5007,6 +5014,7 @@ namespace renegade::studio
         layoutObjectToggle(sceneObjectMainCamera_, 1, 558.0f);
         layoutObjectToggle(sceneObjectReflections_, 0, 590.0f);
         layoutObjectToggle(sceneObjectWetmap_, 1, 590.0f);
+        LayoutMaterialInspector(environmentFieldWidth);
 
         positionEnvironmentWidget(cameraLabel_, 506.0f, 20.0f);
         positionEnvironmentWidget(cameraProjection_, 526.0f);
@@ -5555,7 +5563,9 @@ namespace renegade::studio
                     ? 1130.0f
                     : sceneCamera
                         ? 804.0f
-                        : 630.0f;
+                        : materialInspectorVisible_
+                            ? std::max(630.0f, materialInspectorBottom_ + 16.0f)
+                            : 630.0f;
         const float historyRow = environment
             ? actionStart
             : actionStart + 40.0f;
@@ -5722,6 +5732,14 @@ namespace renegade::studio
         sceneObjectMainCamera_.SetVisible(sceneComponentsVisible && hasObjectTargets);
         sceneObjectReflections_.SetVisible(sceneComponentsVisible && hasObjectTargets);
         sceneObjectWetmap_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+
+        RefreshMaterialInspector(
+            sceneComponentsVisible && !hasCamera && !hasDecal &&
+                !hasEnvironmentProbe && !hasLight,
+            selectedEntity);
+        LayoutInspectorActions(
+            hasWeather, hasTerrain, hasLight,
+            hasCamera || hasDecal || hasEnvironmentProbe);
 
         cameraLabel_.SetVisible(hasCamera);
         cameraProjection_.SetVisible(hasCamera);
@@ -6261,6 +6279,7 @@ namespace renegade::studio
             sunSliderActive_ ||
             oceanSliderActive_ ||
             lightSliderActive_ ||
+            materialSliderActive_ ||
             lightPlacementActive_ ||
             terrainSliderActive_ ||
             terrainTextureScaleActive_ ||

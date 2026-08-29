@@ -113,6 +113,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ReusableAssetRuntimeService.cpp
     src/MaterialService.cpp
     src/MaterialTextureAssetService.cpp
+    src/MaterialTextureClearCommand.cpp
     src/MaterialTextureReimportRefreshService.cpp
     src/CollisionService.cpp
     src/PhysicsService.cpp

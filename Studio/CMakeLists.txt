@@ -107,6 +107,7 @@ add_executable(RenegadeStudio WIN32
     src/StartupIdentityPrompt.h
     src/StartupMediaFoundationPlayer.cpp
     src/StartupMediaFoundationPlayer.h
+    src/Phase5Gate4MaterialInspector.cpp
     src/StudioApplication.cpp
     src/StudioApplication.h
     src/StudioUserPreferences.cpp

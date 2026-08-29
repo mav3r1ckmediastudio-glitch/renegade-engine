@@ -16,6 +16,7 @@
 #include "renegade/bridge/CameraService.h"
 #include "renegade/bridge/DecalProbeService.h"
 #include "renegade/bridge/MaterialService.h"
+#include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/SceneComponentService.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
@@ -318,6 +319,55 @@ namespace renegade::studio
             OrthoVerticalSize,
         };
 
+        enum class MaterialField
+        {
+            BaseColorRed,
+            BaseColorGreen,
+            BaseColorBlue,
+            Opacity,
+            Metalness,
+            Roughness,
+            Reflectance,
+            NormalMapStrength,
+            AlphaRef,
+            EmissiveRed,
+            EmissiveGreen,
+            EmissiveBlue,
+            EmissiveStrength,
+            TilingU,
+            TilingV,
+            OffsetU,
+            OffsetV,
+            ParallaxOcclusion,
+            AnisotropyStrength,
+            AnisotropyRotation,
+            SheenRed,
+            SheenGreen,
+            SheenBlue,
+            SheenRoughness,
+            Clearcoat,
+            ClearcoatRoughness,
+            Transmission,
+            Refraction,
+            BlendWithTerrainHeight,
+            MeshBlend,
+            InteriorScaleX,
+            InteriorScaleY,
+            InteriorScaleZ,
+            InteriorOffsetX,
+            InteriorOffsetY,
+            InteriorOffsetZ,
+            InteriorRotation,
+        };
+
+        enum class MaterialToggle
+        {
+            ReceiveShadow,
+            CastShadow,
+            UseVertexColors,
+            DoubleSided,
+        };
+
         void CommitSelectedSceneName(const std::string& name);
         void ApplySelectedLayerBit(std::uint32_t bit, bool enabled);
         void ApplySelectedLayerMask(std::uint32_t mask);
@@ -437,6 +487,25 @@ namespace renegade::studio
         void CreateEnvironmentProbeFromView();
         bool CommitSelectedDecal(const bridge::DecalState& state);
         void ChooseSelectedDecalTexture();
+        void CreateMaterialInspector();
+        void LayoutMaterialInspector(float fieldWidth);
+        void RefreshMaterialInspector(
+            bool candidateVisible,
+            wi::ecs::Entity selectedEntity);
+        bool CommitSelectedMaterial(const bridge::MaterialState& state);
+        void ApplySelectedMaterialShader(
+            wi::scene::MaterialComponent::SHADERTYPE shaderType);
+        void ApplySelectedMaterialBlend(wi::enums::BLENDMODE blendMode);
+        void ApplySelectedMaterialToggle(MaterialToggle toggle, bool value);
+        void BeginMaterialSlider(MaterialField field);
+        void PreviewMaterialSlider(MaterialField field, float value);
+        void CommitMaterialSlider(MaterialField field, float value);
+        static void SetMaterialFieldValue(
+            bridge::MaterialState& state,
+            MaterialField field,
+            float value) noexcept;
+        void ChooseSelectedMaterialTexture(bridge::MaterialTextureSlot slot);
+        void ClearSelectedMaterialTexture(bridge::MaterialTextureSlot slot);
         bool CommitSelectedEnvironmentProbe(
             const bridge::EnvironmentProbeState& state);
         void CreateLight(
@@ -568,6 +637,57 @@ namespace renegade::studio
         SceneInspectorCheckBox sceneObjectMainCamera_;
         SceneInspectorCheckBox sceneObjectReflections_;
         SceneInspectorCheckBox sceneObjectWetmap_;
+        wi::gui::Label materialLabel_;
+        SceneInspectorComboBox materialSelector_;
+        SceneInspectorComboBox materialShaderType_;
+        SceneInspectorComboBox materialBlendMode_;
+        wi::gui::Label materialCoreLabel_;
+        SceneInspectorSlider materialBaseColorRed_;
+        SceneInspectorSlider materialBaseColorGreen_;
+        SceneInspectorSlider materialBaseColorBlue_;
+        SceneInspectorSlider materialOpacity_;
+        SceneInspectorSlider materialMetalness_;
+        SceneInspectorSlider materialRoughness_;
+        SceneInspectorSlider materialReflectance_;
+        SceneInspectorSlider materialNormalStrength_;
+        SceneInspectorSlider materialAlphaRef_;
+        SceneInspectorSlider materialEmissiveRed_;
+        SceneInspectorSlider materialEmissiveGreen_;
+        SceneInspectorSlider materialEmissiveBlue_;
+        SceneInspectorSlider materialEmissiveStrength_;
+        SceneInspectorCheckBox materialReceiveShadow_;
+        SceneInspectorCheckBox materialCastShadow_;
+        SceneInspectorCheckBox materialUseVertexColors_;
+        SceneInspectorCheckBox materialDoubleSided_;
+        wi::gui::Label materialUvLabel_;
+        SceneInspectorSlider materialTilingU_;
+        SceneInspectorSlider materialTilingV_;
+        SceneInspectorSlider materialOffsetU_;
+        SceneInspectorSlider materialOffsetV_;
+        wi::gui::Label materialTexturesLabel_;
+        std::array<SceneInspectorButton, 5> materialTextureAssign_;
+        std::array<SceneInspectorButton, 5> materialTextureClear_;
+        wi::gui::Label materialShaderSpecificLabel_;
+        SceneInspectorSlider materialPomStrength_;
+        SceneInspectorSlider materialAnisotropyStrength_;
+        SceneInspectorSlider materialAnisotropyRotation_;
+        SceneInspectorSlider materialSheenRed_;
+        SceneInspectorSlider materialSheenGreen_;
+        SceneInspectorSlider materialSheenBlue_;
+        SceneInspectorSlider materialSheenRoughness_;
+        SceneInspectorSlider materialClearcoat_;
+        SceneInspectorSlider materialClearcoatRoughness_;
+        SceneInspectorSlider materialTransmission_;
+        SceneInspectorSlider materialRefraction_;
+        SceneInspectorSlider materialTerrainBlendHeight_;
+        SceneInspectorSlider materialMeshBlend_;
+        SceneInspectorSlider materialInteriorScaleX_;
+        SceneInspectorSlider materialInteriorScaleY_;
+        SceneInspectorSlider materialInteriorScaleZ_;
+        SceneInspectorSlider materialInteriorOffsetX_;
+        SceneInspectorSlider materialInteriorOffsetY_;
+        SceneInspectorSlider materialInteriorOffsetZ_;
+        SceneInspectorSlider materialInteriorRotation_;
         wi::gui::Label cameraLabel_;
         SceneInspectorComboBox cameraProjection_;
         SceneInspectorSlider cameraFieldOfView_;
@@ -813,6 +933,17 @@ namespace renegade::studio
         wi::ecs::Entity cameraSliderEntity_ = wi::ecs::INVALID_ENTITY;
         bridge::CameraState cameraSliderBefore_;
         bridge::CameraState cameraSliderAfter_;
+        bool materialInspectorVisible_ = false;
+        float materialInspectorBottom_ = 630.0f;
+        std::size_t materialInspectorMaterialCount_ = 0;
+        wi::ecs::Entity materialInspectorEntity_ = wi::ecs::INVALID_ENTITY;
+        wi::scene::MaterialComponent::SHADERTYPE materialInspectorShaderType_ =
+            wi::scene::MaterialComponent::SHADERTYPE_PBR;
+        bool materialSliderActive_ = false;
+        MaterialField materialSliderField_ = MaterialField::Roughness;
+        wi::ecs::Entity materialSliderEntity_ = wi::ecs::INVALID_ENTITY;
+        bridge::MaterialState materialSliderBefore_;
+        bridge::MaterialState materialSliderAfter_;
         wi::scene::LightComponent::LightType pendingLightType_ =
             wi::scene::LightComponent::POINT;
         wi::scene::LightComponent::LightType lightPlacementType_ =
@@ -834,6 +965,7 @@ namespace renegade::studio
         wi::jobsystem::context projectLoadWorkload_;
         wi::jobsystem::context modelImportWorkload_;
         wi::jobsystem::context decalTextureImportWorkload_;
+        wi::jobsystem::context materialTextureImportWorkload_;
         std::string openingScenePath_;
         bool sceneOpenInProgress_ = false;
         wi::ecs::Entity importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
