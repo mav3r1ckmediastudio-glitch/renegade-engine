@@ -107,18 +107,18 @@ namespace renegade::bridge
         result.tonemap = SanitizeTonemap(result.tonemap);
         result.antiAliasing = SanitizeAntiAliasing(result.antiAliasing);
 
-        result.exposure = ClampFinite(result.exposure, defaults.exposure, 0.0f, 16.0f);
-        result.brightness = ClampFinite(result.brightness, defaults.brightness, -2.0f, 2.0f);
-        result.contrast = ClampFinite(result.contrast, defaults.contrast, 0.0f, 4.0f);
-        result.saturation = ClampFinite(result.saturation, defaults.saturation, 0.0f, 4.0f);
-        result.hdrCalibration = ClampFinite(result.hdrCalibration, defaults.hdrCalibration, 0.01f, 16.0f);
-        result.bloomThreshold = ClampFinite(result.bloomThreshold, defaults.bloomThreshold, 0.0f, 64.0f);
-        result.eyeAdaptationKey = ClampFinite(result.eyeAdaptationKey, defaults.eyeAdaptationKey, 0.001f, 4.0f);
-        result.eyeAdaptationRate = ClampFinite(result.eyeAdaptationRate, defaults.eyeAdaptationRate, 0.0f, 16.0f);
-        result.depthOfFieldStrength = ClampFinite(result.depthOfFieldStrength, defaults.depthOfFieldStrength, 0.0f, 100.0f);
-        result.motionBlurStrength = ClampFinite(result.motionBlurStrength, defaults.motionBlurStrength, 0.0f, 500.0f);
+        result.exposure = ClampFinite(result.exposure, defaults.exposure, 0.0f, 3.0f);
+        result.brightness = ClampFinite(result.brightness, defaults.brightness, -1.0f, 1.0f);
+        result.contrast = ClampFinite(result.contrast, defaults.contrast, 0.0f, 2.0f);
+        result.saturation = ClampFinite(result.saturation, defaults.saturation, 0.0f, 2.0f);
+        result.hdrCalibration = ClampFinite(result.hdrCalibration, defaults.hdrCalibration, 0.0f, 8.0f);
+        result.bloomThreshold = ClampFinite(result.bloomThreshold, defaults.bloomThreshold, 0.0f, 10.0f);
+        result.eyeAdaptationKey = ClampFinite(result.eyeAdaptationKey, defaults.eyeAdaptationKey, 0.01f, 0.5f);
+        result.eyeAdaptationRate = ClampFinite(result.eyeAdaptationRate, defaults.eyeAdaptationRate, 0.01f, 4.0f);
+        result.depthOfFieldStrength = ClampFinite(result.depthOfFieldStrength, defaults.depthOfFieldStrength, 1.0f, 20.0f);
+        result.motionBlurStrength = ClampFinite(result.motionBlurStrength, defaults.motionBlurStrength, 0.1f, 400.0f);
         result.sharpenAmount = ClampFinite(result.sharpenAmount, defaults.sharpenAmount, 0.0f, 4.0f);
-        result.chromaticAberrationAmount = ClampFinite(result.chromaticAberrationAmount, defaults.chromaticAberrationAmount, 0.0f, 64.0f);
+        result.chromaticAberrationAmount = ClampFinite(result.chromaticAberrationAmount, defaults.chromaticAberrationAmount, 0.0f, 40.0f);
         return result;
     }
 
@@ -206,6 +206,73 @@ namespace renegade::bridge
         state.chromaticAberrationAmount = ReadValue(metadata->float_values, KeyChromaticAberrationAmount, defaults.chromaticAberrationAmount);
         state.ditherEnabled = ReadValue(metadata->bool_values, KeyDitherEnabled, defaults.ditherEnabled);
         return SanitizeRenderSettings(state);
+    }
+
+    bool RenderSettingsMatchPath(
+        const wi::RenderPath3D& path,
+        const RenderSettingsState& state) noexcept
+    {
+        const auto safe = SanitizeRenderSettings(state);
+
+        wi::renderer::Tonemap tonemap = wi::renderer::Tonemap::ACES;
+        switch (safe.tonemap)
+        {
+        case RenderTonemap::Reinhard:
+            tonemap = wi::renderer::Tonemap::Reinhard;
+            break;
+        case RenderTonemap::Uchimura:
+            tonemap = wi::renderer::Tonemap::Uchimura;
+            break;
+        case RenderTonemap::ACES:
+        default:
+            break;
+        }
+
+        if (path.getTonemap() != tonemap ||
+            !NearlyEqual(path.getExposure(), safe.exposure) ||
+            !NearlyEqual(path.getBrightness(), safe.brightness) ||
+            !NearlyEqual(path.getContrast(), safe.contrast) ||
+            !NearlyEqual(path.getSaturation(), safe.saturation) ||
+            !NearlyEqual(path.getHDRCalibration(), safe.hdrCalibration) ||
+            path.getColorGradingEnabled() != safe.colorGradingEnabled ||
+            path.getBloomEnabled() != safe.bloomEnabled ||
+            !NearlyEqual(path.getBloomThreshold(), safe.bloomThreshold) ||
+            path.getEyeAdaptionEnabled() != safe.eyeAdaptationEnabled ||
+            !NearlyEqual(path.getEyeAdaptionKey(), safe.eyeAdaptationKey) ||
+            !NearlyEqual(path.getEyeAdaptionRate(), safe.eyeAdaptationRate) ||
+            path.getDepthOfFieldEnabled() != safe.depthOfFieldEnabled ||
+            !NearlyEqual(path.getDepthOfFieldStrength(), safe.depthOfFieldStrength) ||
+            path.getMotionBlurEnabled() != safe.motionBlurEnabled ||
+            !NearlyEqual(path.getMotionBlurStrength(), safe.motionBlurStrength) ||
+            path.getSharpenFilterEnabled() !=
+                (safe.sharpenEnabled && safe.sharpenAmount > Epsilon) ||
+            !NearlyEqual(path.getSharpenFilterAmount(), safe.sharpenAmount) ||
+            path.getChromaticAberrationEnabled() != safe.chromaticAberrationEnabled ||
+            !NearlyEqual(path.getChromaticAberrationAmount(), safe.chromaticAberrationAmount) ||
+            path.getDitherEnabled() != safe.ditherEnabled)
+        {
+            return false;
+        }
+
+        const bool taa = wi::renderer::GetTemporalAAEnabled();
+        const bool fxaa = path.getFXAAEnabled();
+        const std::uint32_t msaa = path.getMSAASampleCount();
+        switch (safe.antiAliasing)
+        {
+        case AntiAliasingMode::FXAA:
+            return fxaa && !taa && msaa == 1;
+        case AntiAliasingMode::TAA:
+            return !fxaa && taa && msaa == 1;
+        case AntiAliasingMode::MSAA2X:
+            return !fxaa && !taa && msaa == 2;
+        case AntiAliasingMode::MSAA4X:
+            return !fxaa && !taa && msaa >= 2 && msaa <= 4;
+        case AntiAliasingMode::MSAA8X:
+            return !fxaa && !taa && msaa >= 2 && msaa <= 8;
+        case AntiAliasingMode::Off:
+        default:
+            return !fxaa && !taa && msaa == 1;
+        }
     }
 
     bool WriteRenderSettings(

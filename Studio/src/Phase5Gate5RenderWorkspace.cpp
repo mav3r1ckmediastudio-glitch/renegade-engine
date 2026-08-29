@@ -100,23 +100,23 @@ namespace renegade::studio
         createSlider(
             renderExposure_, "Render Exposure", "EXPOSURE",
             "Native scene exposure.", RenderField::Exposure,
-            0.0f, 16.0f, 1600.0f);
+            0.0f, 3.0f, 10000.0f);
         createSlider(
             renderBrightness_, "Render Brightness", "BRIGHTNESS",
             "Native post-process brightness offset.", RenderField::Brightness,
-            -2.0f, 2.0f, 800.0f);
+            -1.0f, 1.0f, 10000.0f);
         createSlider(
             renderContrast_, "Render Contrast", "CONTRAST",
             "Native post-process contrast.", RenderField::Contrast,
-            0.0f, 4.0f, 800.0f);
+            0.0f, 2.0f, 10000.0f);
         createSlider(
             renderSaturation_, "Render Saturation", "SATURATION",
             "Native post-process colour saturation.", RenderField::Saturation,
-            0.0f, 4.0f, 800.0f);
+            0.0f, 2.0f, 10000.0f);
         createSlider(
             renderHdrCalibration_, "Render HDR Calibration", "HDR CALIBRATION",
-            "Wicked render-path HDR calibration value. This does not switch OS HDR output mode.",
-            RenderField::HdrCalibration, 0.01f, 16.0f, 1600.0f);
+            "HDR output calibration. This is intentionally subtle/inert while the viewport is running in SDR.",
+            RenderField::HdrCalibration, 0.0f, 8.0f, 100.0f);
 
         createSection(
             renderBloomLabel_,
@@ -180,19 +180,19 @@ namespace renegade::studio
         createSlider(
             renderBloomThreshold_, "Render Bloom Threshold", "BLOOM THRESHOLD",
             "Brightness threshold for native bloom response.",
-            RenderField::BloomThreshold, 0.0f, 64.0f, 1280.0f);
+            RenderField::BloomThreshold, 0.0f, 10.0f, 1000.0f);
         createToggle(
             renderEyeAdaptationEnabled_, "Auto exposure: ",
-            "Enable Wicked eye adaptation / automatic exposure.",
+            "Enable Wicked eye adaptation. The visible response happens over time while scene luminance changes.",
             RenderToggle::EyeAdaptation);
         createSlider(
             renderEyeAdaptationKey_, "Render Eye Adaptation Key", "AUTO EXPOSURE // KEY",
             "Native luminance key used by Wicked eye adaptation.",
-            RenderField::EyeAdaptationKey, 0.001f, 4.0f, 1000.0f);
+            RenderField::EyeAdaptationKey, 0.01f, 0.5f, 10000.0f);
         createSlider(
             renderEyeAdaptationRate_, "Render Eye Adaptation Rate", "AUTO EXPOSURE // RATE",
             "How quickly eye adaptation responds to luminance changes.",
-            RenderField::EyeAdaptationRate, 0.0f, 16.0f, 1600.0f);
+            RenderField::EyeAdaptationRate, 0.01f, 4.0f, 10000.0f);
 
         createSection(
             renderAntiAliasingLabel_,
@@ -221,19 +221,19 @@ namespace renegade::studio
             "POST FX // CAMERA IMAGE");
         createToggle(
             renderDepthOfFieldEnabled_, "Depth of field: ",
-            "Run Wicked depth of field. Focal distance/aperture remain authored on scene cameras.",
+            "Run Wicked depth of field. It requires the active view camera aperture to be greater than zero; focal distance/aperture are authored on scene cameras.",
             RenderToggle::DepthOfField);
         createSlider(
             renderDepthOfFieldStrength_, "Render DOF Strength", "DEPTH OF FIELD // STRENGTH",
             "Native depth-of-field strength.", RenderField::DepthOfFieldStrength,
-            0.0f, 100.0f, 1000.0f);
+            1.0f, 20.0f, 1000.0f);
         createToggle(
             renderMotionBlurEnabled_, "Motion blur: ",
-            "Run Wicked's native motion-blur pass.", RenderToggle::MotionBlur);
+            "Run Wicked's native motion-blur pass. The effect is visible while the camera or scene is moving.", RenderToggle::MotionBlur);
         createSlider(
             renderMotionBlurStrength_, "Render Motion Blur Strength", "MOTION BLUR // STRENGTH",
             "Native motion-blur strength.", RenderField::MotionBlurStrength,
-            0.0f, 500.0f, 1000.0f);
+            0.1f, 400.0f, 10000.0f);
         createToggle(
             renderSharpenEnabled_, "Sharpen: ",
             "Run Wicked's native sharpen filter.", RenderToggle::Sharpen);
@@ -249,10 +249,10 @@ namespace renegade::studio
             renderChromaticAberrationAmount_, "Render Chromatic Aberration Amount",
             "CHROMATIC ABERRATION // AMOUNT",
             "Native chromatic-aberration amount.",
-            RenderField::ChromaticAberrationAmount, 0.0f, 64.0f, 1280.0f);
+            RenderField::ChromaticAberrationAmount, 0.0f, 40.0f, 1000.0f);
         createToggle(
             renderDitherEnabled_, "Dither: ",
-            "Enable Wicked's final-image dithering.", RenderToggle::Dither);
+            "Enable Wicked's subtle final-image dithering for banding reduction.", RenderToggle::Dither);
 
         RefreshRenderWorkspace();
         LayoutRenderWorkspace();
@@ -583,6 +583,12 @@ namespace renegade::studio
         bridge::ApplyRenderSettingsToPath(*this, safe, resizeBuffersForMSAA);
         appliedRenderSettings_ = safe;
         appliedRenderSettingsInitialized_ = true;
+        if (!bridge::RenderSettingsMatchPath(*this, safe))
+        {
+            wi::backlog::post(
+                "Renegade Gate 5: native RenderPath did not retain the authored image-quality state.",
+                wi::backlog::LogLevel::Warning);
+        }
     }
 
     void StudioRenderPath::SyncRenderSettingsFromScene(
@@ -598,9 +604,10 @@ namespace renegade::studio
                 scene, session_->Projects().CurrentProject().rootPath, ignored);
         }
         const auto authored = bridge::CaptureRenderSettings(scene);
-        if (appliedRenderSettingsInitialized_ &&
-            !bridge::HasRenderSettingsChange(appliedRenderSettings_, authored))
+        if (bridge::RenderSettingsMatchPath(*this, authored))
         {
+            appliedRenderSettings_ = authored;
+            appliedRenderSettingsInitialized_ = true;
             return;
         }
         ApplyRenderSettingsState(authored, resizeBuffersForMSAA);

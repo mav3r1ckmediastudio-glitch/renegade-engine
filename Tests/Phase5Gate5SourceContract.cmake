@@ -55,7 +55,8 @@ foreach(token IN ITEMS
     "RenderTonemap"
     "AntiAliasingMode"
     "colorGradingEnabled"
-    "SetRenderSettingsCommand")
+    "SetRenderSettingsCommand"
+    "RenderSettingsMatchPath")
     string(FIND "${render_header_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Gate 5 render-state contract missing ${token}")
@@ -230,7 +231,8 @@ endif()
 foreach(token IN ITEMS
     "colorGradingEnabled"
     "AntiAliasingMode::MSAA4X"
-    "SetRenderSettingsCommand")
+    "SetRenderSettingsCommand"
+    "RenderSettingsMatchPath(nativePath, authored)")
     string(FIND "${settings_test_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Gate 5 render regression missing ${token}")
@@ -267,6 +269,34 @@ foreach(token IN ITEMS
     string(FIND "${gate_doc_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Gate 5 documentation missing ${token}")
+    endif()
+endforeach()
+
+
+# These ranges are the pinned Wicked Editor authoring domains. Owner testing
+# proved the previous oversized domains made most slider travel ineffective.
+foreach(token IN ITEMS
+    "0.0f, 3.0f, 10000.0f"
+    "-1.0f, 1.0f, 10000.0f"
+    "0.0f, 10.0f, 1000.0f"
+    "0.01f, 0.5f, 10000.0f"
+    "1.0f, 20.0f, 1000.0f"
+    "0.1f, 400.0f, 10000.0f"
+    "0.0f, 40.0f, 1000.0f")
+    string(FIND "${studio_render_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 Wicked-native creator range missing ${token}")
+    endif()
+endforeach()
+
+foreach(forbidden IN ITEMS
+    "0.0f, 16.0f, 1600.0f"
+    "0.0f, 64.0f, 1280.0f"
+    "0.0f, 100.0f, 1000.0f"
+    "0.0f, 500.0f, 1000.0f")
+    string(FIND "${studio_render_text}" "${forbidden}" found)
+    if(NOT found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 oversized dead creator range returned: ${forbidden}")
     endif()
 endforeach()
 

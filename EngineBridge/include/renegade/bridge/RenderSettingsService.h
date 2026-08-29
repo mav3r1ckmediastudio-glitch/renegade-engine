@@ -74,6 +74,9 @@ namespace renegade::bridge
         const wi::scene::Scene& scene) noexcept;
     [[nodiscard]] RenderSettingsState CaptureRenderSettings(
         const wi::scene::Scene& scene) noexcept;
+    [[nodiscard]] bool RenderSettingsMatchPath(
+        const wi::RenderPath3D& path,
+        const RenderSettingsState& state) noexcept;
     [[nodiscard]] bool WriteRenderSettings(
         wi::scene::Scene& scene,
         const RenderSettingsState& state);
