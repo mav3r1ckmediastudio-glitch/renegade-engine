@@ -43,6 +43,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Studio/src/StudioApplication.cpp .github/workflows/phase5-g3-status-fix.yml
+          git add Studio/src/StudioApplication.cpp
           git commit -m "Phase 5 Gate 3: fix Studio probe refresh compile"
           git push origin HEAD:phase5/scene-render-gate3-decals-probes
