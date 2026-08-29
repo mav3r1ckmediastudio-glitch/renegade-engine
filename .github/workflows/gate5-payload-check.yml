@@ -1,0 +1,41 @@
+name: Gate 5 payload check
+on:
+  push:
+    branches: [staging/phase5-gate5-payload-check]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check exact chunk blobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, urllib.request, urllib.error
+          shas = '''9efacc30f3b2ea89979b5f9de18d4c5444baba27
+0412cc5ed8635f1f17380f2fcacf00b436564821
+f1482d86d1dcb7ecba8cc92ce494eb7c03a0a0b8
+0a276e9ae8932b849df27d4bd26e5e9612d9a45e
+10e402b5231508121611bb6aaf64a376e0cdc936
+d768677768b6661e8bda112c51d59cdb0fa664a9
+188fd41be49193650eb109eac6442d9e067c3aa8
+75eeb604207dbd15fad3a6a29985297873e8490e
+c1e5f90c00bf2a226816d4054d6997ba799a1315
+31c8fb2c711c99fc268626337800f5b84936faf9
+c919ad63958602357b5342453026af50b31a12a0
+7c514035ec5621433cd8975e37ea0dc9d97290f9
+8bf54ac1f40d875442402446764777ceec96e1ac
+32269862d94ab023e81deec1247725453d91265b
+ece71159f240846cc8e2d0e941279d73ace11841
+40c2a5830ce8ea7816024a26752892c872793d3e'''.splitlines()
+          token=os.environ['GH_TOKEN']; repo=os.environ['REPO']
+          for sha in shas:
+              req=urllib.request.Request(f'https://api.github.com/repos/{repo}/git/blobs/{sha}', method='HEAD', headers={'Authorization':f'Bearer {token}','X-GitHub-Api-Version':'2022-11-28'})
+              try:
+                  with urllib.request.urlopen(req) as r: print('PRESENT', sha, r.status)
+              except urllib.error.HTTPError as e: print('MISSING', sha, e.code)
+          PY
