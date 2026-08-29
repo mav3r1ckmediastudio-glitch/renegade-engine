@@ -2288,7 +2288,6 @@ namespace renegade::studio
             if (bridge::RefreshEnvironmentProbe(
                     session_->Scenes().GetScene(), entity))
             {
-                statusOverride_ = "ENVIRONMENT PROBE REFRESH REQUESTED";
                 RefreshInspector();
                 RefreshStatus();
             }
