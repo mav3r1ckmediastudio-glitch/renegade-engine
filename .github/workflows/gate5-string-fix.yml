@@ -16,11 +16,11 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Guard exact base
+      - name: Guard exact staging parent
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "b8020e3576a28d81b4ec35b28d7e4268d2f7d0d2"
+          test "$(git rev-parse HEAD^)" = "d9870d775e4b6d1849dcbb7fb35aab7f355a09ab"
 
       - name: Repair malformed LUT error literal
         shell: bash
@@ -30,14 +30,8 @@ jobs:
           from pathlib import Path
           path = Path('Studio/src/Phase5Gate5RenderWorkspace.cpp')
           text = path.read_text(encoding='utf-8')
-          old = '''                        wi::helper::messageBox(
-                            error + "
-
-Use a lossless 256x16 8-bit RGBA PNG.",
-                            "Import Color Grading LUT");'''
-          new = '''                        wi::helper::messageBox(
-                            error + "\\n\\nUse a lossless 256x16 8-bit RGBA PNG.",
-                            "Import Color Grading LUT");'''
+          old = '                        wi::helper::messageBox(\n                            error + "' + chr(10) + chr(10) + 'Use a lossless 256x16 8-bit RGBA PNG.",\n                            "Import Color Grading LUT");'
+          new = '                        wi::helper::messageBox(\n                            error + "\\n\\nUse a lossless 256x16 8-bit RGBA PNG.",\n                            "Import Color Grading LUT");'
           if text.count(old) != 1:
               raise SystemExit(f'expected exactly one malformed literal, found {text.count(old)}')
           path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
