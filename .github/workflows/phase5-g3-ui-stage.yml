@@ -1,0 +1,39 @@
+name: Phase 5 Gate 3 Studio UI stage
+
+on:
+  push:
+    branches:
+      - phase5/scene-render-gate3-decals-probes
+    paths:
+      - .github/workflows/phase5-g3-ui-stage.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase5/scene-render-gate3-decals-probes
+      - name: Apply Gate 3 UI patch
+        run: python Tools/phase5_g3_ui_patch.py
+      - name: Remove staging helpers
+        run: rm Tools/phase5_g3_ui_patch.py .github/workflows/phase5-g3-ui-stage.yml
+      - name: Verify bounded UI diff
+        run: |
+          set -euo pipefail
+          git diff --check
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate3SourceContract.cmake
+          test ! -e Tools/phase5_g3_ui_patch.py
+          test ! -e .github/workflows/phase5-g3-ui-stage.yml
+          git diff --name-only
+      - name: Commit clean Gate 3 UI tree
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Phase 5 Gate 3: add decal and probe Studio authoring"
+          git push origin HEAD:phase5/scene-render-gate3-decals-probes
