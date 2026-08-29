@@ -497,9 +497,7 @@ namespace renegade::studio
                     {
                         studioChrome_.SetStatusText("LUT // IMPORT FAILED // " + error);
                         wi::helper::messageBox(
-                            error + "
-
-Use a lossless 256x16 8-bit RGBA PNG.",
+                            error + "\n\nUse a lossless 256x16 8-bit RGBA PNG.",
                             "Import Color Grading LUT");
                         return;
                     }
