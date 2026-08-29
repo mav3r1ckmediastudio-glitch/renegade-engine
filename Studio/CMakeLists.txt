@@ -108,6 +108,7 @@ add_executable(RenegadeStudio WIN32
     src/StartupMediaFoundationPlayer.cpp
     src/StartupMediaFoundationPlayer.h
     src/Phase5Gate4MaterialInspector.cpp
+    src/Phase5Gate5RenderWorkspace.cpp
     src/StudioApplication.cpp
     src/StudioApplication.h
     src/StudioUserPreferences.cpp
@@ -242,6 +243,28 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/weather/snowflake.dds"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/weather/snowflake.dds"
+    VERBATIM
+)
+
+set(RENEGADE_BUILTIN_LUT_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/luts")
+foreach(RENEGADE_LUT_INDEX IN ITEMS 1 2 3)
+    if(NOT EXISTS "${RENEGADE_BUILTIN_LUT_DIR}/${RENEGADE_LUT_INDEX}.png")
+        message(FATAL_ERROR "Gate 5 built-in LUT ${RENEGADE_LUT_INDEX}.png is missing")
+    endif()
+endforeach()
+add_custom_command(TARGET RenegadeStudio POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/luts"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${RENEGADE_BUILTIN_LUT_DIR}/1.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/luts/1.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${RENEGADE_BUILTIN_LUT_DIR}/2.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/luts/2.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${RENEGADE_BUILTIN_LUT_DIR}/3.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/luts/3.png"
     VERBATIM
 )
 

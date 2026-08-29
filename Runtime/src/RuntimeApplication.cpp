@@ -8,17 +8,52 @@
 
 namespace renegade::runtime
 {
-    void RuntimeRenderPath::BindScene(bridge::SceneService& scenes) noexcept
+    void RuntimeRenderPath::BindScene(
+        bridge::SceneService& scenes,
+        std::string projectRoot) noexcept
     {
         scenes_ = &scenes;
+        projectRoot_ = std::move(projectRoot);
         scene = &scenes.GetScene();
+        renderSettingsInitialized_ = false;
+    }
+
+    void RuntimeRenderPath::SyncRenderSettings(
+        const bool resizeBuffersForMSAA)
+    {
+        if (scenes_ == nullptr)
+            return;
+
+        auto& activeScene = scenes_->GetScene();
+        if (!projectRoot_.empty())
+        {
+            std::string ignored;
+            (void)bridge::RefreshColorGradingLutResource(
+                activeScene, projectRoot_, ignored);
+        }
+        const auto authored =
+            bridge::CaptureRenderSettings(activeScene);
+        if (renderSettingsInitialized_ &&
+            !bridge::HasRenderSettingsChange(renderSettings_, authored))
+        {
+            return;
+        }
+
+        bridge::ApplyRenderSettingsToPath(
+            *this,
+            authored,
+            resizeBuffersForMSAA);
+        renderSettings_ = authored;
+        renderSettingsInitialized_ = true;
     }
 
     void RuntimeRenderPath::Load()
     {
+        // Gate 6 owns reflections/GI. Gate 5 replaces the former hardcoded
+        // FXAA reset with the level's shared persisted image-quality state.
         setSSREnabled(false);
         setReflectionsEnabled(true);
-        setFXAAEnabled(false);
+        SyncRenderSettings(false);
 
         wi::scene::TransformComponent cameraTransform;
         cameraTransform.Translate(XMFLOAT3(0.0f, 1.5f, -4.0f));
@@ -26,6 +61,15 @@ namespace renegade::runtime
         camera->TransformCamera(cameraTransform);
 
         RenderPath3D::Load();
+    }
+
+    void RuntimeRenderPath::Update(const float dt)
+    {
+        // Story Flow can replace the active WISCENE without recreating this
+        // render path. Re-capture on Update so each Level receives its own
+        // authored Gate 5 state and a carrier-free Level restores defaults.
+        SyncRenderSettings(true);
+        RenderPath3D::Update(dt);
     }
 
     void RuntimeApplication::SetBootstrapResult(RuntimeBootstrapResult result)
@@ -97,7 +141,7 @@ namespace renegade::runtime
         infoDisplay.colorspace = true;
         infoDisplay.fpsinfo = true;
 
-        renderer_.BindScene(scenes_);
+        renderer_.BindScene(scenes_, startupResult_.project.rootPath);
         renderer_.init(canvas);
 
         // LP03 compatibility path: an explicitly declared project startup

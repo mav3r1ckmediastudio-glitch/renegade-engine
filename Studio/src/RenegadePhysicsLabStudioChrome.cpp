@@ -83,7 +83,8 @@ namespace renegade::studio
             {
                 if (action == Action::SceneWorkspace ||
                     action == Action::EnvironmentWorkspace ||
-                    action == Action::TerrainWorkspace)
+                    action == Action::TerrainWorkspace ||
+                    action == Action::RenderWorkspace)
                 {
                     SetPhysicsLabActive(false);
                 }
