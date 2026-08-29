@@ -97,7 +97,7 @@ text = replace_once(
 text = replace_once(
     text,
     '    "src/Phase5Gate5RenderWorkspace.cpp"\n    "Renegade_Builtin_LUTs_1-50_RGBA.zip"\n    "Content/luts")',
-    '    "src/Phase5Gate5RenderWorkspace.cpp"\n    "assets/luts/1.png"\n    "assets/luts/2.png"\n    "assets/luts/3.png"\n    "copy_if_different"\n    "Content/luts")',
+    '    "src/Phase5Gate5RenderWorkspace.cpp"\n    "RENEGADE_LUT_INDEX IN ITEMS 1 2 3"\n    "Content/luts/1.png"\n    "Content/luts/2.png"\n    "Content/luts/3.png"\n    "copy_if_different")',
     "three-LUT Studio build contract")
 text = replace_once(
     text,
