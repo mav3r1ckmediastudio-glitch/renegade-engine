@@ -1,0 +1,63 @@
+name: Gate 4 material Inspector integration
+
+on:
+  push:
+    branches:
+      - phase5/scene-render-gate4-material-shader
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Gate 4 branch
+        uses: actions/checkout@v4
+        with:
+          ref: phase5/scene-render-gate4-material-shader
+          fetch-depth: 0
+
+      - name: Apply bounded Gate 4 material Inspector patch
+        run: python .github/scripts/gate4_material_ui.py
+
+      - name: Remove temporary integration helpers
+        run: |
+          rm .github/scripts/gate4_material_ui.py
+          rm .github/workflows/gate4-material-ui.yml
+
+      - name: Validate bounded repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          changed="$(git diff --name-only)"
+          printf '%s\n' "$changed"
+          while IFS= read -r path; do
+            case "$path" in
+              Studio/src/StudioApplication.h|Studio/src/StudioApplication.cpp|Studio/src/Phase5Gate4MaterialInspector.cpp|Studio/CMakeLists.txt|.github/scripts/gate4_material_ui.py|.github/workflows/gate4-material-ui.yml)
+                ;;
+              "")
+                ;;
+              *)
+                echo "Unexpected Gate 4 material UI path: $path" >&2
+                exit 1
+                ;;
+            esac
+          done <<< "$changed"
+          test -f Studio/src/Phase5Gate4MaterialInspector.cpp
+          grep -q 'MATERIAL // NATIVE WICKED' Studio/src/Phase5Gate4MaterialInspector.cpp
+          grep -q 'SetMaterialTextureAssetCommand' Studio/src/Phase5Gate4MaterialInspector.cpp
+          grep -q 'ClearMaterialTextureAssetCommand' Studio/src/Phase5Gate4MaterialInspector.cpp
+          cmake -DRENEGADE_SOURCE_DIR="$GITHUB_WORKSPACE" -P Tests/Phase5Gate4SourceContract.cmake
+
+      - name: Commit and push clean production tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Phase 5 Gate 4: add material Inspector authoring"
+          git push origin HEAD:phase5/scene-render-gate4-material-shader
