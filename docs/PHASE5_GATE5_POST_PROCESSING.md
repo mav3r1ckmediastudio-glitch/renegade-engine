@@ -6,7 +6,7 @@ Gate 5 starts from post-Gate-4 `main` at `7d6e5f2164993c84588fea3b44ef265ddc1db5
 
 Production branch: `phase5/scene-render-gate5-post-processing`.
 
-Shared render-settings backend implemented at `fa5ad944e74ca619c92a2efdb3865421398a59d8`. It adds the versioned Gate 5 state, native WISCENE persistence carrier, deterministic defaults/sanitization, CommandService Undo/Redo and the shared native `RenderPath3D` application seam. Studio/Runtime application and the creator-facing RENDER workspace remain the next implementation slice.
+The shared render-settings backend is implemented. It adds the versioned Gate 5 state, native WISCENE persistence carrier, deterministic defaults/sanitization, CommandService Undo/Redo and the shared native `RenderPath3D` application seam. Studio/Runtime application and the creator-facing RENDER workspace remain the next implementation slice.
 
 This gate exposes Wicked Engine's existing `RenderPath3D` post-processing and image-quality controls through Renegade Studio. Renegade does **not** introduce a parallel renderer or duplicate the native post-process implementation.
 
