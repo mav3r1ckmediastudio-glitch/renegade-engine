@@ -6,11 +6,13 @@ Gate 5 starts from post-Gate-4 `main` at `7d6e5f2164993c84588fea3b44ef265ddc1db5
 
 Production branch: `phase5/scene-render-gate5-post-processing`.
 
+Shared render-settings backend implemented at `fa5ad944e74ca619c92a2efdb3865421398a59d8`. It adds the versioned Gate 5 state, native WISCENE persistence carrier, deterministic defaults/sanitization, CommandService Undo/Redo and the shared native `RenderPath3D` application seam. Studio/Runtime application and the creator-facing RENDER workspace remain the next implementation slice.
+
 This gate exposes Wicked Engine's existing `RenderPath3D` post-processing and image-quality controls through Renegade Studio. Renegade does **not** introduce a parallel renderer or duplicate the native post-process implementation.
 
 ## Architectural rule
 
-Unlike decals, probes and materials, Wicked post-process state is owned by `wi::RenderPath3D`; it is not a serializable scene component. Renegade therefore needs one small scene-owned, versioned render-settings document/state seam whose only job is to persist creator intent and apply it to the native Wicked render path.
+Unlike decals, probes and materials, Wicked post-process state is owned by `wi::RenderPath3D`; it is not a serializable scene component. Renegade therefore uses one small scene-owned, versioned render-settings state persisted in a reserved internal Metadata carrier named `__renegade_internal_render_settings`. The carrier is serialized by native WISCENE, filtered from creator hierarchy surfaces and contains creator intent only; Wicked's renderer remains authoritative for actual post processing.
 
 The same persisted state must be consumed by:
 
@@ -78,6 +80,7 @@ Implementation rules:
 - TAA uses Wicked's native `wi::renderer::SetTemporalAAEnabled()`.
 - MSAA uses the native render path sample-count control.
 - Selecting a mode must establish a deterministic compatible state; for example, selecting MSAA must not silently leave FXAA/TAA enabled from a previous choice.
+- MSAA changes rebuild the render buffers, matching Wicked's own Graphics editor behaviour.
 - Unsupported sample counts/capabilities must fail safely to a supported documented state rather than breaking render-target creation.
 
 FSR/FSR2 and dynamic resolution are native Wicked capabilities but are **not** conflated with anti-aliasing in this first Gate 5 acceptance surface. They are performance/upscaling policy and may be added as a bounded Gate 5B or later graphics-quality pass without changing the persisted Gate 5 core contract.
@@ -116,7 +119,7 @@ Light shafts, volumetric-light policy and lens-flare authoring should remain wit
 
 ## Defaults
 
-A scene with no Gate 5 state must resolve deterministically to Renegade's documented baseline based on Wicked's pinned defaults, including:
+A scene with no Gate 5 state resolves deterministically to Renegade's documented baseline based on Wicked's pinned defaults, including:
 
 - Tonemap: ACES
 - Exposure: 1.0
@@ -147,6 +150,8 @@ Every creator-facing Gate 5 edit must:
 4. mark the scene dirty,
 5. Undo back to the exact prior state,
 6. Redo to the exact changed state.
+
+`SetRenderSettingsCommand` owns the persisted carrier lifecycle. The first authored change creates the hidden carrier; Undo of that first change removes it and restores a truly carrier-free default scene. If a carrier already existed, Undo preserves it and restores its exact prior Gate 5 values.
 
 Continuous sliders may preview live during drag, but one drag must collapse to one owner-facing Undo step just like existing Renegade slider authoring.
 
@@ -180,11 +185,18 @@ Gate 5 is not complete until one owner build proves all of the following:
 
 ## CI / regression requirements
 
-Gate 5 must add headless/source-contract coverage for:
+The backend regression now covers:
 
 - state sanitize/default rules,
-- persistence round-trip,
-- command Undo/Redo,
+- native Metadata persistence round-trip,
+- native entity serialization of the WISCENE carrier,
+- carrier invisibility through creator-facing `SceneService`,
+- command Undo/Redo for new and pre-existing settings,
+- first-edit carrier removal on Undo,
+- no-op history filtering.
+
+The completed Gate 5 candidate must additionally lock:
+
 - deterministic anti-aliasing-mode mapping,
 - Studio native Wicked setter application,
 - Runtime native Wicked setter application,
