@@ -14,13 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 4
 
-      - name: Guard exact Gate 5 head
+      - name: Guard exact Gate 5 product base
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "c5012bf6bf2d59c10071febff5d916d1343d5807"
+          base="c5012bf6bf2d59c10071febff5d916d1343d5807"
+          test "$(git merge-base HEAD "$base")" = "$base"
+          changed="$(git diff --name-only "$base"...HEAD)"
+          test "$changed" = ".github/workflows/gate5-ui-ownership-fix.yml"
 
       - name: Stop frame loop from mutating Render widgets
         shell: bash
@@ -72,35 +75,7 @@ jobs:
           marker = 'message(STATUS "Phase 5 Gate 5 source contract passed")'
           if text.count(marker) != 1:
               raise SystemExit('source contract final marker changed')
-          checks = r'''
-# RENDER workspace interaction ownership: the per-frame Studio update may show/hide
-# the panel, but must not relayout or repopulate its widgets while wiGUI owns mouse state.
-string(FIND "${studio_source_text}"
-    "if (renderWorkspaceActive_)\n        {\n            LayoutRenderWorkspace();"
-    render_frame_layout)
-if(NOT render_frame_layout EQUAL -1)
-    message(FATAL_ERROR "Gate 5 frame loop still relayouts Render widgets")
-endif()
-string(FIND "${studio_source_text}"
-    "if (renderWorkspaceActive_)\n            LayoutRenderWorkspace();"
-    render_resize_layout)
-if(render_resize_layout EQUAL -1)
-    message(FATAL_ERROR "Gate 5 ResizeLayout no longer owns Render workspace layout")
-endif()
-string(FIND "${studio_render_text}"
-    "renderWorkspaceActive_ && authoredStateChanged"
-    render_authored_refresh)
-if(render_authored_refresh EQUAL -1)
-    message(FATAL_ERROR "Gate 5 Render refresh is not gated by authored state changes")
-endif()
-string(FIND "${studio_render_text}"
-    "RenderField::BloomThreshold, 0.0f, 1.0f, 1000.0f"
-    bloom_useful_range)
-if(bloom_useful_range EQUAL -1)
-    message(FATAL_ERROR "Gate 5 Bloom mouse range regressed from useful 0-1 range")
-endif()
-
-'''
+          checks = '''\n# RENDER workspace interaction ownership: frame updates must not relayout widgets.\nstring(FIND "${studio_source_text}" "if (renderWorkspaceActive_)\\n        {\\n            LayoutRenderWorkspace();" render_frame_layout)\nif(NOT render_frame_layout EQUAL -1)\n    message(FATAL_ERROR "Gate 5 frame loop still relayouts Render widgets")\nendif()\nstring(FIND "${studio_source_text}" "if (renderWorkspaceActive_)\\n            LayoutRenderWorkspace();" render_resize_layout)\nif(render_resize_layout EQUAL -1)\n    message(FATAL_ERROR "Gate 5 ResizeLayout no longer owns Render workspace layout")\nendif()\nstring(FIND "${studio_render_text}" "renderWorkspaceActive_ && authoredStateChanged" render_authored_refresh)\nif(render_authored_refresh EQUAL -1)\n    message(FATAL_ERROR "Gate 5 Render refresh is not gated by authored state changes")\nendif()\nstring(FIND "${studio_render_text}" "RenderField::BloomThreshold, 0.0f, 1.0f, 1000.0f" bloom_useful_range)\nif(bloom_useful_range EQUAL -1)\n    message(FATAL_ERROR "Gate 5 Bloom mouse range regressed from useful 0-1 range")\nendif()\n\n'''
           contract.write_text(text.replace(marker, checks + marker, 1), encoding='utf-8', newline='\n')
           PY
 
