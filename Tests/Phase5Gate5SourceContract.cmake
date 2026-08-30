@@ -278,7 +278,7 @@ endforeach()
 foreach(token IN ITEMS
     "0.0f, 3.0f, 10000.0f"
     "-1.0f, 1.0f, 10000.0f"
-    "0.0f, 10.0f, 1000.0f"
+    "0.0f, 1.0f, 1000.0f"
     "0.01f, 0.5f, 10000.0f"
     "1.0f, 20.0f, 1000.0f"
     "0.1f, 400.0f, 10000.0f"
@@ -321,5 +321,24 @@ foreach(token IN ITEMS
         message(FATAL_ERROR "Gate 5 direct native slider preview missing ${token}")
     endif()
 endforeach()
+
+
+# RENDER workspace interaction ownership: frame updates must not relayout widgets.
+string(FIND "${studio_source_text}" "if (renderWorkspaceActive_)\n        {\n            LayoutRenderWorkspace();" render_frame_layout)
+if(NOT render_frame_layout EQUAL -1)
+    message(FATAL_ERROR "Gate 5 frame loop still relayouts Render widgets")
+endif()
+string(FIND "${studio_source_text}" "if (renderWorkspaceActive_)\n            LayoutRenderWorkspace();" render_resize_layout)
+if(render_resize_layout EQUAL -1)
+    message(FATAL_ERROR "Gate 5 ResizeLayout no longer owns Render workspace layout")
+endif()
+string(FIND "${studio_render_text}" "renderWorkspaceActive_ && authoredStateChanged" render_authored_refresh)
+if(render_authored_refresh EQUAL -1)
+    message(FATAL_ERROR "Gate 5 Render refresh is not gated by authored state changes")
+endif()
+string(FIND "${studio_render_text}" "RenderField::BloomThreshold, 0.0f, 1.0f, 1000.0f" bloom_useful_range)
+if(bloom_useful_range EQUAL -1)
+    message(FATAL_ERROR "Gate 5 Bloom mouse range regressed from useful 0-1 range")
+endif()
 
 message(STATUS "Phase 5 Gate 5 source contract passed")
