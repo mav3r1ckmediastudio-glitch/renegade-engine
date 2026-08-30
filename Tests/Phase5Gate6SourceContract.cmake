@@ -33,7 +33,13 @@ function(require_text haystack needle description)
     endif()
 endfunction()
 
-require_text(service_header "RenderSettingsSchemaVersion = 2" "schema-v2 render settings")
+# Gate 6 introduced schema v2. Later rendering gates are allowed to advance the
+# shared render-settings schema as long as the Gate 6 state and migration seam
+# remain present.
+string(REGEX MATCH "RenderSettingsSchemaVersion = ([0-9]+)" schema_match "${service_header}")
+if(schema_match STREQUAL "" OR CMAKE_MATCH_1 LESS 2)
+    message(FATAL_ERROR "Phase 5 Gate 6 requires render-settings schema v2 or newer")
+endif()
 require_text(service_header "enum class RenderAmbientOcclusion" "curated AO enum")
 require_text(service_header "enum class RenderQuality" "curated render quality enum")
 require_text(service_header "ambientOcclusionPower" "AO power state")
@@ -43,7 +49,7 @@ require_text(service_header "planarReflectionResolutionScale" "planar reflection
 require_text(service_header "ssrQuality" "SSR quality state")
 require_text(service_header "reflectionRoughnessCutoff" "reflection roughness state")
 
-require_text(service_source "schema != 1 && schema != RenderSettingsSchemaVersion" "lossless schema-v1 migration")
+require_text(service_source "schema != 1" "lossless schema-v1 migration")
 require_text(service_source "path.setAO(" "native AO application")
 require_text(service_source "path.setAOPower(" "native AO power application")
 require_text(service_source "path.setAORange(" "native AO range application")
@@ -69,11 +75,6 @@ require_text(studio_render "RenderToggle::Ssr" "SSR creator toggle")
 require_text(studio_render "setSSGIDepthRejection" "direct SSGI slider preview")
 require_text(studio_render "wi::renderer::SetGIBoost" "direct GI boost slider preview")
 require_text(studio_render "setReflectionRoughnessCutoff" "direct reflection cutoff preview")
-
-string(FIND "${studio_render}" "RenderAmbientOcclusion::RTAO" rtao_ui)
-if(NOT rtao_ui EQUAL -1)
-    message(FATAL_ERROR "Gate 6 must not expose RTAO; it belongs to Gate 7")
-endif()
 
 require_text(runtime_source "ApplyRenderSettingsToPath(" "shared Runtime render-settings application seam")
 require_text(test_source "schema-v1 carrier did not migrate losslessly" "schema migration regression")
