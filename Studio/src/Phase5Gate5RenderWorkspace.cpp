@@ -179,8 +179,8 @@ namespace renegade::studio
             "Run Wicked's native bloom pass.", RenderToggle::Bloom);
         createSlider(
             renderBloomThreshold_, "Render Bloom Threshold", "BLOOM THRESHOLD",
-            "Brightness threshold for native bloom response.",
-            RenderField::BloomThreshold, 0.0f, 10.0f, 1000.0f);
+            "Useful mouse range is 0-1 for ordinary scenes. Type a larger value in the numeric field for HDR content.",
+            RenderField::BloomThreshold, 0.0f, 1.0f, 1000.0f);
         createToggle(
             renderEyeAdaptationEnabled_, "Auto exposure: ",
             "Enable Wicked eye adaptation. The visible response happens over time while scene luminance changes.",
@@ -538,14 +538,7 @@ namespace renegade::studio
     void StudioRenderPath::SetRenderWorkspaceActive(const bool active)
     {
         if (renderWorkspaceActive_ == active)
-        {
-            if (active)
-            {
-                LayoutRenderWorkspace();
-                RefreshRenderWorkspace();
-            }
             return;
-        }
 
         renderWorkspaceActive_ = active && session_ != nullptr;
         if (renderWorkspaceActive_)
@@ -604,14 +597,25 @@ namespace renegade::studio
                 scene, session_->Projects().CurrentProject().rootPath, ignored);
         }
         const auto authored = bridge::CaptureRenderSettings(scene);
+        const bool authoredStateChanged =
+            !appliedRenderSettingsInitialized_ ||
+            bridge::HasRenderSettingsChange(appliedRenderSettings_, authored);
+
         if (bridge::RenderSettingsMatchPath(*this, authored))
         {
             appliedRenderSettings_ = authored;
             appliedRenderSettingsInitialized_ = true;
-            return;
         }
-        ApplyRenderSettingsState(authored, resizeBuffersForMSAA);
-        if (renderWorkspaceActive_)
+        else
+        {
+            // Renderer drift is repaired silently. Do not rewrite GUI widget state
+            // just because some native render value was overwritten elsewhere.
+            ApplyRenderSettingsState(authored, resizeBuffersForMSAA);
+        }
+
+        // Refresh widgets only when the authored document state actually changes
+        // (scene replacement/external command), never on renderer mismatch alone.
+        if (renderWorkspaceActive_ && authoredStateChanged)
             RefreshRenderWorkspace();
     }
 

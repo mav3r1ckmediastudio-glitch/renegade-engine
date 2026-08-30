@@ -4539,7 +4539,8 @@ namespace renegade::studio
         SyncRenderSettingsFromScene(true);
         if (renderWorkspaceActive_)
         {
-            LayoutRenderWorkspace();
+            // The Window owns child transforms while it processes scrolling and
+            // pointer state. Never relayout its children from the frame loop.
             renderWorkspacePanel_.SetVisible(!projectHubVisible_);
             inspectorPanel_.SetVisible(false);
         }
@@ -5425,6 +5426,11 @@ namespace renegade::studio
         hubMessageLabel_.SetSize(XMFLOAT2(
             width - hubMargin * 2.0f,
             hubStatusHeight));
+
+        // Layout the Render window only when the Studio layout itself changes.
+        // Repositioning Window children every frame breaks Wicked GUI mouse/scroll ownership.
+        if (renderWorkspaceActive_)
+            LayoutRenderWorkspace();
 
         if (diagnostics_ != nullptr)
         {
