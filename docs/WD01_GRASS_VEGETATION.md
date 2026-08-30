@@ -32,7 +32,7 @@ WD01 therefore edits the native terrain chunk grass masks and lets Wicked contin
 The bundled starting preset is the pinned Wicked content:
 
 - `WickedEngine/Content/terrain/grass.wiscene`
-- `WickedEngine/Content/terrain/grassparticle.dds`
+- `WickedEngine/Content/terrain/grassparticle.png`
 
 Renegade packages those files beside Studio and Runtime as read-only built-in content.
 

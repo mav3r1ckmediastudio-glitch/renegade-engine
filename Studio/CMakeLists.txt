@@ -209,8 +209,8 @@ add_custom_command(
         "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grass.wiscene"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.dds"
-        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grassparticle.dds"
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grassparticle.png"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeGridVS.hlsl"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeGridVS.hlsl"

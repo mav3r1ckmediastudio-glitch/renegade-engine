@@ -21,7 +21,7 @@ wd01_require(WD01_STUDIO "PAINT" "missing creator Paint tool")
 wd01_require(WD01_STUDIO "DELETE" "missing creator Delete tool")
 wd01_require(WD01_APP "HandleWd01Vegetation(pointer)" "viewport does not route vegetation brush")
 wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grass.wiscene" "Studio does not package Wicked grass scene")
-wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grassparticle.dds" "Studio does not package Wicked grass texture")
+wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grassparticle.png" "Studio does not package Wicked grass texture")
 
 foreach(FORBIDDEN IN ITEMS "HairParticleWindow" "PaintToolWindow")
     string(FIND "${WD01_STUDIO}" "${FORBIDDEN}" FOUND)
