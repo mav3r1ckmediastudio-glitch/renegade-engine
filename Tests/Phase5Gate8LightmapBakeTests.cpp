@@ -127,7 +127,7 @@ int main()
     ok &= Check(!LightmapBakeService::ComputeVertexAo(
             fixture.scene, {fixture.object}, ao, commands, error),
         "Vertex AO accepted a ray count below the native Gate 8 range");
-    ok &= Check(commands.UndoDepth() == 0,
+    ok &= Check(commands.UndoCount() == 0,
         "failed Vertex AO validation created an Undo entry");
 
     ao.rayCount = 256;
@@ -136,21 +136,21 @@ int main()
     ok &= Check(!LightmapBakeService::ComputeVertexAo(
             fixture.scene, {fixture.object}, ao, commands, error),
         "Vertex AO accepted an out-of-range ray length");
-    ok &= Check(commands.UndoDepth() == 0,
+    ok &= Check(commands.UndoCount() == 0,
         "failed Vertex AO ray-length validation created an Undo entry");
 
     error.clear();
     ok &= Check(!LightmapBakeService::ClearLightmaps(
             fixture.scene, {fixture.object}, commands, error),
         "clearing a missing lightmap reported success");
-    ok &= Check(commands.UndoDepth() == 0,
+    ok &= Check(commands.UndoCount() == 0,
         "failed lightmap clear created an Undo entry");
 
     error.clear();
     ok &= Check(!LightmapBakeService::ClearVertexAo(
             fixture.scene, {fixture.object}, commands, error),
         "clearing missing Vertex AO reported success");
-    ok &= Check(commands.UndoDepth() == 0,
+    ok &= Check(commands.UndoCount() == 0,
         "failed Vertex AO clear created an Undo entry");
 
     if (!ok)
