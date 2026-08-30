@@ -18,6 +18,8 @@
 #include "renegade/bridge/MaterialService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/SceneComponentService.h"
+#include "renegade/bridge/RenderSettingsService.h"
+#include "renegade/bridge/RenderLutService.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
@@ -177,6 +179,7 @@ namespace renegade::studio
             ToggleGrid,
             OpenEnvironmentWorkspace,
             OpenTerrainWorkspace,
+            OpenRenderWorkspace,
             OpenSceneWorkspace,
             StartTestLevel,
             StartProjectPlay,
@@ -368,6 +371,34 @@ namespace renegade::studio
             DoubleSided,
         };
 
+        enum class RenderField
+        {
+            Exposure,
+            Brightness,
+            Contrast,
+            Saturation,
+            HdrCalibration,
+            BloomThreshold,
+            EyeAdaptationKey,
+            EyeAdaptationRate,
+            DepthOfFieldStrength,
+            MotionBlurStrength,
+            SharpenAmount,
+            ChromaticAberrationAmount,
+        };
+
+        enum class RenderToggle
+        {
+            ColorGrading,
+            Bloom,
+            EyeAdaptation,
+            DepthOfField,
+            MotionBlur,
+            Sharpen,
+            ChromaticAberration,
+            Dither,
+        };
+
         void CommitSelectedSceneName(const std::string& name);
         void ApplySelectedLayerBit(std::uint32_t bit, bool enabled);
         void ApplySelectedLayerMask(std::uint32_t mask);
@@ -536,6 +567,27 @@ namespace renegade::studio
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
         void SetTerrainWorkspaceActive(bool active);
+        void SetRenderWorkspaceActive(bool active);
+        void CreateRenderWorkspace();
+        void LayoutRenderWorkspace();
+        void RefreshRenderWorkspace();
+        void SyncRenderSettingsFromScene(bool resizeBuffersForMSAA);
+        void ApplyRenderSettingsState(
+            const bridge::RenderSettingsState& state,
+            bool resizeBuffersForMSAA);
+        bool CommitRenderSettings(const bridge::RenderSettingsState& state);
+        void ApplyRenderToggle(RenderToggle toggle, bool value);
+        void RefreshRenderLutLibrary();
+        void ApplyRenderLutChoice(std::size_t choiceIndex);
+        void ImportRenderLut();
+        void ClearRenderLut();
+        void BeginRenderSlider(RenderField field);
+        void PreviewRenderSlider(RenderField field, float value);
+        void CommitRenderSlider(RenderField field, float value);
+        static void SetRenderFieldValue(
+            bridge::RenderSettingsState& state,
+            RenderField field,
+            float value) noexcept;
         void ApplyRenegadeTheme();
         void LoadGridResources();
         void LayoutInspectorActions(
@@ -807,6 +859,39 @@ namespace renegade::studio
         SceneInspectorSlider terrainBrushFalloff_;
         wi::gui::Label terrainBrushReadout_;
         wi::gui::Label terrainStrokeDiagnostic_;
+        wi::gui::Window renderWorkspacePanel_;
+        wi::gui::Label renderWorkspaceTitle_;
+        wi::gui::Label renderImageLabel_;
+        SceneInspectorComboBox renderTonemap_;
+        SceneInspectorSlider renderExposure_;
+        SceneInspectorSlider renderBrightness_;
+        SceneInspectorSlider renderContrast_;
+        SceneInspectorSlider renderSaturation_;
+        SceneInspectorSlider renderHdrCalibration_;
+        wi::gui::Label renderColorGradingLabel_;
+        SceneInspectorCheckBox renderColorGradingEnabled_;
+        SceneInspectorComboBox renderLutLibrary_;
+        SceneInspectorButton renderLutImport_;
+        SceneInspectorButton renderLutClear_;
+        std::vector<bridge::ColorGradingLutEntry> renderLutChoices_;
+        wi::gui::Label renderBloomLabel_;
+        SceneInspectorCheckBox renderBloomEnabled_;
+        SceneInspectorSlider renderBloomThreshold_;
+        SceneInspectorCheckBox renderEyeAdaptationEnabled_;
+        SceneInspectorSlider renderEyeAdaptationKey_;
+        SceneInspectorSlider renderEyeAdaptationRate_;
+        wi::gui::Label renderAntiAliasingLabel_;
+        SceneInspectorComboBox renderAntiAliasing_;
+        wi::gui::Label renderPostFxLabel_;
+        SceneInspectorCheckBox renderDepthOfFieldEnabled_;
+        SceneInspectorSlider renderDepthOfFieldStrength_;
+        SceneInspectorCheckBox renderMotionBlurEnabled_;
+        SceneInspectorSlider renderMotionBlurStrength_;
+        SceneInspectorCheckBox renderSharpenEnabled_;
+        SceneInspectorSlider renderSharpenAmount_;
+        SceneInspectorCheckBox renderChromaticAberrationEnabled_;
+        SceneInspectorSlider renderChromaticAberrationAmount_;
+        SceneInspectorCheckBox renderDitherEnabled_;
         SceneInspectorButton focusButton_;
         SceneInspectorButton duplicateButton_;
         SceneInspectorButton deleteButton_;
@@ -879,6 +964,14 @@ namespace renegade::studio
         bridge::WeatherState weatherSliderAfter_;
         bool environmentWorkspaceActive_ = false;
         bool terrainWorkspaceActive_ = false;
+        bool renderWorkspaceActive_ = false;
+        bool renderSliderActive_ = false;
+        bool renderSliderHadCarrierBefore_ = false;
+        RenderField renderSliderField_ = RenderField::Exposure;
+        bridge::RenderSettingsState renderSliderBefore_;
+        bridge::RenderSettingsState renderSliderAfter_;
+        bridge::RenderSettingsState appliedRenderSettings_;
+        bool appliedRenderSettingsInitialized_ = false;
         bool precipitationSliderActive_ = false;
         PrecipitationField precipitationSliderField_ =
             PrecipitationField::Intensity;

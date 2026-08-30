@@ -1191,9 +1191,6 @@ namespace renegade::studio
     {
         setSSREnabled(false);
         setReflectionsEnabled(true);
-        setFXAAEnabled(false);
-        setBloomEnabled(true);
-        setBloomThreshold(1.35f);
 
         // Ambient occlusion grounds the deck props against the terrain, and
         // volumetric lights are what make the scene's fog react to lighting
@@ -1202,11 +1199,10 @@ namespace renegade::studio
         setAOPower(1.4f);
         setVolumeLightsEnabled(true);
 
-        // Fixed exposure. Eye adaption would make the viewport brightness
-        // depend on where the creator points the camera, which is not
-        // acceptable for a colour-accurate authoring viewport.
-        setEyeAdaptionEnabled(false);
-        setExposure(1.0f);
+        // Gate 5 owns image-quality state per Level. Apply the persisted
+        // state before RenderPath3D::Load() so the first rendered frame cannot
+        // inherit arbitrary settings from the previous editor scene.
+        SyncRenderSettingsFromScene(false);
 
         // Renegade draws its own grid. Wicked's stock helper is a fixed 20x20
         // unit line list whose adaptive path is gated behind gridHelper2D -
@@ -1768,6 +1764,7 @@ namespace renegade::studio
                 static_cast<wi::ecs::Entity>(args.userdata));
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
             RefreshInspector();
             RefreshStatus();
         });
@@ -2014,6 +2011,7 @@ namespace renegade::studio
             bridge::ObjectParticipationProperty::Wetmap);
 
         CreateMaterialInspector();
+        CreateRenderWorkspace();
 
         createSectionLabel(
             cameraLabel_,
@@ -3458,6 +3456,9 @@ namespace renegade::studio
             case RenegadeStudioChrome::Action::TerrainWorkspace:
                 pendingAction_ = EditorAction::OpenTerrainWorkspace;
                 break;
+            case RenegadeStudioChrome::Action::RenderWorkspace:
+                pendingAction_ = EditorAction::OpenRenderWorkspace;
+                break;
             case RenegadeStudioChrome::Action::SceneWorkspace:
                 pendingAction_ = EditorAction::OpenSceneWorkspace;
                 break;
@@ -4535,6 +4536,14 @@ namespace renegade::studio
 
     void StudioRenderPath::Update(const float dt)
     {
+        SyncRenderSettingsFromScene(true);
+        if (renderWorkspaceActive_)
+        {
+            // The Window owns child transforms while it processes scrolling and
+            // pointer state. Never relayout its children from the frame loop.
+            renderWorkspacePanel_.SetVisible(!projectHubVisible_);
+            inspectorPanel_.SetVisible(false);
+        }
         PollTestLevel();
 
         // The capture button is processed inside the previous frame's GUI
@@ -5417,6 +5426,11 @@ namespace renegade::studio
         hubMessageLabel_.SetSize(XMFLOAT2(
             width - hubMargin * 2.0f,
             hubStatusHeight));
+
+        // Layout the Render window only when the Studio layout itself changes.
+        // Repositioning Window children every frame breaks Wicked GUI mouse/scroll ownership.
+        if (renderWorkspaceActive_)
+            LayoutRenderWorkspace();
 
         if (diagnostics_ != nullptr)
         {
@@ -6431,21 +6445,25 @@ namespace renegade::studio
         case EditorAction::SelectTool:
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
             SetTransformTool(TransformTool::Select);
             break;
         case EditorAction::TranslateTool:
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
             SetTransformTool(TransformTool::Translate);
             break;
         case EditorAction::RotateTool:
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
             SetTransformTool(TransformTool::Rotate);
             break;
         case EditorAction::ScaleTool:
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
             SetTransformTool(TransformTool::Scale);
             break;
         case EditorAction::ToggleGrid:
@@ -6457,9 +6475,13 @@ namespace renegade::studio
         case EditorAction::OpenTerrainWorkspace:
             SetTerrainWorkspaceActive(true);
             break;
+        case EditorAction::OpenRenderWorkspace:
+            SetRenderWorkspaceActive(true);
+            break;
         case EditorAction::OpenSceneWorkspace:
             SetEnvironmentWorkspaceActive(false);
             SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
             break;
         case EditorAction::StartTestLevel:
             StartTestLevel();
@@ -6566,6 +6588,8 @@ namespace renegade::studio
 
     void StudioRenderPath::SetEnvironmentWorkspaceActive(const bool active)
     {
+        if (active && renderWorkspaceActive_)
+            SetRenderWorkspaceActive(false);
         if (!active && sunPreviewPlaying_)
         {
             StopSunPreview(true);
@@ -6612,6 +6636,8 @@ namespace renegade::studio
 
     void StudioRenderPath::SetTerrainWorkspaceActive(const bool active)
     {
+        if (active && renderWorkspaceActive_)
+            SetRenderWorkspaceActive(false);
         if (sunPreviewPlaying_)
         {
             StopSunPreview(true);

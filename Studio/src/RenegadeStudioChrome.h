@@ -278,6 +278,7 @@ namespace renegade::studio
             ToggleGrid,
             EnvironmentWorkspace,
             TerrainWorkspace,
+            RenderWorkspace,
             SceneWorkspace,
             TestLevelPlay,
             TestLevelStop,
@@ -328,6 +329,11 @@ namespace renegade::studio
         void SetGridVisible(bool visible) noexcept;
         void SetEnvironmentWorkspaceActive(bool active) noexcept;
         void SetTerrainWorkspaceActive(bool active) noexcept;
+        void SetRenderWorkspaceActive(bool active) noexcept;
+        [[nodiscard]] bool IsRenderWorkspaceActive() const noexcept
+        {
+            return renderWorkspaceActive_;
+        }
         void SetTestLevelState(TestLevelState state) noexcept;
         void SetPanelSizes(
             float hierarchyWidth,
@@ -362,7 +368,9 @@ namespace renegade::studio
                 ? Action::EnvironmentWorkspace
                 : terrainWorkspaceActive_
                     ? Action::TerrainWorkspace
-                    : Action::SceneWorkspace);
+                    : renderWorkspaceActive_
+                        ? Action::RenderWorkspace
+                        : Action::SceneWorkspace);
         }
 
         [[nodiscard]] XMFLOAT4 ViewportBounds() const noexcept;
@@ -458,6 +466,7 @@ namespace renegade::studio
         bool gridVisible_ = true;
         bool environmentWorkspaceActive_ = false;
         bool terrainWorkspaceActive_ = false;
+        bool renderWorkspaceActive_ = false;
         TestLevelState testLevelState_ = TestLevelState::Idle;
         bool pointerConsumed_ = false;
         wi::Resource brandLockup_;

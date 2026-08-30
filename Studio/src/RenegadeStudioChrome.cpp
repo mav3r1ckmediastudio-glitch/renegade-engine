@@ -1102,12 +1102,33 @@ namespace renegade::studio
         const bool active) noexcept
     {
         environmentWorkspaceActive_ = active;
+        if (active)
+        {
+            terrainWorkspaceActive_ = false;
+            renderWorkspaceActive_ = false;
+        }
     }
 
     void RenegadeStudioChrome::SetTerrainWorkspaceActive(
         const bool active) noexcept
     {
         terrainWorkspaceActive_ = active;
+        if (active)
+        {
+            environmentWorkspaceActive_ = false;
+            renderWorkspaceActive_ = false;
+        }
+    }
+
+    void RenegadeStudioChrome::SetRenderWorkspaceActive(
+        const bool active) noexcept
+    {
+        renderWorkspaceActive_ = active;
+        if (active)
+        {
+            environmentWorkspaceActive_ = false;
+            terrainWorkspaceActive_ = false;
+        }
     }
 
     void RenegadeStudioChrome::SetTestLevelState(
@@ -1878,30 +1899,28 @@ namespace renegade::studio
             }
             if (!consumed && y >= 34.0f && y < 58.0f)
             {
-                if (x >= sceneMetaX + 16.0f && x < sceneMetaX + 76.0f)
+                if (x >= sceneMetaX + 12.0f && x < sceneMetaX + 62.0f)
                 {
                     if (action_)
-                    {
                         action_(Action::SceneWorkspace);
-                    }
                     consumed = true;
                 }
-                else if (x >= sceneMetaX + 82.0f &&
-                    x < sceneMetaX + 202.0f)
+                else if (x >= sceneMetaX + 64.0f && x < sceneMetaX + 162.0f)
                 {
                     if (action_)
-                    {
                         action_(Action::EnvironmentWorkspace);
-                    }
                     consumed = true;
                 }
-                else if (x >= sceneMetaX + 208.0f &&
-                    x < sceneMetaX + 286.0f)
+                else if (x >= sceneMetaX + 164.0f && x < sceneMetaX + 224.0f)
                 {
                     if (action_)
-                    {
                         action_(Action::TerrainWorkspace);
-                    }
+                    consumed = true;
+                }
+                else if (x >= sceneMetaX + 226.0f && x < sceneMetaX + 286.0f)
+                {
+                    if (action_)
+                        action_(Action::RenderWorkspace);
                     consumed = true;
                 }
             }
@@ -2629,26 +2648,29 @@ namespace renegade::studio
             cmd,
             1.25f,
             0.08f);
+        const bool sceneWorkspaceActive =
+            !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
+            !renderWorkspaceActive_;
         const wi::Color sceneWorkspaceColor =
-            environmentWorkspaceActive_ || terrainWorkspaceActive_
-                ? TextSecondary : TextStrong;
+            sceneWorkspaceActive ? TextStrong : TextSecondary;
         const wi::Color environmentWorkspaceColor =
             environmentWorkspaceActive_ ? TextStrong : TextSecondary;
         const wi::Color terrainWorkspaceColor =
             terrainWorkspaceActive_ ? TextStrong : TextSecondary;
+        const wi::Color renderWorkspaceColor =
+            renderWorkspaceActive_ ? TextStrong : TextSecondary;
         DrawText(
             "SCENE",
-            sceneMetaX + 20.0f,
+            sceneMetaX + 14.0f,
             38.0f,
             SceneChromeSmallTextSize,
             sceneWorkspaceColor,
             cmd,
-            1.3f,
-            environmentWorkspaceActive_ || terrainWorkspaceActive_
-                ? 0.0f : 0.12f);
+            1.1f,
+            sceneWorkspaceActive ? 0.12f : 0.0f);
         DrawText(
             "ENVIRONMENT",
-            sceneMetaX + 86.0f,
+            sceneMetaX + 66.0f,
             38.0f,
             SceneChromeSmallTextSize,
             environmentWorkspaceColor,
@@ -2657,23 +2679,36 @@ namespace renegade::studio
             environmentWorkspaceActive_ ? 0.12f : 0.0f);
         DrawText(
             "TERRAIN",
-            sceneMetaX + 212.0f,
+            sceneMetaX + 166.0f,
             38.0f,
             SceneChromeSmallTextSize,
             terrainWorkspaceColor,
             cmd,
-            1.15f,
+            1.05f,
             terrainWorkspaceActive_ ? 0.12f : 0.0f);
+        DrawText(
+            "RENDER",
+            sceneMetaX + 228.0f,
+            38.0f,
+            SceneChromeSmallTextSize,
+            renderWorkspaceColor,
+            cmd,
+            1.05f,
+            renderWorkspaceActive_ ? 0.12f : 0.0f);
         DrawRect(
-            terrainWorkspaceActive_
-                ? sceneMetaX + 208.0f
-                : environmentWorkspaceActive_
-                    ? sceneMetaX + 82.0f
-                    : sceneMetaX + 16.0f,
+            renderWorkspaceActive_
+                ? sceneMetaX + 226.0f
+                : terrainWorkspaceActive_
+                    ? sceneMetaX + 164.0f
+                    : environmentWorkspaceActive_
+                        ? sceneMetaX + 64.0f
+                        : sceneMetaX + 12.0f,
             57.0f,
-            terrainWorkspaceActive_
-                ? 78.0f
-                : environmentWorkspaceActive_ ? 120.0f : 60.0f,
+            renderWorkspaceActive_
+                ? 60.0f
+                : terrainWorkspaceActive_
+                    ? 60.0f
+                    : environmentWorkspaceActive_ ? 98.0f : 50.0f,
             2.0f,
             Forge,
             cmd);
