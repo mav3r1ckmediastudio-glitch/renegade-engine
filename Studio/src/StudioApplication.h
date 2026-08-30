@@ -611,6 +611,10 @@ namespace renegade::studio
         void ClearSelectedLightmap();
         void ComputeSelectedVertexAo();
         void ClearSelectedVertexAo();
+        void CreateGate9DiagnosticsControls();
+        void LayoutGate9DiagnosticsControls(float fieldWidth, float& y);
+        void RefreshGate9DiagnosticsControls();
+        void ResetGate9Diagnostics();
         void BeginRenderSlider(RenderField field);
         void PreviewRenderSlider(RenderField field, float value);
         void CommitRenderSlider(RenderField field, float value);
