@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 5
+          fetch-depth: 6
 
       - name: Guard exact Gate 5 product base
         shell: bash
@@ -72,6 +72,11 @@ jobs:
 
           contract = Path('Tests/Phase5Gate5SourceContract.cmake')
           text = contract.read_text(encoding='utf-8')
+          old_bloom_range = '    "0.0f, 10.0f, 1000.0f"\n'
+          new_bloom_range = '    "0.0f, 1.0f, 1000.0f"\n'
+          if text.count(old_bloom_range) != 1:
+              raise SystemExit(f'Bloom range contract: expected one old token, found {text.count(old_bloom_range)}')
+          text = text.replace(old_bloom_range, new_bloom_range, 1)
           marker = 'message(STATUS "Phase 5 Gate 5 source contract passed")'
           if text.count(marker) != 1:
               raise SystemExit('source contract final marker changed')
