@@ -3235,6 +3235,7 @@ namespace renegade::studio
         terrainSculptMode_.SetTooltip("Choose how dragging the left mouse button changes terrain.");
         terrainSculptMode_.OnSelect([this](const wi::gui::EventArgs& args)
         {
+            DisableWd01VegetationBrush();
             terrainSculptModeValue_ = static_cast<bridge::TerrainSculptMode>(args.userdata);
         });
         inspectorPanel_.AddWidget(&terrainSculptMode_);
@@ -3271,6 +3272,7 @@ namespace renegade::studio
         terrainStrokeDiagnostic_.Create("Terrain Stroke Diagnostic");
         terrainStrokeDiagnostic_.SetText("LAST STROKE // READY");
         inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);
+        CreateWd01VegetationControls();
 
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
@@ -4550,6 +4552,7 @@ namespace renegade::studio
     {
         if (!pathTracePreviewActive_)
             SyncRenderSettingsFromScene(true);
+        TickWd01Vegetation();
         if (renderWorkspaceActive_)
         {
             // The Window owns child transforms while it processes scrolling and
@@ -4782,6 +4785,10 @@ namespace renegade::studio
             gizmo_.Update(*camera, pointer, *this);
         }
 
+        if (HandleWd01Vegetation(pointer))
+        {
+            return;
+        }
         if (HandleTerrainSculpt(pointer))
         {
             return;
@@ -5194,6 +5201,7 @@ namespace renegade::studio
         positionEnvironmentWidget(terrainBrushFalloff_, 622.0f);
         positionEnvironmentWidget(terrainBrushReadout_, 656.0f, 20.0f);
         positionEnvironmentWidget(terrainStrokeDiagnostic_, 676.0f, 20.0f);
+        LayoutWd01VegetationControls(environmentFieldWidth);
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
@@ -6018,6 +6026,7 @@ namespace renegade::studio
         setTerrainVisible(terrainBrushFalloff_);
         setTerrainVisible(terrainBrushReadout_);
         setTerrainVisible(terrainStrokeDiagnostic_);
+        RefreshWd01VegetationControls(hasTerrain);
 
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);

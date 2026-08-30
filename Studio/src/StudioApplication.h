@@ -577,6 +577,12 @@ namespace renegade::studio
             const XMFLOAT3& world,
             XMFLOAT2& screen) const noexcept;
         bool HandleTerrainSculpt(const XMFLOAT4& pointer);
+        void CreateWd01VegetationControls();
+        void LayoutWd01VegetationControls(float fieldWidth);
+        void RefreshWd01VegetationControls(bool hasTerrain);
+        void TickWd01Vegetation();
+        void DisableWd01VegetationBrush();
+        bool HandleWd01Vegetation(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
         void SetTerrainWorkspaceActive(bool active);

@@ -110,6 +110,7 @@ add_executable(RenegadeStudio WIN32
     src/Phase5Gate4MaterialInspector.cpp
     src/Phase5Gate5RenderWorkspace.cpp
     src/Phase5Gate7RayPathTracing.cpp
+    src/WD01Vegetation.cpp
     src/StudioApplication.cpp
     src/StudioApplication.h
     src/StudioUserPreferences.cpp
@@ -191,6 +192,8 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/ui"
     COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass"
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/weather"
@@ -202,6 +205,12 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/cube.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grass.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.dds"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grassparticle.dds"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/shaders/RenegadeGridVS.hlsl"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/shaders/RenegadeGridVS.hlsl"
