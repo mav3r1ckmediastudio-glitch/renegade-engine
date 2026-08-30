@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 4
+          fetch-depth: 5
 
       - name: Guard exact Gate 5 product base
         shell: bash
@@ -48,8 +48,8 @@ jobs:
 
           replace_once(
               'Studio/src/StudioApplication.cpp',
-              '''        if (diagnostics_ != nullptr)\n        {''',
-              '''        // Layout the Render window only when the Studio layout itself changes.\n        // Repositioning Window children every frame breaks Wicked GUI mouse/scroll ownership.\n        if (renderWorkspaceActive_)\n            LayoutRenderWorkspace();\n\n        if (diagnostics_ != nullptr)\n        {''',
+              '''        hubMessageLabel_.SetSize(XMFLOAT2(\n            width - hubMargin * 2.0f,\n            hubStatusHeight));\n\n        if (diagnostics_ != nullptr)\n        {''',
+              '''        hubMessageLabel_.SetSize(XMFLOAT2(\n            width - hubMargin * 2.0f,\n            hubStatusHeight));\n\n        // Layout the Render window only when the Studio layout itself changes.\n        // Repositioning Window children every frame breaks Wicked GUI mouse/scroll ownership.\n        if (renderWorkspaceActive_)\n            LayoutRenderWorkspace();\n\n        if (diagnostics_ != nullptr)\n        {''',
               'ResizeLayout Render layout')
 
           replace_once(
