@@ -1,11 +1,30 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`1e0470a9e530dd20c42ddf16662c3771aaede825`
-(`Scene UI Gate 5: recover Environment and Terrain (#105)`).
+`0b3a162b88a951097413b029d262487d892d7a6a`
+(`Phase 5 Gate 5: post-processing and image quality (#113)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
+
+## Current programme — Phase 5 scene/rendering exposure
+
+Phase 5 Gates 1–5 are accepted and merged. Gate 5 established the durable
+`RENDER` workspace and one scene-owned render-settings state shared by Studio,
+Test Level and packaged Runtime. The project owner accepted LUTs, tonemapping,
+image controls, bloom/eye adaptation, AA, DOF, motion blur, sharpen, chromatic
+aberration and dithering in the packaged Release.
+
+**Gate 6 — AO / GI / Reflections is active** on
+`phase5/scene-render-gate6-ao-gi-reflections`. Its bounded contract is
+`docs/PHASE5_GATE6_AO_GI_REFLECTIONS.md`. It extends the same state/workspace
+with OFF/SSAO/HBAO/MSAO, SSGI and GI Boost, SSR and planar-reflection quality,
+including lossless Gate-5 schema-v1 migration to schema v2. RTAO and other
+hardware ray-tracing paths remain Gate 7.
+
+Remaining Phase 5 sequence: Gate 7 ray/path tracing, Gate 8 lightmap/baking,
+Gate 9 render diagnostics/debug. Older programme sections below are retained as
+historical implementation evidence and are not the current active gate.
 
 ## Immediate stabilization programme
 

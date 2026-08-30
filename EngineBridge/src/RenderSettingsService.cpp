@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <utility>
 
 namespace
@@ -57,6 +58,52 @@ namespace
         }
     }
 
+    renegade::bridge::RenderAmbientOcclusion SanitizeAmbientOcclusion(
+        const renegade::bridge::RenderAmbientOcclusion value) noexcept
+    {
+        using Mode = renegade::bridge::RenderAmbientOcclusion;
+        switch (value)
+        {
+        case Mode::Off:
+        case Mode::SSAO:
+        case Mode::HBAO:
+        case Mode::MSAO:
+            return value;
+        default:
+            return Mode::Off;
+        }
+    }
+
+    renegade::bridge::RenderQuality SanitizeRenderQuality(
+        const renegade::bridge::RenderQuality value) noexcept
+    {
+        using Quality = renegade::bridge::RenderQuality;
+        switch (value)
+        {
+        case Quality::Low:
+        case Quality::Medium:
+        case Quality::High:
+            return value;
+        default:
+            return Quality::Medium;
+        }
+    }
+
+    std::uint32_t SanitizePlanarMsaaSampleCount(
+        const std::uint32_t value) noexcept
+    {
+        switch (value)
+        {
+        case 1:
+        case 2:
+        case 4:
+        case 8:
+            return value;
+        default:
+            return 4;
+        }
+    }
+
     template<typename T>
     T ReadValue(
         const wi::scene::MetadataComponent::OrderedNamedValues<T>& values,
@@ -80,6 +127,19 @@ namespace
     constexpr const char* KeyEyeAdaptationKey = "renegade.render.eye_adaptation.key";
     constexpr const char* KeyEyeAdaptationRate = "renegade.render.eye_adaptation.rate";
     constexpr const char* KeyAntiAliasing = "renegade.render.anti_aliasing";
+    constexpr const char* KeyAmbientOcclusion = "renegade.render.ao.mode";
+    constexpr const char* KeyAmbientOcclusionPower = "renegade.render.ao.power";
+    constexpr const char* KeyAmbientOcclusionRange = "renegade.render.ao.range";
+    constexpr const char* KeyAmbientOcclusionSamples = "renegade.render.ao.samples";
+    constexpr const char* KeySsgiEnabled = "renegade.render.ssgi.enabled";
+    constexpr const char* KeySsgiDepthRejection = "renegade.render.ssgi.depth_rejection";
+    constexpr const char* KeyGiBoost = "renegade.render.gi_boost";
+    constexpr const char* KeyPlanarReflectionsEnabled = "renegade.render.planar_reflections.enabled";
+    constexpr const char* KeyPlanarReflectionResolutionScale = "renegade.render.planar_reflections.resolution_scale";
+    constexpr const char* KeyPlanarReflectionMsaa = "renegade.render.planar_reflections.msaa";
+    constexpr const char* KeySsrEnabled = "renegade.render.ssr.enabled";
+    constexpr const char* KeySsrQuality = "renegade.render.ssr.quality";
+    constexpr const char* KeyReflectionRoughnessCutoff = "renegade.render.reflections.roughness_cutoff";
     constexpr const char* KeyDepthOfFieldEnabled = "renegade.render.dof.enabled";
     constexpr const char* KeyDepthOfFieldStrength = "renegade.render.dof.strength";
     constexpr const char* KeyMotionBlurEnabled = "renegade.render.motion_blur.enabled";
@@ -106,6 +166,8 @@ namespace renegade::bridge
         result.schemaVersion = RenderSettingsSchemaVersion;
         result.tonemap = SanitizeTonemap(result.tonemap);
         result.antiAliasing = SanitizeAntiAliasing(result.antiAliasing);
+        result.ambientOcclusion = SanitizeAmbientOcclusion(result.ambientOcclusion);
+        result.ssrQuality = SanitizeRenderQuality(result.ssrQuality);
 
         result.exposure = ClampFinite(result.exposure, defaults.exposure, 0.0f, 3.0f);
         result.brightness = ClampFinite(result.brightness, defaults.brightness, -1.0f, 1.0f);
@@ -119,6 +181,14 @@ namespace renegade::bridge
         result.motionBlurStrength = ClampFinite(result.motionBlurStrength, defaults.motionBlurStrength, 0.1f, 400.0f);
         result.sharpenAmount = ClampFinite(result.sharpenAmount, defaults.sharpenAmount, 0.0f, 4.0f);
         result.chromaticAberrationAmount = ClampFinite(result.chromaticAberrationAmount, defaults.chromaticAberrationAmount, 0.0f, 40.0f);
+        result.ambientOcclusionPower = ClampFinite(result.ambientOcclusionPower, defaults.ambientOcclusionPower, 0.25f, 8.0f);
+        result.ambientOcclusionRange = ClampFinite(result.ambientOcclusionRange, defaults.ambientOcclusionRange, 1.0f, 100.0f);
+        result.ambientOcclusionSampleCount = std::clamp(result.ambientOcclusionSampleCount, 1u, 16u);
+        result.ssgiDepthRejection = ClampFinite(result.ssgiDepthRejection, defaults.ssgiDepthRejection, 0.1f, 100.0f);
+        result.giBoost = ClampFinite(result.giBoost, defaults.giBoost, 1.0f, 10.0f);
+        result.planarReflectionResolutionScale = ClampFinite(result.planarReflectionResolutionScale, defaults.planarReflectionResolutionScale, 0.25f, 2.0f);
+        result.planarReflectionMsaaSampleCount = SanitizePlanarMsaaSampleCount(result.planarReflectionMsaaSampleCount);
+        result.reflectionRoughnessCutoff = ClampFinite(result.reflectionRoughnessCutoff, defaults.reflectionRoughnessCutoff, 0.0f, 1.0f);
         return result;
     }
 
@@ -141,6 +211,19 @@ namespace renegade::bridge
             !NearlyEqual(left.eyeAdaptationKey, right.eyeAdaptationKey) ||
             !NearlyEqual(left.eyeAdaptationRate, right.eyeAdaptationRate) ||
             left.antiAliasing != right.antiAliasing ||
+            left.ambientOcclusion != right.ambientOcclusion ||
+            !NearlyEqual(left.ambientOcclusionPower, right.ambientOcclusionPower) ||
+            !NearlyEqual(left.ambientOcclusionRange, right.ambientOcclusionRange) ||
+            left.ambientOcclusionSampleCount != right.ambientOcclusionSampleCount ||
+            left.ssgiEnabled != right.ssgiEnabled ||
+            !NearlyEqual(left.ssgiDepthRejection, right.ssgiDepthRejection) ||
+            !NearlyEqual(left.giBoost, right.giBoost) ||
+            left.planarReflectionsEnabled != right.planarReflectionsEnabled ||
+            !NearlyEqual(left.planarReflectionResolutionScale, right.planarReflectionResolutionScale) ||
+            left.planarReflectionMsaaSampleCount != right.planarReflectionMsaaSampleCount ||
+            left.ssrEnabled != right.ssrEnabled ||
+            left.ssrQuality != right.ssrQuality ||
+            !NearlyEqual(left.reflectionRoughnessCutoff, right.reflectionRoughnessCutoff) ||
             left.depthOfFieldEnabled != right.depthOfFieldEnabled ||
             !NearlyEqual(left.depthOfFieldStrength, right.depthOfFieldStrength) ||
             left.motionBlurEnabled != right.motionBlurEnabled ||
@@ -176,11 +259,11 @@ namespace renegade::bridge
             return defaults;
 
         const int schema = ReadValue(metadata->int_values, KeySchema, 0);
-        if (schema != RenderSettingsSchemaVersion)
+        if (schema != 1 && schema != RenderSettingsSchemaVersion)
             return defaults;
 
         RenderSettingsState state = defaults;
-        state.schemaVersion = schema;
+        state.schemaVersion = RenderSettingsSchemaVersion;
         state.tonemap = static_cast<RenderTonemap>(
             ReadValue(metadata->int_values, KeyTonemap, static_cast<int>(defaults.tonemap)));
         state.exposure = ReadValue(metadata->float_values, KeyExposure, defaults.exposure);
@@ -196,6 +279,26 @@ namespace renegade::bridge
         state.eyeAdaptationRate = ReadValue(metadata->float_values, KeyEyeAdaptationRate, defaults.eyeAdaptationRate);
         state.antiAliasing = static_cast<AntiAliasingMode>(
             ReadValue(metadata->int_values, KeyAntiAliasing, static_cast<int>(defaults.antiAliasing)));
+        if (schema >= 2)
+        {
+            state.ambientOcclusion = static_cast<RenderAmbientOcclusion>(
+                ReadValue(metadata->int_values, KeyAmbientOcclusion, static_cast<int>(defaults.ambientOcclusion)));
+            state.ambientOcclusionPower = ReadValue(metadata->float_values, KeyAmbientOcclusionPower, defaults.ambientOcclusionPower);
+            state.ambientOcclusionRange = ReadValue(metadata->float_values, KeyAmbientOcclusionRange, defaults.ambientOcclusionRange);
+            state.ambientOcclusionSampleCount = static_cast<std::uint32_t>(
+                ReadValue(metadata->int_values, KeyAmbientOcclusionSamples, static_cast<int>(defaults.ambientOcclusionSampleCount)));
+            state.ssgiEnabled = ReadValue(metadata->bool_values, KeySsgiEnabled, defaults.ssgiEnabled);
+            state.ssgiDepthRejection = ReadValue(metadata->float_values, KeySsgiDepthRejection, defaults.ssgiDepthRejection);
+            state.giBoost = ReadValue(metadata->float_values, KeyGiBoost, defaults.giBoost);
+            state.planarReflectionsEnabled = ReadValue(metadata->bool_values, KeyPlanarReflectionsEnabled, defaults.planarReflectionsEnabled);
+            state.planarReflectionResolutionScale = ReadValue(metadata->float_values, KeyPlanarReflectionResolutionScale, defaults.planarReflectionResolutionScale);
+            state.planarReflectionMsaaSampleCount = static_cast<std::uint32_t>(
+                ReadValue(metadata->int_values, KeyPlanarReflectionMsaa, static_cast<int>(defaults.planarReflectionMsaaSampleCount)));
+            state.ssrEnabled = ReadValue(metadata->bool_values, KeySsrEnabled, defaults.ssrEnabled);
+            state.ssrQuality = static_cast<RenderQuality>(
+                ReadValue(metadata->int_values, KeySsrQuality, static_cast<int>(defaults.ssrQuality)));
+            state.reflectionRoughnessCutoff = ReadValue(metadata->float_values, KeyReflectionRoughnessCutoff, defaults.reflectionRoughnessCutoff);
+        }
         state.depthOfFieldEnabled = ReadValue(metadata->bool_values, KeyDepthOfFieldEnabled, defaults.depthOfFieldEnabled);
         state.depthOfFieldStrength = ReadValue(metadata->float_values, KeyDepthOfFieldStrength, defaults.depthOfFieldStrength);
         state.motionBlurEnabled = ReadValue(metadata->bool_values, KeyMotionBlurEnabled, defaults.motionBlurEnabled);
@@ -228,6 +331,37 @@ namespace renegade::bridge
             break;
         }
 
+        wi::RenderPath3D::AO ambientOcclusion = wi::RenderPath3D::AO_DISABLED;
+        switch (safe.ambientOcclusion)
+        {
+        case RenderAmbientOcclusion::SSAO:
+            ambientOcclusion = wi::RenderPath3D::AO_SSAO;
+            break;
+        case RenderAmbientOcclusion::HBAO:
+            ambientOcclusion = wi::RenderPath3D::AO_HBAO;
+            break;
+        case RenderAmbientOcclusion::MSAO:
+            ambientOcclusion = wi::RenderPath3D::AO_MSAO;
+            break;
+        case RenderAmbientOcclusion::Off:
+        default:
+            break;
+        }
+
+        wi::renderer::PostProcessQuality ssrQuality = wi::renderer::PostProcessQuality::Medium;
+        switch (safe.ssrQuality)
+        {
+        case RenderQuality::Low:
+            ssrQuality = wi::renderer::PostProcessQuality::Low;
+            break;
+        case RenderQuality::High:
+            ssrQuality = wi::renderer::PostProcessQuality::High;
+            break;
+        case RenderQuality::Medium:
+        default:
+            break;
+        }
+
         if (path.getTonemap() != tonemap ||
             !NearlyEqual(path.getExposure(), safe.exposure) ||
             !NearlyEqual(path.getBrightness(), safe.brightness) ||
@@ -240,6 +374,19 @@ namespace renegade::bridge
             path.getEyeAdaptionEnabled() != safe.eyeAdaptationEnabled ||
             !NearlyEqual(path.getEyeAdaptionKey(), safe.eyeAdaptationKey) ||
             !NearlyEqual(path.getEyeAdaptionRate(), safe.eyeAdaptationRate) ||
+            path.getAO() != ambientOcclusion ||
+            !NearlyEqual(path.getAOPower(), safe.ambientOcclusionPower) ||
+            !NearlyEqual(path.getAORange(), safe.ambientOcclusionRange) ||
+            path.getAOSampleCount() != safe.ambientOcclusionSampleCount ||
+            path.getSSGIEnabled() != safe.ssgiEnabled ||
+            !NearlyEqual(path.getSSGIDepthRejection(), safe.ssgiDepthRejection) ||
+            !NearlyEqual(wi::renderer::GetGIBoost(), safe.giBoost) ||
+            path.getReflectionsEnabled() != safe.planarReflectionsEnabled ||
+            !NearlyEqual(path.getPlanarReflectionResolutionScale(), safe.planarReflectionResolutionScale) ||
+            path.getPlanarReflectionMSAASampleCount() != safe.planarReflectionMsaaSampleCount ||
+            path.getSSREnabled() != safe.ssrEnabled ||
+            path.getSSRQuality() != ssrQuality ||
+            !NearlyEqual(path.getReflectionRoughnessCutoff(), safe.reflectionRoughnessCutoff) ||
             path.getDepthOfFieldEnabled() != safe.depthOfFieldEnabled ||
             !NearlyEqual(path.getDepthOfFieldStrength(), safe.depthOfFieldStrength) ||
             path.getMotionBlurEnabled() != safe.motionBlurEnabled ||
@@ -307,6 +454,19 @@ namespace renegade::bridge
         metadata->float_values.set(KeyEyeAdaptationKey, safe.eyeAdaptationKey);
         metadata->float_values.set(KeyEyeAdaptationRate, safe.eyeAdaptationRate);
         metadata->int_values.set(KeyAntiAliasing, static_cast<int>(safe.antiAliasing));
+        metadata->int_values.set(KeyAmbientOcclusion, static_cast<int>(safe.ambientOcclusion));
+        metadata->float_values.set(KeyAmbientOcclusionPower, safe.ambientOcclusionPower);
+        metadata->float_values.set(KeyAmbientOcclusionRange, safe.ambientOcclusionRange);
+        metadata->int_values.set(KeyAmbientOcclusionSamples, static_cast<int>(safe.ambientOcclusionSampleCount));
+        metadata->bool_values.set(KeySsgiEnabled, safe.ssgiEnabled);
+        metadata->float_values.set(KeySsgiDepthRejection, safe.ssgiDepthRejection);
+        metadata->float_values.set(KeyGiBoost, safe.giBoost);
+        metadata->bool_values.set(KeyPlanarReflectionsEnabled, safe.planarReflectionsEnabled);
+        metadata->float_values.set(KeyPlanarReflectionResolutionScale, safe.planarReflectionResolutionScale);
+        metadata->int_values.set(KeyPlanarReflectionMsaa, static_cast<int>(safe.planarReflectionMsaaSampleCount));
+        metadata->bool_values.set(KeySsrEnabled, safe.ssrEnabled);
+        metadata->int_values.set(KeySsrQuality, static_cast<int>(safe.ssrQuality));
+        metadata->float_values.set(KeyReflectionRoughnessCutoff, safe.reflectionRoughnessCutoff);
         metadata->bool_values.set(KeyDepthOfFieldEnabled, safe.depthOfFieldEnabled);
         metadata->float_values.set(KeyDepthOfFieldStrength, safe.depthOfFieldStrength);
         metadata->bool_values.set(KeyMotionBlurEnabled, safe.motionBlurEnabled);
@@ -390,6 +550,67 @@ namespace renegade::bridge
             if (resizeBuffersForMSAA)
                 path.ResizeBuffers();
         }
+
+        path.setAOPower(safe.ambientOcclusionPower);
+        path.setAORange(safe.ambientOcclusionRange);
+        path.setAOSampleCount(safe.ambientOcclusionSampleCount);
+        wi::RenderPath3D::AO ambientOcclusion = wi::RenderPath3D::AO_DISABLED;
+        switch (safe.ambientOcclusion)
+        {
+        case RenderAmbientOcclusion::SSAO:
+            ambientOcclusion = wi::RenderPath3D::AO_SSAO;
+            break;
+        case RenderAmbientOcclusion::HBAO:
+            ambientOcclusion = wi::RenderPath3D::AO_HBAO;
+            break;
+        case RenderAmbientOcclusion::MSAO:
+            ambientOcclusion = wi::RenderPath3D::AO_MSAO;
+            break;
+        case RenderAmbientOcclusion::Off:
+        default:
+            break;
+        }
+        if (path.getAO() != ambientOcclusion)
+            path.setAO(ambientOcclusion);
+
+        path.setSSGIDepthRejection(safe.ssgiDepthRejection);
+        if (path.getSSGIEnabled() != safe.ssgiEnabled)
+            path.setSSGIEnabled(safe.ssgiEnabled);
+        wi::renderer::SetGIBoost(safe.giBoost);
+
+        if (path.getReflectionsEnabled() != safe.planarReflectionsEnabled)
+            path.setReflectionsEnabled(safe.planarReflectionsEnabled);
+        if (!NearlyEqual(path.getPlanarReflectionResolutionScale(), safe.planarReflectionResolutionScale) ||
+            path.getPlanarReflectionMSAASampleCount() != safe.planarReflectionMsaaSampleCount)
+        {
+            path.setPlanarReflectionQuality(
+                safe.planarReflectionResolutionScale,
+                safe.planarReflectionMsaaSampleCount);
+        }
+
+        path.setReflectionRoughnessCutoff(safe.reflectionRoughnessCutoff);
+        wi::renderer::PostProcessQuality ssrQuality = wi::renderer::PostProcessQuality::Medium;
+        switch (safe.ssrQuality)
+        {
+        case RenderQuality::Low:
+            ssrQuality = wi::renderer::PostProcessQuality::Low;
+            break;
+        case RenderQuality::High:
+            ssrQuality = wi::renderer::PostProcessQuality::High;
+            break;
+        case RenderQuality::Medium:
+        default:
+            break;
+        }
+        if (path.getSSRQuality() != ssrQuality)
+        {
+            const bool wasEnabled = path.getSSREnabled();
+            path.setSSRQuality(ssrQuality);
+            if (wasEnabled)
+                path.setSSREnabled(true);
+        }
+        if (path.getSSREnabled() != safe.ssrEnabled)
+            path.setSSREnabled(safe.ssrEnabled);
 
         path.setDepthOfFieldEnabled(safe.depthOfFieldEnabled);
         path.setDepthOfFieldStrength(safe.depthOfFieldStrength);

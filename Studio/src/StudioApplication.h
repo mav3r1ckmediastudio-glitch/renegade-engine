@@ -385,6 +385,13 @@ namespace renegade::studio
             MotionBlurStrength,
             SharpenAmount,
             ChromaticAberrationAmount,
+            AmbientOcclusionPower,
+            AmbientOcclusionRange,
+            AmbientOcclusionSampleCount,
+            SsgiDepthRejection,
+            GiBoost,
+            PlanarReflectionResolutionScale,
+            ReflectionRoughnessCutoff,
         };
 
         enum class RenderToggle
@@ -397,6 +404,9 @@ namespace renegade::studio
             Sharpen,
             ChromaticAberration,
             Dither,
+            Ssgi,
+            PlanarReflections,
+            Ssr,
         };
 
         void CommitSelectedSceneName(const std::string& name);
@@ -892,6 +902,22 @@ namespace renegade::studio
         SceneInspectorCheckBox renderChromaticAberrationEnabled_;
         SceneInspectorSlider renderChromaticAberrationAmount_;
         SceneInspectorCheckBox renderDitherEnabled_;
+        wi::gui::Label renderAmbientOcclusionLabel_;
+        SceneInspectorComboBox renderAmbientOcclusion_;
+        SceneInspectorSlider renderAmbientOcclusionPower_;
+        SceneInspectorSlider renderAmbientOcclusionRange_;
+        SceneInspectorSlider renderAmbientOcclusionSampleCount_;
+        wi::gui::Label renderGlobalIlluminationLabel_;
+        SceneInspectorCheckBox renderSsgiEnabled_;
+        SceneInspectorSlider renderSsgiDepthRejection_;
+        SceneInspectorSlider renderGiBoost_;
+        wi::gui::Label renderReflectionsLabel_;
+        SceneInspectorCheckBox renderPlanarReflectionsEnabled_;
+        SceneInspectorSlider renderPlanarReflectionResolutionScale_;
+        SceneInspectorComboBox renderPlanarReflectionMsaa_;
+        SceneInspectorCheckBox renderSsrEnabled_;
+        SceneInspectorComboBox renderSsrQuality_;
+        SceneInspectorSlider renderReflectionRoughnessCutoff_;
         SceneInspectorButton focusButton_;
         SceneInspectorButton duplicateButton_;
         SceneInspectorButton deleteButton_;
