@@ -1,0 +1,59 @@
+name: Gate 5 headless native test fix
+
+on:
+  push:
+    branches:
+      - staging/phase5-gate5-headless-test-fix
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Guard exact repair parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "9c9f6814b597a224ab2349b0193f3165d863a585"
+
+      - name: Keep native test GPU-free
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('Tests/Phase5Gate5RenderSettingsTests.cpp')
+          text = p.read_text(encoding='utf-8')
+          old = '''    wi::RenderPath3D nativePath;\n    ApplyRenderSettingsToPath(nativePath, authored, false);\n    if (!RenderSettingsMatchPath(nativePath, authored))\n        return Fail("Gate 5 authored state did not reach the native Wicked RenderPath");\n\n    constexpr std::array<AntiAliasingMode, 6> aaModes = {'''
+          new = '''    // Eye adaptation and bloom enablement allocate GPU resources in Wicked.\n    // Keep this console test graphics-device-free while still proving all\n    // scalar/native path values and every AA mode. The resource-owning enabled\n    // paths are exercised by the real Studio build/owner test.\n    auto nativeAuthored = authored;\n    nativeAuthored.eyeAdaptationEnabled = false;\n    nativeAuthored.bloomEnabled = false;\n\n    wi::RenderPath3D nativePath;\n    ApplyRenderSettingsToPath(nativePath, nativeAuthored, false);\n    if (!RenderSettingsMatchPath(nativePath, nativeAuthored))\n        return Fail("Gate 5 authored state did not reach the native Wicked RenderPath");\n\n    constexpr std::array<AntiAliasingMode, 6> aaModes = {'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected native path test anchor once, found {text.count(old)}')
+          text = text.replace(old, new, 1)
+          old = '''        auto aaState = authored;'''
+          new = '''        auto aaState = nativeAuthored;'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected AA state anchor once, found {text.count(old)}')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
+          git diff --check
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate5SourceContract.cmake
+          test "$(git diff --name-only | wc -l)" -eq 1
+          test "$(git diff --name-only)" = "Tests/Phase5Gate5RenderSettingsTests.cpp"
+
+      - name: Self-clean and publish test fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/gate5-headless-test-fix.yml
+          git add Tests/Phase5Gate5RenderSettingsTests.cpp .github/workflows/gate5-headless-test-fix.yml
+          git diff --cached --check
+          git config user.name "mav3r1ckmediastudio-glitch"
+          git config user.email "mav3r1ckmediastudio@gmail.com"
+          git commit -m "Phase 5 Gate 5: keep native path test GPU-free"
+          git push origin HEAD:staging/phase5-gate5-headless-test-fix
