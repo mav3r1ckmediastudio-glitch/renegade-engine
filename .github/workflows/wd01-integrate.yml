@@ -1,0 +1,172 @@
+name: WD01 guarded integration
+
+on:
+  push:
+    branches:
+      - wd01/grass-vegetation-painting
+    paths:
+      - .github/workflows/wd01-integrate.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch bounded WD01 seams
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one anchor, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # WD01 implementation needs std::abs for density commit comparison.
+          replace_once(
+              "Studio/src/WD01Vegetation.cpp",
+              "#include <algorithm>\n#include <memory>",
+              "#include <algorithm>\n#include <cmath>\n#include <memory>")
+
+          # Keep StudioApplication.h integration to declarations only. All WD01
+          # state/widgets remain isolated in WD01Vegetation.cpp.
+          replace_once(
+              "Studio/src/StudioApplication.h",
+              "        bool HandleTerrainSculpt(const XMFLOAT4& pointer);\n",
+              "        bool HandleTerrainSculpt(const XMFLOAT4& pointer);\n"
+              "        void CreateWd01VegetationControls();\n"
+              "        void LayoutWd01VegetationControls(float fieldWidth);\n"
+              "        void RefreshWd01VegetationControls(bool hasTerrain);\n"
+              "        void TickWd01Vegetation();\n"
+              "        void DisableWd01VegetationBrush();\n"
+              "        bool HandleWd01Vegetation(const XMFLOAT4& pointer);\n")
+
+          cpp = "Studio/src/StudioApplication.cpp"
+
+          # Create vegetation controls immediately after the existing sculpt
+          # surface so the new section is part of the same TERRAIN Inspector.
+          replace_once(
+              cpp,
+              "        inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);\n\n"
+              "        focusButton_.Create(\"Focus Selected\");",
+              "        inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);\n"
+              "        CreateWd01VegetationControls();\n\n"
+              "        focusButton_.Create(\"Focus Selected\");")
+
+          # Explicit sculpt selection hands viewport ownership back to sculpt.
+          replace_once(
+              cpp,
+              "        terrainSculptMode_.OnSelect([this](const wi::gui::EventArgs& args)\n"
+              "        {\n"
+              "            terrainSculptModeValue_ = static_cast<bridge::TerrainSculptMode>(args.userdata);\n"
+              "        });",
+              "        terrainSculptMode_.OnSelect([this](const wi::gui::EventArgs& args)\n"
+              "        {\n"
+              "            DisableWd01VegetationBrush();\n"
+              "            terrainSculptModeValue_ = static_cast<bridge::TerrainSculptMode>(args.userdata);\n"
+              "        });")
+
+          # Append WD01 below the existing sculpt/status rows.
+          replace_once(
+              cpp,
+              "        positionEnvironmentWidget(terrainStrokeDiagnostic_, 676.0f, 20.0f);\n\n"
+              "        const bool environmentSelected =",
+              "        positionEnvironmentWidget(terrainStrokeDiagnostic_, 676.0f, 20.0f);\n"
+              "        LayoutWd01VegetationControls(environmentFieldWidth);\n\n"
+              "        const bool environmentSelected =")
+
+          # Let the isolated source own its own visibility/enable policy.
+          replace_once(
+              cpp,
+              "        setTerrainVisible(terrainStrokeDiagnostic_);\n\n"
+              "        translationX_.SetEnabled(hasTransform);",
+              "        setTerrainVisible(terrainStrokeDiagnostic_);\n"
+              "        RefreshWd01VegetationControls(hasTerrain);\n\n"
+              "        translationX_.SetEnabled(hasTransform);")
+
+          # New streamed chunks must be initialized empty while manual
+          # vegetation authoring is active.
+          replace_once(
+              cpp,
+              "    void StudioRenderPath::Update(const float dt)\n"
+              "    {\n"
+              "        if (!pathTracePreviewActive_)\n"
+              "            SyncRenderSettingsFromScene(true);",
+              "    void StudioRenderPath::Update(const float dt)\n"
+              "    {\n"
+              "        if (!pathTracePreviewActive_)\n"
+              "            SyncRenderSettingsFromScene(true);\n"
+              "        TickWd01Vegetation();")
+
+          # Vegetation gets first refusal on the terrain left-click while its
+          # PAINT or DELETE tool is active; sculpt remains unchanged otherwise.
+          replace_once(
+              cpp,
+              "        if (HandleTerrainSculpt(pointer))\n"
+              "        {\n"
+              "            return;\n"
+              "        }",
+              "        if (HandleWd01Vegetation(pointer))\n"
+              "        {\n"
+              "            return;\n"
+              "        }\n"
+              "        if (HandleTerrainSculpt(pointer))\n"
+              "        {\n"
+              "            return;\n"
+              "        }")
+
+          cmake = "Studio/CMakeLists.txt"
+          replace_once(
+              cmake,
+              "    src/Phase5Gate7RayPathTracing.cpp\n"
+              "    src/StudioApplication.cpp",
+              "    src/Phase5Gate7RayPathTracing.cpp\n"
+              "    src/WD01Vegetation.cpp\n"
+              "    src/StudioApplication.cpp")
+
+          replace_once(
+              cmake,
+              "    COMMAND ${CMAKE_COMMAND} -E make_directory\n"
+              "        \"$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass\"",
+              "    COMMAND ${CMAKE_COMMAND} -E make_directory\n"
+              "        \"$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain\"\n"
+              "    COMMAND ${CMAKE_COMMAND} -E make_directory\n"
+              "        \"$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass\"")
+
+          replace_once(
+              cmake,
+              "    COMMAND ${CMAKE_COMMAND} -E copy_if_different\n"
+              "        \"${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene\"\n"
+              "        \"$<TARGET_FILE_DIR:RenegadeStudio>/Content/cube.wiscene\"",
+              "    COMMAND ${CMAKE_COMMAND} -E copy_if_different\n"
+              "        \"${CMAKE_SOURCE_DIR}/WickedEngine/Content/models/cube.wiscene\"\n"
+              "        \"$<TARGET_FILE_DIR:RenegadeStudio>/Content/cube.wiscene\"\n"
+              "    COMMAND ${CMAKE_COMMAND} -E copy_if_different\n"
+              "        \"${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene\"\n"
+              "        \"$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grass.wiscene\"\n"
+              "    COMMAND ${CMAKE_COMMAND} -E copy_if_different\n"
+              "        \"${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.dds\"\n"
+              "        \"$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grassparticle.dds\"")
+
+          # Remove this one-shot workflow in the same integration commit so the
+          # next push is normal product CI rather than another patch pass.
+          Path(".github/workflows/wd01-integrate.yml").unlink()
+
+      - name: Commit guarded integration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "WD01: integrate vegetation paint surface"
+          git push origin HEAD:wd01/grass-vegetation-painting
