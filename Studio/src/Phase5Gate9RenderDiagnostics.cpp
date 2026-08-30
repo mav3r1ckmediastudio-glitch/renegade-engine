@@ -1,11 +1,17 @@
 #include "StudioApplication.h"
 
+#include <wiProfiler.h>
+
+#include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <string>
 
 namespace
 {
     constexpr wi::Color RenderMuted = wi::Color(178, 178, 176, 255);
+    constexpr wi::Color ProfilerText = wi::Color(244, 244, 244, 255);
+    constexpr wi::Color ProfilerBackground = wi::Color(8, 12, 16, 224);
 
     enum class DiagnosticShading : std::uint64_t
     {
@@ -14,36 +20,6 @@ namespace
         DiffuseOnly = 2,
         Unlit = 3,
     };
-
-    struct Gate9Controls
-    {
-        wi::gui::Label viewLabel;
-        renegade::studio::SceneInspectorComboBox viewMode;
-        renegade::studio::SceneInspectorComboBox shadingMode;
-
-        wi::gui::Label sceneLabel;
-        renegade::studio::SceneInspectorCheckBox envProbes;
-        renegade::studio::SceneInspectorCheckBox cameras;
-        renegade::studio::SceneInspectorCheckBox partitionTree;
-        renegade::studio::SceneInspectorCheckBox raytraceBvh;
-        renegade::studio::SceneInspectorCheckBox freezeCulling;
-
-        wi::gui::Label rendererLabel;
-        renegade::studio::SceneInspectorCheckBox lightCulling;
-        renegade::studio::SceneInspectorCheckBox taaDebug;
-        renegade::studio::SceneInspectorComboBox surfelDebug;
-        wi::gui::Label status;
-        renegade::studio::SceneInspectorButton reset;
-    };
-
-    std::unique_ptr<Gate9Controls> gate9;
-
-    Gate9Controls& Controls()
-    {
-        if (!gate9)
-            gate9 = std::make_unique<Gate9Controls>();
-        return *gate9;
-    }
 
     DiagnosticShading CurrentShading() noexcept
     {
@@ -77,6 +53,111 @@ namespace
         default:
             break;
         }
+    }
+
+    void ResetNativeDiagnostics() noexcept
+    {
+        wi::renderer::SetWireframeMode(wi::renderer::WIREFRAME_DISABLED);
+        ApplyShading(DiagnosticShading::Normal);
+        wi::renderer::SetToDrawDebugEnvProbes(false);
+        wi::renderer::SetToDrawDebugCameras(false);
+        wi::renderer::SetToDrawDebugPartitionTree(false);
+        wi::renderer::SetRaytraceDebugBVHVisualizerEnabled(false);
+        wi::renderer::SetFreezeCullingCameraEnabled(false);
+        wi::renderer::SetDebugLightCulling(false);
+        wi::renderer::SetTemporalAADebugEnabled(false);
+        wi::renderer::SetSurfelGIDebugEnabled(SURFEL_DEBUG_NONE);
+        wi::profiler::SetEnabled(false);
+    }
+
+    class Gate9ProfilerOverlay final : public wi::gui::Widget
+    {
+    public:
+        void Render(
+            const wi::Canvas& canvas,
+            const wi::graphics::CommandList cmd) const override
+        {
+            if (!IsVisible())
+                return;
+
+            ApplyScissor(canvas, scissorRect, cmd);
+            wi::profiler::SetBackgroundColor(ProfilerBackground);
+            wi::profiler::SetTextColor(ProfilerText);
+            wi::profiler::DrawData(
+                canvas,
+                translation.x + 8.0f,
+                translation.y + 8.0f,
+                cmd);
+        }
+    };
+
+    struct Gate9Controls
+    {
+        wi::gui::Label viewLabel;
+        renegade::studio::SceneInspectorComboBox viewMode;
+        renegade::studio::SceneInspectorComboBox shadingMode;
+
+        wi::gui::Label sceneLabel;
+        renegade::studio::SceneInspectorCheckBox envProbes;
+        renegade::studio::SceneInspectorCheckBox cameras;
+        renegade::studio::SceneInspectorCheckBox partitionTree;
+        renegade::studio::SceneInspectorCheckBox raytraceBvh;
+        renegade::studio::SceneInspectorCheckBox freezeCulling;
+
+        wi::gui::Label rendererLabel;
+        renegade::studio::SceneInspectorCheckBox lightCulling;
+        renegade::studio::SceneInspectorCheckBox taaDebug;
+        renegade::studio::SceneInspectorComboBox surfelDebug;
+        wi::gui::Label status;
+
+        wi::gui::Label profilerLabel;
+        renegade::studio::SceneInspectorCheckBox profilerEnabled;
+        Gate9ProfilerOverlay profilerOverlay;
+
+        renegade::studio::SceneInspectorButton reset;
+
+        bool identityCaptured = false;
+        std::string projectIdentity;
+        std::string sceneIdentity;
+
+        ~Gate9Controls()
+        {
+            // Studio process teardown must not leave any renderer-owned global
+            // diagnostic switch or the native profiler enabled.
+            ResetNativeDiagnostics();
+        }
+    };
+
+    std::unique_ptr<Gate9Controls> gate9;
+
+    Gate9Controls& Controls()
+    {
+        if (!gate9)
+            gate9 = std::make_unique<Gate9Controls>();
+        return *gate9;
+    }
+
+    void LayoutProfilerOverlay(
+        Gate9ProfilerOverlay& overlay,
+        const XMFLOAT4& viewportBounds)
+    {
+        constexpr float Margin = 12.0f;
+        constexpr float PreferredWidth = 460.0f;
+        constexpr float PreferredHeight = 620.0f;
+
+        const float availableWidth = std::max(
+            160.0f,
+            viewportBounds.z - viewportBounds.x - Margin * 2.0f);
+        const float availableHeight = std::max(
+            120.0f,
+            viewportBounds.w - viewportBounds.y - Margin * 2.0f);
+
+        overlay.SetPos(XMFLOAT2(
+            viewportBounds.x + Margin,
+            viewportBounds.y + Margin));
+        overlay.SetSize(XMFLOAT2(
+            std::min(PreferredWidth, availableWidth),
+            std::min(PreferredHeight, availableHeight)));
     }
 }
 
@@ -271,6 +352,33 @@ namespace renegade::studio
         controls.status.SetWrapEnabled(true);
         renderWorkspacePanel_.AddWidget(&controls.status);
 
+        createSection(
+            controls.profilerLabel,
+            "Render Diagnostics Profiler Section",
+            "DIAGNOSTICS // PROFILER");
+
+        controls.profilerEnabled.Create("CPU/GPU profiler overlay: ");
+        controls.profilerEnabled.SetTooltip(
+            "Show Wicked's native CPU/GPU profiler data in a Renegade-owned Scene viewport overlay. Never serialized or enabled in Runtime.");
+        controls.profilerEnabled.OnClick([this](const wi::gui::EventArgs& args)
+        {
+            wi::profiler::SetEnabled(args.bValue);
+            Controls().profilerOverlay.SetVisible(args.bValue);
+            RefreshGate9DiagnosticsControls();
+        });
+        renderWorkspacePanel_.AddWidget(&controls.profilerEnabled);
+
+        controls.profilerOverlay.SetVisible(false);
+        controls.profilerOverlay.SetSize(XMFLOAT2(460.0f, 620.0f));
+        auto& gui = GetGUI();
+        gui.AddWidget(&controls.profilerOverlay);
+        // Wicked renders top-level GUI widgets in reverse registration order.
+        // Re-register the Renegade chrome last so it renders first; the profiler
+        // can then draw over the Scene viewport while remaining clipped away
+        // from the owned sidebars/status chrome.
+        gui.RemoveWidget(&studioChrome_);
+        gui.AddWidget(&studioChrome_);
+
         controls.reset.Create("Render Diagnostics Reset");
         controls.reset.SetText("RESET DIAGNOSTICS");
         controls.reset.SetTooltip(
@@ -321,12 +429,48 @@ namespace renegade::studio
         controls.status.SetPos(XMFLOAT2(12.0f, y));
         controls.status.SetSize(XMFLOAT2(fieldWidth, 42.0f));
         y += 46.0f;
+        section(controls.profilerLabel);
+        full(controls.profilerEnabled);
         full(controls.reset);
+
+        LayoutProfilerOverlay(controls.profilerOverlay, viewportBounds_);
     }
 
     void StudioRenderPath::RefreshGate9DiagnosticsControls()
     {
         auto& controls = Controls();
+
+        // Renderer debug flags are process-global in Wicked. Track the governed
+        // project/scene identity and fail closed if Studio replaces either one
+        // while this render path remains alive.
+        std::string projectIdentity;
+        std::string sceneIdentity;
+        if (session_ != nullptr)
+        {
+            if (session_->Projects().HasProject())
+            {
+                const auto& project = session_->Projects().CurrentProject();
+                projectIdentity = !project.projectId.empty()
+                    ? project.projectId
+                    : project.descriptorPath;
+            }
+            sceneIdentity = session_->Scenes().CurrentPath();
+        }
+
+        if (!controls.identityCaptured)
+        {
+            controls.identityCaptured = true;
+            controls.projectIdentity = projectIdentity;
+            controls.sceneIdentity = sceneIdentity;
+        }
+        else if (
+            controls.projectIdentity != projectIdentity ||
+            controls.sceneIdentity != sceneIdentity)
+        {
+            ResetGate9Diagnostics();
+            controls.projectIdentity = projectIdentity;
+            controls.sceneIdentity = sceneIdentity;
+        }
 
         if (pathTracePreviewActive_)
             ResetGate9Diagnostics();
@@ -340,6 +484,7 @@ namespace renegade::studio
         controls.raytraceBvh.SetEnabled(interactive);
         controls.freezeCulling.SetEnabled(interactive);
         controls.lightCulling.SetEnabled(interactive);
+        controls.profilerEnabled.SetEnabled(interactive);
         controls.reset.SetEnabled(interactive);
 
         const bool taa = session_ != nullptr &&
@@ -353,6 +498,11 @@ namespace renegade::studio
         if (!surfel && wi::renderer::GetSurfelGIDebugEnabled() != SURFEL_DEBUG_NONE)
             wi::renderer::SetSurfelGIDebugEnabled(SURFEL_DEBUG_NONE);
         controls.surfelDebug.SetEnabled(interactive && surfel);
+
+        const bool profiler = wi::profiler::IsEnabled();
+        controls.profilerEnabled.SetCheck(profiler);
+        controls.profilerOverlay.SetVisible(interactive && profiler);
+        LayoutProfilerOverlay(controls.profilerOverlay, viewportBounds_);
 
         controls.viewMode.SetSelectedByUserdataWithoutCallback(
             static_cast<std::uint64_t>(wi::renderer::GetWireframeMode()));
@@ -388,15 +538,8 @@ namespace renegade::studio
 
     void StudioRenderPath::ResetGate9Diagnostics()
     {
-        wi::renderer::SetWireframeMode(wi::renderer::WIREFRAME_DISABLED);
-        ApplyShading(DiagnosticShading::Normal);
-        wi::renderer::SetToDrawDebugEnvProbes(false);
-        wi::renderer::SetToDrawDebugCameras(false);
-        wi::renderer::SetToDrawDebugPartitionTree(false);
-        wi::renderer::SetRaytraceDebugBVHVisualizerEnabled(false);
-        wi::renderer::SetFreezeCullingCameraEnabled(false);
-        wi::renderer::SetDebugLightCulling(false);
-        wi::renderer::SetTemporalAADebugEnabled(false);
-        wi::renderer::SetSurfelGIDebugEnabled(SURFEL_DEBUG_NONE);
+        ResetNativeDiagnostics();
+        if (gate9)
+            gate9->profilerOverlay.SetVisible(false);
     }
 }
