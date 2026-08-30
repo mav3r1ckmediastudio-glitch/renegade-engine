@@ -300,4 +300,26 @@ foreach(forbidden IN ITEMS
     endif()
 endforeach()
 
+
+# Live creator sliders must directly drive the exact Wicked RenderPath setter.
+# This prevents regression to whole-state replay during mouse preview.
+foreach(token IN ITEMS
+    "setExposure(renderSliderAfter_.exposure)"
+    "setBrightness(renderSliderAfter_.brightness)"
+    "setContrast(renderSliderAfter_.contrast)"
+    "setSaturation(renderSliderAfter_.saturation)"
+    "setHDRCalibration(renderSliderAfter_.hdrCalibration)"
+    "setBloomThreshold(renderSliderAfter_.bloomThreshold)"
+    "setEyeAdaptionKey(renderSliderAfter_.eyeAdaptationKey)"
+    "setEyeAdaptionRate(renderSliderAfter_.eyeAdaptationRate)"
+    "setDepthOfFieldStrength(renderSliderAfter_.depthOfFieldStrength)"
+    "setMotionBlurStrength(renderSliderAfter_.motionBlurStrength)"
+    "setSharpenFilterAmount(renderSliderAfter_.sharpenAmount)"
+    "setChromaticAberrationAmount(renderSliderAfter_.chromaticAberrationAmount)")
+    string(FIND "${studio_render_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Gate 5 direct native slider preview missing ${token}")
+    endif()
+endforeach()
+
 message(STATUS "Phase 5 Gate 5 source contract passed")

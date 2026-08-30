@@ -698,7 +698,49 @@ namespace renegade::studio
         renderSliderAfter_ = renderSliderBefore_;
         SetRenderFieldValue(renderSliderAfter_, field, value);
         renderSliderAfter_ = bridge::SanitizeRenderSettings(renderSliderAfter_);
-        ApplyRenderSettingsState(renderSliderAfter_, true);
+
+        // Live slider preview mirrors Wicked's own GraphicsWindow: change only
+        // the exact native RenderPath field being dragged. Do not replay every
+        // render setting (and resource-owning toggle) on each mouse movement.
+        switch (field)
+        {
+        case RenderField::Exposure:
+            setExposure(renderSliderAfter_.exposure);
+            break;
+        case RenderField::Brightness:
+            setBrightness(renderSliderAfter_.brightness);
+            break;
+        case RenderField::Contrast:
+            setContrast(renderSliderAfter_.contrast);
+            break;
+        case RenderField::Saturation:
+            setSaturation(renderSliderAfter_.saturation);
+            break;
+        case RenderField::HdrCalibration:
+            setHDRCalibration(renderSliderAfter_.hdrCalibration);
+            break;
+        case RenderField::BloomThreshold:
+            setBloomThreshold(renderSliderAfter_.bloomThreshold);
+            break;
+        case RenderField::EyeAdaptationKey:
+            setEyeAdaptionKey(renderSliderAfter_.eyeAdaptationKey);
+            break;
+        case RenderField::EyeAdaptationRate:
+            setEyeAdaptionRate(renderSliderAfter_.eyeAdaptationRate);
+            break;
+        case RenderField::DepthOfFieldStrength:
+            setDepthOfFieldStrength(renderSliderAfter_.depthOfFieldStrength);
+            break;
+        case RenderField::MotionBlurStrength:
+            setMotionBlurStrength(renderSliderAfter_.motionBlurStrength);
+            break;
+        case RenderField::SharpenAmount:
+            setSharpenFilterAmount(renderSliderAfter_.sharpenAmount);
+            break;
+        case RenderField::ChromaticAberrationAmount:
+            setChromaticAberrationAmount(renderSliderAfter_.chromaticAberrationAmount);
+            break;
+        }
     }
 
     void StudioRenderPath::CommitRenderSlider(

@@ -352,9 +352,11 @@ namespace renegade::bridge
         path.setSaturation(safe.saturation);
         path.setHDRCalibration(safe.hdrCalibration);
         path.setColorGradingEnabled(safe.colorGradingEnabled);
-        path.setBloomEnabled(safe.bloomEnabled);
+        if (path.getBloomEnabled() != safe.bloomEnabled)
+            path.setBloomEnabled(safe.bloomEnabled);
         path.setBloomThreshold(safe.bloomThreshold);
-        path.setEyeAdaptionEnabled(safe.eyeAdaptationEnabled);
+        if (path.getEyeAdaptionEnabled() != safe.eyeAdaptationEnabled)
+            path.setEyeAdaptionEnabled(safe.eyeAdaptationEnabled);
         path.setEyeAdaptionKey(safe.eyeAdaptationKey);
         path.setEyeAdaptionRate(safe.eyeAdaptationRate);
 
