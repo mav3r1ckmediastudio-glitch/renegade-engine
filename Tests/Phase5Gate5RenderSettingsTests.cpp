@@ -106,6 +106,12 @@ int main()
     authored.chromaticAberrationAmount = 3.5f;
     authored.ditherEnabled = false;
 
+    // Enabling Wicked eye adaptation allocates a GPU luminance buffer.
+    // This console regression intentionally has no graphics device, so keep
+    // the same authored object/contract but temporarily disable only that
+    // resource-owning toggle while verifying the live native RenderPath.
+    authored.eyeAdaptationEnabled = false;
+
     wi::RenderPath3D nativePath;
     ApplyRenderSettingsToPath(nativePath, authored, false);
     if (!RenderSettingsMatchPath(nativePath, authored))
@@ -127,6 +133,11 @@ int main()
         if (!RenderSettingsMatchPath(nativePath, aaState))
             return Fail("Gate 5 AA mode did not reach the native Wicked RenderPath");
     }
+
+    // Restore the creator-authored resource-owning state before persistence,
+    // WISCENE and Undo/Redo coverage. Real Studio owner testing exercises the
+    // enabled GPU path.
+    authored.eyeAdaptationEnabled = true;
 
     if (!WriteRenderSettings(scenes.GetScene(), authored))
         return Fail("could not persist authored Gate 5 render settings");
