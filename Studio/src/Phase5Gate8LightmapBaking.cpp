@@ -93,10 +93,17 @@ namespace renegade::studio
         renderLightmapStart_.Create("Render Lightmap Start");
         renderLightmapStart_.SetText("START BAKE");
         renderLightmapStart_.SetTooltip(
-            "Prepare the selected static mesh and start Wicked's native progressive lightmap bake.");
+            "Start the selected native Wicked lightmap bake. While baking, this same control becomes Stop & Save.");
         renderLightmapStart_.OnClick([this](const wi::gui::EventArgs&)
         {
-            BeginSelectedLightmapBake();
+            // Keep the creator's primary bake action reachable for the entire
+            // session. The same button that successfully starts the bake becomes
+            // a Stop & Save action while active, avoiding a pointer-focus dead end
+            // between adjacent Studio controls during progressive accumulation.
+            if (lightmapBakeSession_.IsActive())
+                FinishSelectedLightmapBake();
+            else
+                BeginSelectedLightmapBake();
         });
         renderWorkspacePanel_.AddWidget(&renderLightmapStart_);
 
@@ -311,7 +318,9 @@ namespace renegade::studio
         renderLightmapResolution_.SetEnabled(status.eligible && !active && realtime);
         renderLightmapUvSource_.SetEnabled(status.eligible && !active && realtime);
         renderLightmapBlockCompression_.SetEnabled(status.eligible && !active && realtime);
-        renderLightmapStart_.SetEnabled(status.eligible && !active && realtime);
+        renderLightmapStart_.SetText(active ? "STOP & SAVE" : "START BAKE");
+        renderLightmapStart_.SetEnabled(
+            active || (status.eligible && realtime));
         renderLightmapStop_.SetEnabled(active);
         renderLightmapClear_.SetEnabled(
             status.eligible && !active && status.bakedCount > 0);
