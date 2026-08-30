@@ -68,6 +68,7 @@ namespace
         case Mode::SSAO:
         case Mode::HBAO:
         case Mode::MSAO:
+        case Mode::RTAO:
             return value;
         default:
             return Mode::Off;
@@ -140,6 +141,14 @@ namespace
     constexpr const char* KeySsrEnabled = "renegade.render.ssr.enabled";
     constexpr const char* KeySsrQuality = "renegade.render.ssr.quality";
     constexpr const char* KeyReflectionRoughnessCutoff = "renegade.render.reflections.roughness_cutoff";
+    constexpr const char* KeyRaytracedShadowsEnabled = "renegade.render.rt.shadows.enabled";
+    constexpr const char* KeyRaytracedReflectionsEnabled = "renegade.render.rt.reflections.enabled";
+    constexpr const char* KeyRaytracedReflectionsRange = "renegade.render.rt.reflections.range";
+    constexpr const char* KeyRaytracedReflectionsQuality = "renegade.render.rt.reflections.quality";
+    constexpr const char* KeyRaytracedDiffuseEnabled = "renegade.render.rt.diffuse.enabled";
+    constexpr const char* KeyRaytracedDiffuseRange = "renegade.render.rt.diffuse.range";
+    constexpr const char* KeyRaytracedDiffuseQuality = "renegade.render.rt.diffuse.quality";
+    constexpr const char* KeySurfelGiEnabled = "renegade.render.rt.surfel_gi.enabled";
     constexpr const char* KeyDepthOfFieldEnabled = "renegade.render.dof.enabled";
     constexpr const char* KeyDepthOfFieldStrength = "renegade.render.dof.strength";
     constexpr const char* KeyMotionBlurEnabled = "renegade.render.motion_blur.enabled";
@@ -168,6 +177,10 @@ namespace renegade::bridge
         result.antiAliasing = SanitizeAntiAliasing(result.antiAliasing);
         result.ambientOcclusion = SanitizeAmbientOcclusion(result.ambientOcclusion);
         result.ssrQuality = SanitizeRenderQuality(result.ssrQuality);
+        result.raytracedReflectionsQuality =
+            SanitizeRenderQuality(result.raytracedReflectionsQuality);
+        result.raytracedDiffuseQuality =
+            SanitizeRenderQuality(result.raytracedDiffuseQuality);
 
         result.exposure = ClampFinite(result.exposure, defaults.exposure, 0.0f, 3.0f);
         result.brightness = ClampFinite(result.brightness, defaults.brightness, -1.0f, 1.0f);
@@ -189,6 +202,10 @@ namespace renegade::bridge
         result.planarReflectionResolutionScale = ClampFinite(result.planarReflectionResolutionScale, defaults.planarReflectionResolutionScale, 0.25f, 2.0f);
         result.planarReflectionMsaaSampleCount = SanitizePlanarMsaaSampleCount(result.planarReflectionMsaaSampleCount);
         result.reflectionRoughnessCutoff = ClampFinite(result.reflectionRoughnessCutoff, defaults.reflectionRoughnessCutoff, 0.0f, 1.0f);
+        result.raytracedReflectionsRange = ClampFinite(
+            result.raytracedReflectionsRange, defaults.raytracedReflectionsRange, 1.0f, 10000.0f);
+        result.raytracedDiffuseRange = ClampFinite(
+            result.raytracedDiffuseRange, defaults.raytracedDiffuseRange, 1.0f, 100.0f);
         return result;
     }
 
@@ -224,6 +241,14 @@ namespace renegade::bridge
             left.ssrEnabled != right.ssrEnabled ||
             left.ssrQuality != right.ssrQuality ||
             !NearlyEqual(left.reflectionRoughnessCutoff, right.reflectionRoughnessCutoff) ||
+            left.raytracedShadowsEnabled != right.raytracedShadowsEnabled ||
+            left.raytracedReflectionsEnabled != right.raytracedReflectionsEnabled ||
+            !NearlyEqual(left.raytracedReflectionsRange, right.raytracedReflectionsRange) ||
+            left.raytracedReflectionsQuality != right.raytracedReflectionsQuality ||
+            left.raytracedDiffuseEnabled != right.raytracedDiffuseEnabled ||
+            !NearlyEqual(left.raytracedDiffuseRange, right.raytracedDiffuseRange) ||
+            left.raytracedDiffuseQuality != right.raytracedDiffuseQuality ||
+            left.surfelGiEnabled != right.surfelGiEnabled ||
             left.depthOfFieldEnabled != right.depthOfFieldEnabled ||
             !NearlyEqual(left.depthOfFieldStrength, right.depthOfFieldStrength) ||
             left.motionBlurEnabled != right.motionBlurEnabled ||
@@ -233,6 +258,13 @@ namespace renegade::bridge
             left.chromaticAberrationEnabled != right.chromaticAberrationEnabled ||
             !NearlyEqual(left.chromaticAberrationAmount, right.chromaticAberrationAmount) ||
             left.ditherEnabled != right.ditherEnabled;
+    }
+
+    bool IsHardwareRayTracingAvailable() noexcept
+    {
+        const auto* device = wi::graphics::GetDevice();
+        return device != nullptr && device->CheckCapability(
+            wi::graphics::GraphicsDeviceCapability::RAYTRACING);
     }
 
     wi::ecs::Entity FindRenderSettingsCarrier(
@@ -259,7 +291,7 @@ namespace renegade::bridge
             return defaults;
 
         const int schema = ReadValue(metadata->int_values, KeySchema, 0);
-        if (schema != 1 && schema != RenderSettingsSchemaVersion)
+        if (schema < 1 || schema > RenderSettingsSchemaVersion)
             return defaults;
 
         RenderSettingsState state = defaults;
@@ -299,6 +331,27 @@ namespace renegade::bridge
                 ReadValue(metadata->int_values, KeySsrQuality, static_cast<int>(defaults.ssrQuality)));
             state.reflectionRoughnessCutoff = ReadValue(metadata->float_values, KeyReflectionRoughnessCutoff, defaults.reflectionRoughnessCutoff);
         }
+        if (schema >= 3)
+        {
+            state.raytracedShadowsEnabled = ReadValue(
+                metadata->bool_values, KeyRaytracedShadowsEnabled, defaults.raytracedShadowsEnabled);
+            state.raytracedReflectionsEnabled = ReadValue(
+                metadata->bool_values, KeyRaytracedReflectionsEnabled, defaults.raytracedReflectionsEnabled);
+            state.raytracedReflectionsRange = ReadValue(
+                metadata->float_values, KeyRaytracedReflectionsRange, defaults.raytracedReflectionsRange);
+            state.raytracedReflectionsQuality = static_cast<RenderQuality>(ReadValue(
+                metadata->int_values, KeyRaytracedReflectionsQuality,
+                static_cast<int>(defaults.raytracedReflectionsQuality)));
+            state.raytracedDiffuseEnabled = ReadValue(
+                metadata->bool_values, KeyRaytracedDiffuseEnabled, defaults.raytracedDiffuseEnabled);
+            state.raytracedDiffuseRange = ReadValue(
+                metadata->float_values, KeyRaytracedDiffuseRange, defaults.raytracedDiffuseRange);
+            state.raytracedDiffuseQuality = static_cast<RenderQuality>(ReadValue(
+                metadata->int_values, KeyRaytracedDiffuseQuality,
+                static_cast<int>(defaults.raytracedDiffuseQuality)));
+            state.surfelGiEnabled = ReadValue(
+                metadata->bool_values, KeySurfelGiEnabled, defaults.surfelGiEnabled);
+        }
         state.depthOfFieldEnabled = ReadValue(metadata->bool_values, KeyDepthOfFieldEnabled, defaults.depthOfFieldEnabled);
         state.depthOfFieldStrength = ReadValue(metadata->float_values, KeyDepthOfFieldStrength, defaults.depthOfFieldStrength);
         state.motionBlurEnabled = ReadValue(metadata->bool_values, KeyMotionBlurEnabled, defaults.motionBlurEnabled);
@@ -331,6 +384,7 @@ namespace renegade::bridge
             break;
         }
 
+        const bool hardwareRayTracing = IsHardwareRayTracingAvailable();
         wi::RenderPath3D::AO ambientOcclusion = wi::RenderPath3D::AO_DISABLED;
         switch (safe.ambientOcclusion)
         {
@@ -342,6 +396,10 @@ namespace renegade::bridge
             break;
         case RenderAmbientOcclusion::MSAO:
             ambientOcclusion = wi::RenderPath3D::AO_MSAO;
+            break;
+        case RenderAmbientOcclusion::RTAO:
+            if (hardwareRayTracing)
+                ambientOcclusion = wi::RenderPath3D::AO_RTAO;
             break;
         case RenderAmbientOcclusion::Off:
         default:
@@ -361,6 +419,24 @@ namespace renegade::bridge
         default:
             break;
         }
+
+        wi::renderer::PostProcessQuality rtReflectionsQuality = wi::renderer::PostProcessQuality::Medium;
+        switch (safe.raytracedReflectionsQuality)
+        {
+        case RenderQuality::Low: rtReflectionsQuality = wi::renderer::PostProcessQuality::Low; break;
+        case RenderQuality::High: rtReflectionsQuality = wi::renderer::PostProcessQuality::High; break;
+        case RenderQuality::Medium: default: break;
+        }
+        wi::renderer::PostProcessQuality rtDiffuseQuality = wi::renderer::PostProcessQuality::Medium;
+        switch (safe.raytracedDiffuseQuality)
+        {
+        case RenderQuality::Low: rtDiffuseQuality = wi::renderer::PostProcessQuality::Low; break;
+        case RenderQuality::High: rtDiffuseQuality = wi::renderer::PostProcessQuality::High; break;
+        case RenderQuality::Medium: default: break;
+        }
+        const bool expectedRtShadows = safe.raytracedShadowsEnabled && hardwareRayTracing;
+        const bool expectedRtReflections = safe.raytracedReflectionsEnabled && hardwareRayTracing;
+        const bool expectedRtDiffuse = safe.raytracedDiffuseEnabled && hardwareRayTracing;
 
         if (path.getTonemap() != tonemap ||
             !NearlyEqual(path.getExposure(), safe.exposure) ||
@@ -387,6 +463,14 @@ namespace renegade::bridge
             path.getSSREnabled() != safe.ssrEnabled ||
             path.getSSRQuality() != ssrQuality ||
             !NearlyEqual(path.getReflectionRoughnessCutoff(), safe.reflectionRoughnessCutoff) ||
+            wi::renderer::GetRaytracedShadowsEnabled() != expectedRtShadows ||
+            path.getRaytracedReflectionEnabled() != expectedRtReflections ||
+            !NearlyEqual(path.getRaytracedReflectionsRange(), safe.raytracedReflectionsRange) ||
+            path.getRaytracedReflectionsQuality() != rtReflectionsQuality ||
+            path.getRaytracedDiffuseEnabled() != expectedRtDiffuse ||
+            !NearlyEqual(path.getRaytracedDiffuseRange(), safe.raytracedDiffuseRange) ||
+            path.getRaytracedDiffuseQuality() != rtDiffuseQuality ||
+            wi::renderer::GetSurfelGIEnabled() != safe.surfelGiEnabled ||
             path.getDepthOfFieldEnabled() != safe.depthOfFieldEnabled ||
             !NearlyEqual(path.getDepthOfFieldStrength(), safe.depthOfFieldStrength) ||
             path.getMotionBlurEnabled() != safe.motionBlurEnabled ||
@@ -467,6 +551,14 @@ namespace renegade::bridge
         metadata->bool_values.set(KeySsrEnabled, safe.ssrEnabled);
         metadata->int_values.set(KeySsrQuality, static_cast<int>(safe.ssrQuality));
         metadata->float_values.set(KeyReflectionRoughnessCutoff, safe.reflectionRoughnessCutoff);
+        metadata->bool_values.set(KeyRaytracedShadowsEnabled, safe.raytracedShadowsEnabled);
+        metadata->bool_values.set(KeyRaytracedReflectionsEnabled, safe.raytracedReflectionsEnabled);
+        metadata->float_values.set(KeyRaytracedReflectionsRange, safe.raytracedReflectionsRange);
+        metadata->int_values.set(KeyRaytracedReflectionsQuality, static_cast<int>(safe.raytracedReflectionsQuality));
+        metadata->bool_values.set(KeyRaytracedDiffuseEnabled, safe.raytracedDiffuseEnabled);
+        metadata->float_values.set(KeyRaytracedDiffuseRange, safe.raytracedDiffuseRange);
+        metadata->int_values.set(KeyRaytracedDiffuseQuality, static_cast<int>(safe.raytracedDiffuseQuality));
+        metadata->bool_values.set(KeySurfelGiEnabled, safe.surfelGiEnabled);
         metadata->bool_values.set(KeyDepthOfFieldEnabled, safe.depthOfFieldEnabled);
         metadata->float_values.set(KeyDepthOfFieldStrength, safe.depthOfFieldStrength);
         metadata->bool_values.set(KeyMotionBlurEnabled, safe.motionBlurEnabled);
@@ -554,6 +646,7 @@ namespace renegade::bridge
         path.setAOPower(safe.ambientOcclusionPower);
         path.setAORange(safe.ambientOcclusionRange);
         path.setAOSampleCount(safe.ambientOcclusionSampleCount);
+        const bool hardwareRayTracing = IsHardwareRayTracingAvailable();
         wi::RenderPath3D::AO ambientOcclusion = wi::RenderPath3D::AO_DISABLED;
         switch (safe.ambientOcclusion)
         {
@@ -565,6 +658,10 @@ namespace renegade::bridge
             break;
         case RenderAmbientOcclusion::MSAO:
             ambientOcclusion = wi::RenderPath3D::AO_MSAO;
+            break;
+        case RenderAmbientOcclusion::RTAO:
+            if (hardwareRayTracing)
+                ambientOcclusion = wi::RenderPath3D::AO_RTAO;
             break;
         case RenderAmbientOcclusion::Off:
         default:
@@ -611,6 +708,51 @@ namespace renegade::bridge
         }
         if (path.getSSREnabled() != safe.ssrEnabled)
             path.setSSREnabled(safe.ssrEnabled);
+
+        const bool enableRtShadows = safe.raytracedShadowsEnabled && hardwareRayTracing;
+        if (wi::renderer::GetRaytracedShadowsEnabled() != enableRtShadows)
+            wi::renderer::SetRaytracedShadowsEnabled(enableRtShadows);
+
+        path.setRaytracedReflectionsRange(safe.raytracedReflectionsRange);
+        wi::renderer::PostProcessQuality rtReflectionsQuality = wi::renderer::PostProcessQuality::Medium;
+        switch (safe.raytracedReflectionsQuality)
+        {
+        case RenderQuality::Low: rtReflectionsQuality = wi::renderer::PostProcessQuality::Low; break;
+        case RenderQuality::High: rtReflectionsQuality = wi::renderer::PostProcessQuality::High; break;
+        case RenderQuality::Medium: default: break;
+        }
+        if (path.getRaytracedReflectionsQuality() != rtReflectionsQuality)
+        {
+            const bool wasEnabled = path.getRaytracedReflectionEnabled();
+            path.setRaytracedReflectionsQuality(rtReflectionsQuality);
+            if (wasEnabled && hardwareRayTracing)
+                path.setRaytracedReflectionsEnabled(true);
+        }
+        const bool enableRtReflections = safe.raytracedReflectionsEnabled && hardwareRayTracing;
+        if (path.getRaytracedReflectionEnabled() != enableRtReflections)
+            path.setRaytracedReflectionsEnabled(enableRtReflections);
+
+        path.setRaytracedDiffuseRange(safe.raytracedDiffuseRange);
+        wi::renderer::PostProcessQuality rtDiffuseQuality = wi::renderer::PostProcessQuality::Medium;
+        switch (safe.raytracedDiffuseQuality)
+        {
+        case RenderQuality::Low: rtDiffuseQuality = wi::renderer::PostProcessQuality::Low; break;
+        case RenderQuality::High: rtDiffuseQuality = wi::renderer::PostProcessQuality::High; break;
+        case RenderQuality::Medium: default: break;
+        }
+        if (path.getRaytracedDiffuseQuality() != rtDiffuseQuality)
+        {
+            const bool wasEnabled = path.getRaytracedDiffuseEnabled();
+            path.setRaytracedDiffuseQuality(rtDiffuseQuality);
+            if (wasEnabled && hardwareRayTracing)
+                path.setRaytracedDiffuseEnabled(true);
+        }
+        const bool enableRtDiffuse = safe.raytracedDiffuseEnabled && hardwareRayTracing;
+        if (path.getRaytracedDiffuseEnabled() != enableRtDiffuse)
+            path.setRaytracedDiffuseEnabled(enableRtDiffuse);
+
+        if (wi::renderer::GetSurfelGIEnabled() != safe.surfelGiEnabled)
+            wi::renderer::SetSurfelGIEnabled(safe.surfelGiEnabled);
 
         path.setDepthOfFieldEnabled(safe.depthOfFieldEnabled);
         path.setDepthOfFieldStrength(safe.depthOfFieldStrength);

@@ -263,8 +263,13 @@ namespace renegade::studio
         renderAmbientOcclusion_.AddItem("SSAO", static_cast<std::uint64_t>(bridge::RenderAmbientOcclusion::SSAO));
         renderAmbientOcclusion_.AddItem("HBAO", static_cast<std::uint64_t>(bridge::RenderAmbientOcclusion::HBAO));
         renderAmbientOcclusion_.AddItem("MSAO", static_cast<std::uint64_t>(bridge::RenderAmbientOcclusion::MSAO));
+        if (bridge::IsHardwareRayTracingAvailable())
+        {
+            renderAmbientOcclusion_.AddItem(
+                "RTAO", static_cast<std::uint64_t>(bridge::RenderAmbientOcclusion::RTAO));
+        }
         renderAmbientOcclusion_.SetTooltip(
-            "Choose Wicked ambient occlusion. Ray-traced AO is reserved for Gate 7.");
+            "Choose Wicked ambient occlusion. RTAO is available on hardware ray-tracing GPUs.");
         renderAmbientOcclusion_.OnSelect([this](const wi::gui::EventArgs& args)
         {
             auto state = bridge::CaptureRenderSettings(session_->Scenes().GetScene());
@@ -351,6 +356,8 @@ namespace renegade::studio
             "REFLECTIONS // ROUGHNESS CUTOFF",
             "Maximum material roughness that receives screen-space reflections.",
             RenderField::ReflectionRoughnessCutoff, 0.0f, 1.0f, 1000.0f);
+
+        CreateGate7RenderControls();
 
         // Wicked Window::AddWidget() copies Window::IsEnabled() into each child,
         // and IsEnabled() includes the Window's visibility. Hiding this Window
@@ -457,6 +464,8 @@ namespace renegade::studio
         full(renderSsrEnabled_);
         full(renderSsrQuality_);
         full(renderReflectionRoughnessCutoff_);
+
+        LayoutGate7RenderControls(fieldWidth, y);
     }
 
     void StudioRenderPath::RefreshRenderWorkspace()
@@ -508,6 +517,7 @@ namespace renegade::studio
         renderSsrQuality_.SetSelectedByUserdataWithoutCallback(
             static_cast<std::uint64_t>(state.ssrQuality));
         renderReflectionRoughnessCutoff_.SetValue(state.reflectionRoughnessCutoff);
+        RefreshGate7RenderControls(state);
 
         renderBloomThreshold_.SetEnabled(state.bloomEnabled);
         renderEyeAdaptationKey_.SetEnabled(state.eyeAdaptationEnabled);
@@ -519,9 +529,12 @@ namespace renegade::studio
             state.chromaticAberrationEnabled);
         const bool ssao =
             state.ambientOcclusion == bridge::RenderAmbientOcclusion::SSAO;
+        const bool rtao =
+            state.ambientOcclusion == bridge::RenderAmbientOcclusion::RTAO &&
+            bridge::IsHardwareRayTracingAvailable();
         renderAmbientOcclusionPower_.SetEnabled(
             state.ambientOcclusion != bridge::RenderAmbientOcclusion::Off);
-        renderAmbientOcclusionRange_.SetEnabled(ssao);
+        renderAmbientOcclusionRange_.SetEnabled(ssao || rtao);
         renderAmbientOcclusionSampleCount_.SetEnabled(ssao);
         renderSsgiDepthRejection_.SetEnabled(state.ssgiEnabled);
         renderPlanarReflectionResolutionScale_.SetEnabled(
@@ -715,6 +728,8 @@ namespace renegade::studio
         }
         else
         {
+            if (pathTracePreviewActive_)
+                SetPathTracePreviewActive(false);
             studioChrome_.SetRenderWorkspaceActive(false);
             renderWorkspacePanel_.SetVisible(false);
             if (!projectHubVisible_)
@@ -932,6 +947,12 @@ namespace renegade::studio
         case RenderField::ReflectionRoughnessCutoff:
             setReflectionRoughnessCutoff(renderSliderAfter_.reflectionRoughnessCutoff);
             break;
+        case RenderField::RaytracedReflectionsRange:
+            setRaytracedReflectionsRange(renderSliderAfter_.raytracedReflectionsRange);
+            break;
+        case RenderField::RaytracedDiffuseRange:
+            setRaytracedDiffuseRange(renderSliderAfter_.raytracedDiffuseRange);
+            break;
         }
     }
 
@@ -1033,6 +1054,12 @@ namespace renegade::studio
             break;
         case RenderField::ReflectionRoughnessCutoff:
             state.reflectionRoughnessCutoff = value;
+            break;
+        case RenderField::RaytracedReflectionsRange:
+            state.raytracedReflectionsRange = value;
+            break;
+        case RenderField::RaytracedDiffuseRange:
+            state.raytracedDiffuseRange = value;
             break;
         }
     }
