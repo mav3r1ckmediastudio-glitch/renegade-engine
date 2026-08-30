@@ -793,6 +793,43 @@ namespace renegade::bridge
             (resolution & (resolution - 1)) == 0;
     }
 
+    bool LightmapBakeService::HydratePersistedLightmaps(
+        Scene& scene,
+        std::string& error)
+    {
+        for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)
+        {
+            ObjectComponent& object = scene.objects[index];
+            if (object.lightmapTextureData.empty())
+                continue;
+            if (object.lightmapWidth == 0 || object.lightmapHeight == 0)
+            {
+                error = "Serialized lightmap data has invalid zero dimensions.";
+                return false;
+            }
+            if (object.lightmap.IsValid())
+                continue;
+
+            const wi::graphics::Format format =
+                object.IsLightmapDisableBlockCompression()
+                    ? wi::graphics::Format::R11G11B10_FLOAT
+                    : wi::graphics::Format::BC6H_UF16;
+            if (!wi::texturehelper::CreateTexture(
+                    object.lightmap,
+                    object.lightmapTextureData.data(),
+                    object.lightmapWidth,
+                    object.lightmapHeight,
+                    format))
+            {
+                error = "Could not reconstruct a serialized native Wicked lightmap texture.";
+                return false;
+            }
+            wi::graphics::GetDevice()->SetName(&object.lightmap, "lightmap");
+        }
+        error.clear();
+        return true;
+    }
+
     LightmapBakeStatus LightmapBakeService::CaptureStatus(
         const Scene& scene,
         const std::vector<Entity>& requestedTargets)

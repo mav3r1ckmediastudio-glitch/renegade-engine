@@ -235,8 +235,20 @@ namespace renegade::studio
         if (session_ == nullptr || !session_->Selection().HasSelection())
             return targets;
         const wi::ecs::Entity selected = session_->Selection().SelectedEntity();
-        if (selected != wi::ecs::INVALID_ENTITY)
-            targets.push_back(selected);
+        if (selected == wi::ecs::INVALID_ENTITY)
+            return targets;
+
+        // Creator selection commonly resolves to an imported/reusable model root
+        // while the Wicked ObjectComponents live on render descendants. Treat
+        // the selected branch as one bake target set without changing the global
+        // single-selection model.
+        const auto& scene = session_->Scenes().GetScene();
+        for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)
+        {
+            const wi::ecs::Entity entity = scene.objects.GetEntity(index);
+            if (entity == selected || scene.Entity_IsDescendant(entity, selected))
+                targets.push_back(entity);
+        }
         return targets;
     }
 

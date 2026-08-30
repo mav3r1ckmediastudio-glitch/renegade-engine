@@ -72,6 +72,13 @@ namespace renegade::bridge
             const wi::scene::Scene& scene,
             const std::vector<wi::ecs::Entity>& targets);
 
+        // Wicked serializes baked lightmap bytes but the pinned ObjectComponent
+        // read path only rebuilds Vertex AO render data. Rehydrate the native
+        // lightmap texture before a prepared scene is adopted by Studio/Runtime.
+        static bool HydratePersistedLightmaps(
+            wi::scene::Scene& scene,
+            std::string& error);
+
         static bool BeginBake(
             wi::scene::Scene& scene,
             const std::vector<wi::ecs::Entity>& targets,

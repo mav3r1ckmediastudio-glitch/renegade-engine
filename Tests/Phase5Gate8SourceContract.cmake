@@ -30,6 +30,8 @@ read_required("Studio/src/Phase5Gate8LightmapBaking.cpp" gate8_studio)
 read_required("Studio/src/Phase5Gate5RenderWorkspace.cpp" render_workspace)
 read_required("Studio/src/StudioApplication.h" studio_header)
 read_required("Studio/src/StudioApplication.cpp" studio_source)
+read_required("EngineBridge/src/SceneDocumentService.cpp" scene_document)
+read_required("EngineBridge/src/SceneService.cpp" scene_service)
 read_required("Studio/Phase5Gate8.cmake" gate8_studio_cmake)
 read_required("CMakeLists.txt" root_cmake)
 
@@ -43,6 +45,7 @@ require_text("${gate8_service}" "vertex_atlas" "native Wicked atlas channel is n
 require_text("${gate8_service}" "vertex_ao" "native Wicked Vertex AO storage is not used")
 require_text("${gate8_service}" "xatlas::Create" "pinned xatlas generation is not isolated in the bake service")
 require_text("${gate8_service}" "RecordExecuted" "completed bake/AO changes are not recorded in CommandService")
+require_text("${gate8_service}" "HydratePersistedLightmaps" "serialized native lightmaps are not rehydrated")
 require_text("${gate8_service}" "BC6H_UF16" "BC6H restore path is missing")
 require_text("${gate8_service}" "R11G11B10_FLOAT" "uncompressed lightmap restore path is missing")
 reject_text("${gate8_service}" "ObjectWindow" "stock Wicked ObjectWindow leaked into EngineBridge")
@@ -58,6 +61,7 @@ require_text("${render_workspace}" "CreateGate8BakeControls();" "Gate 8 controls
 require_text("${render_workspace}" "LayoutGate8BakeControls(fieldWidth, y);" "Gate 8 controls are not part of RENDER layout")
 require_text("${render_workspace}" "RefreshGate8BakeControls();" "Gate 8 controls are not refreshed with the RENDER workspace")
 require_text("${studio_source}" "TickGate8BakeControls();" "progress/status is not updated from the Studio frame loop")
+require_text("${gate8_studio}" "Entity_IsDescendant(entity, selected)" "selected model roots do not expand to render descendants")
 require_text("${render_workspace}" "CancelGate8Bake();" "leaving RENDER does not fail closed on an active bake")
 
 require_text("${gate8_studio}" "START BAKE" "creator Start Bake control is missing")
@@ -70,6 +74,8 @@ reject_text("${gate8_studio}" "ObjectWindow" "stock Wicked ObjectWindow UI is re
 require_text("${root_cmake}" "include(EngineBridge/Phase5Gate8.cmake)" "Gate 8 EngineBridge CMake integration is missing")
 require_text("${root_cmake}" "include(Studio/Phase5Gate8.cmake)" "Gate 8 Studio CMake integration is missing")
 require_text("${root_cmake}" "include(Tests/Phase5Gate8.cmake)" "Gate 8 tests are not included")
+require_text("${scene_document}" "HydratePersistedLightmaps" "Studio prepared-scene adoption does not hydrate baked lightmaps")
+require_text("${scene_service}" "HydratePersistedLightmaps" "Runtime SceneService load does not hydrate baked lightmaps")
 
 if(EXISTS "${RENEGADE_SOURCE_DIR}/.github/workflows/phase5-gate8-integrate.yml")
     message(FATAL_ERROR "Gate 8 temporary integration workflow did not self-clean")

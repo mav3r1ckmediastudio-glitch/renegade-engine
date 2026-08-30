@@ -3,6 +3,7 @@
 #include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
@@ -193,6 +194,18 @@ namespace renegade::bridge
             scenes_.lastError_ = prepared.Error().empty()
                 ? "The prepared scene was not ready to open."
                 : prepared.Error();
+            return false;
+        }
+
+        // Gate 8: the pinned Wicked serializer restores baked bytes but
+        // does not reconstruct ObjectComponent::lightmap. Hydrate the prepared
+        // candidate here, at Studio's thread-safe adoption point, so a failure
+        // leaves the active document untouched.
+        std::string lightmapError;
+        if (!LightmapBakeService::HydratePersistedLightmaps(
+                *prepared.scene_, lightmapError))
+        {
+            scenes_.lastError_ = "Could not restore baked lightmaps: " + lightmapError;
             return false;
         }
 
