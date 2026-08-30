@@ -1,0 +1,120 @@
+name: Phase 5 Gate 8 Harden
+
+on:
+  push:
+    branches:
+      - phase5/scene-render-gate8-lightmap-baking
+    paths:
+      - ".github/workflows/phase5-gate8-harden.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Verify Gate 8 integration head ancestry
+        shell: bash
+        run: |
+          git merge-base --is-ancestor 1a676e2b5e355bf7ae2b4d64ea3e46cc892e782f HEAD || {
+            echo "Gate 8 hardening refused: expected integrated Gate 8 head is not an ancestor"
+            exit 1
+          }
+
+      - name: Apply guarded Gate 8 hardening
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(relative, old, new):
+              path = Path(relative)
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(
+                      f"Gate 8 hardening refused: {relative} expected exactly one anchor, found {count}: {old[:140]!r}"
+                  )
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "EngineBridge/include/renegade/bridge/LightmapBakeService.h",
+              "        [[nodiscard]] static LightmapBakeStatus CaptureStatus(\n            const wi::scene::Scene& scene,\n            const std::vector<wi::ecs::Entity>& targets);\n\n        static bool BeginBake(\n",
+              "        [[nodiscard]] static LightmapBakeStatus CaptureStatus(\n            const wi::scene::Scene& scene,\n            const std::vector<wi::ecs::Entity>& targets);\n\n        // Wicked serializes baked lightmap bytes but the pinned ObjectComponent\n        // read path only rebuilds Vertex AO render data. Rehydrate the native\n        // lightmap texture before a prepared scene is adopted by Studio/Runtime.\n        static bool HydratePersistedLightmaps(\n            wi::scene::Scene& scene,\n            std::string& error);\n\n        static bool BeginBake(\n",
+          )
+
+          replace_once(
+              "EngineBridge/src/LightmapBakeService.cpp",
+              "    bool LightmapBakeService::IsValidResolution(const std::uint32_t resolution) noexcept\n    {\n        return resolution >= 32 && resolution <= 8192 &&\n            (resolution & (resolution - 1)) == 0;\n    }\n\n    LightmapBakeStatus LightmapBakeService::CaptureStatus(\n",
+              "    bool LightmapBakeService::IsValidResolution(const std::uint32_t resolution) noexcept\n    {\n        return resolution >= 32 && resolution <= 8192 &&\n            (resolution & (resolution - 1)) == 0;\n    }\n\n    bool LightmapBakeService::HydratePersistedLightmaps(\n        Scene& scene,\n        std::string& error)\n    {\n        for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)\n        {\n            ObjectComponent& object = scene.objects[index];\n            if (object.lightmapTextureData.empty())\n                continue;\n            if (object.lightmapWidth == 0 || object.lightmapHeight == 0)\n            {\n                error = \"Serialized lightmap data has invalid zero dimensions.\";\n                return false;\n            }\n            if (object.lightmap.IsValid())\n                continue;\n\n            const wi::graphics::Format format =\n                object.IsLightmapDisableBlockCompression()\n                    ? wi::graphics::Format::R11G11B10_FLOAT\n                    : wi::graphics::Format::BC6H_UF16;\n            if (!wi::texturehelper::CreateTexture(\n                    object.lightmap,\n                    object.lightmapTextureData.data(),\n                    object.lightmapWidth,\n                    object.lightmapHeight,\n                    format))\n            {\n                error = \"Could not reconstruct a serialized native Wicked lightmap texture.\";\n                return false;\n            }\n            wi::graphics::GetDevice()->SetName(&object.lightmap, \"lightmap\");\n        }\n        error.clear();\n        return true;\n    }\n\n    LightmapBakeStatus LightmapBakeService::CaptureStatus(\n",
+          )
+
+          replace_once(
+              "EngineBridge/src/SceneDocumentService.cpp",
+              '#include "renegade/bridge/IdentityService.h"\n#include "renegade/bridge/ProjectService.h"\n',
+              '#include "renegade/bridge/IdentityService.h"\n#include "renegade/bridge/LightmapBakeService.h"\n#include "renegade/bridge/ProjectService.h"\n',
+          )
+          replace_once(
+              "EngineBridge/src/SceneDocumentService.cpp",
+              "        // This is the one replacement point. Preparation has already\n        // completed, so the active document remains intact on every failure\n        // path above. Studio invokes this at EVENT_THREAD_SAFE_POINT.\n        scenes_.scene_.Clear();\n",
+              "        // Gate 8: the pinned Wicked serializer restores baked bytes but\n        // does not reconstruct ObjectComponent::lightmap. Hydrate the prepared\n        // candidate here, at Studio's thread-safe adoption point, so a failure\n        // leaves the active document untouched.\n        std::string lightmapError;\n        if (!LightmapBakeService::HydratePersistedLightmaps(\n                *prepared.scene_, lightmapError))\n        {\n            scenes_.lastError_ = \"Could not restore baked lightmaps: \" + lightmapError;\n            return false;\n        }\n\n        // This is the one replacement point. Preparation has already\n        // completed, so the active document remains intact on every failure\n        // path above. Studio invokes this at EVENT_THREAD_SAFE_POINT.\n        scenes_.scene_.Clear();\n",
+          )
+
+          replace_once(
+              "EngineBridge/src/SceneService.cpp",
+              '#include "renegade/bridge/SceneDocumentService.h"\n#include "renegade/bridge/TerrainService.h"\n',
+              '#include "renegade/bridge/SceneDocumentService.h"\n#include "renegade/bridge/LightmapBakeService.h"\n#include "renegade/bridge/TerrainService.h"\n',
+          )
+          replace_once(
+              "EngineBridge/src/SceneService.cpp",
+              "        scene_.Clear();\n        scene_.Merge(*prepared.scene_);\n",
+              "        std::string lightmapError;\n        if (!LightmapBakeService::HydratePersistedLightmaps(\n                *prepared.scene_, lightmapError))\n        {\n            lastError_ = \"Could not restore baked lightmaps: \" + lightmapError;\n            return false;\n        }\n\n        scene_.Clear();\n        scene_.Merge(*prepared.scene_);\n",
+          )
+
+          replace_once(
+              "Studio/src/Phase5Gate8LightmapBaking.cpp",
+              "        const wi::ecs::Entity selected = session_->Selection().SelectedEntity();\n        if (selected != wi::ecs::INVALID_ENTITY)\n            targets.push_back(selected);\n        return targets;\n",
+              "        const wi::ecs::Entity selected = session_->Selection().SelectedEntity();\n        if (selected == wi::ecs::INVALID_ENTITY)\n            return targets;\n\n        // Creator selection commonly resolves to an imported/reusable model root\n        // while the Wicked ObjectComponents live on render descendants. Treat\n        // the selected branch as one bake target set without changing the global\n        // single-selection model.\n        const auto& scene = session_->Scenes().GetScene();\n        for (std::size_t index = 0; index < scene.objects.GetCount(); ++index)\n        {\n            const wi::ecs::Entity entity = scene.objects.GetEntity(index);\n            if (entity == selected || scene.Entity_IsDescendant(entity, selected))\n                targets.push_back(entity);\n        }\n        return targets;\n",
+          )
+
+          replace_once(
+              "Tests/Phase5Gate8SourceContract.cmake",
+              'require_text("${gate8_service}" "RecordExecuted" "completed bake/AO changes are not recorded in CommandService")\n',
+              'require_text("${gate8_service}" "RecordExecuted" "completed bake/AO changes are not recorded in CommandService")\nrequire_text("${gate8_service}" "HydratePersistedLightmaps" "serialized native lightmaps are not rehydrated")\n',
+          )
+          replace_once(
+              "Tests/Phase5Gate8SourceContract.cmake",
+              'require_text("${studio_source}" "TickGate8BakeControls();" "progress/status is not updated from the Studio frame loop")\n',
+              'require_text("${studio_source}" "TickGate8BakeControls();" "progress/status is not updated from the Studio frame loop")\nrequire_text("${gate8_studio}" "Entity_IsDescendant(entity, selected)" "selected model roots do not expand to render descendants")\n',
+          )
+          replace_once(
+              "Tests/Phase5Gate8SourceContract.cmake",
+              'read_required("Studio/src/StudioApplication.cpp" studio_source)\n',
+              'read_required("Studio/src/StudioApplication.cpp" studio_source)\nread_required("EngineBridge/src/SceneDocumentService.cpp" scene_document)\nread_required("EngineBridge/src/SceneService.cpp" scene_service)\n',
+          )
+          replace_once(
+              "Tests/Phase5Gate8SourceContract.cmake",
+              'require_text("${root_cmake}" "include(Tests/Phase5Gate8.cmake)" "Gate 8 tests are not included")\n',
+              'require_text("${root_cmake}" "include(Tests/Phase5Gate8.cmake)" "Gate 8 tests are not included")\nrequire_text("${scene_document}" "HydratePersistedLightmaps" "Studio prepared-scene adoption does not hydrate baked lightmaps")\nrequire_text("${scene_service}" "HydratePersistedLightmaps" "Runtime SceneService load does not hydrate baked lightmaps")\n',
+          )
+          PY
+
+          git diff --check
+
+      - name: Commit clean Gate 8 hardening
+        shell: bash
+        run: |
+          git config user.name "mav3r1ckmediastudio-glitch"
+          git config user.email "mav3r1ckmediastudio@gmail.com"
+          git add EngineBridge Studio Tests docs CMakeLists.txt
+          git rm .github/workflows/phase5-gate8-harden.yml
+          git diff --cached --check
+          git commit -m "Phase 5 Gate 8: harden scene and runtime bake parity"
+          git push origin HEAD:phase5/scene-render-gate8-lightmap-baking
