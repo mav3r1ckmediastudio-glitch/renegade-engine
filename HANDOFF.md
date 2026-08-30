@@ -1,17 +1,58 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-27
+**Date:** 2026-08-30
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
 **Authoritative main:**
-`1e0470a9e530dd20c42ddf16662c3771aaede825`
-(`Scene UI Gate 5: recover Environment and Terrain (#105)`).
+`0b3a162b88a951097413b029d262487d892d7a6a`
+(`Phase 5 Gate 5: post-processing and image quality (#113)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Active work — Scene UI Gate 6 consolidated acceptance
+## Active work — Phase 5 Gate 6 AO / GI / Reflections
+
+Branch: `phase5/scene-render-gate6-ao-gi-reflections`.
+
+Gate 5 is owner-accepted and merged. The exact accepted Gate 5 product tree is
+on `main`; LUTs and the complete post-processing workspace were exercised in a
+real Release build, including DOF and motion blur under their required camera /
+motion conditions. HDR output calibration is correctly inert on SDR and its
+wording is deferred to the later global UI polish pass.
+
+Gate 6 extends the same `RenderSettingsState`, hidden WISCENE Metadata carrier,
+`SetRenderSettingsCommand`, `ApplyRenderSettingsToPath()` seam and RENDER
+workspace. There is no second render-state model and no stock Wicked Editor UI.
+
+Current implementation commit:
+`4c77f3a9e97edb35c5570365bde7e1f0c92fa388`.
+
+Implemented Gate 6 boundary:
+
+- AO: OFF / SSAO / HBAO / MSAO, power, SSAO range and sample count;
+- screen-space GI: SSGI, depth rejection and GI Boost;
+- reflections: SSR toggle/quality/roughness cutoff plus planar reflection
+  toggle/resolution scale/MSAA;
+- render settings schema v2 with lossless schema-v1 Gate 5 migration;
+- Studio/Runtime shared application, command history and deterministic defaults;
+- focused Gate 6 backend regression and source contract; and
+- RTAO/ray-traced reflections/ray-traced diffuse/path tracing explicitly kept
+  out of Gate 6 for Gate 7.
+
+The guarded implementation passed `git diff --check`, the retained Gate 5
+source contract and the new Gate 6 source contract before the temporary staging
+workflows self-cleaned. The production branch history was then reparented to
+remove those staging workflows completely.
+
+Next required evidence is one real PR cycle: Studio Debug/Release and Windows
+baseline Debug/Release on the complete Gate 6 candidate, followed by one owner
+Release build. Green compilation alone does not accept Gate 6. Do not merge
+until the owner verifies AO/GI/reflection behaviour and Gate 5 regression parity.
+
+Contract: `docs/PHASE5_GATE6_AO_GI_REFLECTIONS.md`.
+
+## Historical work — Scene UI Gate 6 consolidated acceptance
 
 Branch: `recovery/scene-ui-gate6-consolidated-acceptance`.
 

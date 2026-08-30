@@ -7,21 +7,14 @@ foundation; Renegade owns its Studio editor, project and asset workflows,
 runtime/player, build lifecycle, UX, documentation and higher-level gameplay
 framework.
 
-> **Status:** Phase 4 — Project and asset pipeline. Renegade Studio and the
-> standalone Runtime are separate applications. Project/scene persistence,
-> Undo/Redo, environment, terrain, native lights, GLB/GLTF import and placement,
-> Runtime Screens/Story Flow, unsaved Test Level launch, deterministic dependency
-> extraction, stable asset identity/source provenance and safe standalone Windows
-> builds are all established foundations. LP06 is accepted and merged: Studio's
-> **BUILD > BUILD WINDOWS GAME...** action can produce a named Release executable,
-> smoke-test the staged package on DX12, validate its exact contents and safely
-> promote it without destroying the previous successful build. The project owner
-> then launched the promoted executable directly from Explorer and confirmed the
-> Runtime screen and Story Flow entered Level One successfully. Scene UI Gate 6
-> acceptance has since exposed save-order and bundled-Terrain regressions in that
-> owner-facing build path; recovery is active and Gate 6 must not merge until its
-> packaged Release retest passes. Renegade is still a development project, not a
-> distribution-ready v1 game engine.
+> **Status:** Phase 5 — Scene/rendering exposure. Gates 1–5 are accepted and
+> merged. Gate 5 added the persistent Renegade-owned **RENDER** workspace with
+> native Wicked tonemapping, image controls, LUTs, bloom/eye adaptation, AA and
+> camera-image post FX; the project owner completed the packaged Release audit.
+> Gate 6 is active on `phase5/scene-render-gate6-ao-gi-reflections` and extends
+> that same scene-owned render-settings seam with non-ray-traced AO, SSGI/GI
+> controls, SSR and planar-reflection quality. Ray/path tracing remains Gate 7.
+> Renegade is still a development project, not a distribution-ready v1 engine.
 
 Scene UI Gate 5 is also accepted and merged. The recovered Scene Editor now has
 independent Environment and Terrain ownership, complete realistic-sky/Sun
@@ -31,8 +24,8 @@ and Runtime weather/terrain resources.
 
 ## Current baseline
 
-- Current main baseline: `1e0470a9e530dd20c42ddf16662c3771aaede825`
-  (Scene UI Gate 5 Environment and Terrain recovery, PR #105)
+- Current main baseline: `0b3a162b88a951097413b029d262487d892d7a6a`
+  (Phase 5 Gate 5 post-processing and image quality, PR #113)
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
 - Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
