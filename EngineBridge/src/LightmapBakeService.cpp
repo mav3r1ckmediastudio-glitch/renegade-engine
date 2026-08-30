@@ -500,8 +500,10 @@ namespace renegade::bridge
             const std::vector<Entity>& targets,
             const LightmapBakeSettings& settings,
             std::unordered_map<Entity, AtlasDimensions>& dimensions,
+            bool& changed,
             std::string& error)
         {
+            changed = false;
             std::unordered_set<Entity> prepared;
             for (const Entity entity : targets)
             {
@@ -527,10 +529,12 @@ namespace renegade::bridge
                 {
                 case LightmapUvSource::CopyUv0:
                     mesh->vertex_atlas = mesh->vertex_uvset_0;
+                    changed = true;
                     mesh->CreateRenderData();
                     break;
                 case LightmapUvSource::CopyUv1:
                     mesh->vertex_atlas = mesh->vertex_uvset_1;
+                    changed = true;
                     mesh->CreateRenderData();
                     break;
                 case LightmapUvSource::KeepAtlas:
@@ -538,6 +542,7 @@ namespace renegade::bridge
                 case LightmapUvSource::GenerateAtlas:
                     if (!GenerateAtlas(*mesh, settings.resolution, dim, error))
                         return false;
+                    changed = true;
                     break;
                 }
                 dimensions.emplace(object->meshID, dim);
@@ -885,9 +890,16 @@ namespace renegade::bridge
 
         const BakeSnapshot before = CaptureSnapshot(scene, targets, true);
         std::unordered_map<Entity, AtlasDimensions> dimensions;
-        if (!PrepareMeshes(scene, targets, settings, dimensions, error))
+        bool meshPreparationChanged = false;
+        if (!PrepareMeshes(
+                scene, targets, settings, dimensions, meshPreparationChanged, error))
         {
-            (void)ApplySnapshot(scene, before);
+            // Validation can fail before any native mesh state is touched. In that
+            // case there is nothing to roll back, and avoiding ApplySnapshot also
+            // keeps the fail-closed validation path renderer/GPU independent. If a
+            // prior mesh was already prepared, restore the full captured state.
+            if (meshPreparationChanged)
+                (void)ApplySnapshot(scene, before);
             return false;
         }
 

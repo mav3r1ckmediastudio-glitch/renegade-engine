@@ -97,6 +97,8 @@ int main()
         "failed UV validation left an active bake session");
     ok &= Check(!fixture.scene.objects.GetComponent(fixture.object)->IsLightmapRenderRequested(),
         "failed UV validation left a native lightmap render request active");
+    ok &= Check(fixture.scene.meshes.GetComponent(fixture.mesh)->vertex_atlas.empty(),
+        "failed UV validation mutated the native lightmap atlas");
 
     fixture.scene.meshes.GetComponent(fixture.mesh)->vertex_uvset_0.clear();
     settings.uvSource = LightmapUvSource::KeepAtlas;
