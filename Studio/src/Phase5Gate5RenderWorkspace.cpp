@@ -1,6 +1,7 @@
 #include "StudioApplication.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace
@@ -253,6 +254,104 @@ namespace renegade::studio
             renderDitherEnabled_, "Dither: ",
             "Enable Wicked's subtle final-image dithering for banding reduction.", RenderToggle::Dither);
 
+        createSection(
+            renderAmbientOcclusionLabel_,
+            "Render Ambient Occlusion Section",
+            "AMBIENT OCCLUSION // NATIVE WICKED");
+        renderAmbientOcclusion_.Create("Render Ambient Occlusion");
+        renderAmbientOcclusion_.AddItem("OFF", static_cast<std::uint64_t>(bridge::RenderAmbientOcclusion::Off));
+        renderAmbientOcclusion_.AddItem("SSAO", static_cast<std::uint64_t>(bridge::RenderAmbientOcclusion::SSAO));
+        renderAmbientOcclusion_.AddItem("HBAO", static_cast<std::uint64_t>(bridge::RenderAmbientOcclusion::HBAO));
+        renderAmbientOcclusion_.AddItem("MSAO", static_cast<std::uint64_t>(bridge::RenderAmbientOcclusion::MSAO));
+        renderAmbientOcclusion_.SetTooltip(
+            "Choose Wicked ambient occlusion. Ray-traced AO is reserved for Gate 7.");
+        renderAmbientOcclusion_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            auto state = bridge::CaptureRenderSettings(session_->Scenes().GetScene());
+            state.ambientOcclusion = static_cast<bridge::RenderAmbientOcclusion>(args.userdata);
+            CommitRenderSettings(state);
+        });
+        renderWorkspacePanel_.AddWidget(&renderAmbientOcclusion_);
+        createSlider(
+            renderAmbientOcclusionPower_, "Render AO Power", "AO // POWER",
+            "AO darkness/power. Higher values produce a more pronounced result.",
+            RenderField::AmbientOcclusionPower, 0.25f, 8.0f, 1000.0f);
+        createSlider(
+            renderAmbientOcclusionRange_, "Render AO Range", "AO // RANGE",
+            "SSAO ray length. This control is only active for SSAO.",
+            RenderField::AmbientOcclusionRange, 1.0f, 100.0f, 1000.0f);
+        createSlider(
+            renderAmbientOcclusionSampleCount_, "Render AO Samples", "AO // SAMPLES",
+            "SSAO ray sample count. This control is only active for SSAO.",
+            RenderField::AmbientOcclusionSampleCount, 1.0f, 16.0f, 15.0f);
+
+        createSection(
+            renderGlobalIlluminationLabel_,
+            "Render Global Illumination Section",
+            "GLOBAL ILLUMINATION // SCREEN SPACE");
+        createToggle(
+            renderSsgiEnabled_, "SSGI: ",
+            "Enable Wicked screen-space global illumination.", RenderToggle::Ssgi);
+        createSlider(
+            renderSsgiDepthRejection_, "Render SSGI Depth Rejection",
+            "SSGI // DEPTH REJECTION",
+            "Depth rejection distance used by Wicked SSGI.",
+            RenderField::SsgiDepthRejection, 0.1f, 100.0f, 1000.0f);
+        createSlider(
+            renderGiBoost_, "Render GI Boost", "GI // BOOST",
+            "Global indirect-light multiplier. Values other than 1 diverge from path-traced reference.",
+            RenderField::GiBoost, 1.0f, 10.0f, 1000.0f);
+
+        createSection(
+            renderReflectionsLabel_,
+            "Render Reflections Section",
+            "REFLECTIONS // SCREEN + PLANAR");
+        createToggle(
+            renderPlanarReflectionsEnabled_, "Planar reflections: ",
+            "Enable Wicked planar reflections for compatible materials.",
+            RenderToggle::PlanarReflections);
+        createSlider(
+            renderPlanarReflectionResolutionScale_,
+            "Render Planar Reflection Resolution",
+            "PLANAR // RESOLUTION SCALE",
+            "Resolution scale used by Wicked planar reflection rendering.",
+            RenderField::PlanarReflectionResolutionScale, 0.25f, 2.0f, 700.0f);
+        renderPlanarReflectionMsaa_.Create("Render Planar Reflection MSAA");
+        renderPlanarReflectionMsaa_.AddItem("1X", 1);
+        renderPlanarReflectionMsaa_.AddItem("2X", 2);
+        renderPlanarReflectionMsaa_.AddItem("4X", 4);
+        renderPlanarReflectionMsaa_.AddItem("8X", 8);
+        renderPlanarReflectionMsaa_.SetTooltip(
+            "MSAA used only by planar reflections; independent of the main scene AA mode.");
+        renderPlanarReflectionMsaa_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            auto state = bridge::CaptureRenderSettings(session_->Scenes().GetScene());
+            state.planarReflectionMsaaSampleCount = static_cast<std::uint32_t>(args.userdata);
+            CommitRenderSettings(state);
+        });
+        renderWorkspacePanel_.AddWidget(&renderPlanarReflectionMsaa_);
+        createToggle(
+            renderSsrEnabled_, "Screen-space reflections: ",
+            "Enable Wicked SSR. Off-screen geometry cannot be reflected.",
+            RenderToggle::Ssr);
+        renderSsrQuality_.Create("Render SSR Quality");
+        renderSsrQuality_.AddItem("LOW", static_cast<std::uint64_t>(bridge::RenderQuality::Low));
+        renderSsrQuality_.AddItem("MEDIUM", static_cast<std::uint64_t>(bridge::RenderQuality::Medium));
+        renderSsrQuality_.AddItem("HIGH", static_cast<std::uint64_t>(bridge::RenderQuality::High));
+        renderSsrQuality_.SetTooltip("Native Wicked SSR render quality.");
+        renderSsrQuality_.OnSelect([this](const wi::gui::EventArgs& args)
+        {
+            auto state = bridge::CaptureRenderSettings(session_->Scenes().GetScene());
+            state.ssrQuality = static_cast<bridge::RenderQuality>(args.userdata);
+            CommitRenderSettings(state);
+        });
+        renderWorkspacePanel_.AddWidget(&renderSsrQuality_);
+        createSlider(
+            renderReflectionRoughnessCutoff_, "Render Reflection Roughness Cutoff",
+            "REFLECTIONS // ROUGHNESS CUTOFF",
+            "Maximum material roughness that receives screen-space reflections.",
+            RenderField::ReflectionRoughnessCutoff, 0.0f, 1.0f, 1000.0f);
+
         // Wicked Window::AddWidget() copies Window::IsEnabled() into each child,
         // and IsEnabled() includes the Window's visibility. Hiding this Window
         // before attaching its controls permanently disabled those controls even
@@ -339,6 +438,25 @@ namespace renegade::studio
         full(renderChromaticAberrationEnabled_);
         full(renderChromaticAberrationAmount_);
         full(renderDitherEnabled_);
+
+        section(renderAmbientOcclusionLabel_);
+        full(renderAmbientOcclusion_);
+        full(renderAmbientOcclusionPower_);
+        full(renderAmbientOcclusionRange_);
+        full(renderAmbientOcclusionSampleCount_);
+
+        section(renderGlobalIlluminationLabel_);
+        full(renderSsgiEnabled_);
+        full(renderSsgiDepthRejection_);
+        full(renderGiBoost_);
+
+        section(renderReflectionsLabel_);
+        full(renderPlanarReflectionsEnabled_);
+        full(renderPlanarReflectionResolutionScale_);
+        full(renderPlanarReflectionMsaa_);
+        full(renderSsrEnabled_);
+        full(renderSsrQuality_);
+        full(renderReflectionRoughnessCutoff_);
     }
 
     void StudioRenderPath::RefreshRenderWorkspace()
@@ -372,6 +490,24 @@ namespace renegade::studio
         renderChromaticAberrationEnabled_.SetCheck(state.chromaticAberrationEnabled);
         renderChromaticAberrationAmount_.SetValue(state.chromaticAberrationAmount);
         renderDitherEnabled_.SetCheck(state.ditherEnabled);
+        renderAmbientOcclusion_.SetSelectedByUserdataWithoutCallback(
+            static_cast<std::uint64_t>(state.ambientOcclusion));
+        renderAmbientOcclusionPower_.SetValue(state.ambientOcclusionPower);
+        renderAmbientOcclusionRange_.SetValue(state.ambientOcclusionRange);
+        renderAmbientOcclusionSampleCount_.SetValue(
+            static_cast<float>(state.ambientOcclusionSampleCount));
+        renderSsgiEnabled_.SetCheck(state.ssgiEnabled);
+        renderSsgiDepthRejection_.SetValue(state.ssgiDepthRejection);
+        renderGiBoost_.SetValue(state.giBoost);
+        renderPlanarReflectionsEnabled_.SetCheck(state.planarReflectionsEnabled);
+        renderPlanarReflectionResolutionScale_.SetValue(
+            state.planarReflectionResolutionScale);
+        renderPlanarReflectionMsaa_.SetSelectedByUserdataWithoutCallback(
+            static_cast<std::uint64_t>(state.planarReflectionMsaaSampleCount));
+        renderSsrEnabled_.SetCheck(state.ssrEnabled);
+        renderSsrQuality_.SetSelectedByUserdataWithoutCallback(
+            static_cast<std::uint64_t>(state.ssrQuality));
+        renderReflectionRoughnessCutoff_.SetValue(state.reflectionRoughnessCutoff);
 
         renderBloomThreshold_.SetEnabled(state.bloomEnabled);
         renderEyeAdaptationKey_.SetEnabled(state.eyeAdaptationEnabled);
@@ -381,6 +517,18 @@ namespace renegade::studio
         renderSharpenAmount_.SetEnabled(state.sharpenEnabled);
         renderChromaticAberrationAmount_.SetEnabled(
             state.chromaticAberrationEnabled);
+        const bool ssao =
+            state.ambientOcclusion == bridge::RenderAmbientOcclusion::SSAO;
+        renderAmbientOcclusionPower_.SetEnabled(
+            state.ambientOcclusion != bridge::RenderAmbientOcclusion::Off);
+        renderAmbientOcclusionRange_.SetEnabled(ssao);
+        renderAmbientOcclusionSampleCount_.SetEnabled(ssao);
+        renderSsgiDepthRejection_.SetEnabled(state.ssgiEnabled);
+        renderPlanarReflectionResolutionScale_.SetEnabled(
+            state.planarReflectionsEnabled);
+        renderPlanarReflectionMsaa_.SetEnabled(state.planarReflectionsEnabled);
+        renderSsrQuality_.SetEnabled(state.ssrEnabled);
+        renderReflectionRoughnessCutoff_.SetEnabled(state.ssrEnabled);
     }
 
     void StudioRenderPath::RefreshRenderLutLibrary()
@@ -681,6 +829,15 @@ namespace renegade::studio
         case RenderToggle::Dither:
             state.ditherEnabled = value;
             break;
+        case RenderToggle::Ssgi:
+            state.ssgiEnabled = value;
+            break;
+        case RenderToggle::PlanarReflections:
+            state.planarReflectionsEnabled = value;
+            break;
+        case RenderToggle::Ssr:
+            state.ssrEnabled = value;
+            break;
         }
         CommitRenderSettings(state);
     }
@@ -751,6 +908,29 @@ namespace renegade::studio
             break;
         case RenderField::ChromaticAberrationAmount:
             setChromaticAberrationAmount(renderSliderAfter_.chromaticAberrationAmount);
+            break;
+        case RenderField::AmbientOcclusionPower:
+            setAOPower(renderSliderAfter_.ambientOcclusionPower);
+            break;
+        case RenderField::AmbientOcclusionRange:
+            setAORange(renderSliderAfter_.ambientOcclusionRange);
+            break;
+        case RenderField::AmbientOcclusionSampleCount:
+            setAOSampleCount(renderSliderAfter_.ambientOcclusionSampleCount);
+            break;
+        case RenderField::SsgiDepthRejection:
+            setSSGIDepthRejection(renderSliderAfter_.ssgiDepthRejection);
+            break;
+        case RenderField::GiBoost:
+            wi::renderer::SetGIBoost(renderSliderAfter_.giBoost);
+            break;
+        case RenderField::PlanarReflectionResolutionScale:
+            setPlanarReflectionQuality(
+                renderSliderAfter_.planarReflectionResolutionScale,
+                renderSliderAfter_.planarReflectionMsaaSampleCount);
+            break;
+        case RenderField::ReflectionRoughnessCutoff:
+            setReflectionRoughnessCutoff(renderSliderAfter_.reflectionRoughnessCutoff);
             break;
         }
     }
@@ -831,6 +1011,28 @@ namespace renegade::studio
             break;
         case RenderField::ChromaticAberrationAmount:
             state.chromaticAberrationAmount = value;
+            break;
+        case RenderField::AmbientOcclusionPower:
+            state.ambientOcclusionPower = value;
+            break;
+        case RenderField::AmbientOcclusionRange:
+            state.ambientOcclusionRange = value;
+            break;
+        case RenderField::AmbientOcclusionSampleCount:
+            state.ambientOcclusionSampleCount = static_cast<std::uint32_t>(
+                std::lround(value));
+            break;
+        case RenderField::SsgiDepthRejection:
+            state.ssgiDepthRejection = value;
+            break;
+        case RenderField::GiBoost:
+            state.giBoost = value;
+            break;
+        case RenderField::PlanarReflectionResolutionScale:
+            state.planarReflectionResolutionScale = value;
+            break;
+        case RenderField::ReflectionRoughnessCutoff:
+            state.reflectionRoughnessCutoff = value;
             break;
         }
     }

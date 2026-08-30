@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 
 #include <WickedEngine.h>
@@ -8,7 +9,7 @@
 
 namespace renegade::bridge
 {
-    inline constexpr int RenderSettingsSchemaVersion = 1;
+    inline constexpr int RenderSettingsSchemaVersion = 2;
     inline constexpr const char* RenderSettingsCarrierName =
         "__renegade_internal_render_settings";
 
@@ -27,6 +28,21 @@ namespace renegade::bridge
         MSAA2X = 3,
         MSAA4X = 4,
         MSAA8X = 5,
+    };
+
+    enum class RenderAmbientOcclusion
+    {
+        Off = 0,
+        SSAO = 1,
+        HBAO = 2,
+        MSAO = 3,
+    };
+
+    enum class RenderQuality
+    {
+        Low = 0,
+        Medium = 1,
+        High = 2,
     };
 
     struct RenderSettingsState
@@ -48,6 +64,22 @@ namespace renegade::bridge
         float eyeAdaptationRate = 1.0f;
 
         AntiAliasingMode antiAliasing = AntiAliasingMode::Off;
+
+        RenderAmbientOcclusion ambientOcclusion = RenderAmbientOcclusion::Off;
+        float ambientOcclusionPower = 1.0f;
+        float ambientOcclusionRange = 1.0f;
+        std::uint32_t ambientOcclusionSampleCount = 16;
+
+        bool ssgiEnabled = false;
+        float ssgiDepthRejection = 8.0f;
+        float giBoost = 1.0f;
+
+        bool planarReflectionsEnabled = true;
+        float planarReflectionResolutionScale = 0.25f;
+        std::uint32_t planarReflectionMsaaSampleCount = 4;
+        bool ssrEnabled = false;
+        RenderQuality ssrQuality = RenderQuality::Medium;
+        float reflectionRoughnessCutoff = 0.6f;
 
         bool depthOfFieldEnabled = true;
         float depthOfFieldStrength = 10.0f;

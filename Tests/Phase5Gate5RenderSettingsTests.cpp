@@ -111,6 +111,11 @@ int main()
     // the same authored object/contract but temporarily disable only that
     // resource-owning toggle while verifying the live native RenderPath.
     authored.eyeAdaptationEnabled = false;
+    const bool planarReflectionsBeforeHeadless = authored.planarReflectionsEnabled;
+    authored.ambientOcclusion = RenderAmbientOcclusion::Off;
+    authored.ssgiEnabled = false;
+    authored.ssrEnabled = false;
+    authored.planarReflectionsEnabled = false;
 
     wi::RenderPath3D nativePath;
     ApplyRenderSettingsToPath(nativePath, authored, false);
@@ -138,6 +143,7 @@ int main()
     // WISCENE and Undo/Redo coverage. Real Studio owner testing exercises the
     // enabled GPU path.
     authored.eyeAdaptationEnabled = true;
+    authored.planarReflectionsEnabled = planarReflectionsBeforeHeadless;
 
     if (!WriteRenderSettings(scenes.GetScene(), authored))
         return Fail("could not persist authored Gate 5 render settings");
