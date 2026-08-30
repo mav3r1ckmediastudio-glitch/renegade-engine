@@ -1,0 +1,76 @@
+name: Gate 5 Render input root fix
+
+on:
+  push:
+    branches:
+      - staging/phase5-gate5-render-input-rootfix
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Guard exact Gate 5 head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "84ff2a7983d5e5e882ee061fd345f7eec3b4ab10"
+          test "$(git diff --name-only HEAD^...HEAD)" = ".github/workflows/gate5-render-input-rootfix.yml"
+
+      - name: Repair Render child enabled-state inheritance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path('Studio/src/Phase5Gate5RenderWorkspace.cpp')
+          text = source.read_text(encoding='utf-8')
+
+          old = '''        renderWorkspacePanel_.scrollbar_vertical.SetVisible(true);\n        renderWorkspacePanel_.SetVisible(false);\n        GetGUI().AddWidget(&renderWorkspacePanel_);'''
+          new = '''        renderWorkspacePanel_.scrollbar_vertical.SetVisible(true);\n        GetGUI().AddWidget(&renderWorkspacePanel_);'''
+          if text.count(old) != 1:
+              raise SystemExit('Render workspace early-hide anchor changed')
+          text = text.replace(old, new, 1)
+
+          old = '''        createToggle(\n            renderDitherEnabled_, "Dither: ",\n            "Enable Wicked's subtle final-image dithering for banding reduction.", RenderToggle::Dither);\n\n        RefreshRenderWorkspace();'''
+          new = '''        createToggle(\n            renderDitherEnabled_, "Dither: ",\n            "Enable Wicked's subtle final-image dithering for banding reduction.", RenderToggle::Dither);\n\n        // Wicked Window::AddWidget() copies Window::IsEnabled() into each child,\n        // and IsEnabled() includes the Window's visibility. Hiding this Window\n        // before attaching its controls permanently disabled those controls even\n        // after the Window became visible again. Attach everything first, then\n        // hide the completed workspace. Reassert enabled state defensively before\n        // the initial scene refresh applies intentional dependent-control disables.\n        renderWorkspacePanel_.SetEnabled(true);\n        renderWorkspacePanel_.SetVisible(false);\n\n        RefreshRenderWorkspace();'''
+          if text.count(old) != 1:
+              raise SystemExit('Render workspace final-control anchor changed')
+          text = text.replace(old, new, 1)
+          source.write_text(text, encoding='utf-8', newline='\n')
+
+          contract = Path('Tests/Phase5Gate5SourceContract.cmake')
+          ctext = contract.read_text(encoding='utf-8')
+          marker = 'message(STATUS "Phase 5 Gate 5 source contract passed")'
+          if ctext.count(marker) != 1:
+              raise SystemExit('Gate 5 source-contract final marker changed')
+          checks = '''\n# Wicked Window::AddWidget() copies parent IsEnabled(), which includes visibility.\n# The RENDER window must therefore remain visible while all children are attached,\n# then be enabled and hidden only after the final control has been created.\nstring(FIND "${studio_render_text}"\n    "renderWorkspacePanel_.scrollbar_vertical.SetVisible(true);\\n        renderWorkspacePanel_.SetVisible(false);\\n        GetGUI().AddWidget(&renderWorkspacePanel_);"\n    render_early_hide)\nif(NOT render_early_hide EQUAL -1)\n    message(FATAL_ERROR "Gate 5 Render controls are again attached to a hidden/disabled Window")\nendif()\nstring(FIND "${studio_render_text}"\n    "GetGUI().AddWidget(&renderWorkspacePanel_);" render_parent_add)\nstring(FIND "${studio_render_text}"\n    "RenderToggle::Dither);" render_last_control)\nstring(FIND "${studio_render_text}"\n    "renderWorkspacePanel_.SetEnabled(true);" render_enable_after_children)\nstring(FIND "${studio_render_text}"\n    "renderWorkspacePanel_.SetVisible(false);" render_hide_after_children)\nif(render_parent_add EQUAL -1 OR render_last_control EQUAL -1 OR\n   render_enable_after_children EQUAL -1 OR render_hide_after_children EQUAL -1)\n    message(FATAL_ERROR "Gate 5 Render enabled-state construction contract is incomplete")\nendif()\nif(render_enable_after_children LESS render_last_control OR\n   render_hide_after_children LESS render_last_control OR\n   render_hide_after_children LESS render_enable_after_children)\n    message(FATAL_ERROR "Gate 5 Render Window is hidden/disabled before child attachment completes")\nendif()\n\n'''
+          contract.write_text(ctext.replace(marker, checks + marker, 1), encoding='utf-8', newline='\n')
+          PY
+
+          git diff --check
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate5SourceContract.cmake
+          test "$(git diff --name-only | wc -l)" -eq 2
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' 'Studio/src/Phase5Gate5RenderWorkspace.cpp' 'Tests/Phase5Gate5SourceContract.cmake' | sort)"
+
+      - name: Self-clean and publish product repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/gate5-render-input-rootfix.yml
+          git add \
+            Studio/src/Phase5Gate5RenderWorkspace.cpp \
+            Tests/Phase5Gate5SourceContract.cmake \
+            .github/workflows/gate5-render-input-rootfix.yml
+          git diff --cached --check
+          git config user.name "mav3r1ckmediastudio-glitch"
+          git config user.email "mav3r1ckmediastudio@gmail.com"
+          git commit -m "Phase 5 Gate 5: restore Render control input"
+          git push origin HEAD:staging/phase5-gate5-render-input-rootfix
