@@ -49,7 +49,10 @@ require_text(service_header "planarReflectionResolutionScale" "planar reflection
 require_text(service_header "ssrQuality" "SSR quality state")
 require_text(service_header "reflectionRoughnessCutoff" "reflection roughness state")
 
-require_text(service_source "schema != 1" "lossless schema-v1 migration")
+# Gate 6's v1 compatibility is behaviourally locked by its regression test.
+# Later gates may generalize the schema-validity predicate, so don't pin its
+# exact spelling here.
+require_text(service_source "if (schema >= 2)" "Gate 6 schema-v2 field migration seam")
 require_text(service_source "path.setAO(" "native AO application")
 require_text(service_source "path.setAOPower(" "native AO power application")
 require_text(service_source "path.setAORange(" "native AO range application")
