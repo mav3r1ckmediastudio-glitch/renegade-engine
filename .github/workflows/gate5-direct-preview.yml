@@ -1,0 +1,78 @@
+name: Gate 5 direct preview repair
+
+on:
+  push:
+    branches:
+      - staging/phase5-gate5-direct-preview
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Guard exact Gate 5 head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "c9a974c60922b749c16e4bf304428d66eb9c33ef"
+
+      - name: Wire slider previews directly to Wicked
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one anchor, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          replace_once(
+              'EngineBridge/src/RenderSettingsService.cpp',
+              '''        path.setColorGradingEnabled(safe.colorGradingEnabled);\n        path.setBloomEnabled(safe.bloomEnabled);\n        path.setBloomThreshold(safe.bloomThreshold);\n        path.setEyeAdaptionEnabled(safe.eyeAdaptationEnabled);\n        path.setEyeAdaptionKey(safe.eyeAdaptationKey);''',
+              '''        path.setColorGradingEnabled(safe.colorGradingEnabled);\n        if (path.getBloomEnabled() != safe.bloomEnabled)\n            path.setBloomEnabled(safe.bloomEnabled);\n        path.setBloomThreshold(safe.bloomThreshold);\n        if (path.getEyeAdaptionEnabled() != safe.eyeAdaptationEnabled)\n            path.setEyeAdaptionEnabled(safe.eyeAdaptationEnabled);\n        path.setEyeAdaptionKey(safe.eyeAdaptationKey);''',
+              'resource-owning toggle idempotence')
+
+          replace_once(
+              'Studio/src/Phase5Gate5RenderWorkspace.cpp',
+              '''        renderSliderAfter_ = renderSliderBefore_;\n        SetRenderFieldValue(renderSliderAfter_, field, value);\n        renderSliderAfter_ = bridge::SanitizeRenderSettings(renderSliderAfter_);\n        ApplyRenderSettingsState(renderSliderAfter_, true);''',
+              '''        renderSliderAfter_ = renderSliderBefore_;\n        SetRenderFieldValue(renderSliderAfter_, field, value);\n        renderSliderAfter_ = bridge::SanitizeRenderSettings(renderSliderAfter_);\n\n        // Live slider preview mirrors Wicked's own GraphicsWindow: change only\n        // the exact native RenderPath field being dragged. Do not replay every\n        // render setting (and resource-owning toggle) on each mouse movement.\n        switch (field)\n        {\n        case RenderField::Exposure:\n            setExposure(renderSliderAfter_.exposure);\n            break;\n        case RenderField::Brightness:\n            setBrightness(renderSliderAfter_.brightness);\n            break;\n        case RenderField::Contrast:\n            setContrast(renderSliderAfter_.contrast);\n            break;\n        case RenderField::Saturation:\n            setSaturation(renderSliderAfter_.saturation);\n            break;\n        case RenderField::HdrCalibration:\n            setHDRCalibration(renderSliderAfter_.hdrCalibration);\n            break;\n        case RenderField::BloomThreshold:\n            setBloomThreshold(renderSliderAfter_.bloomThreshold);\n            break;\n        case RenderField::EyeAdaptationKey:\n            setEyeAdaptionKey(renderSliderAfter_.eyeAdaptationKey);\n            break;\n        case RenderField::EyeAdaptationRate:\n            setEyeAdaptionRate(renderSliderAfter_.eyeAdaptationRate);\n            break;\n        case RenderField::DepthOfFieldStrength:\n            setDepthOfFieldStrength(renderSliderAfter_.depthOfFieldStrength);\n            break;\n        case RenderField::MotionBlurStrength:\n            setMotionBlurStrength(renderSliderAfter_.motionBlurStrength);\n            break;\n        case RenderField::SharpenAmount:\n            setSharpenFilterAmount(renderSliderAfter_.sharpenAmount);\n            break;\n        case RenderField::ChromaticAberrationAmount:\n            setChromaticAberrationAmount(renderSliderAfter_.chromaticAberrationAmount);\n            break;\n        }''',
+              'direct native slider preview')
+
+          contract = Path('Tests/Phase5Gate5SourceContract.cmake')
+          text = contract.read_text(encoding='utf-8')
+          marker = 'message(STATUS "Phase 5 Gate 5 source contract passed")'
+          if text.count(marker) != 1:
+              raise SystemExit('source contract final marker changed')
+          checks = '''\n# Live creator sliders must directly drive the exact Wicked RenderPath setter.\n# This prevents regression to whole-state replay during mouse preview.\nforeach(token IN ITEMS\n    "setExposure(renderSliderAfter_.exposure)"\n    "setBrightness(renderSliderAfter_.brightness)"\n    "setContrast(renderSliderAfter_.contrast)"\n    "setSaturation(renderSliderAfter_.saturation)"\n    "setHDRCalibration(renderSliderAfter_.hdrCalibration)"\n    "setBloomThreshold(renderSliderAfter_.bloomThreshold)"\n    "setEyeAdaptionKey(renderSliderAfter_.eyeAdaptationKey)"\n    "setEyeAdaptionRate(renderSliderAfter_.eyeAdaptationRate)"\n    "setDepthOfFieldStrength(renderSliderAfter_.depthOfFieldStrength)"\n    "setMotionBlurStrength(renderSliderAfter_.motionBlurStrength)"\n    "setSharpenFilterAmount(renderSliderAfter_.sharpenAmount)"\n    "setChromaticAberrationAmount(renderSliderAfter_.chromaticAberrationAmount)")\n    string(FIND "${studio_render_text}" "${token}" found)\n    if(found EQUAL -1)\n        message(FATAL_ERROR "Gate 5 direct native slider preview missing ${token}")\n    endif()\nendforeach()\n\n'''
+          contract.write_text(text.replace(marker, checks + marker, 1), encoding='utf-8', newline='\n')
+          PY
+          git diff --check
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate5SourceContract.cmake
+          test "$(git diff --name-only | wc -l)" -eq 3
+
+      - name: Self-clean and publish direct-preview product
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/gate5-direct-preview.yml
+          git add \
+            EngineBridge/src/RenderSettingsService.cpp \
+            Studio/src/Phase5Gate5RenderWorkspace.cpp \
+            Tests/Phase5Gate5SourceContract.cmake \
+            .github/workflows/gate5-direct-preview.yml
+          git diff --cached --check
+          git config user.name "mav3r1ckmediastudio-glitch"
+          git config user.email "mav3r1ckmediastudio@gmail.com"
+          git commit -m "Phase 5 Gate 5: drive sliders directly on live RenderPath"
+          git push origin HEAD:staging/phase5-gate5-direct-preview
