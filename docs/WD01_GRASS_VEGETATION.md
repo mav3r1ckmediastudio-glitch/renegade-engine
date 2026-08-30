@@ -36,6 +36,8 @@ The bundled starting preset is the pinned Wicked content:
 
 Renegade packages those files beside Studio and Runtime as read-only built-in content.
 
+The viewport brush uses the existing `StudioRenderPath::camera` member and the same Wicked `GetPickRay`/terrain-pick path already used by Renegade terrain authoring; WD01 does not introduce a second editor camera.
+
 ## Manual-paint contract
 
 When WD01 is first activated for a terrain, Renegade switches that terrain to explicit manual vegetation authoring:
