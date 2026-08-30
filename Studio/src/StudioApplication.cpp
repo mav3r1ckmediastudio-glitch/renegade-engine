@@ -1540,6 +1540,13 @@ namespace renegade::studio
 
     void StudioRenderPath::ResizeBuffers()
     {
+        if (pathTracePreviewActive_)
+        {
+            selectionOutlineMask_ = {};
+            selectionOutlineMaskMsaa_ = {};
+            RenderPath3D_PathTracing::ResizeBuffers();
+            return;
+        }
         RenderPath3D::ResizeBuffers();
 
         const auto* depthStencil = GetDepthStencil();
@@ -1590,6 +1597,11 @@ namespace renegade::studio
 
     void StudioRenderPath::Render() const
     {
+        if (pathTracePreviewActive_)
+        {
+            RenderPath3D_PathTracing::Render();
+            return;
+        }
         RenderPath3D::Render();
 
         const auto* depthStencil = GetDepthStencil();
@@ -4536,7 +4548,8 @@ namespace renegade::studio
 
     void StudioRenderPath::Update(const float dt)
     {
-        SyncRenderSettingsFromScene(true);
+        if (!pathTracePreviewActive_)
+            SyncRenderSettingsFromScene(true);
         if (renderWorkspaceActive_)
         {
             // The Window owns child transforms while it processes scrolling and
@@ -4615,7 +4628,15 @@ namespace renegade::studio
         {
             bridge::RefreshPrecipitationVisual(session_->Scenes().GetScene());
         }
-        RenderPath3D::Update(dt);
+        if (pathTracePreviewActive_)
+        {
+            RenderPath3D_PathTracing::Update(dt);
+            RefreshPathTracePreviewStatus();
+        }
+        else
+        {
+            RenderPath3D::Update(dt);
+        }
 
         if (session_ == nullptr || projectHubVisible_)
         {
@@ -4814,6 +4835,11 @@ namespace renegade::studio
 
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
+        if (pathTracePreviewActive_)
+        {
+            RenderPath3D_PathTracing::Compose(cmd);
+            return;
+        }
         RenderPath3D::Compose(cmd);
 
         auto* device = wi::graphics::GetDevice();

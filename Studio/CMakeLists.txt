@@ -109,6 +109,7 @@ add_executable(RenegadeStudio WIN32
     src/StartupMediaFoundationPlayer.h
     src/Phase5Gate4MaterialInspector.cpp
     src/Phase5Gate5RenderWorkspace.cpp
+    src/Phase5Gate7RayPathTracing.cpp
     src/StudioApplication.cpp
     src/StudioApplication.h
     src/StudioUserPreferences.cpp
