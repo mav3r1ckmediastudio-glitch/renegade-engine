@@ -9,7 +9,7 @@
 
 namespace renegade::bridge
 {
-    inline constexpr int RenderSettingsSchemaVersion = 2;
+    inline constexpr int RenderSettingsSchemaVersion = 3;
     inline constexpr const char* RenderSettingsCarrierName =
         "__renegade_internal_render_settings";
 
@@ -36,6 +36,7 @@ namespace renegade::bridge
         SSAO = 1,
         HBAO = 2,
         MSAO = 3,
+        RTAO = 4,
     };
 
     enum class RenderQuality
@@ -81,6 +82,15 @@ namespace renegade::bridge
         RenderQuality ssrQuality = RenderQuality::Medium;
         float reflectionRoughnessCutoff = 0.6f;
 
+        bool raytracedShadowsEnabled = false;
+        bool raytracedReflectionsEnabled = false;
+        float raytracedReflectionsRange = 10000.0f;
+        RenderQuality raytracedReflectionsQuality = RenderQuality::Medium;
+        bool raytracedDiffuseEnabled = false;
+        float raytracedDiffuseRange = 10.0f;
+        RenderQuality raytracedDiffuseQuality = RenderQuality::Medium;
+        bool surfelGiEnabled = false;
+
         bool depthOfFieldEnabled = true;
         float depthOfFieldStrength = 10.0f;
         bool motionBlurEnabled = false;
@@ -101,6 +111,7 @@ namespace renegade::bridge
     [[nodiscard]] bool HasRenderSettingsChange(
         const RenderSettingsState& before,
         const RenderSettingsState& after) noexcept;
+    [[nodiscard]] bool IsHardwareRayTracingAvailable() noexcept;
 
     [[nodiscard]] wi::ecs::Entity FindRenderSettingsCarrier(
         const wi::scene::Scene& scene) noexcept;

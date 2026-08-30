@@ -45,7 +45,7 @@ namespace
 
 namespace renegade::studio
 {
-    class StudioRenderPath : public wi::RenderPath3D
+    class StudioRenderPath : public wi::RenderPath3D_PathTracing
     {
     public:
         void BindSession(bridge::StudioSession& session) noexcept;
@@ -392,6 +392,8 @@ namespace renegade::studio
             GiBoost,
             PlanarReflectionResolutionScale,
             ReflectionRoughnessCutoff,
+            RaytracedReflectionsRange,
+            RaytracedDiffuseRange,
         };
 
         enum class RenderToggle
@@ -591,6 +593,12 @@ namespace renegade::studio
         void ApplyRenderLutChoice(std::size_t choiceIndex);
         void ImportRenderLut();
         void ClearRenderLut();
+        void CreateGate7RenderControls();
+        void LayoutGate7RenderControls(float fieldWidth, float& y);
+        void RefreshGate7RenderControls(const bridge::RenderSettingsState& state);
+        void SetPathTracePreviewActive(bool active);
+        void RestartPathTracePreview();
+        void RefreshPathTracePreviewStatus();
         void BeginRenderSlider(RenderField field);
         void PreviewRenderSlider(RenderField field, float value);
         void CommitRenderSlider(RenderField field, float value);
@@ -918,6 +926,22 @@ namespace renegade::studio
         SceneInspectorCheckBox renderSsrEnabled_;
         SceneInspectorComboBox renderSsrQuality_;
         SceneInspectorSlider renderReflectionRoughnessCutoff_;
+        wi::gui::Label renderRayTracingLabel_;
+        wi::gui::Label renderRayTracingCapability_;
+        SceneInspectorCheckBox renderRaytracedShadowsEnabled_;
+        SceneInspectorCheckBox renderRaytracedReflectionsEnabled_;
+        SceneInspectorSlider renderRaytracedReflectionsRange_;
+        SceneInspectorComboBox renderRaytracedReflectionsQuality_;
+        SceneInspectorCheckBox renderRaytracedDiffuseEnabled_;
+        SceneInspectorSlider renderRaytracedDiffuseRange_;
+        SceneInspectorComboBox renderRaytracedDiffuseQuality_;
+        SceneInspectorCheckBox renderSurfelGiEnabled_;
+        wi::gui::Label renderPathTraceLabel_;
+        wi::gui::Label renderPathTraceStatus_;
+        SceneInspectorButton renderPathTraceToggle_;
+        SceneInspectorSlider renderPathTraceSamples_;
+        SceneInspectorSlider renderPathTraceBounces_;
+        SceneInspectorButton renderPathTraceRestart_;
         SceneInspectorButton focusButton_;
         SceneInspectorButton duplicateButton_;
         SceneInspectorButton deleteButton_;
@@ -998,6 +1022,10 @@ namespace renegade::studio
         bridge::RenderSettingsState renderSliderAfter_;
         bridge::RenderSettingsState appliedRenderSettings_;
         bool appliedRenderSettingsInitialized_ = false;
+        bool pathTracePreviewActive_ = false;
+        int pathTraceTargetSamples_ = 1024;
+        std::uint32_t pathTraceBounceCount_ = 1;
+        std::uint32_t pathTracePreviousBounceCount_ = 1;
         bool precipitationSliderActive_ = false;
         PrecipitationField precipitationSliderField_ =
             PrecipitationField::Intensity;
