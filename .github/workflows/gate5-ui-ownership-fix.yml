@@ -1,0 +1,126 @@
+name: Gate 5 UI ownership repair
+
+on:
+  push:
+    branches:
+      - staging/phase5-gate5-ui-ownership-fix
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Guard exact Gate 5 head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "c5012bf6bf2d59c10071febff5d916d1343d5807"
+
+      - name: Stop frame loop from mutating Render widgets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one anchor, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          replace_once(
+              'Studio/src/StudioApplication.cpp',
+              '''        if (renderWorkspaceActive_)\n        {\n            LayoutRenderWorkspace();\n            renderWorkspacePanel_.SetVisible(!projectHubVisible_);\n            inspectorPanel_.SetVisible(false);\n        }''',
+              '''        if (renderWorkspaceActive_)\n        {\n            // The Window owns child transforms while it processes scrolling and\n            // pointer state. Never relayout its children from the frame loop.\n            renderWorkspacePanel_.SetVisible(!projectHubVisible_);\n            inspectorPanel_.SetVisible(false);\n        }''',
+              'per-frame Render layout')
+
+          replace_once(
+              'Studio/src/StudioApplication.cpp',
+              '''        if (diagnostics_ != nullptr)\n        {''',
+              '''        // Layout the Render window only when the Studio layout itself changes.\n        // Repositioning Window children every frame breaks Wicked GUI mouse/scroll ownership.\n        if (renderWorkspaceActive_)\n            LayoutRenderWorkspace();\n\n        if (diagnostics_ != nullptr)\n        {''',
+              'ResizeLayout Render layout')
+
+          replace_once(
+              'Studio/src/Phase5Gate5RenderWorkspace.cpp',
+              '''        createSlider(\n            renderBloomThreshold_, "Render Bloom Threshold", "BLOOM THRESHOLD",\n            "Brightness threshold for native bloom response.",\n            RenderField::BloomThreshold, 0.0f, 10.0f, 1000.0f);''',
+              '''        createSlider(\n            renderBloomThreshold_, "Render Bloom Threshold", "BLOOM THRESHOLD",\n            "Useful mouse range is 0-1 for ordinary scenes. Type a larger value in the numeric field for HDR content.",\n            RenderField::BloomThreshold, 0.0f, 1.0f, 1000.0f);''',
+              'Bloom useful mouse range')
+
+          replace_once(
+              'Studio/src/Phase5Gate5RenderWorkspace.cpp',
+              '''        if (renderWorkspaceActive_ == active)\n        {\n            if (active)\n            {\n                LayoutRenderWorkspace();\n                RefreshRenderWorkspace();\n            }\n            return;\n        }''',
+              '''        if (renderWorkspaceActive_ == active)\n            return;''',
+              'repeated workspace activation refresh')
+
+          replace_once(
+              'Studio/src/Phase5Gate5RenderWorkspace.cpp',
+              '''        const auto authored = bridge::CaptureRenderSettings(scene);\n        if (bridge::RenderSettingsMatchPath(*this, authored))\n        {\n            appliedRenderSettings_ = authored;\n            appliedRenderSettingsInitialized_ = true;\n            return;\n        }\n        ApplyRenderSettingsState(authored, resizeBuffersForMSAA);\n        if (renderWorkspaceActive_)\n            RefreshRenderWorkspace();''',
+              '''        const auto authored = bridge::CaptureRenderSettings(scene);\n        const bool authoredStateChanged =\n            !appliedRenderSettingsInitialized_ ||\n            bridge::HasRenderSettingsChange(appliedRenderSettings_, authored);\n\n        if (bridge::RenderSettingsMatchPath(*this, authored))\n        {\n            appliedRenderSettings_ = authored;\n            appliedRenderSettingsInitialized_ = true;\n        }\n        else\n        {\n            // Renderer drift is repaired silently. Do not rewrite GUI widget state\n            // just because some native render value was overwritten elsewhere.\n            ApplyRenderSettingsState(authored, resizeBuffersForMSAA);\n        }\n\n        // Refresh widgets only when the authored document state actually changes\n        // (scene replacement/external command), never on renderer mismatch alone.\n        if (renderWorkspaceActive_ && authoredStateChanged)\n            RefreshRenderWorkspace();''',
+              'renderer sync UI refresh separation')
+
+          contract = Path('Tests/Phase5Gate5SourceContract.cmake')
+          text = contract.read_text(encoding='utf-8')
+          marker = 'message(STATUS "Phase 5 Gate 5 source contract passed")'
+          if text.count(marker) != 1:
+              raise SystemExit('source contract final marker changed')
+          checks = r'''
+# RENDER workspace interaction ownership: the per-frame Studio update may show/hide
+# the panel, but must not relayout or repopulate its widgets while wiGUI owns mouse state.
+string(FIND "${studio_source_text}"
+    "if (renderWorkspaceActive_)\n        {\n            LayoutRenderWorkspace();"
+    render_frame_layout)
+if(NOT render_frame_layout EQUAL -1)
+    message(FATAL_ERROR "Gate 5 frame loop still relayouts Render widgets")
+endif()
+string(FIND "${studio_source_text}"
+    "if (renderWorkspaceActive_)\n            LayoutRenderWorkspace();"
+    render_resize_layout)
+if(render_resize_layout EQUAL -1)
+    message(FATAL_ERROR "Gate 5 ResizeLayout no longer owns Render workspace layout")
+endif()
+string(FIND "${studio_render_text}"
+    "renderWorkspaceActive_ && authoredStateChanged"
+    render_authored_refresh)
+if(render_authored_refresh EQUAL -1)
+    message(FATAL_ERROR "Gate 5 Render refresh is not gated by authored state changes")
+endif()
+string(FIND "${studio_render_text}"
+    "RenderField::BloomThreshold, 0.0f, 1.0f, 1000.0f"
+    bloom_useful_range)
+if(bloom_useful_range EQUAL -1)
+    message(FATAL_ERROR "Gate 5 Bloom mouse range regressed from useful 0-1 range")
+endif()
+
+'''
+          contract.write_text(text.replace(marker, checks + marker, 1), encoding='utf-8', newline='\n')
+          PY
+
+          git diff --check
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase5Gate5SourceContract.cmake
+          test "$(git diff --name-only | wc -l)" -eq 3
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' 'Studio/src/Phase5Gate5RenderWorkspace.cpp' 'Studio/src/StudioApplication.cpp' 'Tests/Phase5Gate5SourceContract.cmake' | sort)"
+
+      - name: Self-clean and publish product repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/gate5-ui-ownership-fix.yml
+          git add \
+            Studio/src/Phase5Gate5RenderWorkspace.cpp \
+            Studio/src/StudioApplication.cpp \
+            Tests/Phase5Gate5SourceContract.cmake \
+            .github/workflows/gate5-ui-ownership-fix.yml
+          git diff --cached --check
+          git config user.name "mav3r1ckmediastudio-glitch"
+          git config user.email "mav3r1ckmediastudio@gmail.com"
+          git commit -m "Phase 5 Gate 5: restore Render workspace mouse ownership"
+          git push origin HEAD:staging/phase5-gate5-ui-ownership-fix
