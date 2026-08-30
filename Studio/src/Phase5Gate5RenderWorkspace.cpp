@@ -22,7 +22,6 @@ namespace renegade::studio
             RenderPanel,
             wi::gui::WIDGET_ID_WINDOW_BASE);
         renderWorkspacePanel_.scrollbar_vertical.SetVisible(true);
-        renderWorkspacePanel_.SetVisible(false);
         GetGUI().AddWidget(&renderWorkspacePanel_);
 
         renderWorkspaceTitle_.Create("Render Workspace Title");
@@ -253,6 +252,15 @@ namespace renegade::studio
         createToggle(
             renderDitherEnabled_, "Dither: ",
             "Enable Wicked's subtle final-image dithering for banding reduction.", RenderToggle::Dither);
+
+        // Wicked Window::AddWidget() copies Window::IsEnabled() into each child,
+        // and IsEnabled() includes the Window's visibility. Hiding this Window
+        // before attaching its controls permanently disabled those controls even
+        // after the Window became visible again. Attach everything first, then
+        // hide the completed workspace. Reassert enabled state defensively before
+        // the initial scene refresh applies intentional dependent-control disables.
+        renderWorkspacePanel_.SetEnabled(true);
+        renderWorkspacePanel_.SetVisible(false);
 
         RefreshRenderWorkspace();
         LayoutRenderWorkspace();

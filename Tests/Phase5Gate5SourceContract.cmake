@@ -341,4 +341,32 @@ if(bloom_useful_range EQUAL -1)
     message(FATAL_ERROR "Gate 5 Bloom mouse range regressed from useful 0-1 range")
 endif()
 
+
+# Wicked Window::AddWidget() copies parent IsEnabled(), which includes visibility.
+# The RENDER window must therefore remain visible while all children are attached,
+# then be enabled and hidden only after the final control has been created.
+string(FIND "${studio_render_text}"
+    "renderWorkspacePanel_.scrollbar_vertical.SetVisible(true);\n        renderWorkspacePanel_.SetVisible(false);\n        GetGUI().AddWidget(&renderWorkspacePanel_);"
+    render_early_hide)
+if(NOT render_early_hide EQUAL -1)
+    message(FATAL_ERROR "Gate 5 Render controls are again attached to a hidden/disabled Window")
+endif()
+string(FIND "${studio_render_text}"
+    "GetGUI().AddWidget(&renderWorkspacePanel_);" render_parent_add)
+string(FIND "${studio_render_text}"
+    "RenderToggle::Dither);" render_last_control)
+string(FIND "${studio_render_text}"
+    "renderWorkspacePanel_.SetEnabled(true);" render_enable_after_children)
+string(FIND "${studio_render_text}"
+    "renderWorkspacePanel_.SetVisible(false);" render_hide_after_children)
+if(render_parent_add EQUAL -1 OR render_last_control EQUAL -1 OR
+   render_enable_after_children EQUAL -1 OR render_hide_after_children EQUAL -1)
+    message(FATAL_ERROR "Gate 5 Render enabled-state construction contract is incomplete")
+endif()
+if(render_enable_after_children LESS render_last_control OR
+   render_hide_after_children LESS render_last_control OR
+   render_hide_after_children LESS render_enable_after_children)
+    message(FATAL_ERROR "Gate 5 Render Window is hidden/disabled before child attachment completes")
+endif()
+
 message(STATUS "Phase 5 Gate 5 source contract passed")
