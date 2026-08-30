@@ -1,6 +1,7 @@
 #include "renegade/bridge/SceneService.h"
 
 #include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/TerrainService.h"
 
 #include <algorithm>
@@ -675,6 +676,14 @@ namespace renegade::bridge
         if (!prepared.IsReady())
         {
             lastError_ = prepared.Error();
+            return false;
+        }
+
+        std::string lightmapError;
+        if (!LightmapBakeService::HydratePersistedLightmaps(
+                *prepared.scene_, lightmapError))
+        {
+            lastError_ = "Could not restore baked lightmaps: " + lightmapError;
             return false;
         }
 

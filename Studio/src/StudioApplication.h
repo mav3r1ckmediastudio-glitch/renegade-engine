@@ -20,6 +20,7 @@
 #include "renegade/bridge/SceneComponentService.h"
 #include "renegade/bridge/RenderSettingsService.h"
 #include "renegade/bridge/RenderLutService.h"
+#include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/OceanService.h"
 #include "renegade/bridge/PrecipitationService.h"
@@ -599,6 +600,17 @@ namespace renegade::studio
         void SetPathTracePreviewActive(bool active);
         void RestartPathTracePreview();
         void RefreshPathTracePreviewStatus();
+        void CreateGate8BakeControls();
+        void LayoutGate8BakeControls(float fieldWidth, float& y);
+        void RefreshGate8BakeControls();
+        void TickGate8BakeControls();
+        [[nodiscard]] std::vector<wi::ecs::Entity> SelectedBakeTargets() const;
+        void BeginSelectedLightmapBake();
+        void FinishSelectedLightmapBake();
+        void CancelGate8Bake();
+        void ClearSelectedLightmap();
+        void ComputeSelectedVertexAo();
+        void ClearSelectedVertexAo();
         void BeginRenderSlider(RenderField field);
         void PreviewRenderSlider(RenderField field, float value);
         void CommitRenderSlider(RenderField field, float value);
@@ -942,6 +954,25 @@ namespace renegade::studio
         SceneInspectorSlider renderPathTraceSamples_;
         SceneInspectorSlider renderPathTraceBounces_;
         SceneInspectorButton renderPathTraceRestart_;
+        wi::gui::Label renderLightmapBakeLabel_;
+        wi::gui::Label renderLightmapBakeStatus_;
+        SceneInspectorComboBox renderLightmapResolution_;
+        SceneInspectorComboBox renderLightmapUvSource_;
+        SceneInspectorCheckBox renderLightmapBlockCompression_;
+        SceneInspectorButton renderLightmapStart_;
+        SceneInspectorButton renderLightmapStop_;
+        SceneInspectorButton renderLightmapClear_;
+        SceneInspectorButton renderLightmapPreview_;
+        wi::gui::Label renderVertexAoBakeLabel_;
+        wi::gui::Label renderVertexAoBakeStatus_;
+        SceneInspectorSlider renderVertexAoRayCount_;
+        SceneInspectorSlider renderVertexAoRayLength_;
+        SceneInspectorButton renderVertexAoCompute_;
+        SceneInspectorButton renderVertexAoClear_;
+        bridge::LightmapBakeSettings lightmapBakeSettings_;
+        bridge::LightmapBakeSession lightmapBakeSession_;
+        bridge::VertexAoBakeSettings vertexAoBakeSettings_;
+        std::string renderBakeLastMessage_;
         SceneInspectorButton focusButton_;
         SceneInspectorButton duplicateButton_;
         SceneInspectorButton deleteButton_;
