@@ -358,6 +358,7 @@ namespace renegade::studio
             RenderField::ReflectionRoughnessCutoff, 0.0f, 1.0f, 1000.0f);
 
         CreateGate7RenderControls();
+        CreateGate8BakeControls();
 
         // Wicked Window::AddWidget() copies Window::IsEnabled() into each child,
         // and IsEnabled() includes the Window's visibility. Hiding this Window
@@ -466,6 +467,7 @@ namespace renegade::studio
         full(renderReflectionRoughnessCutoff_);
 
         LayoutGate7RenderControls(fieldWidth, y);
+        LayoutGate8BakeControls(fieldWidth, y);
     }
 
     void StudioRenderPath::RefreshRenderWorkspace()
@@ -518,6 +520,7 @@ namespace renegade::studio
             static_cast<std::uint64_t>(state.ssrQuality));
         renderReflectionRoughnessCutoff_.SetValue(state.reflectionRoughnessCutoff);
         RefreshGate7RenderControls(state);
+        RefreshGate8BakeControls();
 
         renderBloomThreshold_.SetEnabled(state.bloomEnabled);
         renderEyeAdaptationKey_.SetEnabled(state.eyeAdaptationEnabled);
@@ -728,6 +731,8 @@ namespace renegade::studio
         }
         else
         {
+            if (lightmapBakeSession_.IsActive())
+                CancelGate8Bake();
             if (pathTracePreviewActive_)
                 SetPathTracePreviewActive(false);
             studioChrome_.SetRenderWorkspaceActive(false);

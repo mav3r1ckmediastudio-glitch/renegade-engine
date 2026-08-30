@@ -9,6 +9,7 @@
 #include <utility>
 
 #include <xatlas.h>
+#include <wiTextureHelper.h>
 
 namespace renegade::bridge
 {
@@ -249,6 +250,25 @@ namespace renegade::bridge
                 object->vertex_ao.assign(
                     state.vertexAo.begin(),
                     state.vertexAo.end());
+                if (!object->lightmapTextureData.empty() &&
+                    object->lightmapWidth > 0 && object->lightmapHeight > 0)
+                {
+                    const wi::graphics::Format format =
+                        state.lightmapDisableBlockCompression
+                            ? wi::graphics::Format::R11G11B10_FLOAT
+                            : wi::graphics::Format::BC6H_UF16;
+                    if (!wi::texturehelper::CreateTexture(
+                            object->lightmap,
+                            object->lightmapTextureData.data(),
+                            object->lightmapWidth,
+                            object->lightmapHeight,
+                            format))
+                    {
+                        return false;
+                    }
+                    wi::graphics::GetDevice()->SetName(
+                        &object->lightmap, "lightmap");
+                }
                 object->CreateRenderData();
             }
             scene.SetAccelerationStructureUpdateRequested(true);
@@ -731,6 +751,11 @@ namespace renegade::bridge
                 });
             wi::jobsystem::Wait(context);
             object->CreateRenderData();
+            if (!mesh->IsBVHEnabled())
+            {
+                mesh->bvh = {};
+                mesh->bvh_leaf_aabbs.clear();
+            }
             return true;
         }
     }
@@ -884,8 +909,21 @@ namespace renegade::bridge
                 Cancel(scene, session);
                 return false;
             }
+            if (!object->lightmap.IsValid() ||
+                object->lightmapIterationCount == 0)
+            {
+                error = "The native lightmap bake has not produced a sample yet.";
+                Cancel(scene, session);
+                return false;
+            }
             object->SetLightmapRenderRequest(false);
             object->SaveLightmap();
+            if (object->lightmapTextureData.empty())
+            {
+                error = "Wicked did not return persisted lightmap data.";
+                Cancel(scene, session);
+                return false;
+            }
         }
 
         const BakeSnapshot after = CaptureSnapshot(scene, session.impl_->targets, true);

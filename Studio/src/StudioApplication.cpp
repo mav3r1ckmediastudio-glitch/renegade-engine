@@ -4556,6 +4556,7 @@ namespace renegade::studio
             // pointer state. Never relayout its children from the frame loop.
             renderWorkspacePanel_.SetVisible(!projectHubVisible_);
             inspectorPanel_.SetVisible(false);
+            TickGate8BakeControls();
         }
         PollTestLevel();
 

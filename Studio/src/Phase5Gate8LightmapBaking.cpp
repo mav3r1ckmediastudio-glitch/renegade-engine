@@ -295,6 +295,7 @@ namespace renegade::studio
         renderVertexAoBakeStatus_.SetText(aoText.str());
 
         const bool realtime = !pathTracePreviewActive_;
+        renderPathTraceToggle_.SetEnabled(!active);
         renderLightmapResolution_.SetEnabled(status.eligible && !active && realtime);
         renderLightmapUvSource_.SetEnabled(status.eligible && !active && realtime);
         renderLightmapBlockCompression_.SetEnabled(status.eligible && !active && realtime);
