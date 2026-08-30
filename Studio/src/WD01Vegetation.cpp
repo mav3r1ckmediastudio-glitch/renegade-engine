@@ -310,7 +310,6 @@ namespace renegade::studio
             return false;
         }
 
-        auto* camera = GetCamera();
         if (camera == nullptr)
             return false;
 
