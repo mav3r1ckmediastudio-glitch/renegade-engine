@@ -123,6 +123,7 @@ add_library(RenegadeEngineBridge STATIC
     src/SunService.cpp
     src/TerrainService.cpp
     src/VegetationService.cpp
+    src/VegetationNativePaintService.cpp
     src/ProjectService.cpp
     src/ProjectDocumentTransaction.cpp
     src/SceneService.cpp
@@ -131,6 +132,16 @@ add_library(RenegadeEngineBridge STATIC
     src/SelectionService.cpp
     src/TestLevelSnapshotService.cpp
     src/WindowsGameBuildProjectService.cpp
+)
+
+# Keep the original WD01 support/Undo implementation intact while replacing
+# only its PaintVegetation symbol with the native Wicked-style implementation
+# in VegetationNativePaintService.cpp. The compile definition is local to this
+# one translation unit; all normal callers still bind to PaintVegetation().
+set_source_files_properties(
+    src/VegetationService.cpp
+    PROPERTIES
+        COMPILE_DEFINITIONS "PaintVegetation=PaintVegetationLegacy"
 )
 
 # Wicked's format converters are self-contained even though upstream keeps
