@@ -562,9 +562,7 @@ namespace renegade::studio
     {
         auto& state = Controls();
         if (!state.created || !state.brushActive ||
-            !terrainWorkspaceActive_ || session_ == nullptr ||
-            flyCameraActive_ || GetGUI().HasFocus() ||
-            !IsPointerOverViewport(pointer) || camera == nullptr)
+            !terrainWorkspaceActive_ || session_ == nullptr)
         {
             return false;
         }
@@ -577,6 +575,60 @@ namespace renegade::studio
             return false;
 
         auto& scene = session_->Scenes().GetScene();
+
+        // A stroke can begin in the viewport and be released over Renegade's
+        // top menu, Inspector or bottom drawer. Complete that release before
+        // applying viewport/focus guards so the brush never retains input
+        // ownership outside its surface.
+        if (state.strokeActive &&
+            wi::input::Release(
+                wi::input::MOUSE_BUTTON_LEFT))
+        {
+            state.strokeActive = false;
+            auto* strokeTerrain = scene.terrains.GetComponent(
+                state.strokeTerrain);
+            if (strokeTerrain == nullptr)
+                strokeTerrain = terrain;
+            if (state.strokeChanged)
+            {
+                bridge::FinalizeWickedVegetationStroke(
+                    scene,
+                    *strokeTerrain,
+                    state.strokeBefore);
+                auto after =
+                    bridge::CaptureWickedVegetationAfter(
+                        *strokeTerrain,
+                        state.strokeBefore);
+                if (!after.chunks.empty())
+                {
+                    session_->Commands().RecordExecuted(
+                        std::make_unique<
+                            bridge::WickedVegetationStrokeCommand>(
+                            scene,
+                            state.strokeTerrain,
+                            std::move(state.strokeBefore),
+                            std::move(after)));
+                    std::ostringstream message;
+                    message << "LAST GRASS STROKE // "
+                            << state.affectedVertices
+                            << " VERTICES // "
+                            << state.affectedChunks
+                            << " CHUNK UPDATES";
+                    state.status.SetText(message.str());
+                    RefreshStatus();
+                }
+            }
+            state.strokeBefore = {};
+            state.strokeChanged = false;
+            return IsPointerOverViewport(pointer);
+        }
+
+        if (flyCameraActive_ || GetGUI().HasFocus() ||
+            !IsPointerOverViewport(pointer) || camera == nullptr)
+        {
+            return false;
+        }
+
         const auto ray = wi::renderer::GetPickRay(
             static_cast<long>(pointer.x),
             static_cast<long>(pointer.y),
@@ -646,48 +698,9 @@ namespace renegade::studio
             state.affectedChunks += result.affectedChunks;
             state.affectedVertices +=
                 result.affectedVertices;
-            return true;
-        }
-
-        if (state.strokeActive &&
-            wi::input::Release(
-                wi::input::MOUSE_BUTTON_LEFT))
-        {
-            state.strokeActive = false;
-            if (state.strokeChanged)
-            {
-                bridge::FinalizeWickedVegetationStroke(
-                    scene,
-                    *terrain,
-                    state.strokeBefore);
-                auto after =
-                    bridge::CaptureWickedVegetationAfter(
-                        *terrain,
-                        state.strokeBefore);
-                if (!after.chunks.empty())
-                {
-                    session_->Commands().RecordExecuted(
-                        std::make_unique<
-                            bridge::WickedVegetationStrokeCommand>(
-                            scene,
-                            state.strokeTerrain,
-                            std::move(state.strokeBefore),
-                            std::move(after)));
-                    std::ostringstream message;
-                    message << "LAST GRASS STROKE // "
-                            << state.affectedVertices
-                            << " VERTICES // "
-                            << state.affectedChunks
-                            << " CHUNK UPDATES";
-                    state.status.SetText(message.str());
-                    RefreshStatus();
-                }
-            }
-            state.strokeBefore = {};
-            state.strokeChanged = false;
-            return true;
         }
 
         return true;
     }
+
 }
