@@ -13,13 +13,7 @@ namespace
         "renegade.vegetation.manual_terrain";
     constexpr const char* ManualChunkKey =
         "renegade.vegetation.manual_chunk";
-    constexpr const char* SettingsVersionKey =
-        "renegade.vegetation.hair_settings_v2";
-    constexpr const char* NativePaintChunkKey =
-        "renegade.vegetation.native_paint_v3";
     constexpr float MaskEpsilon = 0.0001f;
-    constexpr float NativeMinimumNonZeroLength = 1.0f / 255.0f;
-    constexpr float RenegadeDefaultGrassLength = 0.35f;
 
     std::string BundledWickedGrassScenePath()
     {
@@ -82,42 +76,6 @@ namespace
         return nullptr;
     }
 
-    bool NearlyEqual(const float left, const float right) noexcept
-    {
-        return std::abs(left - right) <= MaskEpsilon;
-    }
-
-    // The failed v2 stability experiment wrote 0.001 to every unpainted
-    // terrain vertex. Wicked's CPU CreateFromMesh() treats any value > 0 as an
-    // emitter triangle, even though 0.001 later packs to zero in R8_UNORM.
-    // Wicked's own length painter clamps legitimate retained non-zero lengths
-    // to at least 1/255, so values in (0, 1/255) identify that bad sentinel and
-    // can be migrated back to native zero without destroying authored lengths.
-    bool MigrateLegacySentinelMask(std::vector<float>& lengths) noexcept
-    {
-        bool changed = false;
-        for (float& value : lengths)
-        {
-            if (value > 0.0f && value < NativeMinimumNonZeroLength)
-            {
-                value = 0.0f;
-                changed = true;
-            }
-        }
-        return changed;
-    }
-
-    bool HasPaintedVertices(const wi::HairParticleSystem& grass) noexcept
-    {
-        return std::any_of(
-            grass.vertex_lengths.begin(),
-            grass.vertex_lengths.end(),
-            [](const float value)
-            {
-                return value > MaskEpsilon;
-            });
-    }
-
     std::uint32_t CountPaintedStrands(
         const wi::terrain::Terrain& terrain,
         const wi::HairParticleSystem& grass) noexcept
@@ -131,117 +89,10 @@ namespace
         if (paintedVertices == 0)
             return 0;
 
-        // Match Wicked terrain's native grass-density formula. Crucially this
-        // is based on valid grass vertices, not every vertex in the chunk.
         const float nativeCount =
             static_cast<float>(paintedVertices) * 3.0f *
             terrain.chunk_scale * terrain.chunk_scale;
         return static_cast<std::uint32_t>(nativeCount);
-    }
-
-    bool StrokeAlreadyContainsChunk(
-        const renegade::bridge::VegetationStrokeState* state,
-        const wi::ecs::Entity chunkEntity) noexcept
-    {
-        if (state == nullptr)
-            return false;
-        for (const auto& snapshot : state->chunks)
-        {
-            if (snapshot.chunkEntity == chunkEntity)
-                return true;
-        }
-        return false;
-    }
-
-    renegade::bridge::VegetationGrassSettings ClampSettings(
-        renegade::bridge::VegetationGrassSettings settings)
-    {
-        settings.length = std::clamp(settings.length, 0.0f, 4.0f);
-        settings.width = std::clamp(settings.width, 0.0f, 2.0f);
-        settings.stiffness = std::clamp(settings.stiffness, 0.0f, 10.0f);
-        settings.drag = std::clamp(settings.drag, 0.0f, 1.0f);
-        settings.gravityPower = std::clamp(settings.gravityPower, 0.0f, 1.0f);
-        settings.randomness = std::clamp(settings.randomness, 0.0f, 1.0f);
-        settings.segmentCount = std::clamp<std::uint32_t>(
-            settings.segmentCount, 1u, 10u);
-        settings.billboardCount = std::clamp<std::uint32_t>(
-            settings.billboardCount, 1u, 10u);
-        settings.randomSeed = std::clamp<std::uint32_t>(
-            settings.randomSeed, 1u, 12345u);
-        settings.viewDistance = std::clamp(settings.viewDistance, 0.0f, 1000.0f);
-        settings.uniformity = std::clamp(settings.uniformity, 0.01f, 2.0f);
-
-        for (auto& rect : settings.atlasRects)
-        {
-            rect.texMulAdd.z = std::clamp(rect.texMulAdd.z, 0.0f, 1.0f);
-            rect.texMulAdd.w = std::clamp(rect.texMulAdd.w, 0.0f, 1.0f);
-            rect.texMulAdd.x = std::clamp(
-                rect.texMulAdd.x,
-                0.001f,
-                std::max(0.001f, 1.0f - rect.texMulAdd.z));
-            rect.texMulAdd.y = std::clamp(
-                rect.texMulAdd.y,
-                0.001f,
-                std::max(0.001f, 1.0f - rect.texMulAdd.w));
-            rect.size = std::clamp(rect.size, 0.0f, 2.0f);
-        }
-        return settings;
-    }
-
-    void ApplySettingsToHair(
-        wi::HairParticleSystem& hair,
-        const renegade::bridge::VegetationGrassSettings& settings)
-    {
-        const bool topologyChanged =
-            hair.segmentCount != settings.segmentCount ||
-            hair.billboardCount != settings.billboardCount;
-
-        hair.length = settings.length;
-        hair.width = settings.width;
-        hair.stiffness = settings.stiffness;
-        hair.drag = settings.drag;
-        hair.gravityPower = settings.gravityPower;
-        hair.randomness = settings.randomness;
-        hair.segmentCount = settings.segmentCount;
-        hair.billboardCount = settings.billboardCount;
-        hair.randomSeed = settings.randomSeed;
-        hair.viewDistance = settings.viewDistance;
-        hair.uniformity = settings.uniformity;
-        hair.atlas_rects = settings.atlasRects;
-        hair.SetCameraBendEnabled(settings.cameraBendEnabled);
-        hair.regenerate_frame = true;
-        hair.SetDirty();
-        if (topologyChanged)
-            hair._flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
-    }
-
-    void CopyAuthoredGrassState(
-        wi::HairParticleSystem& live,
-        const wi::HairParticleSystem& authored)
-    {
-        live.meshID = authored.meshID;
-        live.segmentCount = authored.segmentCount;
-        live.billboardCount = authored.billboardCount;
-        live.randomSeed = authored.randomSeed;
-        live.length = authored.length;
-        live.stiffness = authored.stiffness;
-        live.drag = authored.drag;
-        live.gravityPower = authored.gravityPower;
-        live.randomness = authored.randomness;
-        live.viewDistance = authored.viewDistance;
-        live.vertex_lengths = authored.vertex_lengths;
-        live.width = authored.width;
-        live.uniformity = authored.uniformity;
-        live.atlas_rects = authored.atlas_rects;
-        live.layerMask = authored.layerMask;
-        live.SetCameraBendEnabled(authored.IsCameraBendEnabled());
-        live.regenerate_frame = true;
-        live.SetDirty();
-
-        // Match Wicked's stock PaintTool: changing the native vertex mask only
-        // marks buffers dirty. HairParticleSystem::UpdateCPU() owns the actual
-        // CreateFromMesh()/CreateRenderData() rebuild on the normal scene tick.
-        live._flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
     }
 
     bool EnsureLiveChunkGrass(
@@ -253,14 +104,8 @@ namespace
         if (mesh == nullptr)
             return false;
 
-        if (chunk.grass.vertex_lengths.size() != mesh->vertex_positions.size())
-        {
-            chunk.grass.vertex_lengths.assign(
-                mesh->vertex_positions.size(), 0.0f);
-        }
-        MigrateLegacySentinelMask(chunk.grass.vertex_lengths);
-
         chunk.grass.meshID = chunk.entity;
+        chunk.grass.CreateFromMesh(*mesh);
         chunk.grass_density_current = terrain.grass_density;
 
         if (chunk.grass_entity == wi::ecs::INVALID_ENTITY &&
@@ -269,49 +114,35 @@ namespace
             return true;
         }
 
-        bool createdEntity = false;
+        bool created = false;
         if (chunk.grass_entity == wi::ecs::INVALID_ENTITY)
         {
             chunk.grass_entity = wi::ecs::CreateEntity();
-            createdEntity = true;
+            created = true;
         }
 
         auto* live = scene.hairs.GetComponent(chunk.grass_entity);
         if (live == nullptr)
-        {
             live = &scene.hairs.Create(chunk.grass_entity);
-            *live = chunk.grass;
-            // A new live component must not inherit render resources from the
-            // chunk-side authored copy. Wicked will allocate them on UpdateCPU.
-            live->DeleteRenderData();
-            live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
-        }
-        else
-        {
-            CopyAuthoredGrassState(*live, chunk.grass);
-        }
-
+        *live = chunk.grass;
         live->strandCount = static_cast<std::uint32_t>(
             static_cast<float>(chunk.grass.strandCount) *
             std::max(0.0f, terrain.grass_density));
-        live->regenerate_frame = true;
-        live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
+        live->CreateFromMesh(*mesh);
 
         auto* material = scene.materials.GetComponent(chunk.grass_entity);
         if (material == nullptr)
-        {
             material = &scene.materials.Create(chunk.grass_entity);
-            *material = terrain.grass_material;
-            material->SetDirty();
-            material->CreateRenderData();
-        }
+        *material = terrain.grass_material;
+        material->SetDirty();
+        material->CreateRenderData();
 
         if (scene.transforms.GetComponent(chunk.grass_entity) == nullptr)
             scene.transforms.Create(chunk.grass_entity);
         if (scene.names.GetComponent(chunk.grass_entity) == nullptr)
             scene.names.Create(chunk.grass_entity).name = "grass";
 
-        if (createdEntity)
+        if (created)
             scene.Component_Attach(chunk.grass_entity, chunk.entity, true);
 
         return true;
@@ -333,81 +164,11 @@ namespace
         chunk.grass.DeleteRenderData();
         chunk.grass.meshID = chunk.entity;
         chunk.grass.vertex_lengths.assign(mesh->vertex_positions.size(), 0.0f);
-        chunk.grass.indices.clear();
         chunk.grass.strandCount = 0;
+        chunk.grass.CreateFromMesh(*mesh);
         EnsureLiveChunkGrass(scene, terrain, chunk);
         SetBoolMarker(scene, chunk.entity, ManualChunkKey);
-        SetBoolMarker(scene, chunk.entity, NativePaintChunkKey);
         return true;
-    }
-
-    bool StabilizeManualChunk(
-        wi::scene::Scene& scene,
-        wi::terrain::Terrain& terrain,
-        wi::terrain::ChunkData& chunk)
-    {
-        if (!HasBoolMarker(scene, chunk.entity, ManualChunkKey))
-            return false;
-
-        auto* mesh = scene.meshes.GetComponent(chunk.entity);
-        if (mesh == nullptr || mesh->vertex_positions.empty())
-            return false;
-
-        bool changed = false;
-        if (chunk.grass.vertex_lengths.size() != mesh->vertex_positions.size())
-        {
-            chunk.grass.vertex_lengths.assign(
-                mesh->vertex_positions.size(), 0.0f);
-            chunk.grass.strandCount = 0;
-            changed = true;
-        }
-
-        const bool needsNativePaintMigration =
-            !HasBoolMarker(scene, chunk.entity, NativePaintChunkKey);
-        if (needsNativePaintMigration)
-        {
-            changed |= MigrateLegacySentinelMask(chunk.grass.vertex_lengths);
-            const std::uint32_t migratedCount =
-                CountPaintedStrands(terrain, chunk.grass);
-            if (chunk.grass.strandCount != migratedCount)
-            {
-                chunk.grass.strandCount = migratedCount;
-                changed = true;
-            }
-            chunk.grass.CreateFromMesh(*mesh);
-            SetBoolMarker(scene, chunk.entity, NativePaintChunkKey);
-        }
-
-        const auto settings =
-            renegade::bridge::CaptureVegetationGrassSettings(terrain);
-        const auto chunkSettings = [&]()
-        {
-            renegade::bridge::VegetationGrassSettings value;
-            value.length = chunk.grass.length;
-            value.width = chunk.grass.width;
-            value.stiffness = chunk.grass.stiffness;
-            value.drag = chunk.grass.drag;
-            value.gravityPower = chunk.grass.gravityPower;
-            value.randomness = chunk.grass.randomness;
-            value.segmentCount = chunk.grass.segmentCount;
-            value.billboardCount = chunk.grass.billboardCount;
-            value.randomSeed = chunk.grass.randomSeed;
-            value.viewDistance = chunk.grass.viewDistance;
-            value.uniformity = chunk.grass.uniformity;
-            value.cameraBendEnabled = chunk.grass.IsCameraBendEnabled();
-            value.atlasRects = chunk.grass.atlas_rects;
-            return value;
-        }();
-        if (!renegade::bridge::VegetationGrassSettingsEqual(
-                settings, chunkSettings))
-        {
-            ApplySettingsToHair(chunk.grass, settings);
-            changed = true;
-        }
-
-        if (changed)
-            EnsureLiveChunkGrass(scene, terrain, chunk);
-        return changed;
     }
 
     bool CaptureChunkBeforeIfNeeded(
@@ -441,8 +202,11 @@ namespace
         }
         for (std::size_t index = 0; index < left.vertexLengths.size(); ++index)
         {
-            if (!NearlyEqual(left.vertexLengths[index], right.vertexLengths[index]))
+            if (std::abs(left.vertexLengths[index] -
+                    right.vertexLengths[index]) > MaskEpsilon)
+            {
                 return false;
+            }
         }
         return true;
     }
@@ -465,16 +229,6 @@ namespace renegade::bridge
     {
         if (IsManualVegetationEnabled(scene, terrain))
         {
-            // One-time migration from the first WD01 owner build, which copied
-            // Wicked's oversized authored length verbatim. After the marker is
-            // present the creator owns Length and it is never overwritten.
-            if (!HasBoolMarker(scene, terrain.terrainEntity, SettingsVersionKey))
-            {
-                auto settings = CaptureVegetationGrassSettings(terrain);
-                settings.length = RenegadeDefaultGrassLength;
-                ApplyVegetationGrassSettings(scene, terrain, settings);
-                SetBoolMarker(scene, terrain.terrainEntity, SettingsVersionKey);
-            }
             SynchronizeManualVegetation(scene, terrain);
             if (error != nullptr)
                 error->clear();
@@ -515,7 +269,6 @@ namespace renegade::bridge
         terrain.grass_properties.vertex_lengths.clear();
         terrain.grass_properties.indices.clear();
         terrain.grass_properties.strandCount = 0;
-        terrain.grass_properties.length = RenegadeDefaultGrassLength;
         terrain.grass_material = *sourceMaterial;
         terrain.grass_material.SetDirty(false);
 
@@ -538,7 +291,6 @@ namespace renegade::bridge
             scene.names.Create(terrain.grassEntity).name = "grass";
 
         SetBoolMarker(scene, terrain.terrainEntity, ManualTerrainKey);
-        SetBoolMarker(scene, terrain.terrainEntity, SettingsVersionKey);
         SynchronizeManualVegetation(scene, terrain);
 
         if (error != nullptr)
@@ -553,18 +305,13 @@ namespace renegade::bridge
         if (!IsManualVegetationEnabled(scene, terrain))
             return 0;
 
-        std::size_t changed = 0;
+        std::size_t initialized = 0;
         for (auto& entry : terrain.chunks)
         {
             if (InitializeManualChunk(scene, terrain, entry.second))
-            {
-                ++changed;
-                continue;
-            }
-            if (StabilizeManualChunk(scene, terrain, entry.second))
-                ++changed;
+                ++initialized;
         }
-        return changed;
+        return initialized;
     }
 
     VegetationPaintResult PaintVegetation(
@@ -582,6 +329,7 @@ namespace renegade::bridge
             return result;
         }
 
+        SynchronizeManualVegetation(scene, terrain);
         const float brushRadius = std::clamp(radius, 0.5f, 250.0f);
         const float radiusSquared = brushRadius * brushRadius;
         const float target =
@@ -609,7 +357,6 @@ namespace renegade::bridge
                 chunk.grass.vertex_lengths.assign(
                     mesh->vertex_positions.size(), 0.0f);
             }
-            MigrateLegacySentinelMask(chunk.grass.vertex_lengths);
 
             const XMMATRIX world = transform->GetWorldMatrix();
             std::vector<std::size_t> changedIndices;
@@ -627,35 +374,22 @@ namespace renegade::bridge
                 const float dz = worldPosition.z - center.z;
                 if (dx * dx + dz * dz > radiusSquared)
                     continue;
-                if (NearlyEqual(chunk.grass.vertex_lengths[index], target))
+                if (std::abs(chunk.grass.vertex_lengths[index] - target) <=
+                    MaskEpsilon)
+                {
                     continue;
+                }
                 changedIndices.push_back(index);
             }
 
             if (changedIndices.empty())
                 continue;
 
-            const bool firstTouchThisStroke =
-                !StrokeAlreadyContainsChunk(beforeState, chunk.entity);
             CaptureChunkBeforeIfNeeded(beforeState, chunk);
             for (const std::size_t index : changedIndices)
                 chunk.grass.vertex_lengths[index] = target;
 
-            if (!HasPaintedVertices(chunk.grass))
-            {
-                // Never leave a live positive strand count with zero emitter
-                // triangles. Wicked's shader indexes the emitter triangle list.
-                chunk.grass.strandCount = 0;
-            }
-            else if (firstTouchThisStroke || chunk.grass.strandCount == 0)
-            {
-                // Establish a bounded native count once when this stroke first
-                // reaches the chunk. Subsequent interpolated samples keep it
-                // stable; the completed stroke is finalized once on mouse-up.
-                chunk.grass.strandCount =
-                    CountPaintedStrands(terrain, chunk.grass);
-            }
-
+            chunk.grass.strandCount = CountPaintedStrands(terrain, chunk.grass);
             EnsureLiveChunkGrass(scene, terrain, chunk);
             result.changed = true;
             ++result.affectedChunks;
@@ -665,44 +399,11 @@ namespace renegade::bridge
         return result;
     }
 
-    bool FinalizeVegetationStroke(
-        wi::scene::Scene& scene,
-        wi::terrain::Terrain& terrain,
-        const VegetationStrokeState& touchedState)
-    {
-        bool changed = false;
-        for (const auto& snapshot : touchedState.chunks)
-        {
-            auto* chunk = FindChunk(terrain, snapshot.chunkEntity);
-            if (chunk == nullptr)
-                continue;
-            auto* mesh = scene.meshes.GetComponent(chunk->entity);
-            if (mesh == nullptr)
-                continue;
-
-            MigrateLegacySentinelMask(chunk->grass.vertex_lengths);
-            const std::uint32_t finalCount =
-                CountPaintedStrands(terrain, chunk->grass);
-            if (chunk->grass.strandCount != finalCount)
-            {
-                chunk->grass.strandCount = finalCount;
-                changed = true;
-            }
-            // Keep chunk-side authored emitter indices coherent for terrain
-            // persistence/runtime placement. This is CPU-only; the live scene
-            // hair still rebuilds GPU resources through Wicked UpdateCPU().
-            chunk->grass.CreateFromMesh(*mesh);
-            EnsureLiveChunkGrass(scene, terrain, *chunk);
-        }
-        return changed;
-    }
-
     VegetationStrokeState CaptureVegetationAfter(
-        wi::scene::Scene& scene,
-        wi::terrain::Terrain& terrain,
+        const wi::scene::Scene&,
+        const wi::terrain::Terrain& terrain,
         const VegetationStrokeState& beforeState)
     {
-        FinalizeVegetationStroke(scene, terrain, beforeState);
         VegetationStrokeState after;
         after.chunks.reserve(beforeState.chunks.size());
         for (const auto& beforeChunk : beforeState.chunks)
@@ -737,21 +438,14 @@ namespace renegade::bridge
             {
                 continue;
             }
-
-            const auto settings = CaptureVegetationGrassSettings(terrain);
             chunk->grass = terrain.grass_properties;
             chunk->grass.DeleteRenderData();
             chunk->grass.meshID = chunk->entity;
             chunk->grass.vertex_lengths = snapshot.vertexLengths;
-            MigrateLegacySentinelMask(chunk->grass.vertex_lengths);
-            chunk->grass.strandCount = HasPaintedVertices(chunk->grass)
-                ? snapshot.strandCount
-                : 0;
-            ApplySettingsToHair(chunk->grass, settings);
+            chunk->grass.strandCount = snapshot.strandCount;
             chunk->grass.CreateFromMesh(*mesh);
             EnsureLiveChunkGrass(scene, terrain, *chunk);
             SetBoolMarker(scene, chunk->entity, ManualChunkKey);
-            SetBoolMarker(scene, chunk->entity, NativePaintChunkKey);
             applied = true;
         }
         return applied || state.chunks.empty();
@@ -769,7 +463,7 @@ namespace renegade::bridge
         const float density)
     {
         const float clamped = std::clamp(density, 0.0f, 4.0f);
-        if (NearlyEqual(terrain.grass_density, clamped))
+        if (std::abs(terrain.grass_density - clamped) <= MaskEpsilon)
             return false;
 
         terrain.grass_density = clamped;
@@ -784,100 +478,7 @@ namespace renegade::bridge
                 continue;
             live->strandCount = static_cast<std::uint32_t>(
                 static_cast<float>(chunk.grass.strandCount) * clamped);
-            live->regenerate_frame = true;
-            live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
         }
-        return true;
-    }
-
-    VegetationGrassSettings CaptureVegetationGrassSettings(
-        const wi::terrain::Terrain& terrain)
-    {
-        VegetationGrassSettings settings;
-        settings.length = terrain.grass_properties.length;
-        settings.width = terrain.grass_properties.width;
-        settings.stiffness = terrain.grass_properties.stiffness;
-        settings.drag = terrain.grass_properties.drag;
-        settings.gravityPower = terrain.grass_properties.gravityPower;
-        settings.randomness = terrain.grass_properties.randomness;
-        settings.segmentCount = terrain.grass_properties.segmentCount;
-        settings.billboardCount = terrain.grass_properties.billboardCount;
-        settings.randomSeed = terrain.grass_properties.randomSeed;
-        settings.viewDistance = terrain.grass_properties.viewDistance;
-        settings.uniformity = terrain.grass_properties.uniformity;
-        settings.cameraBendEnabled =
-            terrain.grass_properties.IsCameraBendEnabled();
-        settings.atlasRects = terrain.grass_properties.atlas_rects;
-        return settings;
-    }
-
-    bool VegetationGrassSettingsEqual(
-        const VegetationGrassSettings& left,
-        const VegetationGrassSettings& right) noexcept
-    {
-        if (!NearlyEqual(left.length, right.length) ||
-            !NearlyEqual(left.width, right.width) ||
-            !NearlyEqual(left.stiffness, right.stiffness) ||
-            !NearlyEqual(left.drag, right.drag) ||
-            !NearlyEqual(left.gravityPower, right.gravityPower) ||
-            !NearlyEqual(left.randomness, right.randomness) ||
-            left.segmentCount != right.segmentCount ||
-            left.billboardCount != right.billboardCount ||
-            left.randomSeed != right.randomSeed ||
-            !NearlyEqual(left.viewDistance, right.viewDistance) ||
-            !NearlyEqual(left.uniformity, right.uniformity) ||
-            left.cameraBendEnabled != right.cameraBendEnabled ||
-            left.atlasRects.size() != right.atlasRects.size())
-        {
-            return false;
-        }
-
-        for (std::size_t i = 0; i < left.atlasRects.size(); ++i)
-        {
-            const auto& a = left.atlasRects[i];
-            const auto& b = right.atlasRects[i];
-            if (!NearlyEqual(a.texMulAdd.x, b.texMulAdd.x) ||
-                !NearlyEqual(a.texMulAdd.y, b.texMulAdd.y) ||
-                !NearlyEqual(a.texMulAdd.z, b.texMulAdd.z) ||
-                !NearlyEqual(a.texMulAdd.w, b.texMulAdd.w) ||
-                !NearlyEqual(a.size, b.size))
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool ApplyVegetationGrassSettings(
-        wi::scene::Scene& scene,
-        wi::terrain::Terrain& terrain,
-        const VegetationGrassSettings& requested)
-    {
-        const VegetationGrassSettings settings = ClampSettings(requested);
-        const VegetationGrassSettings before =
-            CaptureVegetationGrassSettings(terrain);
-        if (VegetationGrassSettingsEqual(before, settings))
-            return false;
-
-        ApplySettingsToHair(terrain.grass_properties, settings);
-
-        if (terrain.grassEntity != wi::ecs::INVALID_ENTITY)
-        {
-            if (auto* master = scene.hairs.GetComponent(terrain.grassEntity))
-                ApplySettingsToHair(*master, settings);
-        }
-
-        for (auto& entry : terrain.chunks)
-        {
-            auto& chunk = entry.second;
-            ApplySettingsToHair(chunk.grass, settings);
-            if (chunk.grass_entity == wi::ecs::INVALID_ENTITY)
-                continue;
-            if (auto* live = scene.hairs.GetComponent(chunk.grass_entity))
-                ApplySettingsToHair(*live, settings);
-        }
-
-        SetBoolMarker(scene, terrain.terrainEntity, SettingsVersionKey);
         return true;
     }
 
@@ -898,8 +499,7 @@ namespace renegade::bridge
         if (scene_ == nullptr)
             return false;
         auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
-        return terrain != nullptr &&
-            ApplyVegetationState(*scene_, *terrain, state);
+        return terrain != nullptr && ApplyVegetationState(*scene_, *terrain, state);
     }
 
     bool VegetationStrokeCommand::Execute()
@@ -941,38 +541,6 @@ namespace renegade::bridge
     }
 
     void SetVegetationDensityCommand::Undo()
-    {
-        Apply(before_);
-    }
-
-    SetVegetationGrassSettingsCommand::SetVegetationGrassSettingsCommand(
-        wi::scene::Scene& scene,
-        const wi::ecs::Entity terrainEntity,
-        VegetationGrassSettings before,
-        VegetationGrassSettings after)
-        : scene_(&scene)
-        , terrainEntity_(terrainEntity)
-        , before_(std::move(before))
-        , after_(std::move(after))
-    {
-    }
-
-    bool SetVegetationGrassSettingsCommand::Apply(
-        const VegetationGrassSettings& settings)
-    {
-        if (scene_ == nullptr)
-            return false;
-        auto* terrain = scene_->terrains.GetComponent(terrainEntity_);
-        return terrain != nullptr &&
-            ApplyVegetationGrassSettings(*scene_, *terrain, settings);
-    }
-
-    bool SetVegetationGrassSettingsCommand::Execute()
-    {
-        return Apply(after_);
-    }
-
-    void SetVegetationGrassSettingsCommand::Undo()
     {
         Apply(before_);
     }
