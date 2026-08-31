@@ -3272,6 +3272,8 @@ namespace renegade::studio
         terrainStrokeDiagnostic_.SetText("LAST STROKE // READY");
         inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);
 
+        CreateWd01VegetationControls();
+
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
         focusButton_.SetTooltip("Frame the selected entity in the viewport");
@@ -4645,6 +4647,8 @@ namespace renegade::studio
             return;
         }
 
+        TickWd01Vegetation();
+
         // Chrome callbacks have returned. A drag release is committed here in
         // this exact frame, before ConsumedPointerThisFrame() can short-circuit
         // the rest of Studio input processing.
@@ -4782,6 +4786,10 @@ namespace renegade::studio
             gizmo_.Update(*camera, pointer, *this);
         }
 
+        if (HandleWd01Vegetation(pointer))
+        {
+            return;
+        }
         if (HandleTerrainSculpt(pointer))
         {
             return;
@@ -5194,6 +5202,7 @@ namespace renegade::studio
         positionEnvironmentWidget(terrainBrushFalloff_, 622.0f);
         positionEnvironmentWidget(terrainBrushReadout_, 656.0f, 20.0f);
         positionEnvironmentWidget(terrainStrokeDiagnostic_, 676.0f, 20.0f);
+        LayoutWd01VegetationControls(environmentFieldWidth);
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
@@ -5599,7 +5608,7 @@ namespace renegade::studio
         const float actionStart = environment
             ? std::max(1772.0f, inspectorPanel_.GetSize().y - 82.0f)
             : terrain
-                ? 726.0f
+                ? 1340.0f
                 : light
                     ? 1130.0f
                     : sceneCamera
@@ -6018,6 +6027,7 @@ namespace renegade::studio
         setTerrainVisible(terrainBrushFalloff_);
         setTerrainVisible(terrainBrushReadout_);
         setTerrainVisible(terrainStrokeDiagnostic_);
+        RefreshWd01VegetationControls(hasTerrain);
 
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
