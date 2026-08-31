@@ -551,10 +551,11 @@ namespace renegade::studio
         state.strokeActive = false;
         state.strokeChanged = false;
         state.strokeBefore = {};
+        if (!state.created)
+            return;
         state.paint.SetText("PAINT");
         state.erase.SetText("DELETE");
-        if (state.created)
-            state.status.SetText("VEGETATION // READY");
+        state.status.SetText("VEGETATION // READY");
     }
 
     bool StudioRenderPath::HandleWd01Vegetation(
