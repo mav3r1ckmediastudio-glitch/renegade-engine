@@ -1,5 +1,6 @@
 file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/VegetationService.h" WD01_HEADER)
 file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/src/VegetationService.cpp" WD01_SERVICE)
+file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/VegetationAppearanceService.h" WD01_APPEARANCE)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/WD01Vegetation.cpp" WD01_STUDIO)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp" WD01_APP)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt" WD01_STUDIO_CMAKE)
@@ -52,6 +53,25 @@ wd01_require(WD01_SERVICE "live->_flags |= wi::HairParticleSystem::REBUILD_BUFFE
 wd01_require_exact_count(WD01_SERVICE "*live = chunk.grass;" 1 "live HairParticle may only be wholesale-copied on first creation")
 wd01_require_exact_count(WD01_SERVICE "live->CreateFromMesh(*mesh);" 1 "live CreateFromMesh may only occur on first creation")
 
+# Appearance is additive over the locked paint backend. It may alter only native
+# non-topology HairParticle properties and must never rebuild the emitter buffers.
+wd01_require(WD01_APPEARANCE "VegetationAppearanceSettings" "missing isolated grass appearance settings contract")
+wd01_require(WD01_APPEARANCE "hair.length = settings.length" "Length is not mapped to native Wicked hair")
+wd01_require(WD01_APPEARANCE "hair.width = settings.width" "Width is not mapped to native Wicked hair")
+wd01_require(WD01_APPEARANCE "hair.randomness = settings.randomness" "Randomness is not mapped to native Wicked hair")
+wd01_require(WD01_APPEARANCE "hair.randomSeed = settings.randomSeed" "Random Seed is not mapped to native Wicked hair")
+wd01_require(WD01_APPEARANCE "hair.uniformity = settings.uniformity" "Uniformity is not mapped to native Wicked hair")
+wd01_require(WD01_STUDIO "APPEARANCE [-]" "missing collapsible Appearance section")
+wd01_require(WD01_STUDIO "WD01 Grass Length" "missing grass Length control")
+wd01_require(WD01_STUDIO "WD01 Grass Width" "missing grass Width control")
+wd01_require(WD01_STUDIO "WD01 Grass Randomness" "missing grass Randomness control")
+wd01_require(WD01_STUDIO "WD01 Grass Random Seed" "missing grass Random Seed control")
+wd01_require(WD01_STUDIO "WD01 Grass Uniformity" "missing grass Uniformity control")
+string(FIND "${WD01_APPEARANCE}" "REBUILD_BUFFERS" APPEARANCE_REBUILD)
+if(NOT APPEARANCE_REBUILD EQUAL -1)
+    message(FATAL_ERROR "WD01 contract: Appearance controls must not rebuild HairParticle emitter buffers")
+endif()
+
 # Terrain's pre-WD01 action rows are anchored at Y 726 and end at Y 834
 # (save row at 806 with 28 px controls). Vegetation must append below that
 # boundary so Wicked's normal Window scroll-range calculation can expose it
@@ -62,6 +82,7 @@ wd01_require(WD01_STUDIO "VegetationInspectorTop =" "missing vegetation scroll-e
 wd01_require(WD01_STUDIO "TerrainInspectorActionsBottom + VegetationInspectorGap" "vegetation must begin after existing Terrain action rows")
 wd01_require(WD01_STUDIO "place(controls.sectionLabel, VegetationInspectorTop, 20.0f)" "vegetation section is not anchored below Terrain actions")
 wd01_require(WD01_STUDIO "place(controls.status, VegetationInspectorTop + 148.0f, 34.0f)" "vegetation content does not extend the Terrain scroll range")
+wd01_require(WD01_STUDIO "place(controls.appearanceHeader, VegetationInspectorTop + 190.0f)" "Appearance section is not appended below the accepted paint controls")
 
 foreach(FORBIDDEN IN ITEMS "HairParticleWindow" "PaintToolWindow")
     string(FIND "${WD01_STUDIO}" "${FORBIDDEN}" FOUND)
