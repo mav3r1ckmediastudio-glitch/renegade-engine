@@ -3,6 +3,7 @@
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/TerrainService.h"
+#include "renegade/bridge/VegetationService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -696,6 +697,7 @@ namespace renegade::bridge
             terrain.scene = &scene_;
         }
         RebindDefaultTerrainMaterials(scene_);
+        RebindWickedVegetationResources(scene_);
         currentPath_ = std::move(prepared.path_);
         lastError_.clear();
         return true;
