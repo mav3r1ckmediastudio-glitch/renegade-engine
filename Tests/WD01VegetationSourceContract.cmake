@@ -25,25 +25,42 @@ wd01_require(WD01_APP "HandleWd01Vegetation(pointer)" "viewport does not route v
 wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grass.wiscene" "Studio does not package Wicked grass scene")
 wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grassparticle.png" "Studio does not package Wicked grass texture")
 
-# Painting is deliberately routed through a separate implementation that mirrors
-# pinned Wicked PaintTool MODE_HAIRPARTICLE_LENGTH. The legacy support file keeps
-# initialization/Undo/Redo only; it must not be the linked PaintVegetation symbol.
+# Painting is routed through the native coverage implementation. The legacy
+# support file keeps initialization/Undo/Redo only; it must not be the linked
+# PaintVegetation symbol.
 wd01_require(WD01_BRIDGE_CMAKE "src/VegetationNativePaintService.cpp" "native Wicked paint implementation is not compiled")
 wd01_require(WD01_BRIDGE_CMAKE "PaintVegetation=PaintVegetationLegacy" "legacy custom painter is still the linked PaintVegetation symbol")
-wd01_require(WD01_NATIVE_PAINT "StableInactiveLength = 1.0f / 255.0f" "native Wicked retained-emitter threshold changed")
-wd01_require(WD01_NATIVE_PAINT "wi::math::SmoothStep" "native Wicked brush falloff was removed")
-wd01_require(WD01_NATIVE_PAINT "wi::math::Lerp" "native Wicked HairParticle Length interpolation was removed")
-wd01_require(WD01_NATIVE_PAINT "live->vertex_lengths[vertex] = next" "painting no longer edits the live HairParticle mask directly")
-wd01_require(WD01_NATIVE_PAINT "live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS" "painting no longer uses Wicked HairParticle rebuild semantics")
-wd01_require(WD01_NATIVE_PAINT "chunk.grass.vertex_lengths = live->vertex_lengths" "live Wicked mask is not mirrored back into terrain ChunkData")
+
+# Paint/Delete must follow Wicked HairParticle Add/Remove coverage semantics:
+# real zero means no emitter support, Paint writes 1, Delete writes 0.
+wd01_require(WD01_NATIVE_PAINT "mode == VegetationBrushMode::Paint ? 1.0f : 0.0f" "Paint/Delete no longer maps to native Add/Remove coverage values")
+wd01_require(WD01_NATIVE_PAINT "chunk.grass.vertex_lengths[vertex] = target" "painting no longer edits the authored Wicked vertex mask")
+wd01_require(WD01_NATIVE_PAINT "CountActiveGrassVertices" "active grass coverage is not counted")
+wd01_require(WD01_NATIVE_PAINT "NativeTerrainStrandCount" "native terrain strand-density formula is missing")
+wd01_require(WD01_NATIVE_PAINT "activeVertexCount) * 3.0f" "strand capacity is not derived from actual painted vertices")
+wd01_require(WD01_NATIVE_PAINT "live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS" "live painting no longer uses Wicked HairParticle rebuild semantics")
+wd01_require(WD01_NATIVE_PAINT "scene.Entity_Remove(chunk.grass_entity)" "fully empty chunks must release their live grass entity")
 wd01_require(WD01_NATIVE_PAINT "substepCount" "drag stroke subdivision was removed")
 
+# The discarded full-chunk 1/255 system is migration-only. It must never be
+# used to activate an empty chunk again because that creates full strand cost
+# for tiny painted patches and leaves stale chunks unpaintable.
+wd01_require(WD01_NATIVE_PAINT "MigrateLegacyStableChunks" "legacy stable-distribution scenes are not migrated")
+wd01_require(WD01_NATIVE_PAINT "LegacyInvisibleLength = 1.0f / 255.0f" "legacy R8 support migration threshold changed")
+string(FIND "${WD01_NATIVE_PAINT}" "mesh.vertex_positions.size(), LegacyInvisibleLength" FULL_CHUNK_STABLE)
+if(NOT FULL_CHUNK_STABLE EQUAL -1)
+    message(FATAL_ERROR "WD01 contract: full-chunk 1/255 activation must not return")
+endif()
+string(FIND "${WD01_NATIVE_PAINT}" "if (current <= 0.0f)" ZERO_BLOCK)
+if(NOT ZERO_BLOCK EQUAL -1)
+    message(FATAL_ERROR "WD01 contract: zero-length vertices must remain paintable by Add mode")
+endif()
+
 # Empty neighbouring chunks create their grass child lazily during the paint
-# call. Before Wicked's hierarchy update runs, that child does not yet have the
-# parent's world transform. Vertex-space painting must therefore use the chunk
-# mesh entity transform directly; after hierarchy sync this is equivalent to
-# Wicked's established hair-child transform, but it is correct on first contact.
+# call. Vertex-space painting must use the chunk mesh entity transform directly,
+# not a just-created child transform awaiting hierarchy propagation.
 wd01_require(WD01_NATIVE_PAINT "scene.transforms.GetComponent(chunk.entity)" "native painter must transform terrain mesh vertices with the chunk entity world matrix")
+wd01_require(WD01_NATIVE_PAINT "XMVector3TransformCoord(position, world)" "terrain vertex painting must use the chunk world transform")
 string(FIND "${WD01_NATIVE_PAINT}" "scene.transforms.GetComponent(\n                chunk.grass_entity)" GRASS_CHILD_WORLD)
 if(NOT GRASS_CHILD_WORLD EQUAL -1)
     message(FATAL_ERROR "WD01 contract: first-contact painting must not use an unsynchronised grass-child world matrix")
