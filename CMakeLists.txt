@@ -78,6 +78,12 @@ if(WIN32)
     include(Tests/Phase5Gate7.cmake)
     include(Tests/Phase5Gate8.cmake)
     include(Tests/Phase5Gate9.cmake)
+    add_test(
+        NAME RenegadeWD01VegetationSourceContract
+        COMMAND ${CMAKE_COMMAND}
+            -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P ${CMAKE_SOURCE_DIR}/Tests/WD01VegetationSourceContract.cmake
+    )
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)

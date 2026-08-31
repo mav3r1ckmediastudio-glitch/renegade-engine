@@ -11,17 +11,46 @@ function(wd01_require HAYSTACK NEEDLE MESSAGE_TEXT)
     endif()
 endfunction()
 
+function(wd01_require_exact_count HAYSTACK NEEDLE EXPECTED MESSAGE_TEXT)
+    set(REMAINING "${${HAYSTACK}}")
+    set(COUNT 0)
+    while(TRUE)
+        string(FIND "${REMAINING}" "${NEEDLE}" FOUND)
+        if(FOUND EQUAL -1)
+            break()
+        endif()
+        math(EXPR COUNT "${COUNT} + 1")
+        string(LENGTH "${NEEDLE}" NEEDLE_LENGTH)
+        math(EXPR NEXT "${FOUND} + ${NEEDLE_LENGTH}")
+        string(SUBSTRING "${REMAINING}" ${NEXT} -1 REMAINING)
+    endwhile()
+    if(NOT COUNT EQUAL EXPECTED)
+        message(FATAL_ERROR "WD01 contract: ${MESSAGE_TEXT} (expected ${EXPECTED}, found ${COUNT})")
+    endif()
+endfunction()
+
 wd01_require(WD01_HEADER "VegetationBrushMode" "missing Paint/Delete brush contract")
 wd01_require(WD01_HEADER "VegetationStrokeCommand" "missing vegetation Undo/Redo command")
 wd01_require(WD01_SERVICE "wi::scene::LoadModel(grassScene, grassScenePath)" "must consume native Wicked grass.wiscene")
 wd01_require(WD01_SERVICE "vertex_lengths" "must author native Wicked hair vertex mask")
-wd01_require(WD01_SERVICE "CreateFromMesh" "must rebuild native Wicked hair distribution")
+wd01_require(WD01_SERVICE "CreateFromMesh" "must use native Wicked hair distribution")
 wd01_require(WD01_STUDIO "VEGETATION // GRASS" "missing Terrain vegetation section")
 wd01_require(WD01_STUDIO "PAINT" "missing creator Paint tool")
 wd01_require(WD01_STUDIO "DELETE" "missing creator Delete tool")
 wd01_require(WD01_APP "HandleWd01Vegetation(pointer)" "viewport does not route vegetation brush")
 wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grass.wiscene" "Studio does not package Wicked grass scene")
 wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grassparticle.png" "Studio does not package Wicked grass texture")
+
+# Owner-approved interactive paint baseline, accepted at 02d5b90c8e7faee011eebf679cb1f3a1df107d73.
+# These checks intentionally protect the native live-mask update seam that fixed
+# visible painting and eliminated flicker/re-randomisation while a stroke is active.
+wd01_require(WD01_SERVICE "StableInactiveLength = 1.0f / 255.0f" "stable Wicked R8 mask threshold changed")
+wd01_require(WD01_SERVICE "BuildStrokeSamples(beforeState, center, brushRadius)" "continuous stroke interpolation was removed")
+wd01_require(WD01_SERVICE "if (texture.name == texturePath && texture.resource.IsValid())" "grass material rebind is no longer idempotent")
+wd01_require(WD01_SERVICE "live->vertex_lengths = chunk.grass.vertex_lengths" "live grass mask is not updated in place")
+wd01_require(WD01_SERVICE "live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS" "live grass no longer uses Wicked deferred rebuild path")
+wd01_require_exact_count(WD01_SERVICE "*live = chunk.grass;" 1 "live HairParticle may only be wholesale-copied on first creation")
+wd01_require_exact_count(WD01_SERVICE "live->CreateFromMesh(*mesh);" 1 "live CreateFromMesh may only occur on first creation")
 
 # Terrain's pre-WD01 action rows are anchored at Y 726 and end at Y 834
 # (save row at 806 with 28 px controls). Vegetation must append below that
