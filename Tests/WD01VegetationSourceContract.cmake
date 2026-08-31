@@ -4,6 +4,7 @@ endif()
 
 file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/src/VegetationService.cpp" WD01_SERVICE)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/WD01Vegetation.cpp" WD01_STUDIO)
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp" WD01_APPLICATION)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt" WD01_STUDIO_CMAKE)
 file(READ "${RENEGADE_SOURCE_DIR}/Runtime/CMakeLists.txt" WD01_RUNTIME_CMAKE)
 
@@ -24,6 +25,9 @@ wd01_require("${WD01_STUDIO}" "FILTER_TERRAIN" "viewport brush must pick native 
 wd01_require("${WD01_STUDIO}" "PaintWickedVegetation" "Studio must delegate painting through EngineBridge")
 wd01_require("${WD01_STUDIO}" "WickedVegetationStrokeCommand" "completed strokes must be Undo/Redo commands")
 wd01_require("${WD01_STUDIO}" "VEGETATION // WICKED GRASS" "grass UI must live in Renegade's Terrain inspector")
+wd01_require("${WD01_STUDIO}" "A stroke can begin in the viewport and be released over Renegade's" "stroke release must be finalized outside the viewport")
+wd01_require("${WD01_APPLICATION}" "Cancel the persistent" "Renegade chrome must cancel vegetation input ownership")
+wd01_require("${WD01_APPLICATION}" "else\n        {\n            DisableWd01VegetationBrush();" "leaving Terrain must cancel the vegetation tool")
 wd01_require("${WD01_STUDIO_CMAKE}" "WickedEngine/Content/terrain/grass.wiscene" "Studio must package Wicked grass.wiscene")
 wd01_require("${WD01_STUDIO_CMAKE}" "WickedEngine/Content/terrain/grassparticle.png" "Studio must package Wicked grass texture")
 wd01_require("${WD01_RUNTIME_CMAKE}" "WickedEngine/Content/terrain/grass.wiscene" "Runtime must package Wicked grass.wiscene")
