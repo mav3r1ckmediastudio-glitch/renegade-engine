@@ -295,24 +295,6 @@ namespace renegade::bridge
         {
             auto& chunk = entry.second;
 
-            bool nearStroke = false;
-            for (const auto& sample : samples)
-            {
-                const XMFLOAT3 delta(
-                    chunk.sphere.center.x - sample.x,
-                    chunk.sphere.center.y - sample.y,
-                    chunk.sphere.center.z - sample.z);
-                const float reach = brushRadius + chunk.sphere.radius;
-                if (delta.x * delta.x + delta.y * delta.y + delta.z * delta.z <=
-                    reach * reach)
-                {
-                    nearStroke = true;
-                    break;
-                }
-            }
-            if (!nearStroke)
-                continue;
-
             auto* mesh = scene.meshes.GetComponent(chunk.entity);
             const auto* transform = scene.transforms.GetComponent(chunk.entity);
             if (mesh == nullptr || transform == nullptr ||
@@ -321,8 +303,27 @@ namespace renegade::bridge
                 continue;
             }
 
-            PrepareAuthoredChunkGrass(terrain, chunk, *mesh);
             const XMMATRIX world = XMLoadFloat4x4(&transform->world);
+            const wi::primitive::AABB worldAabb = mesh->aabb.transform(world);
+
+            // Match Wicked PaintTool's broad phase: brush sphere vs the actual
+            // rendered object's AABB. Do not depend on Terrain::ChunkData::sphere
+            // bookkeeping, which can be stale across serialized/regenerated
+            // chunks and was rejecting otherwise valid paint targets.
+            bool nearStroke = false;
+            for (const auto& sample : samples)
+            {
+                const wi::primitive::Sphere brushSphere(sample, brushRadius);
+                if (brushSphere.intersects(worldAabb))
+                {
+                    nearStroke = true;
+                    break;
+                }
+            }
+            if (!nearStroke)
+                continue;
+
+            PrepareAuthoredChunkGrass(terrain, chunk, *mesh);
 
             bool chunkChanged = false;
             std::size_t changedVertices = 0;
