@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
-#include <limits>
 #include <utility>
 
 namespace
@@ -16,16 +15,10 @@ namespace
         "renegade.vegetation.manual_chunk";
     constexpr const char* SettingsVersionKey =
         "renegade.vegetation.hair_settings_v2";
+    constexpr const char* NativePaintChunkKey =
+        "renegade.vegetation.native_paint_v3";
     constexpr float MaskEpsilon = 0.0001f;
-
-    // Wicked's CreateFromMesh() keeps only triangles containing at least one
-    // positive vertex length. A tiny CPU-side sentinel therefore keeps the
-    // emitter triangle list stable, while Wicked's R8_UNORM upload truncates
-    // 0.001 * 255 to zero so no visible grass is rendered at those vertices.
-    // This prevents already-painted strands from being redistributed whenever
-    // the brush expands or deletes part of a patch.
-    constexpr float InactiveDistributionMask = 0.001f;
-    constexpr float PaintedMaskThreshold = 0.5f;
+    constexpr float NativeMinimumNonZeroLength = 1.0f / 255.0f;
     constexpr float RenegadeDefaultGrassLength = 0.35f;
 
     std::string BundledWickedGrassScenePath()
@@ -94,14 +87,20 @@ namespace
         return std::abs(left - right) <= MaskEpsilon;
     }
 
-    bool NormalizeInactiveMask(std::vector<float>& lengths) noexcept
+    // The failed v2 stability experiment wrote 0.001 to every unpainted
+    // terrain vertex. Wicked's CPU CreateFromMesh() treats any value > 0 as an
+    // emitter triangle, even though 0.001 later packs to zero in R8_UNORM.
+    // Wicked's own length painter clamps legitimate retained non-zero lengths
+    // to at least 1/255, so values in (0, 1/255) identify that bad sentinel and
+    // can be migrated back to native zero without destroying authored lengths.
+    bool MigrateLegacySentinelMask(std::vector<float>& lengths) noexcept
     {
         bool changed = false;
         for (float& value : lengths)
         {
-            if (value <= MaskEpsilon)
+            if (value > 0.0f && value < NativeMinimumNonZeroLength)
             {
-                value = InactiveDistributionMask;
+                value = 0.0f;
                 changed = true;
             }
         }
@@ -115,28 +114,43 @@ namespace
             grass.vertex_lengths.end(),
             [](const float value)
             {
-                return value >= PaintedMaskThreshold;
+                return value > MaskEpsilon;
             });
     }
 
-    std::uint32_t StableActiveStrandCount(
+    std::uint32_t CountPaintedStrands(
         const wi::terrain::Terrain& terrain,
-        const wi::scene::MeshComponent& mesh) noexcept
+        const wi::HairParticleSystem& grass) noexcept
     {
-        if (mesh.vertex_positions.empty())
+        std::size_t paintedVertices = 0;
+        for (const float value : grass.vertex_lengths)
+        {
+            if (value > MaskEpsilon)
+                ++paintedVertices;
+        }
+        if (paintedVertices == 0)
             return 0;
 
-        // Wicked terrain's native density formula for a full chunk. The stable
-        // full-chunk emitter capacity stays constant while the length mask
-        // determines what fraction is visible, preserving the accepted density
-        // without changing the strand index space during a stroke.
-        const double count =
-            static_cast<double>(mesh.vertex_positions.size()) * 3.0 *
-            static_cast<double>(terrain.chunk_scale) *
-            static_cast<double>(terrain.chunk_scale);
-        return static_cast<std::uint32_t>(std::min(
-            count,
-            static_cast<double>(std::numeric_limits<std::uint32_t>::max())));
+        // Match Wicked terrain's native grass-density formula. Crucially this
+        // is based on valid grass vertices, not every vertex in the chunk.
+        const float nativeCount =
+            static_cast<float>(paintedVertices) * 3.0f *
+            terrain.chunk_scale * terrain.chunk_scale;
+        return static_cast<std::uint32_t>(nativeCount);
+    }
+
+    bool StrokeAlreadyContainsChunk(
+        const renegade::bridge::VegetationStrokeState* state,
+        const wi::ecs::Entity chunkEntity) noexcept
+    {
+        if (state == nullptr)
+            return false;
+        for (const auto& snapshot : state->chunks)
+        {
+            if (snapshot.chunkEntity == chunkEntity)
+                return true;
+        }
+        return false;
     }
 
     renegade::bridge::VegetationGrassSettings ClampSettings(
@@ -205,10 +219,6 @@ namespace
         wi::HairParticleSystem& live,
         const wi::HairParticleSystem& authored)
     {
-        const bool topologyChanged =
-            live.segmentCount != authored.segmentCount ||
-            live.billboardCount != authored.billboardCount;
-
         live.meshID = authored.meshID;
         live.segmentCount = authored.segmentCount;
         live.billboardCount = authored.billboardCount;
@@ -227,8 +237,11 @@ namespace
         live.SetCameraBendEnabled(authored.IsCameraBendEnabled());
         live.regenerate_frame = true;
         live.SetDirty();
-        if (topologyChanged)
-            live._flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
+
+        // Match Wicked's stock PaintTool: changing the native vertex mask only
+        // marks buffers dirty. HairParticleSystem::UpdateCPU() owns the actual
+        // CreateFromMesh()/CreateRenderData() rebuild on the normal scene tick.
+        live._flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
     }
 
     bool EnsureLiveChunkGrass(
@@ -243,16 +256,11 @@ namespace
         if (chunk.grass.vertex_lengths.size() != mesh->vertex_positions.size())
         {
             chunk.grass.vertex_lengths.assign(
-                mesh->vertex_positions.size(),
-                InactiveDistributionMask);
+                mesh->vertex_positions.size(), 0.0f);
         }
-        else
-        {
-            NormalizeInactiveMask(chunk.grass.vertex_lengths);
-        }
+        MigrateLegacySentinelMask(chunk.grass.vertex_lengths);
 
         chunk.grass.meshID = chunk.entity;
-        chunk.grass.CreateFromMesh(*mesh);
         chunk.grass_density_current = terrain.grass_density;
 
         if (chunk.grass_entity == wi::ecs::INVALID_ENTITY &&
@@ -273,6 +281,10 @@ namespace
         {
             live = &scene.hairs.Create(chunk.grass_entity);
             *live = chunk.grass;
+            // A new live component must not inherit render resources from the
+            // chunk-side authored copy. Wicked will allocate them on UpdateCPU.
+            live->DeleteRenderData();
+            live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
         }
         else
         {
@@ -282,7 +294,8 @@ namespace
         live->strandCount = static_cast<std::uint32_t>(
             static_cast<float>(chunk.grass.strandCount) *
             std::max(0.0f, terrain.grass_density));
-        live->CreateFromMesh(*mesh);
+        live->regenerate_frame = true;
+        live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
 
         auto* material = scene.materials.GetComponent(chunk.grass_entity);
         if (material == nullptr)
@@ -319,13 +332,12 @@ namespace
         chunk.grass = terrain.grass_properties;
         chunk.grass.DeleteRenderData();
         chunk.grass.meshID = chunk.entity;
-        chunk.grass.vertex_lengths.assign(
-            mesh->vertex_positions.size(),
-            InactiveDistributionMask);
+        chunk.grass.vertex_lengths.assign(mesh->vertex_positions.size(), 0.0f);
+        chunk.grass.indices.clear();
         chunk.grass.strandCount = 0;
-        chunk.grass.CreateFromMesh(*mesh);
         EnsureLiveChunkGrass(scene, terrain, chunk);
         SetBoolMarker(scene, chunk.entity, ManualChunkKey);
+        SetBoolMarker(scene, chunk.entity, NativePaintChunkKey);
         return true;
     }
 
@@ -345,22 +357,25 @@ namespace
         if (chunk.grass.vertex_lengths.size() != mesh->vertex_positions.size())
         {
             chunk.grass.vertex_lengths.assign(
-                mesh->vertex_positions.size(),
-                InactiveDistributionMask);
+                mesh->vertex_positions.size(), 0.0f);
+            chunk.grass.strandCount = 0;
             changed = true;
-        }
-        else
-        {
-            changed |= NormalizeInactiveMask(chunk.grass.vertex_lengths);
         }
 
-        const std::uint32_t stableCount = HasPaintedVertices(chunk.grass)
-            ? StableActiveStrandCount(terrain, *mesh)
-            : 0;
-        if (chunk.grass.strandCount != stableCount)
+        const bool needsNativePaintMigration =
+            !HasBoolMarker(scene, chunk.entity, NativePaintChunkKey);
+        if (needsNativePaintMigration)
         {
-            chunk.grass.strandCount = stableCount;
-            changed = true;
+            changed |= MigrateLegacySentinelMask(chunk.grass.vertex_lengths);
+            const std::uint32_t migratedCount =
+                CountPaintedStrands(terrain, chunk.grass);
+            if (chunk.grass.strandCount != migratedCount)
+            {
+                chunk.grass.strandCount = migratedCount;
+                changed = true;
+            }
+            chunk.grass.CreateFromMesh(*mesh);
+            SetBoolMarker(scene, chunk.entity, NativePaintChunkKey);
         }
 
         const auto settings =
@@ -567,12 +582,10 @@ namespace renegade::bridge
             return result;
         }
 
-        SynchronizeManualVegetation(scene, terrain);
         const float brushRadius = std::clamp(radius, 0.5f, 250.0f);
         const float radiusSquared = brushRadius * brushRadius;
-        const float target = mode == VegetationBrushMode::Paint
-            ? 1.0f
-            : InactiveDistributionMask;
+        const float target =
+            mode == VegetationBrushMode::Paint ? 1.0f : 0.0f;
 
         for (auto& entry : terrain.chunks)
         {
@@ -594,13 +607,9 @@ namespace renegade::bridge
             if (chunk.grass.vertex_lengths.size() != mesh->vertex_positions.size())
             {
                 chunk.grass.vertex_lengths.assign(
-                    mesh->vertex_positions.size(),
-                    InactiveDistributionMask);
+                    mesh->vertex_positions.size(), 0.0f);
             }
-            else
-            {
-                NormalizeInactiveMask(chunk.grass.vertex_lengths);
-            }
+            MigrateLegacySentinelMask(chunk.grass.vertex_lengths);
 
             const XMMATRIX world = transform->GetWorldMatrix();
             std::vector<std::size_t> changedIndices;
@@ -626,13 +635,27 @@ namespace renegade::bridge
             if (changedIndices.empty())
                 continue;
 
+            const bool firstTouchThisStroke =
+                !StrokeAlreadyContainsChunk(beforeState, chunk.entity);
             CaptureChunkBeforeIfNeeded(beforeState, chunk);
             for (const std::size_t index : changedIndices)
                 chunk.grass.vertex_lengths[index] = target;
 
-            chunk.grass.strandCount = HasPaintedVertices(chunk.grass)
-                ? StableActiveStrandCount(terrain, *mesh)
-                : 0;
+            if (!HasPaintedVertices(chunk.grass))
+            {
+                // Never leave a live positive strand count with zero emitter
+                // triangles. Wicked's shader indexes the emitter triangle list.
+                chunk.grass.strandCount = 0;
+            }
+            else if (firstTouchThisStroke || chunk.grass.strandCount == 0)
+            {
+                // Establish a bounded native count once when this stroke first
+                // reaches the chunk. Subsequent interpolated samples keep it
+                // stable; the completed stroke is finalized once on mouse-up.
+                chunk.grass.strandCount =
+                    CountPaintedStrands(terrain, chunk.grass);
+            }
+
             EnsureLiveChunkGrass(scene, terrain, chunk);
             result.changed = true;
             ++result.affectedChunks;
@@ -642,11 +665,44 @@ namespace renegade::bridge
         return result;
     }
 
+    bool FinalizeVegetationStroke(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const VegetationStrokeState& touchedState)
+    {
+        bool changed = false;
+        for (const auto& snapshot : touchedState.chunks)
+        {
+            auto* chunk = FindChunk(terrain, snapshot.chunkEntity);
+            if (chunk == nullptr)
+                continue;
+            auto* mesh = scene.meshes.GetComponent(chunk->entity);
+            if (mesh == nullptr)
+                continue;
+
+            MigrateLegacySentinelMask(chunk->grass.vertex_lengths);
+            const std::uint32_t finalCount =
+                CountPaintedStrands(terrain, chunk->grass);
+            if (chunk->grass.strandCount != finalCount)
+            {
+                chunk->grass.strandCount = finalCount;
+                changed = true;
+            }
+            // Keep chunk-side authored emitter indices coherent for terrain
+            // persistence/runtime placement. This is CPU-only; the live scene
+            // hair still rebuilds GPU resources through Wicked UpdateCPU().
+            chunk->grass.CreateFromMesh(*mesh);
+            EnsureLiveChunkGrass(scene, terrain, *chunk);
+        }
+        return changed;
+    }
+
     VegetationStrokeState CaptureVegetationAfter(
-        const wi::scene::Scene&,
-        const wi::terrain::Terrain& terrain,
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
         const VegetationStrokeState& beforeState)
     {
+        FinalizeVegetationStroke(scene, terrain, beforeState);
         VegetationStrokeState after;
         after.chunks.reserve(beforeState.chunks.size());
         for (const auto& beforeChunk : beforeState.chunks)
@@ -687,14 +743,15 @@ namespace renegade::bridge
             chunk->grass.DeleteRenderData();
             chunk->grass.meshID = chunk->entity;
             chunk->grass.vertex_lengths = snapshot.vertexLengths;
-            NormalizeInactiveMask(chunk->grass.vertex_lengths);
+            MigrateLegacySentinelMask(chunk->grass.vertex_lengths);
             chunk->grass.strandCount = HasPaintedVertices(chunk->grass)
-                ? StableActiveStrandCount(terrain, *mesh)
+                ? snapshot.strandCount
                 : 0;
             ApplySettingsToHair(chunk->grass, settings);
             chunk->grass.CreateFromMesh(*mesh);
             EnsureLiveChunkGrass(scene, terrain, *chunk);
             SetBoolMarker(scene, chunk->entity, ManualChunkKey);
+            SetBoolMarker(scene, chunk->entity, NativePaintChunkKey);
             applied = true;
         }
         return applied || state.chunks.empty();
@@ -728,6 +785,7 @@ namespace renegade::bridge
             live->strandCount = static_cast<std::uint32_t>(
                 static_cast<float>(chunk.grass.strandCount) * clamped);
             live->regenerate_frame = true;
+            live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
         }
         return true;
     }

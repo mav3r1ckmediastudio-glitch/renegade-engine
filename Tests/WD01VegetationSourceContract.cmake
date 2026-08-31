@@ -11,15 +11,26 @@ function(wd01_require HAYSTACK NEEDLE MESSAGE_TEXT)
     endif()
 endfunction()
 
+function(wd01_forbid HAYSTACK NEEDLE MESSAGE_TEXT)
+    string(FIND "${${HAYSTACK}}" "${NEEDLE}" FOUND)
+    if(NOT FOUND EQUAL -1)
+        message(FATAL_ERROR "WD01 contract: ${MESSAGE_TEXT}")
+    endif()
+endfunction()
+
 wd01_require(WD01_HEADER "VegetationBrushMode" "missing Paint/Delete brush contract")
 wd01_require(WD01_HEADER "VegetationStrokeCommand" "missing vegetation Undo/Redo command")
 wd01_require(WD01_HEADER "VegetationGrassSettings" "missing native Wicked grass settings snapshot")
 wd01_require(WD01_HEADER "SetVegetationGrassSettingsCommand" "grass settings must participate in Undo/Redo")
+wd01_require(WD01_HEADER "FinalizeVegetationStroke" "completed strokes must finalize their bounded native strand count")
 wd01_require(WD01_SERVICE "wi::scene::LoadModel(grassScene, grassScenePath)" "must consume native Wicked grass.wiscene")
 wd01_require(WD01_SERVICE "vertex_lengths" "must author native Wicked hair vertex mask")
-wd01_require(WD01_SERVICE "CreateFromMesh" "must rebuild native Wicked hair distribution")
-wd01_require(WD01_SERVICE "InactiveDistributionMask = 0.001f" "missing stable zero-render emitter mask")
-wd01_require(WD01_SERVICE "StableActiveStrandCount" "painted chunks must keep a stable strand index space")
+wd01_require(WD01_SERVICE "NativeMinimumNonZeroLength = 1.0f / 255.0f" "missing safe migration boundary for the failed sentinel-mask build")
+wd01_require(WD01_SERVICE "MigrateLegacySentinelMask" "must migrate the failed positive-zero mask back to native zero")
+wd01_require(WD01_SERVICE "CountPaintedStrands" "strand count must be bounded by actually painted vertices")
+wd01_require(WD01_SERVICE "wi::HairParticleSystem::REBUILD_BUFFERS" "mask edits must use Wicked's deferred native hair rebuild path")
+wd01_require(WD01_SERVICE "chunk->grass.CreateFromMesh(*mesh)" "completed/restored strokes must keep chunk-side emitter indices coherent for persistence")
+wd01_require(WD01_SERVICE "FinalizeVegetationStroke(scene, terrain, beforeState)" "stroke completion must finalize density before history capture")
 wd01_require(WD01_SERVICE "RenegadeDefaultGrassLength = 0.35f" "missing sensible metre-scale default grass length")
 wd01_require(WD01_SERVICE "settings.cameraBendEnabled" "missing native camera-bend exposure")
 wd01_require(WD01_SERVICE "settings.segmentCount" "missing native segment-count exposure")
@@ -41,6 +52,12 @@ wd01_require(WD01_STUDIO "sampleCount" "brush interpolation sample loop missing"
 wd01_require(WD01_APP "HandleWd01Vegetation(pointer)" "viewport does not route vegetation brush")
 wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grass.wiscene" "Studio does not package Wicked grass scene")
 wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grassparticle.png" "Studio does not package Wicked grass texture")
+
+# Lock out the exact runtime-crash regression: unpainted vertices must be real
+# zero and creator painting must never allocate a full-chunk strand capacity.
+wd01_forbid(WD01_SERVICE "InactiveDistributionMask = 0.001f" "positive sentinel mask reintroduces all-triangle emitters")
+wd01_forbid(WD01_SERVICE "StableActiveStrandCount" "full-chunk strand allocation reintroduces paint-time GPU allocation spikes")
+wd01_forbid(WD01_SERVICE "live->CreateFromMesh(*mesh)" "Studio brush must not synchronously rebuild the live hair emitter")
 
 # Terrain's pre-WD01 action rows are anchored at Y 726 and end at Y 834
 # (save row at 806 with 28 px controls). Vegetation must append below that

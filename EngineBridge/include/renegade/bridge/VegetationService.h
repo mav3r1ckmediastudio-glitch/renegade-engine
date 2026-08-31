@@ -78,9 +78,17 @@ namespace renegade::bridge
         VegetationBrushMode mode,
         VegetationStrokeState* beforeState = nullptr);
 
+    // Recompute native terrain grass strand counts once after a completed
+    // interpolated stroke. During the drag each touched chunk keeps a stable
+    // bounded count, avoiding per-sample redistribution/allocation churn.
+    bool FinalizeVegetationStroke(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const VegetationStrokeState& touchedState);
+
     [[nodiscard]] VegetationStrokeState CaptureVegetationAfter(
-        const wi::scene::Scene& scene,
-        const wi::terrain::Terrain& terrain,
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
         const VegetationStrokeState& beforeState);
 
     bool ApplyVegetationState(
