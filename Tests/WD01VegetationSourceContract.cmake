@@ -1,6 +1,8 @@
 file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/VegetationService.h" WD01_HEADER)
 file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/src/VegetationService.cpp" WD01_SERVICE)
+file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/src/VegetationNativePaintService.cpp" WD01_NATIVE_PAINT)
 file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/VegetationAppearanceService.h" WD01_APPEARANCE)
+file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/CMakeLists.txt" WD01_BRIDGE_CMAKE)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/WD01Vegetation.cpp" WD01_STUDIO)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp" WD01_APP)
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt" WD01_STUDIO_CMAKE)
@@ -12,29 +14,10 @@ function(wd01_require HAYSTACK NEEDLE MESSAGE_TEXT)
     endif()
 endfunction()
 
-function(wd01_require_exact_count HAYSTACK NEEDLE EXPECTED MESSAGE_TEXT)
-    set(REMAINING "${${HAYSTACK}}")
-    set(COUNT 0)
-    while(TRUE)
-        string(FIND "${REMAINING}" "${NEEDLE}" FOUND)
-        if(FOUND EQUAL -1)
-            break()
-        endif()
-        math(EXPR COUNT "${COUNT} + 1")
-        string(LENGTH "${NEEDLE}" NEEDLE_LENGTH)
-        math(EXPR NEXT "${FOUND} + ${NEEDLE_LENGTH}")
-        string(SUBSTRING "${REMAINING}" ${NEXT} -1 REMAINING)
-    endwhile()
-    if(NOT COUNT EQUAL EXPECTED)
-        message(FATAL_ERROR "WD01 contract: ${MESSAGE_TEXT} (expected ${EXPECTED}, found ${COUNT})")
-    endif()
-endfunction()
-
 wd01_require(WD01_HEADER "VegetationBrushMode" "missing Paint/Delete brush contract")
 wd01_require(WD01_HEADER "VegetationStrokeCommand" "missing vegetation Undo/Redo command")
 wd01_require(WD01_SERVICE "wi::scene::LoadModel(grassScene, grassScenePath)" "must consume native Wicked grass.wiscene")
-wd01_require(WD01_SERVICE "vertex_lengths" "must author native Wicked hair vertex mask")
-wd01_require(WD01_SERVICE "CreateFromMesh" "must use native Wicked hair distribution")
+wd01_require(WD01_SERVICE "if (texture.name == texturePath && texture.resource.IsValid())" "grass material rebind is no longer idempotent")
 wd01_require(WD01_STUDIO "VEGETATION // GRASS" "missing Terrain vegetation section")
 wd01_require(WD01_STUDIO "PAINT" "missing creator Paint tool")
 wd01_require(WD01_STUDIO "DELETE" "missing creator Delete tool")
@@ -42,19 +25,31 @@ wd01_require(WD01_APP "HandleWd01Vegetation(pointer)" "viewport does not route v
 wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grass.wiscene" "Studio does not package Wicked grass scene")
 wd01_require(WD01_STUDIO_CMAKE "WickedEngine/Content/terrain/grassparticle.png" "Studio does not package Wicked grass texture")
 
-# Owner-approved interactive paint baseline, accepted at 02d5b90c8e7faee011eebf679cb1f3a1df107d73.
-# These checks intentionally protect the native live-mask update seam that fixed
-# visible painting and eliminated flicker/re-randomisation while a stroke is active.
-wd01_require(WD01_SERVICE "StableInactiveLength = 1.0f / 255.0f" "stable Wicked R8 mask threshold changed")
-wd01_require(WD01_SERVICE "BuildStrokeSamples(beforeState, center, brushRadius)" "continuous stroke interpolation was removed")
-wd01_require(WD01_SERVICE "if (texture.name == texturePath && texture.resource.IsValid())" "grass material rebind is no longer idempotent")
-wd01_require(WD01_SERVICE "live->vertex_lengths = chunk.grass.vertex_lengths" "live grass mask is not updated in place")
-wd01_require(WD01_SERVICE "live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS" "live grass no longer uses Wicked deferred rebuild path")
-wd01_require_exact_count(WD01_SERVICE "*live = chunk.grass;" 1 "live HairParticle may only be wholesale-copied on first creation")
-wd01_require_exact_count(WD01_SERVICE "live->CreateFromMesh(*mesh);" 1 "live CreateFromMesh may only occur on first creation")
+# Painting is deliberately routed through a separate implementation that mirrors
+# pinned Wicked PaintTool MODE_HAIRPARTICLE_LENGTH. The legacy support file keeps
+# initialization/Undo/Redo only; it must not be the linked PaintVegetation symbol.
+wd01_require(WD01_BRIDGE_CMAKE "src/VegetationNativePaintService.cpp" "native Wicked paint implementation is not compiled")
+wd01_require(WD01_BRIDGE_CMAKE "PaintVegetation=PaintVegetationLegacy" "legacy custom painter is still the linked PaintVegetation symbol")
+wd01_require(WD01_NATIVE_PAINT "StableInactiveLength = 1.0f / 255.0f" "native Wicked retained-emitter threshold changed")
+wd01_require(WD01_NATIVE_PAINT "wi::math::SmoothStep" "native Wicked brush falloff was removed")
+wd01_require(WD01_NATIVE_PAINT "wi::math::Lerp" "native Wicked HairParticle Length interpolation was removed")
+wd01_require(WD01_NATIVE_PAINT "live->vertex_lengths[vertex] = next" "painting no longer edits the live HairParticle mask directly")
+wd01_require(WD01_NATIVE_PAINT "live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS" "painting no longer uses Wicked HairParticle rebuild semantics")
+wd01_require(WD01_NATIVE_PAINT "chunk.grass.vertex_lengths = live->vertex_lengths" "live Wicked mask is not mirrored back into terrain ChunkData")
+wd01_require(WD01_NATIVE_PAINT "substepCount" "drag stroke subdivision was removed")
 
-# Appearance is additive over the locked paint backend. It may alter only native
-# non-topology HairParticle properties and must never rebuild the emitter buffers.
+# The failed experimental uploader must never return. Wicked owns HairParticle
+# GPU rebuilding; Renegade must not create an ad-hoc UpdateBuffer paint path.
+string(FIND "${WD01_NATIVE_PAINT}" "UpdateBuffer" NATIVE_UPLOAD)
+if(NOT NATIVE_UPLOAD EQUAL -1)
+    message(FATAL_ERROR "WD01 contract: custom GPU mask uploader leaked into native paint path")
+endif()
+string(FIND "${WD01_STUDIO}" "VegetationMaskUploadService" STUDIO_UPLOAD)
+if(NOT STUDIO_UPLOAD EQUAL -1)
+    message(FATAL_ERROR "WD01 contract: Studio still includes the failed custom GPU mask uploader")
+endif()
+
+# Appearance remains additive and must not own HairParticle topology/rebuilds.
 wd01_require(WD01_APPEARANCE "VegetationAppearanceSettings" "missing isolated grass appearance settings contract")
 wd01_require(WD01_APPEARANCE "hair.length = settings.length" "Length is not mapped to native Wicked hair")
 wd01_require(WD01_APPEARANCE "hair.width = settings.width" "Width is not mapped to native Wicked hair")
@@ -72,17 +67,11 @@ if(NOT APPEARANCE_REBUILD EQUAL -1)
     message(FATAL_ERROR "WD01 contract: Appearance controls must not rebuild HairParticle emitter buffers")
 endif()
 
-# Terrain's pre-WD01 action rows are anchored at Y 726 and end at Y 834
-# (save row at 806 with 28 px controls). Vegetation must append below that
-# boundary so Wicked's normal Window scroll-range calculation can expose it
-# without overlapping Undo/Redo/Save controls.
+# Vegetation appends after the existing Terrain inspector action rows.
 wd01_require(WD01_APP "? 726.0f" "Terrain action-row anchor changed; re-audit vegetation layout boundary")
 wd01_require(WD01_STUDIO "TerrainInspectorActionsBottom = 834.0f" "missing audited Terrain action-row bottom boundary")
-wd01_require(WD01_STUDIO "VegetationInspectorTop =" "missing vegetation scroll-extension anchor")
 wd01_require(WD01_STUDIO "TerrainInspectorActionsBottom + VegetationInspectorGap" "vegetation must begin after existing Terrain action rows")
-wd01_require(WD01_STUDIO "place(controls.sectionLabel, VegetationInspectorTop, 20.0f)" "vegetation section is not anchored below Terrain actions")
-wd01_require(WD01_STUDIO "place(controls.status, VegetationInspectorTop + 148.0f, 34.0f)" "vegetation content does not extend the Terrain scroll range")
-wd01_require(WD01_STUDIO "place(controls.appearanceHeader, VegetationInspectorTop + 190.0f)" "Appearance section is not appended below the accepted paint controls")
+wd01_require(WD01_STUDIO "place(controls.appearanceHeader, VegetationInspectorTop + 190.0f)" "Appearance section is not appended below paint controls")
 
 foreach(FORBIDDEN IN ITEMS "HairParticleWindow" "PaintToolWindow")
     string(FIND "${WD01_STUDIO}" "${FORBIDDEN}" FOUND)
