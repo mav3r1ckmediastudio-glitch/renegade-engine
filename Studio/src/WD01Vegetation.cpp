@@ -12,6 +12,16 @@ namespace
 {
     constexpr wi::Color VegetationMuted = wi::Color(178, 178, 176, 255);
 
+    // StudioApplication's existing Terrain action rows end at Y 834:
+    // selection 726-754, history 766-794, save 806-834. WD01 is appended
+    // after them rather than occupying the same rows. Wicked Window children
+    // are scrollable by default, so the lower WD01 controls automatically
+    // extend the Inspector's vertical scroll range.
+    constexpr float TerrainInspectorActionsBottom = 834.0f;
+    constexpr float VegetationInspectorGap = 16.0f;
+    constexpr float VegetationInspectorTop =
+        TerrainInspectorActionsBottom + VegetationInspectorGap;
+
     struct VegetationControls
     {
         wi::gui::Label sectionLabel;
@@ -226,17 +236,21 @@ namespace renegade::studio
             widget.SetSize(XMFLOAT2(fieldWidth, height));
         };
 
-        place(controls.sectionLabel, 706.0f, 20.0f);
-        place(controls.presetReadout, 728.0f, 20.0f);
-        place(controls.brushSize, 752.0f);
-        place(controls.density, 786.0f);
+        place(controls.sectionLabel, VegetationInspectorTop, 20.0f);
+        place(controls.presetReadout, VegetationInspectorTop + 22.0f, 20.0f);
+        place(controls.brushSize, VegetationInspectorTop + 46.0f);
+        place(controls.density, VegetationInspectorTop + 80.0f);
 
         const float buttonWidth = (fieldWidth - 8.0f) * 0.5f;
-        controls.paint.SetPos(XMFLOAT2(12.0f, 820.0f));
+        controls.paint.SetPos(XMFLOAT2(
+            12.0f,
+            VegetationInspectorTop + 114.0f));
         controls.paint.SetSize(XMFLOAT2(buttonWidth, 28.0f));
-        controls.erase.SetPos(XMFLOAT2(20.0f + buttonWidth, 820.0f));
+        controls.erase.SetPos(XMFLOAT2(
+            20.0f + buttonWidth,
+            VegetationInspectorTop + 114.0f));
         controls.erase.SetSize(XMFLOAT2(buttonWidth, 28.0f));
-        place(controls.status, 854.0f, 34.0f);
+        place(controls.status, VegetationInspectorTop + 148.0f, 34.0f);
     }
 
     void StudioRenderPath::RefreshWd01VegetationControls(const bool hasTerrain)
