@@ -8,6 +8,7 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 #include "renegade/bridge/TerrainService.h"
+#include "renegade/bridge/VegetationService.h"
 
 #include <algorithm>
 #include <atomic>
@@ -222,6 +223,7 @@ namespace renegade::bridge
             terrain.scene = &scenes_.scene_;
         }
         RebindDefaultTerrainMaterials(scenes_.scene_);
+        RebindWickedVegetationResources(scenes_.scene_);
         scenes_.currentPath_ = std::move(prepared.path_);
         scenes_.lastError_.clear();
         lastWarning_.clear();
