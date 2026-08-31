@@ -22,11 +22,18 @@ namespace renegade::bridge
         wi::ecs::Entity chunkEntity = wi::ecs::INVALID_ENTITY;
         std::vector<float> vertexLengths;
         std::uint32_t strandCount = 0;
+        bool stableDistribution = false;
     };
 
     struct VegetationStrokeState
     {
         std::vector<VegetationChunkMaskState> chunks;
+
+        // Transient stroke sampling state only. Studio clears chunks at the
+        // start of every completed-stroke transaction, which also defines the
+        // start of a new interpolation path.
+        bool hasLastCenter = false;
+        XMFLOAT3 lastCenter = {};
     };
 
     struct VegetationPaintResult
@@ -38,9 +45,8 @@ namespace renegade::bridge
     };
 
     // Loads Wicked's pinned Content/terrain/grass.wiscene into the native
-    // Terrain grass property/material seam, then switches the terrain to
-    // Renegade's explicit manual-paint mode. Existing generated grass is
-    // cleared only on this first transition; creator-authored masks are not.
+    // Terrain grass property/material seam, explicitly rebinds the packaged
+    // PNG referenced by Renegade, then switches the terrain to manual paint.
     bool EnsureDefaultGrassVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
@@ -50,16 +56,16 @@ namespace renegade::bridge
         const wi::scene::Scene& scene,
         const wi::terrain::Terrain& terrain) noexcept;
 
-    // Newly generated terrain chunks have Wicked's procedural grass mask.
-    // Once a terrain is in manual mode, initialize only unmarked new chunks to
-    // empty grass so expanding terrain never invents creator vegetation.
+    // Newly generated terrain chunks remain genuinely empty until the creator
+    // paints them. A touched chunk is promoted once to Wicked's stable Length
+    // painting contract (minimum retained emitter length = 1/255).
     std::size_t SynchronizeManualVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain);
 
-    // Applies one live brush sample. When beforeState is supplied, the original
-    // state of each touched chunk is captured lazily before its first mutation,
-    // keeping completed-stroke Undo/Redo bounded to changed chunks.
+    // Applies one frame of a completed-stroke transaction. Pointer travel from
+    // the preceding call is subdivided before mask editing, but each touched
+    // chunk is rebuilt only once after all interpolated samples are accumulated.
     VegetationPaintResult PaintVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
