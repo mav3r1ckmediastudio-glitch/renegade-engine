@@ -66,6 +66,10 @@ namespace renegade::bridge
         const wi::scene::Scene& scene,
         const wi::terrain::Terrain& terrain) noexcept;
 
+    // Rebinds the bundled grass texture after Studio or Runtime adopts a
+    // serialized scene at a different filesystem location.
+    void RebindWickedVegetationResources(wi::scene::Scene& scene);
+
     // Clears native procedural masks only for newly generated chunks after the
     // terrain enters manual authoring. Existing painted chunks are untouched.
     std::size_t SynchronizeWickedVegetation(
