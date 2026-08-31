@@ -321,6 +321,58 @@ namespace renegade::bridge
             HasMarker(scene, terrain.terrainEntity, ManualTerrainKey);
     }
 
+    void RebindWickedVegetationResources(
+        wi::scene::Scene& scene)
+    {
+        const std::string texturePath =
+            (BundledGrassRoot() / "grassparticle.png")
+                .generic_u8string();
+        if (!wi::helper::FileExists(texturePath))
+            return;
+
+        const auto rebind = [&texturePath](
+            wi::scene::MaterialComponent& material)
+        {
+            auto& slot = material.textures[
+                wi::scene::MaterialComponent::BASECOLORMAP];
+            slot.name = texturePath;
+            slot.resource = wi::resourcemanager::Load(texturePath);
+            material.SetDirty();
+            material.CreateRenderData();
+        };
+
+        for (std::size_t index = 0;
+            index < scene.terrains.GetCount(); ++index)
+        {
+            auto& terrain = scene.terrains[index];
+            if (!IsWickedVegetationInitialized(scene, terrain))
+                continue;
+
+            rebind(terrain.grass_material);
+            if (terrain.grassEntity !=
+                wi::ecs::INVALID_ENTITY)
+            {
+                if (auto* material = scene.materials.GetComponent(
+                        terrain.grassEntity))
+                {
+                    rebind(*material);
+                }
+            }
+            for (auto& entry : terrain.chunks)
+            {
+                const auto entity =
+                    entry.second.grass_entity;
+                if (entity == wi::ecs::INVALID_ENTITY)
+                    continue;
+                if (auto* material =
+                        scene.materials.GetComponent(entity))
+                {
+                    rebind(*material);
+                }
+            }
+        }
+    }
+
     bool InitializeWickedVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
