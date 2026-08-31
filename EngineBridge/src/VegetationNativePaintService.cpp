@@ -251,8 +251,14 @@ namespace renegade::bridge
                 continue;
             }
 
-            const auto* transform = scene.transforms.GetComponent(
-                chunk.grass_entity);
+            // The mesh belongs to the terrain chunk, not the lazily-created
+            // grass child. Wicked's stock painter can use the hair entity world
+            // matrix because that hierarchy already exists before painting.
+            // Renegade creates an empty chunk's grass child inside this call,
+            // before RunHierarchyUpdateSystem has inherited the parent world
+            // matrix. Use the mesh/chunk transform directly so first contact on
+            // every neighbouring chunk is evaluated in the correct world space.
+            const auto* transform = scene.transforms.GetComponent(chunk.entity);
             if (transform == nullptr)
                 continue;
             const XMMATRIX world = XMLoadFloat4x4(&transform->world);
