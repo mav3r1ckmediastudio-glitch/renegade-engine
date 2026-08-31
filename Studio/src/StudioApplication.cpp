@@ -4748,6 +4748,10 @@ namespace renegade::studio
         // scene selection, gizmo manipulation, or camera navigation.
         if (studioChrome_.ConsumedPointerThisFrame())
         {
+            // Renegade chrome owns this pointer press. Cancel the persistent
+            // vegetation tool so a viewport brush can never retain input
+            // ownership across top-menu or bottom-drawer interaction.
+            DisableWd01VegetationBrush();
             return;
         }
 
@@ -6683,6 +6687,10 @@ namespace renegade::studio
         if (terrainWorkspaceActive_)
         {
             environmentWorkspaceActive_ = false;
+        }
+        else
+        {
+            DisableWd01VegetationBrush();
         }
         studioChrome_.SetEnvironmentWorkspaceActive(environmentWorkspaceActive_);
         studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
