@@ -102,16 +102,20 @@ namespace
         return static_cast<std::uint32_t>(nativeCount);
     }
 
-    void RebindGrassMaterialTexture(
+    bool RebindGrassMaterialTexture(
         wi::scene::MaterialComponent& material,
         const std::string& texturePath)
     {
         auto& texture = material.textures[
             wi::scene::MaterialComponent::BASECOLORMAP];
+        if (texture.name == texturePath && texture.resource.IsValid())
+            return false;
+
         texture.name = texturePath;
         texture.resource = wi::resourcemanager::Load(texturePath);
         material.SetDirty();
         material.CreateRenderData();
+        return true;
     }
 
     bool RebindBundledGrassTexture(
@@ -162,7 +166,8 @@ namespace
             return false;
 
         chunk.grass.meshID = chunk.entity;
-        chunk.grass.CreateFromMesh(*mesh);
+        if (chunk.grass.strandCount > 0 && chunk.grass.indices.empty())
+            chunk.grass.CreateFromMesh(*mesh);
         chunk.grass_density_current = terrain.grass_density;
 
         if (chunk.grass_entity == wi::ecs::INVALID_ENTITY &&
@@ -171,35 +176,68 @@ namespace
             return true;
         }
 
-        bool created = false;
+        bool createdEntity = false;
         if (chunk.grass_entity == wi::ecs::INVALID_ENTITY)
         {
             chunk.grass_entity = wi::ecs::CreateEntity();
-            created = true;
+            createdEntity = true;
         }
 
         auto* live = scene.hairs.GetComponent(chunk.grass_entity);
-        if (live == nullptr)
+        const bool createdLive = live == nullptr;
+        if (createdLive)
             live = &scene.hairs.Create(chunk.grass_entity);
-        *live = chunk.grass;
-        live->strandCount = static_cast<std::uint32_t>(
+
+        const std::uint32_t liveStrandCount = static_cast<std::uint32_t>(
             static_cast<float>(chunk.grass.strandCount) *
             std::max(0.0f, terrain.grass_density));
-        live->CreateFromMesh(*mesh);
+
+        if (createdLive)
+        {
+            // Match Wicked terrain placement: initialize the live component
+            // once from the authored chunk state and build its render data.
+            *live = chunk.grass;
+            live->strandCount = liveStrandCount;
+            live->CreateFromMesh(*mesh);
+            live->CreateRenderData();
+        }
+        else
+        {
+            // Match Wicked's PaintTool behaviour after creation: keep the live
+            // HairParticle object and GPU resources alive. Only update the
+            // native length mask, then let HairParticleSystem::UpdateCPU()
+            // rebuild in place on the normal scene tick. Replacing the whole
+            // component here invalidated its render resources every brush
+            // sample, which caused the visible flicker/disappearing grass.
+            live->meshID = chunk.entity;
+            live->strandCount = liveStrandCount;
+            live->vertex_lengths = chunk.grass.vertex_lengths;
+            live->_flags |= wi::HairParticleSystem::REBUILD_BUFFERS;
+        }
 
         auto* material = scene.materials.GetComponent(chunk.grass_entity);
         if (material == nullptr)
+        {
             material = &scene.materials.Create(chunk.grass_entity);
-        *material = terrain.grass_material;
-        material->SetDirty();
-        material->CreateRenderData();
+            *material = terrain.grass_material;
+            material->SetDirty();
+            material->CreateRenderData();
+        }
+        else
+        {
+            // Do not rebuild the material every brush sample. Rebind only when
+            // the packaged PNG is actually missing or stale.
+            RebindGrassMaterialTexture(
+                *material,
+                BundledWickedGrassTexturePath());
+        }
 
         if (scene.transforms.GetComponent(chunk.grass_entity) == nullptr)
             scene.transforms.Create(chunk.grass_entity);
         if (scene.names.GetComponent(chunk.grass_entity) == nullptr)
             scene.names.Create(chunk.grass_entity).name = "grass";
 
-        if (created)
+        if (createdEntity)
             scene.Component_Attach(chunk.grass_entity, chunk.entity, true);
 
         return true;
