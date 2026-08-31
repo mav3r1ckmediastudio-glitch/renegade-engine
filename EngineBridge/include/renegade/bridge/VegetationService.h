@@ -37,10 +37,26 @@ namespace renegade::bridge
         std::string error;
     };
 
-    // Loads Wicked's pinned Content/terrain/grass.wiscene into the native
-    // Terrain grass property/material seam, then switches the terrain to
-    // Renegade's explicit manual-paint mode. Existing generated grass is
-    // cleared only on this first transition; creator-authored masks are not.
+    // Creator-facing subset of Wicked's native HairParticleSystem settings.
+    // Mesh and raw strand count are deliberately not exposed: terrain chunks
+    // are the emitter meshes and Renegade's Density control owns strand count.
+    struct VegetationGrassSettings
+    {
+        float length = 0.35f;
+        float width = 1.0f;
+        float stiffness = 0.5f;
+        float drag = 0.1f;
+        float gravityPower = 0.0f;
+        float randomness = 0.2f;
+        std::uint32_t segmentCount = 1;
+        std::uint32_t billboardCount = 1;
+        std::uint32_t randomSeed = 1;
+        float viewDistance = 200.0f;
+        float uniformity = 1.0f;
+        bool cameraBendEnabled = true;
+        wi::vector<wi::HairParticleSystem::AtlasRect> atlasRects;
+    };
+
     bool EnsureDefaultGrassVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
@@ -50,16 +66,10 @@ namespace renegade::bridge
         const wi::scene::Scene& scene,
         const wi::terrain::Terrain& terrain) noexcept;
 
-    // Newly generated terrain chunks have Wicked's procedural grass mask.
-    // Once a terrain is in manual mode, initialize only unmarked new chunks to
-    // empty grass so expanding terrain never invents creator vegetation.
     std::size_t SynchronizeManualVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain);
 
-    // Applies one live brush sample. When beforeState is supplied, the original
-    // state of each touched chunk is captured lazily before its first mutation,
-    // keeping completed-stroke Undo/Redo bounded to changed chunks.
     VegetationPaintResult PaintVegetation(
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
@@ -84,6 +94,16 @@ namespace renegade::bridge
         wi::scene::Scene& scene,
         wi::terrain::Terrain& terrain,
         float density);
+
+    [[nodiscard]] VegetationGrassSettings CaptureVegetationGrassSettings(
+        const wi::terrain::Terrain& terrain);
+    [[nodiscard]] bool VegetationGrassSettingsEqual(
+        const VegetationGrassSettings& left,
+        const VegetationGrassSettings& right) noexcept;
+    bool ApplyVegetationGrassSettings(
+        wi::scene::Scene& scene,
+        wi::terrain::Terrain& terrain,
+        const VegetationGrassSettings& settings);
 
     class VegetationStrokeCommand final : public ICommand
     {
@@ -125,5 +145,26 @@ namespace renegade::bridge
         wi::ecs::Entity terrainEntity_ = wi::ecs::INVALID_ENTITY;
         float before_ = 1.0f;
         float after_ = 1.0f;
+    };
+
+    class SetVegetationGrassSettingsCommand final : public ICommand
+    {
+    public:
+        SetVegetationGrassSettingsCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity terrainEntity,
+            VegetationGrassSettings before,
+            VegetationGrassSettings after);
+
+        bool Execute() override;
+        void Undo() override;
+
+    private:
+        bool Apply(const VegetationGrassSettings& settings);
+
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity terrainEntity_ = wi::ecs::INVALID_ENTITY;
+        VegetationGrassSettings before_;
+        VegetationGrassSettings after_;
     };
 }
