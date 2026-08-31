@@ -38,6 +38,17 @@ wd01_require(WD01_NATIVE_PAINT "live->_flags |= wi::HairParticleSystem::REBUILD_
 wd01_require(WD01_NATIVE_PAINT "chunk.grass.vertex_lengths = live->vertex_lengths" "live Wicked mask is not mirrored back into terrain ChunkData")
 wd01_require(WD01_NATIVE_PAINT "substepCount" "drag stroke subdivision was removed")
 
+# Empty neighbouring chunks create their grass child lazily during the paint
+# call. Before Wicked's hierarchy update runs, that child does not yet have the
+# parent's world transform. Vertex-space painting must therefore use the chunk
+# mesh entity transform directly; after hierarchy sync this is equivalent to
+# Wicked's established hair-child transform, but it is correct on first contact.
+wd01_require(WD01_NATIVE_PAINT "scene.transforms.GetComponent(chunk.entity)" "native painter must transform terrain mesh vertices with the chunk entity world matrix")
+string(FIND "${WD01_NATIVE_PAINT}" "scene.transforms.GetComponent(\n                chunk.grass_entity)" GRASS_CHILD_WORLD)
+if(NOT GRASS_CHILD_WORLD EQUAL -1)
+    message(FATAL_ERROR "WD01 contract: first-contact painting must not use an unsynchronised grass-child world matrix")
+endif()
+
 # The failed experimental uploader must never return. Wicked owns HairParticle
 # GPU rebuilding; Renegade must not create an ad-hoc UpdateBuffer paint path.
 string(FIND "${WD01_NATIVE_PAINT}" "UpdateBuffer" NATIVE_UPLOAD)
