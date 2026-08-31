@@ -56,11 +56,17 @@ if(NOT ZERO_BLOCK EQUAL -1)
     message(FATAL_ERROR "WD01 contract: zero-length vertices must remain paintable by Add mode")
 endif()
 
-# Empty neighbouring chunks create their grass child lazily during the paint
-# call. Vertex-space painting must use the chunk mesh entity transform directly,
-# not a just-created child transform awaiting hierarchy propagation.
+# Targeting must follow Wicked PaintTool's object-space broad phase: brush
+# sphere against the current transformed mesh AABB, then exact vertex distance.
+# Do not use Terrain::ChunkData::sphere bookkeeping as a paint eligibility gate.
 wd01_require(WD01_NATIVE_PAINT "scene.transforms.GetComponent(chunk.entity)" "native painter must transform terrain mesh vertices with the chunk entity world matrix")
+wd01_require(WD01_NATIVE_PAINT "mesh->aabb.transform(world)" "grass paint broad phase must use the current transformed chunk mesh AABB")
+wd01_require(WD01_NATIVE_PAINT "brushSphere.intersects(worldAabb)" "grass paint broad phase no longer mirrors Wicked sphere/AABB targeting")
 wd01_require(WD01_NATIVE_PAINT "XMVector3TransformCoord(position, world)" "terrain vertex painting must use the chunk world transform")
+string(FIND "${WD01_NATIVE_PAINT}" "chunk.sphere" CHUNK_SPHERE_GATE)
+if(NOT CHUNK_SPHERE_GATE EQUAL -1)
+    message(FATAL_ERROR "WD01 contract: stale ChunkData::sphere must not gate grass painting")
+endif()
 string(FIND "${WD01_NATIVE_PAINT}" "scene.transforms.GetComponent(\n                chunk.grass_entity)" GRASS_CHILD_WORLD)
 if(NOT GRASS_CHILD_WORLD EQUAL -1)
     message(FATAL_ERROR "WD01 contract: first-contact painting must not use an unsynchronised grass-child world matrix")
