@@ -1,5 +1,6 @@
 #include "StudioApplication.h"
 
+#include "renegade/bridge/VegetationAppearanceService.h"
 #include "renegade/bridge/VegetationService.h"
 
 #include <algorithm>
@@ -22,6 +23,15 @@ namespace
     constexpr float VegetationInspectorTop =
         TerrainInspectorActionsBottom + VegetationInspectorGap;
 
+    enum class AppearanceField
+    {
+        Length,
+        Width,
+        Randomness,
+        RandomSeed,
+        Uniformity,
+    };
+
     struct VegetationControls
     {
         wi::gui::Label sectionLabel;
@@ -32,6 +42,13 @@ namespace
         renegade::studio::SceneInspectorButton erase;
         wi::gui::Label status;
 
+        renegade::studio::SceneInspectorButton appearanceHeader;
+        renegade::studio::SceneInspectorSlider length;
+        renegade::studio::SceneInspectorSlider width;
+        renegade::studio::SceneInspectorSlider randomness;
+        renegade::studio::SceneInspectorSlider randomSeed;
+        renegade::studio::SceneInspectorSlider uniformity;
+
         bool controlsCreated = false;
         bool brushActive = false;
         renegade::bridge::VegetationBrushMode brushMode =
@@ -40,6 +57,11 @@ namespace
         bool densityDragging = false;
         float densityBefore = 1.0f;
         wi::ecs::Entity densityTerrain = wi::ecs::INVALID_ENTITY;
+
+        bool appearanceExpanded = true;
+        bool appearanceDragging = false;
+        renegade::bridge::VegetationAppearanceSettings appearanceBefore;
+        wi::ecs::Entity appearanceTerrain = wi::ecs::INVALID_ENTITY;
 
         bool strokeActive = false;
         bool strokeChanged = false;
@@ -79,6 +101,32 @@ namespace
         if (entity != nullptr)
             *entity = terrainEntity;
         return scene.terrains.GetComponent(terrainEntity);
+    }
+
+    void SetAppearanceField(
+        renegade::bridge::VegetationAppearanceSettings& settings,
+        const AppearanceField field,
+        const float value)
+    {
+        switch (field)
+        {
+        case AppearanceField::Length:
+            settings.length = value;
+            break;
+        case AppearanceField::Width:
+            settings.width = value;
+            break;
+        case AppearanceField::Randomness:
+            settings.randomness = value;
+            break;
+        case AppearanceField::RandomSeed:
+            settings.randomSeed = static_cast<std::uint32_t>(
+                std::max(1l, std::lround(value)));
+            break;
+        case AppearanceField::Uniformity:
+            settings.uniformity = value;
+            break;
+        }
     }
 }
 
@@ -218,6 +266,123 @@ namespace renegade::studio
         StyleLabel(controls.status);
         inspectorPanel_.AddWidget(&controls.status);
 
+        controls.appearanceHeader.Create("WD01 Appearance Header");
+        controls.appearanceHeader.SetText("APPEARANCE [-]");
+        controls.appearanceHeader.SetTooltip(
+            "Native Wicked grass appearance controls. This section does not alter the accepted paint backend.");
+        controls.appearanceHeader.OnClick([this](const wi::gui::EventArgs&)
+        {
+            auto& state = Controls();
+            state.appearanceExpanded = !state.appearanceExpanded;
+            state.appearanceHeader.SetText(
+                state.appearanceExpanded ? "APPEARANCE [-]" : "APPEARANCE [+]");
+            ResizeLayout();
+            RefreshWd01VegetationControls(CurrentTerrain(session_) != nullptr);
+        });
+        inspectorPanel_.AddWidget(&controls.appearanceHeader);
+
+        const auto createAppearanceSlider = [this](
+            SceneInspectorSlider& slider,
+            const float minimum,
+            const float maximum,
+            const float defaultValue,
+            const float steps,
+            const std::string& name,
+            const std::string& label,
+            const std::string& tooltip,
+            const AppearanceField field)
+        {
+            slider.Create(minimum, maximum, defaultValue, steps, name, label);
+            slider.SetTooltip(tooltip);
+            slider.OnDragStarted([this](const float)
+            {
+                auto& state = Controls();
+                wi::ecs::Entity terrainEntity = wi::ecs::INVALID_ENTITY;
+                auto* terrain = CurrentTerrain(session_, &terrainEntity);
+                if (terrain == nullptr || session_ == nullptr)
+                    return;
+                auto& scene = session_->Scenes().GetScene();
+                std::string error;
+                if (!bridge::EnsureDefaultGrassVegetation(scene, *terrain, &error))
+                {
+                    state.status.SetText("VEGETATION // " + error);
+                    return;
+                }
+                state.appearanceDragging = true;
+                state.appearanceTerrain = terrainEntity;
+                state.appearanceBefore =
+                    bridge::CaptureVegetationAppearanceSettings(*terrain);
+            });
+            slider.OnValuePreview([this, field](const float value)
+            {
+                auto* terrain = CurrentTerrain(session_);
+                if (terrain == nullptr || session_ == nullptr)
+                    return;
+                auto settings =
+                    bridge::CaptureVegetationAppearanceSettings(*terrain);
+                SetAppearanceField(settings, field, value);
+                bridge::ApplyVegetationAppearanceSettings(
+                    session_->Scenes().GetScene(), *terrain, settings);
+            });
+            slider.OnValueCommitted([this](const float)
+            {
+                auto& state = Controls();
+                if (!state.appearanceDragging || session_ == nullptr)
+                    return;
+                state.appearanceDragging = false;
+                auto& scene = session_->Scenes().GetScene();
+                auto* terrain = scene.terrains.GetComponent(state.appearanceTerrain);
+                if (terrain == nullptr)
+                    return;
+                const auto after =
+                    bridge::CaptureVegetationAppearanceSettings(*terrain);
+                if (!bridge::VegetationAppearanceSettingsEqual(
+                        state.appearanceBefore, after))
+                {
+                    session_->Commands().RecordExecuted(
+                        std::make_unique<bridge::SetVegetationAppearanceSettingsCommand>(
+                            scene,
+                            state.appearanceTerrain,
+                            state.appearanceBefore,
+                            after));
+                    state.status.SetText("VEGETATION // APPEARANCE UPDATED");
+                    RefreshStatus();
+                }
+            });
+            inspectorPanel_.AddWidget(&slider);
+        };
+
+        createAppearanceSlider(
+            controls.length,
+            0.0f, 4.0f, 1.0f, 1000.0f,
+            "WD01 Grass Length", "LENGTH",
+            "Wicked HairParticle strand length. Use about 0.3-0.4 for ordinary grass.",
+            AppearanceField::Length);
+        createAppearanceSlider(
+            controls.width,
+            0.0f, 2.0f, 1.0f, 1000.0f,
+            "WD01 Grass Width", "WIDTH",
+            "Horizontal width multiplier for each grass card.",
+            AppearanceField::Width);
+        createAppearanceSlider(
+            controls.randomness,
+            0.0f, 1.0f, 0.2f, 1000.0f,
+            "WD01 Grass Randomness", "RANDOMNESS",
+            "Variation in individual strand length.",
+            AppearanceField::Randomness);
+        createAppearanceSlider(
+            controls.randomSeed,
+            1.0f, 12345.0f, 1.0f, 12344.0f,
+            "WD01 Grass Random Seed", "RANDOM SEED",
+            "Native Wicked random seed controlling patch placement variation.",
+            AppearanceField::RandomSeed);
+        createAppearanceSlider(
+            controls.uniformity,
+            0.01f, 2.0f, 1.0f, 1990.0f,
+            "WD01 Grass Uniformity", "UNIFORMITY",
+            "Modulates sprite-selection distribution noise by particle position.",
+            AppearanceField::Uniformity);
+
         RefreshWd01VegetationControls(false);
     }
 
@@ -251,6 +416,16 @@ namespace renegade::studio
             VegetationInspectorTop + 114.0f));
         controls.erase.SetSize(XMFLOAT2(buttonWidth, 28.0f));
         place(controls.status, VegetationInspectorTop + 148.0f, 34.0f);
+
+        place(controls.appearanceHeader, VegetationInspectorTop + 190.0f);
+        if (controls.appearanceExpanded)
+        {
+            place(controls.length, VegetationInspectorTop + 224.0f);
+            place(controls.width, VegetationInspectorTop + 258.0f);
+            place(controls.randomness, VegetationInspectorTop + 292.0f);
+            place(controls.randomSeed, VegetationInspectorTop + 326.0f);
+            place(controls.uniformity, VegetationInspectorTop + 360.0f);
+        }
     }
 
     void StudioRenderPath::RefreshWd01VegetationControls(const bool hasTerrain)
@@ -267,11 +442,25 @@ namespace renegade::studio
         controls.paint.SetVisible(visible);
         controls.erase.SetVisible(visible);
         controls.status.SetVisible(visible);
+        controls.appearanceHeader.SetVisible(visible);
+
+        const bool appearanceVisible = visible && controls.appearanceExpanded;
+        controls.length.SetVisible(appearanceVisible);
+        controls.width.SetVisible(appearanceVisible);
+        controls.randomness.SetVisible(appearanceVisible);
+        controls.randomSeed.SetVisible(appearanceVisible);
+        controls.uniformity.SetVisible(appearanceVisible);
 
         controls.brushSize.SetEnabled(hasTerrain);
         controls.density.SetEnabled(hasTerrain);
         controls.paint.SetEnabled(hasTerrain);
         controls.erase.SetEnabled(hasTerrain);
+        controls.appearanceHeader.SetEnabled(hasTerrain);
+        controls.length.SetEnabled(hasTerrain);
+        controls.width.SetEnabled(hasTerrain);
+        controls.randomness.SetEnabled(hasTerrain);
+        controls.randomSeed.SetEnabled(hasTerrain);
+        controls.uniformity.SetEnabled(hasTerrain);
 
         if (!hasTerrain)
         {
@@ -282,6 +471,17 @@ namespace renegade::studio
         auto* terrain = CurrentTerrain(session_);
         if (terrain != nullptr && !controls.densityDragging)
             controls.density.SetValue(bridge::CaptureVegetationDensity(*terrain));
+
+        if (terrain != nullptr && !controls.appearanceDragging)
+        {
+            const auto settings =
+                bridge::CaptureVegetationAppearanceSettings(*terrain);
+            controls.length.SetValue(settings.length);
+            controls.width.SetValue(settings.width);
+            controls.randomness.SetValue(settings.randomness);
+            controls.randomSeed.SetValue(static_cast<float>(settings.randomSeed));
+            controls.uniformity.SetValue(settings.uniformity);
+        }
     }
 
     void StudioRenderPath::TickWd01Vegetation()
