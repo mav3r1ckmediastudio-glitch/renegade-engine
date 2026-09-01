@@ -435,10 +435,29 @@ namespace renegade::runtime
 
         if (startupResult_.packageRelativeLaunch)
         {
-            error = "Packaged Runtime requires '" +
-                std::string(bridge::GameplayInputDocumentRelativePath) +
-                "' in the dependency closure. " + error;
-            return false;
+            const std::string declaration =
+                "data:" +
+                std::string(bridge::GameplayInputDocumentRelativePath);
+            const bool governedInputMap =
+                std::find(
+                    startupResult_.project.alwaysInclude.begin(),
+                    startupResult_.project.alwaysInclude.end(),
+                    declaration) != startupResult_.project.alwaysInclude.end();
+
+            if (governedInputMap)
+            {
+                error = "Packaged Runtime requires '" +
+                    std::string(bridge::GameplayInputDocumentRelativePath) +
+                    "' in the dependency closure. " + error;
+                return false;
+            }
+
+            inputMap_ = bridge::MakeDefaultGameplayInputMap();
+            wi::backlog::post(
+                "Renegade Runtime: legacy packaged project has no gameplay input-map declaration; using the accepted Gate 1 defaults.",
+                wi::backlog::LogLevel::Default);
+            error.clear();
+            return true;
         }
 
         bool created = false;
