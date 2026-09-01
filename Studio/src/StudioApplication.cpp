@@ -4715,6 +4715,15 @@ namespace renegade::studio
         const bool decalProbeIconConsumed = HandleDecalProbeSceneIcons(pointer);
         const bool lightIconConsumed = HandleLightSceneIcons(pointer);
 
+        // A vegetation stroke can be released after the pointer has crossed
+        // from the viewport onto native GUI or Renegade chrome. Finalize that
+        // release before a UI callback, shortcut or ownership check can return
+        // from this frame. HandleWd01Vegetation() applies its own focus and
+        // viewport guards after completing an in-flight release, so this does
+        // not let a brush begin through the UI.
+        const bool vegetationConsumed =
+            HandleWd01Vegetation(pointer);
+
         if (sunPreviewPlaying_)
         {
             bridge::SetSunTime(
@@ -4758,6 +4767,11 @@ namespace renegade::studio
             return;
         }
 
+        if (vegetationConsumed)
+        {
+            return;
+        }
+
         if (gizmoEntity_ != session_->Selection().SelectedEntity())
         {
             SyncGizmoSelection();
@@ -4787,10 +4801,6 @@ namespace renegade::studio
             gizmo_.Update(*camera, pointer, *this);
         }
 
-        if (HandleWd01Vegetation(pointer))
-        {
-            return;
-        }
         if (HandleTerrainSculpt(pointer))
         {
             return;

@@ -27,6 +27,8 @@ wd01_require("${WD01_STUDIO}" "WickedVegetationStrokeCommand" "completed strokes
 wd01_require("${WD01_STUDIO}" "VEGETATION // WICKED GRASS" "grass UI must live in Renegade's Terrain inspector")
 wd01_require("${WD01_STUDIO}" "A stroke can begin in the viewport and be released over Renegade's" "stroke release must be finalized outside the viewport")
 wd01_require("${WD01_APPLICATION}" "Cancel the persistent" "Renegade chrome must cancel vegetation input ownership")
+wd01_require("${WD01_APPLICATION}" "const bool vegetationConsumed =\n            HandleWd01Vegetation(pointer);\n\n        if (sunPreviewPlaying_)" "stroke finalization must run before UI callbacks can return from the frame")
+wd01_require("${WD01_APPLICATION}" "if (vegetationConsumed)\n        {\n            return;\n        }\n\n        if (gizmoEntity_" "vegetation ownership must be resolved before native GUI focus can return from the frame")
 wd01_require("${WD01_APPLICATION}" "else\n        {\n            DisableWd01VegetationBrush();" "leaving Terrain must cancel the vegetation tool")
 wd01_require("${WD01_STUDIO_CMAKE}" "WickedEngine/Content/terrain/grass.wiscene" "Studio must package Wicked grass.wiscene")
 wd01_require("${WD01_STUDIO_CMAKE}" "WickedEngine/Content/terrain/grassparticle.png" "Studio must package Wicked grass texture")

@@ -63,24 +63,35 @@ Local evidence:
 - Windows native compile and GPU profiling — pending authoritative CI/owner
   evidence.
 
-Known independent blocker:
+Owner performance result and remaining blocker:
 
-- `wd01/wicked-vegetation-clean` is not merged. Its owner-approved grass system
-  still has a separate UI interaction defect: affected menus do not react to
-  the mouse, and Hierarchy selection works but collapse/expand does not. This
-  performance branch does not claim to repair or conceal that defect.
+- draft PR #122 targets `main`; all four required checks passed;
+- the owner measured 75 FPS in both an empty and populated Level, restoring the
+  75 Hz VSync cap without reducing scene or vegetation quality;
+- `wd01/wicked-vegetation-clean` remains unmerged because affected menus do not
+  react to the mouse and Hierarchy selection works while collapse/expand does
+  not; and
+- `fix/wd01-ui-input-lifecycle` now carries a bounded source repair. The
+  vegetation handler's outside-viewport stroke-release path was unreachable
+  whenever native GUI held focus because `StudioRenderPath::Update()` returned
+  at `GetGUI().HasFocus()` first. The repair evaluates vegetation release before
+  shortcut, pending-action, chrome-consumption and native-focus exits, then
+  preserves the existing ownership return before scene/gizmo input. The WD01
+  source contract locks this ordering. Owner interaction testing is still
+  required; compile-only CI cannot prove the mouse behaviour.
 
 Next required work:
 
-1. publish this handoff commit and open a draft PR against
-   `wd01/wicked-vegetation-clean`, not `main`;
-2. require Windows x64 Studio Debug/Release and baseline Debug/Release CI;
-3. owner-test the exact approximately-30-FPS Level using the fixed camera,
-   backend, resolution and VSync settings in
-   `docs/EDITOR_FRAME_LOOP_PERFORMANCE_RECOVERY.md`;
-4. confirm governed textures, LUTs, diagnostics, terrain expansion and
-   multi-chunk grass paint/delete/Undo/Redo/save/reopen/Runtime parity; and
-5. do not declare the regression solved or merge to `main` from source/CI alone.
+1. publish the UI input-lifecycle repair on top of PR #122's exact head and run
+   Windows x64 Studio Debug/Release plus baseline Debug/Release CI;
+2. owner-test top menus, dropdowns, Hierarchy category/entity disclosure,
+   selection, and Inspector controls before and after a grass stroke whose
+   release occurs over the top bar, Hierarchy, Inspector and bottom drawer;
+3. re-confirm the populated Level remains at the 75 Hz VSync cap;
+4. confirm multi-chunk grass paint/delete/Undo/Redo/save/reopen/Runtime parity;
+   and
+5. keep PR #122 draft and do not merge to `main` until the owner explicitly
+   accepts both interaction and performance on the exact tested head.
 
 ## Active work — Phase 5 Gate 6 AO / GI / Reflections
 
