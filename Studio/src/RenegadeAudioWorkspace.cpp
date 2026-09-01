@@ -574,11 +574,11 @@ namespace renegade::studio
                 sourceFileDisplay = fs::u8path(source.filename).filename().generic_u8string();
                 if (sourceFileDisplay.empty())
                     sourceFileDisplay = "NO AUDIO ASSET";
-                playOnStart.SetCheckWithoutCallback(source.playOnStart);
-                looped.SetCheckWithoutCallback(source.looped);
-                spatial.SetCheckWithoutCallback(source.spatial);
-                reverb.SetCheckWithoutCallback(source.reverb);
-                sourceVolume.SetValueWithoutCallback(source.volume);
+                playOnStart.SetCheck(source.playOnStart);
+                looped.SetCheck(source.looped);
+                spatial.SetCheck(source.spatial);
+                reverb.SetCheck(source.reverb);
+                sourceVolume.SetValue(source.volume);
                 sourceBus.SetSelectedWithoutCallback(static_cast<int>(source.bus));
             }
             else
@@ -589,11 +589,11 @@ namespace renegade::studio
             if (mixVisible)
             {
                 const auto mix = bridge::CaptureSceneAudioMix(*Scene());
-                masterVolume.SetValueWithoutCallback(mix.masterVolume);
-                sfxVolume.SetValueWithoutCallback(mix.soundEffectVolume);
-                musicVolume.SetValueWithoutCallback(mix.musicVolume);
-                ambienceVolume.SetValueWithoutCallback(mix.ambienceVolume);
-                voiceVolume.SetValueWithoutCallback(mix.voiceVolume);
+                masterVolume.SetValue(mix.masterVolume);
+                sfxVolume.SetValue(mix.soundEffectVolume);
+                musicVolume.SetValue(mix.musicVolume);
+                ambienceVolume.SetValue(mix.ambienceVolume);
+                voiceVolume.SetValue(mix.voiceVolume);
                 reverbPreset.SetSelectedWithoutCallback(
                     static_cast<int>(mix.reverbPreset));
             }
