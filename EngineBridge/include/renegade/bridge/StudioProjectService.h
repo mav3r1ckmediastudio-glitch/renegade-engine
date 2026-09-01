@@ -1,9 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/ProjectService.h"
 
 namespace renegade::bridge
@@ -26,7 +29,8 @@ namespace renegade::bridge
         {
             ProjectService candidate;
             if (!candidate.CreateProject(
-                    parentDirectory, projectName, templateScenePath))
+                    parentDirectory, projectName, templateScenePath) ||
+                !PrepareGameplayInput(candidate))
             {
                 pendingProject_ = {};
                 hasPendingProject_ = false;
@@ -44,7 +48,8 @@ namespace renegade::bridge
         {
             ProjectService candidate;
             if (!candidate.CreateStoryFlowProject(
-                    parentDirectory, projectName))
+                    parentDirectory, projectName) ||
+                !PrepareGameplayInput(candidate))
             {
                 pendingProject_ = {};
                 hasPendingProject_ = false;
@@ -59,7 +64,8 @@ namespace renegade::bridge
         bool OpenProject(const std::string& descriptorPath)
         {
             ProjectService candidate;
-            if (!candidate.OpenProject(descriptorPath))
+            if (!candidate.OpenProject(descriptorPath) ||
+                !PrepareGameplayInput(candidate))
             {
                 pendingProject_ = {};
                 hasPendingProject_ = false;
@@ -172,6 +178,36 @@ namespace renegade::bridge
         }
 
     private:
+        [[nodiscard]] static bool PrepareGameplayInput(ProjectService& candidate)
+        {
+            if (!candidate.HasProject())
+                return false;
+
+            GameplayInputMap input;
+            bool created = false;
+            std::string error;
+            if (!EnsureGameplayInputMap(
+                    candidate.CurrentProject().rootPath,
+                    input,
+                    created,
+                    error))
+            {
+                return false;
+            }
+
+            constexpr const char* declaration =
+                "data:Content/Data/GameplayInput.renegade-input";
+            auto alwaysInclude = candidate.CurrentProject().alwaysInclude;
+            if (std::find(alwaysInclude.begin(), alwaysInclude.end(), declaration) ==
+                alwaysInclude.end())
+            {
+                alwaysInclude.emplace_back(declaration);
+                if (!candidate.SetAlwaysInclude(alwaysInclude))
+                    return false;
+            }
+            return true;
+        }
+
         void Stage(ProjectMetadata metadata, std::string warning)
         {
             pendingProject_ = std::move(metadata);
