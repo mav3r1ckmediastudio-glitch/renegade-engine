@@ -1,9 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/ProjectService.h"
 
 namespace renegade::bridge
@@ -28,10 +31,13 @@ namespace renegade::bridge
             if (!candidate.CreateProject(
                     parentDirectory, projectName, templateScenePath))
             {
-                pendingProject_ = {};
-                hasPendingProject_ = false;
-                pendingError_ = candidate.LastError();
-                pendingWarning_ = candidate.LastWarning();
+                FailPending(candidate.LastError(), candidate.LastWarning());
+                return false;
+            }
+            std::string gameplayError;
+            if (!PrepareGameplayInput(candidate, gameplayError))
+            {
+                FailPending(std::move(gameplayError), candidate.LastWarning());
                 return false;
             }
             Stage(candidate.CurrentProject(), candidate.LastWarning());
@@ -46,10 +52,13 @@ namespace renegade::bridge
             if (!candidate.CreateStoryFlowProject(
                     parentDirectory, projectName))
             {
-                pendingProject_ = {};
-                hasPendingProject_ = false;
-                pendingError_ = candidate.LastError();
-                pendingWarning_ = candidate.LastWarning();
+                FailPending(candidate.LastError(), candidate.LastWarning());
+                return false;
+            }
+            std::string gameplayError;
+            if (!PrepareGameplayInput(candidate, gameplayError))
+            {
+                FailPending(std::move(gameplayError), candidate.LastWarning());
                 return false;
             }
             Stage(candidate.CurrentProject(), candidate.LastWarning());
@@ -61,10 +70,13 @@ namespace renegade::bridge
             ProjectService candidate;
             if (!candidate.OpenProject(descriptorPath))
             {
-                pendingProject_ = {};
-                hasPendingProject_ = false;
-                pendingError_ = candidate.LastError();
-                pendingWarning_ = candidate.LastWarning();
+                FailPending(candidate.LastError(), candidate.LastWarning());
+                return false;
+            }
+            std::string gameplayError;
+            if (!PrepareGameplayInput(candidate, gameplayError))
+            {
+                FailPending(std::move(gameplayError), candidate.LastWarning());
                 return false;
             }
             Stage(candidate.CurrentProject(), candidate.LastWarning());
@@ -172,6 +184,54 @@ namespace renegade::bridge
         }
 
     private:
+        [[nodiscard]] static bool PrepareGameplayInput(
+            ProjectService& candidate,
+            std::string& error)
+        {
+            if (!candidate.HasProject())
+            {
+                error = "Could not prepare gameplay input without an active candidate project.";
+                return false;
+            }
+
+            GameplayInputMap input;
+            bool created = false;
+            if (!EnsureGameplayInputMap(
+                    candidate.CurrentProject().rootPath,
+                    input,
+                    created,
+                    error))
+            {
+                error = "Could not prepare the project gameplay input-map: " + error;
+                return false;
+            }
+
+            constexpr const char* declaration =
+                "data:Content/Data/GameplayInput.renegade-input";
+            auto alwaysInclude = candidate.CurrentProject().alwaysInclude;
+            if (std::find(alwaysInclude.begin(), alwaysInclude.end(), declaration) ==
+                alwaysInclude.end())
+            {
+                alwaysInclude.emplace_back(declaration);
+                if (!candidate.SetAlwaysInclude(alwaysInclude))
+                {
+                    error = "Could not register the project gameplay input-map for packaging: " +
+                        candidate.LastError();
+                    return false;
+                }
+            }
+            error.clear();
+            return true;
+        }
+
+        void FailPending(std::string error, std::string warning)
+        {
+            pendingProject_ = {};
+            hasPendingProject_ = false;
+            pendingError_ = std::move(error);
+            pendingWarning_ = std::move(warning);
+        }
+
         void Stage(ProjectMetadata metadata, std::string warning)
         {
             pendingProject_ = std::move(metadata);

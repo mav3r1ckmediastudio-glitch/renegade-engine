@@ -6,6 +6,7 @@
 #include "RuntimeBootstrap.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
+#include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/RenderSettingsService.h"
 #include "renegade/bridge/RenderLutService.h"
 #include "renegade/bridge/SceneService.h"
@@ -23,8 +24,10 @@ namespace renegade::runtime
         void BindScene(
             bridge::SceneService& scenes,
             std::string projectRoot) noexcept;
+        void SetPaused(bool paused) noexcept;
         void Load() override;
         void Update(float dt) override;
+        void Compose(wi::graphics::CommandList cmd) const override;
 
     private:
         void SyncRenderSettings(bool resizeBuffersForMSAA);
@@ -33,6 +36,7 @@ namespace renegade::runtime
         std::string projectRoot_;
         bridge::RenderSettingsState renderSettings_;
         bool renderSettingsInitialized_ = false;
+        bool paused_ = false;
         std::uint64_t renderSettingsSceneRevision_ = 0;
     };
 
@@ -57,12 +61,13 @@ namespace renegade::runtime
         [[nodiscard]] bool ConfigureActions(std::string& error);
         [[nodiscard]] bool LoadStartupScreen(std::string& error);
         [[nodiscard]] bool LoadCurrentFlowScreen(std::string& error);
+        [[nodiscard]] bool LoadGameplayInput(std::string& error);
+        [[nodiscard]] bool ResetPlaySession(std::string& error);
+        void SetPaused(bool paused) noexcept;
         void QueueAction(RuntimeActionRequest request);
         void ProcessPendingActions();
         void RecordAction(const RuntimeActionResult& result);
         void SyncPlayerForScene();
-        [[nodiscard]] bridge::PlayerInputFrame CapturePlayerInput(
-            float dt) const noexcept;
 
         bridge::SceneService scenes_;
         RuntimeFlowController flow_;
@@ -72,6 +77,8 @@ namespace renegade::runtime
         RuntimeActionDispatcher actions_;
         bridge::RuntimePlayerState player_;
         bridge::PlayerControllerSettings playerSettings_;
+        bridge::GameplayInputMap inputMap_ = bridge::MakeDefaultGameplayInputMap();
+        RuntimeBootstrapResult initialBootstrapResult_;
         RuntimeBootstrapResult startupResult_;
         std::vector<RuntimeActionRequest> pendingActions_;
         bool startupFinished_ = false;
@@ -79,6 +86,8 @@ namespace renegade::runtime
         bool quitRequested_ = false;
         bool smokeAutoPlay_ = false;
         bool smokeExitOnComplete_ = false;
+        bool paused_ = false;
+        bool physicsSimulationBeforePause_ = true;
         int exitCode_ = 0;
         std::uint64_t evidenceRevision_ = 0;
         std::uint64_t playerSceneRevision_ = 0;
