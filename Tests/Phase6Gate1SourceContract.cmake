@@ -21,7 +21,11 @@ require_text("${player_header}" "CreatePlayerStartCommand" "command-backed Playe
 require_text("${player_header}" "SetPlayerControllerSettingsCommand" "command-backed Player Start Inspector settings")
 require_text("${player_source}" "MetadataComponent::Preset::Player" "native Player classification")
 require_text("${player_source}" "MovePhysicsCharacter" "JP01 character controller reuse")
-require_text("${runtime_source}" "CapturePlayerInput" "Runtime input ownership")
+# Gate 1 owns the action-shaped player service and Runtime possession, not the
+# raw device polling implementation. Gate 2 intentionally moves raw polling
+# behind GameplayInputService, so this historical contract must not pin the
+# removed RuntimeApplication::CapturePlayerInput helper.
+require_text("${runtime_source}" "UpdateRuntimePlayer" "Runtime player update")
 require_text("${runtime_source}" "SpawnRuntimePlayer" "Runtime possession")
 require_text("${runtime_source}" "ApplyRuntimePlayerCamera" "Runtime camera ownership")
 require_text("${studio_source}" "CreatePlayerStartFromView" "Studio authoring workflow")
