@@ -3449,6 +3449,9 @@ namespace renegade::studio
                 pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
                 pendingAction_ = EditorAction::CreateLight;
                 break;
+            case RenegadeStudioChrome::Action::CreatePlayerStart:
+                pendingAction_ = EditorAction::CreatePlayerStart;
+                break;
             case RenegadeStudioChrome::Action::CreateCamera:
                 pendingAction_ = EditorAction::CreateCamera;
                 break;
@@ -6466,6 +6469,9 @@ namespace renegade::studio
         case EditorAction::CreateLight:
             CreateLight(pendingLightType_);
             break;
+        case EditorAction::CreatePlayerStart:
+            CreatePlayerStartFromView();
+            break;
         case EditorAction::CreateCamera:
             CreateCameraFromView();
             break;
@@ -9136,6 +9142,42 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             RefreshHierarchy();
             RefreshInspector();
             RefreshStatus();
+        }
+    }
+
+    void StudioRenderPath::CreatePlayerStartFromView()
+    {
+        if (session_ == nullptr || camera == nullptr)
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        const auto existing = bridge::ResolvePlayerStart(scene);
+        if (existing.resolution != bridge::PlayerStartResolution::Missing)
+        {
+            studioChrome_.SetStatusText(
+                "PLAYER START // LEVEL ALREADY HAS ONE");
+            return;
+        }
+
+        auto playerStartTransform = CaptureEditorCameraTransform();
+        // The editor camera represents eye position; Player Start represents
+        // capsule feet. This makes Test Level begin from the view the creator
+        // was composing instead of spawning the capsule 1.65 metres above it.
+        playerStartTransform.translation.y -= 1.65f;
+        auto command = std::make_unique<bridge::CreatePlayerStartCommand>(
+            scene,
+            playerStartTransform);
+        auto* created = command.get();
+        if (session_->Commands().Execute(std::move(command)))
+        {
+            session_->Selection().Select(created->CreatedEntity());
+            SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+            studioChrome_.SetStatusText(
+                "PLAYER START // CREATED // POSITION WITH GIZMO");
         }
     }
 

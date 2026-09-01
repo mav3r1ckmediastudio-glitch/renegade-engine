@@ -14,6 +14,7 @@
 #include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
 #include "renegade/bridge/CameraService.h"
+#include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/DecalProbeService.h"
 #include "renegade/bridge/MaterialService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
@@ -165,6 +166,7 @@ namespace renegade::studio
             DuplicateSelection,
             DeleteSelection,
             CreateLight,
+            CreatePlayerStart,
             CreateCamera,
             CreateDecal,
             CreateEnvironmentProbe,
@@ -525,6 +527,7 @@ namespace renegade::studio
             float value) noexcept;
         [[nodiscard]] bridge::TransformState CaptureEditorCameraTransform() const;
         void CreateCameraFromView();
+        void CreatePlayerStartFromView();
         void AlignSelectedCameraToView();
         void ViewFromSelectedCamera();
         void CreateDecalFromView();

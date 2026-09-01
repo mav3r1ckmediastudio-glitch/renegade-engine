@@ -339,6 +339,24 @@ The stable ID is reference authority; the project-relative path is a mutable
 diagnostic and discovery hint. Projects without this optional pair retain the
 legacy LP01/LP02 immediate startup route.
 
+### Player foundation
+
+Phase 6 uses one authored Player Start and one Runtime-only player. The Player
+Start is an ordinary WISCENE Transform/Name/Metadata entity identified by a
+Renegade-owned metadata key in addition to Wicked's broader `Player` preset.
+`CreatePlayerStartCommand` owns creation and Undo/Redo; Studio exposes it through
+the Renegade Add menu and existing transform workflow.
+
+`PlayerService` resolves the marker deterministically and creates a native
+Wicked `RigidBodyPhysicsComponent` in character mode only inside Runtime. The
+live capsule is never serialized and no second Jolt world, transform authority
+or player registry exists. A `PlayerInputFrame` carries named movement, look,
+jump and sprint values into the service, so gameplay code does not poll raw
+keyboard/mouse state and Gate 2 can add persistent bindings without replacing
+player movement. Runtime owns possession and the first-person camera. Studio
+continues to launch the separate Runtime process for Test Level/Preview rather
+than hosting gameplay simulation in the editor render path.
+
 ### Runtime
 
 Standalone player without editor code. It loads project settings, startup scene,

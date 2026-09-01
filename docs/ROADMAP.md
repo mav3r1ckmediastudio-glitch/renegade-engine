@@ -75,6 +75,16 @@ That audit must produce a gate plan and acceptance matrix before implementation
 starts. The first implementation PR should deliver one vertical slice rather
 than expose unrelated systems in parallel.
 
+The audit is now recorded in
+[`PHASE6_CAPABILITY_AUDIT.md`](PHASE6_CAPABILITY_AUDIT.md). **Gate 1 — Player
+Start, Possession and Movement** is active on
+`phase6/gate1-player-foundation`. Its bounded contract is
+[`PHASE6_GATE1_PLAYER_FOUNDATION.md`](PHASE6_GATE1_PLAYER_FOUNDATION.md).
+Gate 1 adds one command-backed WISCENE Player Start, an action-shaped gameplay
+input seam, one Runtime-only Wicked character capsule and explicit first-person
+camera ownership. Audio, gameplay Lua, objectives and navigation remain later
+gates rather than widening the first candidate.
+
 ## Verification policy
 
 - Green compilation is necessary but never sufficient for creator-facing work.

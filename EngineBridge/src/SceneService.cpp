@@ -4,6 +4,7 @@
 #include "renegade/bridge/LightmapBakeService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "renegade/bridge/VegetationService.h"
+#include "renegade/bridge/PlayerService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -43,6 +44,10 @@ namespace
             return Category::Lights;
         }
         if (scene.humanoids.Contains(entity))
+        {
+            return Category::Characters;
+        }
+        if (renegade::bridge::IsPlayerStart(scene, entity))
         {
             return Category::Characters;
         }

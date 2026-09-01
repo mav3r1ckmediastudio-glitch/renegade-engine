@@ -81,26 +81,42 @@ They do not obtain performance by lowering scene fidelity.
 The previous handoff incorrectly described Phase 5 Gate 6 and PR #122 as active.
 Those instructions are superseded by this file.
 
-## Next required task
+## Active work — Phase 6 Gate 1 player foundation
 
-Begin planning **Phase 6 / the Heathen playable core**. JP01 already supplies
-the physics foundation, so do not build a second physics system or repeat its
-authoring work.
+Branch: `phase6/gate1-player-foundation`.
 
-Before implementation, audit the current tree and produce a bounded gate plan
-for:
+The capability audit and complete Phase 6 sequence are recorded in
+`docs/PHASE6_CAPABILITY_AUDIT.md`. Gate 1 is bounded by
+`docs/PHASE6_GATE1_PLAYER_FOUNDATION.md`.
 
-- player start/possession, controller and camera;
-- keyboard/mouse/controller action mapping;
-- Play/Pause/Stop and deterministic reset;
-- 3D audio and Runtime persistence;
-- Lua gameplay bindings and a simple scripted objective;
-- any navigation/path-query capability required by the vertical slice; and
-- packaged standalone parity.
+Implemented candidate boundary:
 
-The target exit proof is a packaged project containing a controllable
-character, collisions, audio and a scripted objective. The first code PR should
-be one end-to-end vertical slice with an explicit owner checklist.
+- `PlayerService` owns governed Player Start detection, command-backed
+  creation, deterministic duplicate rejection, action-shaped input evaluation,
+  Runtime spawn/despawn and camera application;
+- `ADD > PLAYER START` creates and selects the WISCENE marker from the current
+  editor view, then uses the existing Hierarchy/Inspector/gizmo workflow;
+- Runtime resolves the marker after a complete Scene replacement and creates
+  one non-serialized Wicked/Jolt character capsule;
+- W/A/S/D and left stick drive camera-relative movement, mouse/right stick
+  drive look, Space/gamepad primary drives jump and Shift/left-stick press
+  drives sprint; and
+- zero markers retain backward-compatible spectator Runtime while multiple or
+  malformed markers never receive arbitrary possession.
+
+The candidate deliberately does not add audio, a general Lua lifecycle,
+objectives, AI/navigation, a player mesh, arms, weapons, animation, input
+rebinding, Pause or deterministic reset. Those remain later bounded gates.
+
+Required next evidence:
+
+1. exact-head Studio Debug/Release and baseline Debug/Release CI;
+2. add Player Start, Undo/Redo, Save/Reopen and reposition it with the gizmo;
+3. run Test Level and verify spawn heading, WASD/mouse, sprint, jump and
+   collision on real Terrain;
+4. repeat keyboard/mouse movement with a controller;
+5. build and run the packaged executable and confirm the same behaviour; and
+6. recheck the #122 editor interaction and 75 FPS baseline before acceptance.
 
 ## Documentation checkpoint
 
