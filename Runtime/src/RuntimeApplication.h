@@ -9,6 +9,7 @@
 #include "renegade/bridge/RenderSettingsService.h"
 #include "renegade/bridge/RenderLutService.h"
 #include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/PlayerService.h"
 
 #include <cstdint>
 #include <string>
@@ -59,6 +60,9 @@ namespace renegade::runtime
         void QueueAction(RuntimeActionRequest request);
         void ProcessPendingActions();
         void RecordAction(const RuntimeActionResult& result);
+        void SyncPlayerForScene();
+        [[nodiscard]] bridge::PlayerInputFrame CapturePlayerInput(
+            float dt) const noexcept;
 
         bridge::SceneService scenes_;
         RuntimeFlowController flow_;
@@ -66,6 +70,8 @@ namespace renegade::runtime
         RuntimeScreenController screenController_;
         RuntimeScreenPresenter screenPresenter_;
         RuntimeActionDispatcher actions_;
+        bridge::RuntimePlayerState player_;
+        bridge::PlayerControllerSettings playerSettings_;
         RuntimeBootstrapResult startupResult_;
         std::vector<RuntimeActionRequest> pendingActions_;
         bool startupFinished_ = false;
@@ -75,5 +81,6 @@ namespace renegade::runtime
         bool smokeExitOnComplete_ = false;
         int exitCode_ = 0;
         std::uint64_t evidenceRevision_ = 0;
+        std::uint64_t playerSceneRevision_ = 0;
     };
 }

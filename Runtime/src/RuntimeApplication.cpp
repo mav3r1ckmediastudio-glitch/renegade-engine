@@ -4,6 +4,7 @@
 #include "renegade/bridge/ScreenService.h"
 #include "renegade/bridge/PrecipitationService.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace renegade::runtime
@@ -270,11 +271,115 @@ namespace renegade::runtime
         bridge::RefreshPrecipitationVisual(scenes_.GetScene());
         wi::Application::Update(dt);
 
+        SyncPlayerForScene();
+        if (player_.IsSpawned() && !screenPresenter_.IsLoaded())
+        {
+            const auto input = CapturePlayerInput(dt);
+            (void)bridge::UpdateRuntimePlayer(
+                scenes_.GetScene(),
+                player_,
+                input,
+                playerSettings_);
+            if (renderer_.camera != nullptr)
+            {
+                bridge::ApplyRuntimePlayerCamera(
+                    scenes_.GetScene(),
+                    player_,
+                    *renderer_.camera,
+                    playerSettings_);
+            }
+            wi::input::HidePointer(true);
+        }
+        else
+        {
+            wi::input::HidePointer(false);
+        }
+
         if (screenPresenter_.IsLoaded())
         {
             screenPresenter_.UpdateInput(renderer_, screenController_);
         }
         ProcessPendingActions();
+    }
+
+    void RuntimeApplication::SyncPlayerForScene()
+    {
+        if (playerSceneRevision_ == scenes_.Revision())
+            return;
+
+        player_ = {};
+        playerSceneRevision_ = scenes_.Revision();
+        const auto resolved = bridge::ResolvePlayerStart(scenes_.GetScene());
+        if (resolved.resolution == bridge::PlayerStartResolution::Missing)
+        {
+            wi::backlog::post(
+                "Renegade Runtime: Level has no Player Start; retaining the legacy spectator camera.",
+                wi::backlog::LogLevel::Default);
+            return;
+        }
+        if (resolved.resolution != bridge::PlayerStartResolution::Success)
+        {
+            wi::backlog::post(
+                "Renegade Runtime: " + resolved.message,
+                wi::backlog::LogLevel::Error);
+            return;
+        }
+
+        playerSettings_ = resolved.start.settings;
+
+        std::string error;
+        if (!bridge::SpawnRuntimePlayer(
+                scenes_.GetScene(),
+                resolved.start,
+                player_,
+                error,
+                playerSettings_))
+        {
+            wi::backlog::post(
+                "Renegade Runtime: could not possess Player Start: " + error,
+                wi::backlog::LogLevel::Error);
+            return;
+        }
+        wi::backlog::post(
+            "Renegade Runtime: possessed Player Start with the Wicked character controller.",
+            wi::backlog::LogLevel::Default);
+    }
+
+    bridge::PlayerInputFrame RuntimeApplication::CapturePlayerInput(
+        const float dt) const noexcept
+    {
+        bridge::PlayerInputFrame input;
+        const auto key = [](const char value)
+        {
+            return static_cast<wi::input::BUTTON>(value);
+        };
+
+        const XMFLOAT4 left = wi::input::GetAnalog(
+            wi::input::GAMEPAD_ANALOG_THUMBSTICK_L);
+        const XMFLOAT4 right = wi::input::GetAnalog(
+            wi::input::GAMEPAD_ANALOG_THUMBSTICK_R);
+        input.moveRight = left.x +
+            (wi::input::Down(key('D')) ? 1.0f : 0.0f) -
+            (wi::input::Down(key('A')) ? 1.0f : 0.0f);
+        input.moveForward = left.y +
+            (wi::input::Down(key('W')) ? 1.0f : 0.0f) -
+            (wi::input::Down(key('S')) ? 1.0f : 0.0f);
+
+        const auto& mouse = wi::input::GetMouseState();
+        constexpr float MouseLookScale = 0.0017f;
+        constexpr float GamepadLookRadiansPerSecond = 2.5f;
+        const float safeDt = std::clamp(dt, 0.0f, 0.1f);
+        input.lookYaw = mouse.delta_position.x * MouseLookScale +
+            right.x * GamepadLookRadiansPerSecond * safeDt;
+        input.lookPitch = mouse.delta_position.y * MouseLookScale -
+            right.y * GamepadLookRadiansPerSecond * safeDt;
+        input.jumpPressed =
+            wi::input::Press(wi::input::KEYBOARD_BUTTON_SPACE) ||
+            wi::input::Press(wi::input::GAMEPAD_BUTTON_2);
+        input.sprintDown =
+            wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
+            wi::input::Down(wi::input::GAMEPAD_BUTTON_7);
+        return input;
     }
 
     bool RuntimeApplication::ConfigureActions(std::string& error)

@@ -7,14 +7,12 @@ foundation; Renegade owns its Studio editor, project and asset workflows,
 runtime/player, build lifecycle, UX, documentation and higher-level gameplay
 framework.
 
-> **Status:** Phase 5 — Scene/rendering exposure. Gates 1–5 are accepted and
-> merged. Gate 5 added the persistent Renegade-owned **RENDER** workspace with
-> native Wicked tonemapping, image controls, LUTs, bloom/eye adaptation, AA and
-> camera-image post FX; the project owner completed the packaged Release audit.
-> Gate 6 is active on `phase5/scene-render-gate6-ao-gi-reflections` and extends
-> that same scene-owned render-settings seam with non-ray-traced AO, SSGI/GI
-> controls, SSR and planar-reflection quality. Ray/path tracing remains Gate 7.
-> Renegade is still a development project, not a distribution-ready v1 engine.
+> **Status:** Phase 6 — Playable Core. Phase 5 Gates 1-9 and the WD01/editor
+> performance recovery are accepted on `main`. Gate 1 is active on
+> `phase6/gate1-player-foundation` and connects a command-backed Player Start,
+> action-shaped gameplay input, the accepted Wicked/Jolt character controller
+> and explicit first-person Runtime camera ownership. Renegade is still a
+> development project, not a distribution-ready v1 engine.
 
 Scene UI Gate 5 is also accepted and merged. The recovered Scene Editor now has
 independent Environment and Terrain ownership, complete realistic-sky/Sun
@@ -24,8 +22,8 @@ and Runtime weather/terrain resources.
 
 ## Current baseline
 
-- Current main baseline: `0b3a162b88a951097413b029d262487d892d7a6a`
-  (Phase 5 Gate 5 post-processing and image quality, PR #113)
+- Current main baseline: `90ebea4b9a9ec41cd7c92d86224d1484ec55d70b`
+  (WD01 vegetation and editor frame-loop recovery, PR #122)
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
 - Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -76,15 +74,14 @@ The Windows reference build and evidence workflow is documented in
 
 ## What comes next
 
-The immediate stabilization gate is **Scene UI Gate 6 — Consolidated
-Whole-Editor Acceptance**. It does not add another editor feature set. It locks
-the accepted Project Hub, Story Flow, Level Editor, Screen Editor, Asset Browser,
-Environment, Terrain, Test Level and Build Game paths together, then proves them
-through exact-head four-way CI and one packaged Release owner pass at all three
-supported review resolutions.
+The active gate is **Phase 6 Gate 1 — Player Start, Possession and Movement**.
+It adds the first complete playable path without reopening JP01 physics: author
+one Player Start, save/reopen it, enter the separate Runtime as a first-person
+Wicked character capsule and prove keyboard/mouse/controller movement through
+Test Level and the packaged executable.
 
 See
-[`docs/SCENE_UI_GATE6_CONSOLIDATED_ACCEPTANCE.md`](docs/SCENE_UI_GATE6_CONSOLIDATED_ACCEPTANCE.md).
+[`docs/PHASE6_GATE1_PLAYER_FOUNDATION.md`](docs/PHASE6_GATE1_PLAYER_FOUNDATION.md).
 
 ## Product layers
 
@@ -108,10 +105,10 @@ reference. It is not the Renegade editor and is not embedded as Renegade UI.
 1. Read [`docs/PROJECT_CHARTER.md`](docs/PROJECT_CHARTER.md).
 2. Read [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md).
 3. Check [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`HANDOFF.md`](HANDOFF.md).
-4. For the latest completed lifecycle proof, read
-   [`docs/LP06_GATE5_SAFE_PROMOTION_CLOSEOUT.md`](docs/LP06_GATE5_SAFE_PROMOTION_CLOSEOUT.md).
-5. For the next programme, read
-   [`docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md`](docs/LP07_REUSABLE_PROJECT_ASSET_WORKFLOW.md).
+4. For the current programme sequence, read
+   [`docs/PHASE6_CAPABILITY_AUDIT.md`](docs/PHASE6_CAPABILITY_AUDIT.md).
+5. For the active gate, read
+   [`docs/PHASE6_GATE1_PLAYER_FOUNDATION.md`](docs/PHASE6_GATE1_PLAYER_FOUNDATION.md).
 6. Follow [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
    Claude or human handovers.
 7. Do not claim feature parity from compilation alone; update
