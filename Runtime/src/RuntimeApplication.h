@@ -6,6 +6,7 @@
 #include "RuntimeBootstrap.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
+#include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/RenderSettingsService.h"
 #include "renegade/bridge/RenderLutService.h"
@@ -68,6 +69,7 @@ namespace renegade::runtime
         void ProcessPendingActions();
         void RecordAction(const RuntimeActionResult& result);
         void SyncPlayerForScene();
+        void SyncAudioForScene();
 
         bridge::SceneService scenes_;
         RuntimeFlowController flow_;
@@ -91,5 +93,6 @@ namespace renegade::runtime
         int exitCode_ = 0;
         std::uint64_t evidenceRevision_ = 0;
         std::uint64_t playerSceneRevision_ = 0;
+        std::uint64_t audioSceneRevision_ = 0;
     };
 }
