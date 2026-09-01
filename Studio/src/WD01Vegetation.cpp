@@ -658,6 +658,10 @@ namespace renegade::studio
             wi::enums::FILTER_TERRAIN,
             ~0u,
             scene);
+        const bool leftPressed = wi::input::Press(
+            wi::input::MOUSE_BUTTON_LEFT);
+        const bool leftDown = wi::input::Down(
+            wi::input::MOUSE_BUTTON_LEFT);
 
         if (picked.entity != wi::ecs::INVALID_ENTITY)
         {
@@ -674,8 +678,7 @@ namespace renegade::studio
                 true);
         }
 
-        if (wi::input::Press(
-                wi::input::MOUSE_BUTTON_LEFT) &&
+        if (leftPressed &&
             picked.entity != wi::ecs::INVALID_ENTITY)
         {
             std::string error;
@@ -694,9 +697,7 @@ namespace renegade::studio
             state.strokeBefore = {};
         }
 
-        if (state.strokeActive &&
-            wi::input::Down(
-                wi::input::MOUSE_BUTTON_LEFT) &&
+        if (state.strokeActive && leftDown &&
             picked.entity != wi::ecs::INVALID_ENTITY)
         {
             const auto result =
@@ -719,7 +720,10 @@ namespace renegade::studio
                 result.affectedVertices;
         }
 
-        return true;
+        // An armed vegetation brush owns only left-button painting. Merely
+        // hovering the viewport must fall through to Studio navigation so RMB
+        // look/pan and keyboard movement remain available between strokes.
+        return leftPressed || leftDown || state.strokeActive;
     }
 
 }

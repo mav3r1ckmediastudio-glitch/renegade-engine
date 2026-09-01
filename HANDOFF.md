@@ -84,15 +84,21 @@ Owner performance result and remaining blocker:
   The bounded repair leaves the profiler overlay registered early and retains
   the one authoritative chrome registration in `CreateWorkspaceShell()`; Gate
   9 source contracts now reject either duplicate registration/reordering call.
-  Owner interaction testing remains required.
+  Owner interaction testing accepted the full chrome repair. A follow-up owner
+  test found that an armed Paint/Delete brush still blocked viewport navigation:
+  `HandleWd01Vegetation()` returned consumed on every hovered frame, including
+  frames with no left-button paint input. The follow-up repair retains brush
+  preview and stroke ownership but returns consumed only for LMB press/down or
+  an active stroke, allowing RMB navigation and keyboard camera movement while
+  the vegetation tool remains armed. Owner testing remains required for this
+  navigation refinement.
 
 Next required work:
 
-1. publish the UI input-lifecycle repair on top of PR #122's exact head and run
+1. publish the vegetation navigation refinement on top of PR #122's exact head and run
    Windows x64 Studio Debug/Release plus baseline Debug/Release CI;
-2. owner-test top menus, dropdowns, Hierarchy category/entity disclosure,
-   selection, and Inspector controls before and after a grass stroke whose
-   release occurs over the top bar, Hierarchy, Inspector and bottom drawer;
+2. with Paint and Delete armed, owner-test RMB look, RMB+WASD traversal and
+   repeated movement-to-stroke cycles without leaving the Terrain workspace;
 3. re-confirm the populated Level remains at the 75 Hz VSync cap;
 4. confirm multi-chunk grass paint/delete/Undo/Redo/save/reopen/Runtime parity;
    and
