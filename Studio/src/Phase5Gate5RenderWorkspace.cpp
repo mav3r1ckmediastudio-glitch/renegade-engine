@@ -777,6 +777,7 @@ namespace renegade::studio
                 scene, session_->Projects().CurrentProject().rootPath, ignored);
         }
         const auto authored = bridge::CaptureRenderSettings(scene);
+        appliedRenderSettingsSceneRevision_ = session_->Scenes().Revision();
         const bool authoredStateChanged =
             !appliedRenderSettingsInitialized_ ||
             bridge::HasRenderSettingsChange(appliedRenderSettings_, authored);

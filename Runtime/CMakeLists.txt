@@ -175,6 +175,12 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/default_grass/default_grass_surface.tga"
         "32"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/grass.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.png"
+        "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/terrain/grassparticle.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_SOURCE_DIR}/Studio/assets/weather/snowflake.dds"
         "$<TARGET_FILE_DIR:RenegadeRuntime>/Content/weather/snowflake.dds"
     VERBATIM

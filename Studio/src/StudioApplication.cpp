@@ -3272,6 +3272,8 @@ namespace renegade::studio
         terrainStrokeDiagnostic_.SetText("LAST STROKE // READY");
         inspectorPanel_.AddWidget(&terrainStrokeDiagnostic_);
 
+        CreateWd01VegetationControls();
+
         focusButton_.Create("Focus Selected");
         focusButton_.SetText("FOCUS [F]");
         focusButton_.SetTooltip("Frame the selected entity in the viewport");
@@ -4548,8 +4550,13 @@ namespace renegade::studio
 
     void StudioRenderPath::Update(const float dt)
     {
-        if (!pathTracePreviewActive_)
+        if (!pathTracePreviewActive_ && session_ != nullptr &&
+            (!appliedRenderSettingsInitialized_ ||
+                appliedRenderSettingsSceneRevision_ !=
+                    session_->Scenes().Revision()))
+        {
             SyncRenderSettingsFromScene(true);
+        }
         if (renderWorkspaceActive_)
         {
             // The Window owns child transforms while it processes scrolling and
@@ -4645,6 +4652,8 @@ namespace renegade::studio
             return;
         }
 
+        TickWd01Vegetation();
+
         // Chrome callbacks have returned. A drag release is committed here in
         // this exact frame, before ConsumedPointerThisFrame() can short-circuit
         // the rest of Studio input processing.
@@ -4666,14 +4675,6 @@ namespace renegade::studio
         }
 
         QueueCreatorImportScaleRuler();
-
-        // Gate 3 uses Wicked's native environment-probe debug renderer so Studio
-        // shows the actual captured cubemap as a reflective sphere together with
-        // the probe's parallax-correct oriented influence box. Keep this editor-only:
-        // Test Level runs in a separate Runtime process and the Studio overlay is
-        // explicitly disabled while that process owns preview execution.
-        wi::renderer::SetToDrawDebugEnvProbes(
-            !projectHubVisible_ && !testLevelRuntime_.IsActive());
 
         if (testLevelRuntime_.IsActive())
         {
@@ -4714,6 +4715,15 @@ namespace renegade::studio
         const bool decalProbeIconConsumed = HandleDecalProbeSceneIcons(pointer);
         const bool lightIconConsumed = HandleLightSceneIcons(pointer);
 
+        // A vegetation stroke can be released after the pointer has crossed
+        // from the viewport onto native GUI or Renegade chrome. Finalize that
+        // release before a UI callback, shortcut or ownership check can return
+        // from this frame. HandleWd01Vegetation() applies its own focus and
+        // viewport guards after completing an in-flight release, so this does
+        // not let a brush begin through the UI.
+        const bool vegetationConsumed =
+            HandleWd01Vegetation(pointer);
+
         if (sunPreviewPlaying_)
         {
             bridge::SetSunTime(
@@ -4744,11 +4754,20 @@ namespace renegade::studio
         // scene selection, gizmo manipulation, or camera navigation.
         if (studioChrome_.ConsumedPointerThisFrame())
         {
+            // Renegade chrome owns this pointer press. Cancel the persistent
+            // vegetation tool so a viewport brush can never retain input
+            // ownership across top-menu or bottom-drawer interaction.
+            DisableWd01VegetationBrush();
             return;
         }
 
         if (cameraIconConsumed || decalProbeIconConsumed ||
             lightIconConsumed)
+        {
+            return;
+        }
+
+        if (vegetationConsumed)
         {
             return;
         }
@@ -5194,6 +5213,7 @@ namespace renegade::studio
         positionEnvironmentWidget(terrainBrushFalloff_, 622.0f);
         positionEnvironmentWidget(terrainBrushReadout_, 656.0f, 20.0f);
         positionEnvironmentWidget(terrainStrokeDiagnostic_, 676.0f, 20.0f);
+        LayoutWd01VegetationControls(environmentFieldWidth);
 
         const bool environmentSelected =
             environmentWorkspaceActive_;
@@ -5599,7 +5619,7 @@ namespace renegade::studio
         const float actionStart = environment
             ? std::max(1772.0f, inspectorPanel_.GetSize().y - 82.0f)
             : terrain
-                ? 726.0f
+                ? 1340.0f
                 : light
                     ? 1130.0f
                     : sceneCamera
@@ -6018,6 +6038,7 @@ namespace renegade::studio
         setTerrainVisible(terrainBrushFalloff_);
         setTerrainVisible(terrainBrushReadout_);
         setTerrainVisible(terrainStrokeDiagnostic_);
+        RefreshWd01VegetationControls(hasTerrain);
 
         translationX_.SetEnabled(hasTransform);
         translationY_.SetEnabled(hasTransform);
@@ -6673,6 +6694,10 @@ namespace renegade::studio
         if (terrainWorkspaceActive_)
         {
             environmentWorkspaceActive_ = false;
+        }
+        else
+        {
+            DisableWd01VegetationBrush();
         }
         studioChrome_.SetEnvironmentWorkspaceActive(environmentWorkspaceActive_);
         studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);

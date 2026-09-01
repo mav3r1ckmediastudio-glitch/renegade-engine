@@ -373,11 +373,12 @@ namespace renegade::studio
         auto& gui = GetGUI();
         gui.AddWidget(&controls.profilerOverlay);
         // Wicked renders top-level GUI widgets in reverse registration order.
-        // Re-register the Renegade chrome last so it renders first; the profiler
-        // can then draw over the Scene viewport while remaining clipped away
-        // from the owned sidebars/status chrome.
-        gui.RemoveWidget(&studioChrome_);
-        gui.AddWidget(&studioChrome_);
+        // CreateWorkspaceShell() registers the Renegade chrome later, exactly
+        // once. It therefore renders first and this earlier profiler overlay
+        // draws over the Scene viewport while remaining clipped away from the
+        // owned sidebars/status chrome. Registering chrome here as well would
+        // make Wicked update the same widget twice per frame, cancelling every
+        // persistent click state (menus, drawers and hierarchy disclosure).
 
         controls.reset.Create("Render Diagnostics Reset");
         controls.reset.SetText("RESET DIAGNOSTICS");

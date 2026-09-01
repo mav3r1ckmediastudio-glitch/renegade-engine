@@ -1,6 +1,6 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-30
+**Date:** 2026-09-01
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
@@ -10,6 +10,100 @@
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
+
+## Active recovery — editor frame-loop performance
+
+Branch: `perf/editor-frame-loop-recovery`.
+
+Base: unmerged `wd01/wicked-vegetation-clean` head
+`b54a22104b965f7b5d463056b76cb2194acd33b7`.
+
+Implementation commit:
+`67ed669ab58e5c4c53967bc38e3976407df61b56`.
+
+The owner-reported Level fell from the 75 Hz VSync cap to approximately 30 FPS.
+The static audit found project/resource repair, synchronous diagnostics and
+whole-system synchronization in ordinary frame paths. This recovery removes
+those architectural defects without lowering terrain, vegetation or render
+quality.
+
+Implemented:
+
+- removed governed texture restoration from
+  `CreatorAssetStudioChrome::Update`; explicit Scene open and staged project
+  adoption restoration remain intact;
+- retired synchronous `PR58Gate1Lifecycle.log` writes while retaining
+  operation-scoped Wicked backlog timings;
+- removed ordinary Studio ownership of native environment-probe debug drawing;
+  Gate 9 Diagnostics remains sole authority;
+- added `SceneService::Revision()` and revision-gated Studio/Runtime render and
+  LUT synchronization;
+- replaced WD01's idle whole-terrain synchronization with an O(1) terrain
+  identity/chunk-count gate, retaining native Wicked grass painting and
+  completed-stroke rebuild behavior; and
+- added `RenegadeEditorFrameLoopRecoverySourceContract`, corrected the older
+  Gate 3/Gate 4 contracts that required the bad behavior, and added a bridge
+  revision assertion.
+
+Changed files are the 20 paths recorded by commit `67ed669`, bounded to
+`SceneService`, Studio/Runtime frame lifecycle, WD01 synchronization, PR58
+diagnostics, source contracts and recovery documentation. The Wicked submodule
+pin is unchanged.
+
+Local evidence:
+
+- `git diff --cached --check` — PASS before implementation commit;
+- fixed-string negative checks for per-frame texture restore, ordinary Studio
+  probe-debug ownership and PR58 file I/O — PASS;
+- fixed-string positive checks for Studio/Runtime Scene revision gates, Gate 9
+  probe ownership and WD01 chunk lifecycle gating — PASS;
+- modified-document local-link validation — PASS;
+- CMake source-contract execution — NOT RUN because CMake is unavailable in
+  this Linux worker;
+- Windows native compile and GPU profiling — pending authoritative CI/owner
+  evidence.
+
+Owner performance result and remaining blocker:
+
+- draft PR #122 targets `main`; all four required checks passed;
+- the owner measured 75 FPS in both an empty and populated Level, restoring the
+  75 Hz VSync cap without reducing scene or vegetation quality;
+- `wd01/wicked-vegetation-clean` remains unmerged because affected menus do not
+  react to the mouse and Hierarchy selection works while collapse/expand does
+  not;
+- the first `fix/wd01-ui-input-lifecycle` repair correctly made vegetation
+  stroke release reachable before UI early exits, but owner testing on exact PR
+  #122 head `7c90d90e9d51c24d731ceca9e7ade1f75f0741ee` proved it did not repair the
+  reported chrome interaction failure; and
+- the actual shared cause is Gate 9's duplicate top-level registration of
+  `studioChrome_`. `CreateGate9DiagnosticsControls()` registered it once while
+  creating the profiler overlay, then `CreateWorkspaceShell()` registered the
+  same widget again. Release builds therefore updated the chrome twice for one
+  physical press: menus/drawers opened then closed and hierarchy disclosure
+  toggled then toggled back, while idempotent selection still appeared to work.
+  The bounded repair leaves the profiler overlay registered early and retains
+  the one authoritative chrome registration in `CreateWorkspaceShell()`; Gate
+  9 source contracts now reject either duplicate registration/reordering call.
+  Owner interaction testing accepted the full chrome repair. A follow-up owner
+  test found that an armed Paint/Delete brush still blocked viewport navigation:
+  `HandleWd01Vegetation()` returned consumed on every hovered frame, including
+  frames with no left-button paint input. The follow-up repair retains brush
+  preview and stroke ownership but returns consumed only for LMB press/down or
+  an active stroke, allowing RMB navigation and keyboard camera movement while
+  the vegetation tool remains armed. Owner testing remains required for this
+  navigation refinement.
+
+Next required work:
+
+1. publish the vegetation navigation refinement on top of PR #122's exact head and run
+   Windows x64 Studio Debug/Release plus baseline Debug/Release CI;
+2. with Paint and Delete armed, owner-test RMB look, RMB+WASD traversal and
+   repeated movement-to-stroke cycles without leaving the Terrain workspace;
+3. re-confirm the populated Level remains at the 75 Hz VSync cap;
+4. confirm multi-chunk grass paint/delete/Undo/Redo/save/reopen/Runtime parity;
+   and
+5. keep PR #122 draft and do not merge to `main` until the owner explicitly
+   accepts both interaction and performance on the exact tested head.
 
 ## Active work — Phase 5 Gate 6 AO / GI / Reflections
 

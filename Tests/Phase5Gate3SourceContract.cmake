@@ -7,6 +7,7 @@ set(service_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/DecalProbeService.cp
 set(studio_source "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
 set(studio_header "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h")
 set(chrome_source "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp")
+set(diagnostics_source "${RENEGADE_SOURCE_DIR}/Studio/src/Phase5Gate9RenderDiagnostics.cpp")
 
 foreach(path IN ITEMS "${service_header}" "${service_source}")
     if(NOT EXISTS "${path}")
@@ -55,13 +56,13 @@ endforeach()
 file(READ "${studio_source}" studio_text)
 file(READ "${studio_header}" studio_header_text)
 file(READ "${chrome_source}" chrome_text)
+file(READ "${diagnostics_source}" diagnostics_text)
 foreach(token IN ITEMS
     "DECAL // NATIVE WICKED"
     "ENVIRONMENT PROBE // NATIVE WICKED"
     "CreateDecalFromView"
     "CreateEnvironmentProbeFromView"
     "HandleDecalProbeSceneIcons"
-    "SetToDrawDebugEnvProbes"
     "RefreshEnvironmentProbe"
     "SetMaterialCommand"
     "ChooseSelectedDecalTexture"
@@ -72,6 +73,14 @@ foreach(token IN ITEMS
         message(FATAL_ERROR "Gate 3 Studio integration missing ${token}")
     endif()
 endforeach()
+string(FIND "${diagnostics_text}" "SetToDrawDebugEnvProbes" probe_debug_owner)
+if(probe_debug_owner EQUAL -1)
+    message(FATAL_ERROR "Gate 3 native environment-probe debug mapping is missing from Gate 9 Diagnostics")
+endif()
+string(FIND "${studio_text}" "SetToDrawDebugEnvProbes" forced_probe_debug)
+if(NOT forced_probe_debug EQUAL -1)
+    message(FATAL_ERROR "Gate 3 Studio frame loop must not own environment-probe diagnostics")
+endif()
 foreach(token IN ITEMS
     "CreateDecal"
     "CreateEnvironmentProbe"

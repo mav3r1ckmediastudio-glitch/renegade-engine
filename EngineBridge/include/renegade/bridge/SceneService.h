@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -129,6 +130,10 @@ namespace renegade::bridge
         [[nodiscard]] bool IsHierarchyVisible(
             wi::ecs::Entity entity) const;
         [[nodiscard]] const std::string& CurrentPath() const noexcept;
+        // Increments only when the complete active Scene is replaced. Render
+        // paths use this lifecycle revision instead of polling/recapturing
+        // authored state merely because another frame occurred.
+        [[nodiscard]] std::uint64_t Revision() const noexcept;
         [[nodiscard]] const std::string& LastError() const noexcept;
 
         // Studio's transactional project switch can fail project adoption
@@ -145,5 +150,6 @@ namespace renegade::bridge
         wi::scene::Scene scene_;
         std::string currentPath_;
         std::string lastError_;
+        std::uint64_t revision_ = 0;
     };
 }

@@ -577,6 +577,12 @@ namespace renegade::studio
             const XMFLOAT3& world,
             XMFLOAT2& screen) const noexcept;
         bool HandleTerrainSculpt(const XMFLOAT4& pointer);
+        void CreateWd01VegetationControls();
+        void LayoutWd01VegetationControls(float fieldWidth);
+        void RefreshWd01VegetationControls(bool hasTerrain);
+        void TickWd01Vegetation();
+        void DisableWd01VegetationBrush();
+        bool HandleWd01Vegetation(const XMFLOAT4& pointer);
         [[nodiscard]] wi::ecs::Entity EditableWeatherEntity() const noexcept;
         void SetEnvironmentWorkspaceActive(bool active);
         void SetTerrainWorkspaceActive(bool active);
@@ -1057,6 +1063,10 @@ namespace renegade::studio
         bridge::RenderSettingsState renderSliderAfter_;
         bridge::RenderSettingsState appliedRenderSettings_;
         bool appliedRenderSettingsInitialized_ = false;
+        std::uint64_t appliedRenderSettingsSceneRevision_ = 0;
+        wi::ecs::Entity wd01SynchronizedTerrainEntity_ =
+            wi::ecs::INVALID_ENTITY;
+        std::size_t wd01SynchronizedChunkCount_ = 0;
         bool pathTracePreviewActive_ = false;
         int pathTraceTargetSamples_ = 1024;
         std::uint32_t pathTraceBounceCount_ = 1;

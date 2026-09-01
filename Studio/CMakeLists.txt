@@ -110,6 +110,7 @@ add_executable(RenegadeStudio WIN32
     src/Phase5Gate4MaterialInspector.cpp
     src/Phase5Gate5RenderWorkspace.cpp
     src/Phase5Gate7RayPathTracing.cpp
+    src/WD01Vegetation.cpp
     src/StudioApplication.cpp
     src/StudioApplication.h
     src/StudioUserPreferences.cpp
@@ -241,6 +242,12 @@ add_custom_command(
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass/default_grass_normal.tga"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/default_grass/default_grass_surface.tga"
         "32"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grass.wiscene"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grass.wiscene"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_SOURCE_DIR}/WickedEngine/Content/terrain/grassparticle.png"
+        "$<TARGET_FILE_DIR:RenegadeStudio>/Content/terrain/grassparticle.png"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/weather/snowflake.dds"
         "$<TARGET_FILE_DIR:RenegadeStudio>/Content/weather/snowflake.dds"

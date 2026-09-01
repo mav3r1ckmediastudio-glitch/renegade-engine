@@ -303,26 +303,6 @@ namespace renegade::studio
     void CreatorAssetStudioChrome::Update(const wi::Canvas& canvas, const float dt)
     {
         RenegadeStudioChrome::Update(canvas, dt);
-
-        // Governed material textures persist StableIds in WISCENE metadata,
-        // while Wicked Resource handles remain live-only. Rehydrate those
-        // bindings whenever this Level Editor chrome is active after a Scene
-        // load. The current restore service is idempotent, skips already-live
-        // resources and deduplicates repeated StableIds within each pass.
-        auto* session = bridge::StudioSession::Current();
-        if (session != nullptr && session->Projects().HasProject())
-        {
-            const auto& project = session->Projects().CurrentProject();
-            const auto restored = bridge::RestoreMaterialTextureBindings(
-                session->Scenes().GetScene(), project.rootPath, project.projectId);
-            if (restored.succeeded && restored.restored > 0)
-            {
-                SetStatusText("TEXTURE BINDING // RESTORED " +
-                    std::to_string(restored.restored) +
-                    " GOVERNED MATERIAL TEXTURE");
-            }
-        }
-
         UpdateCreatorAssetControls(canvas, dt);
     }
 

@@ -440,6 +440,31 @@ PowerShell output pipeline. The exit status is captured before output replay,
 and CI executes a deliberate non-zero child-process probe so test failures
 cannot be represented as successful build evidence.
 
+### Frame-loop lifecycle boundary
+
+Studio and Runtime frame updates may perform constant-time revision/state checks,
+but project adoption, Scene replacement, governed-resource rehydration, LUT path
+validation, whole-terrain vegetation initialization and persistent diagnostics are
+not frame work.
+
+`SceneService::Revision()` is the shared complete-Scene replacement signal.
+Studio and Runtime apply authored render settings when that revision changes;
+creator commands continue to apply their own committed state directly, including
+Undo/Redo callbacks. A failed LUT resolution is therefore attempted once for the
+current Scene revision rather than once per video frame.
+
+Governed material texture restoration remains an explicit project/Scene adoption
+operation. PR58 lifecycle timing may post one operation result to the in-memory
+Wicked backlog, but normal product code does not open or append a timing file.
+Gate 9 Diagnostics is the sole owner of native Wicked environment-probe debug
+rendering.
+
+WD01 vegetation initialization follows the native terrain chunk lifecycle. The
+frame loop compares terrain identity and chunk count, and calls the full native
+synchronization pass only when that lifecycle changes. Grass painting retains
+the existing Wicked `HairParticleSystem` instances and completed-stroke rebuild
+contract.
+
 ## Core rules
 
 1. Prefer adapters over Wicked source changes.
