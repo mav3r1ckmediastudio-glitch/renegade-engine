@@ -1,6 +1,6 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-08-30
+**Date:** 2026-09-01
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
@@ -10,6 +10,77 @@
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
+
+## Active recovery — editor frame-loop performance
+
+Branch: `perf/editor-frame-loop-recovery`.
+
+Base: unmerged `wd01/wicked-vegetation-clean` head
+`b54a22104b965f7b5d463056b76cb2194acd33b7`.
+
+Implementation commit:
+`67ed669ab58e5c4c53967bc38e3976407df61b56`.
+
+The owner-reported Level fell from the 75 Hz VSync cap to approximately 30 FPS.
+The static audit found project/resource repair, synchronous diagnostics and
+whole-system synchronization in ordinary frame paths. This recovery removes
+those architectural defects without lowering terrain, vegetation or render
+quality.
+
+Implemented:
+
+- removed governed texture restoration from
+  `CreatorAssetStudioChrome::Update`; explicit Scene open and staged project
+  adoption restoration remain intact;
+- retired synchronous `PR58Gate1Lifecycle.log` writes while retaining
+  operation-scoped Wicked backlog timings;
+- removed ordinary Studio ownership of native environment-probe debug drawing;
+  Gate 9 Diagnostics remains sole authority;
+- added `SceneService::Revision()` and revision-gated Studio/Runtime render and
+  LUT synchronization;
+- replaced WD01's idle whole-terrain synchronization with an O(1) terrain
+  identity/chunk-count gate, retaining native Wicked grass painting and
+  completed-stroke rebuild behavior; and
+- added `RenegadeEditorFrameLoopRecoverySourceContract`, corrected the older
+  Gate 3/Gate 4 contracts that required the bad behavior, and added a bridge
+  revision assertion.
+
+Changed files are the 20 paths recorded by commit `67ed669`, bounded to
+`SceneService`, Studio/Runtime frame lifecycle, WD01 synchronization, PR58
+diagnostics, source contracts and recovery documentation. The Wicked submodule
+pin is unchanged.
+
+Local evidence:
+
+- `git diff --cached --check` — PASS before implementation commit;
+- fixed-string negative checks for per-frame texture restore, ordinary Studio
+  probe-debug ownership and PR58 file I/O — PASS;
+- fixed-string positive checks for Studio/Runtime Scene revision gates, Gate 9
+  probe ownership and WD01 chunk lifecycle gating — PASS;
+- modified-document local-link validation — PASS;
+- CMake source-contract execution — NOT RUN because CMake is unavailable in
+  this Linux worker;
+- Windows native compile and GPU profiling — pending authoritative CI/owner
+  evidence.
+
+Known independent blocker:
+
+- `wd01/wicked-vegetation-clean` is not merged. Its owner-approved grass system
+  still has a separate UI interaction defect: affected menus do not react to
+  the mouse, and Hierarchy selection works but collapse/expand does not. This
+  performance branch does not claim to repair or conceal that defect.
+
+Next required work:
+
+1. publish this handoff commit and open a draft PR against
+   `wd01/wicked-vegetation-clean`, not `main`;
+2. require Windows x64 Studio Debug/Release and baseline Debug/Release CI;
+3. owner-test the exact approximately-30-FPS Level using the fixed camera,
+   backend, resolution and VSync settings in
+   `docs/EDITOR_FRAME_LOOP_PERFORMANCE_RECOVERY.md`;
+4. confirm governed textures, LUTs, diagnostics, terrain expansion and
+   multi-chunk grass paint/delete/Undo/Redo/save/reopen/Runtime parity; and
+5. do not declare the regression solved or merge to `main` from source/CI alone.
 
 ## Active work — Phase 5 Gate 6 AO / GI / Reflections
 
