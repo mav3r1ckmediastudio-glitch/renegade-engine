@@ -79,11 +79,27 @@ namespace renegade::bridge
     // authored scene mix and starts only sources explicitly marked Play On Start.
     void ActivateSceneAudio(
         wi::scene::Scene& scene) noexcept;
+
     // Pause leaves SoundComponent PLAYING intent intact, so resume can continue
     // the same native Wicked playback instances rather than restarting them.
-    void SetSceneAudioPaused(
+    inline void SetSceneAudioPaused(
         wi::scene::Scene& scene,
-        bool paused) noexcept;
+        const bool paused) noexcept
+    {
+        for (std::size_t index = 0; index < scene.sounds.GetCount(); ++index)
+        {
+            const auto entity = scene.sounds.GetEntity(index);
+            if (!IsRenegadeSoundSource(scene, entity))
+                continue;
+            auto& sound = scene.sounds[index];
+            if (!sound.IsPlaying() || !sound.soundinstance.IsValid())
+                continue;
+            if (paused)
+                wi::audio::Pause(&sound.soundinstance);
+            else
+                wi::audio::Play(&sound.soundinstance);
+        }
+    }
 
     class CreateSoundSourceCommand final : public ICommand
     {
