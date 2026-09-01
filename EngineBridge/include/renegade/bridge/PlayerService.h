@@ -14,10 +14,28 @@ namespace renegade::bridge
     inline constexpr const char* RuntimePlayerEntityName =
         "__renegade_runtime_player";
 
+    struct PlayerControllerSettings
+    {
+        float walkSpeed = 4.5f;
+        float sprintSpeed = 7.5f;
+        float jumpSpeed = 5.0f;
+        float lookSensitivity = 1.0f;
+        float minimumPitch = wi::math::DegreesToRadians(-89.0f);
+        float maximumPitch = wi::math::DegreesToRadians(89.0f);
+        float capsuleRadius = 0.4f;
+        // Wicked/Jolt stores the half-height of the cylinder between the
+        // capsule caps. 0.5 + a 0.4 radius produces a 1.8 m total capsule.
+        float capsuleHeight = 0.5f;
+        float eyeHeight = 1.65f;
+        float maximumSlopeDegrees = 50.0f;
+        float gravityFactor = 1.0f;
+    };
+
     struct PlayerStart
     {
         wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
         TransformState transform;
+        PlayerControllerSettings settings;
 
         [[nodiscard]] constexpr bool IsValid() const noexcept
         {
@@ -45,6 +63,11 @@ namespace renegade::bridge
         wi::ecs::Entity entity) noexcept;
     [[nodiscard]] PlayerStartResult ResolvePlayerStart(
         const wi::scene::Scene& scene);
+    [[nodiscard]] PlayerControllerSettings CapturePlayerControllerSettings(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity entity) noexcept;
+    [[nodiscard]] float PlayerCapsuleTotalHeight(
+        const PlayerControllerSettings& settings) noexcept;
 
     class CreatePlayerStartCommand final : public ICommand
     {
@@ -66,6 +89,24 @@ namespace renegade::bridge
         bool hasSnapshot_ = false;
     };
 
+    class SetPlayerControllerSettingsCommand final : public ICommand
+    {
+    public:
+        SetPlayerControllerSettingsCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity entity,
+            const PlayerControllerSettings& settings);
+
+        bool Execute() override;
+        void Undo() override;
+
+    private:
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+        PlayerControllerSettings before_;
+        PlayerControllerSettings after_;
+    };
+
     struct PlayerInputFrame
     {
         float moveRight = 0.0f;
@@ -83,21 +124,6 @@ namespace renegade::bridge
         float jump = 0.0f;
         float yaw = 0.0f;
         float pitch = 0.0f;
-    };
-
-    struct PlayerControllerSettings
-    {
-        float walkSpeed = 4.5f;
-        float sprintSpeed = 7.5f;
-        float jumpSpeed = 5.0f;
-        float lookSensitivity = 1.0f;
-        float minimumPitch = wi::math::DegreesToRadians(-89.0f);
-        float maximumPitch = wi::math::DegreesToRadians(89.0f);
-        float capsuleRadius = 0.4f;
-        // Wicked/Jolt stores this as the half-height of the cylinder between
-        // the capsule caps. 0.5 + a 0.4 radius produces a 1.8 m total capsule.
-        float capsuleHeight = 0.5f;
-        float eyeHeight = 1.65f;
     };
 
     struct RuntimePlayerState

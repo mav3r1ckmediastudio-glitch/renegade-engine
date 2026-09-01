@@ -11,6 +11,17 @@ namespace renegade::bridge
     namespace
     {
         constexpr float Epsilon = 0.00001f;
+        constexpr const char* KeyWalkSpeed = "renegade.player.walk_speed";
+        constexpr const char* KeySprintSpeed = "renegade.player.sprint_speed";
+        constexpr const char* KeyJumpSpeed = "renegade.player.jump_speed";
+        constexpr const char* KeyLookSensitivity = "renegade.player.look_sensitivity";
+        constexpr const char* KeyMinimumPitch = "renegade.player.minimum_pitch";
+        constexpr const char* KeyMaximumPitch = "renegade.player.maximum_pitch";
+        constexpr const char* KeyCapsuleRadius = "renegade.player.capsule_radius";
+        constexpr const char* KeyCapsuleHeight = "renegade.player.capsule_half_height";
+        constexpr const char* KeyEyeHeight = "renegade.player.eye_height";
+        constexpr const char* KeyMaximumSlope = "renegade.player.maximum_slope";
+        constexpr const char* KeyGravityFactor = "renegade.player.gravity_factor";
 
         float FiniteOr(const float value, const float fallback) noexcept
         {
@@ -31,6 +42,54 @@ namespace renegade::bridge
                     scene.names.Contains(entity) ||
                     scene.metadatas.Contains(entity) ||
                     scene.rigidbodies.Contains(entity));
+        }
+
+        float ReadFloat(
+            const wi::scene::MetadataComponent& metadata,
+            const char* key,
+            const float fallback) noexcept
+        {
+            return metadata.float_values.has(key)
+                ? metadata.float_values.get(key)
+                : fallback;
+        }
+
+        void WritePlayerSettings(
+            wi::scene::MetadataComponent& metadata,
+            const PlayerControllerSettings& settings)
+        {
+            metadata.float_values.set(KeyWalkSpeed, settings.walkSpeed);
+            metadata.float_values.set(KeySprintSpeed, settings.sprintSpeed);
+            metadata.float_values.set(KeyJumpSpeed, settings.jumpSpeed);
+            metadata.float_values.set(KeyLookSensitivity, settings.lookSensitivity);
+            metadata.float_values.set(KeyMinimumPitch, settings.minimumPitch);
+            metadata.float_values.set(KeyMaximumPitch, settings.maximumPitch);
+            metadata.float_values.set(KeyCapsuleRadius, settings.capsuleRadius);
+            metadata.float_values.set(KeyCapsuleHeight, settings.capsuleHeight);
+            metadata.float_values.set(KeyEyeHeight, settings.eyeHeight);
+            metadata.float_values.set(KeyMaximumSlope, settings.maximumSlopeDegrees);
+            metadata.float_values.set(KeyGravityFactor, settings.gravityFactor);
+        }
+
+        bool SettingsDiffer(
+            const PlayerControllerSettings& left,
+            const PlayerControllerSettings& right) noexcept
+        {
+            const auto different = [](const float a, const float b)
+            {
+                return std::abs(a - b) > Epsilon;
+            };
+            return different(left.walkSpeed, right.walkSpeed) ||
+                different(left.sprintSpeed, right.sprintSpeed) ||
+                different(left.jumpSpeed, right.jumpSpeed) ||
+                different(left.lookSensitivity, right.lookSensitivity) ||
+                different(left.minimumPitch, right.minimumPitch) ||
+                different(left.maximumPitch, right.maximumPitch) ||
+                different(left.capsuleRadius, right.capsuleRadius) ||
+                different(left.capsuleHeight, right.capsuleHeight) ||
+                different(left.eyeHeight, right.eyeHeight) ||
+                different(left.maximumSlopeDegrees, right.maximumSlopeDegrees) ||
+                different(left.gravityFactor, right.gravityFactor);
         }
     }
 
@@ -73,6 +132,7 @@ namespace renegade::bridge
             }
             result.start.entity = entity;
             result.start.transform = CaptureTransform(*transform);
+            result.start.settings = CapturePlayerControllerSettings(scene, entity);
         }
 
         if (!result.start.IsValid())
@@ -85,6 +145,35 @@ namespace renegade::bridge
         result.resolution = PlayerStartResolution::Success;
         result.message = "Player Start resolved.";
         return result;
+    }
+
+    PlayerControllerSettings CapturePlayerControllerSettings(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        PlayerControllerSettings settings;
+        const auto* metadata = scene.metadatas.GetComponent(entity);
+        if (metadata == nullptr || !IsPlayerStart(scene, entity))
+            return settings;
+        settings.walkSpeed = ReadFloat(*metadata, KeyWalkSpeed, settings.walkSpeed);
+        settings.sprintSpeed = ReadFloat(*metadata, KeySprintSpeed, settings.sprintSpeed);
+        settings.jumpSpeed = ReadFloat(*metadata, KeyJumpSpeed, settings.jumpSpeed);
+        settings.lookSensitivity = ReadFloat(*metadata, KeyLookSensitivity, settings.lookSensitivity);
+        settings.minimumPitch = ReadFloat(*metadata, KeyMinimumPitch, settings.minimumPitch);
+        settings.maximumPitch = ReadFloat(*metadata, KeyMaximumPitch, settings.maximumPitch);
+        settings.capsuleRadius = ReadFloat(*metadata, KeyCapsuleRadius, settings.capsuleRadius);
+        settings.capsuleHeight = ReadFloat(*metadata, KeyCapsuleHeight, settings.capsuleHeight);
+        settings.eyeHeight = ReadFloat(*metadata, KeyEyeHeight, settings.eyeHeight);
+        settings.maximumSlopeDegrees = ReadFloat(*metadata, KeyMaximumSlope, settings.maximumSlopeDegrees);
+        settings.gravityFactor = ReadFloat(*metadata, KeyGravityFactor, settings.gravityFactor);
+        return SanitizePlayerControllerSettings(settings);
+    }
+
+    float PlayerCapsuleTotalHeight(
+        const PlayerControllerSettings& settings) noexcept
+    {
+        const auto safe = SanitizePlayerControllerSettings(settings);
+        return safe.capsuleHeight * 2.0f + safe.capsuleRadius * 2.0f;
     }
 
     CreatePlayerStartCommand::CreatePlayerStartCommand(
@@ -137,6 +226,7 @@ namespace renegade::bridge
         metadata.string_values.set(
             PlayerStartMetadataKey,
             PlayerStartMetadataVersion);
+        WritePlayerSettings(metadata, SanitizePlayerControllerSettings({}));
 
         snapshot_.SetReadModeAndResetPos(false);
         wi::ecs::EntitySerializer serializer;
@@ -154,6 +244,40 @@ namespace renegade::bridge
     wi::ecs::Entity CreatePlayerStartCommand::CreatedEntity() const noexcept
     {
         return entity_;
+    }
+
+    SetPlayerControllerSettingsCommand::SetPlayerControllerSettingsCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const PlayerControllerSettings& settings)
+        : scene_(&scene)
+        , entity_(entity)
+        , before_(CapturePlayerControllerSettings(scene, entity))
+        , after_(SanitizePlayerControllerSettings(settings))
+    {
+    }
+
+    bool SetPlayerControllerSettingsCommand::Execute()
+    {
+        if (scene_ == nullptr || !IsPlayerStart(*scene_, entity_) ||
+            !SettingsDiffer(before_, after_))
+        {
+            return false;
+        }
+        auto* metadata = scene_->metadatas.GetComponent(entity_);
+        if (metadata == nullptr)
+            return false;
+        WritePlayerSettings(*metadata, after_);
+        return true;
+    }
+
+    void SetPlayerControllerSettingsCommand::Undo()
+    {
+        if (scene_ == nullptr || !IsPlayerStart(*scene_, entity_))
+            return;
+        auto* metadata = scene_->metadatas.GetComponent(entity_);
+        if (metadata != nullptr)
+            WritePlayerSettings(*metadata, before_);
     }
 
     PlayerControllerSettings SanitizePlayerControllerSettings(
@@ -185,6 +309,14 @@ namespace renegade::bridge
         result.eyeHeight = std::max(
             0.01f,
             FiniteOr(result.eyeHeight, 1.65f));
+        result.maximumSlopeDegrees = std::clamp(
+            FiniteOr(result.maximumSlopeDegrees, 50.0f),
+            0.0f,
+            89.0f);
+        result.gravityFactor = std::clamp(
+            FiniteOr(result.gravityFactor, 1.0f),
+            0.0f,
+            10.0f);
         return result;
     }
 
@@ -271,8 +403,9 @@ namespace renegade::bridge
         body.capsule.radius = safe.capsuleRadius;
         body.capsule.height = safe.capsuleHeight;
         body.SetCharacterPhysics(true);
-        body.character.maxSlopeAngle = wi::math::DegreesToRadians(50.0f);
-        body.character.gravityFactor = 1.0f;
+        body.character.maxSlopeAngle = wi::math::DegreesToRadians(
+            safe.maximumSlopeDegrees);
+        body.character.gravityFactor = safe.gravityFactor;
         body.SetRefreshParametersNeeded(true);
 
         const XMFLOAT3 rotation =

@@ -62,6 +62,30 @@ int main()
     {
         Fail("Player Start did not use governed native Wicked metadata");
     }
+    if (!Near(resolved.start.settings.walkSpeed, 4.5f) ||
+        !Near(PlayerCapsuleTotalHeight(resolved.start.settings), 1.8f))
+    {
+        Fail("Player Start did not persist creator-facing controller defaults");
+    }
+
+    auto authoredSettings = resolved.start.settings;
+    authoredSettings.walkSpeed = 3.25f;
+    authoredSettings.sprintSpeed = 6.5f;
+    authoredSettings.eyeHeight = 1.72f;
+    authoredSettings.capsuleRadius = 0.45f;
+    authoredSettings.capsuleHeight = 0.55f;
+    authoredSettings.maximumSlopeDegrees = 42.0f;
+    authoredSettings.gravityFactor = 1.2f;
+    if (!commands.Execute(
+            std::make_unique<SetPlayerControllerSettingsCommand>(
+                scene, startEntity, authoredSettings)) ||
+        !Near(CapturePlayerControllerSettings(scene, startEntity).walkSpeed, 3.25f) ||
+        !commands.Undo() ||
+        !Near(CapturePlayerControllerSettings(scene, startEntity).walkSpeed, 4.5f) ||
+        !commands.Redo())
+    {
+        Fail("Player Start settings were not command-backed with Undo/Redo");
+    }
 
     CommandService duplicateCommands;
     if (duplicateCommands.Execute(
@@ -70,9 +94,13 @@ int main()
         Fail("a second Player Start was not rejected");
     }
     if (!commands.Undo() ||
+        !Near(CapturePlayerControllerSettings(scene, startEntity).walkSpeed, 4.5f) ||
+        !commands.Undo() ||
         ResolvePlayerStart(scene).resolution != PlayerStartResolution::Missing ||
         !commands.Redo() ||
-        ResolvePlayerStart(scene).start.entity != startEntity)
+        ResolvePlayerStart(scene).start.entity != startEntity ||
+        !commands.Redo() ||
+        !Near(CapturePlayerControllerSettings(scene, startEntity).walkSpeed, 3.25f))
     {
         Fail("Player Start Undo/Redo did not preserve entity identity");
     }
@@ -89,7 +117,9 @@ int main()
     const auto reopenedStart = ResolvePlayerStart(reopened);
     if (reopenedEntity != startEntity ||
         reopenedStart.resolution != PlayerStartResolution::Success ||
-        !Near(reopenedStart.start.transform.translation.x, 4.0f))
+        !Near(reopenedStart.start.transform.translation.x, 4.0f) ||
+        !Near(reopenedStart.start.settings.walkSpeed, 3.25f) ||
+        !Near(reopenedStart.start.settings.eyeHeight, 1.72f))
     {
         Fail("Player Start did not survive native Wicked serialization");
     }
@@ -100,7 +130,8 @@ int main()
             reopened,
             reopenedStart.start,
             runtime,
-            error))
+            error,
+            reopenedStart.start.settings))
     {
         Fail("Runtime player spawn failed: " + error);
     }
@@ -110,8 +141,10 @@ int main()
         !body->IsCharacterPhysics() ||
         body->shape !=
             wi::scene::RigidBodyPhysicsComponent::CollisionShape::CAPSULE ||
-        !Near(body->capsule.radius, 0.4f) ||
-        !Near(body->capsule.height, 0.5f) ||
+        !Near(body->capsule.radius, 0.45f) ||
+        !Near(body->capsule.height, 0.55f) ||
+        !Near(body->character.maxSlopeAngle, wi::math::DegreesToRadians(42.0f)) ||
+        !Near(body->character.gravityFactor, 1.2f) ||
         !Near(runtimeTransform->translation_local.x, 4.0f))
     {
         Fail("Runtime player did not use the accepted Wicked character capsule");

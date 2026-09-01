@@ -3,14 +3,17 @@
 ## Outcome
 
 A creator can add one Player Start to a Level, position and rotate it with the
-existing gizmo, save/reopen the Level, and enter Test Level or a packaged game
-as a controllable first-person capsule using the accepted Wicked/Jolt character
-controller.
+existing gizmo, immediately edit its player settings in a dedicated Inspector,
+save/reopen the Level, and enter Test Level or a packaged game as a controllable
+first-person capsule using the accepted Wicked/Jolt character controller.
 
 ## Locked architecture
 
 - The authored Player Start is a WISCENE entity containing Transform, Name and
-  native Metadata. It is an inert spawn marker, not the live player body.
+  native Metadata. It is an inert spawn marker and settings asset, not the live
+  player body.
+- Studio draws its flat forward arrow and selected-state capsule as editor-only
+  geometry. Neither visualizer is a renderable Scene object or Runtime asset.
 - A Renegade metadata key distinguishes Player Start from the broader Wicked
   `MetadataComponent::Preset::Player` classification.
 - Runtime resolves exactly one Player Start after each complete Scene load.
@@ -39,17 +42,25 @@ them without replacing the player service.
 
 1. Open a Level.
 2. Choose `ADD > PLAYER START`.
-3. Renegade creates the marker from the current editor view, selects it and
-   exposes it through the normal Hierarchy/Inspector/gizmo workflow.
-4. A second Player Start is rejected with a clear status. Runtime never chooses
+3. Renegade creates the marker from the current editor view and selects it. Its
+   flat ground arrow points along the horizontal camera heading; the selected
+   marker also shows the configured Wicked/Jolt capsule guide.
+4. Selection opens the dedicated `PLAYER START // SPAWN + CONTROLLER`
+   Inspector automatically. Position and Y heading use the existing gizmo;
+   capsule radius/total height, eye height, walk/sprint/jump speed, look
+   sensitivity, slope, gravity and pitch limits are command-backed controls.
+5. A second Player Start is rejected with a clear status. Runtime never chooses
    between multiple starts by entity order. A legacy Level with no Player Start
    retains the existing spectator camera and does not silently spawn a player.
-5. Save and Reopen retain the marker identity, transform and settings.
-6. Test Level and Build Windows Game consume the same WISCENE authority.
+6. Save and Reopen retain the marker identity, transform and settings.
+7. Test Level and Build Windows Game consume the same WISCENE authority.
 
 ## Acceptance
 
 - command-backed Create/Undo/Redo preserves the same entity identity;
+- the arrow remains flat and points along the exact Runtime spawn yaw;
+- selecting the arrow opens the dedicated settings Inspector;
+- settings edits support Undo/Redo and survive WISCENE save/reopen;
 - Player Start detection ignores an unrelated generic `Player` metadata preset;
 - duplicate starts are rejected deterministically;
 - Runtime spawns at the authored position and heading;
@@ -63,6 +74,7 @@ them without replacing the player service.
 
 ## Gate boundary
 
-No audio, general Lua lifecycle, objectives, AI/navigation, player mesh, arms,
-weapons, animation graph, input-remapping UI or in-process Studio simulation is
-part of Gate 1.
+No audio, general Lua lifecycle, objectives, AI/navigation, Runtime player mesh,
+arms, weapons, animation graph, input-remapping UI or in-process Studio
+simulation is part of Gate 1. The Studio-only arrow and capsule are authoring
+visualizers and do not broaden that boundary.

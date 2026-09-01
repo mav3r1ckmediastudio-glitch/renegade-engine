@@ -325,6 +325,8 @@ namespace renegade::runtime
             return;
         }
 
+        playerSettings_ = resolved.start.settings;
+
         std::string error;
         if (!bridge::SpawnRuntimePlayer(
                 scenes_.GetScene(),

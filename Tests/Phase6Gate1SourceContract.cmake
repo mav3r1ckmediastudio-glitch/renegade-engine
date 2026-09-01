@@ -18,13 +18,15 @@ set(chrome_source "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp")
 
 require_text("${player_header}" "PlayerInputFrame" "action-shaped input boundary")
 require_text("${player_header}" "CreatePlayerStartCommand" "command-backed Player Start")
+require_text("${player_header}" "SetPlayerControllerSettingsCommand" "command-backed Player Start Inspector settings")
 require_text("${player_source}" "MetadataComponent::Preset::Player" "native Player classification")
 require_text("${player_source}" "MovePhysicsCharacter" "JP01 character controller reuse")
 require_text("${runtime_source}" "CapturePlayerInput" "Runtime input ownership")
 require_text("${runtime_source}" "SpawnRuntimePlayer" "Runtime possession")
 require_text("${runtime_source}" "ApplyRuntimePlayerCamera" "Runtime camera ownership")
 require_text("${studio_source}" "CreatePlayerStartFromView" "Studio authoring workflow")
+require_text("${studio_source}" "HandlePlayerStartSceneIcon" "visible selectable Player Start arrow")
+require_text("${studio_source}" "PLAYER START // FIRST PERSON" "dedicated Player Start Inspector")
 require_text("${chrome_source}" "PLAYER START" "Renegade-owned Add menu entry")
 
 message(STATUS "PASS: Phase 6 Gate 1 source contract")
-

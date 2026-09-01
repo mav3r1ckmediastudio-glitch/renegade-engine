@@ -325,6 +325,21 @@ namespace renegade::studio
             OrthoVerticalSize,
         };
 
+        enum class PlayerField
+        {
+            CapsuleRadius,
+            CapsuleTotalHeight,
+            EyeHeight,
+            WalkSpeed,
+            SprintSpeed,
+            JumpSpeed,
+            LookSensitivity,
+            MaximumSlope,
+            GravityFactor,
+            MinimumPitch,
+            MaximumPitch,
+        };
+
         enum class MaterialField
         {
             BaseColorRed,
@@ -422,6 +437,7 @@ namespace renegade::studio
         void ApplySelectedObjectParticipation(
             bridge::ObjectParticipationProperty property,
             bool value);
+        void CommitSelectedPlayerField(PlayerField field, float value);
         void ApplySelectedTransformValue(
             TransformTool tool,
             int axis,
@@ -574,6 +590,7 @@ namespace renegade::studio
         bool HandleCreatorAssetPlacement(const XMFLOAT4& pointer);
         void CancelCreatorAssetPlacement();
         bool HandleCameraSceneIcons(const XMFLOAT4& pointer);
+        bool HandlePlayerStartSceneIcon(const XMFLOAT4& pointer);
         bool HandleDecalProbeSceneIcons(const XMFLOAT4& pointer);
         bool HandleLightSceneIcons(const XMFLOAT4& pointer);
         [[nodiscard]] bool ProjectEditorPoint(
@@ -637,7 +654,8 @@ namespace renegade::studio
             bool environment,
             bool terrain = false,
             bool light = false,
-            bool sceneCamera = false);
+            bool sceneCamera = false,
+            bool playerStart = false);
         void DrawEditorGrid(wi::graphics::CommandList cmd) const;
         void SetGridVisible(bool visible);
         void CreateProjectHub();
@@ -732,6 +750,19 @@ namespace renegade::studio
         SceneInspectorCheckBox sceneObjectMainCamera_;
         SceneInspectorCheckBox sceneObjectReflections_;
         SceneInspectorCheckBox sceneObjectWetmap_;
+        wi::gui::Label playerLabel_;
+        wi::gui::Label playerCameraMode_;
+        SceneInspectorSlider playerCapsuleRadius_;
+        SceneInspectorSlider playerCapsuleHeight_;
+        SceneInspectorSlider playerEyeHeight_;
+        SceneInspectorSlider playerWalkSpeed_;
+        SceneInspectorSlider playerSprintSpeed_;
+        SceneInspectorSlider playerJumpSpeed_;
+        SceneInspectorSlider playerLookSensitivity_;
+        SceneInspectorSlider playerMaximumSlope_;
+        SceneInspectorSlider playerGravityFactor_;
+        SceneInspectorSlider playerMinimumPitch_;
+        SceneInspectorSlider playerMaximumPitch_;
         wi::gui::Label materialLabel_;
         SceneInspectorComboBox materialSelector_;
         SceneInspectorComboBox materialShaderType_;

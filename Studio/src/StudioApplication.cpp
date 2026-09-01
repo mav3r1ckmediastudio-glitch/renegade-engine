@@ -2022,6 +2022,71 @@ namespace renegade::studio
             "Enable native Wicked wetmap participation.",
             bridge::ObjectParticipationProperty::Wetmap);
 
+        createSectionLabel(
+            playerLabel_,
+            "Player Start Section",
+            "PLAYER START // FIRST PERSON");
+        playerCameraMode_.Create("Player Camera Mode");
+        playerCameraMode_.SetText(
+            "CAMERA // FIRST PERSON // SPAWN HEADING FOLLOWS ROTATION Y");
+        playerCameraMode_.font.params.size = 11;
+        playerCameraMode_.font.params.color = HologramMuted;
+        playerCameraMode_.font.params.h_align = wi::font::WIFALIGN_LEFT;
+        playerCameraMode_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.AddWidget(&playerCameraMode_);
+
+        const auto createPlayerSlider = [this](
+            SceneInspectorSlider& slider,
+            const char* name,
+            const char* label,
+            const char* tooltip,
+            const PlayerField field,
+            const float minimum,
+            const float maximum,
+            const float steps)
+        {
+            slider.Create(minimum, maximum, minimum, steps, name, label);
+            slider.SetTooltip(tooltip);
+            slider.OnValueCommitted([this, field](const float value)
+            {
+                CommitSelectedPlayerField(field, value);
+            });
+            inspectorPanel_.AddWidget(&slider);
+        };
+        createPlayerSlider(playerCapsuleRadius_, "Player Capsule Radius",
+            "CAPSULE RADIUS // M", "Wicked/Jolt character capsule radius.",
+            PlayerField::CapsuleRadius, 0.1f, 1.5f, 1401.0f);
+        createPlayerSlider(playerCapsuleHeight_, "Player Capsule Height",
+            "CAPSULE TOTAL HEIGHT // M", "Total height including both rounded caps.",
+            PlayerField::CapsuleTotalHeight, 0.4f, 4.0f, 3601.0f);
+        createPlayerSlider(playerEyeHeight_, "Player Eye Height",
+            "EYE HEIGHT // M", "First-person camera height above the marker feet.",
+            PlayerField::EyeHeight, 0.1f, 3.5f, 3401.0f);
+        createPlayerSlider(playerWalkSpeed_, "Player Walk Speed",
+            "WALK SPEED // M/S", "Normal movement speed.",
+            PlayerField::WalkSpeed, 0.0f, 20.0f, 2001.0f);
+        createPlayerSlider(playerSprintSpeed_, "Player Sprint Speed",
+            "SPRINT SPEED // M/S", "Sprint speed; never lower than walk speed.",
+            PlayerField::SprintSpeed, 0.0f, 30.0f, 3001.0f);
+        createPlayerSlider(playerJumpSpeed_, "Player Jump Speed",
+            "JUMP SPEED // M/S", "Vertical impulse requested through Wicked character physics.",
+            PlayerField::JumpSpeed, 0.0f, 20.0f, 2001.0f);
+        createPlayerSlider(playerLookSensitivity_, "Player Look Sensitivity",
+            "LOOK SENSITIVITY", "Multiplier for mouse and gamepad look actions.",
+            PlayerField::LookSensitivity, 0.05f, 5.0f, 991.0f);
+        createPlayerSlider(playerMaximumSlope_, "Player Maximum Slope",
+            "MAXIMUM SLOPE // DEG", "Steepest surface accepted by Wicked/Jolt.",
+            PlayerField::MaximumSlope, 0.0f, 89.0f, 891.0f);
+        createPlayerSlider(playerGravityFactor_, "Player Gravity Factor",
+            "GRAVITY FACTOR", "Multiplier for world gravity on the character.",
+            PlayerField::GravityFactor, 0.0f, 4.0f, 801.0f);
+        createPlayerSlider(playerMinimumPitch_, "Player Minimum Pitch",
+            "LOOK DOWN LIMIT // DEG", "Lowest first-person camera pitch.",
+            PlayerField::MinimumPitch, -89.0f, 0.0f, 891.0f);
+        createPlayerSlider(playerMaximumPitch_, "Player Maximum Pitch",
+            "LOOK UP LIMIT // DEG", "Highest first-person camera pitch.",
+            PlayerField::MaximumPitch, 0.0f, 89.0f, 891.0f);
+
         CreateMaterialInspector();
         CreateRenderWorkspace();
 
@@ -4419,6 +4484,8 @@ namespace renegade::studio
         ownLabel(positionLabel_);
         ownLabel(rotationLabel_);
         ownLabel(scaleLabel_);
+        ownLabel(playerLabel_);
+        ownLabel(playerCameraMode_);
         ownLabel(cameraLabel_);
         ownLabel(decalLabel_);
         ownLabel(decalMaterialLabel_);
@@ -4714,6 +4781,7 @@ namespace renegade::studio
 
         viewportBounds_ = studioChrome_.ViewportBounds();
         const XMFLOAT4 pointer = wi::input::GetPointer();
+        const bool playerStartIconConsumed = HandlePlayerStartSceneIcon(pointer);
         const bool cameraIconConsumed = HandleCameraSceneIcons(pointer);
         const bool decalProbeIconConsumed = HandleDecalProbeSceneIcons(pointer);
         const bool lightIconConsumed = HandleLightSceneIcons(pointer);
@@ -4764,7 +4832,7 @@ namespace renegade::studio
             return;
         }
 
-        if (cameraIconConsumed || decalProbeIconConsumed ||
+        if (playerStartIconConsumed || cameraIconConsumed || decalProbeIconConsumed ||
             lightIconConsumed)
         {
             return;
@@ -5072,6 +5140,19 @@ namespace renegade::studio
         layoutObjectToggle(sceneObjectMainCamera_, 1, 558.0f);
         layoutObjectToggle(sceneObjectReflections_, 0, 590.0f);
         layoutObjectToggle(sceneObjectWetmap_, 1, 590.0f);
+        positionEnvironmentWidget(playerLabel_, 224.0f, 20.0f);
+        positionEnvironmentWidget(playerCameraMode_, 244.0f, 32.0f);
+        positionEnvironmentWidget(playerCapsuleRadius_, 280.0f);
+        positionEnvironmentWidget(playerCapsuleHeight_, 314.0f);
+        positionEnvironmentWidget(playerEyeHeight_, 348.0f);
+        positionEnvironmentWidget(playerWalkSpeed_, 382.0f);
+        positionEnvironmentWidget(playerSprintSpeed_, 416.0f);
+        positionEnvironmentWidget(playerJumpSpeed_, 450.0f);
+        positionEnvironmentWidget(playerLookSensitivity_, 484.0f);
+        positionEnvironmentWidget(playerMaximumSlope_, 518.0f);
+        positionEnvironmentWidget(playerGravityFactor_, 552.0f);
+        positionEnvironmentWidget(playerMinimumPitch_, 586.0f);
+        positionEnvironmentWidget(playerMaximumPitch_, 620.0f);
         LayoutMaterialInspector(environmentFieldWidth);
 
         positionEnvironmentWidget(cameraLabel_, 506.0f, 20.0f);
@@ -5225,10 +5306,17 @@ namespace renegade::studio
             session_ != nullptr && !environmentSelected && !terrainSelected &&
             session_->Scenes().GetScene().lights.Contains(
                 session_->Selection().SelectedEntity());
+        const bool playerStartSelected =
+            session_ != nullptr && !environmentSelected && !terrainSelected &&
+            bridge::IsPlayerStart(
+                session_->Scenes().GetScene(),
+                session_->Selection().SelectedEntity());
         LayoutInspectorActions(
             environmentSelected,
             terrainSelected,
-            lightSelected);
+            lightSelected,
+            false,
+            playerStartSelected);
 
         contentPanel_.SetPos(XMFLOAT2(
             leftWidth + 16.0f,
@@ -5613,7 +5701,8 @@ namespace renegade::studio
         const bool environment,
         const bool terrain,
         const bool light,
-        const bool sceneCamera)
+        const bool sceneCamera,
+        const bool playerStart)
     {
         const float width = inspectorPanel_.GetSize().x;
         constexpr float gap = 8.0f;
@@ -5627,6 +5716,8 @@ namespace renegade::studio
                     ? 1130.0f
                     : sceneCamera
                         ? 804.0f
+                        : playerStart
+                            ? 670.0f
                         : materialInspectorVisible_
                             ? std::max(630.0f, materialInspectorBottom_ + 16.0f)
                             : 630.0f;
@@ -5724,10 +5815,14 @@ namespace renegade::studio
         const bool hasCamera = authoredCamera != nullptr;
         const bool hasDecal = decal != nullptr;
         const bool hasEnvironmentProbe = environmentProbe != nullptr;
+        const bool hasPlayerStart = hasSession &&
+            !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
+            bridge::IsPlayerStart(
+                session_->Scenes().GetScene(), selectedEntity);
         const bool sceneComponentsVisible =
             hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
             !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
-            !hasWeather && !hasTerrain;
+            !hasWeather && !hasTerrain && !hasPlayerStart;
         wi::ecs::Entity sceneAuthoringRoot = wi::ecs::INVALID_ENTITY;
         bridge::SceneLayerMaskState sceneLayerState;
         bridge::ObjectParticipationState objectRenderableState;
@@ -5778,7 +5873,8 @@ namespace renegade::studio
         }
         LayoutInspectorActions(
             hasWeather, hasTerrain, hasLight,
-            hasCamera || hasDecal || hasEnvironmentProbe);
+            hasCamera || hasDecal || hasEnvironmentProbe,
+            hasPlayerStart);
 
         sceneIdentityLabel_.SetVisible(sceneComponentsVisible);
         sceneNameInput_.SetVisible(sceneComponentsVisible);
@@ -5803,7 +5899,45 @@ namespace renegade::studio
             selectedEntity);
         LayoutInspectorActions(
             hasWeather, hasTerrain, hasLight,
-            hasCamera || hasDecal || hasEnvironmentProbe);
+            hasCamera || hasDecal || hasEnvironmentProbe,
+            hasPlayerStart);
+
+        const auto setPlayerVisible = [hasPlayerStart](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(hasPlayerStart);
+        };
+        setPlayerVisible(playerLabel_);
+        setPlayerVisible(playerCameraMode_);
+        setPlayerVisible(playerCapsuleRadius_);
+        setPlayerVisible(playerCapsuleHeight_);
+        setPlayerVisible(playerEyeHeight_);
+        setPlayerVisible(playerWalkSpeed_);
+        setPlayerVisible(playerSprintSpeed_);
+        setPlayerVisible(playerJumpSpeed_);
+        setPlayerVisible(playerLookSensitivity_);
+        setPlayerVisible(playerMaximumSlope_);
+        setPlayerVisible(playerGravityFactor_);
+        setPlayerVisible(playerMinimumPitch_);
+        setPlayerVisible(playerMaximumPitch_);
+        if (hasPlayerStart)
+        {
+            const auto settings = bridge::CapturePlayerControllerSettings(
+                session_->Scenes().GetScene(), selectedEntity);
+            playerCapsuleRadius_.SetValue(settings.capsuleRadius);
+            playerCapsuleHeight_.SetValue(
+                bridge::PlayerCapsuleTotalHeight(settings));
+            playerEyeHeight_.SetValue(settings.eyeHeight);
+            playerWalkSpeed_.SetValue(settings.walkSpeed);
+            playerSprintSpeed_.SetValue(settings.sprintSpeed);
+            playerJumpSpeed_.SetValue(settings.jumpSpeed);
+            playerLookSensitivity_.SetValue(settings.lookSensitivity);
+            playerMaximumSlope_.SetValue(settings.maximumSlopeDegrees);
+            playerGravityFactor_.SetValue(settings.gravityFactor);
+            playerMinimumPitch_.SetValue(
+                settings.minimumPitch / XM_PI * 180.0f);
+            playerMaximumPitch_.SetValue(
+                settings.maximumPitch / XM_PI * 180.0f);
+        }
 
         cameraLabel_.SetVisible(hasCamera);
         cameraProjection_.SetVisible(hasCamera);
@@ -5930,6 +6064,20 @@ namespace renegade::studio
         setTransformVisible(scaleX_);
         setTransformVisible(scaleY_);
         setTransformVisible(scaleZ_);
+        if (hasPlayerStart)
+        {
+            rotationLabel_.SetText("ROTATION // Y CAMERA HEADING");
+            rotationX_.SetVisible(false);
+            rotationZ_.SetVisible(false);
+            scaleLabel_.SetVisible(false);
+            scaleX_.SetVisible(false);
+            scaleY_.SetVisible(false);
+            scaleZ_.SetVisible(false);
+        }
+        else
+        {
+            rotationLabel_.SetText("ROTATION // DEGREES");
+        }
 
         const auto setLightVisible = [hasLight](wi::gui::Widget& widget)
         {
@@ -6058,7 +6206,8 @@ namespace renegade::studio
         focusButton_.SetVisible(!hasWeather);
         duplicateButton_.SetVisible(!hasWeather);
         deleteButton_.SetVisible(!hasWeather);
-        duplicateButton_.SetEnabled(hasTransform && !hasTerrain);
+        duplicateButton_.SetEnabled(
+            hasTransform && !hasTerrain && !hasPlayerStart);
         undoButton_.SetEnabled(hasSession && session_->Commands().CanUndo());
         redoButton_.SetEnabled(hasSession && session_->Commands().CanRedo());
         saveButton_.SetEnabled(
@@ -6310,7 +6459,11 @@ namespace renegade::studio
 
         const auto* name =
             session_->Scenes().GetScene().names.GetComponent(entity);
-        if (!hasLight)
+        if (hasPlayerStart)
+        {
+            inspectorLabel_.SetText("PLAYER START // SPAWN + CONTROLLER");
+        }
+        else if (!hasLight)
         {
             inspectorLabel_.SetText(
                 "TRANSFORM // " +
@@ -7558,6 +7711,136 @@ bool StudioRenderPath::HandleDecalProbeSceneIcons(
         RefreshHierarchy();
         RefreshInspector();
         RefreshStatus();
+        return true;
+    }
+    return false;
+}
+
+bool StudioRenderPath::HandlePlayerStartSceneIcon(
+    const XMFLOAT4& pointer)
+{
+    if (session_ == nullptr || camera == nullptr || projectHubVisible_ ||
+        creatorModelImporter.thumbnailCapturePending)
+    {
+        return false;
+    }
+
+    auto& scene = session_->Scenes().GetScene();
+    const auto resolved = bridge::ResolvePlayerStart(scene);
+    if (resolved.resolution != bridge::PlayerStartResolution::Success ||
+        !session_->Scenes().IsHierarchyVisible(resolved.start.entity))
+    {
+        return false;
+    }
+    const auto* transform = scene.transforms.GetComponent(resolved.start.entity);
+    if (transform == nullptr)
+        return false;
+
+    const XMFLOAT3 feet = transform->GetPosition();
+    const XMFLOAT3 euler = wi::math::QuaternionToRollPitchYaw(
+        resolved.start.transform.rotation);
+    const XMVECTOR forwardVector = XMVectorSet(
+        std::sin(euler.y), 0.0f, std::cos(euler.y), 0.0f);
+    const XMVECTOR rightVector = XMVectorSet(
+        std::cos(euler.y), 0.0f, -std::sin(euler.y), 0.0f);
+    const XMVECTOR origin = XMLoadFloat3(&feet) + XMVectorSet(0, 0.035f, 0, 0);
+    const auto worldPoint = [&](const float forward, const float right,
+        const float up = 0.0f)
+    {
+        XMFLOAT3 point;
+        XMStoreFloat3(&point,
+            origin + forwardVector * forward + rightVector * right +
+                XMVectorSet(0, up, 0, 0));
+        return point;
+    };
+
+    // Ground-plane silhouette follows the supplied arrow asset proportions:
+    // 2.4 m long, 0.72 m wide, with its tip aligned to Runtime +Z forward.
+    constexpr XMFLOAT2 Arrow[7] = {
+        XMFLOAT2(1.20f, 0.0f),
+        XMFLOAT2(0.28f, 0.36f),
+        XMFLOAT2(0.28f, 0.15f),
+        XMFLOAT2(-1.20f, 0.15f),
+        XMFLOAT2(-1.20f, -0.15f),
+        XMFLOAT2(0.28f, -0.15f),
+        XMFLOAT2(0.28f, -0.36f),
+    };
+    XMFLOAT2 projected[7] = {};
+    bool visible[7] = {};
+    for (int index = 0; index < 7; ++index)
+        visible[index] = ProjectEditorPoint(
+            worldPoint(Arrow[index].x, Arrow[index].y), projected[index]);
+
+    XMFLOAT2 center = {};
+    if (!ProjectEditorPoint(feet, center))
+        return false;
+    const float dx = pointer.x - center.x;
+    const float dy = pointer.y - center.y;
+    const bool hovered = dx * dx + dy * dy <= 28.0f * 28.0f;
+    const bool selected = session_->Selection().SelectedEntity() ==
+        resolved.start.entity;
+    const XMFLOAT4 color = selected
+        ? XMFLOAT4(1.0f, 0.55f, 0.15f, 1.0f)
+        : hovered
+            ? XMFLOAT4(0.58f, 0.95f, 1.0f, 1.0f)
+            : XMFLOAT4(0.20f, 0.84f, 1.0f, 0.95f);
+    for (int index = 0; index < 7; ++index)
+    {
+        const int next = (index + 1) % 7;
+        if (visible[index] && visible[next])
+            DrawEditorLine(projected[index], projected[next], color);
+    }
+
+    // The arrow is always present. Selecting it adds the real configured
+    // capsule as a wire guide without creating a renderable Runtime mesh.
+    if (selected)
+    {
+        const auto settings = resolved.start.settings;
+        const float radius = settings.capsuleRadius;
+        const float totalHeight = bridge::PlayerCapsuleTotalHeight(settings);
+        constexpr int Segments = 20;
+        for (int ring = 0; ring < 2; ++ring)
+        {
+            const float height = ring == 0 ? radius : totalHeight - radius;
+            for (int segment = 0; segment < Segments; ++segment)
+            {
+                const float a0 = XM_2PI * static_cast<float>(segment) / Segments;
+                const float a1 = XM_2PI * static_cast<float>(segment + 1) / Segments;
+                XMFLOAT2 p0 = {}, p1 = {};
+                if (ProjectEditorPoint(
+                        worldPoint(std::cos(a0) * radius,
+                            std::sin(a0) * radius, height), p0) &&
+                    ProjectEditorPoint(
+                        worldPoint(std::cos(a1) * radius,
+                            std::sin(a1) * radius, height), p1))
+                {
+                    DrawEditorLine(p0, p1, XMFLOAT4(color.x, color.y, color.z, 0.72f));
+                }
+            }
+        }
+        for (const float side : {-radius, radius})
+        {
+            XMFLOAT2 bottom = {}, top = {};
+            if (ProjectEditorPoint(worldPoint(0, side, radius), bottom) &&
+                ProjectEditorPoint(worldPoint(0, side, totalHeight - radius), top))
+            {
+                DrawEditorLine(bottom, top, XMFLOAT4(color.x, color.y, color.z, 0.72f));
+            }
+        }
+    }
+
+    const bool selectRequested = hovered && !flyCameraActive_ &&
+        !GetGUI().HasFocus() && !gizmo_.IsInteracting() &&
+        IsPointerOverViewport(pointer) &&
+        wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+    if (selectRequested)
+    {
+        session_->Selection().Select(resolved.start.entity);
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+        SyncGizmoSelection();
+        SyncSelectionOutline();
         return true;
     }
     return false;
@@ -9111,6 +9394,63 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         RefreshStatus();
     }
 
+    void StudioRenderPath::CommitSelectedPlayerField(
+        const PlayerField field,
+        const float value)
+    {
+        if (session_ == nullptr || !session_->Selection().HasSelection())
+            return;
+        auto& scene = session_->Scenes().GetScene();
+        const auto entity = session_->Selection().SelectedEntity();
+        if (!bridge::IsPlayerStart(scene, entity))
+            return;
+
+        auto settings = bridge::CapturePlayerControllerSettings(scene, entity);
+        switch (field)
+        {
+        case PlayerField::CapsuleRadius:
+            settings.capsuleRadius = value;
+            break;
+        case PlayerField::CapsuleTotalHeight:
+            settings.capsuleHeight = std::max(
+                0.01f, (value - settings.capsuleRadius * 2.0f) * 0.5f);
+            break;
+        case PlayerField::EyeHeight:
+            settings.eyeHeight = value;
+            break;
+        case PlayerField::WalkSpeed:
+            settings.walkSpeed = value;
+            break;
+        case PlayerField::SprintSpeed:
+            settings.sprintSpeed = value;
+            break;
+        case PlayerField::JumpSpeed:
+            settings.jumpSpeed = value;
+            break;
+        case PlayerField::LookSensitivity:
+            settings.lookSensitivity = value;
+            break;
+        case PlayerField::MaximumSlope:
+            settings.maximumSlopeDegrees = value;
+            break;
+        case PlayerField::GravityFactor:
+            settings.gravityFactor = value;
+            break;
+        case PlayerField::MinimumPitch:
+            settings.minimumPitch = wi::math::DegreesToRadians(value);
+            break;
+        case PlayerField::MaximumPitch:
+            settings.maximumPitch = wi::math::DegreesToRadians(value);
+            break;
+        }
+
+        (void)session_->Commands().Execute(
+            std::make_unique<bridge::SetPlayerControllerSettingsCommand>(
+                scene, entity, settings));
+        RefreshInspector();
+        RefreshStatus();
+    }
+
 
     bridge::TransformState StudioRenderPath::CaptureEditorCameraTransform() const
     {
@@ -9163,6 +9503,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         // capsule feet. This makes Test Level begin from the view the creator
         // was composing instead of spawning the capsule 1.65 metres above it.
         playerStartTransform.translation.y -= 1.65f;
+        const XMFLOAT3 cameraEuler = wi::math::QuaternionToRollPitchYaw(
+            playerStartTransform.rotation);
+        XMStoreFloat4(
+            &playerStartTransform.rotation,
+            XMQuaternionRotationRollPitchYaw(0.0f, cameraEuler.y, 0.0f));
         auto command = std::make_unique<bridge::CreatePlayerStartCommand>(
             scene,
             playerStartTransform);

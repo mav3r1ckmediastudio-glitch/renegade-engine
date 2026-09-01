@@ -95,7 +95,11 @@ Implemented candidate boundary:
   creation, deterministic duplicate rejection, action-shaped input evaluation,
   Runtime spawn/despawn and camera application;
 - `ADD > PLAYER START` creates and selects the WISCENE marker from the current
-  editor view, then uses the existing Hierarchy/Inspector/gizmo workflow;
+  editor view; a flat selectable ground arrow follows the horizontal player
+  camera heading and selection shows the configured capsule guide;
+- selection automatically opens a dedicated Player Start Inspector with
+  command-backed capsule radius/height, eye height, movement, jump, look,
+  slope, gravity and pitch controls; all values persist in native Metadata;
 - Runtime resolves the marker after a complete Scene replacement and creates
   one non-serialized Wicked/Jolt character capsule;
 - W/A/S/D and left stick drive camera-relative movement, mouse/right stick
@@ -112,11 +116,13 @@ Required next evidence:
 
 1. exact-head Studio Debug/Release and baseline Debug/Release CI;
 2. add Player Start, Undo/Redo, Save/Reopen and reposition it with the gizmo;
-3. run Test Level and verify spawn heading, WASD/mouse, sprint, jump and
+3. visually confirm the arrow lies flat, points at the Runtime heading and the
+   selected capsule/settings Inspector reflect saved values;
+4. run Test Level and verify spawn heading, WASD/mouse, sprint, jump and
    collision on real Terrain;
-4. repeat keyboard/mouse movement with a controller;
-5. build and run the packaged executable and confirm the same behaviour; and
-6. recheck the #122 editor interaction and 75 FPS baseline before acceptance.
+5. repeat keyboard/mouse movement with a controller;
+6. build and run the packaged executable and confirm the same behaviour; and
+7. recheck the #122 editor interaction and 75 FPS baseline before acceptance.
 
 ## Documentation checkpoint
 
