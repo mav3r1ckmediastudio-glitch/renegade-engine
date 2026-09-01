@@ -70,15 +70,21 @@ Owner performance result and remaining blocker:
   75 Hz VSync cap without reducing scene or vegetation quality;
 - `wd01/wicked-vegetation-clean` remains unmerged because affected menus do not
   react to the mouse and Hierarchy selection works while collapse/expand does
-  not; and
-- `fix/wd01-ui-input-lifecycle` now carries a bounded source repair. The
-  vegetation handler's outside-viewport stroke-release path was unreachable
-  whenever native GUI held focus because `StudioRenderPath::Update()` returned
-  at `GetGUI().HasFocus()` first. The repair evaluates vegetation release before
-  shortcut, pending-action, chrome-consumption and native-focus exits, then
-  preserves the existing ownership return before scene/gizmo input. The WD01
-  source contract locks this ordering. Owner interaction testing is still
-  required; compile-only CI cannot prove the mouse behaviour.
+  not;
+- the first `fix/wd01-ui-input-lifecycle` repair correctly made vegetation
+  stroke release reachable before UI early exits, but owner testing on exact PR
+  #122 head `7c90d90e9d51c24d731ceca9e7ade1f75f0741ee` proved it did not repair the
+  reported chrome interaction failure; and
+- the actual shared cause is Gate 9's duplicate top-level registration of
+  `studioChrome_`. `CreateGate9DiagnosticsControls()` registered it once while
+  creating the profiler overlay, then `CreateWorkspaceShell()` registered the
+  same widget again. Release builds therefore updated the chrome twice for one
+  physical press: menus/drawers opened then closed and hierarchy disclosure
+  toggled then toggled back, while idempotent selection still appeared to work.
+  The bounded repair leaves the profiler overlay registered early and retains
+  the one authoritative chrome registration in `CreateWorkspaceShell()`; Gate
+  9 source contracts now reject either duplicate registration/reordering call.
+  Owner interaction testing remains required.
 
 Next required work:
 

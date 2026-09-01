@@ -24,6 +24,7 @@ function(reject_text content needle description)
 endfunction()
 
 read_required("Studio/src/Phase5Gate9RenderDiagnostics.cpp" gate9_studio)
+read_required("Studio/src/StudioApplication.cpp" studio_application)
 read_required("Studio/src/Phase5Gate5RenderWorkspace.cpp" render_workspace)
 read_required("Studio/Phase5Gate9.cmake" gate9_cmake)
 read_required("EngineBridge/include/renegade/bridge/RenderSettingsService.h" render_settings)
@@ -65,6 +66,9 @@ reject_text("${gate9_studio}" "ProfilerWindow" "stock Wicked ProfilerWindow must
 reject_text("${gate9_studio}" "GraphicsWindow" "stock Wicked GraphicsWindow must not be integrated")
 reject_text("${gate9_studio}" "SetToDrawGridHelper" "stock Wicked grid helper must not be exposed by Gate 9")
 reject_text("${gate9_studio}" "diagnostics_->active = true" "Gate 9 must not re-enable Wicked InfoDisplayer over Renegade chrome")
+reject_text("${gate9_studio}" "AddWidget(&studioChrome_)" "Gate 9 must not register the shared Studio chrome a second time")
+reject_text("${gate9_studio}" "RemoveWidget(&studioChrome_)" "Gate 9 must not reorder the shared Studio chrome during control creation")
+require_text("${studio_application}" "GetGUI().AddWidget(&studioChrome_);" "Studio chrome must retain one authoritative registration site")
 
 require_text("${root_cmake}" "include(Studio/Phase5Gate9.cmake)" "Gate 9 Studio integration is missing")
 require_text("${root_cmake}" "include(Tests/Phase5Gate9.cmake)" "Gate 9 regression contract is not included")
