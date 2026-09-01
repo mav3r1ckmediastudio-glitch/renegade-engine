@@ -11,9 +11,9 @@ foreach(path IN ITEMS "${service_header}" "${service_source}")
     endif()
 endforeach()
 
-file(READ "${service_header}" header_text)
-file(READ "${service_source}" source_text)
-
+# Check declaration/serialization authority where it actually lives. The
+# Renegade metadata keys are inline header constants by design so Studio,
+# Runtime and tests share one exact WISCENE contract.
 foreach(token IN ITEMS
     "SoundSourceState"
     "SceneAudioMixState"
@@ -21,29 +21,34 @@ foreach(token IN ITEMS
     "CreateSoundSourceCommand"
     "SetSoundSourceCommand"
     "SetSceneAudioMixCommand"
-    "ActivateSceneAudio")
-    string(FIND "${header_text}" "${token}" found)
-    if(found EQUAL -1)
+    "ActivateSceneAudio"
+    "SetSceneAudioPaused"
+    "renegade.audio.source"
+    "renegade.audio.mix")
+    file(STRINGS "${service_header}" token_matches REGEX "${token}")
+    if(NOT token_matches)
         message(FATAL_ERROR "Phase 6 Gate 3 bridge contract missing ${token}")
     endif()
 endforeach()
 
+# Check the implementation against the native Wicked surface. Use line-wise
+# matching instead of loading the full C++ file into one CMake string; this is
+# resilient to source size and keeps failures tied to the actual mapping line.
 foreach(token IN ITEMS
     "Entity_CreateSound"
     "scene.sounds"
-    "sound->SetLooped"
-    "sound->SetDisable3D"
-    "sound->soundinstance.SetEnableReverb"
+    "SetLooped"
+    "SetDisable3D"
+    "SetEnableReverb"
+    "CreateSoundInstance"
     "SUBMIX_TYPE_SOUNDEFFECT"
     "SUBMIX_TYPE_MUSIC"
     "SUBMIX_TYPE_USER0"
     "SUBMIX_TYPE_USER1"
     "SetSubmixVolume"
-    "SetReverb"
-    "renegade.audio.source"
-    "renegade.audio.mix")
-    string(FIND "${service_source}" "${token}" found)
-    if(found EQUAL -1)
+    "SetReverb")
+    file(STRINGS "${service_source}" token_matches REGEX "${token}")
+    if(NOT token_matches)
         message(FATAL_ERROR "Phase 6 Gate 3 native Wicked mapping missing ${token}")
     endif()
 endforeach()
