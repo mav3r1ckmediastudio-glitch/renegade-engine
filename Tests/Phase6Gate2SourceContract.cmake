@@ -27,8 +27,8 @@ file(READ "${runtime_source}" runtime_text)
 
 foreach(token IN ITEMS
     "GameplayInputDocumentRelativePath"
-    "GameplayAction::Pause"
-    "GameplayAction::Reset"
+    "Pause,"
+    "Reset,"
     "GameplayInputFrame"
     "CaptureGameplayInput")
     string(FIND "${input_header_text}" "${token}" found)
