@@ -85,6 +85,9 @@ Those instructions are superseded by this file.
 
 Branch: `phase6/gate1-player-foundation`.
 
+Exact Player Start asset/Inspector implementation commit:
+`c6cee4ee659e3921bcd2bc70a84cb957ccb7189c`.
+
 The capability audit and complete Phase 6 sequence are recorded in
 `docs/PHASE6_CAPABILITY_AUDIT.md`. Gate 1 is bounded by
 `docs/PHASE6_GATE1_PLAYER_FOUNDATION.md`.
@@ -111,6 +114,30 @@ Implemented candidate boundary:
 The candidate deliberately does not add audio, a general Lua lifecycle,
 objectives, AI/navigation, a player mesh, arms, weapons, animation, input
 rebinding, Pause or deterministic reset. Those remain later bounded gates.
+
+Changed implementation files in the exact commit:
+
+- `EngineBridge/include/renegade/bridge/PlayerService.h`;
+- `EngineBridge/src/PlayerService.cpp`;
+- `Runtime/src/RuntimeApplication.cpp`;
+- `Studio/src/StudioApplication.h`;
+- `Studio/src/StudioApplication.cpp`;
+- `Tests/Phase6Gate1PlayerTests.cpp`;
+- `Tests/Phase6Gate1SourceContract.cmake`;
+- `docs/ARCHITECTURE.md`;
+- `docs/FEATURE_MATRIX.csv`;
+- `docs/PHASE6_GATE1_PLAYER_FOUNDATION.md`; and
+- this handoff.
+
+Local verification for the exact tree:
+
+- `git diff --check` — pass;
+- Phase 6 Gate 1 source-contract text assertions reproduced with `rg` — pass;
+- relevant Markdown local links — pass;
+- `cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/Phase6Gate1SourceContract.cmake`
+  — unavailable because this container has no CMake;
+- Windows build and CTest — unavailable locally because CMake and the Wicked
+  submodule are absent; GitHub Actions is authoritative for this candidate.
 
 Required next evidence:
 
