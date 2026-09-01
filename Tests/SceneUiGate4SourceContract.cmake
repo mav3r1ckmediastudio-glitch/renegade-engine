@@ -4,6 +4,7 @@ endif()
 
 set(CHROME_HEADER "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.h")
 set(ASSET_SOURCE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChromeAssets.cpp")
+set(STUDIO_APPLICATION "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
 set(READABILITY_SOURCE "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioAssetBrowserReadability.cpp")
 set(DRAG_SOURCE "${RENEGADE_SOURCE_DIR}/Studio/src/CreatorAssetDragPreview.cpp")
 set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
@@ -11,6 +12,7 @@ set(STUDIO_CMAKE "${RENEGADE_SOURCE_DIR}/Studio/CMakeLists.txt")
 foreach(path IN ITEMS
     "${CHROME_HEADER}"
     "${ASSET_SOURCE}"
+    "${STUDIO_APPLICATION}"
     "${READABILITY_SOURCE}"
     "${DRAG_SOURCE}"
     "${STUDIO_CMAKE}")
@@ -21,6 +23,7 @@ endforeach()
 
 file(READ "${CHROME_HEADER}" chrome_header)
 file(READ "${ASSET_SOURCE}" asset_source)
+file(READ "${STUDIO_APPLICATION}" studio_application)
 file(READ "${READABILITY_SOURCE}" readability_source)
 file(READ "${DRAG_SOURCE}" drag_source)
 file(READ "${STUDIO_CMAKE}" studio_cmake)
@@ -142,21 +145,22 @@ require_text(readability_source
     "bounded thumbnail sampling")
 
 # Governed material textures serialize stable IDs in WISCENE metadata while
-# Wicked Resource handles remain live-only. The creator chrome must therefore
-# rehydrate those stable-ID bindings whenever a loaded Level becomes active.
-# RestoreMaterialTextureBindings is idempotent and deduplicates repeated StableIds.
-require_text(asset_source
-    "void CreatorAssetStudioChrome::Update("
-    "creator chrome lifecycle update")
-require_text(asset_source
-    "bridge::RestoreMaterialTextureBindings("
-    "governed texture rehydration after Scene load")
-require_text(asset_source
-    "session->Scenes().GetScene(), project.rootPath, project.projectId"
-    "texture restore uses the active Scene and project identity")
-require_text(asset_source
-    "restored.succeeded && restored.restored > 0"
-    "successful texture restore acknowledgement")
+# Wicked Resource handles remain live-only. Rehydration belongs to explicit
+# Scene/project adoption, never the creator chrome's per-frame Update.
+string(FIND "${asset_source}" "bridge::RestoreMaterialTextureBindings(" frame_restore)
+if(NOT frame_restore EQUAL -1)
+    message(FATAL_ERROR
+        "Scene UI Gate 4 contract found governed texture restoration in creator chrome Update")
+endif()
+require_text(studio_application
+    "void StudioRenderPath::RestoreGovernedMaterialTextures()"
+    "explicit governed texture lifecycle seam")
+require_text(studio_application
+    "AdoptOpenedSceneCamera();\n        RestoreGovernedMaterialTextures();"
+    "governed texture restore after Scene adoption")
+require_text(studio_application
+    "operation->textureRestore =\n                                bridge::RestoreMaterialTextureBindings("
+    "governed texture restore during staged project adoption")
 
 # Preserve the governed import -> reveal -> thumbnail -> stable-ID handoff.
 require_text(asset_source

@@ -32,6 +32,7 @@ namespace renegade::runtime
         std::string projectRoot_;
         bridge::RenderSettingsState renderSettings_;
         bool renderSettingsInitialized_ = false;
+        std::uint64_t renderSettingsSceneRevision_ = 0;
     };
 
     class RuntimeApplication final : public wi::Application

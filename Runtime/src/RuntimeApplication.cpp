@@ -16,6 +16,7 @@ namespace renegade::runtime
         projectRoot_ = std::move(projectRoot);
         scene = &scenes.GetScene();
         renderSettingsInitialized_ = false;
+        renderSettingsSceneRevision_ = 0;
     }
 
     void RuntimeRenderPath::SyncRenderSettings(
@@ -33,6 +34,7 @@ namespace renegade::runtime
         }
         const auto authored =
             bridge::CaptureRenderSettings(activeScene);
+        renderSettingsSceneRevision_ = scenes_->Revision();
         if (bridge::RenderSettingsMatchPath(*this, authored))
         {
             renderSettings_ = authored;
@@ -67,9 +69,15 @@ namespace renegade::runtime
     void RuntimeRenderPath::Update(const float dt)
     {
         // Story Flow can replace the active WISCENE without recreating this
-        // render path. Re-capture on Update so each Level receives its own
-        // authored Gate 5 state and a carrier-free Level restores defaults.
-        SyncRenderSettings(true);
+        // render path. SceneService exposes that lifecycle explicitly, so a
+        // normal frame performs only an O(1) revision check and never repeats
+        // LUT filesystem validation or full render-state capture.
+        if (scenes_ != nullptr &&
+            (!renderSettingsInitialized_ ||
+                renderSettingsSceneRevision_ != scenes_->Revision()))
+        {
+            SyncRenderSettings(true);
+        }
         RenderPath3D::Update(dt);
     }
 

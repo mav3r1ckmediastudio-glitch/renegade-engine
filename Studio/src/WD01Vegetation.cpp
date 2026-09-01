@@ -532,16 +532,34 @@ namespace renegade::studio
 
     void StudioRenderPath::TickWd01Vegetation()
     {
-        auto* terrain = CurrentTerrain(session_);
+        wi::ecs::Entity terrainEntity = wi::ecs::INVALID_ENTITY;
+        auto* terrain = CurrentTerrain(session_, &terrainEntity);
         if (terrain == nullptr || session_ == nullptr)
-            return;
-        auto& scene = session_->Scenes().GetScene();
-        if (bridge::IsWickedVegetationInitialized(
-                scene, *terrain))
         {
-            bridge::SynchronizeWickedVegetation(
-                scene, *terrain);
+            wd01SynchronizedTerrainEntity_ = wi::ecs::INVALID_ENTITY;
+            wd01SynchronizedChunkCount_ = 0;
+            return;
         }
+        auto& scene = session_->Scenes().GetScene();
+        if (!bridge::IsWickedVegetationInitialized(scene, *terrain))
+        {
+            wd01SynchronizedTerrainEntity_ = wi::ecs::INVALID_ENTITY;
+            wd01SynchronizedChunkCount_ = 0;
+            return;
+        }
+
+        // Terrain generation and expansion add chunks asynchronously. The
+        // native chunk count is the lifecycle signal: unchanged terrain does
+        // no traversal, allocation or emitter repair during an idle frame.
+        if (wd01SynchronizedTerrainEntity_ == terrainEntity &&
+            wd01SynchronizedChunkCount_ == terrain->chunks.size())
+        {
+            return;
+        }
+
+        bridge::SynchronizeWickedVegetation(scene, *terrain);
+        wd01SynchronizedTerrainEntity_ = terrainEntity;
+        wd01SynchronizedChunkCount_ = terrain->chunks.size();
     }
 
     void StudioRenderPath::DisableWd01VegetationBrush()

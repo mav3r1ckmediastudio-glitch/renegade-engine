@@ -43,6 +43,9 @@ The pinned Wicked `wi::terrain::Terrain` owns one authored `HairParticleSystem` 
 6. The authoring emitter distribution is finalized once per touched chunk when the gesture ends.
 7. Empty chunks do not retain live grass entities.
 8. Newly generated terrain chunks are switched to manual vegetation exactly once using serialized Wicked metadata markers.
+9. Idle Studio frames compare only the active terrain identity and native chunk
+   count. A full chunk synchronization pass runs only when the terrain is
+   replaced or generation/expansion changes that count.
 
 The system therefore scales with touched chunks and touched mesh vertices, not with the total terrain size.
 

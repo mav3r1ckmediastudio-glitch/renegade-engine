@@ -553,6 +553,7 @@ namespace renegade::bridge
         scene_.Clear();
         currentPath_.clear();
         lastError_.clear();
+        ++revision_;
     }
 
     void SceneService::CreateProvingGround()
@@ -700,6 +701,7 @@ namespace renegade::bridge
         RebindWickedVegetationResources(scene_);
         currentPath_ = std::move(prepared.path_);
         lastError_.clear();
+        ++revision_;
         return true;
     }
 
@@ -880,6 +882,11 @@ namespace renegade::bridge
     const std::string& SceneService::CurrentPath() const noexcept
     {
         return currentPath_;
+    }
+
+    std::uint64_t SceneService::Revision() const noexcept
+    {
+        return revision_;
     }
 
     const std::string& SceneService::LastError() const noexcept

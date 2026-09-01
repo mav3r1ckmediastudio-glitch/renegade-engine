@@ -4550,8 +4550,13 @@ namespace renegade::studio
 
     void StudioRenderPath::Update(const float dt)
     {
-        if (!pathTracePreviewActive_)
+        if (!pathTracePreviewActive_ && session_ != nullptr &&
+            (!appliedRenderSettingsInitialized_ ||
+                appliedRenderSettingsSceneRevision_ !=
+                    session_->Scenes().Revision()))
+        {
             SyncRenderSettingsFromScene(true);
+        }
         if (renderWorkspaceActive_)
         {
             // The Window owns child transforms while it processes scrolling and
@@ -4670,14 +4675,6 @@ namespace renegade::studio
         }
 
         QueueCreatorImportScaleRuler();
-
-        // Gate 3 uses Wicked's native environment-probe debug renderer so Studio
-        // shows the actual captured cubemap as a reflective sphere together with
-        // the probe's parallax-correct oriented influence box. Keep this editor-only:
-        // Test Level runs in a separate Runtime process and the Studio overlay is
-        // explicitly disabled while that process owns preview execution.
-        wi::renderer::SetToDrawDebugEnvProbes(
-            !projectHubVisible_ && !testLevelRuntime_.IsActive());
 
         if (testLevelRuntime_.IsActive())
         {

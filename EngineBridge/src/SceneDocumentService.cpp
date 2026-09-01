@@ -226,6 +226,7 @@ namespace renegade::bridge
         RebindWickedVegetationResources(scenes_.scene_);
         scenes_.currentPath_ = std::move(prepared.path_);
         scenes_.lastError_.clear();
+        ++scenes_.revision_;
         lastWarning_.clear();
 
         selection_.Clear();

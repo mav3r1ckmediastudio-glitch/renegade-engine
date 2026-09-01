@@ -56,6 +56,13 @@ int main()
     renegade::bridge::SelectionService selection;
     renegade::bridge::CommandService commands;
 
+    const auto initialSceneRevision = scenes.Revision();
+    scenes.NewScene();
+    if (scenes.Revision() != initialSceneRevision + 1)
+    {
+        return Fail("new Scene did not advance its lifecycle revision");
+    }
+
     const auto parent = wi::ecs::CreateEntity();
     scenes.GetScene().names.Create(parent) = "Parent";
     scenes.GetScene().transforms.Create(parent);

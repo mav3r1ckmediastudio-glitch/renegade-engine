@@ -1063,6 +1063,10 @@ namespace renegade::studio
         bridge::RenderSettingsState renderSliderAfter_;
         bridge::RenderSettingsState appliedRenderSettings_;
         bool appliedRenderSettingsInitialized_ = false;
+        std::uint64_t appliedRenderSettingsSceneRevision_ = 0;
+        wi::ecs::Entity wd01SynchronizedTerrainEntity_ =
+            wi::ecs::INVALID_ENTITY;
+        std::size_t wd01SynchronizedChunkCount_ = 0;
         bool pathTracePreviewActive_ = false;
         int pathTraceTargetSamples_ = 1024;
         std::uint32_t pathTraceBounceCount_ = 1;
