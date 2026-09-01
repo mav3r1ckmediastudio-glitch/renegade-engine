@@ -1,5 +1,7 @@
 #include "renegade/bridge/GameplayInputService.h"
+#include "renegade/bridge/StudioProjectService.h"
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -104,6 +106,35 @@ int main()
         "stable pause action ID did not parse");
     Check(std::string(GameplayActionId(GameplayAction::Reset)) == "reset",
         "stable reset action ID changed");
+
+    // Production Studio project creation/opening must govern the document and
+    // register it through the accepted Always Include dependency contract.
+    const fs::path parent = root / "projects";
+    fs::create_directories(parent, ec);
+    StudioProjectService studio;
+    studio.Initialize((root / "editor-state.ini").generic_u8string());
+    Check(studio.CreateStoryFlowProject(parent.generic_u8string(), "InputProject"),
+        "Studio project creation did not stage with Gate 2 input migration: " +
+            studio.LastError());
+    if (studio.HasPendingProject())
+    {
+        const auto& project = studio.PendingProject();
+        constexpr const char* declaration =
+            "data:Content/Data/GameplayInput.renegade-input";
+        Check(std::find(
+                project.alwaysInclude.begin(),
+                project.alwaysInclude.end(),
+                declaration) != project.alwaysInclude.end(),
+            "Studio project did not register gameplay input as Always Include");
+        Check(fs::is_regular_file(
+                fs::u8path(project.rootPath) /
+                fs::u8path(GameplayInputDocumentRelativePath)),
+            "Studio project did not create the governed gameplay input document");
+    }
+    else
+    {
+        Check(false, "Studio project candidate was not staged");
+    }
 
     fs::remove_all(root, ec);
     if (failures != 0)
