@@ -11,6 +11,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/WindowsGameBuildWorkflow.h
     include/renegade/bridge/PackageIntegrityService.h
     include/renegade/bridge/CameraService.h
+    include/renegade/bridge/AudioService.h
     include/renegade/bridge/DecalProbeService.h
     include/renegade/bridge/CommandService.h
     include/renegade/bridge/CreatorAssetActionPolicy.h
@@ -76,6 +77,7 @@ add_library(RenegadeEngineBridge STATIC
     src/BuildService.cpp
     src/BuildStageService.cpp
     src/CameraService.cpp
+    src/AudioService.cpp
     src/DecalProbeService.cpp
     src/CommandService.cpp
     src/CreatorAssetWorkflowService.cpp
