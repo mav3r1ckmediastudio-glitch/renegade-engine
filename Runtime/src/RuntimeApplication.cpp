@@ -20,6 +20,11 @@ namespace renegade::runtime
         renderSettingsSceneRevision_ = 0;
     }
 
+    void RuntimeRenderPath::SetPaused(const bool paused) noexcept
+    {
+        paused_ = paused;
+    }
+
     void RuntimeRenderPath::SyncRenderSettings(
         const bool resizeBuffersForMSAA)
     {
@@ -82,8 +87,45 @@ namespace renegade::runtime
         RenderPath3D::Update(dt);
     }
 
+    void RuntimeRenderPath::Compose(
+        const wi::graphics::CommandList cmd) const
+    {
+        RenderPath3D::Compose(cmd);
+        if (!paused_)
+            return;
+
+        const float width = std::max(1.0f, GetLogicalWidth());
+        const float height = std::max(1.0f, GetLogicalHeight());
+        wi::image::Params shade(0.0f, 0.0f, width, height,
+            wi::Color(0, 0, 0, 145));
+        shade.blendFlag = wi::enums::BLENDMODE_ALPHA;
+        wi::image::Draw(nullptr, shade, cmd);
+
+        wi::font::Params title(
+            width * 0.5f,
+            height * 0.5f - 22.0f,
+            28,
+            wi::font::WIFALIGN_CENTER,
+            wi::font::WIFALIGN_CENTER,
+            wi::Color(245, 245, 245, 255),
+            wi::Color::Transparent());
+        title.bolden = 0.12f;
+        wi::font::Draw("PAUSED", title, cmd);
+
+        wi::font::Params hint(
+            width * 0.5f,
+            height * 0.5f + 24.0f,
+            14,
+            wi::font::WIFALIGN_CENTER,
+            wi::font::WIFALIGN_CENTER,
+            wi::Color(220, 220, 220, 255),
+            wi::Color::Transparent());
+        wi::font::Draw("ESC RESUME   //   R RESET", hint, cmd);
+    }
+
     void RuntimeApplication::SetBootstrapResult(RuntimeBootstrapResult result)
     {
+        initialBootstrapResult_ = result;
         startupResult_ = std::move(result);
     }
 
@@ -99,8 +141,10 @@ namespace renegade::runtime
         std::string actualBackend,
         std::string capability)
     {
-        startupResult_.graphicsBackend = std::move(actualBackend);
-        startupResult_.graphicsCapability = std::move(capability);
+        startupResult_.graphicsBackend = actualBackend;
+        startupResult_.graphicsCapability = capability;
+        initialBootstrapResult_.graphicsBackend = std::move(actualBackend);
+        initialBootstrapResult_.graphicsCapability = std::move(capability);
         ++evidenceRevision_;
     }
 
@@ -150,6 +194,18 @@ namespace renegade::runtime
         infoDisplay.logical_size = true;
         infoDisplay.colorspace = true;
         infoDisplay.fpsinfo = true;
+
+        std::string inputError;
+        if (!LoadGameplayInput(inputError))
+        {
+            startupResult_.succeeded = false;
+            startupResult_.code = RuntimeBootstrapCode::ProjectRejected;
+            startupResult_.message =
+                "Could not load project gameplay input map: " + inputError;
+            startupFinished_ = true;
+            ++evidenceRevision_;
+            return;
+        }
 
         renderer_.BindScene(scenes_, startupResult_.project.rootPath);
         renderer_.init(canvas);
@@ -265,40 +321,63 @@ namespace renegade::runtime
 
     void RuntimeApplication::Update(const float dt)
     {
-        // Wicked refreshes device state and runs the active path GUI from the
-        // base application update. Renegade reads that current-frame state
-        // afterwards so keyboard and gamepad activation are not one frame stale.
+        // Keep Wicked's device refresh alive while paused, but give the active
+        // 3D path zero simulation time. Physics simulation is also explicitly
+        // disabled by SetPaused(), so Runtime has one deterministic pause owner.
         bridge::RefreshPrecipitationVisual(scenes_.GetScene());
-        wi::Application::Update(dt);
+        wi::Application::Update(paused_ ? 0.0f : dt);
 
-        SyncPlayerForScene();
-        if (player_.IsSpawned() && !screenPresenter_.IsLoaded())
+        if (!screenPresenter_.IsLoaded())
         {
-            const auto input = CapturePlayerInput(dt);
-            (void)bridge::UpdateRuntimePlayer(
-                scenes_.GetScene(),
-                player_,
-                input,
-                playerSettings_);
-            if (renderer_.camera != nullptr)
+            const auto gameplayInput = bridge::CaptureGameplayInput(inputMap_, dt);
+            if (gameplayInput.pausePressed)
+                SetPaused(!paused_);
+
+            if (gameplayInput.resetPressed)
             {
-                bridge::ApplyRuntimePlayerCamera(
-                    scenes_.GetScene(),
-                    player_,
-                    *renderer_.camera,
-                    playerSettings_);
+                std::string error;
+                if (!ResetPlaySession(error))
+                {
+                    wi::backlog::post(
+                        "Renegade Runtime: play-session reset failed: " + error,
+                        wi::backlog::LogLevel::Error);
+                }
             }
-            wi::input::HidePointer(true);
+
+            SyncPlayerForScene();
+            if (player_.IsSpawned())
+            {
+                if (!paused_)
+                {
+                    (void)bridge::UpdateRuntimePlayer(
+                        scenes_.GetScene(),
+                        player_,
+                        gameplayInput.player,
+                        playerSettings_);
+                }
+                if (renderer_.camera != nullptr)
+                {
+                    bridge::ApplyRuntimePlayerCamera(
+                        scenes_.GetScene(),
+                        player_,
+                        *renderer_.camera,
+                        playerSettings_);
+                }
+                wi::input::HidePointer(!paused_);
+            }
+            else
+            {
+                wi::input::HidePointer(false);
+            }
         }
         else
         {
+            if (paused_)
+                SetPaused(false);
             wi::input::HidePointer(false);
-        }
-
-        if (screenPresenter_.IsLoaded())
-        {
             screenPresenter_.UpdateInput(renderer_, screenController_);
         }
+
         ProcessPendingActions();
     }
 
@@ -345,41 +424,154 @@ namespace renegade::runtime
             wi::backlog::LogLevel::Default);
     }
 
-    bridge::PlayerInputFrame RuntimeApplication::CapturePlayerInput(
-        const float dt) const noexcept
+    bool RuntimeApplication::LoadGameplayInput(std::string& error)
     {
-        bridge::PlayerInputFrame input;
-        const auto key = [](const char value)
+        if (bridge::ReadGameplayInputMap(
+                startupResult_.project.rootPath, inputMap_, error))
         {
-            return static_cast<wi::input::BUTTON>(value);
-        };
+            error.clear();
+            return true;
+        }
 
-        const XMFLOAT4 left = wi::input::GetAnalog(
-            wi::input::GAMEPAD_ANALOG_THUMBSTICK_L);
-        const XMFLOAT4 right = wi::input::GetAnalog(
-            wi::input::GAMEPAD_ANALOG_THUMBSTICK_R);
-        input.moveRight = left.x +
-            (wi::input::Down(key('D')) ? 1.0f : 0.0f) -
-            (wi::input::Down(key('A')) ? 1.0f : 0.0f);
-        input.moveForward = left.y +
-            (wi::input::Down(key('W')) ? 1.0f : 0.0f) -
-            (wi::input::Down(key('S')) ? 1.0f : 0.0f);
+        if (startupResult_.packageRelativeLaunch)
+        {
+            error = "Packaged Runtime requires '" +
+                std::string(bridge::GameplayInputDocumentRelativePath) +
+                "' in the dependency closure. " + error;
+            return false;
+        }
 
-        const auto& mouse = wi::input::GetMouseState();
-        constexpr float MouseLookScale = 0.0017f;
-        constexpr float GamepadLookRadiansPerSecond = 2.5f;
-        const float safeDt = std::clamp(dt, 0.0f, 0.1f);
-        input.lookYaw = mouse.delta_position.x * MouseLookScale +
-            right.x * GamepadLookRadiansPerSecond * safeDt;
-        input.lookPitch = mouse.delta_position.y * MouseLookScale -
-            right.y * GamepadLookRadiansPerSecond * safeDt;
-        input.jumpPressed =
-            wi::input::Press(wi::input::KEYBOARD_BUTTON_SPACE) ||
-            wi::input::Press(wi::input::GAMEPAD_BUTTON_2);
-        input.sprintDown =
-            wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
-            wi::input::Down(wi::input::GAMEPAD_BUTTON_7);
-        return input;
+        bool created = false;
+        if (!bridge::EnsureGameplayInputMap(
+                startupResult_.project.rootPath,
+                inputMap_,
+                created,
+                error))
+        {
+            return false;
+        }
+        if (created)
+        {
+            wi::backlog::post(
+                "Renegade Runtime: created the project gameplay input-map with Gate 1 defaults.",
+                wi::backlog::LogLevel::Default);
+        }
+        error.clear();
+        return true;
+    }
+
+    void RuntimeApplication::SetPaused(const bool paused) noexcept
+    {
+        if (paused_ == paused)
+            return;
+
+        if (paused)
+        {
+            physicsSimulationBeforePause_ = wi::physics::IsSimulationEnabled();
+            wi::physics::SetSimulationEnabled(false);
+        }
+        else
+        {
+            wi::physics::SetSimulationEnabled(physicsSimulationBeforePause_);
+        }
+        paused_ = paused;
+        renderer_.SetPaused(paused_);
+        wi::backlog::post(
+            paused_
+                ? "Renegade Runtime: play session paused."
+                : "Renegade Runtime: play session resumed.",
+            wi::backlog::LogLevel::Default);
+        ++evidenceRevision_;
+    }
+
+    bool RuntimeApplication::ResetPlaySession(std::string& error)
+    {
+        SetPaused(false);
+        bridge::DespawnRuntimePlayer(scenes_.GetScene(), player_);
+        player_ = {};
+        playerSettings_ = {};
+        playerSceneRevision_ = 0;
+        pendingActions_.clear();
+        screenPresenter_.Reset(renderer_);
+        flow_ = RuntimeFlowController{};
+        flowStarted_ = false;
+
+        startupResult_ = initialBootstrapResult_;
+        startupResult_.lastActionId.clear();
+        startupResult_.lastActionWidgetId.clear();
+        startupResult_.lastActionInput.clear();
+        startupResult_.lastActionCode.clear();
+        startupResult_.lastActionMessage.clear();
+        startupResult_.lastActionSequence = 0;
+        startupResult_.screenLoaded = false;
+        startupResult_.screenWasLoaded = false;
+        startupResult_.flowTrace.clear();
+        startupResult_.flowNodeId.clear();
+        startupResult_.flowNodeName.clear();
+        startupResult_.flowEntry.clear();
+        startupResult_.flowTerminalAction = bridge::FlowTerminalAction::None;
+
+        if (!startupResult_.startupScreenPath.empty())
+        {
+            if (!ConfigureActions(error) || !LoadStartupScreen(error))
+            {
+                startupResult_.succeeded = false;
+                startupResult_.code = RuntimeBootstrapCode::ScreenLoadFailed;
+                startupResult_.message =
+                    "Could not reset project Runtime screen: " + error;
+                ++evidenceRevision_;
+                return false;
+            }
+            startupResult_.succeeded = true;
+            startupResult_.code = RuntimeBootstrapCode::Success;
+            startupResult_.screenLoaded = true;
+            startupResult_.screenWasLoaded = true;
+            startupResult_.message = "Reset Runtime to the project startup screen.";
+        }
+        else if (!startupResult_.startupFlowPath.empty())
+        {
+            startupResult_ = LoadRuntimeProjectFlow(
+                scenes_, flow_, std::move(startupResult_));
+            flowStarted_ = startupResult_.succeeded;
+            if (!startupResult_.succeeded)
+            {
+                error = startupResult_.message;
+                ++evidenceRevision_;
+                return false;
+            }
+            const auto* current = flow_.CurrentNode();
+            if (current != nullptr && current->kind == bridge::FlowNodeKind::Screen)
+            {
+                if (!LoadCurrentFlowScreen(error))
+                {
+                    startupResult_.succeeded = false;
+                    startupResult_.code = RuntimeBootstrapCode::ScreenLoadFailed;
+                    startupResult_.message =
+                        "Could not reset Story Flow Runtime screen: " + error;
+                    ++evidenceRevision_;
+                    return false;
+                }
+            }
+        }
+        else
+        {
+            startupResult_ =
+                LoadRuntimeProjectScene(scenes_, std::move(startupResult_));
+            if (!startupResult_.succeeded)
+            {
+                error = startupResult_.message;
+                ++evidenceRevision_;
+                return false;
+            }
+        }
+
+        SyncPlayerForScene();
+        wi::backlog::post(
+            "Renegade Runtime: play session reset to its authored startup state.",
+            wi::backlog::LogLevel::Default);
+        error.clear();
+        ++evidenceRevision_;
+        return true;
     }
 
     bool RuntimeApplication::ConfigureActions(std::string& error)
