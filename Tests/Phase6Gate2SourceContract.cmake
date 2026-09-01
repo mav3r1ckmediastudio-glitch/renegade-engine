@@ -27,6 +27,8 @@ file(READ "${runtime_source}" runtime_text)
 
 foreach(token IN ITEMS
     "GameplayInputDocumentRelativePath"
+    "GameplayInput.renegade-input"
+    "renegade-input-map"
     "Pause,"
     "Reset,"
     "GameplayInputFrame"
@@ -38,13 +40,11 @@ foreach(token IN ITEMS
 endforeach()
 
 foreach(token IN ITEMS
-    "renegade-input-map"
     "LEFT_Y_POS"
     "MOUSE_X"
     "BUTTON_2"
     "ESCAPE"
-    "ProjectDocumentTransaction"
-    "GameplayInput.renegade-input")
+    "ProjectDocumentTransaction")
     string(FIND "${input_source_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Phase 6 Gate 2 input implementation missing ${token}")
