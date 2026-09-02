@@ -324,6 +324,7 @@ namespace renegade::runtime
         // Keep Wicked's device refresh alive while paused, but give the active
         // 3D path zero simulation time. Physics simulation is also explicitly
         // disabled by SetPaused(), so Runtime has one deterministic pause owner.
+        SyncAudioForScene();
         bridge::RefreshPrecipitationVisual(scenes_.GetScene());
         wi::Application::Update(paused_ ? 0.0f : dt);
 
@@ -424,6 +425,24 @@ namespace renegade::runtime
             wi::backlog::LogLevel::Default);
     }
 
+    void RuntimeApplication::SyncAudioForScene()
+    {
+        if (audioSceneRevision_ == scenes_.Revision())
+            return;
+
+        audioPauseState_ = {};
+        bridge::ActivateSceneAudio(scenes_.GetScene());
+        if (paused_)
+        {
+            bridge::SetSceneAudioPaused(
+                scenes_.GetScene(), true, audioPauseState_);
+        }
+        audioSceneRevision_ = scenes_.Revision();
+        wi::backlog::post(
+            "Renegade Runtime: applied authored Scene audio mix and Play On Start sources.",
+            wi::backlog::LogLevel::Default);
+    }
+
     bool RuntimeApplication::LoadGameplayInput(std::string& error)
     {
         if (bridge::ReadGameplayInputMap(
@@ -495,6 +514,8 @@ namespace renegade::runtime
         }
         paused_ = paused;
         renderer_.SetPaused(paused_);
+        bridge::SetSceneAudioPaused(
+            scenes_.GetScene(), paused_, audioPauseState_);
         wi::backlog::post(
             paused_
                 ? "Renegade Runtime: play session paused."
@@ -510,6 +531,8 @@ namespace renegade::runtime
         player_ = {};
         playerSettings_ = {};
         playerSceneRevision_ = 0;
+        audioSceneRevision_ = 0;
+        audioPauseState_ = {};
         pendingActions_.clear();
         screenPresenter_.Reset(renderer_);
         flow_ = RuntimeFlowController{};
@@ -585,6 +608,7 @@ namespace renegade::runtime
         }
 
         SyncPlayerForScene();
+        SyncAudioForScene();
         wi::backlog::post(
             "Renegade Runtime: play session reset to its authored startup state.",
             wi::backlog::LogLevel::Default);

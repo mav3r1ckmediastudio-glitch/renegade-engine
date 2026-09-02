@@ -3641,6 +3641,15 @@ namespace renegade::studio
                 static_cast<int>(std::round(drawerHeight)));
             projects.SetEditorPreference("workspace_layout_saved", true);
         });
+        // Audio is an independent top-level authoring surface. Keep the
+        // accepted Inspector alive and untouched underneath it: Wicked's
+        // Window::SetVisible(true) makes every child visible, so using parent
+        // visibility as a z-order switch corrupts per-section Inspector state.
+        // Register Audio ahead of the Inspector in Wicked's reverse render
+        // order, then keep the chrome behind both authoring surfaces.
+        GetGUI().RemoveWidget(&inspectorPanel_);
+        GetGUI().AddWidget(&studioChrome_.AudioWorkspace());
+        GetGUI().AddWidget(&inspectorPanel_);
         GetGUI().AddWidget(&studioChrome_);
     }
 
@@ -4783,6 +4792,7 @@ namespace renegade::studio
         const XMFLOAT4 pointer = wi::input::GetPointer();
         const bool playerStartIconConsumed = HandlePlayerStartSceneIcon(pointer);
         const bool cameraIconConsumed = HandleCameraSceneIcons(pointer);
+        const bool audioIconConsumed = HandleAudioSceneIcons(pointer);
         const bool decalProbeIconConsumed = HandleDecalProbeSceneIcons(pointer);
         const bool lightIconConsumed = HandleLightSceneIcons(pointer);
 
@@ -4832,8 +4842,8 @@ namespace renegade::studio
             return;
         }
 
-        if (playerStartIconConsumed || cameraIconConsumed || decalProbeIconConsumed ||
-            lightIconConsumed)
+        if (playerStartIconConsumed || cameraIconConsumed || audioIconConsumed ||
+            decalProbeIconConsumed || lightIconConsumed)
         {
             return;
         }
@@ -7580,6 +7590,154 @@ namespace renegade::studio
         return IsPointerOverViewport(XMFLOAT4(screen.x, screen.y, 0, 0));
     }
 
+
+bool StudioRenderPath::HandleAudioSceneIcons(
+    const XMFLOAT4& pointer)
+{
+    if (session_ == nullptr || camera == nullptr || projectHubVisible_ ||
+        creatorModelImporter.thumbnailCapturePending)
+    {
+        return false;
+    }
+
+    auto& scene = session_->Scenes().GetScene();
+    const auto selected = session_->Selection().SelectedEntity();
+    const bool canSelect = !lightPlacementActive_ && !flyCameraActive_ &&
+        !GetGUI().HasFocus() && !gizmo_.IsInteracting() &&
+        IsPointerOverViewport(pointer) &&
+        wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+    wi::ecs::Entity best = wi::ecs::INVALID_ENTITY;
+    float bestDistanceSquared = 24.0f * 24.0f;
+
+    const auto drawCircle = [this](
+        const XMFLOAT2& center,
+        const float radius,
+        const XMFLOAT4& color)
+    {
+        constexpr int Segments = 18;
+        for (int segment = 0; segment < Segments; ++segment)
+        {
+            const float a0 = XM_2PI * static_cast<float>(segment) / Segments;
+            const float a1 = XM_2PI * static_cast<float>(segment + 1) / Segments;
+            DrawEditorLine(
+                XMFLOAT2(center.x + std::cos(a0) * radius,
+                    center.y + std::sin(a0) * radius),
+                XMFLOAT2(center.x + std::cos(a1) * radius,
+                    center.y + std::sin(a1) * radius),
+                color);
+        }
+    };
+
+    for (std::size_t index = 0; index < scene.sounds.GetCount(); ++index)
+    {
+        const auto entity = scene.sounds.GetEntity(index);
+        if (!bridge::IsRenegadeSoundSource(scene, entity) ||
+            !session_->Scenes().IsHierarchyVisible(entity))
+        {
+            continue;
+        }
+        const auto* transform = scene.transforms.GetComponent(entity);
+        if (transform == nullptr)
+            continue;
+        const auto source = bridge::CaptureSoundSource(scene, entity);
+        const XMFLOAT3 position = transform->GetPosition();
+        XMFLOAT2 center = {};
+        if (!ProjectEditorPoint(position, center))
+            continue;
+
+        XMFLOAT4 baseColor;
+        switch (source.bus)
+        {
+        case bridge::AudioBus::Music:
+            baseColor = XMFLOAT4(0.78f, 0.42f, 1.0f, 0.96f);
+            break;
+        case bridge::AudioBus::Ambience:
+            baseColor = XMFLOAT4(0.25f, 0.92f, 0.62f, 0.96f);
+            break;
+        case bridge::AudioBus::Voice:
+            baseColor = XMFLOAT4(0.35f, 0.78f, 1.0f, 0.96f);
+            break;
+        case bridge::AudioBus::SoundEffect:
+        default:
+            baseColor = XMFLOAT4(1.0f, 0.55f, 0.15f, 0.96f);
+            break;
+        }
+        const float dx = pointer.x - center.x;
+        const float dy = pointer.y - center.y;
+        const float distanceSquared = dx * dx + dy * dy;
+        const bool hovered = distanceSquared <= 24.0f * 24.0f;
+        const XMFLOAT4 color = entity == selected
+            ? XMFLOAT4(1.0f, 0.88f, 0.42f, 1.0f)
+            : hovered
+                ? XMFLOAT4(0.70f, 0.96f, 1.0f, 1.0f)
+                : baseColor;
+
+        // Bus-specific editor-only glyphs remain a constant readable size.
+        if (source.bus == bridge::AudioBus::SoundEffect)
+        {
+            DrawEditorLine(XMFLOAT2(center.x - 10, center.y - 5),
+                XMFLOAT2(center.x - 4, center.y - 5), color);
+            DrawEditorLine(XMFLOAT2(center.x - 10, center.y + 5),
+                XMFLOAT2(center.x - 4, center.y + 5), color);
+            DrawEditorLine(XMFLOAT2(center.x - 10, center.y - 5),
+                XMFLOAT2(center.x - 10, center.y + 5), color);
+            DrawEditorLine(XMFLOAT2(center.x - 4, center.y - 5),
+                XMFLOAT2(center.x + 4, center.y - 11), color);
+            DrawEditorLine(XMFLOAT2(center.x - 4, center.y + 5),
+                XMFLOAT2(center.x + 4, center.y + 11), color);
+            DrawEditorLine(XMFLOAT2(center.x + 4, center.y - 11),
+                XMFLOAT2(center.x + 4, center.y + 11), color);
+            drawCircle(XMFLOAT2(center.x + 4, center.y), 14.0f, color);
+        }
+        else if (source.bus == bridge::AudioBus::Music)
+        {
+            drawCircle(XMFLOAT2(center.x - 5, center.y + 8), 5.0f, color);
+            DrawEditorLine(XMFLOAT2(center.x, center.y + 8),
+                XMFLOAT2(center.x, center.y - 12), color);
+            DrawEditorLine(XMFLOAT2(center.x, center.y - 12),
+                XMFLOAT2(center.x + 11, center.y - 9), color);
+            DrawEditorLine(XMFLOAT2(center.x + 11, center.y - 9),
+                XMFLOAT2(center.x + 11, center.y + 2), color);
+            drawCircle(XMFLOAT2(center.x + 6, center.y + 3), 5.0f, color);
+        }
+        else if (source.bus == bridge::AudioBus::Ambience)
+        {
+            drawCircle(center, 6.0f, color);
+            drawCircle(center, 12.0f, color);
+            drawCircle(center, 18.0f, color);
+        }
+        else
+        {
+            DrawEditorLine(XMFLOAT2(center.x - 6, center.y - 10),
+                XMFLOAT2(center.x + 6, center.y - 10), color);
+            DrawEditorLine(XMFLOAT2(center.x - 6, center.y - 10),
+                XMFLOAT2(center.x - 6, center.y + 3), color);
+            DrawEditorLine(XMFLOAT2(center.x + 6, center.y - 10),
+                XMFLOAT2(center.x + 6, center.y + 3), color);
+            drawCircle(XMFLOAT2(center.x, center.y + 3), 6.0f, color);
+            DrawEditorLine(XMFLOAT2(center.x, center.y + 9),
+                XMFLOAT2(center.x, center.y + 16), color);
+        }
+
+        if (canSelect && distanceSquared < bestDistanceSquared)
+        {
+            bestDistanceSquared = distanceSquared;
+            best = entity;
+        }
+    }
+
+    if (canSelect && best != wi::ecs::INVALID_ENTITY)
+    {
+        session_->Selection().Select(best);
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+        SyncGizmoSelection();
+        SyncSelectionOutline();
+        return true;
+    }
+    return false;
+}
 
 bool StudioRenderPath::HandleDecalProbeSceneIcons(
     const XMFLOAT4& pointer)

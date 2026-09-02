@@ -370,6 +370,40 @@ than hosting gameplay simulation in the editor render path.
 Standalone player without editor code. It loads project settings, startup scene,
 assets, input configuration, and scripts, then runs the packaged game.
 
+### Native audio authoring and playback
+
+Phase 6 Gate 3 keeps Wicked's `SoundComponent`, `Sound`, `SoundInstance`, four
+serialized submix types and global reverb as the sole audio backend. Renegade's
+`AudioService` adds only stable authoring semantics, metadata for Play On Start
+and Scene Mix, command-backed mutations and Runtime activation/pause boundaries.
+
+Studio exposes global 2D sources and movable positional 3D sources as two
+explicit command-backed creation paths. A 3D source is created in front of the
+editor camera, selected immediately and then uses the ordinary transform gizmo;
+global sources deliberately have no TransformComponent.
+
+The Audio authoring surface is an independent top-level Studio widget rendered
+above the existing Inspector. It never hides or re-shows the Inspector
+`Window`: pinned Wicked propagates `Window::SetVisible(true)` to every child,
+which destroys the Inspector's established per-section visibility state.
+
+Studio Preview owns a separate transient 2D `SoundInstance` backed by the
+selected source resource. It never changes the authored source's spatial,
+looping or Play On Start state and is stopped on selection, Scene, project or
+workspace lifecycle changes. Authored 3D playback remains a Runtime concern.
+
+The pinned Wicked WAV loader assumes a bounded standard `WAVEFORMATEX` chunk
+and copies the declared `fmt` size directly. `ValidateAudioAssetForWicked`
+therefore rejects malformed, extended-header and over-limit WAV/OGG inputs
+before they reach that loader. `ApplySoundSource` creates a replacement native
+resource/instance once and commits it only after validation succeeds; it does
+not build a parallel audio object or mixer.
+
+Audio-specific trigger zones are not part of Gate 3. Reusable spatial volumes
+must be introduced through one shared ZoneService with common viewport
+placement, transform/shape authoring and Runtime entry/exit state so audio,
+weather, objectives and later systems do not grow incompatible zone models.
+
 ### Dependency extraction boundary
 
 `DependencyCollector` owns UI-free graph admission and provider dispatch.

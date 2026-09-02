@@ -14,6 +14,7 @@
 #include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
 #include "renegade/bridge/CameraService.h"
+#include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/DecalProbeService.h"
 #include "renegade/bridge/MaterialService.h"
@@ -130,6 +131,25 @@ namespace renegade::studio
         [[nodiscard]] bool IsPhysicsLabActive() const noexcept
         {
             return studioChrome_.IsPhysicsLabActive();
+        }
+
+        // Audio and the ordinary Scene Inspector are independent top-level
+        // Wicked widgets. Wicked can reorder active widgets during Update(),
+        // so registration order alone cannot decide which surface owns the
+        // right-hand panel. Toggle only the Window's base Widget visibility:
+        // Window::SetVisible() also rewrites every child's visibility and
+        // destroys the Inspector's section state.
+        void SyncAudioInspectorPresentation()
+        {
+            if (studioChrome_.IsAudioWorkspaceActive())
+            {
+                inspectorPanel_.wi::gui::Widget::SetVisible(false);
+                renderWorkspacePanel_.wi::gui::Widget::SetVisible(false);
+                return;
+            }
+
+            if (!projectHubVisible_ && !renderWorkspaceActive_)
+                inspectorPanel_.wi::gui::Widget::SetVisible(true);
         }
 
         [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
@@ -591,6 +611,7 @@ namespace renegade::studio
         void CancelCreatorAssetPlacement();
         bool HandleCameraSceneIcons(const XMFLOAT4& pointer);
         bool HandlePlayerStartSceneIcon(const XMFLOAT4& pointer);
+        bool HandleAudioSceneIcons(const XMFLOAT4& pointer);
         bool HandleDecalProbeSceneIcons(const XMFLOAT4& pointer);
         bool HandleLightSceneIcons(const XMFLOAT4& pointer);
         [[nodiscard]] bool ProjectEditorPoint(
@@ -1207,6 +1228,12 @@ namespace renegade::studio
     class PhysicsLabStudioRenderPath final : public StudioRenderPath
     {
     public:
+        void Update(float dt) override
+        {
+            StudioRenderPath::Update(dt);
+            SyncAudioInspectorPresentation();
+        }
+
         void Render() const override
         {
             if (IsPhysicsLabActive())

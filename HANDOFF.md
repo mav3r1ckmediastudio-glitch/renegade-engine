@@ -1,135 +1,121 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-09-01
+**Date:** 2026-09-02
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Authoritative main:**
-`cda9e26138f7144da9e0bc72f6d2ea1e1dc88a77`
-(`Phase 6 Gate 1: Player Start and runtime possession (#123)`).
+**PR:** #125 — `Phase6/gate3 spatial audio`
 
-**Wicked pin:**
-`3a800b7134aafe58461093c8abb2e274d4e64033`.
+**Branch:** `phase6/gate3-spatial-audio`
 
-## Accepted baseline
+**Main/base:** `861c4d9b0f8acbb57f49db0b84b004d925b51136`
+(`Phase 6 Gate 2: gameplay input and play-session lifecycle (#124)`).
 
-The accepted production baseline on `main` includes:
+**Last owner-tested head:**
+`75218f6cdec4cacdba4c380b488895bdad452f54`.
 
-- Story Flow through Gate 10 / PR #101;
-- Scene UI recovery through PR #106;
-- JP01 full Wicked/Jolt physics foundation through PR #107;
-- Phase 5 Scene/render exposure through PR #118;
-- WD01 native Wicked vegetation plus the 75 FPS/editor-interaction recovery
-  through PR #122; and
-- Phase 6 Gate 1 Player Start, first-person Runtime possession and Wicked/Jolt
-  player movement through PR #123.
+**Zone-removal implementation commit:**
+`d3be47df0fd845bb65323f120f866513f3682082`
+(`Defer zones and preserve Gate 3 core audio`).
 
-## Gate 1 owner acceptance
+**State:** DRAFT — DO NOT MERGE. Core audio has owner evidence at `75218f6`,
+but the exact zone-removal head still requires Windows CI and a short owner
+regression before acceptance.
 
-The project owner confirmed the Gate 1 candidate in a real test Level:
+## Accepted evidence before this repair
 
-- Player Start placement/selection and its dedicated Inspector work;
-- the flat direction arrow and selected capsule visualizer work;
-- position, heading and controller settings persist through save/reopen;
-- duplicate Player Start rejection works;
-- Test Level spawns at the authored marker;
-- W/A/S/D + mouse look work;
-- sprint and jump work;
-- the player collides with the Level through the accepted Wicked/Jolt character
-  controller; and
-- packaged behaviour was accepted before merge.
+`75218f6` passed all four required Windows jobs:
 
-The owner does not own controller hardware. Controller bindings remain
-source/automated covered but were not physically owner-tested; this is an
-explicit evidence limitation, not a Gate 1 failure.
+- Windows baseline run 1588: Debug and Release green;
+- Renegade Studio run 1002: Debug and Release green.
 
-## Active work — Phase 6 Gate 2
+The owner then confirmed in Studio that global sound worked, a short clip could
+be assigned and Previewed/Stopped, and positional 3D sound played correctly in
+Test Level. This is behavioural evidence for the core audio path, not acceptance
+of the abandoned zone path.
 
-Branch: `phase6/gate2-input-lifecycle`.
+## Why audio-specific zones were removed
 
-Gate contract: `docs/PHASE6_GATE2_INPUT_LIFECYCLE.md`.
+The Sound Zone controls and Runtime metadata existed, but the promised creator
+workflow did not. Owner testing found no cursor ghost, no click placement and no
+usable zone volume. The placement state had been implemented inside the Audio
+Inspector widget rather than as a shared viewport placement/volume service, and
+the authored transform scale did not govern the Runtime radius. Automated token
+checks proved that code was present, not that the viewport interaction worked.
 
-Gate 2 is bounded to two outcomes:
+The durable product decision is to keep Gate 3 bounded to working global and
+ordinary positional audio. Reusable trigger volumes will be designed once as a
+shared ZoneService for audio, weather, objectives and later systems.
 
-1. promote Gate 1's hardcoded Runtime bindings into a persistent project action
-   map; and
-2. add Runtime-owned Pause/Resume and deterministic Reset without embedding
-   gameplay simulation inside Studio.
+## Repair implemented at `d3be47d`
 
-### Current candidate architecture
+- Removed Sound Zone state, metadata reads/writes, Runtime entry tracking and
+  per-frame zone activation.
+- Removed the nonfunctional ghost/click-placement state and zone-only Inspector
+  controls, radius guide and trigger/duration UI.
+- Replaced the misleading zone action with `ADD 3D SOUND`, which creates a
+  native spatial sound five metres in front of the editor camera, selects it and
+  leaves movement to the ordinary transform gizmo.
+- Preserved `ADD GLOBAL SOUND`, WAV/OGG selection, transient Preview Play/Stop,
+  Play On Start, Loop, Spatial 3D, Volume, Reverb, buses, Scene Mix, source
+  glyphs, Save/Reload metadata and Runtime activation.
+- Changed Pause from Stop to Wicked's native `wi::audio::Pause` while clearing
+  `SoundComponent::PLAYING`; Resume therefore continues from the existing audio
+  cursor instead of restarting the clip.
+- Added command coverage for global transform-free audio and movable positional
+  3D audio, and changed the source contract to reject reintroduction of the
+  deferred zone surface.
+- Updated README, architecture, roadmap, feature matrix and the Gate 3 contract
+  to state the actual supported boundary.
 
-`GameplayInputService` owns the version-1 project document:
+## Files changed by the implementation
 
-`Content/Data/GameplayInput.renegade-input`
+```text
+EngineBridge/include/renegade/bridge/AudioService.h
+EngineBridge/src/AudioService.cpp
+README.md
+Runtime/src/RuntimeApplication.cpp
+Runtime/src/RuntimeApplication.h
+Studio/src/RenegadeAudioWorkspace.cpp
+Studio/src/StudioApplication.cpp
+Tests/Phase6Gate3AudioTests.cpp
+Tests/Phase6Gate3SourceContract.cmake
+docs/ARCHITECTURE.md
+docs/FEATURE_MATRIX.csv
+docs/PHASE6_GATE3_SPATIAL_AUDIO.md
+docs/ROADMAP.md
+```
 
-It contains stable named actions for movement, look, jump, sprint, pause and
-reset, with the accepted Gate 1 keyboard/mouse/gamepad defaults. The document
-is transactionally written and fails closed on malformed or unsupported tokens.
+## Local evidence
 
-`StudioProjectService` migrates projects on create/open by ensuring the document
-exists and registering:
+This Linux workspace has no CMake installation and the Wicked submodule is not
+initialized, so no local Windows/XAudio build was claimed. The following checks
+passed against the exact implementation diff:
 
-`data:Content/Data/GameplayInput.renegade-input`
+```text
+git diff --check
+manual exact-token equivalent of Phase6Gate3SourceContract.cmake
+repository-wide stale zone-symbol search
+FEATURE_MATRIX.csv parsed as 38 rows with a consistent 16-column schema
+```
 
-in the existing Always Include dependency declaration. This deliberately sends
-the file through the accepted project dependency graph, LC01 identity refresh
-and Build Windows Game package path rather than creating a Gate-specific
-packager.
+Pinned Wicked commit `3a800b7134aafe58461093c8abb2e274d4e64033`
+was inspected directly: `SoundComponent::_flags` and `PLAYING` are public,
+`wi::audio::Pause(SoundInstance*)` exists, Pause preserves the source cursor,
+and `SoundComponent::Play()` restores playback intent and resumes the instance.
 
-Runtime now consumes `GameplayInputService::CaptureGameplayInput()` rather than
-owning the old W/A/S/D/mouse/Space/Shift polling block. `PlayerService` remains
-action-shaped and still receives only `PlayerInputFrame` values.
+## Required exact-head owner check
 
-### Play-session lifecycle
+After the Windows jobs pass:
 
-Default Gate 2 session controls are:
+1. Open Audio and confirm there is no Sound Zone/trigger/radius/duration surface.
+2. Add Global Sound, assign a short WAV/OGG, Preview Play/Stop, and Test Level.
+3. Add 3D Sound and confirm it appears selected in front of the camera with a
+   source glyph and transform gizmo; move it and verify spatial playback.
+4. Confirm Pause/Resume continues rather than restarting, then Reset.
+5. Save/Reopen and verify source asset, position, loop, bus, volume and reverb.
+6. Recheck Scene, Environment, Terrain, Render, Physics and WD01 navigation.
+7. Run one packaged Windows Game check for global/3D playback, Pause and Reset.
 
-- `Escape` — Pause / Resume;
-- `R` — deterministic Reset.
-
-Pause keeps window/input processing alive, passes zero simulation delta to the
-active Runtime path, disables Wicked physics simulation, releases the pointer
-and displays a simple paused overlay. Resume restores the physics simulation
-state that existed before pause.
-
-Reset despawns the runtime-only player, clears transient session state, then
-reuses the already accepted startup authority:
-
-- Test Level reloads its resolved unsaved WISCENE snapshot;
-- scene-first Runtime reloads the resolved startup Scene;
-- Story Flow recreates/re-enters the startup Flow path; and
-- startup Screen recreates its Screen state.
-
-The Player Start is then resolved again and the runtime-only character capsule
-is recreated from authored state.
-
-## Gate 2 automated coverage
-
-New Gate 2 tests cover:
-
-- default input-map creation under `Content/Data`;
-- Gate 1 keyboard/mouse/gamepad default preservation;
-- persisted binding round-trip without default overwrite;
-- malformed binding rejection;
-- stable Pause/Reset action IDs; and
-- source contracts for project migration, package dependency registration,
-  Runtime input ownership, pause physics/zero-delta behaviour and reset through
-  existing loaders.
-
-## Required next evidence
-
-1. Open the Gate 2 PR only after the implementation/docs candidate is assembled.
-2. Require all four Windows checks: Studio Debug/Release and baseline
-   Debug/Release.
-3. Owner-test existing Gate 1 movement/look/sprint/jump/collision for regression.
-4. Press Escape while moving/falling and verify the session visibly freezes;
-   press Escape again and verify clean resume.
-5. Move away from spawn/change dynamic world state, press R and verify the exact
-   authored startup state is restored.
-6. Save/reopen the project and confirm the input document remains present.
-7. Build Windows Game and verify the same controls, Pause and Reset in the
-   independently packaged executable.
-8. Recheck the accepted #122 editor interaction/performance baseline.
-
-Do not add audio, general gameplay Lua, objectives, navigation/AI, player arms,
-animation, weapons or combat to Gate 2. Those remain later Phase 6 gates.
+Do not spend another build cycle trying to validate zones on PR #125. Their next
+implementation begins with the shared ZoneService contract and viewport owner.

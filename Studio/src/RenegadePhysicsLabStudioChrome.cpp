@@ -1,5 +1,6 @@
 #include "RenegadePhysicsLabStudioChrome.h"
 
+#include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/PhysicsLuaService.h"
 #include "renegade/bridge/StudioSession.h"
@@ -10,6 +11,7 @@
 namespace
 {
     constexpr wi::Color Surface0 = wi::Color(8, 12, 16, 255);
+    constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
     constexpr wi::Color TextSecondary = wi::Color(226, 226, 226, 255);
     constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
@@ -22,9 +24,24 @@ namespace
         const wi::Color color,
         const wi::graphics::CommandList cmd)
     {
+        if (width <= 0.0f || height <= 0.0f)
+            return;
         wi::image::Params params(x, y, width, height, color);
         params.blendFlag = wi::enums::BLENDMODE_ALPHA;
         wi::image::Draw(nullptr, params, cmd);
+    }
+
+    void DrawBorderedRect(
+        const float x,
+        const float y,
+        const float width,
+        const float height,
+        const wi::Color fill,
+        const wi::Color border,
+        const wi::graphics::CommandList cmd)
+    {
+        DrawRect(x, y, width, height, border, cmd);
+        DrawRect(x + 1.0f, y + 1.0f, width - 2.0f, height - 2.0f, fill, cmd);
     }
 
     void DrawText(
@@ -62,6 +79,10 @@ namespace renegade::studio
         physicsLab_.Create();
         physicsLab_.SetBounds(ViewportBounds());
         physicsLab_.SetActive(false);
+
+        audioWorkspace_.Create();
+        audioWorkspace_.SetBounds(AudioInspectorBounds());
+        audioWorkspace_.SetActive(false);
     }
 
     void RenegadePhysicsLabStudioChrome::SetLayout(
@@ -72,6 +93,7 @@ namespace renegade::studio
         // Bounds only change when Studio layout changes. Relaying out every
         // frame would reset the stateful GUI controls during interaction.
         physicsLab_.SetBounds(ViewportBounds());
+        audioWorkspace_.SetBounds(AudioInspectorBounds());
     }
 
     void RenegadePhysicsLabStudioChrome::OnAction(
@@ -81,12 +103,15 @@ namespace renegade::studio
         CreatorAssetStudioChrome::OnAction(
             [this](const Action action)
             {
-                if (action == Action::SceneWorkspace ||
+                if (action == Action::ProjectHub ||
+                    action == Action::SceneWorkspace ||
                     action == Action::EnvironmentWorkspace ||
                     action == Action::TerrainWorkspace ||
                     action == Action::RenderWorkspace)
                 {
+                    workspaceTransitionRequested_ = true;
                     SetPhysicsLabActive(false);
+                    SetAudioWorkspaceActive(false);
                 }
                 if (studioAction_)
                     studioAction_(action);
@@ -95,7 +120,7 @@ namespace renegade::studio
 
     void RenegadePhysicsLabStudioChrome::RequestCurrentWorkspaceReconcile()
     {
-        if (!physicsLab_.IsActive())
+        if (!physicsLab_.IsActive() && !audioWorkspace_.IsActive())
         {
             RenegadeStudioChrome::RequestCurrentWorkspaceReconcile();
             return;
@@ -104,6 +129,7 @@ namespace renegade::studio
         if (studioAction_)
             studioAction_(Action::SceneWorkspace);
         physicsLab_.SetBounds(ViewportBounds());
+        audioWorkspace_.SetBounds(AudioInspectorBounds());
     }
 
     void RenegadePhysicsLabStudioChrome::SetPhysicsLabActive(const bool active)
@@ -111,7 +137,21 @@ namespace renegade::studio
         physicsLab_.SetActive(active);
         physicsLab_.SetBounds(ViewportBounds());
         if (active)
+        {
+            audioWorkspace_.SetActive(false);
             SetStatusText("PHYSICS LAB");
+        }
+    }
+
+    void RenegadePhysicsLabStudioChrome::SetAudioWorkspaceActive(const bool active)
+    {
+        audioWorkspace_.SetActive(active);
+        audioWorkspace_.SetBounds(AudioInspectorBounds());
+        if (active)
+        {
+            physicsLab_.SetActive(false);
+            SetStatusText("AUDIO // NATIVE WICKED");
+        }
     }
 
     void RenegadePhysicsLabStudioChrome::SynchronizeRigidBodyOwnerSelection()
@@ -159,10 +199,49 @@ namespace renegade::studio
             pointer.y >= 34.0f && pointer.y < 58.0f;
     }
 
+    XMFLOAT4 RenegadePhysicsLabStudioChrome::AudioViewportToolBounds() const noexcept
+    {
+        const XMFLOAT4 viewport = ViewportBounds();
+
+        // RenegadeStudioChrome owns PERSPECTIVE/LIT/SHOW at viewport.x + 12.
+        // Gate 3 appends AUDIO immediately after SHOW instead of stealing the
+        // RENDER workspace hitbox in the fixed 360 px scene-tab strip.
+        constexpr float audioOffsetX = 237.0f;
+        constexpr float audioWidth = 61.5f;
+        return XMFLOAT4(
+            viewport.x + audioOffsetX,
+            viewport.y + 10.0f,
+            audioWidth,
+            28.0f);
+    }
+
+    bool RenegadePhysicsLabStudioChrome::AudioViewportToolHit(
+        const XMFLOAT4& pointer) const noexcept
+    {
+        const XMFLOAT4 bounds = AudioViewportToolBounds();
+        return pointer.x >= bounds.x && pointer.x < bounds.x + bounds.z &&
+            pointer.y >= bounds.y && pointer.y < bounds.y + bounds.w;
+    }
+
+    XMFLOAT4 RenegadePhysicsLabStudioChrome::AudioInspectorBounds() const noexcept
+    {
+        const XMFLOAT4 viewport = ViewportBounds();
+
+        // ViewportBounds is a rectangle expressed as left/top/right/bottom,
+        // not x/y/width/height. The Inspector begins at the viewport's right
+        // edge and extends down only to the viewport's bottom edge.
+        return XMFLOAT4(
+            viewport.z,
+            viewport.y,
+            InspectorWidth(),
+            std::max(0.0f, viewport.w - viewport.y));
+    }
+
     bool RenegadePhysicsLabStudioChrome::ConsumedPointerThisFrame() const noexcept
     {
-        return physicsTabConsumed_ ||
+        return physicsTabConsumed_ || audioToolConsumed_ ||
             physicsLab_.ConsumedPointerThisFrame() ||
+            audioWorkspace_.ConsumedPointerThisFrame() ||
             CreatorAssetStudioChrome::ConsumedPointerThisFrame();
     }
 
@@ -171,6 +250,8 @@ namespace renegade::studio
         const float dt)
     {
         physicsTabConsumed_ = false;
+        audioToolConsumed_ = false;
+        workspaceTransitionRequested_ = false;
         CreatorAssetStudioChrome::Update(canvas, dt);
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
@@ -182,11 +263,39 @@ namespace renegade::studio
                 studioAction_(Action::SceneWorkspace);
             SetPhysicsLabActive(true);
         }
+        else if (AudioViewportToolHit(pointer) &&
+            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            audioToolConsumed_ = true;
+            if (studioAction_)
+                studioAction_(Action::SceneWorkspace);
+            SetAudioWorkspaceActive(true);
+        }
+
+        // Selecting a Gate 3 source from the hierarchy opens its dedicated
+        // audio Inspector automatically while leaving the viewport and gizmo
+        // available for emitter placement.
+        if (!workspaceTransitionRequested_ && IsSceneWorkspaceActive() &&
+            !physicsLab_.IsActive() && !audioWorkspace_.IsActive())
+        {
+            auto* session = bridge::StudioSession::Current();
+            if (session != nullptr && session->Selection().HasSelection())
+            {
+                auto& scene = session->Scenes().GetScene();
+                if (bridge::IsRenegadeSoundSource(
+                        scene, session->Selection().SelectedEntity()))
+                {
+                    if (studioAction_)
+                        studioAction_(Action::SceneWorkspace);
+                    SetAudioWorkspaceActive(true);
+                }
+            }
+        }
 
         SynchronizeRigidBodyOwnerSelection();
 
-        // Do not call SetBounds here. Physics Lab controls are stateful widgets;
-        // relayout during Update cancels click and slider state mid-interaction.
+        // Do not call SetBounds here. Both workspaces own stateful widgets;
+        // relayout during Update can cancel click/slider state mid-interaction.
         physicsLab_.Update(canvas, dt);
     }
 
@@ -195,6 +304,7 @@ namespace renegade::studio
         const wi::graphics::CommandList cmd) const
     {
         CreatorAssetStudioChrome::Render(canvas, cmd);
+        RenderAudioViewportTool(cmd);
         RenderPhysicsTab(cmd);
         physicsLab_.Render(canvas, cmd);
     }
@@ -216,5 +326,26 @@ namespace renegade::studio
 
         DrawRect(sceneMetaX + 12.0f, 56.0f, 344.0f, 4.0f, Surface0, cmd);
         DrawRect(sceneMetaX + 292.0f, 57.0f, 64.0f, 2.0f, Forge, cmd);
+    }
+
+    void RenegadePhysicsLabStudioChrome::RenderAudioViewportTool(
+        const wi::graphics::CommandList cmd) const
+    {
+        const XMFLOAT4 bounds = AudioViewportToolBounds();
+        const bool active = audioWorkspace_.IsActive();
+        DrawBorderedRect(
+            bounds.x,
+            bounds.y,
+            bounds.z,
+            bounds.w,
+            Surface0,
+            active ? Forge : Border,
+            cmd);
+        DrawText(
+            "AUDIO",
+            bounds.x + 10.0f,
+            bounds.y + 8.0f,
+            active ? TextStrong : TextSecondary,
+            cmd);
     }
 }

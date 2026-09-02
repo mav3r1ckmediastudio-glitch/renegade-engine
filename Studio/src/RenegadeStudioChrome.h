@@ -335,6 +335,11 @@ namespace renegade::studio
         {
             return renderWorkspaceActive_;
         }
+        [[nodiscard]] bool IsSceneWorkspaceActive() const noexcept
+        {
+            return !environmentWorkspaceActive_ &&
+                !terrainWorkspaceActive_ && !renderWorkspaceActive_;
+        }
         void SetTestLevelState(TestLevelState state) noexcept;
         void SetPanelSizes(
             float hierarchyWidth,
