@@ -379,6 +379,16 @@ namespace renegade::runtime
             screenPresenter_.UpdateInput(renderer_, screenController_);
         }
 
+        if (!paused_ && !screenPresenter_.IsLoaded() &&
+            renderer_.camera != nullptr)
+        {
+            bridge::UpdateSceneAudioZones(
+                scenes_.GetScene(),
+                renderer_.camera->Eye,
+                dt,
+                audioZoneState_);
+        }
+
         ProcessPendingActions();
     }
 
@@ -431,7 +441,8 @@ namespace renegade::runtime
             return;
 
         audioPauseState_ = {};
-        bridge::ActivateSceneAudio(scenes_.GetScene());
+        audioZoneState_ = {};
+        bridge::ActivateSceneAudio(scenes_.GetScene(), &audioZoneState_);
         if (paused_)
         {
             bridge::SetSceneAudioPaused(
@@ -533,6 +544,7 @@ namespace renegade::runtime
         playerSceneRevision_ = 0;
         audioSceneRevision_ = 0;
         audioPauseState_ = {};
+        audioZoneState_ = {};
         pendingActions_.clear();
         screenPresenter_.Reset(renderer_);
         flow_ = RuntimeFlowController{};

@@ -610,6 +610,7 @@ namespace renegade::studio
         void CancelCreatorAssetPlacement();
         bool HandleCameraSceneIcons(const XMFLOAT4& pointer);
         bool HandlePlayerStartSceneIcon(const XMFLOAT4& pointer);
+        bool HandleAudioSceneIcons(const XMFLOAT4& pointer);
         bool HandleDecalProbeSceneIcons(const XMFLOAT4& pointer);
         bool HandleLightSceneIcons(const XMFLOAT4& pointer);
         [[nodiscard]] bool ProjectEditorPoint(

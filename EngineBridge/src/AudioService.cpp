@@ -6,6 +6,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 
 namespace renegade::bridge
@@ -14,6 +15,10 @@ namespace renegade::bridge
     {
         constexpr float Epsilon = 0.00001f;
         constexpr const char* KeyPlayOnStart = "renegade.audio.play_on_start";
+        constexpr const char* KeyZoneEnabled = "renegade.audio.zone_enabled";
+        constexpr const char* KeyZoneRadius = "renegade.audio.zone_radius";
+        constexpr const char* KeyZoneDuration = "renegade.audio.zone_duration";
+        constexpr const char* KeyZoneRepeatable = "renegade.audio.zone_repeatable";
         constexpr const char* KeyMasterVolume = "renegade.audio.master_volume";
         constexpr const char* KeySoundEffectVolume = "renegade.audio.sfx_volume";
         constexpr const char* KeyMusicVolume = "renegade.audio.music_volume";
@@ -128,6 +133,10 @@ namespace renegade::bridge
                 AudioSourceMetadataKey,
                 AudioSourceMetadataVersion);
             metadata.bool_values.set(KeyPlayOnStart, state.playOnStart);
+            metadata.bool_values.set(KeyZoneEnabled, state.zoneEnabled);
+            metadata.float_values.set(KeyZoneRadius, state.zoneRadius);
+            metadata.float_values.set(KeyZoneDuration, state.durationSeconds);
+            metadata.bool_values.set(KeyZoneRepeatable, state.repeatable);
         }
 
         void WriteMixMetadata(
@@ -223,7 +232,13 @@ namespace renegade::bridge
         state.bus = FromWickedBus(sound->soundinstance.type);
 
         if (const auto* metadata = scene.metadatas.GetComponent(entity))
+        {
             state.playOnStart = ReadBool(*metadata, KeyPlayOnStart, true);
+            state.zoneEnabled = ReadBool(*metadata, KeyZoneEnabled, false);
+            state.zoneRadius = ReadFloat(*metadata, KeyZoneRadius, 5.0f);
+            state.durationSeconds = ReadFloat(*metadata, KeyZoneDuration, 0.0f);
+            state.repeatable = ReadBool(*metadata, KeyZoneRepeatable, true);
+        }
 
         return SanitizeSoundSourceState(state);
     }
@@ -233,6 +248,10 @@ namespace renegade::bridge
     {
         SoundSourceState result = state;
         result.volume = std::clamp(FiniteOr(result.volume, 1.0f), 0.0f, 1.0f);
+        result.zoneRadius = std::clamp(
+            FiniteOr(result.zoneRadius, 5.0f), 0.5f, 500.0f);
+        result.durationSeconds = std::clamp(
+            FiniteOr(result.durationSeconds, 0.0f), 0.0f, 3600.0f);
         const auto bus = static_cast<std::uint32_t>(result.bus);
         if (bus > static_cast<std::uint32_t>(AudioBus::Voice))
             result.bus = AudioBus::SoundEffect;
@@ -251,7 +270,11 @@ namespace renegade::bridge
             left.spatial != right.spatial ||
             left.reverb != right.reverb ||
             left.playOnStart != right.playOnStart ||
-            left.bus != right.bus;
+            left.bus != right.bus ||
+            left.zoneEnabled != right.zoneEnabled ||
+            !NearlyEqual(left.zoneRadius, right.zoneRadius) ||
+            !NearlyEqual(left.durationSeconds, right.durationSeconds) ||
+            left.repeatable != right.repeatable;
     }
 
     bool ValidateAudioAssetForWicked(
@@ -558,8 +581,12 @@ namespace renegade::bridge
         wi::audio::SetReverb(safe.reverbPreset);
     }
 
-    void ActivateSceneAudio(wi::scene::Scene& scene) noexcept
+    void ActivateSceneAudio(
+        wi::scene::Scene& scene,
+        SceneAudioZoneState* zoneState) noexcept
     {
+        if (zoneState != nullptr)
+            zoneState->entries.clear();
         ApplySceneAudioMixToWicked(CaptureSceneAudioMix(scene));
         for (std::size_t index = 0; index < scene.sounds.GetCount(); ++index)
         {
@@ -569,8 +596,79 @@ namespace renegade::bridge
             auto& sound = scene.sounds[index];
             const auto state = CaptureSoundSource(scene, entity);
             sound.Stop();
-            if (state.playOnStart && sound.soundResource.IsValid())
+            if (!state.zoneEnabled && state.playOnStart &&
+                sound.soundResource.IsValid())
                 sound.Play();
+        }
+    }
+
+    void UpdateSceneAudioZones(
+        wi::scene::Scene& scene,
+        const XMFLOAT3& listenerPosition,
+        const float deltaSeconds,
+        SceneAudioZoneState& zoneState) noexcept
+    {
+        const float safeDelta = std::max(0.0f, FiniteOr(deltaSeconds, 0.0f));
+        for (std::size_t index = 0; index < scene.sounds.GetCount(); ++index)
+        {
+            const auto entity = scene.sounds.GetEntity(index);
+            if (!IsRenegadeSoundSource(scene, entity))
+                continue;
+            const auto source = CaptureSoundSource(scene, entity);
+            if (!source.zoneEnabled)
+                continue;
+            auto* transform = scene.transforms.GetComponent(entity);
+            auto* sound = scene.sounds.GetComponent(entity);
+            if (transform == nullptr || sound == nullptr)
+                continue;
+
+            auto found = std::find_if(
+                zoneState.entries.begin(), zoneState.entries.end(),
+                [entity](const SoundZoneRuntimeEntry& entry)
+                { return entry.entity == entity; });
+            if (found == zoneState.entries.end())
+            {
+                zoneState.entries.push_back(SoundZoneRuntimeEntry{});
+                found = std::prev(zoneState.entries.end());
+                found->entity = entity;
+            }
+            auto& runtime = *found;
+            const XMFLOAT3 center = transform->GetPosition();
+            const float dx = listenerPosition.x - center.x;
+            const float dy = listenerPosition.y - center.y;
+            const float dz = listenerPosition.z - center.z;
+            const bool inside = dx * dx + dy * dy + dz * dz <=
+                source.zoneRadius * source.zoneRadius;
+            const bool entered = inside && !runtime.wasInside;
+            const bool exited = !inside && runtime.wasInside;
+
+            if (entered && (!runtime.hasTriggered || source.repeatable) &&
+                sound->soundResource.IsValid())
+            {
+                sound->Stop();
+                sound->Play();
+                runtime.hasTriggered = true;
+                runtime.playing = true;
+                runtime.elapsedSeconds = 0.0f;
+            }
+
+            if (runtime.playing)
+            {
+                runtime.elapsedSeconds += safeDelta;
+                if (source.durationSeconds > 0.0f &&
+                    runtime.elapsedSeconds >= source.durationSeconds)
+                {
+                    sound->Stop();
+                    runtime.playing = false;
+                }
+            }
+
+            if (exited && source.looped && runtime.playing)
+            {
+                sound->Stop();
+                runtime.playing = false;
+            }
+            runtime.wasInside = inside;
         }
     }
 
@@ -651,7 +749,19 @@ namespace renegade::bridge
 
     std::string CreateSoundSourceCommand::MakeUniqueName() const
     {
-        return ::renegade::bridge::MakeUniqueName(*scene_, "Sound Source");
+        const char* base = "Sound Source";
+        if (state_.zoneEnabled)
+        {
+            switch (state_.bus)
+            {
+            case AudioBus::Music: base = "Music Zone"; break;
+            case AudioBus::Ambience: base = "Ambience Zone"; break;
+            case AudioBus::Voice: base = "Voice Zone"; break;
+            case AudioBus::SoundEffect:
+            default: base = "SFX Zone"; break;
+            }
+        }
+        return ::renegade::bridge::MakeUniqueName(*scene_, base);
     }
 
     SetSoundSourceCommand::SetSoundSourceCommand(

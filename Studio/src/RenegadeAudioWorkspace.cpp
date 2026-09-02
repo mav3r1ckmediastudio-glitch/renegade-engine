@@ -166,11 +166,15 @@ namespace renegade::studio
         RenegadeButton previewPlay;
         RenegadeButton previewStop;
         SceneInspectorCheckBox playOnStart;
+        SceneInspectorCheckBox zoneEnabled;
         SceneInspectorCheckBox looped;
         SceneInspectorCheckBox spatial;
         SceneInspectorCheckBox reverb;
         SceneInspectorSlider sourceVolume;
         SceneInspectorComboBox sourceBus;
+        SceneInspectorComboBox repeatMode;
+        SceneInspectorSlider zoneRadius;
+        SceneInspectorSlider durationSeconds;
 
         SceneInspectorSlider masterVolume;
         SceneInspectorSlider sfxVolume;
@@ -298,10 +302,10 @@ namespace renegade::studio
         void CreateControls()
         {
             addSource.Create("Gate 3 Add Sound Source");
-            addSource.SetText("ADD SOUND SOURCE...");
+            addSource.SetText("ADD SOUND ZONE...");
             addSource.SetRenderTextSize(11);
             addSource.SetTooltip(
-                "Choose a WAV/OGG, copy it into Content/Audio when needed, then create one native Wicked Sound source.");
+                "Choose a WAV/OGG, copy it into Content/Audio when needed, then place a selectable native Wicked Sound Zone.");
             addSource.OnClick([this](const wi::gui::EventArgs&)
             {
                 ChooseAudio(true);
@@ -338,6 +342,12 @@ namespace renegade::studio
                 EditSource([&](bridge::SoundSourceState& state)
                 { state.playOnStart = args.bValue; });
             });
+            zoneEnabled.Create("Sound zone: ");
+            zoneEnabled.OnClick([this](const wi::gui::EventArgs& args)
+            {
+                EditSource([&](bridge::SoundSourceState& state)
+                { state.zoneEnabled = args.bValue; });
+            });
             looped.Create("Loop: ");
             looped.OnClick([this](const wi::gui::EventArgs& args)
             {
@@ -366,14 +376,39 @@ namespace renegade::studio
             });
 
             sourceBus.Create("Gate 3 Audio Bus");
-            sourceBus.AddItem("SFX", static_cast<std::uint64_t>(bridge::AudioBus::SoundEffect));
-            sourceBus.AddItem("MUSIC", static_cast<std::uint64_t>(bridge::AudioBus::Music));
-            sourceBus.AddItem("AMBIENCE", static_cast<std::uint64_t>(bridge::AudioBus::Ambience));
-            sourceBus.AddItem("VOICE", static_cast<std::uint64_t>(bridge::AudioBus::Voice));
+            sourceBus.AddItem("USE // SFX", static_cast<std::uint64_t>(bridge::AudioBus::SoundEffect));
+            sourceBus.AddItem("USE // MUSIC", static_cast<std::uint64_t>(bridge::AudioBus::Music));
+            sourceBus.AddItem("USE // AMBIENCE", static_cast<std::uint64_t>(bridge::AudioBus::Ambience));
+            sourceBus.AddItem("USE // VOICE", static_cast<std::uint64_t>(bridge::AudioBus::Voice));
             sourceBus.OnSelect([this](const wi::gui::EventArgs& args)
             {
                 EditSource([&](bridge::SoundSourceState& state)
                 { state.bus = static_cast<bridge::AudioBus>(args.userdata); });
+            });
+
+            repeatMode.Create("Gate 3 Zone Repeat Mode");
+            repeatMode.AddItem("TRIGGER // ONCE", 0u);
+            repeatMode.AddItem("TRIGGER // MULTIPLE", 1u);
+            repeatMode.OnSelect([this](const wi::gui::EventArgs& args)
+            {
+                EditSource([&](bridge::SoundSourceState& state)
+                { state.repeatable = args.userdata != 0u; });
+            });
+
+            zoneRadius.Create(0.5f, 500.0f, 5.0f, 999.0f,
+                "Gate 3 Zone Radius", "ZONE RADIUS (M)");
+            zoneRadius.OnValueCommitted([this](const float value)
+            {
+                EditSource([&](bridge::SoundSourceState& state)
+                { state.zoneRadius = value; });
+            });
+
+            durationSeconds.Create(0.0f, 3600.0f, 0.0f, 3600.0f,
+                "Gate 3 Zone Duration", "DURATION (S) // 0 = CLIP");
+            durationSeconds.OnValueCommitted([this](const float value)
+            {
+                EditSource([&](bridge::SoundSourceState& state)
+                { state.durationSeconds = value; });
             });
 
             const auto makeMixSlider = [this](
@@ -420,8 +455,9 @@ namespace renegade::studio
 
             controls = {
                 &addSource, &chooseAudio, &previewPlay, &previewStop,
-                &playOnStart, &looped, &spatial, &reverb,
-                &sourceVolume, &sourceBus,
+                &playOnStart, &zoneEnabled, &looped, &spatial, &reverb,
+                &sourceVolume, &sourceBus, &repeatMode,
+                &zoneRadius, &durationSeconds,
                 &masterVolume, &sfxVolume, &musicVolume,
                 &ambienceVolume, &voiceVolume, &reverbPreset,
             };
@@ -538,20 +574,16 @@ namespace renegade::studio
             if (createNew)
             {
                 bridge::TransformState transform;
-                if (session->Selection().HasSelection())
-                {
-                    const auto entity = session->Selection().SelectedEntity();
-                    if (const auto* selectedTransform =
-                            scene.transforms.GetComponent(entity))
-                    {
-                        transform = bridge::CaptureTransform(*selectedTransform);
-                        transform.rotation = XMFLOAT4(0, 0, 0, 1);
-                        transform.scale = XMFLOAT3(1, 1, 1);
-                    }
-                }
+                const auto& editorCamera = wi::scene::GetCamera();
+                transform.translation = XMFLOAT3(
+                    editorCamera.Eye.x + editorCamera.At.x * 5.0f,
+                    editorCamera.Eye.y + editorCamera.At.y * 5.0f,
+                    editorCamera.Eye.z + editorCamera.At.z * 5.0f);
 
                 bridge::SoundSourceState state;
                 state.filename = audioPath;
+                state.zoneEnabled = true;
+                state.playOnStart = false;
                 auto command = std::make_unique<bridge::CreateSoundSourceCommand>(
                     scene, state, transform);
                 auto* createdCommand = command.get();
@@ -598,6 +630,7 @@ namespace renegade::studio
             previewPlay.SetVisible(active && sourceSelected);
             previewStop.SetVisible(active && sourceSelected);
             playOnStart.SetVisible(active && sourceSelected);
+            zoneEnabled.SetVisible(active && sourceSelected);
             looped.SetVisible(active && sourceSelected);
             spatial.SetVisible(active && sourceSelected);
             reverb.SetVisible(active && sourceSelected);
@@ -615,19 +648,30 @@ namespace renegade::studio
             if (sourceSelected)
             {
                 const auto source = bridge::CaptureSoundSource(*Scene(), selected);
+                playOnStart.SetVisible(active && !source.zoneEnabled);
+                repeatMode.SetVisible(active && source.zoneEnabled);
+                zoneRadius.SetVisible(active && source.zoneEnabled);
+                durationSeconds.SetVisible(active && source.zoneEnabled);
                 sourceFileDisplay = fs::u8path(source.filename).filename().generic_u8string();
                 if (sourceFileDisplay.empty())
                     sourceFileDisplay = "NO AUDIO ASSET";
                 playOnStart.SetCheck(source.playOnStart);
+                zoneEnabled.SetCheck(source.zoneEnabled);
                 looped.SetCheck(source.looped);
                 spatial.SetCheck(source.spatial);
                 reverb.SetCheck(source.reverb);
                 sourceVolume.SetValue(source.volume);
                 sourceBus.SetSelectedWithoutCallback(static_cast<int>(source.bus));
+                repeatMode.SetSelectedWithoutCallback(source.repeatable ? 1 : 0);
+                zoneRadius.SetValue(source.zoneRadius);
+                durationSeconds.SetValue(source.durationSeconds);
             }
             else
             {
                 sourceFileDisplay = "NO SOUND SOURCE SELECTED";
+                repeatMode.SetVisible(false);
+                zoneRadius.SetVisible(false);
+                durationSeconds.SetVisible(false);
             }
 
             if (mixVisible)
@@ -669,10 +713,14 @@ namespace renegade::studio
             y += SectionGap;
             full(chooseAudio);
             two(previewPlay, previewStop);
-            two(playOnStart, looped);
-            two(spatial, reverb);
+            two(zoneEnabled, playOnStart);
+            full(repeatMode);
+            two(looped, spatial);
+            full(reverb);
             full(sourceVolume);
             full(sourceBus);
+            full(zoneRadius);
+            full(durationSeconds);
             y += SectionGap + 18.0f;
             full(masterVolume);
             full(sfxVolume);
@@ -813,7 +861,7 @@ namespace renegade::studio
         const auto& b = impl_->bounds;
         DrawRect(b.x, b.y, b.z, b.w, Surface0, cmd);
         DrawRect(b.x, b.y, b.z, 1.0f, Border, cmd);
-        DrawText("SOUND SOURCE // NATIVE WICKED AUDIO",
+        DrawText("SOUND ZONE // NATIVE WICKED AUDIO",
             b.x + 12.0f, b.y + 10.0f, 13, TextStrong, cmd);
         DrawText(impl_->sourceFileDisplay,
             b.x + 12.0f, b.y + 32.0f, 10,
@@ -821,7 +869,7 @@ namespace renegade::studio
 
         const float mixLabelY =
             b.y + HeaderHeight +
-            (6.0f * (RowHeight + RowGap)) +
+            (10.0f * (RowHeight + RowGap)) +
             (2.0f * SectionGap) + 20.0f;
         DrawText("SCENE MIX // WICKED SUBMIX + REVERB",
             b.x + 12.0f, mixLabelY, 11, Forge, cmd);

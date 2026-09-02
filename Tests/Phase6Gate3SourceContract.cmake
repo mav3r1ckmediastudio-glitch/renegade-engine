@@ -100,13 +100,43 @@ endif()
 
 file(READ "${studio_audio_workspace}" studio_workspace_text)
 foreach(token IN ITEMS
-    "ADD SOUND SOURCE..."
+    "ADD SOUND ZONE..."
     "PREVIEW PLAY"
     "AUDIO ASSET..."
-    "Content/Audio")
+    "Content/Audio"
+    "USE // SFX"
+    "USE // MUSIC"
+    "USE // AMBIENCE"
+    "TRIGGER // ONCE"
+    "TRIGGER // MULTIPLE"
+    "ZONE RADIUS (M)"
+    "DURATION (S) // 0 = CLIP")
     string(FIND "${studio_workspace_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Phase 6 Gate 3 Audio workspace contract missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "HandleAudioSceneIcons"
+    "source.zoneRadius"
+    "AudioBus::Music"
+    "AudioBus::Ambience")
+    file(STRINGS "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp" token_matches REGEX "${token}")
+    if(NOT token_matches)
+        message(FATAL_ERROR "Phase 6 Gate 3 editor Sound Zone marker missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "zoneEnabled"
+    "zoneRadius"
+    "durationSeconds"
+    "repeatable"
+    "UpdateSceneAudioZones")
+    file(STRINGS "${service_header}" token_matches REGEX "${token}")
+    if(NOT token_matches)
+        message(FATAL_ERROR "Phase 6 Gate 3 Sound Zone contract missing ${token}")
     endif()
 endforeach()
 

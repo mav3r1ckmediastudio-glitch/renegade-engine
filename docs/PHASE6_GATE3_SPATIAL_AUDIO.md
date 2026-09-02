@@ -66,6 +66,26 @@ or serialize a fake Runtime speaker mesh; any editor icon/guide is editor-only.
 Audio file selection must resolve to project-owned audio content so the existing
 LP05/LC01/LP06 dependency and package chain remains authoritative.
 
+### Sound Zones
+
+`ADD > SOUND ZONE` places a native Wicked SoundComponent five metres in front
+of the editor camera, selects it and opens the Audio Inspector. Every authored
+source has a distinct editor-only marker: orange speaker for SFX, purple note
+for Music, green waves for Ambience and blue microphone for Voice. Selecting a
+zone shows its radius guide; these glyphs and guides are never serialized as
+Runtime geometry.
+
+The Audio Inspector exposes a `USE` dropdown (SFX, Music, Ambience or Voice),
+`TRIGGER` mode (Once or Multiple), zone radius in metres and playback duration.
+Duration `0` means the clip's natural duration. A Multiple zone can trigger on
+each fresh listener entry; a Once zone consumes its trigger until the Scene is
+reset or reloaded. Looping zones stop when the listener leaves their radius.
+
+The zone remains a native Wicked SoundComponent: Spatial 3D/2D, loop, volume,
+reverb and asset controls remain authored source state. Zone metadata is
+versioned Renegade WISCENE metadata, while transient entry state is owned by
+Runtime and is not serialized.
+
 ### Scene Mix
 
 The Sound Source Inspector also exposes one Scene Mix block:
@@ -133,7 +153,9 @@ mix semantics apply only to entities carrying the Gate 3 metadata markers.
 8. Reset: audio returns to the authored startup state with the rest of the Level.
 9. Build Windows Game and repeat spatial playback, Pause and Reset in the
    independent packaged executable.
-10. Recheck the accepted WD01 editor-navigation/performance baseline.
+10. Add separate SFX, Music and Ambience zones, confirm their markers and
+    radius guides are distinct, and verify Once/Multiple and duration behavior.
+11. Recheck the accepted WD01 editor-navigation/performance baseline.
 
 ## Deferred
 

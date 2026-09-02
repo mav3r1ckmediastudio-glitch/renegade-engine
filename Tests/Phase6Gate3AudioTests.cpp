@@ -118,6 +118,10 @@ int main()
         authored.spatial = false;
         authored.playOnStart = false;
         authored.bus = AudioBus::SoundEffect;
+        authored.zoneEnabled = true;
+        authored.zoneRadius = 12.5f;
+        authored.durationSeconds = 4.0f;
+        authored.repeatable = false;
 
         std::string error;
         Check(
@@ -132,6 +136,10 @@ int main()
         Check(!captured.spatial, "source 2D/3D state did not round-trip");
         Check(!captured.playOnStart, "source Play On Start did not round-trip");
         Check(captured.bus == AudioBus::SoundEffect, "source bus did not round-trip");
+        Check(captured.zoneEnabled, "sound-zone marker did not round-trip");
+        Check(Near(captured.zoneRadius, 12.5f), "sound-zone radius did not round-trip");
+        Check(Near(captured.durationSeconds, 4.0f), "sound-zone duration did not round-trip");
+        Check(!captured.repeatable, "sound-zone once mode did not round-trip");
 
         auto* nativeSound = scene.sounds.GetComponent(entity);
         nativeSound->_flags |= wi::scene::SoundComponent::PLAYING;
