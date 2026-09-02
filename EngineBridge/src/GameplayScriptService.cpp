@@ -81,7 +81,7 @@ namespace
             return false;
         }
         text.assign(std::istreambuf_iterator<char>(stream), {});
-        if (!stream.eof() || text.size() != size ||
+        if (stream.bad() || text.size() != size ||
             text.find('\0') != std::string::npos)
         {
             error = "Gameplay script could not be read as complete Lua source.";
