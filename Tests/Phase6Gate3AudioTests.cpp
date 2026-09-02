@@ -1,8 +1,11 @@
 #include "renegade/bridge/AudioService.h"
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -19,6 +22,56 @@ namespace
     bool Near(const float left, const float right)
     {
         return std::abs(left - right) < 0.0001f;
+    }
+
+    void AppendLe16(std::vector<unsigned char>& bytes, const std::uint16_t value)
+    {
+        bytes.push_back(static_cast<unsigned char>(value));
+        bytes.push_back(static_cast<unsigned char>(value >> 8u));
+    }
+
+    void AppendLe32(std::vector<unsigned char>& bytes, const std::uint32_t value)
+    {
+        bytes.push_back(static_cast<unsigned char>(value));
+        bytes.push_back(static_cast<unsigned char>(value >> 8u));
+        bytes.push_back(static_cast<unsigned char>(value >> 16u));
+        bytes.push_back(static_cast<unsigned char>(value >> 24u));
+    }
+
+    std::filesystem::path WriteWaveFixture(
+        const std::filesystem::path& folder,
+        const char* name,
+        const std::uint32_t formatSize)
+    {
+        std::vector<unsigned char> bytes;
+        const auto appendText = [&bytes](const char* text)
+        {
+            for (int i = 0; i < 4; ++i)
+                bytes.push_back(static_cast<unsigned char>(text[i]));
+        };
+        appendText("RIFF");
+        AppendLe32(bytes, 4u + 8u + formatSize + 8u + 4u);
+        appendText("WAVE");
+        appendText("fmt ");
+        AppendLe32(bytes, formatSize);
+        AppendLe16(bytes, formatSize > 18u ? 0xfffeu : 1u);
+        AppendLe16(bytes, 1u);
+        AppendLe32(bytes, 44100u);
+        AppendLe32(bytes, 88200u);
+        AppendLe16(bytes, 2u);
+        AppendLe16(bytes, 16u);
+        while (bytes.size() < 20u + formatSize)
+            bytes.push_back(0u);
+        appendText("data");
+        AppendLe32(bytes, 4u);
+        bytes.insert(bytes.end(), 4u, 0u);
+
+        const auto path = folder / name;
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(
+            reinterpret_cast<const char*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+        return path;
     }
 }
 
@@ -79,6 +132,16 @@ int main()
         Check(!captured.spatial, "source 2D/3D state did not round-trip");
         Check(!captured.playOnStart, "source Play On Start did not round-trip");
         Check(captured.bus == AudioBus::SoundEffect, "source bus did not round-trip");
+
+        auto* nativeSound = scene.sounds.GetComponent(entity);
+        nativeSound->_flags |= wi::scene::SoundComponent::PLAYING;
+        SceneAudioPauseState pauseState;
+        SetSceneAudioPaused(scene, true, pauseState);
+        Check(!nativeSound->IsPlaying(), "pause left Wicked PLAYING intent active");
+        Check(
+            pauseState.playingSources.size() == 1u &&
+                pauseState.playingSources.front() == entity,
+            "pause did not retain transient resume ownership");
     }
 
     {
@@ -88,6 +151,26 @@ int main()
         Check(
             mix.reverbPreset == wi::audio::REVERB_PRESET_DEFAULT,
             "scene without mix did not retain default Wicked reverb");
+    }
+
+    {
+        const auto folder = std::filesystem::temp_directory_path() /
+            "renegade_phase6_gate3_audio_tests";
+        std::error_code ec;
+        std::filesystem::create_directories(folder, ec);
+        const auto pcm = WriteWaveFixture(folder, "standard_pcm.wav", 16u);
+        const auto extended = WriteWaveFixture(folder, "extended.wav", 40u);
+        std::string error;
+        Check(
+            ValidateAudioAssetForWicked(pcm.generic_u8string(), error),
+            "standard PCM WAV was rejected by the Wicked safety preflight");
+        Check(
+            !ValidateAudioAssetForWicked(extended.generic_u8string(), error),
+            "unsafe extended WAV reached the pinned Wicked loader");
+        Check(
+            error.find("Extended WAV") != std::string::npos,
+            "extended WAV rejection did not explain the compatibility boundary");
+        std::filesystem::remove_all(folder, ec);
     }
 
     if (failures != 0)

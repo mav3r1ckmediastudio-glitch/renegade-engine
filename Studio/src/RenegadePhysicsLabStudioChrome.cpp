@@ -103,11 +103,13 @@ namespace renegade::studio
         CreatorAssetStudioChrome::OnAction(
             [this](const Action action)
             {
-                if (action == Action::SceneWorkspace ||
+                if (action == Action::ProjectHub ||
+                    action == Action::SceneWorkspace ||
                     action == Action::EnvironmentWorkspace ||
                     action == Action::TerrainWorkspace ||
                     action == Action::RenderWorkspace)
                 {
+                    workspaceTransitionRequested_ = true;
                     SetPhysicsLabActive(false);
                     SetAudioWorkspaceActive(false);
                 }
@@ -249,6 +251,7 @@ namespace renegade::studio
     {
         physicsTabConsumed_ = false;
         audioToolConsumed_ = false;
+        workspaceTransitionRequested_ = false;
         CreatorAssetStudioChrome::Update(canvas, dt);
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
@@ -272,7 +275,8 @@ namespace renegade::studio
         // Selecting a Gate 3 source from the hierarchy opens its dedicated
         // audio Inspector automatically while leaving the viewport and gizmo
         // available for emitter placement.
-        if (!physicsLab_.IsActive() && !audioWorkspace_.IsActive())
+        if (!workspaceTransitionRequested_ && IsSceneWorkspaceActive() &&
+            !physicsLab_.IsActive() && !audioWorkspace_.IsActive())
         {
             auto* session = bridge::StudioSession::Current();
             if (session != nullptr && session->Selection().HasSelection())
@@ -293,7 +297,6 @@ namespace renegade::studio
         // Do not call SetBounds here. Both workspaces own stateful widgets;
         // relayout during Update can cancel click/slider state mid-interaction.
         physicsLab_.Update(canvas, dt);
-        audioWorkspace_.Update(canvas, dt);
     }
 
     void RenegadePhysicsLabStudioChrome::Render(
@@ -304,7 +307,6 @@ namespace renegade::studio
         RenderAudioViewportTool(cmd);
         RenderPhysicsTab(cmd);
         physicsLab_.Render(canvas, cmd);
-        audioWorkspace_.Render(canvas, cmd);
     }
 
     void RenegadePhysicsLabStudioChrome::RenderPhysicsTab(

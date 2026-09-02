@@ -7,13 +7,15 @@ set(service_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/AudioService.cpp")
 set(studio_audio_chrome "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadePhysicsLabStudioChrome.cpp")
 set(studio_audio_workspace "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeAudioWorkspace.cpp")
 set(studio_application_header "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h")
+set(runtime_application_source "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
 
 foreach(path IN ITEMS
     "${service_header}"
     "${service_source}"
     "${studio_audio_chrome}"
     "${studio_audio_workspace}"
-    "${studio_application_header}")
+    "${studio_application_header}"
+    "${runtime_application_source}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "Phase 6 Gate 3 missing required source: ${path}")
     endif()
@@ -25,6 +27,7 @@ endforeach()
 foreach(token IN ITEMS
     "SoundSourceState"
     "SceneAudioMixState"
+    "SceneAudioPauseState"
     "AudioBus"
     "CreateSoundSourceCommand"
     "SetSoundSourceCommand"
@@ -46,7 +49,7 @@ foreach(token IN ITEMS
     "Entity_CreateSound"
     "scene.sounds"
     "SetLooped"
-    "SetDisable3D"
+    "DISABLE_3D"
     "SetEnableReverb"
     "CreateSoundInstance"
     "SUBMIX_TYPE_SOUNDEFFECT"
@@ -58,6 +61,18 @@ foreach(token IN ITEMS
     file(STRINGS "${service_source}" token_matches REGEX "${token}")
     if(NOT token_matches)
         message(FATAL_ERROR "Phase 6 Gate 3 native Wicked mapping missing ${token}")
+    endif()
+endforeach()
+
+file(READ "${runtime_application_source}" runtime_application_text)
+foreach(token IN ITEMS
+    "SyncAudioForScene"
+    "ActivateSceneAudio"
+    "SetSceneAudioPaused"
+    "audioSceneRevision_ = 0")
+    string(FIND "${runtime_application_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Phase 6 Gate 3 Runtime lifecycle missing ${token}")
     endif()
 endforeach()
 
@@ -95,22 +110,48 @@ foreach(token IN ITEMS
     endif()
 endforeach()
 
-# The Scene Inspector is a top-level Wicked GUI Window rendered after the
-# Renegade chrome. Audio lives inside that chrome, so the ordinary Inspector
-# must be hidden while Audio owns the right-hand panel or it will paint over all
-# Gate 3 controls. The derived render path performs this reconciliation after
-# the normal Studio update and restores the Inspector outside Audio/Render/Hub.
+# Audio is an independent top-level Widget. It is registered ahead of the
+# ordinary Inspector in Wicked's reverse render order, so it can cover that
+# surface without ever toggling the Inspector Window and destroying its
+# per-section child visibility state.
 file(READ "${studio_application_header}" studio_application_header_text)
+string(FIND "${studio_application_header_text}" "SyncAudioInspectorPresentation" unsafe_sync)
+if(NOT unsafe_sync EQUAL -1)
+    message(FATAL_ERROR "Phase 6 Gate 3 must not toggle the accepted Inspector Window")
+endif()
+
+file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp" studio_application_source_text)
 foreach(token IN ITEMS
-    "SyncAudioInspectorPresentation"
-    "studioChrome_.IsAudioWorkspaceActive()"
-    "inspectorPanel_.SetVisible(false)"
-    "renderWorkspacePanel_.SetVisible(false)"
-    "!projectHubVisible_ && !renderWorkspaceActive_"
-    "StudioRenderPath::Update(dt);"
-    "SyncAudioInspectorPresentation();")
-    string(FIND "${studio_application_header_text}" "${token}" found)
+    "AddWidget(&studioChrome_.AudioWorkspace())"
+    "RemoveWidget(&inspectorPanel_)"
+    "AddWidget(&inspectorPanel_)")
+    string(FIND "${studio_application_source_text}" "${token}" found)
     if(found EQUAL -1)
-        message(FATAL_ERROR "Phase 6 Gate 3 Audio Inspector ownership contract missing ${token}")
+        message(FATAL_ERROR "Phase 6 Gate 3 dedicated Audio ownership missing ${token}")
+    endif()
+endforeach()
+foreach(token IN ITEMS
+    "previewInstance"
+    "2D AUDITION"
+    "StopPreview"
+    "CreateSoundInstance")
+    string(FIND "${studio_workspace_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Phase 6 Gate 3 transient Preview contract missing ${token}")
+    endif()
+endforeach()
+string(FIND "${studio_workspace_text}" "Play(&sound->soundinstance)" authored_preview)
+if(NOT authored_preview EQUAL -1)
+    message(FATAL_ERROR "Studio Preview must not play the authored spatial instance")
+endif()
+
+foreach(token IN ITEMS
+    "ValidateAudioAssetForWicked"
+    "Extended WAV headers"
+    "nextInstance"
+    "exactly one resource/instance creation")
+    file(STRINGS "${service_source}" token_matches REGEX "${token}")
+    if(NOT token_matches)
+        message(FATAL_ERROR "Phase 6 Gate 3 audio lifetime hardening missing ${token}")
     endif()
 endforeach()

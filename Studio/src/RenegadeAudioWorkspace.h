@@ -9,7 +9,7 @@ namespace renegade::studio
     // Gate 3 creator-facing audio authoring. This owns presentation and
     // orchestration only; native Wicked SoundComponents and WISCENE metadata
     // remain the serialized authority through EngineBridge AudioService.
-    class RenegadeAudioWorkspace final
+    class RenegadeAudioWorkspace final : public wi::gui::Widget
     {
     public:
         RenegadeAudioWorkspace();
@@ -28,8 +28,14 @@ namespace renegade::studio
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
         [[nodiscard]] bool HasSelectedSoundSource() const noexcept;
         void CreateSoundSource();
-        void Update(const wi::Canvas& canvas, float dt);
-        void Render(const wi::Canvas& canvas, wi::graphics::CommandList cmd) const;
+        void Update(const wi::Canvas& canvas, float dt) override;
+        void Render(
+            const wi::Canvas& canvas,
+            wi::graphics::CommandList cmd) const override;
+        const char* GetWidgetTypeName() const override
+        {
+            return "RenegadeAudioWorkspace";
+        }
 
     private:
         struct Impl;

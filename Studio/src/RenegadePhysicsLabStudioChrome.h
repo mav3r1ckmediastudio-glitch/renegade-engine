@@ -27,6 +27,10 @@ namespace renegade::studio
         {
             return audioWorkspace_.IsActive();
         }
+        [[nodiscard]] RenegadeAudioWorkspace& AudioWorkspace() noexcept
+        {
+            return audioWorkspace_;
+        }
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
 
         void Update(const wi::Canvas& canvas, float dt) override;
@@ -55,5 +59,6 @@ namespace renegade::studio
         std::function<void(Action)> studioAction_;
         bool physicsTabConsumed_ = false;
         bool audioToolConsumed_ = false;
+        bool workspaceTransitionRequested_ = false;
     };
 }

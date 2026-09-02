@@ -1,7 +1,12 @@
 #include "renegade/bridge/AudioService.h"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <limits>
 
 namespace renegade::bridge
 {
@@ -167,6 +172,27 @@ namespace renegade::bridge
         {
             return !HasSceneAudioMixStateChange(SceneAudioMixState{}, state);
         }
+
+        std::uint16_t ReadLe16(const std::array<unsigned char, 40>& bytes, const std::size_t offset)
+        {
+            return static_cast<std::uint16_t>(bytes[offset]) |
+                (static_cast<std::uint16_t>(bytes[offset + 1]) << 8u);
+        }
+
+        std::uint32_t ReadLe32(const unsigned char* bytes)
+        {
+            return static_cast<std::uint32_t>(bytes[0]) |
+                (static_cast<std::uint32_t>(bytes[1]) << 8u) |
+                (static_cast<std::uint32_t>(bytes[2]) << 16u) |
+                (static_cast<std::uint32_t>(bytes[3]) << 24u);
+        }
+
+        bool ReadExact(std::ifstream& stream, void* destination, const std::size_t size)
+        {
+            return static_cast<bool>(stream.read(
+                static_cast<char*>(destination),
+                static_cast<std::streamsize>(size)));
+        }
     }
 
     bool IsRenegadeSoundSource(
@@ -228,6 +254,154 @@ namespace renegade::bridge
             left.bus != right.bus;
     }
 
+    bool ValidateAudioAssetForWicked(
+        const std::string& filename,
+        std::string& error)
+    {
+        namespace fs = std::filesystem;
+        error.clear();
+        if (filename.empty())
+            return true;
+
+        std::ifstream stream(fs::u8path(filename), std::ios::binary | std::ios::ate);
+        if (!stream)
+        {
+            error = "Audio asset is not readable: " + filename;
+            return false;
+        }
+        const auto end = stream.tellg();
+        if (end <= 0)
+        {
+            error = "Audio asset is empty.";
+            return false;
+        }
+        const auto fileSize = static_cast<std::uint64_t>(end);
+        stream.seekg(0, std::ios::beg);
+
+        std::string extension = fs::u8path(filename).extension().generic_u8string();
+        std::transform(
+            extension.begin(), extension.end(), extension.begin(),
+            [](const unsigned char value)
+            { return static_cast<char>(std::tolower(value)); });
+        if (extension == ".ogg")
+        {
+            if (fileSize > static_cast<std::uint64_t>(std::numeric_limits<int>::max()))
+            {
+                error = "OGG asset exceeds the pinned Wicked decoder limit.";
+                return false;
+            }
+            std::array<unsigned char, 4> signature = {};
+            if (!ReadExact(stream, signature.data(), signature.size()) ||
+                signature != std::array<unsigned char, 4>{'O', 'g', 'g', 'S'})
+            {
+                error = "Audio asset is not a valid OGG stream.";
+                return false;
+            }
+            return true;
+        }
+
+        if (extension != ".wav")
+        {
+            error = "Gate 3 supports WAV and OGG audio assets.";
+            return false;
+        }
+        if (fileSize < 12u)
+        {
+            error = "WAV asset is truncated.";
+            return false;
+        }
+
+        std::array<unsigned char, 12> riff = {};
+        if (!ReadExact(stream, riff.data(), riff.size()) ||
+            std::string(reinterpret_cast<const char*>(riff.data()), 4) != "RIFF" ||
+            std::string(reinterpret_cast<const char*>(riff.data() + 8), 4) != "WAVE")
+        {
+            error = "Audio asset is not a RIFF/WAVE file.";
+            return false;
+        }
+        const std::uint64_t declaredEnd = 8u + ReadLe32(riff.data() + 4);
+        if (declaredEnd > fileSize)
+        {
+            error = "WAV RIFF length exceeds the file size.";
+            return false;
+        }
+
+        bool foundFormat = false;
+        bool foundData = false;
+        std::uint64_t offset = 12u;
+        while (offset + 8u <= fileSize)
+        {
+            stream.seekg(static_cast<std::streamoff>(offset), std::ios::beg);
+            std::array<unsigned char, 8> chunk = {};
+            if (!ReadExact(stream, chunk.data(), chunk.size()))
+                break;
+            const std::string id(reinterpret_cast<const char*>(chunk.data()), 4);
+            const std::uint32_t chunkSize = ReadLe32(chunk.data() + 4);
+            const std::uint64_t payload = offset + 8u;
+            const std::uint64_t payloadEnd = payload + chunkSize;
+            if (payloadEnd > fileSize)
+            {
+                error = "WAV chunk exceeds the file size.";
+                return false;
+            }
+
+            if (id == "fmt ")
+            {
+                if (chunkSize < 16u || chunkSize > 18u)
+                {
+                    error = "Extended WAV headers are not safe in the pinned Wicked audio loader; export standard PCM WAV or OGG.";
+                    return false;
+                }
+                std::array<unsigned char, 40> format = {};
+                stream.seekg(static_cast<std::streamoff>(payload), std::ios::beg);
+                if (!ReadExact(stream, format.data(), chunkSize))
+                {
+                    error = "WAV format chunk is truncated.";
+                    return false;
+                }
+                const std::uint16_t formatTag = ReadLe16(format, 0);
+                const std::uint16_t channels = ReadLe16(format, 2);
+                const std::uint32_t sampleRate = ReadLe32(format.data() + 4);
+                const std::uint32_t byteRate = ReadLe32(format.data() + 8);
+                const std::uint16_t blockAlign = ReadLe16(format, 12);
+                const std::uint16_t bitsPerSample = ReadLe16(format, 14);
+                const bool supportedBits = bitsPerSample == 8u ||
+                    bitsPerSample == 16u || bitsPerSample == 24u ||
+                    bitsPerSample == 32u;
+                const std::uint32_t expectedBlockAlign =
+                    static_cast<std::uint32_t>(channels) * bitsPerSample / 8u;
+                if (formatTag != 1u || channels == 0u || channels > 8u ||
+                    sampleRate < 1000u || sampleRate > 200000u ||
+                    !supportedBits || expectedBlockAlign == 0u ||
+                    blockAlign != expectedBlockAlign ||
+                    byteRate != sampleRate * expectedBlockAlign)
+                {
+                    error = "WAV format is not compatible with the pinned Wicked/XAudio2 PCM path.";
+                    return false;
+                }
+                foundFormat = true;
+            }
+            else if (id == "data")
+            {
+                if (chunkSize == 0u || chunkSize > 0x7fffffffu)
+                {
+                    error = "WAV sample data exceeds the pinned XAudio2 buffer limit.";
+                    return false;
+                }
+                foundData = true;
+            }
+
+            offset = payloadEnd + (chunkSize & 1u);
+        }
+
+        if (!foundFormat || !foundData)
+        {
+            error = "WAV asset is missing a valid fmt or data chunk.";
+            return false;
+        }
+        return true;
+    }
+
     bool ApplySoundSource(
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity,
@@ -242,51 +416,71 @@ namespace renegade::bridge
         }
 
         const auto safe = SanitizeSoundSourceState(state);
+        const bool filenameChanged = sound->filename != safe.filename;
         const bool recreate =
-            sound->filename != safe.filename ||
+            filenameChanged ||
             sound->soundinstance.type != ToWickedBus(safe.bus) ||
-            sound->soundinstance.IsEnableReverb() != safe.reverb;
+            sound->soundinstance.IsEnableReverb() != safe.reverb ||
+            sound->IsLooped() != safe.looped ||
+            sound->IsDisable3D() == safe.spatial;
         const bool wasPlaying = sound->IsPlaying();
 
-        if (recreate && wasPlaying)
-            sound->Stop();
-
-        if (sound->filename != safe.filename)
+        wi::Resource nextResource = sound->soundResource;
+        if (filenameChanged)
         {
-            sound->filename = safe.filename;
-            sound->soundResource = safe.filename.empty()
+            if (!ValidateAudioAssetForWicked(safe.filename, error))
+                return false;
+            nextResource = safe.filename.empty()
                 ? wi::Resource{}
                 : wi::resourcemanager::Load(safe.filename);
-            if (!safe.filename.empty() && !sound->soundResource.IsValid())
+            if (!safe.filename.empty() && !nextResource.IsValid())
             {
                 error = "Could not load audio source: " + safe.filename;
                 return false;
             }
         }
 
-        sound->soundinstance.type = ToWickedBus(safe.bus);
-        sound->soundinstance.SetEnableReverb(safe.reverb);
-        if (recreate && sound->soundResource.IsValid())
+        wi::audio::SoundInstance nextInstance;
+        if (recreate && nextResource.IsValid())
         {
+            nextInstance.type = ToWickedBus(safe.bus);
+            nextInstance.SetEnableReverb(safe.reverb);
+            nextInstance.SetLooped(safe.looped);
             if (!wi::audio::CreateSoundInstance(
-                    &sound->soundResource.GetSound(),
-                    &sound->soundinstance))
+                    &nextResource.GetSound(),
+                    &nextInstance))
             {
                 error = "Wicked could not create the audio playback instance.";
                 return false;
             }
         }
 
+        if (recreate)
+        {
+            if (wasPlaying && sound->soundinstance.IsValid())
+                wi::audio::Stop(&sound->soundinstance);
+            sound->filename = safe.filename;
+            sound->soundResource = std::move(nextResource);
+            sound->soundinstance = std::move(nextInstance);
+        }
         sound->volume = safe.volume;
-        sound->SetLooped(safe.looped);
-        sound->SetDisable3D(!safe.spatial);
+        if (safe.looped)
+            sound->_flags |= wi::scene::SoundComponent::LOOPED;
+        else
+            sound->_flags &= ~wi::scene::SoundComponent::LOOPED;
+        if (safe.spatial)
+            sound->_flags &= ~wi::scene::SoundComponent::DISABLE_3D;
+        else
+            sound->_flags |= wi::scene::SoundComponent::DISABLE_3D;
+        if (!sound->soundinstance.IsValid())
+            sound->_flags &= ~wi::scene::SoundComponent::PLAYING;
 
         auto* metadata = scene.metadatas.GetComponent(entity);
         if (metadata == nullptr)
             metadata = &scene.metadatas.Create(entity);
         WriteSourceMetadata(*metadata, safe);
 
-        if (recreate && wasPlaying && sound->soundResource.IsValid())
+        if (recreate && wasPlaying && sound->soundinstance.IsValid())
             sound->Play();
 
         error.clear();
@@ -405,10 +599,14 @@ namespace renegade::bridge
             return scene_->Entity_Serialize(snapshot_, serializer) == entity_;
         }
 
+        // Do not pass the filename into Entity_CreateSound(): Wicked creates a
+        // playback instance immediately and ApplySoundSource would then create
+        // it again. Start inert and let the validated bridge boundary perform
+        // exactly one resource/instance creation.
         entity_ = scene_->Entity_CreateSound(
-            MakeUniqueName(),
-            state_.filename,
-            transform_.translation);
+            MakeUniqueName(), {}, transform_.translation);
+        if (entity_ != wi::ecs::INVALID_ENTITY)
+            scene_->sounds.Create(entity_);
         auto* transform = scene_->transforms.GetComponent(entity_);
         if (entity_ == wi::ecs::INVALID_ENTITY ||
             scene_->sounds.GetComponent(entity_) == nullptr || transform == nullptr)

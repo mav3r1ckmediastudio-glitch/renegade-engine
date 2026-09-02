@@ -28,6 +28,11 @@ unchanged so native serialization remains authoritative.
 
 ## Renegade authoring contract
 
+The Audio surface is a dedicated top-level Studio widget layered above the
+ordinary Inspector. It must not call `Window::SetVisible()` on the accepted
+Inspector as a z-order mechanism because Wicked propagates that state to all
+Inspector children.
+
 ### Sound Source
 
 `ADD > SOUND SOURCE` creates one command-backed native Wicked Sound entity at
@@ -45,6 +50,15 @@ The dedicated Inspector exposes:
 - source Volume;
 - Reverb send enabled; and
 - Bus: SFX, Music, Ambience or Voice.
+
+Preview Play creates a transient Studio-only 2D instance from the selected
+source resource. It never plays the authored instance and stops on Stop,
+selection/asset/Scene/project change, Audio close or Studio destruction.
+
+WAV/OGG files are safety-checked before resource loading. Standard PCM WAV is
+supported regardless of ordinary clip duration; malformed files, extended WAV
+headers that the pinned loader cannot safely copy, and backend-size violations
+fail with a creator-facing error instead of reaching Wicked's unsafe path.
 
 Transform/gizmo position is the native emitter position. Renegade does not draw
 or serialize a fake Runtime speaker mesh; any editor icon/guide is editor-only.

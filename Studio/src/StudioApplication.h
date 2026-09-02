@@ -132,26 +132,6 @@ namespace renegade::studio
             return studioChrome_.IsPhysicsLabActive();
         }
 
-        // Gate 3 Audio is rendered by the Renegade chrome while the ordinary
-        // Scene Inspector is a separate top-level Wicked GUI Window. Wicked
-        // renders top-level widgets in reverse registration order, so leaving
-        // the normal Inspector visible paints it over every Audio control.
-        // Reconcile ownership after the normal Studio update: Audio owns the
-        // right-hand panel while active, otherwise the accepted Scene Inspector
-        // owns it (except when the dedicated Render workspace/project hub does).
-        void SyncAudioInspectorPresentation()
-        {
-            if (studioChrome_.IsAudioWorkspaceActive())
-            {
-                inspectorPanel_.SetVisible(false);
-                renderWorkspacePanel_.SetVisible(false);
-                return;
-            }
-
-            if (!projectHubVisible_ && !renderWorkspaceActive_)
-                inspectorPanel_.SetVisible(true);
-        }
-
         [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
         {
             return studioChrome_.ViewportBounds();
@@ -1227,12 +1207,6 @@ namespace renegade::studio
     class PhysicsLabStudioRenderPath final : public StudioRenderPath
     {
     public:
-        void Update(float dt) override
-        {
-            StudioRenderPath::Update(dt);
-            SyncAudioInspectorPresentation();
-        }
-
         void Render() const override
         {
             if (IsPhysicsLabActive())

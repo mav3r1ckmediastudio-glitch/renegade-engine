@@ -8,10 +8,9 @@ runtime/player, build lifecycle, UX, documentation and higher-level gameplay
 framework.
 
 > **Status:** Phase 6 — Playable Core. Phase 5 Gates 1-9 and the WD01/editor
-> performance recovery are accepted on `main`. Gate 1 is active on
-> `phase6/gate1-player-foundation` and connects a command-backed Player Start,
-> action-shaped gameplay input, the accepted Wicked/Jolt character controller
-> and explicit first-person Runtime camera ownership. Renegade is still a
+> performance recovery are accepted on `main`. Phase 6 Gates 1-2 are accepted;
+> Gate 3 spatial audio is active as a draft repair on
+> `phase6/gate3-spatial-audio`. Renegade is still a
 > development project, not a distribution-ready v1 engine.
 
 Scene UI Gate 5 is also accepted and merged. The recovered Scene Editor now has
@@ -22,8 +21,8 @@ and Runtime weather/terrain resources.
 
 ## Current baseline
 
-- Current main baseline: `90ebea4b9a9ec41cd7c92d86224d1484ec55d70b`
-  (WD01 vegetation and editor frame-loop recovery, PR #122)
+- Current main baseline: `861c4d9b0f8acbb57f49db0b84b004d925b51136`
+  (Phase 6 Gate 2 gameplay input and play-session lifecycle, PR #124)
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
 - Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -74,14 +73,13 @@ The Windows reference build and evidence workflow is documented in
 
 ## What comes next
 
-The active gate is **Phase 6 Gate 1 — Player Start, Possession and Movement**.
-It adds the first complete playable path without reopening JP01 physics: author
-one Player Start, save/reopen it, enter the separate Runtime as a first-person
-Wicked character capsule and prove keyboard/mouse/controller movement through
-Test Level and the packaged executable.
+The active gate is **Phase 6 Gate 3 — Spatial Audio and Mixing**. Its draft
+exposes native Wicked sound sources and scene mixing through Renegade-owned
+authoring and Runtime lifecycle boundaries. It remains unaccepted until the
+Inspector, Preview and WAV crash repairs pass owner Studio and packaged tests.
 
 See
-[`docs/PHASE6_GATE1_PLAYER_FOUNDATION.md`](docs/PHASE6_GATE1_PLAYER_FOUNDATION.md).
+[`docs/PHASE6_GATE3_SPATIAL_AUDIO.md`](docs/PHASE6_GATE3_SPATIAL_AUDIO.md).
 
 ## Product layers
 
@@ -108,7 +106,7 @@ reference. It is not the Renegade editor and is not embedded as Renegade UI.
 4. For the current programme sequence, read
    [`docs/PHASE6_CAPABILITY_AUDIT.md`](docs/PHASE6_CAPABILITY_AUDIT.md).
 5. For the active gate, read
-   [`docs/PHASE6_GATE1_PLAYER_FOUNDATION.md`](docs/PHASE6_GATE1_PLAYER_FOUNDATION.md).
+   [`docs/PHASE6_GATE3_SPATIAL_AUDIO.md`](docs/PHASE6_GATE3_SPATIAL_AUDIO.md).
 6. Follow [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
    Claude or human handovers.
 7. Do not claim feature parity from compilation alone; update

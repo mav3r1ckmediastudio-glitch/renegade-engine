@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "renegade/bridge/CommandService.h"
 
@@ -48,6 +49,11 @@ namespace renegade::bridge
             wi::audio::REVERB_PRESET_DEFAULT;
     };
 
+    struct SceneAudioPauseState
+    {
+        std::vector<wi::ecs::Entity> playingSources;
+    };
+
     [[nodiscard]] bool IsRenegadeSoundSource(
         const wi::scene::Scene& scene,
         wi::ecs::Entity entity) noexcept;
@@ -59,6 +65,12 @@ namespace renegade::bridge
     [[nodiscard]] bool HasSoundSourceStateChange(
         const SoundSourceState& before,
         const SoundSourceState& after) noexcept;
+    // Rejects malformed or backend-incompatible files before the pinned Wicked
+    // WAV loader can copy an oversized fmt chunk into WAVEFORMATEX or pass an
+    // invalid buffer to XAudio2. This validates format, not clip duration.
+    [[nodiscard]] bool ValidateAudioAssetForWicked(
+        const std::string& filename,
+        std::string& error);
     bool ApplySoundSource(
         wi::scene::Scene& scene,
         wi::ecs::Entity entity,
@@ -80,25 +92,42 @@ namespace renegade::bridge
     void ActivateSceneAudio(
         wi::scene::Scene& scene) noexcept;
 
-    // Pause leaves SoundComponent PLAYING intent intact, so resume can continue
-    // the same native Wicked playback instances rather than restarting them.
+    // Runtime must clear SoundComponent PLAYING while paused because Wicked's
+    // normal Scene update calls Play() every frame for that flag, even at zero
+    // simulation delta. The transient state remembers which authored instances
+    // should resume without serializing session state.
     inline void SetSceneAudioPaused(
         wi::scene::Scene& scene,
-        const bool paused) noexcept
+        const bool paused,
+        SceneAudioPauseState& pauseState) noexcept
     {
-        for (std::size_t index = 0; index < scene.sounds.GetCount(); ++index)
+        if (paused)
         {
-            const auto entity = scene.sounds.GetEntity(index);
-            if (!IsRenegadeSoundSource(scene, entity))
-                continue;
-            auto& sound = scene.sounds[index];
-            if (!sound.IsPlaying() || !sound.soundinstance.IsValid())
-                continue;
-            if (paused)
-                wi::audio::Pause(&sound.soundinstance);
-            else
-                wi::audio::Play(&sound.soundinstance);
+            pauseState.playingSources.clear();
+            for (std::size_t index = 0; index < scene.sounds.GetCount(); ++index)
+            {
+                const auto entity = scene.sounds.GetEntity(index);
+                if (!IsRenegadeSoundSource(scene, entity))
+                    continue;
+                auto& sound = scene.sounds[index];
+                if (!sound.IsPlaying())
+                    continue;
+                pauseState.playingSources.push_back(entity);
+                sound.Stop();
+            }
+            return;
         }
+
+        for (const auto entity : pauseState.playingSources)
+        {
+            auto* sound = scene.sounds.GetComponent(entity);
+            if (sound != nullptr && IsRenegadeSoundSource(scene, entity) &&
+                sound->soundResource.IsValid())
+            {
+                sound->Play();
+            }
+        }
+        pauseState.playingSources.clear();
     }
 
     class CreateSoundSourceCommand final : public ICommand

@@ -155,6 +155,7 @@ namespace renegade::studio
         XMFLOAT4 bounds = {};
         bridge::StudioSession* session = nullptr;
         wi::ecs::Entity selected = wi::ecs::INVALID_ENTITY;
+        std::uint64_t sceneRevision = 0;
         std::string status = "AUDIO // READY";
         bool statusError = false;
         std::string sourceFileDisplay = "NO SOUND SOURCE SELECTED";
@@ -177,6 +178,13 @@ namespace renegade::studio
         SceneInspectorSlider ambienceVolume;
         SceneInspectorSlider voiceVolume;
         SceneInspectorComboBox reverbPreset;
+        wi::Resource previewResource;
+        wi::audio::SoundInstance previewInstance;
+
+        ~Impl()
+        {
+            StopPreview();
+        }
 
         [[nodiscard]] wi::scene::Scene* Scene() const noexcept
         {
@@ -194,6 +202,50 @@ namespace renegade::studio
         {
             status = std::move(value);
             statusError = error;
+        }
+
+        void StopPreview() noexcept
+        {
+            if (previewInstance.IsValid())
+                wi::audio::Stop(&previewInstance);
+            previewInstance = {};
+            previewResource = {};
+        }
+
+        void StartPreview()
+        {
+            auto* scene = Scene();
+            auto* sound = scene != nullptr && SelectedIsSource()
+                ? scene->sounds.GetComponent(selected)
+                : nullptr;
+            if (sound == nullptr || !sound->soundResource.IsValid() ||
+                !sound->soundinstance.IsValid())
+            {
+                SetStatus("PREVIEW // AUDIO INSTANCE IS NOT READY", true);
+                return;
+            }
+
+            StopPreview();
+            wi::audio::SoundInstance instance;
+            instance.type = wi::audio::SUBMIX_TYPE_SOUNDEFFECT;
+            instance.SetLooped(false);
+            instance.SetEnableReverb(false);
+            if (!wi::audio::CreateSoundInstance(
+                    &sound->soundResource.GetSound(), &instance))
+            {
+                SetStatus("PREVIEW // WICKED COULD NOT CREATE INSTANCE", true);
+                return;
+            }
+
+            // Keep the decoded asset alive independently of the authored
+            // component. Never call Update3D on this instance: Studio Preview
+            // is an explicit 2D audition path and cannot be stopped by the
+            // Scene SoundComponent PLAYING lifecycle.
+            previewResource = sound->soundResource;
+            previewInstance = std::move(instance);
+            wi::audio::SetVolume(sound->volume, &previewInstance);
+            wi::audio::Play(&previewInstance);
+            SetStatus("PREVIEW // PLAYING // 2D AUDITION");
         }
 
         template <typename Command, typename... Args>
@@ -214,6 +266,7 @@ namespace renegade::studio
             auto* scene = Scene();
             if (scene == nullptr || !SelectedIsSource())
                 return;
+            StopPreview();
             const auto before = bridge::CaptureSoundSource(*scene, selected);
             auto after = before;
             edit(after);
@@ -267,18 +320,7 @@ namespace renegade::studio
             previewPlay.SetRenderTextSize(10);
             previewPlay.OnClick([this](const wi::gui::EventArgs&)
             {
-                auto* scene = Scene();
-                if (scene == nullptr || !SelectedIsSource())
-                    return;
-                auto* sound = scene->sounds.GetComponent(selected);
-                if (sound == nullptr || !sound->soundinstance.IsValid())
-                {
-                    SetStatus("PREVIEW // AUDIO INSTANCE IS NOT READY", true);
-                    return;
-                }
-                wi::audio::SetVolume(sound->volume, &sound->soundinstance);
-                wi::audio::Play(&sound->soundinstance);
-                SetStatus("PREVIEW // PLAYING");
+                StartPreview();
             });
 
             previewStop.Create("Gate 3 Audio Preview Stop");
@@ -286,12 +328,7 @@ namespace renegade::studio
             previewStop.SetRenderTextSize(10);
             previewStop.OnClick([this](const wi::gui::EventArgs&)
             {
-                auto* scene = Scene();
-                if (scene == nullptr || !SelectedIsSource())
-                    return;
-                auto* sound = scene->sounds.GetComponent(selected);
-                if (sound != nullptr && sound->soundinstance.IsValid())
-                    wi::audio::Stop(&sound->soundinstance);
+                StopPreview();
                 SetStatus("PREVIEW // STOPPED");
             });
 
@@ -437,6 +474,11 @@ namespace renegade::studio
                 error = "The selected audio file is not readable.";
                 return false;
             }
+            if (!bridge::ValidateAudioAssetForWicked(
+                    source.generic_u8string(), error))
+            {
+                return false;
+            }
             const fs::path root = fs::weakly_canonical(fs::u8path(project.rootPath), ec);
             if (ec)
             {
@@ -481,6 +523,8 @@ namespace renegade::studio
                 session = bridge::StudioSession::Current();
             if (session == nullptr)
                 return;
+
+            StopPreview();
 
             std::string audioPath;
             std::string error;
@@ -649,15 +693,21 @@ namespace renegade::studio
     void RenegadeAudioWorkspace::Create()
     {
         if (!impl_->created)
+        {
+            SetName("Gate 3 Audio Workspace");
+            wi::gui::Widget::SetVisible(false);
             impl_->CreateControls();
+        }
     }
 
     void RenegadeAudioWorkspace::SetActive(const bool active)
     {
         impl_->active = active;
         impl_->refreshPending = true;
+        wi::gui::Widget::SetVisible(active);
         if (!active)
         {
+            impl_->StopPreview();
             for (auto* control : impl_->controls)
                 control->SetVisible(false);
         }
@@ -671,6 +721,8 @@ namespace renegade::studio
     void RenegadeAudioWorkspace::SetBounds(const XMFLOAT4& bounds)
     {
         impl_->bounds = bounds;
+        SetPos(XMFLOAT2(bounds.x, bounds.y));
+        SetSize(XMFLOAT2(bounds.z, bounds.w));
         if (impl_->created)
             impl_->Layout();
     }
@@ -706,15 +758,23 @@ namespace renegade::studio
         if (!impl_->created || !impl_->active)
             return;
 
+        wi::gui::Widget::Update(canvas, dt);
+
         auto* currentSession = bridge::StudioSession::Current();
         const wi::ecs::Entity currentSelection =
             currentSession != nullptr && currentSession->Selection().HasSelection()
                 ? currentSession->Selection().SelectedEntity()
                 : wi::ecs::INVALID_ENTITY;
+        const std::uint64_t currentRevision = currentSession != nullptr
+            ? currentSession->Scenes().Revision()
+            : 0;
         if (currentSession != impl_->session ||
-            currentSelection != impl_->selected)
+            currentSelection != impl_->selected ||
+            currentRevision != impl_->sceneRevision)
         {
+            impl_->StopPreview();
             impl_->session = currentSession;
+            impl_->sceneRevision = currentRevision;
             impl_->refreshPending = true;
         }
         if (impl_->refreshPending)
@@ -725,6 +785,17 @@ namespace renegade::studio
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
         impl_->pointerConsumed = ContainsPointer(pointer);
+        if (impl_->pointerConsumed)
+        {
+            // The Audio surface is visually above the ordinary Inspector.
+            // Propagate that same priority to Wicked's input scheduler so
+            // hidden Inspector controls cannot react through it.
+            Activate();
+        }
+        else
+        {
+            state = wi::gui::IDLE;
+        }
         for (auto* control : impl_->controls)
         {
             if (control->IsVisible())

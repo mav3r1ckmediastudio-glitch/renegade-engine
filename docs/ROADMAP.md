@@ -1,14 +1,16 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`cda9e26138f7144da9e0bc72f6d2ea1e1dc88a77`
-(`Phase 6 Gate 1: Player Start and runtime possession (#123)`).
+`861c4d9b0f8acbb57f49db0b84b004d925b51136`
+(`Phase 6 Gate 2: gameplay input and play-session lifecycle (#124)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-**Current state:** Phase 6 is active. Gate 1 is merged and owner-accepted; Gate 2
-is active on `phase6/gate2-input-lifecycle`.
+**Current state:** Phase 6 is active. Gates 1-2 are merged and owner-accepted.
+Gate 3 is a draft repair candidate on `phase6/gate3-spatial-audio`; green CI at
+`40282b7` was overridden by owner-found Inspector corruption, silent Preview
+and a longer-WAV crash.
 
 ## Accepted production baseline
 
@@ -56,7 +58,7 @@ Owner hardware did not include a game controller. Controller support therefore
 remains automated/source-covered rather than physically owner-tested; it was not
 a Gate 1 blocker.
 
-### Gate 2 — active
+### Gate 2 — accepted
 
 Branch: `phase6/gate2-input-lifecycle`.
 
@@ -78,6 +80,16 @@ The candidate uses:
 
 Gate 2 does not embed gameplay simulation inside Studio and does not reopen the
 JP01 physics architecture.
+
+### Gate 3 — active repair
+
+PR #125 exposes native Wicked sound sources, scene submixes/reverb and Runtime
+audio lifecycle. The initial CI-green candidate is not accepted. The repair
+removes the Inspector parent-visibility hack, gives Audio independent top-level
+presentation, uses a transient 2D Studio audition instance, validates audio
+containers before the pinned loader, creates source instances once, and wires
+Scene activation plus Pause/Reset into Runtime. Owner acceptance and packaged
+proof remain required.
 
 ### Remaining bounded sequence
 
