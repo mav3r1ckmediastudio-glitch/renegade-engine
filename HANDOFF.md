@@ -1,135 +1,158 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 2026-09-01
+**Date:** 2026-09-02
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**Authoritative main:**
-`cda9e26138f7144da9e0bc72f6d2ea1e1dc88a77`
-(`Phase 6 Gate 1: Player Start and runtime possession (#123)`).
+**PR:** #125 — `Phase6/gate3 spatial audio`
 
-**Wicked pin:**
-`3a800b7134aafe58461093c8abb2e274d4e64033`.
+**Branch:** `phase6/gate3-spatial-audio`
 
-## Accepted baseline
+**Main/base:** `861c4d9b0f8acbb57f49db0b84b004d925b51136`
+(`Phase 6 Gate 2: gameplay input and play-session lifecycle (#124)`).
 
-The accepted production baseline on `main` includes:
+**Rejected owner-tested head:**
+`40282b781b757b5c02262d66fed53f044d30b363`.
 
-- Story Flow through Gate 10 / PR #101;
-- Scene UI recovery through PR #106;
-- JP01 full Wicked/Jolt physics foundation through PR #107;
-- Phase 5 Scene/render exposure through PR #118;
-- WD01 native Wicked vegetation plus the 75 FPS/editor-interaction recovery
-  through PR #122; and
-- Phase 6 Gate 1 Player Start, first-person Runtime possession and Wicked/Jolt
-  player movement through PR #123.
+**Repair implementation commit:**
+`318b188` (`Repair Gate 3 audio ownership and runtime lifecycle`).
 
-## Gate 1 owner acceptance
+**State:** DRAFT — DO NOT MERGE. The repair is locally source-validated but has
+not yet run Windows CI or owner Studio/package acceptance.
 
-The project owner confirmed the Gate 1 candidate in a real test Level:
+## Why the CI-green candidate failed
 
-- Player Start placement/selection and its dedicated Inspector work;
-- the flat direction arrow and selected capsule visualizer work;
-- position, heading and controller settings persist through save/reopen;
-- duplicate Player Start rejection works;
-- Test Level spawns at the authored marker;
-- W/A/S/D + mouse look work;
-- sprint and jump work;
-- the player collides with the Level through the accepted Wicked/Jolt character
-  controller; and
-- packaged behaviour was accepted before merge.
+The earlier head passed Studio run #992 and Windows baseline #1578, but owner
+testing found three hard failures: Terrain/Environment Inspector corruption,
+silent Preview and a desktop crash with a longer WAV. Green CI did not override
+those behavioural failures.
 
-The owner does not own controller hardware. Controller bindings remain
-source/automated covered but were not physically owner-tested; this is an
-explicit evidence limitation, not a Gate 1 failure.
+The repair audit established:
 
-## Active work — Phase 6 Gate 2
+1. `SyncAudioInspectorPresentation()` called
+   `inspectorPanel_.SetVisible(false/true)`. Pinned Wicked
+   `Window::SetVisible(true)` explicitly sets every child visible, destroying
+   the Inspector's per-section state and producing the overlapping controls.
+2. Preview played the authored `SoundComponent::soundinstance` without setting
+   authored `PLAYING`. Wicked's next Scene update therefore stopped it.
+3. Pinned Wicked copies a WAV's declared `fmt` chunk into a fixed
+   `WAVEFORMATEX` without bounding the copy. Extended WAV headers can corrupt
+   memory. Gate 3 also created/recreated the same instance multiple times.
+4. Runtime audio was only declared in `RuntimeApplication.h`; no `.cpp`
+   activation, Scene-transition, Pause/Resume or Reset wiring existed.
+5. Native audio pause cannot merely call `wi::audio::Pause` while leaving the
+   component `PLAYING` flag set: Wicked's Scene update calls `Play` again every
+   frame, including zero-delta paused frames.
 
-Branch: `phase6/gate2-input-lifecycle`.
+## Repair implemented at `318b188`
 
-Gate contract: `docs/PHASE6_GATE2_INPUT_LIFECYCLE.md`.
+- Removed `SyncAudioInspectorPresentation()` and its derived frame-loop hook.
+- Promoted `RenegadeAudioWorkspace` to an independent top-level Wicked GUI
+  widget registered above the accepted Inspector. Audio never toggles the
+  Inspector parent Window.
+- Propagated Audio surface priority into Wicked input scheduling so controls
+  underneath it cannot react through the overlay.
+- Prevented automatic Sound-source Inspector routing from reopening Audio over
+  Environment/Terrain/Render workspace transitions.
+- Added `ValidateAudioAssetForWicked()`:
+  - validates RIFF/WAVE structure and chunk bounds;
+  - accepts standard PCM WAV without an arbitrary duration cap;
+  - rejects extended/malformed/over-limit WAV before the unsafe pinned loader;
+  - validates OGG signature and the pinned decoder's signed-size boundary.
+- Changed source creation to start with an inert native Sound entity, then load
+  and create exactly one validated replacement instance.
+- Made instance mutation transactional: the existing source is changed only
+  after the replacement resource and instance succeed.
+- Added a dedicated transient Studio-only 2D Preview instance. It never mutates
+  authored Spatial 3D, Loop or Play On Start and stops on asset, selection,
+  Scene, project, workspace and Studio lifetime changes.
+- Implemented Runtime Scene-revision activation, authored Scene Mix application,
+  Play On Start, Scene-transition replay, Pause/Resume and Reset wiring.
+- Added transient `SceneAudioPauseState`; pause clears native component
+  `PLAYING` intent and resume restores only the sources that had been playing.
+- Strengthened unit/source contracts for standard-vs-extended WAV safety,
+  independent Audio ownership, transient Preview and real Runtime wiring.
+- Updated README, architecture, roadmap, feature matrix and Gate 3 contract.
 
-Gate 2 is bounded to two outcomes:
+## Files changed by the repair
 
-1. promote Gate 1's hardcoded Runtime bindings into a persistent project action
-   map; and
-2. add Runtime-owned Pause/Resume and deterministic Reset without embedding
-   gameplay simulation inside Studio.
+```text
+EngineBridge/include/renegade/bridge/AudioService.h
+EngineBridge/src/AudioService.cpp
+README.md
+Runtime/src/RuntimeApplication.cpp
+Runtime/src/RuntimeApplication.h
+Studio/src/RenegadeAudioWorkspace.cpp
+Studio/src/RenegadeAudioWorkspace.h
+Studio/src/RenegadePhysicsLabStudioChrome.cpp
+Studio/src/RenegadePhysicsLabStudioChrome.h
+Studio/src/RenegadeStudioChrome.h
+Studio/src/StudioApplication.cpp
+Studio/src/StudioApplication.h
+Tests/Phase6Gate3AudioTests.cpp
+Tests/Phase6Gate3SourceContract.cmake
+docs/ARCHITECTURE.md
+docs/FEATURE_MATRIX.csv
+docs/PHASE6_GATE3_SPATIAL_AUDIO.md
+docs/ROADMAP.md
+```
 
-### Current candidate architecture
+## Local evidence
 
-`GameplayInputService` owns the version-1 project document:
+The Linux host has no CMake installation and cannot execute the Windows/XAudio
+backend, so Windows CI remains authoritative. The following checks passed:
 
-`Content/Data/GameplayInput.renegade-input`
+```text
+g++ -std=c++17 -fsyntax-only [Wicked/bridge includes] \
+  EngineBridge/src/AudioService.cpp Tests/Phase6Gate3AudioTests.cpp
 
-It contains stable named actions for movement, look, jump, sprint, pause and
-reset, with the accepted Gate 1 keyboard/mouse/gamepad defaults. The document
-is transactionally written and fails closed on malformed or unsupported tokens.
+g++ -std=c++17 -fsyntax-only [Wicked/bridge/Studio includes] \
+  Studio/src/RenegadeAudioWorkspace.cpp \
+  Studio/src/RenegadePhysicsLabStudioChrome.cpp
 
-`StudioProjectService` migrates projects on create/open by ensuring the document
-exists and registering:
+g++ -std=c++17 -fsyntax-only [complete Studio/Runtime includes] \
+  Studio/src/StudioApplication.cpp Runtime/src/RuntimeApplication.cpp
 
-`data:Content/Data/GameplayInput.renegade-input`
+git diff --check
+manual exact-token equivalent of Phase6Gate3SourceContract.cmake
+```
 
-in the existing Always Include dependency declaration. This deliberately sends
-the file through the accepted project dependency graph, LC01 identity refresh
-and Build Windows Game package path rather than creating a Gate-specific
-packager.
+All syntax checks passed. The complete Studio check emitted only the existing
+unrelated `TestLevelSnapshotService::Cleanup` ignored-result warning.
 
-Runtime now consumes `GameplayInputService::CaptureGameplayInput()` rather than
-owning the old W/A/S/D/mouse/Space/Shift polling block. `PlayerService` remains
-action-shaped and still receives only `PlayerInputFrame` values.
+## Residual risk requiring the next exact-head build
 
-### Play-session lifecycle
+The exact owner WAV was not available in this workspace, so the desktop crash
+could not be reproduced under the Windows debugger. The pinned source provides
+a concrete corruption path for extended WAV headers, now blocked before load.
 
-Default Gate 2 session controls are:
+Pinned Wicked also assigns `SoundInstance::internal_state` before XAudio voice
+creation has succeeded, while its Windows instance destructor assumes the voice
+pointer is non-null. The new validation prevents known bad container/size paths
+from reaching that failure and the bridge avoids redundant creation. If the
+owner's exact file still makes `CreateSoundInstance` return false after passing
+validation, stop and approve a documented Wicked core patch; do not hide it
+with a file-size rule or add another audio backend.
 
-- `Escape` — Pause / Resume;
-- `R` — deterministic Reset.
+## Next action
 
-Pause keeps window/input processing alive, passes zero simulation delta to the
-active Runtime path, disables Wicked physics simulation, releases the pointer
-and displays a simple paused overlay. Resume restores the physics simulation
-state that existed before pause.
+1. Run the normal four Windows checks once for the new exact PR head.
+2. If green, owner-test one Studio build:
+   - Scene, Environment, Terrain, Render, Physics and WD01 remain normal;
+   - Audio opens/closes without changing those workspaces;
+   - short standard PCM WAV, the original longer WAV and OGG do not crash;
+   - Preview Play is audible and independent of emitter distance;
+   - Preview Stop and selection/Audio-close cleanup work;
+   - authored 3D distance/direction, Loop, Volume, buses, mix and reverb work;
+   - Save/Reopen preserves authored values;
+   - Escape pauses and resumes sound; R restarts authored startup sound.
+3. Build Windows Game once and repeat authored spatial playback, Pause and Reset.
+4. Do not merge until those owner checks pass. One Studio build and one packaged
+   build are sufficient unless a specific remaining defect needs a targeted fix.
 
-Reset despawns the runtime-only player, clears transient session state, then
-reuses the already accepted startup authority:
+## Deferred non-blocker
 
-- Test Level reloads its resolved unsaved WISCENE snapshot;
-- scene-first Runtime reloads the resolved startup Scene;
-- Story Flow recreates/re-enters the startup Flow path; and
-- startup Screen recreates its Screen state.
-
-The Player Start is then resolved again and the runtime-only character capsule
-is recreated from authored state.
-
-## Gate 2 automated coverage
-
-New Gate 2 tests cover:
-
-- default input-map creation under `Content/Data`;
-- Gate 1 keyboard/mouse/gamepad default preservation;
-- persisted binding round-trip without default overwrite;
-- malformed binding rejection;
-- stable Pause/Reset action IDs; and
-- source contracts for project migration, package dependency registration,
-  Runtime input ownership, pause physics/zero-delta behaviour and reset through
-  existing loaders.
-
-## Required next evidence
-
-1. Open the Gate 2 PR only after the implementation/docs candidate is assembled.
-2. Require all four Windows checks: Studio Debug/Release and baseline
-   Debug/Release.
-3. Owner-test existing Gate 1 movement/look/sprint/jump/collision for regression.
-4. Press Escape while moving/falling and verify the session visibly freezes;
-   press Escape again and verify clean resume.
-5. Move away from spawn/change dynamic world state, press R and verify the exact
-   authored startup state is restored.
-6. Save/reopen the project and confirm the input document remains present.
-7. Build Windows Game and verify the same controls, Pause and Reset in the
-   independently packaged executable.
-8. Recheck the accepted #122 editor interaction/performance baseline.
-
-Do not add audio, general gameplay Lua, objectives, navigation/AI, player arms,
-animation, weapons or combat to Gate 2. Those remain later Phase 6 gates.
+`ADD SOUND SOURCE...` still inherits a selected transform or origin rather than
+placing at the current editor view. Correct placement should reuse an existing
+Renegade camera/raycast placement boundary after the regression/crash repair is
+accepted; it must not be used to delay the blocker validation above.
