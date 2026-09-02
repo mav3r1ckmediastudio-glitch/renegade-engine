@@ -7727,10 +7727,14 @@ bool StudioRenderPath::HandleAudioSceneIcons(
                 const float a0 = XM_2PI * static_cast<float>(segment) / Segments;
                 const float a1 = XM_2PI * static_cast<float>(segment + 1) / Segments;
                 XMFLOAT2 p0 = {}, p1 = {};
-                const XMFLOAT3 w0(position.x + std::cos(a0) * source.zoneRadius,
-                    position.y, position.z + std::sin(a0) * source.zoneRadius);
-                const XMFLOAT3 w1(position.x + std::cos(a1) * source.zoneRadius,
-                    position.y, position.z + std::sin(a1) * source.zoneRadius);
+                const XMFLOAT3 w0{
+                    position.x + std::cos(a0) * source.zoneRadius,
+                    position.y,
+                    position.z + std::sin(a0) * source.zoneRadius};
+                const XMFLOAT3 w1{
+                    position.x + std::cos(a1) * source.zoneRadius,
+                    position.y,
+                    position.z + std::sin(a1) * source.zoneRadius};
                 if (ProjectEditorPoint(w0, p0) && ProjectEditorPoint(w1, p1))
                     DrawEditorLine(p0, p1,
                         XMFLOAT4(baseColor.x, baseColor.y, baseColor.z, 0.72f));

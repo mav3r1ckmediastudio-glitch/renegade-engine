@@ -14,6 +14,7 @@
 #include "renegade/bridge/AssetBrowserService.h"
 #include "renegade/bridge/LightService.h"
 #include "renegade/bridge/CameraService.h"
+#include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/DecalProbeService.h"
 #include "renegade/bridge/MaterialService.h"
