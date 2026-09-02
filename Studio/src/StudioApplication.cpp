@@ -2023,6 +2023,36 @@ namespace renegade::studio
             bridge::ObjectParticipationProperty::Wetmap);
 
         createSectionLabel(
+            gameplayScriptLabel_,
+            "Gameplay Script Section",
+            "GAMEPLAY SCRIPT // LUA LIFECYCLE");
+        gameplayScriptPath_.Create("Gameplay Script Path");
+        gameplayScriptPath_.SetText("Content/Scripts");
+        gameplayScriptPath_.SetTooltip(
+            "Project-owned Lua source executed by Renegade's deterministic Runtime lifecycle.");
+        inspectorPanel_.AddWidget(&gameplayScriptPath_);
+        gameplayScriptEnabled_.Create("Enabled: ");
+        gameplayScriptEnabled_.SetTooltip(
+            "Enable this script for Test Level and packaged Runtime playback.");
+        gameplayScriptEnabled_.OnClick([this](const wi::gui::EventArgs& args)
+        {
+            if (session_ == nullptr)
+                return;
+            const auto entity = session_->Selection().SelectedEntity();
+            if (!bridge::IsGameplayScript(
+                    session_->Scenes().GetScene(), entity))
+            {
+                return;
+            }
+            (void)session_->Commands().Execute(
+                std::make_unique<bridge::SetGameplayScriptEnabledCommand>(
+                    session_->Scenes().GetScene(), entity, args.bValue));
+            RefreshInspector();
+            RefreshStatus();
+        });
+        inspectorPanel_.AddWidget(&gameplayScriptEnabled_);
+
+        createSectionLabel(
             playerLabel_,
             "Player Start Section",
             "PLAYER START // FIRST PERSON");
@@ -3516,6 +3546,9 @@ namespace renegade::studio
                 break;
             case RenegadeStudioChrome::Action::CreatePlayerStart:
                 pendingAction_ = EditorAction::CreatePlayerStart;
+                break;
+            case RenegadeStudioChrome::Action::CreateGameplayScript:
+                pendingAction_ = EditorAction::CreateGameplayScript;
                 break;
             case RenegadeStudioChrome::Action::CreateCamera:
                 pendingAction_ = EditorAction::CreateCamera;
@@ -5150,6 +5183,12 @@ namespace renegade::studio
         layoutObjectToggle(sceneObjectMainCamera_, 1, 558.0f);
         layoutObjectToggle(sceneObjectReflections_, 0, 590.0f);
         layoutObjectToggle(sceneObjectWetmap_, 1, 590.0f);
+        // Script carriers deliberately have no TransformComponent. Keep their
+        // small, dedicated Inspector surface at the top instead of below the
+        // transform and generic scene sections that do not apply to them.
+        positionEnvironmentWidget(gameplayScriptLabel_, 44.0f, 20.0f);
+        positionEnvironmentWidget(gameplayScriptPath_, 64.0f, 32.0f);
+        positionEnvironmentWidget(gameplayScriptEnabled_, 104.0f);
         positionEnvironmentWidget(playerLabel_, 224.0f, 20.0f);
         positionEnvironmentWidget(playerCameraMode_, 244.0f, 32.0f);
         positionEnvironmentWidget(playerCapsuleRadius_, 280.0f);
@@ -5829,10 +5868,15 @@ namespace renegade::studio
             !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
             bridge::IsPlayerStart(
                 session_->Scenes().GetScene(), selectedEntity);
+        const bool hasGameplayScript = hasSession &&
+            !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
+            bridge::IsGameplayScript(
+                session_->Scenes().GetScene(), selectedEntity);
         const bool sceneComponentsVisible =
             hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
             !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
-            !hasWeather && !hasTerrain && !hasPlayerStart;
+            !hasWeather && !hasTerrain && !hasPlayerStart &&
+            !hasGameplayScript;
         wi::ecs::Entity sceneAuthoringRoot = wi::ecs::INVALID_ENTITY;
         bridge::SceneLayerMaskState sceneLayerState;
         bridge::ObjectParticipationState objectRenderableState;
@@ -5902,6 +5946,16 @@ namespace renegade::studio
         sceneObjectMainCamera_.SetVisible(sceneComponentsVisible && hasObjectTargets);
         sceneObjectReflections_.SetVisible(sceneComponentsVisible && hasObjectTargets);
         sceneObjectWetmap_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        gameplayScriptLabel_.SetVisible(hasGameplayScript);
+        gameplayScriptPath_.SetVisible(hasGameplayScript);
+        gameplayScriptEnabled_.SetVisible(hasGameplayScript);
+        if (hasGameplayScript)
+        {
+            const auto script = bridge::CaptureGameplayScript(
+                session_->Scenes().GetScene(), selectedEntity);
+            gameplayScriptPath_.SetText(script.projectRelativePath);
+            gameplayScriptEnabled_.SetCheck(script.enabled);
+        }
 
         RefreshMaterialInspector(
             sceneComponentsVisible && !hasCamera && !hasDecal &&
@@ -6058,9 +6112,12 @@ namespace renegade::studio
             sceneObjectWetmap_.SetCheck(objectWetmapState.value);
         }
 
-        const auto setTransformVisible = [this, hasWeather, hasTerrain](wi::gui::Widget& widget)
+        const auto setTransformVisible =
+            [this, hasWeather, hasTerrain, hasGameplayScript](wi::gui::Widget& widget)
         {
-            widget.SetVisible(!environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !hasWeather && !hasTerrain);
+            widget.SetVisible(
+                !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
+                !hasWeather && !hasTerrain && !hasGameplayScript);
         };
         setTransformVisible(positionLabel_);
         setTransformVisible(rotationLabel_);
@@ -6211,13 +6268,14 @@ namespace renegade::studio
         scaleY_.SetEnabled(hasTransform);
         scaleZ_.SetEnabled(hasTransform);
         focusButton_.SetEnabled(hasTransform);
-        duplicateButton_.SetEnabled(hasTransform);
-        deleteButton_.SetEnabled(hasTransform);
+        duplicateButton_.SetEnabled(hasTransform || hasGameplayScript);
+        deleteButton_.SetEnabled(hasTransform || hasGameplayScript);
         focusButton_.SetVisible(!hasWeather);
         duplicateButton_.SetVisible(!hasWeather);
         deleteButton_.SetVisible(!hasWeather);
         duplicateButton_.SetEnabled(
-            hasTransform && !hasTerrain && !hasPlayerStart);
+            (hasTransform || hasGameplayScript) &&
+            !hasTerrain && !hasPlayerStart);
         undoButton_.SetEnabled(hasSession && session_->Commands().CanUndo());
         redoButton_.SetEnabled(hasSession && session_->Commands().CanRedo());
         saveButton_.SetEnabled(
@@ -6451,9 +6509,22 @@ namespace renegade::studio
         {
             if (!hasLight)
             {
-                inspectorLabel_.SetText(terrainWorkspaceActive_
-                    ? "TERRAIN // CREATE OR EDIT LANDSCAPE"
-                    : "TRANSFORM // SELECT AN ENTITY");
+                if (hasGameplayScript)
+                {
+                    const auto* name = session_->Scenes().GetScene()
+                        .names.GetComponent(selectedEntity);
+                    inspectorLabel_.SetText(
+                        "GAMEPLAY SCRIPT // " +
+                        (name != nullptr && !name->name.empty()
+                            ? name->name
+                            : "LUA LIFECYCLE"));
+                }
+                else
+                {
+                    inspectorLabel_.SetText(terrainWorkspaceActive_
+                        ? "TERRAIN // CREATE OR EDIT LANDSCAPE"
+                        : "TRANSFORM // SELECT AN ENTITY");
+                }
             }
             translationX_.SetValue(0.0f);
             translationY_.SetValue(0.0f);
@@ -6634,6 +6705,9 @@ namespace renegade::studio
             break;
         case EditorAction::CreatePlayerStart:
             CreatePlayerStartFromView();
+            break;
+        case EditorAction::CreateGameplayScript:
+            ChooseGameplayScript();
             break;
         case EditorAction::CreateCamera:
             CreateCameraFromView();
@@ -9684,6 +9758,88 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
     }
 
+    void StudioRenderPath::ChooseGameplayScript()
+    {
+        if (session_ == nullptr || !session_->Projects().HasProject())
+        {
+            studioChrome_.SetStatusText(
+                "GAMEPLAY SCRIPT // OPEN A PROJECT FIRST");
+            return;
+        }
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description =
+            "Lua gameplay script to import into Content/Scripts";
+        params.extensions = {"lua"};
+        wi::helper::FileDialog(
+            params,
+            [this](const std::string& sourcePath)
+            {
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, sourcePath](std::uint64_t)
+                    {
+                        if (sourcePath.empty() || session_ == nullptr ||
+                            !session_->Projects().HasProject())
+                        {
+                            return;
+                        }
+
+                        std::string relativePath;
+                        std::string error;
+                        if (!bridge::ImportGameplayScript(
+                                session_->Projects().CurrentProject().rootPath,
+                                sourcePath,
+                                relativePath,
+                                error))
+                        {
+                            studioChrome_.SetStatusText(
+                                "GAMEPLAY SCRIPT // " + error);
+                            return;
+                        }
+                        if (!bridge::ValidateGameplayScriptSyntax(
+                                session_->Projects().CurrentProject().rootPath,
+                                relativePath,
+                                wi::lua::GetLuaState(),
+                                error))
+                        {
+                            studioChrome_.SetStatusText(
+                                "GAMEPLAY SCRIPT // LUA SYNTAX ERROR // " +
+                                    error);
+                            return;
+                        }
+
+                        auto command = std::make_unique<
+                            bridge::CreateGameplayScriptCommand>(
+                                session_->Scenes().GetScene(),
+                                session_->Projects().CurrentProject().rootPath,
+                                bridge::GameplayScriptState{
+                                    relativePath,
+                                    true,
+                                });
+                        auto* created = command.get();
+                        if (!session_->Commands().Execute(std::move(command)))
+                        {
+                            studioChrome_.SetStatusText(
+                                "GAMEPLAY SCRIPT // WISCENE ATTACHMENT FAILED");
+                            return;
+                        }
+
+                        session_->Selection().Select(created->CreatedEntity());
+                        SetEnvironmentWorkspaceActive(false);
+                        SetTerrainWorkspaceActive(false);
+                        SetRenderWorkspaceActive(false);
+                        RefreshHierarchy();
+                        RefreshInspector();
+                        RefreshAssetBrowser();
+                        RefreshStatus();
+                        studioChrome_.SetStatusText(
+                            "GAMEPLAY SCRIPT // IMPORTED // TEST LEVEL RUNS LIFECYCLE");
+                    });
+            });
+    }
+
     bool StudioRenderPath::CommitSelectedCamera(
         const bridge::CameraState& cameraState)
     {
@@ -11347,7 +11503,7 @@ wi::eventhandler::Subscribe_Once(
         if (runtimePath.empty())
         {
             std::string cleanupError;
-            snapshotService.Cleanup(snapshot, cleanupError);
+            (void)snapshotService.Cleanup(snapshot, cleanupError);
             studioChrome_.SetTestLevelState(
                 RenegadeStudioChrome::TestLevelState::Idle);
             studioChrome_.SetStatusText("TEST LEVEL // RUNTIME NOT FOUND");

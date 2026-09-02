@@ -404,6 +404,31 @@ must be introduced through one shared ZoneService with common viewport
 placement, transform/shape authoring and Runtime entry/exit state so audio,
 weather, objectives and later systems do not grow incompatible zone models.
 
+### Governed Lua gameplay lifecycle
+
+Phase 6 Gate 4 persists gameplay attachments as Wicked `ScriptComponent`
+scene-relative resource filenames plus versioned Renegade project-relative
+metadata, but deliberately does not opt those components into Wicked's native
+whole-file-per-frame execution. Runtime clears
+their native `PLAYING`/`PLAY_ONCE` flags before Scene update and
+`GameplayScriptRuntime` invokes returned lifecycle tables in persistent-entity-ID
+order. This creates one deterministic owner for Start, Update, Pause, Resume,
+Reset and Stop while retaining Wicked's one process-global Lua VM.
+
+The gameplay namespace resolves persisted UUIDs against the active WISCENE and
+exposes only values and process-local numeric handles required by the existing
+JP01 physics adapter. It never exposes a Scene, component or engine pointer.
+Input remains action-shaped, player access is possession-shaped and audio
+targets only governed sound-source stable IDs. A failing callback disables its
+own instance and records a structured diagnostic without stopping other scripts.
+
+Studio's `ADD > GAMEPLAY SCRIPT...` path validates Lua syntax without executing
+source, imports external files beneath `Content/Scripts` and creates a
+command-backed transform-free carrier. Project-relative script filenames feed
+the existing typed WISCENE dependency and packaging boundary unchanged. The
+Test Level snapshot boundary copies governed script sources into its isolated
+shadow project at the same relative paths before Runtime launch.
+
 ### Dependency extraction boundary
 
 `DependencyCollector` owns UI-free graph admission and provider dispatch.

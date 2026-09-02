@@ -1,6 +1,7 @@
 #include "renegade/bridge/TestLevelSnapshotService.h"
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/GameplayScriptService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
@@ -15,6 +16,7 @@
 #include <sstream>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -112,6 +114,131 @@ namespace
         error.clear();
         return true;
     }
+
+    bool StageGameplayScripts(
+        const wi::scene::Scene& scene,
+        const fs::path& projectRoot,
+        const fs::path& snapshotRoot,
+        std::string& error)
+    {
+        for (std::size_t index = 0; index < scene.scripts.GetCount(); ++index)
+        {
+            const auto entity = scene.scripts.GetEntity(index);
+            if (!renegade::bridge::IsGameplayScript(scene, entity))
+                continue;
+
+            const auto state =
+                renegade::bridge::CaptureGameplayScript(scene, entity);
+            std::string source;
+            if (!renegade::bridge::ResolveGameplayScriptPath(
+                    projectRoot.generic_u8string(),
+                    state.projectRelativePath,
+                    source,
+                    error))
+            {
+                error = "Test Level could not stage gameplay script '" +
+                    state.projectRelativePath + "': " + error;
+                return false;
+            }
+
+            const fs::path destination =
+                snapshotRoot / fs::u8path(state.projectRelativePath);
+            std::error_code copyError;
+            fs::create_directories(destination.parent_path(), copyError);
+            if (copyError)
+            {
+                error = "Test Level could not create the gameplay script "
+                    "snapshot folder: " + copyError.message();
+                return false;
+            }
+            fs::copy_file(
+                fs::u8path(source),
+                destination,
+                fs::copy_options::overwrite_existing,
+                copyError);
+            if (copyError)
+            {
+                error = "Test Level could not copy gameplay script '" +
+                    state.projectRelativePath + "': " + copyError.message();
+                return false;
+            }
+
+            std::string staged;
+            if (!renegade::bridge::ResolveGameplayScriptPath(
+                    snapshotRoot.generic_u8string(),
+                    state.projectRelativePath,
+                    staged,
+                    error))
+            {
+                error = "Test Level gameplay script snapshot failed "
+                    "validation for '" + state.projectRelativePath +
+                    "': " + error;
+                return false;
+            }
+        }
+        error.clear();
+        return true;
+    }
+
+    class ScopedGameplayScriptFilenames
+    {
+    public:
+        explicit ScopedGameplayScriptFilenames(wi::scene::Scene& scene)
+            : scene_(scene)
+        {
+            entries_.reserve(scene.scripts.GetCount());
+            for (std::size_t index = 0; index < scene.scripts.GetCount(); ++index)
+            {
+                const auto entity = scene.scripts.GetEntity(index);
+                if (renegade::bridge::IsGameplayScript(scene, entity))
+                    entries_.push_back({entity, scene.scripts[index].filename});
+            }
+        }
+
+        ~ScopedGameplayScriptFilenames()
+        {
+            Restore();
+        }
+
+        void Restore() noexcept
+        {
+            if (restored_)
+                return;
+            for (auto& entry : entries_)
+            {
+                auto* script = scene_.scripts.GetComponent(entry.entity);
+                if (script != nullptr)
+                    script->filename.swap(entry.original);
+            }
+            restored_ = true;
+        }
+
+        void Redirect(const fs::path& snapshotRoot)
+        {
+            for (auto& entry : entries_)
+            {
+                auto* script = scene_.scripts.GetComponent(entry.entity);
+                if (script == nullptr)
+                    continue;
+                const auto state = renegade::bridge::CaptureGameplayScript(
+                    scene_, entry.entity);
+                script->filename =
+                    (snapshotRoot / fs::u8path(state.projectRelativePath))
+                        .lexically_normal().generic_u8string();
+            }
+        }
+
+    private:
+        struct Entry
+        {
+            wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
+            std::string original;
+        };
+
+        wi::scene::Scene& scene_;
+        std::vector<Entry> entries_;
+        bool restored_ = false;
+    };
 }
 
 namespace renegade::bridge
@@ -284,6 +411,20 @@ namespace renegade::bridge
                 return false;
             };
 
+            // Test Level launches Runtime against an isolated shadow project,
+            // not the creator's source tree. Stage governed sources first,
+            // then temporarily point the native serializers at those copies.
+            // The scoped redirect restores every live Studio filename even if
+            // archive serialization throws.
+            if (!StageGameplayScripts(
+                    scenes_.GetScene(), root, sessionDirectory, error))
+            {
+                return failAndCleanup(error);
+            }
+            ScopedGameplayScriptFilenames scriptFilenames(
+                scenes_.GetScene());
+            scriptFilenames.Redirect(sessionDirectory);
+
             bool archiveWritten = false;
             try
             {
@@ -313,6 +454,7 @@ namespace renegade::bridge
                 return failAndCleanup(
                     "Test Level snapshot serialization failed.");
             }
+            scriptFilenames.Restore();
 
             if (!archiveWritten || !fs::is_regular_file(scenePath, pathError) ||
                 pathError)

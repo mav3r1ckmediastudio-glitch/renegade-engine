@@ -325,16 +325,17 @@ namespace renegade::runtime
         // 3D path zero simulation time. Physics simulation is also explicitly
         // disabled by SetPaused(), so Runtime has one deterministic pause owner.
         SyncAudioForScene();
+        bridge::PrepareGameplayScriptsForRuntime(scenes_.GetScene());
         bridge::RefreshPrecipitationVisual(scenes_.GetScene());
         wi::Application::Update(paused_ ? 0.0f : dt);
 
         if (!screenPresenter_.IsLoaded())
         {
-            const auto gameplayInput = bridge::CaptureGameplayInput(inputMap_, dt);
-            if (gameplayInput.pausePressed)
+            gameplayInput_ = bridge::CaptureGameplayInput(inputMap_, dt);
+            if (gameplayInput_.pausePressed)
                 SetPaused(!paused_);
 
-            if (gameplayInput.resetPressed)
+            if (gameplayInput_.resetPressed)
             {
                 std::string error;
                 if (!ResetPlaySession(error))
@@ -343,9 +344,14 @@ namespace renegade::runtime
                         "Renegade Runtime: play-session reset failed: " + error,
                         wi::backlog::LogLevel::Error);
                 }
+                else
+                {
+                    gameplayInput_ = {};
+                }
             }
 
             SyncPlayerForScene();
+            SyncGameplayScriptsForScene();
             if (player_.IsSpawned())
             {
                 if (!paused_)
@@ -353,7 +359,7 @@ namespace renegade::runtime
                     (void)bridge::UpdateRuntimePlayer(
                         scenes_.GetScene(),
                         player_,
-                        gameplayInput.player,
+                        gameplayInput_.player,
                         playerSettings_);
                 }
                 if (renderer_.camera != nullptr)
@@ -370,9 +376,15 @@ namespace renegade::runtime
             {
                 wi::input::HidePointer(false);
             }
+            if (!paused_)
+                gameplayScripts_.Update(dt, gameplayInput_, player_);
+            ReportGameplayScriptDiagnostics();
         }
         else
         {
+            gameplayScripts_.Stop();
+            scriptSceneRevision_ = 0;
+            reportedScriptDiagnostics_ = 0;
             if (paused_)
                 SetPaused(false);
             wi::input::HidePointer(false);
@@ -441,6 +453,53 @@ namespace renegade::runtime
         wi::backlog::post(
             "Renegade Runtime: applied authored Scene audio mix and Play On Start sources.",
             wi::backlog::LogLevel::Default);
+    }
+
+    void RuntimeApplication::SyncGameplayScriptsForScene()
+    {
+        if (scriptSceneRevision_ == scenes_.Revision())
+            return;
+
+        gameplayScripts_.Stop();
+        reportedScriptDiagnostics_ = 0;
+        std::string error;
+        if (!gameplayScripts_.Start(
+                scenes_.GetScene(),
+                startupResult_.project.rootPath,
+                gameplayInput_,
+                player_,
+                error))
+        {
+            wi::backlog::post(
+                "Renegade Runtime: gameplay script lifecycle could not start: " +
+                    error,
+                wi::backlog::LogLevel::Error);
+        }
+        else if (paused_)
+        {
+            gameplayScripts_.Pause();
+        }
+        scriptSceneRevision_ = scenes_.Revision();
+        ReportGameplayScriptDiagnostics();
+        wi::backlog::post(
+            "Renegade Runtime: started " +
+                std::to_string(gameplayScripts_.ActiveScriptCount()) +
+                " governed gameplay script(s).",
+            wi::backlog::LogLevel::Default);
+    }
+
+    void RuntimeApplication::ReportGameplayScriptDiagnostics()
+    {
+        const auto& diagnostics = gameplayScripts_.Diagnostics();
+        while (reportedScriptDiagnostics_ < diagnostics.size())
+        {
+            const auto& diagnostic = diagnostics[reportedScriptDiagnostics_++];
+            wi::backlog::post(
+                "Renegade Runtime: gameplay script '" + diagnostic.scriptPath +
+                    "' [" + diagnostic.entityId + "] " +
+                    diagnostic.callback + " failed: " + diagnostic.message,
+                wi::backlog::LogLevel::Error);
+        }
     }
 
     bool RuntimeApplication::LoadGameplayInput(std::string& error)
@@ -514,8 +573,12 @@ namespace renegade::runtime
         }
         paused_ = paused;
         renderer_.SetPaused(paused_);
+        if (paused_)
+            gameplayScripts_.Pause();
         bridge::SetSceneAudioPaused(
             scenes_.GetScene(), paused_, audioPauseState_);
+        if (!paused_)
+            gameplayScripts_.Resume();
         wi::backlog::post(
             paused_
                 ? "Renegade Runtime: play session paused."
@@ -526,12 +589,15 @@ namespace renegade::runtime
 
     bool RuntimeApplication::ResetPlaySession(std::string& error)
     {
+        gameplayScripts_.Reset();
         SetPaused(false);
         bridge::DespawnRuntimePlayer(scenes_.GetScene(), player_);
         player_ = {};
         playerSettings_ = {};
         playerSceneRevision_ = 0;
         audioSceneRevision_ = 0;
+        scriptSceneRevision_ = 0;
+        reportedScriptDiagnostics_ = 0;
         audioPauseState_ = {};
         pendingActions_.clear();
         screenPresenter_.Reset(renderer_);
@@ -609,6 +675,7 @@ namespace renegade::runtime
 
         SyncPlayerForScene();
         SyncAudioForScene();
+        SyncGameplayScriptsForScene();
         wi::backlog::post(
             "Renegade Runtime: play session reset to its authored startup state.",
             wi::backlog::LogLevel::Default);

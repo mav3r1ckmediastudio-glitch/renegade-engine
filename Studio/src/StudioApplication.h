@@ -15,6 +15,7 @@
 #include "renegade/bridge/LightService.h"
 #include "renegade/bridge/CameraService.h"
 #include "renegade/bridge/AudioService.h"
+#include "renegade/bridge/GameplayScriptService.h"
 #include "renegade/bridge/PlayerService.h"
 #include "renegade/bridge/DecalProbeService.h"
 #include "renegade/bridge/MaterialService.h"
@@ -187,6 +188,7 @@ namespace renegade::studio
             DeleteSelection,
             CreateLight,
             CreatePlayerStart,
+            CreateGameplayScript,
             CreateCamera,
             CreateDecal,
             CreateEnvironmentProbe,
@@ -564,6 +566,7 @@ namespace renegade::studio
         [[nodiscard]] bridge::TransformState CaptureEditorCameraTransform() const;
         void CreateCameraFromView();
         void CreatePlayerStartFromView();
+        void ChooseGameplayScript();
         void AlignSelectedCameraToView();
         void ViewFromSelectedCamera();
         void CreateDecalFromView();
@@ -771,6 +774,9 @@ namespace renegade::studio
         SceneInspectorCheckBox sceneObjectMainCamera_;
         SceneInspectorCheckBox sceneObjectReflections_;
         SceneInspectorCheckBox sceneObjectWetmap_;
+        wi::gui::Label gameplayScriptLabel_;
+        wi::gui::Label gameplayScriptPath_;
+        SceneInspectorCheckBox gameplayScriptEnabled_;
         wi::gui::Label playerLabel_;
         wi::gui::Label playerCameraMode_;
         SceneInspectorSlider playerCapsuleRadius_;

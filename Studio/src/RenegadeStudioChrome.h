@@ -271,6 +271,7 @@ namespace renegade::studio
             CreateDirectionalLight,
             CreateRectangleLight,
             CreatePlayerStart,
+            CreateGameplayScript,
             CreateCamera,
             CreateDecal,
             CreateEnvironmentProbe,

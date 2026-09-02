@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/GameplayScriptService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
@@ -104,6 +105,13 @@ int main()
     const fs::path scenePath =
         projectRoot / "Content" / "Scenes" / "Authoritative.wiscene";
     fs::create_directories(scenePath.parent_path());
+    const fs::path gameplayScript =
+        projectRoot / "Content" / "Scripts" / "snapshot.lua";
+    fs::create_directories(gameplayScript.parent_path());
+    {
+        std::ofstream stream(gameplayScript, std::ios::binary);
+        stream << "return { on_start = function() end }\n";
+    }
 
     renegade::bridge::StudioSession session;
     const auto landmark = wi::ecs::CreateEntity();
@@ -112,6 +120,16 @@ int main()
     transform.translation_local = XMFLOAT3(1.0f, 2.0f, 3.0f);
     transform.SetDirty();
     transform.UpdateTransform();
+    if (!session.Commands().Execute(
+            std::make_unique<
+                renegade::bridge::CreateGameplayScriptCommand>(
+                    session.Scenes().GetScene(),
+                    projectRoot.generic_u8string(),
+                    renegade::bridge::GameplayScriptState{
+                        "Content/Scripts/snapshot.lua", true})))
+    {
+        return Fail("LP04 gameplay script fixture could not be attached");
+    }
 
     if (!session.SaveScene(scenePath.generic_u8string()))
     {
@@ -145,6 +163,12 @@ int main()
     const std::size_t undoBeforeSnapshot = session.Commands().UndoCount();
     const std::size_t redoBeforeSnapshot = session.Commands().RedoCount();
     const std::string pathBeforeSnapshot = session.Scenes().CurrentPath();
+    if (session.Scenes().GetScene().scripts.GetCount() != 1)
+    {
+        return Fail("LP04 gameplay script fixture count is invalid");
+    }
+    const std::string nativeScriptPathBeforeSnapshot =
+        session.Scenes().GetScene().scripts[0].filename;
 
     renegade::bridge::TestLevelSnapshotService snapshots(
         session.Scenes(),
@@ -162,6 +186,20 @@ int main()
     if (!snapshot.IsValid() || !fs::is_regular_file(snapshot.scenePath))
     {
         return Fail("LP04 snapshot did not produce a valid temporary WISCENE");
+    }
+    const fs::path stagedGameplayScript =
+        fs::u8path(snapshot.sessionDirectory) /
+        "Content" / "Scripts" / "snapshot.lua";
+    if (ReadBytes(stagedGameplayScript) != ReadBytes(gameplayScript))
+    {
+        return Fail(
+            "LP04 snapshot did not stage its governed gameplay script");
+    }
+    if (session.Scenes().GetScene().scripts[0].filename !=
+        nativeScriptPathBeforeSnapshot)
+    {
+        return Fail(
+            "LP04 snapshot did not restore the live gameplay script filename");
     }
 
     // The authoritative scene must be byte-for-byte unchanged, and snapshot
@@ -200,6 +238,23 @@ int main()
     {
         return Fail("LP04 snapshot did not contain the unsaved scene edit");
     }
+    const auto& reopenedScene = reopenedSnapshot.Scenes().GetScene();
+    if (reopenedScene.scripts.GetCount() != 1)
+    {
+        return Fail("LP04 snapshot lost its gameplay script attachment");
+    }
+    const auto reopenedScriptEntity = reopenedScene.scripts.GetEntity(0);
+    if (!renegade::bridge::IsGameplayScript(
+            reopenedScene, reopenedScriptEntity) ||
+        renegade::bridge::CaptureGameplayScript(
+            reopenedScene, reopenedScriptEntity).projectRelativePath !=
+            "Content/Scripts/snapshot.lua" ||
+        fs::u8path(reopenedScene.scripts[0].filename).lexically_normal() !=
+            stagedGameplayScript.lexically_normal())
+    {
+        return Fail(
+            "LP04 snapshot gameplay script did not round-trip against its staged copy");
+    }
 
     renegade::bridge::StudioSession reopenedAuthoritative;
     if (!reopenedAuthoritative.LoadScene(scenePath.generic_u8string()))
@@ -215,6 +270,26 @@ int main()
     {
         return Fail(
             "LP04 snapshot leaked the unsaved edit into the source scene");
+    }
+    const auto& authoritativeScene =
+        reopenedAuthoritative.Scenes().GetScene();
+    if (authoritativeScene.scripts.GetCount() != 1)
+    {
+        return Fail("authoritative scene lost its gameplay script attachment");
+    }
+    const auto authoritativeScriptEntity =
+        authoritativeScene.scripts.GetEntity(0);
+    if (!renegade::bridge::IsGameplayScript(
+            authoritativeScene, authoritativeScriptEntity) ||
+        renegade::bridge::CaptureGameplayScript(
+            authoritativeScene,
+            authoritativeScriptEntity).projectRelativePath !=
+            "Content/Scripts/snapshot.lua" ||
+        fs::u8path(authoritativeScene.scripts[0].filename).lexically_normal() !=
+            gameplayScript.lexically_normal())
+    {
+        return Fail(
+            "authoritative gameplay script filename did not round-trip");
     }
 
     const fs::path successfulSession = fs::u8path(snapshot.sessionDirectory);

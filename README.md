@@ -8,9 +8,9 @@ runtime/player, build lifecycle, UX, documentation and higher-level gameplay
 framework.
 
 > **Status:** Phase 6 — Playable Core. Phase 5 Gates 1-9 and the WD01/editor
-> performance recovery are accepted on `main`. Phase 6 Gates 1-2 are accepted;
-> Gate 3 spatial audio is active as a draft repair on
-> `phase6/gate3-spatial-audio`. Renegade is still a
+> performance recovery are accepted on `main`. Phase 6 Gates 1-3 are accepted;
+> Gate 4 Lua gameplay lifecycle is active on
+> `phase6/gate4-lua-gameplay-lifecycle`. Renegade is still a
 > development project, not a distribution-ready v1 engine.
 
 Scene UI Gate 5 is also accepted and merged. The recovered Scene Editor now has
@@ -21,8 +21,8 @@ and Runtime weather/terrain resources.
 
 ## Current baseline
 
-- Current main baseline: `861c4d9b0f8acbb57f49db0b84b004d925b51136`
-  (Phase 6 Gate 2 gameplay input and play-session lifecycle, PR #124)
+- Current main baseline: `6a135aa2a2ae15a723235406afec8f7f8b12d2cd`
+  (Phase 6 Gate 3 spatial audio and mixing, PR #125)
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
 - Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -73,17 +73,13 @@ The Windows reference build and evidence workflow is documented in
 
 ## What comes next
 
-The active gate is **Phase 6 Gate 3 — Spatial Audio and Mixing**. Its draft
-exposes native Wicked sound sources and scene mixing through Renegade-owned
-authoring and Runtime lifecycle boundaries. The owner has confirmed global
-audio, Preview Play/Stop and ordinary 3D spatial playback in Test Level. The
-current repair removes the nonfunctional audio-specific zone experiment; reusable
-trigger volumes will return through a shared zone service in a later gate.
-Gate 3 remains unaccepted until the exact repair head passes Windows CI and the
-remaining save/reopen and packaged checks.
+The active gate is **Phase 6 Gate 4 — Lua Gameplay Lifecycle**. It adds governed
+project script attachments, deterministic Start/Update/Pause/Resume/Reset/Stop
+callbacks and stable entity/input/player/audio access while retaining the
+accepted JP01 physics namespace and Wicked-owned Lua VM.
 
 See
-[`docs/PHASE6_GATE3_SPATIAL_AUDIO.md`](docs/PHASE6_GATE3_SPATIAL_AUDIO.md).
+[`docs/PHASE6_GATE4_LUA_GAMEPLAY_LIFECYCLE.md`](docs/PHASE6_GATE4_LUA_GAMEPLAY_LIFECYCLE.md).
 
 ## Product layers
 

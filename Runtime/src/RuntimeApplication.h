@@ -8,6 +8,7 @@
 #include "RuntimeScreen.h"
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/GameplayInputService.h"
+#include "renegade/bridge/GameplayScriptService.h"
 #include "renegade/bridge/RenderSettingsService.h"
 #include "renegade/bridge/RenderLutService.h"
 #include "renegade/bridge/SceneService.h"
@@ -70,6 +71,8 @@ namespace renegade::runtime
         void RecordAction(const RuntimeActionResult& result);
         void SyncPlayerForScene();
         void SyncAudioForScene();
+        void SyncGameplayScriptsForScene();
+        void ReportGameplayScriptDiagnostics();
 
         bridge::SceneService scenes_;
         RuntimeFlowController flow_;
@@ -80,6 +83,8 @@ namespace renegade::runtime
         bridge::RuntimePlayerState player_;
         bridge::PlayerControllerSettings playerSettings_;
         bridge::GameplayInputMap inputMap_ = bridge::MakeDefaultGameplayInputMap();
+        bridge::GameplayInputFrame gameplayInput_;
+        bridge::GameplayScriptRuntime gameplayScripts_;
         bridge::SceneAudioPauseState audioPauseState_;
         RuntimeBootstrapResult initialBootstrapResult_;
         RuntimeBootstrapResult startupResult_;
@@ -95,5 +100,7 @@ namespace renegade::runtime
         std::uint64_t evidenceRevision_ = 0;
         std::uint64_t playerSceneRevision_ = 0;
         std::uint64_t audioSceneRevision_ = 0;
+        std::uint64_t scriptSceneRevision_ = 0;
+        std::size_t reportedScriptDiagnostics_ = 0;
     };
 }

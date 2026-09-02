@@ -4,118 +4,160 @@
 
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 
-**PR:** #125 — `Phase6/gate3 spatial audio`
+**Branch:** `phase6/gate4-lua-gameplay-lifecycle`
 
-**Branch:** `phase6/gate3-spatial-audio`
+**Main/base:** `6a135aa2a2ae15a723235406afec8f7f8b12d2cd`
+(`Phase 6 Gate 3: spatial audio and mixing (#125)`).
 
-**Main/base:** `861c4d9b0f8acbb57f49db0b84b004d925b51136`
-(`Phase 6 Gate 2: gameplay input and play-session lifecycle (#124)`).
+**Local branch state:** one committed Gate 3 Scene Mix label-spacing repair
+(`b7cdc99`) plus the uncommitted Gate 4 implementation described below.
 
-**Last owner-tested head:**
-`75218f6cdec4cacdba4c380b488895bdad452f54`.
+**Remote branch state:** still at the merged Gate 3 base. No Gate 4 push, PR or
+CI run has been started.
 
-**Zone-removal implementation commit:**
-`d3be47df0fd845bb65323f120f866513f3682082`
-(`Defer zones and preserve Gate 3 core audio`).
+**State:** LOCAL CANDIDATE AUDITED; FIRST PUSH PENDING. Do not represent Gate 4
+as built or owner-accepted until the exact candidate passes all four Windows
+jobs, then the Save/Reopen, Test Level and packaged owner checks.
 
-**State:** DRAFT — DO NOT MERGE. Core audio has owner evidence at `75218f6`,
-but the exact zone-removal head still requires Windows CI and a short owner
-regression before acceptance.
+## Accepted baseline
 
-## Accepted evidence before this repair
+PR #125 is merged. Its merge commit is
+`6a135aa2a2ae15a723235406afec8f7f8b12d2cd`. The owner confirmed working global
+audio, transient Preview Play/Stop and positional 3D playback in Test Level.
+Audio-specific zones were removed and remain deferred to one shared ZoneService.
 
-`75218f6` passed all four required Windows jobs:
+The narrow Scene Mix UI correction requested after that acceptance is carried
+locally: `RenegadeAudioWorkspace` reserves an explicit heading row above the
+Master slider. It has not been pushed separately so it can share Gate 4's one
+expensive CI cycle.
 
-- Windows baseline run 1588: Debug and Release green;
-- Renegade Studio run 1002: Debug and Release green.
+## Gate 4 contract
 
-The owner then confirmed in Studio that global sound worked, a short clip could
-be assigned and Previewed/Stopped, and positional 3D sound played correctly in
-Test Level. This is behavioural evidence for the core audio path, not acceptance
-of the abandoned zone path.
+The canonical contract is
+[`docs/PHASE6_GATE4_LUA_GAMEPLAY_LIFECYCLE.md`](docs/PHASE6_GATE4_LUA_GAMEPLAY_LIFECYCLE.md).
 
-## Why audio-specific zones were removed
+Gate 4 uses:
 
-The Sound Zone controls and Runtime metadata existed, but the promised creator
-workflow did not. Owner testing found no cursor ghost, no click placement and no
-usable zone volume. The placement state had been implemented inside the Audio
-Inspector widget rather than as a shared viewport placement/volume service, and
-the authored transform scale did not govern the Runtime radius. Automated token
-checks proved that code was present, not that the viewport interaction worked.
+- native WISCENE `ScriptComponent` filename persistence;
+- versioned Renegade gameplay-script metadata;
+- project-relative `Content/Scripts/*.lua` authority;
+- one Wicked-owned Lua VM;
+- one Renegade-owned lifecycle dispatcher;
+- deterministic persistent-entity-ID ordering; and
+- value/ID-shaped gameplay APIs with no raw engine pointers.
 
-The durable product decision is to keep Gate 3 bounded to working global and
-ordinary positional audio. Reusable trigger volumes will be designed once as a
-shared ZoneService for audio, weather, objectives and later systems.
+## Local implementation
 
-## Repair implemented at `d3be47d`
+### EngineBridge
 
-- Removed Sound Zone state, metadata reads/writes, Runtime entry tracking and
-  per-frame zone activation.
-- Removed the nonfunctional ghost/click-placement state and zone-only Inspector
-  controls, radius guide and trigger/duration UI.
-- Replaced the misleading zone action with `ADD 3D SOUND`, which creates a
-  native spatial sound five metres in front of the editor camera, selects it and
-  leaves movement to the ordinary transform gizmo.
-- Preserved `ADD GLOBAL SOUND`, WAV/OGG selection, transient Preview Play/Stop,
-  Play On Start, Loop, Spatial 3D, Volume, Reverb, buses, Scene Mix, source
-  glyphs, Save/Reload metadata and Runtime activation.
-- Changed Pause from Stop to Wicked's native `wi::audio::Pause` while clearing
-  `SoundComponent::PLAYING`; Resume therefore continues from the existing audio
-  cursor instead of restarting the clip.
-- Added command coverage for global transform-free audio and movable positional
-  3D audio, and changed the source contract to reject reintroduction of the
-  deferred zone surface.
-- Updated README, architecture, roadmap, feature matrix and the Gate 3 contract
-  to state the actual supported boundary.
+`GameplayScriptService` now provides:
 
-## Files changed by the implementation
+- contained `.lua` import into `Content/Scripts` with collision-free naming;
+- regular-file, non-symlink and 1 MiB source bounds;
+- non-executing Lua syntax validation;
+- project-relative metadata authority plus Wicked-safe native absolute/
+  scene-relative filename round-trip;
+- `CreateGameplayScriptCommand` Execute/Undo/Redo;
+- `SetGameplayScriptEnabledCommand`;
+- stable project-relative path resolution;
+- immediate stable UUID assignment so unsaved Test Level attachments start;
+- governed source staging into the isolated Test Level shadow project;
+- pre-Scene-update clearing of native Wicked `PLAYING`/`PLAY_ONCE`; and
+- `GameplayScriptRuntime` with Start, Update, Pause, Resume, Reset and Stop.
 
-```text
-EngineBridge/include/renegade/bridge/AudioService.h
-EngineBridge/src/AudioService.cpp
-README.md
-Runtime/src/RuntimeApplication.cpp
-Runtime/src/RuntimeApplication.h
-Studio/src/RenegadeAudioWorkspace.cpp
-Studio/src/StudioApplication.cpp
-Tests/Phase6Gate3AudioTests.cpp
-Tests/Phase6Gate3SourceContract.cmake
-docs/ARCHITECTURE.md
-docs/FEATURE_MATRIX.csv
-docs/PHASE6_GATE3_SPATIAL_AUDIO.md
-docs/ROADMAP.md
-```
+Each source returns one lifecycle table. Optional callbacks receive the same
+table as `self` and a context containing the carrier's persistent UUID. Runtime
+sorts instances by that UUID. A load/callback error disables only its own
+instance and appends a structured diagnostic.
 
-## Local evidence
+The Lua v1 surface adds:
 
-This Linux workspace has no CMake installation and the Wicked submodule is not
-initialized, so no local Windows/XAudio build was claimed. The following checks
-passed against the exact implementation diff:
+- `renegade.entity`: stable-ID exists/find/position and an explicit temporary
+  native-ID adapter for JP01 physics calls;
+- `renegade.input`: value/pressed/down over Gate 2 gameplay actions;
+- `renegade.player`: possession and feet position;
+- `renegade.audio`: stable-ID source play/stop; and
+- the already accepted `renegade.physics` namespace unchanged.
+
+### Runtime
+
+`RuntimeApplication` now:
+
+- clears governed native script flags before every Wicked Scene update;
+- starts scripts after Player Start possession for each Scene revision;
+- updates scripts only on unpaused gameplay frames;
+- dispatches Pause/Resume with audio pause ordering preserved;
+- dispatches Reset/Stop before reloading authored startup state;
+- stops Level scripts while a Screen owns Runtime; and
+- reports new diagnostics once through Wicked backlog.
+
+### Studio
+
+`ADD > GAMEPLAY SCRIPT...` opens a `.lua` chooser, imports and syntax-checks the
+source, creates an undoable transform-free WISCENE carrier, selects it and
+refreshes Hierarchy, Inspector and Asset Browser. The Inspector shows the exact
+project-relative source and an undoable Enabled checkbox at the top; transform
+and generic object sections are suppressed because they do not apply.
+
+### Tests
+
+`RenegadePhase6Gate4GameplayScriptTests` covers import containment, path
+traversal rejection, command/Enabled round-trip, valid/invalid syntax,
+immediate stable identity, native flag exclusion, API access, deterministic
+callback order, pause suppression, Reset/Stop and failing-script isolation.
+
+The existing Test Level snapshot test now proves the referenced governed Lua
+file is copied byte-for-byte into the isolated shadow project.
+
+`RenegadePhase6Gate4SourceContract` pins the Studio, Runtime and ownership
+boundaries. Both are registered through `Tests/Phase6Gate4.cmake`.
+
+## Local verification completed
+
+The exact Wicked submodule pin and imnodes pin were initialized locally for
+header-level verification. The following pass:
 
 ```text
 git diff --check
-manual exact-token equivalent of Phase6Gate3SourceContract.cmake
-repository-wide stale zone-symbol search
+g++ -std=c++17 -fsyntax-only EngineBridge/src/GameplayScriptService.cpp
+g++ -std=c++17 -fsyntax-only EngineBridge/src/TestLevelSnapshotService.cpp
+g++ -std=c++17 -fsyntax-only Tests/Phase6Gate4GameplayScriptTests.cpp
+g++ -std=c++17 -fsyntax-only Tests/TestLevelSnapshotTests.cpp
+g++ -std=c++17 -fsyntax-only Runtime/src/RuntimeApplication.cpp
+g++ -std=c++17 -fsyntax-only Studio/src/RenegadeStudioChrome.cpp
+g++ -std=c++17 -fsyntax-only Studio/src/StudioApplication.cpp
+manual exact-token equivalent of Phase6Gate4SourceContract.cmake
 FEATURE_MATRIX.csv parsed as 38 rows with a consistent 16-column schema
 ```
 
-Pinned Wicked commit `3a800b7134aafe58461093c8abb2e274d4e64033`
-was inspected directly: `SoundComponent::_flags` and `PLAYING` are public,
-`wi::audio::Pause(SoundInstance*)` exists, Pause preserves the source cursor,
-and `SoundComponent::Play()` restores playback intent and resumes the instance.
+The full Studio source passes the Linux header check with only a compile-command
+shim for its pre-existing Win32 `GetModuleFileNameW/MAX_PATH` call. This
+workspace has no CMake executable, so no local target link/build is claimed.
+Windows CI remains authoritative.
+
+Pinned Wicked source was checked directly: `ScriptComponent::_flags`,
+`PLAYING`, `PLAY_ONCE` and `IsPlaying()` match the implementation, and Wicked's
+Scene update runs playing script components before other Scene systems. This is
+why Gate 4 clears native flags before `wi::Application::Update()` rather than
+waiting until Renegade callback startup.
+
+## Promotion next
+
+1. Confirm no unrelated worktree changes and create one coherent local commit.
+2. Push the complete commit tree to the existing remote Gate 4 branch, verify
+   every remote blob/tree SHA and only then open the draft PR/start CI.
 
 ## Required exact-head owner check
 
-After the Windows jobs pass:
+After all four Windows jobs pass:
 
-1. Open Audio and confirm there is no Sound Zone/trigger/radius/duration surface.
-2. Add Global Sound, assign a short WAV/OGG, Preview Play/Stop, and Test Level.
-3. Add 3D Sound and confirm it appears selected in front of the camera with a
-   source glyph and transform gizmo; move it and verify spatial playback.
-4. Confirm Pause/Resume continues rather than restarting, then Reset.
-5. Save/Reopen and verify source asset, position, loop, bus, volume and reverb.
-6. Recheck Scene, Environment, Terrain, Render, Physics and WD01 navigation.
-7. Run one packaged Windows Game check for global/3D playback, Pause and Reset.
+1. Add a valid Lua file and confirm its named carrier is selected.
+2. Confirm the Inspector path and Enabled control are readable and functional.
+3. Save/Reopen and confirm the script attachment persists.
+4. Run Test Level and prove Start/Update, Pause/Resume and Reset.
+5. Add one throwing script and confirm another script continues with one clear
+   diagnostic.
+6. Build Windows Game and repeat the script proof from the packaged executable.
+7. Recheck Player Start, global/3D sound and Scene Mix label spacing.
 
-Do not spend another build cycle trying to validate zones on PR #125. Their next
-implementation begins with the shared ZoneService contract and viewport owner.
+Do not begin Gate 5 objective behavior or shared zones inside this Gate 4 PR.

@@ -27,6 +27,10 @@ The implementation provides:
   isolated heap-backed scene on the job system, then writes and validates the
   WISCENE at Studio's Wicked thread-safe point without touching the active
   document.
+- `GameplayScriptService`, which imports and validates project-owned Lua,
+  persists command-backed WISCENE script carriers, and dispatches deterministic
+  Runtime lifecycle callbacks through stable entity/input/player/audio APIs on
+  Wicked's single Lua VM.
 
 These are deliberately bounded service interfaces. Studio widgets must use
 them instead of creating UI-owned project or scene state.

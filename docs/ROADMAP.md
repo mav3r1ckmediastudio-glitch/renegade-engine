@@ -1,18 +1,16 @@
 # Renegade Engine Roadmap
 
 **Current authoritative main:**
-`861c4d9b0f8acbb57f49db0b84b004d925b51136`
-(`Phase 6 Gate 2: gameplay input and play-session lifecycle (#124)`).
+`6a135aa2a2ae15a723235406afec8f7f8b12d2cd`
+(`Phase 6 Gate 3: spatial audio and mixing (#125)`).
 
 **Wicked pin:**
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-**Current state:** Phase 6 is active. Gates 1-2 are merged and owner-accepted.
-Gate 3 is a draft repair candidate on `phase6/gate3-spatial-audio`. The latest
-owner-tested head passed all four Windows jobs and proved global audio, Preview
-Play/Stop and ordinary positional 3D playback in Test Level. Its audio-specific
-zone experiment had no working viewport placement and is being removed rather
-than represented as delivered.
+**Current state:** Phase 6 is active. Gates 1-3 are merged and owner-accepted.
+Gate 4 is being implemented on `phase6/gate4-lua-gameplay-lifecycle`. The first
+local slice adds governed Lua attachments, deterministic Runtime callbacks and
+stable entity/input/player/audio access over the accepted physics namespace.
 
 ## Accepted production baseline
 
@@ -26,6 +24,8 @@ The following programmes are complete on `main`:
 | Phase 5 Gates 1-9 | Scene components, cameras, decals/probes, materials/shaders, post-processing, AO/GI/reflections, ray/path tracing, lightmap/baking and render diagnostics through PRs #109-#118. |
 | WD01 vegetation and frame-loop recovery | Native Wicked grass painting across Terrain chunks, editor interaction recovery and the 75 Hz performance baseline through PR #122. |
 | Phase 6 Gate 1 | One governed Player Start, first-person Runtime possession, Wicked/Jolt character capsule, movement/look/sprint/jump, save/reopen and packaged parity through PR #123. |
+| Phase 6 Gate 2 | Governed gameplay input map plus Runtime Pause/Resume and deterministic Reset through PR #124. |
+| Phase 6 Gate 3 | Global and movable 3D native audio, Preview, Scene Mix, Runtime lifecycle and packaged parity through PR #125; audio-specific zones deferred to one future shared ZoneService. |
 
 The original Wicked Editor remains the parity oracle. Accepted Renegade
 features continue to use Renegade-owned UI and stable EngineBridge boundaries;
@@ -83,21 +83,38 @@ The candidate uses:
 Gate 2 does not embed gameplay simulation inside Studio and does not reopen the
 JP01 physics architecture.
 
-### Gate 3 — active repair
+### Gate 3 — accepted
 
 PR #125 exposes native Wicked sound sources, scene submixes/reverb and Runtime
-audio lifecycle. The repaired core uses an independent top-level Audio surface,
+audio lifecycle. The accepted core uses an independent top-level Audio surface,
 a transient 2D Studio audition instance, validated audio containers, one native
 instance creation path, explicit global 2D and movable 3D source creation, and
 Runtime Scene activation plus Pause/Reset. Audio-specific zones are removed;
 one reusable ZoneService for audio, weather, objectives and later systems is a
-separate future slice. Exact-head owner acceptance and packaged proof remain
-required.
+separate future slice. Four Windows jobs passed and the owner verified global
+audio, Preview Play/Stop and ordinary positional 3D playback before merge.
+
+### Gate 4 — active
+
+Branch: `phase6/gate4-lua-gameplay-lifecycle`.
+
+Contract:
+[`PHASE6_GATE4_LUA_GAMEPLAY_LIFECYCLE.md`](PHASE6_GATE4_LUA_GAMEPLAY_LIFECYCLE.md).
+
+The local candidate uses native WISCENE Script components as persistence and
+dependency authority while `GameplayScriptRuntime` owns deterministic
+Start/Update/Pause/Resume/Reset/Stop callbacks on Wicked's single Lua VM. Studio
+imports `.lua` files beneath `Content/Scripts`, performs non-executing syntax
+validation, creates an undoable script carrier and exposes its path/Enabled
+state in the Inspector. Test Level stages governed sources into its isolated
+shadow project before launch. Runtime adds stable entity lookup, action-shaped
+input, player position and stable-ID audio control while retaining JP01 physics.
+
+The Gate 3 Scene Mix label-spacing fix is carried in this branch and will share
+Gate 4's first CI run rather than triggering a standalone 40-minute build.
 
 ### Remaining bounded sequence
 
-3. **Spatial audio and mixing** — native Wicked sound-source authoring plus the
-   minimum bus/submix and reverb model for the playable slice.
 4. **Lua gameplay lifecycle** — governed project scripts and stable lifecycle /
    player/input/audio/physics operations.
 5. **Objective and interaction slice** — one reusable scripted objective loop
