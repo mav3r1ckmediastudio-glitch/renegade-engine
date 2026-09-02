@@ -4,8 +4,14 @@ endif()
 
 set(service_header "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/AudioService.h")
 set(service_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/AudioService.cpp")
+set(studio_audio_chrome "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadePhysicsLabStudioChrome.cpp")
+set(studio_audio_workspace "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeAudioWorkspace.cpp")
 
-foreach(path IN ITEMS "${service_header}" "${service_source}")
+foreach(path IN ITEMS
+    "${service_header}"
+    "${service_source}"
+    "${studio_audio_chrome}"
+    "${studio_audio_workspace}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "Phase 6 Gate 3 missing required source: ${path}")
     endif()
@@ -50,5 +56,39 @@ foreach(token IN ITEMS
     file(STRINGS "${service_source}" token_matches REGEX "${token}")
     if(NOT token_matches)
         message(FATAL_ERROR "Phase 6 Gate 3 native Wicked mapping missing ${token}")
+    endif()
+endforeach()
+
+# Studio layout contract. ViewportBounds is left/top/right/bottom, while the
+# Audio workspace expects x/y/width/height. Gate 3 must therefore anchor the
+# Inspector at viewport.z and derive its height from bottom - top. AUDIO also
+# lives in the viewport-tool row; it must never reuse RENDER's +224..286 slot.
+file(READ "${studio_audio_chrome}" studio_chrome_text)
+foreach(token IN ITEMS
+    "AudioViewportToolBounds"
+    "AudioViewportToolHit"
+    "RenderAudioViewportTool"
+    "viewport.z"
+    "viewport.w - viewport.y")
+    string(FIND "${studio_chrome_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Phase 6 Gate 3 Studio layout contract missing ${token}")
+    endif()
+endforeach()
+
+string(FIND "${studio_chrome_text}" "sceneMetaX + 224.0f" render_overlap)
+if(NOT render_overlap EQUAL -1)
+    message(FATAL_ERROR "Phase 6 Gate 3 AUDIO must not overlap the RENDER workspace slot")
+endif()
+
+file(READ "${studio_audio_workspace}" studio_workspace_text)
+foreach(token IN ITEMS
+    "ADD SOUND SOURCE..."
+    "PREVIEW PLAY"
+    "AUDIO ASSET..."
+    "Content/Audio")
+    string(FIND "${studio_workspace_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Phase 6 Gate 3 Audio workspace contract missing ${token}")
     endif()
 endforeach()
