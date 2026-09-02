@@ -75,8 +75,12 @@ The Windows reference build and evidence workflow is documented in
 
 The active gate is **Phase 6 Gate 3 — Spatial Audio and Mixing**. Its draft
 exposes native Wicked sound sources and scene mixing through Renegade-owned
-authoring and Runtime lifecycle boundaries. It remains unaccepted until the
-Inspector, Preview and WAV crash repairs pass owner Studio and packaged tests.
+authoring and Runtime lifecycle boundaries. The owner has confirmed global
+audio, Preview Play/Stop and ordinary 3D spatial playback in Test Level. The
+current repair removes the nonfunctional audio-specific zone experiment; reusable
+trigger volumes will return through a shared zone service in a later gate.
+Gate 3 remains unaccepted until the exact repair head passes Windows CI and the
+remaining save/reopen and packaged checks.
 
 See
 [`docs/PHASE6_GATE3_SPATIAL_AUDIO.md`](docs/PHASE6_GATE3_SPATIAL_AUDIO.md).

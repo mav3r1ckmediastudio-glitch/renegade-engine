@@ -377,6 +377,11 @@ serialized submix types and global reverb as the sole audio backend. Renegade's
 `AudioService` adds only stable authoring semantics, metadata for Play On Start
 and Scene Mix, command-backed mutations and Runtime activation/pause boundaries.
 
+Studio exposes global 2D sources and movable positional 3D sources as two
+explicit command-backed creation paths. A 3D source is created in front of the
+editor camera, selected immediately and then uses the ordinary transform gizmo;
+global sources deliberately have no TransformComponent.
+
 The Audio authoring surface is an independent top-level Studio widget rendered
 above the existing Inspector. It never hides or re-shows the Inspector
 `Window`: pinned Wicked propagates `Window::SetVisible(true)` to every child,
@@ -393,6 +398,11 @@ therefore rejects malformed, extended-header and over-limit WAV/OGG inputs
 before they reach that loader. `ApplySoundSource` creates a replacement native
 resource/instance once and commits it only after validation succeeds; it does
 not build a parallel audio object or mixer.
+
+Audio-specific trigger zones are not part of Gate 3. Reusable spatial volumes
+must be introduced through one shared ZoneService with common viewport
+placement, transform/shape authoring and Runtime entry/exit state so audio,
+weather, objectives and later systems do not grow incompatible zone models.
 
 ### Dependency extraction boundary
 

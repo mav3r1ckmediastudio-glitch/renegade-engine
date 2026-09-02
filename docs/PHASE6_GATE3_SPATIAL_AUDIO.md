@@ -35,8 +35,14 @@ Inspector children.
 
 ### Sound Source
 
-`ADD > SOUND SOURCE` creates one command-backed native Wicked Sound entity at
-the current editor view, selects it and opens:
+The Audio workspace exposes two explicit creation paths:
+
+- `ADD GLOBAL SOUND` creates a transform-free 2D source for level-wide music or
+  ambience; and
+- `ADD 3D SOUND` creates a spatial source five metres in front of the current
+  editor camera, selects it and lets the creator move it with the normal gizmo.
+
+Both paths create one command-backed native Wicked Sound entity and open:
 
 `SOUND SOURCE // NATIVE WICKED AUDIO`
 
@@ -66,25 +72,9 @@ or serialize a fake Runtime speaker mesh; any editor icon/guide is editor-only.
 Audio file selection must resolve to project-owned audio content so the existing
 LP05/LC01/LP06 dependency and package chain remains authoritative.
 
-### Sound Zones
-
-`ADD > SOUND ZONE` places a native Wicked SoundComponent five metres in front
-of the editor camera, selects it and opens the Audio Inspector. Every authored
-source has a distinct editor-only marker: orange speaker for SFX, purple note
-for Music, green waves for Ambience and blue microphone for Voice. Selecting a
-zone shows its radius guide; these glyphs and guides are never serialized as
-Runtime geometry.
-
-The Audio Inspector exposes a `USE` dropdown (SFX, Music, Ambience or Voice),
-`TRIGGER` mode (Once or Multiple), zone radius in metres and playback duration.
-Duration `0` means the clip's natural duration. A Multiple zone can trigger on
-each fresh listener entry; a Once zone consumes its trigger until the Scene is
-reset or reloaded. Looping zones stop when the listener leaves their radius.
-
-The zone remains a native Wicked SoundComponent: Spatial 3D/2D, loop, volume,
-reverb and asset controls remain authored source state. Zone metadata is
-versioned Renegade WISCENE metadata, while transient entry state is owned by
-Runtime and is not serialized.
+Every positional source has a distinct editor-only marker: orange speaker for
+SFX, purple note for Music, green waves for Ambience and blue microphone for
+Voice. These glyphs are never serialized as Runtime geometry.
 
 ### Scene Mix
 
@@ -153,14 +143,15 @@ mix semantics apply only to entities carrying the Gate 3 metadata markers.
 8. Reset: audio returns to the authored startup state with the rest of the Level.
 9. Build Windows Game and repeat spatial playback, Pause and Reset in the
    independent packaged executable.
-10. Add separate SFX, Music and Ambience zones, confirm their markers and
-    radius guides are distinct, and verify Once/Multiple and duration behavior.
-11. Recheck the accepted WD01 editor-navigation/performance baseline.
+10. Recheck the accepted WD01 editor-navigation/performance baseline.
 
 ## Deferred
 
 - general gameplay/Lua audio calls belong to Gate 4;
 - objective-specific cues belong to Gate 5;
+- reusable trigger/volume zones are deferred to a shared ZoneService so audio,
+  weather, objectives and later systems use one viewport placement, transform,
+  shape and entry/exit lifecycle instead of audio-specific zone machinery;
 - occlusion/obstruction simulation, DSP graphs, convolution reverb, streaming
   music systems and third-party audio middleware are outside this bounded gate;
 - voice chat/network audio is not part of Phase 6.

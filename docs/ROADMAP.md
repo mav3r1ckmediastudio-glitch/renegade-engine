@@ -8,9 +8,11 @@
 `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 **Current state:** Phase 6 is active. Gates 1-2 are merged and owner-accepted.
-Gate 3 is a draft repair candidate on `phase6/gate3-spatial-audio`; green CI at
-`40282b7` was overridden by owner-found Inspector corruption, silent Preview
-and a longer-WAV crash.
+Gate 3 is a draft repair candidate on `phase6/gate3-spatial-audio`. The latest
+owner-tested head passed all four Windows jobs and proved global audio, Preview
+Play/Stop and ordinary positional 3D playback in Test Level. Its audio-specific
+zone experiment had no working viewport placement and is being removed rather
+than represented as delivered.
 
 ## Accepted production baseline
 
@@ -84,12 +86,13 @@ JP01 physics architecture.
 ### Gate 3 — active repair
 
 PR #125 exposes native Wicked sound sources, scene submixes/reverb and Runtime
-audio lifecycle. The initial CI-green candidate is not accepted. The repair
-removes the Inspector parent-visibility hack, gives Audio independent top-level
-presentation, uses a transient 2D Studio audition instance, validates audio
-containers before the pinned loader, creates source instances once, and wires
-Scene activation plus Pause/Reset into Runtime. Owner acceptance and packaged
-proof remain required.
+audio lifecycle. The repaired core uses an independent top-level Audio surface,
+a transient 2D Studio audition instance, validated audio containers, one native
+instance creation path, explicit global 2D and movable 3D source creation, and
+Runtime Scene activation plus Pause/Reset. Audio-specific zones are removed;
+one reusable ZoneService for audio, weather, objectives and later systems is a
+separate future slice. Exact-head owner acceptance and packaged proof remain
+required.
 
 ### Remaining bounded sequence
 
@@ -116,6 +119,8 @@ proof remain required.
 
 ## Deferred boundaries
 
+- Shared viewport-placeable trigger/volume zones remain deferred until one
+  ZoneService can serve audio, weather, objectives and later systems.
 - Renegade still has no user-facing VSync control; the accepted 75 FPS result is
   the current capped baseline, not proof of uncapped maximum throughput.
 - Hardware-specific ray/path-tracing, HDR and light-baking limitations remain

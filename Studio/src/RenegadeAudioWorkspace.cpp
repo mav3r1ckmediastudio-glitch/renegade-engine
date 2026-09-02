@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -153,10 +152,6 @@ namespace renegade::studio
         bool active = false;
         bool pointerConsumed = false;
         bool refreshPending = true;
-        bool placingZone = false;
-        bool placementValid = false;
-        XMFLOAT2 placementScreen = {};
-        XMFLOAT3 placementPosition = {};
         XMFLOAT4 bounds = {};
         bridge::StudioSession* session = nullptr;
         wi::ecs::Entity selected = wi::ecs::INVALID_ENTITY;
@@ -172,15 +167,11 @@ namespace renegade::studio
         RenegadeButton previewPlay;
         RenegadeButton previewStop;
         SceneInspectorCheckBox playOnStart;
-        SceneInspectorCheckBox zoneEnabled;
         SceneInspectorCheckBox looped;
         SceneInspectorCheckBox spatial;
         SceneInspectorCheckBox reverb;
         SceneInspectorSlider sourceVolume;
         SceneInspectorComboBox sourceBus;
-        SceneInspectorComboBox repeatMode;
-        SceneInspectorSlider zoneRadius;
-        SceneInspectorSlider durationSeconds;
 
         SceneInspectorSlider masterVolume;
         SceneInspectorSlider sfxVolume;
@@ -194,8 +185,6 @@ namespace renegade::studio
         ~Impl()
         {
             StopPreview();
-            if (placingZone)
-                wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
         }
 
         [[nodiscard]] wi::scene::Scene* Scene() const noexcept
@@ -216,55 +205,6 @@ namespace renegade::studio
             statusError = error;
         }
 
-        [[nodiscard]] bool PointerInsideViewport(
-            const XMFLOAT4& pointer) const noexcept
-        {
-            const auto* chrome = CreatorAssetStudioChrome::Current();
-            if (chrome == nullptr)
-                return false;
-            const XMFLOAT4 viewport = chrome->ViewportBounds();
-            return pointer.x >= viewport.x && pointer.x < viewport.z &&
-                pointer.y >= viewport.y && pointer.y < viewport.w;
-        }
-
-        bool ResolvePlacementSurface(
-            const wi::Canvas& canvas,
-            const XMFLOAT4& pointer,
-            XMFLOAT3& surface)
-        {
-            auto* scene = Scene();
-            if (scene == nullptr)
-                return false;
-
-            const auto& camera = wi::scene::GetCamera();
-            const auto ray = wi::renderer::GetPickRay(
-                static_cast<long>(pointer.x),
-                static_cast<long>(pointer.y),
-                canvas,
-                camera);
-            const auto picked = wi::scene::Pick(
-                ray,
-                wi::enums::FILTER_OBJECT_ALL | wi::enums::FILTER_TERRAIN,
-                ~0u,
-                *scene);
-            if (picked.entity != wi::ecs::INVALID_ENTITY)
-            {
-                surface = picked.position;
-                return true;
-            }
-
-            if (std::abs(ray.direction.y) <= 0.0001f)
-                return false;
-            const float distance = -ray.origin.y / ray.direction.y;
-            if (distance < ray.TMin || distance > ray.TMax)
-                return false;
-            surface = XMFLOAT3(
-                ray.origin.x + ray.direction.x * distance,
-                0.0f,
-                ray.origin.z + ray.direction.z * distance);
-            return true;
-        }
-
         void StopPreview() noexcept
         {
             if (previewInstance.IsValid())
@@ -273,23 +213,8 @@ namespace renegade::studio
             previewResource = {};
         }
 
-        void CancelZonePlacement(const bool announce = true)
+        void CreateSpatialSound()
         {
-            placingZone = false;
-            placementValid = false;
-            addSource.SetText("ADD SOUND ZONE...");
-            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-            if (announce)
-                SetStatus("SOUND ZONE // PLACEMENT CANCELLED");
-        }
-
-        void BeginZonePlacement()
-        {
-            if (placingZone)
-            {
-                CancelZonePlacement();
-                return;
-            }
             if (session == nullptr)
                 session = bridge::StudioSession::Current();
             if (session == nullptr || !session->Projects().HasProject())
@@ -299,10 +224,30 @@ namespace renegade::studio
             }
 
             StopPreview();
-            placingZone = true;
-            placementValid = false;
-            addSource.SetText("CANCEL PLACEMENT");
-            SetStatus("SOUND ZONE // MOVE CURSOR INTO VIEWPORT // LEFT CLICK TO PLACE // ESC TO CANCEL");
+            auto& scene = session->Scenes().GetScene();
+            const auto& editorCamera = wi::scene::GetCamera();
+            bridge::TransformState transform;
+            transform.translation = XMFLOAT3{
+                editorCamera.Eye.x + editorCamera.At.x * 5.0f,
+                editorCamera.Eye.y + editorCamera.At.y * 5.0f,
+                editorCamera.Eye.z + editorCamera.At.z * 5.0f};
+
+            bridge::SoundSourceState state;
+            state.playOnStart = true;
+            state.spatial = true;
+            auto command = std::make_unique<bridge::CreateSoundSourceCommand>(
+                scene, state, transform);
+            auto* createdCommand = command.get();
+            if (!session->Commands().Execute(std::move(command)))
+            {
+                SetStatus("AUDIO // 3D SOUND CREATION FAILED", true);
+                return;
+            }
+
+            selected = createdCommand->CreatedEntity();
+            session->Selection().Select(selected);
+            refreshPending = true;
+            SetStatus("3D SOUND // CREATED // USE GIZMO TO MOVE // CHOOSE AUDIO ASSET");
         }
 
         void CreateGlobalSound()
@@ -315,13 +260,10 @@ namespace renegade::studio
                 return;
             }
 
-            if (placingZone)
-                CancelZonePlacement(false);
             StopPreview();
 
             auto& scene = session->Scenes().GetScene();
             bridge::SoundSourceState state;
-            state.zoneEnabled = false;
             state.playOnStart = true;
             state.looped = true;
             state.spatial = false;
@@ -341,88 +283,6 @@ namespace renegade::studio
             session->Selection().Select(selected);
             refreshPending = true;
             SetStatus("GLOBAL SOUND // CREATED // CHOOSE AUDIO ASSET");
-        }
-
-        bool CommitZonePlacement()
-        {
-            if (!placingZone || !placementValid || session == nullptr)
-                return false;
-
-            auto& scene = session->Scenes().GetScene();
-            bridge::TransformState transform;
-            transform.translation = placementPosition;
-
-            bridge::SoundSourceState state;
-            state.zoneEnabled = true;
-            state.playOnStart = false;
-            auto command = std::make_unique<bridge::CreateSoundSourceCommand>(
-                scene, state, transform);
-            auto* createdCommand = command.get();
-            if (!session->Commands().Execute(std::move(command)))
-            {
-                SetStatus("AUDIO // SOUND ZONE CREATION FAILED", true);
-                return false;
-            }
-
-            selected = createdCommand->CreatedEntity();
-            session->Selection().Select(selected);
-            refreshPending = true;
-            placingZone = false;
-            placementValid = false;
-            addSource.SetText("ADD SOUND ZONE...");
-            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-            SetStatus("SOUND ZONE // PLACED // USE GIZMO TO MOVE/SCALE // CHOOSE AUDIO ASSET");
-            return true;
-        }
-
-        bool UpdateZonePlacement(const wi::Canvas& canvas)
-        {
-            if (!placingZone)
-                return false;
-
-            if (session == nullptr || !session->Projects().HasProject())
-            {
-                CancelZonePlacement(false);
-                SetStatus("AUDIO // PROJECT CLOSED // PLACEMENT CANCELLED", true);
-                return false;
-            }
-
-            if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
-            {
-                CancelZonePlacement();
-                return false;
-            }
-
-            const XMFLOAT4 pointer = wi::input::GetPointer();
-            placementScreen = XMFLOAT2(pointer.x, pointer.y);
-            const bool insideViewport = PointerInsideViewport(pointer);
-            placementValid = insideViewport &&
-                ResolvePlacementSurface(canvas, pointer, placementPosition);
-
-            if (insideViewport)
-            {
-                wi::input::SetCursor(
-                    placementValid
-                        ? wi::input::CURSOR_HAND
-                        : wi::input::CURSOR_NOTALLOWED);
-            }
-            else
-            {
-                wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
-            }
-
-            if (insideViewport &&
-                wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
-            {
-                if (!placementValid)
-                {
-                    SetStatus("SOUND ZONE // NO VALID SURFACE UNDER CURSOR", true);
-                    return true;
-                }
-                (void)CommitZonePlacement();
-                return true;
-            }
-            return false;
         }
 
         void StartPreview()
@@ -517,13 +377,13 @@ namespace renegade::studio
             });
 
             addSource.Create("Gate 3 Add Sound Source");
-            addSource.SetText("ADD SOUND ZONE...");
+            addSource.SetText("ADD 3D SOUND");
             addSource.SetRenderTextSize(10);
             addSource.SetTooltip(
-                "Enter viewport placement mode. A sound-zone ghost follows the cursor; left-click a surface to place it, then assign WAV/OGG audio in the Inspector.");
+                "Create a spatial sound five metres in front of the editor camera, then move it with the gizmo and assign WAV/OGG audio in the Inspector.");
             addSource.OnClick([this](const wi::gui::EventArgs&)
             {
-                BeginZonePlacement();
+                CreateSpatialSound();
             });
 
             chooseAudio.Create("Gate 3 Choose Audio");
@@ -531,7 +391,7 @@ namespace renegade::studio
             chooseAudio.SetRenderTextSize(11);
             chooseAudio.OnClick([this](const wi::gui::EventArgs&)
             {
-                ChooseAudio(false);
+                ChooseAudio();
             });
 
             previewPlay.Create("Gate 3 Audio Preview Play");
@@ -556,12 +416,6 @@ namespace renegade::studio
             {
                 EditSource([&](bridge::SoundSourceState& state)
                 { state.playOnStart = args.bValue; });
-            });
-            zoneEnabled.Create("Sound zone: ");
-            zoneEnabled.OnClick([this](const wi::gui::EventArgs& args)
-            {
-                EditSource([&](bridge::SoundSourceState& state)
-                { state.zoneEnabled = args.bValue; });
             });
             looped.Create("Loop: ");
             looped.OnClick([this](const wi::gui::EventArgs& args)
@@ -599,31 +453,6 @@ namespace renegade::studio
             {
                 EditSource([&](bridge::SoundSourceState& state)
                 { state.bus = static_cast<bridge::AudioBus>(args.userdata); });
-            });
-
-            repeatMode.Create("Gate 3 Zone Repeat Mode");
-            repeatMode.AddItem("TRIGGER // ONCE", 0u);
-            repeatMode.AddItem("TRIGGER // MULTIPLE", 1u);
-            repeatMode.OnSelect([this](const wi::gui::EventArgs& args)
-            {
-                EditSource([&](bridge::SoundSourceState& state)
-                { state.repeatable = args.userdata != 0u; });
-            });
-
-            zoneRadius.Create(0.5f, 500.0f, 5.0f, 999.0f,
-                "Gate 3 Zone Radius", "ZONE RADIUS (M)");
-            zoneRadius.OnValueCommitted([this](const float value)
-            {
-                EditSource([&](bridge::SoundSourceState& state)
-                { state.zoneRadius = value; });
-            });
-
-            durationSeconds.Create(0.0f, 3600.0f, 0.0f, 3600.0f,
-                "Gate 3 Zone Duration", "DURATION (S) // 0 = CLIP");
-            durationSeconds.OnValueCommitted([this](const float value)
-            {
-                EditSource([&](bridge::SoundSourceState& state)
-                { state.durationSeconds = value; });
             });
 
             const auto makeMixSlider = [this](
@@ -670,9 +499,8 @@ namespace renegade::studio
 
             controls = {
                 &addGlobal, &addSource, &chooseAudio, &previewPlay, &previewStop,
-                &playOnStart, &zoneEnabled, &looped, &spatial, &reverb,
-                &sourceVolume, &sourceBus, &repeatMode,
-                &zoneRadius, &durationSeconds,
+                &playOnStart, &looped, &spatial, &reverb,
+                &sourceVolume, &sourceBus,
                 &masterVolume, &sfxVolume, &musicVolume,
                 &ambienceVolume, &voiceVolume, &reverbPreset,
             };
@@ -681,7 +509,7 @@ namespace renegade::studio
             created = true;
         }
 
-        void ChooseAudio(const bool createNew)
+        void ChooseAudio()
         {
             if (session == nullptr || !session->Projects().HasProject())
             {
@@ -694,9 +522,9 @@ namespace renegade::studio
             params.extensions = {"wav", "ogg"};
             wi::helper::FileDialog(
                 params,
-                [this, createNew](const std::string& selectedPath)
+                [this](const std::string& selectedPath)
                 {
-                    ImportAudio(selectedPath, createNew);
+                    ImportAudio(selectedPath);
                 });
         }
 
@@ -768,7 +596,7 @@ namespace renegade::studio
             return true;
         }
 
-        void ImportAudio(const std::string& selectedPath, const bool createNew)
+        void ImportAudio(const std::string& selectedPath)
         {
             if (session == nullptr)
                 session = bridge::StudioSession::Current();
@@ -786,34 +614,6 @@ namespace renegade::studio
             }
 
             auto& scene = session->Scenes().GetScene();
-            if (createNew)
-            {
-                bridge::TransformState transform;
-                const auto& editorCamera = wi::scene::GetCamera();
-                transform.translation = XMFLOAT3(
-                    editorCamera.Eye.x + editorCamera.At.x * 5.0f,
-                    editorCamera.Eye.y + editorCamera.At.y * 5.0f,
-                    editorCamera.Eye.z + editorCamera.At.z * 5.0f);
-
-                bridge::SoundSourceState state;
-                state.filename = audioPath;
-                state.zoneEnabled = true;
-                state.playOnStart = false;
-                auto command = std::make_unique<bridge::CreateSoundSourceCommand>(
-                    scene, state, transform);
-                auto* createdCommand = command.get();
-                if (!session->Commands().Execute(std::move(command)))
-                {
-                    SetStatus("AUDIO // SOUND SOURCE CREATION FAILED", true);
-                    return;
-                }
-                selected = createdCommand->CreatedEntity();
-                session->Selection().Select(selected);
-                refreshPending = true;
-                SetStatus("SOUND SOURCE // CREATED");
-                return;
-            }
-
             if (!SelectedIsSource())
             {
                 SetStatus("AUDIO // SELECT A SOUND SOURCE FIRST", true);
@@ -846,7 +646,6 @@ namespace renegade::studio
             previewPlay.SetVisible(active && sourceSelected);
             previewStop.SetVisible(active && sourceSelected);
             playOnStart.SetVisible(active && sourceSelected);
-            zoneEnabled.SetVisible(active && sourceSelected);
             looped.SetVisible(active && sourceSelected);
             spatial.SetVisible(active && sourceSelected);
             reverb.SetVisible(active && sourceSelected);
@@ -864,34 +663,22 @@ namespace renegade::studio
             if (sourceSelected)
             {
                 const auto source = bridge::CaptureSoundSource(*Scene(), selected);
-                const bool global2D = !source.zoneEnabled && !source.spatial &&
+                const bool global2D = !source.spatial &&
                     !Scene()->transforms.Contains(selected);
-                playOnStart.SetVisible(active && !source.zoneEnabled);
-                zoneEnabled.SetVisible(active && !global2D);
                 spatial.SetVisible(active && !global2D);
-                repeatMode.SetVisible(active && source.zoneEnabled);
-                zoneRadius.SetVisible(active && source.zoneEnabled);
-                durationSeconds.SetVisible(active && source.zoneEnabled);
                 sourceFileDisplay = fs::u8path(source.filename).filename().generic_u8string();
                 if (sourceFileDisplay.empty())
                     sourceFileDisplay = global2D ? "GLOBAL SOUND // NO AUDIO ASSET" : "NO AUDIO ASSET";
                 playOnStart.SetCheck(source.playOnStart);
-                zoneEnabled.SetCheck(source.zoneEnabled);
                 looped.SetCheck(source.looped);
                 spatial.SetCheck(source.spatial);
                 reverb.SetCheck(source.reverb);
                 sourceVolume.SetValue(source.volume);
                 sourceBus.SetSelectedWithoutCallback(static_cast<int>(source.bus));
-                repeatMode.SetSelectedWithoutCallback(source.repeatable ? 1 : 0);
-                zoneRadius.SetValue(source.zoneRadius);
-                durationSeconds.SetValue(source.durationSeconds);
             }
             else
             {
                 sourceFileDisplay = "NO SOUND SOURCE SELECTED";
-                repeatMode.SetVisible(false);
-                zoneRadius.SetVisible(false);
-                durationSeconds.SetVisible(false);
             }
 
             if (mixVisible)
@@ -933,14 +720,11 @@ namespace renegade::studio
             y += SectionGap;
             full(chooseAudio);
             two(previewPlay, previewStop);
-            two(zoneEnabled, playOnStart);
-            full(repeatMode);
+            full(playOnStart);
             two(looped, spatial);
             full(reverb);
             full(sourceVolume);
             full(sourceBus);
-            full(zoneRadius);
-            full(durationSeconds);
             y += SectionGap + 18.0f;
             full(masterVolume);
             full(sfxVolume);
@@ -976,8 +760,6 @@ namespace renegade::studio
         if (!active)
         {
             impl_->StopPreview();
-            if (impl_->placingZone)
-                impl_->CancelZonePlacement(false);
             for (auto* control : impl_->controls)
                 control->SetVisible(false);
         }
@@ -1017,7 +799,7 @@ namespace renegade::studio
 
     void RenegadeAudioWorkspace::CreateSoundSource()
     {
-        impl_->BeginZonePlacement();
+        impl_->CreateSpatialSound();
     }
 
     void RenegadeAudioWorkspace::Update(
@@ -1055,8 +837,7 @@ namespace renegade::studio
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
         const bool inspectorConsumed = ContainsPointer(pointer);
-        const bool placementConsumed = impl_->UpdateZonePlacement(canvas);
-        impl_->pointerConsumed = inspectorConsumed || placementConsumed;
+        impl_->pointerConsumed = inspectorConsumed;
         if (inspectorConsumed)
         {
             Activate();
@@ -1090,7 +871,7 @@ namespace renegade::studio
 
         const float mixLabelY =
             b.y + HeaderHeight +
-            (10.0f * (RowHeight + RowGap)) +
+            (8.0f * (RowHeight + RowGap)) +
             (2.0f * SectionGap) + 20.0f;
         DrawText("SCENE MIX // WICKED SUBMIX + REVERB",
             b.x + 12.0f, mixLabelY, 11, Forge, cmd);
@@ -1099,31 +880,6 @@ namespace renegade::studio
         {
             if (control->IsVisible())
                 control->Render(canvas, cmd);
-        }
-
-        if (impl_->placingZone && impl_->PointerInsideViewport(XMFLOAT4(
-                impl_->placementScreen.x,
-                impl_->placementScreen.y,
-                0.0f,
-                0.0f)))
-        {
-            const float x = impl_->placementScreen.x;
-            const float y = impl_->placementScreen.y;
-            const wi::Color marker = impl_->placementValid ? Forge : Error;
-            const wi::Color ghost = impl_->placementValid
-                ? wi::Color(210, 91, 29, 72)
-                : wi::Color(229, 92, 92, 72);
-            DrawRect(x - 18.0f, y - 18.0f, 36.0f, 36.0f, ghost, cmd);
-            DrawRect(x - 24.0f, y - 1.0f, 48.0f, 2.0f, marker, cmd);
-            DrawRect(x - 1.0f, y - 24.0f, 2.0f, 48.0f, marker, cmd);
-            DrawText(
-                impl_->placementValid ? "SOUND ZONE // CLICK TO PLACE" : "SOUND ZONE // NO SURFACE",
-                x + 16.0f,
-                y + 16.0f,
-                9,
-                marker,
-                cmd,
-                0.08f);
         }
 
         const float statusY = b.y + b.w - 28.0f;

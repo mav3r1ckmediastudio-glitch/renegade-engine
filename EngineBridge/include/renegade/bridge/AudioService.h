@@ -36,10 +36,6 @@ namespace renegade::bridge
         bool reverb = false;
         bool playOnStart = true;
         AudioBus bus = AudioBus::SoundEffect;
-        bool zoneEnabled = false;
-        float zoneRadius = 5.0f;
-        float durationSeconds = 0.0f;
-        bool repeatable = true;
     };
 
     struct SceneAudioMixState
@@ -56,20 +52,6 @@ namespace renegade::bridge
     struct SceneAudioPauseState
     {
         std::vector<wi::ecs::Entity> playingSources;
-    };
-
-    struct SoundZoneRuntimeEntry
-    {
-        wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
-        bool wasInside = false;
-        bool hasTriggered = false;
-        bool playing = false;
-        float elapsedSeconds = 0.0f;
-    };
-
-    struct SceneAudioZoneState
-    {
-        std::vector<SoundZoneRuntimeEntry> entries;
     };
 
     [[nodiscard]] bool IsRenegadeSoundSource(
@@ -107,17 +89,7 @@ namespace renegade::bridge
 
     // Runtime calls this after every accepted scene replacement. It applies the
     // authored scene mix and starts only sources explicitly marked Play On Start.
-    void ActivateSceneAudio(
-        wi::scene::Scene& scene,
-        SceneAudioZoneState* zoneState = nullptr) noexcept;
-
-    // Runtime calls this with the possessed player camera/listener position.
-    // Zone playback state is transient and deliberately never serialized.
-    void UpdateSceneAudioZones(
-        wi::scene::Scene& scene,
-        const XMFLOAT3& listenerPosition,
-        float deltaSeconds,
-        SceneAudioZoneState& zoneState) noexcept;
+    void ActivateSceneAudio(wi::scene::Scene& scene) noexcept;
 
     // Runtime must clear SoundComponent PLAYING while paused because Wicked's
     // normal Scene update calls Play() every frame for that flag, even at zero
@@ -140,7 +112,8 @@ namespace renegade::bridge
                 if (!sound.IsPlaying())
                     continue;
                 pauseState.playingSources.push_back(entity);
-                sound.Stop();
+                sound._flags &= ~wi::scene::SoundComponent::PLAYING;
+                wi::audio::Pause(&sound.soundinstance);
             }
             return;
         }

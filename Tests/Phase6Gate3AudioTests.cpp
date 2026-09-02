@@ -118,10 +118,6 @@ int main()
         authored.spatial = false;
         authored.playOnStart = false;
         authored.bus = AudioBus::SoundEffect;
-        authored.zoneEnabled = true;
-        authored.zoneRadius = 12.5f;
-        authored.durationSeconds = 4.0f;
-        authored.repeatable = false;
 
         std::string error;
         Check(
@@ -136,10 +132,6 @@ int main()
         Check(!captured.spatial, "source 2D/3D state did not round-trip");
         Check(!captured.playOnStart, "source Play On Start did not round-trip");
         Check(captured.bus == AudioBus::SoundEffect, "source bus did not round-trip");
-        Check(captured.zoneEnabled, "sound-zone marker did not round-trip");
-        Check(Near(captured.zoneRadius, 12.5f), "sound-zone radius did not round-trip");
-        Check(Near(captured.durationSeconds, 4.0f), "sound-zone duration did not round-trip");
-        Check(!captured.repeatable, "sound-zone once mode did not round-trip");
 
         auto* nativeSound = scene.sounds.GetComponent(entity);
         nativeSound->_flags |= wi::scene::SoundComponent::PLAYING;
@@ -159,7 +151,6 @@ int main()
         global.spatial = false;
         global.playOnStart = true;
         global.bus = AudioBus::Ambience;
-        global.zoneEnabled = false;
         TransformState transform;
         transform.translation = XMFLOAT3(40.0f, 8.0f, -20.0f);
 
@@ -171,7 +162,7 @@ int main()
         const auto* name = scene.names.GetComponent(entity);
         Check(name != nullptr && name->name == "Global Ambience", "global ambience did not receive a clear hierarchy name");
         const auto captured = CaptureSoundSource(scene, entity);
-        Check(!captured.spatial && !captured.zoneEnabled, "global source did not remain non-spatial and non-zone");
+        Check(!captured.spatial, "global source did not remain non-spatial");
         Check(captured.looped && captured.playOnStart, "global source defaults did not retain persistent playback intent");
         Check(captured.bus == AudioBus::Ambience, "global source did not retain ambience bus ownership");
 
@@ -180,6 +171,40 @@ int main()
         Check(command.Execute(), "global source Redo could not restore the entity snapshot");
         Check(IsRenegadeSoundSource(scene, entity), "global source Redo lost audio metadata");
         Check(!scene.transforms.Contains(entity), "global source Redo restored a viewport transform");
+    }
+
+    {
+        wi::scene::Scene scene;
+        SoundSourceState positional;
+        positional.spatial = true;
+        positional.playOnStart = true;
+        positional.bus = AudioBus::SoundEffect;
+        TransformState transform;
+        transform.translation = XMFLOAT3(7.0f, 2.0f, -3.0f);
+
+        CreateSoundSourceCommand command(scene, positional, transform);
+        Check(command.Execute(), "3D sound command could not create a source");
+        const auto entity = command.CreatedEntity();
+        Check(IsRenegadeSoundSource(scene, entity), "3D source was not marked as Renegade audio");
+        const auto* nativeTransform = scene.transforms.GetComponent(entity);
+        Check(nativeTransform != nullptr, "3D source lost its movable world transform");
+        if (nativeTransform != nullptr)
+        {
+            const auto capturedTransform = CaptureTransform(*nativeTransform);
+            Check(
+                Near(capturedTransform.translation.x, 7.0f) &&
+                    Near(capturedTransform.translation.y, 2.0f) &&
+                    Near(capturedTransform.translation.z, -3.0f),
+                "3D source did not retain its authored position");
+        }
+        const auto captured = CaptureSoundSource(scene, entity);
+        Check(captured.spatial, "3D source lost spatial playback mode");
+        Check(captured.playOnStart, "3D source lost Play On Start intent");
+
+        command.Undo();
+        Check(!IsRenegadeSoundSource(scene, entity), "3D source Undo did not remove the entity");
+        Check(command.Execute(), "3D source Redo could not restore the entity snapshot");
+        Check(scene.transforms.Contains(entity), "3D source Redo lost its world transform");
     }
 
     {

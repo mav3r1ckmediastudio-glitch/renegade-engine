@@ -100,17 +100,15 @@ endif()
 
 file(READ "${studio_audio_workspace}" studio_workspace_text)
 foreach(token IN ITEMS
-    "ADD SOUND ZONE..."
+    "ADD GLOBAL SOUND"
+    "ADD 3D SOUND"
+    "CreateSpatialSound"
     "PREVIEW PLAY"
     "AUDIO ASSET..."
     "Content/Audio"
     "USE // SFX"
     "USE // MUSIC"
-    "USE // AMBIENCE"
-    "TRIGGER // ONCE"
-    "TRIGGER // MULTIPLE"
-    "ZONE RADIUS (M)"
-    "DURATION (S) // 0 = CLIP")
+    "USE // AMBIENCE")
     string(FIND "${studio_workspace_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Phase 6 Gate 3 Audio workspace contract missing ${token}")
@@ -119,26 +117,34 @@ endforeach()
 
 foreach(token IN ITEMS
     "HandleAudioSceneIcons"
-    "source.zoneRadius"
     "AudioBus::Music"
     "AudioBus::Ambience")
     file(STRINGS "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp" token_matches REGEX "${token}")
     if(NOT token_matches)
-        message(FATAL_ERROR "Phase 6 Gate 3 editor Sound Zone marker missing ${token}")
+        message(FATAL_ERROR "Phase 6 Gate 3 editor sound-source marker missing ${token}")
     endif()
 endforeach()
 
 foreach(token IN ITEMS
+    "ADD SOUND ZONE"
     "zoneEnabled"
     "zoneRadius"
     "durationSeconds"
     "repeatable"
     "UpdateSceneAudioZones")
-    file(STRINGS "${service_header}" token_matches REGEX "${token}")
-    if(NOT token_matches)
-        message(FATAL_ERROR "Phase 6 Gate 3 Sound Zone contract missing ${token}")
+    string(FIND "${studio_workspace_text}" "${token}" studio_zone_reference)
+    file(STRINGS "${service_header}" header_zone_reference REGEX "${token}")
+    file(STRINGS "${service_source}" source_zone_reference REGEX "${token}")
+    if(NOT studio_zone_reference EQUAL -1 OR
+        header_zone_reference OR source_zone_reference)
+        message(FATAL_ERROR "Phase 6 Gate 3 must not expose deferred zone behavior: ${token}")
     endif()
 endforeach()
+
+file(STRINGS "${service_header}" pause_matches REGEX "wi::audio::Pause")
+if(NOT pause_matches)
+    message(FATAL_ERROR "Phase 6 Gate 3 pause must preserve the authored playback cursor")
+endif()
 
 # Audio is an independent top-level Widget, but Wicked can reorder active
 # widgets during Update(). Reconcile ownership afterwards by toggling only the
