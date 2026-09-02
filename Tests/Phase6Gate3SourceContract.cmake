@@ -6,12 +6,14 @@ set(service_header "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/
 set(service_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/AudioService.cpp")
 set(studio_audio_chrome "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadePhysicsLabStudioChrome.cpp")
 set(studio_audio_workspace "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeAudioWorkspace.cpp")
+set(studio_application_header "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h")
 
 foreach(path IN ITEMS
     "${service_header}"
     "${service_source}"
     "${studio_audio_chrome}"
-    "${studio_audio_workspace}")
+    "${studio_audio_workspace}"
+    "${studio_application_header}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "Phase 6 Gate 3 missing required source: ${path}")
     endif()
@@ -90,5 +92,25 @@ foreach(token IN ITEMS
     string(FIND "${studio_workspace_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Phase 6 Gate 3 Audio workspace contract missing ${token}")
+    endif()
+endforeach()
+
+# The Scene Inspector is a top-level Wicked GUI Window rendered after the
+# Renegade chrome. Audio lives inside that chrome, so the ordinary Inspector
+# must be hidden while Audio owns the right-hand panel or it will paint over all
+# Gate 3 controls. The derived render path performs this reconciliation after
+# the normal Studio update and restores the Inspector outside Audio/Render/Hub.
+file(READ "${studio_application_header}" studio_application_header_text)
+foreach(token IN ITEMS
+    "SyncAudioInspectorPresentation"
+    "studioChrome_.IsAudioWorkspaceActive()"
+    "inspectorPanel_.SetVisible(false)"
+    "renderWorkspacePanel_.SetVisible(false)"
+    "!projectHubVisible_ && !renderWorkspaceActive_"
+    "StudioRenderPath::Update(dt);"
+    "SyncAudioInspectorPresentation();")
+    string(FIND "${studio_application_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Phase 6 Gate 3 Audio Inspector ownership contract missing ${token}")
     endif()
 endforeach()
