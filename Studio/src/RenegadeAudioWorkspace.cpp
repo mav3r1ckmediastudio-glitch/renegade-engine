@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -152,6 +153,10 @@ namespace renegade::studio
         bool active = false;
         bool pointerConsumed = false;
         bool refreshPending = true;
+        bool placingZone = false;
+        bool placementValid = false;
+        XMFLOAT2 placementScreen = {};
+        XMFLOAT3 placementPosition = {};
         XMFLOAT4 bounds = {};
         bridge::StudioSession* session = nullptr;
         wi::ecs::Entity selected = wi::ecs::INVALID_ENTITY;
@@ -188,6 +193,8 @@ namespace renegade::studio
         ~Impl()
         {
             StopPreview();
+            if (placingZone)
+                wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
         }
 
         [[nodiscard]] wi::scene::Scene* Scene() const noexcept
@@ -208,12 +215,181 @@ namespace renegade::studio
             statusError = error;
         }
 
+        [[nodiscard]] bool PointerInsideViewport(
+            const XMFLOAT4& pointer) const noexcept
+        {
+            const auto* chrome = CreatorAssetStudioChrome::Current();
+            if (chrome == nullptr)
+                return false;
+            const XMFLOAT4 viewport = chrome->ViewportBounds();
+            return pointer.x >= viewport.x && pointer.x < viewport.z &&
+                pointer.y >= viewport.y && pointer.y < viewport.w;
+        }
+
+        bool ResolvePlacementSurface(
+            const wi::Canvas& canvas,
+            const XMFLOAT4& pointer,
+            XMFLOAT3& surface)
+        {
+            auto* scene = Scene();
+            if (scene == nullptr)
+                return false;
+
+            const auto& camera = wi::scene::GetCamera();
+            const auto ray = wi::renderer::GetPickRay(
+                static_cast<long>(pointer.x),
+                static_cast<long>(pointer.y),
+                canvas,
+                camera);
+            const auto picked = wi::scene::Pick(
+                ray,
+                wi::enums::FILTER_OBJECT_ALL | wi::enums::FILTER_TERRAIN,
+                ~0u,
+                *scene);
+            if (picked.entity != wi::ecs::INVALID_ENTITY)
+            {
+                surface = picked.position;
+                return true;
+            }
+
+            // Empty levels still need a deterministic placement surface. Use
+            // the editor ground plane only when the pick ray intersects it in
+            // front of the camera; never manufacture a point behind the user.
+            if (std::abs(ray.direction.y) <= 0.0001f)
+                return false;
+            const float distance = -ray.origin.y / ray.direction.y;
+            if (distance < ray.TMin || distance > ray.TMax)
+                return false;
+            surface = XMFLOAT3(
+                ray.origin.x + ray.direction.x * distance,
+                0.0f,
+                ray.origin.z + ray.direction.z * distance);
+            return true;
+        }
+
         void StopPreview() noexcept
         {
             if (previewInstance.IsValid())
                 wi::audio::Stop(&previewInstance);
             previewInstance = {};
             previewResource = {};
+        }
+
+        void CancelZonePlacement(const bool announce = true)
+        {
+            placingZone = false;
+            placementValid = false;
+            addSource.SetText("ADD SOUND ZONE...");
+            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+            if (announce)
+                SetStatus("SOUND ZONE // PLACEMENT CANCELLED");
+        }
+
+        void BeginZonePlacement()
+        {
+            if (placingZone)
+            {
+                CancelZonePlacement();
+                return;
+            }
+            if (session == nullptr)
+                session = bridge::StudioSession::Current();
+            if (session == nullptr || !session->Projects().HasProject())
+            {
+                SetStatus("AUDIO // OPEN A PROJECT FIRST", true);
+                return;
+            }
+
+            StopPreview();
+            placingZone = true;
+            placementValid = false;
+            addSource.SetText("CANCEL PLACEMENT");
+            SetStatus("SOUND ZONE // MOVE CURSOR INTO VIEWPORT // LEFT CLICK TO PLACE // ESC TO CANCEL");
+        }
+
+        bool CommitZonePlacement()
+        {
+            if (!placingZone || !placementValid || session == nullptr)
+                return false;
+
+            auto& scene = session->Scenes().GetScene();
+            bridge::TransformState transform;
+            transform.translation = placementPosition;
+
+            bridge::SoundSourceState state;
+            state.zoneEnabled = true;
+            state.playOnStart = false;
+            auto command = std::make_unique<bridge::CreateSoundSourceCommand>(
+                scene, state, transform);
+            auto* createdCommand = command.get();
+            if (!session->Commands().Execute(std::move(command)))
+            {
+                SetStatus("AUDIO // SOUND ZONE CREATION FAILED", true);
+                return false;
+            }
+
+            selected = createdCommand->CreatedEntity();
+            session->Selection().Select(selected);
+            refreshPending = true;
+            placingZone = false;
+            placementValid = false;
+            addSource.SetText("ADD SOUND ZONE...");
+            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+            SetStatus("SOUND ZONE // PLACED // USE GIZMO TO MOVE/SCALE // CHOOSE AUDIO ASSET");
+            return true;
+        }
+
+        bool UpdateZonePlacement(const wi::Canvas& canvas)
+        {
+            if (!placingZone)
+                return false;
+
+            if (session == nullptr || !session->Projects().HasProject())
+            {
+                CancelZonePlacement(false);
+                SetStatus("AUDIO // PROJECT CLOSED // PLACEMENT CANCELLED", true);
+                return false;
+            }
+
+            if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
+            {
+                CancelZonePlacement();
+                return false;
+            }
+
+            const XMFLOAT4 pointer = wi::input::GetPointer();
+            placementScreen = XMFLOAT2(pointer.x, pointer.y);
+            const bool insideViewport = PointerInsideViewport(pointer);
+            placementValid = insideViewport &&
+                ResolvePlacementSurface(canvas, pointer, placementPosition);
+
+            if (insideViewport)
+            {
+                wi::input::SetCursor(
+                    placementValid
+                        ? wi::input::CURSOR_HAND
+                        : wi::input::CURSOR_NOTALLOWED);
+            }
+            else
+            {
+                wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+            }
+
+            // Only the actual placement click is consumed. RMB/MMB and mouse
+            // motion stay available to the normal viewport camera while the
+            // ghost follows the cursor, so the user can navigate before drop.
+            if (insideViewport &&
+                wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+            {
+                if (!placementValid)
+                {
+                    SetStatus("SOUND ZONE // NO VALID SURFACE UNDER CURSOR", true);
+                    return true;
+                }
+                (void)CommitZonePlacement();
+                return true;
+            }
+            return false;
         }
 
         void StartPreview()
@@ -305,8 +481,11 @@ namespace renegade::studio
             addSource.SetText("ADD SOUND ZONE...");
             addSource.SetRenderTextSize(11);
             addSource.SetTooltip(
-                "Choose a WAV/OGG, copy it into Content/Audio when needed, then place a selectable native Wicked Sound Zone.");
-            addSource.OnClick([this](const wi::gui::EventArgs&)\n            {\n                CreateEmptyZone();\n            });
+                "Enter viewport placement mode. A sound-zone ghost follows the cursor; left-click a surface to place it, then assign WAV/OGG audio in the Inspector.");
+            addSource.OnClick([this](const wi::gui::EventArgs&)
+            {
+                BeginZonePlacement();
+            });
 
             chooseAudio.Create("Gate 3 Choose Audio");
             chooseAudio.SetText("AUDIO ASSET...");
@@ -461,39 +640,6 @@ namespace renegade::studio
             for (auto* control : controls)
                 control->SetVisible(false);
             created = true;
-        }
-
-        void CreateEmptyZone()
-        {
-            if (session == nullptr || !session->Projects().HasProject())
-            {
-                SetStatus("AUDIO // OPEN A PROJECT FIRST", true);
-                return;
-            }
-
-            auto& scene = session->Scenes().GetScene();
-            bridge::TransformState transform;
-            const auto& editorCamera = wi::scene::GetCamera();
-            transform.translation = XMFLOAT3{
-                editorCamera.Eye.x + editorCamera.At.x * 5.0f,
-                editorCamera.Eye.y + editorCamera.At.y * 5.0f,
-                editorCamera.Eye.z + editorCamera.At.z * 5.0f};
-
-            bridge::SoundSourceState state;
-            state.zoneEnabled = true;
-            state.playOnStart = false;
-            auto command = std::make_unique<bridge::CreateSoundSourceCommand>(
-                scene, state, transform);
-            auto* createdCommand = command.get();
-            if (!session->Commands().Execute(std::move(command)))
-            {
-                SetStatus("AUDIO // SOUND ZONE CREATION FAILED", true);
-                return;
-            }
-            selected = createdCommand->CreatedEntity();
-            session->Selection().Select(selected);
-            refreshPending = true;
-            SetStatus("SOUND ZONE // CREATED // CHOOSE AUDIO ASSET");
         }
 
         void ChooseAudio(const bool createNew)
@@ -786,6 +932,8 @@ namespace renegade::studio
         if (!active)
         {
             impl_->StopPreview();
+            if (impl_->placingZone)
+                impl_->CancelZonePlacement(false);
             for (auto* control : impl_->controls)
                 control->SetVisible(false);
         }
@@ -825,7 +973,7 @@ namespace renegade::studio
 
     void RenegadeAudioWorkspace::CreateSoundSource()
     {
-        impl_->ChooseAudio(true);
+        impl_->BeginZonePlacement();
     }
 
     void RenegadeAudioWorkspace::Update(
@@ -862,8 +1010,10 @@ namespace renegade::studio
         }
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
-        impl_->pointerConsumed = ContainsPointer(pointer);
-        if (impl_->pointerConsumed)
+        const bool inspectorConsumed = ContainsPointer(pointer);
+        const bool placementConsumed = impl_->UpdateZonePlacement(canvas);
+        impl_->pointerConsumed = inspectorConsumed || placementConsumed;
+        if (inspectorConsumed)
         {
             // The Audio surface is visually above the ordinary Inspector.
             // Propagate that same priority to Wicked's input scheduler so
@@ -908,6 +1058,35 @@ namespace renegade::studio
         {
             if (control->IsVisible())
                 control->Render(canvas, cmd);
+        }
+
+        // Placement preview is deliberately editor-only: no temporary scene
+        // entity enters WISCENE, hierarchy, selection, Undo or save state.
+        // The cursor ghost marks the exact screen ray used for the eventual
+        // native SoundComponent placement.
+        if (impl_->placingZone && impl_->PointerInsideViewport(XMFLOAT4(
+                impl_->placementScreen.x,
+                impl_->placementScreen.y,
+                0.0f,
+                0.0f)))
+        {
+            const float x = impl_->placementScreen.x;
+            const float y = impl_->placementScreen.y;
+            const wi::Color marker = impl_->placementValid ? Forge : Error;
+            const wi::Color ghost = impl_->placementValid
+                ? wi::Color(210, 91, 29, 72)
+                : wi::Color(229, 92, 92, 72);
+            DrawRect(x - 18.0f, y - 18.0f, 36.0f, 36.0f, ghost, cmd);
+            DrawRect(x - 24.0f, y - 1.0f, 48.0f, 2.0f, marker, cmd);
+            DrawRect(x - 1.0f, y - 24.0f, 2.0f, 48.0f, marker, cmd);
+            DrawText(
+                impl_->placementValid ? "SOUND ZONE // CLICK TO PLACE" : "SOUND ZONE // NO SURFACE",
+                x + 16.0f,
+                y + 16.0f,
+                9,
+                marker,
+                cmd,
+                0.08f);
         }
 
         const float statusY = b.y + b.w - 28.0f;
