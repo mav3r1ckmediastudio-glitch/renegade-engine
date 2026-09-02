@@ -464,12 +464,16 @@ namespace renegade::bridge
         }
 
         wi::audio::SoundInstance nextInstance;
-        if (recreate && nextResource.IsValid())
+        if (recreate)
         {
+            // Preserve authored routing and instance flags even before an audio
+            // asset is assigned. CreateSoundInstance() adds the backend handle
+            // later without changing the source's selected bus semantics.
             nextInstance.type = ToWickedBus(safe.bus);
             nextInstance.SetEnableReverb(safe.reverb);
             nextInstance.SetLooped(safe.looped);
-            if (!wi::audio::CreateSoundInstance(
+            if (nextResource.IsValid() &&
+                !wi::audio::CreateSoundInstance(
                     &nextResource.GetSound(),
                     &nextInstance))
             {
