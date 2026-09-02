@@ -153,6 +153,36 @@ int main()
     }
 
     {
+        wi::scene::Scene scene;
+        SoundSourceState global;
+        global.looped = true;
+        global.spatial = false;
+        global.playOnStart = true;
+        global.bus = AudioBus::Ambience;
+        global.zoneEnabled = false;
+        TransformState transform;
+        transform.translation = XMFLOAT3(40.0f, 8.0f, -20.0f);
+
+        CreateSoundSourceCommand command(scene, global, transform);
+        Check(command.Execute(), "global 2D sound command could not create a source");
+        const auto entity = command.CreatedEntity();
+        Check(IsRenegadeSoundSource(scene, entity), "global source was not marked as Renegade audio");
+        Check(!scene.transforms.Contains(entity), "global 2D source retained a meaningless world transform");
+        const auto* name = scene.names.GetComponent(entity);
+        Check(name != nullptr && name->name == "Global Ambience", "global ambience did not receive a clear hierarchy name");
+        const auto captured = CaptureSoundSource(scene, entity);
+        Check(!captured.spatial && !captured.zoneEnabled, "global source did not remain non-spatial and non-zone");
+        Check(captured.looped && captured.playOnStart, "global source defaults did not retain persistent playback intent");
+        Check(captured.bus == AudioBus::Ambience, "global source did not retain ambience bus ownership");
+
+        command.Undo();
+        Check(!IsRenegadeSoundSource(scene, entity), "global source Undo did not remove the entity");
+        Check(command.Execute(), "global source Redo could not restore the entity snapshot");
+        Check(IsRenegadeSoundSource(scene, entity), "global source Redo lost audio metadata");
+        Check(!scene.transforms.Contains(entity), "global source Redo restored a viewport transform");
+    }
+
+    {
         wi::scene::Scene empty;
         const auto mix = CaptureSceneAudioMix(empty);
         Check(Near(mix.masterVolume, 1.0f), "scene without mix did not retain default master volume");

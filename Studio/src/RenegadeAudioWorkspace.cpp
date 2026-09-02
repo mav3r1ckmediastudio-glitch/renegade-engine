@@ -166,6 +166,7 @@ namespace renegade::studio
         std::string sourceFileDisplay = "NO SOUND SOURCE SELECTED";
         std::vector<wi::gui::Widget*> controls;
 
+        RenegadeButton addGlobal;
         RenegadeButton addSource;
         RenegadeButton chooseAudio;
         RenegadeButton previewPlay;
@@ -252,9 +253,6 @@ namespace renegade::studio
                 return true;
             }
 
-            // Empty levels still need a deterministic placement surface. Use
-            // the editor ground plane only when the pick ray intersects it in
-            // front of the camera; never manufacture a point behind the user.
             if (std::abs(ray.direction.y) <= 0.0001f)
                 return false;
             const float distance = -ray.origin.y / ray.direction.y;
@@ -305,6 +303,44 @@ namespace renegade::studio
             placementValid = false;
             addSource.SetText("CANCEL PLACEMENT");
             SetStatus("SOUND ZONE // MOVE CURSOR INTO VIEWPORT // LEFT CLICK TO PLACE // ESC TO CANCEL");
+        }
+
+        void CreateGlobalSound()
+        {
+            if (session == nullptr)
+                session = bridge::StudioSession::Current();
+            if (session == nullptr || !session->Projects().HasProject())
+            {
+                SetStatus("AUDIO // OPEN A PROJECT FIRST", true);
+                return;
+            }
+
+            if (placingZone)
+                CancelZonePlacement(false);
+            StopPreview();
+
+            auto& scene = session->Scenes().GetScene();
+            bridge::SoundSourceState state;
+            state.zoneEnabled = false;
+            state.playOnStart = true;
+            state.looped = true;
+            state.spatial = false;
+            state.bus = bridge::AudioBus::Ambience;
+            bridge::TransformState transform;
+
+            auto command = std::make_unique<bridge::CreateSoundSourceCommand>(
+                scene, state, transform);
+            auto* createdCommand = command.get();
+            if (!session->Commands().Execute(std::move(command)))
+            {
+                SetStatus("AUDIO // GLOBAL SOUND CREATION FAILED", true);
+                return;
+            }
+
+            selected = createdCommand->CreatedEntity();
+            session->Selection().Select(selected);
+            refreshPending = true;
+            SetStatus("GLOBAL SOUND // CREATED // CHOOSE AUDIO ASSET");
         }
 
         bool CommitZonePlacement()
@@ -375,9 +411,6 @@ namespace renegade::studio
                 wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
             }
 
-            // Only the actual placement click is consumed. RMB/MMB and mouse
-            // motion stay available to the normal viewport camera while the
-            // ghost follows the cursor, so the user can navigate before drop.
             if (insideViewport &&
                 wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
             {
@@ -417,10 +450,6 @@ namespace renegade::studio
                 return;
             }
 
-            // Keep the decoded asset alive independently of the authored
-            // component. Never call Update3D on this instance: Studio Preview
-            // is an explicit 2D audition path and cannot be stopped by the
-            // Scene SoundComponent PLAYING lifecycle.
             previewResource = sound->soundResource;
             previewInstance = std::move(instance);
             wi::audio::SetVolume(sound->volume, &previewInstance);
@@ -477,9 +506,19 @@ namespace renegade::studio
 
         void CreateControls()
         {
+            addGlobal.Create("Gate 3 Add Global Sound");
+            addGlobal.SetText("ADD GLOBAL SOUND");
+            addGlobal.SetRenderTextSize(10);
+            addGlobal.SetTooltip(
+                "Create a level-wide 2D sound immediately. It is not placed in the viewport; assign WAV/OGG audio in the Inspector and choose MUSIC or AMBIENCE as needed.");
+            addGlobal.OnClick([this](const wi::gui::EventArgs&)
+            {
+                CreateGlobalSound();
+            });
+
             addSource.Create("Gate 3 Add Sound Source");
             addSource.SetText("ADD SOUND ZONE...");
-            addSource.SetRenderTextSize(11);
+            addSource.SetRenderTextSize(10);
             addSource.SetTooltip(
                 "Enter viewport placement mode. A sound-zone ghost follows the cursor; left-click a surface to place it, then assign WAV/OGG audio in the Inspector.");
             addSource.OnClick([this](const wi::gui::EventArgs&)
@@ -630,7 +669,7 @@ namespace renegade::studio
             });
 
             controls = {
-                &addSource, &chooseAudio, &previewPlay, &previewStop,
+                &addGlobal, &addSource, &chooseAudio, &previewPlay, &previewStop,
                 &playOnStart, &zoneEnabled, &looped, &spatial, &reverb,
                 &sourceVolume, &sourceBus, &repeatMode,
                 &zoneRadius, &durationSeconds,
@@ -801,6 +840,7 @@ namespace renegade::studio
             selected = next;
 
             const bool sourceSelected = SelectedIsSource();
+            addGlobal.SetVisible(active);
             addSource.SetVisible(active);
             chooseAudio.SetVisible(active && sourceSelected);
             previewPlay.SetVisible(active && sourceSelected);
@@ -824,13 +864,17 @@ namespace renegade::studio
             if (sourceSelected)
             {
                 const auto source = bridge::CaptureSoundSource(*Scene(), selected);
+                const bool global2D = !source.zoneEnabled && !source.spatial &&
+                    !Scene()->transforms.Contains(selected);
                 playOnStart.SetVisible(active && !source.zoneEnabled);
+                zoneEnabled.SetVisible(active && !global2D);
+                spatial.SetVisible(active && !global2D);
                 repeatMode.SetVisible(active && source.zoneEnabled);
                 zoneRadius.SetVisible(active && source.zoneEnabled);
                 durationSeconds.SetVisible(active && source.zoneEnabled);
                 sourceFileDisplay = fs::u8path(source.filename).filename().generic_u8string();
                 if (sourceFileDisplay.empty())
-                    sourceFileDisplay = "NO AUDIO ASSET";
+                    sourceFileDisplay = global2D ? "GLOBAL SOUND // NO AUDIO ASSET" : "NO AUDIO ASSET";
                 playOnStart.SetCheck(source.playOnStart);
                 zoneEnabled.SetCheck(source.zoneEnabled);
                 looped.SetCheck(source.looped);
@@ -885,7 +929,7 @@ namespace renegade::studio
                 y += RowHeight + RowGap;
             };
 
-            full(addSource);
+            two(addGlobal, addSource);
             y += SectionGap;
             full(chooseAudio);
             two(previewPlay, previewStop);
@@ -1015,9 +1059,6 @@ namespace renegade::studio
         impl_->pointerConsumed = inspectorConsumed || placementConsumed;
         if (inspectorConsumed)
         {
-            // The Audio surface is visually above the ordinary Inspector.
-            // Propagate that same priority to Wicked's input scheduler so
-            // hidden Inspector controls cannot react through it.
             Activate();
         }
         else
@@ -1041,7 +1082,7 @@ namespace renegade::studio
         const auto& b = impl_->bounds;
         DrawRect(b.x, b.y, b.z, b.w, Surface0, cmd);
         DrawRect(b.x, b.y, b.z, 1.0f, Border, cmd);
-        DrawText("SOUND ZONE // NATIVE WICKED AUDIO",
+        DrawText("AUDIO // NATIVE WICKED AUDIO",
             b.x + 12.0f, b.y + 10.0f, 13, TextStrong, cmd);
         DrawText(impl_->sourceFileDisplay,
             b.x + 12.0f, b.y + 32.0f, 10,
@@ -1060,10 +1101,6 @@ namespace renegade::studio
                 control->Render(canvas, cmd);
         }
 
-        // Placement preview is deliberately editor-only: no temporary scene
-        // entity enters WISCENE, hierarchy, selection, Undo or save state.
-        // The cursor ghost marks the exact screen ray used for the eventual
-        // native SoundComponent placement.
         if (impl_->placingZone && impl_->PointerInsideViewport(XMFLOAT4(
                 impl_->placementScreen.x,
                 impl_->placementScreen.y,

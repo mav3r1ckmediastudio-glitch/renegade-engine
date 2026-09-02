@@ -697,10 +697,6 @@ namespace renegade::bridge
             return scene_->Entity_Serialize(snapshot_, serializer) == entity_;
         }
 
-        // Do not pass the filename into Entity_CreateSound(): Wicked creates a
-        // playback instance immediately and ApplySoundSource would then create
-        // it again. Start inert and let the validated bridge boundary perform
-        // exactly one resource/instance creation.
         entity_ = scene_->Entity_CreateSound(
             MakeUniqueName(), {}, transform_.translation);
         if (entity_ != wi::ecs::INVALID_ENTITY)
@@ -728,6 +724,13 @@ namespace renegade::bridge
             entity_ = wi::ecs::INVALID_ENTITY;
             return false;
         }
+
+        // A true global 2D source has no world-space meaning. Wicked only needs
+        // TransformComponent for 3D audio, so remove the creation-time transform
+        // before the command snapshot. This keeps global audio in the hierarchy
+        // while keeping it out of the viewport/gizmo path, including Undo/Redo.
+        if (!state_.zoneEnabled && !state_.spatial)
+            scene_->transforms.Remove(entity_);
 
         snapshot_.SetReadModeAndResetPos(false);
         wi::ecs::EntitySerializer serializer;
@@ -759,6 +762,17 @@ namespace renegade::bridge
             case AudioBus::Voice: base = "Voice Zone"; break;
             case AudioBus::SoundEffect:
             default: base = "SFX Zone"; break;
+            }
+        }
+        else if (!state_.spatial)
+        {
+            switch (state_.bus)
+            {
+            case AudioBus::Music: base = "Global Music"; break;
+            case AudioBus::Ambience: base = "Global Ambience"; break;
+            case AudioBus::Voice: base = "Global Voice"; break;
+            case AudioBus::SoundEffect:
+            default: base = "Global SFX"; break;
             }
         }
         return ::renegade::bridge::MakeUniqueName(*scene_, base);
