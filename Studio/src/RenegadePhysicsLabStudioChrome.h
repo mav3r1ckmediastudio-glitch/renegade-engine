@@ -43,15 +43,17 @@ namespace renegade::studio
         void SetAudioWorkspaceActive(bool active);
         void SynchronizeRigidBodyOwnerSelection();
         [[nodiscard]] bool PhysicsTabHit(const XMFLOAT4& pointer) const noexcept;
-        [[nodiscard]] bool AudioTabHit(const XMFLOAT4& pointer) const noexcept;
+        [[nodiscard]] XMFLOAT4 AudioViewportToolBounds() const noexcept;
+        [[nodiscard]] bool AudioViewportToolHit(
+            const XMFLOAT4& pointer) const noexcept;
         [[nodiscard]] XMFLOAT4 AudioInspectorBounds() const noexcept;
         void RenderPhysicsTab(wi::graphics::CommandList cmd) const;
-        void RenderAudioTab(wi::graphics::CommandList cmd) const;
+        void RenderAudioViewportTool(wi::graphics::CommandList cmd) const;
 
         RenegadePhysicsLabWorkspace physicsLab_;
         RenegadeAudioWorkspace audioWorkspace_;
         std::function<void(Action)> studioAction_;
         bool physicsTabConsumed_ = false;
-        bool audioTabConsumed_ = false;
+        bool audioToolConsumed_ = false;
     };
 }
