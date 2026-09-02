@@ -306,10 +306,7 @@ namespace renegade::studio
             addSource.SetRenderTextSize(11);
             addSource.SetTooltip(
                 "Choose a WAV/OGG, copy it into Content/Audio when needed, then place a selectable native Wicked Sound Zone.");
-            addSource.OnClick([this](const wi::gui::EventArgs&)
-            {
-                ChooseAudio(true);
-            });
+            addSource.OnClick([this](const wi::gui::EventArgs&)\n            {\n                CreateEmptyZone();\n            });
 
             chooseAudio.Create("Gate 3 Choose Audio");
             chooseAudio.SetText("AUDIO ASSET...");
@@ -464,6 +461,39 @@ namespace renegade::studio
             for (auto* control : controls)
                 control->SetVisible(false);
             created = true;
+        }
+
+        void CreateEmptyZone()
+        {
+            if (session == nullptr || !session->Projects().HasProject())
+            {
+                SetStatus("AUDIO // OPEN A PROJECT FIRST", true);
+                return;
+            }
+
+            auto& scene = session->Scenes().GetScene();
+            bridge::TransformState transform;
+            const auto& editorCamera = wi::scene::GetCamera();
+            transform.translation = XMFLOAT3{
+                editorCamera.Eye.x + editorCamera.At.x * 5.0f,
+                editorCamera.Eye.y + editorCamera.At.y * 5.0f,
+                editorCamera.Eye.z + editorCamera.At.z * 5.0f};
+
+            bridge::SoundSourceState state;
+            state.zoneEnabled = true;
+            state.playOnStart = false;
+            auto command = std::make_unique<bridge::CreateSoundSourceCommand>(
+                scene, state, transform);
+            auto* createdCommand = command.get();
+            if (!session->Commands().Execute(std::move(command)))
+            {
+                SetStatus("AUDIO // SOUND ZONE CREATION FAILED", true);
+                return;
+            }
+            selected = createdCommand->CreatedEntity();
+            session->Selection().Select(selected);
+            refreshPending = true;
+            SetStatus("SOUND ZONE // CREATED // CHOOSE AUDIO ASSET");
         }
 
         void ChooseAudio(const bool createNew)
