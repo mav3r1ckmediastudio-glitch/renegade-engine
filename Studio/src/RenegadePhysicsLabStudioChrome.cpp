@@ -11,6 +11,7 @@
 namespace
 {
     constexpr wi::Color Surface0 = wi::Color(8, 12, 16, 255);
+    constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
     constexpr wi::Color TextSecondary = wi::Color(226, 226, 226, 255);
     constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
@@ -23,9 +24,24 @@ namespace
         const wi::Color color,
         const wi::graphics::CommandList cmd)
     {
+        if (width <= 0.0f || height <= 0.0f)
+            return;
         wi::image::Params params(x, y, width, height, color);
         params.blendFlag = wi::enums::BLENDMODE_ALPHA;
         wi::image::Draw(nullptr, params, cmd);
+    }
+
+    void DrawBorderedRect(
+        const float x,
+        const float y,
+        const float width,
+        const float height,
+        const wi::Color fill,
+        const wi::Color border,
+        const wi::graphics::CommandList cmd)
+    {
+        DrawRect(x, y, width, height, border, cmd);
+        DrawRect(x + 1.0f, y + 1.0f, width - 2.0f, height - 2.0f, fill, cmd);
     }
 
     void DrawText(
@@ -181,28 +197,47 @@ namespace renegade::studio
             pointer.y >= 34.0f && pointer.y < 58.0f;
     }
 
-    bool RenegadePhysicsLabStudioChrome::AudioTabHit(
+    XMFLOAT4 RenegadePhysicsLabStudioChrome::AudioViewportToolBounds() const noexcept
+    {
+        const XMFLOAT4 viewport = ViewportBounds();
+
+        // RenegadeStudioChrome owns PERSPECTIVE/LIT/SHOW at viewport.x + 12.
+        // Gate 3 appends AUDIO immediately after SHOW instead of stealing the
+        // RENDER workspace hitbox in the fixed 360 px scene-tab strip.
+        constexpr float audioOffsetX = 237.0f;
+        constexpr float audioWidth = 61.5f;
+        return XMFLOAT4(
+            viewport.x + audioOffsetX,
+            viewport.y + 10.0f,
+            audioWidth,
+            28.0f);
+    }
+
+    bool RenegadePhysicsLabStudioChrome::AudioViewportToolHit(
         const XMFLOAT4& pointer) const noexcept
     {
-        const float sceneMetaX = LayoutWidth() - 360.0f;
-        return pointer.x >= sceneMetaX + 224.0f &&
-            pointer.x < sceneMetaX + 286.0f &&
-            pointer.y >= 34.0f && pointer.y < 58.0f;
+        const XMFLOAT4 bounds = AudioViewportToolBounds();
+        return pointer.x >= bounds.x && pointer.x < bounds.x + bounds.z &&
+            pointer.y >= bounds.y && pointer.y < bounds.y + bounds.w;
     }
 
     XMFLOAT4 RenegadePhysicsLabStudioChrome::AudioInspectorBounds() const noexcept
     {
         const XMFLOAT4 viewport = ViewportBounds();
+
+        // ViewportBounds is a rectangle expressed as left/top/right/bottom,
+        // not x/y/width/height. The Inspector begins at the viewport's right
+        // edge and extends down only to the viewport's bottom edge.
         return XMFLOAT4(
-            viewport.x + viewport.z,
+            viewport.z,
             viewport.y,
             InspectorWidth(),
-            viewport.w);
+            std::max(0.0f, viewport.w - viewport.y));
     }
 
     bool RenegadePhysicsLabStudioChrome::ConsumedPointerThisFrame() const noexcept
     {
-        return physicsTabConsumed_ || audioTabConsumed_ ||
+        return physicsTabConsumed_ || audioToolConsumed_ ||
             physicsLab_.ConsumedPointerThisFrame() ||
             audioWorkspace_.ConsumedPointerThisFrame() ||
             CreatorAssetStudioChrome::ConsumedPointerThisFrame();
@@ -213,7 +248,7 @@ namespace renegade::studio
         const float dt)
     {
         physicsTabConsumed_ = false;
-        audioTabConsumed_ = false;
+        audioToolConsumed_ = false;
         CreatorAssetStudioChrome::Update(canvas, dt);
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
@@ -225,18 +260,18 @@ namespace renegade::studio
                 studioAction_(Action::SceneWorkspace);
             SetPhysicsLabActive(true);
         }
-        else if (AudioTabHit(pointer) &&
+        else if (AudioViewportToolHit(pointer) &&
             wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
-            audioTabConsumed_ = true;
+            audioToolConsumed_ = true;
             if (studioAction_)
                 studioAction_(Action::SceneWorkspace);
             SetAudioWorkspaceActive(true);
         }
 
         // Selecting a Gate 3 source from the hierarchy opens its dedicated
-        // audio authoring surface automatically while leaving the viewport and
-        // gizmo available for emitter placement.
+        // audio Inspector automatically while leaving the viewport and gizmo
+        // available for emitter placement.
         if (!physicsLab_.IsActive() && !audioWorkspace_.IsActive())
         {
             auto* session = bridge::StudioSession::Current();
@@ -266,7 +301,7 @@ namespace renegade::studio
         const wi::graphics::CommandList cmd) const
     {
         CreatorAssetStudioChrome::Render(canvas, cmd);
-        RenderAudioTab(cmd);
+        RenderAudioViewportTool(cmd);
         RenderPhysicsTab(cmd);
         physicsLab_.Render(canvas, cmd);
         audioWorkspace_.Render(canvas, cmd);
@@ -291,22 +326,24 @@ namespace renegade::studio
         DrawRect(sceneMetaX + 292.0f, 57.0f, 64.0f, 2.0f, Forge, cmd);
     }
 
-    void RenegadePhysicsLabStudioChrome::RenderAudioTab(
+    void RenegadePhysicsLabStudioChrome::RenderAudioViewportTool(
         const wi::graphics::CommandList cmd) const
     {
-        const float sceneMetaX = LayoutWidth() - 360.0f;
+        const XMFLOAT4 bounds = AudioViewportToolBounds();
         const bool active = audioWorkspace_.IsActive();
+        DrawBorderedRect(
+            bounds.x,
+            bounds.y,
+            bounds.z,
+            bounds.w,
+            Surface0,
+            active ? Forge : Border,
+            cmd);
         DrawText(
             "AUDIO",
-            sceneMetaX + 230.0f,
-            38.0f,
+            bounds.x + 10.0f,
+            bounds.y + 8.0f,
             active ? TextStrong : TextSecondary,
             cmd);
-
-        if (!active)
-            return;
-
-        DrawRect(sceneMetaX + 12.0f, 56.0f, 344.0f, 4.0f, Surface0, cmd);
-        DrawRect(sceneMetaX + 224.0f, 57.0f, 62.0f, 2.0f, Forge, cmd);
     }
 }
