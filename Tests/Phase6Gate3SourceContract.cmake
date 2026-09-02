@@ -189,13 +189,24 @@ if(NOT authored_preview EQUAL -1)
     message(FATAL_ERROR "Studio Preview must not play the authored spatial instance")
 endif()
 
+file(READ "${service_source}" service_source_text)
 foreach(token IN ITEMS
     "ValidateAudioAssetForWicked"
     "Extended WAV headers"
-    "nextInstance"
-    "exactly one resource/instance creation")
-    file(STRINGS "${service_source}" token_matches REGEX "${token}")
-    if(NOT token_matches)
+    "wi::Resource nextResource"
+    "wi::audio::SoundInstance nextInstance"
+    "wi::resourcemanager::Load(safe.filename)"
+    "wi::audio::CreateSoundInstance")
+    string(FIND "${service_source_text}" "${token}" found)
+    if(found EQUAL -1)
         message(FATAL_ERROR "Phase 6 Gate 3 audio lifetime hardening missing ${token}")
     endif()
 endforeach()
+
+string(REGEX MATCHALL "wi::audio::CreateSoundInstance" instance_creations
+    "${service_source_text}")
+list(LENGTH instance_creations instance_creation_count)
+if(NOT instance_creation_count EQUAL 1)
+    message(FATAL_ERROR
+        "Phase 6 Gate 3 must create exactly one authored Wicked audio instance path")
+endif()
