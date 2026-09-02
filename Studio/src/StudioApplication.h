@@ -132,6 +132,25 @@ namespace renegade::studio
             return studioChrome_.IsPhysicsLabActive();
         }
 
+        // Audio and the ordinary Scene Inspector are independent top-level
+        // Wicked widgets. Wicked can reorder active widgets during Update(),
+        // so registration order alone cannot decide which surface owns the
+        // right-hand panel. Toggle only the Window's base Widget visibility:
+        // Window::SetVisible() also rewrites every child's visibility and
+        // destroys the Inspector's section state.
+        void SyncAudioInspectorPresentation()
+        {
+            if (studioChrome_.IsAudioWorkspaceActive())
+            {
+                inspectorPanel_.wi::gui::Widget::SetVisible(false);
+                renderWorkspacePanel_.wi::gui::Widget::SetVisible(false);
+                return;
+            }
+
+            if (!projectHubVisible_ && !renderWorkspaceActive_)
+                inspectorPanel_.wi::gui::Widget::SetVisible(true);
+        }
+
         [[nodiscard]] XMFLOAT4 StoryFlowWorkspaceBounds() const noexcept
         {
             return studioChrome_.ViewportBounds();
@@ -1207,6 +1226,12 @@ namespace renegade::studio
     class PhysicsLabStudioRenderPath final : public StudioRenderPath
     {
     public:
+        void Update(float dt) override
+        {
+            StudioRenderPath::Update(dt);
+            SyncAudioInspectorPresentation();
+        }
+
         void Render() const override
         {
             if (IsPhysicsLabActive())

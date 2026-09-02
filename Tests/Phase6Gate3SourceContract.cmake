@@ -110,14 +110,28 @@ foreach(token IN ITEMS
     endif()
 endforeach()
 
-# Audio is an independent top-level Widget. It is registered ahead of the
-# ordinary Inspector in Wicked's reverse render order, so it can cover that
-# surface without ever toggling the Inspector Window and destroying its
-# per-section child visibility state.
+# Audio is an independent top-level Widget, but Wicked can reorder active
+# widgets during Update(). Reconcile ownership afterwards by toggling only the
+# Inspector Window's base Widget visibility. Calling Window::SetVisible() here
+# would rewrite every Inspector child's visibility and corrupt section state.
 file(READ "${studio_application_header}" studio_application_header_text)
-string(FIND "${studio_application_header_text}" "SyncAudioInspectorPresentation" unsafe_sync)
-if(NOT unsafe_sync EQUAL -1)
-    message(FATAL_ERROR "Phase 6 Gate 3 must not toggle the accepted Inspector Window")
+foreach(token IN ITEMS
+    "SyncAudioInspectorPresentation"
+    "studioChrome_.IsAudioWorkspaceActive()"
+    "inspectorPanel_.wi::gui::Widget::SetVisible(false)"
+    "renderWorkspacePanel_.wi::gui::Widget::SetVisible(false)"
+    "inspectorPanel_.wi::gui::Widget::SetVisible(true)"
+    "StudioRenderPath::Update(dt);"
+    "SyncAudioInspectorPresentation();")
+    string(FIND "${studio_application_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Phase 6 Gate 3 Audio Inspector ownership missing ${token}")
+    endif()
+endforeach()
+
+string(FIND "${studio_application_header_text}" "inspectorPanel_.SetVisible(false)" unsafe_window_hide)
+if(NOT unsafe_window_hide EQUAL -1)
+    message(FATAL_ERROR "Phase 6 Gate 3 must preserve Inspector child visibility")
 endif()
 
 file(READ "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp" studio_application_source_text)
