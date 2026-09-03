@@ -1595,8 +1595,25 @@ namespace renegade::studio
         }
     }
 
+    void StudioRenderPath::PreRender()
+    {
+        if (testLevelRuntime_.IsActive())
+        {
+            // Runtime owns the live 3D world during Test Level. Keep only the
+            // lightweight 2D Studio surface alive so STOP/status remain usable.
+            wi::RenderPath2D::PreRender();
+            return;
+        }
+        wi::RenderPath3D::PreRender();
+    }
+
     void StudioRenderPath::Render() const
     {
+        if (testLevelRuntime_.IsActive())
+        {
+            wi::RenderPath2D::Render();
+            return;
+        }
         if (pathTracePreviewActive_)
         {
             RenderPath3D_PathTracing::Render();
@@ -3470,6 +3487,14 @@ namespace renegade::studio
         studioChrome_.OnAction(
             [this](const RenegadeStudioChrome::Action action)
         {
+            if (action == RenegadeStudioChrome::Action::ProjectHub ||
+                action == RenegadeStudioChrome::Action::SceneWorkspace ||
+                action == RenegadeStudioChrome::Action::EnvironmentWorkspace ||
+                action == RenegadeStudioChrome::Action::TerrainWorkspace ||
+                action == RenegadeStudioChrome::Action::RenderWorkspace)
+            {
+                ResetS1BInspectorDisclosure();
+            }
             switch (action)
             {
             case RenegadeStudioChrome::Action::ProjectHub:
@@ -4630,6 +4655,32 @@ namespace renegade::studio
 
     void StudioRenderPath::Update(const float dt)
     {
+        PollTestLevel();
+        if (testLevelRuntime_.IsActive())
+        {
+            // The child Runtime is the sole 3D owner while Test Level runs.
+            // RenderPath2D keeps wiGUI/chrome responsive without ticking the
+            // editor scene, visibility, physics, vegetation or render graph.
+            wi::RenderPath2D::Update(dt);
+
+            if (pendingAction_ == EditorAction::StopTestLevel)
+            {
+                ProcessPendingAction();
+                return;
+            }
+            pendingAction_ = EditorAction::None;
+
+            const auto state = testLevelRuntime_.LastResult().state;
+            statusLabel_.SetText(
+                state == TestLevelProcessState::Running
+                    ? "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT"
+                    : "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
+            if (session_ != nullptr)
+                studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+            studioChrome_.SetStatusText(statusLabel_.GetText());
+            return;
+        }
+
         if (!pathTracePreviewActive_ && session_ != nullptr &&
             (!appliedRenderSettingsInitialized_ ||
                 appliedRenderSettingsSceneRevision_ !=
@@ -4645,8 +4696,6 @@ namespace renegade::studio
             inspectorPanel_.SetVisible(false);
             TickGate8BakeControls();
         }
-        PollTestLevel();
-
         // The capture button is processed inside the previous frame's GUI
         // update. While pending, every Renegade overlay is suppressed for that
         // frame. Save that already-rendered clean 3D result here, before GUI
@@ -4755,33 +4804,6 @@ namespace renegade::studio
         }
 
         QueueCreatorImportScaleRuler();
-
-        if (testLevelRuntime_.IsActive())
-        {
-            // StopTestLevel is the only editor action that must still take
-            // effect while Runtime is active - without this, clicking STOP
-            // queues pendingAction_ but this function returns below before
-            // ever reaching the pendingAction_ dispatch further down, so the
-            // click would have no effect until Runtime happened to exit on
-            // its own. Any other action requested during an active session
-            // is discarded rather than silently deferred until Runtime
-            // exits and then firing unexpectedly.
-            if (pendingAction_ == EditorAction::StopTestLevel)
-            {
-                ProcessPendingAction();
-                return;
-            }
-            pendingAction_ = EditorAction::None;
-
-            const auto state = testLevelRuntime_.LastResult().state;
-            statusLabel_.SetText(
-                state == TestLevelProcessState::Running
-                    ? "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT"
-                    : "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
-            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
-            studioChrome_.SetStatusText(statusLabel_.GetText());
-            return;
-        }
 
         if (workspaceLayoutDirty_)
         {
@@ -4937,6 +4959,11 @@ namespace renegade::studio
 
     void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
     {
+        if (testLevelRuntime_.IsActive())
+        {
+            wi::RenderPath2D::Compose(cmd);
+            return;
+        }
         if (pathTracePreviewActive_)
         {
             RenderPath3D_PathTracing::Compose(cmd);

@@ -88,6 +88,18 @@ if(WIN32)
     include(Tests/Phase6Gate3.cmake)
     include(Tests/S1AInspectorSectionFramework.cmake)
     include(Tests/S1BInspectorMigration.cmake)
+    add_test(
+        NAME RenegadeStudioDisclosurePolicySourceContract
+        COMMAND ${CMAKE_COMMAND}
+            -DRENEGADE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/StudioDisclosurePolicySourceContract.cmake
+    )
+    add_test(
+        NAME RenegadeTestLevelRuntimeHandoffSourceContract
+        COMMAND ${CMAKE_COMMAND}
+            -DRENEGADE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/TestLevelRuntimeHandoffSourceContract.cmake
+    )
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)

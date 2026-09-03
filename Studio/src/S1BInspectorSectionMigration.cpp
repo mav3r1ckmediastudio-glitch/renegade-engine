@@ -132,10 +132,12 @@ namespace renegade::studio
             button.SetTooltip(tooltip);
             button.OnClick([this, sectionId](const wi::gui::EventArgs&)
             {
-                if (inspectorSectionRegistry_.ToggleExpanded(sectionId))
-                {
-                    RefreshInspector();
-                }
+                const bool opening =
+                    !inspectorSectionRegistry_.IsExpanded(sectionId);
+                ResetS1BInspectorDisclosure();
+                if (opening)
+                    (void)inspectorSectionRegistry_.SetExpanded(sectionId, true);
+                RefreshInspector();
             });
             inspectorPanel_.AddWidget(&button);
         };
@@ -158,7 +160,7 @@ namespace renegade::studio
 
         std::string error;
         auto transform = std::make_shared<CallbackInspectorSectionProvider>(
-            MakeSection("transform", "TRANSFORM", 10, true),
+            MakeSection("transform", "TRANSFORM", 10, false),
             [this](const InspectorSectionContext&)
             {
                 return IsS1BTransformSectionVisible();
@@ -233,7 +235,7 @@ namespace renegade::studio
             studioChrome_.SetStatusText("S1B INSPECTOR // " + error);
 
         auto rendering = std::make_shared<CallbackInspectorSectionProvider>(
-            MakeSection("rendering", "RENDERING", 20, true),
+            MakeSection("rendering", "RENDERING", 20, false),
             [this](const InspectorSectionContext&)
             {
                 return IsS1BRenderingSectionVisible();
@@ -286,7 +288,7 @@ namespace renegade::studio
             studioChrome_.SetStatusText("S1B INSPECTOR // " + error);
 
         auto materials = std::make_shared<CallbackInspectorSectionProvider>(
-            MakeSection("materials", "MATERIALS", 30, true),
+            MakeSection("materials", "MATERIALS", 30, false),
             [this](const InspectorSectionContext&)
             {
                 return materialInspectorVisible_;
@@ -449,6 +451,12 @@ namespace renegade::studio
         for (auto& widget : materialTextureClear_) offset(widget);
     }
 
+    void StudioRenderPath::ResetS1BInspectorDisclosure()
+    {
+        for (const char* sectionId : {"transform", "rendering", "materials"})
+            (void)inspectorSectionRegistry_.SetExpanded(sectionId, false);
+    }
+
     void StudioRenderPath::LayoutS1BInspectorSections()
     {
         transformSectionHeader_.SetVisible(false);
@@ -470,6 +478,24 @@ namespace renegade::studio
         const auto selected = hasSession && session_->Selection().HasSelection()
             ? session_->Selection().SelectedEntity()
             : wi::ecs::INVALID_ENTITY;
+        const std::uint64_t selectionRevision = selected != wi::ecs::INVALID_ENTITY
+            ? static_cast<std::uint64_t>(selected)
+            : 0u;
+        const int viewToken = projectHubVisible_
+            ? 1
+            : environmentWorkspaceActive_ ? 2
+            : terrainWorkspaceActive_ ? 3
+            : renderWorkspaceActive_ ? 4
+            : studioChrome_.IsAudioWorkspaceActive() ? 5
+            : studioChrome_.IsPhysicsLabActive() ? 6
+            : 16 + studioChrome_.ActiveBottomTab();
+        if (selectionRevision != inspectorDisclosureSelectionRevision_ ||
+            viewToken != inspectorDisclosureViewToken_)
+        {
+            ResetS1BInspectorDisclosure();
+            inspectorDisclosureSelectionRevision_ = selectionRevision;
+            inspectorDisclosureViewToken_ = viewToken;
+        }
         static wi::scene::Scene emptyScene;
         const auto& scene = hasSession
             ? session_->Scenes().GetScene()

@@ -110,6 +110,8 @@ namespace renegade::studio
                     action == Action::RenderWorkspace)
                 {
                     workspaceTransitionRequested_ = true;
+                    SetActiveBottomTab(-1, true);
+                    ResetDisclosureState();
                     SetPhysicsLabActive(false);
                     SetAudioWorkspaceActive(false);
                 }
@@ -263,7 +265,8 @@ namespace renegade::studio
                 studioAction_(Action::SceneWorkspace);
             SetPhysicsLabActive(true);
         }
-        else if (AudioViewportToolHit(pointer) &&
+        else if (!HasOpenMenuPopup() &&
+            AudioViewportToolHit(pointer) &&
             wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
             audioToolConsumed_ = true;
@@ -331,6 +334,8 @@ namespace renegade::studio
     void RenegadePhysicsLabStudioChrome::RenderAudioViewportTool(
         const wi::graphics::CommandList cmd) const
     {
+        if (HasOpenMenuPopup())
+            return;
         const XMFLOAT4 bounds = AudioViewportToolBounds();
         const bool active = audioWorkspace_.IsActive();
         DrawBorderedRect(
