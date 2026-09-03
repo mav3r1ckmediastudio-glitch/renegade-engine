@@ -445,6 +445,7 @@ namespace
             return 0;
 
         case WM_DESTROY:
+            application.ShutdownForProcessExit();
             PostQuitMessage(application.ExitCode());
             return 0;
 
