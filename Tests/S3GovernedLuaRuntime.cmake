@@ -1,5 +1,5 @@
 add_executable(RenegadeS3GovernedLuaRuntimeTests
-    S3GovernedLuaRuntimeTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/S3GovernedLuaRuntimeTests.cpp
 )
 
 target_link_libraries(
