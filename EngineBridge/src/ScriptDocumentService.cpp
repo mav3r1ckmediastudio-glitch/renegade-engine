@@ -1236,8 +1236,11 @@ namespace renegade::bridge
                 return false;
             }
 
-            const std::string normalizedPath =
-                fs::u8path(attachment.sourcePath).lexically_normal().generic_u8string();
+            // Renegade is Windows-first and Windows project paths are case-insensitive.
+            // One physical governed Lua source must never acquire multiple source IDs
+            // merely because two document entries use different path casing.
+            const std::string normalizedPath = LowerAscii(
+                fs::u8path(attachment.sourcePath).lexically_normal().generic_u8string());
             const auto pathSource = sourceIdsByPath.find(normalizedPath);
             if (pathSource == sourceIdsByPath.end())
             {

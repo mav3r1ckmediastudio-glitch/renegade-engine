@@ -251,6 +251,14 @@ int main()
     if (AddScriptAttachment(conflictDocument, conflictingPath, error))
         return Fail("same source path with different sourceId should be rejected");
 
+    ScriptAttachment conflictingPathCase = CreateScriptAttachment(
+        ScriptScope::Entity,
+        ownerA,
+        MakeSource("content/scripts/SHARED # ACTION.lua", ScriptPresentation::Action));
+    conflictDocument = document;
+    if (AddScriptAttachment(conflictDocument, conflictingPathCase, error))
+        return Fail("Windows-equivalent source path casing with different sourceId should be rejected");
+
     ScriptSourceBinding conflictingId = actionSource;
     conflictingId.sourcePath = "Content/Scripts/different.lua";
     ScriptAttachment conflictingSourceId = CreateScriptAttachment(
