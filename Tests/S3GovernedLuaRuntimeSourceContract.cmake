@@ -6,10 +6,20 @@ set(runtime_source
     "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeScriptRuntime.cpp")
 set(runtime_header
     "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeScriptRuntime.h")
+set(application_source
+    "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
+set(application_header
+    "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.h")
+set(runtime_main
+    "${RENEGADE_SOURCE_DIR}/Runtime/src/main_Windows.cpp")
 
 file(READ "${runtime_source}" source)
 file(READ "${runtime_header}" header)
-set(all_text "${header}\n${source}")
+file(READ "${application_source}" application)
+file(READ "${application_header}" application_h)
+file(READ "${runtime_main}" main_source)
+set(core_text "${header}\n${source}")
+set(integration_text "${application_h}\n${application}\n${main_source}")
 
 foreach(required
     "lua_newstate"
@@ -45,10 +55,30 @@ foreach(required
     "Governed require()"
     "Advanced/Unsafe Lua execution is not enabled by S3"
 )
-    string(FIND "${all_text}" "${required}" found)
+    string(FIND "${core_text}" "${required}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR
             "S3 governed Lua Runtime contract is missing '${required}'")
+    endif()
+endforeach()
+
+foreach(required
+    "RuntimeScriptRuntime creatorScripts_"
+    "SyncCreatorScriptsForScene"
+    "StartSceneFromCompanion"
+    "creatorScripts_.Update"
+    "creatorScripts_.Pause"
+    "creatorScripts_.Resume"
+    "creatorScripts_.ResetScene"
+    "StopCreatorScripts"
+    "ReportCreatorScriptDiagnostics"
+    "ShutdownForProcessExit"
+    "application.ShutdownForProcessExit()"
+)
+    string(FIND "${integration_text}" "${required}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR
+            "S3 Runtime lifecycle integration is missing '${required}'")
     endif()
 endforeach()
 
@@ -65,7 +95,7 @@ foreach(forbidden
     "native_id"
     "InstructionBudgetGuard"
 )
-    string(FIND "${all_text}" "${forbidden}" found)
+    string(FIND "${core_text}" "${forbidden}" found)
     if(NOT found EQUAL -1)
         message(FATAL_ERROR
             "S3 governed Lua Runtime must not contain '${forbidden}'")
