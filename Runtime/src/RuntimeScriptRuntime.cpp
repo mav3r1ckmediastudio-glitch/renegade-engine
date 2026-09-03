@@ -324,13 +324,9 @@ namespace renegade::runtime
         {
             auto* reference = static_cast<EntityRefPayload*>(
                 luaL_testudata(state, 1, EntityRefMetatable));
-            bool valid = false;
-            if (reference != nullptr && reference->owner != nullptr)
-            {
-                valid = reference->generation == reference->owner->generation &&
-                    reference->owner->entitiesById.find(reference->stableId) !=
-                        reference->owner->entitiesById.end();
-            }
+            const bool valid = reference != nullptr &&
+                reference->owner != nullptr &&
+                reference->owner->IsLiveEntityRef(*reference);
             lua_pushstring(
                 state,
                 valid ? "EntityRef(valid)" : "EntityRef(stale)");
@@ -344,8 +340,10 @@ namespace renegade::runtime
             auto* right = static_cast<EntityRefPayload*>(
                 luaL_testudata(state, 2, EntityRefMetatable));
             const bool equal = left != nullptr && right != nullptr &&
+                left->owner != nullptr &&
                 left->owner == right->owner &&
-                left->generation == right->generation &&
+                left->owner->IsLiveEntityRef(*left) &&
+                left->owner->IsLiveEntityRef(*right) &&
                 std::strcmp(left->stableId, right->stableId) == 0;
             lua_pushboolean(state, equal ? 1 : 0);
             return 1;
@@ -474,6 +472,27 @@ namespace renegade::runtime
                 lua_touserdata(state, lua_upvalueindex(1)));
         }
 
+        bool IsLiveEntityRef(const EntityRefPayload& reference) const noexcept
+        {
+            if (reference.owner != this ||
+                reference.generation != generation ||
+                scene == nullptr)
+            {
+                return false;
+            }
+
+            const auto found = entitiesById.find(reference.stableId);
+            if (found == entitiesById.end())
+                return false;
+
+            // The map is a stable-ID resolver, not a liveness cache. Runtime
+            // entity mutation can remove or replace an ECS entity without
+            // changing the Level generation, so every creator-facing query
+            // revalidates the current Scene identity before exposing success.
+            return bridge::PersistentEntityId(*scene, found->second) ==
+                reference.stableId;
+        }
+
         static int EntityIsValidLua(lua_State* state)
         {
             auto* owner = FromUpvalue(state);
@@ -481,22 +500,23 @@ namespace renegade::runtime
                 luaL_testudata(state, 1, EntityRefMetatable));
             const bool valid = owner != nullptr && reference != nullptr &&
                 reference->owner == owner &&
-                reference->generation == owner->generation &&
-                owner->entitiesById.find(reference->stableId) !=
-                    owner->entitiesById.end();
+                owner->IsLiveEntityRef(*reference);
             lua_pushboolean(state, valid ? 1 : 0);
             return 1;
         }
 
         static int EntityEqualsLua(lua_State* state)
         {
+            auto* owner = FromUpvalue(state);
             auto* left = static_cast<EntityRefPayload*>(
                 luaL_testudata(state, 1, EntityRefMetatable));
             auto* right = static_cast<EntityRefPayload*>(
                 luaL_testudata(state, 2, EntityRefMetatable));
-            const bool equal = left != nullptr && right != nullptr &&
-                left->owner == right->owner &&
-                left->generation == right->generation &&
+            const bool equal = owner != nullptr &&
+                left != nullptr && right != nullptr &&
+                left->owner == owner && right->owner == owner &&
+                owner->IsLiveEntityRef(*left) &&
+                owner->IsLiveEntityRef(*right) &&
                 std::strcmp(left->stableId, right->stableId) == 0;
             lua_pushboolean(state, equal ? 1 : 0);
             return 1;
