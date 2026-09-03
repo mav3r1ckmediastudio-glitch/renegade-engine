@@ -37,6 +37,8 @@ endforeach()
 
 # Keep the empty provider refresh callback explicitly typed. Bare {} is
 # ambiguous to MSVC when passed through std::make_shared's parameter pack.
+# S1B now uses SetExpanded through the Studio disclosure policy rather than
+# requiring ToggleExpanded; the framework still owns section state and layout.
 foreach(token IN ITEMS
     "MakeSection(\"transform\""
     "MakeSection(\"rendering\""
@@ -44,7 +46,7 @@ foreach(token IN ITEMS
     "ProjectInspectorSectionPreferenceStore"
     "LayoutVisibleSections"
     "RefreshVisibleSections"
-    "ToggleExpanded"
+    "SetExpanded"
     "LayoutMaterialInspector"
     "InspectObjectParticipation"
     "CallbackInspectorSectionProvider::RefreshFn{}")
