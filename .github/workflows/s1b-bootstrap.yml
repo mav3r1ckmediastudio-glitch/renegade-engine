@@ -1,0 +1,143 @@
+name: S1B Inspector integration bootstrap
+
+on:
+  push:
+    branches:
+      - scripting/s1b-existing-inspector-migration
+
+permissions:
+  contents: write
+
+jobs:
+  patch-source:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Apply S1B integration seams
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one integration anchor, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # Header: consume the S1A framework, expose only private S1B seams, and
+          # keep the provider registry beside the existing Inspector owner.
+          replace_once(
+              "Studio/src/StudioApplication.h",
+              '#include "CreatorImportPreviewWindow.h"\n',
+              '#include "CreatorImportPreviewWindow.h"\n#include "InspectorSectionFramework.h"\n')
+          replace_once(
+              "Studio/src/StudioApplication.h",
+              '        void CreateMaterialInspector();\n        void LayoutMaterialInspector(float fieldWidth);\n',
+              '        void CreateMaterialInspector();\n'
+              '        void CreateS1BInspectorSections();\n'
+              '        void LayoutS1BInspectorSections();\n'
+              '        [[nodiscard]] bool IsS1BTransformSectionVisible() const;\n'
+              '        [[nodiscard]] bool IsS1BRenderingSectionVisible() const;\n'
+              '        void SetS1BMaterialContentVisible(bool visible);\n'
+              '        void OffsetS1BMaterialContent(float delta);\n'
+              '        void LayoutMaterialInspector(float fieldWidth);\n')
+          replace_once(
+              "Studio/src/StudioApplication.h",
+              '        wi::gui::Window inspectorPanel_;\n        wi::gui::Label inspectorLabel_;\n',
+              '        wi::gui::Window inspectorPanel_;\n'
+              '        std::unique_ptr<ProjectInspectorSectionPreferenceStore> inspectorSectionPreferences_;\n'
+              '        InspectorSectionRegistry inspectorSectionRegistry_;\n'
+              '        SceneInspectorButton transformSectionHeader_;\n'
+              '        SceneInspectorButton renderingSectionHeader_;\n'
+              '        SceneInspectorButton materialsSectionHeader_;\n'
+              '        wi::gui::Label inspectorLabel_;\n')
+
+          # Create headers/providers immediately after the specialist Material
+          # editor has registered its existing widgets.
+          replace_once(
+              "Studio/src/StudioApplication.cpp",
+              '        CreateMaterialInspector();\n        CreateRenderWorkspace();\n',
+              '        CreateMaterialInspector();\n        CreateS1BInspectorSections();\n        CreateRenderWorkspace();\n')
+
+          # ResizeLayout retains all legacy positioning first; S1B then owns the
+          # final placement of the three migrated component sections.
+          replace_once(
+              "Studio/src/StudioApplication.cpp",
+              '        LayoutInspectorActions(\n'
+              '            environmentSelected,\n'
+              '            terrainSelected,\n'
+              '            lightSelected,\n'
+              '            false,\n'
+              '            playerStartSelected);\n',
+              '        LayoutInspectorActions(\n'
+              '            environmentSelected,\n'
+              '            terrainSelected,\n'
+              '            lightSelected,\n'
+              '            false,\n'
+              '            playerStartSelected);\n'
+              '        LayoutS1BInspectorSections();\n')
+
+          # RefreshInspector has three deliberate early returns. Finalize S1B
+          # presentation at every exit so collapsed state cannot be overwritten
+          # by legacy visibility refreshes.
+          replace_once(
+              "Studio/src/StudioApplication.cpp",
+              '            SyncGizmoSelection();\n            return;\n        }\n\n        if (hasTerrain)\n',
+              '            SyncGizmoSelection();\n            LayoutS1BInspectorSections();\n            return;\n        }\n\n        if (hasTerrain)\n')
+          replace_once(
+              "Studio/src/StudioApplication.cpp",
+              '            terrainBrushReadout_.SetText(brush.str());\n            SyncGizmoSelection();\n            return;\n        }\n\n        if (hasLight)\n',
+              '            terrainBrushReadout_.SetText(brush.str());\n            SyncGizmoSelection();\n            LayoutS1BInspectorSections();\n            return;\n        }\n\n        if (hasLight)\n')
+          replace_once(
+              "Studio/src/StudioApplication.cpp",
+              '            scaleZ_.SetValue(1.0f);\n            return;\n        }\n',
+              '            scaleZ_.SetValue(1.0f);\n            LayoutS1BInspectorSections();\n            return;\n        }\n')
+          replace_once(
+              "Studio/src/StudioApplication.cpp",
+              '        scaleZ_.SetValue(transform->scale_local.z);\n        SyncGizmoSelection();\n    }\n\n    void StudioRenderPath::HandleEditorShortcuts()\n',
+              '        scaleZ_.SetValue(transform->scale_local.z);\n        LayoutS1BInspectorSections();\n        SyncGizmoSelection();\n    }\n\n    void StudioRenderPath::HandleEditorShortcuts()\n')
+
+          # S1B is a Studio presentation gate and a cheap source-contract gate.
+          replace_once(
+              "CMakeLists.txt",
+              '    include(Studio/S1AInspectorSectionFramework.cmake)\n',
+              '    include(Studio/S1AInspectorSectionFramework.cmake)\n'
+              '    include(Studio/S1BInspectorMigration.cmake)\n')
+          replace_once(
+              "CMakeLists.txt",
+              '    include(Tests/S1AInspectorSectionFramework.cmake)\n',
+              '    include(Tests/S1AInspectorSectionFramework.cmake)\n'
+              '    include(Tests/S1BInspectorMigration.cmake)\n')
+
+          # The migration host needs a harmless scene object when no Studio
+          # session exists; never call a non-existent global scene accessor.
+          replace_once(
+              "Studio/src/S1BInspectorSectionMigration.cpp",
+              '        const auto& scene = hasSession\n'
+              '            ? session_->Scenes().GetScene()\n'
+              '            : wi::scene::GetScene();\n',
+              '        static wi::scene::Scene emptyScene;\n'
+              '        const auto& scene = hasSession\n'
+              '            ? session_->Scenes().GetScene()\n'
+              '            : emptyScene;\n')
+
+      - name: Remove bootstrap workflow from final branch state
+        shell: bash
+        run: rm .github/workflows/s1b-bootstrap.yml
+
+      - name: Commit S1B integration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CMakeLists.txt Studio Tests .github/workflows/s1b-bootstrap.yml
+          git commit -m "S1B: migrate Transform Rendering and Materials to Inspector providers"
+          git push origin HEAD:scripting/s1b-existing-inspector-migration
