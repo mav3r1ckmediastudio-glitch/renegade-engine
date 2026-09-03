@@ -173,6 +173,18 @@ namespace renegade::runtime
         return evidenceRevision_;
     }
 
+    void RuntimeApplication::ShutdownForProcessExit() noexcept
+    {
+        // RuntimeApplication is a process-global object while Wicked's Lua VM
+        // is a later-created function-local static. If governed scripts remain
+        // live until CRT static destruction, Wicked closes Lua first and the
+        // GameplayScriptRuntime destructor would then unref tables through a
+        // dead lua_State. Stop explicitly while the VM and scene are alive.
+        gameplayScripts_.Stop();
+        scriptSceneRevision_ = 0;
+        reportedScriptDiagnostics_ = 0;
+    }
+
     void RuntimeApplication::Initialize()
     {
         wi::Application::Initialize();

@@ -5,12 +5,13 @@ endif()
 set(service_header "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/GameplayScriptService.h")
 set(service_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/GameplayScriptService.cpp")
 set(runtime_source "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp")
+set(runtime_main "${RENEGADE_SOURCE_DIR}/Runtime/src/main_Windows.cpp")
 set(snapshot_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/TestLevelSnapshotService.cpp")
 set(studio_source "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
 set(chrome_source "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp")
 
 foreach(path IN ITEMS "${service_header}" "${service_source}"
-    "${runtime_source}" "${snapshot_source}" "${studio_source}" "${chrome_source}")
+    "${runtime_source}" "${runtime_main}" "${snapshot_source}" "${studio_source}" "${chrome_source}")
     if(NOT EXISTS "${path}")
         message(FATAL_ERROR "Phase 6 Gate 4 missing required source: ${path}")
     endif()
@@ -74,6 +75,7 @@ foreach(token IN ITEMS
     "gameplayScripts_.Pause"
     "gameplayScripts_.Resume"
     "gameplayScripts_.Reset"
+    "ShutdownForProcessExit"
     "ReportGameplayScriptDiagnostics")
     string(FIND "${runtime_text}" "${token}" found)
     if(found EQUAL -1)
@@ -89,6 +91,19 @@ if(prepare_position EQUAL -1 OR wicked_update_position EQUAL -1 OR
     prepare_position GREATER wicked_update_position)
     message(FATAL_ERROR
         "Phase 6 Gate 4 did not suppress native script execution before Wicked update")
+endif()
+
+# The Windows Runtime application object outlives Wicked's function-local Lua
+# owner during CRT static destruction. Governed Lua instances must therefore be
+# stopped explicitly while Wicked's VM is still alive, before jobsystem/process
+# teardown begins.
+file(READ "${runtime_main}" runtime_main_text)
+string(FIND "${runtime_main_text}" "application.ShutdownForProcessExit();" shutdown_position)
+string(FIND "${runtime_main_text}" "wi::jobsystem::ShutDown();" jobsystem_shutdown_position)
+if(shutdown_position EQUAL -1 OR jobsystem_shutdown_position EQUAL -1 OR
+    shutdown_position GREATER jobsystem_shutdown_position)
+    message(FATAL_ERROR
+        "Phase 6 Gate 4 Runtime must stop governed Lua before process teardown")
 endif()
 
 file(READ "${studio_source}" studio_text)

@@ -662,6 +662,7 @@ int APIENTRY wWinMain(
         }
     }
 
+    application.ShutdownForProcessExit();
     wi::jobsystem::ShutDown();
     return static_cast<int>(message.wParam);
 }

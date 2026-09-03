@@ -55,6 +55,7 @@ namespace renegade::runtime
         [[nodiscard]] bool QuitRequested() const noexcept;
         [[nodiscard]] int ExitCode() const noexcept;
         [[nodiscard]] std::uint64_t EvidenceRevision() const noexcept;
+        void ShutdownForProcessExit() noexcept;
 
         void Initialize() override;
         void Update(float dt) override;
