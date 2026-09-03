@@ -35,6 +35,8 @@ foreach(token IN ITEMS
     endif()
 endforeach()
 
+# Keep the empty provider refresh callback explicitly typed. Bare {} is
+# ambiguous to MSVC when passed through std::make_shared's parameter pack.
 foreach(token IN ITEMS
     "MakeSection(\"transform\""
     "MakeSection(\"rendering\""
