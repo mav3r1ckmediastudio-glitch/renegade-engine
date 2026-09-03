@@ -44,7 +44,8 @@ foreach(token IN ITEMS
     "RefreshVisibleSections"
     "ToggleExpanded"
     "LayoutMaterialInspector"
-    "InspectObjectParticipation")
+    "InspectObjectParticipation"
+    "CallbackInspectorSectionProvider::RefreshFn{}")
     string(FIND "${migration_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "S1B migration contract is missing ${token}")

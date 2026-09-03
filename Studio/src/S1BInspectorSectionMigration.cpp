@@ -174,7 +174,7 @@ namespace renegade::studio
                 }
                 return 168.0f;
             },
-            {},
+            CallbackInspectorSectionProvider::RefreshFn{},
             [this](const InspectorSectionContext&, const InspectorSectionLayout& layout)
             {
                 transformSectionHeader_.SetVisible(true);
@@ -242,7 +242,7 @@ namespace renegade::studio
             {
                 return 112.0f;
             },
-            {},
+            CallbackInspectorSectionProvider::RefreshFn{},
             [this](const InspectorSectionContext&, const InspectorSectionLayout& layout)
             {
                 renderingSectionHeader_.SetVisible(true);
@@ -298,7 +298,7 @@ namespace renegade::studio
                     ? std::max(0.0f, materialInspectorBottom_ - 630.0f)
                     : 0.0f;
             },
-            {},
+            CallbackInspectorSectionProvider::RefreshFn{},
             [this](const InspectorSectionContext&, const InspectorSectionLayout& layout)
             {
                 materialsSectionHeader_.SetVisible(true);
