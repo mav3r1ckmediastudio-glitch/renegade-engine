@@ -59,6 +59,7 @@ namespace renegade::studio
             wi::Application::InfoDisplayer& diagnostics) noexcept;
         void DeleteGPUResources() override;
         void Load() override;
+        void PreRender() override;
         void Render() const override;
         void ResizeBuffers() override;
         void Update(float dt) override;
@@ -127,6 +128,11 @@ namespace renegade::studio
         [[nodiscard]] bool IsProjectLoadBlocking() const noexcept
         {
             return projectLoadingOverlay_.IsBlocking();
+        }
+
+        [[nodiscard]] bool IsTestLevelRuntimeActive() const noexcept
+        {
+            return testLevelRuntime_.IsActive();
         }
 
         [[nodiscard]] bool IsPhysicsLabActive() const noexcept
@@ -1252,6 +1258,13 @@ namespace renegade::studio
 
         void Render() const override
         {
+            // Test Level owns the foreground Runtime. Its resource handoff
+            // takes precedence over specialist Studio viewport routing.
+            if (IsTestLevelRuntimeActive())
+            {
+                StudioRenderPath::Render();
+                return;
+            }
             if (IsPhysicsLabActive())
             {
                 wi::RenderPath3D::Render();
@@ -1262,6 +1275,11 @@ namespace renegade::studio
 
         void Compose(wi::graphics::CommandList cmd) const override
         {
+            if (IsTestLevelRuntimeActive())
+            {
+                StudioRenderPath::Compose(cmd);
+                return;
+            }
             if (IsPhysicsLabActive())
             {
                 wi::RenderPath3D::Compose(cmd);
