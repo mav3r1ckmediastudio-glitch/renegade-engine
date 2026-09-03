@@ -913,6 +913,7 @@ namespace renegade::studio
         brandLockup_ = wi::resourcemanager::Load(
             "Content/ui/renegade-engine-fractured-crest-logo.png");
         SetLayout(width_, height_);
+        ResetDisclosureState();
         SetShadowRadius(0.0f);
     }
 
@@ -936,82 +937,111 @@ namespace renegade::studio
     void RenegadeStudioChrome::SetHierarchyRows(
         std::vector<HierarchyRow> rows)
     {
+        hierarchyRows_ = std::move(rows);
+        ResetHierarchyDisclosureToSelection();
         const auto selected = std::find_if(
-            rows.begin(),
-            rows.end(),
+            hierarchyRows_.begin(),
+            hierarchyRows_.end(),
             [](const HierarchyRow& row)
             {
                 return row.selected;
             });
-        const std::uint64_t selectedEntity = selected != rows.end()
+        lastHierarchySelection_ = selected != hierarchyRows_.end()
             ? selected->entity
             : 0;
-        if (selectedEntity != 0 && selectedEntity != lastHierarchySelection_)
-        {
-            collapsedHierarchyCategories_[
-                static_cast<std::size_t>(selected->category)] = false;
-        }
+        SetHierarchyFilter(hierarchyFilter_);
+    }
 
-        // Preserve disclosure state by stable scene entity while rows refresh.
-        // Reusable Asset Instance roots are the one hierarchy product that is
-        // intentionally collapsed on first sight: their generated mesh/material
-        // descendants are useful when requested, but should not flood the scene
-        // tree by default.
-        std::unordered_set<std::uint64_t> parentEntities;
-        for (std::size_t index = 0; index + 1 < rows.size(); ++index)
+    void RenegadeStudioChrome::ResetHierarchyDisclosureToSelection()
+    {
+        collapsedHierarchyCategories_.fill(true);
+        collapsedHierarchyEntities_.clear();
+        initializedHierarchyDisclosureEntities_.clear();
+
+        for (std::size_t index = 0; index + 1 < hierarchyRows_.size(); ++index)
         {
-            const auto& row = rows[index];
-            const auto& next = rows[index + 1];
-            if (row.entity == 0 || row.category != next.category ||
-                next.depth <= row.depth)
-            {
-                continue;
-            }
-            parentEntities.insert(row.entity);
-            if (row.name == "Reusable Asset Instance" &&
-                initializedHierarchyDisclosureEntities_.insert(row.entity).second)
+            const auto& row = hierarchyRows_[index];
+            const auto& next = hierarchyRows_[index + 1];
+            if (row.entity != 0 && row.category == next.category &&
+                next.depth > row.depth)
             {
                 collapsedHierarchyEntities_.insert(row.entity);
             }
         }
-        for (auto item = collapsedHierarchyEntities_.begin();
-            item != collapsedHierarchyEntities_.end();)
+
+        const auto selected = std::find_if(
+            hierarchyRows_.begin(),
+            hierarchyRows_.end(),
+            [](const HierarchyRow& row)
+            {
+                return row.selected;
+            });
+        if (selected == hierarchyRows_.end())
+            return;
+
+        collapsedHierarchyCategories_[
+            static_cast<std::size_t>(selected->category)] = false;
+        collapsedHierarchyEntities_.erase(selected->entity);
+
+        const std::size_t selectedIndex = static_cast<std::size_t>(
+            std::distance(hierarchyRows_.begin(), selected));
+        int ancestorDepth = selected->depth;
+        for (std::size_t index = selectedIndex; index-- > 0 && ancestorDepth > 0;)
         {
-            item = parentEntities.count(*item) == 0
-                ? collapsedHierarchyEntities_.erase(item)
-                : std::next(item);
+            const auto& ancestor = hierarchyRows_[index];
+            if (ancestor.category == selected->category &&
+                ancestor.depth < ancestorDepth)
+            {
+                collapsedHierarchyEntities_.erase(ancestor.entity);
+                ancestorDepth = ancestor.depth;
+            }
         }
-        for (auto item = initializedHierarchyDisclosureEntities_.begin();
-            item != initializedHierarchyDisclosureEntities_.end();)
+    }
+
+    void RenegadeStudioChrome::ResetAssetFolderDisclosureToSelection()
+    {
+        collapsedAssetFolders_.clear();
+        for (std::size_t index = 0; index + 1 < assetBrowserFolders_.size(); ++index)
         {
-            item = parentEntities.count(*item) == 0
-                ? initializedHierarchyDisclosureEntities_.erase(item)
-                : std::next(item);
+            const auto& folder = assetBrowserFolders_[index];
+            const auto& next = assetBrowserFolders_[index + 1];
+            if (next.depth > folder.depth)
+                collapsedAssetFolders_.insert(folder.relativePath);
         }
 
-        // A viewport-selected descendant must remain reachable. Open only its
-        // ancestor chain; selecting the instance root itself does not expand it.
-        if (selected != rows.end() && selectedEntity != lastHierarchySelection_ &&
-            selected->depth > 0)
-        {
-            const std::size_t selectedIndex = static_cast<std::size_t>(
-                std::distance(rows.begin(), selected));
-            int ancestorDepth = selected->depth;
-            for (std::size_t index = selectedIndex; index-- > 0 && ancestorDepth > 0;)
+        const auto selected = std::find_if(
+            assetBrowserFolders_.begin(),
+            assetBrowserFolders_.end(),
+            [](const AssetFolderRow& folder)
             {
-                const auto& ancestor = rows[index];
-                if (ancestor.category == selected->category &&
-                    ancestor.depth < ancestorDepth)
+                return folder.selected;
+            });
+        if (selected != assetBrowserFolders_.end())
+        {
+            for (auto item = collapsedAssetFolders_.begin();
+                item != collapsedAssetFolders_.end();)
+            {
+                if (*item == selected->relativePath ||
+                    IsAssetDescendant(selected->relativePath, *item))
                 {
-                    collapsedHierarchyEntities_.erase(ancestor.entity);
-                    ancestorDepth = ancestor.depth;
+                    item = collapsedAssetFolders_.erase(item);
+                }
+                else
+                {
+                    ++item;
                 }
             }
         }
+        RebuildVisibleAssetFolders();
+    }
 
-        lastHierarchySelection_ = selectedEntity;
-        hierarchyRows_ = std::move(rows);
+    void RenegadeStudioChrome::ResetDisclosureState()
+    {
+        activeMenu_ = -1;
+        activeViewportMenu_ = -1;
+        ResetHierarchyDisclosureToSelection();
         SetHierarchyFilter(hierarchyFilter_);
+        ResetAssetFolderDisclosureToSelection();
     }
 
     bool RenegadeStudioChrome::HierarchyRowHasChildren(
@@ -1038,28 +1068,7 @@ namespace renegade::studio
         assetBrowserFolderScrollRow_ = 0;
         assetBrowserAssetScrollRow_ = 0;
 
-        for (const auto& folder : assetBrowserFolders_)
-        {
-            if (!folder.selected)
-            {
-                continue;
-            }
-            for (auto collapsed = collapsedAssetFolders_.begin();
-                collapsed != collapsedAssetFolders_.end();)
-            {
-                if (folder.relativePath == *collapsed ||
-                    IsAssetDescendant(folder.relativePath, *collapsed))
-                {
-                    collapsed = collapsedAssetFolders_.erase(collapsed);
-                }
-                else
-                {
-                    ++collapsed;
-                }
-            }
-            break;
-        }
-        RebuildVisibleAssetFolders();
+        ResetAssetFolderDisclosureToSelection();
     }
 
     void RenegadeStudioChrome::SetAssetBrowserSelectedPath(
@@ -1177,7 +1186,12 @@ namespace renegade::studio
         const int tab,
         const bool notify)
     {
-        activeBottomTab_ = std::clamp(tab, -1, 3);
+        const int next = std::clamp(tab, -1, 3);
+        if (next != activeBottomTab_)
+        {
+            activeBottomTab_ = next;
+            ResetDisclosureState();
+        }
         if (notify && drawerChanged_)
         {
             drawerChanged_(activeBottomTab_);
@@ -1973,8 +1987,11 @@ namespace renegade::studio
                     {
                         const auto categoryIndex =
                             static_cast<std::size_t>(item.category);
-                        collapsedHierarchyCategories_[categoryIndex] =
-                            !collapsedHierarchyCategories_[categoryIndex];
+                        const bool opening =
+                            collapsedHierarchyCategories_[categoryIndex];
+                        collapsedHierarchyCategories_.fill(true);
+                        if (opening)
+                            collapsedHierarchyCategories_[categoryIndex] = false;
                         SetHierarchyFilter(hierarchyFilter_);
                     }
                     else
@@ -1982,11 +1999,29 @@ namespace renegade::studio
                         const auto& row = hierarchyRows_[item.rowIndex];
                         if (HierarchyRowHasChildren(item.rowIndex))
                         {
-                            if (collapsedHierarchyEntities_.count(row.entity) != 0)
+                            const bool opening =
+                                collapsedHierarchyEntities_.count(row.entity) != 0;
+                            if (opening)
                             {
+                                ResetHierarchyDisclosureToSelection();
+                                collapsedHierarchyCategories_.fill(true);
+                                collapsedHierarchyCategories_[
+                                    static_cast<std::size_t>(row.category)] = false;
                                 collapsedHierarchyEntities_.erase(row.entity);
+                                int ancestorDepth = row.depth;
+                                for (std::size_t index = item.rowIndex;
+                                    index-- > 0 && ancestorDepth > 0;)
+                                {
+                                    const auto& ancestor = hierarchyRows_[index];
+                                    if (ancestor.category == row.category &&
+                                        ancestor.depth < ancestorDepth)
+                                    {
+                                        collapsedHierarchyEntities_.erase(ancestor.entity);
+                                        ancestorDepth = ancestor.depth;
+                                    }
+                                }
                             }
-                            else
+                            else if (!row.selected)
                             {
                                 collapsedHierarchyEntities_.insert(row.entity);
                             }
@@ -2082,16 +2117,36 @@ namespace renegade::studio
                             std::max(0, folder.depth) * 14.0f;
                         if (x < arrowEdge + 15.0f)
                         {
-                            if (collapsedAssetFolders_.count(
-                                    folder.relativePath) != 0)
+                            const bool opening = collapsedAssetFolders_.count(
+                                folder.relativePath) != 0;
+                            if (opening)
                             {
-                                collapsedAssetFolders_.erase(
-                                    folder.relativePath);
+                                collapsedAssetFolders_.clear();
+                                for (std::size_t index = 0;
+                                    index + 1 < assetBrowserFolders_.size(); ++index)
+                                {
+                                    const auto& candidate = assetBrowserFolders_[index];
+                                    const auto& next = assetBrowserFolders_[index + 1];
+                                    if (next.depth > candidate.depth)
+                                        collapsedAssetFolders_.insert(candidate.relativePath);
+                                }
+                                for (auto item = collapsedAssetFolders_.begin();
+                                    item != collapsedAssetFolders_.end();)
+                                {
+                                    if (*item == folder.relativePath ||
+                                        IsAssetDescendant(folder.relativePath, *item))
+                                    {
+                                        item = collapsedAssetFolders_.erase(item);
+                                    }
+                                    else
+                                    {
+                                        ++item;
+                                    }
+                                }
                             }
                             else
                             {
-                                collapsedAssetFolders_.insert(
-                                    folder.relativePath);
+                                collapsedAssetFolders_.insert(folder.relativePath);
                             }
                             RebuildVisibleAssetFolders();
                         }

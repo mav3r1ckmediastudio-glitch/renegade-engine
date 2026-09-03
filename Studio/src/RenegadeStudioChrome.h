@@ -346,6 +346,11 @@ namespace renegade::studio
             float inspectorWidth,
             float drawerHeight) noexcept;
         void SetActiveBottomTab(int tab, bool notify = false);
+        void ResetDisclosureState();
+        [[nodiscard]] bool HasOpenMenuPopup() const noexcept
+        {
+            return activeMenu_ >= 0 || activeViewportMenu_ >= 0;
+        }
         void OnHierarchySelected(std::function<void(std::uint64_t)> callback);
         void OnToolSelected(std::function<void(int)> callback);
         void OnAction(std::function<void(Action)> callback);
@@ -451,6 +456,8 @@ namespace renegade::studio
 
         [[nodiscard]] bool HierarchyRowHasChildren(
             std::size_t rowIndex) const noexcept;
+        void ResetHierarchyDisclosureToSelection();
+        void ResetAssetFolderDisclosureToSelection();
         void RebuildVisibleAssetFolders();
         void RenderAssetBrowser(
             float drawerTop,

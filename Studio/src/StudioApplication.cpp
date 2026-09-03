@@ -3470,6 +3470,14 @@ namespace renegade::studio
         studioChrome_.OnAction(
             [this](const RenegadeStudioChrome::Action action)
         {
+            if (action == RenegadeStudioChrome::Action::ProjectHub ||
+                action == RenegadeStudioChrome::Action::SceneWorkspace ||
+                action == RenegadeStudioChrome::Action::EnvironmentWorkspace ||
+                action == RenegadeStudioChrome::Action::TerrainWorkspace ||
+                action == RenegadeStudioChrome::Action::RenderWorkspace)
+            {
+                ResetS1BInspectorDisclosure();
+            }
             switch (action)
             {
             case RenegadeStudioChrome::Action::ProjectHub:

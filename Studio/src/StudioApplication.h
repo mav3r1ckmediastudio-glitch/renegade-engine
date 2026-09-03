@@ -573,6 +573,7 @@ namespace renegade::studio
         void ChooseSelectedDecalTexture();
         void CreateMaterialInspector();
         void CreateS1BInspectorSections();
+        void ResetS1BInspectorDisclosure();
         void LayoutS1BInspectorSections();
         [[nodiscard]] bool IsS1BTransformSectionVisible() const;
         [[nodiscard]] bool IsS1BRenderingSectionVisible() const;
@@ -752,6 +753,9 @@ namespace renegade::studio
         wi::gui::Window inspectorPanel_;
         std::unique_ptr<ProjectInspectorSectionPreferenceStore> inspectorSectionPreferences_;
         InspectorSectionRegistry inspectorSectionRegistry_;
+        std::uint64_t inspectorDisclosureSelectionRevision_ =
+            static_cast<std::uint64_t>(-1);
+        int inspectorDisclosureViewToken_ = -1;
         SceneInspectorButton transformSectionHeader_;
         SceneInspectorButton renderingSectionHeader_;
         SceneInspectorButton materialsSectionHeader_;
