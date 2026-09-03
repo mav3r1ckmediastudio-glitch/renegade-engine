@@ -45,6 +45,7 @@ add_subdirectory(WickedEngine)
 add_subdirectory(EngineBridge)
 include(EngineBridge/JP01PhysicsLua.cmake)
 include(EngineBridge/S2ScriptDocument.cmake)
+include(EngineBridge/S4AScriptMetadata.cmake)
 include(EngineBridge/Phase5Gate5.cmake)
 include(EngineBridge/Phase5Gate8.cmake)
 
@@ -92,6 +93,7 @@ if(WIN32)
     include(Tests/S1BInspectorMigration.cmake)
     include(Tests/S2ScriptDocument.cmake)
     include(Tests/S3GovernedLuaRuntime.cmake)
+    include(Tests/S4AScriptMetadata.cmake)
     add_test(
         NAME RenegadeStudioDisclosurePolicySourceContract
         COMMAND ${CMAKE_COMMAND}
