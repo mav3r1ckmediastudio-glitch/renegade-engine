@@ -29,6 +29,7 @@
 #include "renegade/bridge/SunService.h"
 #include "renegade/bridge/TerrainService.h"
 #include "CreatorImportPreviewWindow.h"
+#include "InspectorSectionFramework.h"
 #include "RenegadeStudioChrome.h"
 #include "RenegadePhysicsLabStudioChrome.h"
 #include "RenegadeProjectHub.h"
@@ -571,6 +572,12 @@ namespace renegade::studio
         bool CommitSelectedDecal(const bridge::DecalState& state);
         void ChooseSelectedDecalTexture();
         void CreateMaterialInspector();
+        void CreateS1BInspectorSections();
+        void LayoutS1BInspectorSections();
+        [[nodiscard]] bool IsS1BTransformSectionVisible() const;
+        [[nodiscard]] bool IsS1BRenderingSectionVisible() const;
+        void SetS1BMaterialContentVisible(bool visible);
+        void OffsetS1BMaterialContent(float delta);
         void LayoutMaterialInspector(float fieldWidth);
         void RefreshMaterialInspector(
             bool candidateVisible,
@@ -743,6 +750,11 @@ namespace renegade::studio
         wi::gui::TreeList hierarchyTree_;
         SceneInspectorTextInputField hierarchySearch_;
         wi::gui::Window inspectorPanel_;
+        std::unique_ptr<ProjectInspectorSectionPreferenceStore> inspectorSectionPreferences_;
+        InspectorSectionRegistry inspectorSectionRegistry_;
+        SceneInspectorButton transformSectionHeader_;
+        SceneInspectorButton renderingSectionHeader_;
+        SceneInspectorButton materialsSectionHeader_;
         wi::gui::Label inspectorLabel_;
         wi::gui::Label positionLabel_;
         wi::gui::Label rotationLabel_;

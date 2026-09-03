@@ -470,9 +470,10 @@ namespace renegade::studio
         const auto selected = hasSession && session_->Selection().HasSelection()
             ? session_->Selection().SelectedEntity()
             : wi::ecs::INVALID_ENTITY;
+        static wi::scene::Scene emptyScene;
         const auto& scene = hasSession
             ? session_->Scenes().GetScene()
-            : wi::scene::GetScene();
+            : emptyScene;
         const bool selectedWeather = hasSession && selected != wi::ecs::INVALID_ENTITY &&
             scene.weathers.Contains(selected);
         const bool selectedTerrain = hasSession && selected != wi::ecs::INVALID_ENTITY &&

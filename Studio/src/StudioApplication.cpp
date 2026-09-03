@@ -2088,6 +2088,7 @@ namespace renegade::studio
             PlayerField::MaximumPitch, 0.0f, 89.0f, 891.0f);
 
         CreateMaterialInspector();
+        CreateS1BInspectorSections();
         CreateRenderWorkspace();
 
         createSectionLabel(
@@ -5327,6 +5328,7 @@ namespace renegade::studio
             lightSelected,
             false,
             playerStartSelected);
+        LayoutS1BInspectorSections();
 
         contentPanel_.SetPos(XMFLOAT2(
             leftWidth + 16.0f,
@@ -6346,6 +6348,7 @@ namespace renegade::studio
             precipitationWindSpeed_.SetEnabled(precipitationEnabled);
             precipitationTurbulence_.SetEnabled(precipitationEnabled);
             SyncGizmoSelection();
+            LayoutS1BInspectorSections();
             return;
         }
 
@@ -6401,6 +6404,7 @@ namespace renegade::studio
                   << std::setprecision(2) << terrainBrushStrengthValue_;
             terrainBrushReadout_.SetText(brush.str());
             SyncGizmoSelection();
+            LayoutS1BInspectorSections();
             return;
         }
 
@@ -6464,6 +6468,7 @@ namespace renegade::studio
             scaleX_.SetValue(1.0f);
             scaleY_.SetValue(1.0f);
             scaleZ_.SetValue(1.0f);
+            LayoutS1BInspectorSections();
             return;
         }
 
@@ -6492,6 +6497,7 @@ namespace renegade::studio
         scaleX_.SetValue(transform->scale_local.x);
         scaleY_.SetValue(transform->scale_local.y);
         scaleZ_.SetValue(transform->scale_local.z);
+        LayoutS1BInspectorSections();
         SyncGizmoSelection();
     }
 
