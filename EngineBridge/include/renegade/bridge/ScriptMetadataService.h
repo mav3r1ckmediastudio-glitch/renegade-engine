@@ -75,18 +75,22 @@ namespace renegade::bridge
         std::vector<ScriptMetadataDiagnostic> diagnostics;
     };
 
-    // S4A authoring contract:
+    // S4A authoring contract. The guard is part of the frozen schema-v1 idiom:
+    // S4A's metadata-only state supplies renegade.metadata; the S3 gameplay
+    // Runtime does not, so the same source simply skips this authoring block.
     //
-    // renegade.metadata({
-    //   schema_version = 1,
-    //   name = "Open Door",
-    //   description = "Opens an entity when activated.",
-    //   category = "Interaction",
-    //   role = "ACTION", -- ACTION | SCRIPT | GLOBAL SCRIPT
-    //   properties = {
-    //     { name="speed", label="Speed", type="float", default=2.0 },
-    //   },
-    // })
+    // if renegade and renegade.metadata then
+    //   renegade.metadata({
+    //     schema_version = 1,
+    //     name = "Open Door",
+    //     description = "Opens an entity when activated.",
+    //     category = "Interaction",
+    //     role = "ACTION", -- ACTION | SCRIPT | GLOBAL SCRIPT
+    //     properties = {
+    //       { name="speed", label="Speed", type="float", default=2.0 },
+    //     },
+    //   })
+    // end
     //
     // The declaration is captured in a dedicated metadata-only Lua state and
     // evaluation terminates immediately after capture. Gameplay setup below
