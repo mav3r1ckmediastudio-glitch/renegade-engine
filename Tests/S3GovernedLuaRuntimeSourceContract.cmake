@@ -43,6 +43,8 @@ foreach(required
     "ScriptDocumentPathForScene"
     "EntityRef"
     "generation"
+    "IsLiveEntityRef"
+    "PersistentEntityId(*scene"
     "renegade"
     "api_version"
     "on_start"
@@ -72,6 +74,7 @@ foreach(required
     "creatorScripts_.ResetScene"
     "StopCreatorScripts"
     "ReportCreatorScriptDiagnostics"
+    "reportedScriptDiagnostics_ = 0"
     "ShutdownForProcessExit"
     "application.ShutdownForProcessExit()"
 )
