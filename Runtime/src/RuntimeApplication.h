@@ -6,6 +6,7 @@
 #include "RuntimeBootstrap.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
+#include "RuntimeScriptRuntime.h"
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/RenderSettingsService.h"
@@ -13,6 +14,7 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/PlayerService.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -54,6 +56,7 @@ namespace renegade::runtime
         [[nodiscard]] bool QuitRequested() const noexcept;
         [[nodiscard]] int ExitCode() const noexcept;
         [[nodiscard]] std::uint64_t EvidenceRevision() const noexcept;
+        void ShutdownForProcessExit() noexcept;
 
         void Initialize() override;
         void Update(float dt) override;
@@ -70,6 +73,9 @@ namespace renegade::runtime
         void RecordAction(const RuntimeActionResult& result);
         void SyncPlayerForScene();
         void SyncAudioForScene();
+        void SyncCreatorScriptsForScene();
+        void StopCreatorScripts() noexcept;
+        void ReportCreatorScriptDiagnostics();
 
         bridge::SceneService scenes_;
         RuntimeFlowController flow_;
@@ -77,6 +83,7 @@ namespace renegade::runtime
         RuntimeScreenController screenController_;
         RuntimeScreenPresenter screenPresenter_;
         RuntimeActionDispatcher actions_;
+        RuntimeScriptRuntime creatorScripts_;
         bridge::RuntimePlayerState player_;
         bridge::PlayerControllerSettings playerSettings_;
         bridge::GameplayInputMap inputMap_ = bridge::MakeDefaultGameplayInputMap();
@@ -95,5 +102,7 @@ namespace renegade::runtime
         std::uint64_t evidenceRevision_ = 0;
         std::uint64_t playerSceneRevision_ = 0;
         std::uint64_t audioSceneRevision_ = 0;
+        std::uint64_t scriptSceneRevision_ = 0;
+        std::size_t reportedScriptDiagnostics_ = 0;
     };
 }
