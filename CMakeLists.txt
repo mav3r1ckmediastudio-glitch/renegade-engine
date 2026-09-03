@@ -44,6 +44,7 @@ set(WICKED_EMBED_SHADERS ${RENEGADE_EMBED_SHADERS} CACHE BOOL "" FORCE)
 add_subdirectory(WickedEngine)
 add_subdirectory(EngineBridge)
 include(EngineBridge/JP01PhysicsLua.cmake)
+include(EngineBridge/S2ScriptDocument.cmake)
 include(EngineBridge/Phase5Gate5.cmake)
 include(EngineBridge/Phase5Gate8.cmake)
 
@@ -88,6 +89,7 @@ if(WIN32)
     include(Tests/Phase6Gate3.cmake)
     include(Tests/S1AInspectorSectionFramework.cmake)
     include(Tests/S1BInspectorMigration.cmake)
+    include(Tests/S2ScriptDocument.cmake)
     add_test(
         NAME RenegadeStudioDisclosurePolicySourceContract
         COMMAND ${CMAKE_COMMAND}
