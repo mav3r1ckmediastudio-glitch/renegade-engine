@@ -1,0 +1,75 @@
+if(NOT DEFINED RENEGADE_SOURCE_DIR)
+    message(FATAL_ERROR "RENEGADE_SOURCE_DIR is required")
+endif()
+
+set(runtime_source
+    "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeScriptRuntime.cpp")
+set(runtime_header
+    "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeScriptRuntime.h")
+
+file(READ "${runtime_source}" source)
+file(READ "${runtime_header}" header)
+set(all_text "${header}\n${source}")
+
+foreach(required
+    "lua_newstate"
+    "LuaAllocate"
+    "luaL_requiref"
+    "luaopen_base"
+    "luaopen_table"
+    "luaopen_string"
+    "luaopen_math"
+    "luaopen_utf8"
+    "luaL_loadbufferx"
+    "LUA_MASKCOUNT"
+    "lua_sethook"
+    "activeInstructionBudget"
+    "lua_pcall"
+    "ScriptInstanceId"
+    "scriptInstanceId"
+    "environmentReference"
+    "contextReference"
+    "StartSceneFromCompanion"
+    "ScriptDocumentPathForScene"
+    "EntityRef"
+    "generation"
+    "renegade"
+    "api_version"
+    "on_start"
+    "on_pause"
+    "on_resume"
+    "on_reset"
+    "on_stop"
+    "on_update"
+    "hasOnUpdate"
+    "Governed require()"
+    "Advanced/Unsafe Lua execution is not enabled by S3"
+)
+    string(FIND "${all_text}" "${required}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR
+            "S3 governed Lua Runtime contract is missing '${required}'")
+    endif()
+endforeach()
+
+foreach(forbidden
+    "wi::lua::GetLuaState"
+    "wi::lua::RunFile"
+    "wi::lua::RunText"
+    "luaL_openlibs"
+    "luaopen_package"
+    "luaopen_io"
+    "luaopen_os"
+    "luaopen_debug"
+    "ScriptComponent"
+    "native_id"
+    "InstructionBudgetGuard"
+)
+    string(FIND "${all_text}" "${forbidden}" found)
+    if(NOT found EQUAL -1)
+        message(FATAL_ERROR
+            "S3 governed Lua Runtime must not contain '${forbidden}'")
+    endif()
+endforeach()
+
+message(STATUS "S3 governed Lua Runtime source contract passed")
