@@ -170,7 +170,19 @@ int main()
             "return {on_resume=function(self) error('resume-hit') end}\n") ||
         !writeScript(
             "reset.lua",
-            "return {on_reset=function(self) error('reset-hit') end}\n"))
+            "return {on_reset=function(self) error('reset-hit') end}\n") ||
+        !writeScript(
+            "liveness.lua",
+            "return {\n"
+            " on_start=function(self)\n"
+            "  if not renegade.entity.is_valid(self.entity) then "
+            "error('owner not live at start') end\n"
+            " end,\n"
+            " on_update=function(self,dt)\n"
+            "  if renegade.entity.is_valid(self.entity) then "
+            "error('deleted entity remained live') end\n"
+            " end\n"
+            "}\n"))
     {
         return Fail("script fixtures: " + error);
     }
@@ -258,6 +270,54 @@ int main()
         runtime.StopScene();
         runtime.Shutdown();
         if (!Check(!runtime.IsInitialized(), "Shutdown did not close Lua state"))
+            return 1;
+    }
+
+    // EntityRefs revalidate Scene liveness inside one Runtime generation.
+    {
+        const StableId liveOwner = GenerateStableId();
+        wi::scene::Scene livenessScene;
+        const auto liveEntity =
+            livenessScene.Entity_CreateTransform("S3 Liveness Owner");
+        if (!AssignPersistentEntityId(
+                livenessScene,
+                liveEntity,
+                liveOwner,
+                error))
+        {
+            return Fail("liveness persistent ID: " + error);
+        }
+
+        ScriptDocument document = CreateScriptDocument(
+            projectId,
+            GenerateStableId(),
+            "Content/Scenes/Liveness.wiscene",
+            "s3-tests");
+        if (!Add(
+                document,
+                ScriptScope::Entity,
+                liveOwner,
+                Source("Content/Scripts/liveness.lua"),
+                error))
+        {
+            return Fail("liveness attachment: " + error);
+        }
+
+        RuntimeScriptRuntime runtime;
+        if (!runtime.StartScene(
+                document,
+                livenessScene,
+                root.generic_u8string(),
+                error))
+            return Fail("liveness StartScene: " + error);
+        if (!Check(runtime.Diagnostics().empty(), "liveness startup"))
+            return 1;
+
+        livenessScene.Entity_Remove(liveEntity);
+        runtime.Update(1.0f / 60.0f);
+        if (!Check(
+                runtime.Diagnostics().empty(),
+                "deleted EntityRef remained valid inside one generation"))
             return 1;
     }
 
