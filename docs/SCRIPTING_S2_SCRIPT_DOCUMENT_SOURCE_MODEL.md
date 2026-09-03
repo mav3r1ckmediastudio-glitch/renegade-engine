@@ -79,8 +79,11 @@ Each attachment persists:
 
 A single `sourceId` must map to one source path and one source authority within
 the document. Conversely, one source path may not silently acquire multiple
-source IDs. Multiple attachments may share that source authority while retaining
-independent enabled state, order, property state and `ScriptInstanceId`.
+source IDs. Because Renegade is Windows-first, governed source-path identity is
+case-insensitive: path casing differences cannot create a second authority for
+the same physical Lua source. Multiple attachments may share that source
+authority while retaining independent enabled state, order, property state and
+`ScriptInstanceId`.
 
 S2 source validation requires creator Lua to remain under
 `Content/Scripts/*.lua`, rejects traversal and symlink paths, requires a regular
@@ -206,7 +209,7 @@ both Renegade Studio jobs. Its automated tests must prove:
 5. all twelve property types;
 6. unresolved EntityRef retention;
 7. source containment/traversal/size governance;
-8. source ID/path conflict rejection;
+8. source ID/path conflict rejection, including Windows-equivalent path casing;
 9. Game-scope reservation;
 10. CommandService Undo/Redo;
 11. transactional load behaviour; and
