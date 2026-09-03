@@ -173,13 +173,21 @@ namespace renegade::runtime
         return evidenceRevision_;
     }
 
+    void RuntimeApplication::ShutdownForProcessExit() noexcept
+    {
+        StopCreatorScripts();
+        creatorScripts_.Shutdown();
+        scriptSceneRevision_ = 0;
+        reportedScriptDiagnostics_ = 0;
+    }
+
     void RuntimeApplication::Initialize()
     {
         wi::Application::Initialize();
 
-        // Wicked's Application::Initialize() owns global subsystem startup and
-        // initializes Lua synchronously on the main thread. Only now is it safe
-        // for Renegade to install its entity-oriented physics namespace.
+        // This is retained for existing engine-internal/unsafe Wicked Lua
+        // integrations. Creator S3 scripts never borrow that global VM: their
+        // RuntimeScriptRuntime owns a separate governed lua_State.
         if (!bridge::BindPhysicsLua(scenes_.GetScene()))
         {
             wi::backlog::post(
@@ -346,6 +354,7 @@ namespace renegade::runtime
             }
 
             SyncPlayerForScene();
+            SyncCreatorScriptsForScene();
             if (player_.IsSpawned())
             {
                 if (!paused_)
@@ -370,9 +379,14 @@ namespace renegade::runtime
             {
                 wi::input::HidePointer(false);
             }
+
+            if (!paused_)
+                creatorScripts_.Update(dt);
+            ReportCreatorScriptDiagnostics();
         }
         else
         {
+            StopCreatorScripts();
             if (paused_)
                 SetPaused(false);
             wi::input::HidePointer(false);
@@ -380,6 +394,8 @@ namespace renegade::runtime
         }
 
         ProcessPendingActions();
+        if (screenPresenter_.IsLoaded())
+            StopCreatorScripts();
     }
 
     void RuntimeApplication::SyncPlayerForScene()
@@ -441,6 +457,79 @@ namespace renegade::runtime
         wi::backlog::post(
             "Renegade Runtime: applied authored Scene audio mix and Play On Start sources.",
             wi::backlog::LogLevel::Default);
+    }
+
+    void RuntimeApplication::SyncCreatorScriptsForScene()
+    {
+        if (scriptSceneRevision_ == scenes_.Revision())
+            return;
+
+        if (creatorScripts_.IsRunning())
+            creatorScripts_.StopScene();
+        ReportCreatorScriptDiagnostics();
+
+        scriptSceneRevision_ = scenes_.Revision();
+        if (startupResult_.startupScenePath.empty())
+            return;
+
+        std::string error;
+        if (!creatorScripts_.StartSceneFromCompanion(
+                startupResult_.startupScenePath,
+                startupResult_.project.projectId,
+                scenes_.GetScene(),
+                startupResult_.project.rootPath,
+                error))
+        {
+            wi::backlog::post(
+                "Renegade Runtime: governed creator scripts could not start: " +
+                    error,
+                wi::backlog::LogLevel::Error);
+            return;
+        }
+
+        // StartScene/BeginScene intentionally clears diagnostics for the new
+        // Level generation. Reset the publication cursor only after that
+        // successful transition so every new instance failure is surfaced.
+        reportedScriptDiagnostics_ = 0;
+        if (paused_)
+            creatorScripts_.Pause();
+
+        ReportCreatorScriptDiagnostics();
+        wi::backlog::post(
+            "Renegade Runtime: governed creator Lua started " +
+                std::to_string(creatorScripts_.ActiveInstanceCount()) +
+                " script instance(s) for the active Level.",
+            wi::backlog::LogLevel::Default);
+    }
+
+    void RuntimeApplication::StopCreatorScripts() noexcept
+    {
+        if (creatorScripts_.IsRunning())
+            creatorScripts_.StopScene();
+        ReportCreatorScriptDiagnostics();
+        scriptSceneRevision_ = 0;
+    }
+
+    void RuntimeApplication::ReportCreatorScriptDiagnostics()
+    {
+        const auto& diagnostics = creatorScripts_.Diagnostics();
+        while (reportedScriptDiagnostics_ < diagnostics.size())
+        {
+            const auto& diagnostic =
+                diagnostics[reportedScriptDiagnostics_++];
+            std::string message =
+                "Renegade creator Lua [" + diagnostic.scriptInstanceId + "] ";
+            if (!diagnostic.sourcePath.empty())
+                message += diagnostic.sourcePath + " ";
+            if (!diagnostic.callback.empty())
+                message += "(" + diagnostic.callback + ") ";
+            message += diagnostic.message;
+            wi::backlog::post(
+                message,
+                diagnostic.disabledInstance
+                    ? wi::backlog::LogLevel::Error
+                    : wi::backlog::LogLevel::Default);
+        }
     }
 
     bool RuntimeApplication::LoadGameplayInput(std::string& error)
@@ -516,6 +605,11 @@ namespace renegade::runtime
         renderer_.SetPaused(paused_);
         bridge::SetSceneAudioPaused(
             scenes_.GetScene(), paused_, audioPauseState_);
+        if (paused_)
+            creatorScripts_.Pause();
+        else
+            creatorScripts_.Resume();
+        ReportCreatorScriptDiagnostics();
         wi::backlog::post(
             paused_
                 ? "Renegade Runtime: play session paused."
@@ -526,6 +620,10 @@ namespace renegade::runtime
 
     bool RuntimeApplication::ResetPlaySession(std::string& error)
     {
+        if (creatorScripts_.IsRunning())
+            creatorScripts_.ResetScene();
+        ReportCreatorScriptDiagnostics();
+        scriptSceneRevision_ = 0;
         SetPaused(false);
         bridge::DespawnRuntimePlayer(scenes_.GetScene(), player_);
         player_ = {};
@@ -609,6 +707,8 @@ namespace renegade::runtime
 
         SyncPlayerForScene();
         SyncAudioForScene();
+        if (!screenPresenter_.IsLoaded())
+            SyncCreatorScriptsForScene();
         wi::backlog::post(
             "Renegade Runtime: play session reset to its authored startup state.",
             wi::backlog::LogLevel::Default);
