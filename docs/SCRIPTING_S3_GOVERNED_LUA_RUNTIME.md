@@ -2,16 +2,21 @@
 
 ## Status
 
-S3 executes the persistent script attachments introduced by S2. It is stacked on
-the accepted S2 data model and deliberately remains separate from the later S4
+S3 executes the persistent script attachments introduced by S2. It is based on
+the merged S2 data model and deliberately remains separate from the later S4
 metadata/Inspector work and S5 gameplay API/event work.
 
-The preparation branch is:
+Merged S2 baseline:
 
-`script­ing/s3-governed-lua-runtime`
+`c86187e73216d301af06d55cb45993f468845861`
 
-It was created from the exact S2 head under acceptance CI so S2 itself can remain
-frozen while the expensive Windows builds run.
+S3 branch:
+
+`scripting/s3-governed-lua-runtime`
+
+The branch was initially prepared while S2 acceptance CI ran, then re-anchored
+onto the exact squash-merged S2 `main` commit so the S3 pull request contains
+only S3 changes.
 
 ## Runtime ownership
 
@@ -92,10 +97,14 @@ Every API use validates:
 
 1. the ref belongs to this governed Runtime;
 2. its generation matches the active Scene generation; and
-3. its stable entity identity resolves in the active Scene.
+3. its stable entity identity still resolves to the same live entity in the
+   active Scene.
 
-Stopping/resetting/replacing a Scene advances the generation, making retained
-refs stale rather than allowing them to alias a later entity.
+The stable-ID map is therefore a resolver rather than a permanent liveness
+cache. If an entity is removed during the current Level generation,
+`renegade.entity.is_valid(ref)` immediately becomes false without requiring a
+Level reload. Stopping/resetting/replacing a Scene also advances the generation,
+making retained refs stale rather than allowing them to alias a later entity.
 
 S3 exposes only the minimal bootstrap entity surface:
 
@@ -136,10 +145,15 @@ Every protected Lua execution is also covered by an instruction-count hook. The
 initial callback budget is 500,000 Lua VM instructions. A runaway callback is
 converted into the normal isolated error path instead of freezing Runtime.
 
+The Lua protected-call/error boundary is explicitly longjmp-safe: hook cleanup is
+performed after `lua_pcall` returns rather than through C++ RAII, and C callbacks
+that can invoke `lua_error` do not retain non-trivial C++ locals across that
+boundary.
+
 S5 will add richer severity/category/sequence diagnostics and Studio IPC. S3
 retains structured in-process diagnostics containing ScriptInstanceId, owner,
-source, callback and message so that later transport does not require a runtime
-redesign.
+source, callback and message, and RuntimeApplication publishes those diagnostics
+to the Runtime backlog without changing the execution model.
 
 ## Scene companion loading
 
@@ -160,23 +174,53 @@ keeps projects created before S2/S3 compatible.
 Malformed script documents are document-level failures. Individual Lua/source
 failures after a valid document is accepted remain instance-level failures.
 
-## Integration boundary
+## RuntimeApplication integration
 
-The core governed runtime and tests are prepared on the stacked S3 branch while
-S2 acceptance CI runs. Before S3 itself enters CI, RuntimeApplication integration
-will wire:
+S3 is wired into the live Runtime lifecycle rather than remaining a standalone
+library proof.
 
-- initial Level start;
-- Story Flow Level replacement;
-- pause/resume;
-- reset;
-- Level-to-Screen/terminal stop;
-- per-frame optional `on_update`;
-- basic backlog diagnostic reporting; and
-- explicit process-exit shutdown before Wicked teardown.
+RuntimeApplication now:
 
-This keeps the expensive S2 CI head frozen and avoids starting an exploratory S3
-PR/build before the core runtime contract has been audited.
+- starts the governed script scene when Runtime owns a Level;
+- revision-gates script startup alongside the existing scene-owned services;
+- restarts scripts when Story Flow loads a different Level;
+- stops creator scripts when Runtime enters a Screen;
+- forwards pause and resume to the governed runtime;
+- dispatches `on_reset` before rebuilding the play session;
+- calls optional `on_update` only while the Level is running and unpaused;
+- publishes new per-instance diagnostics to the Runtime backlog;
+- resets the diagnostic publication cursor when a new Level generation starts;
+  and
+- explicitly shuts the governed state down from the process/window shutdown
+  path before the Wicked jobsystem teardown.
+
+The creator Lua state remains independent of the existing Wicked Lua state used
+by engine-internal/legacy integrations. No S3 attachment is represented by a
+Wicked `ScriptComponent` or carrier entity.
+
+## Automated acceptance coverage
+
+The S3 behavioural tests cover:
+
+1. dedicated governed Lua-state creation and shutdown;
+2. safe standard-library exposure and forbidden host surfaces;
+3. independent environments for shared-source ScriptInstances;
+4. Entity and Level-global context semantics;
+5. S2 typed-property projection and opaque references;
+6. declared-only module loading and per-instance module caching;
+7. syntax/load failure isolation;
+8. Advanced/Unsafe rejection;
+9. optional `on_update` and callback failure isolation;
+10. runaway-script instruction budgets;
+11. pause/resume/reset lifecycle dispatch;
+12. same-generation EntityRef invalidation after entity removal;
+13. `.rscripts` + Scene identity binding; and
+14. no-companion zero-script compatibility.
+
+A source contract additionally guards the separate Lua-state architecture,
+forbidden Wicked creator-VM/native-ID seams, live EntityRef validation,
+RuntimeApplication lifecycle ownership, diagnostic cursor reset and explicit
+process-exit shutdown.
 
 ## Explicit S3 non-goals
 
