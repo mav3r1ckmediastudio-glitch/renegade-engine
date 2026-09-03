@@ -110,8 +110,9 @@ int main()
     Check(ResolveGameplayScriptPath(
         root.generic_u8string(), imported, resolved, error),
         "imported script did not resolve inside Content/Scripts");
+    std::string rejectedResolved;
     Check(!ResolveGameplayScriptPath(
-        root.generic_u8string(), "../gate4_external.lua", resolved, error),
+        root.generic_u8string(), "../gate4_external.lua", rejectedResolved, error),
         "script path traversal was accepted");
 
     {
