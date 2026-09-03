@@ -1,0 +1,244 @@
+name: UI disclosure and audio bootstrap
+
+on:
+  push:
+    branches:
+      - ui/disclosure-audio-zorder
+
+permissions:
+  contents: write
+
+jobs:
+  patch-source:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: ui/disclosure-audio-zorder
+          fetch-depth: 0
+
+      - name: Apply Studio disclosure policy and audio layering fix
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected one match, found {count}: {old[:80]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # ---- RenegadeStudioChrome.h ----
+          path = 'Studio/src/RenegadeStudioChrome.h'
+          replace_once(path,
+              '        void SetActiveBottomTab(int tab, bool notify = false);\n        void OnHierarchySelected(std::function<void(std::uint64_t)> callback);',
+              '        void SetActiveBottomTab(int tab, bool notify = false);\n        void ResetDisclosureState();\n        [[nodiscard]] bool HasOpenMenuPopup() const noexcept\n        {\n            return activeMenu_ >= 0 || activeViewportMenu_ >= 0;\n        }\n        void OnHierarchySelected(std::function<void(std::uint64_t)> callback);')
+          replace_once(path,
+              '        [[nodiscard]] bool HierarchyRowHasChildren(\n            std::size_t rowIndex) const noexcept;\n        void RebuildVisibleAssetFolders();',
+              '        [[nodiscard]] bool HierarchyRowHasChildren(\n            std::size_t rowIndex) const noexcept;\n        void ResetHierarchyDisclosureToSelection();\n        void ResetAssetFolderDisclosureToSelection();\n        void RebuildVisibleAssetFolders();')
+
+          # ---- RenegadeStudioChrome.cpp ----
+          path = 'Studio/src/RenegadeStudioChrome.cpp'
+          replace_once(path,
+              '        SetLayout(width_, height_);\n        SetShadowRadius(0.0f);',
+              '        SetLayout(width_, height_);\n        ResetDisclosureState();\n        SetShadowRadius(0.0f);')
+
+          start = '''    void RenegadeStudioChrome::SetHierarchyRows(\n        std::vector<HierarchyRow> rows)\n    {\n'''
+          end = '''    bool RenegadeStudioChrome::HierarchyRowHasChildren(\n'''
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          a = text.find(start)
+          b = text.find(end, a)
+          if a < 0 or b < 0:
+              raise RuntimeError('RenegadeStudioChrome.cpp: SetHierarchyRows boundary not found')
+          new_block = '''    void RenegadeStudioChrome::SetHierarchyRows(\n        std::vector<HierarchyRow> rows)\n    {\n        hierarchyRows_ = std::move(rows);\n        ResetHierarchyDisclosureToSelection();\n        const auto selected = std::find_if(\n            hierarchyRows_.begin(),\n            hierarchyRows_.end(),\n            [](const HierarchyRow& row)\n            {\n                return row.selected;\n            });\n        lastHierarchySelection_ = selected != hierarchyRows_.end()\n            ? selected->entity\n            : 0;\n        SetHierarchyFilter(hierarchyFilter_);\n    }\n\n    void RenegadeStudioChrome::ResetHierarchyDisclosureToSelection()\n    {\n        collapsedHierarchyCategories_.fill(true);\n        collapsedHierarchyEntities_.clear();\n\n        for (std::size_t index = 0; index + 1 < hierarchyRows_.size(); ++index)\n        {\n            const auto& row = hierarchyRows_[index];\n            const auto& next = hierarchyRows_[index + 1];\n            if (row.entity != 0 && row.category == next.category &&\n                next.depth > row.depth)\n            {\n                collapsedHierarchyEntities_.insert(row.entity);\n            }\n        }\n\n        const auto selected = std::find_if(\n            hierarchyRows_.begin(),\n            hierarchyRows_.end(),\n            [](const HierarchyRow& row)\n            {\n                return row.selected;\n            });\n        if (selected == hierarchyRows_.end())\n            return;\n\n        collapsedHierarchyCategories_[\n            static_cast<std::size_t>(selected->category)] = false;\n        collapsedHierarchyEntities_.erase(selected->entity);\n\n        const std::size_t selectedIndex = static_cast<std::size_t>(\n            std::distance(hierarchyRows_.begin(), selected));\n        int ancestorDepth = selected->depth;\n        for (std::size_t index = selectedIndex; index-- > 0 && ancestorDepth > 0;)\n        {\n            const auto& ancestor = hierarchyRows_[index];\n            if (ancestor.category == selected->category &&\n                ancestor.depth < ancestorDepth)\n            {\n                collapsedHierarchyEntities_.erase(ancestor.entity);\n                ancestorDepth = ancestor.depth;\n            }\n        }\n    }\n\n    void RenegadeStudioChrome::ResetAssetFolderDisclosureToSelection()\n    {\n        collapsedAssetFolders_.clear();\n        for (std::size_t index = 0; index + 1 < assetBrowserFolders_.size(); ++index)\n        {\n            const auto& folder = assetBrowserFolders_[index];\n            const auto& next = assetBrowserFolders_[index + 1];\n            if (next.depth > folder.depth)\n                collapsedAssetFolders_.insert(folder.relativePath);\n        }\n\n        const auto selected = std::find_if(\n            assetBrowserFolders_.begin(),\n            assetBrowserFolders_.end(),\n            [](const AssetFolderRow& folder)\n            {\n                return folder.selected;\n            });\n        if (selected != assetBrowserFolders_.end())\n        {\n            for (auto item = collapsedAssetFolders_.begin();\n                item != collapsedAssetFolders_.end();)\n            {\n                if (*item == selected->relativePath ||\n                    IsAssetDescendant(selected->relativePath, *item))\n                {\n                    item = collapsedAssetFolders_.erase(item);\n                }\n                else\n                {\n                    ++item;\n                }\n            }\n        }\n        RebuildVisibleAssetFolders();\n    }\n\n    void RenegadeStudioChrome::ResetDisclosureState()\n    {\n        activeMenu_ = -1;\n        activeViewportMenu_ = -1;\n        ResetHierarchyDisclosureToSelection();\n        SetHierarchyFilter(hierarchyFilter_);\n        ResetAssetFolderDisclosureToSelection();\n    }\n\n'''
+          p.write_text(text[:a] + new_block + text[b:], encoding='utf-8')
+
+          replace_once(path,
+              '''        for (const auto& folder : assetBrowserFolders_)\n        {\n            if (!folder.selected)\n            {\n                continue;\n            }\n            for (auto collapsed = collapsedAssetFolders_.begin();\n                collapsed != collapsedAssetFolders_.end();)\n            {\n                if (folder.relativePath == *collapsed ||\n                    IsAssetDescendant(folder.relativePath, *collapsed))\n                {\n                    collapsed = collapsedAssetFolders_.erase(collapsed);\n                }\n                else\n                {\n                    ++collapsed;\n                }\n            }\n            break;\n        }\n        RebuildVisibleAssetFolders();''',
+              '        ResetAssetFolderDisclosureToSelection();')
+
+          replace_once(path,
+              '''    void RenegadeStudioChrome::SetActiveBottomTab(\n        const int tab,\n        const bool notify)\n    {\n        activeBottomTab_ = std::clamp(tab, -1, 3);\n        if (notify && drawerChanged_)\n        {\n            drawerChanged_(activeBottomTab_);\n        }\n    }''',
+              '''    void RenegadeStudioChrome::SetActiveBottomTab(\n        const int tab,\n        const bool notify)\n    {\n        const int next = std::clamp(tab, -1, 3);\n        if (next != activeBottomTab_)\n        {\n            activeBottomTab_ = next;\n            ResetDisclosureState();\n        }\n        if (notify && drawerChanged_)\n        {\n            drawerChanged_(activeBottomTab_);\n        }\n    }''')
+
+          replace_once(path,
+              '''                    if (item.header)\n                    {\n                        const auto categoryIndex =\n                            static_cast<std::size_t>(item.category);\n                        collapsedHierarchyCategories_[categoryIndex] =\n                            !collapsedHierarchyCategories_[categoryIndex];\n                        SetHierarchyFilter(hierarchyFilter_);\n                    }''',
+              '''                    if (item.header)\n                    {\n                        const auto categoryIndex =\n                            static_cast<std::size_t>(item.category);\n                        const bool opening =\n                            collapsedHierarchyCategories_[categoryIndex];\n                        collapsedHierarchyCategories_.fill(true);\n                        if (opening)\n                            collapsedHierarchyCategories_[categoryIndex] = false;\n                        SetHierarchyFilter(hierarchyFilter_);\n                    }''')
+
+          replace_once(path,
+              '''                        if (HierarchyRowHasChildren(item.rowIndex))\n                        {\n                            if (collapsedHierarchyEntities_.count(row.entity) != 0)\n                            {\n                                collapsedHierarchyEntities_.erase(row.entity);\n                            }\n                            else\n                            {\n                                collapsedHierarchyEntities_.insert(row.entity);\n                            }\n                            SetHierarchyFilter(hierarchyFilter_);\n                        }''',
+              '''                        if (HierarchyRowHasChildren(item.rowIndex))\n                        {\n                            const bool opening =\n                                collapsedHierarchyEntities_.count(row.entity) != 0;\n                            if (opening)\n                            {\n                                ResetHierarchyDisclosureToSelection();\n                                collapsedHierarchyCategories_.fill(true);\n                                collapsedHierarchyCategories_[\n                                    static_cast<std::size_t>(row.category)] = false;\n                                collapsedHierarchyEntities_.erase(row.entity);\n                                int ancestorDepth = row.depth;\n                                for (std::size_t index = item.rowIndex;\n                                    index-- > 0 && ancestorDepth > 0;)\n                                {\n                                    const auto& ancestor = hierarchyRows_[index];\n                                    if (ancestor.category == row.category &&\n                                        ancestor.depth < ancestorDepth)\n                                    {\n                                        collapsedHierarchyEntities_.erase(ancestor.entity);\n                                        ancestorDepth = ancestor.depth;\n                                    }\n                                }\n                            }\n                            else if (!row.selected)\n                            {\n                                collapsedHierarchyEntities_.insert(row.entity);\n                            }\n                            SetHierarchyFilter(hierarchyFilter_);\n                        }''')
+
+          replace_once(path,
+              '''                        if (x < arrowEdge + 15.0f)\n                        {\n                            if (collapsedAssetFolders_.count(\n                                    folder.relativePath) != 0)\n                            {\n                                collapsedAssetFolders_.erase(\n                                    folder.relativePath);\n                            }\n                            else\n                            {\n                                collapsedAssetFolders_.insert(\n                                    folder.relativePath);\n                            }\n                            RebuildVisibleAssetFolders();\n                        }''',
+              '''                        if (x < arrowEdge + 15.0f)\n                        {\n                            const bool opening = collapsedAssetFolders_.count(\n                                folder.relativePath) != 0;\n                            if (opening)\n                            {\n                                collapsedAssetFolders_.clear();\n                                for (std::size_t index = 0;\n                                    index + 1 < assetBrowserFolders_.size(); ++index)\n                                {\n                                    const auto& candidate = assetBrowserFolders_[index];\n                                    const auto& next = assetBrowserFolders_[index + 1];\n                                    if (next.depth > candidate.depth)\n                                        collapsedAssetFolders_.insert(candidate.relativePath);\n                                }\n                                for (auto item = collapsedAssetFolders_.begin();\n                                    item != collapsedAssetFolders_.end();)\n                                {\n                                    if (*item == folder.relativePath ||\n                                        IsAssetDescendant(folder.relativePath, *item))\n                                    {\n                                        item = collapsedAssetFolders_.erase(item);\n                                    }\n                                    else\n                                    {\n                                        ++item;\n                                    }\n                                }\n                            }\n                            else\n                            {\n                                collapsedAssetFolders_.insert(folder.relativePath);\n                            }\n                            RebuildVisibleAssetFolders();\n                        }''')
+
+          # ---- S1B Inspector accordion/reset policy ----
+          path = 'Studio/src/S1BInspectorSectionMigration.cpp'
+          replace_once(path,
+              '''            button.OnClick([this, sectionId](const wi::gui::EventArgs&)\n            {\n                if (inspectorSectionRegistry_.ToggleExpanded(sectionId))\n                {\n                    RefreshInspector();\n                }\n            });''',
+              '''            button.OnClick([this, sectionId](const wi::gui::EventArgs&)\n            {\n                const bool opening =\n                    !inspectorSectionRegistry_.IsExpanded(sectionId);\n                ResetS1BInspectorDisclosure();\n                if (opening)\n                    (void)inspectorSectionRegistry_.SetExpanded(sectionId, true);\n                RefreshInspector();\n            });''')
+          for section in ('transform', 'rendering', 'materials'):
+              replace_once(path,
+                  f'MakeSection("{section}", "{section.upper()}", ' + ({'transform':'10','rendering':'20','materials':'30'}[section]) + ', true)',
+                  f'MakeSection("{section}", "{section.upper()}", ' + ({'transform':'10','rendering':'20','materials':'30'}[section]) + ', false)')
+
+          replace_once(path,
+              '    void StudioRenderPath::LayoutS1BInspectorSections()\n    {',
+              '''    void StudioRenderPath::ResetS1BInspectorDisclosure()\n    {\n        for (const char* sectionId : {"transform", "rendering", "materials"})\n            (void)inspectorSectionRegistry_.SetExpanded(sectionId, false);\n    }\n\n    void StudioRenderPath::LayoutS1BInspectorSections()\n    {''')
+
+          replace_once(path,
+              '''        const float panelWidth = inspectorPanel_.GetSize().x;\n        const float innerWidth = std::max(1.0f, panelWidth - 24.0f);\n        const bool hasSession = session_ != nullptr;\n        const auto selected = hasSession && session_->Selection().HasSelection()\n            ? session_->Selection().SelectedEntity()\n            : wi::ecs::INVALID_ENTITY;''',
+              '''        const float panelWidth = inspectorPanel_.GetSize().x;\n        const float innerWidth = std::max(1.0f, panelWidth - 24.0f);\n        const bool hasSession = session_ != nullptr;\n        const auto selected = hasSession && session_->Selection().HasSelection()\n            ? session_->Selection().SelectedEntity()\n            : wi::ecs::INVALID_ENTITY;\n        const std::uint64_t selectionRevision = selected != wi::ecs::INVALID_ENTITY\n            ? static_cast<std::uint64_t>(selected)\n            : 0u;\n        const int viewToken = projectHubVisible_\n            ? 1\n            : environmentWorkspaceActive_ ? 2\n            : terrainWorkspaceActive_ ? 3\n            : renderWorkspaceActive_ ? 4\n            : studioChrome_.IsAudioWorkspaceActive() ? 5\n            : studioChrome_.IsPhysicsLabActive() ? 6\n            : 16 + studioChrome_.ActiveBottomTab();\n        if (selectionRevision != inspectorDisclosureSelectionRevision_ ||\n            viewToken != inspectorDisclosureViewToken_)\n        {\n            ResetS1BInspectorDisclosure();\n            inspectorDisclosureSelectionRevision_ = selectionRevision;\n            inspectorDisclosureViewToken_ = viewToken;\n        }''')
+
+          # ---- StudioApplication.h S1B state ----
+          path = 'Studio/src/StudioApplication.h'
+          replace_once(path,
+              '        void CreateS1BInspectorSections();\n        void LayoutS1BInspectorSections();',
+              '        void CreateS1BInspectorSections();\n        void ResetS1BInspectorDisclosure();\n        void LayoutS1BInspectorSections();')
+          replace_once(path,
+              '        InspectorSectionRegistry inspectorSectionRegistry_;\n        SceneInspectorButton transformSectionHeader_;',
+              '        InspectorSectionRegistry inspectorSectionRegistry_;\n        std::uint64_t inspectorDisclosureSelectionRevision_ =\n            static_cast<std::uint64_t>(-1);\n        int inspectorDisclosureViewToken_ = -1;\n        SceneInspectorButton transformSectionHeader_;')
+
+          # ---- StudioApplication.cpp: Project/workspace transitions reset Inspector ----
+          path = 'Studio/src/StudioApplication.cpp'
+          replace_once(path,
+              '''        studioChrome_.OnAction(\n            [this](const RenegadeStudioChrome::Action action)\n        {\n            switch (action)\n            {''',
+              '''        studioChrome_.OnAction(\n            [this](const RenegadeStudioChrome::Action action)\n        {\n            if (action == RenegadeStudioChrome::Action::ProjectHub ||\n                action == RenegadeStudioChrome::Action::SceneWorkspace ||\n                action == RenegadeStudioChrome::Action::EnvironmentWorkspace ||\n                action == RenegadeStudioChrome::Action::TerrainWorkspace ||\n                action == RenegadeStudioChrome::Action::RenderWorkspace)\n            {\n                ResetS1BInspectorDisclosure();\n            }\n            switch (action)\n            {''')
+
+          # ---- Audio popup ownership / workspace transition disclosure reset ----
+          path = 'Studio/src/RenegadePhysicsLabStudioChrome.cpp'
+          replace_once(path,
+              '''                {\n                    workspaceTransitionRequested_ = true;\n                    SetPhysicsLabActive(false);\n                    SetAudioWorkspaceActive(false);\n                }''',
+              '''                {\n                    workspaceTransitionRequested_ = true;\n                    SetActiveBottomTab(-1, true);\n                    ResetDisclosureState();\n                    SetPhysicsLabActive(false);\n                    SetAudioWorkspaceActive(false);\n                }''')
+          replace_once(path,
+              '''        else if (AudioViewportToolHit(pointer) &&\n            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))''',
+              '''        else if (!HasOpenMenuPopup() &&\n            AudioViewportToolHit(pointer) &&\n            wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))''')
+          replace_once(path,
+              '''    void RenegadePhysicsLabStudioChrome::RenderAudioViewportTool(\n        const wi::graphics::CommandList cmd) const\n    {\n        const XMFLOAT4 bounds = AudioViewportToolBounds();''',
+              '''    void RenegadePhysicsLabStudioChrome::RenderAudioViewportTool(\n        const wi::graphics::CommandList cmd) const\n    {\n        if (HasOpenMenuPopup())\n            return;\n        const XMFLOAT4 bounds = AudioViewportToolBounds();''')
+
+          # ---- Source contract ----
+          Path('Tests/StudioDisclosurePolicySourceContract.cmake').write_text(r'''set(chrome_header "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.h")
+set(chrome_source "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp")
+set(inspector_source "${RENEGADE_SOURCE_DIR}/Studio/src/S1BInspectorSectionMigration.cpp")
+set(studio_header "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.h")
+set(studio_source "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp")
+set(audio_source "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadePhysicsLabStudioChrome.cpp")
+
+foreach(required_file IN ITEMS
+    "${chrome_header}"
+    "${chrome_source}"
+    "${inspector_source}"
+    "${studio_header}"
+    "${studio_source}"
+    "${audio_source}")
+    if(NOT EXISTS "${required_file}")
+        message(FATAL_ERROR "Studio disclosure policy file is missing: ${required_file}")
+    endif()
+endforeach()
+
+file(READ "${chrome_header}" chrome_header_text)
+file(READ "${chrome_source}" chrome_text)
+file(READ "${inspector_source}" inspector_text)
+file(READ "${studio_header}" studio_header_text)
+file(READ "${studio_source}" studio_text)
+file(READ "${audio_source}" audio_text)
+
+foreach(token IN ITEMS
+    "ResetDisclosureState"
+    "ResetHierarchyDisclosureToSelection"
+    "ResetAssetFolderDisclosureToSelection"
+    "HasOpenMenuPopup")
+    string(FIND "${chrome_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Studio disclosure chrome contract is missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "collapsedHierarchyCategories_.fill(true)"
+    "ResetHierarchyDisclosureToSelection();"
+    "ResetAssetFolderDisclosureToSelection();")
+    string(FIND "${chrome_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Studio disclosure implementation is missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "MakeSection(\"transform\", \"TRANSFORM\", 10, false)"
+    "MakeSection(\"rendering\", \"RENDERING\", 20, false)"
+    "MakeSection(\"materials\", \"MATERIALS\", 30, false)"
+    "ResetS1BInspectorDisclosure"
+    "inspectorDisclosureSelectionRevision_"
+    "inspectorDisclosureViewToken_")
+    string(FIND "${inspector_text}${studio_header_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Studio Inspector disclosure policy is missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "ResetS1BInspectorDisclosure();"
+    "Action::ProjectHub"
+    "Action::SceneWorkspace")
+    string(FIND "${studio_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Studio view-reset seam is missing ${token}")
+    endif()
+endforeach()
+
+foreach(token IN ITEMS
+    "!HasOpenMenuPopup()"
+    "if (HasOpenMenuPopup())"
+    "ResetDisclosureState();")
+    string(FIND "${audio_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Audio/menu ownership fix is missing ${token}")
+    endif()
+endforeach()
+
+foreach(forbidden IN ITEMS "lua_State" "renegade.events" "GLOBAL SCRIPT")
+    string(FIND "${chrome_text}${inspector_text}${audio_text}" "${forbidden}" found)
+    if(NOT found EQUAL -1)
+        message(FATAL_ERROR "Studio UI consistency gate must not introduce scripting/runtime work: ${forbidden}")
+    endif()
+endforeach()
+''', encoding='utf-8')
+
+          # Register the source contract in the root configure-time test set.
+          path = 'CMakeLists.txt'
+          p = Path(path)
+          text = p.read_text(encoding='utf-8')
+          anchor = 'include(Tests/S1BInspectorSectionFramework.cmake)' if 'include(Tests/S1BInspectorSectionFramework.cmake)' in text else 'include(Tests/S1BInspectorMigration.cmake)'
+          if anchor not in text:
+              anchor = 'include(Tests/S1BInspectorMigrationSourceContract.cmake)'
+          if anchor not in text:
+              # Fall back to the known S1B contract registration added by PR #128.
+              candidates = [line for line in text.splitlines() if 'S1B' in line and 'include(' in line]
+              if not candidates:
+                  raise RuntimeError('CMakeLists.txt: S1B include anchor not found')
+              anchor = candidates[-1]
+          insertion = anchor + '\nadd_test(\n    NAME RenegadeStudioDisclosurePolicySourceContract\n    COMMAND ${CMAKE_COMMAND}\n        -DRENEGADE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}\n        -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/StudioDisclosurePolicySourceContract.cmake)'
+          if 'RenegadeStudioDisclosurePolicySourceContract' not in text:
+              text = text.replace(anchor, insertion, 1)
+              p.write_text(text, encoding='utf-8')
+
+      - name: Remove one-shot workflow
+        shell: bash
+        run: rm .github/workflows/ui-disclosure-audio-patch.yml
+
+      - name: Commit and push gate
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Studio UI: enforce disclosure policy and menu ownership"
+          git push origin HEAD:ui/disclosure-audio-zorder
