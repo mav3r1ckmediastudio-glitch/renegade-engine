@@ -1323,15 +1323,27 @@ namespace renegade::runtime
         const std::string companionPath =
             bridge::ScriptDocumentPathForScene(scenePath);
         std::error_code ec;
-        const bool hasCompanion = fs::is_regular_file(
-            fs::u8path(companionPath), ec);
+        const fs::file_status companionStatus =
+            fs::status(fs::u8path(companionPath), ec);
+        if (companionStatus.type() == fs::file_type::not_found)
+        {
+            // A missing S2 companion is the normal compatibility case for
+            // projects/scenes that have no creator scripts yet. MSVC's
+            // filesystem implementation can still populate ec for not-found,
+            // so recognize the status before treating ec as an I/O failure.
+            ec.clear();
+            return impl_->BeginScene(
+                scene,
+                std::move(projectRoot),
+                error);
+        }
         if (ec)
         {
             error = "Could not inspect the Scene script companion: " +
                 ec.message();
             return false;
         }
-        if (!hasCompanion)
+        if (!fs::is_regular_file(companionStatus))
         {
             return impl_->BeginScene(
                 scene,
