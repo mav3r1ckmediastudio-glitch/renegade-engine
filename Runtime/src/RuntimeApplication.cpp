@@ -487,6 +487,10 @@ namespace renegade::runtime
             return;
         }
 
+        // StartScene/BeginScene intentionally clears diagnostics for the new
+        // Level generation. Reset the publication cursor only after that
+        // successful transition so every new instance failure is surfaced.
+        reportedScriptDiagnostics_ = 0;
         if (paused_)
             creatorScripts_.Pause();
 
