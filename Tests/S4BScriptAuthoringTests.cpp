@@ -191,14 +191,17 @@ return {}
     const ScriptAuthoringSource* scriptSource = FindSource(scripts, scriptPath);
     ok = Expect(scriptSource != nullptr, "SCRIPT source is discoverable") && ok;
 
+    // S4D extends the same governed source catalogue to GLOBAL SCRIPT. This
+    // S4B fixture has no GLOBAL SCRIPT source, so discovery succeeds with an
+    // empty compatible list while retaining any malformed-source diagnostics.
     std::vector<ScriptAuthoringSource> globals;
     diagnostics.clear();
     error.clear();
     ok = Expect(
-        !session.Scripts().EnumerateProjectSources(
-            ScriptPresentation::GlobalScript, globals, diagnostics, error) &&
-        error.find("S4D") != std::string::npos,
-        "GLOBAL SCRIPT authoring remains deferred to S4D") && ok;
+        session.Scripts().EnumerateProjectSources(
+            ScriptPresentation::GlobalScript, globals, diagnostics, error),
+        "GLOBAL SCRIPT catalogue extension remains compatible: " + error) && ok;
+    ok = Expect(globals.empty(), "S4B fixture has no GLOBAL SCRIPT sources") && ok;
 
     if (actionSource == nullptr || scriptSource == nullptr)
     {
