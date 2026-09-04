@@ -22,6 +22,16 @@ namespace
     {
         return std::fabs(left - right) < 0.0001f;
     }
+
+    bool PositionMatches(
+        const wi::scene::TransformComponent& transform,
+        const float x,
+        const float y,
+        const float z) noexcept
+    {
+        const XMFLOAT3 world = transform.GetPosition();
+        return Near(world.x, x) && Near(world.y, y) && Near(world.z, z);
+    }
 }
 
 int main()
@@ -63,6 +73,9 @@ int main()
     {
         return Fail("set local position did not persist in the live Scene");
     }
+    const auto* liveTransform = scene.transforms.GetComponent(entity);
+    if (liveTransform == nullptr || !PositionMatches(*liveTransform, 1.0f, 2.0f, 3.0f))
+        return Fail("set local position did not update the Wicked world transform");
 
     if (!api.TranslateLocal(reference, XMFLOAT3(0.5f, -1.0f, 2.0f), error))
         return Fail("translate local position: " + error);
@@ -71,6 +84,9 @@ int main()
     {
         return Fail("local translation produced the wrong transform");
     }
+    liveTransform = scene.transforms.GetComponent(entity);
+    if (liveTransform == nullptr || !PositionMatches(*liveTransform, 1.5f, 1.0f, 5.0f))
+        return Fail("local translation did not update the Wicked world transform");
 
     const XMFLOAT3 beforeInvalid = position;
     error.clear();
