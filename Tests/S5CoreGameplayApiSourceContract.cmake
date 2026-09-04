@@ -29,7 +29,10 @@ read_required("CMakeLists.txt" root_cmake)
 read_required("Runtime/src/RuntimeScriptEntityApi.h" api_header)
 read_required("Runtime/src/RuntimeScriptEntityApi.cpp" api_source)
 read_required("Runtime/src/RuntimeScriptRuntime.cpp" runtime_source)
+read_required("Studio/src/S4BScriptAttachmentInspector.cpp" inspector_source)
+read_required("Tests/S4BScriptAuthoringTests.cpp" authoring_test)
 read_required("Tests/S5CoreGameplayApi.cmake" test_cmake)
+read_required("Tests/S5CoreGameplayApiTests.cpp" api_test)
 read_required("Tests/S5CoreGameplayLuaTests.cpp" lua_test)
 
 require_text(root_cmake "include(Runtime/S5CoreGameplayApi.cmake)" "Runtime S5A build registration")
@@ -51,8 +54,9 @@ foreach(required IN ITEMS
     "reference.generation != generation_"
     "Transform position must contain finite numbers."
     "Transform delta must contain finite numbers."
-    "transform->SetDirty()")
-    require_text(api_source "${required}" "generation/liveness/finite-value hardening")
+    "transform->SetDirty()"
+    "transform->UpdateTransform()")
+    require_text(api_source "${required}" "generation/liveness/finite-value/transform propagation hardening")
 endforeach()
 
 foreach(required IN ITEMS
@@ -74,10 +78,20 @@ require_text(runtime_source "reference.generation = payload->generation" "opaque
 require_text(runtime_source "lua_rawget" "vector input read without creator metamethod execution")
 
 require_text(test_cmake "RenegadeS5CoreGameplayLuaTests" "governed Lua behavioural target")
+require_text(api_test "GetPosition()" "C++ acceptance checks propagated Wicked world position")
 require_text(lua_test "renegade.entity.get_name" "creator-safe entity name owner path")
 require_text(lua_test "renegade.transform.set_local_position" "creator transform write owner path")
 require_text(lua_test "renegade.transform.translate_local" "creator transform translation owner path")
-require_text(lua_test "governed Lua did not move the barrel" "visible barrel-movement acceptance")
+require_text(lua_test "GetPosition()" "Lua acceptance checks visible Wicked world position")
+require_text(lua_test "move the barrel visibly" "visible barrel-movement acceptance")
+
+# S5A owner testing exposed a confusing S4B source chooser reset. The chooser
+# must retain its selected source across Scene/Story Flow refreshes, while the
+# actual attachment persistence remains S2 sourceId/sourcePath authoritative.
+require_text(inspector_source "selectedSourcePath" "SCRIPT source chooser refresh continuity")
+require_text(authoring_test "Story Flow-style reopen" "real Level reopen persistence regression")
+require_text(authoring_test "sourcePath == scriptPath" "exact SCRIPT source path persistence")
+require_text(authoring_test "sourceId == scriptSourceId" "exact SCRIPT source identity persistence")
 
 foreach(forbidden IN ITEMS
     "native_id"
