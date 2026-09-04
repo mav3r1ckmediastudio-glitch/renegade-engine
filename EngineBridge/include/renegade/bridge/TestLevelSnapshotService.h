@@ -8,6 +8,7 @@ namespace renegade::bridge
     class CommandService;
     struct ProjectMetadata;
     class SceneService;
+    class ScriptAuthoringService;
 
     struct TestLevelSnapshot
     {
@@ -49,7 +50,8 @@ namespace renegade::bridge
     public:
         TestLevelSnapshotService(
             SceneService& scenes,
-            const CommandService& commands) noexcept;
+            const CommandService& commands,
+            ScriptAuthoringService* scripts = nullptr) noexcept;
 
         // Builds a Runtime-ready shadow project around the unsaved scene
         // snapshot. The shadow descriptor reuses only the authoritative
@@ -86,5 +88,6 @@ namespace renegade::bridge
     private:
         SceneService& scenes_;
         const CommandService& commands_;
+        ScriptAuthoringService* scripts_ = nullptr;
     };
 }

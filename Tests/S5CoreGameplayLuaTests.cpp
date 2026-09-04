@@ -311,7 +311,8 @@ int main()
 
     TestLevelSnapshotService snapshots(
         session.Scenes(),
-        session.Commands());
+        session.Commands(),
+        &session.Scripts());
     TestLevelSnapshot snapshot;
     if (!snapshots.Create(authoredProject, snapshot, error))
         return Fail("create scripted Test Level snapshot: " + error);

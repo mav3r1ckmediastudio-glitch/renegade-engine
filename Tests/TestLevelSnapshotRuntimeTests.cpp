@@ -9,7 +9,10 @@
 #include <vector>
 
 #include "RuntimeBootstrap.h"
+#include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/CreatorTextureWorkflowService.h"
+#include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
@@ -67,6 +70,62 @@ namespace
         return bytes;
     }
 
+    const std::vector<std::uint8_t>& PngBytes()
+    {
+        static const std::vector<std::uint8_t> bytes = {
+            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,
+            0,0,0,1,0,0,0,1,8,4,0,0,0,181,28,12,2,
+            0,0,0,11,73,68,65,84,120,218,99,100,248,15,0,1,
+            5,1,1,39,24,227,102,0,0,0,0,73,69,78,68,174,66,96,130};
+        return bytes;
+    }
+
+    bool WriteBytes(const fs::path& path, const std::vector<std::uint8_t>& bytes)
+    {
+        fs::create_directories(path.parent_path());
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream.write(
+            reinterpret_cast<const char*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+        return static_cast<bool>(stream);
+    }
+
+    bool WriteEmptyRegistry(
+        const fs::path& root,
+        const renegade::bridge::StableId& projectId)
+    {
+        renegade::bridge::AssetRegistry registry;
+        registry.projectId = projectId;
+        registry.schemaVersion =
+            renegade::bridge::AssetRegistry::CurrentSchemaVersion;
+        std::string json;
+        std::string error;
+        if (!renegade::bridge::SerializeAssetRegistry(registry, json, error))
+            return false;
+        std::ofstream stream(
+            root / renegade::bridge::AssetRegistryDocumentName,
+            std::ios::binary | std::ios::trunc);
+        stream << json;
+        return static_cast<bool>(stream);
+    }
+
+    wi::Resource FakeTextureLoader(
+        const renegade::bridge::PreparedMaterialTextureAsset& prepared,
+        std::string& error)
+    {
+        wi::vector<std::uint8_t> bytes;
+        bytes.assign(prepared.payload.begin(), prepared.payload.end());
+        wi::Resource resource;
+        resource.SetFileData(std::move(bytes));
+        if (!resource.IsValid())
+        {
+            error = "fake Test Level texture loader could not retain payload bytes";
+            return {};
+        }
+        error.clear();
+        return resource;
+    }
+
     bool FindTranslationX(
         const renegade::bridge::SceneService& scenes,
         const std::string& name,
@@ -121,6 +180,41 @@ int main()
     project.startupScreenId = "66666666-6666-4666-8666-666666666666";
     project.startupScreen = "Content/UI/Main.renegade-screen";
 
+    fs::create_directories(projectRoot / "SourceAssets");
+    fs::create_directories(projectRoot / "Intermediate" / "Transactions");
+    if (!WriteEmptyRegistry(projectRoot, project.projectId))
+    {
+        return Fail("LP04 material parity fixture could not create the asset registry");
+    }
+
+    const fs::path externalTexture = fixture.path / "test-level-base.png";
+    if (!WriteBytes(externalTexture, PngBytes()))
+        return Fail("LP04 material parity fixture could not write its texture source");
+
+    renegade::bridge::CreatorTextureWorkflowService textureWorkflow;
+    const auto importedTexture = textureWorkflow.ImportTexture(
+        projectRoot.generic_u8string(),
+        project.projectId,
+        externalTexture.generic_u8string());
+    if (!importedTexture.succeeded || !importedTexture.committed)
+    {
+        std::cerr << importedTexture.error << '\n';
+        return Fail("LP04 material parity fixture could not import a governed texture");
+    }
+
+    renegade::bridge::PreparedMaterialTextureAsset preparedTexture;
+    std::string materialError;
+    if (!renegade::bridge::PrepareMaterialTextureAsset(
+            projectRoot.generic_u8string(),
+            project.projectId,
+            importedTexture.assetId,
+            preparedTexture,
+            materialError))
+    {
+        std::cerr << materialError << '\n';
+        return Fail("LP04 material parity fixture could not prepare its governed texture");
+    }
+
     renegade::bridge::StudioSession session;
     const auto landmark = wi::ecs::CreateEntity();
     session.Scenes().GetScene().names.Create(landmark) = "Runtime Landmark";
@@ -128,6 +222,20 @@ int main()
     transform.translation_local = XMFLOAT3(1.0f, 2.0f, 3.0f);
     transform.SetDirty();
     transform.UpdateTransform();
+
+    const wi::ecs::Entity governedMaterial = wi::ecs::CreateEntity();
+    session.Scenes().GetScene().materials.Create(governedMaterial);
+    if (!renegade::bridge::ApplyPreparedMaterialTextureAsset(
+            session.Scenes().GetScene(),
+            governedMaterial,
+            renegade::bridge::MaterialTextureSlot::BaseColor,
+            preparedTexture,
+            FakeTextureLoader,
+            materialError))
+    {
+        std::cerr << materialError << '\n';
+        return Fail("LP04 material parity fixture could not bind its governed texture");
+    }
 
     if (!session.SaveScene(scenePath.generic_u8string()))
     {
@@ -167,6 +275,15 @@ int main()
         !fs::is_regular_file(snapshot.descriptorPath))
     {
         return Fail("LP04 snapshot did not produce a Runtime-ready shadow project");
+    }
+
+    const fs::path snapshotRoot = fs::u8path(snapshot.sessionDirectory);
+    if (!fs::is_regular_file(
+            snapshotRoot / renegade::bridge::AssetRegistryDocumentName) ||
+        !fs::is_regular_file(
+            snapshotRoot / fs::u8path(importedTexture.assetProjectRelativePath)))
+    {
+        return Fail("LP04 Test Level snapshot omitted governed material Runtime inputs");
     }
 
     renegade::bridge::ProjectService inspector;
@@ -216,12 +333,31 @@ int main()
     renegade::bridge::SceneService runtimeScenes;
     auto loaded = renegade::runtime::LoadRuntimeProjectScene(
         runtimeScenes,
-        resolved);
+        resolved,
+        FakeTextureLoader);
     if (!loaded.succeeded)
     {
         std::cerr << loaded.message << '\n';
         return Fail("existing Runtime scene loader rejected the LP04 snapshot");
     }
+    std::vector<renegade::bridge::MaterialTextureBindingRecord> runtimeBindings;
+    std::string runtimeMaterialError;
+    if (!renegade::bridge::InspectMaterialTextureBindings(
+            runtimeScenes.GetScene(), runtimeBindings, runtimeMaterialError) ||
+        runtimeBindings.size() != 1)
+    {
+        std::cerr << runtimeMaterialError << '\n';
+        return Fail("Runtime did not preserve the Test Level governed material binding");
+    }
+    const auto* runtimeMaterial = runtimeScenes.GetScene().materials.GetComponent(
+        runtimeBindings.front().materialEntity);
+    if (runtimeMaterial == nullptr ||
+        !runtimeMaterial->textures[
+            wi::scene::MaterialComponent::BASECOLORMAP].resource.IsValid())
+    {
+        return Fail("Runtime did not rehydrate the Test Level governed material resource");
+    }
+
     float runtimeX = 0.0f;
     if (!FindTranslationX(runtimeScenes, "Runtime Landmark", runtimeX) ||
         !NearlyEqual(runtimeX, 9.0f))
