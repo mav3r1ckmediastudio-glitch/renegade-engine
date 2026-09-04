@@ -29,6 +29,36 @@ jobs:
         shell: pwsh
         run: python .github/s5a_owner_parity_patch.py
 
+      - name: Publish repair immediately to PR 138
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(
+            'EngineBridge/include/renegade/bridge/TestLevelSnapshotService.h',
+            'EngineBridge/src/TestLevelSnapshotService.cpp',
+            'Studio/src/StudioApplication.cpp',
+            'Runtime/src/RuntimeBootstrap.h',
+            'Runtime/src/RuntimeBootstrap.cpp',
+            'Runtime/src/RuntimeReusableAssets.cpp',
+            'Tests/S5CoreGameplayLuaTests.cpp',
+            'Tests/TestLevelSnapshotRuntimeTests.cpp'
+          )
+          $patch = Join-Path $env:RUNNER_TEMP 's5a-owner-parity.patch'
+          git diff -- $files | Set-Content -LiteralPath $patch -Encoding utf8NoBOM
+          if ((Get-Item -LiteralPath $patch).Length -eq 0) {
+            throw 'Owner parity repair produced an empty patch.'
+          }
+          git fetch origin scripting/s5a-core-entity-transform
+          git checkout -B publish origin/scripting/s5a-core-entity-transform
+          git apply --check $patch
+          git apply $patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- $files
+          git diff --cached --check
+          git commit -m "S5A: repair Test Level owner and material parity"
+          git push origin HEAD:scripting/s5a-core-entity-transform
+
       - name: Stage LP07 pinned FBX proof fixtures
         shell: pwsh
         run: |
@@ -62,7 +92,7 @@ jobs:
 
       - name: Run real S5A owner scripting regression
         shell: pwsh
-        run: ./BUILD/preflight/Tests/Release/RenegadeS5CoreGameplayLuaTests.exe
+        run: ./BUILD/preflight/Release/RenegadeS5CoreGameplayLuaTests.exe
 
       - name: Run real Test Level material and Runtime regression
         shell: pwsh
@@ -71,23 +101,3 @@ jobs:
       - name: Compile production Studio integration
         shell: pwsh
         run: cmake --build BUILD/preflight --config Release --parallel --target RenegadeStudio
-
-      - name: Publish clean proven repair to preflight branch
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/s5a-owner-parity-preflight.yml
-          git rm .github/s5a_owner_parity_patch.py
-          git add EngineBridge/include/renegade/bridge/TestLevelSnapshotService.h
-          git add EngineBridge/src/TestLevelSnapshotService.cpp
-          git add Studio/src/StudioApplication.cpp
-          git add Runtime/src/RuntimeBootstrap.h
-          git add Runtime/src/RuntimeBootstrap.cpp
-          git add Runtime/src/RuntimeReusableAssets.cpp
-          git add Tests/S5CoreGameplayLuaTests.cpp
-          git add Tests/TestLevelSnapshotRuntimeTests.cpp
-          git diff --cached --check
-          git commit -m "S5A: repair Test Level owner and material parity"
-          git push origin HEAD:preflight/s5a-owner-parity-repair
