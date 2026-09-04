@@ -89,6 +89,7 @@ namespace renegade::studio
             std::vector<ScriptAuthoringSource> sources;
             std::vector<bridge::ScriptMetadataDiagnostic> diagnostics;
             std::size_t selectedSource = 0;
+            std::string selectedSourcePath;
             std::uint64_t sourceSceneRevision =
                 std::numeric_limits<std::uint64_t>::max();
             std::string sourceProjectRoot;
@@ -416,13 +417,18 @@ namespace renegade::studio
 
                 controls.addSource.Create("S4B " + role + " Source");
                 controls.addSource.SetTooltip(
-                    "Choose a governed Content/Scripts Lua source whose S4A metadata role is " +
+                    "Choose the next governed Content/Scripts Lua source to ADD. "
+                    "Already attached scripts are listed below. Required metadata role: " +
                     role + ".");
                 controls.addSource.OnSelect(
                     [this, presentation](const wi::gui::EventArgs& args)
                     {
-                        Role(presentation).selectedSource =
+                        auto& role = Role(presentation);
+                        role.selectedSource =
                             static_cast<std::size_t>(args.userdata);
+                        if (role.selectedSource < role.sources.size())
+                            role.selectedSourcePath =
+                                role.sources[role.selectedSource].sourcePath;
                     });
                 panel_->AddWidget(&controls.addSource);
 
@@ -595,7 +601,33 @@ namespace renegade::studio
                         static_cast<std::uint64_t>(index));
                 }
                 if (!controls.sources.empty())
-                    controls.addSource.SetSelectedWithoutCallback(0);
+                {
+                    std::size_t restored = 0;
+                    if (!controls.selectedSourcePath.empty())
+                    {
+                        const auto selected = std::find_if(
+                            controls.sources.begin(), controls.sources.end(),
+                            [&](const ScriptAuthoringSource& candidate)
+                            {
+                                return candidate.sourcePath ==
+                                    controls.selectedSourcePath;
+                            });
+                        if (selected != controls.sources.end())
+                        {
+                            restored = static_cast<std::size_t>(
+                                std::distance(controls.sources.begin(), selected));
+                        }
+                    }
+                    controls.selectedSource = restored;
+                    controls.selectedSourcePath = controls.sources[restored].sourcePath;
+                    controls.addSource.SetSelectedWithoutCallback(
+                        static_cast<int>(restored));
+                }
+                else
+                {
+                    controls.selectedSource = 0;
+                    controls.selectedSourcePath.clear();
+                }
                 controls.sourceSceneRevision = session->Scenes().Revision();
                 controls.sourceProjectRoot = project.rootPath;
                 controls.documentError.clear();
