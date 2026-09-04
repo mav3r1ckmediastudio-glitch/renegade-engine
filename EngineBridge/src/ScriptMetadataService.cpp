@@ -943,7 +943,7 @@ namespace
         // No non-trivial C++ locals are live across lua_error(). The sentinel
         // intentionally terminates the metadata-only execution immediately so
         // gameplay setup below renegade.metadata() is never run by Studio.
-        lua_pushliteral(state, MetadataCapturedSentinel);
+        lua_pushstring(state, MetadataCapturedSentinel);
         return lua_error(state);
     }
 
