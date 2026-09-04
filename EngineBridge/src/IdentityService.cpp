@@ -659,27 +659,6 @@ namespace renegade::bridge
         wi::unordered_set<wi::ecs::Entity> discovered;
         scene.FindAllEntities(discovered);
 
-        // Scene::FindAllEntities() is Wicked's render/runtime enumeration.
-        // Renegade identity is broader: a creator-facing root can be a
-        // transform/name/hierarchy/metadata carrier before it has a render
-        // component (this is the shape used by imported/reusable model
-        // roots). Keep the identity index aligned with the component stores
-        // that Renegade authoring can select and persist instead of assuming
-        // that render enumeration is the complete authoring universe.
-        const auto includeEntities = [&discovered](const auto& components)
-        {
-            for (std::size_t index = 0; index < components.GetCount(); ++index)
-            {
-                const wi::ecs::Entity entity = components.GetEntity(index);
-                if (entity != wi::ecs::INVALID_ENTITY)
-                    discovered.insert(entity);
-            }
-        };
-        includeEntities(scene.transforms);
-        includeEntities(scene.names);
-        includeEntities(scene.hierarchy);
-        includeEntities(scene.metadatas);
-
         std::vector<wi::ecs::Entity> entities;
         entities.reserve(discovered.size());
         for (const auto entity : discovered)
