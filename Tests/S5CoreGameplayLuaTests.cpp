@@ -21,6 +21,35 @@ namespace
         return 1;
     }
 
+    bool WriteText(
+        const fs::path& path,
+        const std::string& text,
+        std::string& error)
+    {
+        std::error_code ec;
+        fs::create_directories(path.parent_path(), ec);
+        if (ec)
+        {
+            error = "could not create fixture directory: " + ec.message();
+            return false;
+        }
+
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        if (!stream)
+        {
+            error = "could not open fixture file: " + path.generic_u8string();
+            return false;
+        }
+        stream << text;
+        if (!stream)
+        {
+            error = "could not write fixture file: " + path.generic_u8string();
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
     bool Near(const float left, const float right) noexcept
     {
         return std::fabs(left - right) < 0.0001f;
