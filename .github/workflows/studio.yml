@@ -29,6 +29,7 @@ permissions:
 
 jobs:
   studio:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025
     timeout-minutes: 60
