@@ -1,0 +1,38 @@
+name: S5A Integrate V2
+
+on: [push]
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: scripting/s5a-core-entity-transform
+          fetch-depth: 0
+
+      - name: Apply guarded runtime integration
+        run: python Tools/S5AIntegrate.py
+
+      - name: Validate source contract and diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/S5CoreGameplayApiSourceContract.cmake
+
+      - name: Commit integrated S5A source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/s5a-integration.yml
+          rm .github/workflows/s5a-integrate-v2.yml
+          rm Tools/S5AIntegrate.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "S5A: integrate governed entity transform Lua API"
+          git push origin HEAD:scripting/s5a-core-entity-transform
