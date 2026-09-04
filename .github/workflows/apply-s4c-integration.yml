@@ -1,0 +1,102 @@
+name: Apply S4C integration patch
+
+on:
+  push:
+    branches:
+      - scripting/s4c-typed-script-properties
+    paths:
+      - .github/workflows/apply-s4c-integration.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: scripting/s4c-typed-script-properties
+          fetch-depth: 0
+
+      - name: Apply integration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, got {count}: {old[:100]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'CMakeLists.txt',
+              'include(EngineBridge/S4BScriptAuthoring.cmake)\n',
+              'include(EngineBridge/S4BScriptAuthoring.cmake)\ninclude(EngineBridge/S4CScriptPropertyAuthoring.cmake)\n')
+          replace_once(
+              'CMakeLists.txt',
+              '    include(Studio/S4BScriptAttachmentInspector.cmake)\n',
+              '    include(Studio/S4BScriptAttachmentInspector.cmake)\n    include(Studio/S4CScriptPropertyControls.cmake)\n')
+          replace_once(
+              'CMakeLists.txt',
+              '    include(Tests/S4BScriptAuthoring.cmake)\n',
+              '    include(Tests/S4BScriptAuthoring.cmake)\n    include(Tests/S4CScriptPropertyAuthoring.cmake)\n')
+
+          replace_once(
+              'Studio/src/S4CScriptPropertyControls.cpp',
+              '#include <algorithm>\n#include <cmath>\n#include <iomanip>\n#include <sstream>\n#include <string_view>\n',
+              '#include <algorithm>\n#include <cctype>\n#include <cmath>\n#include <iomanip>\n#include <sstream>\n#include <stdexcept>\n#include <utility>\n')
+
+          replace_once(
+              'Studio/src/S4BScriptAttachmentInspector.cpp',
+              '#include "S4BScriptAttachmentInspector.h"\n\n',
+              '#include "S4BScriptAttachmentInspector.h"\n#include "S4CScriptPropertyControls.h"\n\n')
+
+          replace_once(
+              'Studio/src/S4BScriptAttachmentInspector.cpp',
+              '            StableId scriptInstanceId;\n            std::uint32_t order = 0;\n',
+              '            StableId scriptInstanceId;\n            std::uint32_t order = 0;\n            std::unique_ptr<S4CScriptPropertyEditor> properties;\n')
+
+          replace_once(
+              'Studio/src/S4BScriptAttachmentInspector.cpp',
+              '                const auto& controls = Role(presentation);\n                const std::size_t count = VisibleAttachmentCount(presentation);\n                // status + add/source row + one compact row per attachment.\n                return 60.0f + static_cast<float>(count) * 36.0f;\n',
+              '                const auto& controls = Role(presentation);\n                const std::size_t count = VisibleAttachmentCount(presentation);\n                float height = 60.0f;\n                for (std::size_t index = 0; index < count && index < controls.rows.size(); ++index)\n                {\n                    height += 36.0f;\n                    if (controls.rows[index]->properties)\n                        height += controls.rows[index]->properties->MeasureHeight();\n                }\n                return height;\n')
+
+          replace_once(
+              'Studio/src/S4BScriptAttachmentInspector.cpp',
+              '                for (std::size_t index = 0; index < attachments.size(); ++index)\n                {\n                    auto& row = *controls.rows[index];\n                    const float y = top + 60.0f + static_cast<float>(index) * 36.0f;\n',
+              '                float rowY = top + 60.0f;\n                for (std::size_t index = 0; index < attachments.size(); ++index)\n                {\n                    auto& row = *controls.rows[index];\n                    const float y = rowY;\n')
+
+          replace_once(
+              'Studio/src/S4BScriptAttachmentInspector.cpp',
+              '                    row.up.SetEnabled(index > 0);\n                    row.down.SetEnabled(index + 1 < attachments.size());\n                }\n',
+              '                    row.up.SetEnabled(index > 0);\n                    row.down.SetEnabled(index + 1 < attachments.size());\n                    if (row.properties)\n                    {\n                        row.properties->SetVisible(true);\n                        row.properties->Layout(\n                            x + 12.0f,\n                            y + 32.0f,\n                            std::max(70.0f, width - 12.0f));\n                        rowY += 36.0f + row.properties->MeasureHeight();\n                    }\n                    else\n                    {\n                        rowY += 36.0f;\n                    }\n                }\n')
+
+          replace_once(
+              'Studio/src/S4BScriptAttachmentInspector.cpp',
+              '                    auto row = std::make_unique<ScriptRowControls>();\n                    row->source.Create(\n',
+              '                    auto row = std::make_unique<ScriptRowControls>();\n                    row->properties = std::make_unique<S4CScriptPropertyEditor>(\n                        *panel_,\n                        [this]() { RequestRefresh(); },\n                        [this](std::string status) { SetStatus(std::move(status)); });\n                    row->source.Create(\n')
+
+          replace_once(
+              'Studio/src/S4BScriptAttachmentInspector.cpp',
+              '                if (source != controls.sources.end())\n                    display = source->metadata.name;\n                row.source.SetText(\n                    "#" + std::to_string(attachment.order + 1) + "  " + display);\n                row.source.SetTooltip(attachment.sourcePath);\n                row.enabled.SetCheck(attachment.enabled);\n',
+              '                const bridge::ScriptMetadataDescriptor* metadata = nullptr;\n                if (source != controls.sources.end())\n                {\n                    display = source->metadata.name;\n                    metadata = &source->metadata;\n                }\n                row.source.SetText(\n                    "#" + std::to_string(attachment.order + 1) + "  " + display);\n                row.source.SetTooltip(attachment.sourcePath);\n                row.enabled.SetCheck(attachment.enabled);\n                if (row.properties)\n                {\n                    row.properties->Refresh(\n                        attachment.scriptInstanceId,\n                        attachment,\n                        metadata);\n                }\n')
+
+          replace_once(
+              'Studio/src/S4BScriptAttachmentInspector.cpp',
+              '                row.remove.SetVisible(visible);\n            }\n',
+              '                row.remove.SetVisible(visible);\n                if (row.properties)\n                    row.properties->SetVisible(visible);\n            }\n')
+
+      - name: Commit patch and remove helper
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-s4c-integration.yml
+          git add CMakeLists.txt Studio/src/S4BScriptAttachmentInspector.cpp Studio/src/S4CScriptPropertyControls.cpp
+          git commit -m "S4C: integrate typed property controls"
+          git push origin HEAD:scripting/s4c-typed-script-properties
