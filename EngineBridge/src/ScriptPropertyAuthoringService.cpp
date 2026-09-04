@@ -126,9 +126,16 @@ namespace renegade::bridge
 
         case ScriptPropertyType::Integer:
         {
-            double number = static_cast<double>(value.integerValue);
-            number = QuantizeMetadataNumber(number, metadata);
-            value.integerValue = static_cast<std::int64_t>(std::llround(number));
+            // Preserve the exact 64-bit value when the metadata declares no
+            // numeric constraint. Converting an unconstrained integer through
+            // double would lose precision near the ends of int64_t.
+            if (metadata.hasMinimum || metadata.hasMaximum || metadata.hasStep)
+            {
+                double number = static_cast<double>(value.integerValue);
+                number = QuantizeMetadataNumber(number, metadata);
+                value.integerValue =
+                    static_cast<std::int64_t>(std::llround(number));
+            }
             break;
         }
 
