@@ -46,6 +46,7 @@ add_subdirectory(EngineBridge)
 include(EngineBridge/JP01PhysicsLua.cmake)
 include(EngineBridge/S2ScriptDocument.cmake)
 include(EngineBridge/S4AScriptMetadata.cmake)
+include(EngineBridge/S4BScriptAuthoring.cmake)
 include(EngineBridge/Phase5Gate5.cmake)
 include(EngineBridge/Phase5Gate8.cmake)
 
@@ -54,6 +55,7 @@ if(WIN32)
     add_subdirectory(Studio)
     include(Studio/S1AInspectorSectionFramework.cmake)
     include(Studio/S1BInspectorMigration.cmake)
+    include(Studio/S4BScriptAttachmentInspector.cmake)
     include(Studio/Phase5Gate8.cmake)
     include(Studio/Phase5Gate9.cmake)
     include(Studio/Phase6Gate3.cmake)
@@ -94,6 +96,7 @@ if(WIN32)
     include(Tests/S2ScriptDocument.cmake)
     include(Tests/S3GovernedLuaRuntime.cmake)
     include(Tests/S4AScriptMetadata.cmake)
+    include(Tests/S4BScriptAuthoring.cmake)
     add_test(
         NAME RenegadeStudioDisclosurePolicySourceContract
         COMMAND ${CMAKE_COMMAND}

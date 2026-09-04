@@ -1,8 +1,10 @@
 #pragma once
 
+#include <string>
 #include <utility>
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/ScriptAuthoringService.h"
 #include "renegade/bridge/StudioProjectService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SceneDocumentService.h"
@@ -51,6 +53,11 @@ namespace renegade::bridge
             return selection_;
         }
 
+        [[nodiscard]] const SelectionService& Selection() const noexcept
+        {
+            return selection_;
+        }
+
         [[nodiscard]] SceneDocumentService& Documents() noexcept
         {
             return documents_;
@@ -76,16 +83,31 @@ namespace renegade::bridge
             return projects_;
         }
 
+        [[nodiscard]] ScriptAuthoringService& Scripts() noexcept
+        {
+            return scripts_;
+        }
+
+        [[nodiscard]] const ScriptAuthoringService& Scripts() const noexcept
+        {
+            return scripts_;
+        }
+
         void NewScene()
         {
             documents_.NewScene();
+            scripts_.Invalidate();
         }
 
         bool CommitPendingProjectScene(PreparedSceneOpen prepared)
         {
             if (!projects_.HasPendingProject())
             {
-                return documents_.CommitPreparedOpen(std::move(prepared));
+                const bool committed =
+                    documents_.CommitPreparedOpen(std::move(prepared));
+                if (committed)
+                    scripts_.Invalidate();
+                return committed;
             }
 
             if (!prepared.IsReady())
@@ -106,7 +128,11 @@ namespace renegade::bridge
                 return false;
             }
 
-            return documents_.CommitPreparedOpen(std::move(prepared));
+            const bool committed =
+                documents_.CommitPreparedOpen(std::move(prepared));
+            if (committed)
+                scripts_.Invalidate();
+            return committed;
         }
 
         // Gate 7 Story Flow-native adoption boundary. The pending descriptor
@@ -137,6 +163,7 @@ namespace renegade::bridge
                 return false;
             }
             documents_.NewScene();
+            scripts_.Invalidate();
             return true;
         }
 
@@ -147,12 +174,38 @@ namespace renegade::bridge
 
         bool SaveScene(const std::string& filePath)
         {
-            return documents_.Save(filePath);
+            const std::string previousPath = scenes_.CurrentPath();
+            if (!documents_.Save(filePath))
+                return false;
+
+            // Scene-only/headless uses of StudioSession predate project-owned
+            // scripting and remain valid. A scripting companion is meaningful
+            // only when an authoritative Renegade project is active.
+            if (!projects_.HasProject())
+                return true;
+
+            std::string scriptError;
+            if (!scripts_.SaveForScene(filePath, previousPath, scriptError))
+            {
+                // SceneDocumentService has already marked the shared command
+                // history saved. A failed companion commit means the complete
+                // creator document transaction is not saved, so restore dirty
+                // state and surface one authoritative error.
+                commands_.MarkUnsaved();
+                scenes_.SetLastError(
+                    "Scene saved but scripting companion failed: " +
+                    scriptError);
+                return false;
+            }
+            return true;
         }
 
         bool ReloadScene()
         {
-            return documents_.Reload();
+            const bool reloaded = documents_.Reload();
+            if (reloaded)
+                scripts_.Invalidate();
+            return reloaded;
         }
 
     private:
@@ -164,5 +217,6 @@ namespace renegade::bridge
         CommandService commands_;
         SceneDocumentService documents_{
             scenes_, selection_, commands_, projects_};
+        ScriptAuthoringService scripts_{scenes_, projects_, commands_};
     };
 }
