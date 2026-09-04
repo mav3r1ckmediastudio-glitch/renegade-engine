@@ -53,6 +53,11 @@ namespace renegade::bridge
             return selection_;
         }
 
+        [[nodiscard]] const SelectionService& Selection() const noexcept
+        {
+            return selection_;
+        }
+
         [[nodiscard]] SceneDocumentService& Documents() noexcept
         {
             return documents_;
