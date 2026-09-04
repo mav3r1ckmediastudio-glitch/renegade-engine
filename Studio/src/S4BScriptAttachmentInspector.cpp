@@ -707,6 +707,24 @@ namespace renegade::studio
                 auto* session = bridge::StudioSession::Current();
                 if (session == nullptr || !controls.documentReady)
                     return;
+
+                // Imported/reusable asset adoption and Scene reloads can occur
+                // while this Inspector remains alive. Recapture the owner ID
+                // from the live selection at click time instead of trusting
+                // an ID captured during an earlier refresh.
+                const auto selected = session->Selection().SelectedEntity();
+                const StableId liveOwnerEntityId =
+                    selected == wi::ecs::INVALID_ENTITY
+                    ? StableId{}
+                    : bridge::PersistentEntityId(
+                        session->Scenes().GetScene(), selected);
+                if (!bridge::IsValidStableId(liveOwnerEntityId))
+                {
+                    SetStatus(
+                        "S4B SCRIPTING // selected entity has no current persistent identity");
+                    return;
+                }
+                controls.ownerEntityId = liveOwnerEntityId;
                 if (controls.sources.empty() ||
                     controls.selectedSource >= controls.sources.size())
                 {
