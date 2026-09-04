@@ -1,0 +1,72 @@
+name: S5A targeted Windows preflight
+
+on:
+  push:
+    branches:
+      - scripting/s5a-core-entity-transform
+
+permissions:
+  contents: write
+
+jobs:
+  preflight:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - name: Check out Renegade and Wicked
+        uses: actions/checkout@v4
+        with:
+          ref: scripting/s5a-core-entity-transform
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Apply final compile-risk cleanup
+        shell: pwsh
+        run: python tools/s5a_targeted_preflight_fix.py
+
+      - name: Source preflight
+        shell: pwsh
+        run: |
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed' }
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/S5CoreGameplayApiSourceContract.cmake
+          if ($LASTEXITCODE -ne 0) { throw 'S5A source contract failed' }
+          cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/S4BScriptAuthoringSourceContract.cmake
+          if ($LASTEXITCODE -ne 0) { throw 'S4B source contract failed' }
+
+      - name: Configure targeted test build
+        shell: pwsh
+        run: |
+          cmake -S . -B BUILD/s5a-preflight -A x64 -DRENEGADE_EMBED_SHADERS=OFF
+          if ($LASTEXITCODE -ne 0) { throw 'S5A targeted configure failed' }
+
+      - name: Build targeted tests
+        shell: pwsh
+        run: |
+          cmake --build BUILD/s5a-preflight --config Debug --target RenegadeS5CoreGameplayApiTests RenegadeS5CoreGameplayLuaTests RenegadeS4BScriptAuthoringTests --parallel
+          if ($LASTEXITCODE -ne 0) { throw 'S5A targeted build failed' }
+
+      - name: Run targeted owner-workflow regressions
+        shell: pwsh
+        run: |
+          ctest --test-dir BUILD/s5a-preflight -C Debug --output-on-failure -R "^(RenegadeS5CoreGameplayApiTests|RenegadeS5CoreGameplayLuaTests|RenegadeS4BScriptAuthoringTests)$"
+          if ($LASTEXITCODE -ne 0) { throw 'S5A targeted tests failed' }
+
+      - name: Commit preflighted final source
+        shell: pwsh
+        run: |
+          Remove-Item .github/workflows/s5a-targeted-windows-preflight.yml
+          Remove-Item tools/s5a_targeted_preflight_fix.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "S5A: complete targeted owner-workflow preflight"
+          if ($LASTEXITCODE -ne 0) { throw 'S5A preflight commit failed' }
+          git push origin HEAD:scripting/s5a-core-entity-transform
+          if ($LASTEXITCODE -ne 0) { throw 'S5A preflight push failed' }
