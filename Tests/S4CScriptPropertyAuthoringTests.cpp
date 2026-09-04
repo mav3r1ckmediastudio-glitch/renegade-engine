@@ -1,6 +1,7 @@
 #include "renegade/bridge/ScriptPropertyAuthoringService.h"
 
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -93,6 +94,20 @@ int main()
         countValue.integerValue != 9)
     {
         return Fail("integer property did not honor metadata step");
+    }
+
+    ScriptMetadataPropertyDescriptor exactInteger;
+    exactInteger.name = "exact_integer";
+    exactInteger.type = ScriptPropertyType::Integer;
+    ScriptPropertyValue exactIntegerValue;
+    exactIntegerValue.name = "exact_integer";
+    exactIntegerValue.type = ScriptPropertyType::Integer;
+    exactIntegerValue.integerValue = std::numeric_limits<std::int64_t>::max();
+    if (!NormalizeScriptPropertyForAuthoring(
+            exactInteger, exactIntegerValue, error) ||
+        exactIntegerValue.integerValue != std::numeric_limits<std::int64_t>::max())
+    {
+        return Fail("unconstrained int64 property lost exact precision");
     }
 
     ScriptMetadataPropertyDescriptor colour;
