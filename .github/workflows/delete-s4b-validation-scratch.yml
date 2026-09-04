@@ -1,0 +1,19 @@
+name: Remove S4B validation scratch branch
+
+on:
+  push:
+    branches:
+      - scripting/s4b-validation-scratch
+    paths:
+      - .github/workflows/delete-s4b-validation-scratch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete scratch branch
+        shell: bash
+        run: git push https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git --delete scripting/s4b-validation-scratch
