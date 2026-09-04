@@ -1,6 +1,7 @@
 #include "StudioApplication.h"
 
 #include "InspectorSectionFramework.h"
+#include "S4BScriptAttachmentInspector.h"
 
 #include <algorithm>
 #include <functional>
@@ -322,6 +323,16 @@ namespace renegade::studio
         error.clear();
         if (!inspectorSectionRegistry_.Register(std::move(materials), error))
             studioChrome_.SetStatusText("S1B INSPECTOR // " + error);
+
+        RegisterS4BScriptAttachmentInspector(
+            *this,
+            inspectorPanel_,
+            inspectorSectionRegistry_,
+            [this]() { RefreshInspector(); },
+            [this](std::string status)
+            {
+                studioChrome_.SetStatusText(std::move(status));
+            });
     }
 
     void StudioRenderPath::SetS1BMaterialContentVisible(const bool visible)
@@ -453,12 +464,13 @@ namespace renegade::studio
 
     void StudioRenderPath::ResetS1BInspectorDisclosure()
     {
-        for (const char* sectionId : {"transform", "rendering", "materials"})
+        for (const char* sectionId : {"transform", "rendering", "materials", S4BActionSectionId, S4BScriptSectionId})
             (void)inspectorSectionRegistry_.SetExpanded(sectionId, false);
     }
 
     void StudioRenderPath::LayoutS1BInspectorSections()
     {
+        PrepareS4BScriptAttachmentInspector(*this);
         transformSectionHeader_.SetVisible(false);
         renderingSectionHeader_.SetVisible(false);
         materialsSectionHeader_.SetVisible(false);
