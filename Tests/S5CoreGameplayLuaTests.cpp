@@ -25,31 +25,6 @@ namespace
     {
         return std::fabs(left - right) < 0.0001f;
     }
-
-    bool WriteText(const fs::path& path, const std::string& text, std::string& error)
-    {
-        std::error_code ec;
-        fs::create_directories(path.parent_path(), ec);
-        if (ec)
-        {
-            error = ec.message();
-            return false;
-        }
-        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
-        if (!stream)
-        {
-            error = "could not open Lua fixture";
-            return false;
-        }
-        stream.write(text.data(), static_cast<std::streamsize>(text.size()));
-        if (!stream)
-        {
-            error = "could not write Lua fixture";
-            return false;
-        }
-        error.clear();
-        return true;
-    }
 }
 
 int main()
@@ -122,9 +97,12 @@ int main()
     const auto* transform = scene.transforms.GetComponent(barrel);
     if (transform == nullptr)
         return Fail("barrel transform disappeared");
-    const XMFLOAT3 position = transform->translation_local;
-    if (!Near(position.x, 1.5f) || !Near(position.y, 1.0f) || !Near(position.z, 5.0f))
-        return Fail("governed Lua did not move the barrel through the S5A transform API");
+    const XMFLOAT3 local = transform->translation_local;
+    if (!Near(local.x, 1.5f) || !Near(local.y, 1.0f) || !Near(local.z, 5.0f))
+        return Fail("governed Lua did not update the barrel local transform");
+    const XMFLOAT3 world = transform->GetPosition();
+    if (!Near(world.x, 1.5f) || !Near(world.y, 1.0f) || !Near(world.z, 5.0f))
+        return Fail("governed Lua did not move the barrel visibly through the Wicked world transform");
 
     runtime.StopScene();
     std::error_code ec;
