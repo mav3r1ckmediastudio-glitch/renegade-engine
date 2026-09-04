@@ -3,6 +3,7 @@
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/StudioSession.h"
 
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>

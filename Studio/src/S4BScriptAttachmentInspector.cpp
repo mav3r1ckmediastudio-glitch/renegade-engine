@@ -452,7 +452,7 @@ namespace renegade::studio
                     panel_->AddWidget(&row->enabled);
 
                     row->up.Create("UP");
-                    row->up.SetTooltip("Move this attachment earlier.");
+                    row->up.SetTooltip("Move this attachment earlier in the entity script execution order.");
                     row->up.OnClick(
                         [this, presentation, index](const wi::gui::EventArgs&)
                         {
@@ -461,7 +461,7 @@ namespace renegade::studio
                     panel_->AddWidget(&row->up);
 
                     row->down.Create("DOWN");
-                    row->down.SetTooltip("Move this attachment later.");
+                    row->down.SetTooltip("Move this attachment later in the entity script execution order.");
                     row->down.OnClick(
                         [this, presentation, index](const wi::gui::EventArgs&)
                         {
