@@ -615,7 +615,7 @@ namespace renegade::studio
                         if (selected != controls.sources.end())
                         {
                             restored = static_cast<std::size_t>(
-                                std::distance(controls.sources.begin(), selected));
+                                selected - controls.sources.begin());
                         }
                     }
                     controls.selectedSource = restored;
