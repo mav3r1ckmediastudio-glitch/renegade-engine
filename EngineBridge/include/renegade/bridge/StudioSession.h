@@ -178,6 +178,12 @@ namespace renegade::bridge
             if (!documents_.Save(filePath))
                 return false;
 
+            // Scene-only/headless uses of StudioSession predate project-owned
+            // scripting and remain valid. A scripting companion is meaningful
+            // only when an authoritative Renegade project is active.
+            if (!projects_.HasProject())
+                return true;
+
             std::string scriptError;
             if (!scripts_.SaveForScene(filePath, previousPath, scriptError))
             {
