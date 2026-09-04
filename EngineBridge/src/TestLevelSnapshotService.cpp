@@ -366,12 +366,59 @@ namespace
             error = "Could not retarget the Test Level Scene identity: " + error;
             return false;
         }
+        // Transactional Renegade document writes create render and journal
+        // suffixes. The Test Level snapshot already lives under a deliberately
+        // deep project/Intermediate path, so doing those transactions in-place
+        // can cross the Windows legacy path limit even when the final shadow
+        // files themselves fit. Render and validate under the OS temp root,
+        // then install the committed bytes into the disposable snapshot.
+        std::error_code stagingError;
+        fs::path stagingRoot = fs::temp_directory_path(stagingError);
+        if (stagingError)
+        {
+            error = "Could not resolve short Test Level staging storage: " +
+                stagingError.message();
+            return false;
+        }
+        stagingRoot /= fs::u8path(
+            "renegade-tls-" + GenerateStableId());
+        fs::create_directories(stagingRoot, stagingError);
+        if (stagingError)
+        {
+            error = "Could not create short Test Level staging storage: " +
+                stagingError.message();
+            return false;
+        }
+        const auto cleanupStaging = [&]()
+        {
+            std::error_code ignored;
+            fs::remove_all(stagingRoot, ignored);
+        };
+
+        const fs::path stagedSceneEnvelopePath =
+            stagingRoot / "TestLevelScene.rmeta";
+        const fs::path finalSceneEnvelopePath =
+            fs::u8path(snapshot.scenePath + ".rmeta");
         if (!WriteDocumentEnvelope(
-                snapshot.scenePath + ".rmeta",
+                stagedSceneEnvelopePath.generic_u8string(),
                 snapshotSceneEnvelope,
                 error))
         {
-            error = "Could not write the Test Level Scene identity: " + error;
+            cleanupStaging();
+            error = "Could not stage the Test Level Scene identity: " + error;
+            return false;
+        }
+
+        fs::copy_file(
+            stagedSceneEnvelopePath,
+            finalSceneEnvelopePath,
+            fs::copy_options::overwrite_existing,
+            stagingError);
+        if (stagingError)
+        {
+            cleanupStaging();
+            error = "Could not install the Test Level Scene identity: " +
+                stagingError.message();
             return false;
         }
 
@@ -385,14 +432,34 @@ namespace
             error = "Could not retarget the Test Level script companion: " + error;
             return false;
         }
+        const fs::path stagedScriptPath =
+            stagingRoot / "TestLevel.rscripts";
+        const fs::path finalScriptPath =
+            fs::u8path(ScriptDocumentPathForScene(snapshot.scenePath));
         if (!WriteScriptDocument(
-                ScriptDocumentPathForScene(snapshot.scenePath),
+                stagedScriptPath.generic_u8string(),
                 snapshotDocument,
                 error))
         {
-            error = "Could not write the Test Level script companion: " + error;
+            cleanupStaging();
+            error = "Could not stage the Test Level script companion: " + error;
             return false;
         }
+
+        stagingError.clear();
+        fs::copy_file(
+            stagedScriptPath,
+            finalScriptPath,
+            fs::copy_options::overwrite_existing,
+            stagingError);
+        if (stagingError)
+        {
+            cleanupStaging();
+            error = "Could not install the Test Level script companion: " +
+                stagingError.message();
+            return false;
+        }
+        cleanupStaging();
 
         const fs::path sourceScripts =
             fs::u8path(project.rootPath) / "Content" / "Scripts";
