@@ -24,19 +24,9 @@ jobs:
           from pathlib import Path
           path = Path("EngineBridge/include/renegade/bridge/StudioSession.h")
           text = path.read_text(encoding="utf-8")
-          addition = '''        [[nodiscard]] const SelectionService& Selection() const noexcept
-        {
-            return selection_;
-        }
-
-'''
+          anchor = "        [[nodiscard]] SelectionService& Selection() noexcept\n        {\n            return selection_;\n        }\n\n"
+          addition = "        [[nodiscard]] const SelectionService& Selection() const noexcept\n        {\n            return selection_;\n        }\n\n"
           if addition not in text:
-              anchor = '''        [[nodiscard]] SelectionService& Selection() noexcept
-        {
-            return selection_;
-        }
-
-'''
               if anchor not in text:
                   raise SystemExit("missing StudioSession Selection accessor anchor")
               text = text.replace(anchor, anchor + addition, 1)
