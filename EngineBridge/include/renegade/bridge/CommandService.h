@@ -107,6 +107,14 @@ namespace renegade::bridge
         bool Redo();
         void Clear() noexcept;
         void MarkSaved() noexcept;
+        // A multi-document save may serialize the WISCENE successfully and
+        // then fail its governed companion. Keep Studio visibly dirty in that
+        // case rather than falsely reporting the whole authoring transaction
+        // as saved.
+        void MarkUnsaved() noexcept
+        {
+            savedStateReachable_ = false;
+        }
 
         [[nodiscard]] bool CanUndo() const noexcept;
         [[nodiscard]] bool CanRedo() const noexcept;
