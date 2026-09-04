@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     name: Windows x64 ${{ matrix.configuration }}
     runs-on: windows-latest
     timeout-minutes: 240
