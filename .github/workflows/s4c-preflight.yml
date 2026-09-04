@@ -20,6 +20,7 @@ jobs:
           ref: scripting/s4c-typed-script-properties
           fetch-depth: 0
 
+      # Re-run after correcting header-vs-source assertions.
       - name: Run S4C source contract
         run: cmake -DRENEGADE_SOURCE_DIR="$GITHUB_WORKSPACE" -P Tests/S4CScriptPropertyAuthoringSourceContract.cmake
 
