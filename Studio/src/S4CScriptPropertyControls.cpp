@@ -4,10 +4,12 @@
 #include "renegade/bridge/StudioSession.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
-#include <string_view>
+#include <stdexcept>
+#include <utility>
 
 namespace
 {

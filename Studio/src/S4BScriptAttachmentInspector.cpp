@@ -1,4 +1,5 @@
 #include "S4BScriptAttachmentInspector.h"
+#include "S4CScriptPropertyControls.h"
 
 #include "InspectorSectionFramework.h"
 #include "RenegadeStudioChrome.h"
@@ -74,6 +75,7 @@ namespace renegade::studio
             SceneInspectorButton remove;
             StableId scriptInstanceId;
             std::uint32_t order = 0;
+            std::unique_ptr<S4CScriptPropertyEditor> properties;
         };
 
         struct ScriptRoleControls
@@ -183,8 +185,14 @@ namespace renegade::studio
             {
                 const auto& controls = Role(presentation);
                 const std::size_t count = VisibleAttachmentCount(presentation);
-                // status + add/source row + one compact row per attachment.
-                return 60.0f + static_cast<float>(count) * 36.0f;
+                float height = 60.0f;
+                for (std::size_t index = 0; index < count && index < controls.rows.size(); ++index)
+                {
+                    height += 36.0f;
+                    if (controls.rows[index]->properties)
+                        height += controls.rows[index]->properties->MeasureHeight();
+                }
+                return height;
             }
 
             void RefreshRole(const ScriptPresentation presentation)
@@ -294,10 +302,11 @@ namespace renegade::studio
                         controls.ownerEntityId,
                         presentation);
                 }
+                float rowY = top + 60.0f;
                 for (std::size_t index = 0; index < attachments.size(); ++index)
                 {
                     auto& row = *controls.rows[index];
-                    const float y = top + 60.0f + static_cast<float>(index) * 36.0f;
+                    const float y = rowY;
                     const float enabledWidth = 62.0f;
                     const float buttonWidth = 42.0f;
                     const float removeWidth = 58.0f;
@@ -331,6 +340,19 @@ namespace renegade::studio
                     row.remove.SetSize(XMFLOAT2(removeWidth, 28.0f));
                     row.up.SetEnabled(index > 0);
                     row.down.SetEnabled(index + 1 < attachments.size());
+                    if (row.properties)
+                    {
+                        row.properties->SetVisible(true);
+                        row.properties->Layout(
+                            x + 12.0f,
+                            y + 32.0f,
+                            std::max(70.0f, width - 12.0f));
+                        rowY += 36.0f + row.properties->MeasureHeight();
+                    }
+                    else
+                    {
+                        rowY += 36.0f;
+                    }
                 }
                 HideUnusedRows(controls, attachments.size());
             }
@@ -437,6 +459,10 @@ namespace renegade::studio
                 {
                     const std::size_t index = controls.rows.size();
                     auto row = std::make_unique<ScriptRowControls>();
+                    row->properties = std::make_unique<S4CScriptPropertyEditor>(
+                        *panel_,
+                        [this]() { RequestRefresh(); },
+                        [this](std::string status) { SetStatus(std::move(status)); });
                     row->source.Create(
                         "S4B " + std::string(RoleLabel(presentation)) +
                         " Source " + std::to_string(index));
@@ -501,12 +527,23 @@ namespace renegade::studio
                     {
                         return candidate.sourcePath == attachment.sourcePath;
                     });
+                const bridge::ScriptMetadataDescriptor* metadata = nullptr;
                 if (source != controls.sources.end())
+                {
                     display = source->metadata.name;
+                    metadata = &source->metadata;
+                }
                 row.source.SetText(
                     "#" + std::to_string(attachment.order + 1) + "  " + display);
                 row.source.SetTooltip(attachment.sourcePath);
                 row.enabled.SetCheck(attachment.enabled);
+                if (row.properties)
+                {
+                    row.properties->Refresh(
+                        attachment.scriptInstanceId,
+                        attachment,
+                        metadata);
+                }
             }
 
             void RefreshSourcesIfNeeded(
@@ -616,6 +653,8 @@ namespace renegade::studio
                 row.up.SetVisible(visible);
                 row.down.SetVisible(visible);
                 row.remove.SetVisible(visible);
+                if (row.properties)
+                    row.properties->SetVisible(visible);
             }
 
             static void SetRoleContentVisible(
