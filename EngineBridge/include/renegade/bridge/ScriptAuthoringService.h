@@ -78,9 +78,15 @@ namespace renegade::bridge
         [[nodiscard]] std::vector<const ScriptAttachment*> EntityAttachments(
             const StableId& ownerEntityId,
             ScriptPresentation presentation) const;
+        [[nodiscard]] std::vector<const ScriptAttachment*> LevelAttachments(
+            ScriptPresentation presentation) const;
 
         [[nodiscard]] bool AttachEntitySource(
             const StableId& ownerEntityId,
+            const ScriptAuthoringSource& source,
+            StableId& scriptInstanceId,
+            std::string& error);
+        [[nodiscard]] bool AttachLevelSource(
             const ScriptAuthoringSource& source,
             StableId& scriptInstanceId,
             std::string& error);

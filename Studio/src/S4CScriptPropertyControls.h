@@ -3,6 +3,7 @@
 #include "RenegadeStudioChrome.h"
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/ScriptMetadataService.h"
+#include "renegade/bridge/ScriptReferenceAuthoringService.h"
 
 #include <array>
 #include <cstddef>
@@ -38,7 +39,8 @@ namespace renegade::studio
             SceneInspectorTextInputField textValue;
             SceneInspectorComboBox enumValue;
             std::array<SceneInspectorTextInputField, 4> components;
-            wi::gui::Label deferredValue;
+            SceneInspectorComboBox referenceValue;
+            std::vector<bridge::ScriptReferenceOption> referenceOptions;
 
             bridge::ScriptMetadataPropertyDescriptor metadata;
             bridge::ScriptPropertyValue value;
@@ -61,6 +63,7 @@ namespace renegade::studio
             std::size_t index,
             std::size_t component,
             const std::string& text);
+        void CommitReference(std::size_t index, std::size_t optionIndex);
         void CommitValue(
             std::size_t index,
             bridge::ScriptPropertyValue value);

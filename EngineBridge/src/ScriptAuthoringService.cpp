@@ -410,12 +410,6 @@ namespace renegade::bridge
         diagnostics.clear();
         if (!EnsureCurrent(error))
             return false;
-        if (presentation == ScriptPresentation::GlobalScript)
-        {
-            error = "GLOBAL SCRIPT authoring is deferred to S4D.";
-            return false;
-        }
-
         const auto& project = projects_->CurrentProject();
         const fs::path scriptsRoot =
             fs::u8path(project.rootPath) / "Content" / "Scripts";
@@ -555,6 +549,30 @@ namespace renegade::bridge
         return result;
     }
 
+    std::vector<const ScriptAttachment*> ScriptAuthoringService::LevelAttachments(
+        const ScriptPresentation presentation) const
+    {
+        std::vector<const ScriptAttachment*> result;
+        if (!loaded_)
+            return result;
+        for (const auto& attachment : document_.attachments)
+        {
+            if (attachment.scope == ScriptScope::Level &&
+                attachment.ownerEntityId.empty() &&
+                attachment.presentation == presentation)
+            {
+                result.push_back(&attachment);
+            }
+        }
+        std::sort(
+            result.begin(), result.end(),
+            [](const ScriptAttachment* left, const ScriptAttachment* right)
+            {
+                return left->order < right->order;
+            });
+        return result;
+    }
+
     bool ScriptAuthoringService::AttachEntitySource(
         const StableId& ownerEntityId,
         const ScriptAuthoringSource& source,
@@ -570,7 +588,7 @@ namespace renegade::bridge
         }
         if (source.metadata.presentation == ScriptPresentation::GlobalScript)
         {
-            error = "GLOBAL SCRIPT authoring is deferred to S4D.";
+            error = "GLOBAL SCRIPT sources must be attached at Level scope.";
             return false;
         }
 
@@ -590,6 +608,41 @@ namespace renegade::bridge
         if (!commands_->Execute(std::move(command)))
         {
             error = "Could not attach script through the Studio Undo/Redo stack.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
+    bool ScriptAuthoringService::AttachLevelSource(
+        const ScriptAuthoringSource& source,
+        StableId& scriptInstanceId,
+        std::string& error)
+    {
+        if (!EnsureCurrent(error))
+            return false;
+        if (source.metadata.presentation != ScriptPresentation::GlobalScript)
+        {
+            error = "Only GLOBAL SCRIPT sources can be attached at Level scope.";
+            return false;
+        }
+
+        ScriptAttachment attachment = CreateScriptAttachment(
+            ScriptScope::Level,
+            {},
+            ResolveSourceBinding(source));
+        if (!ApplyScriptMetadataDefaults(source.metadata, attachment, error))
+            return false;
+        scriptInstanceId = attachment.scriptInstanceId;
+        auto command = MakeAddScriptAttachmentCommand(
+            document_,
+            std::move(attachment),
+            error);
+        if (!command)
+            return false;
+        if (!commands_->Execute(std::move(command)))
+        {
+            error = "Could not attach GLOBAL SCRIPT through the Studio Undo/Redo stack.";
             return false;
         }
         error.clear();

@@ -168,8 +168,8 @@ namespace renegade::studio
             row.textValue.SetSize(XMFLOAT2(controlWidth, 28.0f));
             row.enumValue.SetPos(XMFLOAT2(controlX, rowY));
             row.enumValue.SetSize(XMFLOAT2(controlWidth, 28.0f));
-            row.deferredValue.SetPos(XMFLOAT2(controlX, rowY));
-            row.deferredValue.SetSize(XMFLOAT2(controlWidth, 28.0f));
+            row.referenceValue.SetPos(XMFLOAT2(controlX, rowY));
+            row.referenceValue.SetSize(XMFLOAT2(controlWidth, 28.0f));
 
             if (row.componentCount > 0)
             {
@@ -254,8 +254,13 @@ namespace renegade::studio
             panel_->AddWidget(&input);
         }
 
-        row->deferredValue.Create("S4C Deferred Reference " + suffix);
-        panel_->AddWidget(&row->deferredValue);
+        row->referenceValue.Create("S4D Governed Reference " + suffix);
+        row->referenceValue.OnSelect(
+            [this, index](const wi::gui::EventArgs& args)
+            {
+                CommitReference(index, static_cast<std::size_t>(args.userdata));
+            });
+        panel_->AddWidget(&row->referenceValue);
 
         SetRowVisible(*row, false);
         rows_.push_back(std::move(row));
@@ -279,10 +284,10 @@ namespace renegade::studio
         row.booleanValue.SetTooltip(metadata.description);
         row.textValue.SetTooltip(metadata.description);
         row.enumValue.SetTooltip(metadata.description);
-        row.deferredValue.SetTooltip(
+        row.referenceValue.SetTooltip(
             metadata.description.empty()
-                ? std::string("Reference picker arrives in S4D.")
-                : metadata.description + " Reference picker arrives in S4D.");
+                ? std::string("Choose a governed Renegade reference.")
+                : metadata.description);
 
         row.enumValue.ClearItems();
         for (std::size_t option = 0; option < metadata.enumOptions.size(); ++option)
@@ -355,11 +360,72 @@ namespace renegade::studio
         case bridge::ScriptPropertyType::AssetReference:
         case bridge::ScriptPropertyType::Animation:
         case bridge::ScriptPropertyType::Audio:
-            row.deferredValue.SetText(
-                bridge::IsValidStableId(row.value.referenceId) || !row.value.pathHint.empty()
-                    ? "Assigned — picker in S4D"
-                    : "Unresolved — picker in S4D");
+        {
+            row.referenceOptions.clear();
+            row.referenceValue.ClearItems();
+
+            bridge::ScriptReferenceOption none;
+            none.label = "(None)";
+            row.referenceOptions.push_back(none);
+
+            auto* session = bridge::StudioSession::Current();
+            std::vector<bridge::ScriptReferenceOption> discovered;
+            std::string referenceError;
+            if (session != nullptr)
+            {
+                (void)bridge::EnumerateScriptReferenceOptions(
+                    session->Scenes(),
+                    session->Projects(),
+                    type,
+                    discovered,
+                    referenceError);
+            }
+            row.referenceOptions.insert(
+                row.referenceOptions.end(),
+                discovered.begin(),
+                discovered.end());
+
+            std::size_t selected = 0;
+            if (bridge::IsValidStableId(row.value.referenceId) ||
+                !row.value.pathHint.empty())
+            {
+                const auto found = std::find_if(
+                    row.referenceOptions.begin() + 1,
+                    row.referenceOptions.end(),
+                    [&](const bridge::ScriptReferenceOption& option)
+                    {
+                        return option.referenceId == row.value.referenceId;
+                    });
+                if (found != row.referenceOptions.end())
+                {
+                    selected = static_cast<std::size_t>(
+                        std::distance(row.referenceOptions.begin(), found));
+                }
+                else
+                {
+                    bridge::ScriptReferenceOption unresolved;
+                    unresolved.referenceId = row.value.referenceId;
+                    unresolved.pathHint = row.value.pathHint;
+                    unresolved.resolved = false;
+                    unresolved.label = row.value.pathHint.empty()
+                        ? "⚠ Unresolved"
+                        : "⚠ Unresolved — " + row.value.pathHint;
+                    row.referenceOptions.push_back(std::move(unresolved));
+                    selected = row.referenceOptions.size() - 1;
+                }
+            }
+
+            for (std::size_t option = 0;
+                option < row.referenceOptions.size(); ++option)
+            {
+                row.referenceValue.AddItem(
+                    row.referenceOptions[option].label,
+                    static_cast<std::uint64_t>(option));
+            }
+            row.referenceValue.SetSelectedWithoutCallback(
+                static_cast<int>(selected));
             break;
+        }
         }
         SetRowVisible(row, visible_ && index < usedRows_);
     }
@@ -372,7 +438,7 @@ namespace renegade::studio
         row.booleanValue.SetVisible(false);
         row.textValue.SetVisible(false);
         row.enumValue.SetVisible(false);
-        row.deferredValue.SetVisible(false);
+        row.referenceValue.SetVisible(false);
         for (auto& component : row.components)
             component.SetVisible(false);
         if (!visible || !row.configured)
@@ -401,7 +467,7 @@ namespace renegade::studio
         case bridge::ScriptPropertyType::AssetReference:
         case bridge::ScriptPropertyType::Animation:
         case bridge::ScriptPropertyType::Audio:
-            row.deferredValue.SetVisible(true);
+            row.referenceValue.SetVisible(true);
             break;
         }
     }
@@ -505,6 +571,55 @@ namespace renegade::studio
         float* values[4] = {&property.x, &property.y, &property.z, &property.w};
         *values[component] = parsed;
         CommitValue(index, std::move(property));
+    }
+
+    void S4CScriptPropertyEditor::CommitReference(
+        const std::size_t index,
+        const std::size_t optionIndex)
+    {
+        if (index >= usedRows_ ||
+            optionIndex >= rows_[index]->referenceOptions.size())
+        {
+            return;
+        }
+        const auto& option = rows_[index]->referenceOptions[optionIndex];
+        if (!option.resolved)
+        {
+            ApplyValueToWidgets(index);
+            SetStatus("S4D REFERENCES // unresolved value preserved; choose another target or (None)");
+            return;
+        }
+
+        auto* session = bridge::StudioSession::Current();
+        if (session == nullptr)
+            return;
+
+        bridge::ScriptPropertyValue value;
+        std::string error;
+        if (!bridge::BuildScriptReferenceProperty(
+                rows_[index]->metadata, option, value, error) ||
+            !bridge::CommitScriptReferenceAuthoringEdit(
+                session->Scripts(),
+                session->Commands(),
+                scriptInstanceId_,
+                rows_[index]->metadata,
+                option,
+                error))
+        {
+            ApplyValueToWidgets(index);
+            SetStatus("S4D REFERENCES // " + error);
+            return;
+        }
+
+        rows_[index]->value = std::move(value);
+        ApplyValueToWidgets(index);
+        SetStatus(
+            "S4D REFERENCES // " +
+            (rows_[index]->metadata.label.empty()
+                ? rows_[index]->metadata.name
+                : rows_[index]->metadata.label) +
+            " updated");
+        RequestRefresh();
     }
 
     void S4CScriptPropertyEditor::CommitValue(
