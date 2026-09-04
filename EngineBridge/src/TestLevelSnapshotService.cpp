@@ -1,9 +1,13 @@
 #include "renegade/bridge/TestLevelSnapshotService.h"
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/ScriptAuthoringService.h"
+#include "renegade/bridge/ScriptDocumentService.h"
+#include "renegade/bridge/StudioSession.h"
 
 #include <atomic>
 #include <chrono>
@@ -112,6 +116,294 @@ namespace
         error.clear();
         return true;
     }
+
+    bool CopyCreatorScriptTree(
+        const fs::path& sourceRoot,
+        const fs::path& destinationRoot,
+        std::string& error)
+    {
+        std::error_code ec;
+        const fs::file_status rootStatus = fs::status(sourceRoot, ec);
+        if (rootStatus.type() == fs::file_type::not_found)
+        {
+            error =
+                "The active script document references Content/Scripts, but "
+                "that project directory does not exist.";
+            return false;
+        }
+        if (ec || !fs::is_directory(rootStatus))
+        {
+            error = "Could not inspect the project Content/Scripts directory";
+            if (ec)
+                error += ": " + ec.message();
+            return false;
+        }
+
+        fs::create_directories(destinationRoot, ec);
+        if (ec)
+        {
+            error = "Could not create the Test Level Content/Scripts directory: " +
+                ec.message();
+            return false;
+        }
+
+        fs::recursive_directory_iterator iterator(
+            sourceRoot,
+            fs::directory_options::none,
+            ec);
+        const fs::recursive_directory_iterator end;
+        if (ec)
+        {
+            error = "Could not enumerate project creator scripts: " + ec.message();
+            return false;
+        }
+
+        for (; iterator != end; iterator.increment(ec))
+        {
+            if (ec)
+            {
+                error = "Could not enumerate project creator scripts: " +
+                    ec.message();
+                return false;
+            }
+
+            const fs::path source = iterator->path();
+            const fs::file_status status = iterator->symlink_status(ec);
+            if (ec)
+            {
+                error = "Could not inspect creator script entry: " +
+                    source.generic_u8string() + ": " + ec.message();
+                return false;
+            }
+            if (fs::is_symlink(status))
+            {
+                error = "Refusing a symlink inside governed Content/Scripts: " +
+                    source.generic_u8string();
+                return false;
+            }
+
+            const fs::path relative = source.lexically_relative(sourceRoot);
+            const std::string relativeText = relative.generic_u8string();
+            if (relative.empty() ||
+                relativeText == ".." ||
+                relativeText.rfind("../", 0) == 0)
+            {
+                error = "Creator script escaped the governed Content/Scripts root.";
+                return false;
+            }
+            const fs::path destination = destinationRoot / relative;
+
+            if (fs::is_directory(status))
+            {
+                fs::create_directories(destination, ec);
+            }
+            else if (fs::is_regular_file(status))
+            {
+                fs::create_directories(destination.parent_path(), ec);
+                if (!ec)
+                {
+                    fs::copy_file(
+                        source,
+                        destination,
+                        fs::copy_options::overwrite_existing,
+                        ec);
+                }
+            }
+            else
+            {
+                error = "Unsupported file type inside governed Content/Scripts: " +
+                    source.generic_u8string();
+                return false;
+            }
+
+            if (ec)
+            {
+                error = "Could not snapshot creator script entry: " +
+                    source.generic_u8string() + ": " + ec.message();
+                return false;
+            }
+        }
+
+        error.clear();
+        return true;
+    }
+
+    bool SnapshotCreatorScripts(
+        const renegade::bridge::ProjectMetadata& project,
+        const renegade::bridge::TestLevelSnapshot& snapshot,
+        renegade::bridge::SceneService& scenes,
+        const renegade::bridge::CommandService& commands,
+        std::string& error)
+    {
+        using namespace renegade::bridge;
+
+        const std::string sourceScenePath = scenes.CurrentPath();
+        if (sourceScenePath.empty())
+        {
+            error.clear();
+            return true;
+        }
+
+        ScriptDocument document;
+        bool haveDocument = false;
+        bool liveAuthority = false;
+
+        StudioSession* session = StudioSession::Current();
+        if (session != nullptr &&
+            &session->Scenes() == &scenes &&
+            &session->Commands() == &commands &&
+            session->Projects().HasProject() &&
+            session->Projects().CurrentProject().projectId == project.projectId &&
+            session->Scripts().IsLoaded() &&
+            fs::u8path(session->Scripts().LoadedScenePath()).lexically_normal() ==
+                fs::u8path(sourceScenePath).lexically_normal())
+        {
+            const ScriptDocument* live = session->Scripts().Document();
+            if (live == nullptr)
+            {
+                error =
+                    "Studio reported loaded creator scripting without a live document.";
+                return false;
+            }
+            document = *live;
+            haveDocument = true;
+            liveAuthority = true;
+        }
+
+        const std::string sourceCompanionPath =
+            ScriptDocumentPathForScene(sourceScenePath);
+        DocumentEnvelope sceneEnvelope;
+
+        if (!haveDocument)
+        {
+            std::error_code ec;
+            const fs::file_status companionStatus =
+                fs::status(fs::u8path(sourceCompanionPath), ec);
+            if (companionStatus.type() == fs::file_type::not_found)
+            {
+                ec.clear();
+                error.clear();
+                return true;
+            }
+            if (ec)
+            {
+                error = "Could not inspect the active Scene script companion: " +
+                    ec.message();
+                return false;
+            }
+            if (!fs::is_regular_file(companionStatus))
+            {
+                error.clear();
+                return true;
+            }
+
+            if (!ReadDocumentEnvelope(
+                    sourceScenePath + ".rmeta",
+                    sceneEnvelope,
+                    error))
+            {
+                error = "Could not read the active Scene identity for Test Level: " +
+                    error;
+                return false;
+            }
+            if (!ReadScriptDocument(
+                    sourceCompanionPath,
+                    project.projectId,
+                    sceneEnvelope.documentId,
+                    document,
+                    error))
+            {
+                error = "Could not read the active Scene script companion: " + error;
+                return false;
+            }
+            haveDocument = true;
+        }
+
+        if (!haveDocument || document.attachments.empty())
+        {
+            // A loaded empty document is authoritative too: an unsaved removal
+            // must not resurrect scripts from an older on-disk companion.
+            error.clear();
+            return true;
+        }
+
+        if (!ValidateScriptDocumentAgainstScene(document, scenes.GetScene(), error))
+        {
+            error = "Live creator scripting state is not valid for the active Scene: " +
+                error;
+            return false;
+        }
+
+        if (liveAuthority)
+        {
+            if (!ReadDocumentEnvelope(
+                    sourceScenePath + ".rmeta",
+                    sceneEnvelope,
+                    error))
+            {
+                error = "Could not read the active Scene identity for Test Level: " +
+                    error;
+                return false;
+            }
+        }
+
+        if (sceneEnvelope.projectId != project.projectId ||
+            document.envelope.projectId != project.projectId ||
+            sceneEnvelope.documentId != document.sceneDocumentId ||
+            sceneEnvelope.documentType != "scene")
+        {
+            error =
+                "Creator scripting identity does not match the active project/Scene.";
+            return false;
+        }
+
+        DocumentEnvelope snapshotSceneEnvelope = sceneEnvelope;
+        if (!RetargetDocumentEnvelope(
+                snapshotSceneEnvelope,
+                TestLevelStartupScene,
+                error))
+        {
+            error = "Could not retarget the Test Level Scene identity: " + error;
+            return false;
+        }
+        if (!WriteDocumentEnvelope(
+                snapshot.scenePath + ".rmeta",
+                snapshotSceneEnvelope,
+                error))
+        {
+            error = "Could not write the Test Level Scene identity: " + error;
+            return false;
+        }
+
+        ScriptDocument snapshotDocument = document;
+        snapshotDocument.scenePathHint = TestLevelStartupScene;
+        if (!RetargetDocumentEnvelope(
+                snapshotDocument.envelope,
+                ScriptDocumentPathHintForScene(TestLevelStartupScene),
+                error))
+        {
+            error = "Could not retarget the Test Level script companion: " + error;
+            return false;
+        }
+        if (!WriteScriptDocument(
+                ScriptDocumentPathForScene(snapshot.scenePath),
+                snapshotDocument,
+                error))
+        {
+            error = "Could not write the Test Level script companion: " + error;
+            return false;
+        }
+
+        const fs::path sourceScripts =
+            fs::u8path(project.rootPath) / "Content" / "Scripts";
+        const fs::path snapshotScripts =
+            fs::u8path(snapshot.sessionDirectory) / "Content" / "Scripts";
+        if (!CopyCreatorScriptTree(sourceScripts, snapshotScripts, error))
+            return false;
+
+        error.clear();
+        return true;
+    }
 }
 
 namespace renegade::bridge
@@ -158,6 +450,17 @@ namespace renegade::bridge
 
         try
         {
+            if (!SnapshotCreatorScripts(
+                    project,
+                    created,
+                    scenes_,
+                    commands_,
+                    error))
+            {
+                return failAndCleanup(
+                    "Could not snapshot creator scripting state: " + error);
+            }
+
             const fs::path descriptorPath =
                 fs::u8path(created.sessionDirectory) / "TestLevel.renegade";
             if (!WriteSnapshotDescriptor(project, descriptorPath, error))
