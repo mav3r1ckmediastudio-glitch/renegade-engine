@@ -43,7 +43,9 @@ require_text(authoring_source "MakeAddScriptAttachmentCommand" "S2 attach Undo/R
 require_text(authoring_source "MakeRemoveScriptAttachmentCommand" "S2 remove Undo/Redo command")
 require_text(authoring_source "MakeSetScriptEnabledCommand" "S2 enabled Undo/Redo command")
 require_text(authoring_source "MakeMoveScriptAttachmentCommand" "S2 reorder Undo/Redo command")
-require_text(authoring_source "GLOBAL SCRIPT authoring is deferred to S4D." "S4D scope boundary")
+require_text(authoring_header "AttachLevelSource" "S4D Level-scope authoring extension")
+require_text(authoring_source "Only GLOBAL SCRIPT sources can be attached at Level scope." "S4D GLOBAL SCRIPT scope boundary")
+require_text(authoring_source "ScriptScope::Level" "S4D Level attachment authority")
 require_text(authoring_source "WriteScriptDocument" "transactional scripting companion persistence")
 require_text(authoring_source "ValidateScriptDocumentAgainstScene" "Scene identity validation before persistence")
 
