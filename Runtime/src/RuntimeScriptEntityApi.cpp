@@ -121,6 +121,7 @@ namespace renegade::runtime
             return false;
         transform->translation_local = position;
         transform->SetDirty();
+        transform->UpdateTransform();
         error.clear();
         return true;
     }
@@ -150,6 +151,7 @@ namespace renegade::runtime
         }
         transform->translation_local = translated;
         transform->SetDirty();
+        transform->UpdateTransform();
         error.clear();
         return true;
     }
