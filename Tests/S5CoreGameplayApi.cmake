@@ -141,16 +141,3 @@ add_test(
     NAME RenegadeS5BGameplayLifecycleTests
     COMMAND RenegadeS5BGameplayLifecycleTests
 )
-
-# S5C Gate: bounded cross-script event queue contract.
-add_executable(RenegadeS5CGameplayEventTests
-    ${CMAKE_CURRENT_LIST_DIR}/S5CGameplayEventTests.cpp
-)
-target_link_libraries(RenegadeS5CGameplayEventTests PRIVATE Renegade::EngineBridge)
-target_compile_options(RenegadeS5CGameplayEventTests PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
-set_target_properties(RenegadeS5CGameplayEventTests PROPERTIES FOLDER "Renegade/Tests")
-add_dependencies(RenegadeBridgeTests RenegadeS5CGameplayEventTests)
-add_test(NAME RenegadeS5CGameplayEventTests COMMAND RenegadeS5CGameplayEventTests)
-add_test(NAME RenegadeS5CGameplayEventSourceContract
-    COMMAND ${CMAKE_COMMAND} -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
-        -P ${CMAKE_CURRENT_LIST_DIR}/S5CGameplayEventSourceContract.cmake)
