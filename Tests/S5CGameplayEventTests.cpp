@@ -1,0 +1,4 @@
+#include "renegade/bridge/GameplayEventService.h"
+#include <cassert>
+#include <string>
+int main(){renegade::bridge::GameplayEventService q;std::string e;assert(q.Enqueue({0,"spawn","barrel","player",""},e));assert(q.Enqueue({0,"hit","10","barrel","player"},e));renegade::bridge::GameplayEvent x;assert(q.TryDequeue(x)&&x.sequence==1&&x.name=="spawn");assert(q.TryDequeue(x)&&x.sequence==2&&x.targetEntityId=="player");assert(!q.Enqueue({0,"", "", "", ""},e));assert(!q.Enqueue({0,"evt",std::string(4097,'x'),"", ""},e));q.Clear();for(std::size_t i=0;i<q.MaxEvents;i++)assert(q.Enqueue({0,"evt","","",""},e));assert(!q.Enqueue({0,"evt","","",""},e)&&q.DroppedCount()==1);}
