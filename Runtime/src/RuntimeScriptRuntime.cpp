@@ -185,6 +185,7 @@ namespace renegade::runtime
             bool hasOnReset = false;
             bool hasOnStop = false;
             bool hasOnUpdate = false;
+            bool hasOnEvent = false;
         };
 
         lua_State* lua = nullptr;
@@ -200,6 +201,7 @@ namespace renegade::runtime
 
         const bridge::RuntimePlayerState* playerState = nullptr;
         const bridge::GameplayInputFrame* gameplayInput = nullptr;
+        bridge::GameplayEventService events;
 
         static void* LuaAllocate(
             void* userData,
@@ -1382,7 +1384,38 @@ namespace renegade::runtime
                 CheckCallback(instance, "on_resume", instance.hasOnResume) &&
                 CheckCallback(instance, "on_reset", instance.hasOnReset) &&
                 CheckCallback(instance, "on_stop", instance.hasOnStop) &&
-                CheckCallback(instance, "on_update", instance.hasOnUpdate);
+                CheckCallback(instance, "on_update", instance.hasOnUpdate) &&
+                CheckCallback(instance, "on_event", instance.hasOnEvent);
+        }
+
+        void DispatchEvents() noexcept
+        {
+            bridge::GameplayEvent event;
+            while (events.TryDequeue(event))
+            {
+                for (auto& instance : instances)
+                {
+                    if (instance.failed || !instance.hasOnEvent)
+                        continue;
+                    if (!event.targetEntityId.empty() &&
+                        instance.attachment.ownerEntityId != event.targetEntityId)
+                        continue;
+                    const int base = lua_gettop(lua);
+                    lua_rawgeti(lua, LUA_REGISTRYINDEX, instance.lifecycleReference);
+                    lua_getfield(lua, -1, "on_event");
+                    lua_rawgeti(lua, LUA_REGISTRYINDEX, instance.contextReference);
+                    lua_newtable(lua);
+                    lua_pushlstring(lua, event.name.data(), event.name.size()); lua_setfield(lua, -2, "name");
+                    lua_pushlstring(lua, event.payload.data(), event.payload.size()); lua_setfield(lua, -2, "payload");
+                    lua_pushinteger(lua, static_cast<lua_Integer>(event.sequence)); lua_setfield(lua, -2, "sequence");
+                    if (event.senderEntityId.empty()) lua_pushnil(lua); else PushEntityRef(event.senderEntityId); lua_setfield(lua, -2, "sender");
+                    if (event.targetEntityId.empty()) lua_pushnil(lua); else PushEntityRef(event.targetEntityId); lua_setfield(lua, -2, "target");
+                    std::string callbackError;
+                    if (!ProtectedCall(2, 0, callbackError))
+                        Record(instance, "on_event", std::move(callbackError));
+                    lua_settop(lua, base);
+                }
+            }
         }
 
         bool Invoke(
@@ -1846,6 +1879,12 @@ namespace renegade::runtime
         impl_->gameplayInput = input;
     }
 
+    bool RuntimeScriptRuntime::QueueGameplayEvent(
+        bridge::GameplayEvent event, std::string& error)
+    {
+        return impl_ != nullptr && impl_->events.Enqueue(std::move(event), error);
+    }
+
     void RuntimeScriptRuntime::Update(const float dt) noexcept
     {
         if (!impl_->running || impl_->paused || impl_->lua == nullptr)
@@ -1854,6 +1893,7 @@ namespace renegade::runtime
             std::isfinite(dt) ? dt : 0.0f,
             0.0f,
             0.25f);
+        impl_->DispatchEvents();
         for (auto& instance : impl_->instances)
         {
             if (!instance.failed && instance.hasOnUpdate)

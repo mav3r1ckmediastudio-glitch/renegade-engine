@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/GameplayInputService.h"
+#include "renegade/bridge/GameplayEventService.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -69,6 +70,12 @@ namespace renegade::runtime
         void SetGameplayState(
             const bridge::RuntimePlayerState* player,
             const bridge::GameplayInputFrame* input) noexcept;
+
+        // Queue a governed cross-script event. Entity IDs are stable authoring
+        // identities only; no Wicked/ECS handle crosses this boundary.
+        [[nodiscard]] bool QueueGameplayEvent(
+            bridge::GameplayEvent event,
+            std::string& error);
 
         void Update(float dt) noexcept;
         void Pause() noexcept;
