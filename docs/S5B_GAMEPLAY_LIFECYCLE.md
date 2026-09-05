@@ -1,45 +1,33 @@
-# S5B — Gameplay Lifecycle and Governed Gameplay Access
+# S5B — Governed gameplay lifecycle
 
-## Status
+S5B is the first complete gameplay-facing Lua slice on top of the S5A
+entity/transform runtime. It is implemented in the governed Runtime Lua state,
+with no access to Wicked's global Lua VM, raw ECS integers, filesystem APIs, or
+device polling.
 
-S5B is the next scripting gate after the accepted S5A core Entity and Transform API. It extends the existing dedicated Renegade Lua runtime; it does not create a second Lua state, input poller, player controller, audio system or physics world.
+The shipped API is:
 
-## First vertical slice
+- `renegade.player.is_present()`
+- `renegade.player.get_position()`
+- `renegade.player.get_forward()`
+- `renegade.player.get_yaw()`
+- `renegade.player.get_pitch()`
+- `renegade.input.get_axis(action)`
+- `renegade.input.is_down(action)`
+- `renegade.input.was_pressed(action)`
 
-The first S5B slice exposes the already accepted Phase 6 gameplay lifecycle to governed creator scripts:
+Actions use the stable names from the project GameplayInput map:
+`move_forward`, `move_backward`, `move_left`, `move_right`,
+`look_yaw`, `look_pitch`, `jump`, `sprint`, `pause`, and `reset`.
 
-```lua
-renegade.player.is_present()
-renegade.player.get_position()
-renegade.player.get_forward()
-renegade.input.is_down("move_forward")
-renegade.input.was_pressed("jump")
-```
+Player and input state are projections of the live EngineBridge services. Scripts
+never poll devices or mutate the PlayerService directly. Lifecycle callbacks
+`on_start`, `on_update`, `on_pause`, `on_resume`, `on_reset`, and
+`on_stop` remain isolated per script instance and are invoked by the Runtime
+generation that owns the active Scene.
 
-All returned entity references remain opaque `Renegade.EntityRef` userdata. Vector values are plain immutable-by-contract tables with finite numeric components.
-
-## Authority
-
-- `GameplayInputService` remains the only raw device polling boundary.
-- `PlayerService` remains the only player movement/controller boundary.
-- Runtime Lua receives a read-only gameplay view in the first slice.
-- Lua cannot inject raw keyboard/mouse events or access Wicked ECS/Jolt IDs.
-- Pause, reset and stop continue through the existing Runtime lifecycle.
-
-## Acceptance
-
-The S5B gate must prove:
-
-- lifecycle callbacks see deterministic player/input state;
-- input is sourced from the governed project action map;
-- absent player state returns a recoverable Lua error;
-- stale EntityRefs remain rejected through S5A;
-- pause/reset/stop isolate and clean up script instances;
-- save/reopen preserves authored script attachments;
-- Test Level and packaged Runtime use the same bindings;
-- full Studio Debug/Release and Windows baseline Debug/Release CI pass;
-- owner test verifies a governed script reads jump/movement state and player position in Test Level.
-
-## Explicitly deferred
-
-Player mutation, custom input injection, audio control, physics mutation, cross-script messaging and diagnostics IPC remain later S5B/S5C slices and require their own contracts and acceptance evidence.
+All API errors use the existing governed convention: query functions return
+`value, error`; boolean/action functions return `false, error`. Invalid
+action names are rejected. The acceptance target is
+`RenegadeS5BGameplayLifecycleTests`, and it is registered in the normal full
+CI test graph.

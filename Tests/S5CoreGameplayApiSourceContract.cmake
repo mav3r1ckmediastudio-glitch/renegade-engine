@@ -34,6 +34,7 @@ read_required("Tests/S4BScriptAuthoringTests.cpp" authoring_test)
 read_required("Tests/S5CoreGameplayApi.cmake" test_cmake)
 read_required("Tests/S5CoreGameplayApiTests.cpp" api_test)
 read_required("Tests/S5CoreGameplayLuaTests.cpp" lua_test)
+read_required("Tests/S5BGameplayLifecycleTests.cpp" s5b_test)
 
 require_text(root_cmake "include(Runtime/S5CoreGameplayApi.cmake)" "Runtime S5A build registration")
 require_text(root_cmake "include(Tests/S5CoreGameplayApi.cmake)" "S5A acceptance registration")
@@ -84,6 +85,22 @@ require_text(lua_test "renegade.transform.set_local_position" "creator transform
 require_text(lua_test "renegade.transform.translate_local" "creator transform translation owner path")
 require_text(lua_test "GetPosition()" "Lua acceptance checks visible Wicked world position")
 require_text(lua_test "move the barrel visibly" "visible barrel-movement acceptance")
+
+foreach(required IN ITEMS
+    "PlayerIsPresentLua"
+    "PlayerGetPositionLua"
+    "PlayerGetForwardLua"
+    "InputGetAxisLua"
+    "InputIsDownLua"
+    "InputWasPressedLua"
+    "\"player\""
+    "\"input\"")
+    require_text(runtime_source "${required}" "S5B governed gameplay registration")
+endforeach()
+
+require_text(s5b_test "renegade.player.get_position" "player state acceptance")
+require_text(s5b_test "renegade.input.was_pressed" "input edge acceptance")
+require_text(s5b_test "runtime.Pause" "lifecycle pause/resume acceptance")
 
 # S5A owner testing exposed a confusing S4B source chooser reset. The chooser
 # must retain its selected source across Scene/Story Flow refreshes, while the

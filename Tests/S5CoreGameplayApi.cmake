@@ -107,3 +107,37 @@ add_test(
         -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_CURRENT_LIST_DIR}/S5CoreGameplayApiSourceContract.cmake
 )
+
+# S5B Gate 4: the full governed gameplay lifecycle seam. This test exercises
+# lifecycle callbacks together with the live PlayerService/InputService state.
+add_executable(RenegadeS5BGameplayLifecycleTests
+    ${CMAKE_CURRENT_LIST_DIR}/S5BGameplayLifecycleTests.cpp
+)
+
+target_link_libraries(
+    RenegadeS5BGameplayLifecycleTests
+    PRIVATE
+        Renegade::RuntimeBootstrap
+)
+
+target_compile_options(
+    RenegadeS5BGameplayLifecycleTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(
+    RenegadeS5BGameplayLifecycleTests
+    PROPERTIES
+        FOLDER "Renegade/Tests"
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeS5BGameplayLifecycleTests
+)
+
+add_test(
+    NAME RenegadeS5BGameplayLifecycleTests
+    COMMAND RenegadeS5BGameplayLifecycleTests
+)

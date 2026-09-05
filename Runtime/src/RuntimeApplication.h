@@ -87,6 +87,7 @@ namespace renegade::runtime
         bridge::RuntimePlayerState player_;
         bridge::PlayerControllerSettings playerSettings_;
         bridge::GameplayInputMap inputMap_ = bridge::MakeDefaultGameplayInputMap();
+        bridge::GameplayInputFrame gameplayInput_;
         bridge::SceneAudioPauseState audioPauseState_;
         RuntimeBootstrapResult initialBootstrapResult_;
         RuntimeBootstrapResult startupResult_;

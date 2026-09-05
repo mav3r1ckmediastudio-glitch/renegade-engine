@@ -198,6 +198,9 @@ namespace renegade::runtime
         std::unordered_map<bridge::StableId, wi::ecs::Entity> entitiesById;
         std::vector<RuntimeScriptDiagnostic> diagnostics;
 
+        const bridge::RuntimePlayerState* playerState = nullptr;
+        const bridge::GameplayInputFrame* gameplayInput = nullptr;
+
         static void* LuaAllocate(
             void* userData,
             void* pointer,
@@ -720,6 +723,205 @@ namespace renegade::runtime
             return 1;
         }
 
+        static int PlayerIsPresentLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            lua_pushboolean(
+                state,
+                owner != nullptr && owner->playerState != nullptr &&
+                    owner->playerState->IsSpawned());
+            return 1;
+        }
+
+        static int PlayerGetPositionLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->scene == nullptr ||
+                owner->playerState == nullptr ||
+                !owner->playerState->IsSpawned())
+                return PushNilError(
+                    state,
+                    "Player API is not bound to a spawned Runtime player.");
+
+            const auto* transform =
+                owner->scene->transforms.GetComponent(owner->playerState->entity);
+            if (transform == nullptr)
+                return PushNilError(
+                    state,
+                    "Player API could not resolve the live player transform.");
+
+            PushVector3Table(state, transform->GetPosition());
+            return 1;
+        }
+
+        static int PlayerGetForwardLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->playerState == nullptr ||
+                !owner->playerState->IsSpawned())
+                return PushNilError(
+                    state,
+                    "Player API is not bound to a spawned Runtime player.");
+
+            const float yaw = owner->playerState->yaw;
+            const float pitch = owner->playerState->pitch;
+            const float cosPitch = std::cos(pitch);
+            PushVector3Table(
+                state,
+                XMFLOAT3(
+                    std::sin(yaw) * cosPitch,
+                    -std::sin(pitch),
+                    std::cos(yaw) * cosPitch));
+            return 1;
+        }
+
+        static int PlayerGetYawLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->playerState == nullptr ||
+                !owner->playerState->IsSpawned())
+                return PushNilError(
+                    state,
+                    "Player API is not bound to a spawned Runtime player.");
+            lua_pushnumber(state, owner->playerState->yaw);
+            return 1;
+        }
+
+        static int PlayerGetPitchLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->playerState == nullptr ||
+                !owner->playerState->IsSpawned())
+                return PushNilError(
+                    state,
+                    "Player API is not bound to a spawned Runtime player.");
+            lua_pushnumber(state, owner->playerState->pitch);
+            return 1;
+        }
+
+        static bool ReadGameplayAction(
+            lua_State* state,
+            const int index,
+            bridge::GameplayAction& action,
+            std::string& error)
+        {
+            if (!lua_isstring(state, index))
+            {
+                error = "Gameplay action must be a string.";
+                return false;
+            }
+            const char* id = lua_tostring(state, index);
+            if (id == nullptr ||
+                !bridge::TryParseGameplayAction(id, action))
+            {
+                error = "Unknown gameplay action.";
+                return false;
+            }
+            error.clear();
+            return true;
+        }
+
+        static float GameplayAxis(
+            const bridge::GameplayInputFrame& frame,
+            const bridge::GameplayAction action) noexcept
+        {
+            switch (action)
+            {
+            case bridge::GameplayAction::MoveForward:
+                return std::clamp(frame.player.moveForward, -1.0f, 1.0f);
+            case bridge::GameplayAction::MoveBackward:
+                return std::clamp(-frame.player.moveForward, -1.0f, 1.0f);
+            case bridge::GameplayAction::MoveLeft:
+                return std::clamp(-frame.player.moveRight, -1.0f, 1.0f);
+            case bridge::GameplayAction::MoveRight:
+                return std::clamp(frame.player.moveRight, -1.0f, 1.0f);
+            case bridge::GameplayAction::LookYaw:
+                return frame.player.lookYaw;
+            case bridge::GameplayAction::LookPitch:
+                return frame.player.lookPitch;
+            case bridge::GameplayAction::Jump:
+                return frame.player.jumpPressed ? 1.0f : 0.0f;
+            case bridge::GameplayAction::Sprint:
+                return frame.player.sprintDown ? 1.0f : 0.0f;
+            case bridge::GameplayAction::Pause:
+                return frame.pausePressed ? 1.0f : 0.0f;
+            case bridge::GameplayAction::Reset:
+                return frame.resetPressed ? 1.0f : 0.0f;
+            case bridge::GameplayAction::Count:
+                break;
+            }
+            return 0.0f;
+        }
+
+        static int InputGetAxisLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->gameplayInput == nullptr)
+                return PushNilError(
+                    state,
+                    "Input API is not bound to the active gameplay frame.");
+
+            bridge::GameplayAction action;
+            std::string error;
+            if (!ReadGameplayAction(state, 1, action, error))
+                return PushNilError(state, error);
+            lua_pushnumber(
+                state,
+                GameplayAxis(*owner->gameplayInput, action));
+            return 1;
+        }
+
+        static int InputIsDownLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->gameplayInput == nullptr)
+                return PushFalseError(
+                    state,
+                    "Input API is not bound to the active gameplay frame.");
+
+            bridge::GameplayAction action;
+            std::string error;
+            if (!ReadGameplayAction(state, 1, action, error))
+                return PushFalseError(state, error);
+            lua_pushboolean(
+                state,
+                std::abs(GameplayAxis(*owner->gameplayInput, action)) >
+                    0.0001f);
+            return 1;
+        }
+
+        static int InputWasPressedLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->gameplayInput == nullptr)
+                return PushFalseError(
+                    state,
+                    "Input API is not bound to the active gameplay frame.");
+
+            bridge::GameplayAction action;
+            std::string error;
+            if (!ReadGameplayAction(state, 1, action, error))
+                return PushFalseError(state, error);
+
+            bool pressed = false;
+            switch (action)
+            {
+            case bridge::GameplayAction::Jump:
+                pressed = owner->gameplayInput->player.jumpPressed;
+                break;
+            case bridge::GameplayAction::Pause:
+                pressed = owner->gameplayInput->pausePressed;
+                break;
+            case bridge::GameplayAction::Reset:
+                pressed = owner->gameplayInput->resetPressed;
+                break;
+            default:
+                break;
+            }
+            lua_pushboolean(state, pressed ? 1 : 0);
+            return 1;
+        }
+
         // This helper may use normal C++ objects because it always returns
         // normally. It leaves either the required module value or an error
         // string on the Lua stack for RequireLua to consume.
@@ -868,6 +1070,40 @@ namespace renegade::runtime
             lua_pushcclosure(lua, TransformTranslateLocalLua, 1);
             lua_setfield(lua, -2, "translate_local");
             lua_setfield(lua, -2, "transform");
+
+            lua_newtable(lua);
+            lua_pushinteger(lua, 1);
+            lua_setfield(lua, -2, "contract_version");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, PlayerIsPresentLua, 1);
+            lua_setfield(lua, -2, "is_present");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, PlayerGetPositionLua, 1);
+            lua_setfield(lua, -2, "get_position");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, PlayerGetForwardLua, 1);
+            lua_setfield(lua, -2, "get_forward");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, PlayerGetYawLua, 1);
+            lua_setfield(lua, -2, "get_yaw");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, PlayerGetPitchLua, 1);
+            lua_setfield(lua, -2, "get_pitch");
+            lua_setfield(lua, -2, "player");
+
+            lua_newtable(lua);
+            lua_pushinteger(lua, 1);
+            lua_setfield(lua, -2, "contract_version");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, InputGetAxisLua, 1);
+            lua_setfield(lua, -2, "get_axis");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, InputIsDownLua, 1);
+            lua_setfield(lua, -2, "is_down");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, InputWasPressedLua, 1);
+            lua_setfield(lua, -2, "was_pressed");
+            lua_setfield(lua, -2, "input");
 
             lua_setfield(lua, environmentIndex, "renegade");
 
@@ -1600,6 +1836,14 @@ namespace renegade::runtime
             scene,
             std::move(projectRoot),
             error);
+    }
+
+    void RuntimeScriptRuntime::SetGameplayState(
+        const bridge::RuntimePlayerState* player,
+        const bridge::GameplayInputFrame* input) noexcept
+    {
+        impl_->playerState = player;
+        impl_->gameplayInput = input;
     }
 
     void RuntimeScriptRuntime::Update(const float dt) noexcept
