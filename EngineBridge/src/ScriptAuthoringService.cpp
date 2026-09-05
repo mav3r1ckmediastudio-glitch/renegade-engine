@@ -153,6 +153,21 @@ namespace
         return requestedOwner;
     }
 
+    bool SceneContainsPersistentOwner(
+        const wi::scene::Scene& scene,
+        const StableId& ownerId)
+    {
+        if (!IsValidStableId(ownerId))
+            return false;
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        {
+            const wi::ecs::Entity entity = scene.metadatas.GetEntity(index);
+            if (PersistentEntityId(scene, entity) == ownerId)
+                return true;
+        }
+        return false;
+    }
+
     bool SourceSortLess(
         const ScriptAuthoringSource& left,
         const ScriptAuthoringSource& right)
@@ -307,6 +322,25 @@ namespace renegade::bridge
         {
             return false;
         }
+
+        // A reusable/imported hierarchy can be replaced while its old
+        // entity attachment remains in the scene companion. Keep the
+        // authoritative document strict, but remove only attachments whose
+        // owner is no longer present in the current Scene. This prevents an
+        // invisible orphan from blocking every visible entity's Test Level
+        // snapshot while preserving all attachments with live owners.
+        candidate.attachments.erase(
+            std::remove_if(
+                candidate.attachments.begin(),
+                candidate.attachments.end(),
+                [&](const ScriptAttachment& attachment)
+                {
+                    return attachment.scope == ScriptScope::Entity &&
+                        !SceneContainsPersistentOwner(
+                            scenes_->GetScene(), attachment.ownerEntityId);
+                }),
+            candidate.attachments.end());
+        NormalizeScriptAttachmentOrder(candidate);
 
         document_ = std::move(candidate);
         loaded_ = true;

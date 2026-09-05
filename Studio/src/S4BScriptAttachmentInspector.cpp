@@ -571,6 +571,19 @@ namespace renegade::studio
                     return;
                 }
 
+                // The combo is also the persisted-source indicator. Preserve
+                // the current path, but on first load derive it from the
+                // selected entity's actual attachment instead of defaulting
+                // visually to the first catalogue entry.
+                if (controls.selectedSourcePath.empty() && session->Scripts().IsLoaded())
+                {
+                    const auto attachments = session->Scripts().EntityAttachments(
+                        controls.ownerEntityId,
+                        presentation);
+                    if (attachments.size() == 1)
+                        controls.selectedSourcePath = attachments.front()->sourcePath;
+                }
+
                 controls.sources.clear();
                 controls.diagnostics.clear();
                 controls.addSource.ClearItems();
