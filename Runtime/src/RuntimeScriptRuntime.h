@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renegade/bridge/ScriptDocumentService.h"
+#include "renegade/bridge/GameplayInputService.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -61,6 +62,13 @@ namespace renegade::runtime
             wi::scene::Scene& scene,
             std::string projectRoot,
             std::string& error);
+
+        // Bind the live gameplay state owned by RuntimeApplication. Creator
+        // scripts read this state through governed player/input namespaces;
+        // they never poll Wicked's global input or receive raw ECS handles.
+        void SetGameplayState(
+            const bridge::RuntimePlayerState* player,
+            const bridge::GameplayInputFrame* input) noexcept;
 
         void Update(float dt) noexcept;
         void Pause() noexcept;

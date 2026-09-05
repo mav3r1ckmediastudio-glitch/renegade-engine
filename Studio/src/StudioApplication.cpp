@@ -4775,6 +4775,12 @@ namespace renegade::studio
             RenderPath3D::Update(dt);
         }
 
+        if (inspectorRefreshPending_)
+        {
+            inspectorRefreshPending_ = false;
+            RefreshInspector();
+        }
+
         if (session_ == nullptr || projectHubVisible_)
         {
             detail::ClearCreatorAssetDragPreview();
@@ -5793,6 +5799,11 @@ namespace renegade::studio
         saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
         saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
         reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+    }
+
+    void StudioRenderPath::QueueInspectorRefresh() noexcept
+    {
+        inspectorRefreshPending_ = true;
     }
 
     void StudioRenderPath::RefreshInspector()
@@ -7087,7 +7098,7 @@ namespace renegade::studio
                         {
                             studioChrome_.SetStatusText(
                                 "DECAL TEXTURE // UNSUPPORTED IMAGE FORMAT");
-                            wi::helper::messageBox(
+                            ShowStudioMessageBox(
                                 "Choose a supported image texture (PNG, TGA, DDS, JPG/JPEG, BMP or HDR).",
                                 "Select Decal Texture");
                             return;
@@ -7135,7 +7146,7 @@ namespace renegade::studio
                                                     : "DECAL TEXTURE // IMPORT FAILED // ";
                                             studioChrome_.SetStatusText(
                                                 prefix + state->imported.error);
-                                            wi::helper::messageBox(
+                                            ShowStudioMessageBox(
                                                 "Could not prepare the selected decal texture.\n\nReason: " +
                                                     state->imported.error,
                                                 "Select Decal Texture");
@@ -10419,7 +10430,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         if (session_ == nullptr ||
             session_->Projects().CurrentProject().rootPath.empty())
         {
-            wi::helper::messageBox(
+            ShowStudioMessageBox(
                 "Open or create a Renegade project before running the model import proof.",
                 "Model Import Gate 1");
             return;
@@ -10444,7 +10455,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         }
                         if (wi::jobsystem::IsBusy(modelImportWorkload_))
                         {
-                            wi::helper::messageBox(
+                            ShowStudioMessageBox(
                                 "A model import validation is already running.",
                                 "Model Import Gate 1");
                             return;
@@ -10528,7 +10539,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         studioChrome_.SetStatusText(
             std::string("MODEL IMPORT PROOF // ") +
             (result.succeeded ? "PASS // " : "FAIL // ") + renderer);
-        wi::helper::messageBox(report.str(), "Model Import Gate 1");
+        ShowStudioMessageBox(report.str(), "Model Import Gate 1");
     }
 
     void StudioRenderPath::ImportModel()
@@ -10536,7 +10547,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         if (session_ == nullptr ||
             session_->Projects().CurrentProject().rootPath.empty())
         {
-            wi::helper::messageBox(
+            ShowStudioMessageBox(
                 "Open or create a Renegade project before importing a model.",
                 "Import Model");
             return;
@@ -10562,7 +10573,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         }
                         if (wi::jobsystem::IsBusy(modelImportWorkload_))
                         {
-                            wi::helper::messageBox(
+                            ShowStudioMessageBox(
                                 "A model import is already running.",
                                 "Import Model");
                             return;
@@ -10622,7 +10633,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                                 ? "Renegade could not prepare a visible preview."
                                 : state->prepared.Result().error;
                             studioChrome_.SetStatusText("IMPORT MODEL // PREVIEW FAILED");
-                            wi::helper::messageBox(error, "Import Model");
+                            ShowStudioMessageBox(error, "Import Model");
                             return;
                         }
 
@@ -10668,7 +10679,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                             creatorModelImporter = {};
                             studioChrome_.SetStatusText(
                                 "IMPORT MODEL // PREVIEW CLONE FAILED");
-                            wi::helper::messageBox(
+                            ShowStudioMessageBox(
                                 previewCloneError,
                                 "Import Model");
                             return;
@@ -11008,7 +11019,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         if (!creatorModelImporter.preparedForCommit.IsReady())
         {
             studioChrome_.SetStatusText("IMPORT MODEL // RETAINED PREVIEW LOST");
-            wi::helper::messageBox(
+            ShowStudioMessageBox(
                 "The importer lost the already-converted model scene. The project was not changed.",
                 "Import Model");
             return;
@@ -11035,7 +11046,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 "IMPORT BLOCKED // PREFLIGHT FAILED");
             studioChrome_.SetStatusText(
                 "IMPORT MODEL // DESTINATION PREFLIGHT FAILED");
-            wi::helper::messageBox(destinationError.c_str(), "Import Model");
+            ShowStudioMessageBox(destinationError.c_str(), "Import Model");
             return;
         }
 
@@ -11203,7 +11214,7 @@ wi::eventhandler::Subscribe_Once(
                         if (!state->imported.succeeded)
                         {
                             studioChrome_.SetStatusText("IMPORT MODEL // COMMIT FAILED");
-                            wi::helper::messageBox(
+                            ShowStudioMessageBox(
                                 "The preview was discarded safely, but the governed asset could not be committed.\n\nReason: " +
                                     state->imported.error,
                                 "Import Model");
@@ -11233,7 +11244,7 @@ wi::eventhandler::Subscribe_Once(
                         {
                             studioChrome_.SetStatusText(
                                 "IMPORT MODEL // ASSET COMMITTED // BROWSER FAILED");
-                            wi::helper::messageBox(
+                            ShowStudioMessageBox(
                                 "The governed asset was committed, but Studio could not verify it in the Asset Browser. Do not import it again.\n\nAsset: " +
                                     state->imported.assetProjectRelativePath +
                                     "\n\nReason: " + browserError,
@@ -11338,12 +11349,34 @@ wi::eventhandler::Subscribe_Once(
         return "dx12";
     }
 
+    void StudioRenderPath::ShowStudioMessageBox(
+        const std::string& message,
+        const std::string& caption)
+    {
+        // Native modal dialogs stop Wicked's input update loop. Reporting
+        // failures through the backlog keeps the Studio window interactive,
+        // while the status line still identifies the failed operation.
+        wi::backlog::post(
+            caption + " // " + message,
+            wi::backlog::LogLevel::Error);
+        const std::size_t firstLine = message.find('\n');
+        studioChrome_.SetStatusText(
+            caption + " // " +
+            message.substr(0, firstLine == std::string::npos
+                ? message.size()
+                : firstLine));
+        wi::input::ClearForNextFrame();
+        wi::input::HidePointer(false);
+        wi::input::ResetCursors();
+        studioChrome_.ResetTransientPointerState();
+    }
+
     void StudioRenderPath::StartTestLevel()
     {
         projectPreviewActive_ = false;
         if (session_ == nullptr || !session_->Projects().HasProject())
         {
-            wi::helper::messageBox(
+            ShowStudioMessageBox(
                 "Open or create a Renegade project before starting Test Level.",
                 "Test Level");
             return;
@@ -11370,7 +11403,7 @@ wi::eventhandler::Subscribe_Once(
             studioChrome_.SetTestLevelState(
                 RenegadeStudioChrome::TestLevelState::Idle);
             studioChrome_.SetStatusText("TEST LEVEL // SNAPSHOT FAILED");
-            wi::helper::messageBox(
+            ShowStudioMessageBox(
                 "Renegade could not create the Test Level snapshot.\n\n" +
                     error,
                 "Test Level");
@@ -11392,7 +11425,7 @@ wi::eventhandler::Subscribe_Once(
             {
                 message += "\n\nSnapshot cleanup warning: " + cleanupError;
             }
-            wi::helper::messageBox(message, "Test Level");
+            ShowStudioMessageBox(message, "Test Level");
             return;
         }
 
@@ -11415,7 +11448,7 @@ wi::eventhandler::Subscribe_Once(
             studioChrome_.SetTestLevelState(
                 RenegadeStudioChrome::TestLevelState::Idle);
             studioChrome_.SetStatusText("TEST LEVEL // LAUNCH FAILED");
-            wi::helper::messageBox(
+            ShowStudioMessageBox(
                 "Renegade could not launch Test Level.\n\n" + error,
                 "Test Level");
             return;
@@ -11432,7 +11465,7 @@ wi::eventhandler::Subscribe_Once(
         projectPreviewActive_ = false;
         if (session_ == nullptr || !session_->Projects().HasProject())
         {
-            wi::helper::messageBox(
+            ShowStudioMessageBox(
                 "Open or create a Renegade project before previewing Story Flow.",
                 "Story Flow Preview");
             return;
@@ -11444,7 +11477,7 @@ wi::eventhandler::Subscribe_Once(
         if (runtimePath.empty())
         {
             studioChrome_.SetStatusText("STORY FLOW PREVIEW // RUNTIME NOT FOUND");
-            wi::helper::messageBox(
+            ShowStudioMessageBox(
                 "RenegadeRuntime.exe was not found beside this Studio build.",
                 "Story Flow Preview");
             return;
@@ -11471,7 +11504,7 @@ wi::eventhandler::Subscribe_Once(
         {
             projectPreviewActive_ = false;
             studioChrome_.SetStatusText("STORY FLOW PREVIEW // LAUNCH FAILED");
-            wi::helper::messageBox(
+            ShowStudioMessageBox(
                 "Renegade could not launch Story Flow Preview.\n\n" + error,
                 "Story Flow Preview");
             return;
@@ -11531,7 +11564,7 @@ wi::eventhandler::Subscribe_Once(
         {
             message += "\n\nWarning: " + result.warning;
         }
-        wi::helper::messageBox(message,
+        ShowStudioMessageBox(message,
             wasProjectPreview ? "Story Flow Preview" : "Test Level");
     }
 
@@ -11556,7 +11589,7 @@ wi::eventhandler::Subscribe_Once(
                 : "TEST LEVEL // STOPPED // CLEANUP WARNING"));
         if (!result.warning.empty())
         {
-            wi::helper::messageBox(result.warning,
+            ShowStudioMessageBox(result.warning,
                 wasProjectPreview ? "Story Flow Preview" : "Test Level");
         }
     }

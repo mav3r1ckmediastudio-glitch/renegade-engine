@@ -69,6 +69,7 @@ namespace renegade::studio
         void RefreshStatus();
         void RefreshHierarchy();
         void RefreshInspector();
+        void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
         void RestoreGovernedMaterialTextures();
@@ -721,6 +722,9 @@ namespace renegade::studio
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
+        void ShowStudioMessageBox(
+            const std::string& message,
+            const std::string& caption);
         void StartTestLevel();
         void StartProjectPlay();
         void PollTestLevel();
@@ -1125,6 +1129,7 @@ namespace renegade::studio
         bool gridVisible_ = true;
         int lastDrawerTab_ = 0;
         bool workspaceLayoutDirty_ = false;
+        bool inspectorRefreshPending_ = false;
         bool weatherSliderActive_ = false;
         WeatherField weatherSliderField_ = WeatherField::SkyExposure;
         wi::ecs::Entity weatherSliderEntity_ = wi::ecs::INVALID_ENTITY;

@@ -338,7 +338,9 @@ namespace renegade::runtime
 
         if (!screenPresenter_.IsLoaded())
         {
-            const auto gameplayInput = bridge::CaptureGameplayInput(inputMap_, dt);
+            gameplayInput_ = bridge::CaptureGameplayInput(inputMap_, dt);
+            const auto& gameplayInput = gameplayInput_;
+            creatorScripts_.SetGameplayState(&player_, &gameplayInput_);
             if (gameplayInput.pausePressed)
                 SetPaused(!paused_);
 
