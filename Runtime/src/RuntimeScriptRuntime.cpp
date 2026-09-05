@@ -638,6 +638,33 @@ namespace renegade::runtime
             return 1;
         }
 
+        static int EventsEmitLua(lua_State* state)
+        {
+            auto* owner = static_cast<Impl*>(lua_touserdata(state, lua_upvalueindex(1)));
+            if (owner == nullptr) return luaL_error(state, "Events service is unavailable.");
+            bridge::GameplayEvent event;
+            event.name = luaL_checkstring(state, 1);
+            if (!lua_isnoneornil(state, 2)) event.payload = luaL_checkstring(state, 2);
+            std::string error;
+            if (!owner->events.Enqueue(std::move(event), error)) return luaL_error(state, "%s", error.c_str());
+            lua_pushboolean(state, 1); return 1;
+        }
+
+        static int EventsSendLua(lua_State* state)
+        {
+            auto* owner = static_cast<Impl*>(lua_touserdata(state, lua_upvalueindex(1)));
+            auto* ref = static_cast<EntityRefPayload*>(luaL_checkudata(state, 1, EntityRefMetatable));
+            if (owner == nullptr || ref == nullptr || ref->owner != owner || !owner->IsLiveEntityRef(*ref))
+                return luaL_error(state, "Target entity reference is stale.");
+            bridge::GameplayEvent event;
+            event.targetEntityId = ref->stableId;
+            event.name = luaL_checkstring(state, 2);
+            if (!lua_isnoneornil(state, 3)) event.payload = luaL_checkstring(state, 3);
+            std::string error;
+            if (!owner->events.Enqueue(std::move(event), error)) return luaL_error(state, "%s", error.c_str());
+            lua_pushboolean(state, 1); return 1;
+        }
+
         static int TransformGetLocalPositionLua(lua_State* state)
         {
             Impl* owner = FromUpvalue(state);
@@ -1106,6 +1133,14 @@ namespace renegade::runtime
             lua_pushcclosure(lua, InputWasPressedLua, 1);
             lua_setfield(lua, -2, "was_pressed");
             lua_setfield(lua, -2, "input");
+
+            lua_newtable(lua);
+            lua_pushinteger(lua, 1); lua_setfield(lua, -2, "contract_version");
+            lua_pushlightuserdata(lua, this); lua_pushcclosure(lua, EventsEmitLua, 1);
+            lua_setfield(lua, -2, "emit");
+            lua_pushlightuserdata(lua, this); lua_pushcclosure(lua, EventsSendLua, 1);
+            lua_setfield(lua, -2, "send");
+            lua_setfield(lua, -2, "events");
 
             lua_setfield(lua, environmentIndex, "renegade");
 
