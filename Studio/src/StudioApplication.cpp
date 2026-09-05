@@ -11348,7 +11348,7 @@ wi::eventhandler::Subscribe_Once(
         wi::backlog::post(
             caption + " // " + message,
             wi::backlog::LogLevel::Error);
-        const std::size_t firstLine = message.find('\\n');
+        const std::size_t firstLine = message.find('\n');
         studioChrome_.SetStatusText(
             caption + " // " +
             message.substr(0, firstLine == std::string::npos
