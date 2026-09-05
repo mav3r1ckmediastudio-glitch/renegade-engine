@@ -64,7 +64,7 @@ jobs:
           cmake
           --build BUILD/renegade
           --config Release
-          --target RenegadeStudio RenegadeRuntime RenegadeS5CoreGameplayLuaTests
+          --target RenegadeStudio RenegadeRuntime RenegadeS5CoreGameplayLuaTests RenegadeS5CoreGameplayApiTests RenegadeTestLevelSnapshotRuntimeTests
           --parallel
 
       - name: Run targeted S5A tests
