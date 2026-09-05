@@ -438,8 +438,10 @@ namespace renegade::studio
                 controls.refresh.OnClick(
                     [this, presentation](const wi::gui::EventArgs&)
                     {
+                        // Source refresh only updates the catalogue. Do not
+                        // rebuild the owning Inspector here: the selected entity
+                        // and its attachment controls must remain live.
                         RefreshSourcesIfNeeded(presentation, true);
-                        RequestRefresh();
                     });
                 panel_->AddWidget(&controls.refresh);
 

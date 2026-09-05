@@ -132,8 +132,10 @@ namespace renegade::studio
                     "Rescan Content/Scripts and re-evaluate restricted S4A metadata.");
                 refresh_.OnClick([this](const wi::gui::EventArgs&)
                 {
+                    // Source refresh only updates the catalogue. Do not
+                    // rebuild the owning Inspector here: the level attachment
+                    // controls must remain live.
                     RefreshSourcesIfNeeded(true);
-                    RequestRefresh();
                 });
                 panel_->AddWidget(&refresh_);
 
