@@ -69,6 +69,7 @@ namespace renegade::studio
         void RefreshStatus();
         void RefreshHierarchy();
         void RefreshInspector();
+        void QueueInspectorRefresh() noexcept;
         void RefreshProjectHub();
         void RefreshAssetBrowser();
         void RestoreGovernedMaterialTextures();

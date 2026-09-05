@@ -32,6 +32,8 @@ read_required("EngineBridge/include/renegade/bridge/StudioSession.h" studio_sess
 read_required("Studio/src/S4BScriptAttachmentInspector.h" inspector_header)
 read_required("Studio/src/S4BScriptAttachmentInspector.cpp" inspector_source)
 read_required("Studio/src/S1BInspectorSectionMigration.cpp" registry_source)
+read_required("Studio/src/StudioApplication.h" studio_application_header)
+read_required("Studio/src/StudioApplication.cpp" studio_application_source)
 
 require_text(root_cmake "include(EngineBridge/S4BScriptAuthoring.cmake)" "EngineBridge S4B build registration")
 require_text(root_cmake "include(Studio/S4BScriptAttachmentInspector.cmake)" "Studio S4B build registration")
@@ -64,6 +66,10 @@ require_text(inspector_source "ScriptPresentation::Script" "SCRIPT creator role"
 require_text(inspector_source "attachments[neighbour]->order" "absolute S2 order mapping for role-local UP/DOWN")
 require_text(registry_source "RegisterS4BScriptAttachmentInspector" "S1 provider-registry integration")
 require_text(registry_source "PrepareS4BScriptAttachmentInspector" "S1 layout reset integration")
+require_text(studio_application_header "void QueueInspectorRefresh() noexcept;" "deferred Inspector refresh declaration")
+require_text(studio_application_source "void StudioRenderPath::QueueInspectorRefresh() noexcept" "deferred Inspector refresh implementation")
+require_text(registry_source "[this]() { QueueInspectorRefresh(); }," "deferred script Inspector callbacks")
+forbid_text(registry_source "[this]() { RefreshInspector(); }," "synchronous script Inspector callbacks")
 
 forbid_text(authoring_source "ScriptComponent" "Wicked ScriptComponent creator authority")
 forbid_text(authoring_source "native_id" "raw native entity IDs")

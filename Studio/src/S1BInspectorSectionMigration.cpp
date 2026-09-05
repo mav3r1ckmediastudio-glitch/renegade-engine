@@ -139,7 +139,7 @@ namespace renegade::studio
                 ResetS1BInspectorDisclosure();
                 if (opening)
                     (void)inspectorSectionRegistry_.SetExpanded(sectionId, true);
-                RefreshInspector();
+                QueueInspectorRefresh();
             });
             inspectorPanel_.AddWidget(&button);
         };
@@ -329,7 +329,7 @@ namespace renegade::studio
             *this,
             inspectorPanel_,
             inspectorSectionRegistry_,
-            [this]() { RefreshInspector(); },
+            [this]() { QueueInspectorRefresh(); },
             [this](std::string status)
             {
                 studioChrome_.SetStatusText(std::move(status));
@@ -338,7 +338,7 @@ namespace renegade::studio
             *this,
             inspectorPanel_,
             inspectorSectionRegistry_,
-            [this]() { RefreshInspector(); },
+            [this]() { QueueInspectorRefresh(); },
             [this](std::string status)
             {
                 studioChrome_.SetStatusText(std::move(status));

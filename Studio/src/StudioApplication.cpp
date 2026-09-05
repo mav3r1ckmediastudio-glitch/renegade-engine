@@ -4775,6 +4775,12 @@ namespace renegade::studio
             RenderPath3D::Update(dt);
         }
 
+        if (inspectorRefreshPending_)
+        {
+            inspectorRefreshPending_ = false;
+            RefreshInspector();
+        }
+
         if (session_ == nullptr || projectHubVisible_)
         {
             detail::ClearCreatorAssetDragPreview();
@@ -5793,6 +5799,11 @@ namespace renegade::studio
         saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
         saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
         reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+    }
+
+    void StudioRenderPath::QueueInspectorRefresh() noexcept
+    {
+        inspectorRefreshPending_ = true;
     }
 
     void StudioRenderPath::RefreshInspector()
