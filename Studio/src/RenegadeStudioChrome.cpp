@@ -1146,6 +1146,19 @@ namespace renegade::studio
         testLevelState_ = state;
     }
 
+    void RenegadeStudioChrome::ResetTransientPointerState() noexcept
+    {
+        resizingPanel_ = 0;
+        hoveredSplitter_ = 0;
+        activeMenu_ = -1;
+        activeViewportMenu_ = -1;
+        pointerConsumed_ = false;
+        hierarchyScrollbarDragging_ = false;
+        assetBrowserDragCandidate_ = false;
+        assetBrowserDragging_ = false;
+        assetBrowserDragPath_.clear();
+    }
+
     void RenegadeStudioChrome::SetPanelSizes(
         const float hierarchyWidth,
         const float inspectorWidth,

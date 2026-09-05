@@ -721,6 +721,9 @@ namespace renegade::studio
         void OpenProjectDescriptor(const std::string& descriptorPath);
         void OpenSelectedRecentProject();
         void ProcessPendingAction();
+        void ShowStudioMessageBox(
+            const std::string& message,
+            const std::string& caption);
         void StartTestLevel();
         void StartProjectPlay();
         void PollTestLevel();

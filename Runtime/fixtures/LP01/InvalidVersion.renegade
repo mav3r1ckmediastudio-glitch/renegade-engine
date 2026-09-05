@@ -1,7 +1,0 @@
-format = renegade-project
-version = 99
-
-[project]
-project_id = 44444444-4444-4444-8444-444444444444
-name = LP01 Invalid Version
-startup_scene = Content/Scenes/BootstrapTest.wiscene

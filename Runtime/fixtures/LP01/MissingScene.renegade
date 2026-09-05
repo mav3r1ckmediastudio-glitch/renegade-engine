@@ -1,7 +1,0 @@
-format = renegade-project
-version = 1
-
-[project]
-project_id = 55555555-5555-4555-8555-555555555555
-name = LP01 Missing Scene
-startup_scene = Content/Scenes/Missing.wiscene

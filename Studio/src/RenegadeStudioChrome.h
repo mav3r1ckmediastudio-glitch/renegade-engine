@@ -341,6 +341,7 @@ namespace renegade::studio
                 !terrainWorkspaceActive_ && !renderWorkspaceActive_;
         }
         void SetTestLevelState(TestLevelState state) noexcept;
+        void ResetTransientPointerState() noexcept;
         void SetPanelSizes(
             float hierarchyWidth,
             float inspectorWidth,
