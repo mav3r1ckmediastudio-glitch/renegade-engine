@@ -1,0 +1,10 @@
+format = renegade-document
+version = 1
+
+[document]
+id = 63333333-3333-4333-8333-333333333333
+project_id = 61111111-1111-4111-8111-111111111111
+type = runtime-screen
+path_hint = Content/UI/Malformed.renegade-screen
+generator = Renegade LP03 negative fixture
+migrated_from = 0

@@ -1,0 +1,9 @@
+[submodule "WickedEngine"]
+	path = WickedEngine
+	url = https://github.com/turanszkij/WickedEngine.git
+	branch = master
+
+[submodule "ThirdParty/imnodes"]
+	path = ThirdParty/imnodes
+	url = https://github.com/Nelarius/imnodes.git
+	branch = master

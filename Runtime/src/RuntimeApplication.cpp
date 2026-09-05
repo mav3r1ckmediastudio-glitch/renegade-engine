@@ -1,0 +1,1044 @@
+#include "RuntimeApplication.h"
+
+#include "renegade/bridge/PhysicsLuaService.h"
+#include "renegade/bridge/ScreenService.h"
+#include "renegade/bridge/PrecipitationService.h"
+
+#include <algorithm>
+#include <utility>
+
+namespace renegade::runtime
+{
+    void RuntimeRenderPath::BindScene(
+        bridge::SceneService& scenes,
+        std::string projectRoot) noexcept
+    {
+        scenes_ = &scenes;
+        projectRoot_ = std::move(projectRoot);
+        scene = &scenes.GetScene();
+        renderSettingsInitialized_ = false;
+        renderSettingsSceneRevision_ = 0;
+    }
+
+    void RuntimeRenderPath::SetPaused(const bool paused) noexcept
+    {
+        paused_ = paused;
+    }
+
+    void RuntimeRenderPath::SyncRenderSettings(
+        const bool resizeBuffersForMSAA)
+    {
+        if (scenes_ == nullptr)
+            return;
+
+        auto& activeScene = scenes_->GetScene();
+        if (!projectRoot_.empty())
+        {
+            std::string ignored;
+            (void)bridge::RefreshColorGradingLutResource(
+                activeScene, projectRoot_, ignored);
+        }
+        const auto authored =
+            bridge::CaptureRenderSettings(activeScene);
+        renderSettingsSceneRevision_ = scenes_->Revision();
+        if (bridge::RenderSettingsMatchPath(*this, authored))
+        {
+            renderSettings_ = authored;
+            renderSettingsInitialized_ = true;
+            return;
+        }
+
+        bridge::ApplyRenderSettingsToPath(
+            *this,
+            authored,
+            resizeBuffersForMSAA);
+        renderSettings_ = authored;
+        renderSettingsInitialized_ = true;
+    }
+
+    void RuntimeRenderPath::Load()
+    {
+        // Gate 6 owns reflections/GI. Gate 5 replaces the former hardcoded
+        // FXAA reset with the level's shared persisted image-quality state.
+        setSSREnabled(false);
+        setReflectionsEnabled(true);
+        SyncRenderSettings(false);
+
+        wi::scene::TransformComponent cameraTransform;
+        cameraTransform.Translate(XMFLOAT3(0.0f, 1.5f, -4.0f));
+        cameraTransform.UpdateTransform();
+        camera->TransformCamera(cameraTransform);
+
+        RenderPath3D::Load();
+    }
+
+    void RuntimeRenderPath::Update(const float dt)
+    {
+        // Story Flow can replace the active WISCENE without recreating this
+        // render path. SceneService exposes that lifecycle explicitly, so a
+        // normal frame performs only an O(1) revision check and never repeats
+        // LUT filesystem validation or full render-state capture.
+        if (scenes_ != nullptr &&
+            (!renderSettingsInitialized_ ||
+                renderSettingsSceneRevision_ != scenes_->Revision()))
+        {
+            SyncRenderSettings(true);
+        }
+        RenderPath3D::Update(dt);
+    }
+
+    void RuntimeRenderPath::Compose(
+        const wi::graphics::CommandList cmd) const
+    {
+        RenderPath3D::Compose(cmd);
+        if (!paused_)
+            return;
+
+        const float width = std::max(1.0f, GetLogicalWidth());
+        const float height = std::max(1.0f, GetLogicalHeight());
+        wi::image::Params shade(0.0f, 0.0f, width, height,
+            wi::Color(0, 0, 0, 145));
+        shade.blendFlag = wi::enums::BLENDMODE_ALPHA;
+        wi::image::Draw(nullptr, shade, cmd);
+
+        wi::font::Params title(
+            width * 0.5f,
+            height * 0.5f - 22.0f,
+            28,
+            wi::font::WIFALIGN_CENTER,
+            wi::font::WIFALIGN_CENTER,
+            wi::Color(245, 245, 245, 255),
+            wi::Color::Transparent());
+        title.bolden = 0.12f;
+        wi::font::Draw("PAUSED", title, cmd);
+
+        wi::font::Params hint(
+            width * 0.5f,
+            height * 0.5f + 24.0f,
+            14,
+            wi::font::WIFALIGN_CENTER,
+            wi::font::WIFALIGN_CENTER,
+            wi::Color(220, 220, 220, 255),
+            wi::Color::Transparent());
+        wi::font::Draw("ESC RESUME   //   R RESET", hint, cmd);
+    }
+
+    void RuntimeApplication::SetBootstrapResult(RuntimeBootstrapResult result)
+    {
+        initialBootstrapResult_ = result;
+        startupResult_ = std::move(result);
+    }
+
+    void RuntimeApplication::SetSmokeOptions(
+        const bool autoPlay,
+        const bool exitOnComplete) noexcept
+    {
+        smokeAutoPlay_ = autoPlay;
+        smokeExitOnComplete_ = exitOnComplete;
+    }
+
+    void RuntimeApplication::SetGraphicsRuntimeEvidence(
+        std::string actualBackend,
+        std::string capability)
+    {
+        startupResult_.graphicsBackend = actualBackend;
+        startupResult_.graphicsCapability = capability;
+        initialBootstrapResult_.graphicsBackend = std::move(actualBackend);
+        initialBootstrapResult_.graphicsCapability = std::move(capability);
+        ++evidenceRevision_;
+    }
+
+    bool RuntimeApplication::StartupFinished() const noexcept
+    {
+        return startupFinished_;
+    }
+
+    const RuntimeBootstrapResult& RuntimeApplication::StartupResult() const noexcept
+    {
+        return startupResult_;
+    }
+
+    bool RuntimeApplication::QuitRequested() const noexcept
+    {
+        return quitRequested_;
+    }
+
+    int RuntimeApplication::ExitCode() const noexcept
+    {
+        return exitCode_;
+    }
+
+    std::uint64_t RuntimeApplication::EvidenceRevision() const noexcept
+    {
+        return evidenceRevision_;
+    }
+
+    void RuntimeApplication::ShutdownForProcessExit() noexcept
+    {
+        StopCreatorScripts();
+        creatorScripts_.Shutdown();
+        scriptSceneRevision_ = 0;
+        reportedScriptDiagnostics_ = 0;
+    }
+
+    void RuntimeApplication::Initialize()
+    {
+        wi::Application::Initialize();
+
+        // This is retained for existing engine-internal/unsafe Wicked Lua
+        // integrations. Creator S3 scripts never borrow that global VM: their
+        // RuntimeScriptRuntime owns a separate governed lua_State.
+        if (!bridge::BindPhysicsLua(scenes_.GetScene()))
+        {
+            wi::backlog::post(
+                "Renegade Runtime: renegade.physics could not bind to Wicked Lua after application initialization.",
+                wi::backlog::LogLevel::Error);
+        }
+
+        infoDisplay.active = true;
+        infoDisplay.watermark = false;
+        infoDisplay.device_name = true;
+        infoDisplay.resolution = true;
+        infoDisplay.logical_size = true;
+        infoDisplay.colorspace = true;
+        infoDisplay.fpsinfo = true;
+
+        std::string inputError;
+        if (!LoadGameplayInput(inputError))
+        {
+            startupResult_.succeeded = false;
+            startupResult_.code = RuntimeBootstrapCode::ProjectRejected;
+            startupResult_.message =
+                "Could not load project gameplay input map: " + inputError;
+            startupFinished_ = true;
+            ++evidenceRevision_;
+            return;
+        }
+
+        renderer_.BindScene(scenes_, startupResult_.project.rootPath);
+        renderer_.init(canvas);
+
+        // LP03 compatibility path: an explicitly declared project startup
+        // screen still appears before Story Flow. Gate 2 additionally allows
+        // Story Flow itself to enter Screen destinations after play.
+        if (!startupResult_.startupScreenPath.empty())
+        {
+            std::string error;
+            if (!ConfigureActions(error) || !LoadStartupScreen(error))
+            {
+                startupResult_.succeeded = false;
+                startupResult_.code = RuntimeBootstrapCode::ScreenLoadFailed;
+                startupResult_.message =
+                    "Could not load project Runtime screen: " + error;
+                startupFinished_ = true;
+                ++evidenceRevision_;
+                return;
+            }
+
+            renderer_.Load();
+            ActivatePath(&renderer_);
+            startupResult_.succeeded = true;
+            startupResult_.code = RuntimeBootstrapCode::Success;
+            startupResult_.screenLoaded = true;
+            startupResult_.screenWasLoaded = true;
+            startupResult_.message =
+                "Loaded project Runtime screen: " +
+                startupResult_.startupScreenPath;
+            startupFinished_ = true;
+            ++evidenceRevision_;
+
+            if (smokeAutoPlay_)
+            {
+                const auto* focused = screenController_.FocusedWidget();
+                QueueAction(RuntimeActionRequest{
+                    bridge::RuntimeScreenPlayAction,
+                    focused == nullptr ? std::string{} : focused->id,
+                    RuntimeInputSource::Test,
+                    1,
+                });
+            }
+            return;
+        }
+
+        if (!startupResult_.startupFlowPath.empty())
+        {
+            startupResult_ = LoadRuntimeProjectFlow(
+                scenes_,
+                flow_,
+                std::move(startupResult_));
+            flowStarted_ = startupResult_.succeeded;
+        }
+        else
+        {
+            startupResult_ =
+                LoadRuntimeProjectScene(scenes_, std::move(startupResult_));
+        }
+        startupFinished_ = true;
+        ++evidenceRevision_;
+        if (!startupResult_.succeeded)
+        {
+            return;
+        }
+
+        if (flowStarted_)
+        {
+            const auto* current = flow_.CurrentNode();
+            if (current != nullptr &&
+                current->kind == bridge::FlowNodeKind::Screen)
+            {
+                std::string error;
+                if (!LoadCurrentFlowScreen(error))
+                {
+                    startupResult_.succeeded = false;
+                    startupResult_.code = RuntimeBootstrapCode::ScreenLoadFailed;
+                    startupResult_.message =
+                        "Could not load Story Flow Runtime screen: " + error;
+                    ++evidenceRevision_;
+                    return;
+                }
+            }
+        }
+
+        // Gate 10 Flow-native standalone smoke: unlike the retained LP03
+        // compatibility path above, a modern project has no project-level
+        // startup Screen whose Play action can drive smoke completion. The
+        // build supplies the exact authored Story Flow outcomes on the command
+        // line, so once bootstrap has consumed them the terminal Flow state is
+        // already authoritative evidence. Record PASS/FAIL here and exit
+        // instead of waiting for a legacy Play action that will never arrive.
+        if (smokeAutoPlay_ && flowStarted_)
+        {
+            const bool complete =
+                startupResult_.flowTerminalAction ==
+                    bridge::FlowTerminalAction::CompleteGame;
+            startupResult_.smokeStatus = complete ? "PASS" : "FAIL";
+            startupResult_.smokeQuitReason = complete
+                ? "smoke_complete"
+                : "flow_not_complete";
+            exitCode_ = complete
+                ? 0
+                : static_cast<int>(RuntimeBootstrapCode::FlowExecutionFailed);
+            if (smokeExitOnComplete_)
+                quitRequested_ = true;
+            ++evidenceRevision_;
+        }
+
+        renderer_.Load();
+        ActivatePath(&renderer_);
+    }
+
+    void RuntimeApplication::Update(const float dt)
+    {
+        // Keep Wicked's device refresh alive while paused, but give the active
+        // 3D path zero simulation time. Physics simulation is also explicitly
+        // disabled by SetPaused(), so Runtime has one deterministic pause owner.
+        SyncAudioForScene();
+        bridge::RefreshPrecipitationVisual(scenes_.GetScene());
+        wi::Application::Update(paused_ ? 0.0f : dt);
+
+        if (!screenPresenter_.IsLoaded())
+        {
+            gameplayInput_ = bridge::CaptureGameplayInput(inputMap_, dt);
+            const auto& gameplayInput = gameplayInput_;
+            creatorScripts_.SetGameplayState(&player_, &gameplayInput_);
+            if (gameplayInput.pausePressed)
+                SetPaused(!paused_);
+
+            if (gameplayInput.resetPressed)
+            {
+                std::string error;
+                if (!ResetPlaySession(error))
+                {
+                    wi::backlog::post(
+                        "Renegade Runtime: play-session reset failed: " + error,
+                        wi::backlog::LogLevel::Error);
+                }
+            }
+
+            SyncPlayerForScene();
+            SyncCreatorScriptsForScene();
+            if (player_.IsSpawned())
+            {
+                if (!paused_)
+                {
+                    (void)bridge::UpdateRuntimePlayer(
+                        scenes_.GetScene(),
+                        player_,
+                        gameplayInput.player,
+                        playerSettings_);
+                }
+                if (renderer_.camera != nullptr)
+                {
+                    bridge::ApplyRuntimePlayerCamera(
+                        scenes_.GetScene(),
+                        player_,
+                        *renderer_.camera,
+                        playerSettings_);
+                }
+                wi::input::HidePointer(!paused_);
+            }
+            else
+            {
+                wi::input::HidePointer(false);
+            }
+
+            if (!paused_)
+                creatorScripts_.Update(dt);
+            ReportCreatorScriptDiagnostics();
+        }
+        else
+        {
+            StopCreatorScripts();
+            if (paused_)
+                SetPaused(false);
+            wi::input::HidePointer(false);
+            screenPresenter_.UpdateInput(renderer_, screenController_);
+        }
+
+        ProcessPendingActions();
+        if (screenPresenter_.IsLoaded())
+            StopCreatorScripts();
+    }
+
+    void RuntimeApplication::SyncPlayerForScene()
+    {
+        if (playerSceneRevision_ == scenes_.Revision())
+            return;
+
+        player_ = {};
+        playerSceneRevision_ = scenes_.Revision();
+        const auto resolved = bridge::ResolvePlayerStart(scenes_.GetScene());
+        if (resolved.resolution == bridge::PlayerStartResolution::Missing)
+        {
+            wi::backlog::post(
+                "Renegade Runtime: Level has no Player Start; retaining the legacy spectator camera.",
+                wi::backlog::LogLevel::Default);
+            return;
+        }
+        if (resolved.resolution != bridge::PlayerStartResolution::Success)
+        {
+            wi::backlog::post(
+                "Renegade Runtime: " + resolved.message,
+                wi::backlog::LogLevel::Error);
+            return;
+        }
+
+        playerSettings_ = resolved.start.settings;
+
+        std::string error;
+        if (!bridge::SpawnRuntimePlayer(
+                scenes_.GetScene(),
+                resolved.start,
+                player_,
+                error,
+                playerSettings_))
+        {
+            wi::backlog::post(
+                "Renegade Runtime: could not possess Player Start: " + error,
+                wi::backlog::LogLevel::Error);
+            return;
+        }
+        wi::backlog::post(
+            "Renegade Runtime: possessed Player Start with the Wicked character controller.",
+            wi::backlog::LogLevel::Default);
+    }
+
+    void RuntimeApplication::SyncAudioForScene()
+    {
+        if (audioSceneRevision_ == scenes_.Revision())
+            return;
+
+        audioPauseState_ = {};
+        bridge::ActivateSceneAudio(scenes_.GetScene());
+        if (paused_)
+        {
+            bridge::SetSceneAudioPaused(
+                scenes_.GetScene(), true, audioPauseState_);
+        }
+        audioSceneRevision_ = scenes_.Revision();
+        wi::backlog::post(
+            "Renegade Runtime: applied authored Scene audio mix and Play On Start sources.",
+            wi::backlog::LogLevel::Default);
+    }
+
+    void RuntimeApplication::SyncCreatorScriptsForScene()
+    {
+        if (scriptSceneRevision_ == scenes_.Revision())
+            return;
+
+        if (creatorScripts_.IsRunning())
+            creatorScripts_.StopScene();
+        ReportCreatorScriptDiagnostics();
+
+        scriptSceneRevision_ = scenes_.Revision();
+        if (startupResult_.startupScenePath.empty())
+            return;
+
+        std::string error;
+        if (!creatorScripts_.StartSceneFromCompanion(
+                startupResult_.startupScenePath,
+                startupResult_.project.projectId,
+                scenes_.GetScene(),
+                startupResult_.project.rootPath,
+                error))
+        {
+            wi::backlog::post(
+                "Renegade Runtime: governed creator scripts could not start: " +
+                    error,
+                wi::backlog::LogLevel::Error);
+            return;
+        }
+
+        // StartScene/BeginScene intentionally clears diagnostics for the new
+        // Level generation. Reset the publication cursor only after that
+        // successful transition so every new instance failure is surfaced.
+        reportedScriptDiagnostics_ = 0;
+        if (paused_)
+            creatorScripts_.Pause();
+
+        ReportCreatorScriptDiagnostics();
+        wi::backlog::post(
+            "Renegade Runtime: governed creator Lua started " +
+                std::to_string(creatorScripts_.ActiveInstanceCount()) +
+                " script instance(s) for the active Level.",
+            wi::backlog::LogLevel::Default);
+    }
+
+    void RuntimeApplication::StopCreatorScripts() noexcept
+    {
+        if (creatorScripts_.IsRunning())
+            creatorScripts_.StopScene();
+        ReportCreatorScriptDiagnostics();
+        scriptSceneRevision_ = 0;
+    }
+
+    void RuntimeApplication::ReportCreatorScriptDiagnostics()
+    {
+        const auto& diagnostics = creatorScripts_.Diagnostics();
+        while (reportedScriptDiagnostics_ < diagnostics.size())
+        {
+            const auto& diagnostic =
+                diagnostics[reportedScriptDiagnostics_++];
+            std::string message =
+                "Renegade creator Lua [" + diagnostic.scriptInstanceId + "] ";
+            if (!diagnostic.sourcePath.empty())
+                message += diagnostic.sourcePath + " ";
+            if (!diagnostic.callback.empty())
+                message += "(" + diagnostic.callback + ") ";
+            message += diagnostic.message;
+            wi::backlog::post(
+                message,
+                diagnostic.disabledInstance
+                    ? wi::backlog::LogLevel::Error
+                    : wi::backlog::LogLevel::Default);
+        }
+    }
+
+    bool RuntimeApplication::LoadGameplayInput(std::string& error)
+    {
+        if (bridge::ReadGameplayInputMap(
+                startupResult_.project.rootPath, inputMap_, error))
+        {
+            error.clear();
+            return true;
+        }
+
+        if (startupResult_.packageRelativeLaunch)
+        {
+            const std::string declaration =
+                "data:" +
+                std::string(bridge::GameplayInputDocumentRelativePath);
+            const bool governedInputMap =
+                std::find(
+                    startupResult_.project.alwaysInclude.begin(),
+                    startupResult_.project.alwaysInclude.end(),
+                    declaration) != startupResult_.project.alwaysInclude.end();
+
+            if (governedInputMap)
+            {
+                error = "Packaged Runtime requires '" +
+                    std::string(bridge::GameplayInputDocumentRelativePath) +
+                    "' in the dependency closure. " + error;
+                return false;
+            }
+
+            inputMap_ = bridge::MakeDefaultGameplayInputMap();
+            wi::backlog::post(
+                "Renegade Runtime: legacy packaged project has no gameplay input-map declaration; using the accepted Gate 1 defaults.",
+                wi::backlog::LogLevel::Default);
+            error.clear();
+            return true;
+        }
+
+        bool created = false;
+        if (!bridge::EnsureGameplayInputMap(
+                startupResult_.project.rootPath,
+                inputMap_,
+                created,
+                error))
+        {
+            return false;
+        }
+        if (created)
+        {
+            wi::backlog::post(
+                "Renegade Runtime: created the project gameplay input-map with Gate 1 defaults.",
+                wi::backlog::LogLevel::Default);
+        }
+        error.clear();
+        return true;
+    }
+
+    void RuntimeApplication::SetPaused(const bool paused) noexcept
+    {
+        if (paused_ == paused)
+            return;
+
+        if (paused)
+        {
+            physicsSimulationBeforePause_ = wi::physics::IsSimulationEnabled();
+            wi::physics::SetSimulationEnabled(false);
+        }
+        else
+        {
+            wi::physics::SetSimulationEnabled(physicsSimulationBeforePause_);
+        }
+        paused_ = paused;
+        renderer_.SetPaused(paused_);
+        bridge::SetSceneAudioPaused(
+            scenes_.GetScene(), paused_, audioPauseState_);
+        if (paused_)
+            creatorScripts_.Pause();
+        else
+            creatorScripts_.Resume();
+        ReportCreatorScriptDiagnostics();
+        wi::backlog::post(
+            paused_
+                ? "Renegade Runtime: play session paused."
+                : "Renegade Runtime: play session resumed.",
+            wi::backlog::LogLevel::Default);
+        ++evidenceRevision_;
+    }
+
+    bool RuntimeApplication::ResetPlaySession(std::string& error)
+    {
+        if (creatorScripts_.IsRunning())
+            creatorScripts_.ResetScene();
+        ReportCreatorScriptDiagnostics();
+        scriptSceneRevision_ = 0;
+        SetPaused(false);
+        bridge::DespawnRuntimePlayer(scenes_.GetScene(), player_);
+        player_ = {};
+        playerSettings_ = {};
+        playerSceneRevision_ = 0;
+        audioSceneRevision_ = 0;
+        audioPauseState_ = {};
+        pendingActions_.clear();
+        screenPresenter_.Reset(renderer_);
+        flow_ = RuntimeFlowController{};
+        flowStarted_ = false;
+
+        startupResult_ = initialBootstrapResult_;
+        startupResult_.lastActionId.clear();
+        startupResult_.lastActionWidgetId.clear();
+        startupResult_.lastActionInput.clear();
+        startupResult_.lastActionCode.clear();
+        startupResult_.lastActionMessage.clear();
+        startupResult_.lastActionSequence = 0;
+        startupResult_.screenLoaded = false;
+        startupResult_.screenWasLoaded = false;
+        startupResult_.flowTrace.clear();
+        startupResult_.flowNodeId.clear();
+        startupResult_.flowNodeName.clear();
+        startupResult_.flowEntry.clear();
+        startupResult_.flowTerminalAction = bridge::FlowTerminalAction::None;
+
+        if (!startupResult_.startupScreenPath.empty())
+        {
+            if (!ConfigureActions(error) || !LoadStartupScreen(error))
+            {
+                startupResult_.succeeded = false;
+                startupResult_.code = RuntimeBootstrapCode::ScreenLoadFailed;
+                startupResult_.message =
+                    "Could not reset project Runtime screen: " + error;
+                ++evidenceRevision_;
+                return false;
+            }
+            startupResult_.succeeded = true;
+            startupResult_.code = RuntimeBootstrapCode::Success;
+            startupResult_.screenLoaded = true;
+            startupResult_.screenWasLoaded = true;
+            startupResult_.message = "Reset Runtime to the project startup screen.";
+        }
+        else if (!startupResult_.startupFlowPath.empty())
+        {
+            startupResult_ = LoadRuntimeProjectFlow(
+                scenes_, flow_, std::move(startupResult_));
+            flowStarted_ = startupResult_.succeeded;
+            if (!startupResult_.succeeded)
+            {
+                error = startupResult_.message;
+                ++evidenceRevision_;
+                return false;
+            }
+            const auto* current = flow_.CurrentNode();
+            if (current != nullptr && current->kind == bridge::FlowNodeKind::Screen)
+            {
+                if (!LoadCurrentFlowScreen(error))
+                {
+                    startupResult_.succeeded = false;
+                    startupResult_.code = RuntimeBootstrapCode::ScreenLoadFailed;
+                    startupResult_.message =
+                        "Could not reset Story Flow Runtime screen: " + error;
+                    ++evidenceRevision_;
+                    return false;
+                }
+            }
+        }
+        else
+        {
+            startupResult_ =
+                LoadRuntimeProjectScene(scenes_, std::move(startupResult_));
+            if (!startupResult_.succeeded)
+            {
+                error = startupResult_.message;
+                ++evidenceRevision_;
+                return false;
+            }
+        }
+
+        SyncPlayerForScene();
+        SyncAudioForScene();
+        if (!screenPresenter_.IsLoaded())
+            SyncCreatorScriptsForScene();
+        wi::backlog::post(
+            "Renegade Runtime: play session reset to its authored startup state.",
+            wi::backlog::LogLevel::Default);
+        error.clear();
+        ++evidenceRevision_;
+        return true;
+    }
+
+    bool RuntimeApplication::ConfigureActions(std::string& error)
+    {
+        actions_.Clear();
+        if (!actions_.Register(
+                bridge::RuntimeScreenPlayAction,
+                [this](const RuntimeActionRequest& request)
+                {
+                    if (flowStarted_)
+                    {
+                        return RuntimeActionResult{
+                            false,
+                            RuntimeActionCode::AlreadyStarted,
+                            request,
+                            "The project Story Flow has already started.",
+                        };
+                    }
+                    if (startupResult_.startupFlowPath.empty())
+                    {
+                        return RuntimeActionResult{
+                            false,
+                            RuntimeActionCode::ActionUnavailable,
+                            request,
+                            "The project does not declare a startup Story Flow.",
+                        };
+                    }
+
+                    RuntimeBootstrapResult executed = LoadRuntimeProjectFlow(
+                        scenes_,
+                        flow_,
+                        startupResult_);
+                    if (!executed.succeeded)
+                    {
+                        return RuntimeActionResult{
+                            false,
+                            RuntimeActionCode::FlowStartFailed,
+                            request,
+                            executed.message,
+                        };
+                    }
+
+                    startupResult_ = std::move(executed);
+                    flowStarted_ = true;
+                    return RuntimeActionResult{
+                        true,
+                        RuntimeActionCode::Success,
+                        request,
+                        "Runtime action play entered the project Story Flow.",
+                    };
+                },
+                error))
+        {
+            return false;
+        }
+
+        if (!actions_.Register(
+                bridge::RuntimeScreenQuitAction,
+                [this](const RuntimeActionRequest& request)
+                {
+                    quitRequested_ = true;
+                    return RuntimeActionResult{
+                        true,
+                        RuntimeActionCode::QuitRequested,
+                        request,
+                        "Runtime action quit requested normal window shutdown.",
+                    };
+                },
+                error))
+        {
+            return false;
+        }
+
+        error.clear();
+        return true;
+    }
+
+    bool RuntimeApplication::LoadStartupScreen(std::string& error)
+    {
+        if (startupResult_.startupFlowPath.empty())
+        {
+            error = "LP03 requires play to enter a project startup Story Flow.";
+            return false;
+        }
+
+        bridge::ScreenDocument document;
+        if (!bridge::ReadScreenDocument(
+                startupResult_.startupScreenPath,
+                startupResult_.project.projectId,
+                document,
+                error))
+        {
+            return false;
+        }
+        if (document.envelope.documentId !=
+            startupResult_.project.startupScreenId)
+        {
+            error = "Resolved Runtime screen document ID does not match the project manifest.";
+            return false;
+        }
+        if (!screenController_.Initialize(document, error))
+        {
+            return false;
+        }
+        if (!screenPresenter_.Load(
+                document,
+                startupResult_.project.rootPath,
+                renderer_,
+                screenController_,
+                [this](RuntimeActionRequest request)
+                {
+                    QueueAction(std::move(request));
+                },
+                error))
+        {
+            return false;
+        }
+
+        startupResult_.screenDocumentId = document.envelope.documentId;
+        const auto* focused = screenController_.FocusedWidget();
+        startupResult_.screenFocusedWidgetId =
+            focused == nullptr ? std::string{} : focused->id;
+        error.clear();
+        return true;
+    }
+
+    bool RuntimeApplication::LoadCurrentFlowScreen(std::string& error)
+    {
+        const auto* current = flow_.CurrentNode();
+        if (!flowStarted_ || current == nullptr ||
+            current->kind != bridge::FlowNodeKind::Screen)
+        {
+            error = "Story Flow is not currently positioned on a Screen destination.";
+            return false;
+        }
+        if (startupResult_.startupScreenPath.empty() ||
+            startupResult_.screenDocumentId != current->screenDocumentId)
+        {
+            error = "Story Flow Screen destination has not been resolved into Runtime state.";
+            return false;
+        }
+
+        bridge::ScreenDocument document;
+        if (!bridge::ReadScreenDocument(
+                startupResult_.startupScreenPath,
+                startupResult_.project.projectId,
+                document,
+                error))
+        {
+            return false;
+        }
+        if (document.envelope.documentId != current->screenDocumentId)
+        {
+            error = "Resolved Runtime screen document ID does not match the current Story Flow node.";
+            return false;
+        }
+        if (!screenController_.Initialize(document, error))
+        {
+            return false;
+        }
+        if (!screenPresenter_.Load(
+                document,
+                startupResult_.project.rootPath,
+                renderer_,
+                screenController_,
+                [this](RuntimeActionRequest request)
+                {
+                    QueueAction(std::move(request));
+                },
+                error))
+        {
+            return false;
+        }
+
+        startupResult_.screenDocumentId = document.envelope.documentId;
+        const auto* focused = screenController_.FocusedWidget();
+        startupResult_.screenFocusedWidgetId =
+            focused == nullptr ? std::string{} : focused->id;
+        startupResult_.screenLoaded = true;
+        startupResult_.screenWasLoaded = true;
+        error.clear();
+        return true;
+    }
+
+    void RuntimeApplication::QueueAction(RuntimeActionRequest request)
+    {
+        pendingActions_.push_back(std::move(request));
+    }
+
+    void RuntimeApplication::ProcessPendingActions()
+    {
+        if (pendingActions_.empty())
+        {
+            return;
+        }
+
+        std::vector<RuntimeActionRequest> pending;
+        pending.swap(pendingActions_);
+        for (const auto& request : pending)
+        {
+            const auto* current = flowStarted_ ? flow_.CurrentNode() : nullptr;
+            if (current != nullptr &&
+                current->kind == bridge::FlowNodeKind::Screen)
+            {
+                RuntimeActionResult result;
+                result.request = request;
+
+                auto step = flow_.EmitOutcome(request.actionId);
+                if (!step.succeeded)
+                {
+                    result.succeeded = false;
+                    result.code = RuntimeActionCode::FlowStartFailed;
+                    result.message = step.message;
+                    RecordAction(result);
+                    continue;
+                }
+
+                std::string error;
+                if (!flow_.ApplyStep(scenes_, startupResult_, step, error))
+                {
+                    result.succeeded = false;
+                    result.code = RuntimeActionCode::FlowStartFailed;
+                    result.message = error;
+                    RecordAction(result);
+                    continue;
+                }
+
+                screenPresenter_.Reset(renderer_);
+                startupResult_.screenLoaded = false;
+
+                const auto* destination = flow_.CurrentNode();
+                if (destination != nullptr &&
+                    destination->kind == bridge::FlowNodeKind::Screen)
+                {
+                    if (!LoadCurrentFlowScreen(error))
+                    {
+                        result.succeeded = false;
+                        result.code = RuntimeActionCode::FlowStartFailed;
+                        result.message = error;
+                        RecordAction(result);
+                        continue;
+                    }
+                }
+
+                if (startupResult_.flowTerminalAction ==
+                    bridge::FlowTerminalAction::Quit)
+                {
+                    quitRequested_ = true;
+                }
+
+                result.succeeded = true;
+                result.code = RuntimeActionCode::Success;
+                result.message = "Runtime Screen action advanced Story Flow to '" +
+                    startupResult_.flowNodeName + "'.";
+                RecordAction(result);
+                continue;
+            }
+
+            RuntimeActionResult result = actions_.Dispatch(request);
+            if (result.succeeded &&
+                result.request.actionId == bridge::RuntimeScreenPlayAction)
+            {
+                screenPresenter_.Reset(renderer_);
+                startupResult_.screenLoaded = false;
+
+                const auto* destination = flow_.CurrentNode();
+                if (destination != nullptr &&
+                    destination->kind == bridge::FlowNodeKind::Screen)
+                {
+                    std::string error;
+                    if (!LoadCurrentFlowScreen(error))
+                    {
+                        result.succeeded = false;
+                        result.code = RuntimeActionCode::FlowStartFailed;
+                        result.message = error;
+                    }
+                }
+            }
+            RecordAction(result);
+        }
+    }
+
+    void RuntimeApplication::RecordAction(const RuntimeActionResult& result)
+    {
+        startupResult_.lastActionId = result.request.actionId;
+        startupResult_.lastActionWidgetId = result.request.widgetId;
+        startupResult_.lastActionInput =
+            RuntimeInputSourceName(result.request.inputSource);
+        startupResult_.lastActionCode = RuntimeActionCodeName(result.code);
+        startupResult_.lastActionMessage = result.message;
+        startupResult_.lastActionSequence = result.request.sequence;
+        const auto* focused = screenController_.FocusedWidget();
+        startupResult_.screenFocusedWidgetId =
+            focused == nullptr ? std::string{} : focused->id;
+
+        if (smokeAutoPlay_ &&
+            result.request.actionId == bridge::RuntimeScreenPlayAction)
+        {
+            const bool complete = result.succeeded &&
+                startupResult_.flowTerminalAction ==
+                    bridge::FlowTerminalAction::CompleteGame;
+            if (complete)
+            {
+                startupResult_.smokeStatus = "PASS";
+                startupResult_.smokeQuitReason = "smoke_complete";
+                exitCode_ = 0;
+                if (smokeExitOnComplete_)
+                    quitRequested_ = true;
+            }
+            else
+            {
+                startupResult_.smokeStatus = "FAIL";
+                startupResult_.smokeQuitReason = result.succeeded
+                    ? "flow_not_complete"
+                    : "play_action_failed";
+                exitCode_ = static_cast<int>(
+                    RuntimeBootstrapCode::FlowExecutionFailed);
+                if (smokeExitOnComplete_)
+                    quitRequested_ = true;
+            }
+        }
+
+        ++evidenceRevision_;
+    }
+}

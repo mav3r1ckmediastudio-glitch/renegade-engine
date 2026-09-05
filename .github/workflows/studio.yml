@@ -1,0 +1,128 @@
+name: Renegade Studio
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/studio.yml"
+      - "CMakeLists.txt"
+      - "EngineBridge/**"
+      - "Studio/**"
+      - "Runtime/**"
+      - "ScreenRenderer/**"
+      - "Tests/**"
+      - "Tools/Build-Studio-Windows.ps1"
+      - "Tools/Test-Windows-LoggedCommand.ps1"
+      - "Tools/TerrainSurfacePacker.cpp"
+      - "Tools/Windows-Build.Common.ps1"
+      - ".gitmodules"
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  studio:
+    name: Renegade Studio Windows x64 ${{ matrix.configuration }}
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration:
+          - Debug
+          - Release
+
+    steps:
+      - name: Check out Renegade and Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Capture toolchain
+        shell: pwsh
+        run: >-
+          ./Tools/Collect-Windows-Baseline.ps1
+          -OutputRoot "artifacts/studio/ci-${{ matrix.configuration }}"
+
+      - name: Verify native command failure propagation
+        shell: pwsh
+        run: ./Tools/Test-Windows-LoggedCommand.ps1
+
+      - name: Stage LP07 pinned FBX proof fixtures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixtureRoot = 'Tests/Fixtures/LP07'
+          New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
+
+          $upstreamCommit = 'fcc5d6ba444cfd3eb80677dba5e37e493941abe5'
+          $fixtures = @(
+            @{
+              Name = 'maya_cube_6100_ascii.fbx'
+              Blob = 'b0aa64ea2361060b4f9bc4cd4e7bd0f730b6f7d8'
+            },
+            @{
+              Name = 'maya_transformed_skin_7700_ascii.fbx'
+              Blob = '683b74cf082e5adab645082c73dd221e0ff7f281'
+            }
+          )
+
+          foreach ($fixture in $fixtures) {
+            $path = Join-Path $fixtureRoot $fixture.Name
+            $uri = "https://raw.githubusercontent.com/ufbx/ufbx/$upstreamCommit/data/$($fixture.Name)"
+            Invoke-WebRequest -Uri $uri -OutFile $path
+
+            $actualBlob = (& git.exe hash-object -- $path).Trim()
+            if ($LASTEXITCODE -ne 0) {
+              throw "git hash-object failed for $path"
+            }
+            if ($actualBlob -ne $fixture.Blob) {
+              throw "LP07 fixture integrity failure for $($fixture.Name): expected $($fixture.Blob), got $actualBlob"
+            }
+            Write-Host "LP07 fixture verified: $($fixture.Name) // git-blob=$actualBlob"
+          }
+
+      - name: Build Renegade Studio
+        shell: pwsh
+        run: >-
+          ./Tools/Build-Studio-Windows.ps1
+          -Configuration ${{ matrix.configuration }}
+          -Clean
+          -ArtifactRoot "artifacts/studio/ci-${{ matrix.configuration }}"
+
+      - name: Verify Renegade Studio process startup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $studio = "BUILD/renegade/Studio/${{ matrix.configuration }}/RenegadeStudio.exe"
+          if (-not (Test-Path -LiteralPath $studio -PathType Leaf)) {
+            throw "Renegade Studio startup proof cannot find $studio"
+          }
+
+          $process = Start-Process -FilePath $studio -ArgumentList 'startup-smoke' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Renegade Studio startup proof failed with process exit code $($process.ExitCode)."
+          }
+          Write-Host "RENEGADE_STUDIO_STARTUP_SMOKE_PASS configuration=${{ matrix.configuration }}"
+
+      - name: Upload build and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: >-
+            renegade-studio-windows-x64-${{ matrix.configuration }}-${{ github.sha }}
+          path: artifacts/studio/ci-${{ matrix.configuration }}
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,67 @@
+name: Windows baseline
+
+on:
+  push:
+    branches:
+      - main
+      - "agent/**"
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-baseline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Windows x64 ${{ matrix.configuration }}
+    runs-on: windows-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration:
+          - Debug
+          - Release
+
+    steps:
+      - name: Check out Renegade and Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Capture toolchain
+        shell: pwsh
+        run: >
+          ./Tools/Collect-Windows-Baseline.ps1
+          -OutputRoot "artifacts/phase1/ci-${{ matrix.configuration }}"
+
+      - name: Build pinned Wicked baseline
+        shell: pwsh
+        run: >
+          ./Tools/Build-Windows.ps1
+          -Configuration ${{ matrix.configuration }}
+          -Clean
+          -ArtifactRoot "artifacts/phase1/ci-${{ matrix.configuration }}"
+
+      - name: Upload build and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-${{ matrix.configuration }}-${{ github.sha }}
+          path: artifacts/phase1/ci-${{ matrix.configuration }}
+          if-no-files-found: warn
+          retention-days: 14

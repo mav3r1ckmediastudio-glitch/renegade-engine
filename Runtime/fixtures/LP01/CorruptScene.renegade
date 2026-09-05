@@ -1,0 +1,7 @@
+format = renegade-project
+version = 1
+
+[project]
+project_id = 22222222-2222-4222-8222-222222222222
+name = LP01 Corrupt Scene
+startup_scene = Content/Scenes/Corrupt.wiscene
