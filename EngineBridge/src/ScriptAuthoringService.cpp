@@ -308,6 +308,39 @@ namespace renegade::bridge
             return true;
         }
 
+        const auto pruneOrphanedEntityAttachments =
+            [&](ScriptDocument& candidate)
+            {
+                // Scene revision is a coarse lifecycle counter. A loaded
+                // document can still outlive an imported/reusable entity
+                // replacement without changing that counter, so this check
+                // must also run on the fast path used by every inspector and
+                // Test Level snapshot call.
+                candidate.attachments.erase(
+                    std::remove_if(
+                        candidate.attachments.begin(),
+                        candidate.attachments.end(),
+                        [&](const ScriptAttachment& attachment)
+                        {
+                            return attachment.scope == ScriptScope::Entity &&
+                                !SceneContainsPersistentOwner(
+                                    scenes_->GetScene(),
+                                    attachment.ownerEntityId);
+                        }),
+                    candidate.attachments.end());
+                NormalizeScriptAttachmentOrder(candidate);
+            };
+
+        if (loaded_ &&
+            loadedSceneRevision_ == scenes_->Revision() &&
+            loadedScenePath_ == normalizedScene &&
+            loadedProjectId_ == project.projectId)
+        {
+            pruneOrphanedEntityAttachments(document_);
+            error.clear();
+            return true;
+        }
+
         ScriptDocument candidate;
         bool companionExists = false;
         std::string sceneHint;
@@ -323,24 +356,9 @@ namespace renegade::bridge
             return false;
         }
 
-        // A reusable/imported hierarchy can be replaced while its old
-        // entity attachment remains in the scene companion. Keep the
-        // authoritative document strict, but remove only attachments whose
-        // owner is no longer present in the current Scene. This prevents an
-        // invisible orphan from blocking every visible entity's Test Level
-        // snapshot while preserving all attachments with live owners.
-        candidate.attachments.erase(
-            std::remove_if(
-                candidate.attachments.begin(),
-                candidate.attachments.end(),
-                [&](const ScriptAttachment& attachment)
-                {
-                    return attachment.scope == ScriptScope::Entity &&
-                        !SceneContainsPersistentOwner(
-                            scenes_->GetScene(), attachment.ownerEntityId);
-                }),
-            candidate.attachments.end());
-        NormalizeScriptAttachmentOrder(candidate);
+        // Drop only entity attachments whose owners are no longer present;
+        // level-scoped scripts and all live owners remain authoritative.
+        pruneOrphanedEntityAttachments(candidate);
 
         document_ = std::move(candidate);
         loaded_ = true;
