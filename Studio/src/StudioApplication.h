@@ -1129,6 +1129,7 @@ namespace renegade::studio
         bool gridVisible_ = true;
         int lastDrawerTab_ = 0;
         bool workspaceLayoutDirty_ = false;
+        bool inspectorRefreshPending_ = false;
         bool weatherSliderActive_ = false;
         WeatherField weatherSliderField_ = WeatherField::SkyExposure;
         wi::ecs::Entity weatherSliderEntity_ = wi::ecs::INVALID_ENTITY;
