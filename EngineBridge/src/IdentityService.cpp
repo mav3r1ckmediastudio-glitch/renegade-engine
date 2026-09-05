@@ -659,20 +659,6 @@ namespace renegade::bridge
         wi::unordered_set<wi::ecs::Entity> discovered;
         scene.FindAllEntities(discovered);
 
-        // Wicked's FindAllEntities() is normally sufficient, but creator
-        // metadata can temporarily outlive the component stores during an
-        // imported/reusable hierarchy adoption. The metadata store is the
-        // authoritative owner of Renegade persistent IDs, so include its
-        // entities explicitly before building the identity index. This does
-        // not weaken validation: every included entity is still required to
-        // carry one valid, unique persistent ID.
-        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
-        {
-            const wi::ecs::Entity entity = scene.metadatas.GetEntity(index);
-            if (entity != wi::ecs::INVALID_ENTITY)
-                discovered.insert(entity);
-        }
-
         std::vector<wi::ecs::Entity> entities;
         entities.reserve(discovered.size());
         for (const auto entity : discovered)
