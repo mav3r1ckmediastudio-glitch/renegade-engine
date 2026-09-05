@@ -65,6 +65,7 @@ if(WIN32)
     include(Studio/Phase6Gate3.cmake)
     add_subdirectory(Runtime)
     include(Runtime/S3GovernedLuaRuntime.cmake)
+    include(Runtime/S5CoreGameplayApi.cmake)
     include(Runtime/LP06Gate3.cmake)
     add_subdirectory(Tests)
     include(Tests/JP01Constraints.cmake)
@@ -103,6 +104,7 @@ if(WIN32)
     include(Tests/S4BScriptAuthoring.cmake)
     include(Tests/S4CScriptPropertyAuthoring.cmake)
     include(Tests/S4DScriptReferenceAuthoring.cmake)
+    include(Tests/S5CoreGameplayApi.cmake)
     add_test(
         NAME RenegadeStudioDisclosurePolicySourceContract
         COMMAND ${CMAKE_COMMAND}

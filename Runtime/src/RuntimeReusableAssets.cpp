@@ -1,22 +1,37 @@
 #include "RuntimeBootstrap.h"
 
 #include "renegade/bridge/ResourceAssetRuntimeService.h"
+#include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ReusableAssetRuntimeService.h"
 
 #include <sstream>
+#include <utility>
 
 namespace renegade::runtime
 {
     bool RefreshRuntimeReusableAssets(
         bridge::SceneService& scenes,
         RuntimeBootstrapResult& result,
-        std::string& error)
+        std::string& error,
+        bridge::MaterialTextureResourceLoader authoringTextureLoader)
     {
-        // Studio Test Level and other explicit --project launches continue to
-        // consume their already-authored scene exactly as before. Package-only
-        // refresh is reserved for the integrity-validated LP06 launch path.
+        // Authored/Test Level WISCENEs persist governed texture stable IDs,
+        // not live Wicked Resource handles. Rehydrate those bindings from the
+        // explicit project root before gameplay starts. Test Level snapshots
+        // carry the registry plus only the referenced governed texture products.
         if (!result.packageRelativeLaunch)
         {
+            const auto restored = bridge::RestoreMaterialTextureBindings(
+                scenes.GetScene(),
+                result.project.rootPath,
+                result.project.projectId,
+                std::move(authoringTextureLoader));
+            if (!restored.succeeded)
+            {
+                error = "Authored Runtime governed material restore failed: " +
+                    restored.error;
+                return false;
+            }
             error.clear();
             return true;
         }

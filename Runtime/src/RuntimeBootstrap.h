@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneService.h"
 
@@ -97,19 +98,21 @@ namespace renegade::runtime
     [[nodiscard]] RuntimeBootstrapResult ResolveRuntimeProject(
         RuntimeBootstrapResult result);
 
-    // Gate 6 post-load package refresh. Explicit --project/Test Level launches
-    // are unchanged; package-relative launches resolve and refresh every saved
-    // reusable asset instance from the already integrity-validated package.
+    // Post-load governed resource refresh. Explicit --project/Test Level
+    // launches rehydrate material textures from their authored/shadow project;
+    // package-relative launches retain the integrity-validated package refresh.
     [[nodiscard]] bool RefreshRuntimeReusableAssets(
         bridge::SceneService& scenes,
         RuntimeBootstrapResult& result,
-        std::string& error);
+        std::string& error,
+        bridge::MaterialTextureResourceLoader authoringTextureLoader = {});
 
     // Loads the already resolved WISCENE through the shared SceneService and
     // converts its diagnostic into the same structured startup result.
     [[nodiscard]] RuntimeBootstrapResult LoadRuntimeProjectScene(
         bridge::SceneService& scenes,
-        RuntimeBootstrapResult result);
+        RuntimeBootstrapResult result,
+        bridge::MaterialTextureResourceLoader authoringTextureLoader = {});
 
     [[nodiscard]] const char* RuntimeBootstrapCodeName(
         RuntimeBootstrapCode code) noexcept;

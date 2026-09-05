@@ -4,6 +4,7 @@
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/SceneService.h"
 
 #include <algorithm>
@@ -97,6 +98,74 @@ namespace
         hint = relative.lexically_normal().generic_u8string();
         error.clear();
         return true;
+    }
+
+    StableId ResolveEntityScriptAuthoringOwner(
+        const wi::scene::Scene& scene,
+        const StableId& requestedOwner)
+    {
+        if (!IsValidStableId(requestedOwner))
+            return {};
+
+        wi::ecs::Entity selected = wi::ecs::INVALID_ENTITY;
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        {
+            const wi::ecs::Entity candidate = scene.metadatas.GetEntity(index);
+            if (PersistentEntityId(scene, candidate) == requestedOwner)
+            {
+                selected = candidate;
+                break;
+            }
+        }
+        if (selected == wi::ecs::INVALID_ENTITY)
+            return {};
+
+        // Imported nodes inside a reusable asset are replaceable payload.
+        // Creator-owned scripts belong to the nearest stable reusable
+        // instance root so payload refresh/reimport cannot orphan them.
+        wi::ecs::Entity current = selected;
+        const std::size_t maximumDepth = scene.hierarchy.GetCount() + 1;
+        for (std::size_t depth = 0;
+            current != wi::ecs::INVALID_ENTITY && depth <= maximumDepth;
+            ++depth)
+        {
+            const auto* metadata = scene.metadatas.GetComponent(current);
+            if (metadata != nullptr &&
+                metadata->string_values.has(
+                    ReusableAssetInstanceIdMetadataKey))
+            {
+                const StableId wrapperId = PersistentEntityId(scene, current);
+                return IsValidStableId(wrapperId)
+                    ? wrapperId
+                    : StableId{};
+            }
+
+            const auto* hierarchy = scene.hierarchy.GetComponent(current);
+            if (hierarchy == nullptr ||
+                hierarchy->parentID == wi::ecs::INVALID_ENTITY ||
+                hierarchy->parentID == current)
+            {
+                break;
+            }
+            current = hierarchy->parentID;
+        }
+
+        return requestedOwner;
+    }
+
+    bool SceneContainsPersistentOwner(
+        const wi::scene::Scene& scene,
+        const StableId& ownerId)
+    {
+        if (!IsValidStableId(ownerId))
+            return false;
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        {
+            const wi::ecs::Entity entity = scene.metadatas.GetEntity(index);
+            if (PersistentEntityId(scene, entity) == ownerId)
+                return true;
+        }
+        return false;
     }
 
     bool SourceSortLess(
@@ -253,6 +322,25 @@ namespace renegade::bridge
         {
             return false;
         }
+
+        // A reusable/imported hierarchy can be replaced while its old
+        // entity attachment remains in the scene companion. Keep the
+        // authoritative document strict, but remove only attachments whose
+        // owner is no longer present in the current Scene. This prevents an
+        // invisible orphan from blocking every visible entity's Test Level
+        // snapshot while preserving all attachments with live owners.
+        candidate.attachments.erase(
+            std::remove_if(
+                candidate.attachments.begin(),
+                candidate.attachments.end(),
+                [&](const ScriptAttachment& attachment)
+                {
+                    return attachment.scope == ScriptScope::Entity &&
+                        !SceneContainsPersistentOwner(
+                            scenes_->GetScene(), attachment.ownerEntityId);
+                }),
+            candidate.attachments.end());
+        NormalizeScriptAttachmentOrder(candidate);
 
         document_ = std::move(candidate);
         loaded_ = true;
@@ -529,12 +617,18 @@ namespace renegade::bridge
         const ScriptPresentation presentation) const
     {
         std::vector<const ScriptAttachment*> result;
-        if (!loaded_ || !IsValidStableId(ownerEntityId))
+        if (!loaded_ || !IsValidStableId(ownerEntityId) || scenes_ == nullptr)
             return result;
+
+        const StableId resolvedOwner = ResolveEntityScriptAuthoringOwner(
+            scenes_->GetScene(), ownerEntityId);
+        if (!IsValidStableId(resolvedOwner))
+            return result;
+
         for (const auto& attachment : document_.attachments)
         {
             if (attachment.scope == ScriptScope::Entity &&
-                attachment.ownerEntityId == ownerEntityId &&
+                attachment.ownerEntityId == resolvedOwner &&
                 attachment.presentation == presentation)
             {
                 result.push_back(&attachment);
@@ -586,6 +680,27 @@ namespace renegade::bridge
             error = "Selected entity has no valid persistent Renegade ID.";
             return false;
         }
+
+        const StableId resolvedOwner = ResolveEntityScriptAuthoringOwner(
+            scenes_->GetScene(), ownerEntityId);
+        if (!IsValidStableId(resolvedOwner))
+        {
+            error = "Selected entity no longer resolves in the active Scene.";
+            return false;
+        }
+
+        EntityIdentityIndex identities;
+        if (!identities.Build(scenes_->GetScene(), error))
+        {
+            error = "Cannot attach script because Scene identity is invalid: " + error;
+            return false;
+        }
+        if (identities.Resolve(resolvedOwner) == wi::ecs::INVALID_ENTITY)
+        {
+            error = "Resolved script owner does not exist in the active Scene.";
+            return false;
+        }
+
         if (source.metadata.presentation == ScriptPresentation::GlobalScript)
         {
             error = "GLOBAL SCRIPT sources must be attached at Level scope.";
@@ -594,7 +709,7 @@ namespace renegade::bridge
 
         ScriptAttachment attachment = CreateScriptAttachment(
             ScriptScope::Entity,
-            ownerEntityId,
+            resolvedOwner,
             ResolveSourceBinding(source));
         if (!ApplyScriptMetadataDefaults(source.metadata, attachment, error))
             return false;

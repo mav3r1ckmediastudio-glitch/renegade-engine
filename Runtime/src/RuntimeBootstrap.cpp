@@ -281,7 +281,8 @@ namespace renegade::runtime
 
     RuntimeBootstrapResult LoadRuntimeProjectScene(
         bridge::SceneService& scenes,
-        RuntimeBootstrapResult result)
+        RuntimeBootstrapResult result,
+        bridge::MaterialTextureResourceLoader authoringTextureLoader)
     {
         if (!result.succeeded)
         {
@@ -306,7 +307,8 @@ namespace renegade::runtime
         }
 
         std::string refreshError;
-        if (!RefreshRuntimeReusableAssets(scenes, result, refreshError))
+        if (!RefreshRuntimeReusableAssets(
+                scenes, result, refreshError, std::move(authoringTextureLoader)))
         {
             return Fail(
                 std::move(result),

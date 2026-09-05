@@ -208,6 +208,7 @@ return {}
         fs::remove_all(root, ec);
         return 1;
     }
+    const StableId scriptSourceId = scriptSource->binding.sourceId;
 
     StableId actionOne;
     StableId actionTwo;
@@ -323,8 +324,16 @@ return {}
         FindScriptAttachment(persisted, actionTwo) != nullptr &&
         FindScriptAttachment(persisted, scriptOne) != nullptr,
         "save preserves ScriptInstanceIds") && ok;
+    const ScriptAttachment* persistedScript =
+        FindScriptAttachment(persisted, scriptOne);
+    ok = Expect(
+        persistedScript != nullptr && persistedScript->sourcePath == scriptPath &&
+        persistedScript->sourceId == scriptSourceId,
+        "saved companion preserves exact SCRIPT sourcePath/sourceId") && ok;
 
-    ok = Expect(session.ReloadScene(), "reopen saved Scene") && ok;
+    ok = Expect(
+        session.LoadScene(scenePath),
+        "Story Flow-style reopen saved Scene") && ok;
     error.clear();
     ok = Expect(session.Scripts().EnsureCurrent(error), "reopen scripting companion: " + error) && ok;
     const wi::ecs::Entity reopenedOwner = session.Scenes().GetScene().transforms.GetEntity(0);
@@ -337,6 +346,13 @@ return {}
         session.Scripts().EntityAttachments(
             reopenedOwnerId, ScriptPresentation::Script).size() == 1,
         "Scene reopen restores ACTION and SCRIPT attachments") && ok;
+    const auto reopenedScripts = session.Scripts().EntityAttachments(
+        reopenedOwnerId, ScriptPresentation::Script);
+    ok = Expect(
+        reopenedScripts.size() == 1 &&
+        reopenedScripts[0]->sourcePath == scriptPath &&
+        reopenedScripts[0]->sourceId == scriptSourceId,
+        "Story Flow-style reopen preserves exact SCRIPT sourcePath/sourceId") && ok;
 
     actions.clear();
     diagnostics.clear();

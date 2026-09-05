@@ -11355,7 +11355,8 @@ wi::eventhandler::Subscribe_Once(
 
         bridge::TestLevelSnapshotService snapshotService(
             session_->Scenes(),
-            session_->Commands());
+            session_->Commands(),
+            &session_->Scripts());
         bridge::TestLevelSnapshot snapshot;
         std::string error;
         ClearSelectionOutline();

@@ -89,6 +89,7 @@ namespace renegade::studio
             std::vector<ScriptAuthoringSource> sources;
             std::vector<bridge::ScriptMetadataDiagnostic> diagnostics;
             std::size_t selectedSource = 0;
+            std::string selectedSourcePath;
             std::uint64_t sourceSceneRevision =
                 std::numeric_limits<std::uint64_t>::max();
             std::string sourceProjectRoot;
@@ -416,13 +417,18 @@ namespace renegade::studio
 
                 controls.addSource.Create("S4B " + role + " Source");
                 controls.addSource.SetTooltip(
-                    "Choose a governed Content/Scripts Lua source whose S4A metadata role is " +
+                    "Choose the next governed Content/Scripts Lua source to ADD. "
+                    "Already attached scripts are listed below. Required metadata role: " +
                     role + ".");
                 controls.addSource.OnSelect(
                     [this, presentation](const wi::gui::EventArgs& args)
                     {
-                        Role(presentation).selectedSource =
+                        auto& role = Role(presentation);
+                        role.selectedSource =
                             static_cast<std::size_t>(args.userdata);
+                        if (role.selectedSource < role.sources.size())
+                            role.selectedSourcePath =
+                                role.sources[role.selectedSource].sourcePath;
                     });
                 panel_->AddWidget(&controls.addSource);
 
@@ -565,6 +571,19 @@ namespace renegade::studio
                     return;
                 }
 
+                // The combo is also the persisted-source indicator. Preserve
+                // the current path, but on first load derive it from the
+                // selected entity's actual attachment instead of defaulting
+                // visually to the first catalogue entry.
+                if (controls.selectedSourcePath.empty() && session->Scripts().IsLoaded())
+                {
+                    const auto attachments = session->Scripts().EntityAttachments(
+                        controls.ownerEntityId,
+                        presentation);
+                    if (attachments.size() == 1)
+                        controls.selectedSourcePath = attachments.front()->sourcePath;
+                }
+
                 controls.sources.clear();
                 controls.diagnostics.clear();
                 controls.addSource.ClearItems();
@@ -595,7 +614,33 @@ namespace renegade::studio
                         static_cast<std::uint64_t>(index));
                 }
                 if (!controls.sources.empty())
-                    controls.addSource.SetSelectedWithoutCallback(0);
+                {
+                    std::size_t restored = 0;
+                    if (!controls.selectedSourcePath.empty())
+                    {
+                        const auto selected = std::find_if(
+                            controls.sources.begin(), controls.sources.end(),
+                            [&](const ScriptAuthoringSource& candidate)
+                            {
+                                return candidate.sourcePath ==
+                                    controls.selectedSourcePath;
+                            });
+                        if (selected != controls.sources.end())
+                        {
+                            restored = static_cast<std::size_t>(
+                                selected - controls.sources.begin());
+                        }
+                    }
+                    controls.selectedSource = restored;
+                    controls.selectedSourcePath = controls.sources[restored].sourcePath;
+                    controls.addSource.SetSelectedWithoutCallback(
+                        static_cast<int>(restored));
+                }
+                else
+                {
+                    controls.selectedSource = 0;
+                    controls.selectedSourcePath.clear();
+                }
                 controls.sourceSceneRevision = session->Scenes().Revision();
                 controls.sourceProjectRoot = project.rootPath;
                 controls.documentError.clear();
@@ -675,6 +720,24 @@ namespace renegade::studio
                 auto* session = bridge::StudioSession::Current();
                 if (session == nullptr || !controls.documentReady)
                     return;
+
+                // Imported/reusable asset adoption and Scene reloads can occur
+                // while this Inspector remains alive. Recapture the owner ID
+                // from the live selection at click time instead of trusting
+                // an ID captured during an earlier refresh.
+                const auto selected = session->Selection().SelectedEntity();
+                const StableId liveOwnerEntityId =
+                    selected == wi::ecs::INVALID_ENTITY
+                    ? StableId{}
+                    : bridge::PersistentEntityId(
+                        session->Scenes().GetScene(), selected);
+                if (!bridge::IsValidStableId(liveOwnerEntityId))
+                {
+                    SetStatus(
+                        "S4B SCRIPTING // selected entity has no current persistent identity");
+                    return;
+                }
+                controls.ownerEntityId = liveOwnerEntityId;
                 if (controls.sources.empty() ||
                     controls.selectedSource >= controls.sources.size())
                 {
