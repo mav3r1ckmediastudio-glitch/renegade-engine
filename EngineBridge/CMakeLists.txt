@@ -14,6 +14,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/AudioService.h
     include/renegade/bridge/DecalProbeService.h
     include/renegade/bridge/CommandService.h
+    include/renegade/bridge/DiagnosticService.h
     include/renegade/bridge/CreatorAssetActionPolicy.h
     include/renegade/bridge/CreatorAssetWorkflowService.h
     include/renegade/bridge/CreatorModelImportRecipe.h
@@ -80,6 +81,7 @@ add_library(RenegadeEngineBridge STATIC
     src/AudioService.cpp
     src/DecalProbeService.cpp
     src/CommandService.cpp
+    src/DiagnosticService.cpp
     src/CreatorAssetWorkflowService.cpp
     src/CreatorModelImportRecipe.cpp
     src/CreatorModelMaterialDetectionService.cpp
@@ -180,6 +182,7 @@ target_link_libraries(RenegadeEngineBridge
 )
 
 if(WIN32)
+    target_link_libraries(RenegadeEngineBridge PRIVATE ws2_32)
     # LP06 packaging is Windows-first. Keep its Win32/BCrypt implementation out
     # of non-Windows EngineBridge configuration while retaining shared public
     # contracts for the Windows Runtime and build pipeline.
