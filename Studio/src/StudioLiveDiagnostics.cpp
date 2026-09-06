@@ -1,5 +1,7 @@
 #include "StudioApplication.h"
 
+#include <algorithm>
+
 namespace renegade::studio
 {
     const char* StudioRenderPath::DiagnosticActionName(EditorAction action)
@@ -119,9 +121,24 @@ namespace renegade::studio
             {"state_code", static_cast<std::uint64_t>(play.state)}, {"message", play.message},
             {"warning", play.warning}, {"child_pid", static_cast<std::uint64_t>(testLevelRuntime_.ProcessId())}},
             "Studio/src/TestLevelRuntimeProcess.cpp");
+
+        // The drawer renderer performs its own wrapping and line advance. Feed it
+        // one logical stream rather than embedded newlines so Wicked does not draw
+        // multiple internal font lines on top of the next wrapped drawer row.
+        // Full structured diagnostics remain available unchanged on /snapshot.
         std::string text = diagnosticService_.SummaryText();
+        std::replace(text.begin(), text.end(), '\n', ' ');
         const auto peer = diagnosticService_.ReadPeerSummary();
-        text += peer.empty() ? "\nRUNTIME // endpoint unavailable" : "\nRUNTIME // " + peer;
+        if (peer.empty())
+        {
+            text += " // RUNTIME // endpoint unavailable";
+        }
+        else
+        {
+            std::string peerText = peer;
+            std::replace(peerText.begin(), peerText.end(), '\n', ' ');
+            text += " // RUNTIME // " + peerText;
+        }
         studioChrome_.SetDiagnosticText(std::move(text));
     }
 }
