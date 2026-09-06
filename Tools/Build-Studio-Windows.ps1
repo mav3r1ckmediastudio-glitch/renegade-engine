@@ -55,6 +55,7 @@ $result = [ordered]@{
         "RenegadeStudio",
         "RenegadeRuntime",
         "RenegadeBridgeTests",
+        "RenegadeDiagnosticServiceTests",
         "RenegadeDependencyProcessFixture",
         "RenegadeAssetRegistryProcessFixture"
     )
@@ -83,7 +84,7 @@ try {
             -ArgumentList @(
                 "--build", $buildRoot,
                 "--config", $currentConfiguration,
-                "--target", "RenegadeStudio", "RenegadeRuntime", "RenegadeBridgeTests",
+                "--target", "RenegadeStudio", "RenegadeRuntime", "RenegadeBridgeTests", "RenegadeDiagnosticServiceTests",
                 "RenegadeAssetRegistryProcessFixture",
                 "--parallel"
             ) `
