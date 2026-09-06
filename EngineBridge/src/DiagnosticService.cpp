@@ -91,11 +91,13 @@ namespace renegade::bridge
     void DiagnosticService::Record(const DiagnosticSeverity severity,
         std::string source, std::string code, std::string message)
     {
-        std::lock_guard lock(mutex_);
-        if (events_.size() == capacity_)
-            events_.erase(events_.begin());
-        events_.push_back({severity, std::move(source), std::move(code),
-            std::move(message)});
+        {
+            std::lock_guard lock(mutex_);
+            if (events_.size() == capacity_)
+                events_.erase(events_.begin());
+            events_.push_back({severity, std::move(source), std::move(code),
+                std::move(message)});
+        }
         if (publishPeer_)
         {
             const auto temporary = peerSnapshotPath_ + ".tmp";
