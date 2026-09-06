@@ -184,6 +184,9 @@ namespace renegade::runtime
     void RuntimeApplication::Initialize()
     {
         wi::Application::Initialize();
+        diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
+            "runtime", "runtime.initialized", "Runtime initialized");
+        diagnosticService_.StartLocalEndpoint(38742);
 
         // This is retained for existing engine-internal/unsafe Wicked Lua
         // integrations. Creator S3 scripts never borrow that global VM: their
@@ -456,6 +459,9 @@ namespace renegade::runtime
                 scenes_.GetScene(), true, audioPauseState_);
         }
         audioSceneRevision_ = scenes_.Revision();
+        diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
+            "runtime.audio", "audio.scene.synced",
+            "Authored scene audio synchronized");
         wi::backlog::post(
             "Renegade Runtime: applied authored Scene audio mix and Play On Start sources.",
             wi::backlog::LogLevel::Default);
@@ -526,6 +532,13 @@ namespace renegade::runtime
             if (!diagnostic.callback.empty())
                 message += "(" + diagnostic.callback + ") ";
             message += diagnostic.message;
+            diagnosticService_.Record(
+                diagnostic.disabledInstance
+                    ? bridge::DiagnosticSeverity::Error
+                    : bridge::DiagnosticSeverity::Info,
+                "runtime.script", diagnostic.callback.empty()
+                    ? "script.diagnostic" : "script." + diagnostic.callback,
+                message);
             wi::backlog::post(
                 message,
                 diagnostic.disabledInstance
