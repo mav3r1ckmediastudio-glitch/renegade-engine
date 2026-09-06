@@ -43,6 +43,7 @@ namespace renegade::bridge
 
         [[nodiscard]] std::vector<DiagnosticEvent> Snapshot() const;
         [[nodiscard]] std::string SnapshotJson() const;
+        [[nodiscard]] std::string ReadPeerSnapshot() const;
         [[nodiscard]] std::size_t ErrorCount() const noexcept;
         [[nodiscard]] std::size_t WarningCount() const noexcept;
 
@@ -54,5 +55,7 @@ namespace renegade::bridge
         std::vector<DiagnosticEvent> events_;
         std::atomic_bool endpointRunning_ = false;
         std::thread endpointThread_;
+        std::string peerSnapshotPath_;
+        bool publishPeer_ = false;
     };
 }
