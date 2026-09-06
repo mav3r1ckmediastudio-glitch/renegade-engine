@@ -1599,6 +1599,10 @@ namespace renegade::studio
 
     void StudioRenderPath::PreRender()
     {
+        std::string diagnosticText = diagnosticService_.SnapshotJson();
+        const std::string runtimeText = diagnosticService_.ReadPeerSnapshot();
+        if (!runtimeText.empty()) diagnosticText += "\nRUNTIME // " + runtimeText;
+        studioChrome_.SetDiagnosticText(std::move(diagnosticText));
         if (testLevelRuntime_.IsActive())
         {
             // Runtime owns the live 3D world during Test Level. Keep only the
