@@ -503,6 +503,11 @@ namespace renegade::runtime
             creatorScripts_.Pause();
 
         ReportCreatorScriptDiagnostics();
+        diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
+            "runtime.script", "script.scene.started",
+            "Governed creator Lua started " +
+                std::to_string(creatorScripts_.ActiveInstanceCount()) +
+                " script instance(s)");
         wi::backlog::post(
             "Renegade Runtime: governed creator Lua started " +
                 std::to_string(creatorScripts_.ActiveInstanceCount()) +
