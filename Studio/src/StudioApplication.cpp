@@ -1,3 +1,4 @@
+#include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
 #include "StudioUserPreferences.h"
 
@@ -1181,12 +1182,16 @@ namespace renegade::studio
             });
     }
 
+    bool StudioRenderPath::DiagnosticImportActive() const
+    {
+        return creatorModelImporter.active;
+    }
+
     void StudioRenderPath::BindDiagnostics(
         wi::Application::InfoDisplayer& diagnostics) noexcept
     {
         diagnostics_ = &diagnostics;
-        diagnosticService_.Record(bridge::DiagnosticSeverity::Info, "studio", "diagnostics.bound", "Diagnostic surface bound");
-        diagnosticService_.StartLocalEndpoint();
+        InitializeLiveDiagnostics();
     }
 
     void StudioRenderPath::Load()
@@ -1599,10 +1604,6 @@ namespace renegade::studio
 
     void StudioRenderPath::PreRender()
     {
-        std::string diagnosticText = diagnosticService_.SnapshotJson();
-        const std::string runtimeText = diagnosticService_.ReadPeerSnapshot();
-        if (!runtimeText.empty()) diagnosticText += "\nRUNTIME // " + runtimeText;
-        studioChrome_.SetDiagnosticText(std::move(diagnosticText));
         if (testLevelRuntime_.IsActive())
         {
             // Runtime owns the live 3D world during Test Level. Keep only the
@@ -1726,7 +1727,7 @@ namespace renegade::studio
             button.SetAngularHighlightWidth(4.0f);
             button.OnClick([this, action](const wi::gui::EventArgs&)
             {
-                pendingAction_ = action;
+                RequestDiagnosticAction(action);
             });
             toolbarPanel_.AddWidget(&button);
         };
@@ -1757,7 +1758,7 @@ namespace renegade::studio
             "scene.");
         gridToggleButton_.OnClick([this](wi::gui::EventArgs)
         {
-            pendingAction_ = EditorAction::ToggleGrid;
+            RequestDiagnosticAction(EditorAction::ToggleGrid);
         });
         toolbarPanel_.AddWidget(&gridToggleButton_);
 
@@ -3007,7 +3008,7 @@ namespace renegade::studio
             "Preview the 24-hour path. Pausing commits one Undo step.");
         sunPlayButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::StartSunPreview;
+            RequestDiagnosticAction(EditorAction::StartSunPreview);
         });
         inspectorPanel_.AddWidget(&sunPlayButton_);
 
@@ -3017,7 +3018,7 @@ namespace renegade::studio
             "Pause the preview and commit its final time as one Undo step.");
         sunPauseButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::PauseSunPreview;
+            RequestDiagnosticAction(EditorAction::PauseSunPreview);
         });
         inspectorPanel_.AddWidget(&sunPauseButton_);
 
@@ -3031,7 +3032,7 @@ namespace renegade::studio
         oceanEnabled_.OnClick([this](const wi::gui::EventArgs& args)
         {
             pendingOceanEnabled_ = args.bValue;
-            pendingAction_ = EditorAction::SetOceanEnabled;
+            RequestDiagnosticAction(EditorAction::SetOceanEnabled);
         });
         inspectorPanel_.AddWidget(&oceanEnabled_);
 
@@ -3057,7 +3058,7 @@ namespace renegade::studio
             {
                 pendingOceanPreset_ = static_cast<bridge::OceanPreset>(
                     args.userdata - 1u);
-                pendingAction_ = EditorAction::ApplyOceanPreset;
+                RequestDiagnosticAction(EditorAction::ApplyOceanPreset);
             }
         });
         inspectorPanel_.AddWidget(&oceanPreset_);
@@ -3074,7 +3075,7 @@ namespace renegade::studio
         oceanResolution_.OnSelect([this](const wi::gui::EventArgs& args)
         {
             pendingOceanResolution_ = static_cast<int>(args.userdata);
-            pendingAction_ = EditorAction::SetOceanResolution;
+            RequestDiagnosticAction(EditorAction::SetOceanResolution);
         });
         inspectorPanel_.AddWidget(&oceanResolution_);
 
@@ -3167,7 +3168,7 @@ namespace renegade::studio
             "Create and select one native streamed terrain component");
         createTerrainButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::CreateTerrain;
+            RequestDiagnosticAction(EditorAction::CreateTerrain);
         });
         inspectorPanel_.AddWidget(&createTerrainButton_);
 
@@ -3183,7 +3184,7 @@ namespace renegade::studio
             "Add one 66 m chunk ring on every side without restarting or erasing sculpting.");
         expandTerrainButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::ExpandTerrain;
+            RequestDiagnosticAction(EditorAction::ExpandTerrain);
         });
         inspectorPanel_.AddWidget(&expandTerrainButton_);
 
@@ -3265,7 +3266,7 @@ namespace renegade::studio
                 pendingTerrainMaterialPreset_ =
                     static_cast<bridge::TerrainMaterialPreset>(
                         args.userdata - 1u);
-                pendingAction_ = EditorAction::ApplyTerrainMaterialPreset;
+                RequestDiagnosticAction(EditorAction::ApplyTerrainMaterialPreset);
             }
         });
         inspectorPanel_.AddWidget(&terrainMaterialPreset_);
@@ -3300,7 +3301,7 @@ namespace renegade::studio
         terrainApplyDefaultGrassButton_.OnClick(
             [this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::ApplyDefaultGrass;
+            RequestDiagnosticAction(EditorAction::ApplyDefaultGrass);
         });
         inspectorPanel_.AddWidget(&terrainApplyDefaultGrassButton_);
 
@@ -3311,7 +3312,7 @@ namespace renegade::studio
         terrainReloadMaterialButton_.OnClick(
             [this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::ReloadTerrainMaterial;
+            RequestDiagnosticAction(EditorAction::ReloadTerrainMaterial);
         });
         inspectorPanel_.AddWidget(&terrainReloadMaterialButton_);
 
@@ -3368,7 +3369,7 @@ namespace renegade::studio
         focusButton_.SetTooltip("Frame the selected entity in the viewport");
         focusButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::FocusSelection;
+            RequestDiagnosticAction(EditorAction::FocusSelection);
         });
         inspectorPanel_.AddWidget(&focusButton_);
 
@@ -3377,7 +3378,7 @@ namespace renegade::studio
         duplicateButton_.SetTooltip("Duplicate selected entity (Ctrl+D)");
         duplicateButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::DuplicateSelection;
+            RequestDiagnosticAction(EditorAction::DuplicateSelection);
         });
         inspectorPanel_.AddWidget(&duplicateButton_);
 
@@ -3386,7 +3387,7 @@ namespace renegade::studio
         deleteButton_.SetTooltip("Delete selected entity (Delete)");
         deleteButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::DeleteSelection;
+            RequestDiagnosticAction(EditorAction::DeleteSelection);
         });
         inspectorPanel_.AddWidget(&deleteButton_);
 
@@ -3395,7 +3396,7 @@ namespace renegade::studio
         undoButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
         undoButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::Undo;
+            RequestDiagnosticAction(EditorAction::Undo);
         });
         inspectorPanel_.AddWidget(&undoButton_);
 
@@ -3404,7 +3405,7 @@ namespace renegade::studio
         redoButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
         redoButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::Redo;
+            RequestDiagnosticAction(EditorAction::Redo);
         });
         inspectorPanel_.AddWidget(&redoButton_);
 
@@ -3414,7 +3415,7 @@ namespace renegade::studio
         saveButton_.SetTooltip("Save the current scene (Ctrl+S)");
         saveButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::SaveScene;
+            RequestDiagnosticAction(EditorAction::SaveScene);
         });
         inspectorPanel_.AddWidget(&saveButton_);
 
@@ -3423,7 +3424,7 @@ namespace renegade::studio
         saveAsButton_.SetSize(XMFLOAT2(112.0f, 28.0f));
         saveAsButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::SaveSceneAs;
+            RequestDiagnosticAction(EditorAction::SaveSceneAs);
         });
         inspectorPanel_.AddWidget(&saveAsButton_);
 
@@ -3432,7 +3433,7 @@ namespace renegade::studio
         reopenButton_.SetSize(XMFLOAT2(92.0f, 28.0f));
         reopenButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::ReopenScene;
+            RequestDiagnosticAction(EditorAction::ReopenScene);
         });
         inspectorPanel_.AddWidget(&reopenButton_);
 
@@ -3504,92 +3505,92 @@ namespace renegade::studio
             switch (action)
             {
             case RenegadeStudioChrome::Action::ProjectHub:
-                pendingAction_ = EditorAction::ProjectHub;
+                RequestDiagnosticAction(EditorAction::ProjectHub);
                 break;
             case RenegadeStudioChrome::Action::OpenScene:
-                pendingAction_ = EditorAction::OpenScene;
+                RequestDiagnosticAction(EditorAction::OpenScene);
                 break;
             case RenegadeStudioChrome::Action::Save:
-                pendingAction_ = EditorAction::SaveScene;
+                RequestDiagnosticAction(EditorAction::SaveScene);
                 break;
             case RenegadeStudioChrome::Action::SaveAs:
-                pendingAction_ = EditorAction::SaveSceneAs;
+                RequestDiagnosticAction(EditorAction::SaveSceneAs);
                 break;
             case RenegadeStudioChrome::Action::Reopen:
-                pendingAction_ = EditorAction::ReopenScene;
+                RequestDiagnosticAction(EditorAction::ReopenScene);
                 break;
             case RenegadeStudioChrome::Action::Undo:
-                pendingAction_ = EditorAction::Undo;
+                RequestDiagnosticAction(EditorAction::Undo);
                 break;
             case RenegadeStudioChrome::Action::Redo:
-                pendingAction_ = EditorAction::Redo;
+                RequestDiagnosticAction(EditorAction::Redo);
                 break;
             case RenegadeStudioChrome::Action::Duplicate:
-                pendingAction_ = EditorAction::DuplicateSelection;
+                RequestDiagnosticAction(EditorAction::DuplicateSelection);
                 break;
             case RenegadeStudioChrome::Action::Delete:
-                pendingAction_ = EditorAction::DeleteSelection;
+                RequestDiagnosticAction(EditorAction::DeleteSelection);
                 break;
             case RenegadeStudioChrome::Action::CreatePointLight:
                 pendingLightType_ = wi::scene::LightComponent::POINT;
-                pendingAction_ = EditorAction::CreateLight;
+                RequestDiagnosticAction(EditorAction::CreateLight);
                 break;
             case RenegadeStudioChrome::Action::CreateSpotLight:
                 pendingLightType_ = wi::scene::LightComponent::SPOT;
-                pendingAction_ = EditorAction::CreateLight;
+                RequestDiagnosticAction(EditorAction::CreateLight);
                 break;
             case RenegadeStudioChrome::Action::CreateDirectionalLight:
                 pendingLightType_ = wi::scene::LightComponent::DIRECTIONAL;
-                pendingAction_ = EditorAction::CreateLight;
+                RequestDiagnosticAction(EditorAction::CreateLight);
                 break;
             case RenegadeStudioChrome::Action::CreateRectangleLight:
                 pendingLightType_ = wi::scene::LightComponent::RECTANGLE;
-                pendingAction_ = EditorAction::CreateLight;
+                RequestDiagnosticAction(EditorAction::CreateLight);
                 break;
             case RenegadeStudioChrome::Action::CreatePlayerStart:
-                pendingAction_ = EditorAction::CreatePlayerStart;
+                RequestDiagnosticAction(EditorAction::CreatePlayerStart);
                 break;
             case RenegadeStudioChrome::Action::CreateCamera:
-                pendingAction_ = EditorAction::CreateCamera;
+                RequestDiagnosticAction(EditorAction::CreateCamera);
                 break;
             case RenegadeStudioChrome::Action::CreateDecal:
-                pendingAction_ = EditorAction::CreateDecal;
+                RequestDiagnosticAction(EditorAction::CreateDecal);
                 break;
             case RenegadeStudioChrome::Action::CreateEnvironmentProbe:
-                pendingAction_ = EditorAction::CreateEnvironmentProbe;
+                RequestDiagnosticAction(EditorAction::CreateEnvironmentProbe);
                 break;
             case RenegadeStudioChrome::Action::Focus:
-                pendingAction_ = EditorAction::FocusSelection;
+                RequestDiagnosticAction(EditorAction::FocusSelection);
                 break;
             case RenegadeStudioChrome::Action::ToggleGrid:
-                pendingAction_ = EditorAction::ToggleGrid;
+                RequestDiagnosticAction(EditorAction::ToggleGrid);
                 break;
             case RenegadeStudioChrome::Action::EnvironmentWorkspace:
-                pendingAction_ = EditorAction::OpenEnvironmentWorkspace;
+                RequestDiagnosticAction(EditorAction::OpenEnvironmentWorkspace);
                 break;
             case RenegadeStudioChrome::Action::TerrainWorkspace:
-                pendingAction_ = EditorAction::OpenTerrainWorkspace;
+                RequestDiagnosticAction(EditorAction::OpenTerrainWorkspace);
                 break;
             case RenegadeStudioChrome::Action::RenderWorkspace:
-                pendingAction_ = EditorAction::OpenRenderWorkspace;
+                RequestDiagnosticAction(EditorAction::OpenRenderWorkspace);
                 break;
             case RenegadeStudioChrome::Action::SceneWorkspace:
-                pendingAction_ = EditorAction::OpenSceneWorkspace;
+                RequestDiagnosticAction(EditorAction::OpenSceneWorkspace);
                 break;
             case RenegadeStudioChrome::Action::TestLevelPlay:
-                pendingAction_ = EditorAction::StartTestLevel;
+                RequestDiagnosticAction(EditorAction::StartTestLevel);
                 break;
             case RenegadeStudioChrome::Action::TestLevelStop:
-                pendingAction_ = EditorAction::StopTestLevel;
+                RequestDiagnosticAction(EditorAction::StopTestLevel);
                 break;
             case RenegadeStudioChrome::Action::BuildWindowsGame:
-                pendingAction_ = EditorAction::BuildWindowsGame;
+                RequestDiagnosticAction(EditorAction::BuildWindowsGame);
                 break;
             case RenegadeStudioChrome::Action::ValidateModelImport:
-                pendingAction_ = EditorAction::ValidateModelImport;
+                RequestDiagnosticAction(EditorAction::ValidateModelImport);
                 break;
             case RenegadeStudioChrome::Action::ImportModel:
-                pendingAction_ = EditorAction::ImportModel;
+                RequestDiagnosticAction(EditorAction::ImportModel);
                 break;
             }
         });
@@ -4350,7 +4351,7 @@ namespace renegade::studio
             "Commit the governed reusable asset to the Asset Browser without placing an instance in the level.");
         importScaleApplyButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::ApplyImportScale;
+            RequestDiagnosticAction(EditorAction::ApplyImportScale);
         });
 
         importScaleDismissButton_.Create("Cancel Model Import");
@@ -4359,7 +4360,7 @@ namespace renegade::studio
             "Discard the temporary preview and return to the level without importing anything.");
         importScaleDismissButton_.OnClick([this](const wi::gui::EventArgs&)
         {
-            pendingAction_ = EditorAction::DismissImportScale;
+            RequestDiagnosticAction(EditorAction::DismissImportScale);
         });
 
         creatorImportActionBar.Create("THUMBNAIL & IMPORT");
@@ -4661,9 +4662,12 @@ namespace renegade::studio
 
     void StudioRenderPath::Update(const float dt)
     {
+        DiagnosticInputFrame diagnosticInput(diagnosticService_,
+            wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
         PollTestLevel();
         if (testLevelRuntime_.IsActive())
         {
+            diagnosticInput.StopAt("test_level");
             // The child Runtime is the sole 3D owner while Test Level runs.
             // RenderPath2D keeps wiGUI/chrome responsive without ticking the
             // editor scene, visibility, physics, vegetation or render graph.
@@ -4762,6 +4766,7 @@ namespace renegade::studio
         // scene changes from inside the base update.
         if (sceneOpenInProgress_)
         {
+            diagnosticInput.StopAt("scene_loading");
             detail::ClearCreatorAssetDragPreview();
             pendingAction_ = EditorAction::None;
             return;
@@ -4789,6 +4794,7 @@ namespace renegade::studio
 
         if (session_ == nullptr || projectHubVisible_)
         {
+            diagnosticInput.StopAt("project_hub");
             detail::ClearCreatorAssetDragPreview();
             return;
         }
@@ -4861,6 +4867,7 @@ namespace renegade::studio
         // editor actions only after the complete GUI update has returned.
         if (pendingAction_ != EditorAction::None)
         {
+            diagnosticInput.StopAt("editor_action");
             ProcessPendingAction();
             return;
         }
@@ -4870,6 +4877,7 @@ namespace renegade::studio
         // scene selection, gizmo manipulation, or camera navigation.
         if (studioChrome_.ConsumedPointerThisFrame())
         {
+            diagnosticInput.StopAt("studio_chrome");
             // Renegade chrome owns this pointer press. Cancel the persistent
             // vegetation tool so a viewport brush can never retain input
             // ownership across top-menu or bottom-drawer interaction.
@@ -4880,11 +4888,13 @@ namespace renegade::studio
         if (playerStartIconConsumed || cameraIconConsumed || audioIconConsumed ||
             decalProbeIconConsumed || lightIconConsumed)
         {
+            diagnosticInput.StopAt("scene_icon");
             return;
         }
 
         if (vegetationConsumed)
         {
+            diagnosticInput.StopAt("vegetation");
             return;
         }
 
@@ -4896,18 +4906,22 @@ namespace renegade::studio
 
         if (HandleCreatorAssetPlacement(pointer))
         {
+            diagnosticInput.StopAt("asset_placement");
             return;
         }
 
         if (HandleLightPlacement(pointer))
         {
+            diagnosticInput.StopAt("light_placement");
             return;
         }
 
         HandleViewportNavigation(dt, pointer);
+        diagnosticInput.CameraReached(flyCameraActive_);
 
         if (GetGUI().HasFocus() && !gizmoDragActive_)
         {
+            diagnosticInput.StopAt("native_gui_focus");
             return;
         }
 
@@ -4919,10 +4933,12 @@ namespace renegade::studio
 
         if (HandleTerrainSculpt(pointer))
         {
+            diagnosticInput.StopAt("terrain_sculpt");
             return;
         }
         if (HandleViewportSelection(pointer))
         {
+            diagnosticInput.StopAt("viewport_selection");
             return;
         }
 
@@ -5817,6 +5833,8 @@ namespace renegade::studio
 
     void StudioRenderPath::RefreshInspector()
     {
+        diagnosticService_.SetState("inspector_refresh", {{"elapsed_ms", diagnosticService_.ElapsedMs()},
+            {"stage", std::string("refresh_entered")}});
         const bool hasSession = session_ != nullptr;
         const auto selectedEntity = hasSession
             ? session_->Selection().SelectedEntity()
@@ -6582,15 +6600,15 @@ namespace renegade::studio
 
         if (control && wi::input::Press(key('Z')))
         {
-            pendingAction_ = EditorAction::Undo;
+            RequestDiagnosticAction(EditorAction::Undo);
         }
         else if (control && wi::input::Press(key('Y')))
         {
-            pendingAction_ = EditorAction::Redo;
+            RequestDiagnosticAction(EditorAction::Redo);
         }
         else if (control && wi::input::Press(key('D')))
         {
-            pendingAction_ = EditorAction::DuplicateSelection;
+            RequestDiagnosticAction(EditorAction::DuplicateSelection);
         }
         else if (control && wi::input::Press(key('S')))
         {
@@ -6600,27 +6618,27 @@ namespace renegade::studio
         }
         else if (wi::input::Press(wi::input::KEYBOARD_BUTTON_DELETE))
         {
-            pendingAction_ = EditorAction::DeleteSelection;
+            RequestDiagnosticAction(EditorAction::DeleteSelection);
         }
         else if (wi::input::Press(key('F')))
         {
-            pendingAction_ = EditorAction::FocusSelection;
+            RequestDiagnosticAction(EditorAction::FocusSelection);
         }
         else if (wi::input::Press(key('W')))
         {
-            pendingAction_ = EditorAction::TranslateTool;
+            RequestDiagnosticAction(EditorAction::TranslateTool);
         }
         else if (wi::input::Press(key('E')))
         {
-            pendingAction_ = EditorAction::RotateTool;
+            RequestDiagnosticAction(EditorAction::RotateTool);
         }
         else if (wi::input::Press(key('R')))
         {
-            pendingAction_ = EditorAction::ScaleTool;
+            RequestDiagnosticAction(EditorAction::ScaleTool);
         }
         else if (wi::input::Press(key('G')))
         {
-            pendingAction_ = EditorAction::ToggleGrid;
+            RequestDiagnosticAction(EditorAction::ToggleGrid);
         }
     }
 
@@ -6634,6 +6652,7 @@ namespace renegade::studio
 
     void StudioRenderPath::ProcessPendingAction()
     {
+        TraceDiagnosticAction(pendingAction_, session_ ? "handler_entered" : "blocked.scene_unavailable");
         if (session_ == nullptr)
         {
             pendingAction_ = EditorAction::None;
@@ -6811,6 +6830,7 @@ namespace renegade::studio
         default:
             break;
         }
+        TraceDiagnosticAction(action, "handler_returned");
     }
 
     void StudioRenderPath::SetTransformTool(const TransformTool tool)
@@ -11627,7 +11647,7 @@ wi::eventhandler::Subscribe_Once(
 
     void StudioRenderPath::RequestProjectHubFromStoryFlow()
     {
-        pendingAction_ = EditorAction::ProjectHub;
+        RequestDiagnosticAction(EditorAction::ProjectHub);
     }
 
     void StudioRenderPath::RequestAssetBrowserFromStoryFlow()
@@ -11637,7 +11657,7 @@ wi::eventhandler::Subscribe_Once(
 
     void StudioRenderPath::RequestProjectPlayFromStoryFlow()
     {
-        pendingAction_ = EditorAction::StartProjectPlay;
+        RequestDiagnosticAction(EditorAction::StartProjectPlay);
     }
 
     void StudioRenderPath::RequestWindowsGameBuild()

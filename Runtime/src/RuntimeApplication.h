@@ -79,6 +79,8 @@ namespace renegade::runtime
         void ReportCreatorScriptDiagnostics();
 
         bridge::SceneService scenes_;
+        void UpdateLiveDiagnostics();
+        std::uint64_t lastDiagnosticSampleMs_ = 0;
         bridge::DiagnosticService diagnosticService_;
         RuntimeFlowController flow_;
         RuntimeRenderPath renderer_;

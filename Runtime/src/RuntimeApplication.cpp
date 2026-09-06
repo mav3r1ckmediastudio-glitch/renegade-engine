@@ -175,6 +175,7 @@ namespace renegade::runtime
 
     void RuntimeApplication::ShutdownForProcessExit() noexcept
     {
+        diagnosticService_.StopLocalEndpoint();
         StopCreatorScripts();
         creatorScripts_.Shutdown();
         scriptSceneRevision_ = 0;
@@ -186,6 +187,7 @@ namespace renegade::runtime
         wi::Application::Initialize();
         diagnosticService_.Record(bridge::DiagnosticSeverity::Info,
             "runtime", "runtime.initialized", "Runtime initialized");
+        diagnosticService_.Identify("runtime");
         diagnosticService_.StartLocalEndpoint(38742);
 
         // This is retained for existing engine-internal/unsafe Wicked Lua
@@ -332,6 +334,7 @@ namespace renegade::runtime
 
     void RuntimeApplication::Update(const float dt)
     {
+        UpdateLiveDiagnostics();
         // Keep Wicked's device refresh alive while paused, but give the active
         // 3D path zero simulation time. Physics simulation is also explicitly
         // disabled by SetPaused(), so Runtime has one deterministic pause owner.
@@ -413,6 +416,8 @@ namespace renegade::runtime
         const auto resolved = bridge::ResolvePlayerStart(scenes_.GetScene());
         if (resolved.resolution == bridge::PlayerStartResolution::Missing)
         {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Info, "RuntimeApplication.cpp:SyncPlayerForScene",
+                "player.start.missing", "No Player Start; spectator camera retained");
             wi::backlog::post(
                 "Renegade Runtime: Level has no Player Start; retaining the legacy spectator camera.",
                 wi::backlog::LogLevel::Default);
@@ -420,6 +425,8 @@ namespace renegade::runtime
         }
         if (resolved.resolution != bridge::PlayerStartResolution::Success)
         {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error, "RuntimeApplication.cpp:SyncPlayerForScene",
+                "player.start.invalid", resolved.message);
             wi::backlog::post(
                 "Renegade Runtime: " + resolved.message,
                 wi::backlog::LogLevel::Error);
@@ -436,6 +443,8 @@ namespace renegade::runtime
                 error,
                 playerSettings_))
         {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error, "RuntimeApplication.cpp:SyncPlayerForScene",
+                "player.spawn.failed", error);
             wi::backlog::post(
                 "Renegade Runtime: could not possess Player Start: " + error,
                 wi::backlog::LogLevel::Error);
@@ -488,6 +497,8 @@ namespace renegade::runtime
                 startupResult_.project.rootPath,
                 error))
         {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error, "RuntimeApplication.cpp:SyncCreatorScriptsForScene",
+                "script.start.failed", error);
             wi::backlog::post(
                 "Renegade Runtime: governed creator scripts could not start: " +
                     error,

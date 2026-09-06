@@ -56,6 +56,7 @@ namespace renegade::studio
         void BindSession(bridge::StudioSession& session) noexcept;
         void SetExitRequestHandler(std::function<void()> handler);
         void RequestExit();
+        void UpdateLiveDiagnostics(const char* outerWorkspace);
         void BindDiagnostics(
             wi::Application::InfoDisplayer& diagnostics) noexcept;
         void DeleteGPUResources() override;
@@ -749,7 +750,15 @@ namespace renegade::studio
             std::function<void()> continuation);
 
         bridge::StudioSession* session_ = nullptr;
+        bool DiagnosticImportActive() const;
+        void InitializeLiveDiagnostics();
+        void RequestDiagnosticAction(EditorAction action);
+        void TraceDiagnosticAction(EditorAction action, const char* stage);
+        static const char* DiagnosticActionName(EditorAction action);
+        bridge::DiagnosticState CaptureVegetationDiagnostics() const;
         bridge::DiagnosticService diagnosticService_;
+        std::uint64_t lastDiagnosticSampleMs_ = 0;
+        std::uint64_t diagnosticActionSequence_ = 0;
         wi::Application::InfoDisplayer* diagnostics_ = nullptr;
         wi::gui::Window toolbarPanel_;
         wi::gui::Label workspaceTitle_;
@@ -1316,6 +1325,8 @@ namespace renegade::studio
                 storyFlowRenderer_,
                 screenEditorRenderer_,
                 session_);
+            renderer_.UpdateLiveDiagnostics(GetActivePath() == &storyFlowRenderer_ ? "story_flow" :
+                GetActivePath() == &screenEditorRenderer_ ? "screen_editor" : "level_editor");
         }
 
     private:

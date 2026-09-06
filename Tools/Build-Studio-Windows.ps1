@@ -275,6 +275,7 @@ try {
         $lc01ToolRoot = Join-Path $packageRoot "Tools"
         $lc01FixtureRoot = Join-Path $packageRoot "Proof\LC01"
         New-Item -ItemType Directory -Path $lc01ToolRoot -Force | Out-Null
+        Copy-Item -Path (Join-Path $repositoryRoot "Tools\Read-RenegadeDiagnostics.py") -Destination $lc01ToolRoot -Force
         New-Item -ItemType Directory -Path $lc01FixtureRoot -Force | Out-Null
         $packagedAssetRegistryProof = Join-Path `
             $lc01ToolRoot `

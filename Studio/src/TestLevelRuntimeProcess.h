@@ -83,6 +83,7 @@ namespace renegade::studio
         [[nodiscard]] TestLevelProcessResult Poll();
         [[nodiscard]] TestLevelProcessResult Stop();
 
+        [[nodiscard]] std::uint32_t ProcessId() const noexcept;
         [[nodiscard]] bool IsActive() const noexcept;
         [[nodiscard]] const TestLevelProcessResult& LastResult() const noexcept;
 
