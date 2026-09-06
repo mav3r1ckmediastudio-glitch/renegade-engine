@@ -87,6 +87,13 @@ namespace renegade::runtime
         [[nodiscard]] std::uint64_t Generation() const noexcept;
         [[nodiscard]] std::size_t ActiveInstanceCount() const noexcept;
         [[nodiscard]] std::size_t DisabledInstanceCount() const noexcept;
+        [[nodiscard]] std::size_t PendingEventCount() const noexcept;
+        [[nodiscard]] std::size_t DroppedEventCount() const noexcept;
+        [[nodiscard]] std::uint64_t DispatchedEventCount() const noexcept;
+        [[nodiscard]] std::uint64_t EventDeliveryAttemptCount() const noexcept;
+        [[nodiscard]] std::uint64_t LastEventSequence() const noexcept;
+        [[nodiscard]] std::string LastEventName() const;
+        [[nodiscard]] std::string LastEventTarget() const;
         [[nodiscard]] const std::vector<RuntimeScriptDiagnostic>&
             Diagnostics() const noexcept;
 
