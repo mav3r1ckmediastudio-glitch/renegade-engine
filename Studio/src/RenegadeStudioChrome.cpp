@@ -1092,6 +1092,11 @@ namespace renegade::studio
         statusText_ = std::move(statusText);
     }
 
+    void RenegadeStudioChrome::SetDiagnosticText(std::string diagnosticText)
+    {
+        diagnosticText_ = std::move(diagnosticText);
+    }
+
     void RenegadeStudioChrome::SetSelectionName(std::string selectionName)
     {
         selectionName_ = std::move(selectionName);
@@ -3167,7 +3172,8 @@ namespace renegade::studio
             }
             else
             {
-                const std::string message = activeBottomTab_ == 1
+                const std::string message = activeBottomTab_ == 3 && !diagnosticText_.empty()
+                    ? diagnosticText_ : activeBottomTab_ == 1
                     ? "Console connected. No messages in this session."
                     : "Runtime diagnostics are shown here when available.";
                 DrawText(
