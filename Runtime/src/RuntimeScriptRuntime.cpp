@@ -1,6 +1,7 @@
 #include "RuntimeScriptRuntime.h"
 #include "RuntimeScriptEntityApi.h"
 
+#include "renegade/bridge/GameplayEventService.h"
 #include "renegade/bridge/IdentityService.h"
 
 #include <wiLua.h>
@@ -185,6 +186,7 @@ namespace renegade::runtime
             bool hasOnReset = false;
             bool hasOnStop = false;
             bool hasOnUpdate = false;
+            bool hasOnEvent = false;
         };
 
         lua_State* lua = nullptr;
@@ -197,6 +199,12 @@ namespace renegade::runtime
         std::vector<Instance> instances;
         std::unordered_map<bridge::StableId, wi::ecs::Entity> entitiesById;
         std::vector<RuntimeScriptDiagnostic> diagnostics;
+        bridge::GameplayEventService gameplayEvents;
+        std::uint64_t dispatchedEventCount = 0;
+        std::uint64_t eventDeliveryAttemptCount = 0;
+        std::uint64_t lastEventSequence = 0;
+        std::string lastEventName;
+        std::string lastEventTarget;
 
         const bridge::RuntimePlayerState* playerState = nullptr;
         const bridge::GameplayInputFrame* gameplayInput = nullptr;
@@ -922,6 +930,93 @@ namespace renegade::runtime
             return 1;
         }
 
+        bool EnqueueGameplayEventForLua(
+            lua_State* state,
+            const char* instanceId,
+            const bool targeted)
+        {
+            std::string error;
+            Instance* instance = instanceId == nullptr
+                ? nullptr
+                : FindInstance(instanceId);
+            if (!running || instance == nullptr || instance->failed)
+            {
+                error = "Gameplay events are not bound to an active script instance.";
+            }
+
+            const int nameIndex = targeted ? 2 : 1;
+            const int payloadIndex = targeted ? 3 : 2;
+            if (error.empty() &&
+                (lua_type(state, nameIndex) != LUA_TSTRING ||
+                 lua_type(state, payloadIndex) != LUA_TSTRING))
+            {
+                error = targeted
+                    ? "renegade.events.send(entity,name,payload) expects string name and payload."
+                    : "renegade.events.emit(name,payload) expects string name and payload.";
+            }
+
+            bridge::GameplayEvent event;
+            if (error.empty())
+            {
+                std::size_t nameLength = 0;
+                std::size_t payloadLength = 0;
+                const char* name = lua_tolstring(state, nameIndex, &nameLength);
+                const char* payload = lua_tolstring(state, payloadIndex, &payloadLength);
+                event.name.assign(name == nullptr ? "" : name, nameLength);
+                event.payload.assign(payload == nullptr ? "" : payload, payloadLength);
+                if (instance->attachment.scope == bridge::ScriptScope::Entity)
+                    event.senderEntityId = instance->attachment.ownerEntityId;
+
+                if (targeted)
+                {
+                    auto* target = static_cast<EntityRefPayload*>(
+                        luaL_testudata(state, 1, EntityRefMetatable));
+                    if (target == nullptr || target->owner != this ||
+                        !IsLiveEntityRef(*target))
+                    {
+                        error = "renegade.events.send target must be a live Renegade EntityRef.";
+                    }
+                    else
+                    {
+                        event.targetEntityId = target->stableId;
+                    }
+                }
+            }
+
+            const bool succeeded = error.empty() &&
+                gameplayEvents.Enqueue(std::move(event), error);
+            if (!succeeded)
+                return PushFalseError(state, error);
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+
+        static int EventEmitLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            const char* instanceId = lua_tostring(state, lua_upvalueindex(2));
+            if (owner == nullptr)
+            {
+                lua_pushboolean(state, 0);
+                lua_pushliteral(state, "Gameplay event Runtime context is unavailable.");
+                return 2;
+            }
+            return owner->EnqueueGameplayEventForLua(state, instanceId, false);
+        }
+
+        static int EventSendLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            const char* instanceId = lua_tostring(state, lua_upvalueindex(2));
+            if (owner == nullptr)
+            {
+                lua_pushboolean(state, 0);
+                lua_pushliteral(state, "Gameplay event Runtime context is unavailable.");
+                return 2;
+            }
+            return owner->EnqueueGameplayEventForLua(state, instanceId, true);
+        }
+
         // This helper may use normal C++ objects because it always returns
         // normally. It leaves either the required module value or an error
         // string on the Lua stack for RequireLua to consume.
@@ -1104,6 +1199,25 @@ namespace renegade::runtime
             lua_pushcclosure(lua, InputWasPressedLua, 1);
             lua_setfield(lua, -2, "was_pressed");
             lua_setfield(lua, -2, "input");
+
+            lua_newtable(lua);
+            lua_pushinteger(lua, 1);
+            lua_setfield(lua, -2, "contract_version");
+            lua_pushlightuserdata(lua, this);
+            lua_pushlstring(
+                lua,
+                instance.attachment.scriptInstanceId.data(),
+                instance.attachment.scriptInstanceId.size());
+            lua_pushcclosure(lua, EventEmitLua, 2);
+            lua_setfield(lua, -2, "emit");
+            lua_pushlightuserdata(lua, this);
+            lua_pushlstring(
+                lua,
+                instance.attachment.scriptInstanceId.data(),
+                instance.attachment.scriptInstanceId.size());
+            lua_pushcclosure(lua, EventSendLua, 2);
+            lua_setfield(lua, -2, "send");
+            lua_setfield(lua, -2, "events");
 
             lua_setfield(lua, environmentIndex, "renegade");
 
@@ -1382,7 +1496,8 @@ namespace renegade::runtime
                 CheckCallback(instance, "on_resume", instance.hasOnResume) &&
                 CheckCallback(instance, "on_reset", instance.hasOnReset) &&
                 CheckCallback(instance, "on_stop", instance.hasOnStop) &&
-                CheckCallback(instance, "on_update", instance.hasOnUpdate);
+                CheckCallback(instance, "on_update", instance.hasOnUpdate) &&
+                CheckCallback(instance, "on_event", instance.hasOnEvent);
         }
 
         bool Invoke(
@@ -1416,6 +1531,71 @@ namespace renegade::runtime
                 Record(instance, callback, std::move(callbackError));
             lua_settop(lua, base);
             return succeeded;
+        }
+
+        void PushGameplayEvent(const bridge::GameplayEvent& event)
+        {
+            lua_createtable(lua, 0, 5);
+            lua_pushlstring(lua, event.name.data(), event.name.size());
+            lua_setfield(lua, -2, "name");
+            lua_pushlstring(lua, event.payload.data(), event.payload.size());
+            lua_setfield(lua, -2, "payload");
+            lua_pushinteger(lua, static_cast<lua_Integer>(event.sequence));
+            lua_setfield(lua, -2, "sequence");
+            PushEntityRef(event.senderEntityId);
+            lua_setfield(lua, -2, "sender");
+            PushEntityRef(event.targetEntityId);
+            lua_setfield(lua, -2, "target");
+        }
+
+        bool InvokeEvent(
+            Instance& instance,
+            const bridge::GameplayEvent& event)
+        {
+            if (instance.failed || !instance.hasOnEvent ||
+                instance.lifecycleReference == LUA_NOREF ||
+                instance.contextReference == LUA_NOREF)
+                return !instance.failed;
+
+            const int base = lua_gettop(lua);
+            lua_rawgeti(lua, LUA_REGISTRYINDEX, instance.lifecycleReference);
+            lua_getfield(lua, -1, "on_event");
+            lua_rawgeti(lua, LUA_REGISTRYINDEX, instance.contextReference);
+            PushGameplayEvent(event);
+
+            std::string callbackError;
+            const bool succeeded = ProtectedCall(2, 0, callbackError);
+            if (!succeeded)
+                Record(instance, "on_event", std::move(callbackError));
+            lua_settop(lua, base);
+            return succeeded;
+        }
+
+        void DispatchGameplayEvents()
+        {
+            const std::size_t phaseCount = gameplayEvents.Size();
+            for (std::size_t index = 0; index < phaseCount; ++index)
+            {
+                bridge::GameplayEvent event;
+                if (!gameplayEvents.TryDequeue(event))
+                    break;
+
+                ++dispatchedEventCount;
+                lastEventSequence = event.sequence;
+                lastEventName = event.name;
+                lastEventTarget = event.targetEntityId;
+
+                for (auto& instance : instances)
+                {
+                    if (instance.failed || !instance.hasOnEvent)
+                        continue;
+                    if (!event.targetEntityId.empty() &&
+                        instance.attachment.ownerEntityId != event.targetEntityId)
+                        continue;
+                    ++eventDeliveryAttemptCount;
+                    (void)InvokeEvent(instance, event);
+                }
+            }
         }
 
         const bridge::ScriptDependency* ResolveModuleDependency(
@@ -1609,6 +1789,12 @@ namespace renegade::runtime
         {
             StopScene();
             diagnostics.clear();
+            gameplayEvents.Clear();
+            dispatchedEventCount = 0;
+            eventDeliveryAttemptCount = 0;
+            lastEventSequence = 0;
+            lastEventName.clear();
+            lastEventTarget.clear();
             ++generation;
             scene = &activeScene;
             projectRoot = std::move(root);
@@ -1688,6 +1874,7 @@ namespace renegade::runtime
             {
                 instances.clear();
                 entitiesById.clear();
+                gameplayEvents.Clear();
                 scene = nullptr;
                 projectRoot.clear();
                 running = false;
@@ -1706,6 +1893,7 @@ namespace renegade::runtime
             }
             ReleaseInstances();
             entitiesById.clear();
+            gameplayEvents.Clear();
             scene = nullptr;
             projectRoot.clear();
             if (running)
@@ -1850,6 +2038,7 @@ namespace renegade::runtime
     {
         if (!impl_->running || impl_->paused || impl_->lua == nullptr)
             return;
+        impl_->DispatchGameplayEvents();
         const float safeDelta = std::clamp(
             std::isfinite(dt) ? dt : 0.0f,
             0.0f,
@@ -1962,6 +2151,41 @@ namespace renegade::runtime
             {
                 return instance.failed;
             }));
+    }
+
+    std::size_t RuntimeScriptRuntime::PendingEventCount() const noexcept
+    {
+        return impl_ == nullptr ? 0 : impl_->gameplayEvents.Size();
+    }
+
+    std::size_t RuntimeScriptRuntime::DroppedEventCount() const noexcept
+    {
+        return impl_ == nullptr ? 0 : impl_->gameplayEvents.DroppedCount();
+    }
+
+    std::uint64_t RuntimeScriptRuntime::DispatchedEventCount() const noexcept
+    {
+        return impl_ == nullptr ? 0 : impl_->dispatchedEventCount;
+    }
+
+    std::uint64_t RuntimeScriptRuntime::EventDeliveryAttemptCount() const noexcept
+    {
+        return impl_ == nullptr ? 0 : impl_->eventDeliveryAttemptCount;
+    }
+
+    std::uint64_t RuntimeScriptRuntime::LastEventSequence() const noexcept
+    {
+        return impl_ == nullptr ? 0 : impl_->lastEventSequence;
+    }
+
+    std::string RuntimeScriptRuntime::LastEventName() const
+    {
+        return impl_ == nullptr ? std::string() : impl_->lastEventName;
+    }
+
+    std::string RuntimeScriptRuntime::LastEventTarget() const
+    {
+        return impl_ == nullptr ? std::string() : impl_->lastEventTarget;
     }
 
     const std::vector<RuntimeScriptDiagnostic>&
