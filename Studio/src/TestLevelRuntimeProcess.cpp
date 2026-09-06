@@ -991,3 +991,11 @@ namespace renegade::studio
         return OwnershipMarker;
     }
 }
+
+namespace renegade::studio
+{
+    std::uint32_t TestLevelRuntimeProcess::ProcessId() const noexcept
+    {
+        return implementation_ && implementation_->process ? GetProcessId(implementation_->process) : 0;
+    }
+}

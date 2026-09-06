@@ -1,0 +1,38 @@
+if(NOT DEFINED RENEGADE_SOURCE_DIR)
+    message(FATAL_ERROR "RENEGADE_SOURCE_DIR is required")
+endif()
+
+file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/GameplayEventService.h" event_h)
+file(READ "${RENEGADE_SOURCE_DIR}/EngineBridge/src/GameplayEventService.cpp" event_c)
+file(READ "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeScriptRuntime.cpp" runtime_c)
+file(READ "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeLiveDiagnostics.cpp" runtime_diag)
+file(READ "${RENEGADE_SOURCE_DIR}/Tests/S5CGameplayEventRuntimeTests.cpp" runtime_test)
+
+function(require_text text_var needle label)
+    string(FIND "${${text_var}}" "${needle}" index)
+    if(index EQUAL -1)
+        message(FATAL_ERROR "S5C contract missing ${label}: ${needle}")
+    endif()
+endfunction()
+
+foreach(name IN ITEMS "MaxEvents" "MaxPayloadLength" "TryDequeue" "DroppedCount")
+    require_text(event_h "${name}" "queue contract ${name}")
+endforeach()
+require_text(event_c "queue is full" "overflow rejection")
+
+require_text(runtime_c "EventEmitLua" "renegade.events.emit bridge")
+require_text(runtime_c "EventSendLua" "renegade.events.send bridge")
+require_text(runtime_c "\"events\"" "events namespace registration")
+require_text(runtime_c "\"on_event\"" "on_event lifecycle callback")
+require_text(runtime_c "DispatchGameplayEvents" "Runtime dispatch phase")
+require_text(runtime_c "const std::size_t phaseCount = gameplayEvents.Size();" "reentrant phase boundary")
+require_text(runtime_c "instance.attachment.ownerEntityId != event.targetEntityId" "targeted entity routing")
+require_text(runtime_diag "event_queue_depth" "live event queue diagnostics")
+require_text(runtime_diag "events_dispatched" "live event dispatch diagnostics")
+
+require_text(runtime_test "renegade.events.emit" "Lua broadcast acceptance")
+require_text(runtime_test "renegade.events.send" "Lua targeted acceptance")
+require_text(runtime_test "reentrant targeted event was not deferred" "reentrant acceptance")
+require_text(runtime_test "failing recipient was not isolated" "recipient isolation acceptance")
+
+message(STATUS "S5C gameplay event source contract passed")

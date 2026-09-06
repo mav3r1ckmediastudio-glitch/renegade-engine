@@ -13,6 +13,20 @@ set_target_properties(RenegadeBridgeTests PROPERTIES
 
 add_test(NAME RenegadeBridgeTests COMMAND RenegadeBridgeTests)
 
+add_executable(RenegadeDiagnosticServiceTests DiagnosticServiceTests.cpp)
+target_link_libraries(RenegadeDiagnosticServiceTests PRIVATE Renegade::EngineBridge)
+set_target_properties(RenegadeDiagnosticServiceTests PROPERTIES FOLDER "Renegade/Tests")
+add_test(NAME RenegadeDiagnosticServiceTests COMMAND RenegadeDiagnosticServiceTests)
+if(WIN32)
+    target_link_libraries(RenegadeDiagnosticServiceTests PRIVATE ws2_32)
+endif()
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME RenegadeDiagnosticReaderTests
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/ReadRenegadeDiagnosticsTests.py")
+endif()
+
+
 add_executable(RenegadeDependencyTests
     DependencyTests.cpp
 )

@@ -1092,6 +1092,11 @@ namespace renegade::studio
         statusText_ = std::move(statusText);
     }
 
+    void RenegadeStudioChrome::SetDiagnosticText(std::string diagnosticText)
+    {
+        diagnosticText_ = std::move(diagnosticText);
+    }
+
     void RenegadeStudioChrome::SetSelectionName(std::string selectionName)
     {
         selectionName_ = std::move(selectionName);
@@ -3167,13 +3172,21 @@ namespace renegade::studio
             }
             else
             {
-                const std::string message = activeBottomTab_ == 1
+                const std::string message = activeBottomTab_ == 3 && !diagnosticText_.empty()
+                    ? diagnosticText_ : activeBottomTab_ == 1
                     ? "Console connected. No messages in this session."
                     : "Runtime diagnostics are shown here when available.";
-                DrawText(
-                    message,
-                    hierarchyWidth_ + 16.0f, drawerTop + 55.0f,
-                    SceneChromeSmallTextSize, TextSecondary, cmd, 0.0f, 0.18f);
+                const auto lines = WrapTextLines(message,
+                    std::max<std::size_t>(20, static_cast<std::size_t>(
+                        std::floor((inspectorX - hierarchyWidth_ - 32.0f) / 7.2f))));
+                float lineY = drawerTop + 55.0f;
+                for (const auto& line : lines)
+                {
+                    if (lineY + 14.0f >= bottomTabsTop - 6.0f) break;
+                    DrawText(line, hierarchyWidth_ + 16.0f, lineY,
+                        SceneChromeSmallTextSize, TextSecondary, cmd, 0.0f, 0.18f);
+                    lineY += 14.0f;
+                }
             }
         }
 

@@ -14,6 +14,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/AudioService.h
     include/renegade/bridge/DecalProbeService.h
     include/renegade/bridge/CommandService.h
+    include/renegade/bridge/DiagnosticService.h
     include/renegade/bridge/CreatorAssetActionPolicy.h
     include/renegade/bridge/CreatorAssetWorkflowService.h
     include/renegade/bridge/CreatorModelImportRecipe.h
@@ -80,6 +81,8 @@ add_library(RenegadeEngineBridge STATIC
     src/AudioService.cpp
     src/DecalProbeService.cpp
     src/CommandService.cpp
+    src/DiagnosticService.cpp
+    src/DiagnosticEndpoint.cpp
     src/CreatorAssetWorkflowService.cpp
     src/CreatorModelImportRecipe.cpp
     src/CreatorModelMaterialDetectionService.cpp
@@ -124,6 +127,8 @@ add_library(RenegadeEngineBridge STATIC
     src/PhysicsService.cpp
     src/PlayerService.cpp
     src/GameplayInputService.cpp
+    include/renegade/bridge/GameplayEventService.h
+    src/GameplayEventService.cpp
     src/OceanService.cpp
     src/PrecipitationService.cpp
     src/SunService.cpp
@@ -178,6 +183,7 @@ target_link_libraries(RenegadeEngineBridge
 )
 
 if(WIN32)
+    target_link_libraries(RenegadeEngineBridge PRIVATE ws2_32)
     # LP06 packaging is Windows-first. Keep its Win32/BCrypt implementation out
     # of non-Windows EngineBridge configuration while retaining shared public
     # contracts for the Windows Runtime and build pipeline.
@@ -194,3 +200,13 @@ endif()
 set_target_properties(RenegadeEngineBridge PROPERTIES
     FOLDER "Renegade"
 )
+
+# One embedded source identity shared by Studio and Runtime diagnostics.
+find_package(Git REQUIRED)
+execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE RENEGADE_DIAGNOSTIC_REVISION OUTPUT_STRIP_TRAILING_WHITESPACE
+    COMMAND_ERROR_IS_FATAL ANY)
+target_compile_definitions(RenegadeEngineBridge PRIVATE
+    RENEGADE_DIAGNOSTIC_REVISION="${RENEGADE_DIAGNOSTIC_REVISION}"
+    RENEGADE_DIAGNOSTIC_CONFIGURATION="$<CONFIG>")

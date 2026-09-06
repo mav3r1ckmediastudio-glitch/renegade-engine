@@ -141,3 +141,38 @@ add_test(
     NAME RenegadeS5BGameplayLifecycleTests
     COMMAND RenegadeS5BGameplayLifecycleTests
 )
+
+# S5C: prove the actual governed Lua bridge rather than the queue in isolation.
+# The fixture broadcasts between two healthy instances, isolates a failing
+# recipient, targets a reply, and proves reentrant events defer one phase.
+add_executable(RenegadeS5CGameplayEventRuntimeTests
+    ${CMAKE_CURRENT_LIST_DIR}/S5CGameplayEventRuntimeTests.cpp
+)
+
+target_link_libraries(
+    RenegadeS5CGameplayEventRuntimeTests
+    PRIVATE
+        Renegade::RuntimeBootstrap
+)
+
+target_compile_options(
+    RenegadeS5CGameplayEventRuntimeTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(
+    RenegadeS5CGameplayEventRuntimeTests
+    PROPERTIES
+        FOLDER "Renegade/Tests"
+)
+
+add_dependencies(
+    RenegadeBridgeTests
+    RenegadeS5CGameplayEventRuntimeTests
+)
+
+add_test(
+    NAME RenegadeS5CGameplayEventRuntimeTests
+    COMMAND RenegadeS5CGameplayEventRuntimeTests
+)

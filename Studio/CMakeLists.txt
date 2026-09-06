@@ -112,6 +112,7 @@ add_executable(RenegadeStudio WIN32
     src/Phase5Gate7RayPathTracing.cpp
     src/WD01Vegetation.cpp
     src/StudioApplication.cpp
+    src/StudioLiveDiagnostics.cpp
     src/StudioApplication.h
     src/StudioUserPreferences.cpp
     src/StudioUserPreferences.h

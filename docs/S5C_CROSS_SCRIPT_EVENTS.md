@@ -1,0 +1,6 @@
+# S5C — governed cross-script events
+S5C adds a bounded deterministic FIFO event gate for Runtime creator scripts. Events are transient and never serialized.
+The engine contract is GameplayEventService: producers enqueue a name, UTF-8 payload, and opaque sender/target entity identities. Names are 1–64 bytes, payloads are capped at 4096 bytes, and the queue holds 1024 events. Overflow is rejected and counted.
+Runtime drains the queue at the start of the governed update phase in sequence order. Targeted events go only to the matching live entity owner; broadcasts go to every eligible script instance. A failing recipient is disabled and diagnosed without suppressing other recipients. Reentrant events are deferred to the next phase.
+The Lua surface is renegade.events.emit(name,payload) and renegade.events.send(entity,name,payload); scripts implement on_event(self,event), whose fields are name,payload,sequence,sender,target.
+S5C does not add asset loading, physics, networking, or persistence.

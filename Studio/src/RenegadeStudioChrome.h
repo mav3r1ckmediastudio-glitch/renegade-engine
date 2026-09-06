@@ -324,6 +324,7 @@ namespace renegade::studio
         void SetSceneName(std::string sceneName);
         void SetSceneDirty(bool dirty) noexcept;
         void SetStatusText(std::string statusText);
+        void SetDiagnosticText(std::string diagnosticText);
         void SetSelectionName(std::string selectionName);
         void SetActiveTool(int toolIndex) noexcept;
         void SetHierarchyFilter(std::string filter);
@@ -504,6 +505,7 @@ namespace renegade::studio
         std::string sceneName_ = "PROVING GROUND";
         bool sceneDirty_ = false;
         std::string statusText_ = "STUDIO READY";
+        std::string diagnosticText_;
         std::string selectionName_;
         std::string hierarchyFilter_;
         std::string assetBrowserCurrentPath_ = "Content";

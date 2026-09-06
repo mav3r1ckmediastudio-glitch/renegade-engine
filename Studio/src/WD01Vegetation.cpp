@@ -727,3 +727,13 @@ namespace renegade::studio
     }
 
 }
+
+namespace renegade::studio
+{
+    bridge::DiagnosticState StudioRenderPath::CaptureVegetationDiagnostics() const
+    {
+        return {{"brush_active", controls && controls->brushActive},
+            {"stroke_active", controls && controls->strokeActive},
+            {"mode", controls && controls->mode == bridge::VegetationBrushMode::Paint ? std::string("paint") : std::string("erase")}};
+    }
+}

@@ -634,3 +634,18 @@ hints rather than reference authority. Normal duplication regenerates IDs for
 all newly created entities, while Undo/Redo restores the assigned identities.
 The LF01 document-envelope writer is deliberately non-transactional; backup,
 rollback, migration chains and project-wide commit remain LF02.
+
+
+## Local live diagnostics (candidate)
+
+DiagnosticService is the shared read-only evidence store for Studio and Runtime.
+Dedicated StudioLiveDiagnostics/RuntimeLiveDiagnostics units copy bounded state
+on the application thread; DiagnosticEndpoint only reads those copies. Local
+HTTP binds exclusively to loopback, supports no commands, and never reads ECS
+from a network thread. Runtime evidence is polled/cached off the render thread;
+the previous shared temporary diagnostic file is no longer an authority.
+The existing Diagnostics tab projects bounded summaries from these same stores.
+No upstream changes, project serialization, API key or cloud service is involved.
+A local coding agent must run on the machine hosting the executable: this does
+not connect cloud sessions to an owner's localhost. See LIVE_DIAGNOSTIC_ACCESS.md
+for schema, limits, reader and outstanding acceptance proof.

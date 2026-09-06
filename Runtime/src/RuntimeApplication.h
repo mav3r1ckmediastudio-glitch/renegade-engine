@@ -8,6 +8,7 @@
 #include "RuntimeScreen.h"
 #include "RuntimeScriptRuntime.h"
 #include "renegade/bridge/AudioService.h"
+#include "renegade/bridge/DiagnosticService.h"
 #include "renegade/bridge/GameplayInputService.h"
 #include "renegade/bridge/RenderSettingsService.h"
 #include "renegade/bridge/RenderLutService.h"
@@ -78,6 +79,9 @@ namespace renegade::runtime
         void ReportCreatorScriptDiagnostics();
 
         bridge::SceneService scenes_;
+        void UpdateLiveDiagnostics();
+        std::uint64_t lastDiagnosticSampleMs_ = 0;
+        bridge::DiagnosticService diagnosticService_;
         RuntimeFlowController flow_;
         RuntimeRenderPath renderer_;
         RuntimeScreenController screenController_;
