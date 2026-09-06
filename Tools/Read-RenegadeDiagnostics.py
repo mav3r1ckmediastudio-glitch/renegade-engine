@@ -31,10 +31,19 @@ def read_snapshot(kind, port, timeout=2.0):
             raise ValueError("process identity must be an object")
         if identity.get("type") != kind:
             raise ValueError("endpoint process type does not match requested process")
-        age = snapshot["heartbeat_age_ms"]
+        age = snapshot.get("application_heartbeat_age_ms", snapshot.get("heartbeat_age_ms"))
         if not isinstance(age, int) or age < 0:
-            raise ValueError("invalid heartbeat age")
-        return {"available": True, "responsive": age <= 2000, "snapshot": snapshot}
+            raise ValueError("invalid application heartbeat age")
+        foreground = snapshot.get("process_foreground")
+        suspended_unfocused = kind == "runtime" and foreground is False and age > 2000
+        return {
+            "available": True,
+            "responsive": age <= 2000 or suspended_unfocused,
+            "transport_responsive": bool(snapshot.get("transport_alive", True)),
+            "application_responsive": age <= 2000,
+            "suspended_unfocused": suspended_unfocused,
+            "snapshot": snapshot,
+        }
     except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException) as error:
         return {"available": False, "error": str(error)}
     finally:
