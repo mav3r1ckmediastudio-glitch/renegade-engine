@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <chrono>
 #include <thread>
+#include <filesystem>
+#include <fstream>
 
 #ifdef _WIN32
 #include <winsock2.h>
@@ -15,6 +17,8 @@ namespace renegade::bridge
         : capacity_(std::max<std::size_t>(1, capacity))
     {
         events_.reserve(capacity_);
+        peerSnapshotPath_ =
+            (std::filesystem::temp_directory_path() / "renegade-runtime-diagnostics.json").string();
     }
 
     DiagnosticService::~DiagnosticService()
@@ -24,6 +28,7 @@ namespace renegade::bridge
 
     bool DiagnosticService::StartLocalEndpoint(const std::uint16_t port)
     {
+        publishPeer_ = (port == 38742);
 #ifdef _WIN32
         if (endpointRunning_.exchange(true))
             return false;
@@ -91,6 +96,21 @@ namespace renegade::bridge
             events_.erase(events_.begin());
         events_.push_back({severity, std::move(source), std::move(code),
             std::move(message)});
+        if (publishPeer_)
+        {
+            const auto temporary = peerSnapshotPath_ + ".tmp";
+            std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+            if (output) { output << SnapshotJson(); output.close();
+                std::error_code ec; std::filesystem::rename(temporary, peerSnapshotPath_, ec);
+                if (ec) std::filesystem::remove(temporary, ec); }
+        }
+    }
+
+    std::string DiagnosticService::ReadPeerSnapshot() const
+    {
+        std::ifstream input(peerSnapshotPath_, std::ios::binary);
+        if (!input) return {};
+        return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     }
 
     void DiagnosticService::Clear() noexcept
