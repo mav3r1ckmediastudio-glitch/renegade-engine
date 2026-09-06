@@ -14,6 +14,8 @@ spec.loader.exec_module(reader)
 
 def snapshot(kind="studio", commit="a" * 40, pid=1):
     return {"schema": "renegade.diagnostics.v2", "heartbeat_age_ms": 0,
+            "application_heartbeat_age_ms": 0, "transport_alive": True,
+            "process_foreground": True,
             "state": {"process": {"type": kind, "build_commit": commit, "pid": pid}}, "events": []}
 
 
@@ -43,13 +45,29 @@ class ReaderTests(unittest.TestCase):
     def test_identity_staleness_and_state(self):
         value = snapshot()
         value["heartbeat_age_ms"] = 10000
+        value["application_heartbeat_age_ms"] = 10000
         value["state"]["last_action"] = {"stage": "blocked", "reason": "test consumer unavailable"}
         with serve(value) as port:
             result = reader.collect("studio", port)
         self.assertTrue(result["studio"]["available"])
         self.assertFalse(result["studio"]["responsive"])
+        self.assertTrue(result["studio"]["transport_responsive"])
+        self.assertFalse(result["studio"]["application_responsive"])
         self.assertEqual(result["studio"]["snapshot"]["state"]["last_action"]["stage"], "blocked")
         self.assertEqual(len(result["findings"]), 1)
+
+    def test_unfocused_runtime_suspension_is_not_a_false_hang(self):
+        value = snapshot("runtime")
+        value["heartbeat_age_ms"] = 10000
+        value["application_heartbeat_age_ms"] = 10000
+        value["process_foreground"] = False
+        with serve(value) as port:
+            result = reader.collect("runtime", runtime_port=port)
+        self.assertTrue(result["runtime"]["available"])
+        self.assertTrue(result["runtime"]["responsive"])
+        self.assertFalse(result["runtime"]["application_responsive"])
+        self.assertTrue(result["runtime"]["suspended_unfocused"])
+        self.assertFalse(result["findings"])
 
     def test_wrong_process_and_schema_rejected(self):
         with serve(snapshot("runtime")) as port:
