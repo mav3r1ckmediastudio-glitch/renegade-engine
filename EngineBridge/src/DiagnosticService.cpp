@@ -6,6 +6,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #endif
@@ -33,6 +34,16 @@ namespace renegade::bridge
             return static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count());
         }
+#ifdef _WIN32
+        bool ProcessOwnsForegroundWindow() noexcept
+        {
+            const HWND foreground = GetForegroundWindow();
+            if (foreground == nullptr) return false;
+            DWORD foregroundPid = 0;
+            (void)GetWindowThreadProcessId(foreground, &foregroundPid);
+            return foregroundPid == GetCurrentProcessId();
+        }
+#endif
     }
 
     DiagnosticService::DiagnosticService(const std::size_t capacity)
@@ -157,9 +168,19 @@ namespace renegade::bridge
     {
         std::lock_guard lock(mutex_);
         const auto quote = [](const std::string& value) { return "\"" + EscapeJson(value) + "\""; };
-        std::string result = "{\"schema\":\"renegade.diagnostics.v2\",\"elapsed_ms\":" + std::to_string(ElapsedMs()) +
-            ",\"heartbeat_age_ms\":" + std::to_string(ElapsedMs() - heartbeatMs_) +
-            ",\"endpoint_port\":" + std::to_string(endpointPort_.load()) + ",\"state\":{";
+        const auto elapsed = ElapsedMs();
+        const auto applicationHeartbeatAge = elapsed - heartbeatMs_;
+        std::string result = "{\"schema\":\"renegade.diagnostics.v2\",\"elapsed_ms\":" + std::to_string(elapsed) +
+            ",\"heartbeat_age_ms\":" + std::to_string(applicationHeartbeatAge) +
+            ",\"application_heartbeat_age_ms\":" + std::to_string(applicationHeartbeatAge) +
+            ",\"transport_alive\":true";
+#ifdef _WIN32
+        result += std::string(",\"process_foreground\":") +
+            (ProcessOwnsForegroundWindow() ? "true" : "false");
+#else
+        result += ",\"process_foreground\":null";
+#endif
+        result += ",\"endpoint_port\":" + std::to_string(endpointPort_.load()) + ",\"state\":{";
         bool firstGroup = true;
         for (const auto& [group, fields] : state_)
         {
@@ -195,7 +216,7 @@ namespace renegade::bridge
     {
         std::lock_guard lock(mutex_);
         std::string text = endpointRunning_ ? "LIVE DIAGNOSTICS // 127.0.0.1:" + std::to_string(endpointPort_.load()) : "LIVE DIAGNOSTICS // endpoint unavailable";
-        text += " // heartbeat age " + std::to_string(ElapsedMs() - heartbeatMs_) + " ms";
+        text += " // app heartbeat age " + std::to_string(ElapsedMs() - heartbeatMs_) + " ms";
         const auto start = events_.size() > 8 ? events_.size() - 8 : 0;
         for (std::size_t i = events_.size(); i > start; --i)
         {
