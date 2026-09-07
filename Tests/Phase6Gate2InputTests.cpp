@@ -120,9 +120,9 @@ int main()
     // as the appended Action's default.
     {
         std::ifstream source(inputMapPath, std::ios::binary);
-        std::string legacyText(
+        std::string legacyText{
             std::istreambuf_iterator<char>(source),
-            std::istreambuf_iterator<char>());
+            std::istreambuf_iterator<char>()};
         const std::string interactHeader = "[action.interact]\n";
         const std::string pauseHeader = "[action.pause]\n";
         const auto first = legacyText.find(interactHeader);
