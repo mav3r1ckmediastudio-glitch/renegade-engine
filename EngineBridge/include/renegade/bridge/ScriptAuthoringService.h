@@ -19,6 +19,17 @@ namespace renegade::bridge
         std::string sourcePath;
         ScriptMetadataDescriptor metadata;
         ScriptSourceBinding binding;
+
+        // S6 Creator Library identity. Library rows project directly into the
+        // future project-owned Content/Scripts path; first attachment performs
+        // transactional adoption before the normal S2/S4 authoring command.
+        bool libraryEntry = false;
+        std::string libraryManifestPath;
+        std::string libraryEntryPath;
+        std::string libraryPackageId;
+        std::string libraryPackageVersion;
+        bool libraryAdopted = false;
+        bool libraryUpdateAvailable = false;
     };
 
     // Studio-facing document authority for creator scripting. The service owns
@@ -63,12 +74,17 @@ namespace renegade::bridge
         // Called after the WISCENE save succeeds. previousScenePath preserves
         // Save As semantics: an existing companion is cloned with a fresh
         // document envelope while ScriptInstanceId/sourceId identity remains
-        // stable in the copied Scene.
+        // stable in the copied Scene. S6 also registers the companion and the
+        // complete governed script/module closure as project build roots here,
+        // giving Build Game the same project-owned inputs as Test Level.
         [[nodiscard]] bool SaveForScene(
             const std::string& scenePath,
             const std::string& previousScenePath,
             std::string& error);
 
+        // Returns both project-owned sources and compatible installed Creator
+        // Library entries. Library entries remain immutable until first use;
+        // attachment adopts the complete package closure into Content/Scripts.
         [[nodiscard]] bool EnumerateProjectSources(
             ScriptPresentation presentation,
             std::vector<ScriptAuthoringSource>& sources,
@@ -112,6 +128,14 @@ namespace renegade::bridge
             std::string& error) const;
         [[nodiscard]] ScriptSourceBinding ResolveSourceBinding(
             const ScriptAuthoringSource& source) const;
+        [[nodiscard]] bool MaterializeLibrarySource(
+            const ScriptAuthoringSource& source,
+            ScriptAuthoringSource& materialized,
+            std::string& error) const;
+        [[nodiscard]] bool EnsureBuildClosureDeclarations(
+            const std::string& scriptDocumentPathHint,
+            const ScriptDocument& document,
+            std::string& error);
 
         SceneService* scenes_ = nullptr;
         ProjectService* projects_ = nullptr;
