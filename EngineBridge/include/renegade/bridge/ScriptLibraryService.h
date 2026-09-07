@@ -3,6 +3,7 @@
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/ScriptMetadataService.h"
 
+#include <iterator>
 #include <string>
 #include <vector>
 
