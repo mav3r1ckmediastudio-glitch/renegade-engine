@@ -28,6 +28,7 @@ namespace
     constexpr std::uint32_t LibraryLockSchemaVersion = 1;
     constexpr std::size_t MaximumPackageFiles = 2048;
     constexpr std::size_t MaximumManifestBytes = 1024u * 1024u;
+    constexpr const char* S7StockPackageId = "renegade.stock.actions.wave_a";
 
     struct PackageFile
     {
@@ -942,103 +943,159 @@ namespace renegade::bridge
         if (!ReadLock(projectRoot, lock, error))
             return false;
 
-        const std::string configuredRoot = installedLibraryRoot.empty()
-            ? DefaultInstalledLibraryRoot()
-            : installedLibraryRoot;
-        if (configuredRoot.empty())
+        struct LibraryRootCandidate
+        {
+            fs::path path;
+            bool builtIn = false;
+        };
+
+        std::vector<LibraryRootCandidate> roots;
+        const bool defaultDiscovery = installedLibraryRoot.empty();
+        if (!defaultDiscovery)
+        {
+            roots.push_back({ fs::u8path(installedLibraryRoot), false });
+        }
+        else
+        {
+            std::error_code cwdError;
+            const fs::path cwd = fs::current_path(cwdError);
+            if (!cwdError && !cwd.empty())
+            {
+                roots.push_back({
+                    (cwd / "Content" / "ScriptLibrary").lexically_normal(),
+                    true,
+                });
+            }
+
+            const std::string configuredRoot = DefaultInstalledLibraryRoot();
+            if (!configuredRoot.empty())
+            {
+                const fs::path configured =
+                    fs::u8path(configuredRoot).lexically_normal();
+                const std::string configuredKey =
+                    PathKey(configured.generic_u8string());
+                const bool alreadyPresent = std::any_of(
+                    roots.begin(), roots.end(),
+                    [&](const LibraryRootCandidate& candidate)
+                    {
+                        return PathKey(candidate.path.generic_u8string()) ==
+                            configuredKey;
+                    });
+                if (!alreadyPresent)
+                    roots.push_back({ configured, false });
+            }
+        }
+
+        if (roots.empty())
         {
             error.clear();
             return true;
         }
 
-        const fs::path root = fs::u8path(configuredRoot);
-        std::error_code ec;
-        if (!fs::exists(root, ec))
+        std::set<std::string> packageIds;
+        for (const LibraryRootCandidate& candidate : roots)
         {
-            if (ec)
+            const fs::path& root = candidate.path;
+            std::error_code ec;
+            if (!fs::exists(root, ec))
             {
-                error = "Could not inspect installed script library: " + ec.message();
+                if (ec)
+                {
+                    error = "Could not inspect installed script library: " +
+                        ec.message();
+                    return false;
+                }
+                continue;
+            }
+            if (!fs::is_directory(root, ec) || ec)
+            {
+                error = "Installed script library root is not a readable directory.";
                 return false;
             }
-            error.clear();
-            return true;
-        }
-        if (!fs::is_directory(root, ec) || ec)
-        {
-            error = "Installed script library root is not a readable directory.";
-            return false;
-        }
 
-        std::vector<fs::path> manifests;
-        fs::recursive_directory_iterator iterator(
-            root, fs::directory_options::skip_permission_denied, ec);
-        const fs::recursive_directory_iterator end;
-        if (ec)
-        {
-            error = "Could not enumerate installed script library: " + ec.message();
-            return false;
-        }
-        for (; iterator != end; iterator.increment(ec))
-        {
+            std::vector<fs::path> manifests;
+            fs::recursive_directory_iterator iterator(
+                root, fs::directory_options::skip_permission_denied, ec);
+            const fs::recursive_directory_iterator end;
             if (ec)
             {
                 error = "Could not enumerate installed script library: " + ec.message();
                 return false;
             }
-            std::error_code typeError;
-            if (!iterator->is_regular_file(typeError) || typeError)
-                continue;
-            if (iterator->path().filename() == ScriptLibraryPackageFilename)
-                manifests.push_back(iterator->path());
-        }
-        std::sort(manifests.begin(), manifests.end());
-
-        std::set<std::string> packageIds;
-        for (const fs::path& manifest : manifests)
-        {
-            PackageDocument package;
-            std::string packageError;
-            if (!ReadPackage(manifest, package, packageError))
+            for (; iterator != end; iterator.increment(ec))
             {
-                diagnostics.push_back(LibraryDiagnostic(
-                    "S6_LIBRARY_PACKAGE_INVALID",
-                    manifest.generic_u8string(),
-                    packageError));
-                continue;
+                if (ec)
+                {
+                    error = "Could not enumerate installed script library: " +
+                        ec.message();
+                    return false;
+                }
+                std::error_code typeError;
+                if (!iterator->is_regular_file(typeError) || typeError)
+                    continue;
+                if (iterator->path().filename() == ScriptLibraryPackageFilename)
+                    manifests.push_back(iterator->path());
             }
-            if (!packageIds.insert(package.packageId).second)
-            {
-                diagnostics.push_back(LibraryDiagnostic(
-                    "S6_LIBRARY_PACKAGE_ID_COLLISION",
-                    package.manifestPath,
-                    "Duplicate installed script package ID: " + package.packageId));
-                continue;
-            }
+            std::sort(manifests.begin(), manifests.end());
 
-            for (const auto& entryPath : package.entries)
+            for (const fs::path& manifest : manifests)
             {
-                ScriptLibraryEntry entry;
-                if (!BuildEntry(
-                        projectRoot,
-                        package,
-                        entryPath,
-                        lock,
-                        entry,
-                        diagnostics,
-                        packageError))
+                PackageDocument package;
+                std::string packageError;
+                if (!ReadPackage(manifest, package, packageError))
                 {
                     diagnostics.push_back(LibraryDiagnostic(
-                        "S6_LIBRARY_CLOSURE_INVALID",
-                        package.manifestPath,
+                        "S6_LIBRARY_PACKAGE_INVALID",
+                        manifest.generic_u8string(),
                         packageError));
                     continue;
                 }
-                if (entry.projectSourcePath.empty() ||
-                    entry.metadata.presentation != presentation)
+
+                if (defaultDiscovery &&
+                    !candidate.builtIn &&
+                    package.packageId == S7StockPackageId)
                 {
+                    diagnostics.push_back(LibraryDiagnostic(
+                        "S7_STOCK_LIBRARY_SHADOW_BLOCKED",
+                        package.manifestPath,
+                        "External Creator Library package attempted to shadow the built-in Renegade Stock Actions package ID. The built-in package remains authoritative."));
                     continue;
                 }
-                entries.push_back(std::move(entry));
+
+                if (!packageIds.insert(package.packageId).second)
+                {
+                    diagnostics.push_back(LibraryDiagnostic(
+                        "S6_LIBRARY_PACKAGE_ID_COLLISION",
+                        package.manifestPath,
+                        "Duplicate installed script package ID: " + package.packageId));
+                    continue;
+                }
+
+                for (const auto& entryPath : package.entries)
+                {
+                    ScriptLibraryEntry entry;
+                    if (!BuildEntry(
+                            projectRoot,
+                            package,
+                            entryPath,
+                            lock,
+                            entry,
+                            diagnostics,
+                            packageError))
+                    {
+                        diagnostics.push_back(LibraryDiagnostic(
+                            "S6_LIBRARY_CLOSURE_INVALID",
+                            package.manifestPath,
+                            packageError));
+                        continue;
+                    }
+                    if (entry.projectSourcePath.empty() ||
+                        entry.metadata.presentation != presentation)
+                    {
+                        continue;
+                    }
+                    entries.push_back(std::move(entry));
+                }
             }
         }
 

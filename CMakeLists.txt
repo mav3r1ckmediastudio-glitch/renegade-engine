@@ -56,6 +56,29 @@ include(EngineBridge/Phase5Gate8.cmake)
 if(WIN32)
     add_subdirectory(ScreenRenderer)
     add_subdirectory(Studio)
+
+    # S7 stock Actions are Studio-owned immutable library content. Emit the
+    # exact package beneath Content so Build-Studio-Windows.ps1 automatically
+    # carries it into downloaded Studio artifacts without changing Runtime
+    # packaging. The destination is replaced each build so removed stock files
+    # cannot linger as stale library content.
+    set(RENEGADE_S7_STOCK_LIBRARY_OUTPUT
+        "${CMAKE_BINARY_DIR}/Studio/$<CONFIG>/Content/ScriptLibrary/RenegadeStockActions")
+    add_custom_target(RenegadeS7StockActionLibrary
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "${RENEGADE_S7_STOCK_LIBRARY_OUTPUT}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_BINARY_DIR}/Studio/$<CONFIG>/Content/ScriptLibrary"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/Library/Scripts/RenegadeStockActions"
+            "${RENEGADE_S7_STOCK_LIBRARY_OUTPUT}"
+        VERBATIM
+    )
+    add_dependencies(RenegadeStudio RenegadeS7StockActionLibrary)
+    set_target_properties(RenegadeS7StockActionLibrary PROPERTIES
+        FOLDER "Renegade/Packaging"
+    )
+
     include(Studio/S1AInspectorSectionFramework.cmake)
     include(Studio/S1BInspectorMigration.cmake)
     include(Studio/S4BScriptAttachmentInspector.cmake)
