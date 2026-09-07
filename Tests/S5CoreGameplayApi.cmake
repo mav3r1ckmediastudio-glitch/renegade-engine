@@ -176,3 +176,19 @@ add_test(
     NAME RenegadeS5CGameplayEventRuntimeTests
     COMMAND RenegadeS5CGameplayEventRuntimeTests
 )
+
+# S5D closes S5 by pinning the production structured-diagnostics and supervised
+# Studio -> Test Level Runtime handshake paths. The production endpoint/process
+# tests are already registered by Tests/CMakeLists.txt and run in the normal
+# CTest suite; do not duplicate them here merely to attach a label.
+add_test(
+    NAME RenegadeS5DClosureSourceContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_LIST_DIR}/S5DClosureSourceContract.cmake
+)
+set_tests_properties(
+    RenegadeS5DClosureSourceContract
+    PROPERTIES
+        LABELS "S5D"
+)
