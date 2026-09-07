@@ -6,6 +6,7 @@
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/SceneService.h"
+#include "renegade/bridge/ScriptLibraryService.h"
 
 #include <algorithm>
 #include <cctype>
@@ -177,6 +178,38 @@ namespace
         if (left.metadata.name != right.metadata.name)
             return left.metadata.name < right.metadata.name;
         return left.sourcePath < right.sourcePath;
+    }
+
+    bool NeedsLibraryBindingRefresh(
+        const ScriptAttachment& attachment,
+        const ScriptSourceBinding& binding)
+    {
+        if (attachment.provenance.kind != ScriptProvenanceKind::InstalledLibrary ||
+            attachment.provenance.libraryId != binding.provenance.libraryId)
+        {
+            return false;
+        }
+        return attachment.sourceId != binding.sourceId ||
+            attachment.sourcePath != binding.sourcePath ||
+            attachment.presentation != binding.presentation ||
+            attachment.apiVersion != binding.apiVersion ||
+            attachment.provenance.libraryVersion != binding.provenance.libraryVersion ||
+            attachment.provenance.contentHash != binding.provenance.contentHash ||
+            attachment.dependencies.size() != binding.dependencies.size();
+    }
+
+    ScriptMetadataDiagnostic LibraryConflictDiagnostic(
+        const ScriptLibraryEntry& entry)
+    {
+        ScriptMetadataDiagnostic diagnostic;
+        diagnostic.severity = ScriptMetadataDiagnosticSeverity::Error;
+        diagnostic.code = "S6_LIBRARY_LOCAL_CONFLICT";
+        diagnostic.sourcePath = entry.projectSourcePath;
+        diagnostic.field = "library";
+        diagnostic.message =
+            "Creator Library update is blocked because the project-owned copy from package '" +
+            entry.packageId + "' has local edits. The project copy remains authoritative.";
+        return diagnostic;
     }
 }
 
@@ -495,13 +528,22 @@ namespace renegade::bridge
         {
             return false;
         }
+        if (!EnsureBuildClosureDeclarations(
+                ScriptDocumentPathHintForScene(newHint),
+                target,
+                error))
+        {
+            error = "Could not register the saved scripting closure for Build Game: " +
+                error;
+            return false;
+        }
 
         document_ = std::move(target);
         loaded_ = true;
         companionExistedWhenLoaded_ = true;
         loadedSceneRevision_ = scenes_->Revision();
         loadedScenePath_ = normalizedNew;
-        loadedProjectId_ = project.projectId;
+        loadedProjectId_ = projects_->CurrentProject().projectId;
         error.clear();
         return true;
     }
@@ -520,84 +562,135 @@ namespace renegade::bridge
         const fs::path scriptsRoot =
             fs::u8path(project.rootPath) / "Content" / "Scripts";
         std::error_code ec;
-        if (!fs::exists(scriptsRoot, ec))
+        if (fs::exists(scriptsRoot, ec))
         {
-            if (ec)
+            if (!fs::is_directory(scriptsRoot, ec) || ec)
             {
-                error = "Could not inspect Content/Scripts: " + ec.message();
+                error = "Content/Scripts is not a readable directory.";
                 return false;
             }
-            error.clear();
-            return true;
-        }
-        if (!fs::is_directory(scriptsRoot, ec) || ec)
-        {
-            error = "Content/Scripts is not a readable directory.";
-            return false;
-        }
 
-        fs::recursive_directory_iterator iterator(
-            scriptsRoot,
-            fs::directory_options::skip_permission_denied,
-            ec);
-        const fs::recursive_directory_iterator end;
-        if (ec)
-        {
-            error = "Could not enumerate Content/Scripts: " + ec.message();
-            return false;
-        }
-        for (; iterator != end; iterator.increment(ec))
-        {
+            fs::recursive_directory_iterator iterator(
+                scriptsRoot,
+                fs::directory_options::skip_permission_denied,
+                ec);
+            const fs::recursive_directory_iterator end;
             if (ec)
             {
                 error = "Could not enumerate Content/Scripts: " + ec.message();
                 return false;
             }
-            std::error_code typeError;
-            if (!iterator->is_regular_file(typeError) || typeError)
-                continue;
-
-            std::string extension = iterator->path().extension().generic_u8string();
-            std::transform(
-                extension.begin(), extension.end(), extension.begin(),
-                [](const unsigned char c)
-                {
-                    return static_cast<char>(std::tolower(c));
-                });
-            if (extension != ".lua")
-                continue;
-
-            const fs::path relative = fs::relative(
-                iterator->path(),
-                fs::u8path(project.rootPath),
-                typeError);
-            if (typeError || relative.empty() || relative.is_absolute())
-                continue;
-            const std::string relativePath =
-                relative.lexically_normal().generic_u8string();
-            auto evaluated = EvaluateScriptMetadata(
-                project.rootPath,
-                relativePath);
-            if (!evaluated.succeeded)
+            for (; iterator != end; iterator.increment(ec))
             {
-                diagnostics.insert(
-                    diagnostics.end(),
-                    evaluated.diagnostics.begin(),
-                    evaluated.diagnostics.end());
+                if (ec)
+                {
+                    error = "Could not enumerate Content/Scripts: " + ec.message();
+                    return false;
+                }
+                std::error_code typeError;
+                if (!iterator->is_regular_file(typeError) || typeError)
+                    continue;
+
+                std::string extension = iterator->path().extension().generic_u8string();
+                std::transform(
+                    extension.begin(), extension.end(), extension.begin(),
+                    [](const unsigned char c)
+                    {
+                        return static_cast<char>(std::tolower(c));
+                    });
+                if (extension != ".lua")
+                    continue;
+
+                const fs::path relative = fs::relative(
+                    iterator->path(),
+                    fs::u8path(project.rootPath),
+                    typeError);
+                if (typeError || relative.empty() || relative.is_absolute())
+                    continue;
+                const std::string relativePath =
+                    relative.lexically_normal().generic_u8string();
+                auto evaluated = EvaluateScriptMetadata(
+                    project.rootPath,
+                    relativePath);
+                if (!evaluated.succeeded)
+                {
+                    diagnostics.insert(
+                        diagnostics.end(),
+                        evaluated.diagnostics.begin(),
+                        evaluated.diagnostics.end());
+                    continue;
+                }
+                if (evaluated.descriptor.presentation != presentation)
+                    continue;
+
+                ScriptAuthoringSource source;
+                source.sourcePath = relativePath;
+                source.metadata = std::move(evaluated.descriptor);
+                source.binding.sourcePath = relativePath;
+                source.binding.presentation = presentation;
+                source.binding.apiVersion = 1;
+                source.binding.unsafe = false;
+                source.binding.provenance.kind = ScriptProvenanceKind::Project;
+                source.binding = ResolveSourceBinding(source);
+                sources.push_back(std::move(source));
+            }
+        }
+        else if (ec)
+        {
+            error = "Could not inspect Content/Scripts: " + ec.message();
+            return false;
+        }
+
+        ScriptLibraryService library;
+        std::vector<ScriptLibraryEntry> libraryEntries;
+        std::string libraryError;
+        if (!library.EnumerateEntries(
+                project.rootPath,
+                presentation,
+                libraryEntries,
+                diagnostics,
+                libraryError))
+        {
+            error = "Could not enumerate Creator Library scripts: " + libraryError;
+            return false;
+        }
+        for (const ScriptLibraryEntry& entry : libraryEntries)
+        {
+            const auto local = std::find_if(
+                sources.begin(), sources.end(),
+                [&](const ScriptAuthoringSource& source)
+                {
+                    return NormalizedPathIdentity(source.sourcePath) ==
+                        NormalizedPathIdentity(entry.projectSourcePath);
+                });
+
+            // A locally edited adopted copy is project authority. Keep its
+            // normal project row and suppress the immutable Library row until
+            // the creator resolves the conflict; never make ADD an overwrite
+            // button in disguise.
+            if (entry.localConflict)
+            {
+                diagnostics.push_back(LibraryConflictDiagnostic(entry));
                 continue;
             }
-            if (evaluated.descriptor.presentation != presentation)
-                continue;
+            if (local != sources.end())
+                sources.erase(local);
 
             ScriptAuthoringSource source;
-            source.sourcePath = relativePath;
-            source.metadata = std::move(evaluated.descriptor);
-            source.binding.sourcePath = relativePath;
-            source.binding.presentation = presentation;
-            source.binding.apiVersion = 1;
-            source.binding.unsafe = false;
-            source.binding.provenance.kind = ScriptProvenanceKind::Project;
-            source.binding = ResolveSourceBinding(source);
+            source.sourcePath = entry.projectSourcePath;
+            source.metadata = entry.metadata;
+            source.binding = entry.binding;
+            source.libraryEntry = true;
+            source.libraryManifestPath = entry.manifestPath;
+            source.libraryEntryPath = entry.entryPath;
+            source.libraryPackageId = entry.packageId;
+            source.libraryPackageVersion = entry.packageVersion;
+            source.libraryAdopted = entry.adopted;
+            source.libraryUpdateAvailable = entry.updateAvailable;
+            if (source.libraryUpdateAvailable)
+                source.metadata.category = "LIBRARY UPDATE / " + entry.packageName;
+            else if (source.libraryAdopted)
+                source.metadata.category = "LIBRARY ADOPTED / " + entry.packageName;
             sources.push_back(std::move(source));
         }
 
@@ -614,8 +707,18 @@ namespace renegade::bridge
         {
             for (const auto& attachment : document_.attachments)
             {
-                if (NormalizedPathIdentity(attachment.sourcePath) == identity)
-                    return CaptureScriptSourceBinding(attachment);
+                if (NormalizedPathIdentity(attachment.sourcePath) != identity)
+                    continue;
+                // A creator-modified adopted copy is deliberately surfaced as
+                // a normal project source. Do not silently inherit stale
+                // installed-library provenance for a new project-authored
+                // attachment to that local file.
+                if (source.binding.provenance.kind == ScriptProvenanceKind::Project &&
+                    attachment.provenance.kind != ScriptProvenanceKind::Project)
+                {
+                    continue;
+                }
+                return CaptureScriptSourceBinding(attachment);
             }
         }
 
@@ -626,8 +729,139 @@ namespace renegade::bridge
         binding.presentation = source.metadata.presentation;
         binding.apiVersion = 1;
         binding.unsafe = false;
-        binding.provenance.kind = ScriptProvenanceKind::Project;
         return binding;
+    }
+
+    bool ScriptAuthoringService::MaterializeLibrarySource(
+        const ScriptAuthoringSource& source,
+        ScriptAuthoringSource& materialized,
+        std::string& error)
+    {
+        materialized = source;
+        if (!source.libraryEntry)
+        {
+            error.clear();
+            return true;
+        }
+        if (projects_ == nullptr || !projects_->HasProject() || commands_ == nullptr)
+        {
+            error = "Creator Library adoption requires an active Studio project.";
+            return false;
+        }
+
+        ScriptLibraryService library;
+        ScriptLibraryAdoptionResult adoption;
+        if (!library.AdoptEntry(
+                projects_->CurrentProject().rootPath,
+                source.libraryManifestPath,
+                source.libraryEntryPath,
+                adoption,
+                error))
+        {
+            return false;
+        }
+
+        materialized.sourcePath = adoption.projectSourcePath;
+        materialized.binding = adoption.binding;
+        materialized.libraryAdopted = true;
+        materialized.libraryUpdateAvailable = false;
+
+        auto evaluated = EvaluateScriptMetadata(
+            projects_->CurrentProject().rootPath,
+            materialized.sourcePath);
+        if (!evaluated.succeeded)
+        {
+            error = evaluated.diagnostics.empty()
+                ? "Adopted Creator Library source has invalid metadata."
+                : evaluated.diagnostics.front().message;
+            return false;
+        }
+        materialized.metadata = std::move(evaluated.descriptor);
+        materialized.binding.presentation = materialized.metadata.presentation;
+
+        // Package updates refresh every live attachment that still carries the
+        // same installed-library authority. Use the existing S2 command seam so
+        // the .rscripts model remains undoable/dirty instead of mutating around
+        // Studio's history stack.
+        std::vector<StableId> refreshIds;
+        for (const auto& attachment : document_.attachments)
+        {
+            if (NormalizedPathIdentity(attachment.sourcePath) ==
+                    NormalizedPathIdentity(materialized.sourcePath) &&
+                NeedsLibraryBindingRefresh(attachment, materialized.binding))
+            {
+                refreshIds.push_back(attachment.scriptInstanceId);
+            }
+        }
+        for (const StableId& scriptInstanceId : refreshIds)
+        {
+            auto command = MakeReplaceScriptSourceCommand(
+                document_,
+                scriptInstanceId,
+                materialized.binding,
+                error);
+            if (!command || !commands_->Execute(std::move(command)))
+            {
+                if (error.empty())
+                    error = "Could not refresh an adopted script binding through Undo/Redo.";
+                return false;
+            }
+        }
+
+        error.clear();
+        return true;
+    }
+
+    bool ScriptAuthoringService::EnsureBuildClosureDeclarations(
+        const std::string& scriptDocumentPathHint,
+        const ScriptDocument& document,
+        std::string& error)
+    {
+        if (projects_ == nullptr || !projects_->HasProject())
+        {
+            error = "S6 build closure requires an active project.";
+            return false;
+        }
+
+        std::vector<std::string> declarations =
+            projects_->CurrentProject().alwaysInclude;
+        const auto append = [&](const std::string& declaration)
+        {
+            if (std::find(declarations.begin(), declarations.end(), declaration) ==
+                declarations.end())
+            {
+                declarations.push_back(declaration);
+            }
+        };
+
+        if (!scriptDocumentPathHint.empty())
+            append("generated_data:" + scriptDocumentPathHint);
+        for (const auto& attachment : document.attachments)
+        {
+            if (!attachment.sourcePath.empty())
+                append("script:" + attachment.sourcePath);
+            for (const auto& dependency : attachment.dependencies)
+            {
+                if (dependency.kind == ScriptDependencyKind::ScriptModule &&
+                    !dependency.pathHint.empty())
+                {
+                    append("script:" + dependency.pathHint);
+                }
+            }
+        }
+
+        if (declarations == projects_->CurrentProject().alwaysInclude)
+        {
+            error.clear();
+            return true;
+        }
+        if (!projects_->SetAlwaysInclude(declarations))
+        {
+            error = projects_->LastError();
+            return false;
+        }
+        error.clear();
+        return true;
     }
 
     std::vector<const ScriptAttachment*> ScriptAuthoringService::EntityAttachments(
@@ -699,6 +933,10 @@ namespace renegade::bridge
             return false;
         }
 
+        ScriptAuthoringSource materialized;
+        if (!MaterializeLibrarySource(source, materialized, error))
+            return false;
+
         const StableId resolvedOwner = ResolveEntityScriptAuthoringOwner(
             scenes_->GetScene(), ownerEntityId);
         if (!IsValidStableId(resolvedOwner))
@@ -719,7 +957,7 @@ namespace renegade::bridge
             return false;
         }
 
-        if (source.metadata.presentation == ScriptPresentation::GlobalScript)
+        if (materialized.metadata.presentation == ScriptPresentation::GlobalScript)
         {
             error = "GLOBAL SCRIPT sources must be attached at Level scope.";
             return false;
@@ -728,8 +966,8 @@ namespace renegade::bridge
         ScriptAttachment attachment = CreateScriptAttachment(
             ScriptScope::Entity,
             resolvedOwner,
-            ResolveSourceBinding(source));
-        if (!ApplyScriptMetadataDefaults(source.metadata, attachment, error))
+            ResolveSourceBinding(materialized));
+        if (!ApplyScriptMetadataDefaults(materialized.metadata, attachment, error))
             return false;
         scriptInstanceId = attachment.scriptInstanceId;
         auto command = MakeAddScriptAttachmentCommand(
@@ -754,7 +992,11 @@ namespace renegade::bridge
     {
         if (!EnsureCurrent(error))
             return false;
-        if (source.metadata.presentation != ScriptPresentation::GlobalScript)
+
+        ScriptAuthoringSource materialized;
+        if (!MaterializeLibrarySource(source, materialized, error))
+            return false;
+        if (materialized.metadata.presentation != ScriptPresentation::GlobalScript)
         {
             error = "Only GLOBAL SCRIPT sources can be attached at Level scope.";
             return false;
@@ -763,8 +1005,8 @@ namespace renegade::bridge
         ScriptAttachment attachment = CreateScriptAttachment(
             ScriptScope::Level,
             {},
-            ResolveSourceBinding(source));
-        if (!ApplyScriptMetadataDefaults(source.metadata, attachment, error))
+            ResolveSourceBinding(materialized));
+        if (!ApplyScriptMetadataDefaults(materialized.metadata, attachment, error))
             return false;
         scriptInstanceId = attachment.scriptInstanceId;
         auto command = MakeAddScriptAttachmentCommand(
