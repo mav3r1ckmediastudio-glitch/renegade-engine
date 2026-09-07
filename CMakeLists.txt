@@ -49,6 +49,7 @@ include(EngineBridge/S4AScriptMetadata.cmake)
 include(EngineBridge/S4BScriptAuthoring.cmake)
 include(EngineBridge/S4CScriptPropertyAuthoring.cmake)
 include(EngineBridge/S4DScriptReferenceAuthoring.cmake)
+include(EngineBridge/S6ScriptLibrary.cmake)
 include(EngineBridge/Phase5Gate5.cmake)
 include(EngineBridge/Phase5Gate8.cmake)
 
@@ -105,6 +106,7 @@ if(WIN32)
     include(Tests/S4CScriptPropertyAuthoring.cmake)
     include(Tests/S4DScriptReferenceAuthoring.cmake)
     include(Tests/S5CoreGameplayApi.cmake)
+    include(Tests/S6ScriptLibrary.cmake)
     add_test(
         NAME RenegadeStudioDisclosurePolicySourceContract
         COMMAND ${CMAKE_COMMAND}
