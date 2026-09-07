@@ -1,0 +1,4 @@
+# Script package manifests hash exact Lua source bytes. Keep packaged Lua
+# sources stable across Windows/Linux checkout so immutable FNV hashes remain
+# valid in CI and in downloaded Studio packages.
+Library/Scripts/**/*.lua text eol=lf
