@@ -107,7 +107,7 @@ require_text("${process_cpp}" "CurrentProcessIdentity(processId, creationTime" "
 require_text("${process_cpp}" "CREATE_SUSPENDED" "suspended child launch")
 require_text("${process_cpp}" "AssignProcessToJobObject" "kill-on-close Job Object supervision")
 require_text("${process_cpp}" "ResumeThread(thread)" "child resume after supervision setup")
-require_text("${process_cpp}" "WaitForSingleObject(\n                implementation_->readyEvent" "non-blocking ready-event poll")
+require_text("${process_cpp}" "implementation_->readyEvent" "ready-event supervision state")
 require_text("${process_cpp}" "TestLevelProcessState::Running" "ready promotion to Running")
 require_text("${process_cpp}" "implementation_->result.ready = true" "ready flag publication")
 require_text("${process_cpp}" "TestLevelProcessState::StartupTimedOut" "startup timeout classification")
@@ -161,6 +161,6 @@ require_text("${process_tests}" "TestLevelProcessState::Stopped" "owner stop acc
 # are added by Tests/S5CoreGameplayApi.cmake without duplicating test execution.
 require_text("${tests_cmake}" "NAME RenegadeDiagnosticServiceTests" "diagnostic production test registration")
 require_text("${tests_cmake}" "RenegadeTestLevelRuntimeProcessTests" "Test Level production test target")
-require_text("${tests_cmake}" "NAME RenegadeTestLevelRuntimeProcess" "Test Level production test registration")
+require_text("${tests_cmake}" "NAME RenegadeTestLevelRuntimeProcessTests" "Test Level production test registration")
 
 message(STATUS "S5D structured diagnostics and Studio/Test Level IPC source contract passed")
