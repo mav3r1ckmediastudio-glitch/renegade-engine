@@ -131,7 +131,7 @@ namespace renegade::bridge
         [[nodiscard]] bool MaterializeLibrarySource(
             const ScriptAuthoringSource& source,
             ScriptAuthoringSource& materialized,
-            std::string& error) const;
+            std::string& error);
         [[nodiscard]] bool EnsureBuildClosureDeclarations(
             const std::string& scriptDocumentPathHint,
             const ScriptDocument& document,
