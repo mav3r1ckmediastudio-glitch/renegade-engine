@@ -107,6 +107,7 @@ if(WIN32)
     include(Tests/S4DScriptReferenceAuthoring.cmake)
     include(Tests/S5CoreGameplayApi.cmake)
     include(Tests/S6ScriptLibrary.cmake)
+    include(Tests/S7StockActions.cmake)
     add_test(
         NAME RenegadeStudioDisclosurePolicySourceContract
         COMMAND ${CMAKE_COMMAND}
