@@ -8,7 +8,7 @@ endfunction()
 
 # S6A/S6B: immutable manifest identity + deterministic transitive closure.
 require_source(
-    "EngineBridge/src/ScriptLibraryService.cpp"
+    "EngineBridge/include/renegade/bridge/ScriptLibraryService.h"
     "renegade-script-package"
     "package manifest schema")
 require_source(
@@ -27,14 +27,14 @@ require_source(
     "transactional adoption boundary")
 require_source(
     "EngineBridge/src/ScriptLibraryService.cpp"
-    "Content/Scripts/Library"
+    "fs::path(\"Content\") / \"Scripts\" / \"Library\""
     "project-owned script namespace")
 require_source(
     "EngineBridge/src/ScriptLibraryService.cpp"
     "have local edits"
     "creator modification conflict guard")
 require_source(
-    "EngineBridge/src/ScriptLibraryService.cpp"
+    "EngineBridge/include/renegade/bridge/ScriptLibraryService.h"
     "library-lock.json"
     "persistent adoption baseline")
 
