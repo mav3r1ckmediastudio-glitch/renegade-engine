@@ -12,10 +12,9 @@ the governed gameplay lifecycle/input projection, and S5C the bounded
 cross-script event path.
 
 The functional substrate already exists on `main` after the live diagnostics
-integration. S5D hardens that substrate as an explicit gate, registers its
-acceptance tests under the S5D label and adds a source contract so later work
-cannot silently weaken the handshake or structured evidence while still
-compiling green.
+integration. S5D hardens that substrate as an explicit gate and adds a source
+contract so later work cannot silently weaken the handshake or structured
+evidence while still compiling green.
 
 ## Structured diagnostics contract
 
@@ -100,15 +99,18 @@ fixtures that could go green independently of the real code:
   paths, ownership timestamp defence, and registration of the two production
   tests above.
 
-The first two existing tests are labelled `S5D` rather than duplicated, so full
-CI does not pay twice for the same Windows process tests.
+The two production tests remain in their existing `Tests/CMakeLists.txt` CTest
+scope and therefore run once in every normal Studio validation. S5D does not
+register aliases that would execute those Windows fixtures a second time. The
+cheap `RenegadeS5DClosureSourceContract` carries the `S5D` label.
 
 ## Gate acceptance
 
 S5D may be closed only when the exact PR head has all four normal Renegade
-Windows checks green (baseline Debug/Release and Studio Debug/Release), the S5D
-labelled tests pass, and the owner performs one Test Level smoke from the CI
-artifact confirming:
+Windows checks green (baseline Debug/Release and Studio Debug/Release), the
+normal production diagnostics/Test Level tests plus the S5D source contract
+pass, and the owner performs one Test Level smoke from the CI artifact
+confirming:
 
 1. Studio starts Test Level and reports `active=true`, `ready=true`, and a
    non-zero child PID in Diagnostics.
