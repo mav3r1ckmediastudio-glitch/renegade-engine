@@ -1,135 +1,152 @@
 # Renegade Engine Roadmap
 
-**Current authoritative main:**
-`861c4d9b0f8acbb57f49db0b84b004d925b51136`
-(`Phase 6 Gate 2: gameplay input and play-session lifecycle (#124)`).
+**Current programme:** Phase 6 — Playable Core  
+**Current implementation baseline:** S6 — Library Adoption & Package Closure,
+merged as PR #143 (`708030996ea748e5251958a995e1bd69192ae10f`). Documentation-only
+commits may follow this implementation baseline without changing the product
+state.  
+**Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`  
+**Latest integrated CI:** the final S6 head passed Windows baseline run 1688 and
+Renegade Studio run 1102 before merge.
 
-**Wicked pin:**
-`3a800b7134aafe58461093c8abb2e274d4e64033`
+## Current state
 
-**Current state:** Phase 6 is active. Gates 1-2 are merged and owner-accepted.
-Gate 3 is a draft repair candidate on `phase6/gate3-spatial-audio`. The latest
-owner-tested head passed all four Windows jobs and proved global audio, Preview
-Play/Stop and ordinary positional 3D playback in Test Level. Its audio-specific
-zone experiment had no working viewport placement and is being removed rather
-than represented as delivered.
+Renegade has moved substantially beyond the old Phase 6 Gate 3 roadmap. Spatial
+audio is merged, the first-person/player/input lifecycle is established, and the
+project now contains a governed creator-facing Lua scripting stack through S6,
+including live diagnostics, Studio/Test Level IPC and reusable script-library
+package adoption.
 
-## Accepted production baseline
+The Phase 6 exit gate remains unchanged: author and package a small interactive
+game with a controllable character, collisions, audio and a scripted objective
+in the standalone Runtime.
 
-The following programmes are complete on `main`:
+## Merged production baseline
 
-| Programme | Accepted result |
+| Programme | Merged result |
 |---|---|
 | Story Flow Gates 1-10 | Project-home Journey/Graph authoring, Screen lifecycle, Runtime traversal, Build Game and standalone parity through PR #101. |
 | Scene UI recovery | Shell/workspace isolation, Hierarchy and Inspector, Asset Browser placement, Environment/Terrain and consolidated whole-editor acceptance through PRs #102-#106. |
 | JP01 physics foundation | Wicked/Jolt physics authoring, Physics Lab, serialization, Runtime and packaged parity through PR #107. |
-| Phase 5 Gates 1-9 | Scene components, cameras, decals/probes, materials/shaders, post-processing, AO/GI/reflections, ray/path tracing, lightmap/baking and render diagnostics through PRs #109-#118. |
-| WD01 vegetation and frame-loop recovery | Native Wicked grass painting across Terrain chunks, editor interaction recovery and the 75 Hz performance baseline through PR #122. |
-| Phase 6 Gate 1 | One governed Player Start, first-person Runtime possession, Wicked/Jolt character capsule, movement/look/sprint/jump, save/reopen and packaged parity through PR #123. |
+| Phase 5 Gates 1-9 | Scene components, cameras, decals/probes, materials/shaders, post-processing, AO/GI/reflections, ray/path-tracing exposure, lightmap/baking and render diagnostics through PRs #109-#118. |
+| WD01 vegetation/frame-loop recovery | Native Wicked grass painting across Terrain chunks, restored editor interaction and the accepted 75 Hz capped baseline through PR #122. |
+| Phase 6 Gate 1 | Governed Player Start, Runtime first-person possession, Wicked/Jolt character capsule, movement/look/sprint/jump and packaged parity through PR #123. |
+| Phase 6 Gate 2 | Project gameplay input map, Pause/Resume and deterministic Reset lifecycle through PR #124. |
+| Phase 6 Gate 3 | Native Wicked global/2D and positional 3D audio authoring, preview, buses/mixing/reverb and Runtime lifecycle through PR #125. Audio-only zones were deliberately removed and deferred to one future shared ZoneService. |
+| S1A/S1B | Extensible Inspector section/provider framework and migration of existing Inspector ownership through PRs #127-#128. |
+| Test Level runtime handoff | Studio suspends competing 3D ownership while Test Level Runtime is active, reducing duplicate rendering/resource pressure through PR #130. |
+| S2 | Durable `.rscripts` script document/source model, source identity, transactions and validation through PR #131. |
+| S3 | Governed Runtime-owned Lua lifecycle, live EntityRef validation and restricted standard-library surface through PR #132. |
+| S4A-D | Restricted metadata evaluator, ACTION/SCRIPT attachment, typed generated properties, governed references and GLOBAL SCRIPT authoring through PRs #134-#137. |
+| S5A/S5B | Generation-safe entity/transform gameplay API and governed gameplay lifecycle through PRs #138-#139. |
+| S5C + live diagnostics | Bounded cross-script events plus built-in live Studio/Runtime diagnostics and local diagnostic transport through PR #141. |
+| S5D | Structured diagnostics and Studio-Test Level IPC/handshake closure through PR #142. |
+| S6 | Installed script-package manifests, deterministic transitive closure, transactional first-use adoption, Creator Library integration, update/conflict safety and Test Level/Build Game closure through PR #143. |
 
-The original Wicked Editor remains the parity oracle. Accepted Renegade
-features continue to use Renegade-owned UI and stable EngineBridge boundaries;
-they do not embed Wicked's stock Editor windows.
+The original Wicked Editor remains the parity oracle. Accepted Renegade features
+continue to use Renegade-owned UI and stable EngineBridge boundaries rather than
+embedding Wicked's stock Editor windows.
 
-## Phase 6 / Heathen playable core
+## Playable-core foundations now available
 
-The Phase 6 exit gate from [`MASTER_PLAN.md`](MASTER_PLAN.md) is to author and
-package a small interactive game with a controllable character, collisions,
-audio and a scripted objective.
+### Player, physics, input and audio
 
-The capability audit and bounded sequence are recorded in
-[`PHASE6_CAPABILITY_AUDIT.md`](PHASE6_CAPABILITY_AUDIT.md).
+- one governed Player Start and first-person Runtime possession;
+- Wicked/Jolt character collision and movement;
+- persisted gameplay action maps;
+- Pause/Resume and deterministic Reset;
+- Renegade-owned Jolt physics authoring and Runtime integration;
+- global/2D and movable positional 3D audio; and
+- scene/runtime audio lifecycle, mixing and reverb foundations.
 
-### Gate 1 — accepted
+### Governed scripting stack
 
-PR #123 established the player foundation:
+The scripting programme now provides a complete path from creator authoring to
+Runtime/package consumption:
 
-- `ADD > PLAYER START` creates one command-backed WISCENE marker;
-- the flat editor arrow and capsule guide expose spawn heading/body scale without
-  becoming Runtime render objects;
-- the dedicated Inspector persists capsule, eye-height and movement/controller
-  settings in native Metadata;
-- Runtime creates one non-serialized Wicked/Jolt character capsule and owns the
-  first-person camera;
-- W/A/S/D + mouse, sprint and jump were owner-tested in a real Level;
-- duplicate markers are rejected and zero-marker legacy Levels retain spectator
-  Runtime; and
-- CI passed after the stale Phase 5 ADD-menu source contract was corrected.
+1. Inspector provider architecture;
+2. durable script document/source identity;
+3. governed Lua Runtime lifecycle;
+4. restricted metadata evaluation;
+5. ACTION, SCRIPT and GLOBAL SCRIPT authoring;
+6. typed properties and governed entity references;
+7. generation-safe gameplay entity/transform APIs;
+8. governed gameplay lifecycle;
+9. bounded cross-script events;
+10. structured diagnostics and Studio/Test Level IPC; and
+11. reusable Creator Library packages with deterministic dependency closure,
+    transactional adoption and conflict-safe updates.
 
-Owner hardware did not include a game controller. Controller support therefore
-remains automated/source-covered rather than physically owner-tested; it was not
-a Gate 1 blocker.
+After S6 adoption, project-owned script copies are authoritative. Test Level and
+Build Game consume those same project-owned files through the established
+snapshot/dependency graph. Runtime does not search the installed Creator Library
+or enable unrestricted filesystem/package lookup.
 
-### Gate 2 — accepted
+See [`SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md).
 
-Branch: `phase6/gate2-input-lifecycle`.
+## Next bounded sequence
 
-Contract: [`PHASE6_GATE2_INPUT_LIFECYCLE.md`](PHASE6_GATE2_INPUT_LIFECYCLE.md).
+### 1. S6 owner-visible acceptance
 
-Gate 2 promotes Gate 1's temporary Runtime bindings into a governed project
-action-map document and adds Runtime-owned Pause/Resume and deterministic Reset.
-The candidate uses:
+The implementation and integrated Windows CI are complete. If the visible owner
+evidence has not yet been recorded, run the acceptance checklist in
+[`SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md):
+Creator Library rows, ADD/adoption, reopen/adopted-state behaviour, Test Level
+execution and packaged Build Game parity.
 
-- `Content/Data/GameplayInput.renegade-input` as the versioned project input map;
-- stable named actions for movement, look, jump, sprint, pause and reset;
-- `GameplayInputService` as the sole raw gameplay-device polling boundary;
-- the existing project Always Include / LP05 / LC01 / LP06 chain for packaged
-  input-map parity;
-- Escape for Pause/Resume, including zero simulation delta and Wicked physics
-  suspension/restoration; and
-- R for deterministic reset through the already accepted Scene, Story Flow and
-  Screen loaders.
+### 2. Objective and interaction vertical slice
 
-Gate 2 does not embed gameplay simulation inside Studio and does not reopen the
-JP01 physics architecture.
+Build one reusable scripted objective loop on the governed scripting stack rather
+than another special-case gameplay path. The slice should exercise creator
+properties/references, events, player interaction, save/reopen, Test Level and
+packaged Runtime behaviour.
 
-### Gate 3 — active repair
+A shared viewport-placeable trigger/volume system may be introduced here if the
+objective genuinely needs it, but it must be a single ZoneService suitable for
+audio, weather, objectives and later systems.
 
-PR #125 exposes native Wicked sound sources, scene submixes/reverb and Runtime
-audio lifecycle. The repaired core uses an independent top-level Audio surface,
-a transient 2D Studio audition instance, validated audio containers, one native
-instance creation path, explicit global 2D and movable 3D source creation, and
-Runtime Scene activation plus Pause/Reset. Audio-specific zones are removed;
-one reusable ZoneService for audio, weather, objectives and later systems is a
-separate future slice. Exact-head owner acceptance and packaged proof remain
-required.
+### 3. Navigation and actor path queries
 
-### Remaining bounded sequence
+Expose a stable Renegade service over Wicked voxel/pathfinding facilities and
+prove at least one Runtime actor path query/navigation behaviour without creating
+a competing navigation world.
 
-3. **Spatial audio and mixing** — native Wicked sound-source authoring plus the
-   minimum bus/submix and reverb model for the playable slice.
-4. **Lua gameplay lifecycle** — governed project scripts and stable lifecycle /
-   player/input/audio/physics operations.
-5. **Objective and interaction slice** — one reusable scripted objective loop
-   using the accepted Screen/Story Flow action boundaries.
-6. **Navigation and actor path queries** — stable Wicked voxel/path-query
-   service and one Runtime actor navigation proof.
-7. **Integrated acceptance** — reopen, Test Level and independently packaged
-   playable-core acceptance.
+### 4. Integrated Phase 6 acceptance
+
+Create the Phase 6 reference playable slice and prove:
+
+- project reopen and authored-state persistence;
+- controllable player and collisions;
+- audio;
+- scripted objective/interaction behaviour;
+- navigation where used;
+- Test Level parity; and
+- independently packaged Windows Runtime parity.
+
+Passing this closes the current Playable Core phase and allows planned Phase 7
+animation/advanced-simulation work to become the primary programme.
+
+## Deferred boundaries
+
+- **Shared zones:** no audio-specific replacement. One future ZoneService must
+  serve multiple systems.
+- **VSync control:** Renegade still has no creator-facing VSync toggle; the 75 Hz
+  figure is a capped owner baseline, not uncapped maximum throughput.
+- **Controller physical evidence:** controller code has automated/source coverage
+  but owner hardware evidence remains unavailable where previously recorded.
+- **Player arms, weapons, combat and production enemy AI:** later gameplay work,
+  not prerequisites for the current scripting foundation.
+- **Advanced animation/simulation:** remains under later master-plan phases unless
+  a narrow Phase 6 acceptance dependency is identified.
+- **Commercial distribution:** current Build Game output remains an engineering
+  acceptance path until licensing/release packaging is explicitly cleared.
 
 ## Verification policy
 
 - Green compilation is necessary but never sufficient for creator-facing work.
 - Visual or behavioural owner failure overrides nominal automated success.
-- Each implementation PR runs Studio Debug/Release and baseline Debug/Release.
-- Save/reopen and packaged standalone behaviour are required wherever authored
-  or gameplay-facing state is involved.
-- Controller physical-device evidence is explicitly marked unavailable when no
-  owner hardware exists; automated coverage remains required.
-
-## Deferred boundaries
-
-- Shared viewport-placeable trigger/volume zones remain deferred until one
-  ZoneService can serve audio, weather, objectives and later systems.
-- Renegade still has no user-facing VSync control; the accepted 75 FPS result is
-  the current capped baseline, not proof of uncapped maximum throughput.
-- Hardware-specific ray/path-tracing, HDR and light-baking limitations remain
-  recorded in their Phase 5 gate documents.
-- Player arms, body mesh, weapon sockets, animation graphs, combat and production
-  enemy AI remain outside Gates 1-2.
-- Advanced animation, specialised simulation and full export/template work
-  remain governed by later master-plan phases unless the playable-core audit
-  identifies a strictly necessary vertical-slice dependency.
-
-Historical gate contracts and evidence remain under `docs/`; this file records
-the current programme rather than reproducing every completed gate narrative.
+- Save/reopen is required wherever authored state is persisted.
+- Gameplay-facing state must be exercised in the real Runtime process.
+- Packaged parity is required for Phase 6 exit acceptance.
+- Exact gate evidence belongs in the gate/script contract documents; this roadmap
+  records programme state rather than reproducing every implementation log.
