@@ -274,6 +274,73 @@ namespace
         return diagnostic;
     }
 
+    ScriptMetadataEvaluationResult EvaluatePackageMetadata(
+        const std::string& packageRoot,
+        const std::string& packageRelativePath)
+    {
+        ScriptMetadataEvaluationResult result;
+        fs::path source;
+        std::string error;
+        if (!ResolveContainedFile(
+                fs::u8path(packageRoot),
+                packageRelativePath,
+                source,
+                error))
+        {
+            result.diagnostics.push_back(LibraryDiagnostic(
+                "metadata.source_invalid",
+                packageRelativePath,
+                error));
+            return result;
+        }
+
+        std::error_code ec;
+        const fs::path systemTemp = fs::temp_directory_path(ec);
+        if (ec || systemTemp.empty())
+        {
+            result.diagnostics.push_back(LibraryDiagnostic(
+                "metadata.preview_unavailable",
+                packageRelativePath,
+                "Could not resolve a temporary metadata sandbox."));
+            return result;
+        }
+
+        const fs::path previewRoot =
+            systemTemp / fs::u8path("renegade-s6-metadata-" + GenerateStableId());
+        const fs::path previewSource =
+            previewRoot / "Content" / "Scripts" / "LibraryPreview.lua";
+        fs::create_directories(previewSource.parent_path(), ec);
+        if (!ec)
+        {
+            fs::copy_file(
+                source,
+                previewSource,
+                fs::copy_options::overwrite_existing,
+                ec);
+        }
+        if (ec)
+        {
+            std::error_code cleanupError;
+            fs::remove_all(previewRoot, cleanupError);
+            result.diagnostics.push_back(LibraryDiagnostic(
+                "metadata.preview_unavailable",
+                packageRelativePath,
+                "Could not prepare the restricted package metadata sandbox: " +
+                    ec.message()));
+            return result;
+        }
+
+        result = EvaluateScriptMetadata(
+            previewRoot.generic_u8string(),
+            "Content/Scripts/LibraryPreview.lua");
+        for (auto& diagnostic : result.diagnostics)
+            diagnostic.sourcePath = packageRelativePath;
+
+        std::error_code cleanupError;
+        fs::remove_all(previewRoot, cleanupError);
+        return result;
+    }
+
     bool ReadPackage(
         const fs::path& manifestPath,
         PackageDocument& package,
@@ -744,7 +811,7 @@ namespace
             return false;
         }
 
-        auto evaluated = EvaluateScriptMetadata(package.rootPath, entryPath);
+        auto evaluated = EvaluatePackageMetadata(package.rootPath, entryPath);
         if (!evaluated.succeeded)
         {
             diagnostics.insert(
@@ -1169,7 +1236,7 @@ namespace renegade::bridge
 
         result.projectSourcePath = ProjectPathFor(package.packageId, entryPath);
         result.binding = BuildBinding(package, *packageEntry, closure);
-        auto metadata = EvaluateScriptMetadata(package.rootPath, entryPath);
+        auto metadata = EvaluateScriptMetadata(projectRoot, result.projectSourcePath);
         if (!metadata.succeeded)
         {
             error = "S6 adopted package entry no longer has valid creator metadata.";
