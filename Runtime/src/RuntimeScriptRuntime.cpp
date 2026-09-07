@@ -1,6 +1,7 @@
 #include "RuntimeScriptRuntime.h"
 #include "RuntimeScriptEntityApi.h"
 
+#include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/GameplayEventService.h"
 #include "renegade/bridge/IdentityService.h"
 
@@ -671,6 +672,31 @@ namespace renegade::runtime
             return 1;
         }
 
+        static int TransformGetWorldPositionLua(lua_State* state)
+        {
+            Impl* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->scene == nullptr)
+                return PushNilError(
+                    state,
+                    "Transform API is not bound to an active Level.");
+
+            RuntimeScriptEntityReference reference;
+            std::string error;
+            if (!owner->ReadEntityReferenceForApi(state, 1, reference, error))
+                return PushNilError(state, error);
+
+            RuntimeScriptEntityApi api(
+                *owner->scene,
+                owner->entitiesById,
+                owner->generation);
+            XMFLOAT3 position;
+            if (!api.GetWorldPosition(reference, position, error))
+                return PushNilError(state, error);
+
+            PushVector3Table(state, position);
+            return 1;
+        }
+
         static int TransformSetLocalPositionLua(lua_State* state)
         {
             Impl* owner = FromUpvalue(state);
@@ -727,6 +753,134 @@ namespace renegade::runtime
             if (!api.TranslateLocal(reference, delta, error))
                 return PushFalseError(state, error);
 
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+
+        static int TransformGetLocalScaleLua(lua_State* state)
+        {
+            Impl* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->scene == nullptr)
+                return PushNilError(
+                    state,
+                    "Transform API is not bound to an active Level.");
+
+            RuntimeScriptEntityReference reference;
+            std::string error;
+            if (!owner->ReadEntityReferenceForApi(state, 1, reference, error))
+                return PushNilError(state, error);
+
+            RuntimeScriptEntityApi api(
+                *owner->scene,
+                owner->entitiesById,
+                owner->generation);
+            XMFLOAT3 scale;
+            if (!api.GetLocalScale(reference, scale, error))
+                return PushNilError(state, error);
+
+            PushVector3Table(state, scale);
+            return 1;
+        }
+
+        static int TransformSetLocalScaleLua(lua_State* state)
+        {
+            Impl* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->scene == nullptr)
+                return PushFalseError(
+                    state,
+                    "Transform API is not bound to an active Level.");
+
+            RuntimeScriptEntityReference reference;
+            XMFLOAT3 scale;
+            std::string error;
+            if (!owner->ReadEntityReferenceForApi(state, 1, reference, error) ||
+                !ReadVector3Table(state, 2, scale, error))
+            {
+                return PushFalseError(state, error);
+            }
+
+            RuntimeScriptEntityApi api(
+                *owner->scene,
+                owner->entitiesById,
+                owner->generation);
+            if (!api.SetLocalScale(reference, scale, error))
+                return PushFalseError(state, error);
+
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+
+        static int AudioPlayLua(lua_State* state)
+        {
+            Impl* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->scene == nullptr)
+                return PushFalseError(
+                    state,
+                    "Audio API is not bound to an active Level.");
+
+            RuntimeScriptEntityReference reference;
+            std::string error;
+            if (!owner->ReadEntityReferenceForApi(state, 1, reference, error))
+                return PushFalseError(state, error);
+
+            RuntimeScriptEntityApi api(
+                *owner->scene,
+                owner->entitiesById,
+                owner->generation);
+            wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
+            if (!api.Resolve(reference, entity, error))
+                return PushFalseError(state, error);
+            if (!bridge::IsRenegadeSoundSource(*owner->scene, entity))
+                return PushFalseError(
+                    state,
+                    "EntityRef is not an authored Renegade Sound Source.");
+
+            auto* sound = owner->scene->sounds.GetComponent(entity);
+            if (sound == nullptr || !sound->soundResource.IsValid() ||
+                !sound->soundinstance.IsValid())
+            {
+                return PushFalseError(
+                    state,
+                    "Renegade Sound Source has no playable audio asset.");
+            }
+
+            sound->Play();
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+
+        static int AudioStopLua(lua_State* state)
+        {
+            Impl* owner = FromUpvalue(state);
+            if (owner == nullptr || owner->scene == nullptr)
+                return PushFalseError(
+                    state,
+                    "Audio API is not bound to an active Level.");
+
+            RuntimeScriptEntityReference reference;
+            std::string error;
+            if (!owner->ReadEntityReferenceForApi(state, 1, reference, error))
+                return PushFalseError(state, error);
+
+            RuntimeScriptEntityApi api(
+                *owner->scene,
+                owner->entitiesById,
+                owner->generation);
+            wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
+            if (!api.Resolve(reference, entity, error))
+                return PushFalseError(state, error);
+            if (!bridge::IsRenegadeSoundSource(*owner->scene, entity))
+                return PushFalseError(
+                    state,
+                    "EntityRef is not an authored Renegade Sound Source.");
+
+            auto* sound = owner->scene->sounds.GetComponent(entity);
+            if (sound == nullptr)
+                return PushFalseError(
+                    state,
+                    "Renegade Sound Source is missing its native audio component.");
+
+            sound->Stop();
             lua_pushboolean(state, 1);
             return 1;
         }
@@ -851,6 +1005,8 @@ namespace renegade::runtime
                 return frame.player.jumpPressed ? 1.0f : 0.0f;
             case bridge::GameplayAction::Sprint:
                 return frame.player.sprintDown ? 1.0f : 0.0f;
+            case bridge::GameplayAction::Interact:
+                return frame.interactPressed ? 1.0f : 0.0f;
             case bridge::GameplayAction::Pause:
                 return frame.pausePressed ? 1.0f : 0.0f;
             case bridge::GameplayAction::Reset:
@@ -916,6 +1072,9 @@ namespace renegade::runtime
             {
             case bridge::GameplayAction::Jump:
                 pressed = owner->gameplayInput->player.jumpPressed;
+                break;
+            case bridge::GameplayAction::Interact:
+                pressed = owner->gameplayInput->interactPressed;
                 break;
             case bridge::GameplayAction::Pause:
                 pressed = owner->gameplayInput->pausePressed;
@@ -1159,11 +1318,20 @@ namespace renegade::runtime
             lua_pushcclosure(lua, TransformGetLocalPositionLua, 1);
             lua_setfield(lua, -2, "get_local_position");
             lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, TransformGetWorldPositionLua, 1);
+            lua_setfield(lua, -2, "get_world_position");
+            lua_pushlightuserdata(lua, this);
             lua_pushcclosure(lua, TransformSetLocalPositionLua, 1);
             lua_setfield(lua, -2, "set_local_position");
             lua_pushlightuserdata(lua, this);
             lua_pushcclosure(lua, TransformTranslateLocalLua, 1);
             lua_setfield(lua, -2, "translate_local");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, TransformGetLocalScaleLua, 1);
+            lua_setfield(lua, -2, "get_local_scale");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, TransformSetLocalScaleLua, 1);
+            lua_setfield(lua, -2, "set_local_scale");
             lua_setfield(lua, -2, "transform");
 
             lua_newtable(lua);
@@ -1199,6 +1367,17 @@ namespace renegade::runtime
             lua_pushcclosure(lua, InputWasPressedLua, 1);
             lua_setfield(lua, -2, "was_pressed");
             lua_setfield(lua, -2, "input");
+
+            lua_newtable(lua);
+            lua_pushinteger(lua, 1);
+            lua_setfield(lua, -2, "contract_version");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, AudioPlayLua, 1);
+            lua_setfield(lua, -2, "play");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, AudioStopLua, 1);
+            lua_setfield(lua, -2, "stop");
+            lua_setfield(lua, -2, "audio");
 
             lua_newtable(lua);
             lua_pushinteger(lua, 1);
