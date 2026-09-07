@@ -25,6 +25,7 @@ namespace renegade::bridge
         LookPitch,
         Jump,
         Sprint,
+        Interact,
         Pause,
         Reset,
         Count,
@@ -50,6 +51,7 @@ namespace renegade::bridge
     struct GameplayInputFrame
     {
         PlayerInputFrame player;
+        bool interactPressed = false;
         bool pausePressed = false;
         bool resetPressed = false;
     };
@@ -84,7 +86,8 @@ namespace renegade::bridge
         std::string& error);
 
     // Gate 2 owns raw gameplay-device polling. PlayerService remains action-shaped
-    // and receives only PlayerInputFrame values produced here.
+    // and receives only PlayerInputFrame values produced here. S7 appends the
+    // creator-facing Interact action without exposing raw keyboard/device state.
     [[nodiscard]] GameplayInputFrame CaptureGameplayInput(
         const GameplayInputMap& map,
         float dt) noexcept;
