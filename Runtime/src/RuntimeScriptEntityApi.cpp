@@ -105,6 +105,19 @@ namespace renegade::runtime
         return true;
     }
 
+    bool RuntimeScriptEntityApi::GetWorldPosition(
+        const RuntimeScriptEntityReference& reference,
+        XMFLOAT3& position,
+        std::string& error) const
+    {
+        wi::scene::TransformComponent* transform = nullptr;
+        if (!ResolveTransform(reference, transform, error))
+            return false;
+        position = transform->GetPosition();
+        error.clear();
+        return true;
+    }
+
     bool RuntimeScriptEntityApi::SetLocalPosition(
         const RuntimeScriptEntityReference& reference,
         const XMFLOAT3& position,
@@ -150,6 +163,40 @@ namespace renegade::runtime
             return false;
         }
         transform->translation_local = translated;
+        transform->SetDirty();
+        transform->UpdateTransform();
+        error.clear();
+        return true;
+    }
+
+    bool RuntimeScriptEntityApi::GetLocalScale(
+        const RuntimeScriptEntityReference& reference,
+        XMFLOAT3& scale,
+        std::string& error) const
+    {
+        wi::scene::TransformComponent* transform = nullptr;
+        if (!ResolveTransform(reference, transform, error))
+            return false;
+        scale = transform->scale_local;
+        error.clear();
+        return true;
+    }
+
+    bool RuntimeScriptEntityApi::SetLocalScale(
+        const RuntimeScriptEntityReference& reference,
+        const XMFLOAT3& scale,
+        std::string& error) const
+    {
+        if (!IsFinite(scale))
+        {
+            error = "Transform scale must contain finite numbers.";
+            return false;
+        }
+
+        wi::scene::TransformComponent* transform = nullptr;
+        if (!ResolveTransform(reference, transform, error))
+            return false;
+        transform->scale_local = scale;
         transform->SetDirty();
         transform->UpdateTransform();
         error.clear();
