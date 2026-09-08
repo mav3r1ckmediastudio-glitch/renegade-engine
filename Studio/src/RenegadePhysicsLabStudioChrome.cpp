@@ -2,19 +2,29 @@
 
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/CollisionService.h"
+#include "renegade/bridge/ParticleEmitterService.h"
 #include "renegade/bridge/PhysicsLuaService.h"
 #include "renegade/bridge/StudioSession.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace
 {
     constexpr wi::Color Surface0 = wi::Color(8, 12, 16, 255);
+    constexpr wi::Color Surface2 = wi::Color(16, 23, 28, 255);
     constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
     constexpr wi::Color TextSecondary = wi::Color(226, 226, 226, 255);
     constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
+
+    constexpr float TopBarHeight = 64.0f;
+    constexpr float AddPopupX = 328.0f;
+    constexpr float AddPopupWidth = 226.0f;
+    constexpr float AddItemHeight = 30.0f;
+    constexpr int ExistingAddItemCount = 9;
+    constexpr float AddMenuLabelRight = 377.0f;
 
     void DrawRect(
         const float x,
@@ -83,6 +93,10 @@ namespace renegade::studio
         audioWorkspace_.Create();
         audioWorkspace_.SetBounds(AudioInspectorBounds());
         audioWorkspace_.SetActive(false);
+
+        particleWorkspace_.Create();
+        particleWorkspace_.SetBounds(AudioInspectorBounds());
+        particleWorkspace_.SetActive(false);
     }
 
     void RenegadePhysicsLabStudioChrome::SetLayout(
@@ -91,9 +105,10 @@ namespace renegade::studio
     {
         CreatorAssetStudioChrome::SetLayout(width, height);
         // Bounds only change when Studio layout changes. Relaying out every
-        // frame would reset the stateful GUI controls during interaction.
+        // frame would reset stateful GUI controls during interaction.
         physicsLab_.SetBounds(ViewportBounds());
         audioWorkspace_.SetBounds(AudioInspectorBounds());
+        particleWorkspace_.SetBounds(AudioInspectorBounds());
     }
 
     void RenegadePhysicsLabStudioChrome::OnAction(
@@ -110,10 +125,12 @@ namespace renegade::studio
                     action == Action::RenderWorkspace)
                 {
                     workspaceTransitionRequested_ = true;
+                    particleAddMenuOpen_ = false;
                     SetActiveBottomTab(-1, true);
                     ResetDisclosureState();
                     SetPhysicsLabActive(false);
                     SetAudioWorkspaceActive(false);
+                    SetParticleWorkspaceActive(false);
                 }
                 if (studioAction_)
                     studioAction_(action);
@@ -122,7 +139,8 @@ namespace renegade::studio
 
     void RenegadePhysicsLabStudioChrome::RequestCurrentWorkspaceReconcile()
     {
-        if (!physicsLab_.IsActive() && !audioWorkspace_.IsActive())
+        if (!physicsLab_.IsActive() && !audioWorkspace_.IsActive() &&
+            !particleWorkspace_.IsActive())
         {
             RenegadeStudioChrome::RequestCurrentWorkspaceReconcile();
             return;
@@ -132,6 +150,7 @@ namespace renegade::studio
             studioAction_(Action::SceneWorkspace);
         physicsLab_.SetBounds(ViewportBounds());
         audioWorkspace_.SetBounds(AudioInspectorBounds());
+        particleWorkspace_.SetBounds(AudioInspectorBounds());
     }
 
     void RenegadePhysicsLabStudioChrome::SetPhysicsLabActive(const bool active)
@@ -141,6 +160,7 @@ namespace renegade::studio
         if (active)
         {
             audioWorkspace_.SetActive(false);
+            particleWorkspace_.SetActive(false);
             SetStatusText("PHYSICS LAB");
         }
     }
@@ -152,7 +172,21 @@ namespace renegade::studio
         if (active)
         {
             physicsLab_.SetActive(false);
+            particleWorkspace_.SetActive(false);
             SetStatusText("AUDIO // NATIVE WICKED");
+        }
+    }
+
+    void RenegadePhysicsLabStudioChrome::SetParticleWorkspaceActive(
+        const bool active)
+    {
+        particleWorkspace_.SetActive(active);
+        particleWorkspace_.SetBounds(AudioInspectorBounds());
+        if (active)
+        {
+            physicsLab_.SetActive(false);
+            audioWorkspace_.SetActive(false);
+            SetStatusText("PARTICLE EMITTER // NATIVE WICKED GPU PARTICLES");
         }
     }
 
@@ -239,10 +273,40 @@ namespace renegade::studio
             std::max(0.0f, viewport.w - viewport.y));
     }
 
+    bool RenegadePhysicsLabStudioChrome::AddMenuLabelHit(
+        const XMFLOAT4& pointer) const noexcept
+    {
+        // Mirrors the existing base chrome's menu-position arithmetic:
+        // menuPositions[ADD] = 336, with its hitbox extending 8 px left.
+        return pointer.x >= AddPopupX && pointer.x < AddMenuLabelRight &&
+            pointer.y >= 0.0f && pointer.y < TopBarHeight;
+    }
+
+    XMFLOAT4 RenegadePhysicsLabStudioChrome::ParticleAddMenuItemBounds() const noexcept
+    {
+        return XMFLOAT4(
+            AddPopupX,
+            TopBarHeight + ExistingAddItemCount * AddItemHeight,
+            AddPopupWidth,
+            AddItemHeight);
+    }
+
+    bool RenegadePhysicsLabStudioChrome::ParticleAddMenuItemHit(
+        const XMFLOAT4& pointer) const noexcept
+    {
+        if (!particleAddMenuOpen_)
+            return false;
+        const XMFLOAT4 bounds = ParticleAddMenuItemBounds();
+        return pointer.x >= bounds.x && pointer.x < bounds.x + bounds.z &&
+            pointer.y >= bounds.y && pointer.y < bounds.y + bounds.w;
+    }
+
     bool RenegadePhysicsLabStudioChrome::ConsumedPointerThisFrame() const noexcept
     {
         return physicsTabConsumed_ || audioToolConsumed_ ||
+            particleMenuConsumed_ ||
             physicsLab_.ConsumedPointerThisFrame() ||
+            particleWorkspace_.ConsumedPointerThisFrame() ||
             audioWorkspace_.ConsumedPointerThisFrame() ||
             CreatorAssetStudioChrome::ConsumedPointerThisFrame();
     }
@@ -253,14 +317,57 @@ namespace renegade::studio
     {
         physicsTabConsumed_ = false;
         audioToolConsumed_ = false;
+        particleMenuConsumed_ = false;
         workspaceTransitionRequested_ = false;
-        CreatorAssetStudioChrome::Update(canvas, dt);
+
+        const XMFLOAT4 pointerBeforeBase = wi::input::GetPointer();
+        const bool leftPressed = wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+        const bool addMenuPressed = leftPressed && AddMenuLabelHit(pointerBeforeBase);
+        if (addMenuPressed)
+        {
+            particleAddMenuOpen_ = !particleAddMenuOpen_;
+        }
+        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE))
+        {
+            particleAddMenuOpen_ = false;
+        }
+
+        bool skipBaseUpdate = false;
+        if (leftPressed && ParticleAddMenuItemHit(pointerBeforeBase))
+        {
+            // The native ADD popup owns nine rows. This tenth row is drawn and
+            // handled by the bounded particle wrapper. Close the base popup and
+            // skip its update for this one frame so the click cannot leak into
+            // the viewport beneath the extended popup.
+            particleMenuConsumed_ = true;
+            particleAddMenuOpen_ = false;
+            ResetDisclosureState();
+            SetActiveBottomTab(-1, true);
+            SetPhysicsLabActive(false);
+            SetAudioWorkspaceActive(false);
+            if (studioAction_)
+                studioAction_(Action::SceneWorkspace);
+            SetParticleWorkspaceActive(true);
+            particleWorkspace_.CreateEmitterInFrontOfCamera();
+            skipBaseUpdate = true;
+        }
+        else if (leftPressed && particleAddMenuOpen_ && !addMenuPressed)
+        {
+            // Native ADD rows or any click outside the ADD label close the
+            // mirrored tenth-row state while the base chrome handles its own
+            // popup selection normally.
+            particleAddMenuOpen_ = false;
+        }
+
+        if (!skipBaseUpdate)
+            CreatorAssetStudioChrome::Update(canvas, dt);
 
         const XMFLOAT4 pointer = wi::input::GetPointer();
         if (PhysicsTabHit(pointer) &&
             wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
             physicsTabConsumed_ = true;
+            particleAddMenuOpen_ = false;
             if (studioAction_)
                 studioAction_(Action::SceneWorkspace);
             SetPhysicsLabActive(true);
@@ -270,36 +377,59 @@ namespace renegade::studio
             wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
         {
             audioToolConsumed_ = true;
+            particleAddMenuOpen_ = false;
             if (studioAction_)
                 studioAction_(Action::SceneWorkspace);
             SetAudioWorkspaceActive(true);
         }
 
-        // Selecting a Gate 3 source from the hierarchy opens its dedicated
-        // audio Inspector automatically while leaving the viewport and gizmo
-        // available for emitter placement.
+        // Selecting a native sound/emitter from the hierarchy routes directly
+        // to the matching specialist Inspector. This intentionally switches
+        // Audio <-> Particles when the selection changes between those native
+        // component types, instead of requiring the creator to close one first.
         if (!workspaceTransitionRequested_ && IsSceneWorkspaceActive() &&
-            !physicsLab_.IsActive() && !audioWorkspace_.IsActive())
+            !physicsLab_.IsActive())
         {
             auto* session = bridge::StudioSession::Current();
             if (session != nullptr && session->Selection().HasSelection())
             {
                 auto& scene = session->Scenes().GetScene();
-                if (bridge::IsRenegadeSoundSource(
-                        scene, session->Selection().SelectedEntity()))
+                const auto selected = session->Selection().SelectedEntity();
+                if (bridge::IsParticleEmitter(scene, selected))
                 {
-                    if (studioAction_)
-                        studioAction_(Action::SceneWorkspace);
-                    SetAudioWorkspaceActive(true);
+                    if (!particleWorkspace_.IsActive())
+                    {
+                        if (studioAction_)
+                            studioAction_(Action::SceneWorkspace);
+                        SetParticleWorkspaceActive(true);
+                    }
                 }
+                else if (bridge::IsRenegadeSoundSource(scene, selected))
+                {
+                    if (!audioWorkspace_.IsActive())
+                    {
+                        if (studioAction_)
+                            studioAction_(Action::SceneWorkspace);
+                        SetAudioWorkspaceActive(true);
+                    }
+                }
+                else if (particleWorkspace_.IsActive())
+                {
+                    SetParticleWorkspaceActive(false);
+                }
+            }
+            else if (particleWorkspace_.IsActive())
+            {
+                SetParticleWorkspaceActive(false);
             }
         }
 
         SynchronizeRigidBodyOwnerSelection();
 
-        // Do not call SetBounds here. Both workspaces own stateful widgets;
-        // relayout during Update can cancel click/slider state mid-interaction.
+        // Do not call SetBounds here. Specialist workspaces own stateful
+        // widgets; relayout during Update can cancel click/slider state.
         physicsLab_.Update(canvas, dt);
+        particleWorkspace_.Update(canvas, dt);
     }
 
     void RenegadePhysicsLabStudioChrome::Render(
@@ -309,7 +439,34 @@ namespace renegade::studio
         CreatorAssetStudioChrome::Render(canvas, cmd);
         RenderAudioViewportTool(cmd);
         RenderPhysicsTab(cmd);
+        RenderParticleAddMenuItem(cmd);
         physicsLab_.Render(canvas, cmd);
+        particleWorkspace_.Render(canvas, cmd);
+    }
+
+    void RenegadePhysicsLabStudioChrome::RenderParticleAddMenuItem(
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!particleAddMenuOpen_)
+            return;
+
+        const XMFLOAT4 bounds = ParticleAddMenuItemBounds();
+        const XMFLOAT4 pointer = wi::input::GetPointer();
+        const bool hovered = ParticleAddMenuItemHit(pointer);
+        DrawBorderedRect(
+            bounds.x,
+            bounds.y,
+            bounds.z,
+            bounds.w,
+            hovered ? wi::Color(28, 20, 16, 255) : Surface2,
+            hovered ? Forge : Border,
+            cmd);
+        DrawText(
+            "PARTICLE EMITTER",
+            bounds.x + 12.0f,
+            bounds.y + 9.0f,
+            hovered ? TextStrong : TextSecondary,
+            cmd);
     }
 
     void RenegadePhysicsLabStudioChrome::RenderPhysicsTab(
