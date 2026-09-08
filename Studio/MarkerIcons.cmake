@@ -1,30 +1,15 @@
 # Renegade-owned, editor-only viewport marker system.
-# Stock artwork is copied beside Studio and may be overridden without recompiling:
+#
+# Marker artwork is intentionally NOT part of the repository/build graph. The
+# stock PNGs are added manually to the completed Studio build at:
+#   Content/Editor/MarkerIcons
+# This keeps binary artwork out of Git/CI while preserving the runtime lookup
+# order implemented by MarkerIconOverlay:
 #   Project/Content/Editor/MarkerIcons -> User/MarkerIcons -> stock Content/Editor/MarkerIcons.
 
 target_sources(RenegadeStudio PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/src/MarkerIconOverlay.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/src/MarkerIconOverlay.h"
-)
-
-set(RENEGADE_MARKER_ICON_SOURCE
-    "${CMAKE_CURRENT_LIST_DIR}/assets/markericons")
-set(RENEGADE_MARKER_ICON_OUTPUT
-    "${CMAKE_BINARY_DIR}/Studio/$<CONFIG>/Content/Editor/MarkerIcons")
-
-add_custom_target(RenegadeMarkerIconAssets
-    COMMAND ${CMAKE_COMMAND} -E remove_directory
-        "${RENEGADE_MARKER_ICON_OUTPUT}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "${CMAKE_BINARY_DIR}/Studio/$<CONFIG>/Content/Editor"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${RENEGADE_MARKER_ICON_SOURCE}"
-        "${RENEGADE_MARKER_ICON_OUTPUT}"
-    VERBATIM
-)
-add_dependencies(RenegadeStudio RenegadeMarkerIconAssets)
-set_target_properties(RenegadeMarkerIconAssets PROPERTIES
-    FOLDER "Renegade/Packaging"
 )
 
 add_test(
