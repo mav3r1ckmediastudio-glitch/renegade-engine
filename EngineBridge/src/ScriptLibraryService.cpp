@@ -1184,8 +1184,12 @@ namespace renegade::bridge
             return false;
         }
 
+        std::set<std::string> closureProjectKeys;
         for (const PackageFile* file : closure)
         {
+            closureProjectKeys.insert(PathKey(
+                ProjectPathFor(package.packageId, file->path)));
+
             const std::string projectPath = ProjectPathFor(package.packageId, file->path);
             const LockRecord* previous = FindLockRecord(lock, package.packageId, projectPath);
             if (previous != nullptr &&
@@ -1207,9 +1211,18 @@ namespace renegade::bridge
             }
             if (exists && previous == nullptr)
             {
-                error = "S6 adoption collision: project path already exists outside library authority: " +
-                    projectPath;
-                return false;
+                // Early S7 builds incorrectly removed ownership records for
+                // previously adopted stock Actions while leaving their exact
+                // shipped Lua files behind. Reclaim only byte-identical stock
+                // content. Any changed/unrelated file remains creator-owned and
+                // blocks adoption exactly as before.
+                if (package.packageId != S7StockPackageId ||
+                    currentHash != file->contentHash)
+                {
+                    error = "S6 adoption collision: project path already exists outside library authority: " +
+                        projectPath;
+                    return false;
+                }
             }
             if (exists && previous != nullptr && currentHash != previous->contentHash)
             {
@@ -1225,7 +1238,11 @@ namespace renegade::bridge
                 candidate.records.begin(), candidate.records.end(),
                 [&](const LockRecord& record)
                 {
-                    return record.packageId == package.packageId;
+                    if (record.packageId != package.packageId)
+                        return false;
+                    if (package.packageId != S7StockPackageId)
+                        return true;
+                    return closureProjectKeys.count(PathKey(record.projectPath)) != 0;
                 }),
             candidate.records.end());
 

@@ -4,6 +4,7 @@
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ScriptAuthoringService.h"
 #include "renegade/bridge/ScriptDocumentService.h"
+#include "renegade/bridge/ScriptReferenceAuthoringService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/TestLevelSnapshotService.h"
 
@@ -254,7 +255,7 @@ int main()
             "  name='S5A Move Barrel',\n"
             "  category='Tests',\n"
             "  role='SCRIPT',\n"
-            "  properties={}\n"
+            "  properties={{name='target',label='Target',type='entity'}}\n"
             " })\n"
             "end\n"
             "return {\n"
@@ -284,6 +285,14 @@ int main()
         FindSource(sources, snapshotScriptPath);
     if (authoredSource == nullptr)
         return Fail("owner-workflow movement script was not discoverable");
+    if (authoredSource->metadata.properties.size() != 1 ||
+        authoredSource->metadata.properties[0].type !=
+            ScriptPropertyType::EntityReference)
+    {
+        return Fail("owner-workflow target EntityRef metadata was not discovered");
+    }
+    const ScriptMetadataPropertyDescriptor targetMetadata =
+        authoredSource->metadata.properties[0];
 
     StableId scriptInstanceId;
     if (!session.Scripts().AttachEntitySource(
@@ -304,6 +313,42 @@ int main()
     }
     if (!session.Commands().IsDirty())
         return Fail("unsaved script attachment did not mark Studio dirty");
+
+    // Reproduce the creator failure that escaped the earlier S7 tests: place a
+    // fresh imported/reusable hierarchy after the last Save, target its stable
+    // wrapper from a script property, and leave one payload descendant without
+    // persistent identity. Test Level must launch from this live unsaved Scene;
+    // it must not require a Save merely to assign irrelevant payload IDs.
+    const wi::ecs::Entity authoredCrate =
+        authoredScene.Entity_CreateTransform("Fresh Imported Crate");
+    const wi::ecs::Entity authoredCratePayload =
+        authoredScene.Entity_CreateTransform("Fresh Imported Crate Payload");
+    authoredScene.Component_Attach(authoredCratePayload, authoredCrate, true);
+    const StableId authoredCrateId = GenerateStableId();
+    if (!AssignPersistentEntityId(
+            authoredScene, authoredCrate, authoredCrateId, error))
+    {
+        return Fail("assign fresh imported crate wrapper identity: " + error);
+    }
+    if (!PersistentEntityId(authoredScene, authoredCratePayload).empty())
+    {
+        return Fail(
+            "fresh imported crate payload unexpectedly already has persistent identity");
+    }
+
+    ScriptReferenceOption crateTarget;
+    crateTarget.referenceId = authoredCrateId;
+    crateTarget.label = "Fresh Imported Crate";
+    if (!CommitScriptReferenceAuthoringEdit(
+            session.Scripts(),
+            session.Commands(),
+            scriptInstanceId,
+            targetMetadata,
+            crateTarget,
+            error))
+    {
+        return Fail("commit fresh imported crate EntityRef: " + error);
+    }
 
     const std::size_t undoBeforeSnapshot = session.Commands().UndoCount();
     const std::size_t redoBeforeSnapshot = session.Commands().RedoCount();
@@ -375,6 +420,8 @@ int main()
         runtimeIdentities.Resolve(authoredBarrelId);
     if (runtimeBarrel == wi::ecs::INVALID_ENTITY)
         return Fail("scripted snapshot barrel identity did not survive Runtime load");
+    if (runtimeIdentities.Resolve(authoredCrateId) == wi::ecs::INVALID_ENTITY)
+        return Fail("scripted snapshot crate target identity did not survive Runtime load");
 
     const auto* runtimeTransform =
         runtimeScenes.GetScene().transforms.GetComponent(runtimeBarrel);
