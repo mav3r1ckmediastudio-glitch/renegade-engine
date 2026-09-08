@@ -1,36 +1,146 @@
 # Renegade Engine
 
-Renegade is the working title for a Windows-first game engine and authoring
-environment built on [Wicked Engine](https://github.com/turanszkij/WickedEngine).
-Wicked provides the renderer, ECS, physics integration and low-level engine
-foundation; Renegade owns its Studio editor, project and asset workflows,
-runtime/player, build lifecycle, UX, documentation and higher-level gameplay
-framework.
+Renegade is a Windows-first game engine and creator environment built on
+[Wicked Engine](https://github.com/turanszkij/WickedEngine). Wicked supplies the
+renderer, ECS, Jolt physics integration and other low-level engine systems;
+Renegade owns its Studio editor, project and asset workflows, Runtime/player,
+build lifecycle, creator UX, diagnostics and higher-level gameplay framework.
 
-> **Status:** Phase 6 — Playable Core. Phase 5 Gates 1-9 and the WD01/editor
-> performance recovery are accepted on `main`. Phase 6 Gates 1-2 are accepted;
-> Gate 3 spatial audio is active as a draft repair on
-> `phase6/gate3-spatial-audio`. Renegade is still a
-> development project, not a distribution-ready v1 engine.
+> **Status: active development — Phase 6 / Playable Core.** Renegade has moved
+> beyond scene-authoring foundations into a working gameplay stack with player
+> control, governed input, physics, audio, Lua scripting, creator-facing script
+> authoring, gameplay APIs, live diagnostics and reusable script-library package
+> adoption. S6 — Library Adoption & Package Closure — is merged on `main`
+> through PR #143 after its final integrated Windows CI passed. Renegade is not
+> yet a distribution-ready v1 engine.
 
-Scene UI Gate 5 is also accepted and merged. The recovered Scene Editor now has
-independent Environment and Terrain ownership, complete realistic-sky/Sun
-startup, finite one-metre Terrain creation and non-destructive ring expansion,
-cross-chunk sculpting, validated packaged terrain materials and matching Studio
-and Runtime weather/terrain resources.
+## What Renegade already does
 
-## Current baseline
+### Studio and project authoring
 
-- Current main baseline: `861c4d9b0f8acbb57f49db0b84b004d925b51136`
-  (Phase 6 Gate 2 gameplay input and play-session lifecycle, PR #124)
+- Custom Renegade Studio chrome and workspaces over Wicked subsystems rather
+  than embedded stock Wicked Editor windows.
+- Project Hub, Story Flow/Journey authoring, Scene hierarchy, selection,
+  transform gizmos, Inspector workflows and command-backed Undo/Redo.
+- Asset Browser placement and creator-owned project/scene lifecycle.
+- Environment, Terrain, Render, Physics, Audio and Diagnostics authoring
+  surfaces.
+- Stable Inspector section/provider architecture used by both existing and new
+  creator-facing systems.
+
+### World and rendering
+
+- Finite one-metre Terrain creation, non-destructive ring expansion and
+  cross-chunk sculpting.
+- Native Wicked grass/vegetation painting across Terrain chunks with normal
+  viewport navigation preserved while the brush is armed.
+- Environment, realistic sky, sun/time-of-day, precipitation and native FFT
+  ocean foundations.
+- Lights, materials, decals, probes, post-processing, AO/GI/reflections,
+  ray/path-tracing exposure, lightmap/baking workflows and render diagnostics.
+- Packaged Studio/Runtime parity checks for the accepted world and rendering
+  paths.
+
+### Assets and standalone builds
+
+- GLB/GLTF creator-facing import with placement, automatic scale correction,
+  Undo/Redo and save/reopen behaviour.
+- Stable asset identity, source provenance and deterministic moved/missing
+  source recovery.
+- Deterministic dependency extraction and standalone Windows build staging,
+  validation, rollback/promotion and isolated Runtime launch.
+- Test Level runs through the real Runtime process; Studio yields 3D ownership
+  while Test Level is active instead of rendering a competing second world.
+
+### Physics, player, input and audio
+
+- Renegade-owned authoring over Wicked/Jolt physics, including the JP01 physics
+  foundation and Physics Lab workflow.
+- One governed Player Start, Runtime first-person possession and a Wicked/Jolt
+  character capsule with movement, mouse look, sprint and jump.
+- Versioned project action maps with governed gameplay input plus Pause/Resume
+  and deterministic Reset lifecycle behaviour.
+- Native Wicked audio authoring for global/2D and movable positional 3D sources,
+  preview playback, buses/mixing/reverb and Runtime Pause/Reset integration.
+- Audio-specific trigger zones are intentionally deferred; a future shared
+  ZoneService must serve audio, objectives, weather and other gameplay systems
+  rather than creating separate incompatible zone implementations.
+
+## Governed Lua scripting
+
+Renegade now has a creator-facing scripting stack rather than relying on ad-hoc
+raw Lua execution:
+
+- **S1A/S1B — Inspector foundation:** extensible Inspector sections/providers and
+  migration of existing Inspector ownership.
+- **S2 — Script document/source model:** durable project `.rscripts` companions,
+  transactional edits, source identity and validation.
+- **S3 — Governed Lua Runtime:** Runtime-owned Lua lifecycle, live EntityRef
+  validation and a deliberately restricted standard-library surface.
+- **S4A-D — Creator authoring:** restricted metadata evaluation, ACTION/SCRIPT
+  attachments, typed generated properties, governed entity references and
+  GLOBAL SCRIPT authoring through normal Undo/Redo and dirty-state ownership.
+- **S5A-C — Gameplay APIs and events:** generation-safe entity/transform access,
+  governed gameplay lifecycle and bounded cross-script event dispatch.
+- **S5D — Structured diagnostics/IPC:** Studio-to-Test-Level handshake and
+  structured diagnostics across the creator/runtime boundary.
+- **S6 — Creator Library packages:** immutable installed package manifests,
+  deterministic transitive dependency closure, transactional first-use adoption
+  into project-owned `Content/Scripts/Library/...`, clean update handling,
+  creator-edit conflict protection and structured package diagnostics.
+
+After S6 adoption the **project copy is authoritative**. Runtime never searches
+or executes scripts directly from the installed Library. Test Level and Build
+Game consume the same project-owned script closure through the existing project
+snapshot and dependency-graph paths.
+
+See
+[`docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md).
+
+## Diagnostics
+
+Renegade has a built-in Diagnostics surface for inspecting the running editor and
+Test Level/Runtime rather than relying only on build logs. The current diagnostic
+stack includes structured editor/runtime state, script and audio diagnostics,
+Runtime heartbeat/liveness semantics, local live diagnostic transport and the
+Studio/Test Level IPC handshake.
+
+See [`docs/LIVE_DIAGNOSTIC_ACCESS.md`](docs/LIVE_DIAGNOSTIC_ACCESS.md).
+
+## Current programme
+
+Phase 6 exits when Renegade can author and package a small interactive game with
+a controllable character, collisions, audio and a scripted objective.
+
+With the scripting foundation through S6 now merged, the remaining bounded
+playable-core work is centred on:
+
+1. a reusable scripted **objective and interaction vertical slice** using the
+   governed scripting/gameplay APIs;
+2. **navigation and actor path queries** over Wicked's voxel/pathfinding
+   facilities; and
+3. **integrated playable-core acceptance** across reopen, Test Level and an
+   independently packaged Windows game.
+
+Shared trigger/volume authoring may be introduced as part of that work only as a
+single cross-system ZoneService. Player arms, combat, production enemy AI and
+advanced animation remain later work unless a narrow playable-core dependency
+requires them.
+
+The detailed programme state lives in [`docs/ROADMAP.md`](docs/ROADMAP.md), not
+in a fast-aging branch/status paragraph here.
+
+## Build baseline
+
 - Wicked upstream: `https://github.com/turanszkij/WickedEngine.git`
 - Pinned branch: `master`
-- Pinned commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
-- Initial target: Windows x64 / DirectX 12
+- Pinned Wicked commit: `3a800b7134aafe58461093c8abb2e274d4e64033`
+- Primary target: Windows x64 / DirectX 12
 - Development cross-check: Vulkan on Windows
 
-Wicked Engine is included as a pinned Git submodule at `/WickedEngine`. Clone
-with:
+Wicked Engine is included as a pinned Git submodule at `/WickedEngine`.
+
+Clone with:
 
 ```bash
 git clone --recurse-submodules \
@@ -46,57 +156,18 @@ git submodule update --init --recursive
 The Windows reference build and evidence workflow is documented in
 [`docs/BUILD_WINDOWS.md`](docs/BUILD_WINDOWS.md).
 
-## What is already proven
-
-- **Studio foundation:** custom Renegade chrome over Wicked subsystems, Project
-  Hub, hierarchy/selection, transform gizmos, Inspector workflows, Save/Open and
-  command-backed Undo/Redo.
-- **World authoring:** environment, precipitation, sun/time-of-day foundations,
-  native FFT ocean and Terrain Authoring V1, including packaged DX12/Vulkan
-  persistence proof.
-- **Native lights and materials foundation:** Renegade-owned service/command
-  boundaries over Wicked components rather than stock Wicked Editor windows.
-- **Model import:** isolated GLB/GLTF conversion, scene placement, Undo/Redo,
-  Save/Open and automatic scale correction. The pinned Wicked source also
-  contains dedicated FBX, OBJ and PLY model converters; Renegade has not yet
-  promoted those to accepted creator-facing import paths.
-- **Runtime lifecycle:** Runtime Screens, stable action dispatch, Story Flow and
-  LP04 unsaved Test Level snapshots launched through the real Runtime process.
-- **LP05 dependency extraction:** deterministic project dependency closure with
-  typed providers and packaged separate-process proof.
-- **LC01 asset identity/source tracking:** durable stable asset IDs, transactional
-  registry persistence, import provenance and deterministic moved/missing source
-  recovery.
-- **LP06 standalone build lifecycle:** deterministic plan, staging, named
-  executable, package integrity, isolated DX12 smoke, safe rollback/promotion and
-  owner-visible Build Windows Game integration.
-
-## What comes next
-
-The active gate is **Phase 6 Gate 3 — Spatial Audio and Mixing**. Its draft
-exposes native Wicked sound sources and scene mixing through Renegade-owned
-authoring and Runtime lifecycle boundaries. The owner has confirmed global
-audio, Preview Play/Stop and ordinary 3D spatial playback in Test Level. The
-current repair removes the nonfunctional audio-specific zone experiment; reusable
-trigger volumes will return through a shared zone service in a later gate.
-Gate 3 remains unaccepted until the exact repair head passes Windows CI and the
-remaining save/reopen and packaged checks.
-
-See
-[`docs/PHASE6_GATE3_SPATIAL_AUDIO.md`](docs/PHASE6_GATE3_SPATIAL_AUDIO.md).
-
 ## Product layers
 
 | Path | Responsibility |
 |---|---|
 | `/WickedEngine` | Pinned upstream engine foundation |
-| `/Studio` | Renegade editor application and owned UX |
+| `/Studio` | Renegade editor application and owned creator UX |
 | `/EngineBridge` | Stable Renegade services/adapters around Wicked APIs |
 | `/Runtime` | Standalone game/player executable |
 | `/Tools` | Import, shader, packaging and validation tools |
 | `/Templates` | Starter projects and examples |
-| `/Tests` | Automated, integration, packaged and sample-project tests |
-| `/docs` | Canonical plan, architecture, roadmap and verification records |
+| `/Tests` | Automated, integration, packaged and acceptance tests |
+| `/docs` | Canonical architecture, roadmap, gate contracts and verification records |
 | `/assets` | Renegade-owned editor assets |
 
 The original Wicked Editor remains available inside the submodule as a parity
@@ -106,21 +177,30 @@ reference. It is not the Renegade editor and is not embedded as Renegade UI.
 
 1. Read [`docs/PROJECT_CHARTER.md`](docs/PROJECT_CHARTER.md).
 2. Read [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md).
-3. Check [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`HANDOFF.md`](HANDOFF.md).
-4. For the current programme sequence, read
-   [`docs/PHASE6_CAPABILITY_AUDIT.md`](docs/PHASE6_CAPABILITY_AUDIT.md).
-5. For the active gate, read
-   [`docs/PHASE6_GATE3_SPATIAL_AUDIO.md`](docs/PHASE6_GATE3_SPATIAL_AUDIO.md).
-6. Follow [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
+3. Check [`docs/ROADMAP.md`](docs/ROADMAP.md) for the current programme state.
+4. Check [`HANDOFF.md`](HANDOFF.md) for the current implementation handoff only.
+5. For the scripting stack, start with
+   [`docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md)
+   and follow its references back through S1-S5.
+6. For live diagnostics, read
+   [`docs/LIVE_DIAGNOSTIC_ACCESS.md`](docs/LIVE_DIAGNOSTIC_ACCESS.md).
+7. Follow [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) for Codex, ChatGPT,
    Claude or human handovers.
-7. Do not claim feature parity from compilation alone; update
-   [`docs/FEATURE_MATRIX.csv`](docs/FEATURE_MATRIX.csv) and record behavioural
-   evidence for creator-facing work.
+8. Treat [`docs/FEATURE_MATRIX.csv`](docs/FEATURE_MATRIX.csv) as the capability
+   evidence ledger; compilation alone is never proof of creator-facing parity.
+
+## Verification policy
+
+Green compilation is necessary but not sufficient. Creator-facing work must be
+behaviourally verified in the editor, save/reopen must be exercised where state
+is persisted, and gameplay-facing work must be checked in Test Level and/or an
+independently packaged Runtime as appropriate. Visual or behavioural owner
+failure overrides nominal automated success.
 
 ## Licensing and distribution
 
 Wicked Engine is MIT licensed and retains its original copyright and licence.
-Renegade's own project-wide licence has not yet been selected. LP06's promoted
-standalone output deliberately remains `distribution_ready=false`; it is an
-owner-visible engineering build, not commercial redistribution clearance. See
-[`docs/LICENSING.md`](docs/LICENSING.md) before redistributing any build.
+Renegade's own project-wide licence has not yet been selected. Current standalone
+outputs are engineering/acceptance builds rather than commercial redistribution
+clearance. See [`docs/LICENSING.md`](docs/LICENSING.md) before redistributing any
+build.
