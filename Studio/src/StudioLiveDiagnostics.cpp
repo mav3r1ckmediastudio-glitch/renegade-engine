@@ -1,4 +1,5 @@
 #include "StudioApplication.h"
+#include "MarkerIconOverlay.h"
 
 #include <algorithm>
 
@@ -81,6 +82,11 @@ namespace renegade::studio
 
     void StudioRenderPath::UpdateLiveDiagnostics(const char* outerWorkspace)
     {
+        // MarkerIcons is a non-interactive Studio overlay. Registration is
+        // idempotent and deliberately lives outside StudioApplication.cpp so
+        // feature branches that alter scene/runtime systems do not collide.
+        EnsureMarkerIconOverlay(*this);
+
         diagnosticService_.Heartbeat();
         const auto now = diagnosticService_.ElapsedMs();
         if (now - lastDiagnosticSampleMs_ < 250) return;
