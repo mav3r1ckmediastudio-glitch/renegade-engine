@@ -31,9 +31,12 @@ namespace renegade::bridge
             std::string& error) const;
 
         // Fast creator-facing projection of the last committed LC01 state.
-        // Unlike BuildCatalogue(), this never rescans or hashes Content/SourceAssets;
-        // Studio uses it for normal browser presentation and immediate post-import
-        // reveal so a committed stable ID cannot be replaced by a recovery pass.
+        // Normal browser presentation remains snapshot-only. If that strict
+        // projection detects a real file at a missing-asset tombstone path,
+        // Studio performs one authoritative LC01 recovery/persistence pass and
+        // retries. Any still-ambiguous collision is quarantined as Invalid in
+        // the in-memory catalogue so one stale asset cannot blank every healthy
+        // browser entry or break post-import reveal.
         [[nodiscard]] bool BuildCatalogueSnapshot(
             const std::string& projectRoot,
             const StableId& projectId,

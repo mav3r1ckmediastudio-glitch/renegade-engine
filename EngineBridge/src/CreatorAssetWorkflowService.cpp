@@ -19,6 +19,8 @@ namespace renegade::bridge
 
         constexpr std::uint64_t FnvOffset = 1469598103934665603ull;
         constexpr std::uint64_t FnvPrime = 1099511628211ull;
+        constexpr const char* TombstonePathCollisionError =
+            "Asset catalogue found a file at a missing-asset tombstone path; registry refresh is required.";
 
         struct RefreshIdentity
         {
@@ -195,31 +197,31 @@ namespace renegade::bridge
         }
 
         bool ReadBinaryFile(
-        const fs::path& path,
-        std::vector<std::uint8_t>& bytes,
-        std::string& error)
-    {
-        bytes.clear();
-        std::ifstream stream(path, std::ios::binary);
-        if (!stream)
-        {
-            error = "Could not read creator package file: " + path.generic_u8string();
-            return false;
-        }
-        bytes.assign(
-            std::istreambuf_iterator<char>(stream),
-            std::istreambuf_iterator<char>());
-        if (!stream.good() && !stream.eof())
+            const fs::path& path,
+            std::vector<std::uint8_t>& bytes,
+            std::string& error)
         {
             bytes.clear();
-            error = "Could not read complete creator package file: " + path.generic_u8string();
-            return false;
+            std::ifstream stream(path, std::ios::binary);
+            if (!stream)
+            {
+                error = "Could not read creator package file: " + path.generic_u8string();
+                return false;
+            }
+            bytes.assign(
+                std::istreambuf_iterator<char>(stream),
+                std::istreambuf_iterator<char>());
+            if (!stream.good() && !stream.eof())
+            {
+                bytes.clear();
+                error = "Could not read complete creator package file: " + path.generic_u8string();
+                return false;
+            }
+            error.clear();
+            return true;
         }
-        error.clear();
-        return true;
-    }
 
-    std::string TopLevelFolder(const std::string& projectRelativePath)
+        std::string TopLevelFolder(const std::string& projectRelativePath)
         {
             const fs::path path = fs::u8path(projectRelativePath);
             const auto first = path.begin();
@@ -278,6 +280,142 @@ namespace renegade::bridge
             return identity.contentHash == candidate.contentHash &&
                 TopLevelFolder(identity.lastKnownPath) ==
                     TopLevelFolder(candidate.projectRelativePath);
+        }
+
+        bool IsTombstonePathCollision(const std::string& error) noexcept
+        {
+            return error == TombstonePathCollisionError;
+        }
+
+        bool IsExistingContentFile(
+            const fs::path& root,
+            const std::string& projectRelativePath)
+        {
+            const fs::path relative =
+                fs::u8path(projectRelativePath).lexically_normal();
+            if (relative.empty() || relative.is_absolute() ||
+                relative.generic_u8string() != projectRelativePath ||
+                relative.begin() == relative.end() ||
+                relative.begin()->generic_u8string() != "Content" ||
+                std::next(relative.begin()) == relative.end())
+            {
+                return false;
+            }
+
+            std::error_code ec;
+            const fs::path absolute = fs::weakly_canonical(root / relative, ec);
+            return !ec && fs::is_regular_file(absolute, ec) && !ec &&
+                IsWithin(absolute, root);
+        }
+
+        bool QuarantineUnresolvedTombstoneCollisions(
+            const fs::path& root,
+            AssetRegistry& projection,
+            std::set<StableId>& quarantinedIds)
+        {
+            quarantinedIds.clear();
+            std::set<std::string> activePaths;
+            for (const auto& record : projection.records)
+                activePaths.insert(record.projectRelativePath);
+
+            std::vector<MissingAssetRecord> remaining;
+            remaining.reserve(projection.missingAssets.size());
+            for (const auto& missing : projection.missingAssets)
+            {
+                if (!IsExistingContentFile(root, missing.lastKnownPath) ||
+                    activePaths.find(missing.lastKnownPath) != activePaths.end())
+                {
+                    remaining.push_back(missing);
+                    continue;
+                }
+
+                AssetRecord projected;
+                projected.assetId = missing.assetId;
+                projected.dependencyNodeId = "lc01.quarantined:" + missing.assetId;
+                projected.projectRelativePath = missing.lastKnownPath;
+                projected.dependencyClass = missing.dependencyClass;
+                projected.requirement = missing.requirement;
+                projected.applicability = missing.applicability;
+                projected.provider = missing.provider;
+                projected.providerVersion = missing.providerVersion;
+                projected.contentHash = missing.contentHash;
+                projected.root = false;
+                // This record only bypasses the catalogue-wide tombstone guard.
+                // It is never persisted and never claims the changed bytes own
+                // this stable ID. After the catalogue builds, ApplyQuarantineState
+                // marks the entry unavailable/Invalid explicitly.
+                projected.sourceAvailable = true;
+                projection.records.push_back(std::move(projected));
+                activePaths.insert(missing.lastKnownPath);
+                quarantinedIds.insert(missing.assetId);
+            }
+            projection.missingAssets = std::move(remaining);
+            return !quarantinedIds.empty();
+        }
+
+        void ApplyQuarantineState(
+            AssetCatalogue& catalogue,
+            const std::set<StableId>& quarantinedIds)
+        {
+            for (auto& entry : catalogue.entries)
+            {
+                const bool quarantinedAsset =
+                    quarantinedIds.find(entry.assetId) != quarantinedIds.end();
+                const bool quarantinedSource =
+                    entry.importedProduct &&
+                    quarantinedIds.find(entry.sourceAssetId) != quarantinedIds.end();
+                if (!quarantinedAsset && !quarantinedSource)
+                    continue;
+
+                entry.state = AssetCatalogueState::Invalid;
+                entry.sourceAvailable = false;
+                // CanPlaceCreatorModelAsset intentionally keys on product
+                // availability rather than presentation state. Make quarantine
+                // non-placeable without weakening that global action policy.
+                entry.productAvailable = false;
+            }
+        }
+
+        bool BuildRecoveredCatalogueProjection(
+            const fs::path& root,
+            const StableId& projectId,
+            const AssetRegistry& authoritativeRegistry,
+            const AssetCatalogueMetadataDocument& metadata,
+            const std::vector<StableId>& movedAssetIds,
+            AssetCatalogue& catalogue,
+            AssetRegistry& projectionRegistry,
+            std::string& error)
+        {
+            projectionRegistry = authoritativeRegistry;
+            const auto build = [&]()
+            {
+                AssetCatalogueBuildOptions options;
+                options.movedAssetIds = movedAssetIds;
+                return BuildAssetCatalogue(
+                    root.generic_u8string(), projectId, projectionRegistry,
+                    metadata, catalogue, error, std::move(options));
+            };
+
+            if (build())
+                return true;
+            if (!IsTombstonePathCollision(error))
+                return false;
+
+            // LC01 could not unambiguously recover one or more reappeared
+            // files. Keep their persisted tombstones authoritative. The
+            // temporary active records only let BuildAssetCatalogue finish so
+            // healthy assets remain governed; quarantined IDs are then forced
+            // to Invalid/unavailable in the returned catalogue.
+            std::set<StableId> quarantinedIds;
+            if (!QuarantineUnresolvedTombstoneCollisions(
+                    root, projectionRegistry, quarantinedIds))
+                return false;
+            if (!build())
+                return false;
+            ApplyQuarantineState(catalogue, quarantinedIds);
+
+            error.clear();
+            return true;
         }
 
         bool ScanRefreshCandidates(
@@ -691,10 +829,9 @@ namespace renegade::bridge
         if (!ResolveRoot(projectRoot, root, error))
             return false;
 
-        // Studio already has an authoritative transaction result after import.
-        // Read the committed LC01 document exactly as written instead of running
-        // RefreshRegistryInternal(), which hashes every registered file and can
-        // turn a cheap reveal into a long synchronous editor stall.
+        // Keep the normal browser path cheap: use the last committed LC01
+        // state first and only hash/refresh if the catalogue proves that state
+        // contradicts a real file at a tombstoned path.
         AssetRegistry registry;
         if (!ExistingRegistryOrEmpty(root, projectId, registry, error))
             return false;
@@ -704,12 +841,31 @@ namespace renegade::bridge
                 root.generic_u8string(), projectId, metadata, error))
             return false;
 
+        AssetRegistry projectionRegistry = registry;
         if (!BuildAssetCatalogue(root.generic_u8string(), projectId,
-                registry, metadata, catalogue, error))
-            return false;
+                projectionRegistry, metadata, catalogue, error))
+        {
+            if (!IsTombstonePathCollision(error))
+                return false;
 
-        // Keep the same missing-product/source projection as the recovery build;
-        // only the disk recovery/hash pass is intentionally omitted.
+            // A snapshot cannot legally resolve this contradiction itself.
+            // Run the existing LC01 disk reconciliation once, persist its
+            // authoritative result, then rebuild. Exact matches recover their
+            // stable IDs; ambiguous/changed files remain tombstoned.
+            AssetRegistryRefresh refresh;
+            if (!RefreshRegistryInternal(root, projectId, refresh, error))
+                return false;
+            registry = std::move(refresh.registry);
+            if (!BuildRecoveredCatalogueProjection(
+                    root, projectId, registry, metadata,
+                    refresh.recoveredAssetIds, catalogue,
+                    projectionRegistry, error))
+            {
+                return false;
+            }
+        }
+
+        // Keep the same missing-product/source projection as the recovery build.
         for (auto& entry : catalogue.entries)
         {
             if (!entry.importedProduct || entry.productAvailable ||
@@ -718,10 +874,10 @@ namespace renegade::bridge
                 continue;
 
             const auto source = std::find_if(
-                registry.records.begin(), registry.records.end(),
+                projectionRegistry.records.begin(), projectionRegistry.records.end(),
                 [&entry](const AssetRecord& record)
                 { return record.assetId == entry.sourceAssetId; });
-            entry.sourceAvailable = source != registry.records.end() &&
+            entry.sourceAvailable = source != projectionRegistry.records.end() &&
                 source->sourceAvailable;
         }
         error.clear();
@@ -752,11 +908,14 @@ namespace renegade::bridge
                 root.generic_u8string(), projectId, metadata, error))
             return false;
 
-        AssetCatalogueBuildOptions options;
-        options.movedAssetIds = refresh.recoveredAssetIds;
-        if (!BuildAssetCatalogue(root.generic_u8string(), projectId,
-                refresh.registry, metadata, catalogue, error, std::move(options)))
+        AssetRegistry projectionRegistry;
+        if (!BuildRecoveredCatalogueProjection(
+                root, projectId, refresh.registry, metadata,
+                refresh.recoveredAssetIds, catalogue,
+                projectionRegistry, error))
+        {
             return false;
+        }
 
         // A missing imported product is represented by its own tombstone, but
         // creator actions still need the independent retained-source state.
@@ -770,10 +929,10 @@ namespace renegade::bridge
                 continue;
 
             const auto source = std::find_if(
-                refresh.registry.records.begin(), refresh.registry.records.end(),
+                projectionRegistry.records.begin(), projectionRegistry.records.end(),
                 [&entry](const AssetRecord& record)
                 { return record.assetId == entry.sourceAssetId; });
-            entry.sourceAvailable = source != refresh.registry.records.end() &&
+            entry.sourceAvailable = source != projectionRegistry.records.end() &&
                 source->sourceAvailable;
         }
         error.clear();
