@@ -93,7 +93,8 @@ namespace renegade::studio
         lastDiagnosticSampleMs_ = now;
         const bool levelEditor = std::string(outerWorkspace) == "level_editor";
         const std::string workspace = !levelEditor ? outerWorkspace : projectHubVisible_ ? "project_hub" :
-            studioChrome_.IsPhysicsLabActive() ? "physics" : studioChrome_.IsAudioWorkspaceActive() ? "audio" :
+            studioChrome_.IsPhysicsLabActive() ? "physics" : studioChrome_.IsParticleWorkspaceActive() ? "particles" :
+            studioChrome_.IsAudioWorkspaceActive() ? "audio" :
             terrainWorkspaceActive_ ? "terrain" : environmentWorkspaceActive_ ? "environment" :
             renderWorkspaceActive_ ? "render" : "scene";
         const bool projectOpen = session_ && session_->Projects().HasProject();
