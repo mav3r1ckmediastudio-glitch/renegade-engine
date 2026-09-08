@@ -1,0 +1,43 @@
+name: S7 Owner Hardening Stage
+
+on:
+  push:
+    branches:
+      - repair/s7-owner-hardening-batch
+    paths:
+      - ".github/workflows/s7-owner-hardening-stage.yml"
+      - "Tools/S7OwnerHardeningPatch.py"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: repair/s7-owner-hardening-batch
+          fetch-depth: 1
+      - name: Apply exact owner-hardening patch
+        run: python3 Tools/S7OwnerHardeningPatch.py
+      - name: Commit staged source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add EngineBridge/src/ScriptLibraryService.cpp \
+                  EngineBridge/src/ReusableAssetInstanceService.cpp \
+                  EngineBridge/src/MaterialTextureAssetService.cpp \
+                  Studio/src/StudioApplication.cpp \
+                  Tests/S6ScriptLibraryTests.cpp \
+                  Tests/ReusableAssetInstanceTests.cpp \
+                  Tests/MaterialTextureAssetTests.cpp \
+                  Tests/S4DScriptReferenceAuthoringTests.cpp
+          git commit -m "stage S7 owner hardening source repairs"
+          git push origin HEAD:repair/s7-owner-hardening-batch
