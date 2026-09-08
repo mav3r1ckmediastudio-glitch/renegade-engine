@@ -1,6 +1,7 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 
 #include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "renegade/bridge/IdentityService.h"
 
 #include <filesystem>
 #include <utility>
@@ -16,6 +17,33 @@ namespace renegade::bridge
         {
             return entity != wi::ecs::INVALID_ENTITY &&
                 scene.transforms.GetComponent(entity) != nullptr;
+        }
+
+        bool AssignFreshReusableHierarchyIdentities(
+            wi::scene::Scene& scene,
+            const wi::ecs::Entity root) noexcept
+        {
+            if (root == wi::ecs::INVALID_ENTITY)
+                return false;
+
+            std::string error;
+            for (const wi::ecs::Entity entity :
+                EnumeratePersistentSceneEntities(scene))
+            {
+                if (entity != root &&
+                    !scene.Entity_IsDescendant(entity, root))
+                {
+                    continue;
+                }
+
+                // Prefab/template instances can carry copied metadata. Replace
+                // it unconditionally at creator placement time so every scene
+                // instance is addressable independently. The command snapshot
+                // is captured afterwards, therefore Undo/Redo retains these IDs.
+                if (!AssignNewPersistentEntityId(scene, entity, error))
+                    return false;
+            }
+            return true;
         }
 
         bool ReadInstanceAssetId(
@@ -462,6 +490,8 @@ namespace renegade::bridge
                     ReusableAssetPayloadRootMetadataKey, true);
 
                 ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);
+                if (!AssignFreshReusableHierarchyIdentities(*scene_, entity_))
+                    return false;
 
                 CaptureMaterialResources(firstMaterialIndex_);
                 snapshot_.SetReadModeAndResetPos(false);
@@ -531,6 +561,8 @@ namespace renegade::bridge
 
             scene_->Component_Attach(payloadRoot_, entity_, true);
             ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);
+            if (!AssignFreshReusableHierarchyIdentities(*scene_, entity_))
+                return false;
 
             for (std::size_t index = animationCountBefore;
                 index < scene_->animations.GetCount(); ++index)

@@ -398,7 +398,9 @@ namespace renegade::bridge
                 continue;
             }
             auto& texture = material->textures[WickedTextureSlot(binding.slot)];
-            if (texture.resource.IsValid() && texture.name.empty())
+            if (texture.resource.IsValid() &&
+                texture.resource.GetTexture().IsValid() &&
+                texture.name.empty())
             {
                 ++result.alreadyLive;
                 continue;

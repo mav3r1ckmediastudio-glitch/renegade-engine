@@ -1399,15 +1399,29 @@ namespace renegade::studio
         XMStoreFloat4x4(
             &constants.inverseViewProjection,
             XMMatrixInverse(nullptr, viewProjection));
-        // w is the grid plane height. The generated deck's top surface is at
-        // exactly y = 0, so a grid drawn at y = 0 is coplanar with it and
-        // loses the GREATER depth test. 2 cm is invisible at any working
-        // camera distance and is the same trick Wicked's own helper uses.
+        // w is the grid plane height. Renegade terrain uses bottomLevel as
+        // its authored reference plane (the standard terrain starts at -20 m),
+        // so an absolute y=0 grid visibly floats above a standard landscape.
+        // Keep a 2 cm depth epsilon and retain y=0.02 only when no terrain is
+        // present. The isolated creator-import stage keeps its own plane.
+        float gridPlaneHeight = 0.02f;
+        if (!creatorModelImporter.active && session_ != nullptr)
+        {
+            const auto& gridScene = session_->Scenes().GetScene();
+            if (gridScene.terrains.GetCount() != 0)
+            {
+                gridPlaneHeight =
+                    bridge::CaptureTerrain(gridScene.terrains[0]).minimumHeight +
+                    0.02f;
+            }
+        }
         constants.cameraPosition = XMFLOAT4(
             camera->Eye.x,
             camera->Eye.y,
             camera->Eye.z,
-            creatorModelImporter.active ? CreatorImportStageHeight + 0.02f : 0.02f);
+            creatorModelImporter.active
+                ? CreatorImportStageHeight + 0.02f
+                : gridPlaneHeight);
 
         // Ice-blue is the approved interaction colour. Unlike Wicked's helper,
         // every line including the two axes is Renegade's to choose.

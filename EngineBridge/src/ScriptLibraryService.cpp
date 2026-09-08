@@ -32,6 +32,36 @@ namespace
     constexpr std::size_t MaximumManifestBytes = 1024u * 1024u;
     constexpr const char* S7StockPackageId = "renegade.stock.actions.wave_a";
 
+    bool IsRecoverableStockProjectFile(
+        const std::string& packageId,
+        const std::string& packageVersion,
+        const std::string& filePath,
+        const std::string& projectHash,
+        const std::string& installedHash) noexcept
+    {
+        if (packageId != S7StockPackageId)
+            return false;
+
+        // Current byte-identical stock content is always safe to reclaim.
+        if (projectHash == installedHash)
+            return true;
+
+        // S7 v1.0 shipped before the package-ownership repair. Those builds
+        // could strand an official Action on disk without its lock record.
+        // v1.1 is allowed to migrate only the exact known official v1.0 bytes;
+        // arbitrary or creator-edited files remain collisions.
+        if (packageVersion != "1.1.0")
+            return false;
+
+        return
+            (filePath == "Door.lua" &&
+                projectHash == "fnv1a64:13d97d4492f8089e") ||
+            (filePath == "Switch.lua" &&
+                projectHash == "fnv1a64:e0aa38cd6391622c") ||
+            (filePath == "Pickup.lua" &&
+                projectHash == "fnv1a64:9fa1dd43736335c5");
+    }
+
     struct PackageFile
     {
         std::string path;
@@ -1216,8 +1246,12 @@ namespace renegade::bridge
                 // shipped Lua files behind. Reclaim only byte-identical stock
                 // content. Any changed/unrelated file remains creator-owned and
                 // blocks adoption exactly as before.
-                if (package.packageId != S7StockPackageId ||
-                    currentHash != file->contentHash)
+                if (!IsRecoverableStockProjectFile(
+                        package.packageId,
+                        package.packageVersion,
+                        file->path,
+                        currentHash,
+                        file->contentHash))
                 {
                     error = "S6 adoption collision: project path already exists outside library authority: " +
                         projectPath;
