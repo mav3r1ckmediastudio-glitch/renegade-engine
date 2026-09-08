@@ -56,6 +56,7 @@ include(EngineBridge/Phase5Gate8.cmake)
 if(WIN32)
     add_subdirectory(ScreenRenderer)
     add_subdirectory(Studio)
+    include(Studio/MarkerIcons.cmake)
 
     # S7 stock Actions are Studio-owned immutable library content. Emit the
     # exact package beneath Content so Build-Studio-Windows.ps1 automatically
