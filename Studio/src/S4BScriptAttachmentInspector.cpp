@@ -597,9 +597,25 @@ namespace renegade::studio
                 for (std::size_t index = 0; index < controls.sources.size(); ++index)
                 {
                     const auto& source = controls.sources[index];
-                    std::string label = source.metadata.category.empty()
-                        ? source.metadata.name
-                        : source.metadata.category + " / " + source.metadata.name;
+                    // Put the creator-facing Action/Script name first. Library
+                    // authority is useful context, but it must not consume the
+                    // fixed-width combo row before the distinguishable name.
+                    std::string label = source.metadata.name;
+                    if (source.libraryEntry)
+                    {
+                        label += source.libraryPackageId ==
+                                "renegade.stock.actions.wave_a"
+                            ? " // STOCK"
+                            : " // LIBRARY";
+                        if (source.libraryUpdateAvailable)
+                            label += " UPDATE";
+                        else if (source.libraryAdopted)
+                            label += " ADOPTED";
+                    }
+                    else if (!source.metadata.category.empty())
+                    {
+                        label += " // " + source.metadata.category;
+                    }
                     controls.addSource.AddItem(
                         label,
                         static_cast<std::uint64_t>(index));
@@ -714,6 +730,12 @@ namespace renegade::studio
                 if (session == nullptr || !controls.documentReady)
                     return;
 
+                const auto showFailure = [&](const std::string& message)
+                {
+                    controls.status.SetText("ADD FAILED // " + message);
+                    SetStatus("S4B SCRIPTING // " + message);
+                };
+
                 // Imported/reusable asset adoption and Scene reloads can occur
                 // while this Inspector remains alive. Recapture the owner ID
                 // from the live selection at click time instead of trusting
@@ -722,7 +744,7 @@ namespace renegade::studio
                 if (controls.sources.empty() ||
                     controls.selectedSource >= controls.sources.size())
                 {
-                    SetStatus("S4B SCRIPTING // no compatible source selected");
+                    showFailure("no compatible source selected");
                     return;
                 }
 
@@ -732,7 +754,7 @@ namespace renegade::studio
                 if (!session->Scripts().EnsureEntityOwnerIdentity(
                         selected, liveOwnerEntityId, error))
                 {
-                    SetStatus("S4B SCRIPTING // " + error);
+                    showFailure(error);
                     return;
                 }
                 controls.ownerEntityId = liveOwnerEntityId;
@@ -742,7 +764,7 @@ namespace renegade::studio
                         created,
                         error))
                 {
-                    SetStatus("S4B SCRIPTING // " + error);
+                    showFailure(error);
                     return;
                 }
                 SetStatus(

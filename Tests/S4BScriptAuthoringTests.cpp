@@ -212,6 +212,44 @@ return {}
     const ScriptAuthoringSource* actionSource = FindSource(actions, actionPath);
     ok = Expect(actionSource != nullptr, "first ACTION source is discoverable") && ok;
 
+    // A selected, valid script owner must remain authorable even when some
+    // unrelated legacy/imported entity carries malformed identity metadata.
+    // Runtime already ignores unrelated malformed IDs; ADD must not impose a
+    // stricter whole-Scene gate before attaching the selected object.
+    const wi::ecs::Entity unrelatedMalformed =
+        scene.Entity_CreateTransform("Unrelated Malformed Legacy Entity");
+    auto* malformedMetadata = scene.metadatas.GetComponent(unrelatedMalformed);
+    if (malformedMetadata == nullptr)
+        malformedMetadata = &scene.metadatas.Create(unrelatedMalformed);
+    malformedMetadata->string_values.set(
+        PersistentEntityIdMetadataKey,
+        "legacy-not-a-renegade-id");
+
+    StableId reaffirmedImportedOwnerId;
+    error.clear();
+    ok = Expect(
+        session.Scripts().EnsureEntityOwnerIdentity(
+            importedOwner, reaffirmedImportedOwnerId, error),
+        "unrelated malformed identity does not block selected owner: " + error) && ok;
+    ok = Expect(
+        reaffirmedImportedOwnerId == importedOwnerId,
+        "selected imported owner keeps its existing stable identity") && ok;
+
+    StableId importedAction;
+    if (actionSource != nullptr)
+    {
+        error.clear();
+        ok = Expect(
+            session.Scripts().AttachEntitySource(
+                importedOwnerId, *actionSource, importedAction, error),
+            "unrelated malformed identity does not block ACTION attachment: " + error) && ok;
+        ok = Expect(
+            session.Scripts().EntityAttachments(
+                importedOwnerId, ScriptPresentation::Action).size() == 1,
+            "selected imported owner receives the ACTION") && ok;
+    }
+    scene.Entity_Remove(unrelatedMalformed);
+
     std::vector<ScriptAuthoringSource> scripts;
     diagnostics.clear();
     error.clear();

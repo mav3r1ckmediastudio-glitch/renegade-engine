@@ -411,14 +411,6 @@ namespace renegade::bridge
         const auto& project = projects_->CurrentProject();
         const std::string normalizedScene =
             fs::u8path(scenePath).lexically_normal().generic_u8string();
-        if (loaded_ &&
-            loadedSceneRevision_ == scenes_->Revision() &&
-            loadedScenePath_ == normalizedScene &&
-            loadedProjectId_ == project.projectId)
-        {
-            error.clear();
-            return true;
-        }
 
         const auto pruneOrphanedEntityAttachments =
             [&](ScriptDocument& candidate)
@@ -1013,40 +1005,51 @@ namespace renegade::bridge
         }
 
         auto& scene = scenes_->GetScene();
-        const auto validation = ValidatePersistentEntityIdentities(scene);
-        std::vector<MissingIdentityAssignment> assignments;
-        assignments.reserve(validation.issues.size());
-        for (const auto& issue : validation.issues)
+        StableId selectedId = PersistentEntityId(scene, selectedEntity);
+        if (selectedId.empty())
         {
-            if (issue.code != EntityIdentityIssueCode::Missing)
-            {
-                error = issue.message;
-                return false;
-            }
+            std::vector<MissingIdentityAssignment> assignments;
             assignments.push_back({
-                issue.entity,
+                selectedEntity,
                 GenerateStableId(),
-                scene.metadatas.Contains(issue.entity),
+                scene.metadatas.Contains(selectedEntity),
             });
-        }
-
-        if (!assignments.empty())
-        {
             auto command = std::make_unique<AssignMissingSceneIdentitiesCommand>(
                 scene, std::move(assignments));
             if (!commands_->Execute(std::move(command)))
             {
-                error = "Could not assign missing Scene identities through Undo/Redo.";
+                error = "Could not assign the selected Scene identity through Undo/Redo.";
                 return false;
             }
+            selectedId = PersistentEntityId(scene, selectedEntity);
+        }
+        else if (!IsValidStableId(selectedId))
+        {
+            error = "Selected entity has malformed persistent Renegade ID '" +
+                selectedId + "'.";
+            return false;
         }
 
-        ownerEntityId = PersistentEntityId(scene, selectedEntity);
-        if (!IsValidStableId(ownerEntityId))
+        if (!IsValidStableId(selectedId))
         {
             error = "Selected entity still has no valid persistent Renegade ID.";
             return false;
         }
+
+        std::size_t selectedIdMatches = 0;
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        {
+            const wi::ecs::Entity entity = scene.metadatas.GetEntity(index);
+            if (PersistentEntityId(scene, entity) == selectedId)
+                ++selectedIdMatches;
+        }
+        if (selectedIdMatches != 1)
+        {
+            error = "Selected entity's persistent Renegade ID is duplicated in the active Scene.";
+            return false;
+        }
+
+        ownerEntityId = selectedId;
         error.clear();
         return true;
     }
@@ -1065,29 +1068,42 @@ namespace renegade::bridge
             return false;
         }
 
-        ScriptAuthoringSource materialized;
-        if (!MaterializeLibrarySource(source, materialized, error))
-            return false;
-
+        // Resolve and validate the actual script owner before Creator Library
+        // adoption writes anything into the project. A failed ADD must not
+        // leave behind a half-adopted package with no attachment.
         const StableId resolvedOwner = ResolveEntityScriptAuthoringOwner(
             scenes_->GetScene(), ownerEntityId);
         if (!IsValidStableId(resolvedOwner))
         {
-            error = "Selected entity no longer resolves in the active Scene.";
+            error = "Selected entity no longer resolves to a valid script owner in the active Scene.";
             return false;
         }
 
-        EntityIdentityIndex identities;
-        if (!identities.Build(scenes_->GetScene(), error))
+        std::size_t ownerMatches = 0;
+        for (std::size_t index = 0;
+             index < scenes_->GetScene().metadatas.GetCount();
+             ++index)
         {
-            error = "Cannot attach script because Scene identity is invalid: " + error;
+            const wi::ecs::Entity entity =
+                scenes_->GetScene().metadatas.GetEntity(index);
+            if (PersistentEntityId(scenes_->GetScene(), entity) == resolvedOwner)
+                ++ownerMatches;
+        }
+        if (ownerMatches != 1)
+        {
+            error = "Resolved script owner has a duplicate persistent Renegade ID.";
             return false;
         }
-        if (identities.Resolve(resolvedOwner) == wi::ecs::INVALID_ENTITY)
+
+        if (source.metadata.presentation == ScriptPresentation::GlobalScript)
         {
-            error = "Resolved script owner does not exist in the active Scene.";
+            error = "GLOBAL SCRIPT sources must be attached at Level scope.";
             return false;
         }
+
+        ScriptAuthoringSource materialized;
+        if (!MaterializeLibrarySource(source, materialized, error))
+            return false;
 
         if (materialized.metadata.presentation == ScriptPresentation::GlobalScript)
         {
