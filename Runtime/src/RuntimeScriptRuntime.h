@@ -94,6 +94,7 @@ namespace renegade::runtime
         [[nodiscard]] std::uint64_t LastEventSequence() const noexcept;
         [[nodiscard]] std::string LastEventName() const;
         [[nodiscard]] std::string LastEventTarget() const;
+        [[nodiscard]] std::string CurrentPrompt() const;
         [[nodiscard]] const std::vector<RuntimeScriptDiagnostic>&
             Diagnostics() const noexcept;
 

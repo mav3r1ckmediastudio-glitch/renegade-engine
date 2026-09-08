@@ -19,7 +19,8 @@ namespace renegade::runtime
         std::uint64_t generation = 0;
     };
 
-    // S5A core entity/transform safety seam.
+    // S5A core entity/transform safety seam, extended by S7 only with generic
+    // transform queries/mutation required by reusable stock Actions.
     //
     // This service deliberately owns no Lua state and no entity identity. It
     // resolves the opaque reference against S3's current generation map, then
@@ -49,6 +50,11 @@ namespace renegade::runtime
             XMFLOAT3& position,
             std::string& error) const;
 
+        [[nodiscard]] bool GetWorldPosition(
+            const RuntimeScriptEntityReference& reference,
+            XMFLOAT3& position,
+            std::string& error) const;
+
         [[nodiscard]] bool SetLocalPosition(
             const RuntimeScriptEntityReference& reference,
             const XMFLOAT3& position,
@@ -57,6 +63,16 @@ namespace renegade::runtime
         [[nodiscard]] bool TranslateLocal(
             const RuntimeScriptEntityReference& reference,
             const XMFLOAT3& delta,
+            std::string& error) const;
+
+        [[nodiscard]] bool GetLocalScale(
+            const RuntimeScriptEntityReference& reference,
+            XMFLOAT3& scale,
+            std::string& error) const;
+
+        [[nodiscard]] bool SetLocalScale(
+            const RuntimeScriptEntityReference& reference,
+            const XMFLOAT3& scale,
             std::string& error) const;
 
     private:

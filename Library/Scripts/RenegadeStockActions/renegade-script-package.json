@@ -1,0 +1,47 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.stock.actions.wave_a",
+  "package_version": "1.1.0",
+  "display_name": "Renegade Stock Actions",
+  "files": [
+    {
+      "path": "Door.lua",
+      "content_hash": "fnv1a64:c7d52e5d477ef2de",
+      "dependencies": []
+    },
+    {
+      "path": "Switch.lua",
+      "content_hash": "fnv1a64:4e05d42d677e5e6b",
+      "dependencies": []
+    },
+    {
+      "path": "TriggerZone.lua",
+      "content_hash": "fnv1a64:126681ff22d6259f",
+      "dependencies": []
+    },
+    {
+      "path": "Pickup.lua",
+      "content_hash": "fnv1a64:e8dfb1720cefc22b",
+      "dependencies": []
+    },
+    {
+      "path": "Relay.lua",
+      "content_hash": "fnv1a64:1ea9f370826a1c2b",
+      "dependencies": []
+    },
+    {
+      "path": "PlaySound.lua",
+      "content_hash": "fnv1a64:b8fa08f63344ab6d",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "Door.lua",
+    "Switch.lua",
+    "TriggerZone.lua",
+    "Pickup.lua",
+    "Relay.lua",
+    "PlaySound.lua"
+  ]
+}

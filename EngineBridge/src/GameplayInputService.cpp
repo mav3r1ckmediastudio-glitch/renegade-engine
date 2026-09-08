@@ -231,6 +231,7 @@ namespace renegade::bridge
         case GameplayAction::LookPitch: return "look_pitch";
         case GameplayAction::Jump: return "jump";
         case GameplayAction::Sprint: return "sprint";
+        case GameplayAction::Interact: return "interact";
         case GameplayAction::Pause: return "pause";
         case GameplayAction::Reset: return "reset";
         case GameplayAction::Count: break;
@@ -268,6 +269,7 @@ namespace renegade::bridge
             {GameplayAction::LookPitch, "", "MOUSE_Y", "RIGHT_Y"},
             {GameplayAction::Jump, "SPACE", "", "BUTTON_2"},
             {GameplayAction::Sprint, "LSHIFT", "", "BUTTON_7"},
+            {GameplayAction::Interact, "E", "", ""},
             {GameplayAction::Pause, "ESCAPE", "", ""},
             {GameplayAction::Reset, "R", "", ""},
         }};
@@ -464,6 +466,14 @@ namespace renegade::bridge
             error = "Could not read complete gameplay input-map: " + path;
             return false;
         }
+
+        // S7 appended Interact to the version-1 action set. Existing project
+        // documents predate that section, so preserve their authored bindings
+        // and supply only the new default rather than forcing a file migration.
+        const auto interactIndex = static_cast<std::size_t>(GameplayAction::Interact);
+        if (!seen[interactIndex])
+            seen[interactIndex] = true;
+
         if (!formatSeen || !versionSeen ||
             std::any_of(seen.begin(), seen.end(), [](const bool value) { return !value; }))
         {
@@ -620,6 +630,7 @@ namespace renegade::bridge
             GamepadAxis(pitch.gamepad) * map.gamepadLookRadiansPerSecond * safeDt;
         frame.player.jumpPressed = Pressed(Binding(map, GameplayAction::Jump));
         frame.player.sprintDown = Down(Binding(map, GameplayAction::Sprint));
+        frame.interactPressed = Pressed(Binding(map, GameplayAction::Interact));
         frame.pausePressed = Pressed(Binding(map, GameplayAction::Pause));
         frame.resetPressed = Pressed(Binding(map, GameplayAction::Reset));
         return frame;

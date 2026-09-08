@@ -1,6 +1,7 @@
 #include "renegade/bridge/ScriptReferenceAuthoringService.h"
 
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/SceneService.h"
 
 #include <algorithm>
@@ -24,6 +25,15 @@ namespace
             options.begin(), options.end(),
             [&](const auto& option) { return option.label == label; });
     }
+
+    std::size_t CountLabel(
+        const std::vector<renegade::bridge::ScriptReferenceOption>& options,
+        const std::string& label)
+    {
+        return static_cast<std::size_t>(std::count_if(
+            options.begin(), options.end(),
+            [&](const auto& option) { return option.label == label; }));
+    }
 }
 
 int main()
@@ -37,13 +47,29 @@ int main()
     const auto walk = scene.Entity_CreateTransform("Walk");
     scene.animations.Create(walk);
 
+    const auto reusableWrapper =
+        scene.Entity_CreateTransform("Crate 002");
+    const auto reusablePayload = scene.Entity_CreateTransform("730");
+    const auto reusableChild = scene.Entity_CreateTransform("757");
+    scene.Component_Attach(reusablePayload, reusableWrapper, true);
+    scene.Component_Attach(reusableChild, reusablePayload, true);
+    auto& reusableMetadata = scene.metadatas.Create(reusableWrapper);
+    reusableMetadata.string_values.set(
+        ReusableAssetInstanceIdMetadataKey, GenerateStableId());
+    reusableMetadata.int_values.set(
+        ReusableAssetInstanceVersionMetadataKey,
+        ReusableAssetInstanceVersion);
+
     std::string error;
     if (!EnsurePersistentEntityIdentities(scene, error))
         return Fail("could not seed persistent Scene identities: " + error);
 
     const StableId targetId = PersistentEntityId(scene, target);
     const StableId walkId = PersistentEntityId(scene, walk);
-    if (!IsValidStableId(targetId) || !IsValidStableId(walkId))
+    const StableId reusableWrapperId =
+        PersistentEntityId(scene, reusableWrapper);
+    if (!IsValidStableId(targetId) || !IsValidStableId(walkId) ||
+        !IsValidStableId(reusableWrapperId))
         return Fail("Scene references did not receive stable IDs");
 
     std::vector<ScriptReferenceOption> entityOptions;
@@ -57,6 +83,21 @@ int main()
         !ContainsLabel(entityOptions, "Walk"))
     {
         return Fail("entity reference enumeration did not expose creator Scene entities");
+    }
+    const auto reusableOption = std::find_if(
+        entityOptions.begin(), entityOptions.end(),
+        [](const ScriptReferenceOption& option)
+        {
+            return option.label == "Crate 002";
+        });
+    if (CountLabel(entityOptions, "Crate 002") != 1 ||
+        ContainsLabel(entityOptions, "730") ||
+        ContainsLabel(entityOptions, "757") ||
+        reusableOption == entityOptions.end() ||
+        reusableOption->referenceId != reusableWrapperId)
+    {
+        return Fail(
+            "reusable asset target picker leaked payload entities instead of one creator-facing wrapper");
     }
 
     std::vector<ScriptReferenceOption> animationOptions;

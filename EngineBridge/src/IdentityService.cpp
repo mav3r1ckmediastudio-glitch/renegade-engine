@@ -863,17 +863,31 @@ namespace renegade::bridge
         std::string& error)
     {
         entitiesById_.clear();
-        const auto validation = ValidatePersistentEntityIdentities(scene);
-        if (!validation.IsValid())
-        {
-            error = validation.Summary();
-            return false;
-        }
 
+        // Runtime and Test Level only need an index of entities that already
+        // carry valid persistent identity. Fresh imported/reusable payload
+        // descendants can legitimately exist in the live unsaved Scene before
+        // the next Save assigns their IDs. Missing or malformed unrelated IDs
+        // are therefore skipped here; explicit full-Scene validation remains
+        // available through ValidatePersistentEntityIdentities(). Duplicate
+        // valid IDs remain fatal because they make reference resolution
+        // ambiguous and Runtime rejects them for the same reason.
         for (const auto entity : EnumeratePersistentSceneEntities(scene))
         {
-            entitiesById_.emplace(PersistentEntityId(scene, entity), entity);
+            const StableId id = PersistentEntityId(scene, entity);
+            if (!IsValidStableId(id))
+                continue;
+
+            const auto inserted = entitiesById_.emplace(id, entity);
+            if (!inserted.second && inserted.first->second != entity)
+            {
+                error = "Active Scene contains a duplicate persistent entity ID: " +
+                    id;
+                entitiesById_.clear();
+                return false;
+            }
         }
+
         error.clear();
         return true;
     }

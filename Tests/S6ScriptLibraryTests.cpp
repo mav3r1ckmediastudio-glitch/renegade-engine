@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -147,6 +148,62 @@ return { on_start = function(self) return helper end }
                 cycle));
     }
 
+    std::string StockActionSource(const std::string& name)
+    {
+        return
+            "if renegade and renegade.metadata then\n"
+            " renegade.metadata({schema_version=1,name='" + name +
+            "',description='Stock adoption regression fixture.',category='Interaction',role='ACTION',properties={}})\n"
+            "end\n"
+            "return {}\n";
+    }
+
+    bool WriteStockPackage(const fs::path& libraryRoot)
+    {
+        const fs::path packageRoot = libraryRoot / "Stock Actions";
+        struct StockFile
+        {
+            const char* path;
+            const char* name;
+        };
+        static const StockFile files[] = {
+            {"First.lua", "Stock First"},
+            {"Second.lua", "Stock Second"},
+            {"Reclaim.lua", "Stock Reclaim"},
+            {"Modified.lua", "Stock Modified"},
+        };
+
+        std::ostringstream manifest;
+        manifest
+            << "{\n"
+            << "  \"schema\": \"renegade-script-package\",\n"
+            << "  \"schema_version\": 1,\n"
+            << "  \"package_id\": \"renegade.stock.actions.wave_a\",\n"
+            << "  \"package_version\": \"1.1.0\",\n"
+            << "  \"display_name\": \"Renegade Stock Actions\",\n"
+            << "  \"files\": [\n";
+
+        for (std::size_t index = 0; index < std::size(files); ++index)
+        {
+            const std::string source = StockActionSource(files[index].name);
+            if (!WriteText(packageRoot / files[index].path, source))
+                return false;
+            manifest
+                << "    { \"path\": \"" << files[index].path
+                << "\", \"content_hash\": \"" << ContentHash(source)
+                << "\", \"dependencies\": [] }"
+                << (index + 1 == std::size(files) ? "\n" : ",\n");
+        }
+
+        manifest
+            << "  ],\n"
+            << "  \"entries\": [\"First.lua\", \"Second.lua\", \"Reclaim.lua\", \"Modified.lua\"]\n"
+            << "}\n";
+        return WriteText(
+            packageRoot / ScriptLibraryPackageFilename,
+            manifest.str());
+    }
+
     bool HasDiagnostic(
         const std::vector<ScriptMetadataDiagnostic>& diagnostics,
         const std::string& code)
@@ -157,6 +214,19 @@ return { on_start = function(self) return helper end }
             {
                 return diagnostic.code == code;
             });
+    }
+
+    const ScriptLibraryEntry* FindEntry(
+        const std::vector<ScriptLibraryEntry>& entries,
+        const std::string& entryPath)
+    {
+        const auto found = std::find_if(
+            entries.begin(), entries.end(),
+            [&](const ScriptLibraryEntry& entry)
+            {
+                return entry.entryPath == entryPath;
+            });
+        return found == entries.end() ? nullptr : &*found;
     }
 }
 
@@ -326,6 +396,122 @@ int main()
         conflicted != entries.end() && conflicted->localConflict &&
             conflicted->updateAvailable,
         "Creator Library surfaces update + local conflict state") && ok;
+
+    // S7 stock packages expose multiple independent Actions. Adopting a second
+    // Action must preserve the first Action's ownership record. Also repair the
+    // exact broken-build state where shipped bytes remain on disk after their
+    // lock record was accidentally removed; only byte-identical stock content
+    // may be reclaimed, never a creator-modified file.
+    const fs::path stockProjectRoot = root / "StockProject";
+    fs::create_directories(stockProjectRoot / "Content" / "Scripts", ec);
+    ok = Expect(!ec, "create stock regression project root") && ok;
+    ok = Expect(WriteStockPackage(libraryRoot),
+        "write multi-entry stock Action package") && ok;
+    const fs::path stockManifest =
+        libraryRoot / "Stock Actions" / ScriptLibraryPackageFilename;
+
+    ScriptLibraryAdoptionResult stockFirst;
+    error.clear();
+    ok = Expect(
+        service.AdoptEntry(
+            stockProjectRoot.generic_u8string(),
+            stockManifest.generic_u8string(),
+            "First.lua",
+            stockFirst,
+            error),
+        "adopt first stock Action: " + error) && ok;
+    ScriptLibraryAdoptionResult stockSecond;
+    error.clear();
+    ok = Expect(
+        service.AdoptEntry(
+            stockProjectRoot.generic_u8string(),
+            stockManifest.generic_u8string(),
+            "Second.lua",
+            stockSecond,
+            error),
+        "adopt second stock Action: " + error) && ok;
+
+    std::vector<ScriptLibraryEntry> stockEntries;
+    diagnostics.clear();
+    error.clear();
+    ok = Expect(
+        service.EnumerateEntries(
+            stockProjectRoot.generic_u8string(),
+            ScriptPresentation::Action,
+            stockEntries,
+            diagnostics,
+            error,
+            libraryRoot.generic_u8string()),
+        "re-enumerate independently adopted stock Actions: " + error) && ok;
+    const ScriptLibraryEntry* firstEntry = FindEntry(stockEntries, "First.lua");
+    const ScriptLibraryEntry* secondEntry = FindEntry(stockEntries, "Second.lua");
+    ok = Expect(
+        firstEntry != nullptr && firstEntry->adopted &&
+            secondEntry != nullptr && secondEntry->adopted,
+        "adopting a second stock Action preserves the first ownership record") && ok;
+
+    const fs::path stockDestinationRoot =
+        stockProjectRoot / "Content" / "Scripts" / "Library" /
+        "renegade.stock.actions.wave_a";
+    const std::string reclaimSource = StockActionSource("Stock Reclaim");
+    ok = Expect(
+        WriteText(stockDestinationRoot / "Reclaim.lua", reclaimSource),
+        "seed byte-identical stranded stock Action") && ok;
+    ScriptLibraryAdoptionResult reclaimedStock;
+    error.clear();
+    ok = Expect(
+        service.AdoptEntry(
+            stockProjectRoot.generic_u8string(),
+            stockManifest.generic_u8string(),
+            "Reclaim.lua",
+            reclaimedStock,
+            error),
+        "reclaim byte-identical stranded stock Action: " + error) && ok;
+
+    const std::string modifiedStock =
+        StockActionSource("Stock Modified") + "-- creator edit\n";
+    ok = Expect(
+        WriteText(stockDestinationRoot / "Modified.lua", modifiedStock),
+        "seed modified stranded stock Action") && ok;
+    ScriptLibraryAdoptionResult modifiedBlocked;
+    error.clear();
+    ok = Expect(
+        !service.AdoptEntry(
+            stockProjectRoot.generic_u8string(),
+            stockManifest.generic_u8string(),
+            "Modified.lua",
+            modifiedBlocked,
+            error),
+        "modified stranded stock Action remains protected") && ok;
+    ok = Expect(
+        error.find("collision") != std::string::npos,
+        "modified stranded stock Action reports an ownership collision") && ok;
+    ok = Expect(
+        ReadText(stockDestinationRoot / "Modified.lua") == modifiedStock,
+        "modified stranded stock Action bytes remain untouched") && ok;
+
+    stockEntries.clear();
+    diagnostics.clear();
+    error.clear();
+    ok = Expect(
+        service.EnumerateEntries(
+            stockProjectRoot.generic_u8string(),
+            ScriptPresentation::Action,
+            stockEntries,
+            diagnostics,
+            error,
+            libraryRoot.generic_u8string()),
+        "re-enumerate recovered stock Actions: " + error) && ok;
+    firstEntry = FindEntry(stockEntries, "First.lua");
+    secondEntry = FindEntry(stockEntries, "Second.lua");
+    const ScriptLibraryEntry* reclaimEntry = FindEntry(stockEntries, "Reclaim.lua");
+    const ScriptLibraryEntry* modifiedEntry = FindEntry(stockEntries, "Modified.lua");
+    ok = Expect(
+        firstEntry != nullptr && firstEntry->adopted &&
+            secondEntry != nullptr && secondEntry->adopted &&
+            reclaimEntry != nullptr && reclaimEntry->adopted &&
+            modifiedEntry != nullptr && !modifiedEntry->adopted,
+        "stock ownership survives multiple additions and exact recovery") && ok;
 
     // Existing project bytes without an S6 lock are not adoption authority.
     ok = Expect(

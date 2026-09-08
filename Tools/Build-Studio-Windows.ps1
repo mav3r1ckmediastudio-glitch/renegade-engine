@@ -130,6 +130,22 @@ try {
             -Destination $packageRoot `
             -Force
 
+        $stockActionRoot = Join-Path `
+            $packageRoot `
+            "Content\ScriptLibrary\RenegadeStockActions"
+        $stockActionManifest = Join-Path `
+            $stockActionRoot `
+            "renegade-script-package.json"
+        if (-not (Test-Path $stockActionManifest -PathType Leaf)) {
+            throw "S7 stock Action manifest was not packaged beside RenegadeStudio.exe."
+        }
+        $stockActionFiles = @(
+            Get-ChildItem -Path $stockActionRoot -File -Filter "*.lua"
+        )
+        if ($stockActionFiles.Count -ne 6) {
+            throw "S7 packaged Studio must contain exactly six stock Lua Actions."
+        }
+
         # The owner audit must travel with the exact executable it validates.
         # A green source-tree document is not usable evidence when the Release
         # artifact is downloaded and tested outside the repository.
@@ -141,6 +157,16 @@ try {
             throw "Story Flow Gate 5 owner-audit instructions are missing."
         }
         New-Item -ItemType Directory -Path $ownerDocsRoot -Force | Out-Null
+        $stockActionsOwnerAudit = Join-Path `
+            $repositoryRoot `
+            "docs\SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md"
+        if (-not (Test-Path $stockActionsOwnerAudit -PathType Leaf)) {
+            throw "S7 stock Actions owner-test instructions are missing."
+        }
+        Copy-Item `
+            -Path $stockActionsOwnerAudit `
+            -Destination $ownerDocsRoot `
+            -Force
         $packagedStoryFlowOwnerAudit = Join-Path `
             $ownerDocsRoot `
             "STORY_FLOW_GATE5_OWNER_TEST.md"

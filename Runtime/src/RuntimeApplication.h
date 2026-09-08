@@ -29,6 +29,7 @@ namespace renegade::runtime
             bridge::SceneService& scenes,
             std::string projectRoot) noexcept;
         void SetPaused(bool paused) noexcept;
+        void SetInteractionPrompt(std::string prompt) noexcept;
         void Load() override;
         void Update(float dt) override;
         void Compose(wi::graphics::CommandList cmd) const override;
@@ -41,6 +42,7 @@ namespace renegade::runtime
         bridge::RenderSettingsState renderSettings_;
         bool renderSettingsInitialized_ = false;
         bool paused_ = false;
+        std::string interactionPrompt_;
         std::uint64_t renderSettingsSceneRevision_ = 0;
     };
 

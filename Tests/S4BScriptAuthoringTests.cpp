@@ -131,6 +131,37 @@ int main()
     const StableId ownerId = PersistentEntityId(scene, owner);
     ok = Expect(IsValidStableId(ownerId), "Scene save assigned persistent owner ID") && ok;
 
+    // Legacy/imported payload can enter a project without Renegade identity.
+    // The Action Inspector repairs this only when ADD is pressed, and that
+    // migration must remain part of normal Scene Undo/Redo.
+    const wi::ecs::Entity importedOwner =
+        scene.Entity_CreateTransform("Imported Legacy Script Owner");
+    ok = Expect(
+        PersistentEntityId(scene, importedOwner).empty(),
+        "imported fixture begins without persistent identity") && ok;
+    StableId importedOwnerId;
+    error.clear();
+    ok = Expect(
+        session.Scripts().EnsureEntityOwnerIdentity(
+            importedOwner, importedOwnerId, error),
+        "assign imported owner identity through authoring seam: " + error) && ok;
+    ok = Expect(
+        IsValidStableId(importedOwnerId) &&
+            PersistentEntityId(scene, importedOwner) == importedOwnerId,
+        "authoring seam assigned the selected imported entity") && ok;
+    ok = Expect(
+        session.Commands().Undo(),
+        "Undo removes the imported identity migration") && ok;
+    ok = Expect(
+        PersistentEntityId(scene, importedOwner).empty(),
+        "Undo restored the missing-identity state") && ok;
+    ok = Expect(
+        session.Commands().Redo(),
+        "Redo reapplies the imported identity migration") && ok;
+    ok = Expect(
+        PersistentEntityId(scene, importedOwner) == importedOwnerId,
+        "Redo preserved the generated identity") && ok;
+
     const fs::path projectRoot = fs::u8path(project.rootPath);
     const std::string actionPath = "Content/Scripts/open_door.lua";
     const std::string secondActionPath = "Content/Scripts/close_door.lua";
@@ -180,6 +211,44 @@ return {}
 
     const ScriptAuthoringSource* actionSource = FindSource(actions, actionPath);
     ok = Expect(actionSource != nullptr, "first ACTION source is discoverable") && ok;
+
+    // A selected, valid script owner must remain authorable even when some
+    // unrelated legacy/imported entity carries malformed identity metadata.
+    // Runtime already ignores unrelated malformed IDs; ADD must not impose a
+    // stricter whole-Scene gate before attaching the selected object.
+    const wi::ecs::Entity unrelatedMalformed =
+        scene.Entity_CreateTransform("Unrelated Malformed Legacy Entity");
+    auto* malformedMetadata = scene.metadatas.GetComponent(unrelatedMalformed);
+    if (malformedMetadata == nullptr)
+        malformedMetadata = &scene.metadatas.Create(unrelatedMalformed);
+    malformedMetadata->string_values.set(
+        PersistentEntityIdMetadataKey,
+        "legacy-not-a-renegade-id");
+
+    StableId reaffirmedImportedOwnerId;
+    error.clear();
+    ok = Expect(
+        session.Scripts().EnsureEntityOwnerIdentity(
+            importedOwner, reaffirmedImportedOwnerId, error),
+        "unrelated malformed identity does not block selected owner: " + error) && ok;
+    ok = Expect(
+        reaffirmedImportedOwnerId == importedOwnerId,
+        "selected imported owner keeps its existing stable identity") && ok;
+
+    StableId importedAction;
+    if (actionSource != nullptr)
+    {
+        error.clear();
+        ok = Expect(
+            session.Scripts().AttachEntitySource(
+                importedOwnerId, *actionSource, importedAction, error),
+            "unrelated malformed identity does not block ACTION attachment: " + error) && ok;
+        ok = Expect(
+            session.Scripts().EntityAttachments(
+                importedOwnerId, ScriptPresentation::Action).size() == 1,
+            "selected imported owner receives the ACTION") && ok;
+    }
+    scene.Entity_Remove(unrelatedMalformed);
 
     std::vector<ScriptAuthoringSource> scripts;
     diagnostics.clear();

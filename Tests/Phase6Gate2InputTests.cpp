@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 
 namespace
@@ -55,8 +56,9 @@ int main()
             root.generic_u8string(), map, created, error),
         "default gameplay input map was not created: " + error);
     Check(created, "first ensure did not report map creation");
-    Check(fs::is_regular_file(
-            root / "Content" / "Data" / "GameplayInput.renegade-input"),
+    const fs::path inputMapPath =
+        root / "Content" / "Data" / "GameplayInput.renegade-input";
+    Check(fs::is_regular_file(inputMapPath),
         "input-map file was not created in Content/Data");
 
     Check(Binding(map, GameplayAction::MoveForward).keyboard == "W",
@@ -65,6 +67,8 @@ int main()
         "look-yaw default is not mouse X");
     Check(Binding(map, GameplayAction::Jump).gamepad == "BUTTON_2",
         "jump gamepad default was not retained from Gate 1");
+    Check(Binding(map, GameplayAction::Interact).keyboard == "E",
+        "S7 Interact default is not E");
     Check(Binding(map, GameplayAction::Pause).keyboard == "ESCAPE",
         "pause default is not Escape");
     Check(Binding(map, GameplayAction::Reset).keyboard == "R",
@@ -106,6 +110,43 @@ int main()
         "stable pause action ID did not parse");
     Check(std::string(GameplayActionId(GameplayAction::Reset)) == "reset",
         "stable reset action ID changed");
+    Check(TryParseGameplayAction("interact", parsed) &&
+            parsed == GameplayAction::Interact &&
+            std::string(GameplayActionId(GameplayAction::Interact)) == "interact",
+        "S7 stable Interact action ID did not round-trip");
+
+    // Existing version-1 projects have no [action.interact] section. S7 must
+    // adopt them without rewriting creator-authored bindings, supplying E only
+    // as the appended Action's default.
+    {
+        std::ifstream source(inputMapPath, std::ios::binary);
+        std::string legacyText{
+            std::istreambuf_iterator<char>(source),
+            std::istreambuf_iterator<char>()};
+        const std::string interactHeader = "[action.interact]\n";
+        const std::string pauseHeader = "[action.pause]\n";
+        const auto first = legacyText.find(interactHeader);
+        const auto next = legacyText.find(pauseHeader, first);
+        Check(first != std::string::npos && next != std::string::npos,
+            "persisted map did not contain the S7 Interact section");
+        if (first != std::string::npos && next != std::string::npos)
+            legacyText.erase(first, next - first);
+
+        const fs::path legacyPath = root / "legacy-v1.renegade-input";
+        std::ofstream legacy(legacyPath, std::ios::binary | std::ios::trunc);
+        legacy << legacyText;
+        legacy.close();
+
+        GameplayInputMap legacyMap;
+        error.clear();
+        Check(ReadGameplayInputMapFile(
+                legacyPath.generic_u8string(), legacyMap, error),
+            "pre-S7 version-1 input map did not migrate in memory: " + error);
+        Check(Binding(legacyMap, GameplayAction::Interact).keyboard == "E",
+            "legacy input map did not receive the S7 E Interact default");
+        Check(Binding(legacyMap, GameplayAction::MoveForward).keyboard == "I",
+            "legacy migration disturbed an authored binding");
+    }
 
     // Production Studio project creation/opening must govern the document and
     // register it through the accepted Always Include dependency contract.
