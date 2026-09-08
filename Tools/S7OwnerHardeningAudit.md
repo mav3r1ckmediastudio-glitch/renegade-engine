@@ -1,0 +1,1 @@
+Temporary staging audit marker. Final PR squash intentionally excludes this file and the staging patch runner.
