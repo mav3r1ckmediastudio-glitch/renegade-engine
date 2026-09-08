@@ -97,6 +97,16 @@ namespace renegade::bridge
         [[nodiscard]] std::vector<const ScriptAttachment*> LevelAttachments(
             ScriptPresentation presentation) const;
 
+        // Legacy/imported WISCENE content can predate Renegade's persistent
+        // entity IDs. Repair every missing ID through the shared Scene
+        // Undo/Redo stack, then return the selected entity's stable owner ID.
+        // Malformed or duplicate IDs remain explicit errors and are never
+        // silently rewritten.
+        [[nodiscard]] bool EnsureEntityOwnerIdentity(
+            wi::ecs::Entity selectedEntity,
+            StableId& ownerEntityId,
+            std::string& error);
+
         [[nodiscard]] bool AttachEntitySource(
             const StableId& ownerEntityId,
             const ScriptAuthoringSource& source,

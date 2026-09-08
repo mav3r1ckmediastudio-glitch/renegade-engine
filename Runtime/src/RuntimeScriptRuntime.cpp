@@ -26,6 +26,7 @@ namespace
     constexpr const char* EntityRefMetatable = "Renegade.EntityRef";
     constexpr const char* ResourceRefMetatable = "Renegade.ResourceRef";
     constexpr std::size_t InstructionHookQuantum = 1000u;
+    constexpr std::size_t MaximumPromptBytes = 160u;
 
     // Lua protected-call failures use longjmp semantics. This pointer therefore
     // only references storage owned by the outermost ProtectedCall until
@@ -206,6 +207,7 @@ namespace renegade::runtime
         std::uint64_t lastEventSequence = 0;
         std::string lastEventName;
         std::string lastEventTarget;
+        std::string currentPrompt;
 
         const bridge::RuntimePlayerState* playerState = nullptr;
         const bridge::GameplayInputFrame* gameplayInput = nullptr;
@@ -1089,6 +1091,40 @@ namespace renegade::runtime
             return 1;
         }
 
+        static int UiShowPromptLua(lua_State* state)
+        {
+            auto* owner = FromUpvalue(state);
+            if (owner == nullptr || !owner->running)
+                return PushFalseError(
+                    state,
+                    "UI prompt API is not bound to an active Level.");
+            if (!lua_isstring(state, 1))
+                return PushFalseError(state, "Prompt text must be a string.");
+
+            std::size_t length = 0;
+            const char* value = lua_tolstring(state, 1, &length);
+            if (value == nullptr || length == 0)
+                return PushFalseError(state, "Prompt text must not be empty.");
+
+            // Attachment order is deterministic; the first nearby Action wins
+            // the single creator-facing prompt slot for this frame.
+            if (owner->currentPrompt.empty())
+            {
+                owner->currentPrompt.assign(
+                    value,
+                    std::min(length, MaximumPromptBytes));
+                for (char& character : owner->currentPrompt)
+                {
+                    const unsigned char byte =
+                        static_cast<unsigned char>(character);
+                    if (byte < 0x20u || byte == 0x7fu)
+                        character = ' ';
+                }
+            }
+            lua_pushboolean(state, 1);
+            return 1;
+        }
+
         bool EnqueueGameplayEventForLua(
             lua_State* state,
             const char* instanceId,
@@ -1367,6 +1403,14 @@ namespace renegade::runtime
             lua_pushcclosure(lua, InputWasPressedLua, 1);
             lua_setfield(lua, -2, "was_pressed");
             lua_setfield(lua, -2, "input");
+
+            lua_newtable(lua);
+            lua_pushinteger(lua, 1);
+            lua_setfield(lua, -2, "contract_version");
+            lua_pushlightuserdata(lua, this);
+            lua_pushcclosure(lua, UiShowPromptLua, 1);
+            lua_setfield(lua, -2, "show_prompt");
+            lua_setfield(lua, -2, "ui");
 
             lua_newtable(lua);
             lua_pushinteger(lua, 1);
@@ -1974,6 +2018,7 @@ namespace renegade::runtime
             lastEventSequence = 0;
             lastEventName.clear();
             lastEventTarget.clear();
+            currentPrompt.clear();
             ++generation;
             scene = &activeScene;
             projectRoot = std::move(root);
@@ -2054,6 +2099,7 @@ namespace renegade::runtime
                 instances.clear();
                 entitiesById.clear();
                 gameplayEvents.Clear();
+                currentPrompt.clear();
                 scene = nullptr;
                 projectRoot.clear();
                 running = false;
@@ -2073,6 +2119,7 @@ namespace renegade::runtime
             ReleaseInstances();
             entitiesById.clear();
             gameplayEvents.Clear();
+            currentPrompt.clear();
             scene = nullptr;
             projectRoot.clear();
             if (running)
@@ -2215,6 +2262,7 @@ namespace renegade::runtime
 
     void RuntimeScriptRuntime::Update(const float dt) noexcept
     {
+        impl_->currentPrompt.clear();
         if (!impl_->running || impl_->paused || impl_->lua == nullptr)
             return;
         impl_->DispatchGameplayEvents();
@@ -2365,6 +2413,11 @@ namespace renegade::runtime
     std::string RuntimeScriptRuntime::LastEventTarget() const
     {
         return impl_ == nullptr ? std::string() : impl_->lastEventTarget;
+    }
+
+    std::string RuntimeScriptRuntime::CurrentPrompt() const
+    {
+        return impl_ == nullptr ? std::string() : impl_->currentPrompt;
     }
 
     const std::vector<RuntimeScriptDiagnostic>&

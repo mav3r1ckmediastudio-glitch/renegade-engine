@@ -3,6 +3,7 @@
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ScriptDocumentService.h"
+#include "renegade/bridge/ScriptMetadataService.h"
 
 #include <cmath>
 #include <filesystem>
@@ -63,6 +64,7 @@ int main()
 
     const fs::path root = fs::temp_directory_path() /
         fs::u8path("renegade-s7-actions-" + GenerateStableId());
+    std::error_code ec;
     const std::string sourcePath = "Content/Scripts/s7_runtime_seams.lua";
     const fs::path scriptPath = root / fs::u8path(sourcePath);
 
@@ -84,6 +86,8 @@ int main()
             " end,\n"
             " on_update=function(self,dt)\n"
             "  assert(type(dt)=='number')\n"
+            "  local shown,prompterr=renegade.ui.show_prompt('Press E to test')\n"
+            "  assert(shown and not prompterr)\n"
             "  if renegade.input.was_pressed('interact') then\n"
             "   local ok,err=renegade.events.emit('s7.interact','')\n"
             "   assert(ok and not err)\n"
@@ -180,6 +184,8 @@ int main()
     runtime.Update(1.0f / 60.0f);
     if (runtime.PendingEventCount() != 1)
         return Fail("Interact did not enqueue the stock Action gameplay event");
+    if (runtime.CurrentPrompt() != "Press E to test")
+        return Fail("governed Lua prompt did not reach the Runtime presentation seam");
 
     input.interactPressed = false;
     runtime.Update(1.0f / 60.0f);
@@ -192,7 +198,82 @@ int main()
     }
 
     runtime.StopScene();
-    std::error_code ec;
+    if (!runtime.CurrentPrompt().empty())
+        return Fail("Runtime retained a stale prompt after stopping the Level");
+
+    // Execute the real shipped Sliding Door Action, not a token-only fixture.
+    const std::string doorSourcePath = "Content/Scripts/Stock/Door.lua";
+    const fs::path doorSource =
+        fs::u8path(RENEGADE_SOURCE_DIR) /
+        "Library" / "Scripts" / "RenegadeStockActions" / "Door.lua";
+    const fs::path copiedDoor = root / fs::u8path(doorSourcePath);
+    fs::create_directories(copiedDoor.parent_path(), ec);
+    ec.clear();
+    fs::copy_file(
+        doorSource,
+        copiedDoor,
+        fs::copy_options::overwrite_existing,
+        ec);
+    if (ec)
+        return Fail("copy real Sliding Door Action: " + ec.message());
+
+    wi::scene::Scene doorScene;
+    const wi::ecs::Entity doorEntity = doorScene.Entity_CreateTransform("Door");
+    const wi::ecs::Entity playerEntity = doorScene.Entity_CreateTransform("Player");
+    const StableId doorId = GenerateStableId();
+    const StableId playerId = GenerateStableId();
+    if (!AssignPersistentEntityId(doorScene, doorEntity, doorId, error) ||
+        !AssignPersistentEntityId(doorScene, playerEntity, playerId, error))
+    {
+        return Fail("assign real Action fixture identity: " + error);
+    }
+
+    const auto metadata = EvaluateScriptMetadata(
+        root.generic_u8string(), doorSourcePath);
+    if (!metadata.succeeded)
+        return Fail("real Sliding Door metadata did not evaluate");
+
+    ScriptDocument doorDocument = CreateScriptDocument(
+        projectId,
+        GenerateStableId(),
+        "Content/Scenes/S7Door.wiscene",
+        "s7-stock-actions-tests");
+    ScriptSourceBinding doorBinding;
+    doorBinding.sourceId = GenerateStableId();
+    doorBinding.sourcePath = doorSourcePath;
+    doorBinding.presentation = ScriptPresentation::Action;
+    doorBinding.apiVersion = RuntimeScriptRuntime::ApiVersion;
+    doorBinding.provenance.kind = ScriptProvenanceKind::Project;
+    doorBinding.provenance.contentHash = "s7-real-door-fixture";
+    ScriptAttachment doorAttachment = CreateScriptAttachment(
+        ScriptScope::Entity, doorId, doorBinding);
+    if (!ApplyScriptMetadataDefaults(
+            metadata.descriptor, doorAttachment, error) ||
+        !AddScriptAttachment(doorDocument, std::move(doorAttachment), error))
+    {
+        return Fail("attach real Sliding Door Action: " + error);
+    }
+
+    RuntimePlayerState player;
+    player.entity = playerEntity;
+    GameplayInputFrame doorInput;
+    doorInput.interactPressed = true;
+    runtime.SetGameplayState(&player, &doorInput);
+    if (!runtime.StartScene(
+            doorDocument, doorScene, root.generic_u8string(), error))
+    {
+        return Fail("start real Sliding Door Action: " + error);
+    }
+    runtime.Update(0.25f);
+    const auto* movedDoor = doorScene.transforms.GetComponent(doorEntity);
+    if (runtime.CurrentPrompt() != "Press E to open / close")
+        return Fail("real Sliding Door did not show its nearby E prompt");
+    if (movedDoor == nullptr || movedDoor->translation_local.y <= 0.0f)
+        return Fail("real Sliding Door did not move when E was pressed nearby");
+    if (runtime.DisabledInstanceCount() != 0 || !runtime.Diagnostics().empty())
+        return Fail("real Sliding Door Action produced a Runtime diagnostic");
+
+    runtime.StopScene();
     fs::remove_all(root, ec);
     std::cout << "S7 generic stock Action runtime seams passed.\n";
     return 0;

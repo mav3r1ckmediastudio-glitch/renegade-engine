@@ -169,6 +169,85 @@ namespace
         return false;
     }
 
+    struct MissingIdentityAssignment
+    {
+        wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
+        StableId id;
+        bool hadMetadata = false;
+    };
+
+    class AssignMissingSceneIdentitiesCommand final : public ICommand
+    {
+    public:
+        AssignMissingSceneIdentitiesCommand(
+            wi::scene::Scene& scene,
+            std::vector<MissingIdentityAssignment> assignments)
+            : scene_(&scene)
+            , assignments_(std::move(assignments))
+        {
+        }
+
+        bool Execute() override
+        {
+            if (scene_ == nullptr)
+                return false;
+
+            std::size_t applied = 0;
+            std::string error;
+            for (const auto& assignment : assignments_)
+            {
+                const StableId current = PersistentEntityId(
+                    *scene_, assignment.entity);
+                if (current == assignment.id)
+                {
+                    ++applied;
+                    continue;
+                }
+                if (!current.empty() ||
+                    !AssignPersistentEntityId(
+                        *scene_, assignment.entity, assignment.id, error))
+                {
+                    UndoApplied(applied);
+                    return false;
+                }
+                ++applied;
+            }
+            return true;
+        }
+
+        void Undo() override
+        {
+            UndoApplied(assignments_.size());
+        }
+
+    private:
+        void UndoApplied(const std::size_t count)
+        {
+            if (scene_ == nullptr)
+                return;
+            for (std::size_t index = count; index > 0; --index)
+            {
+                const auto& assignment = assignments_[index - 1];
+                auto* metadata = scene_->metadatas.GetComponent(
+                    assignment.entity);
+                if (metadata == nullptr ||
+                    PersistentEntityId(*scene_, assignment.entity) !=
+                        assignment.id)
+                {
+                    continue;
+                }
+                if (!assignment.hadMetadata)
+                    scene_->metadatas.Remove(assignment.entity);
+                else
+                    metadata->string_values.erase(
+                        PersistentEntityIdMetadataKey);
+            }
+        }
+
+        wi::scene::Scene* scene_ = nullptr;
+        std::vector<MissingIdentityAssignment> assignments_;
+    };
+
     bool SourceSortLess(
         const ScriptAuthoringSource& left,
         const ScriptAuthoringSource& right)
@@ -917,6 +996,59 @@ namespace renegade::bridge
                 return left->order < right->order;
             });
         return result;
+    }
+
+    bool ScriptAuthoringService::EnsureEntityOwnerIdentity(
+        const wi::ecs::Entity selectedEntity,
+        StableId& ownerEntityId,
+        std::string& error)
+    {
+        ownerEntityId.clear();
+        if (scenes_ == nullptr || commands_ == nullptr ||
+            selectedEntity == wi::ecs::INVALID_ENTITY ||
+            !scenes_->ContainsEntity(selectedEntity))
+        {
+            error = "Selected entity no longer exists in the active Scene.";
+            return false;
+        }
+
+        auto& scene = scenes_->GetScene();
+        const auto validation = ValidatePersistentEntityIdentities(scene);
+        std::vector<MissingIdentityAssignment> assignments;
+        assignments.reserve(validation.issues.size());
+        for (const auto& issue : validation.issues)
+        {
+            if (issue.code != EntityIdentityIssueCode::Missing)
+            {
+                error = issue.message;
+                return false;
+            }
+            assignments.push_back({
+                issue.entity,
+                GenerateStableId(),
+                scene.metadatas.Contains(issue.entity),
+            });
+        }
+
+        if (!assignments.empty())
+        {
+            auto command = std::make_unique<AssignMissingSceneIdentitiesCommand>(
+                scene, std::move(assignments));
+            if (!commands_->Execute(std::move(command)))
+            {
+                error = "Could not assign missing Scene identities through Undo/Redo.";
+                return false;
+            }
+        }
+
+        ownerEntityId = PersistentEntityId(scene, selectedEntity);
+        if (!IsValidStableId(ownerEntityId))
+        {
+            error = "Selected entity still has no valid persistent Renegade ID.";
+            return false;
+        }
+        error.clear();
+        return true;
     }
 
     bool ScriptAuthoringService::AttachEntitySource(

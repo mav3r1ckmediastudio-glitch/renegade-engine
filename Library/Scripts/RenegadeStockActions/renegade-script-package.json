@@ -2,17 +2,17 @@
   "schema": "renegade-script-package",
   "schema_version": 1,
   "package_id": "renegade.stock.actions.wave_a",
-  "package_version": "1.0.0",
+  "package_version": "1.1.0",
   "display_name": "Renegade Stock Actions",
   "files": [
     {
       "path": "Door.lua",
-      "content_hash": "fnv1a64:13d97d4492f8089e",
+      "content_hash": "fnv1a64:c7d52e5d477ef2de",
       "dependencies": []
     },
     {
       "path": "Switch.lua",
-      "content_hash": "fnv1a64:e0aa38cd6391622c",
+      "content_hash": "fnv1a64:4e05d42d677e5e6b",
       "dependencies": []
     },
     {
@@ -22,7 +22,7 @@
     },
     {
       "path": "Pickup.lua",
-      "content_hash": "fnv1a64:9fa1dd43736335c5",
+      "content_hash": "fnv1a64:e8dfb1720cefc22b",
       "dependencies": []
     },
     {

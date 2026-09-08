@@ -131,6 +131,37 @@ int main()
     const StableId ownerId = PersistentEntityId(scene, owner);
     ok = Expect(IsValidStableId(ownerId), "Scene save assigned persistent owner ID") && ok;
 
+    // Legacy/imported payload can enter a project without Renegade identity.
+    // The Action Inspector repairs this only when ADD is pressed, and that
+    // migration must remain part of normal Scene Undo/Redo.
+    const wi::ecs::Entity importedOwner =
+        scene.Entity_CreateTransform("Imported Legacy Script Owner");
+    ok = Expect(
+        PersistentEntityId(scene, importedOwner).empty(),
+        "imported fixture begins without persistent identity") && ok;
+    StableId importedOwnerId;
+    error.clear();
+    ok = Expect(
+        session.Scripts().EnsureEntityOwnerIdentity(
+            importedOwner, importedOwnerId, error),
+        "assign imported owner identity through authoring seam: " + error) && ok;
+    ok = Expect(
+        IsValidStableId(importedOwnerId) &&
+            PersistentEntityId(scene, importedOwner) == importedOwnerId,
+        "authoring seam assigned the selected imported entity") && ok;
+    ok = Expect(
+        session.Commands().Undo(),
+        "Undo removes the imported identity migration") && ok;
+    ok = Expect(
+        PersistentEntityId(scene, importedOwner).empty(),
+        "Undo restored the missing-identity state") && ok;
+    ok = Expect(
+        session.Commands().Redo(),
+        "Redo reapplies the imported identity migration") && ok;
+    ok = Expect(
+        PersistentEntityId(scene, importedOwner) == importedOwnerId,
+        "Redo preserved the generated identity") && ok;
+
     const fs::path projectRoot = fs::u8path(project.rootPath);
     const std::string actionPath = "Content/Scripts/open_door.lua";
     const std::string secondActionPath = "Content/Scripts/close_door.lua";

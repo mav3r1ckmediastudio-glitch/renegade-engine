@@ -17,6 +17,10 @@ if(NOT EXISTS "${S7_MANIFEST}")
     message(FATAL_ERROR "S7 stock Action package manifest is missing")
 endif()
 file(READ "${S7_MANIFEST}" S7_MANIFEST_TEXT)
+string(FIND "${S7_MANIFEST_TEXT}" "\"package_version\": \"1.1.0\"" S7_PACKAGE_VERSION)
+if(S7_PACKAGE_VERSION EQUAL -1)
+    message(FATAL_ERROR "S7 repaired stock package must publish a new immutable version")
+endif()
 
 foreach(S7_ACTION IN LISTS S7_ACTIONS)
     set(S7_PATH "${S7_LIBRARY_DIR}/${S7_ACTION}")
@@ -50,6 +54,8 @@ foreach(S7_RUNTIME_TOKEN
     "AudioPlayLua"
     "AudioStopLua"
     "GameplayAction::Interact"
+    "UiShowPromptLua"
+    "show_prompt"
 )
     string(FIND "${S7_RUNTIME}" "${S7_RUNTIME_TOKEN}" S7_RUNTIME_INDEX)
     if(S7_RUNTIME_INDEX EQUAL -1)
@@ -70,10 +76,20 @@ if(S7_LEGACY_INTERACT EQUAL -1)
 endif()
 
 file(READ "${S7_LIBRARY_DIR}/Switch.lua" S7_SWITCH)
-string(FIND "${S7_SWITCH}" "was_pressed(\"interact\")" S7_SWITCH_INTERACT)
-if(S7_SWITCH_INTERACT EQUAL -1)
-    message(FATAL_ERROR "S7 Switch does not use the creator-facing Interact action")
-endif()
+foreach(S7_SWITCH_TOKEN "was_pressed(\"interact\")" "renegade.ui.show_prompt")
+    string(FIND "${S7_SWITCH}" "${S7_SWITCH_TOKEN}" S7_SWITCH_INTERACT)
+    if(S7_SWITCH_INTERACT EQUAL -1)
+        message(FATAL_ERROR "S7 Switch is missing interactive UX: ${S7_SWITCH_TOKEN}")
+    endif()
+endforeach()
+
+file(READ "${S7_LIBRARY_DIR}/Door.lua" S7_DOOR)
+foreach(S7_DOOR_TOKEN "was_pressed(\"interact\")" "renegade.ui.show_prompt" "auto_close")
+    string(FIND "${S7_DOOR}" "${S7_DOOR_TOKEN}" S7_DOOR_INTERACTION)
+    if(S7_DOOR_INTERACTION EQUAL -1)
+        message(FATAL_ERROR "S7 Door is missing direct interaction UX: ${S7_DOOR_TOKEN}")
+    endif()
+endforeach()
 
 file(READ "${S7_LIBRARY_DIR}/PlaySound.lua" S7_AUDIO_ACTION)
 foreach(S7_AUDIO_TOKEN "renegade.audio.play" "renegade.audio.stop")
@@ -82,5 +98,41 @@ foreach(S7_AUDIO_TOKEN "renegade.audio.play" "renegade.audio.stop")
         message(FATAL_ERROR "S7 Audio Action is missing ${S7_AUDIO_TOKEN}")
     endif()
 endforeach()
+
+file(READ
+    "${RENEGADE_SOURCE_DIR}/EngineBridge/src/ScriptLibraryService.cpp"
+    S7_LIBRARY_SERVICE)
+string(FIND "${S7_LIBRARY_SERVICE}" "GetExecutablePath" S7_EXECUTABLE_ROOT)
+if(S7_EXECUTABLE_ROOT EQUAL -1)
+    message(FATAL_ERROR "S7 built-in library discovery is not executable-relative")
+endif()
+
+file(READ
+    "${RENEGADE_SOURCE_DIR}/Studio/src/S4BScriptAttachmentInspector.cpp"
+    S7_ACTION_INSPECTOR)
+foreach(S7_INSPECTOR_TOKEN
+    "EnsureEntityOwnerIdentity"
+    "identity will be assigned on ADD"
+    "controls.addSource.SetSize(XMFLOAT2(width, 28.0f))"
+)
+    string(FIND "${S7_ACTION_INSPECTOR}" "${S7_INSPECTOR_TOKEN}" S7_INSPECTOR_INDEX)
+    if(S7_INSPECTOR_INDEX EQUAL -1)
+        message(FATAL_ERROR "S7 Action Inspector repair is missing: ${S7_INSPECTOR_TOKEN}")
+    endif()
+endforeach()
+
+file(READ
+    "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeStudioChrome.cpp"
+    S7_STUDIO_CHROME)
+string(FIND "${S7_STUDIO_CHROME}" "ElideText" S7_PICKER_ELISION)
+if(S7_PICKER_ELISION EQUAL -1)
+    message(FATAL_ERROR "S7 source picker labels are not bounded to their controls")
+endif()
+
+file(READ "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeApplication.cpp" S7_RUNTIME_APP)
+string(FIND "${S7_RUNTIME_APP}" "SetInteractionPrompt" S7_PROMPT_RENDER)
+if(S7_PROMPT_RENDER EQUAL -1)
+    message(FATAL_ERROR "S7 Runtime does not render creator interaction prompts")
+endif()
 
 message(STATUS "S7 six-Action stock package source contract passed")

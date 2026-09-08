@@ -2,7 +2,7 @@ if renegade and renegade.metadata then
     renegade.metadata({
         schema_version = 1,
         name = "Sliding Door",
-        description = "Slides this entity between closed and open positions when it receives events.",
+        description = "Slides this entity with a nearby Interact prompt or open, close, and toggle events.",
         category = "Interaction",
         role = "ACTION",
         properties = {
@@ -28,6 +28,43 @@ if renegade and renegade.metadata then
                 label = "Start Open",
                 type = "boolean",
                 default = false,
+            },
+            {
+                name = "direct_interaction",
+                label = "Direct Interaction",
+                description = "Let the player use this door directly with the Interact key.",
+                type = "boolean",
+                default = true,
+            },
+            {
+                name = "interaction_distance",
+                label = "Interaction Distance",
+                type = "float",
+                default = 2.0,
+                min = 0.1,
+                max = 50.0,
+                step = 0.1,
+            },
+            {
+                name = "prompt_text",
+                label = "Prompt Text",
+                type = "string",
+                default = "Press E to open / close",
+            },
+            {
+                name = "auto_close",
+                label = "Auto Close",
+                type = "boolean",
+                default = false,
+            },
+            {
+                name = "auto_close_delay",
+                label = "Auto Close Delay",
+                type = "float",
+                default = 3.0,
+                min = 0.0,
+                max = 120.0,
+                step = 0.1,
             },
             {
                 name = "open_event",
@@ -71,9 +108,21 @@ local function move_towards(current, target, max_delta)
     }
 end
 
+local function distance_squared(a, b)
+    local dx = a.x - b.x
+    local dy = a.y - b.y
+    local dz = a.z - b.z
+    return dx * dx + dy * dy + dz * dz
+end
+
 local function set_open(self, open)
     self._open = open
     self._target = open and self._open_position or self._closed_position
+    if open and self.properties.auto_close then
+        self._auto_close_remaining = self.properties.auto_close_delay
+    else
+        self._auto_close_remaining = nil
+    end
 end
 
 return {
@@ -107,6 +156,27 @@ return {
         if not self._target then
             return
         end
+
+        if self.properties.direct_interaction and renegade.player.is_present() then
+            local player_position = renegade.player.get_position()
+            local door_position = renegade.transform.get_world_position(self.entity)
+            local radius = self.properties.interaction_distance
+            if player_position and door_position and
+                distance_squared(player_position, door_position) <= radius * radius then
+                renegade.ui.show_prompt(self.properties.prompt_text)
+                if renegade.input.was_pressed("interact") then
+                    set_open(self, not self._open)
+                end
+            end
+        end
+
+        if self._auto_close_remaining then
+            self._auto_close_remaining = self._auto_close_remaining - dt
+            if self._auto_close_remaining <= 0.0 then
+                set_open(self, false)
+            end
+        end
+
         local current = renegade.transform.get_local_position(self.entity)
         if not current then
             return

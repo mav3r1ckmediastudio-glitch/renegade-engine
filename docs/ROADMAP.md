@@ -1,13 +1,14 @@
 # Renegade Engine Roadmap
 
 **Current programme:** Phase 6 — Playable Core  
-**Current implementation baseline:** S6 — Library Adoption & Package Closure,
-merged as PR #143 (`708030996ea748e5251958a995e1bd69192ae10f`). Documentation-only
-commits may follow this implementation baseline without changing the product
-state.  
-**Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`  
-**Latest integrated CI:** the final S6 head passed Windows baseline run 1688 and
-Renegade Studio run 1102 before merge.
+**Merged implementation baseline:** S6 — Library Adoption & Package Closure,
+merged as PR #143 (`708030996ea748e5251958a995e1bd69192ae10f`).
+**Active candidate:** S7 — six Stock Actions and creator interaction UX in
+PR #144.
+**Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
+**Latest integrated CI:** the rebased S7 baseline `3e679ec` passed all four
+Windows Debug/Release checks before the final owner-feedback repair; exact-head
+checks remain required after the single completion push.
 
 ## Current state
 
@@ -42,6 +43,19 @@ in the standalone Runtime.
 | S5C + live diagnostics | Bounded cross-script events plus built-in live Studio/Runtime diagnostics and local diagnostic transport through PR #141. |
 | S5D | Structured diagnostics and Studio-Test Level IPC/handshake closure through PR #142. |
 | S6 | Installed script-package manifests, deterministic transitive closure, transactional first-use adoption, Creator Library integration, update/conflict safety and Test Level/Build Game closure through PR #143. |
+
+## Active S7 candidate
+
+PR #144 deliberately contains six representative Lua Actions rather than a
+large native catalogue: Sliding Door, Interaction Switch, Player Trigger Zone,
+Proximity Pickup, Activation Relay and Play Sound. The completion candidate also
+repairs packaged library discovery after native file dialogs, makes ADD assign
+missing imported-entity identity through Undo/Redo, gives the source picker a
+full-width non-overlapping layout and adds the generic Runtime prompt seam used
+by nearby E/Interact Actions.
+
+Creator setup and exact acceptance steps are in
+[`SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md`](SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md).
 
 The original Wicked Editor remains the parity oracle. Accepted Renegade features
 continue to use Renegade-owned UI and stable EngineBridge boundaries rather than
@@ -86,13 +100,13 @@ See [`SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](SCRIPTING_S6_LIBRARY_AD
 
 ## Next bounded sequence
 
-### 1. S6 owner-visible acceptance
+### 1. S7 owner-visible acceptance
 
-The implementation and integrated Windows CI are complete. If the visible owner
-evidence has not yet been recorded, run the acceptance checklist in
-[`SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md):
-Creator Library rows, ADD/adoption, reopen/adopted-state behaviour, Test Level
-execution and packaged Build Game parity.
+Finish PR #144 only after the packaged Studio lists all six Actions, the picker
+and buttons remain usable on imported objects, direct Door/Switch interaction
+shows a prompt and responds to E, save/reopen persists the setup, and Test Level
+and packaged Runtime agree. Use
+[`SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md`](SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md).
 
 ### 2. Objective and interaction vertical slice
 

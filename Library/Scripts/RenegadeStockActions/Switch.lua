@@ -34,6 +34,12 @@ if renegade and renegade.metadata then
                 step = 0.1,
             },
             {
+                name = "prompt_text",
+                label = "Prompt Text",
+                type = "string",
+                default = "Press E to use",
+            },
+            {
                 name = "one_shot",
                 label = "One Shot",
                 type = "boolean",
@@ -87,6 +93,7 @@ return {
             return
         end
 
+        renegade.ui.show_prompt(self.properties.prompt_text)
         if renegade.input.was_pressed("interact") then
             if send_event(self) then
                 self._used = true

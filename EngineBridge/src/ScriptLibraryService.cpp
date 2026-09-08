@@ -5,6 +5,8 @@
 
 #include "json.hpp"
 
+#include <WickedEngine.h>
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -957,14 +959,35 @@ namespace renegade::bridge
         }
         else
         {
+            // Native Open/Save dialogs can change the process current working
+            // directory. Bundled Creator Library content belongs to the
+            // executable, so resolve that stable location first.
+            const std::string executablePath = wi::helper::GetExecutablePath();
+            if (!executablePath.empty())
+            {
+                roots.push_back({
+                    (fs::u8path(executablePath).parent_path() /
+                        "Content" / "ScriptLibrary").lexically_normal(),
+                    true,
+                });
+            }
+
+            // Retain cwd as a development/test fallback for non-native hosts.
             std::error_code cwdError;
             const fs::path cwd = fs::current_path(cwdError);
             if (!cwdError && !cwd.empty())
             {
-                roots.push_back({
-                    (cwd / "Content" / "ScriptLibrary").lexically_normal(),
-                    true,
-                });
+                const fs::path cwdRoot =
+                    (cwd / "Content" / "ScriptLibrary").lexically_normal();
+                const std::string cwdKey = PathKey(cwdRoot.generic_u8string());
+                const bool alreadyPresent = std::any_of(
+                    roots.begin(), roots.end(),
+                    [&](const LibraryRootCandidate& candidate)
+                    {
+                        return PathKey(candidate.path.generic_u8string()) == cwdKey;
+                    });
+                if (!alreadyPresent)
+                    roots.push_back({ cwdRoot, true });
             }
 
             const std::string configuredRoot = DefaultInstalledLibraryRoot();

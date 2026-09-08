@@ -8,6 +8,12 @@ target_link_libraries(
         Renegade::RuntimeBootstrap
 )
 
+target_compile_definitions(
+    RenegadeS7StockActionsRuntimeTests
+    PRIVATE
+        RENEGADE_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
+
 target_compile_options(
     RenegadeS7StockActionsRuntimeTests
     PRIVATE

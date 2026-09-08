@@ -186,7 +186,7 @@ namespace renegade::studio
             {
                 const auto& controls = Role(presentation);
                 const std::size_t count = VisibleAttachmentCount(presentation);
-                float height = 60.0f;
+                float height = 94.0f;
                 for (std::size_t index = 0; index < count && index < controls.rows.size(); ++index)
                 {
                     height += 36.0f;
@@ -212,14 +212,6 @@ namespace renegade::studio
 
                 controls.ownerEntityId = bridge::PersistentEntityId(
                     session->Scenes().GetScene(), selected);
-                if (!bridge::IsValidStableId(controls.ownerEntityId))
-                {
-                    controls.documentError =
-                        "Selected entity has no persistent Renegade identity.";
-                    RefreshStatusText(presentation);
-                    HideUnusedRows(controls, 0);
-                    return;
-                }
 
                 std::string error;
                 if (!session->Scripts().EnsureCurrent(error))
@@ -271,24 +263,21 @@ namespace renegade::studio
                 controls.status.SetPos(XMFLOAT2(x, top));
                 controls.status.SetSize(XMFLOAT2(width, 24.0f));
 
-                const float refreshWidth = 64.0f;
-                const float addWidth = 54.0f;
                 const float gap = 6.0f;
-                const float sourceWidth = std::max(
-                    80.0f,
-                    width - refreshWidth - addWidth - gap * 2.0f);
+                const float refreshWidth = std::max(
+                    1.0f, (width - gap) * 0.5f);
+                const float addWidth = std::max(
+                    1.0f, width - refreshWidth - gap);
                 controls.addSource.SetVisible(true);
                 controls.addSource.SetPos(XMFLOAT2(x, top + 26.0f));
-                controls.addSource.SetSize(XMFLOAT2(sourceWidth, 28.0f));
+                controls.addSource.SetSize(XMFLOAT2(width, 28.0f));
                 controls.refresh.SetVisible(true);
-                controls.refresh.SetPos(XMFLOAT2(
-                    x + sourceWidth + gap,
-                    top + 26.0f));
+                controls.refresh.SetPos(XMFLOAT2(x, top + 60.0f));
                 controls.refresh.SetSize(XMFLOAT2(refreshWidth, 28.0f));
                 controls.add.SetVisible(true);
                 controls.add.SetPos(XMFLOAT2(
-                    x + sourceWidth + gap + refreshWidth + gap,
-                    top + 26.0f));
+                    x + refreshWidth + gap,
+                    top + 60.0f));
                 controls.add.SetSize(XMFLOAT2(addWidth, 28.0f));
                 controls.addSource.SetEnabled(
                     controls.documentReady && !controls.sources.empty());
@@ -303,7 +292,7 @@ namespace renegade::studio
                         controls.ownerEntityId,
                         presentation);
                 }
-                float rowY = top + 60.0f;
+                float rowY = top + 94.0f;
                 for (std::size_t index = 0; index < attachments.size(); ++index)
                 {
                     auto& row = *controls.rows[index];
@@ -659,6 +648,8 @@ namespace renegade::studio
                 }
                 const std::size_t count = VisibleAttachmentCount(presentation);
                 std::string text = std::to_string(count) + " attached";
+                if (!bridge::IsValidStableId(controls.ownerEntityId))
+                    text += " // identity will be assigned on ADD";
                 if (controls.sources.empty())
                     text += " // no compatible sources";
                 else
@@ -728,18 +719,6 @@ namespace renegade::studio
                 // from the live selection at click time instead of trusting
                 // an ID captured during an earlier refresh.
                 const auto selected = session->Selection().SelectedEntity();
-                const StableId liveOwnerEntityId =
-                    selected == wi::ecs::INVALID_ENTITY
-                    ? StableId{}
-                    : bridge::PersistentEntityId(
-                        session->Scenes().GetScene(), selected);
-                if (!bridge::IsValidStableId(liveOwnerEntityId))
-                {
-                    SetStatus(
-                        "S4B SCRIPTING // selected entity has no current persistent identity");
-                    return;
-                }
-                controls.ownerEntityId = liveOwnerEntityId;
                 if (controls.sources.empty() ||
                     controls.selectedSource >= controls.sources.size())
                 {
@@ -749,6 +728,14 @@ namespace renegade::studio
 
                 StableId created;
                 std::string error;
+                StableId liveOwnerEntityId;
+                if (!session->Scripts().EnsureEntityOwnerIdentity(
+                        selected, liveOwnerEntityId, error))
+                {
+                    SetStatus("S4B SCRIPTING // " + error);
+                    return;
+                }
+                controls.ownerEntityId = liveOwnerEntityId;
                 if (!session->Scripts().AttachEntitySource(
                         controls.ownerEntityId,
                         controls.sources[controls.selectedSource],

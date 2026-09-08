@@ -140,6 +140,32 @@ namespace
         wi::font::Draw(text, params, cmd);
     }
 
+    std::string ElideText(
+        const std::string& value,
+        const float availableWidth,
+        const int textSize)
+    {
+        const float approximateGlyphWidth =
+            std::max(1.0f, static_cast<float>(textSize) * 0.68f);
+        const std::size_t capacity = static_cast<std::size_t>(
+            std::max(0.0f, std::floor(availableWidth / approximateGlyphWidth)));
+        if (value.size() <= capacity)
+            return value;
+        const auto utf8Prefix = [&](std::size_t bytes)
+        {
+            bytes = std::min(bytes, value.size());
+            while (bytes > 0 && bytes < value.size() &&
+                (static_cast<unsigned char>(value[bytes]) & 0xc0u) == 0x80u)
+            {
+                --bytes;
+            }
+            return value.substr(0, bytes);
+        };
+        if (capacity <= 3)
+            return utf8Prefix(capacity);
+        return utf8Prefix(capacity - 3) + "...";
+    }
+
     void DrawBorderedRect(
         const float x,
         const float y,
@@ -462,7 +488,7 @@ namespace renegade::studio
             ? items[static_cast<std::size_t>(selected)].name
             : "SELECT...";
         DrawText(
-            value,
+            ElideText(value, scale.x - 42.0f, renderTextSize_),
             translation.x + 10.0f,
             translation.y + std::max(4.0f,
                 (scale.y - static_cast<float>(renderTextSize_)) * 0.5f),
@@ -546,7 +572,10 @@ namespace renegade::studio
                 index == hovered ? HoverEdge : BorderSoft,
                 cmd);
             DrawText(
-                items[static_cast<std::size_t>(index)].name,
+                ElideText(
+                    items[static_cast<std::size_t>(index)].name,
+                    dropWidth - 16.0f,
+                    renderTextSize_),
                 dropX + 8.0f,
                 y + std::max(3.0f,
                     (NativeDropItemHeight -

@@ -34,6 +34,19 @@ if renegade and renegade.metadata then
                 step = 0.1,
             },
             {
+                name = "require_interact",
+                label = "Require Interact",
+                description = "Show a prompt and wait for Interact instead of collecting automatically.",
+                type = "boolean",
+                default = false,
+            },
+            {
+                name = "prompt_text",
+                label = "Prompt Text",
+                type = "string",
+                default = "Press E to pick up",
+            },
+            {
                 name = "hide_on_pickup",
                 label = "Hide On Pickup",
                 type = "boolean",
@@ -83,6 +96,13 @@ return {
         local radius = self.properties.pickup_radius
         if distance_squared(player_position, pickup_position) > radius * radius then
             return
+        end
+
+        if self.properties.require_interact then
+            renegade.ui.show_prompt(self.properties.prompt_text)
+            if not renegade.input.was_pressed("interact") then
+                return
+            end
         end
 
         if send_pickup(self) then

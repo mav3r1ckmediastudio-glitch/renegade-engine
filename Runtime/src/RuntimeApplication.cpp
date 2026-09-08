@@ -25,6 +25,11 @@ namespace renegade::runtime
         paused_ = paused;
     }
 
+    void RuntimeRenderPath::SetInteractionPrompt(std::string prompt) noexcept
+    {
+        interactionPrompt_ = std::move(prompt);
+    }
+
     void RuntimeRenderPath::SyncRenderSettings(
         const bool resizeBuffersForMSAA)
     {
@@ -91,11 +96,38 @@ namespace renegade::runtime
         const wi::graphics::CommandList cmd) const
     {
         RenderPath3D::Compose(cmd);
-        if (!paused_)
-            return;
-
         const float width = std::max(1.0f, GetLogicalWidth());
         const float height = std::max(1.0f, GetLogicalHeight());
+        if (!paused_)
+        {
+            if (!interactionPrompt_.empty())
+            {
+                const float panelWidth = std::max(
+                    1.0f,
+                    std::min(560.0f, width - 32.0f));
+                wi::image::Params panel(
+                    width * 0.5f - panelWidth * 0.5f,
+                    height - 104.0f,
+                    panelWidth,
+                    44.0f,
+                    wi::Color(4, 8, 10, 210));
+                panel.blendFlag = wi::enums::BLENDMODE_ALPHA;
+                wi::image::Draw(nullptr, panel, cmd);
+
+                wi::font::Params prompt(
+                    width * 0.5f,
+                    height - 82.0f,
+                    16,
+                    wi::font::WIFALIGN_CENTER,
+                    wi::font::WIFALIGN_CENTER,
+                    wi::Color(245, 245, 245, 255),
+                    wi::Color::Transparent());
+                prompt.bolden = 0.08f;
+                wi::font::Draw(interactionPrompt_, prompt, cmd);
+            }
+            return;
+        }
+
         wi::image::Params shade(0.0f, 0.0f, width, height,
             wi::Color(0, 0, 0, 145));
         shade.blendFlag = wi::enums::BLENDMODE_ALPHA;
@@ -390,10 +422,12 @@ namespace renegade::runtime
 
             if (!paused_)
                 creatorScripts_.Update(dt);
+            renderer_.SetInteractionPrompt(creatorScripts_.CurrentPrompt());
             ReportCreatorScriptDiagnostics();
         }
         else
         {
+            renderer_.SetInteractionPrompt({});
             StopCreatorScripts();
             if (paused_)
                 SetPaused(false);
@@ -530,6 +564,7 @@ namespace renegade::runtime
     {
         if (creatorScripts_.IsRunning())
             creatorScripts_.StopScene();
+        renderer_.SetInteractionPrompt({});
         ReportCreatorScriptDiagnostics();
         scriptSceneRevision_ = 0;
     }

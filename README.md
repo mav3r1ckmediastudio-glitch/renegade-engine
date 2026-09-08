@@ -11,7 +11,8 @@ build lifecycle, creator UX, diagnostics and higher-level gameplay framework.
 > control, governed input, physics, audio, Lua scripting, creator-facing script
 > authoring, gameplay APIs, live diagnostics and reusable script-library package
 > adoption. S6 — Library Adoption & Package Closure — is merged on `main`
-> through PR #143 after its final integrated Windows CI passed. Renegade is not
+> through PR #143 after its final integrated Windows CI passed. PR #144 is the
+> active S7 candidate for six creator-ready stock Lua Actions. Renegade is not
 > yet a distribution-ready v1 engine.
 
 ## What Renegade already does
@@ -88,6 +89,9 @@ raw Lua execution:
   deterministic transitive dependency closure, transactional first-use adoption
   into project-owned `Content/Scripts/Library/...`, clean update handling,
   creator-edit conflict protection and structured package diagnostics.
+- **S7 — Stock Actions candidate:** six installed Lua Actions for doors,
+  switches, trigger zones, pickups, relays and sound playback; generic Runtime
+  Interact prompts; imported-entity identity repair; and a usable Action picker.
 
 After S6 adoption the **project copy is authoritative**. Runtime never searches
 or executes scripts directly from the installed Library. Test Level and Build
@@ -96,6 +100,8 @@ snapshot and dependency-graph paths.
 
 See
 [`docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md).
+The S7 setup and owner test is
+[`docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md`](docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md).
 
 ## Diagnostics
 
@@ -112,8 +118,8 @@ See [`docs/LIVE_DIAGNOSTIC_ACCESS.md`](docs/LIVE_DIAGNOSTIC_ACCESS.md).
 Phase 6 exits when Renegade can author and package a small interactive game with
 a controllable character, collisions, audio and a scripted objective.
 
-With the scripting foundation through S6 now merged, the remaining bounded
-playable-core work is centred on:
+With the scripting foundation through S6 merged and S7 stock Actions in active
+acceptance, the remaining bounded playable-core work is centred on:
 
 1. a reusable scripted **objective and interaction vertical slice** using the
    governed scripting/gameplay APIs;
