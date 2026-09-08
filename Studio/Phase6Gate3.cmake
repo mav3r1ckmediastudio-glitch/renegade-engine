@@ -6,3 +6,8 @@ target_sources(RenegadeStudio PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/src/RenegadeAudioWorkspace.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/src/RenegadeAudioWorkspace.h"
 )
+
+# Particle authoring is a bounded post-S7 morale feature: native Wicked GPU
+# emitters, transform/hierarchy and material texture bindings, wrapped only in
+# Renegade-owned creator UI. Keep its build registration isolated.
+include("${CMAKE_CURRENT_LIST_DIR}/ParticleEmitter.cmake")
