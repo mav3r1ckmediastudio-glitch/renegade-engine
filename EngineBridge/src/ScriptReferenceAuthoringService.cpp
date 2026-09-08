@@ -4,11 +4,13 @@
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ProjectService.h"
+#include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/ScriptAuthoringService.h"
 
 #include <algorithm>
 #include <filesystem>
+#include <unordered_set>
 #include <utility>
 
 namespace
@@ -32,6 +34,43 @@ namespace
         if (left.pathHint != right.pathHint)
             return left.pathHint < right.pathHint;
         return left.referenceId < right.referenceId;
+    }
+
+    wi::ecs::Entity CreatorReferenceEntity(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        wi::ecs::Entity current = entity;
+        const std::size_t maximumDepth = scene.hierarchy.GetCount() + 1;
+        for (std::size_t depth = 0;
+            current != wi::ecs::INVALID_ENTITY && depth <= maximumDepth; ++depth)
+        {
+            const auto* metadata = scene.metadatas.GetComponent(current);
+            if (metadata != nullptr && metadata->string_values.has(
+                    ReusableAssetInstanceIdMetadataKey))
+            {
+                return current;
+            }
+            const auto* hierarchy = scene.hierarchy.GetComponent(current);
+            if (hierarchy == nullptr ||
+                hierarchy->parentID == wi::ecs::INVALID_ENTITY ||
+                hierarchy->parentID == current)
+            {
+                break;
+            }
+            current = hierarchy->parentID;
+        }
+        return entity;
+    }
+
+    std::string CreatorReferenceLabel(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        const auto* name = scene.names.GetComponent(entity);
+        if (name != nullptr && !name->name.empty())
+            return name->name;
+        return "Unnamed Entity";
     }
 }
 
@@ -68,6 +107,7 @@ namespace renegade::bridge
         const auto& scene = scenes.GetScene();
         if (type == ScriptPropertyType::EntityReference)
         {
+            std::unordered_set<StableId> seen;
             for (const auto& item : scenes.ListEntities())
             {
                 if (item.entity == wi::ecs::INVALID_ENTITY ||
@@ -75,13 +115,22 @@ namespace renegade::bridge
                 {
                     continue;
                 }
-                const StableId id = PersistentEntityId(scene, item.entity);
-                if (!IsValidStableId(id))
+
+                // A reusable asset is one creator-facing scene object even when
+                // Wicked imported it as a wrapper plus unnamed payload nodes.
+                // Script pickers must target that stable wrapper rather than
+                // leaking ephemeral Wicked entity numbers such as 730/757.
+                const wi::ecs::Entity target =
+                    CreatorReferenceEntity(scene, item.entity);
+                if (target == wi::ecs::INVALID_ENTITY)
+                    continue;
+                const StableId id = PersistentEntityId(scene, target);
+                if (!IsValidStableId(id) || !seen.insert(id).second)
                     continue;
 
                 ScriptReferenceOption option;
                 option.referenceId = id;
-                option.label = item.name.empty() ? "Unnamed Entity" : item.name;
+                option.label = CreatorReferenceLabel(scene, target);
                 options.push_back(std::move(option));
             }
         }
