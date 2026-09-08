@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -178,7 +179,7 @@ return { on_start = function(self) return helper end }
             << "  \"schema\": \"renegade-script-package\",\n"
             << "  \"schema_version\": 1,\n"
             << "  \"package_id\": \"renegade.stock.actions.wave_a\",\n"
-            << "  \"package_version\": \"1.0.0\",\n"
+            << "  \"package_version\": \"1.1.0\",\n"
             << "  \"display_name\": \"Renegade Stock Actions\",\n"
             << "  \"files\": [\n";
 

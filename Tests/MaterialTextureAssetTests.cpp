@@ -335,9 +335,9 @@ int main()
     const auto secondRestore = RestoreMaterialTextureBindings(
         reopened, root.generic_u8string(), ProjectId, FakeLoader);
     Require(secondRestore.succeeded && secondRestore.discovered == 1 &&
-            secondRestore.restored == 0 && secondRestore.alreadyLive == 1 &&
-            fakeLoaderCalls == 1,
-        "material texture restore is not idempotent once the resource is live");
+            secondRestore.restored == 1 && secondRestore.alreadyLive == 0 &&
+            fakeLoaderCalls == 2,
+        "resource wrapper without a live texture was incorrectly treated as already rehydrated");
 
     wi::scene::Scene deduplicated;
     const wi::ecs::Entity dedupA = wi::ecs::CreateEntity();

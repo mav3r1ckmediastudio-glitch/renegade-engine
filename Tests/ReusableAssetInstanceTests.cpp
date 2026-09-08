@@ -1,4 +1,5 @@
 #include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
@@ -119,6 +120,25 @@ int main(int argc, char** argv)
             "instance inspection did not return the marked payload root"))
         return 1;
 
+    const wi::ecs::Entity placedPayloadChild =
+        FindNamedEntity(target, "Payload Child");
+    const StableId wrapperSceneId = PersistentEntityId(target, wrapper);
+    const StableId payloadSceneId =
+        PersistentEntityId(target, command.PayloadRootEntity());
+    const StableId payloadChildSceneId =
+        PersistentEntityId(target, placedPayloadChild);
+    if (!Require(placedPayloadChild != wi::ecs::INVALID_ENTITY,
+            "placed reusable payload child is missing") ||
+        !Require(IsValidStableId(wrapperSceneId) &&
+                 IsValidStableId(payloadSceneId) &&
+                 IsValidStableId(payloadChildSceneId),
+            "fresh reusable hierarchy did not receive persistent scene IDs") ||
+        !Require(wrapperSceneId != payloadSceneId &&
+                 wrapperSceneId != payloadChildSceneId &&
+                 payloadSceneId != payloadChildSceneId,
+            "fresh reusable hierarchy reused a persistent scene ID"))
+        return 1;
+
     const auto* wrapperTransform = target.transforms.GetComponent(wrapper);
     const auto* childTransform =
         target.transforms.GetComponent(command.PayloadRootEntity());
@@ -159,6 +179,56 @@ int main(int argc, char** argv)
                  instances.front().instanceRoot == wrapper,
             "Redo did not restore the same wrapper identity and stable asset ID"))
         return 1;
+
+    const wi::ecs::Entity redonePayloadChild =
+        FindNamedEntity(target, "Payload Child");
+    if (!Require(PersistentEntityId(target, wrapper) == wrapperSceneId &&
+                 PersistentEntityId(target, command.PayloadRootEntity()) ==
+                    payloadSceneId &&
+                 PersistentEntityId(target, redonePayloadChild) ==
+                    payloadChildSceneId,
+            "Undo/Redo changed reusable persistent scene identities"))
+        return 1;
+
+    auto secondPayload = wi::allocator::make_shared<wi::scene::Scene>();
+    const wi::ecs::Entity secondPayloadRoot =
+        secondPayload->Entity_CreateTransform("Second Payload Root");
+    const wi::ecs::Entity secondPayloadChild =
+        secondPayload->Entity_CreateTransform("Second Payload Child");
+    secondPayload->Component_Attach(secondPayloadChild, secondPayloadRoot);
+    PlaceReusableModelCommand secondCommand(
+        target,
+        std::move(secondPayload),
+        AssetId,
+        XMFLOAT3(12.0f, 5.0f, 6.0f),
+        1.0f);
+    if (!Require(secondCommand.Execute(),
+            "second reusable placement failed"))
+        return 1;
+    const wi::ecs::Entity secondPlacedChild =
+        FindNamedEntity(target, "Second Payload Child");
+    const StableId secondWrapperId =
+        PersistentEntityId(target, secondCommand.PlacedEntity());
+    const StableId secondPayloadId =
+        PersistentEntityId(target, secondCommand.PayloadRootEntity());
+    const StableId secondChildId =
+        PersistentEntityId(target, secondPlacedChild);
+    if (!Require(IsValidStableId(secondWrapperId) &&
+                 IsValidStableId(secondPayloadId) &&
+                 IsValidStableId(secondChildId),
+            "second reusable hierarchy did not receive persistent scene IDs") ||
+        !Require(secondWrapperId != wrapperSceneId &&
+                 secondWrapperId != payloadSceneId &&
+                 secondWrapperId != payloadChildSceneId &&
+                 secondPayloadId != wrapperSceneId &&
+                 secondPayloadId != payloadSceneId &&
+                 secondPayloadId != payloadChildSceneId &&
+                 secondChildId != wrapperSceneId &&
+                 secondChildId != payloadSceneId &&
+                 secondChildId != payloadChildSceneId,
+            "separate reusable placements shared persistent scene identity"))
+        return 1;
+    secondCommand.Undo();
 
     const fs::path scenePath = outputRoot / "ReusableInstance.wiscene";
     if (!Require(SaveSceneForProof(target, scenePath, error),
@@ -286,6 +356,16 @@ int main(int argc, char** argv)
             "live adoption cloned or merged extra transforms"))
         return 1;
 
+    const StableId adoptedWrapperSceneId =
+        PersistentEntityId(adoptedTarget, adoptedWrapper);
+    const StableId adoptedPayloadSceneId =
+        PersistentEntityId(adoptedTarget, adoptedPayload);
+    if (!Require(IsValidStableId(adoptedWrapperSceneId) &&
+                 IsValidStableId(adoptedPayloadSceneId) &&
+                 adoptedWrapperSceneId != adoptedPayloadSceneId,
+            "live drag adoption did not stamp distinct persistent scene IDs"))
+        return 1;
+
     const auto* adoptedAfter =
         adoptedTarget.transforms.GetComponent(adoptedWrapper);
     if (!Require(adoptedAfter != nullptr &&
@@ -316,7 +396,12 @@ int main(int argc, char** argv)
     if (!Require(adoptedCommand.Execute(),
             "Redo of adopted live instance failed") ||
         !Require(adoptedCommand.PlacedEntity() == adoptedWrapper,
-            "Redo remapped the adopted wrapper identity"))
+            "Redo remapped the adopted wrapper identity") ||
+        !Require(PersistentEntityId(adoptedTarget, adoptedWrapper) ==
+                    adoptedWrapperSceneId &&
+                 PersistentEntityId(adoptedTarget, adoptedPayload) ==
+                    adoptedPayloadSceneId,
+            "Redo changed live-adopted persistent scene IDs"))
         return 1;
     const auto* adoptedRedo =
         adoptedTarget.transforms.GetComponent(adoptedWrapper);
