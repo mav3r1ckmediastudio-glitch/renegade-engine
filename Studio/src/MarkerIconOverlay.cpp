@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 #include <filesystem>
+#include <functional>
 #include <string>
 
 namespace renegade::studio
@@ -57,10 +58,6 @@ namespace renegade::studio
             "physics_volume.png",
         };
 
-        // Owner acceptance showed 48 px markers were too easy to lose against
-        // a production scene. Keep them editor-only but give them a creator-
-        // readable 96 px footprint and scale the hover/selection affordances
-        // and hit radius with it.
         constexpr float MarkerSize = 96.0f;
         constexpr float HoverExtraSize = 10.0f;
         constexpr float SelectedExtraSize = 16.0f;
@@ -77,7 +74,8 @@ namespace renegade::studio
             const wi::scene::CameraComponent& camera,
             const wi::Canvas& canvas,
             const XMFLOAT4& viewport,
-            XMFLOAT2& screen) noexcept
+            XMFLOAT2& screen,
+            float* depth = nullptr) noexcept
         {
             const XMVECTOR clip = XMVector4Transform(
                 XMVectorSet(world.x, world.y, world.z, 1.0f),
@@ -93,6 +91,8 @@ namespace renegade::studio
 
             screen.x = (XMVectorGetX(ndc) * 0.5f + 0.5f) * canvas.GetLogicalWidth();
             screen.y = (-XMVectorGetY(ndc) * 0.5f + 0.5f) * canvas.GetLogicalHeight();
+            if (depth != nullptr)
+                *depth = z;
             return PointInside(screen, viewport);
         }
 
@@ -118,7 +118,11 @@ namespace renegade::studio
             MarkerIconOverlay()
             {
                 SetName("Renegade Marker Icon Overlay");
-                SetEnabled(false);
+                // Markers are creator handles, not decorative sprites. Keeping
+                // the overlay enabled lets the GUI focus contract consume a
+                // marker click before the normal scene picker can select the
+                // object behind an editor-only marker.
+                SetEnabled(true);
                 SetVisible(true);
                 SetShadowRadius(0.0f);
             }
@@ -179,18 +183,94 @@ namespace renegade::studio
                 }
             }
 
+            void Update(const wi::Canvas& canvas, const float dt) override
+            {
+                if (!CanUseMarkers())
+                {
+                    hoveredEntity_ = wi::ecs::INVALID_ENTITY;
+                    if (state != wi::gui::IDLE)
+                        Deactivate();
+                    return;
+                }
+
+                Widget::Update(canvas, dt);
+                auto* session = bridge::StudioSession::Current();
+                if (session == nullptr)
+                    return;
+
+                const auto& camera = wi::scene::GetCamera();
+                const XMFLOAT4 viewport = owner_->StoryFlowWorkspaceBounds();
+                if (viewport.z <= viewport.x || viewport.w <= viewport.y)
+                    return;
+
+                const XMFLOAT4 pointer = wi::input::GetPointer();
+                const XMFLOAT2 pointer2(pointer.x, pointer.y);
+                wi::ecs::Entity candidate = wi::ecs::INVALID_ENTITY;
+                float bestDistance2 = HoverRadius * HoverRadius;
+                float bestDepth = 2.0f;
+
+                ForEachMarker(session->Scenes().GetScene(),
+                    [&](const MarkerIconKind, const wi::ecs::Entity entity,
+                        const XMFLOAT3& position)
+                    {
+                        XMFLOAT2 center = {};
+                        float depth = 1.0f;
+                        if (!ProjectPoint(position, camera, canvas, viewport, center, &depth))
+                            return;
+                        const float dx = pointer2.x - center.x;
+                        const float dy = pointer2.y - center.y;
+                        const float distance2 = dx * dx + dy * dy;
+                        if (distance2 > HoverRadius * HoverRadius)
+                            return;
+
+                        // Prefer the marker whose centre the creator is
+                        // actually closest to. If markers are effectively on
+                        // top of each other, prefer the front-most marker.
+                        constexpr float DistanceTie = 0.25f;
+                        if (candidate == wi::ecs::INVALID_ENTITY ||
+                            distance2 < bestDistance2 - DistanceTie ||
+                            (std::abs(distance2 - bestDistance2) <= DistanceTie &&
+                                depth < bestDepth))
+                        {
+                            candidate = entity;
+                            bestDistance2 = distance2;
+                            bestDepth = depth;
+                        }
+                    });
+
+                hoveredEntity_ = candidate;
+                if (candidate == wi::ecs::INVALID_ENTITY)
+                {
+                    if (state != wi::gui::ACTIVE)
+                        state = wi::gui::IDLE;
+                    if (state == wi::gui::ACTIVE &&
+                        !wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+                        Deactivate();
+                    return;
+                }
+
+                state = wi::gui::FOCUS;
+                if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+                {
+                    session->Selection().Select(candidate);
+                    Activate();
+                }
+                else if (state == wi::gui::ACTIVE &&
+                    !wi::input::Down(wi::input::MOUSE_BUTTON_LEFT))
+                {
+                    Deactivate();
+                }
+            }
+
             void Render(
                 const wi::Canvas& canvas,
                 const wi::graphics::CommandList cmd) const override
             {
-                if (!IsVisible() || owner_ == nullptr ||
-                    owner_->IsProjectHubVisible() || owner_->IsTestLevelRuntimeActive())
-                {
+                if (!CanUseMarkers())
                     return;
-                }
 
                 auto* session = bridge::StudioSession::Current();
-                if (session == nullptr || !session->Projects().HasProject())
+                if (session == nullptr)
                     return;
 
                 const auto& camera = wi::scene::GetCamera();
@@ -202,44 +282,69 @@ namespace renegade::studio
                 const wi::ecs::Entity selected = session->Selection().SelectedEntity();
                 const XMFLOAT4 pointer = wi::input::GetPointer();
 
-                const auto drawAt = [&](
-                    const MarkerIconKind kind,
-                    const wi::ecs::Entity entity,
-                    const XMFLOAT3& position)
+                ForEachMarker(scene,
+                    [&](const MarkerIconKind kind, const wi::ecs::Entity entity,
+                        const XMFLOAT3& position)
+                    {
+                        XMFLOAT2 center = {};
+                        if (!ProjectPoint(position, camera, canvas, viewport, center))
+                            return;
+
+                        const float dx = pointer.x - center.x;
+                        const float dy = pointer.y - center.y;
+                        const bool hovered = entity == hoveredEntity_ ||
+                            dx * dx + dy * dy <= HoverRadius * HoverRadius;
+                        const bool isSelected = entity == selected;
+                        const float size = MarkerSize +
+                            (isSelected ? SelectedExtraSize : hovered ? HoverExtraSize : 0.0f);
+                        const std::size_t index = static_cast<std::size_t>(kind);
+                        if (index >= resources_.size() || !resources_[index].IsValid())
+                            return;
+
+                        wi::image::Params params(
+                            center.x - size * 0.5f,
+                            center.y - size * 0.5f,
+                            size,
+                            size,
+                            wi::Color::White());
+                        params.blendFlag = wi::enums::BLENDMODE_ALPHA;
+                        params.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
+                        params.opacity = isSelected ? 1.0f : hovered ? 0.98f : 0.90f;
+                        wi::image::Draw(&resources_[index].GetTexture(), params, cmd);
+                    });
+            }
+
+        private:
+            [[nodiscard]] bool CanUseMarkers() const noexcept
+            {
+                return IsVisible() && owner_ != nullptr &&
+                    !owner_->IsProjectHubVisible() &&
+                    !owner_->IsTestLevelRuntimeActive();
+            }
+
+            void ForEachMarker(
+                wi::scene::Scene& scene,
+                const std::function<void(
+                    MarkerIconKind, wi::ecs::Entity, const XMFLOAT3&)>& visit) const
+            {
+                auto* session = bridge::StudioSession::Current();
+                if (session == nullptr)
+                    return;
+
+                const auto emit = [&](const MarkerIconKind kind,
+                    const wi::ecs::Entity entity, const XMFLOAT3& position)
                 {
-                    if (!session->Scenes().IsHierarchyVisible(entity))
-                        return;
-
-                    XMFLOAT2 center = {};
-                    if (!ProjectPoint(position, camera, canvas, viewport, center))
-                        return;
-
-                    const float dx = pointer.x - center.x;
-                    const float dy = pointer.y - center.y;
-                    const bool hovered = dx * dx + dy * dy <= HoverRadius * HoverRadius;
-                    const bool isSelected = entity == selected;
-                    const float size = MarkerSize +
-                        (isSelected ? SelectedExtraSize : hovered ? HoverExtraSize : 0.0f);
-                    const std::size_t index = static_cast<std::size_t>(kind);
-                    if (index >= resources_.size() || !resources_[index].IsValid())
-                        return;
-
-                    wi::image::Params params(
-                        center.x - size * 0.5f,
-                        center.y - size * 0.5f,
-                        size,
-                        size,
-                        wi::Color::White());
-                    params.blendFlag = wi::enums::BLENDMODE_ALPHA;
-                    params.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
-                    params.opacity = isSelected ? 1.0f : hovered ? 0.98f : 0.90f;
-                    wi::image::Draw(&resources_[index].GetTexture(), params, cmd);
+                    if (entity != wi::ecs::INVALID_ENTITY &&
+                        session->Scenes().IsHierarchyVisible(entity))
+                    {
+                        visit(kind, entity, position);
+                    }
                 };
 
                 const auto player = bridge::ResolvePlayerStart(scene);
                 if (player.resolution == bridge::PlayerStartResolution::Success)
                 {
-                    drawAt(
+                    emit(
                         MarkerIconKind::PlayerStart,
                         player.start.entity,
                         player.start.transform.translation);
@@ -251,7 +356,7 @@ namespace renegade::studio
                     const auto* light = scene.lights.GetComponent(entity);
                     const auto* transform = scene.transforms.GetComponent(entity);
                     if (light != nullptr && transform != nullptr)
-                        drawAt(KindForLight(*light), entity, transform->GetPosition());
+                        emit(KindForLight(*light), entity, transform->GetPosition());
                 }
 
                 for (std::size_t index = 0; index < scene.cameras.GetCount(); ++index)
@@ -259,7 +364,7 @@ namespace renegade::studio
                     const wi::ecs::Entity entity = scene.cameras.GetEntity(index);
                     const auto* transform = scene.transforms.GetComponent(entity);
                     if (transform != nullptr)
-                        drawAt(MarkerIconKind::Camera, entity, transform->GetPosition());
+                        emit(MarkerIconKind::Camera, entity, transform->GetPosition());
                 }
 
                 for (std::size_t index = 0; index < scene.decals.GetCount(); ++index)
@@ -267,7 +372,7 @@ namespace renegade::studio
                     const wi::ecs::Entity entity = scene.decals.GetEntity(index);
                     const auto* transform = scene.transforms.GetComponent(entity);
                     if (transform != nullptr)
-                        drawAt(MarkerIconKind::DecalProjector, entity, transform->GetPosition());
+                        emit(MarkerIconKind::DecalProjector, entity, transform->GetPosition());
                 }
 
                 for (std::size_t index = 0; index < scene.sounds.GetCount(); ++index)
@@ -275,7 +380,7 @@ namespace renegade::studio
                     const wi::ecs::Entity entity = scene.sounds.GetEntity(index);
                     const auto* transform = scene.transforms.GetComponent(entity);
                     if (transform != nullptr && bridge::IsRenegadeSoundSource(scene, entity))
-                        drawAt(MarkerIconKind::AudioSource, entity, transform->GetPosition());
+                        emit(MarkerIconKind::AudioSource, entity, transform->GetPosition());
                 }
 
                 for (std::size_t index = 0; index < scene.emitters.GetCount(); ++index)
@@ -283,7 +388,7 @@ namespace renegade::studio
                     const wi::ecs::Entity entity = scene.emitters.GetEntity(index);
                     const auto* transform = scene.transforms.GetComponent(entity);
                     if (transform != nullptr)
-                        drawAt(MarkerIconKind::ParticleEmitter, entity, transform->GetPosition());
+                        emit(MarkerIconKind::ParticleEmitter, entity, transform->GetPosition());
                 }
 
                 for (std::size_t index = 0; index < scene.scripts.GetCount(); ++index)
@@ -294,14 +399,14 @@ namespace renegade::studio
                         !scene.objects.Contains(entity) &&
                         !scene.humanoids.Contains(entity))
                     {
-                        drawAt(MarkerIconKind::ScriptEntity, entity, transform->GetPosition());
+                        emit(MarkerIconKind::ScriptEntity, entity, transform->GetPosition());
                     }
                 }
             }
 
-        private:
             StudioRenderPath* owner_ = nullptr;
             std::string projectDescriptor_;
+            wi::ecs::Entity hoveredEntity_ = wi::ecs::INVALID_ENTITY;
             std::array<wi::Resource, static_cast<std::size_t>(MarkerIconKind::Count)> resources_;
             std::array<std::string, static_cast<std::size_t>(MarkerIconKind::Count)> resolvedPaths_;
         };
