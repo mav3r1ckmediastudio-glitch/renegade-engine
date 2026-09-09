@@ -8,17 +8,19 @@ endif()
 target_sources(RenegadeEngineBridge PRIVATE
     "${CMAKE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/ParticleEmitterService.h"
     "${CMAKE_SOURCE_DIR}/EngineBridge/src/ParticleEmitterService.cpp"
+    "${CMAKE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/ParticleBlendModeService.h"
+    "${CMAKE_SOURCE_DIR}/EngineBridge/src/ParticleBlendModeService.cpp"
 )
 
 target_sources(RenegadeStudio PRIVATE
-    "${CMAKE_CURRENT_LIST_DIR}/src/RenegadeParticleEmitterWorkspace.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/src/RenegadeParticleEmitterWorkspaceV2.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/src/RenegadeParticleEmitterWorkspace.h"
 )
 
 # Build a CPU-only bridge regression alongside Studio so the normal Studio CI
 # cannot register an emitter test binary that was never produced. The tests do
 # not run the particle GPU simulation; they prove native ECS creation,
-# serialization/identity, state round-trip and exact Wicked hierarchy offsets.
+# serialization/identity, state round-trip, blend mode and exact Wicked hierarchy offsets.
 add_executable(RenegadeParticleEmitterTests
     "${CMAKE_SOURCE_DIR}/Tests/ParticleEmitterTests.cpp"
 )

@@ -4,14 +4,16 @@ endif()
 
 set(service_header "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/ParticleEmitterService.h")
 set(service_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/ParticleEmitterService.cpp")
+set(blend_header "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/ParticleBlendModeService.h")
+set(blend_source "${RENEGADE_SOURCE_DIR}/EngineBridge/src/ParticleBlendModeService.cpp")
 set(workspace_header "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeParticleEmitterWorkspace.h")
-set(workspace_source "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeParticleEmitterWorkspace.cpp")
+set(workspace_source "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadeParticleEmitterWorkspaceV2.cpp")
 set(chrome_source "${RENEGADE_SOURCE_DIR}/Studio/src/RenegadePhysicsLabStudioChrome.cpp")
 set(behavior_test "${RENEGADE_SOURCE_DIR}/Tests/ParticleEmitterTests.cpp")
 
 foreach(required IN ITEMS
-    "${service_header}" "${service_source}" "${workspace_header}"
-    "${workspace_source}" "${chrome_source}" "${behavior_test}")
+    "${service_header}" "${service_source}" "${blend_header}" "${blend_source}"
+    "${workspace_header}" "${workspace_source}" "${chrome_source}" "${behavior_test}")
     if(NOT EXISTS "${required}")
         message(FATAL_ERROR "Particle emitter source contract missing ${required}")
     endif()
@@ -37,6 +39,14 @@ foreach(token IN ITEMS "Entity_CreateEmitter" "AssignNewPersistentEntityId"
     endif()
 endforeach()
 
+file(READ "${blend_source}" blend_source_text)
+foreach(token IN ITEMS "GetBlendMode" "BLENDMODE_ALPHA" "SetParticleBlendModeCommand" "ApplyMaterial")
+    string(FIND "${blend_source_text}" "${token}" found)
+    if(found EQUAL -1)
+        message(FATAL_ERROR "Particle blend-mode bridge missing ${token}")
+    endif()
+endforeach()
+
 file(READ "${workspace_source}" workspace_source_text)
 foreach(token IN ITEMS
     "CreateEmitterInFrontOfCamera"
@@ -44,20 +54,38 @@ foreach(token IN ITEMS
     "CreatorTextureWorkflowService"
     "SetMaterialTextureAssetCommand"
     "SPRITE SHEET // ANIMATED PARTICLES"
-    "FRAME RATE FPS"
+    "ANIMATION FPS"
     "NATIVE WICKED PARENT"
-    "ParticleNumericInputField"
-    "SetAsActive(true)"
-    "SliderSteps"
-    "sectionExpanded"
-    "RenderScrollbar"
-    "field(framesX,1,64"
-    "field(framesY,1,64")
+    "class ParticleSlider"
+    "GetCurrentInputValue"
+    "valueInputField.OnInputAccepted"
+    "Slider dragging is deliberately coarse"
+    "AUTO RESTART PREVIEW ON EDIT"
+    "RestartPreview"
+    "BLENDMODE_PREMULTIPLIED"
+    "BLENDMODE_ADDITIVE"
+    "SPRITE COLUMNS"
+    "1, 1024"
+    "FRAMES USED"
+    "1048576"
+    "USE ALL SHEET CELLS"
+    "OVER PARTICLE LIFETIME"
+    "FIXED FPS"
+    "VARIABLE // FRAME DELTA"
+    "FIXED // 120 FPS"
+    "FIXED // 60 FPS"
+    "FIXED // 30 FPS"
+    "RenderScrollbar")
     string(FIND "${workspace_source_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Particle emitter Studio workflow missing ${token}")
     endif()
 endforeach()
+
+string(FIND "${workspace_source_text}" "ParticleNumericInputField" stale_overlay)
+if(NOT stale_overlay EQUAL -1)
+    message(FATAL_ERROR "Particle emitter V2 must not restore the duplicate numeric overlay")
+endif()
 
 file(READ "${chrome_source}" chrome_source_text)
 foreach(token IN ITEMS "PARTICLE EMITTER" "CreateEmitterInFrontOfCamera"
