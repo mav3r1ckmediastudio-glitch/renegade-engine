@@ -52,8 +52,8 @@ int main()
     if (firstHierarchy == nullptr || firstHierarchy->parentID != root)
         return Fail("first native Wicked emitter was not parented under the effect root");
 
-    const auto rootId = ReadPersistentEntityId(scene, root);
-    const auto firstId = ReadPersistentEntityId(scene, first);
+    const auto rootId = PersistentEntityId(scene, root);
+    const auto firstId = PersistentEntityId(scene, first);
     if (rootId.empty() || firstId.empty() || rootId == firstId)
         return Fail("effect root/layer did not receive distinct persistent identities");
 
@@ -90,7 +90,7 @@ int main()
         !Near(secondTransform->translation_local.y, smokeLocal.translation.y) ||
         !Near(secondTransform->translation_local.z, smokeLocal.translation.z))
         return Fail("second layer exact local offset was not preserved");
-    const auto secondId = ReadPersistentEntityId(scene, second);
+    const auto secondId = PersistentEntityId(scene, second);
     if (secondId.empty() || secondId == firstId || secondId == rootId)
         return Fail("second layer did not receive fresh persistent identity");
 
@@ -102,7 +102,7 @@ int main()
     if (Exists(scene, second))
         return Fail("layer Undo did not remove the added emitter");
     if (!addSmoke.Execute() || !Exists(scene, second) ||
-        ReadPersistentEntityId(scene, second) != secondId)
+        PersistentEntityId(scene, second) != secondId)
         return Fail("layer Redo did not restore the exact emitter identity");
 
     const fs::path libraryRoot =
