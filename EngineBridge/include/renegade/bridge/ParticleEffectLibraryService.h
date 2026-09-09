@@ -6,6 +6,7 @@
 #include <WickedEngine.h>
 
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ParticleEffectService.h"
 
 namespace renegade::bridge
@@ -70,4 +71,74 @@ namespace renegade::bridge
     ListParticleEffectLibrary(
         const std::string& libraryRoot,
         std::string& warning);
+
+    struct PreparedParticleEffectPresetLayer
+    {
+        ParticleEffectPresetLayer preset;
+        bool hasTexture = false;
+        PreparedMaterialTextureAsset texture;
+    };
+
+    struct PreparedParticleEffectPreset
+    {
+        std::string name;
+        std::vector<PreparedParticleEffectPresetLayer> layers;
+    };
+
+    struct PrepareParticleEffectPresetResult
+    {
+        bool succeeded = false;
+        PreparedParticleEffectPreset preset;
+        std::size_t importedTextureCount = 0;
+        std::string error;
+    };
+
+    // Imports any bundled library textures through the existing governed
+    // creator texture pipeline, then prepares their stable project products for
+    // one atomic scene-placement command. Project imports intentionally persist
+    // just like the existing particle Texture/Spritesheet picker; Undo governs
+    // the scene instance, not the project's reusable imported dependencies.
+    [[nodiscard]] PrepareParticleEffectPresetResult PrepareParticleEffectPresetForProject(
+        const std::string& packagePath,
+        const std::string& projectRoot,
+        const StableId& projectId);
+
+    class CreateParticleEffectFromPresetCommand final : public ICommand
+    {
+    public:
+        CreateParticleEffectFromPresetCommand(
+            wi::scene::Scene& scene,
+            const XMFLOAT3& position,
+            PreparedParticleEffectPreset preset);
+
+        bool Execute() override;
+        void Undo() override;
+
+        [[nodiscard]] wi::ecs::Entity RootEntity() const noexcept
+        {
+            return root_;
+        }
+        [[nodiscard]] const std::vector<wi::ecs::Entity>& LayerEntities() const noexcept
+        {
+            return layerEntities_;
+        }
+        [[nodiscard]] const std::string& Error() const noexcept
+        {
+            return error_;
+        }
+
+    private:
+        bool CreateFirstTime();
+        bool RestoreSnapshot();
+        bool ApplyPreparedTextures();
+
+        wi::scene::Scene* scene_ = nullptr;
+        XMFLOAT3 position_ = {};
+        PreparedParticleEffectPreset preset_;
+        wi::ecs::Entity root_ = wi::ecs::INVALID_ENTITY;
+        std::vector<wi::ecs::Entity> layerEntities_;
+        wi::Archive snapshot_;
+        bool hasSnapshot_ = false;
+        std::string error_;
+    };
 }
