@@ -8,6 +8,7 @@
 #include "renegade/bridge/StudioSession.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <functional>
@@ -19,6 +20,7 @@
 namespace
 {
     namespace fs = std::filesystem;
+    using renegade::studio::RenegadeTextInputField;
     using renegade::studio::SceneInspectorButton;
     using renegade::studio::SceneInspectorCheckBox;
     using renegade::studio::SceneInspectorComboBox;
@@ -28,17 +30,41 @@ namespace
     constexpr float FooterHeight = 34.0f;
     constexpr float RowHeight = 30.0f;
     constexpr float RowGap = 6.0f;
-    constexpr float SectionGap = 18.0f;
     constexpr float ScrollStep = 72.0f;
+    constexpr float NumericInputWidth = 64.0f;
+    constexpr float ScrollbarWidth = 5.0f;
 
     constexpr wi::Color Surface0 = wi::Color(8, 12, 16, 255);
     constexpr wi::Color Surface1 = wi::Color(12, 18, 22, 255);
     constexpr wi::Color Border = wi::Color(38, 52, 61, 255);
+    constexpr wi::Color BorderSoft = wi::Color(25, 36, 43, 255);
     constexpr wi::Color TextStrong = wi::Color(244, 244, 244, 255);
     constexpr wi::Color TextSecondary = wi::Color(214, 222, 226, 255);
     constexpr wi::Color Muted = wi::Color(139, 151, 158, 255);
     constexpr wi::Color Forge = wi::Color(210, 91, 29, 255);
     constexpr wi::Color Error = wi::Color(229, 92, 92, 255);
+
+    enum class ParticleSection : std::size_t
+    {
+        Appearance,
+        Attachment,
+        Emission,
+        Particle,
+        Motion,
+        SpriteSheet,
+        Advanced,
+        Count,
+    };
+
+    constexpr std::size_t ParticleSectionCount =
+        static_cast<std::size_t>(ParticleSection::Count);
+
+    float SliderSteps(const float minimum, const float maximum, const float increment) noexcept
+    {
+        if (!(maximum > minimum) || !(increment > 0.0f))
+            return 1.0f;
+        return std::max(1.0f, std::round((maximum - minimum) / increment));
+    }
 
     void DrawRect(float x, float y, float width, float height,
         wi::Color color, wi::graphics::CommandList cmd)
@@ -58,6 +84,14 @@ namespace
         wi::font::Draw(value, params, cmd);
     }
 
+    bool PointInside(const XMFLOAT4& pointer, const wi::gui::Widget& widget) noexcept
+    {
+        const auto pos = widget.GetPos();
+        const auto size = widget.GetSize();
+        return pointer.x >= pos.x && pointer.x < pos.x + size.x &&
+            pointer.y >= pos.y && pointer.y < pos.y + size.y;
+    }
+
     std::string EntityName(const wi::scene::Scene& scene, wi::ecs::Entity entity)
     {
         if (entity == wi::ecs::INVALID_ENTITY) return "NONE // WORLD";
@@ -68,6 +102,25 @@ namespace
 
     float RadiansToDegrees(float value) noexcept { return value * (180.0f / XM_PI); }
     float DegreesToRadians(float value) noexcept { return value * (XM_PI / 180.0f); }
+
+    class ParticleNumericInputField final : public RenegadeTextInputField
+    {
+    public:
+        ParticleNumericInputField() { SetRenderTextSize(12); }
+
+        void Update(const wi::Canvas& canvas, const float dt) override
+        {
+            const auto before = GetState();
+            RenegadeTextInputField::Update(canvas, dt);
+            if (before != wi::gui::ACTIVE && GetState() == wi::gui::ACTIVE)
+                SetAsActive(true);
+        }
+
+        const char* GetWidgetTypeName() const override
+        {
+            return "ParticleNumericInputField";
+        }
+    };
 }
 
 namespace renegade::studio
@@ -89,9 +142,18 @@ namespace renegade::studio
         std::string textureDisplay = "NO PARTICLE TEXTURE";
         std::string parentDisplay = "WORLD";
         std::vector<wi::gui::Widget*> controls;
-        struct SectionLabel { std::string text; float y = 0.0f; };
-        std::vector<SectionLabel> sectionLabels;
         wi::jobsystem::context textureImportWorkload;
+
+        std::array<bool, ParticleSectionCount> sectionExpanded = {
+            true, false, false, false, false, false, false};
+
+        SceneInspectorButton appearanceHeader;
+        SceneInspectorButton attachmentHeader;
+        SceneInspectorButton emissionHeader;
+        SceneInspectorButton particleHeader;
+        SceneInspectorButton motionHeader;
+        SceneInspectorButton spriteHeader;
+        SceneInspectorButton advancedHeader;
 
         SceneInspectorButton chooseTexture;
         SceneInspectorButton clearTexture;
@@ -117,6 +179,17 @@ namespace renegade::studio
         SceneInspectorSlider gravityX, gravityY, gravityZ, drag, restitution;
         SceneInspectorSlider framesX, framesY, frameCount, frameStart, frameRate;
         SceneInspectorSlider fixedTimestep, sphH, sphK, sphP0, sphE;
+
+        struct NumericBinding
+        {
+            SceneInspectorSlider* slider = nullptr;
+            std::unique_ptr<ParticleNumericInputField> input;
+            float minimum = 0.0f;
+            float maximum = 1.0f;
+            bool integer = false;
+            int precision = 3;
+        };
+        std::vector<NumericBinding> numericBindings;
 
         [[nodiscard]] wi::scene::Scene* Scene() const noexcept
         {
@@ -169,6 +242,94 @@ namespace renegade::studio
             if (ExecuteCommand<bridge::SetTransformCommand>(
                     *scene, selected, before, after))
                 SetStatus("ATTACHMENT OFFSET // APPLIED");
+        }
+
+        void ToggleSection(const ParticleSection section)
+        {
+            const auto index = static_cast<std::size_t>(section);
+            const bool opening = !sectionExpanded[index];
+            sectionExpanded.fill(false);
+            if (opening)
+                sectionExpanded[index] = true;
+            Layout();
+        }
+
+        void RegisterNumericInput(
+            SceneInspectorSlider& slider,
+            const float minimum,
+            const float maximum,
+            const bool integer,
+            const int precision,
+            std::function<void(float)> commit)
+        {
+            auto input = std::make_unique<ParticleNumericInputField>();
+            input->Create(slider.GetName() + " Exact Value");
+            input->SetTooltip("Type an exact value and press Enter. Click selects the current value.");
+            input->SetFloatPrecision(integer ? 0 : precision);
+            input->OnInputAccepted(
+                [this, &slider, minimum, maximum, integer, commit = std::move(commit)](
+                    const wi::gui::EventArgs& args)
+                {
+                    float value = std::isfinite(args.fValue) ? args.fValue : slider.GetValue();
+                    value = std::clamp(value, minimum, maximum);
+                    if (integer)
+                        value = std::round(value);
+                    slider.SetRange(minimum, maximum);
+                    slider.SetValue(value);
+                    if (commit)
+                        commit(value);
+                    refreshPending = true;
+                });
+            numericBindings.push_back({
+                &slider, std::move(input), minimum, maximum, integer, precision});
+        }
+
+        void PositionNumericInputs()
+        {
+            for (auto& binding : numericBindings)
+            {
+                if (binding.slider == nullptr || binding.input == nullptr ||
+                    !binding.slider->IsVisible())
+                {
+                    if (binding.input != nullptr)
+                        binding.input->SetVisible(false);
+                    continue;
+                }
+                const auto pos = binding.slider->GetPos();
+                const auto size = binding.slider->GetSize();
+                const float inputWidth = std::min(
+                    NumericInputWidth, std::max(42.0f, size.x * 0.38f));
+                binding.input->SetVisible(true);
+                binding.input->SetPos(XMFLOAT2(
+                    pos.x + size.x - inputWidth, pos.y));
+                binding.input->SetSize(XMFLOAT2(inputWidth, size.y));
+            }
+        }
+
+        void SyncNumericInputs()
+        {
+            for (auto& binding : numericBindings)
+            {
+                if (binding.slider == nullptr || binding.input == nullptr ||
+                    binding.input->GetState() == wi::gui::ACTIVE)
+                    continue;
+                if (binding.integer)
+                    binding.input->SetValue(
+                        static_cast<int>(std::lround(binding.slider->GetValue())));
+                else
+                    binding.input->SetValue(binding.slider->GetValue());
+            }
+        }
+
+        void SuppressSlidersBehindExactInputs(const XMFLOAT4& pointer, const bool suppress)
+        {
+            for (auto& binding : numericBindings)
+            {
+                if (binding.slider == nullptr || binding.input == nullptr)
+                    continue;
+                binding.slider->force_disable = suppress &&
+                    binding.input->IsVisible() && PointInside(pointer, *binding.input);
+            }
         }
 
         void CreateEmitter()
@@ -312,6 +473,26 @@ namespace renegade::studio
 
         void CreateControls()
         {
+            const auto sectionHeader = [this](
+                SceneInspectorButton& button,
+                const char* name,
+                const char* title,
+                const ParticleSection section)
+            {
+                button.Create(name);
+                button.SetText(std::string("▶  ") + title);
+                button.SetTooltip("Expand or collapse this Particle Emitter Inspector section.");
+                button.OnClick([this, section](const wi::gui::EventArgs&)
+                { ToggleSection(section); });
+            };
+            sectionHeader(appearanceHeader, "Particle Appearance Header", "APPEARANCE", ParticleSection::Appearance);
+            sectionHeader(attachmentHeader, "Particle Attachment Header", "ATTACHMENT", ParticleSection::Attachment);
+            sectionHeader(emissionHeader, "Particle Emission Header", "PLAYBACK + EMISSION", ParticleSection::Emission);
+            sectionHeader(particleHeader, "Particle Properties Header", "PARTICLE", ParticleSection::Particle);
+            sectionHeader(motionHeader, "Particle Motion Header", "MOTION", ParticleSection::Motion);
+            sectionHeader(spriteHeader, "Particle Sprite Header", "SPRITE SHEET", ParticleSection::SpriteSheet);
+            sectionHeader(advancedHeader, "Particle Advanced Header", "ADVANCED", ParticleSection::Advanced);
+
             chooseTexture.Create("Particle Choose Texture");
             chooseTexture.SetText("TEXTURE / SPRITESHEET...");
             chooseTexture.OnClick([this](const wi::gui::EventArgs&) { ChooseParticleTexture(); });
@@ -321,8 +502,11 @@ namespace renegade::studio
             restart.OnClick([this](const wi::gui::EventArgs&) { RestartEmitter(); });
             burst.Create("Particle Burst"); burst.SetText("BURST NOW");
             burst.OnClick([this](const wi::gui::EventArgs&) { BurstNow(); });
-            burstCount.Create(1.0f, 10000.0f, 10.0f, 9999.0f,
+            burstCount.Create(1.0f, 10000.0f, 10.0f,
+                SliderSteps(1.0f, 10000.0f, 1.0f),
                 "Particle Burst Count", "BURST COUNT");
+            RegisterNumericInput(burstCount, 1.0f, 10000.0f, true, 0,
+                [this](float value) { burstCount.SetValue(value); });
             debugVisual.Create("DEBUG EMITTER VISUALISER: ");
             debugVisual.OnClick([](const wi::gui::EventArgs& args)
             { wi::renderer::SetToDrawDebugEmitters(args.bValue); });
@@ -333,10 +517,12 @@ namespace renegade::studio
             const auto transformSlider = [this](SceneInspectorSlider& slider,
                 const char* name, const char* label, int axis, bool isScale)
             {
-                slider.Create(isScale ? 0.001f : -10000.0f,
-                    isScale ? 100.0f : 10000.0f, isScale ? 1.0f : 0.0f,
-                    100000.0f, name, label);
-                slider.OnValueCommitted([this, axis, isScale](float value)
+                const float minimum = isScale ? 0.001f : -10000.0f;
+                const float maximum = isScale ? 100.0f : 10000.0f;
+                const float initial = isScale ? 1.0f : 0.0f;
+                slider.Create(minimum, maximum, initial,
+                    SliderSteps(minimum, maximum, 0.01f), name, label);
+                const auto commit = [this, axis, isScale](float value)
                 {
                     EditTransform([=](bridge::TransformState& state)
                     {
@@ -345,7 +531,9 @@ namespace renegade::studio
                         else if (axis == 1) target.y = value;
                         else target.z = value;
                     });
-                });
+                };
+                slider.OnValueCommitted(commit);
+                RegisterNumericInput(slider, minimum, maximum, false, 3, commit);
             };
             transformSlider(localX,"Particle Local X","LOCAL X",0,false);
             transformSlider(localY,"Particle Local Y","LOCAL Y",1,false);
@@ -362,22 +550,39 @@ namespace renegade::studio
             shaderType.OnSelect([this](const wi::gui::EventArgs& args)
             { EditEmitter([&](auto& s){ s.shaderType = static_cast<wi::EmittedParticleSystem::PARTICLESHADERTYPE>(args.userdata); }); });
 
-            const auto field = [this](SceneInspectorSlider& slider, float min, float max,
-                float def, const char* name, const char* label,
+            const auto field = [this](
+                SceneInspectorSlider& slider,
+                float minimum,
+                float maximum,
+                float initial,
+                float increment,
+                bool integer,
+                int precision,
+                const char* name,
+                const char* label,
                 std::function<void(bridge::ParticleEmitterState&, float)> set)
             {
-                slider.Create(min,max,def,100000.0f,name,label);
-                slider.OnValueCommitted([this,set=std::move(set)](float v)
-                { EditEmitter([&](auto& s){ set(s,v); }); });
+                slider.Create(minimum, maximum, initial,
+                    SliderSteps(minimum, maximum, increment), name, label);
+                const auto commit = [this, minimum, maximum, integer, set](float value)
+                {
+                    float safe = std::clamp(value, minimum, maximum);
+                    if (integer)
+                        safe = std::round(safe);
+                    EditEmitter([&](auto& state) { set(state, safe); });
+                };
+                slider.OnValueCommitted(commit);
+                RegisterNumericInput(slider, minimum, maximum, integer, precision, commit);
             };
-            field(colorR,0,1,1,"Particle Color R","COLOR R",[](auto&s,float v){s.color.x=v;});
-            field(colorG,0,1,1,"Particle Color G","COLOR G",[](auto&s,float v){s.color.y=v;});
-            field(colorB,0,1,1,"Particle Color B","COLOR B",[](auto&s,float v){s.color.z=v;});
-            field(opacity,0,1,1,"Particle Opacity","OPACITY",[](auto&s,float v){s.color.w=v;});
-            field(emissiveR,0,1,0,"Particle Emissive R","EMISSIVE R",[](auto&s,float v){s.emissiveColor.x=v;});
-            field(emissiveG,0,1,0,"Particle Emissive G","EMISSIVE G",[](auto&s,float v){s.emissiveColor.y=v;});
-            field(emissiveB,0,1,0,"Particle Emissive B","EMISSIVE B",[](auto&s,float v){s.emissiveColor.z=v;});
-            field(emissiveStrength,0,100,0,"Particle Emissive Strength","EMISSIVE",[](auto&s,float v){s.emissiveStrength=v;});
+
+            field(colorR,0,1,1,0.01f,false,2,"Particle Color R","COLOR R",[](auto&s,float v){s.color.x=v;});
+            field(colorG,0,1,1,0.01f,false,2,"Particle Color G","COLOR G",[](auto&s,float v){s.color.y=v;});
+            field(colorB,0,1,1,0.01f,false,2,"Particle Color B","COLOR B",[](auto&s,float v){s.color.z=v;});
+            field(opacity,0,1,1,0.01f,false,2,"Particle Opacity","OPACITY",[](auto&s,float v){s.color.w=v;});
+            field(emissiveR,0,1,0,0.01f,false,2,"Particle Emissive R","EMISSIVE R",[](auto&s,float v){s.emissiveColor.x=v;});
+            field(emissiveG,0,1,0,0.01f,false,2,"Particle Emissive G","EMISSIVE G",[](auto&s,float v){s.emissiveColor.y=v;});
+            field(emissiveB,0,1,0,0.01f,false,2,"Particle Emissive B","EMISSIVE B",[](auto&s,float v){s.emissiveColor.z=v;});
+            field(emissiveStrength,0,100,0,0.1f,false,1,"Particle Emissive Strength","EMISSIVE",[](auto&s,float v){s.emissiveStrength=v;});
 
             const auto flag = [this](SceneInspectorCheckBox& box, const char* label,
                 std::function<void(bridge::ParticleEmitterState&, bool)> set)
@@ -398,42 +603,45 @@ namespace renegade::studio
             emitterMesh.OnSelect([this](const wi::gui::EventArgs& args)
             { EditEmitter([&](auto& s){s.meshId=static_cast<wi::ecs::Entity>(args.userdata);}); });
 
-            field(maxParticles,100,1000000,1000,"Particle Max","MAX PARTICLES",[](auto&s,float v){s.maxParticles=static_cast<std::uint32_t>(std::lround(v));});
-            field(emitCount,0,10000,20,"Particle Emit Count","EMIT / SEC",[](auto&s,float v){s.emitCount=v;});
-            field(burstOnCreate,0,100000,0,"Particle Burst On Create","BURST ON CREATE",[](auto&s,float v){s.burstOnCreate=static_cast<int>(std::lround(v));});
-            field(size,0.001f,100,0.2f,"Particle Size","SIZE",[](auto&s,float v){s.size=v;});
-            field(life,0.001f,600,2,"Particle Life","LIFETIME",[](auto&s,float v){s.life=v;});
-            field(rotationDegrees,-360,360,0,"Particle Rotation","ROTATION DEG",[](auto&s,float v){s.rotation=DegreesToRadians(v);});
-            field(particleScaleX,0.001f,100,1,"Particle Scale X","PARTICLE SCALE X",[](auto&s,float v){s.scaleX=v;});
-            field(particleScaleY,0.001f,100,1,"Particle Scale Y","PARTICLE SCALE Y",[](auto&s,float v){s.scaleY=v;});
-            field(normalFactor,-10,10,0,"Particle Normal Factor","NORMAL FACTOR",[](auto&s,float v){s.normalFactor=v;});
-            field(randomness,0,1,0.35f,"Particle Random","RANDOMNESS",[](auto&s,float v){s.randomFactor=v;});
-            field(lifeRandomness,0,10,0.25f,"Particle Life Random","LIFE RANDOM",[](auto&s,float v){s.randomLife=v;});
-            field(colorRandomness,0,2,0,"Particle Color Random","COLOR RANDOM",[](auto&s,float v){s.randomColor=v;});
-            field(opacityStart,0,1,0.1f,"Particle Opacity Start","OPACITY PEAK START",[](auto&s,float v){s.opacityPeakStart=v;});
-            field(opacityEnd,0,1,0.5f,"Particle Opacity End","OPACITY PEAK END",[](auto&s,float v){s.opacityPeakEnd=v;});
-            field(motionBlur,0,1,0,"Particle Motion Blur","MOTION BLUR",[](auto&s,float v){s.motionBlurAmount=v;});
-            field(mass,0.001f,1000,1,"Particle Mass","MASS",[](auto&s,float v){s.mass=v;});
-            field(velocityX,-1000,1000,0,"Particle Velocity X","VELOCITY X",[](auto&s,float v){s.velocity.x=v;});
-            field(velocityY,-1000,1000,0.75f,"Particle Velocity Y","VELOCITY Y",[](auto&s,float v){s.velocity.y=v;});
-            field(velocityZ,-1000,1000,0,"Particle Velocity Z","VELOCITY Z",[](auto&s,float v){s.velocity.z=v;});
-            field(gravityX,-1000,1000,0,"Particle Gravity X","GRAVITY X",[](auto&s,float v){s.gravity.x=v;});
-            field(gravityY,-1000,1000,0,"Particle Gravity Y","GRAVITY Y",[](auto&s,float v){s.gravity.y=v;});
-            field(gravityZ,-1000,1000,0,"Particle Gravity Z","GRAVITY Z",[](auto&s,float v){s.gravity.z=v;});
-            field(drag,0,1,1,"Particle Drag","DRAG",[](auto&s,float v){s.drag=v;});
-            field(restitution,0,1,0.98f,"Particle Restitution","RESTITUTION",[](auto&s,float v){s.restitution=v;});
-            field(framesX,1,1024,1,"Particle Frames X","SPRITE COLUMNS",[](auto&s,float v){s.framesX=static_cast<std::uint32_t>(std::lround(v));});
-            field(framesY,1,1024,1,"Particle Frames Y","SPRITE ROWS",[](auto&s,float v){s.framesY=static_cast<std::uint32_t>(std::lround(v));});
-            field(frameCount,1,1048576,1,"Particle Frame Count","FRAME COUNT",[](auto&s,float v){s.frameCount=static_cast<std::uint32_t>(std::lround(v));});
-            field(frameStart,0,1048575,0,"Particle Frame Start","START FRAME",[](auto&s,float v){s.frameStart=static_cast<std::uint32_t>(std::lround(v));});
-            field(frameRate,0,240,0,"Particle Frame Rate","FRAME RATE FPS",[](auto&s,float v){s.frameRate=v;});
-            field(fixedTimestep,-1,0.1f,-1,"Particle Fixed Timestep","FIXED TIMESTEP",[](auto&s,float v){s.fixedTimestep=v;});
-            field(sphH,0.001f,100,1,"Particle SPH H","SPH H",[](auto&s,float v){s.sphH=v;});
-            field(sphK,0,10000,250,"Particle SPH K","SPH K",[](auto&s,float v){s.sphK=v;});
-            field(sphP0,0.001f,1000,1,"Particle SPH P0","SPH P0",[](auto&s,float v){s.sphP0=v;});
-            field(sphE,0,100,0.018f,"Particle SPH E","SPH VISCOSITY",[](auto&s,float v){s.sphE=v;});
+            field(maxParticles,100,1000000,1000,100,true,0,"Particle Max","MAX PARTICLES",[](auto&s,float v){s.maxParticles=static_cast<std::uint32_t>(std::lround(v));});
+            field(emitCount,0,10000,20,1,false,0,"Particle Emit Count","EMIT / SEC",[](auto&s,float v){s.emitCount=v;});
+            field(burstOnCreate,0,100000,0,1,true,0,"Particle Burst On Create","BURST ON CREATE",[](auto&s,float v){s.burstOnCreate=static_cast<int>(std::lround(v));});
+            field(size,0.001f,100,0.2f,0.01f,false,3,"Particle Size","SIZE",[](auto&s,float v){s.size=v;});
+            field(life,0.001f,600,2,0.01f,false,3,"Particle Life","LIFETIME",[](auto&s,float v){s.life=v;});
+            field(rotationDegrees,-360,360,0,1,false,1,"Particle Rotation","ROTATION DEG",[](auto&s,float v){s.rotation=DegreesToRadians(v);});
+            field(particleScaleX,0.001f,100,1,0.01f,false,3,"Particle Scale X","PARTICLE SCALE X",[](auto&s,float v){s.scaleX=v;});
+            field(particleScaleY,0.001f,100,1,0.01f,false,3,"Particle Scale Y","PARTICLE SCALE Y",[](auto&s,float v){s.scaleY=v;});
+            field(normalFactor,-10,10,0,0.01f,false,2,"Particle Normal Factor","NORMAL FACTOR",[](auto&s,float v){s.normalFactor=v;});
+            field(randomness,0,1,0.35f,0.01f,false,2,"Particle Random","RANDOMNESS",[](auto&s,float v){s.randomFactor=v;});
+            field(lifeRandomness,0,10,0.25f,0.01f,false,2,"Particle Life Random","LIFE RANDOM",[](auto&s,float v){s.randomLife=v;});
+            field(colorRandomness,0,2,0,0.01f,false,2,"Particle Color Random","COLOR RANDOM",[](auto&s,float v){s.randomColor=v;});
+            field(opacityStart,0,1,0.1f,0.01f,false,2,"Particle Opacity Start","OPACITY PEAK START",[](auto&s,float v){s.opacityPeakStart=v;});
+            field(opacityEnd,0,1,0.5f,0.01f,false,2,"Particle Opacity End","OPACITY PEAK END",[](auto&s,float v){s.opacityPeakEnd=v;});
+            field(motionBlur,0,1,0,0.01f,false,2,"Particle Motion Blur","MOTION BLUR",[](auto&s,float v){s.motionBlurAmount=v;});
+            field(mass,0.001f,1000,1,0.01f,false,3,"Particle Mass","MASS",[](auto&s,float v){s.mass=v;});
+            field(velocityX,-1000,1000,0,0.1f,false,2,"Particle Velocity X","VELOCITY X",[](auto&s,float v){s.velocity.x=v;});
+            field(velocityY,-1000,1000,0.75f,0.1f,false,2,"Particle Velocity Y","VELOCITY Y",[](auto&s,float v){s.velocity.y=v;});
+            field(velocityZ,-1000,1000,0,0.1f,false,2,"Particle Velocity Z","VELOCITY Z",[](auto&s,float v){s.velocity.z=v;});
+            field(gravityX,-1000,1000,0,0.1f,false,2,"Particle Gravity X","GRAVITY X",[](auto&s,float v){s.gravity.x=v;});
+            field(gravityY,-1000,1000,0,0.1f,false,2,"Particle Gravity Y","GRAVITY Y",[](auto&s,float v){s.gravity.y=v;});
+            field(gravityZ,-1000,1000,0,0.1f,false,2,"Particle Gravity Z","GRAVITY Z",[](auto&s,float v){s.gravity.z=v;});
+            field(drag,0,1,1,0.01f,false,2,"Particle Drag","DRAG",[](auto&s,float v){s.drag=v;});
+            field(restitution,0,1,0.98f,0.01f,false,2,"Particle Restitution","RESTITUTION",[](auto&s,float v){s.restitution=v;});
+            field(framesX,1,64,1,1,true,0,"Particle Frames X","SPRITE COLUMNS",[](auto&s,float v){s.framesX=static_cast<std::uint32_t>(std::lround(v));});
+            field(framesY,1,64,1,1,true,0,"Particle Frames Y","SPRITE ROWS",[](auto&s,float v){s.framesY=static_cast<std::uint32_t>(std::lround(v));});
+            field(frameCount,1,4096,1,1,true,0,"Particle Frame Count","FRAME COUNT",[](auto&s,float v){const auto cells=std::max<std::uint32_t>(1u,s.framesX*s.framesY);s.frameCount=std::min<std::uint32_t>(static_cast<std::uint32_t>(std::lround(v)),cells);});
+            field(frameStart,0,4095,0,1,true,0,"Particle Frame Start","START FRAME",[](auto&s,float v){const auto last=s.frameCount>0?s.frameCount-1u:0u;s.frameStart=std::min<std::uint32_t>(static_cast<std::uint32_t>(std::lround(v)),last);});
+            field(frameRate,0,240,0,1,false,1,"Particle Frame Rate","FRAME RATE FPS",[](auto&s,float v){s.frameRate=v;});
+            field(fixedTimestep,-1,0.1f,-1,0.001f,false,3,"Particle Fixed Timestep","FIXED TIMESTEP",[](auto&s,float v){s.fixedTimestep=v;});
+            field(sphH,0.001f,100,1,0.01f,false,3,"Particle SPH H","SPH H",[](auto&s,float v){s.sphH=v;});
+            field(sphK,0,10000,250,1,false,1,"Particle SPH K","SPH K",[](auto&s,float v){s.sphK=v;});
+            field(sphP0,0.001f,1000,1,0.01f,false,3,"Particle SPH P0","SPH P0",[](auto&s,float v){s.sphP0=v;});
+            field(sphE,0,100,0.018f,0.001f,false,3,"Particle SPH E","SPH VISCOSITY",[](auto&s,float v){s.sphE=v;});
 
-            controls = {&chooseTexture,&clearTexture,&restart,&burst,&burstCount,&debugVisual,
+            controls = {
+                &appearanceHeader,&attachmentHeader,&emissionHeader,&particleHeader,
+                &motionHeader,&spriteHeader,&advancedHeader,
+                &chooseTexture,&clearTexture,&restart,&burst,&burstCount,&debugVisual,
                 &parent,&localX,&localY,&localZ,&localScaleX,&localScaleY,&localScaleZ,
                 &shaderType,&colorR,&colorG,&colorB,&opacity,&emissiveR,&emissiveG,&emissiveB,&emissiveStrength,
                 &paused,&sorting,&depthCollision,&sph,&volume,&frameBlending,&collidersDisabled,&takeColorFromMesh,&emitterMesh,
@@ -441,6 +649,8 @@ namespace renegade::studio
                 &normalFactor,&randomness,&lifeRandomness,&colorRandomness,&opacityStart,&opacityEnd,&motionBlur,&mass,
                 &velocityX,&velocityY,&velocityZ,&gravityX,&gravityY,&gravityZ,&drag,&restitution,
                 &framesX,&framesY,&frameCount,&frameStart,&frameRate,&fixedTimestep,&sphH,&sphK,&sphP0,&sphE};
+            for (auto& binding : numericBindings)
+                controls.push_back(binding.input.get());
             for (auto* control : controls) control->SetVisible(false);
             created = true;
         }
@@ -497,6 +707,7 @@ namespace renegade::studio
                 if (!texture.name.empty()) textureDisplay = fs::u8path(texture.name).filename().generic_u8string();
                 else if (texture.resource.IsValid()) textureDisplay = "PARTICLE TEXTURE // LOADED";
             }
+            SyncNumericInputs();
             refreshPending = false;
         }
 
@@ -505,23 +716,117 @@ namespace renegade::studio
             const float visible = std::max(0.0f, bounds.w - HeaderHeight - FooterHeight);
             scrollY = std::clamp(scrollY, 0.0f, std::max(0.0f, contentHeight-visible));
         }
+
         void Layout()
         {
-            sectionLabels.clear();
-            const float x=bounds.x+12.0f, width=std::max(80.0f,bounds.z-24.0f);
-            const float top=bounds.y+HeaderHeight, bottom=bounds.y+bounds.w-FooterHeight;
-            float y=0.0f;
-            const auto full=[&](wi::gui::Widget& w){const float sy=top+y-scrollY; w.SetVisible(active&&SelectedIsEmitter()&&sy+RowHeight>=top&&sy<=bottom); w.SetPos(XMFLOAT2(x,sy)); w.SetSize(XMFLOAT2(width,RowHeight)); y+=RowHeight+RowGap;};
-            const auto two=[&](wi::gui::Widget& a,wi::gui::Widget& b){const float half=(width-RowGap)*0.5f,sy=top+y-scrollY; const bool vis=active&&SelectedIsEmitter()&&sy+RowHeight>=top&&sy<=bottom; a.SetVisible(vis);b.SetVisible(vis);a.SetPos(XMFLOAT2(x,sy));b.SetPos(XMFLOAT2(x+half+RowGap,sy));a.SetSize(XMFLOAT2(half,RowHeight));b.SetSize(XMFLOAT2(half,RowHeight));y+=RowHeight+RowGap;};
-            const auto section=[&](const char* text){y+=SectionGap;sectionLabels.push_back({text,top+y-scrollY});y+=24.0f;};
-            section("APPEARANCE // WICKED MATERIAL + PARTICLE SHADER"); two(chooseTexture,clearTexture); full(shaderType); two(colorR,colorG); two(colorB,opacity); two(emissiveR,emissiveG); two(emissiveB,emissiveStrength);
-            section("ATTACHMENT // NATIVE WICKED HIERARCHY"); full(parent); two(localX,localY); full(localZ); two(localScaleX,localScaleY); full(localScaleZ);
-            section("PLAYBACK + EMISSION"); two(restart,burst); full(burstCount); full(debugVisual); two(paused,sorting); two(volume,depthCollision); two(sph,frameBlending); two(collidersDisabled,takeColorFromMesh); full(emitterMesh); full(maxParticles); full(emitCount); full(burstOnCreate);
-            section("PARTICLE"); two(size,life); full(rotationDegrees); two(particleScaleX,particleScaleY); full(normalFactor); full(randomness); full(lifeRandomness); full(colorRandomness); two(opacityStart,opacityEnd); full(motionBlur); full(mass);
-            section("MOTION"); two(velocityX,velocityY); full(velocityZ); two(gravityX,gravityY); full(gravityZ); two(drag,restitution);
-            section("SPRITE SHEET // ANIMATED PARTICLES"); two(framesX,framesY); two(frameCount,frameStart); full(frameRate);
-            section("ADVANCED // NATIVE WICKED"); full(fixedTimestep); two(sphH,sphK); two(sphP0,sphE);
-            contentHeight=y+RowHeight; ClampScroll();
+            for (auto* control : controls)
+                control->SetVisible(false);
+
+            const float x = bounds.x + 12.0f;
+            const float width = std::max(80.0f, bounds.z - 34.0f);
+            const float top = bounds.y + HeaderHeight;
+            const float bottom = bounds.y + bounds.w - FooterHeight;
+            const float scrollBefore = scrollY;
+            float y = 6.0f;
+
+            const auto full = [&](wi::gui::Widget& widget)
+            {
+                const float sy = top + y - scrollY;
+                widget.SetVisible(active && SelectedIsEmitter() &&
+                    sy + RowHeight >= top && sy <= bottom);
+                widget.SetPos(XMFLOAT2(x, sy));
+                widget.SetSize(XMFLOAT2(width, RowHeight));
+                y += RowHeight + RowGap;
+            };
+            const auto two = [&](wi::gui::Widget& a, wi::gui::Widget& b)
+            {
+                const float half = (width - RowGap) * 0.5f;
+                const float sy = top + y - scrollY;
+                const bool visible = active && SelectedIsEmitter() &&
+                    sy + RowHeight >= top && sy <= bottom;
+                a.SetVisible(visible); b.SetVisible(visible);
+                a.SetPos(XMFLOAT2(x, sy));
+                b.SetPos(XMFLOAT2(x + half + RowGap, sy));
+                a.SetSize(XMFLOAT2(half, RowHeight));
+                b.SetSize(XMFLOAT2(half, RowHeight));
+                y += RowHeight + RowGap;
+            };
+            const auto header = [&](
+                SceneInspectorButton& button,
+                const ParticleSection section,
+                const char* title)
+            {
+                const auto index = static_cast<std::size_t>(section);
+                full(button);
+                button.SetText(std::string(sectionExpanded[index] ? "▼  " : "▶  ") + title);
+                return sectionExpanded[index];
+            };
+
+            if (header(appearanceHeader, ParticleSection::Appearance, "APPEARANCE"))
+            {
+                two(chooseTexture,clearTexture); full(shaderType);
+                two(colorR,colorG); two(colorB,opacity);
+                two(emissiveR,emissiveG); two(emissiveB,emissiveStrength);
+            }
+            if (header(attachmentHeader, ParticleSection::Attachment, "ATTACHMENT"))
+            {
+                full(parent); two(localX,localY); full(localZ);
+                two(localScaleX,localScaleY); full(localScaleZ);
+            }
+            if (header(emissionHeader, ParticleSection::Emission, "PLAYBACK + EMISSION"))
+            {
+                two(restart,burst); full(burstCount); full(debugVisual);
+                two(paused,sorting); two(volume,depthCollision);
+                two(sph,frameBlending); two(collidersDisabled,takeColorFromMesh);
+                full(emitterMesh); full(maxParticles); full(emitCount); full(burstOnCreate);
+            }
+            if (header(particleHeader, ParticleSection::Particle, "PARTICLE"))
+            {
+                two(size,life); full(rotationDegrees);
+                two(particleScaleX,particleScaleY); full(normalFactor);
+                full(randomness); full(lifeRandomness); full(colorRandomness);
+                two(opacityStart,opacityEnd); full(motionBlur); full(mass);
+            }
+            if (header(motionHeader, ParticleSection::Motion, "MOTION"))
+            {
+                two(velocityX,velocityY); full(velocityZ);
+                two(gravityX,gravityY); full(gravityZ); two(drag,restitution);
+            }
+            if (header(spriteHeader, ParticleSection::SpriteSheet, "SPRITE SHEET // ANIMATED PARTICLES"))
+            {
+                two(framesX,framesY); two(frameCount,frameStart); full(frameRate);
+                full(frameBlending);
+            }
+            if (header(advancedHeader, ParticleSection::Advanced, "ADVANCED // NATIVE WICKED"))
+            {
+                full(fixedTimestep); two(sphH,sphK); two(sphP0,sphE);
+            }
+
+            contentHeight = y + 8.0f;
+            ClampScroll();
+            if (std::abs(scrollY - scrollBefore) > 0.01f)
+            {
+                Layout();
+                return;
+            }
+            PositionNumericInputs();
+        }
+
+        void RenderScrollbar(wi::graphics::CommandList cmd) const
+        {
+            const float visible = std::max(0.0f, bounds.w - HeaderHeight - FooterHeight);
+            if (!(contentHeight > visible + 1.0f) || visible <= 0.0f)
+                return;
+            const float trackX = bounds.x + bounds.z - 10.0f;
+            const float trackY = bounds.y + HeaderHeight + 5.0f;
+            const float trackHeight = std::max(1.0f, visible - 10.0f);
+            const float maximumScroll = std::max(1.0f, contentHeight - visible);
+            const float thumbHeight = std::clamp(
+                trackHeight * (visible / contentHeight), 42.0f, trackHeight);
+            const float travel = std::max(0.0f, trackHeight - thumbHeight);
+            const float thumbY = trackY + travel * std::clamp(scrollY / maximumScroll, 0.0f, 1.0f);
+            DrawRect(trackX, trackY, ScrollbarWidth, trackHeight, BorderSoft, cmd);
+            DrawRect(trackX, thumbY, ScrollbarWidth, thumbHeight, Forge, cmd);
         }
     };
 
@@ -545,15 +850,18 @@ namespace renegade::studio
         const XMFLOAT4 pointer=wi::input::GetPointer();const bool consumed=ContainsPointer(pointer);impl_->pointerConsumed=consumed;
         if(consumed){Activate();const float top=impl_->bounds.y+HeaderHeight,bottom=impl_->bounds.y+impl_->bounds.w-FooterHeight;if(pointer.y>=top&&pointer.y<bottom&&std::abs(pointer.z)>0.1f){impl_->scrollY+=pointer.z>0.0f?-ScrollStep:ScrollStep;impl_->ClampScroll();impl_->Layout();}}
         else state=wi::gui::IDLE;
+        impl_->SuppressSlidersBehindExactInputs(pointer,true);
         for(auto* c:impl_->controls)if(c->IsVisible())c->Update(canvas,dt);
+        impl_->SuppressSlidersBehindExactInputs(pointer,false);
+        impl_->SyncNumericInputs();
     }
 
     void RenegadeParticleEmitterWorkspace::Render(const wi::Canvas& canvas,wi::graphics::CommandList cmd)const
     {
         if(!impl_->created||!impl_->active)return;const auto&b=impl_->bounds;DrawRect(b.x,b.y,b.z,b.w,Surface0,cmd);DrawRect(b.x,b.y,b.z,1.0f,Border,cmd);
-        DrawText("PARTICLE EMITTER // NATIVE WICKED GPU PARTICLES",b.x+12,b.y+10,12,TextStrong,cmd);DrawText(impl_->textureDisplay,b.x+12,b.y+34,10,TextSecondary,cmd,0.08f);DrawText("PARENT // "+impl_->parentDisplay,b.x+12,b.y+54,9,Muted,cmd,0.08f);DrawText("Place/rotate with the normal gizmo. Attachment keeps the exact local offset.",b.x+12,b.y+74,9,Muted,cmd,0.06f);
+        DrawText("PARTICLE EMITTER // NATIVE WICKED GPU PARTICLES",b.x+12,b.y+10,12,TextStrong,cmd);DrawText(impl_->textureDisplay,b.x+12,b.y+34,10,TextSecondary,cmd,0.08f);DrawText("PARENT // "+impl_->parentDisplay,b.x+12,b.y+54,9,Muted,cmd,0.08f);DrawText("Click a section to expand it. Mouse wheel scrolls long sections.",b.x+12,b.y+74,9,Muted,cmd,0.06f);
         if(impl_->SelectedIsEmitter())if(const auto* emitter=impl_->Scene()->emitters.GetComponent(impl_->selected))DrawText("ALIVE "+std::to_string(emitter->statistics.aliveCount)+" // CULLED "+std::to_string(emitter->statistics.culledCount),b.x+12,b.y+94,9,Forge,cmd,0.08f);
-        const float top=b.y+HeaderHeight,bottom=b.y+b.w-FooterHeight;DrawRect(b.x,top,b.z,1.0f,Border,cmd);for(const auto&label:impl_->sectionLabels)if(label.y>=top&&label.y<bottom-16)DrawText(label.text,b.x+12,label.y,10,Forge,cmd,0.1f);for(auto*c:impl_->controls)if(c->IsVisible())c->Render(canvas,cmd);
+        const float top=b.y+HeaderHeight;DrawRect(b.x,top,b.z,1.0f,Border,cmd);for(auto*c:impl_->controls)if(c->IsVisible())c->Render(canvas,cmd);impl_->RenderScrollbar(cmd);
         const float footer=b.y+b.w-FooterHeight;DrawRect(b.x,footer,b.z,FooterHeight,Surface1,cmd);DrawRect(b.x,footer,b.z,1.0f,Border,cmd);DrawText(impl_->status,b.x+12,footer+9,9,impl_->statusError?Error:Muted,cmd,0.08f);
     }
 }
