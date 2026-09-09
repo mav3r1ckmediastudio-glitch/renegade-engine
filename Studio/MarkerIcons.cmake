@@ -18,3 +18,7 @@ add_test(
         -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_SOURCE_DIR}/Tests/MarkerIconsSourceContract.cmake
 )
+
+# Kept on the isolated VFX follow-up branch while #146 owner acceptance CI is
+# running. The follow-up remains a separate commit series / no-PR branch.
+include("${CMAKE_CURRENT_LIST_DIR}/ParticleVfxFollowup.cmake")
