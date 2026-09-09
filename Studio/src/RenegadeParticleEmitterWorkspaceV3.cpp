@@ -149,6 +149,24 @@ namespace renegade::studio
         static constexpr float NumericHitGutter = 7.0f;
         static constexpr float NumericBoxMaximumWidth = 70.0f;
 
+        // Wicked uses frameRate == 0 as the special "animate over particle
+        // lifetime" sentinel. V2 represented that mode by disabling the FPS
+        // slider, which also disabled its numeric box and made it impossible
+        // for a creator to type a positive FPS to switch into fixed-rate mode.
+        // Keep that one field interactive at zero. V2's existing commit path
+        // already writes any positive value to emitter->frameRate, and Refresh
+        // then derives FIXED FPS from the resulting non-zero native state.
+        void SetEnabled(const bool enabled)
+        {
+            if (GetName() == "Particle Frame Rate")
+            {
+                RenegadeSlider::SetEnabled(true);
+                valueInputField.SetEnabled(true);
+                return;
+            }
+            RenegadeSlider::SetEnabled(enabled);
+        }
+
         void Update(
             const wi::Canvas& canvas,
             const float dt) override
