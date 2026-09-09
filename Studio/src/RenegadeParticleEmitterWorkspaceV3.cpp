@@ -1,6 +1,12 @@
 #include "RenegadeStudioChrome.h"
+#include "renegade/bridge/ParticleEmitterService.h"
+#include "renegade/bridge/StudioSession.h"
 
 #include <algorithm>
+#include <functional>
+#include <memory>
+#include <string>
+#include <utility>
 
 namespace renegade::studio
 {
@@ -79,9 +85,112 @@ namespace renegade::studio
     class ParticleInspectorButton : public RenegadeButton
     {
     public:
+        enum class Role
+        {
+            Normal,
+            StaticTexture,
+            SpriteSheet,
+        };
+
         ParticleInspectorButton()
         {
             SetRenderTextSize(11);
+        }
+
+        ~ParticleInspectorButton()
+        {
+            if (staticTextureButton_ == this)
+                staticTextureButton_ = nullptr;
+            if (spriteSheetButton_ == this)
+                spriteSheetButton_ = nullptr;
+        }
+
+        void Create(const std::string& name)
+        {
+            RenegadeButton::Create(name);
+
+            if (name == "Particle Choose Texture")
+            {
+                role_ = Role::StaticTexture;
+                staticTextureButton_ = this;
+                SetTooltip(
+                    "Load a single static particle image using the current/native emitter setup. "
+                    "Right-click to clear the assigned particle texture.");
+            }
+            else if (name == "Particle Clear Texture")
+            {
+                // V2 gives this half of the row to CLEAR. The compiled V3
+                // owner-feedback shim repurposes that visible slot as the
+                // requested second creator path, while retaining CLEAR on RMB.
+                role_ = Role::SpriteSheet;
+                spriteSheetButton_ = this;
+                SetTooltip(
+                    "Load an animated sprite sheet. Starts from 100 max particles, "
+                    "1 emitted particle/sec, 24 FPS, frame 0 and no frame blending. "
+                    "All native Wicked controls remain editable. Right-click to clear.");
+            }
+        }
+
+        void SetText(const std::string& text)
+        {
+            if (role_ == Role::StaticTexture)
+            {
+                RenegadeButton::SetText("STATIC TEXTURE...");
+                return;
+            }
+            if (role_ == Role::SpriteSheet)
+            {
+                RenegadeButton::SetText("SPRITESHEET...");
+                return;
+            }
+            RenegadeButton::SetText(text);
+        }
+
+        void OnClick(
+            std::function<void(const wi::gui::EventArgs& args)> func)
+        {
+            if (role_ == Role::StaticTexture)
+            {
+                primaryCallback_ = std::move(func);
+                RenegadeButton::OnClick(
+                    [this](const wi::gui::EventArgs& args)
+                    {
+                        if (primaryCallback_)
+                            primaryCallback_(args);
+                    });
+                RenegadeButton::OnRightClick(
+                    [](const wi::gui::EventArgs& args)
+                    {
+                        InvokeClear(args);
+                    });
+                return;
+            }
+
+            if (role_ == Role::SpriteSheet)
+            {
+                // V2 wires this widget to ClearParticleTexture(). Preserve
+                // that callback for RMB, but use the normal left-click as the
+                // new sprite-sheet chooser requested by the creator workflow.
+                clearCallback_ = std::move(func);
+                RenegadeButton::OnClick(
+                    [](const wi::gui::EventArgs& args)
+                    {
+                        ApplySpriteSheetPreset();
+                        if (staticTextureButton_ != nullptr &&
+                            staticTextureButton_->primaryCallback_)
+                        {
+                            staticTextureButton_->primaryCallback_(args);
+                        }
+                    });
+                RenegadeButton::OnRightClick(
+                    [](const wi::gui::EventArgs& args)
+                    {
+                        InvokeClear(args);
+                    });
+                return;
+            }
+
+            RenegadeButton::OnClick(std::move(func));
         }
 
         void Update(const wi::Canvas& canvas, const float dt) override
@@ -104,6 +213,66 @@ namespace renegade::studio
         {
             return "ParticleInspectorButton";
         }
+
+    private:
+        static void InvokeClear(const wi::gui::EventArgs& args)
+        {
+            if (spriteSheetButton_ != nullptr &&
+                spriteSheetButton_->clearCallback_)
+            {
+                spriteSheetButton_->clearCallback_(args);
+            }
+        }
+
+        static void ApplySpriteSheetPreset()
+        {
+            auto* session = bridge::StudioSession::Current();
+            if (session == nullptr ||
+                !session->Projects().HasProject() ||
+                !session->Selection().HasSelection())
+            {
+                return;
+            }
+
+            auto& scene = session->Scenes().GetScene();
+            const auto entity = session->Selection().SelectedEntity();
+            if (!bridge::IsParticleEmitter(scene, entity))
+                return;
+
+            const auto before =
+                bridge::CaptureParticleEmitter(scene, entity);
+            auto after = before;
+
+            // Creator-safe whole-effect flipbook starting point. This does not
+            // hide or lock any Wicked controls; it only avoids immediately
+            // stacking tens of independently-aged copies of a complete effect.
+            after.maxParticles = 100u;
+            after.emitCount = 1.0f;
+            after.burstOnCreate = 0;
+            after.frameRate = 24.0f;
+            after.frameStart = 0u;
+            after.frameBlending = false;
+            after = bridge::SanitizeParticleEmitterState(after);
+
+            session->Commands().Execute(
+                std::make_unique<bridge::SetParticleEmitterCommand>(
+                    scene,
+                    entity,
+                    before,
+                    after));
+
+            if (auto* emitter = scene.emitters.GetComponent(entity);
+                emitter != nullptr)
+            {
+                emitter->Restart();
+            }
+        }
+
+        Role role_ = Role::Normal;
+        std::function<void(const wi::gui::EventArgs& args)> primaryCallback_;
+        std::function<void(const wi::gui::EventArgs& args)> clearCallback_;
+        static inline ParticleInspectorButton* staticTextureButton_ = nullptr;
+        static inline ParticleInspectorButton* spriteSheetButton_ = nullptr;
     };
 
     class ParticleInspectorCheckBox : public RenegadeCheckBox
