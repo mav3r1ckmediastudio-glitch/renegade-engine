@@ -13,7 +13,7 @@ target_sources(RenegadeEngineBridge PRIVATE
 )
 
 target_sources(RenegadeStudio PRIVATE
-    "${CMAKE_CURRENT_LIST_DIR}/src/RenegadeParticleEmitterWorkspaceV2.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/src/RenegadeParticleEmitterWorkspaceV3.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/src/RenegadeParticleEmitterWorkspace.h"
 )
 
@@ -39,4 +39,14 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_SOURCE_DIR}/Tests/ParticleEmitterSourceContract.cmake
+)
+
+# Owner-acceptance UI contract: the compiled V3 shim must keep numeric value
+# boxes exclusive from slider hit testing and keep open combo popups opaque and
+# interaction-exclusive above the controls they overlap.
+add_test(
+    NAME RenegadeParticleEmitterOwnerFeedbackSourceContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_SOURCE_DIR}/Tests/ParticleEmitterOwnerFeedbackSourceContract.cmake
 )
