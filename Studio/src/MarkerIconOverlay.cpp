@@ -57,10 +57,14 @@ namespace renegade::studio
             "physics_volume.png",
         };
 
-        constexpr float MarkerSize = 48.0f;
-        constexpr float HoverExtraSize = 5.0f;
-        constexpr float SelectedExtraSize = 8.0f;
-        constexpr float HoverRadius = 27.0f;
+        // Owner acceptance showed 48 px markers were too easy to lose against
+        // a production scene. Keep them editor-only but give them a creator-
+        // readable 96 px footprint and scale the hover/selection affordances
+        // and hit radius with it.
+        constexpr float MarkerSize = 96.0f;
+        constexpr float HoverExtraSize = 10.0f;
+        constexpr float SelectedExtraSize = 16.0f;
+        constexpr float HoverRadius = 54.0f;
 
         bool PointInside(const XMFLOAT2& point, const XMFLOAT4& bounds) noexcept
         {
