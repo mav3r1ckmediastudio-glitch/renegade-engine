@@ -38,10 +38,21 @@ foreach(token IN ITEMS "Entity_CreateEmitter" "AssignNewPersistentEntityId"
 endforeach()
 
 file(READ "${workspace_source}" workspace_source_text)
-foreach(token IN ITEMS "CreateEmitterInFrontOfCamera" "TEXTURE / SPRITESHEET..."
-    "CreatorTextureWorkflowService" "SetMaterialTextureAssetCommand"
-    "SPRITE SHEET // ANIMATED PARTICLES" "FRAME RATE FPS"
-    "NATIVE WICKED HIERARCHY")
+foreach(token IN ITEMS
+    "CreateEmitterInFrontOfCamera"
+    "TEXTURE / SPRITESHEET..."
+    "CreatorTextureWorkflowService"
+    "SetMaterialTextureAssetCommand"
+    "SPRITE SHEET // ANIMATED PARTICLES"
+    "FRAME RATE FPS"
+    "NATIVE WICKED PARENT"
+    "ParticleNumericInputField"
+    "SetAsActive(true)"
+    "SliderSteps"
+    "sectionExpanded"
+    "RenderScrollbar"
+    "field(framesX,1,64"
+    "field(framesY,1,64")
     string(FIND "${workspace_source_text}" "${token}" found)
     if(found EQUAL -1)
         message(FATAL_ERROR "Particle emitter Studio workflow missing ${token}")
