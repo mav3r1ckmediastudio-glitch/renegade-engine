@@ -80,6 +80,26 @@ if(WIN32)
         FOLDER "Renegade/Packaging"
     )
 
+    # Phase 6 objective vertical slice ships as a separate immutable Creator
+    # Library package. Keep S7's six-Action contract frozen and add reusable
+    # objective logic beside it rather than mutating the accepted stock wave.
+    set(RENEGADE_PHASE6_OBJECTIVE_LIBRARY_OUTPUT
+        "${CMAKE_BINARY_DIR}/Studio/$<CONFIG>/Content/ScriptLibrary/RenegadeObjectiveActions")
+    add_custom_target(RenegadePhase6ObjectiveLibrary
+        COMMAND ${CMAKE_COMMAND} -E remove_directory
+            "${RENEGADE_PHASE6_OBJECTIVE_LIBRARY_OUTPUT}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_BINARY_DIR}/Studio/$<CONFIG>/Content/ScriptLibrary"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/Library/Scripts/RenegadeObjectiveActions"
+            "${RENEGADE_PHASE6_OBJECTIVE_LIBRARY_OUTPUT}"
+        VERBATIM
+    )
+    add_dependencies(RenegadeStudio RenegadePhase6ObjectiveLibrary)
+    set_target_properties(RenegadePhase6ObjectiveLibrary PROPERTIES
+        FOLDER "Renegade/Packaging"
+    )
+
     include(Studio/S1AInspectorSectionFramework.cmake)
     include(Studio/S1BInspectorMigration.cmake)
     include(Studio/S4BScriptAttachmentInspector.cmake)
@@ -132,6 +152,7 @@ if(WIN32)
     include(Tests/S5CoreGameplayApi.cmake)
     include(Tests/S6ScriptLibrary.cmake)
     include(Tests/S7StockActions.cmake)
+    include(Tests/Phase6ObjectiveSlice.cmake)
     add_test(
         NAME RenegadeStudioDisclosurePolicySourceContract
         COMMAND ${CMAKE_COMMAND}
