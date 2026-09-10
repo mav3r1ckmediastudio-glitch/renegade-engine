@@ -1,0 +1,17 @@
+{
+  "schema": "renegade-script-package",
+  "schema_version": 1,
+  "package_id": "renegade.objectives.core",
+  "package_version": "1.0.0",
+  "display_name": "Renegade Objective Actions",
+  "files": [
+    {
+      "path": "ObjectiveCounter.lua",
+      "content_hash": "fnv1a64:4a42c05d31a3512f",
+      "dependencies": []
+    }
+  ],
+  "entries": [
+    "ObjectiveCounter.lua"
+  ]
+}
