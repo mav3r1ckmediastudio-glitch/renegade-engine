@@ -498,22 +498,32 @@ namespace renegade::bridge
             return false;
         }
 
-        auto& agentMetadata = scene.metadatas.Create(agentEntity);
-        agentMetadata.string_values.set(
-            NavigationAgentMetadataKey, NavigationAgentMetadataVersion);
-        agentMetadata.string_values.set(
-            NavigationGridReferenceMetadataKey, gridId);
-        agentMetadata.string_values.set(
-            NavigationDestinationReferenceMetadataKey, destinationId);
-        agentMetadata.float_values.set(
-            NavigationMoveSpeedMetadataKey, DefaultNavigationMoveSpeed);
-        agentMetadata.bool_values.set(NavigationFlyingMetadataKey, false);
+        auto* agentMetadata = scene.metadatas.GetComponent(agentEntity);
+        auto* destinationMetadata = scene.metadatas.GetComponent(destinationEntity);
+        if (agentMetadata == nullptr || destinationMetadata == nullptr)
+        {
+            scene.Entity_Remove(destinationEntity);
+            scene.Entity_Remove(agentEntity);
+            agentEntity = wi::ecs::INVALID_ENTITY;
+            destinationEntity = wi::ecs::INVALID_ENTITY;
+            error = "Navigation marker metadata could not be resolved after identity assignment.";
+            return false;
+        }
 
-        auto& destinationMetadata = scene.metadatas.Create(destinationEntity);
-        destinationMetadata.string_values.set(
+        agentMetadata->string_values.set(
+            NavigationAgentMetadataKey, NavigationAgentMetadataVersion);
+        agentMetadata->string_values.set(
+            NavigationGridReferenceMetadataKey, gridId);
+        agentMetadata->string_values.set(
+            NavigationDestinationReferenceMetadataKey, destinationId);
+        agentMetadata->float_values.set(
+            NavigationMoveSpeedMetadataKey, DefaultNavigationMoveSpeed);
+        agentMetadata->bool_values.set(NavigationFlyingMetadataKey, false);
+
+        destinationMetadata->string_values.set(
             NavigationDestinationMetadataKey,
             NavigationDestinationMetadataVersion);
-        destinationMetadata.string_values.set(
+        destinationMetadata->string_values.set(
             NavigationGridReferenceMetadataKey, gridId);
 
         auto& character = scene.characters.Create(agentEntity);
@@ -588,10 +598,10 @@ namespace renegade::bridge
             binding.settings.query.flying =
                 metadata->bool_values.get(NavigationFlyingMetadataKey);
         }
-        // A roughly human-sized grounded agent should reserve a little vertical
-        // clearance. Flying remains fully volumetric on the same VoxelGrid.
-        binding.settings.query.agentHeight =
-            binding.settings.query.flying ? 1 : 3;
+        // Start the creator proof with Wicked's least restrictive grounded
+        // clearance. Agent dimensions can become explicit authoring controls
+        // later without making the first route fail on thin test grids.
+        binding.settings.query.agentHeight = 1;
         binding.settings.query.agentWidth = 0;
 
         error.clear();
