@@ -92,14 +92,19 @@ namespace renegade::studio
         bool refreshPending = true;
         bool pendingDirty = false;
         bool showVoxels = true;
+        bool showPath = true;
+        bool pathValid = false;
         XMFLOAT4 bounds = {};
         bridge::StudioSession* session = nullptr;
         wi::ecs::Entity selected = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity previewAgent = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity previewGrid = wi::ecs::INVALID_ENTITY;
         std::uint64_t sceneRevision = 0;
         bridge::NavigationGridSettings pending;
+        bridge::NavigationPathResult previewPath;
         std::string status = "NAVIGATION // READY";
         bool statusError = false;
-        std::string gridInfo = "NO NAVIGATION GRID SELECTED";
+        std::string selectionInfo = "NO NAVIGATION ENTITY SELECTED";
         std::vector<wi::gui::Widget*> controls;
 
         SceneInspectorSlider resolutionX;
@@ -108,7 +113,10 @@ namespace renegade::studio
         SceneInspectorSlider voxelSize;
         SceneInspectorButton rebuild;
         SceneInspectorButton fitScene;
+        SceneInspectorButton createAgentPair;
+        SceneInspectorButton refreshPath;
         SceneInspectorCheckBox debugVoxels;
+        SceneInspectorCheckBox debugPath;
 
         [[nodiscard]] wi::scene::Scene* Scene() const noexcept
         {
@@ -120,6 +128,26 @@ namespace renegade::studio
             const auto* scene = Scene();
             return scene != nullptr &&
                 bridge::IsRenegadeNavigationGrid(*scene, selected);
+        }
+
+        [[nodiscard]] bool SelectedIsAgent() const noexcept
+        {
+            const auto* scene = Scene();
+            return scene != nullptr &&
+                bridge::IsRenegadeNavigationAgent(*scene, selected);
+        }
+
+        [[nodiscard]] bool SelectedIsDestination() const noexcept
+        {
+            const auto* scene = Scene();
+            return scene != nullptr &&
+                bridge::IsRenegadeNavigationDestination(*scene, selected);
+        }
+
+        [[nodiscard]] bool SelectedIsNavigation() const noexcept
+        {
+            return SelectedIsGrid() || SelectedIsAgent() ||
+                SelectedIsDestination();
         }
 
         void SetStatus(std::string value, const bool error = false)
@@ -194,6 +222,24 @@ namespace renegade::studio
                 Rebuild(true);
             });
 
+            createAgentPair.Create("Navigation Create Agent Pair");
+            createAgentPair.SetText("CREATE TEST AGENT + TARGET");
+            createAgentPair.SetTooltip(
+                "Create a visible native Wicked CharacterComponent agent and linked destination for this grid. Move both markers with the normal gizmo, refresh the path, then run Test Level to prove native following.");
+            createAgentPair.OnClick([this](const wi::gui::EventArgs&)
+            {
+                CreateAgentPair();
+            });
+
+            refreshPath.Create("Navigation Refresh Path");
+            refreshPath.SetText("REFRESH PATH");
+            refreshPath.SetTooltip(
+                "Run Wicked PathQuery between the authored agent and destination and update the editor path preview.");
+            refreshPath.OnClick([this](const wi::gui::EventArgs&)
+            {
+                RefreshPathPreview(true);
+            });
+
             debugVoxels.Create("Show navigation voxels: ");
             debugVoxels.SetCheck(true);
             debugVoxels.SetTooltip(
@@ -203,13 +249,115 @@ namespace renegade::studio
                 showVoxels = args.bValue;
             });
 
+            debugPath.Create("Show queried path: ");
+            debugPath.SetCheck(true);
+            debugPath.SetTooltip(
+                "Draw the latest native Wicked PathQuery waypoints in the editor viewport. Move the target and press Refresh Path, or let scene edits refresh it automatically.");
+            debugPath.OnClick([this](const wi::gui::EventArgs& args)
+            {
+                showPath = args.bValue;
+            });
+
             controls = {
                 &resolutionX, &resolutionY, &resolutionZ, &voxelSize,
-                &rebuild, &fitScene, &debugVoxels,
+                &rebuild, &fitScene, &createAgentPair, &refreshPath,
+                &debugVoxels, &debugPath,
             };
             for (auto* control : controls)
                 control->SetVisible(false);
             created = true;
+        }
+
+        [[nodiscard]] wi::ecs::Entity FindPreviewAgent() const
+        {
+            const auto* scene = Scene();
+            if (scene == nullptr)
+                return wi::ecs::INVALID_ENTITY;
+            if (SelectedIsAgent())
+                return selected;
+
+            for (const auto agent : bridge::CollectNavigationAgents(*scene))
+            {
+                bridge::NavigationAgentBinding binding;
+                std::string ignored;
+                if (!bridge::ResolveNavigationAgentBinding(
+                        *scene, agent, binding, ignored))
+                    continue;
+                if (SelectedIsGrid() && binding.grid == selected)
+                    return agent;
+                if (SelectedIsDestination() && binding.destination == selected)
+                    return agent;
+            }
+            return wi::ecs::INVALID_ENTITY;
+        }
+
+        [[nodiscard]] wi::ecs::Entity GridForSelection() const
+        {
+            if (SelectedIsGrid())
+                return selected;
+            const auto* scene = Scene();
+            if (scene == nullptr)
+                return wi::ecs::INVALID_ENTITY;
+            const auto agent = FindPreviewAgent();
+            if (agent == wi::ecs::INVALID_ENTITY)
+                return wi::ecs::INVALID_ENTITY;
+            bridge::NavigationAgentBinding binding;
+            std::string ignored;
+            if (!bridge::ResolveNavigationAgentBinding(
+                    *scene, agent, binding, ignored))
+                return wi::ecs::INVALID_ENTITY;
+            return binding.grid;
+        }
+
+        void RefreshPathPreview(const bool reportStatus)
+        {
+            pathValid = false;
+            previewAgent = FindPreviewAgent();
+            previewGrid = wi::ecs::INVALID_ENTITY;
+            previewPath = {};
+            if (previewAgent == wi::ecs::INVALID_ENTITY || Scene() == nullptr)
+            {
+                if (reportStatus)
+                    SetStatus("NAVIGATION PATH // CREATE OR SELECT AN AGENT", true);
+                return;
+            }
+
+            bridge::NavigationAgentBinding binding;
+            std::string error;
+            if (!bridge::ResolveNavigationAgentBinding(
+                    *Scene(), previewAgent, binding, error))
+            {
+                if (reportStatus)
+                    SetStatus("NAVIGATION PATH // " + error, true);
+                return;
+            }
+            previewGrid = binding.grid;
+            if (!bridge::QueryNavigationAgentPath(
+                    *Scene(), previewAgent, previewPath, error))
+            {
+                if (reportStatus)
+                    SetStatus("NAVIGATION PATH // " + error, true);
+                return;
+            }
+
+            pathValid = previewPath.successful &&
+                previewPath.waypoints.size() >= 2;
+            if (reportStatus)
+            {
+                if (pathValid)
+                {
+                    SetStatus(
+                        "NAVIGATION PATH // " +
+                        std::to_string(previewPath.waypoints.size()) +
+                        " WAYPOINTS // READY FOR TEST LEVEL");
+                }
+                else
+                {
+                    SetStatus(
+                        "NAVIGATION PATH // NO ROUTE // MOVE MARKERS ONTO WALKABLE VOXELS",
+                        true);
+                }
+            }
         }
 
         void Refresh()
@@ -223,8 +371,18 @@ namespace renegade::studio
             selected = next;
 
             const bool gridSelected = SelectedIsGrid();
+            const bool navigationSelected = SelectedIsNavigation();
             for (auto* control : controls)
-                control->SetVisible(active && gridSelected);
+                control->SetVisible(false);
+
+            resolutionX.SetVisible(active && gridSelected);
+            resolutionY.SetVisible(active && gridSelected);
+            resolutionZ.SetVisible(active && gridSelected);
+            voxelSize.SetVisible(active && gridSelected);
+            rebuild.SetVisible(active && gridSelected);
+            fitScene.SetVisible(active && gridSelected);
+            createAgentPair.SetVisible(active && gridSelected);
+            debugVoxels.SetVisible(active && navigationSelected);
 
             if (gridSelected)
             {
@@ -235,7 +393,6 @@ namespace renegade::studio
                 resolutionY.SetValue(static_cast<float>(pending.resolutionY));
                 resolutionZ.SetValue(static_cast<float>(pending.resolutionZ));
                 voxelSize.SetValue(pending.voxelSize);
-                debugVoxels.SetCheck(showVoxels);
 
                 std::ostringstream stream;
                 stream << "GRID "
@@ -243,13 +400,30 @@ namespace renegade::studio
                        << pending.resolutionY << " x "
                        << pending.resolutionZ
                        << " // VOXEL " << pending.voxelSize << " M";
-                gridInfo = stream.str();
+                selectionInfo = stream.str();
+            }
+            else if (SelectedIsAgent())
+            {
+                selectionInfo = "NAVIGATION AGENT // NATIVE WICKED CHARACTER";
+                pendingDirty = false;
+            }
+            else if (SelectedIsDestination())
+            {
+                selectionInfo = "NAVIGATION DESTINATION // MOVE WITH GIZMO";
+                pendingDirty = false;
             }
             else
             {
-                gridInfo = "NO NAVIGATION GRID SELECTED";
+                selectionInfo = "NO NAVIGATION ENTITY SELECTED";
                 pendingDirty = false;
             }
+
+            debugVoxels.SetCheck(showVoxels);
+            RefreshPathPreview(false);
+            const bool hasPathAgent = previewAgent != wi::ecs::INVALID_ENTITY;
+            refreshPath.SetVisible(active && navigationSelected && hasPathAgent);
+            debugPath.SetVisible(active && navigationSelected && hasPathAgent);
+            debugPath.SetCheck(showPath);
             refreshPending = false;
         }
 
@@ -260,17 +434,32 @@ namespace renegade::studio
             float y = bounds.y + HeaderHeight;
             const auto full = [&](wi::gui::Widget& widget)
             {
+                if (!widget.IsVisible())
+                    return;
                 widget.SetPos(XMFLOAT2(x, y));
                 widget.SetSize(XMFLOAT2(width, RowHeight));
                 y += RowHeight + RowGap;
             };
             const auto two = [&](wi::gui::Widget& left, wi::gui::Widget& right)
             {
-                const float half = (width - RowGap) * 0.5f;
-                left.SetPos(XMFLOAT2(x, y));
-                right.SetPos(XMFLOAT2(x + half + RowGap, y));
-                left.SetSize(XMFLOAT2(half, RowHeight));
-                right.SetSize(XMFLOAT2(half, RowHeight));
+                const bool leftVisible = left.IsVisible();
+                const bool rightVisible = right.IsVisible();
+                if (!leftVisible && !rightVisible)
+                    return;
+                if (leftVisible && rightVisible)
+                {
+                    const float half = (width - RowGap) * 0.5f;
+                    left.SetPos(XMFLOAT2(x, y));
+                    right.SetPos(XMFLOAT2(x + half + RowGap, y));
+                    left.SetSize(XMFLOAT2(half, RowHeight));
+                    right.SetSize(XMFLOAT2(half, RowHeight));
+                }
+                else
+                {
+                    auto& visible = leftVisible ? left : right;
+                    visible.SetPos(XMFLOAT2(x, y));
+                    visible.SetSize(XMFLOAT2(width, RowHeight));
+                }
                 y += RowHeight + RowGap;
             };
 
@@ -278,8 +467,14 @@ namespace renegade::studio
             full(resolutionY);
             full(resolutionZ);
             full(voxelSize);
-            y += SectionGap;
+            if (SelectedIsGrid())
+                y += SectionGap;
             two(rebuild, fitScene);
+            full(createAgentPair);
+            if (refreshPath.IsVisible() || debugPath.IsVisible())
+                y += SectionGap;
+            full(refreshPath);
+            full(debugPath);
             full(debugVoxels);
         }
 
@@ -309,6 +504,44 @@ namespace renegade::studio
             refreshPending = true;
             pendingDirty = false;
             SetStatus("NAVIGATION GRID // CREATED // FIT TO SCENE WHEN READY");
+        }
+
+        void CreateAgentPair()
+        {
+            if (!SelectedIsGrid() || session == nullptr)
+            {
+                SetStatus("NAVIGATION // SELECT A NAVIGATION GRID", true);
+                return;
+            }
+
+            const auto& camera = wi::scene::GetCamera();
+            const XMFLOAT3 agentPosition{
+                camera.Eye.x + camera.At.x * 3.0f,
+                camera.Eye.y + camera.At.y * 3.0f,
+                camera.Eye.z + camera.At.z * 3.0f};
+            const XMFLOAT3 destinationPosition{
+                camera.Eye.x + camera.At.x * 8.0f,
+                camera.Eye.y + camera.At.y * 8.0f,
+                camera.Eye.z + camera.At.z * 8.0f};
+
+            auto& scene = session->Scenes().GetScene();
+            auto command = std::make_unique<bridge::CreateNavigationAgentPairCommand>(
+                scene, selected, agentPosition, destinationPosition);
+            auto* createdCommand = command.get();
+            if (!session->Commands().Execute(std::move(command)))
+            {
+                SetStatus("NAVIGATION // AGENT + TARGET CREATION FAILED", true);
+                return;
+            }
+
+            // Leave the target selected so the creator can immediately place it
+            // with the normal transform gizmo. Selecting either marker keeps
+            // this specialist Inspector active.
+            selected = createdCommand->CreatedDestination();
+            session->Selection().Select(selected);
+            refreshPending = true;
+            SetStatus(
+                "NAVIGATION AGENT + TARGET // CREATED // MOVE BOTH ONTO WALKABLE SURFACE");
         }
 
         bool FitSettingsToScene(bridge::NavigationGridSettings& settings)
@@ -396,6 +629,21 @@ namespace renegade::studio
                 fitSceneBounds
                     ? "NAVIGATION GRID // FIT TO SCENE + REBUILT"
                     : "NAVIGATION GRID // REBUILT");
+        }
+
+        void QueuePathDebugDraw() const
+        {
+            if (!showPath || !pathValid || previewPath.waypoints.size() < 2)
+                return;
+            for (std::size_t index = 1; index < previewPath.waypoints.size(); ++index)
+            {
+                wi::renderer::RenderableLine line;
+                line.start = previewPath.waypoints[index - 1];
+                line.end = previewPath.waypoints[index];
+                line.color_start = XMFLOAT4(1.0f, 0.45f, 0.08f, 1.0f);
+                line.color_end = XMFLOAT4(1.0f, 0.75f, 0.12f, 1.0f);
+                wi::renderer::DrawLine(line);
+            }
         }
     };
 
@@ -510,6 +758,7 @@ namespace renegade::studio
             if (control->IsVisible())
                 control->Update(canvas, dt);
         }
+        impl_->QueuePathDebugDraw();
     }
 
     void RenegadeNavigationWorkspace::Render(
@@ -519,12 +768,17 @@ namespace renegade::studio
         if (!impl_->created || !impl_->active)
             return;
 
-        if (impl_->showVoxels && impl_->SelectedIsGrid())
+        if (impl_->showVoxels)
         {
-            if (const auto* grid = impl_->Scene()->voxel_grids.GetComponent(impl_->selected);
-                grid != nullptr && grid->IsValid())
+            const auto gridEntity = impl_->GridForSelection();
+            if (gridEntity != wi::ecs::INVALID_ENTITY && impl_->Scene() != nullptr)
             {
-                grid->debugdraw(cmd);
+                if (const auto* grid =
+                        impl_->Scene()->voxel_grids.GetComponent(gridEntity);
+                    grid != nullptr && grid->IsValid())
+                {
+                    grid->debugdraw(cmd);
+                }
             }
         }
 
@@ -533,10 +787,10 @@ namespace renegade::studio
         DrawRect(b.x, b.y, b.z, 1.0f, Border, cmd);
         DrawText("NAVIGATION // NATIVE WICKED VOXEL GRID",
             b.x + 12.0f, b.y + 10.0f, 13, TextStrong, cmd);
-        DrawText(impl_->gridInfo,
+        DrawText(impl_->selectionInfo,
             b.x + 12.0f, b.y + 32.0f, 10,
-            impl_->SelectedIsGrid() ? TextSecondary : Muted, cmd, 0.08f);
-        DrawText("GROUND PATHS + TRUE 3D / FLYING PATHS",
+            impl_->SelectedIsNavigation() ? TextSecondary : Muted, cmd, 0.08f);
+        DrawText("PATHQUERY + CHARACTER TURN/MOVE // TEST LEVEL READY",
             b.x + 12.0f, b.y + 52.0f, 9, Forge, cmd, 0.08f);
 
         for (auto* control : impl_->controls)
