@@ -1,4 +1,5 @@
 #include "StudioApplication.h"
+#include "MarkerIconOverlay.h"
 
 #include <algorithm>
 
@@ -81,13 +82,19 @@ namespace renegade::studio
 
     void StudioRenderPath::UpdateLiveDiagnostics(const char* outerWorkspace)
     {
+        // MarkerIcons is a non-interactive Studio overlay. Registration is
+        // idempotent and deliberately lives outside StudioApplication.cpp so
+        // feature branches that alter scene/runtime systems do not collide.
+        EnsureMarkerIconOverlay(*this);
+
         diagnosticService_.Heartbeat();
         const auto now = diagnosticService_.ElapsedMs();
         if (now - lastDiagnosticSampleMs_ < 250) return;
         lastDiagnosticSampleMs_ = now;
         const bool levelEditor = std::string(outerWorkspace) == "level_editor";
         const std::string workspace = !levelEditor ? outerWorkspace : projectHubVisible_ ? "project_hub" :
-            studioChrome_.IsPhysicsLabActive() ? "physics" : studioChrome_.IsAudioWorkspaceActive() ? "audio" :
+            studioChrome_.IsPhysicsLabActive() ? "physics" : studioChrome_.IsParticleWorkspaceActive() ? "particles" :
+            studioChrome_.IsAudioWorkspaceActive() ? "audio" :
             terrainWorkspaceActive_ ? "terrain" : environmentWorkspaceActive_ ? "environment" :
             renderWorkspaceActive_ ? "render" : "scene";
         const bool projectOpen = session_ && session_->Projects().HasProject();
