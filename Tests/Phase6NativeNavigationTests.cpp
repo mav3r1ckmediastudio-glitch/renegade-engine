@@ -204,8 +204,7 @@ int main()
     SetTransformPosition(authoredAgentTransform, start);
     auto& authoredCharacter = scene.characters.Create(authoredAgent);
     authoredCharacter.SetActive(false);
-    auto& authoredAgentMetadata = scene.metadatas.Create(authoredAgent);
-    authoredAgentMetadata.string_values.set(
+    scene.metadatas.Create(authoredAgent).string_values.set(
         NavigationAgentMetadataKey, NavigationAgentMetadataVersion);
     if (!AssignNewPersistentEntityId(scene, authoredAgent, error))
         return Fail("assign agent identity: " + error);
@@ -214,23 +213,29 @@ int main()
     scene.names.Create(authoredDestination) = "Navigation Destination Test";
     auto& authoredDestinationTransform = scene.transforms.Create(authoredDestination);
     SetTransformPosition(authoredDestinationTransform, goal);
-    auto& authoredDestinationMetadata = scene.metadatas.Create(authoredDestination);
-    authoredDestinationMetadata.string_values.set(
+    scene.metadatas.Create(authoredDestination).string_values.set(
         NavigationDestinationMetadataKey,
         NavigationDestinationMetadataVersion);
     if (!AssignNewPersistentEntityId(scene, authoredDestination, error))
         return Fail("assign destination identity: " + error);
 
+    auto* authoredAgentMetadata = scene.metadatas.GetComponent(authoredAgent);
+    auto* authoredDestinationMetadata =
+        scene.metadatas.GetComponent(authoredDestination);
+    if (authoredAgentMetadata == nullptr || authoredDestinationMetadata == nullptr)
+        return Fail("authored navigation metadata components disappeared");
+
     const std::string gridId = PersistentEntityId(scene, gridEntity);
     const std::string destinationId =
         PersistentEntityId(scene, authoredDestination);
-    authoredAgentMetadata.string_values.set(
+    authoredAgentMetadata->string_values.set(
         NavigationGridReferenceMetadataKey, gridId);
-    authoredAgentMetadata.string_values.set(
+    authoredAgentMetadata->string_values.set(
         NavigationDestinationReferenceMetadataKey, destinationId);
-    authoredAgentMetadata.float_values.set(NavigationMoveSpeedMetadataKey, 0.12f);
-    authoredAgentMetadata.bool_values.set(NavigationFlyingMetadataKey, false);
-    authoredDestinationMetadata.string_values.set(
+    authoredAgentMetadata->float_values.set(
+        NavigationMoveSpeedMetadataKey, 0.12f);
+    authoredAgentMetadata->bool_values.set(NavigationFlyingMetadataKey, false);
+    authoredDestinationMetadata->string_values.set(
         NavigationGridReferenceMetadataKey, gridId);
 
     NavigationAgentBinding binding;
@@ -240,9 +245,10 @@ int main()
         return Fail("resolve authored agent binding: " + error);
     }
     if (binding.grid != gridEntity ||
-        binding.destination != authoredDestination)
+        binding.destination != authoredDestination ||
+        binding.settings.query.agentHeight != 1)
     {
-        return Fail("authored navigation references did not resolve by persistent ID");
+        return Fail("authored navigation references/grounded clearance did not resolve");
     }
 
     NavigationPathResult authoredPath;
