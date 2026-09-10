@@ -550,18 +550,39 @@ namespace renegade::studio
             if (scene == nullptr)
                 return false;
 
-            const XMFLOAT3 halfWidth = scene->bounds.getHalfWidth();
-            const XMFLOAT3 center = scene->bounds.getCenter();
+            XMFLOAT3 halfWidth = scene->bounds.getHalfWidth();
+            XMFLOAT3 center = scene->bounds.getCenter();
             if (!std::isfinite(halfWidth.x) || !std::isfinite(halfWidth.y) ||
-                !std::isfinite(halfWidth.z) ||
-                halfWidth.x <= 0.0f || halfWidth.y <= 0.0f ||
-                halfWidth.z <= 0.0f)
+                !std::isfinite(halfWidth.z) || !std::isfinite(center.x) ||
+                !std::isfinite(center.y) || !std::isfinite(center.z) ||
+                halfWidth.x <= 0.0f || halfWidth.z <= 0.0f)
             {
-                SetStatus("NAVIGATION // SCENE BOUNDS ARE EMPTY", true);
+                SetStatus("NAVIGATION // SCENE HAS NO HORIZONTAL BOUNDS", true);
                 return false;
             }
 
-            float size = std::max(0.05f, settings.voxelSize);
+            // A perfectly flat terrain has a valid X/Z scene footprint but
+            // zero Y thickness. That is normal ground, not an empty scene.
+            // Give fitted navigation useful headroom above the surface plus a
+            // small margin below it so grounded PathQuery has occupied floor
+            // voxels and free character voxels inside the same volume.
+            const float authoredVoxel = std::max(0.05f, settings.voxelSize);
+            const float belowPadding = std::max(0.5f, authoredVoxel * 2.0f);
+            const float abovePadding = std::max(3.0f, authoredVoxel * 8.0f);
+            const float sourceHalfY = std::max(0.0f, halfWidth.y);
+            const float minimumY = center.y - sourceHalfY - belowPadding;
+            const float maximumY = center.y + sourceHalfY + abovePadding;
+            center.y = (minimumY + maximumY) * 0.5f;
+            halfWidth.y = (maximumY - minimumY) * 0.5f;
+
+            // Keep the outermost navigable geometry away from the voxel-grid
+            // boundary. This also makes Fit to Scene less sensitive to exact
+            // terrain AABB rounding at chunk edges.
+            const float horizontalPadding = std::max(0.5f, authoredVoxel * 2.0f);
+            halfWidth.x += horizontalPadding;
+            halfWidth.z += horizontalPadding;
+
+            float size = authoredVoxel;
             const float axisMinimum = std::max({
                 halfWidth.x / 1024.0f,
                 halfWidth.y / 1024.0f,
@@ -603,6 +624,24 @@ namespace renegade::studio
             }
 
             auto settings = pending;
+            auto& scene = session->Scenes().GetScene();
+
+            // The grid entity is deliberately gizmo-editable. For a normal
+            // rebuild, treat the current gizmo translation as the authored
+            // native VoxelGrid center instead of snapping back to the previous
+            // grid center captured before the transform edit.
+            if (!fitSceneBounds)
+            {
+                if (const auto* transform = scene.transforms.GetComponent(selected);
+                    transform != nullptr &&
+                    std::isfinite(transform->translation_local.x) &&
+                    std::isfinite(transform->translation_local.y) &&
+                    std::isfinite(transform->translation_local.z))
+                {
+                    settings.center = transform->translation_local;
+                }
+            }
+
             if (fitSceneBounds && !FitSettingsToScene(settings))
                 return;
 
@@ -613,7 +652,6 @@ namespace renegade::studio
                 return;
             }
 
-            auto& scene = session->Scenes().GetScene();
             if (!session->Commands().Execute(
                     std::make_unique<bridge::RebuildNavigationGridCommand>(
                         scene, selected, settings)))
