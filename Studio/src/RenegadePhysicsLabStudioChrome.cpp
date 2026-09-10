@@ -447,7 +447,7 @@ namespace renegade::studio
             SetAudioWorkspaceActive(true);
         }
 
-        // Selecting a native sound/emitter/navigation grid from the hierarchy
+        // Selecting a native sound/emitter/navigation entity from the hierarchy
         // routes directly to the matching specialist Inspector.
         if (!workspaceTransitionRequested_ && IsSceneWorkspaceActive() &&
             !physicsLab_.IsActive())
@@ -466,7 +466,7 @@ namespace renegade::studio
                         SetParticleWorkspaceActive(true);
                     }
                 }
-                else if (bridge::IsRenegadeNavigationGrid(scene, selected))
+                else if (bridge::IsRenegadeNavigationEntity(scene, selected))
                 {
                     if (!navigationWorkspace_.IsActive())
                     {
