@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -79,9 +78,7 @@ namespace
             {
                 return value.name == name;
             });
-        return found == attachment.properties.end()
-            ? nullptr
-            : &*found;
+        return found == attachment.properties.end() ? nullptr : &*found;
     }
 
     void SetBoolean(
@@ -155,6 +152,7 @@ namespace
     bool BuildActionAttachment(
         const std::string& projectRoot,
         const std::string& sourcePath,
+        const StableId& sourceId,
         const StableId& ownerId,
         ScriptAttachment& attachment,
         std::string& error)
@@ -173,8 +171,11 @@ namespace
             return false;
         }
 
+        // One governed source path owns one sourceId. Multiple creator
+        // instances of the same Action reuse that identity rather than
+        // manufacturing a new source identity per attachment.
         ScriptSourceBinding binding;
-        binding.sourceId = GenerateStableId();
+        binding.sourceId = sourceId;
         binding.sourcePath = sourcePath;
         binding.presentation = ScriptPresentation::Action;
         binding.apiVersion = RuntimeScriptRuntime::ApiVersion;
@@ -203,7 +204,7 @@ int main()
     const fs::path stockPackage =
         sourceRoot / "Library" / "Scripts" / "RenegadeStockActions";
 
-    // First prove the reusable objective is a valid Creator Library entry.
+    // Prove the reusable objective is a valid Creator Library entry.
     const fs::path libraryProject = fs::temp_directory_path() /
         fs::u8path("renegade-objective-library-" + GenerateStableId());
     std::error_code ec;
@@ -248,9 +249,8 @@ int main()
     }
     fs::remove_all(libraryProject, ec);
 
-    // Now execute the actual shipped objective loop with actual shipped S7
-    // interaction/pickup/door Actions. No test-only gameplay script substitutes
-    // for the creator-visible vertical slice.
+    // Execute the actual shipped objective loop with the actual shipped S7
+    // Switch, Pickup and Sliding Door Actions.
     const fs::path root = fs::temp_directory_path() /
         fs::u8path("renegade-objective-slice-" + GenerateStableId());
     const std::string objectivePath =
@@ -281,20 +281,15 @@ int main()
     }
 
     wi::scene::Scene scene;
-    const wi::ecs::Entity playerEntity =
-        scene.Entity_CreateTransform("Player");
+    const wi::ecs::Entity playerEntity = scene.Entity_CreateTransform("Player");
     const wi::ecs::Entity switchEntity =
         scene.Entity_CreateTransform("Objective Start Switch");
     const wi::ecs::Entity objectiveEntity =
         scene.Entity_CreateTransform("Objective Controller");
-    const wi::ecs::Entity pickup1 =
-        scene.Entity_CreateTransform("Crystal 1");
-    const wi::ecs::Entity pickup2 =
-        scene.Entity_CreateTransform("Crystal 2");
-    const wi::ecs::Entity pickup3 =
-        scene.Entity_CreateTransform("Crystal 3");
-    const wi::ecs::Entity doorEntity =
-        scene.Entity_CreateTransform("Exit Door");
+    const wi::ecs::Entity pickup1 = scene.Entity_CreateTransform("Crystal 1");
+    const wi::ecs::Entity pickup2 = scene.Entity_CreateTransform("Crystal 2");
+    const wi::ecs::Entity pickup3 = scene.Entity_CreateTransform("Crystal 3");
+    const wi::ecs::Entity doorEntity = scene.Entity_CreateTransform("Exit Door");
 
     const StableId playerId = GenerateStableId();
     const StableId switchId = GenerateStableId();
@@ -331,10 +326,18 @@ int main()
         "Content/Scenes/ObjectiveSlice.wiscene",
         "phase6-objective-slice-tests");
 
+    // Source identity belongs to the governed source, not an attachment. The
+    // three Pickup instances intentionally share pickupSourceId.
+    const StableId objectiveSourceId = GenerateStableId();
+    const StableId switchSourceId = GenerateStableId();
+    const StableId pickupSourceId = GenerateStableId();
+    const StableId doorSourceId = GenerateStableId();
+
     ScriptAttachment objectiveAttachment;
     if (!BuildActionAttachment(
             root.generic_u8string(),
             objectivePath,
+            objectiveSourceId,
             objectiveId,
             objectiveAttachment,
             error))
@@ -358,6 +361,7 @@ int main()
     if (!BuildActionAttachment(
             root.generic_u8string(),
             switchPath,
+            switchSourceId,
             switchId,
             switchAttachment,
             error))
@@ -383,6 +387,7 @@ int main()
         if (!BuildActionAttachment(
                 root.generic_u8string(),
                 pickupPath,
+                pickupSourceId,
                 pickupId,
                 pickupAttachment,
                 error))
@@ -410,6 +415,7 @@ int main()
     if (!BuildActionAttachment(
             root.generic_u8string(),
             doorPath,
+            doorSourceId,
             doorId,
             doorAttachment,
             error))
@@ -509,8 +515,8 @@ int main()
         return Fail("third pickup did not complete the objective");
     }
 
-    // Completion emits a targeted 'open' event. Deliver it on the next frame
-    // and prove the actual shipped Sliding Door responds.
+    // Completion emits targeted 'open'. Deliver it and prove the real shipped
+    // Sliding Door responds visibly.
     runtime.Update(0.25f);
     const auto* doorTransform = scene.transforms.GetComponent(doorEntity);
     if (doorTransform == nullptr ||
