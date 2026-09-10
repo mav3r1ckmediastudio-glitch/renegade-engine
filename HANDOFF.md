@@ -1,139 +1,160 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 8 September 2026
+**Date:** 10 September 2026
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
-**Merged baseline:** S6 — Library Adoption & Package Closure in PR #143
-**Active candidate:** S7 — Stock Actions in PR #144 on
-`scripting/s7-stock-actions-wave-a`
+**Merged baseline:** PR #146 — marker overlays + native Wicked particle emitter authoring
+**Active candidate:** Phase 6 Objective + Interaction Vertical Slice on
+`phase6/objective-interaction-vertical-slice`
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current status
 
-Renegade is in **Phase 6 — Playable Core**. The old Phase 6 Gate 3/audio handoff
-is historical: Gate 3 merged in PR #125. Since then the scripting programme has
-advanced through S1-S6 and the diagnostics/runtime bridge has been substantially
-expanded.
+Renegade remains in **Phase 6 — Playable Core**. The original Gate 1-3 player,
+input and audio work is merged. The scripting programme is now also through S7:
+PR #144 shipped six creator-facing stock Lua Actions and their interaction UX,
+and PR #146 subsequently merged editor marker overlays plus native Wicked GPU
+particle authoring with separate static-texture and sprite-sheet creator paths.
 
-The rebased S7 baseline `3e679ec` passed all four Windows Debug/Release checks.
-Owner testing then exposed three connected completion defects: packaged builds
-could report no scripts after working-directory changes; imported entities could
-block Action authoring because they lacked Renegade identity; and the Action
-picker crowded or overlapped its REFRESH/ADD buttons. Those defects and the
-missing in-game interaction prompt are repaired in the current working
-candidate. One final exact-head Windows matrix and packaged owner pass remain.
+The next bounded work is no longer another infrastructure layer. It is the first
+small reusable gameplay objective assembled entirely from the governed scripting
+stack already on `main`.
 
-## S7 completion candidate
+## Current objective slice
 
-- exactly six representative vanilla Lua Actions remain in scope: Sliding Door,
-  Interaction Switch, Player Trigger Zone, Proximity Pickup, Activation Relay
-  and Play Sound;
-- built-in library discovery is executable-relative and the Windows package
-  build now rejects a missing manifest or a count other than six Lua Actions;
-- the Action catalogue loads even when the selected imported object has no ID;
-  pressing ADD assigns every missing Scene identity through shared Undo/Redo;
-- the picker has a full-width row and its labels elide instead of drawing over
-  controls;
-- Runtime exposes one bounded `renegade.ui.show_prompt` seam; Door and Switch
-  show nearby E prompts and Pickup can optionally require E;
-- Sliding Door supports direct interaction and optional Auto Close while
-  retaining open/close/toggle event control; and
-- the real shipped Door source is included in the Runtime integration proof.
+The active branch adds one reusable Creator Library Action:
 
-Setup and acceptance:
-[`docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md`](docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md)
+**Objective Counter**
+
+It:
+
+- starts immediately or waits for a configured start event;
+- counts a configured gameplay event;
+- exposes a creator-authored required count;
+- reports short progress/completion messages through the existing governed UI
+  prompt seam;
+- targets an authored entity reference on completion; and
+- sends a configured completion event/payload through the existing bounded
+  gameplay event API.
+
+The reference owner loop deliberately reuses the already accepted S7 Actions:
+
+1. **Interaction Switch** sends `start_objective`;
+2. three **Proximity Pickup** instances send `pickup`;
+3. **Objective Counter** reaches `3` and sends `open`; and
+4. the target **Sliding Door** opens.
+
+No new objective runtime, competing event bus or trigger-volume implementation
+is introduced.
+
+The reusable Action is packaged separately under:
+
+`Content/ScriptLibrary/RenegadeObjectiveActions`
+
+This keeps the accepted S7 contract of exactly six stock Actions frozen rather
+than silently changing that package after merge.
+
+## Automated proof in the active branch
+
+`RenegadePhase6ObjectiveSliceRuntimeTests` exercises the real shipped Lua sources
+rather than token fixtures. It verifies:
+
+- `ObjectiveCounter.lua` is a valid discoverable Creator Library Action;
+- a real Interaction Switch starts the inactive objective;
+- three real Proximity Pickup Actions advance progress through targeted governed
+  events;
+- the objective uses a persisted-style entity reference to target the exit door;
+- completion sends the stock Sliding Door its normal `open` event;
+- the actual door moves in Runtime; and
+- the complete six-instance gameplay loop runs without a disabled script or
+  Runtime diagnostic.
+
+The packaged creator acceptance guide is:
+[`docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md`](docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md)
 
 ## What is now on main
 
 ### Gameplay foundation
 
-- Player Start and first-person Runtime possession.
-- Wicked/Jolt player capsule, movement, mouse look, sprint and jump.
-- Governed gameplay input map plus Pause/Resume and deterministic Reset.
-- Native global/2D and positional 3D audio authoring and Runtime lifecycle.
-- JP01 Jolt physics authoring/runtime foundation.
+- governed Player Start and first-person Runtime possession;
+- Wicked/Jolt character capsule, movement, mouse look, sprint and jump;
+- persisted gameplay action map, Pause/Resume and deterministic Reset;
+- native global/2D and positional 3D audio authoring/runtime lifecycle;
+- JP01 Jolt physics authoring/runtime foundation;
+- native Wicked vegetation/grass authoring;
+- native Wicked particle emitter authoring with static and animated sprite-sheet
+  creator workflows; and
+- editor-only marker overlays for creator entities.
 
-### Scripting S1-S6
+### Governed scripting stack through S7
 
 - extensible Inspector section/provider architecture;
-- durable `.rscripts` document and script-source model;
+- durable `.rscripts` document and script-source identity;
 - governed Runtime-owned Lua lifecycle;
 - restricted metadata evaluation;
-- ACTION and SCRIPT attachment authoring;
-- generated typed script properties;
-- governed entity references;
-- GLOBAL SCRIPT authoring;
-- generation-safe entity/transform gameplay API;
+- ACTION, SCRIPT and GLOBAL SCRIPT authoring;
+- generated typed script properties and governed entity references;
+- generation-safe entity/transform gameplay APIs;
 - governed gameplay lifecycle;
-- bounded cross-script event dispatch;
-- structured scripting diagnostics;
-- Studio/Test Level IPC and handshake diagnostics; and
-- installed Creator Library packages with deterministic dependency closure,
-  transactional first-use adoption, update/conflict protection and Build Game
-  closure.
+- bounded cross-script events;
+- structured diagnostics and Studio/Test Level IPC;
+- reusable Creator Library packages with transactional project adoption,
+  deterministic dependency closure and update/conflict protection; and
+- six accepted stock Actions: Sliding Door, Interaction Switch, Player Trigger
+  Zone, Proximity Pickup, Activation Relay and Play Sound.
 
-### Live diagnostics
-
-PR #141 integrated the built-in live diagnostic path for running Studio and
-Runtime, including script/audio state and bounded local transport. PR #142 then
-closed the structured Studio-Test Level IPC/handshake seam. Diagnostics are meant
-to be visible from Renegade's Diagnostics surface; the external local reader is
-an additional engineering access path, not the product UI.
-
-## S6 creator contract
+## Creator-library contract
 
 Installed packages are immutable inputs. Selecting a compatible Creator Library
-row and pressing **ADD** adopts the selected entry's complete deterministic
-closure into the project under:
+entry and pressing **ADD** adopts its deterministic closure into the project
+under:
 
 `Content/Scripts/Library/<package-id>/...`
 
-After adoption the project copy is authoritative. Test Level and Build Game use
-that same project-owned closure. Runtime never searches or executes directly
-from the installed Library.
+The project-owned copy then becomes authoritative for Test Level and Build Game.
+Runtime does not search the installed Creator Library directly.
 
-Creator-edited adopted files are preserved. A conflicting installed-package
-update reports a structured conflict instead of overwriting creator bytes.
+The objective package follows the same S6 contract; there is no second adoption
+or runtime path for objectives.
 
-Canonical contract:
-[`docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md)
+## Immediate owner-visible verification for this branch
 
-## Immediate owner-visible verification
+Use the final packaged Studio artifact and follow
+[`docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md`](docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md).
+At minimum:
 
-Use the final PR #144 Studio artifact and follow the S7 owner guide. At minimum:
+1. confirm **Objective Counter** appears in Creator Library and adopts into the
+   active project;
+2. wire one Interaction Switch to start it;
+3. wire three Proximity Pickups to its `pickup` count event;
+4. wire its completion target to a Sliding Door using `open`;
+5. save, close and reopen the level and confirm every property/reference remains;
+6. prove switch -> 1/3 -> 2/3 -> completion -> door in Test Level; and
+7. repeat the same loop in an independently packaged Build Game Runtime.
 
-1. Open the same project/imported crate that previously showed no persistent
-   identity. Expand ACTION and confirm six stock rows appear.
-2. Exercise the dropdown plus REFRESH and ADD without overlap or dead controls.
-3. Attach Sliding Door directly to any nearby object. In Test Level confirm the
-   prompt appears and E opens/closes it.
-4. Save/reopen and repeat Test Level.
-5. Run the packaged Studio after an Open/Save dialog and confirm the six stock
-   Actions remain discoverable.
-6. Run packaged Build Game and confirm the same adopted Action behavior.
-
-Do not infer creator acceptance from compilation alone.
+Compile-only success is not creator acceptance.
 
 ## Next engineering work
 
-Once S7 exact-head CI and visible acceptance are recorded, the next bounded
-Playable Core sequence is:
+After this objective slice is CI-green and owner accepted:
 
-1. **Objective and interaction vertical slice** — one reusable scripted objective
-   loop using the governed script properties/references/events/gameplay APIs.
-2. **Navigation and actor path queries** — stable Renegade access over Wicked
-   voxel/pathfinding and one Runtime navigation proof.
-3. **Integrated Phase 6 acceptance** — reopen, Test Level and independently
-   packaged playable slice with player, collisions, audio and scripted objective.
+1. **Navigation and actor path queries** — expose stable Renegade access over
+   Wicked voxel/pathfinding facilities and prove one Runtime actor path query
+   without creating a competing navigation world.
+2. **Integrated Phase 6 acceptance** — build the reference playable slice and
+   prove reopen, player/collisions, audio, scripted objective, navigation where
+   used, Test Level parity and independently packaged Runtime parity.
+3. Close **Phase 6 — Playable Core**, then move the primary programme into the
+   planned Phase 7 animation/advanced-simulation work.
 
-A viewport-placeable trigger/volume system should only be introduced as one
-shared ZoneService for objectives, audio, weather and later systems. Do not
-reintroduce the abandoned audio-only zone implementation.
+A viewport-placeable trigger/volume system remains deferred until a real shared
+need appears. When introduced it must be one ZoneService usable by objectives,
+audio, weather and later systems; do not reintroduce an audio-only zone.
 
 ## Known deferred boundaries
 
 - Shared ZoneService / reusable trigger volumes.
 - Creator-facing VSync control.
-- Physical controller owner evidence where no controller hardware is available.
+- Physical controller owner evidence where controller hardware is unavailable.
 - Player arms, weapons, combat and production enemy AI.
 - Advanced animation/simulation work governed by later phases.
 - Commercial redistribution/release packaging clearance.
@@ -141,10 +162,11 @@ reintroduce the abandoned audio-only zone implementation.
 ## Canonical references
 
 - [`README.md`](README.md) — product/build entry point.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — current programme sequence.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — programme sequence.
 - [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) — long-range programme.
-- [`docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md) — current scripting closure and acceptance.
-- [`docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md`](docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md) — S7 creator setup and exact owner acceptance.
+- [`docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md) — Creator Library contract.
+- [`docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md`](docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md) — accepted stock Action owner setup.
+- [`docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md`](docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md) — active objective-slice acceptance.
 - [`docs/LIVE_DIAGNOSTIC_ACCESS.md`](docs/LIVE_DIAGNOSTIC_ACCESS.md) — live diagnostics architecture/access.
 - [`docs/FEATURE_MATRIX.csv`](docs/FEATURE_MATRIX.csv) — capability evidence ledger.
 - [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) — implementation/handover rules.
