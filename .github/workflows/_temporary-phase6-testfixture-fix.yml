@@ -1,4 +1,4 @@
-name: Temporary Phase 6 test fixture fix
+name: Temporary terrain collision repair
 
 on:
   push:
@@ -11,49 +11,186 @@ permissions:
   contents: write
 
 jobs:
-  fix:
+  repair:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: staging/phase6-native-navigation
           fetch-depth: 0
-      - name: Repair malformed navigation test mesh
-        shell: python
-        run: |
-          from pathlib import Path
 
-          path = Path('Tests/Phase6NativeNavigationTests.cpp')
-          text = path.read_text(encoding='utf-8')
-          old = '''    obstacleMesh.indices = {
-        0,2,1, 1,2,3, 4,5,6, 5,7,6,
-        0,1,4, 1,5,4, 2,6,3, 3,6,7,
-        0,4,2, 2,4,6, 1,3,5, 3,7,5,
-    };
-    scene.rigidbodies.Create(rigidObstacle).mass = 1.0f;
-'''
-          new = '''    obstacleMesh.indices = {
-        0,2,1, 1,2,3, 4,5,6, 5,7,6,
-        0,1,4, 1,5,4, 2,6,3, 3,6,7,
-        0,4,2, 2,4,6, 1,3,5, 3,7,5,
-    };
-    auto& obstacleSubset = obstacleMesh.subsets.emplace_back();
-    obstacleSubset.indexOffset = 0;
-    obstacleSubset.indexCount =
-        static_cast<uint32_t>(obstacleMesh.indices.size());
-    scene.rigidbodies.Create(rigidObstacle).mass = 1.0f;
-'''
-          if text.count(old) != 1:
-              raise RuntimeError(f'expected exactly one fixture block, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-      - name: Verify and commit fixture repair
+      - name: Apply loaded-terrain physics repair and live regression
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/workflows/_temporary-phase6-testfixture-fix.yml
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Public repair seam for load-time terrain physics coverage.
+          replace_once(
+              'EngineBridge/include/renegade/bridge/TerrainService.h',
+              '#include <array>\n#include <cstdint>\n',
+              '#include <array>\n#include <cstddef>\n#include <cstdint>\n')
+          replace_once(
+              'EngineBridge/include/renegade/bridge/TerrainService.h',
+              '    void RebindDefaultTerrainMaterials(wi::scene::Scene& scene);\n\n    constexpr float DefaultGrassPackedTileCount = 32.0f;\n',
+              '    void RebindDefaultTerrainMaterials(wi::scene::Scene& scene);\n\n    // Repairs loaded terrain authored before full resident-physics coverage.\n    // Fixed Renegade terrain must have a static Wicked/Jolt heightfield body\n    // for every resident chunk, including scenes serialized with the legacy\n    // three-chunk physics radius. No regeneration or sculpt reset is required.\n    [[nodiscard]] std::size_t EnsureTerrainPhysicsCoverage(\n        wi::scene::Scene& scene) noexcept;\n\n    constexpr float DefaultGrassPackedTileCount = 32.0f;\n')
+
+          # Sculpt refresh must create the live chunk body when it is absent.
+          replace_once(
+              'EngineBridge/src/TerrainService.cpp',
+              '''        auto* rigidBody =\n            terrain.scene->rigidbodies.GetComponent(chunk.entity);\n        if (rigidBody != nullptr)\n        {\n            rigidBody->SetRefreshParametersNeeded();\n        }\n''',
+              '''        auto* rigidBody =\n            terrain.scene->rigidbodies.GetComponent(chunk.entity);\n        if (rigidBody == nullptr)\n        {\n            rigidBody = &terrain.scene->rigidbodies.Create(chunk.entity);\n        }\n        rigidBody->shape = wi::scene::RigidBodyPhysicsComponent::HEIGHTFIELD;\n        rigidBody->mass = 0.0f;\n        rigidBody->friction = 0.8f;\n        rigidBody->SetRefreshParametersNeeded();\n''')
+
+          # Loaded scenes bypass ApplyTerrain(), so normalize legacy radius and
+          # create missing static heightfield components before the first frame.
+          replace_once(
+              'EngineBridge/src/TerrainService.cpp',
+              '''    wi::ecs::Entity CreateTerrain(\n        wi::scene::Scene& scene,\n''',
+              '''    std::size_t EnsureTerrainPhysicsCoverage(\n        wi::scene::Scene& scene) noexcept\n    {\n        std::size_t repaired = 0;\n        for (std::size_t terrainIndex = 0;\n            terrainIndex < scene.terrains.GetCount(); ++terrainIndex)\n        {\n            auto& terrain = scene.terrains[terrainIndex];\n            terrain.terrainEntity = scene.terrains.GetEntity(terrainIndex);\n            terrain.scene = &scene;\n            if (!terrain.IsPhysicsEnabled())\n            {\n                continue;\n            }\n\n            const bool fixedResident = !terrain.IsCenterToCamEnabled();\n            if (fixedResident)\n            {\n                const int requiredRadius = std::clamp(\n                    terrain.generation + 1,\n                    1,\n                    MaximumTerrainChunkRadius + 1);\n                if (terrain.physics_generation < requiredRadius)\n                {\n                    terrain.physics_generation = requiredRadius;\n                    ++repaired;\n                }\n            }\n\n            for (auto& entry : terrain.chunks)\n            {\n                const auto& coordinate = entry.first;\n                auto& chunk = entry.second;\n                const int distance = std::max(\n                    std::abs(terrain.center_chunk.x - coordinate.x),\n                    std::abs(terrain.center_chunk.z - coordinate.z));\n                if (!fixedResident && distance >= terrain.physics_generation)\n                {\n                    continue;\n                }\n                if (!scene.transforms.Contains(chunk.entity) ||\n                    !scene.objects.Contains(chunk.entity) ||\n                    !scene.meshes.Contains(chunk.entity))\n                {\n                    continue;\n                }\n\n                auto* rigidBody = scene.rigidbodies.GetComponent(chunk.entity);\n                bool changed = false;\n                if (rigidBody == nullptr)\n                {\n                    rigidBody = &scene.rigidbodies.Create(chunk.entity);\n                    changed = true;\n                }\n                if (rigidBody->shape !=\n                    wi::scene::RigidBodyPhysicsComponent::HEIGHTFIELD)\n                {\n                    rigidBody->shape =\n                        wi::scene::RigidBodyPhysicsComponent::HEIGHTFIELD;\n                    changed = true;\n                }\n                if (!NearlyEqual(rigidBody->mass, 0.0f))\n                {\n                    rigidBody->mass = 0.0f;\n                    changed = true;\n                }\n                if (!NearlyEqual(rigidBody->friction, 0.8f))\n                {\n                    rigidBody->friction = 0.8f;\n                    changed = true;\n                }\n\n                // A deserialized component can exist before Jolt has built its\n                // body. Mark it for creation/refresh; Wicked will consume the\n                // mesh or its precomputed heightfield in the normal physics pass.\n                if (changed || rigidBody->physicsobject == nullptr)\n                {\n                    rigidBody->SetRefreshParametersNeeded();\n                    ++repaired;\n                }\n            }\n        }\n        return repaired;\n    }\n\n    wi::ecs::Entity CreateTerrain(\n        wi::scene::Scene& scene,\n''')
+
+          replace_once(
+              'EngineBridge/src/TerrainService.cpp',
+              '''    void RebindDefaultTerrainMaterials(wi::scene::Scene& scene)\n    {\n        for (std::size_t terrainIndex = 0;\n''',
+              '''    void RebindDefaultTerrainMaterials(wi::scene::Scene& scene)\n    {\n        (void)EnsureTerrainPhysicsCoverage(scene);\n        for (std::size_t terrainIndex = 0;\n''')
+
+          # TerrainTests now proves actual Jolt contact instead of only checking
+          # configured radius values.
+          replace_once(
+              'Tests/TerrainTests.cpp',
+              '#include "renegade/bridge/TerrainService.h"\n',
+              '#include "renegade/bridge/TerrainService.h"\n#include "renegade/bridge/PhysicsService.h"\n')
+
+          live_test = r'''
+    // A saved terrain from before full resident collision coverage can carry
+    // generation=9 but physics_generation=3. Rebinding must repair an outer
+    // chunk and the resulting native Jolt heightfield must physically stop a
+    // falling dynamic body. This is a live contact regression, not a config-only
+    // assertion.
+    {
+        wi::jobsystem::Initialize();
+        const auto physicsBefore =
+            renegade::bridge::CapturePhysicsWorldState();
+        auto physicsRunning = physicsBefore;
+        physicsRunning.enabled = true;
+        physicsRunning.simulationEnabled = true;
+        physicsRunning.interpolationEnabled = false;
+        renegade::bridge::ApplyPhysicsWorldState(physicsRunning);
+
+        wi::scene::Scene physicsScene;
+        renegade::bridge::SetPhysicsGravity(
+            physicsScene,
+            XMFLOAT3(0.0f, -9.81f, 0.0f));
+
+        const wi::ecs::Entity liveTerrainEntity = wi::ecs::CreateEntity();
+        auto& liveTerrain = physicsScene.terrains.Create(liveTerrainEntity);
+        liveTerrain.terrainEntity = liveTerrainEntity;
+        liveTerrain.scene = &physicsScene;
+        liveTerrain.SetCenterToCamEnabled(false);
+        liveTerrain.SetPhysicsEnabled(true);
+        liveTerrain.generation = 9;
+        liveTerrain.physics_generation = 3;
+        liveTerrain.center_chunk = {0, 0};
+        physicsScene.transforms.Create(liveTerrainEntity).UpdateTransform();
+
+        const wi::ecs::Entity chunkEntity =
+            physicsScene.Entity_CreateObject("legacy outer terrain chunk");
+        auto* chunkObject = physicsScene.objects.GetComponent(chunkEntity);
+        if (chunkObject == nullptr)
+            return Fail("live terrain fixture object was not created");
+        auto& chunkMesh = physicsScene.meshes.Create(chunkEntity);
+        chunkObject->meshID = chunkEntity;
+        chunkMesh.vertex_positions.reserve(wi::terrain::vertexCount);
+        constexpr float halfChunk =
+            static_cast<float>(wi::terrain::chunk_width - 1) * 0.5f;
+        for (int z = 0; z < wi::terrain::chunk_width; ++z)
+        {
+            for (int x = 0; x < wi::terrain::chunk_width; ++x)
+            {
+                chunkMesh.vertex_positions.emplace_back(
+                    static_cast<float>(x) - halfChunk,
+                    0.0f,
+                    static_cast<float>(z) - halfChunk);
+            }
+        }
+
+        wi::terrain::Chunk outerCoordinate = {8, 0};
+        auto& liveChunk = liveTerrain.chunks[outerCoordinate];
+        liveChunk.entity = chunkEntity;
+        liveChunk.position = XMFLOAT3(0.0f, 0.0f, 0.0f);
+
+        if (renegade::bridge::EnsureTerrainPhysicsCoverage(physicsScene) == 0 ||
+            liveTerrain.physics_generation < 10 ||
+            !physicsScene.rigidbodies.Contains(chunkEntity))
+        {
+            return Fail("legacy loaded terrain did not gain full resident heightfield coverage");
+        }
+
+        const wi::ecs::Entity fallingEntity = wi::ecs::CreateEntity();
+        auto& fallingTransform = physicsScene.transforms.Create(fallingEntity);
+        fallingTransform.Translate(XMFLOAT3(0.0f, 5.0f, 0.0f));
+        fallingTransform.UpdateTransform();
+        auto& fallingBody = physicsScene.rigidbodies.Create(fallingEntity);
+        fallingBody.shape = wi::scene::RigidBodyPhysicsComponent::BOX;
+        fallingBody.box.halfextents = XMFLOAT3(0.5f, 0.5f, 0.5f);
+        fallingBody.mass = 1.0f;
+        fallingBody.friction = 0.6f;
+
+        for (int frame = 0; frame < 240; ++frame)
+        {
+            wi::jobsystem::context ctx;
+            wi::physics::RunPhysicsUpdateSystem(
+                ctx,
+                physicsScene,
+                1.0f / 60.0f);
+            physicsScene.RunTransformUpdateSystem(ctx);
+            wi::jobsystem::Wait(ctx);
+            physicsScene.RunHierarchyUpdateSystem(ctx);
+            wi::jobsystem::Wait(ctx);
+        }
+
+        XMFLOAT3 finalPosition = {};
+        if (!renegade::bridge::HasLivePhysicsBody(
+                physicsScene, chunkEntity) ||
+            !renegade::bridge::HasLivePhysicsBody(
+                physicsScene, fallingEntity) ||
+            !renegade::bridge::GetPhysicsPosition(
+                physicsScene, fallingEntity, finalPosition))
+        {
+            return Fail("live terrain contact fixture never created native Jolt bodies");
+        }
+
+        renegade::bridge::ApplyPhysicsWorldState(physicsBefore);
+        if (finalPosition.y < 0.35f || finalPosition.y > 1.25f)
+        {
+            return Fail("dynamic rigid body fell through repaired terrain heightfield");
+        }
+    }
+
+'''
+          marker = '    std::cout << "PASS: 1.254 km standard terrain, non-destructive expansion, material scale, preview history and Undo/Redo\\n";\n'
+          replace_once('Tests/TerrainTests.cpp', marker, live_test + marker)
+          PY
+
+      - name: Verify patch and push one target commit
+        shell: bash
+        run: |
+          set -euo pipefail
           git diff --check
+          git status --short
           git config user.name "Renegade Patch Builder"
           git config user.email "patch@renegade.local"
-          git add -A
+          git add EngineBridge/include/renegade/bridge/TerrainService.h \
+                  EngineBridge/src/TerrainService.cpp \
+                  Tests/TerrainTests.cpp
           git diff --cached --check
-          git commit -m "Tests: make navigation rigid-body fixture a valid Wicked mesh"
-          git push origin HEAD:staging/phase6-nav-testfixture-fix
+          git commit -m "Fix loaded terrain Jolt collision coverage"
+          git push origin HEAD:staging/phase6-native-navigation
