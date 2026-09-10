@@ -1,0 +1,361 @@
+from pathlib import Path
+
+
+def replace_once(path: str, old: str, new: str) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{path}: expected one match, found {count}: {old[:120]!r}")
+    p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+# Terrain foundation: keep the -20..+120 local sculpt envelope but map the
+# generated flat baseline to creator world Y=0. Fixed resident terrain gets
+# native Wicked/Jolt HEIGHTFIELD physics across every generated chunk.
+replace_once(
+    "EngineBridge/include/renegade/bridge/TerrainService.h",
+    "        int physicsChunkRadius = 3;\n",
+    "        // Fixed resident terrain keeps Jolt heightfields under every visible chunk.\n"
+    "        // Wicked uses dist < physics_generation, so radius+1 covers the edge ring.\n"
+    "        int physicsChunkRadius = DefaultTerrainChunkRadius + 1;\n",
+)
+
+replace_once(
+    "EngineBridge/src/TerrainService.cpp",
+    "        terrain.physics_generation = std::clamp(state.physicsChunkRadius, 0, 8);\n",
+    "        const int requestedPhysicsRadius = std::clamp(\n"
+    "            state.physicsChunkRadius,\n"
+    "            0,\n"
+    "            MaximumTerrainChunkRadius + 1);\n"
+    "        // Renegade fixed terrain is deliberately resident. Give every generated\n"
+    "        // chunk its native Wicked/Jolt HEIGHTFIELD body rather than leaving outer\n"
+    "        // rings visually present but physically bottomless. Wicked creates chunk\n"
+    "        // bodies while dist < physics_generation, hence generation + 1.\n"
+    "        terrain.physics_generation =\n"
+    "            state.physics && !state.centerToCamera\n"
+    "                ? std::max(requestedPhysicsRadius, terrain.generation + 1)\n"
+    "                : requestedPhysicsRadius;\n",
+)
+
+replace_once(
+    "EngineBridge/src/TerrainService.cpp",
+    "        ApplyTerrain(terrain, state, false);\n        terrain.Generation_Restart();\n        return entity;\n",
+    "        ApplyTerrain(terrain, state, false);\n\n"
+    "        // Wicked generates unmodified terrain at bottomLevel. Renegade keeps the\n"
+    "        // useful negative sculpt envelope, but the creator-facing world reference\n"
+    "        // is Y=0. Lift the terrain root once at creation so bottomLevel maps to\n"
+    "        // world zero without changing Wicked terrain internals or losing valleys.\n"
+    "        if (auto* rootTransform = scene.transforms.GetComponent(entity))\n"
+    "        {\n"
+    "            rootTransform->translation_local.y = -terrain.bottomLevel;\n"
+    "            rootTransform->SetDirty();\n"
+    "            rootTransform->UpdateTransform();\n"
+    "        }\n\n"
+    "        terrain.Generation_Restart();\n        return entity;\n",
+)
+
+replace_once(
+    "EngineBridge/src/TerrainService.cpp",
+    "        terrain->generation = beforeRadius_;\n    }\n\n    bool ExpandTerrainCommand::ApplyExpandedRadius()\n",
+    "        terrain->generation = beforeRadius_;\n"
+    "        if (terrain->IsPhysicsEnabled() && !terrain->IsCenterToCamEnabled())\n"
+    "        {\n"
+    "            terrain->physics_generation = std::max(\n"
+    "                terrain->physics_generation, beforeRadius_ + 1);\n"
+    "        }\n"
+    "    }\n\n    bool ExpandTerrainCommand::ApplyExpandedRadius()\n",
+)
+
+replace_once(
+    "EngineBridge/src/TerrainService.cpp",
+    "        terrain->Generation_Cancel();\n        terrain->generation = afterRadius_;\n        return true;\n    }\n\n    TerrainSculptState CaptureTerrainSculpt(\n",
+    "        terrain->Generation_Cancel();\n"
+    "        terrain->generation = afterRadius_;\n"
+    "        if (terrain->IsPhysicsEnabled())\n"
+    "        {\n"
+    "            terrain->physics_generation = std::max(\n"
+    "                terrain->physics_generation, afterRadius_ + 1);\n"
+    "        }\n"
+    "        return true;\n"
+    "    }\n\n    TerrainSculptState CaptureTerrainSculpt(\n",
+)
+
+# The analytic editor grid goes back to the actual Renegade world reference.
+replace_once(
+    "Studio/src/StudioApplication.cpp",
+    """        // w is the grid plane height. Renegade terrain uses bottomLevel as
+        // its authored reference plane (the standard terrain starts at -20 m),
+        // so an absolute y=0 grid visibly floats above a standard landscape.
+        // Keep a 2 cm depth epsilon and retain y=0.02 only when no terrain is
+        // present. The isolated creator-import stage keeps its own plane.
+        float gridPlaneHeight = 0.02f;
+        if (!creatorModelImporter.active && session_ != nullptr)
+        {
+            const auto& gridScene = session_->Scenes().GetScene();
+            if (gridScene.terrains.GetCount() != 0)
+            {
+                gridPlaneHeight =
+                    bridge::CaptureTerrain(gridScene.terrains[0]).minimumHeight +
+                    0.02f;
+            }
+        }
+""",
+    """        // w is the grid plane height. Y=0 is Renegade's creator-facing
+        // world reference plane; keep only the 2 cm reverse-Z/depth epsilon.
+        // The isolated creator-import stage keeps its own elevated plane.
+        constexpr float gridPlaneHeight = 0.02f;
+""",
+)
+
+# A normal Renegade Rigid Body is Wicked/Jolt RigidBodyPhysicsComponent, while
+# FILTER_COLLIDER is Wicked's separate lightweight ColliderComponent. Admit the
+# render geometry under rigid-body roots to FILTER_NAVIGATION_MESH so the same
+# creator obstacle is visible to VoxelGrid/PathQuery and Character collision.
+replace_once(
+    "EngineBridge/include/renegade/bridge/NavigationService.h",
+    "#include <cstdint>\n",
+    "#include <cstddef>\n#include <cstdint>\n",
+)
+replace_once(
+    "EngineBridge/include/renegade/bridge/NavigationService.h",
+    "    [[nodiscard]] bool ValidateNavigationGridSettings(\n",
+    "    // Makes creator Jolt rigid-body geometry participate in Wicked navigation.\n"
+    "    // Returns the number of render objects newly admitted to navigation.\n"
+    "    [[nodiscard]] std::size_t PrepareRigidBodyNavigationGeometry(\n"
+    "        wi::scene::Scene& scene) noexcept;\n\n"
+    "    [[nodiscard]] bool ValidateNavigationGridSettings(\n",
+)
+
+replace_once(
+    "EngineBridge/src/NavigationService.cpp",
+    """namespace renegade::bridge
+{
+    bool ValidateNavigationGridSettings(
+""",
+    """namespace renegade::bridge
+{
+    std::size_t PrepareRigidBodyNavigationGeometry(
+        wi::scene::Scene& scene) noexcept
+    {
+        std::size_t changed = 0;
+        for (std::size_t bodyIndex = 0;
+            bodyIndex < scene.rigidbodies.GetCount(); ++bodyIndex)
+        {
+            const wi::ecs::Entity bodyEntity =
+                scene.rigidbodies.GetEntity(bodyIndex);
+            for (std::size_t objectIndex = 0;
+                objectIndex < scene.objects.GetCount(); ++objectIndex)
+            {
+                const wi::ecs::Entity objectEntity =
+                    scene.objects.GetEntity(objectIndex);
+                if (objectEntity != bodyEntity &&
+                    !scene.Entity_IsDescendant(objectEntity, bodyEntity))
+                {
+                    continue;
+                }
+
+                auto& object = scene.objects[objectIndex];
+                if ((object.filterMask & wi::enums::FILTER_NAVIGATION_MESH) == 0u)
+                {
+                    object.filterMask |= wi::enums::FILTER_NAVIGATION_MESH;
+                    ++changed;
+                }
+
+                if (object.meshID != wi::ecs::INVALID_ENTITY)
+                {
+                    if (auto* mesh = scene.meshes.GetComponent(object.meshID);
+                        mesh != nullptr && !mesh->bvh.IsValid() &&
+                        !mesh->vertex_positions.empty())
+                    {
+                        mesh->BuildBVH();
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
+    bool ValidateNavigationGridSettings(
+""",
+)
+
+replace_once(
+    "EngineBridge/src/NavigationService.cpp",
+    "        grid->cleardata();\n        scene.VoxelizeScene(\n",
+    "        // A normal Renegade Rigid Body is Jolt physics, while Wicked's\n"
+    "        // FILTER_COLLIDER means its separate lightweight ColliderComponent.\n"
+    "        // Admit rigid-body-backed render geometry to FILTER_NAVIGATION_MESH\n"
+    "        // before baking so ordinary creator obstacles block both PathQuery and\n"
+    "        // Wicked CharacterComponent surface collision.\n"
+    "        (void)PrepareRigidBodyNavigationGeometry(scene);\n\n"
+    "        grid->cleardata();\n        scene.VoxelizeScene(\n",
+)
+
+# Focused regressions.
+replace_once(
+    "Tests/TerrainTests.cpp",
+    """    if (standard.visibleChunkRadius != 9 ||
+        renegade::bridge::TerrainChunkCountPerSide(
+""",
+    """    if (standard.visibleChunkRadius != 9 ||
+        standard.physicsChunkRadius != 10 ||
+        renegade::bridge::TerrainChunkCountPerSide(
+""",
+)
+replace_once(
+    "Tests/TerrainTests.cpp",
+    """    if (applied.centerToCamera || applied.removeDistantChunks ||
+        !applied.physics || applied.visibleChunkRadius != 9 ||
+""",
+    """    if (applied.centerToCamera || applied.removeDistantChunks ||
+        !applied.physics || applied.visibleChunkRadius != 9 ||
+        applied.physicsChunkRadius != 10 ||
+""",
+)
+replace_once(
+    "Tests/TerrainTests.cpp",
+    "    if (safe.visibleChunkRadius != 16 || safe.physicsChunkRadius != 0 ||\n",
+    "    if (safe.visibleChunkRadius != 16 || safe.physicsChunkRadius != 17 ||\n",
+)
+replace_once(
+    "Tests/TerrainTests.cpp",
+    """    if (!commands.Redo() || terrain.IsCenterToCamEnabled() ||
+        !NearlyEqual(terrain.topLevel, 120.0f))
+    {
+        return Fail("terrain Redo did not restore authored state");
+    }
+
+""",
+    """    if (!commands.Redo() || terrain.IsCenterToCamEnabled() ||
+        !NearlyEqual(terrain.topLevel, 120.0f) ||
+        terrain.physics_generation != 10)
+    {
+        return Fail("terrain Redo did not restore authored state/full fixed physics coverage");
+    }
+
+    // Fresh authored terrain keeps its internal -20..+120 sculpt envelope but
+    // maps bottomLevel to world Y=0 through the terrain root transform.
+    wi::scene::Scene authoredScene;
+    const auto environment = wi::ecs::CreateEntity();
+    authoredScene.weathers.Create(environment);
+    const auto authoredTerrainEntity = renegade::bridge::CreateTerrain(
+        authoredScene, renegade::bridge::TerrainState{}, "World Zero Terrain");
+    const auto* authoredTerrain =
+        authoredScene.terrains.GetComponent(authoredTerrainEntity);
+    const auto* authoredTransform =
+        authoredScene.transforms.GetComponent(authoredTerrainEntity);
+    if (authoredTerrain == nullptr || authoredTransform == nullptr ||
+        !NearlyEqual(authoredTerrain->bottomLevel, -20.0f) ||
+        !NearlyEqual(authoredTransform->translation_local.y, 20.0f) ||
+        authoredTerrain->physics_generation != 10)
+    {
+        return Fail("fresh terrain did not map its -20 m local baseline to world Y=0 with full physics coverage");
+    }
+
+""",
+)
+replace_once(
+    "Tests/TerrainTests.cpp",
+    """    if (!expansionCommands.Execute(
+            std::make_unique<renegade::bridge::ExpandTerrainCommand>(
+                scene,
+                entity)) ||
+        terrain.generation != 10 ||
+""",
+    """    if (!expansionCommands.Execute(
+            std::make_unique<renegade::bridge::ExpandTerrainCommand>(
+                scene,
+                entity)) ||
+        terrain.generation != 10 ||
+        terrain.physics_generation < 11 ||
+""",
+)
+
+nav_anchor = """    // Build a deterministic synthetic walkable surface directly in Wicked's
+    // native grid. Ground is occupied; obstacles are occupied voxels above it.
+"""
+nav_test = """    // A normal creator Rigid Body is Jolt, not Wicked ColliderComponent. The
+    // navigation bridge must mark the body's render geometry as native Wicked
+    // navigation geometry and build the mesh BVH before a grid rebuild.
+    const wi::ecs::Entity rigidObstacle = wi::ecs::CreateEntity();
+    const wi::ecs::Entity rigidObstacleMesh = wi::ecs::CreateEntity();
+    scene.transforms.Create(rigidObstacle);
+    auto& obstacleObject = scene.objects.Create(rigidObstacle);
+    obstacleObject.meshID = rigidObstacleMesh;
+    obstacleObject.filterMask &= ~wi::enums::FILTER_NAVIGATION_MESH;
+    auto& obstacleMesh = scene.meshes.Create(rigidObstacleMesh);
+    obstacleMesh.vertex_positions = {
+        XMFLOAT3(-1, -1, -1), XMFLOAT3(1, -1, -1),
+        XMFLOAT3(-1,  1, -1), XMFLOAT3(1,  1, -1),
+        XMFLOAT3(-1, -1,  1), XMFLOAT3(1, -1,  1),
+        XMFLOAT3(-1,  1,  1), XMFLOAT3(1,  1,  1),
+    };
+    obstacleMesh.indices = {
+        0,2,1, 1,2,3, 4,5,6, 5,7,6,
+        0,1,4, 1,5,4, 2,6,3, 3,6,7,
+        0,4,2, 2,4,6, 1,3,5, 3,7,5,
+    };
+    scene.rigidbodies.Create(rigidObstacle).mass = 1.0f;
+    if (PrepareRigidBodyNavigationGeometry(scene) != 1 ||
+        (obstacleObject.filterMask & wi::enums::FILTER_NAVIGATION_MESH) == 0u ||
+        !obstacleMesh.bvh.IsValid())
+    {
+        return Fail("Jolt rigid-body render geometry was not admitted to Wicked navigation/BVH");
+    }
+    if (PrepareRigidBodyNavigationGeometry(scene) != 0)
+        return Fail("rigid-body navigation preparation was not idempotent");
+
+    // Build a deterministic synthetic walkable surface directly in Wicked's
+    // native grid. Ground is occupied; obstacles are occupied voxels above it.
+"""
+replace_once("Tests/Phase6NativeNavigationTests.cpp", nav_anchor, nav_test)
+
+replace_once(
+    "Tests/Phase6NativeNavigationSourceContract.cmake",
+    """require_text("${navigation_source}"
+    "character->SetPathGoal(goal, grid)"
+    "native Wicked deferred path-goal handoff")
+""",
+    """require_text("${navigation_source}"
+    "PrepareRigidBodyNavigationGeometry(scene)"
+    "Jolt rigid-body navigation participation before voxelization")
+require_text("${navigation_source}"
+    "object.filterMask |= wi::enums::FILTER_NAVIGATION_MESH"
+    "rigid-body render geometry admitted to Wicked navigation")
+require_text("${navigation_source}"
+    "mesh->BuildBVH()"
+    "Wicked character collision BVH preparation")
+require_text("${navigation_source}"
+    "character->SetPathGoal(goal, grid)"
+    "native Wicked deferred path-goal handoff")
+""",
+)
+
+# Static verification before commit.
+checks = {
+    "EngineBridge/src/TerrainService.cpp": [
+        "terrain.generation + 1",
+        "rootTransform->translation_local.y = -terrain.bottomLevel",
+        "afterRadius_ + 1",
+    ],
+    "Studio/src/StudioApplication.cpp": [
+        "constexpr float gridPlaneHeight = 0.02f;",
+    ],
+    "EngineBridge/src/NavigationService.cpp": [
+        "PrepareRigidBodyNavigationGeometry",
+        "object.filterMask |= wi::enums::FILTER_NAVIGATION_MESH",
+        "mesh->BuildBVH()",
+    ],
+    "Tests/TerrainTests.cpp": [
+        "standard.physicsChunkRadius != 10",
+        "authoredTransform->translation_local.y, 20.0f",
+    ],
+}
+for path, needles in checks.items():
+    text = Path(path).read_text(encoding="utf-8")
+    for needle in needles:
+        if needle not in text:
+            raise RuntimeError(f"{path}: verification missing {needle!r}")
+
+print("Phase 6 terrain/navigation repair substitutions passed")
