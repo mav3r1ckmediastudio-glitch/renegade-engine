@@ -34,6 +34,17 @@ namespace
         return true;
     }
 
+    bool EntityExists(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        if (entity == wi::ecs::INVALID_ENTITY)
+            return false;
+        wi::unordered_set<wi::ecs::Entity> entities;
+        scene.FindAllEntities(entities);
+        return entities.count(entity) != 0;
+    }
+
     void SyncGridTransform(
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity,
@@ -315,5 +326,103 @@ namespace renegade::bridge
 
         error.clear();
         return true;
+    }
+
+    CreateNavigationGridCommand::CreateNavigationGridCommand(
+        wi::scene::Scene& scene,
+        NavigationGridSettings settings)
+        : scene_(&scene), settings_(std::move(settings))
+    {
+    }
+
+    bool CreateNavigationGridCommand::Execute()
+    {
+        if (scene_ == nullptr)
+            return false;
+
+        if (hasSnapshot_)
+        {
+            if (EntityExists(*scene_, entity_))
+                return false;
+            snapshot_.SetReadModeAndResetPos(true);
+            wi::ecs::EntitySerializer serializer;
+            serializer.allow_remap = false;
+            return scene_->Entity_Serialize(snapshot_, serializer) == entity_;
+        }
+
+        std::string error;
+        entity_ = CreateNavigationGrid(*scene_, settings_, error);
+        if (entity_ == wi::ecs::INVALID_ENTITY)
+            return false;
+
+        snapshot_.SetReadModeAndResetPos(false);
+        wi::ecs::EntitySerializer serializer;
+        scene_->Entity_Serialize(snapshot_, serializer, entity_);
+        hasSnapshot_ = true;
+        return true;
+    }
+
+    void CreateNavigationGridCommand::Undo()
+    {
+        if (scene_ != nullptr && EntityExists(*scene_, entity_))
+            scene_->Entity_Remove(entity_);
+    }
+
+    wi::ecs::Entity CreateNavigationGridCommand::CreatedEntity() const noexcept
+    {
+        return entity_;
+    }
+
+    RebuildNavigationGridCommand::RebuildNavigationGridCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity navigationGridEntity,
+        NavigationGridSettings settings)
+        : scene_(&scene), entity_(navigationGridEntity),
+          settings_(std::move(settings))
+    {
+    }
+
+    bool RebuildNavigationGridCommand::Apply(
+        const wi::VoxelGrid& grid) noexcept
+    {
+        if (scene_ == nullptr || !IsRenegadeNavigationGrid(*scene_, entity_))
+            return false;
+        auto* target = scene_->voxel_grids.GetComponent(entity_);
+        if (target == nullptr)
+            return false;
+        *target = grid;
+        SyncGridTransform(*scene_, entity_, *target);
+        return true;
+    }
+
+    bool RebuildNavigationGridCommand::Execute()
+    {
+        if (scene_ == nullptr || !IsRenegadeNavigationGrid(*scene_, entity_))
+            return false;
+
+        if (captured_)
+            return Apply(after_);
+
+        auto* grid = scene_->voxel_grids.GetComponent(entity_);
+        if (grid == nullptr)
+            return false;
+        before_ = *grid;
+
+        std::string error;
+        if (!RebuildNavigationGrid(*scene_, entity_, settings_, error))
+            return false;
+
+        grid = scene_->voxel_grids.GetComponent(entity_);
+        if (grid == nullptr)
+            return false;
+        after_ = *grid;
+        captured_ = true;
+        return true;
+    }
+
+    void RebuildNavigationGridCommand::Undo()
+    {
+        if (captured_)
+            (void)Apply(before_);
     }
 }
