@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <memory>
 #include <string>
 
 namespace
@@ -36,18 +37,54 @@ int main()
     gridSettings.fitToSceneBounds = false;
 
     std::string error;
-    const wi::ecs::Entity gridEntity =
-        CreateNavigationGrid(scene, gridSettings, error);
+    CommandService commands;
+    auto createCommand = std::make_unique<CreateNavigationGridCommand>(
+        scene, gridSettings);
+    auto* createCommandView = createCommand.get();
+    if (!commands.Execute(std::move(createCommand)))
+        return Fail("command-backed navigation grid creation failed");
+
+    const wi::ecs::Entity gridEntity = createCommandView->CreatedEntity();
     if (gridEntity == wi::ecs::INVALID_ENTITY)
-        return Fail("create navigation grid: " + error);
+        return Fail("create navigation grid returned invalid entity");
     if (!IsRenegadeNavigationGrid(scene, gridEntity))
         return Fail("created entity did not retain Renegade navigation identity");
     if (!IsValidStableId(PersistentEntityId(scene, gridEntity)))
         return Fail("navigation grid did not receive persistent scene identity");
 
+    // Creator creation must be a normal undoable scene mutation. Redo must
+    // restore the exact persistent entity rather than remapping identity.
+    if (!commands.Undo() || scene.voxel_grids.Contains(gridEntity))
+        return Fail("navigation grid creation did not undo cleanly");
+    if (!commands.Redo() || !IsRenegadeNavigationGrid(scene, gridEntity))
+        return Fail("navigation grid creation did not redo with stable identity");
+
     auto* grid = scene.voxel_grids.GetComponent(gridEntity);
     if (grid == nullptr || !grid->IsValid())
         return Fail("created entity has no valid native Wicked VoxelGrid");
+
+    // Rebuilds are also command-backed. Prove the native grid state can be
+    // undone/redone before populating the deterministic pathfinding fixture.
+    auto rebuildSettings = CaptureNavigationGridSettings(scene, gridEntity);
+    rebuildSettings.voxelSize = 0.5f;
+    if (!commands.Execute(std::make_unique<RebuildNavigationGridCommand>(
+            scene, gridEntity, rebuildSettings)))
+    {
+        return Fail("command-backed navigation grid rebuild failed");
+    }
+    grid = scene.voxel_grids.GetComponent(gridEntity);
+    if (grid == nullptr || !Near(grid->voxelSize.x, 0.5f))
+        return Fail("navigation rebuild did not apply authored voxel size");
+    if (!commands.Undo())
+        return Fail("navigation rebuild undo failed");
+    grid = scene.voxel_grids.GetComponent(gridEntity);
+    if (grid == nullptr || !Near(grid->voxelSize.x, 1.0f))
+        return Fail("navigation rebuild undo did not restore native grid state");
+    if (!commands.Redo())
+        return Fail("navigation rebuild redo failed");
+    grid = scene.voxel_grids.GetComponent(gridEntity);
+    if (grid == nullptr || !Near(grid->voxelSize.x, 0.5f))
+        return Fail("navigation rebuild redo did not restore rebuilt grid state");
 
     // Build a deterministic synthetic walkable surface directly in Wicked's
     // native grid. Ground is occupied; obstacles are occupied voxels above it.
