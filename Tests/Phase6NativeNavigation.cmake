@@ -35,3 +35,16 @@ set_tests_properties(
     PROPERTIES
         LABELS "Phase6;Navigation"
 )
+
+add_test(
+    NAME RenegadePhase6NativeNavigationSourceContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_LIST_DIR}/Phase6NativeNavigationSourceContract.cmake
+)
+
+set_tests_properties(
+    RenegadePhase6NativeNavigationSourceContract
+    PROPERTIES
+        LABELS "Phase6;Navigation;SourceContract"
+)
