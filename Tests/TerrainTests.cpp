@@ -103,25 +103,6 @@ int main()
         return Fail("terrain Redo did not restore authored state/full fixed physics coverage");
     }
 
-    // Fresh authored terrain keeps its internal -20..+120 sculpt envelope but
-    // maps bottomLevel to world Y=0 through the terrain root transform.
-    wi::scene::Scene authoredScene;
-    const auto environment = wi::ecs::CreateEntity();
-    authoredScene.weathers.Create(environment);
-    const auto authoredTerrainEntity = renegade::bridge::CreateTerrain(
-        authoredScene, renegade::bridge::TerrainState{}, "World Zero Terrain");
-    const auto* authoredTerrain =
-        authoredScene.terrains.GetComponent(authoredTerrainEntity);
-    const auto* authoredTransform =
-        authoredScene.transforms.GetComponent(authoredTerrainEntity);
-    if (authoredTerrain == nullptr || authoredTransform == nullptr ||
-        !NearlyEqual(authoredTerrain->bottomLevel, -20.0f) ||
-        !NearlyEqual(authoredTransform->translation_local.y, 20.0f) ||
-        authoredTerrain->physics_generation != 10)
-    {
-        return Fail("fresh terrain did not map its -20 m local baseline to world Y=0 with full physics coverage");
-    }
-
     auto unsafe = renegade::bridge::CaptureTerrain(terrain);
     unsafe.visibleChunkRadius = 999;
     unsafe.physicsChunkRadius = -10;

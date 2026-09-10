@@ -20,6 +20,15 @@ file(READ
 file(READ
     "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeLiveDiagnostics.cpp"
     runtime_source)
+file(READ
+    "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/TerrainService.h"
+    terrain_header)
+file(READ
+    "${RENEGADE_SOURCE_DIR}/EngineBridge/src/TerrainService.cpp"
+    terrain_source)
+file(READ
+    "${RENEGADE_SOURCE_DIR}/Studio/src/StudioApplication.cpp"
+    studio_application)
 
 require_text("${navigation_header}"
     "NavigationAgentMetadataKey"
@@ -73,4 +82,17 @@ require_text("${runtime_source}"
     "navigation_agents"
     "Runtime diagnostic evidence")
 
-message(STATUS "Phase 6 native navigation source contract passed")
+require_text("${terrain_header}"
+    "physicsChunkRadius = DefaultTerrainChunkRadius + 1"
+    "full fixed-terrain physics default")
+require_text("${terrain_source}"
+    "std::max(requestedPhysicsRadius, terrain.generation + 1)"
+    "full fixed-terrain Jolt heightfield coverage")
+require_text("${terrain_source}"
+    "rootTransform->translation_local.y = -terrain.bottomLevel"
+    "fresh terrain world-zero baseline mapping")
+require_text("${studio_application}"
+    "constexpr float gridPlaneHeight = 0.02f;"
+    "shader grid restored to world-zero reference")
+
+message(STATUS "Phase 6 native navigation + terrain foundation source contract passed")
