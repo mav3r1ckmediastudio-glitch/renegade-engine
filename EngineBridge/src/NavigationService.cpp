@@ -188,8 +188,7 @@ namespace renegade::bridge
         const wi::ecs::Entity entity) noexcept
     {
         if (entity == wi::ecs::INVALID_ENTITY ||
-            !scene.transforms.Contains(entity) ||
-            !scene.characters.Contains(entity))
+            !scene.transforms.Contains(entity))
         {
             return false;
         }
@@ -526,16 +525,11 @@ namespace renegade::bridge
         destinationMetadata->string_values.set(
             NavigationGridReferenceMetadataKey, gridId);
 
-        auto& character = scene.characters.Create(agentEntity);
-        character.width = 0.3f;
-        character.height = 1.8f;
-        character.SetFootPlacementEnabled(false);
-        character.SetPosition(agentPosition);
-        character.SetFacing(XMFLOAT3(0.0f, 0.0f, 1.0f));
-        // Authoring must not make the marker wander or fall while the creator
-        // positions it. Runtime explicitly activates it when Test Level starts.
-        character.SetActive(false);
-
+        // Keep Studio authoring markers as ordinary transform-owned entities.
+        // Wicked's CharacterComponent writes its internal position back to the
+        // Transform every Scene::Update(), even while inactive, which would
+        // undo creator gizmo edits. Runtime materializes the native Character
+        // component from this authored Transform when Test Level starts.
         error.clear();
         return true;
     }
@@ -612,10 +606,10 @@ namespace renegade::bridge
         const wi::scene::Scene& scene)
     {
         std::vector<wi::ecs::Entity> result;
-        result.reserve(scene.characters.GetCount());
-        for (std::size_t index = 0; index < scene.characters.GetCount(); ++index)
+        result.reserve(scene.metadatas.GetCount());
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
         {
-            const auto entity = scene.characters.GetEntity(index);
+            const auto entity = scene.metadatas.GetEntity(index);
             if (IsRenegadeNavigationAgent(scene, entity))
                 result.push_back(entity);
         }
@@ -670,19 +664,22 @@ namespace renegade::bridge
             }
 
             auto* character = scene.characters.GetComponent(binding.agent);
+            if (character == nullptr)
+                character = &scene.characters.Create(binding.agent);
             const auto* agentTransform = scene.transforms.GetComponent(binding.agent);
             const auto* destinationTransform =
                 scene.transforms.GetComponent(binding.destination);
-            if (character == nullptr || agentTransform == nullptr ||
-                destinationTransform == nullptr)
+            if (agentTransform == nullptr || destinationTransform == nullptr)
             {
                 state.agents.clear();
-                error = "Navigation runtime binding lost a required native component.";
+                error = "Navigation runtime binding lost a required transform component.";
                 return false;
             }
 
             const XMFLOAT3 start = agentTransform->GetPosition();
             const XMFLOAT3 goal = destinationTransform->GetPosition();
+            character->width = 0.3f;
+            character->height = 1.8f;
             character->SetFootPlacementEnabled(false);
             character->SetPosition(start);
             XMFLOAT3 facing = agentTransform->GetForward();
