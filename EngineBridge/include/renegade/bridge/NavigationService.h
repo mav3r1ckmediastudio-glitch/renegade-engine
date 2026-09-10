@@ -13,6 +13,20 @@ namespace renegade::bridge
     inline constexpr const char* NavigationGridMetadataKey =
         "renegade.navigation.grid";
     inline constexpr const char* NavigationGridMetadataVersion = "1";
+    inline constexpr const char* NavigationAgentMetadataKey =
+        "renegade.navigation.agent";
+    inline constexpr const char* NavigationAgentMetadataVersion = "1";
+    inline constexpr const char* NavigationDestinationMetadataKey =
+        "renegade.navigation.destination";
+    inline constexpr const char* NavigationDestinationMetadataVersion = "1";
+    inline constexpr const char* NavigationGridReferenceMetadataKey =
+        "renegade.navigation.grid_id";
+    inline constexpr const char* NavigationDestinationReferenceMetadataKey =
+        "renegade.navigation.destination_id";
+    inline constexpr const char* NavigationMoveSpeedMetadataKey =
+        "renegade.navigation.move_speed";
+    inline constexpr const char* NavigationFlyingMetadataKey =
+        "renegade.navigation.flying";
 
     // Creator-facing generation settings over Wicked's native VoxelGrid.
     // The VoxelGrid component itself remains the serialized/runtime source of
@@ -50,11 +64,53 @@ namespace renegade::bridge
         std::vector<XMFLOAT3> waypoints;
     };
 
+    struct NavigationAgentSettings
+    {
+        // Wicked's own character-controller sample uses small per-frame Move()
+        // amounts rather than a metres/second transform override. Renegade keeps
+        // that native CharacterComponent movement contract and only exposes a
+        // creator-friendly amount.
+        float moveSpeed = 0.12f;
+        float arrivalDistance = 0.55f;
+        NavigationQuerySettings query;
+    };
+
+    struct NavigationAgentBinding
+    {
+        wi::ecs::Entity agent = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity grid = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity destination = wi::ecs::INVALID_ENTITY;
+        NavigationAgentSettings settings;
+    };
+
+    struct NavigationAgentRuntimeState
+    {
+        NavigationAgentBinding binding;
+        XMFLOAT3 lastGoal = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        float repathCountdown = 0.0f;
+        bool goalSubmitted = false;
+        bool arrived = false;
+    };
+
+    struct NavigationRuntimeState
+    {
+        std::vector<NavigationAgentRuntimeState> agents;
+    };
+
     [[nodiscard]] bool ValidateNavigationGridSettings(
         const NavigationGridSettings& settings,
         std::string& error) noexcept;
 
     [[nodiscard]] bool IsRenegadeNavigationGrid(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity entity) noexcept;
+    [[nodiscard]] bool IsRenegadeNavigationAgent(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity entity) noexcept;
+    [[nodiscard]] bool IsRenegadeNavigationDestination(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity entity) noexcept;
+    [[nodiscard]] bool IsRenegadeNavigationEntity(
         const wi::scene::Scene& scene,
         wi::ecs::Entity entity) noexcept;
 
@@ -99,6 +155,44 @@ namespace renegade::bridge
         const NavigationQuerySettings& settings,
         std::string& error);
 
+    // Creator proof helper. The agent and destination are ordinary serialized
+    // Scene entities. The agent owns Wicked's native CharacterComponent and is
+    // inactive in Studio; Runtime activates it and follows the linked target.
+    [[nodiscard]] bool CreateNavigationAgentPair(
+        wi::scene::Scene& scene,
+        wi::ecs::Entity navigationGridEntity,
+        const XMFLOAT3& agentPosition,
+        const XMFLOAT3& destinationPosition,
+        wi::ecs::Entity& agentEntity,
+        wi::ecs::Entity& destinationEntity,
+        std::string& error);
+
+    [[nodiscard]] bool ResolveNavigationAgentBinding(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity agentEntity,
+        NavigationAgentBinding& binding,
+        std::string& error);
+    [[nodiscard]] std::vector<wi::ecs::Entity> CollectNavigationAgents(
+        const wi::scene::Scene& scene);
+    [[nodiscard]] bool QueryNavigationAgentPath(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity agentEntity,
+        NavigationPathResult& result,
+        std::string& error);
+
+    // Runtime keeps no competing navigation simulation. This state only caches
+    // resolved authoring references and repath cadence; movement is issued to
+    // Wicked CharacterComponent::Turn()/Move() and path ownership remains on
+    // CharacterComponent::pathquery.
+    [[nodiscard]] bool InitializeRuntimeNavigation(
+        wi::scene::Scene& scene,
+        NavigationRuntimeState& state,
+        std::string& error);
+    void UpdateRuntimeNavigation(
+        wi::scene::Scene& scene,
+        NavigationRuntimeState& state,
+        float dt) noexcept;
+
     // Creator-facing mutations are command-backed so creating/rebuilding a
     // navigation grid participates in the same Undo/Redo and dirty-state
     // contract as the rest of Renegade Studio.
@@ -139,5 +233,30 @@ namespace renegade::bridge
         wi::VoxelGrid before_;
         wi::VoxelGrid after_;
         bool captured_ = false;
+    };
+
+    class CreateNavigationAgentPairCommand final : public ICommand
+    {
+    public:
+        CreateNavigationAgentPairCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity navigationGridEntity,
+            const XMFLOAT3& agentPosition,
+            const XMFLOAT3& destinationPosition);
+        bool Execute() override;
+        void Undo() override;
+        [[nodiscard]] wi::ecs::Entity CreatedAgent() const noexcept;
+        [[nodiscard]] wi::ecs::Entity CreatedDestination() const noexcept;
+
+    private:
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity grid_ = wi::ecs::INVALID_ENTITY;
+        XMFLOAT3 agentPosition_ = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        XMFLOAT3 destinationPosition_ = XMFLOAT3(0.0f, 0.0f, 0.0f);
+        wi::ecs::Entity agent_ = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity destination_ = wi::ecs::INVALID_ENTITY;
+        wi::Archive agentSnapshot_;
+        wi::Archive destinationSnapshot_;
+        bool hasSnapshot_ = false;
     };
 }
