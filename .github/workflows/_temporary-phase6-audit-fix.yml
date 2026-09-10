@@ -33,3 +33,5 @@ jobs:
           git diff --cached --check
           git commit -m "Tests: keep terrain repair proof headless"
           git push origin HEAD:staging/phase6-nav-terrain-repair
+
+# one-shot trigger
