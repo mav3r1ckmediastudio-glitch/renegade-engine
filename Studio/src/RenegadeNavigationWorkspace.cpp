@@ -768,6 +768,12 @@ namespace renegade::studio
         if (!impl_->created || !impl_->active)
             return;
 
+        // This workspace renders its child controls manually. RenegadeSlider
+        // deliberately sets a tight per-control scissor, so restore the
+        // workspace scissor before every subsequent control/status draw or the
+        // last slider clips all buttons and check boxes beneath it.
+        ApplyScissor(canvas, scissorRect, cmd);
+
         if (impl_->showVoxels)
         {
             const auto gridEntity = impl_->GridForSelection();
@@ -796,9 +802,13 @@ namespace renegade::studio
         for (auto* control : impl_->controls)
         {
             if (control->IsVisible())
+            {
+                ApplyScissor(canvas, scissorRect, cmd);
                 control->Render(canvas, cmd);
+            }
         }
 
+        ApplyScissor(canvas, scissorRect, cmd);
         const float statusY = b.y + b.w - 28.0f;
         DrawRect(b.x + 8.0f, statusY - 4.0f, b.z - 16.0f, 24.0f, Surface1, cmd);
         DrawText(impl_->status,
