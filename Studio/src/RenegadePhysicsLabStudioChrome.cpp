@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/AudioService.h"
 #include "renegade/bridge/CollisionService.h"
+#include "renegade/bridge/NavigationService.h"
 #include "renegade/bridge/ParticleEmitterService.h"
 #include "renegade/bridge/PhysicsLuaService.h"
 #include "renegade/bridge/StudioSession.h"
@@ -97,6 +98,10 @@ namespace renegade::studio
         particleWorkspace_.Create();
         particleWorkspace_.SetBounds(AudioInspectorBounds());
         particleWorkspace_.SetActive(false);
+
+        navigationWorkspace_.Create();
+        navigationWorkspace_.SetBounds(AudioInspectorBounds());
+        navigationWorkspace_.SetActive(false);
     }
 
     void RenegadePhysicsLabStudioChrome::SetLayout(
@@ -109,6 +114,7 @@ namespace renegade::studio
         physicsLab_.SetBounds(ViewportBounds());
         audioWorkspace_.SetBounds(AudioInspectorBounds());
         particleWorkspace_.SetBounds(AudioInspectorBounds());
+        navigationWorkspace_.SetBounds(AudioInspectorBounds());
     }
 
     void RenegadePhysicsLabStudioChrome::OnAction(
@@ -131,6 +137,7 @@ namespace renegade::studio
                     SetPhysicsLabActive(false);
                     SetAudioWorkspaceActive(false);
                     SetParticleWorkspaceActive(false);
+                    SetNavigationWorkspaceActive(false);
                 }
                 if (studioAction_)
                     studioAction_(action);
@@ -140,7 +147,7 @@ namespace renegade::studio
     void RenegadePhysicsLabStudioChrome::RequestCurrentWorkspaceReconcile()
     {
         if (!physicsLab_.IsActive() && !audioWorkspace_.IsActive() &&
-            !particleWorkspace_.IsActive())
+            !particleWorkspace_.IsActive() && !navigationWorkspace_.IsActive())
         {
             RenegadeStudioChrome::RequestCurrentWorkspaceReconcile();
             return;
@@ -151,6 +158,7 @@ namespace renegade::studio
         physicsLab_.SetBounds(ViewportBounds());
         audioWorkspace_.SetBounds(AudioInspectorBounds());
         particleWorkspace_.SetBounds(AudioInspectorBounds());
+        navigationWorkspace_.SetBounds(AudioInspectorBounds());
     }
 
     void RenegadePhysicsLabStudioChrome::SetPhysicsLabActive(const bool active)
@@ -161,6 +169,7 @@ namespace renegade::studio
         {
             audioWorkspace_.SetActive(false);
             particleWorkspace_.SetActive(false);
+            navigationWorkspace_.SetActive(false);
             SetStatusText("PHYSICS LAB");
         }
     }
@@ -173,6 +182,7 @@ namespace renegade::studio
         {
             physicsLab_.SetActive(false);
             particleWorkspace_.SetActive(false);
+            navigationWorkspace_.SetActive(false);
             SetStatusText("AUDIO // NATIVE WICKED");
         }
     }
@@ -186,7 +196,22 @@ namespace renegade::studio
         {
             physicsLab_.SetActive(false);
             audioWorkspace_.SetActive(false);
+            navigationWorkspace_.SetActive(false);
             SetStatusText("PARTICLE EMITTER // NATIVE WICKED GPU PARTICLES");
+        }
+    }
+
+    void RenegadePhysicsLabStudioChrome::SetNavigationWorkspaceActive(
+        const bool active)
+    {
+        navigationWorkspace_.SetActive(active);
+        navigationWorkspace_.SetBounds(AudioInspectorBounds());
+        if (active)
+        {
+            physicsLab_.SetActive(false);
+            audioWorkspace_.SetActive(false);
+            particleWorkspace_.SetActive(false);
+            SetStatusText("NAVIGATION // NATIVE WICKED VOXEL GRID");
         }
     }
 
@@ -301,12 +326,32 @@ namespace renegade::studio
             pointer.y >= bounds.y && pointer.y < bounds.y + bounds.w;
     }
 
+    XMFLOAT4 RenegadePhysicsLabStudioChrome::NavigationAddMenuItemBounds() const noexcept
+    {
+        return XMFLOAT4(
+            AddPopupX,
+            TopBarHeight + (ExistingAddItemCount + 1) * AddItemHeight,
+            AddPopupWidth,
+            AddItemHeight);
+    }
+
+    bool RenegadePhysicsLabStudioChrome::NavigationAddMenuItemHit(
+        const XMFLOAT4& pointer) const noexcept
+    {
+        if (!particleAddMenuOpen_)
+            return false;
+        const XMFLOAT4 bounds = NavigationAddMenuItemBounds();
+        return pointer.x >= bounds.x && pointer.x < bounds.x + bounds.z &&
+            pointer.y >= bounds.y && pointer.y < bounds.y + bounds.w;
+    }
+
     bool RenegadePhysicsLabStudioChrome::ConsumedPointerThisFrame() const noexcept
     {
         return physicsTabConsumed_ || audioToolConsumed_ ||
-            particleMenuConsumed_ ||
+            particleMenuConsumed_ || navigationMenuConsumed_ ||
             physicsLab_.ConsumedPointerThisFrame() ||
             particleWorkspace_.ConsumedPointerThisFrame() ||
+            navigationWorkspace_.ConsumedPointerThisFrame() ||
             audioWorkspace_.ConsumedPointerThisFrame() ||
             CreatorAssetStudioChrome::ConsumedPointerThisFrame();
     }
@@ -318,6 +363,7 @@ namespace renegade::studio
         physicsTabConsumed_ = false;
         audioToolConsumed_ = false;
         particleMenuConsumed_ = false;
+        navigationMenuConsumed_ = false;
         workspaceTransitionRequested_ = false;
 
         const XMFLOAT4 pointerBeforeBase = wi::input::GetPointer();
@@ -345,17 +391,35 @@ namespace renegade::studio
             SetActiveBottomTab(-1, true);
             SetPhysicsLabActive(false);
             SetAudioWorkspaceActive(false);
+            SetNavigationWorkspaceActive(false);
             if (studioAction_)
                 studioAction_(Action::SceneWorkspace);
             SetParticleWorkspaceActive(true);
             particleWorkspace_.CreateEmitterInFrontOfCamera();
             skipBaseUpdate = true;
         }
+        else if (leftPressed && NavigationAddMenuItemHit(pointerBeforeBase))
+        {
+            // Navigation extends the same ADD popup with an eleventh row. The
+            // grid itself is a persistent native Wicked VoxelGrid entity.
+            navigationMenuConsumed_ = true;
+            particleAddMenuOpen_ = false;
+            ResetDisclosureState();
+            SetActiveBottomTab(-1, true);
+            SetPhysicsLabActive(false);
+            SetAudioWorkspaceActive(false);
+            SetParticleWorkspaceActive(false);
+            if (studioAction_)
+                studioAction_(Action::SceneWorkspace);
+            SetNavigationWorkspaceActive(true);
+            navigationWorkspace_.CreateNavigationGridForScene();
+            skipBaseUpdate = true;
+        }
         else if (leftPressed && particleAddMenuOpen_ && !addMenuPressed)
         {
             // Native ADD rows or any click outside the ADD label close the
-            // mirrored tenth-row state while the base chrome handles its own
-            // popup selection normally.
+            // mirrored specialist-row state while the base chrome handles its
+            // own popup selection normally.
             particleAddMenuOpen_ = false;
         }
 
@@ -383,10 +447,8 @@ namespace renegade::studio
             SetAudioWorkspaceActive(true);
         }
 
-        // Selecting a native sound/emitter from the hierarchy routes directly
-        // to the matching specialist Inspector. This intentionally switches
-        // Audio <-> Particles when the selection changes between those native
-        // component types, instead of requiring the creator to close one first.
+        // Selecting a native sound/emitter/navigation grid from the hierarchy
+        // routes directly to the matching specialist Inspector.
         if (!workspaceTransitionRequested_ && IsSceneWorkspaceActive() &&
             !physicsLab_.IsActive())
         {
@@ -404,6 +466,15 @@ namespace renegade::studio
                         SetParticleWorkspaceActive(true);
                     }
                 }
+                else if (bridge::IsRenegadeNavigationGrid(scene, selected))
+                {
+                    if (!navigationWorkspace_.IsActive())
+                    {
+                        if (studioAction_)
+                            studioAction_(Action::SceneWorkspace);
+                        SetNavigationWorkspaceActive(true);
+                    }
+                }
                 else if (bridge::IsRenegadeSoundSource(scene, selected))
                 {
                     if (!audioWorkspace_.IsActive())
@@ -413,14 +484,20 @@ namespace renegade::studio
                         SetAudioWorkspaceActive(true);
                     }
                 }
-                else if (particleWorkspace_.IsActive())
+                else
                 {
-                    SetParticleWorkspaceActive(false);
+                    if (particleWorkspace_.IsActive())
+                        SetParticleWorkspaceActive(false);
+                    if (navigationWorkspace_.IsActive())
+                        SetNavigationWorkspaceActive(false);
                 }
             }
-            else if (particleWorkspace_.IsActive())
+            else
             {
-                SetParticleWorkspaceActive(false);
+                if (particleWorkspace_.IsActive())
+                    SetParticleWorkspaceActive(false);
+                if (navigationWorkspace_.IsActive())
+                    SetNavigationWorkspaceActive(false);
             }
         }
 
@@ -430,6 +507,7 @@ namespace renegade::studio
         // widgets; relayout during Update can cancel click/slider state.
         physicsLab_.Update(canvas, dt);
         particleWorkspace_.Update(canvas, dt);
+        navigationWorkspace_.Update(canvas, dt);
     }
 
     void RenegadePhysicsLabStudioChrome::Render(
@@ -440,8 +518,10 @@ namespace renegade::studio
         RenderAudioViewportTool(cmd);
         RenderPhysicsTab(cmd);
         RenderParticleAddMenuItem(cmd);
+        RenderNavigationAddMenuItem(cmd);
         physicsLab_.Render(canvas, cmd);
         particleWorkspace_.Render(canvas, cmd);
+        navigationWorkspace_.Render(canvas, cmd);
     }
 
     void RenegadePhysicsLabStudioChrome::RenderParticleAddMenuItem(
@@ -463,6 +543,31 @@ namespace renegade::studio
             cmd);
         DrawText(
             "PARTICLE EMITTER",
+            bounds.x + 12.0f,
+            bounds.y + 9.0f,
+            hovered ? TextStrong : TextSecondary,
+            cmd);
+    }
+
+    void RenegadePhysicsLabStudioChrome::RenderNavigationAddMenuItem(
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!particleAddMenuOpen_)
+            return;
+
+        const XMFLOAT4 bounds = NavigationAddMenuItemBounds();
+        const XMFLOAT4 pointer = wi::input::GetPointer();
+        const bool hovered = NavigationAddMenuItemHit(pointer);
+        DrawBorderedRect(
+            bounds.x,
+            bounds.y,
+            bounds.z,
+            bounds.w,
+            hovered ? wi::Color(28, 20, 16, 255) : Surface2,
+            hovered ? Forge : Border,
+            cmd);
+        DrawText(
+            "NAVIGATION GRID",
             bounds.x + 12.0f,
             bounds.y + 9.0f,
             hovered ? TextStrong : TextSecondary,
