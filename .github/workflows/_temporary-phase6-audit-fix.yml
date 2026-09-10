@@ -1,0 +1,35 @@
+name: Temporary Phase 6 audit fix
+
+on:
+  push:
+    branches:
+      - staging/phase6-nav-terrain-repair
+    paths:
+      - ".github/workflows/_temporary-phase6-audit-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  audit-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply headless/source-contract correction
+        shell: bash
+        run: python3 Tools/_temporary_phase6_audit_fix.py
+      - name: Commit corrected tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/_temporary-phase6-audit-fix.yml
+          rm -f Tools/_temporary_phase6_audit_fix.py
+          git diff --check
+          git config user.name "Renegade Patch Builder"
+          git config user.email "patch@renegade.local"
+          git add -A
+          git diff --cached --check
+          git commit -m "Tests: keep terrain repair proof headless"
+          git push origin HEAD:staging/phase6-nav-terrain-repair
