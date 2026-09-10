@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string>
+#include <utility>
 
 namespace
 {
@@ -13,6 +15,9 @@ namespace
     constexpr std::uint64_t MaximumVoxelCount =
         128ull * 1024ull * 1024ull;
     constexpr int MaximumAgentExtentVoxels = 64;
+    constexpr float DefaultNavigationMoveSpeed = 0.12f;
+    constexpr float DefaultArrivalDistance = 0.55f;
+    constexpr float RepathIntervalSeconds = 0.75f;
 
     bool ValidateQuerySettings(
         const renegade::bridge::NavigationQuerySettings& settings,
@@ -45,6 +50,40 @@ namespace
         return entities.count(entity) != 0;
     }
 
+    wi::ecs::Entity ResolvePersistentEntity(
+        const wi::scene::Scene& scene,
+        const std::string& stableId) noexcept
+    {
+        if (stableId.empty())
+            return wi::ecs::INVALID_ENTITY;
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        {
+            const auto& metadata = scene.metadatas[index];
+            if (metadata.string_values.has(
+                    renegade::bridge::PersistentEntityIdMetadataKey) &&
+                metadata.string_values.get(
+                    renegade::bridge::PersistentEntityIdMetadataKey) == stableId)
+            {
+                return scene.metadatas.GetEntity(index);
+            }
+        }
+        return wi::ecs::INVALID_ENTITY;
+    }
+
+    bool Finite3(const XMFLOAT3& value) noexcept
+    {
+        return std::isfinite(value.x) && std::isfinite(value.y) &&
+            std::isfinite(value.z);
+    }
+
+    float DistanceSquared(const XMFLOAT3& a, const XMFLOAT3& b) noexcept
+    {
+        const float x = a.x - b.x;
+        const float y = a.y - b.y;
+        const float z = a.z - b.z;
+        return x * x + y * y + z * z;
+    }
+
     void SyncGridTransform(
         wi::scene::Scene& scene,
         const wi::ecs::Entity entity,
@@ -58,6 +97,22 @@ namespace
         transform->scale_local = grid.voxelSize;
         transform->SetDirty();
         transform->UpdateTransform();
+    }
+
+    bool ConfigureMarkerTransform(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity entity,
+        const XMFLOAT3& position,
+        const XMFLOAT3& scale) noexcept
+    {
+        auto* transform = scene.transforms.GetComponent(entity);
+        if (transform == nullptr)
+            return false;
+        transform->ClearTransform();
+        transform->Scale(scale);
+        transform->Translate(position);
+        transform->UpdateTransform();
+        return true;
     }
 }
 
@@ -96,9 +151,7 @@ namespace renegade::bridge
             error = "Navigation voxel size must be a finite positive value.";
             return false;
         }
-        if (!std::isfinite(settings.center.x) ||
-            !std::isfinite(settings.center.y) ||
-            !std::isfinite(settings.center.z))
+        if (!Finite3(settings.center))
         {
             error = "Navigation grid center must contain finite values.";
             return false;
@@ -128,6 +181,48 @@ namespace renegade::bridge
             metadata->string_values.has(NavigationGridMetadataKey) &&
             metadata->string_values.get(NavigationGridMetadataKey) ==
                 NavigationGridMetadataVersion;
+    }
+
+    bool IsRenegadeNavigationAgent(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        if (entity == wi::ecs::INVALID_ENTITY ||
+            !scene.transforms.Contains(entity) ||
+            !scene.characters.Contains(entity))
+        {
+            return false;
+        }
+        const auto* metadata = scene.metadatas.GetComponent(entity);
+        return metadata != nullptr &&
+            metadata->string_values.has(NavigationAgentMetadataKey) &&
+            metadata->string_values.get(NavigationAgentMetadataKey) ==
+                NavigationAgentMetadataVersion;
+    }
+
+    bool IsRenegadeNavigationDestination(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        if (entity == wi::ecs::INVALID_ENTITY ||
+            !scene.transforms.Contains(entity))
+        {
+            return false;
+        }
+        const auto* metadata = scene.metadatas.GetComponent(entity);
+        return metadata != nullptr &&
+            metadata->string_values.has(NavigationDestinationMetadataKey) &&
+            metadata->string_values.get(NavigationDestinationMetadataKey) ==
+                NavigationDestinationMetadataVersion;
+    }
+
+    bool IsRenegadeNavigationEntity(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        return IsRenegadeNavigationGrid(scene, entity) ||
+            IsRenegadeNavigationAgent(scene, entity) ||
+            IsRenegadeNavigationDestination(scene, entity);
     }
 
     wi::ecs::Entity CreateNavigationGrid(
@@ -328,6 +423,383 @@ namespace renegade::bridge
         return true;
     }
 
+    bool CreateNavigationAgentPair(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity navigationGridEntity,
+        const XMFLOAT3& agentPosition,
+        const XMFLOAT3& destinationPosition,
+        wi::ecs::Entity& agentEntity,
+        wi::ecs::Entity& destinationEntity,
+        std::string& error)
+    {
+        agentEntity = wi::ecs::INVALID_ENTITY;
+        destinationEntity = wi::ecs::INVALID_ENTITY;
+        if (!IsRenegadeNavigationGrid(scene, navigationGridEntity))
+        {
+            error = "Navigation agent creation requires a Renegade navigation grid.";
+            return false;
+        }
+        if (!Finite3(agentPosition) || !Finite3(destinationPosition))
+        {
+            error = "Navigation agent and destination positions must be finite.";
+            return false;
+        }
+
+        const std::string gridId = PersistentEntityId(scene, navigationGridEntity);
+        if (!IsValidStableId(gridId))
+        {
+            error = "Navigation grid has no valid persistent identity.";
+            return false;
+        }
+
+        agentEntity = scene.Entity_CreateCube("Navigation Agent");
+        destinationEntity = scene.Entity_CreateCube("Navigation Destination");
+        if (agentEntity == wi::ecs::INVALID_ENTITY ||
+            destinationEntity == wi::ecs::INVALID_ENTITY ||
+            !ConfigureMarkerTransform(
+                scene, agentEntity, agentPosition,
+                XMFLOAT3(0.35f, 0.9f, 0.35f)) ||
+            !ConfigureMarkerTransform(
+                scene, destinationEntity, destinationPosition,
+                XMFLOAT3(0.28f, 0.28f, 0.28f)))
+        {
+            if (destinationEntity != wi::ecs::INVALID_ENTITY)
+                scene.Entity_Remove(destinationEntity);
+            if (agentEntity != wi::ecs::INVALID_ENTITY)
+                scene.Entity_Remove(agentEntity);
+            agentEntity = wi::ecs::INVALID_ENTITY;
+            destinationEntity = wi::ecs::INVALID_ENTITY;
+            error = "Wicked could not create visible navigation authoring markers.";
+            return false;
+        }
+
+        std::string identityError;
+        if (!AssignNewPersistentEntityId(scene, agentEntity, identityError) ||
+            !AssignNewPersistentEntityId(scene, destinationEntity, identityError))
+        {
+            scene.Entity_Remove(destinationEntity);
+            scene.Entity_Remove(agentEntity);
+            agentEntity = wi::ecs::INVALID_ENTITY;
+            destinationEntity = wi::ecs::INVALID_ENTITY;
+            error = "Navigation markers could not receive persistent identity: " +
+                identityError;
+            return false;
+        }
+
+        const std::string destinationId =
+            PersistentEntityId(scene, destinationEntity);
+        if (!IsValidStableId(destinationId))
+        {
+            scene.Entity_Remove(destinationEntity);
+            scene.Entity_Remove(agentEntity);
+            agentEntity = wi::ecs::INVALID_ENTITY;
+            destinationEntity = wi::ecs::INVALID_ENTITY;
+            error = "Navigation destination identity could not be resolved.";
+            return false;
+        }
+
+        auto& agentMetadata = scene.metadatas.Create(agentEntity);
+        agentMetadata.string_values.set(
+            NavigationAgentMetadataKey, NavigationAgentMetadataVersion);
+        agentMetadata.string_values.set(
+            NavigationGridReferenceMetadataKey, gridId);
+        agentMetadata.string_values.set(
+            NavigationDestinationReferenceMetadataKey, destinationId);
+        agentMetadata.float_values.set(
+            NavigationMoveSpeedMetadataKey, DefaultNavigationMoveSpeed);
+        agentMetadata.bool_values.set(NavigationFlyingMetadataKey, false);
+
+        auto& destinationMetadata = scene.metadatas.Create(destinationEntity);
+        destinationMetadata.string_values.set(
+            NavigationDestinationMetadataKey,
+            NavigationDestinationMetadataVersion);
+        destinationMetadata.string_values.set(
+            NavigationGridReferenceMetadataKey, gridId);
+
+        auto& character = scene.characters.Create(agentEntity);
+        character.width = 0.3f;
+        character.height = 1.8f;
+        character.SetFootPlacementEnabled(false);
+        character.SetPosition(agentPosition);
+        character.SetFacing(XMFLOAT3(0.0f, 0.0f, 1.0f));
+        // Authoring must not make the marker wander or fall while the creator
+        // positions it. Runtime explicitly activates it when Test Level starts.
+        character.SetActive(false);
+
+        error.clear();
+        return true;
+    }
+
+    bool ResolveNavigationAgentBinding(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity agentEntity,
+        NavigationAgentBinding& binding,
+        std::string& error)
+    {
+        binding = {};
+        if (!IsRenegadeNavigationAgent(scene, agentEntity))
+        {
+            error = "Selected entity is not a Renegade navigation agent.";
+            return false;
+        }
+
+        const auto* metadata = scene.metadatas.GetComponent(agentEntity);
+        if (metadata == nullptr ||
+            !metadata->string_values.has(NavigationGridReferenceMetadataKey) ||
+            !metadata->string_values.has(
+                NavigationDestinationReferenceMetadataKey))
+        {
+            error = "Navigation agent is missing its grid or destination reference.";
+            return false;
+        }
+
+        const auto grid = ResolvePersistentEntity(
+            scene,
+            metadata->string_values.get(NavigationGridReferenceMetadataKey));
+        const auto destination = ResolvePersistentEntity(
+            scene,
+            metadata->string_values.get(
+                NavigationDestinationReferenceMetadataKey));
+        if (!IsRenegadeNavigationGrid(scene, grid))
+        {
+            error = "Navigation agent references a missing navigation grid.";
+            return false;
+        }
+        if (!IsRenegadeNavigationDestination(scene, destination))
+        {
+            error = "Navigation agent references a missing destination.";
+            return false;
+        }
+
+        binding.agent = agentEntity;
+        binding.grid = grid;
+        binding.destination = destination;
+        binding.settings.moveSpeed = DefaultNavigationMoveSpeed;
+        binding.settings.arrivalDistance = DefaultArrivalDistance;
+        if (metadata->float_values.has(NavigationMoveSpeedMetadataKey))
+        {
+            const float authored =
+                metadata->float_values.get(NavigationMoveSpeedMetadataKey);
+            if (std::isfinite(authored))
+                binding.settings.moveSpeed = std::clamp(authored, 0.01f, 1.0f);
+        }
+        if (metadata->bool_values.has(NavigationFlyingMetadataKey))
+        {
+            binding.settings.query.flying =
+                metadata->bool_values.get(NavigationFlyingMetadataKey);
+        }
+        // A roughly human-sized grounded agent should reserve a little vertical
+        // clearance. Flying remains fully volumetric on the same VoxelGrid.
+        binding.settings.query.agentHeight =
+            binding.settings.query.flying ? 1 : 3;
+        binding.settings.query.agentWidth = 0;
+
+        error.clear();
+        return true;
+    }
+
+    std::vector<wi::ecs::Entity> CollectNavigationAgents(
+        const wi::scene::Scene& scene)
+    {
+        std::vector<wi::ecs::Entity> result;
+        result.reserve(scene.characters.GetCount());
+        for (std::size_t index = 0; index < scene.characters.GetCount(); ++index)
+        {
+            const auto entity = scene.characters.GetEntity(index);
+            if (IsRenegadeNavigationAgent(scene, entity))
+                result.push_back(entity);
+        }
+        std::sort(result.begin(), result.end());
+        return result;
+    }
+
+    bool QueryNavigationAgentPath(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity agentEntity,
+        NavigationPathResult& result,
+        std::string& error)
+    {
+        NavigationAgentBinding binding;
+        if (!ResolveNavigationAgentBinding(scene, agentEntity, binding, error))
+            return false;
+
+        const auto* agentTransform = scene.transforms.GetComponent(binding.agent);
+        const auto* destinationTransform =
+            scene.transforms.GetComponent(binding.destination);
+        if (agentTransform == nullptr || destinationTransform == nullptr)
+        {
+            error = "Navigation agent or destination lost its Transform component.";
+            return false;
+        }
+
+        return QueryNavigationPath(
+            scene,
+            binding.grid,
+            agentTransform->GetPosition(),
+            destinationTransform->GetPosition(),
+            binding.settings.query,
+            result,
+            error);
+    }
+
+    bool InitializeRuntimeNavigation(
+        wi::scene::Scene& scene,
+        NavigationRuntimeState& state,
+        std::string& error)
+    {
+        state.agents.clear();
+        const auto agents = CollectNavigationAgents(scene);
+        state.agents.reserve(agents.size());
+        for (const auto entity : agents)
+        {
+            NavigationAgentBinding binding;
+            if (!ResolveNavigationAgentBinding(scene, entity, binding, error))
+            {
+                state.agents.clear();
+                return false;
+            }
+
+            auto* character = scene.characters.GetComponent(binding.agent);
+            const auto* agentTransform = scene.transforms.GetComponent(binding.agent);
+            const auto* destinationTransform =
+                scene.transforms.GetComponent(binding.destination);
+            if (character == nullptr || agentTransform == nullptr ||
+                destinationTransform == nullptr)
+            {
+                state.agents.clear();
+                error = "Navigation runtime binding lost a required native component.";
+                return false;
+            }
+
+            const XMFLOAT3 start = agentTransform->GetPosition();
+            const XMFLOAT3 goal = destinationTransform->GetPosition();
+            character->SetFootPlacementEnabled(false);
+            character->SetPosition(start);
+            XMFLOAT3 facing = agentTransform->GetForward();
+            if (DistanceSquared(facing, XMFLOAT3(0.0f, 0.0f, 0.0f)) > 0.0001f)
+                character->SetFacing(facing);
+            character->SetActive(true);
+
+            if (!SetCharacterNavigationGoal(
+                    scene,
+                    binding.agent,
+                    binding.grid,
+                    goal,
+                    binding.settings.query,
+                    error))
+            {
+                state.agents.clear();
+                return false;
+            }
+
+            NavigationAgentRuntimeState runtime;
+            runtime.binding = binding;
+            runtime.lastGoal = goal;
+            runtime.repathCountdown = RepathIntervalSeconds;
+            runtime.goalSubmitted = true;
+            runtime.arrived = false;
+            state.agents.push_back(std::move(runtime));
+        }
+
+        error.clear();
+        return true;
+    }
+
+    void UpdateRuntimeNavigation(
+        wi::scene::Scene& scene,
+        NavigationRuntimeState& state,
+        const float dt) noexcept
+    {
+        if (!std::isfinite(dt) || dt <= 0.0f)
+            return;
+
+        for (auto& runtime : state.agents)
+        {
+            auto* character = scene.characters.GetComponent(runtime.binding.agent);
+            const auto* destinationTransform =
+                scene.transforms.GetComponent(runtime.binding.destination);
+            if (character == nullptr || destinationTransform == nullptr ||
+                !IsRenegadeNavigationGrid(scene, runtime.binding.grid))
+            {
+                continue;
+            }
+
+            const XMFLOAT3 goal = destinationTransform->GetPosition();
+            runtime.repathCountdown -= dt;
+            const bool movedGoal = DistanceSquared(goal, runtime.lastGoal) > 0.01f;
+            if (!runtime.goalSubmitted || movedGoal ||
+                runtime.repathCountdown <= 0.0f)
+            {
+                std::string ignored;
+                if (SetCharacterNavigationGoal(
+                        scene,
+                        runtime.binding.agent,
+                        runtime.binding.grid,
+                        goal,
+                        runtime.binding.settings.query,
+                        ignored))
+                {
+                    runtime.lastGoal = goal;
+                    runtime.goalSubmitted = true;
+                    runtime.repathCountdown = RepathIntervalSeconds;
+                }
+            }
+
+            const XMFLOAT3 position = character->GetPositionInterpolated();
+            const float arrival = runtime.binding.settings.arrivalDistance;
+            XMFLOAT3 toGoal{
+                goal.x - position.x,
+                goal.y - position.y,
+                goal.z - position.z};
+            if (!runtime.binding.settings.query.flying)
+                toGoal.y = 0.0f;
+            if (DistanceSquared(
+                    XMFLOAT3(0.0f, 0.0f, 0.0f), toGoal) <=
+                arrival * arrival)
+            {
+                runtime.arrived = true;
+                continue;
+            }
+            runtime.arrived = false;
+
+            if (!character->pathquery.is_succesful())
+                continue;
+
+            const XMFLOAT3 waypoint = character->pathquery.get_next_waypoint();
+            XMFLOAT3 direction{
+                waypoint.x - position.x,
+                waypoint.y - position.y,
+                waypoint.z - position.z};
+            if (!runtime.binding.settings.query.flying)
+                direction.y = 0.0f;
+
+            float length = std::sqrt(
+                direction.x * direction.x +
+                direction.y * direction.y +
+                direction.z * direction.z);
+            if (length <= 0.001f)
+            {
+                direction = toGoal;
+                length = std::sqrt(
+                    direction.x * direction.x +
+                    direction.y * direction.y +
+                    direction.z * direction.z);
+            }
+            if (length <= 0.001f)
+                continue;
+
+            direction.x /= length;
+            direction.y /= length;
+            direction.z /= length;
+            character->Turn(direction);
+            const float amount = runtime.binding.settings.moveSpeed;
+            character->Move(XMFLOAT3(
+                direction.x * amount,
+                direction.y * amount,
+                direction.z * amount));
+        }
+    }
+
     CreateNavigationGridCommand::CreateNavigationGridCommand(
         wi::scene::Scene& scene,
         NavigationGridSettings settings)
@@ -424,5 +896,85 @@ namespace renegade::bridge
     {
         if (captured_)
             (void)Apply(before_);
+    }
+
+    CreateNavigationAgentPairCommand::CreateNavigationAgentPairCommand(
+        wi::scene::Scene& scene,
+        const wi::ecs::Entity navigationGridEntity,
+        const XMFLOAT3& agentPosition,
+        const XMFLOAT3& destinationPosition)
+        : scene_(&scene), grid_(navigationGridEntity),
+          agentPosition_(agentPosition),
+          destinationPosition_(destinationPosition)
+    {
+    }
+
+    bool CreateNavigationAgentPairCommand::Execute()
+    {
+        if (scene_ == nullptr)
+            return false;
+        if (hasSnapshot_)
+        {
+            if (EntityExists(*scene_, agent_) || EntityExists(*scene_, destination_))
+                return false;
+            agentSnapshot_.SetReadModeAndResetPos(true);
+            destinationSnapshot_.SetReadModeAndResetPos(true);
+            wi::ecs::EntitySerializer agentSerializer;
+            wi::ecs::EntitySerializer destinationSerializer;
+            agentSerializer.allow_remap = false;
+            destinationSerializer.allow_remap = false;
+            if (scene_->Entity_Serialize(agentSnapshot_, agentSerializer) != agent_)
+                return false;
+            if (scene_->Entity_Serialize(
+                    destinationSnapshot_, destinationSerializer) != destination_)
+            {
+                scene_->Entity_Remove(agent_);
+                return false;
+            }
+            return true;
+        }
+
+        std::string error;
+        if (!CreateNavigationAgentPair(
+                *scene_,
+                grid_,
+                agentPosition_,
+                destinationPosition_,
+                agent_,
+                destination_,
+                error))
+        {
+            return false;
+        }
+
+        agentSnapshot_.SetReadModeAndResetPos(false);
+        destinationSnapshot_.SetReadModeAndResetPos(false);
+        wi::ecs::EntitySerializer agentSerializer;
+        wi::ecs::EntitySerializer destinationSerializer;
+        scene_->Entity_Serialize(agentSnapshot_, agentSerializer, agent_);
+        scene_->Entity_Serialize(
+            destinationSnapshot_, destinationSerializer, destination_);
+        hasSnapshot_ = true;
+        return true;
+    }
+
+    void CreateNavigationAgentPairCommand::Undo()
+    {
+        if (scene_ == nullptr)
+            return;
+        if (EntityExists(*scene_, destination_))
+            scene_->Entity_Remove(destination_);
+        if (EntityExists(*scene_, agent_))
+            scene_->Entity_Remove(agent_);
+    }
+
+    wi::ecs::Entity CreateNavigationAgentPairCommand::CreatedAgent() const noexcept
+    {
+        return agent_;
+    }
+
+    wi::ecs::Entity CreateNavigationAgentPairCommand::CreatedDestination() const noexcept
+    {
+        return destination_;
     }
 }
