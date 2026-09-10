@@ -1,0 +1,62 @@
+name: Temporary Phase 6 test fixture fix v2
+
+on:
+  push:
+    branches:
+      - staging/phase6-nav-testfixture-fix
+    paths:
+      - ".github/workflows/_temporary-phase6-testfixture-fix-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Repair malformed navigation test mesh
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('Tests/Phase6NativeNavigationTests.cpp')
+          text = path.read_text(encoding='utf-8')
+          old = """    obstacleMesh.indices = {
+              0,2,1, 1,2,3, 4,5,6, 5,7,6,
+              0,1,4, 1,5,4, 2,6,3, 3,6,7,
+              0,4,2, 2,4,6, 1,3,5, 3,7,5,
+          };
+          scene.rigidbodies.Create(rigidObstacle).mass = 1.0f;
+          """
+          new = """    obstacleMesh.indices = {
+              0,2,1, 1,2,3, 4,5,6, 5,7,6,
+              0,1,4, 1,5,4, 2,6,3, 3,6,7,
+              0,4,2, 2,4,6, 1,3,5, 3,7,5,
+          };
+          auto& obstacleSubset = obstacleMesh.subsets.emplace_back();
+          obstacleSubset.indexOffset = 0;
+          obstacleSubset.indexCount =
+              static_cast<uint32_t>(obstacleMesh.indices.size());
+          scene.rigidbodies.Create(rigidObstacle).mass = 1.0f;
+          """
+          if text.count(old) != 1:
+              raise RuntimeError(f'expected exactly one fixture block, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Verify and commit fixture repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/_temporary-phase6-testfixture-fix.yml
+          rm -f .github/workflows/_temporary-phase6-testfixture-fix-v2.yml
+          git diff --check
+          git config user.name "Renegade Patch Builder"
+          git config user.email "patch@renegade.local"
+          git add -A
+          git diff --cached --check
+          git commit -m "Tests: make navigation rigid-body fixture a valid Wicked mesh"
+          git push origin HEAD:staging/phase6-nav-testfixture-fix
