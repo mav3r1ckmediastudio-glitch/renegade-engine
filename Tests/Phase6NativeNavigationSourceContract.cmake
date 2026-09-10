@@ -31,6 +31,15 @@ require_text("${navigation_header}"
     "NavigationRuntimeState"
     "runtime navigation state")
 require_text("${navigation_source}"
+    "PrepareRigidBodyNavigationGeometry(scene)"
+    "Jolt rigid-body navigation participation before voxelization")
+require_text("${navigation_source}"
+    "object.filterMask |= wi::enums::FILTER_NAVIGATION_MESH"
+    "rigid-body render geometry admitted to Wicked navigation")
+require_text("${navigation_source}"
+    "mesh->BuildBVH()"
+    "Wicked character collision BVH preparation")
+require_text("${navigation_source}"
     "character->SetPathGoal(goal, grid)"
     "native Wicked deferred path-goal handoff")
 require_text("${navigation_source}"

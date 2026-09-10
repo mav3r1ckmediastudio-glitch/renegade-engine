@@ -27,7 +27,9 @@ namespace renegade::bridge
         bool tessellation = false;
         int visibleChunkRadius = DefaultTerrainChunkRadius;
         int propChunkRadius = 4;
-        int physicsChunkRadius = 3;
+        // Fixed resident terrain keeps Jolt heightfields under every visible chunk.
+        // Wicked uses dist < physics_generation, so radius+1 covers the edge ring.
+        int physicsChunkRadius = DefaultTerrainChunkRadius + 1;
         // World-space vertex spacing. One metre is Renegade's standard
         // authoring resolution; coarser values remain available for large
         // landscapes created deliberately by the user.

@@ -118,6 +118,47 @@ namespace
 
 namespace renegade::bridge
 {
+    std::size_t PrepareRigidBodyNavigationGeometry(
+        wi::scene::Scene& scene) noexcept
+    {
+        std::size_t changed = 0;
+        for (std::size_t bodyIndex = 0;
+            bodyIndex < scene.rigidbodies.GetCount(); ++bodyIndex)
+        {
+            const wi::ecs::Entity bodyEntity =
+                scene.rigidbodies.GetEntity(bodyIndex);
+            for (std::size_t objectIndex = 0;
+                objectIndex < scene.objects.GetCount(); ++objectIndex)
+            {
+                const wi::ecs::Entity objectEntity =
+                    scene.objects.GetEntity(objectIndex);
+                if (objectEntity != bodyEntity &&
+                    !scene.Entity_IsDescendant(objectEntity, bodyEntity))
+                {
+                    continue;
+                }
+
+                auto& object = scene.objects[objectIndex];
+                if ((object.filterMask & wi::enums::FILTER_NAVIGATION_MESH) == 0u)
+                {
+                    object.filterMask |= wi::enums::FILTER_NAVIGATION_MESH;
+                    ++changed;
+                }
+
+                if (object.meshID != wi::ecs::INVALID_ENTITY)
+                {
+                    if (auto* mesh = scene.meshes.GetComponent(object.meshID);
+                        mesh != nullptr && !mesh->bvh.IsValid() &&
+                        !mesh->vertex_positions.empty())
+                    {
+                        mesh->BuildBVH();
+                    }
+                }
+            }
+        }
+        return changed;
+    }
+
     bool ValidateNavigationGridSettings(
         const NavigationGridSettings& settings,
         std::string& error) noexcept
@@ -298,6 +339,13 @@ namespace renegade::bridge
             grid->center = settings.center;
             grid->set_voxelsize(settings.voxelSize);
         }
+
+        // A normal Renegade Rigid Body is Jolt physics, while Wicked's
+        // FILTER_COLLIDER means its separate lightweight ColliderComponent.
+        // Admit rigid-body-backed render geometry to FILTER_NAVIGATION_MESH
+        // before baking so ordinary creator obstacles block both PathQuery and
+        // Wicked CharacterComponent surface collision.
+        (void)PrepareRigidBodyNavigationGeometry(scene);
 
         grid->cleardata();
         scene.VoxelizeScene(

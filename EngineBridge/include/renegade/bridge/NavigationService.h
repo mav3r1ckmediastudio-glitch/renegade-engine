@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -96,6 +97,11 @@ namespace renegade::bridge
     {
         std::vector<NavigationAgentRuntimeState> agents;
     };
+
+    // Makes creator Jolt rigid-body geometry participate in Wicked navigation.
+    // Returns the number of render objects newly admitted to navigation.
+    [[nodiscard]] std::size_t PrepareRigidBodyNavigationGeometry(
+        wi::scene::Scene& scene) noexcept;
 
     [[nodiscard]] bool ValidateNavigationGridSettings(
         const NavigationGridSettings& settings,

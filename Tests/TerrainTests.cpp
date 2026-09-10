@@ -60,6 +60,7 @@ int main()
 
     const renegade::bridge::TerrainState standard;
     if (standard.visibleChunkRadius != 9 ||
+        standard.physicsChunkRadius != 10 ||
         renegade::bridge::TerrainChunkCountPerSide(
             standard.visibleChunkRadius) != 19 ||
         !NearlyEqual(
@@ -83,6 +84,7 @@ int main()
     const auto applied = renegade::bridge::CaptureTerrain(terrain);
     if (applied.centerToCamera || applied.removeDistantChunks ||
         !applied.physics || applied.visibleChunkRadius != 9 ||
+        applied.physicsChunkRadius != 10 ||
         !NearlyEqual(applied.minimumHeight, -20.0f) ||
         !NearlyEqual(applied.maximumHeight, 120.0f) ||
         !NearlyEqual(applied.chunkScale, 1.0f))
@@ -95,9 +97,29 @@ int main()
         return Fail("terrain Undo did not restore native state");
     }
     if (!commands.Redo() || terrain.IsCenterToCamEnabled() ||
-        !NearlyEqual(terrain.topLevel, 120.0f))
+        !NearlyEqual(terrain.topLevel, 120.0f) ||
+        terrain.physics_generation != 10)
     {
-        return Fail("terrain Redo did not restore authored state");
+        return Fail("terrain Redo did not restore authored state/full fixed physics coverage");
+    }
+
+    // Fresh authored terrain keeps its internal -20..+120 sculpt envelope but
+    // maps bottomLevel to world Y=0 through the terrain root transform.
+    wi::scene::Scene authoredScene;
+    const auto environment = wi::ecs::CreateEntity();
+    authoredScene.weathers.Create(environment);
+    const auto authoredTerrainEntity = renegade::bridge::CreateTerrain(
+        authoredScene, renegade::bridge::TerrainState{}, "World Zero Terrain");
+    const auto* authoredTerrain =
+        authoredScene.terrains.GetComponent(authoredTerrainEntity);
+    const auto* authoredTransform =
+        authoredScene.transforms.GetComponent(authoredTerrainEntity);
+    if (authoredTerrain == nullptr || authoredTransform == nullptr ||
+        !NearlyEqual(authoredTerrain->bottomLevel, -20.0f) ||
+        !NearlyEqual(authoredTransform->translation_local.y, 20.0f) ||
+        authoredTerrain->physics_generation != 10)
+    {
+        return Fail("fresh terrain did not map its -20 m local baseline to world Y=0 with full physics coverage");
     }
 
     auto unsafe = renegade::bridge::CaptureTerrain(terrain);
@@ -112,7 +134,7 @@ int main()
     unsafe.lodBias = 20.0f;
     renegade::bridge::ApplyTerrain(terrain, unsafe, false);
     const auto safe = renegade::bridge::CaptureTerrain(terrain);
-    if (safe.visibleChunkRadius != 16 || safe.physicsChunkRadius != 0 ||
+    if (safe.visibleChunkRadius != 16 || safe.physicsChunkRadius != 17 ||
         !NearlyEqual(safe.chunkScale, 0.25f) ||
         !NearlyEqual(safe.minimumHeight, 1999.0f) ||
         !NearlyEqual(safe.maximumHeight, 2000.0f) ||
@@ -142,6 +164,7 @@ int main()
                 scene,
                 entity)) ||
         terrain.generation != 10 ||
+        terrain.physics_generation < 11 ||
         terrain.chunks[innerChunk].heightmap_data !=
             std::vector<std::uint16_t>({123, 456}))
     {

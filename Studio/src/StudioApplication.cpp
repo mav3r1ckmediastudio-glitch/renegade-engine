@@ -1399,22 +1399,10 @@ namespace renegade::studio
         XMStoreFloat4x4(
             &constants.inverseViewProjection,
             XMMatrixInverse(nullptr, viewProjection));
-        // w is the grid plane height. Renegade terrain uses bottomLevel as
-        // its authored reference plane (the standard terrain starts at -20 m),
-        // so an absolute y=0 grid visibly floats above a standard landscape.
-        // Keep a 2 cm depth epsilon and retain y=0.02 only when no terrain is
-        // present. The isolated creator-import stage keeps its own plane.
-        float gridPlaneHeight = 0.02f;
-        if (!creatorModelImporter.active && session_ != nullptr)
-        {
-            const auto& gridScene = session_->Scenes().GetScene();
-            if (gridScene.terrains.GetCount() != 0)
-            {
-                gridPlaneHeight =
-                    bridge::CaptureTerrain(gridScene.terrains[0]).minimumHeight +
-                    0.02f;
-            }
-        }
+        // w is the grid plane height. Y=0 is Renegade's creator-facing
+        // world reference plane; keep only the 2 cm reverse-Z/depth epsilon.
+        // The isolated creator-import stage keeps its own elevated plane.
+        constexpr float gridPlaneHeight = 0.02f;
         constants.cameraPosition = XMFLOAT4(
             camera->Eye.x,
             camera->Eye.y,

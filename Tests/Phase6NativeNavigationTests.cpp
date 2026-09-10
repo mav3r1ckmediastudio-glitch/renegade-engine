@@ -95,6 +95,37 @@ int main()
     if (grid == nullptr || !Near(grid->voxelSize.x, 0.5f))
         return Fail("navigation rebuild redo did not restore rebuilt grid state");
 
+    // A normal creator Rigid Body is Jolt, not Wicked ColliderComponent. The
+    // navigation bridge must mark the body's render geometry as native Wicked
+    // navigation geometry and build the mesh BVH before a grid rebuild.
+    const wi::ecs::Entity rigidObstacle = wi::ecs::CreateEntity();
+    const wi::ecs::Entity rigidObstacleMesh = wi::ecs::CreateEntity();
+    scene.transforms.Create(rigidObstacle);
+    auto& obstacleObject = scene.objects.Create(rigidObstacle);
+    obstacleObject.meshID = rigidObstacleMesh;
+    obstacleObject.filterMask &= ~wi::enums::FILTER_NAVIGATION_MESH;
+    auto& obstacleMesh = scene.meshes.Create(rigidObstacleMesh);
+    obstacleMesh.vertex_positions = {
+        XMFLOAT3(-1, -1, -1), XMFLOAT3(1, -1, -1),
+        XMFLOAT3(-1,  1, -1), XMFLOAT3(1,  1, -1),
+        XMFLOAT3(-1, -1,  1), XMFLOAT3(1, -1,  1),
+        XMFLOAT3(-1,  1,  1), XMFLOAT3(1,  1,  1),
+    };
+    obstacleMesh.indices = {
+        0,2,1, 1,2,3, 4,5,6, 5,7,6,
+        0,1,4, 1,5,4, 2,6,3, 3,6,7,
+        0,4,2, 2,4,6, 1,3,5, 3,7,5,
+    };
+    scene.rigidbodies.Create(rigidObstacle).mass = 1.0f;
+    if (PrepareRigidBodyNavigationGeometry(scene) != 1 ||
+        (obstacleObject.filterMask & wi::enums::FILTER_NAVIGATION_MESH) == 0u ||
+        !obstacleMesh.bvh.IsValid())
+    {
+        return Fail("Jolt rigid-body render geometry was not admitted to Wicked navigation/BVH");
+    }
+    if (PrepareRigidBodyNavigationGeometry(scene) != 0)
+        return Fail("rigid-body navigation preparation was not idempotent");
+
     // Build a deterministic synthetic walkable surface directly in Wicked's
     // native grid. Ground is occupied; obstacles are occupied voxels above it.
     constexpr std::uint32_t groundY = 4;
