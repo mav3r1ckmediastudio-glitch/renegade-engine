@@ -21,6 +21,15 @@ namespace
     {
         return std::fabs(a - b) < 0.001f;
     }
+
+    void SetTransformPosition(
+        wi::scene::TransformComponent& transform,
+        const XMFLOAT3& position)
+    {
+        transform.ClearTransform();
+        transform.Translate(position);
+        transform.UpdateTransform();
+    }
 }
 
 int main()
@@ -185,7 +194,93 @@ int main()
     if (!flyingPath.successful)
         return Fail("Wicked PathQuery flying mode did not find a 3D route");
 
+    // Build the same serialized authoring relationship Studio creates, but use
+    // component-only entities so this test remains GPU-free. Runtime must
+    // resolve persistent IDs, activate the native CharacterComponent, submit
+    // its goal to Wicked, then drive Turn()/Move() toward the next waypoint.
+    const wi::ecs::Entity authoredAgent = wi::ecs::CreateEntity();
+    scene.names.Create(authoredAgent) = "Navigation Agent Test";
+    auto& authoredAgentTransform = scene.transforms.Create(authoredAgent);
+    SetTransformPosition(authoredAgentTransform, start);
+    auto& authoredCharacter = scene.characters.Create(authoredAgent);
+    authoredCharacter.SetActive(false);
+    auto& authoredAgentMetadata = scene.metadatas.Create(authoredAgent);
+    authoredAgentMetadata.string_values.set(
+        NavigationAgentMetadataKey, NavigationAgentMetadataVersion);
+    if (!AssignNewPersistentEntityId(scene, authoredAgent, error))
+        return Fail("assign agent identity: " + error);
+
+    const wi::ecs::Entity authoredDestination = wi::ecs::CreateEntity();
+    scene.names.Create(authoredDestination) = "Navigation Destination Test";
+    auto& authoredDestinationTransform = scene.transforms.Create(authoredDestination);
+    SetTransformPosition(authoredDestinationTransform, goal);
+    auto& authoredDestinationMetadata = scene.metadatas.Create(authoredDestination);
+    authoredDestinationMetadata.string_values.set(
+        NavigationDestinationMetadataKey,
+        NavigationDestinationMetadataVersion);
+    if (!AssignNewPersistentEntityId(scene, authoredDestination, error))
+        return Fail("assign destination identity: " + error);
+
+    const std::string gridId = PersistentEntityId(scene, gridEntity);
+    const std::string destinationId =
+        PersistentEntityId(scene, authoredDestination);
+    authoredAgentMetadata.string_values.set(
+        NavigationGridReferenceMetadataKey, gridId);
+    authoredAgentMetadata.string_values.set(
+        NavigationDestinationReferenceMetadataKey, destinationId);
+    authoredAgentMetadata.float_values.set(NavigationMoveSpeedMetadataKey, 0.12f);
+    authoredAgentMetadata.bool_values.set(NavigationFlyingMetadataKey, false);
+    authoredDestinationMetadata.string_values.set(
+        NavigationGridReferenceMetadataKey, gridId);
+
+    NavigationAgentBinding binding;
+    if (!ResolveNavigationAgentBinding(
+            scene, authoredAgent, binding, error))
+    {
+        return Fail("resolve authored agent binding: " + error);
+    }
+    if (binding.grid != gridEntity ||
+        binding.destination != authoredDestination)
+    {
+        return Fail("authored navigation references did not resolve by persistent ID");
+    }
+
+    NavigationPathResult authoredPath;
+    if (!QueryNavigationAgentPath(
+            scene, authoredAgent, authoredPath, error) ||
+        !authoredPath.successful || authoredPath.waypoints.size() < 2)
+    {
+        return Fail("authored agent path preview did not resolve a native route: " + error);
+    }
+
+    NavigationRuntimeState runtimeState;
+    if (!InitializeRuntimeNavigation(scene, runtimeState, error))
+        return Fail("initialize Runtime navigation: " + error);
+    if (runtimeState.agents.size() != 1)
+        return Fail("Runtime did not discover exactly one authored navigation agent");
+    if (!authoredCharacter.IsActive())
+        return Fail("Runtime did not activate the authored native CharacterComponent");
+    if (authoredCharacter.voxelgrid != grid)
+        return Fail("Runtime agent was not handed the authored native VoxelGrid");
+
+    // SetPathGoal is intentionally deferred to Wicked's normal Scene update.
+    // For this GPU-free unit test only, run the same native PathQuery directly
+    // so the next Runtime step can prove it consumes Wicked's next waypoint and
+    // issues native CharacterComponent movement rather than moving a Transform.
+    authoredCharacter.pathquery.flying = false;
+    authoredCharacter.pathquery.agent_height = 1;
+    authoredCharacter.pathquery.agent_width = 0;
+    authoredCharacter.pathquery.process(start, goal, *grid);
+    authoredCharacter.movement = XMFLOAT3(0.0f, 0.0f, 0.0f);
+    UpdateRuntimeNavigation(scene, runtimeState, 1.0f / 60.0f);
+    const float movementSquared =
+        authoredCharacter.movement.x * authoredCharacter.movement.x +
+        authoredCharacter.movement.y * authoredCharacter.movement.y +
+        authoredCharacter.movement.z * authoredCharacter.movement.z;
+    if (movementSquared <= 0.000001f)
+        return Fail("Runtime path follower did not issue CharacterComponent::Move()");
+
     std::cout <<
-        "Phase 6 native Wicked VoxelGrid + PathQuery foundation passed.\n";
+        "Phase 6 native Wicked VoxelGrid + PathQuery + Character following passed.\n";
     return 0;
 }
