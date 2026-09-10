@@ -343,6 +343,28 @@ namespace
         }
     }
 
+    void RestartTerrainGeneration(wi::terrain::Terrain& terrain)
+    {
+        terrain.Generation_Restart();
+
+        // Wicked's terrain restart creates the chunk-group entity without a
+        // transform, then attaches it while preserving world space. A
+        // transform-less intermediary prevents the terrain root transform from
+        // reaching generated chunk transforms (and their Jolt heightfields).
+        // Give the group an identity local transform after every restart so
+        // render and physics chunks inherit Renegade's creator-facing root.
+        if (terrain.scene == nullptr ||
+            terrain.chunkGroupEntity == wi::ecs::INVALID_ENTITY)
+        {
+            return;
+        }
+        auto& chunkGroupTransform =
+            terrain.scene->transforms.Create(terrain.chunkGroupEntity);
+        chunkGroupTransform.ClearTransform();
+        chunkGroupTransform.UpdateTransform();
+        chunkGroupTransform.SetDirty();
+    }
+
     void ConfigureDefaultGrassMaterial(
         wi::scene::MaterialComponent& material,
         const float textureScale =
@@ -572,7 +594,7 @@ namespace renegade::bridge
         if (restartGeneration && terrain.scene != nullptr &&
             IsMeaningful(before, CaptureTerrain(terrain)))
         {
-            terrain.Generation_Restart();
+            RestartTerrainGeneration(terrain);
         }
     }
 
@@ -628,7 +650,7 @@ namespace renegade::bridge
             rootTransform->UpdateTransform();
         }
 
-        terrain.Generation_Restart();
+        RestartTerrainGeneration(terrain);
         return entity;
     }
 
@@ -709,7 +731,7 @@ namespace renegade::bridge
         }
         if (restartGeneration && terrain.scene != nullptr)
         {
-            terrain.Generation_Restart();
+            RestartTerrainGeneration(terrain);
         }
     }
 
@@ -788,7 +810,7 @@ namespace renegade::bridge
     {
         wi::resourcemanager::ReloadOutdatedResources();
         RebindDefaultTerrainMaterials(scene);
-        terrain.Generation_Restart();
+        RestartTerrainGeneration(terrain);
     }
 
     SetTerrainMaterialCommand::SetTerrainMaterialCommand(
@@ -861,7 +883,7 @@ namespace renegade::bridge
         if (restoredTerrain != nullptr)
         {
             restoredTerrain->scene = scene_;
-            restoredTerrain->Generation_Restart();
+            RestartTerrainGeneration(*restoredTerrain);
         }
         return restored == entity_;
     }

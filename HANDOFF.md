@@ -3,21 +3,25 @@
 **Date:** 10 September 2026
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 **Merged baseline:** PR #146 — marker overlays + native Wicked particle emitter authoring
-**Active candidate:** Phase 6 Objective + Interaction Vertical Slice on
-`phase6/objective-interaction-vertical-slice`
+**Active candidate:** PR #148 native navigation and terrain-contact repair on
+`staging/phase6-native-navigation`
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current status
 
-Renegade remains in **Phase 6 — Playable Core**. The original Gate 1-3 player,
-input and audio work is merged. The scripting programme is now also through S7:
-PR #144 shipped six creator-facing stock Lua Actions and their interaction UX,
-and PR #146 subsequently merged editor marker overlays plus native Wicked GPU
-particle authoring with separate static-texture and sprite-sheet creator paths.
+Renegade remains in **Phase 6 — Playable Core**. PR #148 now carries native
+Wicked navigation authoring and the finite 19x19 terrain foundation. Its terrain
+contact owner failure was traced to Wicked's transform-less generated chunk
+group: the group broke inheritance from Renegade's translated terrain root, so
+Jolt heightfields remained at local `bottomLevel` instead of world Y=0.
 
-The next bounded work is no longer another infrastructure layer. It is the first
-small reusable gameplay objective assembled entirely from the governed scripting
-stack already on `main`.
+Renegade-controlled terrain restarts now recreate that group with an identity
+local transform. Generated render chunks and their native Jolt HEIGHTFIELD
+bodies therefore inherit the same root translation while retaining the
+negative/positive sculpt envelope and the Y=0.02 editor grid. The registered
+terrain test now creates representative HEIGHTFIELD physics, releases a dynamic
+box above it, steps real Jolt simulation, and requires the box to settle at the
+world-zero surface. The native navigation test remains green locally.
 
 ## Current objective slice
 
@@ -135,16 +139,11 @@ Compile-only success is not creator acceptance.
 
 ## Next engineering work
 
-After this objective slice is CI-green and owner accepted:
-
-1. **Navigation and actor path queries** — expose stable Renegade access over
-   Wicked voxel/pathfinding facilities and prove one Runtime actor path query
-   without creating a competing navigation world.
-2. **Integrated Phase 6 acceptance** — build the reference playable slice and
-   prove reopen, player/collisions, audio, scripted objective, navigation where
-   used, Test Level parity and independently packaged Runtime parity.
-3. Close **Phase 6 — Playable Core**, then move the primary programme into the
-   planned Phase 7 animation/advanced-simulation work.
+For PR #148, run the one fresh Windows CI cycle and then perform packaged owner
+verification: generate fresh 19x19 terrain, drop a dynamic crate onto both flat
+and sculpted areas, rebuild terrain, refresh navigation, and confirm the agent
+routes around the normal rigid-body crate. Do not merge until that owner proof
+is accepted.
 
 A viewport-placeable trigger/volume system remains deferred until a real shared
 need appears. When introduced it must be one ZoneService usable by objectives,

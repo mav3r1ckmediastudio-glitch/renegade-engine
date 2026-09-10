@@ -30,6 +30,15 @@ namespace
         std::cerr << "FAIL: " << message << '\n';
         return 1;
     }
+
+    void SetPosition(
+        wi::scene::TransformComponent& transform,
+        const XMFLOAT3& position)
+    {
+        transform.ClearTransform();
+        transform.Translate(position);
+        transform.UpdateTransform();
+    }
 }
 
 int main()
@@ -198,6 +207,85 @@ int main()
         return Fail("completed preview was not retained for Undo/Redo");
     }
 
-    std::cout << "PASS: 1.254 km standard terrain, non-destructive expansion, material scale, preview history and Undo/Redo\n";
+    // Exercise the real Wicked/Jolt contact path with the same hierarchy and
+    // local height samples used by generated terrain. This specifically guards
+    // the world-zero root transform: the box must stop at Y=0, not fall to the
+    // unshifted bottomLevel plane.
+    wi::jobsystem::Initialize();
+    wi::physics::Initialize();
+    wi::physics::SetEnabled(true);
+    wi::physics::SetSimulationEnabled(true);
+    wi::physics::SetFrameRate(60.0f);
+    wi::physics::SetAccuracy(4);
+    wi::physics::SetInterpolationEnabled(false);
+
+    wi::scene::Scene physicsScene;
+    physicsScene.weather.gravity = XMFLOAT3(0.0f, -10.0f, 0.0f);
+    physicsScene.weathers.Create(wi::ecs::CreateEntity());
+    const auto terrainEntity = renegade::bridge::CreateTerrain(
+        physicsScene,
+        renegade::bridge::TerrainState{},
+        "Jolt Contact Terrain");
+    auto* physicsTerrain = physicsScene.terrains.GetComponent(terrainEntity);
+    if (physicsTerrain == nullptr ||
+        physicsTerrain->chunkGroupEntity == wi::ecs::INVALID_ENTITY ||
+        !physicsScene.transforms.Contains(physicsTerrain->chunkGroupEntity))
+    {
+        return Fail("generated terrain chunk hierarchy did not inherit its root");
+    }
+
+    const wi::ecs::Entity chunk = wi::ecs::CreateEntity();
+    physicsScene.transforms.Create(chunk);
+    physicsScene.Component_Attach(
+        chunk, physicsTerrain->chunkGroupEntity, true);
+
+    const wi::ecs::Entity meshEntity = wi::ecs::CreateEntity();
+    auto& mesh = physicsScene.meshes.Create(meshEntity);
+    mesh.vertex_positions.reserve(9);
+    for (int z = 0; z < 3; ++z)
+    {
+        for (int x = 0; x < 3; ++x)
+        {
+            mesh.vertex_positions.emplace_back(
+                static_cast<float>(x) - 1.0f,
+                physicsTerrain->bottomLevel,
+                static_cast<float>(z) - 1.0f);
+        }
+    }
+    mesh.indices = {
+        0, 3, 1, 1, 3, 4,
+        1, 4, 2, 2, 4, 5,
+        3, 6, 4, 4, 6, 7,
+        4, 7, 5, 5, 7, 8,
+    };
+    physicsScene.objects.Create(chunk).meshID = meshEntity;
+    auto& heightfield = physicsScene.rigidbodies.Create(chunk);
+    heightfield.shape =
+        wi::scene::RigidBodyPhysicsComponent::CollisionShape::HEIGHTFIELD;
+    heightfield.mass = 0.0f;
+    heightfield.friction = 0.8f;
+
+    const wi::ecs::Entity box = wi::ecs::CreateEntity();
+    auto& boxTransform = physicsScene.transforms.Create(box);
+    SetPosition(boxTransform, XMFLOAT3(0.0f, 5.0f, 0.0f));
+    auto& boxBody = physicsScene.rigidbodies.Create(box);
+    boxBody.shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape::BOX;
+    boxBody.box.halfextents = XMFLOAT3(0.5f, 0.5f, 0.5f);
+    boxBody.mass = 1.0f;
+    boxBody.SetDisableDeactivation(true);
+
+    wi::jobsystem::context physicsContext;
+    for (int frame = 0; frame < 600; ++frame)
+    {
+        wi::physics::RunPhysicsUpdateSystem(
+            physicsContext, physicsScene, 1.0f / 60.0f);
+    }
+    const XMFLOAT3 landed = wi::physics::GetPosition(boxBody);
+    if (!std::isfinite(landed.y) || landed.y < 0.35f || landed.y > 0.65f)
+    {
+        return Fail("dynamic Jolt box did not land on world-zero terrain HEIGHTFIELD");
+    }
+
+    std::cout << "PASS: terrain authoring and world-zero Jolt HEIGHTFIELD contact\n";
     return 0;
 }
