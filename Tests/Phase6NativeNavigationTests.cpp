@@ -116,6 +116,10 @@ int main()
         0,1,4, 1,5,4, 2,6,3, 3,6,7,
         0,4,2, 2,4,6, 1,3,5, 3,7,5,
     };
+    auto& obstacleSubset = obstacleMesh.subsets.emplace_back();
+    obstacleSubset.indexOffset = 0;
+    obstacleSubset.indexCount =
+        static_cast<uint32_t>(obstacleMesh.indices.size());
     scene.rigidbodies.Create(rigidObstacle).mass = 1.0f;
     if (PrepareRigidBodyNavigationGeometry(scene) != 1 ||
         (obstacleObject.filterMask & wi::enums::FILTER_NAVIGATION_MESH) == 0u ||
