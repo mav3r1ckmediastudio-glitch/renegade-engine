@@ -6,6 +6,8 @@
 
 #include <WickedEngine.h>
 
+#include "renegade/bridge/CommandService.h"
+
 namespace renegade::bridge
 {
     inline constexpr const char* NavigationGridMetadataKey =
@@ -96,4 +98,46 @@ namespace renegade::bridge
         const XMFLOAT3& goal,
         const NavigationQuerySettings& settings,
         std::string& error);
+
+    // Creator-facing mutations are command-backed so creating/rebuilding a
+    // navigation grid participates in the same Undo/Redo and dirty-state
+    // contract as the rest of Renegade Studio.
+    class CreateNavigationGridCommand final : public ICommand
+    {
+    public:
+        CreateNavigationGridCommand(
+            wi::scene::Scene& scene,
+            NavigationGridSettings settings = {});
+        bool Execute() override;
+        void Undo() override;
+        [[nodiscard]] wi::ecs::Entity CreatedEntity() const noexcept;
+
+    private:
+        wi::scene::Scene* scene_ = nullptr;
+        NavigationGridSettings settings_;
+        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+        wi::Archive snapshot_;
+        bool hasSnapshot_ = false;
+    };
+
+    class RebuildNavigationGridCommand final : public ICommand
+    {
+    public:
+        RebuildNavigationGridCommand(
+            wi::scene::Scene& scene,
+            wi::ecs::Entity navigationGridEntity,
+            NavigationGridSettings settings);
+        bool Execute() override;
+        void Undo() override;
+
+    private:
+        bool Apply(const wi::VoxelGrid& grid) noexcept;
+
+        wi::scene::Scene* scene_ = nullptr;
+        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+        NavigationGridSettings settings_;
+        wi::VoxelGrid before_;
+        wi::VoxelGrid after_;
+        bool captured_ = false;
+    };
 }
