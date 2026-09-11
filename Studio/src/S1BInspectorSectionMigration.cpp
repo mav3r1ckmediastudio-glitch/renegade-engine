@@ -1,6 +1,7 @@
 #include "StudioApplication.h"
 
 #include "InspectorSectionFramework.h"
+#include "Phase7AnimationInspector.h"
 #include "S4BScriptAttachmentInspector.h"
 #include "S4DGlobalScriptInspector.h"
 
@@ -325,6 +326,15 @@ namespace renegade::studio
         if (!inspectorSectionRegistry_.Register(std::move(materials), error))
             studioChrome_.SetStatusText("S1B INSPECTOR // " + error);
 
+        RegisterPhase7AnimationInspector(
+            *this,
+            inspectorPanel_,
+            inspectorSectionRegistry_,
+            [this]() { QueueInspectorRefresh(); },
+            [this](std::string status)
+            {
+                studioChrome_.SetStatusText(std::move(status));
+            });
         RegisterS4BScriptAttachmentInspector(
             *this,
             inspectorPanel_,
@@ -474,12 +484,18 @@ namespace renegade::studio
 
     void StudioRenderPath::ResetS1BInspectorDisclosure()
     {
-        for (const char* sectionId : {"transform", "rendering", "materials", S4BActionSectionId, S4BScriptSectionId, S4DGlobalScriptSectionId})
+        for (const char* sectionId : {
+            "transform", "rendering", "materials",
+            Phase7AnimationSectionId,
+            S4BActionSectionId, S4BScriptSectionId, S4DGlobalScriptSectionId})
+        {
             (void)inspectorSectionRegistry_.SetExpanded(sectionId, false);
+        }
     }
 
     void StudioRenderPath::LayoutS1BInspectorSections()
     {
+        PreparePhase7AnimationInspector(*this);
         PrepareS4BScriptAttachmentInspector(*this);
         PrepareS4DGlobalScriptInspector(*this);
         transformSectionHeader_.SetVisible(false);
