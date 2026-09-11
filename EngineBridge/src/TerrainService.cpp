@@ -343,6 +343,28 @@ namespace
         }
     }
 
+    void RestartTerrainGeneration(wi::terrain::Terrain& terrain)
+    {
+        terrain.Generation_Restart();
+
+        // Wicked's terrain restart creates the chunk-group entity without a
+        // transform, then attaches it while preserving world space. A
+        // transform-less intermediary prevents the terrain root transform from
+        // reaching generated chunk transforms (and their Jolt heightfields).
+        // Give the group an identity local transform after every restart so
+        // render and physics chunks inherit Renegade's creator-facing root.
+        if (terrain.scene == nullptr ||
+            terrain.chunkGroupEntity == wi::ecs::INVALID_ENTITY)
+        {
+            return;
+        }
+        auto& chunkGroupTransform =
+            terrain.scene->transforms.Create(terrain.chunkGroupEntity);
+        chunkGroupTransform.ClearTransform();
+        chunkGroupTransform.UpdateTransform();
+        chunkGroupTransform.SetDirty();
+    }
+
     void ConfigureDefaultGrassMaterial(
         wi::scene::MaterialComponent& material,
         const float textureScale =
@@ -545,7 +567,18 @@ namespace renegade::bridge
             1,
             MaximumTerrainChunkRadius);
         terrain.prop_generation = std::clamp(state.propChunkRadius, 0, 16);
-        terrain.physics_generation = std::clamp(state.physicsChunkRadius, 0, 8);
+        const int requestedPhysicsRadius = std::clamp(
+            state.physicsChunkRadius,
+            0,
+            MaximumTerrainChunkRadius + 1);
+        // Renegade fixed terrain is deliberately resident. Give every generated
+        // chunk its native Wicked/Jolt HEIGHTFIELD body rather than leaving outer
+        // rings visually present but physically bottomless. Wicked creates chunk
+        // bodies while dist < physics_generation, hence generation + 1.
+        terrain.physics_generation =
+            state.physics && !state.centerToCamera
+                ? std::max(requestedPhysicsRadius, terrain.generation + 1)
+                : requestedPhysicsRadius;
         terrain.chunk_scale = std::clamp(state.chunkScale, 0.25f, 16.0f);
         terrain.seed = state.seed;
         terrain.bottomLevel = std::clamp(state.minimumHeight, -2000.0f, 1999.0f);
@@ -561,7 +594,7 @@ namespace renegade::bridge
         if (restartGeneration && terrain.scene != nullptr &&
             IsMeaningful(before, CaptureTerrain(terrain)))
         {
-            terrain.Generation_Restart();
+            RestartTerrainGeneration(terrain);
         }
     }
 
@@ -605,7 +638,19 @@ namespace renegade::bridge
         }
 
         ApplyTerrain(terrain, state, false);
-        terrain.Generation_Restart();
+
+        // Wicked generates unmodified terrain at bottomLevel. Renegade keeps the
+        // useful negative sculpt envelope, but the creator-facing world reference
+        // is Y=0. Lift the terrain root once at creation so bottomLevel maps to
+        // world zero without changing Wicked terrain internals or losing valleys.
+        if (auto* rootTransform = scene.transforms.GetComponent(entity))
+        {
+            rootTransform->translation_local.y = -terrain.bottomLevel;
+            rootTransform->SetDirty();
+            rootTransform->UpdateTransform();
+        }
+
+        RestartTerrainGeneration(terrain);
         return entity;
     }
 
@@ -686,7 +731,7 @@ namespace renegade::bridge
         }
         if (restartGeneration && terrain.scene != nullptr)
         {
-            terrain.Generation_Restart();
+            RestartTerrainGeneration(terrain);
         }
     }
 
@@ -765,7 +810,7 @@ namespace renegade::bridge
     {
         wi::resourcemanager::ReloadOutdatedResources();
         RebindDefaultTerrainMaterials(scene);
-        terrain.Generation_Restart();
+        RestartTerrainGeneration(terrain);
     }
 
     SetTerrainMaterialCommand::SetTerrainMaterialCommand(
@@ -838,7 +883,7 @@ namespace renegade::bridge
         if (restoredTerrain != nullptr)
         {
             restoredTerrain->scene = scene_;
-            restoredTerrain->Generation_Restart();
+            RestartTerrainGeneration(*restoredTerrain);
         }
         return restored == entity_;
     }
@@ -964,6 +1009,11 @@ namespace renegade::bridge
             ++it;
         }
         terrain->generation = beforeRadius_;
+        if (terrain->IsPhysicsEnabled() && !terrain->IsCenterToCamEnabled())
+        {
+            terrain->physics_generation = std::max(
+                terrain->physics_generation, beforeRadius_ + 1);
+        }
     }
 
     bool ExpandTerrainCommand::ApplyExpandedRadius()
@@ -980,6 +1030,11 @@ namespace renegade::bridge
         }
         terrain->Generation_Cancel();
         terrain->generation = afterRadius_;
+        if (terrain->IsPhysicsEnabled())
+        {
+            terrain->physics_generation = std::max(
+                terrain->physics_generation, afterRadius_ + 1);
+        }
         return true;
     }
 

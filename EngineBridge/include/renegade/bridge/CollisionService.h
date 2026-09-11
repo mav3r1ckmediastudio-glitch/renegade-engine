@@ -64,8 +64,10 @@ namespace renegade::bridge
     // geometry in the resolved target's local space. The target's own scale is
     // deliberately excluded: the physics backend applies transform scale when
     // it creates the real shape, so baking it into dimensions here would scale
-    // the collider twice. Returns false when no usable render geometry exists
-    // or the selected shape is mesh-derived.
+    // the collider twice. Off-centre/grounded pivots are represented by the
+    // native rigid body's offset rather than oversized origin-centred shapes.
+    // Returns false when no usable render geometry exists or the selected
+    // shape is mesh-derived.
     [[nodiscard]] bool FitPrimitiveCollisionStateToTarget(
         const wi::scene::Scene& scene,
         wi::ecs::Entity entity,

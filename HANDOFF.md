@@ -1,23 +1,69 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 10 September 2026
+**Date:** 11 September 2026
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
 **Merged baseline:** PR #146 — marker overlays + native Wicked particle emitter authoring
-**Active candidate:** Phase 6 Objective + Interaction Vertical Slice on
-`phase6/objective-interaction-vertical-slice`
+**Active candidate:** PR #148 native navigation and terrain-contact repair on
+`staging/phase6-native-navigation`
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current status
 
-Renegade remains in **Phase 6 — Playable Core**. The original Gate 1-3 player,
-input and audio work is merged. The scripting programme is now also through S7:
-PR #144 shipped six creator-facing stock Lua Actions and their interaction UX,
-and PR #146 subsequently merged editor marker overlays plus native Wicked GPU
-particle authoring with separate static-texture and sprite-sheet creator paths.
+Renegade remains in **Phase 6 — Playable Core**. PR #148 now carries native
+Wicked navigation authoring and the finite 19x19 terrain foundation. The first
+terrain-contact failure was traced to Wicked's transform-less generated chunk
+group: the group broke inheritance from Renegade's translated terrain root, so
+Jolt heightfields remained at local `bottomLevel` instead of world Y=0.
 
-The next bounded work is no longer another infrastructure layer. It is the first
-small reusable gameplay objective assembled entirely from the governed scripting
-stack already on `main`.
+Renegade-controlled terrain restarts now recreate that group with an identity
+local transform. Generated render chunks and their native Jolt HEIGHTFIELD
+bodies therefore inherit the same root translation while retaining the
+negative/positive sculpt envelope and the Y=0.02 editor grid. The registered
+terrain test creates representative HEIGHTFIELD physics and steps real Jolt.
+
+Owner retest at the four-green commit `249fa0244ccfca08839715cc70d372818f5ea93a`
+then proved a second independent failure: creator auto-fit expanded primitive
+colliders around a grounded model pivot. The crate and cylindrical barrel debug
+shapes extended below their visible meshes. Placed on terrain they began inside
+the one-sided heightfield and fell through; dropped from above they contacted
+several metres early. This repair commit now fits the true local
+bounds half-size and stores the bounds centre in Wicked's native rigid-body
+offset. The Jolt regression covers both placement directly on world-zero
+terrain and a drop from above; the reusable-asset suite separately covers Box
+and Cylinder grounded-pivot fitting.
+
+The same repair makes manual **REFRESH PATH** rebuild the native Wicked
+VoxelGrid before querying it. Passive preview refreshes stay read-only. The
+native navigation test now voxelizes a normal Jolt rigid-body render mesh during
+a real grid rebuild and proves that PathQuery makes a lateral detour around it
+before running the existing PathQuery and Character-following checks.
+
+Changed files in this repair commit are `CollisionService.h/.cpp`,
+`RenegadeNavigationWorkspace.cpp`, the terrain/reusable-physics/native-navigation
+tests and source contracts, `docs/PHASE6_NATIVE_NAVIGATION_STAGING.md`,
+`docs/FEATURE_MATRIX.csv`, and this handoff. No Wicked source or submodule
+pointer changed.
+
+Local evidence on Linux, using temporary uncommitted executable wrappers around
+the registered test sources:
+
+- `RenegadeReusablePhysicsRepairAudit` — passed, including grounded Box and
+  Cylinder primitive fit;
+- `RenegadeTerrainRepairAudit` — passed after generating world-zero HEIGHTFIELD
+  physics and stepping two mass-1 auto-fitted boxes for 600 frames;
+- `RenegadeNavigationRepairAudit` — passed real Wicked rigid-body mesh
+  voxelization, lateral obstacle routing, native PathQuery and Character
+  following;
+- `cmake -DRENEGADE_SOURCE_DIR=$PWD -P Tests/JP01HardeningSourceContract.cmake`
+  — passed;
+- `cmake -DRENEGADE_SOURCE_DIR=$PWD -P Tests/Phase6NativeNavigationSourceContract.cmake`
+  — passed; and
+- `cmake -DRENEGADE_SOURCE_DIR=$PWD -P Tests/JP01PhysicsLabSourceContract.cmake`
+  — passed.
+
+Remaining risk is packaged Windows/DX12 owner behavior. Do not treat the prior
+four-green run as evidence for this second repair; one fresh exact-head CI and
+the crate/barrel/navigation owner sequence are still required.
 
 ## Current objective slice
 
@@ -135,16 +181,12 @@ Compile-only success is not creator acceptance.
 
 ## Next engineering work
 
-After this objective slice is CI-green and owner accepted:
-
-1. **Navigation and actor path queries** — expose stable Renegade access over
-   Wicked voxel/pathfinding facilities and prove one Runtime actor path query
-   without creating a competing navigation world.
-2. **Integrated Phase 6 acceptance** — build the reference playable slice and
-   prove reopen, player/collisions, audio, scripted objective, navigation where
-   used, Test Level parity and independently packaged Runtime parity.
-3. Close **Phase 6 — Playable Core**, then move the primary programme into the
-   planned Phase 7 animation/advanced-simulation work.
+For PR #148, inspect the one fresh Windows CI cycle for this exact repair head,
+then perform packaged owner verification: generate fresh 19x19 terrain; place and
+drop both a mass-1 crate and cylindrical barrel on flat and sculpted areas;
+rebuild terrain; confirm their debug shapes fit their visible meshes; press
+**REFRESH PATH**; and confirm the agent routes around the normal rigid-body
+obstacle. Do not merge until that owner proof is accepted.
 
 A viewport-placeable trigger/volume system remains deferred until a real shared
 need appears. When introduced it must be one ZoneService usable by objectives,

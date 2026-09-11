@@ -87,6 +87,12 @@ require_text(collision_source
     "if (autoFitPrimitive_)"
     "creator primitive auto-fit path")
 require_text(collision_source
+    "fitted.localOffset = center;"
+    "grounded-pivot collider bounds centre")
+require_text(collision_source
+    "(maximum.y - minimum.y) * 0.5f"
+    "true primitive half-height instead of pivot expansion")
+require_text(collision_source
     "rigidbody->physicsobject.reset();"
     "native body invalidation before scaled-shape recreation")
 require_text(collision_source

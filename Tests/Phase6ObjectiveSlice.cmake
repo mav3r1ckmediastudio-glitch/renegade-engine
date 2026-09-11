@@ -41,3 +41,8 @@ set_tests_properties(
     PROPERTIES
         LABELS "Phase6;ObjectiveSlice"
 )
+
+# The native-navigation work is intentionally developed on a staging branch
+# layered over this Phase 6 slice. Register its focused CPU-side Wicked
+# VoxelGrid/PathQuery proof here without creating a second CI workflow.
+include(${CMAKE_CURRENT_LIST_DIR}/Phase6NativeNavigation.cmake)
