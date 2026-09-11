@@ -58,6 +58,10 @@ target_sources(RenegadeEngineBridge PRIVATE
     EngineBridge/src/CharacterAnimationControlService.cpp
     EngineBridge/include/renegade/bridge/AnimationTimelineService.h
     EngineBridge/src/AnimationTimelineService.cpp
+    EngineBridge/include/renegade/bridge/SpecialistComponentService.h
+    EngineBridge/src/SpecialistComponentService.cpp
+    EngineBridge/include/renegade/bridge/TerrainCreatorGapService.h
+    EngineBridge/src/TerrainCreatorGapService.cpp
 )
 
 if(WIN32)
@@ -75,6 +79,8 @@ if(WIN32)
         Studio/src/Phase7Gate7CCharacterControlsInspector.h
         Studio/src/Phase7Gate7DNativeTimelineInspector.cpp
         Studio/src/Phase7Gate7DNativeTimelineInspector.h
+        Studio/src/Phase7Gate7ESpecialistInspector.cpp
+        Studio/src/Phase7Gate7ESpecialistInspector.h
     )
     include(Studio/MarkerIcons.cmake)
 
@@ -164,6 +170,7 @@ if(WIN32)
     include(Tests/Phase7Gate7B.cmake)
     include(Tests/Phase7Gate7C.cmake)
     include(Tests/Phase7Gate7D.cmake)
+    include(Tests/Phase7Gate7E.cmake)
     include(Tests/S1AInspectorSectionFramework.cmake)
     include(Tests/S1BInspectorMigration.cmake)
     include(Tests/S2ScriptDocument.cmake)
