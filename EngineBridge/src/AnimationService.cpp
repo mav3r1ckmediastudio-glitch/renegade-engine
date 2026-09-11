@@ -206,7 +206,6 @@ namespace renegade::bridge
         auto* animation = FindAnimation(scene, animationEntity);
         if (animation == nullptr || animation->timer >= animation->end)
             return false;
-        animation->speed = std::abs(animation->speed);
         animation->Play();
         return true;
     }
@@ -220,7 +219,6 @@ namespace renegade::bridge
             return false;
         animation->timer = animation->start;
         animation->last_update_time = animation->start;
-        animation->speed = std::abs(animation->speed);
         animation->Play();
         return true;
     }
