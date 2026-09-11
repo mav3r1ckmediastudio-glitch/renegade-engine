@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "Phase7Gate7BHumanoidRetargetInspector.h"
+#include "Phase7Gate7CCharacterControlsInspector.h"
 
 namespace wi::gui
 {
@@ -40,6 +41,8 @@ namespace renegade::studio
     {
         RegisterPhase7Gate7BHumanoidRetargetInspector(
             owner, inspectorPanel, registry, requestRefresh, setStatus);
+        RegisterPhase7Gate7CCharacterControlsInspector(
+            owner, inspectorPanel, registry, requestRefresh, setStatus);
         RegisterPhase7Gate7AAnimationInspectorCore(
             owner,
             inspectorPanel,
@@ -51,6 +54,7 @@ namespace renegade::studio
     inline void PreparePhase7Gate7AAnimationInspector(StudioRenderPath& owner)
     {
         PreparePhase7Gate7BHumanoidRetargetInspector(owner);
+        PreparePhase7Gate7CCharacterControlsInspector(owner);
         PreparePhase7Gate7AAnimationInspectorCore(owner);
     }
 #endif
