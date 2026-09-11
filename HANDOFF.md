@@ -1,217 +1,117 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 11 September 2026
-**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`
-**Merged baseline:** PR #146 — marker overlays + native Wicked particle emitter authoring
-**Active candidate:** PR #148 native navigation and terrain-contact repair on
-`staging/phase6-native-navigation`
+**Date:** 11 September 2026  
+**Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`  
+**Merged baseline:** PR #148 — native Wicked navigation plus terrain/rigid-body contact repair  
+**Merged commit:** `50b3b3663ce42b7093e4d6c367cfe8dd863d3a9e`  
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Current status
+## Programme state
 
-Renegade remains in **Phase 6 — Playable Core**. PR #148 now carries native
-Wicked navigation authoring and the finite 19x19 terrain foundation. The first
-terrain-contact failure was traced to Wicked's transform-less generated chunk
-group: the group broke inheritance from Renegade's translated terrain root, so
-Jolt heightfields remained at local `bottomLevel` instead of world Y=0.
+**Phase 6 — Playable Core is accepted and closed.**
 
-Renegade-controlled terrain restarts now recreate that group with an identity
-local transform. Generated render chunks and their native Jolt HEIGHTFIELD
-bodies therefore inherit the same root translation while retaining the
-negative/positive sculpt envelope and the Y=0.02 editor grid. The registered
-terrain test creates representative HEIGHTFIELD physics and steps real Jolt.
+PR #148 completed the remaining native-navigation slice and repaired the two
+owner-visible physics failures discovered during acceptance:
 
-Owner retest at the four-green commit `249fa0244ccfca08839715cc70d372818f5ea93a`
-then proved a second independent failure: creator auto-fit expanded primitive
-colliders around a grounded model pivot. The crate and cylindrical barrel debug
-shapes extended below their visible meshes. Placed on terrain they began inside
-the one-sided heightfield and fell through; dropped from above they contacted
-several metres early. This repair commit now fits the true local
-bounds half-size and stores the bounds centre in Wicked's native rigid-body
-offset. The Jolt regression covers both placement directly on world-zero
-terrain and a drop from above; the reusable-asset suite separately covers Box
-and Cylinder grounded-pivot fitting.
+- generated Wicked terrain heightfields now inherit the translated terrain root
+  correctly instead of remaining at local `bottomLevel`;
+- creator auto-fit primitive colliders now use the real local bounds half-size
+  plus Wicked's native rigid-body local offset, so grounded Box and Cylinder
+  shapes no longer begin below one-sided terrain and dropped bodies no longer
+  stop several metres early; and
+- manual **REFRESH PATH** rebuilds the native Wicked VoxelGrid before PathQuery,
+  while passive previews remain read-only.
 
-The same repair makes manual **REFRESH PATH** rebuild the native Wicked
-VoxelGrid before querying it. Passive preview refreshes stay read-only. The
-native navigation test now voxelizes a normal Jolt rigid-body render mesh during
-a real grid rebuild and proves that PathQuery makes a lateral detour around it
-before running the existing PathQuery and Character-following checks.
+The final PR #148 head `69650ee02ffe9e6e0853bdb6511d795760ad41a7`
+passed both GitHub Actions workflows required for the PR: Windows baseline and
+Renegade Studio.
 
-Changed files in this repair commit are `CollisionService.h/.cpp`,
-`RenegadeNavigationWorkspace.cpp`, the terrain/reusable-physics/native-navigation
-tests and source contracts, `docs/PHASE6_NATIVE_NAVIGATION_STAGING.md`,
-`docs/FEATURE_MATRIX.csv`, and this handoff. No Wicked source or submodule
-pointer changed.
+Owner verification then passed the repaired crate/barrel terrain-contact path.
+The owner also built and ran the Phase 6 mini-game acceptance build successfully.
+That satisfies the Phase 6 exit requirement already defined in
+`docs/PHASE6_CAPABILITY_AUDIT.md`: a packaged standalone project with a
+controllable character, collisions, audio and a scripted objective.
 
-Local evidence on Linux, using temporary uncommitted executable wrappers around
-the registered test sources:
+Do not reopen Phase 6 merely to add more gameplay breadth. New work now belongs
+to Phase 7 unless a genuine regression is found in an accepted Phase 6 feature.
 
-- `RenegadeReusablePhysicsRepairAudit` — passed, including grounded Box and
-  Cylinder primitive fit;
-- `RenegadeTerrainRepairAudit` — passed after generating world-zero HEIGHTFIELD
-  physics and stepping two mass-1 auto-fitted boxes for 600 frames;
-- `RenegadeNavigationRepairAudit` — passed real Wicked rigid-body mesh
-  voxelization, lateral obstacle routing, native PathQuery and Character
-  following;
-- `cmake -DRENEGADE_SOURCE_DIR=$PWD -P Tests/JP01HardeningSourceContract.cmake`
-  — passed;
-- `cmake -DRENEGADE_SOURCE_DIR=$PWD -P Tests/Phase6NativeNavigationSourceContract.cmake`
-  — passed; and
-- `cmake -DRENEGADE_SOURCE_DIR=$PWD -P Tests/JP01PhysicsLabSourceContract.cmake`
-  — passed.
+## What Phase 6 now provides
 
-Remaining risk is packaged Windows/DX12 owner behavior. Do not treat the prior
-four-green run as evidence for this second repair; one fresh exact-head CI and
-the crate/barrel/navigation owner sequence are still required.
-
-## Current objective slice
-
-The active branch adds one reusable Creator Library Action:
-
-**Objective Counter**
-
-It:
-
-- starts immediately or waits for a configured start event;
-- counts a configured gameplay event;
-- exposes a creator-authored required count;
-- reports short progress/completion messages through the existing governed UI
-  prompt seam;
-- targets an authored entity reference on completion; and
-- sends a configured completion event/payload through the existing bounded
-  gameplay event API.
-
-The reference owner loop deliberately reuses the already accepted S7 Actions:
-
-1. **Interaction Switch** sends `start_objective`;
-2. three **Proximity Pickup** instances send `pickup`;
-3. **Objective Counter** reaches `3` and sends `open`; and
-4. the target **Sliding Door** opens.
-
-No new objective runtime, competing event bus or trigger-volume implementation
-is introduced.
-
-The reusable Action is packaged separately under:
-
-`Content/ScriptLibrary/RenegadeObjectiveActions`
-
-This keeps the accepted S7 contract of exactly six stock Actions frozen rather
-than silently changing that package after merge.
-
-## Automated proof in the active branch
-
-`RenegadePhase6ObjectiveSliceRuntimeTests` exercises the real shipped Lua sources
-rather than token fixtures. It verifies:
-
-- `ObjectiveCounter.lua` is a valid discoverable Creator Library Action;
-- a real Interaction Switch starts the inactive objective;
-- three real Proximity Pickup Actions advance progress through targeted governed
-  events;
-- the objective uses a persisted-style entity reference to target the exit door;
-- completion sends the stock Sliding Door its normal `open` event;
-- the actual door moves in Runtime; and
-- the complete six-instance gameplay loop runs without a disabled script or
-  Runtime diagnostic.
-
-The packaged creator acceptance guide is:
-[`docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md`](docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md)
-
-## What is now on main
-
-### Gameplay foundation
+### Playable/runtime foundation
 
 - governed Player Start and first-person Runtime possession;
 - Wicked/Jolt character capsule, movement, mouse look, sprint and jump;
-- persisted gameplay action map, Pause/Resume and deterministic Reset;
+- persisted gameplay input map plus Pause/Resume and deterministic Reset;
 - native global/2D and positional 3D audio authoring/runtime lifecycle;
-- JP01 Jolt physics authoring/runtime foundation;
-- native Wicked vegetation/grass authoring;
-- native Wicked particle emitter authoring with static and animated sprite-sheet
-  creator workflows; and
+- JP01 Jolt rigid-body authoring/runtime foundation and repaired terrain contact;
+- native Wicked voxel-grid navigation, PathQuery preview and Runtime following;
+- Build Game packaging and standalone Runtime parity; and
+- live Studio/Runtime diagnostics and Test Level process supervision.
+
+### Governed scripting/gameplay foundation
+
+- durable `.rscripts` documents and governed Lua lifecycle;
+- ACTION, SCRIPT and GLOBAL SCRIPT authoring;
+- typed script properties and governed entity references;
+- generation-safe entity/transform/player/input/audio/event/UI seams;
+- reusable Creator Library packages with transactional project adoption;
+- six accepted stock Actions: Sliding Door, Interaction Switch, Player Trigger
+  Zone, Proximity Pickup, Activation Relay and Play Sound; and
+- reusable Objective Counter composition proving switch -> pickups -> door.
+
+### World/effects already available before Phase 7
+
+- finite native Wicked terrain authoring and sculpting;
+- native vegetation/grass painting;
+- native Wicked particle emitter authoring including sprite-sheet animation;
+- environment, ocean and the accepted Phase 5 rendering stack; and
 - editor-only marker overlays for creator entities.
 
-### Governed scripting stack through S7
+## Next engineering objective
 
-- extensible Inspector section/provider architecture;
-- durable `.rscripts` document and script-source identity;
-- governed Runtime-owned Lua lifecycle;
-- restricted metadata evaluation;
-- ACTION, SCRIPT and GLOBAL SCRIPT authoring;
-- generated typed script properties and governed entity references;
-- generation-safe entity/transform gameplay APIs;
-- governed gameplay lifecycle;
-- bounded cross-script events;
-- structured diagnostics and Studio/Test Level IPC;
-- reusable Creator Library packages with transactional project adoption,
-  deterministic dependency closure and update/conflict protection; and
-- six accepted stock Actions: Sliding Door, Interaction Switch, Player Trigger
-  Zone, Proximity Pickup, Activation Relay and Play Sound.
+Begin **Phase 7 — Animation, Terrain and Advanced Simulation** with a fresh audit
+of the pinned Wicked source before implementing another creator-facing gate.
 
-## Creator-library contract
+The master plan defines Phase 7 coverage as:
 
-Installed packages are immutable inputs. Selecting a compatible Creator Library
-entry and pressing **ADD** adopts its deterministic closure into the project
-under:
+- skeletal animation, animation data and timelines;
+- armatures, humanoids, retargeting, IK, expressions and morph animation;
+- remaining terrain layers/props/virtual-texture authoring not already exposed;
+- hair/grass, force interaction, ocean and fluid effects still missing from the
+  Renegade creator surface;
+- splines, video components, Gaussian splats and remaining scene components; and
+- paint tooling plus component-specific debug visualisation.
 
-`Content/Scripts/Library/<package-id>/...`
+Because terrain, vegetation, particles and ocean are already substantially ahead
+of the original master-plan schedule, the Phase 7 audit must classify what is
+actually missing on the current Renegade baseline rather than blindly rebuilding
+those systems.
 
-The project-owned copy then becomes authoritative for Test Level and Build Game.
-Runtime does not search the installed Creator Library directly.
+The highest-value first audit is the **native Wicked character-animation stack**:
+armatures, AnimationComponent data/timelines, humanoid mapping, retargeting, IK,
+expressions/morphs, and the original Wicked Editor workflows that expose them.
+The audit should identify native data ownership, serialization, Runtime behaviour,
+existing Lua bindings and the minimum Renegade-owned creator workflow before a
+new implementation branch is opened.
 
-The objective package follows the same S6 contract; there is no second adoption
-or runtime path for objectives.
+## Deferred boundaries that remain deliberate
 
-## Immediate owner-visible verification for this branch
-
-Use the final packaged Studio artifact and follow
-[`docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md`](docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md).
-At minimum:
-
-1. confirm **Objective Counter** appears in Creator Library and adopts into the
-   active project;
-2. wire one Interaction Switch to start it;
-3. wire three Proximity Pickups to its `pickup` count event;
-4. wire its completion target to a Sliding Door using `open`;
-5. save, close and reopen the level and confirm every property/reference remains;
-6. prove switch -> 1/3 -> 2/3 -> completion -> door in Test Level; and
-7. repeat the same loop in an independently packaged Build Game Runtime.
-
-Compile-only success is not creator acceptance.
-
-## Next engineering work
-
-For PR #148, inspect the one fresh Windows CI cycle for this exact repair head,
-then perform packaged owner verification: generate fresh 19x19 terrain; place and
-drop both a mass-1 crate and cylindrical barrel on flat and sculpted areas;
-rebuild terrain; confirm their debug shapes fit their visible meshes; press
-**REFRESH PATH**; and confirm the agent routes around the normal rigid-body
-obstacle. Do not merge until that owner proof is accepted.
-
-A viewport-placeable trigger/volume system remains deferred until a real shared
-need appears. When introduced it must be one ZoneService usable by objectives,
-audio, weather and later systems; do not reintroduce an audio-only zone.
-
-## Known deferred boundaries
-
-- Shared ZoneService / reusable trigger volumes.
+- One future shared ZoneService for reusable trigger volumes; do not reintroduce
+  audio-only or objective-only zone implementations.
 - Creator-facing VSync control.
-- Physical controller owner evidence where controller hardware is unavailable.
-- Player arms, weapons, combat and production enemy AI.
-- Advanced animation/simulation work governed by later phases.
+- Player arms, weapons, combat and production enemy AI until deliberately scoped.
+- Physical controller owner evidence where hardware is unavailable.
 - Commercial redistribution/release packaging clearance.
 
 ## Canonical references
 
 - [`README.md`](README.md) — product/build entry point.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — programme sequence.
-- [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) — long-range programme.
-- [`docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md`](docs/SCRIPTING_S6_LIBRARY_ADOPTION_PACKAGE_CLOSURE.md) — Creator Library contract.
-- [`docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md`](docs/SCRIPTING_S7_STOCK_ACTIONS_OWNER_TEST.md) — accepted stock Action owner setup.
-- [`docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md`](docs/PHASE6_OBJECTIVE_INTERACTION_OWNER_TEST.md) — active objective-slice acceptance.
-- [`docs/LIVE_DIAGNOSTIC_ACCESS.md`](docs/LIVE_DIAGNOSTIC_ACCESS.md) — live diagnostics architecture/access.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — current programme sequence.
+- [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) — long-range programme and Phase 7 scope.
+- [`docs/PHASE6_CAPABILITY_AUDIT.md`](docs/PHASE6_CAPABILITY_AUDIT.md) — Phase 6 gate/exit contract.
+- [`docs/PHASE6_NATIVE_NAVIGATION_STAGING.md`](docs/PHASE6_NATIVE_NAVIGATION_STAGING.md) — accepted native-navigation architecture and owner test.
 - [`docs/FEATURE_MATRIX.csv`](docs/FEATURE_MATRIX.csv) — capability evidence ledger.
 - [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) — implementation/handover rules.
 
-Historical gate narratives belong in their gate/contract documents and Git
-history. This file intentionally records the **current** handoff only.
+Historical repair detail belongs in the gate documents and Git history. This
+file intentionally records the current handoff only.
