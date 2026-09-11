@@ -55,7 +55,8 @@ int main()
     if (!Require(scene.inverse_kinematics.Contains(effector),
             "IK redo should restore component")) return 1;
 
-    auto lookAfter = renegade::bridge::CaptureHumanoidLookAtState(scene, rig);
+    const auto lookBefore = renegade::bridge::CaptureHumanoidLookAtState(scene, rig);
+    auto lookAfter = lookBefore;
     lookAfter.enabled = true;
     lookAfter.target = target;
     lookAfter.headRotationMax = XMFLOAT2(0.7f, 0.4f);
@@ -74,8 +75,15 @@ int main()
     if (!Require(humanoid->head_rotation_speed == 0.35f,
             "head speed mismatch")) return 1;
     if (!Require(commands.Undo(), "look-at undo should succeed")) return 1;
-    if (!Require(!scene.humanoids.GetComponent(rig)->IsLookAtEnabled(),
-            "look-at undo should restore disabled state")) return 1;
+    const auto lookRestored = renegade::bridge::CaptureHumanoidLookAtState(scene, rig);
+    if (!Require(lookRestored.enabled == lookBefore.enabled,
+            "look-at undo should restore prior enabled state")) return 1;
+    if (!Require(lookRestored.target == lookBefore.target,
+            "look-at undo should restore prior target")) return 1;
+    if (!Require(lookRestored.headRotationSpeed == lookBefore.headRotationSpeed,
+            "look-at undo should restore prior head speed")) return 1;
+    if (!Require(lookRestored.eyeRotationSpeed == lookBefore.eyeRotationSpeed,
+            "look-at undo should restore prior eye speed")) return 1;
 
     const auto expressionEntity = wi::ecs::CreateEntity();
     scene.names.Create(expressionEntity).name = "Expressions";
