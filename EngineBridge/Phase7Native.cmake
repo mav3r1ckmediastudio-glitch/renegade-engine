@@ -1,0 +1,10 @@
+target_sources(RenegadeEngineBridge
+    PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/include/renegade/bridge/AnimationService.h"
+        "${CMAKE_CURRENT_LIST_DIR}/include/renegade/bridge/AnimationCreationService.h"
+        "${CMAKE_CURRENT_LIST_DIR}/include/renegade/bridge/SpecialistComponentService.h"
+        "${CMAKE_CURRENT_LIST_DIR}/src/AnimationService.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/src/AnimationCreationService.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/src/SpecialistComponentService.cpp"
+        "${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_PLY.cpp"
+)
