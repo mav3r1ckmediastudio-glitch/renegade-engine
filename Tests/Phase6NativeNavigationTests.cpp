@@ -107,15 +107,18 @@ int main()
     auto& obstacleMesh = scene.meshes.Create(rigidObstacleMesh);
     obstacleMesh.vertex_positions = {
         XMFLOAT3(-1, -1, -1), XMFLOAT3(1, -1, -1),
-        XMFLOAT3(-1,  1, -1), XMFLOAT3(1,  1, -1),
+        XMFLOAT3(-1,  3, -1), XMFLOAT3(1,  3, -1),
         XMFLOAT3(-1, -1,  1), XMFLOAT3(1, -1,  1),
-        XMFLOAT3(-1,  1,  1), XMFLOAT3(1,  1,  1),
+        XMFLOAT3(-1,  3,  1), XMFLOAT3(1,  3,  1),
     };
     obstacleMesh.indices = {
         0,2,1, 1,2,3, 4,5,6, 5,7,6,
         0,1,4, 1,5,4, 2,6,3, 3,6,7,
         0,4,2, 2,4,6, 1,3,5, 3,7,5,
     };
+    obstacleMesh.aabb = wi::primitive::AABB(
+        XMFLOAT3(-1.0f, -1.0f, -1.0f),
+        XMFLOAT3(1.0f, 3.0f, 1.0f));
     auto& obstacleSubset = obstacleMesh.subsets.emplace_back();
     obstacleSubset.indexOffset = 0;
     obstacleSubset.indexCount =
@@ -130,6 +133,27 @@ int main()
     if (PrepareRigidBodyNavigationGeometry(scene) != 0)
         return Fail("rigid-body navigation preparation was not idempotent");
 
+    // A manual path refresh rebakes this current scene geometry before the
+    // next query. Exercise Wicked's real object voxelizer and prove the normal
+    // rigid-body mesh actually occupies the native grid after rebuild.
+    wi::jobsystem::Initialize();
+    auto* obstacleTransform = scene.transforms.GetComponent(rigidObstacle);
+    obstacleTransform->UpdateTransform();
+    scene.aabb_objects = {obstacleMesh.aabb};
+    scene.matrix_objects = {obstacleTransform->world};
+    if (!RebuildNavigationGrid(
+            scene, gridEntity,
+            CaptureNavigationGridSettings(scene, gridEntity), error))
+    {
+        return Fail("rigid-body obstacle grid rebuild failed: " + error);
+    }
+    grid = scene.voxel_grids.GetComponent(gridEntity);
+    if (grid == nullptr ||
+        !grid->check_voxel(XMFLOAT3(-1.0f, 0.0f, 0.0f)))
+    {
+        return Fail("rigid-body obstacle was absent from rebuilt Wicked voxel grid");
+    }
+
     // Build a deterministic synthetic walkable surface directly in Wicked's
     // native grid. Ground is occupied; obstacles are occupied voxels above it.
     constexpr std::uint32_t groundY = 4;
@@ -139,21 +163,40 @@ int main()
             grid->set_voxel(XMUINT3(x, groundY, z), true);
     }
 
+    const XMFLOAT3 start = grid->coord_to_world(XMUINT3(3, groundY, 12));
+    const XMFLOAT3 goal = grid->coord_to_world(XMUINT3(20, groundY, 12));
+    NavigationQuerySettings querySettings;
+    querySettings.flying = false;
+    querySettings.agentHeight = 1;
+    querySettings.agentWidth = 0;
+
+    NavigationPathResult rigidObstaclePath;
+    if (!QueryNavigationPath(
+            scene, gridEntity, start, goal, querySettings,
+            rigidObstaclePath, error) ||
+        !rigidObstaclePath.successful)
+    {
+        return Fail("rebuilt rigid-body obstacle grid produced no route: " + error);
+    }
+    bool routedAroundRigidBody = false;
+    for (const auto& waypoint : rigidObstaclePath.waypoints)
+    {
+        if (std::fabs(waypoint.z - start.z) > 0.5f)
+        {
+            routedAroundRigidBody = true;
+            break;
+        }
+    }
+    if (!routedAroundRigidBody)
+        return Fail("path did not change course around rebuilt rigid-body obstacle");
+
     // A wall above the walkable surface forces the path around either end.
     // The ground voxel itself stays occupied so the route remains valid there
     // once a free horizontal route is found.
     for (std::uint32_t z = 3; z <= 20; ++z)
         grid->set_voxel(XMUINT3(12, groundY - 1, z), true);
 
-    const XMFLOAT3 start = grid->coord_to_world(XMUINT3(3, groundY, 12));
-    const XMFLOAT3 goal = grid->coord_to_world(XMUINT3(20, groundY, 12));
-
     NavigationPathResult path;
-    NavigationQuerySettings querySettings;
-    querySettings.flying = false;
-    querySettings.agentHeight = 1;
-    querySettings.agentWidth = 0;
-
     if (!QueryNavigationPath(
             scene,
             gridEntity,

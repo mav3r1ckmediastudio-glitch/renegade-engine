@@ -67,6 +67,9 @@ require_text("${navigation_workspace}"
     "REFRESH PATH"
     "creator path refresh control")
 require_text("${navigation_workspace}"
+    "bridge::RebuildNavigationGridCommand"
+    "manual path refresh rebakes current obstacle geometry")
+require_text("${navigation_workspace}"
     "wi::renderer::DrawLine(line)"
     "visible queried-path debug drawing")
 require_text("${studio_chrome}"

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <memory>
 
+#include "renegade/bridge/CollisionService.h"
 #include "renegade/bridge/TerrainService.h"
 
 namespace
@@ -265,14 +266,48 @@ int main()
     heightfield.mass = 0.0f;
     heightfield.friction = 0.8f;
 
-    const wi::ecs::Entity box = wi::ecs::CreateEntity();
-    auto& boxTransform = physicsScene.transforms.Create(box);
-    SetPosition(boxTransform, XMFLOAT3(0.0f, 5.0f, 0.0f));
-    auto& boxBody = physicsScene.rigidbodies.Create(box);
-    boxBody.shape = wi::scene::RigidBodyPhysicsComponent::CollisionShape::BOX;
-    boxBody.box.halfextents = XMFLOAT3(0.5f, 0.5f, 0.5f);
-    boxBody.mass = 1.0f;
-    boxBody.SetDisableDeactivation(true);
+    // Model the creator's grounded-pivot crate: its render vertices occupy
+    // Y=0..4 relative to the placed entity. Auto-fit must produce a two-metre
+    // half-height at offset Y=2, not a four-metre half-height centred at Y=0.
+    const wi::ecs::Entity crateMeshEntity = wi::ecs::CreateEntity();
+    auto& crateMesh = physicsScene.meshes.Create(crateMeshEntity);
+    crateMesh.vertex_positions = {
+        XMFLOAT3(-0.4f, 0.0f, -0.4f), XMFLOAT3(0.4f, 0.0f, -0.4f),
+        XMFLOAT3(-0.4f, 4.0f, -0.4f), XMFLOAT3(0.4f, 4.0f, -0.4f),
+        XMFLOAT3(-0.4f, 0.0f,  0.4f), XMFLOAT3(0.4f, 0.0f,  0.4f),
+        XMFLOAT3(-0.4f, 4.0f,  0.4f), XMFLOAT3(0.4f, 4.0f,  0.4f),
+    };
+
+    renegade::bridge::CommandService collisionCommands;
+    const auto createDynamicCrate = [&](const float x, const float y)
+    {
+        const wi::ecs::Entity crate = wi::ecs::CreateEntity();
+        auto& transform = physicsScene.transforms.Create(crate);
+        SetPosition(transform, XMFLOAT3(x, y, 0.0f));
+        physicsScene.objects.Create(crate).meshID = crateMeshEntity;
+        renegade::bridge::CollisionState collision;
+        collision.mass = 1.0f;
+        collision.disableDeactivation = true;
+        if (!collisionCommands.Execute(std::make_unique<
+                renegade::bridge::CreateCollisionCommand>(
+                    physicsScene, crate, collision)))
+        {
+            return wi::ecs::INVALID_ENTITY;
+        }
+        return crate;
+    };
+
+    const wi::ecs::Entity surfaceCrate = createDynamicCrate(-0.45f, 0.0f);
+    const wi::ecs::Entity fallingCrate = createDynamicCrate(0.45f, 5.0f);
+    const auto* fittedBody =
+        physicsScene.rigidbodies.GetComponent(surfaceCrate);
+    if (surfaceCrate == wi::ecs::INVALID_ENTITY ||
+        fallingCrate == wi::ecs::INVALID_ENTITY || fittedBody == nullptr ||
+        !NearlyEqual(fittedBody->box.halfextents.y, 2.0f) ||
+        !NearlyEqual(fittedBody->local_offset.y, 2.0f))
+    {
+        return Fail("grounded-pivot crate did not receive centred primitive auto-fit");
+    }
 
     wi::jobsystem::context physicsContext;
     for (int frame = 0; frame < 600; ++frame)
@@ -280,10 +315,19 @@ int main()
         wi::physics::RunPhysicsUpdateSystem(
             physicsContext, physicsScene, 1.0f / 60.0f);
     }
-    const XMFLOAT3 landed = wi::physics::GetPosition(boxBody);
-    if (!std::isfinite(landed.y) || landed.y < 0.35f || landed.y > 0.65f)
+    const auto* surfaceTransform =
+        physicsScene.transforms.GetComponent(surfaceCrate);
+    const auto* fallingTransform =
+        physicsScene.transforms.GetComponent(fallingCrate);
+    if (surfaceTransform == nullptr || fallingTransform == nullptr ||
+        !std::isfinite(surfaceTransform->translation_local.y) ||
+        !std::isfinite(fallingTransform->translation_local.y) ||
+        surfaceTransform->translation_local.y < -0.1f ||
+        surfaceTransform->translation_local.y > 0.1f ||
+        fallingTransform->translation_local.y < -0.1f ||
+        fallingTransform->translation_local.y > 0.1f)
     {
-        return Fail("dynamic Jolt box did not land on world-zero terrain HEIGHTFIELD");
+        return Fail("grounded or falling dynamic crate did not rest on world-zero terrain");
     }
 
     std::cout << "PASS: terrain authoring and world-zero Jolt HEIGHTFIELD contact\n";

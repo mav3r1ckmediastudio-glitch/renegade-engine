@@ -238,15 +238,21 @@ namespace renegade::bridge
         if (!MeasureTargetGeometryBounds(scene, target, minimum, maximum))
             return false;
 
-        // Keep the body centred on the stable transform origin. This avoids
-        // relying on backend local-offset semantics when the asset is rotated;
-        // extents are conservatively expanded to contain an off-centre pivot.
+        const XMFLOAT3 center(
+            (minimum.x + maximum.x) * 0.5f,
+            (minimum.y + maximum.y) * 0.5f,
+            (minimum.z + maximum.z) * 0.5f);
         const XMFLOAT3 half(
-            std::max(std::abs(minimum.x), std::abs(maximum.x)),
-            std::max(std::abs(minimum.y), std::abs(maximum.y)),
-            std::max(std::abs(minimum.z), std::abs(maximum.z)));
+            (maximum.x - minimum.x) * 0.5f,
+            (maximum.y - minimum.y) * 0.5f,
+            (maximum.z - minimum.z) * 0.5f);
 
         CollisionState fitted = state;
+        // Imported reusable models commonly use a grounded pivot at the
+        // bottom of their geometry. Centre the native shape on the measured
+        // bounds instead of expanding it around that pivot; otherwise half of
+        // a dynamic collider can begin below a one-sided terrain heightfield.
+        fitted.localOffset = center;
         switch (state.shape)
         {
         case Shape::BOX:

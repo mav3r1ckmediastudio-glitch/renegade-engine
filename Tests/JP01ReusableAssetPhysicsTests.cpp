@@ -171,6 +171,36 @@ int main()
         return Fail("root scale was baked into fitted collider dimensions");
     }
 
+    // Grounded imported assets commonly keep their stable wrapper pivot at the
+    // floor with render geometry offset above it. The native primitive must use
+    // the true bounds centre and half-size instead of expanding symmetrically
+    // below that pivot into terrain.
+    const auto groundedFixture = CreateReusableFixture(scene);
+    auto* groundedGeometryTransform =
+        scene.transforms.GetComponent(groundedFixture.nested);
+    if (groundedGeometryTransform == nullptr)
+        return Fail("grounded fixture geometry transform missing");
+    groundedGeometryTransform->translation_local.y = 2.0f;
+    groundedGeometryTransform->SetDirty();
+    CollisionState groundedFit;
+    if (!FitPrimitiveCollisionStateToTarget(
+            scene, groundedFixture.wrapper, groundedFit) ||
+        !Near(groundedFit.localOffset, XMFLOAT3(0.0f, 2.0f, 0.0f)) ||
+        !Near(groundedFit.boxHalfExtents, XMFLOAT3(1.0f, 0.375f, 0.25f)))
+    {
+        return Fail("grounded-pivot primitive fit remained oversized or off-centre");
+    }
+    CollisionState groundedCylinderFit;
+    groundedCylinderFit.shape = Shape::CYLINDER;
+    if (!FitPrimitiveCollisionStateToTarget(
+            scene, groundedFixture.wrapper, groundedCylinderFit) ||
+        !Near(groundedCylinderFit.localOffset, XMFLOAT3(0.0f, 2.0f, 0.0f)) ||
+        !Near(groundedCylinderFit.capsuleRadius, 1.0f) ||
+        !Near(groundedCylinderFit.capsuleHeight, 0.375f))
+    {
+        return Fail("grounded-pivot cylinder fit remained oversized or off-centre");
+    }
+
     CollisionState initial;
     if (initial.startDeactivated)
         return Fail("new rigid bodies no longer start active");

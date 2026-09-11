@@ -72,7 +72,8 @@ menu and hierarchy selection routing. The creator surface now provides:
 - **SHOW NAVIGATION VOXELS**, using Wicked's own `VoxelGrid::debugdraw()`;
 - **CREATE TEST AGENT + TARGET**, creating a visible authoring agent with a
   native Wicked `CharacterComponent` plus a linked destination marker;
-- **REFRESH PATH**, running Wicked `PathQuery` from the authored agent to target;
+- **REFRESH PATH**, rebuilding the current native grid and then running Wicked
+  `PathQuery` from the authored agent to target;
   and
 - **SHOW QUERIED PATH**, drawing the returned native waypoint chain in the editor
   viewport.

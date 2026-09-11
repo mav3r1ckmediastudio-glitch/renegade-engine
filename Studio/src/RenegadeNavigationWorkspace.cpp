@@ -234,7 +234,7 @@ namespace renegade::studio
             refreshPath.Create("Navigation Refresh Path");
             refreshPath.SetText("REFRESH PATH");
             refreshPath.SetTooltip(
-                "Run Wicked PathQuery between the authored agent and destination and update the editor path preview.");
+                "Rebuild the native Wicked voxel grid from current terrain and rigid-body geometry, then query the authored agent-to-destination path.");
             refreshPath.OnClick([this](const wi::gui::EventArgs&)
             {
                 RefreshPathPreview(true);
@@ -332,6 +332,25 @@ namespace renegade::studio
                 return;
             }
             previewGrid = binding.grid;
+
+            // A path query reads the already-baked VoxelGrid. Manual refresh is
+            // the creator's request to account for obstacles moved or added
+            // since the last grid build, so rebake through the normal undoable
+            // command before querying. Passive preview refreshes remain
+            // read-only and use the latest authored grid.
+            if (reportStatus)
+            {
+                const auto settings = bridge::CaptureNavigationGridSettings(
+                    *Scene(), binding.grid);
+                if (session == nullptr ||
+                    !session->Commands().Execute(std::make_unique<
+                        bridge::RebuildNavigationGridCommand>(
+                            *Scene(), binding.grid, settings)))
+                {
+                    SetStatus("NAVIGATION PATH // GRID REBUILD FAILED", true);
+                    return;
+                }
+            }
             if (!bridge::QueryNavigationAgentPath(
                     *Scene(), previewAgent, previewPath, error))
             {
