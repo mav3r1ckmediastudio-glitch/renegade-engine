@@ -71,13 +71,11 @@ namespace renegade::studio
         {
         public:
             AnimationInspector(
-                StudioRenderPath& owner,
                 wi::gui::Window& panel,
                 InspectorSectionRegistry& registry,
                 std::function<void()> requestRefresh,
                 std::function<void(std::string)> setStatus)
-                : owner_(&owner)
-                , panel_(&panel)
+                : panel_(&panel)
                 , registry_(&registry)
                 , requestRefresh_(std::move(requestRefresh))
                 , setStatus_(std::move(setStatus))
@@ -116,7 +114,7 @@ namespace renegade::studio
                 const InspectorSectionContext&,
                 float) const override
             {
-                return 382.0f;
+                return 294.0f;
             }
 
             void Refresh(const InspectorSectionContext&) override
@@ -156,14 +154,17 @@ namespace renegade::studio
                 liveStatus_.SetSize(XMFLOAT2(width, 22.0f));
                 y += 22.0f + gap;
 
-                const float transportWidth = std::max(1.0f, (width - gap * 3.0f) / 4.0f);
+                const float transportWidth = std::max(
+                    1.0f, (width - gap * 3.0f) / 4.0f);
                 playFromStart_.SetPos(XMFLOAT2(x, y));
                 playFromStart_.SetSize(XMFLOAT2(transportWidth, rowHeight));
                 play_.SetPos(XMFLOAT2(x + (transportWidth + gap), y));
                 play_.SetSize(XMFLOAT2(transportWidth, rowHeight));
-                pause_.SetPos(XMFLOAT2(x + (transportWidth + gap) * 2.0f, y));
+                pause_.SetPos(XMFLOAT2(
+                    x + (transportWidth + gap) * 2.0f, y));
                 pause_.SetSize(XMFLOAT2(transportWidth, rowHeight));
-                stop_.SetPos(XMFLOAT2(x + (transportWidth + gap) * 3.0f, y));
+                stop_.SetPos(XMFLOAT2(
+                    x + (transportWidth + gap) * 3.0f, y));
                 stop_.SetSize(XMFLOAT2(transportWidth, rowHeight));
                 y += rowHeight + gap;
 
@@ -183,7 +184,8 @@ namespace renegade::studio
                 speed_.SetSize(XMFLOAT2(width, rowHeight));
                 y += rowHeight + gap;
 
-                const float rangeWidth = std::max(1.0f, (width - gap) * 0.5f);
+                const float rangeWidth = std::max(
+                    1.0f, (width - gap) * 0.5f);
                 start_.SetPos(XMFLOAT2(x, y));
                 start_.SetSize(XMFLOAT2(rangeWidth, rowHeight));
                 end_.SetPos(XMFLOAT2(x + rangeWidth + gap, y));
@@ -201,17 +203,6 @@ namespace renegade::studio
             }
 
         private:
-            [[nodiscard]] bridge::AnimationClipState* SelectedClip() noexcept
-            {
-                const auto it = std::find_if(
-                    clips_.begin(), clips_.end(),
-                    [this](const bridge::AnimationClipState& clip)
-                    {
-                        return clip.entity == selectedAnimation_;
-                    });
-                return it == clips_.end() ? nullptr : &*it;
-            }
-
             [[nodiscard]] const bridge::AnimationClipState* SelectedClip() const noexcept
             {
                 const auto it = std::find_if(
@@ -287,18 +278,25 @@ namespace renegade::studio
             [[nodiscard]] std::string LiveStatusText() const
             {
                 auto* session = bridge::StudioSession::Current();
-                if (session == nullptr || selectedAnimation_ == wi::ecs::INVALID_ENTITY)
+                if (session == nullptr ||
+                    selectedAnimation_ == wi::ecs::INVALID_ENTITY)
+                {
                     return "NO ANIMATION";
+                }
                 const auto& scene = session->Scenes().GetScene();
-                const auto* animation = scene.animations.GetComponent(selectedAnimation_);
+                const auto* animation =
+                    scene.animations.GetComponent(selectedAnimation_);
                 if (animation == nullptr)
                     return "ANIMATION UNAVAILABLE";
 
-                std::string state = animation->IsPlaying()
+                const std::string state = animation->IsPlaying()
                     ? "PLAYING"
                     : animation->IsEnded() ? "ENDED" : "PAUSED";
-                return state + "  //  " + FormatSeconds(animation->timer) +
-                    " / " + FormatSeconds(animation->GetLength()) +
+                const float length = std::max(0.0f, animation->GetLength());
+                const float current = std::clamp(
+                    animation->timer - animation->start, 0.0f, length);
+                return state + "  //  " + FormatSeconds(current) +
+                    " / " + FormatSeconds(length) +
                     "  //  " + std::to_string(clips_.size()) +
                     (clips_.size() == 1 ? " CLIP" : " CLIPS");
             }
@@ -317,12 +315,17 @@ namespace renegade::studio
 
             void RunPreview(
                 const char* action,
-                const std::function<bool(wi::scene::Scene&, wi::ecs::Entity)>& operation)
+                const std::function<bool(
+                    wi::scene::Scene&, wi::ecs::Entity)>& operation)
             {
                 auto* session = bridge::StudioSession::Current();
-                if (session == nullptr || selectedAnimation_ == wi::ecs::INVALID_ENTITY)
+                if (session == nullptr ||
+                    selectedAnimation_ == wi::ecs::INVALID_ENTITY)
+                {
                     return;
-                if (operation(session->Scenes().GetScene(), selectedAnimation_))
+                }
+                if (operation(
+                        session->Scenes().GetScene(), selectedAnimation_))
                 {
                     SetStatus(std::string("ANIMATION // ") + action);
                     RequestRefresh();
@@ -331,11 +334,15 @@ namespace renegade::studio
 
             void CommitAuthored(
                 const char* action,
-                const std::function<void(bridge::AnimationAuthoredState&)>& edit)
+                const std::function<void(
+                    bridge::AnimationAuthoredState&)>& edit)
             {
                 auto* session = bridge::StudioSession::Current();
-                if (session == nullptr || selectedAnimation_ == wi::ecs::INVALID_ENTITY)
+                if (session == nullptr ||
+                    selectedAnimation_ == wi::ecs::INVALID_ENTITY)
+                {
                     return;
+                }
 
                 auto& scene = session->Scenes().GetScene();
                 const auto before = bridge::CaptureAnimationAuthoredState(
@@ -349,8 +356,9 @@ namespace renegade::studio
                     return;
                 }
 
-                auto command = std::make_unique<bridge::SetAnimationAuthoredStateCommand>(
-                    scene, selectedAnimation_, before, after);
+                auto command =
+                    std::make_unique<bridge::SetAnimationAuthoredStateCommand>(
+                        scene, selectedAnimation_, before, after);
                 if (session->Commands().Execute(std::move(command)))
                 {
                     SetStatus(std::string("ANIMATION // ") + action);
@@ -361,33 +369,40 @@ namespace renegade::studio
             void CreateControls()
             {
                 header_.Create("Phase 7 Animation Header");
-                header_.SetTooltip("Expand native Wicked animation playback controls.");
+                header_.SetTooltip(
+                    "Expand native Wicked animation playback controls.");
                 header_.OnClick([this](const wi::gui::EventArgs&)
                 {
-                    (void)registry_->ToggleExpanded(Phase7AnimationSectionId);
+                    (void)registry_->ToggleExpanded(
+                        Phase7AnimationSectionId);
                     RequestRefresh();
                 });
                 panel_->AddWidget(&header_);
 
                 clip_.Create("Animation Clip");
-                clip_.SetTooltip("Native Wicked AnimationComponent in the selected asset hierarchy.");
+                clip_.SetTooltip(
+                    "Native Wicked AnimationComponent in the selected asset hierarchy.");
                 clip_.OnSelect([this](const wi::gui::EventArgs& args)
                 {
-                    selectedAnimation_ = static_cast<wi::ecs::Entity>(args.userdata);
+                    selectedAnimation_ =
+                        static_cast<wi::ecs::Entity>(args.userdata);
                     SetStatus("ANIMATION // CLIP SELECTED");
                     RequestRefresh();
                 });
                 panel_->AddWidget(&clip_);
 
                 liveStatus_.Create("Animation Live Status");
-                liveStatus_.SetTextProvider([this]() { return LiveStatusText(); });
+                liveStatus_.SetTextProvider(
+                    [this]() { return LiveStatusText(); });
                 panel_->AddWidget(&liveStatus_);
 
                 playFromStart_.Create("Animation Play From Start");
                 playFromStart_.SetText("FROM START");
                 playFromStart_.OnClick([this](const wi::gui::EventArgs&)
                 {
-                    RunPreview("PLAY FROM START", bridge::PlayAnimationPreviewFromStart);
+                    RunPreview(
+                        "PLAY FROM START",
+                        bridge::PlayAnimationPreviewFromStart);
                 });
                 panel_->AddWidget(&playFromStart_);
 
@@ -415,51 +430,75 @@ namespace renegade::studio
                 });
                 panel_->AddWidget(&stop_);
 
-                timer_.Create(0.0f, 1.0f, 0.0f, 1000.0f,
+                timer_.Create(
+                    0.0f, 1.0f, 0.0f, 1000.0f,
                     "Animation Time", "TIME");
-                timer_.SetTooltip("Preview scrub only. Scrubbing does not dirty the scene.");
+                timer_.SetTooltip(
+                    "Preview scrub only. Scrubbing does not dirty the scene.");
                 timer_.OnValuePreview([this](const float value)
                 {
                     auto* session = bridge::StudioSession::Current();
-                    if (session != nullptr && selectedAnimation_ != wi::ecs::INVALID_ENTITY)
+                    if (session != nullptr &&
+                        selectedAnimation_ != wi::ecs::INVALID_ENTITY)
                     {
                         (void)bridge::ScrubAnimationPreview(
-                            session->Scenes().GetScene(), selectedAnimation_, value);
+                            session->Scenes().GetScene(),
+                            selectedAnimation_,
+                            value);
                     }
                 });
                 timer_.OnValueCommitted([this](const float value)
                 {
                     auto* session = bridge::StudioSession::Current();
-                    if (session != nullptr && selectedAnimation_ != wi::ecs::INVALID_ENTITY)
+                    if (session != nullptr &&
+                        selectedAnimation_ != wi::ecs::INVALID_ENTITY)
                     {
                         (void)bridge::ScrubAnimationPreview(
-                            session->Scenes().GetScene(), selectedAnimation_, value);
+                            session->Scenes().GetScene(),
+                            selectedAnimation_,
+                            value);
                         SetStatus("ANIMATION // PREVIEW SCRUB");
                     }
                 });
                 panel_->AddWidget(&timer_);
 
                 playbackMode_.Create("Animation Playback Mode");
-                playbackMode_.AddItem("LOOP", static_cast<std::uint64_t>(bridge::AnimationPlaybackMode::Loop));
-                playbackMode_.AddItem("PING-PONG", static_cast<std::uint64_t>(bridge::AnimationPlaybackMode::PingPong));
-                playbackMode_.AddItem("PLAY ONCE", static_cast<std::uint64_t>(bridge::AnimationPlaybackMode::PlayOnce));
-                playbackMode_.OnSelect([this](const wi::gui::EventArgs& args)
-                {
-                    const auto mode = static_cast<bridge::AnimationPlaybackMode>(args.userdata);
-                    CommitAuthored(PlaybackModeLabel(mode),
-                        [mode](bridge::AnimationAuthoredState& state)
-                        {
-                            state.playbackMode = mode;
-                        });
-                });
+                playbackMode_.AddItem(
+                    "LOOP",
+                    static_cast<std::uint64_t>(
+                        bridge::AnimationPlaybackMode::Loop));
+                playbackMode_.AddItem(
+                    "PING-PONG",
+                    static_cast<std::uint64_t>(
+                        bridge::AnimationPlaybackMode::PingPong));
+                playbackMode_.AddItem(
+                    "PLAY ONCE",
+                    static_cast<std::uint64_t>(
+                        bridge::AnimationPlaybackMode::PlayOnce));
+                playbackMode_.OnSelect(
+                    [this](const wi::gui::EventArgs& args)
+                    {
+                        const auto mode =
+                            static_cast<bridge::AnimationPlaybackMode>(
+                                args.userdata);
+                        CommitAuthored(
+                            PlaybackModeLabel(mode),
+                            [mode](bridge::AnimationAuthoredState& state)
+                            {
+                                state.playbackMode = mode;
+                            });
+                    });
                 panel_->AddWidget(&playbackMode_);
 
-                blend_.Create(0.0f, 1.0f, 1.0f, 1000.0f,
+                blend_.Create(
+                    0.0f, 1.0f, 1.0f, 1000.0f,
                     "Animation Blend", "BLEND");
-                blend_.SetTooltip("Wicked AnimationComponent blend amount.");
+                blend_.SetTooltip(
+                    "Wicked AnimationComponent blend amount.");
                 blend_.OnValueCommitted([this](const float value)
                 {
-                    CommitAuthored("BLEND",
+                    CommitAuthored(
+                        "BLEND",
                         [value](bridge::AnimationAuthoredState& state)
                         {
                             state.amount = value;
@@ -467,12 +506,15 @@ namespace renegade::studio
                 });
                 panel_->AddWidget(&blend_);
 
-                speed_.Create(0.0f, 4.0f, 1.0f, 4000.0f,
+                speed_.Create(
+                    0.0f, 4.0f, 1.0f, 4000.0f,
                     "Animation Speed", "SPEED");
-                speed_.SetTooltip("Native animation playback speed multiplier.");
+                speed_.SetTooltip(
+                    "Native animation playback speed multiplier.");
                 speed_.OnValueCommitted([this](const float value)
                 {
-                    CommitAuthored("SPEED",
+                    CommitAuthored(
+                        "SPEED",
                         [value](bridge::AnimationAuthoredState& state)
                         {
                             state.speed = value;
@@ -482,44 +524,61 @@ namespace renegade::studio
 
                 start_.Create("Animation Start");
                 start_.SetFloatPrecision(3);
-                start_.SetTooltip("Authored native animation start time. Press Enter to commit.");
-                start_.OnInputAccepted([this](const wi::gui::EventArgs& args)
-                {
-                    const float value = std::isfinite(args.fValue) ? args.fValue : 0.0f;
-                    CommitAuthored("START RANGE",
-                        [value](bridge::AnimationAuthoredState& state)
-                        {
-                            state.start = value;
-                            state.end = std::max(state.end, value);
-                        });
-                });
+                start_.SetDescription("START");
+                start_.SetTooltip(
+                    "Authored native animation start time. Press Enter to commit.");
+                start_.OnInputAccepted(
+                    [this](const wi::gui::EventArgs& args)
+                    {
+                        const float value = std::isfinite(args.fValue)
+                            ? args.fValue
+                            : 0.0f;
+                        CommitAuthored(
+                            "START RANGE",
+                            [value](bridge::AnimationAuthoredState& state)
+                            {
+                                state.start = value;
+                                state.end = std::max(state.end, value);
+                            });
+                    });
                 panel_->AddWidget(&start_);
 
                 end_.Create("Animation End");
                 end_.SetFloatPrecision(3);
-                end_.SetTooltip("Authored native animation end time. Press Enter to commit.");
-                end_.OnInputAccepted([this](const wi::gui::EventArgs& args)
-                {
-                    const float value = std::isfinite(args.fValue) ? args.fValue : 0.0f;
-                    CommitAuthored("END RANGE",
-                        [value](bridge::AnimationAuthoredState& state)
-                        {
-                            state.end = std::max(state.start, value);
-                        });
-                });
+                end_.SetDescription("END");
+                end_.SetTooltip(
+                    "Authored native animation end time. Press Enter to commit.");
+                end_.OnInputAccepted(
+                    [this](const wi::gui::EventArgs& args)
+                    {
+                        const float value = std::isfinite(args.fValue)
+                            ? args.fValue
+                            : 0.0f;
+                        CommitAuthored(
+                            "END RANGE",
+                            [value](bridge::AnimationAuthoredState& state)
+                            {
+                                state.end = std::max(state.start, value);
+                            });
+                    });
                 panel_->AddWidget(&end_);
 
                 rootMotion_.Create("ROOT MOTION: ");
                 rootMotion_.SetTooltip(
                     "Enable Wicked native root-motion evaluation. Root-motion bone ownership remains native.");
-                rootMotion_.OnClick([this](const wi::gui::EventArgs& args)
-                {
-                    CommitAuthored(args.bValue ? "ROOT MOTION ON" : "ROOT MOTION OFF",
-                        [enabled = args.bValue](bridge::AnimationAuthoredState& state)
-                        {
-                            state.rootMotion = enabled;
-                        });
-                });
+                rootMotion_.OnClick(
+                    [this](const wi::gui::EventArgs& args)
+                    {
+                        CommitAuthored(
+                            args.bValue
+                                ? "ROOT MOTION ON"
+                                : "ROOT MOTION OFF",
+                            [enabled = args.bValue](
+                                bridge::AnimationAuthoredState& state)
+                            {
+                                state.rootMotion = enabled;
+                            });
+                    });
                 panel_->AddWidget(&rootMotion_);
 
                 SetContentVisible(false);
@@ -543,7 +602,6 @@ namespace renegade::studio
                 rootMotion_.SetVisible(visible);
             }
 
-            StudioRenderPath* owner_ = nullptr;
             wi::gui::Window* panel_ = nullptr;
             InspectorSectionRegistry* registry_ = nullptr;
             std::function<void()> requestRefresh_;
@@ -568,7 +626,7 @@ namespace renegade::studio
             SceneInspectorCheckBox rootMotion_;
         };
 
-        std::unique_ptr<AnimationInspector> activeInspector;
+        std::shared_ptr<AnimationInspector> activeInspector;
         StudioRenderPath* activeOwner = nullptr;
     }
 
@@ -579,20 +637,18 @@ namespace renegade::studio
         std::function<void()> requestRefresh,
         std::function<void(std::string)> setStatus)
     {
-        activeInspector = std::make_unique<AnimationInspector>(
-            owner,
+        activeInspector.reset();
+        activeOwner = &owner;
+        const auto registrationStatus = setStatus;
+        activeInspector = std::make_shared<AnimationInspector>(
             inspectorPanel,
             registry,
             std::move(requestRefresh),
             std::move(setStatus));
-        activeOwner = &owner;
 
         std::string error;
-        std::shared_ptr<IInspectorSectionProvider> provider(
-            activeInspector.get(),
-            [](IInspectorSectionProvider*) {});
-        if (!registry.Register(std::move(provider), error) && setStatus)
-            setStatus("PHASE 7A ANIMATION // " + error);
+        if (!registry.Register(activeInspector, error) && registrationStatus)
+            registrationStatus("PHASE 7A ANIMATION // " + error);
     }
 
     void PreparePhase7AnimationInspector(StudioRenderPath& owner)
