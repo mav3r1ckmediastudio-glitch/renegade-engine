@@ -14,6 +14,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/AudioService.h
     include/renegade/bridge/DecalProbeService.h
     include/renegade/bridge/CommandService.h
+    include/renegade/bridge/HumanoidRetargetService.h
     include/renegade/bridge/DiagnosticService.h
     include/renegade/bridge/CreatorAssetActionPolicy.h
     include/renegade/bridge/CreatorAssetWorkflowService.h
@@ -82,6 +83,7 @@ add_library(RenegadeEngineBridge STATIC
     src/AudioService.cpp
     src/DecalProbeService.cpp
     src/CommandService.cpp
+    src/HumanoidRetargetService.cpp
     src/DiagnosticService.cpp
     src/DiagnosticEndpoint.cpp
     src/CreatorAssetWorkflowService.cpp
