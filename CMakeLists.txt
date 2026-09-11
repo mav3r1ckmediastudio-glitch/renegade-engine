@@ -53,6 +53,11 @@ include(EngineBridge/S6ScriptLibrary.cmake)
 include(EngineBridge/Phase5Gate5.cmake)
 include(EngineBridge/Phase5Gate8.cmake)
 
+target_sources(RenegadeEngineBridge PRIVATE
+    EngineBridge/include/renegade/bridge/CharacterAnimationControlService.h
+    EngineBridge/src/CharacterAnimationControlService.cpp
+)
+
 if(WIN32)
     add_subdirectory(ScreenRenderer)
     add_subdirectory(Studio)
@@ -64,6 +69,8 @@ if(WIN32)
     target_sources(RenegadeStudio PRIVATE
         Studio/src/Phase7Gate7BHumanoidRetargetInspector.cpp
         Studio/src/Phase7Gate7BHumanoidRetargetInspector.h
+        Studio/src/Phase7Gate7CCharacterControlsInspector.cpp
+        Studio/src/Phase7Gate7CCharacterControlsInspector.h
     )
     include(Studio/MarkerIcons.cmake)
 
@@ -151,6 +158,7 @@ if(WIN32)
     include(Tests/Phase6Gate2.cmake)
     include(Tests/Phase6Gate3.cmake)
     include(Tests/Phase7Gate7B.cmake)
+    include(Tests/Phase7Gate7C.cmake)
     include(Tests/S1AInspectorSectionFramework.cmake)
     include(Tests/S1BInspectorMigration.cmake)
     include(Tests/S2ScriptDocument.cmake)
