@@ -52,6 +52,7 @@ include(EngineBridge/S4DScriptReferenceAuthoring.cmake)
 include(EngineBridge/S6ScriptLibrary.cmake)
 include(EngineBridge/Phase5Gate5.cmake)
 include(EngineBridge/Phase5Gate8.cmake)
+include(EngineBridge/Phase7Native.cmake)
 
 if(WIN32)
     add_subdirectory(ScreenRenderer)
@@ -108,6 +109,7 @@ if(WIN32)
     include(Studio/Phase5Gate8.cmake)
     include(Studio/Phase5Gate9.cmake)
     include(Studio/Phase6Gate3.cmake)
+    include(Studio/Phase7Native.cmake)
     add_subdirectory(Runtime)
     include(Runtime/S3GovernedLuaRuntime.cmake)
     include(Runtime/S5CoreGameplayApi.cmake)
@@ -153,6 +155,7 @@ if(WIN32)
     include(Tests/S6ScriptLibrary.cmake)
     include(Tests/S7StockActions.cmake)
     include(Tests/Phase6ObjectiveSlice.cmake)
+    include(Tests/Phase7Native.cmake)
     add_test(
         NAME RenegadeStudioDisclosurePolicySourceContract
         COMMAND ${CMAKE_COMMAND}
