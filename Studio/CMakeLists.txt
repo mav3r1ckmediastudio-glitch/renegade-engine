@@ -110,6 +110,8 @@ add_executable(RenegadeStudio WIN32
     src/Phase5Gate4MaterialInspector.cpp
     src/Phase5Gate5RenderWorkspace.cpp
     src/Phase5Gate7RayPathTracing.cpp
+    src/Phase7Gate7AAnimationInspector.cpp
+    src/Phase7Gate7AAnimationInspector.h
     src/WD01Vegetation.cpp
     src/StudioApplication.cpp
     src/StudioLiveDiagnostics.cpp
