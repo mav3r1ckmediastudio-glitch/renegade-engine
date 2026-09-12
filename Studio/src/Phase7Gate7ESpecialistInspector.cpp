@@ -1,4 +1,5 @@
 #include "Phase7Gate7ESpecialistInspector.h"
+#include "Phase7AsyncSceneGuard.h"
 
 #include "InspectorSectionFramework.h"
 #include "Phase7Gate7AAnimationInspector.h"
@@ -64,6 +65,18 @@ namespace renegade::studio
             if (path.size() < 4 || path.substr(path.size() - 4) != ".r16")
                 path += ".r16";
             return path;
+        }
+
+        bool PreflightH264Video(const std::string& filename, std::string& error)
+        {
+            wi::video::Video probe;
+            if (!wi::video::CreateVideo(filename, &probe))
+            {
+                error = "Wicked could not decode this MP4 as supported H264 video. H265/HEVC and corrupt MP4 files are rejected before project import.";
+                return false;
+            }
+            error.clear();
+            return true;
         }
 
         class SpecialistInspector;
@@ -235,7 +248,7 @@ namespace renegade::studio
 
                 CreateButton(videoOpen_, "Adopt Governed MP4", "ADOPT MP4", [this]() { BrowseVideo(); });
                 videoOpen_.SetTooltip(
-                    "Adopt an external MP4 into SourceAssets/Video and the governed LP08 Content/Video .rasset pipeline. The Scene persists a StableId, never the original disk path.");
+                    "Adopt an external H264 MP4 into SourceAssets/Video and the governed LP08 Content/Video .rasset pipeline. The Scene persists a StableId, never the original disk path. H265/HEVC is rejected before import.");
                 videoLoop_.Create("Loop Video: ");
                 videoLoop_.OnClick([this](const wi::gui::EventArgs& args)
                 {
@@ -639,7 +652,7 @@ namespace renegade::studio
                 auto* video = scene.videos.GetComponent(entity);
                 addComponent_.SetText(video ? "VIDEO COMPONENT PRESENT" : "ADD VIDEO");
                 addComponent_.SetEnabled(video == nullptr);
-                status_.SetText(video ? "Native VideoComponent // governed H264/H265 MP4" : "No native VideoComponent on selection.");
+                status_.SetText(video ? "Native VideoComponent // governed H264 MP4" : "No native VideoComponent on selection.");
                 for (auto* widget : VideoControls())
                     widget->SetEnabled(video != nullptr);
                 if (!video)
@@ -866,27 +879,40 @@ namespace renegade::studio
                     SetStatus("PHASE 7E // video adoption requires an active Renegade project");
                     return;
                 }
+                const auto guard = CapturePhase7AsyncSceneGuard();
 
                 wi::helper::FileDialogParams params;
                 params.type = wi::helper::FileDialogParams::OPEN;
-                params.description = "Adopt MP4 video into Renegade project (H264/H265)";
+                params.description = "Adopt H264 MP4 video into Renegade project";
                 params.extensions = {"mp4"};
-                wi::helper::FileDialog(params, [this, entity](const std::string& filename)
+                wi::helper::FileDialog(params, [this, entity, guard](const std::string& filename)
                 {
                     if (filename.empty()) return;
                     wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                        [this, entity, filename](std::uint64_t)
+                        [this, entity, guard, filename](std::uint64_t)
                         {
-                            auto* current = Session();
-                            if (current == nullptr || !current->Projects().HasProject())
+                            if (!MatchesPhase7AsyncSceneGuard(guard))
                             {
-                                SetStatus("PHASE 7E // video adoption cancelled: project is no longer active");
+                                SetStatus("PHASE 7E // video adoption cancelled: active project or Level changed while the file picker was open");
+                                RequestRefresh();
                                 return;
                             }
+                            auto* current = Session();
+                            if (current == nullptr || !current->Projects().HasProject())
+                                return;
                             auto& scene = current->Scenes().GetScene();
                             if (!scene.videos.Contains(entity))
                             {
-                                SetStatus("PHASE 7E // video adoption cancelled: target VideoComponent no longer exists");
+                                SetStatus("PHASE 7E // video adoption cancelled: original VideoComponent target no longer exists");
+                                RequestRefresh();
+                                return;
+                            }
+
+                            std::string preflightError;
+                            if (!PreflightH264Video(filename, preflightError))
+                            {
+                                SetStatus("PHASE 7E // video rejected before project import // " + preflightError);
+                                RefreshControls(); RequestRefresh();
                                 return;
                             }
 
@@ -919,7 +945,7 @@ namespace renegade::studio
                                     std::make_unique<bridge::SetVideoAssetCommand>(
                                         scene, entity, std::move(prepared))))
                             {
-                                SetStatus("PHASE 7E // governed MP4 adopted // " + imported.assetId);
+                                SetStatus("PHASE 7E // governed H264 MP4 adopted // " + imported.assetId);
                             }
                             else
                             {
@@ -954,24 +980,34 @@ namespace renegade::studio
 
             void BrowseGaussian()
             {
+                auto* session = Session();
+                if (session == nullptr)
+                    return;
+                const auto guard = CapturePhase7AsyncSceneGuard();
                 wi::helper::FileDialogParams params;
                 params.type = wi::helper::FileDialogParams::OPEN;
                 params.description = "Gaussian splat PLY";
                 params.extensions = {"ply"};
-                wi::helper::FileDialog(params, [this](const std::string& filename)
+                wi::helper::FileDialog(params, [this, guard](const std::string& filename)
                 {
                     if (filename.empty()) return;
                     wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                        [this, filename](std::uint64_t)
+                        [this, guard, filename](std::uint64_t)
                         {
-                            auto* session = Session(); if (!session) return;
-                            auto command = std::make_unique<bridge::ImportGaussianSplatCommand>(session->Scenes().GetScene(), filename);
+                            if (!MatchesPhase7AsyncSceneGuard(guard))
+                            {
+                                SetStatus("PHASE 7E // Gaussian import cancelled: active project or Level changed while the file picker was open");
+                                RequestRefresh();
+                                return;
+                            }
+                            auto* current = Session(); if (!current) return;
+                            auto command = std::make_unique<bridge::ImportGaussianSplatCommand>(current->Scenes().GetScene(), filename);
                             auto* executed = command.get();
                             if (!executed->Execute())
                                 SetStatus("PHASE 7E // " + executed->Error());
                             else
                             {
-                                session->Commands().RecordExecuted(std::move(command));
+                                current->Commands().RecordExecuted(std::move(command));
                                 SetStatus("PHASE 7E // native Gaussian PLY imported");
                             }
                             RefreshControls(); RequestRefresh();
@@ -991,27 +1027,47 @@ namespace renegade::studio
 
             void BrowseHeightmapImport()
             {
+                auto* session = Session();
                 const auto entity = SelectedEntity();
+                if (session == nullptr || entity == wi::ecs::INVALID_ENTITY ||
+                    !session->Scenes().GetScene().terrains.Contains(entity))
+                {
+                    return;
+                }
+                const auto guard = CapturePhase7AsyncSceneGuard();
                 wi::helper::FileDialogParams params;
                 params.type = wi::helper::FileDialogParams::OPEN;
                 params.description = "Square little-endian R16 terrain heightmap";
                 params.extensions = {"r16"};
-                wi::helper::FileDialog(params, [this, entity](const std::string& filename)
+                wi::helper::FileDialog(params, [this, entity, guard](const std::string& filename)
                 {
                     if (filename.empty()) return;
                     wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                        [this, entity, filename](std::uint64_t)
+                        [this, entity, guard, filename](std::uint64_t)
                         {
-                            auto* session = Session(); if (!session) return;
+                            if (!MatchesPhase7AsyncSceneGuard(guard))
+                            {
+                                SetStatus("PHASE 7E // R16 import cancelled: active project or Level changed while the file picker was open");
+                                RequestRefresh();
+                                return;
+                            }
+                            auto* current = Session(); if (!current) return;
+                            auto& scene = current->Scenes().GetScene();
+                            if (!scene.terrains.Contains(entity))
+                            {
+                                SetStatus("PHASE 7E // R16 import cancelled: original Terrain target no longer exists");
+                                RequestRefresh();
+                                return;
+                            }
                             auto command = std::make_unique<bridge::ImportTerrainHeightmapR16Command>(
-                                session->Scenes().GetScene(), entity, filename);
+                                scene, entity, filename);
                             auto* executed = command.get();
                             if (!executed->Execute())
                                 SetStatus("PHASE 7E // " + executed->Error());
                             else
                             {
                                 const auto info = executed->Info();
-                                session->Commands().RecordExecuted(std::move(command));
+                                current->Commands().RecordExecuted(std::move(command));
                                 SetStatus("PHASE 7E // R16 heightmap imported " + std::to_string(info.width) + "x" + std::to_string(info.height));
                             }
                             RefreshControls(); RequestRefresh();
@@ -1021,21 +1077,40 @@ namespace renegade::studio
 
             void BrowseHeightmapExport()
             {
+                auto* session = Session();
                 const auto entity = SelectedEntity();
+                if (session == nullptr || entity == wi::ecs::INVALID_ENTITY ||
+                    !session->Scenes().GetScene().terrains.Contains(entity))
+                {
+                    return;
+                }
+                const auto guard = CapturePhase7AsyncSceneGuard();
                 wi::helper::FileDialogParams params;
                 params.type = wi::helper::FileDialogParams::SAVE;
                 params.description = "Export square little-endian R16 terrain heightmap";
                 params.extensions = {"r16"};
-                wi::helper::FileDialog(params, [this, entity](const std::string& selectedPath)
+                wi::helper::FileDialog(params, [this, entity, guard](const std::string& selectedPath)
                 {
                     if (selectedPath.empty()) return;
                     const std::string filename = EnsureR16Extension(selectedPath);
                     wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                        [this, entity, filename](std::uint64_t)
+                        [this, entity, guard, filename](std::uint64_t)
                         {
-                            auto* session = Session(); if (!session) return;
-                            auto& scene = session->Scenes().GetScene();
-                            auto* terrain = scene.terrains.GetComponent(entity); if (!terrain) return;
+                            if (!MatchesPhase7AsyncSceneGuard(guard))
+                            {
+                                SetStatus("PHASE 7E // R16 export cancelled: active project or Level changed while the file picker was open");
+                                RequestRefresh();
+                                return;
+                            }
+                            auto* current = Session(); if (!current) return;
+                            auto& scene = current->Scenes().GetScene();
+                            auto* terrain = scene.terrains.GetComponent(entity);
+                            if (!terrain)
+                            {
+                                SetStatus("PHASE 7E // R16 export cancelled: original Terrain target no longer exists");
+                                RequestRefresh();
+                                return;
+                            }
                             bridge::TerrainHeightmapInfo info;
                             std::string error;
                             if (bridge::ExportTerrainHeightmapR16(scene, *terrain, filename, &info, &error))
@@ -1116,7 +1191,8 @@ namespace renegade::studio
             if (owner_ != nullptr) owner_->Refresh();
         }
 
-        void SpecialistSectionProvider::ApplyLayout(const InspectorSectionContext&, const InspectorSectionLayout& layout)
+        void SpecialistSectionProvider::ApplyLayout(const InspectorSectionContext&,
+            const InspectorSectionLayout& layout)
         {
             if (owner_ != nullptr) owner_->Layout(layout);
         }

@@ -25,6 +25,14 @@ namespace
         return true;
     }
 
+    bool MetadataEmpty(const wi::scene::MetadataComponent& metadata)
+    {
+        return metadata.bool_values.names.empty() &&
+            metadata.int_values.names.empty() &&
+            metadata.float_values.names.empty() &&
+            metadata.string_values.names.empty();
+    }
+
     const AssetRecord* FindAssetRecord(
         const AssetRegistry& registry,
         const StableId& assetId)
@@ -372,8 +380,45 @@ namespace renegade::bridge
         capturedBefore_ = true;
     }
 
+    bool SetVideoAssetCommand::RestoreAfter()
+    {
+        if (scene_ == nullptr || !capturedAfter_ || !afterResource_.IsValid())
+            return false;
+        auto* video = scene_->videos.GetComponent(videoEntity_);
+        if (video == nullptr)
+        {
+            error_ = "Video redo requires the original native VideoComponent.";
+            return false;
+        }
+
+        wi::video::VideoInstance nextInstance;
+        if (!wi::video::CreateVideoInstance(&afterResource_.GetVideo(), &nextInstance))
+        {
+            error_ = "Wicked could not recreate the governed video instance for Redo.";
+            return false;
+        }
+
+        video->Stop();
+        video->filename.clear();
+        video->videoResource = afterResource_;
+        video->videoinstance = std::move(nextInstance);
+        video->currentTimer = 0.0f;
+        video->SetLooped(afterLooped_);
+
+        auto* metadata = scene_->metadatas.GetComponent(videoEntity_);
+        if (metadata == nullptr)
+            metadata = &scene_->metadatas.Create(videoEntity_);
+        metadata->int_values.set(VideoAssetBindingVersionMetadataKey, VideoAssetBindingVersion);
+        metadata->string_values.set(VideoAssetIdMetadataKey, prepared_.assetId);
+        error_.clear();
+        return true;
+    }
+
     bool SetVideoAssetCommand::Execute()
     {
+        if (capturedAfter_)
+            return RestoreAfter();
+
         CaptureBefore();
         if (!capturedBefore_ || scene_ == nullptr || !IsValidStableId(prepared_.assetId))
             return false;
@@ -386,7 +431,26 @@ namespace renegade::bridge
             if (video != nullptr && video->videoResource.IsValid())
                 return false;
         }
-        return ApplyPreparedVideoAsset(*scene_, videoEntity_, prepared_, error_);
+        if (!ApplyPreparedVideoAsset(*scene_, videoEntity_, prepared_, error_))
+            return false;
+
+        auto* video = scene_->videos.GetComponent(videoEntity_);
+        if (video == nullptr || !video->videoResource.IsValid())
+        {
+            error_ = "Governed video assignment did not retain a live native resource.";
+            RestoreBefore();
+            return false;
+        }
+        afterResource_ = video->videoResource;
+        afterLooped_ = video->IsLooped();
+        capturedAfter_ = true;
+
+        // Wicked's MP4 loader has already copied the compressed video stream into
+        // its native Resource/GPU buffer. Retaining the original .rasset payload
+        // inside CommandService would pin a second potentially multi-gigabyte CPU
+        // copy for the lifetime of the Undo stack. Redo uses afterResource_ instead.
+        std::vector<std::uint8_t>().swap(prepared_.payload);
+        return true;
     }
 
     void SetVideoAssetCommand::RestoreBefore() noexcept
@@ -422,7 +486,12 @@ namespace renegade::bridge
         if (!hadMetadata_)
         {
             if (metadata != nullptr)
-                scene_->metadatas.Remove(videoEntity_);
+            {
+                metadata->int_values.erase(VideoAssetBindingVersionMetadataKey);
+                metadata->string_values.erase(VideoAssetIdMetadataKey);
+                if (MetadataEmpty(*metadata))
+                    scene_->metadatas.Remove(videoEntity_);
+            }
             return;
         }
         if (metadata == nullptr)

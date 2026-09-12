@@ -88,14 +88,18 @@ namespace renegade::bridge
     private:
         void CaptureBefore();
         void RestoreBefore() noexcept;
+        bool RestoreAfter();
 
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity videoEntity_ = wi::ecs::INVALID_ENTITY;
         PreparedVideoAsset prepared_;
         std::string beforeFilename_;
         wi::Resource beforeResource_;
+        wi::Resource afterResource_;
         bool beforeLooped_ = false;
+        bool afterLooped_ = false;
         bool capturedBefore_ = false;
+        bool capturedAfter_ = false;
         bool hadMetadata_ = false;
         bool hadVersion_ = false;
         int beforeVersion_ = 0;
