@@ -472,8 +472,7 @@ namespace renegade::bridge
             RetargetAnimationSnapshot snapshot;
             snapshot.entity = entity;
             snapshot.animation = *animation;
-            snapshot.hasHierarchy = true;
-            snapshot.hierarchy = *animationHierarchy;
+            snapshot.parent = animationHierarchy->parentID;
             if (const auto* name = scene_->names.GetComponent(entity))
                 snapshot.name = name->name;
             animationSnapshots_.push_back(std::move(snapshot));
@@ -495,8 +494,7 @@ namespace renegade::bridge
                 RetargetAnimationDataSnapshot dataSnapshot;
                 dataSnapshot.entity = sampler.data;
                 dataSnapshot.data = *data;
-                dataSnapshot.hasHierarchy = true;
-                dataSnapshot.hierarchy = *dataHierarchy;
+                dataSnapshot.parent = dataHierarchy->parentID;
                 dataSnapshots_.push_back(std::move(dataSnapshot));
             }
         }
@@ -527,6 +525,11 @@ namespace renegade::bridge
                 result_.error = "Retarget redo could not restore an animation because an entity ID was reused.";
                 return false;
             }
+            if (snapshot.parent != destinationHumanoid_)
+            {
+                result_.error = "Retarget redo found an invalid animation ownership parent.";
+                return false;
+            }
         }
 
         result_ = {};
@@ -537,20 +540,19 @@ namespace renegade::bridge
             scene_->animations.Create(snapshot.entity) = snapshot.animation;
             if (!snapshot.name.empty())
                 scene_->names.Create(snapshot.entity).name = snapshot.name;
+            scene_->Component_Attach(snapshot.entity, snapshot.parent);
             result_.createdAnimations.push_back(snapshot.entity);
         }
         for (const auto& snapshot : dataSnapshots_)
+        {
+            if (snapshot.parent == wi::ecs::INVALID_ENTITY || !EntityExists(*scene_, snapshot.parent))
+            {
+                result_.error = "Retarget redo found an invalid baked-data ownership parent.";
+                RemoveCreated();
+                return false;
+            }
             scene_->animation_datas.Create(snapshot.entity) = snapshot.data;
-
-        for (const auto& snapshot : animationSnapshots_)
-        {
-            if (snapshot.hasHierarchy)
-                scene_->hierarchy.Create(snapshot.entity) = snapshot.hierarchy;
-        }
-        for (const auto& snapshot : dataSnapshots_)
-        {
-            if (snapshot.hasHierarchy)
-                scene_->hierarchy.Create(snapshot.entity) = snapshot.hierarchy;
+            scene_->Component_Attach(snapshot.entity, snapshot.parent);
         }
 
         result_.succeeded = !result_.createdAnimations.empty();
