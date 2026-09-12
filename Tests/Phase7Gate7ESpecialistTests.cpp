@@ -1,4 +1,5 @@
 #include "renegade/bridge/SpecialistComponentService.h"
+#include "renegade/bridge/VideoAssetService.h"
 
 #include <cmath>
 #include <cstdlib>
@@ -81,17 +82,35 @@ int main()
     Require(force->type != wi::scene::ForceFieldComponent::Type::Plane || !NearlyEqual(force->gravity, -12.5f),
         "force undo should restore previous state");
 
-    // Video authored loop state is testable without requiring an external MP4.
+    // Video loop authoring must remain independent from governed media identity.
+    // A governed video intentionally keeps VideoComponent::filename empty and
+    // persists the LP08 product StableId in serializable metadata instead.
     scene.videos.Create(entity);
+    auto& videoMetadata = scene.metadatas.Create(entity);
+    const std::string governedVideoId = "11111111-1111-4111-8111-111111111111";
+    videoMetadata.int_values.set(
+        renegade::bridge::VideoAssetBindingVersionMetadataKey,
+        renegade::bridge::VideoAssetBindingVersion);
+    videoMetadata.string_values.set(
+        renegade::bridge::VideoAssetIdMetadataKey,
+        governedVideoId);
+
     auto videoState = renegade::bridge::CaptureVideoAuthoredState(*scene.videos.GetComponent(entity));
+    Require(videoState.filename.empty(), "governed video test should not depend on an external filename");
     videoState.looped = !videoState.looped;
     renegade::bridge::SetVideoAuthoredStateCommand setVideo(scene, entity, videoState);
     Require(setVideo.Execute(), "video loop state should apply without loading media");
     Require(scene.videos.GetComponent(entity)->IsLooped() == videoState.looped,
         "native VideoComponent loop flag should update");
+    Require(scene.metadatas.GetComponent(entity)->string_values.get(
+                renegade::bridge::VideoAssetIdMetadataKey) == governedVideoId,
+        "loop edit must preserve governed video StableId");
     setVideo.Undo();
     Require(scene.videos.GetComponent(entity)->IsLooped() != videoState.looped,
         "video undo should restore previous loop state");
+    Require(scene.metadatas.GetComponent(entity)->string_values.get(
+                renegade::bridge::VideoAssetIdMetadataKey) == governedVideoId,
+        "loop undo must preserve governed video StableId");
 
     // Spline flags and node entity ownership remain native and reversible.
     scene.splines.Create(entity);
