@@ -11,6 +11,17 @@ namespace
 {
     using namespace renegade::bridge;
 
+    constexpr float KeyTimeEpsilon = 0.000001f;
+
+    bool EntityExists(const wi::scene::Scene& scene, const wi::ecs::Entity entity)
+    {
+        if (entity == wi::ecs::INVALID_ENTITY)
+            return false;
+        wi::unordered_set<wi::ecs::Entity> entities;
+        scene.FindAllEntities(entities);
+        return entities.count(entity) != 0;
+    }
+
     bool ContainsEntity(
         const std::vector<TimelineDataSnapshot>& snapshots,
         const wi::ecs::Entity entity) noexcept
@@ -56,6 +67,8 @@ namespace
                     scene.animation_datas.Remove(entity);
             }
         }
+        for (auto& channel : animation->channels)
+            channel.next_event = 0;
         return true;
     }
 
@@ -201,9 +214,8 @@ namespace
         }
         case AnimationPath::SCRIPT_PLAY:
         case AnimationPath::SCRIPT_STOP:
-            return scene.scripts.GetComponent(target) != nullptr
-                ? true
-                : fail("target has no ScriptComponent");
+            return fail(
+                "Renegade creator scripts use the governed .rscripts runtime, not Wicked ScriptComponent events");
         case AnimationPath::MATERIAL_COLOR:
         case AnimationPath::MATERIAL_EMISSIVE:
         case AnimationPath::MATERIAL_ROUGHNESS:
@@ -329,10 +341,100 @@ namespace
         data.keyframe_data = std::move(values);
         return true;
     }
+
+    bool InsertOrReplaceKey(
+        wi::scene::AnimationDataComponent& data,
+        const std::vector<float>& value,
+        const float time,
+        std::string& error,
+        bool& changed)
+    {
+        changed = false;
+        if (!std::isfinite(time))
+        {
+            error = "timeline key time must be finite";
+            return false;
+        }
+
+        const auto timesBefore = data.keyframe_times;
+        if (!ReorderKeys(data, error))
+            return false;
+        changed = timesBefore != data.keyframe_times;
+
+        const std::size_t keyCount = data.keyframe_times.size();
+        const std::size_t stride = value.size();
+        if (keyCount == 0)
+        {
+            if (!data.keyframe_data.empty())
+            {
+                error = "animation data contains payload values without key times";
+                return false;
+            }
+        }
+        else if (data.keyframe_data.size() != keyCount * stride)
+        {
+            error = "animation key payload width does not match the native channel path";
+            return false;
+        }
+
+        auto lower = std::lower_bound(data.keyframe_times.begin(), data.keyframe_times.end(), time);
+        std::size_t index = static_cast<std::size_t>(
+            std::distance(data.keyframe_times.begin(), lower));
+
+        auto replaceAt = [&](const std::size_t keyIndex)
+        {
+            if (stride == 0)
+                return;
+            bool payloadChanged = false;
+            for (std::size_t component = 0; component < stride; ++component)
+            {
+                if (std::abs(data.keyframe_data[keyIndex * stride + component] - value[component]) >
+                    KeyTimeEpsilon)
+                {
+                    payloadChanged = true;
+                    break;
+                }
+            }
+            if (!payloadChanged)
+                return;
+            for (std::size_t component = 0; component < stride; ++component)
+                data.keyframe_data[keyIndex * stride + component] = value[component];
+            changed = true;
+        };
+
+        if (lower != data.keyframe_times.end() && std::abs(*lower - time) <= KeyTimeEpsilon)
+        {
+            replaceAt(index);
+            return true;
+        }
+        if (index > 0 && std::abs(data.keyframe_times[index - 1] - time) <= KeyTimeEpsilon)
+        {
+            replaceAt(index - 1);
+            return true;
+        }
+
+        data.keyframe_times.insert(lower, time);
+        if (stride > 0)
+        {
+            data.keyframe_data.insert(
+                data.keyframe_data.begin() + static_cast<std::ptrdiff_t>(index * stride),
+                value.begin(), value.end());
+        }
+        changed = true;
+        return true;
+    }
 }
 
 namespace renegade::bridge
 {
+    bool IsTimelineEventPath(const AnimationPath path) noexcept
+    {
+        return path == AnimationPath::SOUND_PLAY ||
+            path == AnimationPath::SOUND_STOP ||
+            path == AnimationPath::SCRIPT_PLAY ||
+            path == AnimationPath::SCRIPT_STOP;
+    }
+
     const char* TimelineRecordPresetLabel(const TimelineRecordPreset preset) noexcept
     {
         switch (preset)
@@ -355,8 +457,8 @@ namespace renegade::bridge
         case TimelineRecordPreset::CameraFocalLength: return "CAMERA // FOCAL LENGTH";
         case TimelineRecordPreset::CameraApertureSize: return "CAMERA // APERTURE SIZE";
         case TimelineRecordPreset::CameraApertureShape: return "CAMERA // APERTURE SHAPE";
-        case TimelineRecordPreset::ScriptPlay: return "SCRIPT // PLAY";
-        case TimelineRecordPreset::ScriptStop: return "SCRIPT // STOP";
+        case TimelineRecordPreset::ScriptPlay: return "SCRIPT // PLAY (RESERVED)";
+        case TimelineRecordPreset::ScriptStop: return "SCRIPT // STOP (RESERVED)";
         case TimelineRecordPreset::MaterialColor: return "MATERIAL // COLOR";
         case TimelineRecordPreset::MaterialEmissive: return "MATERIAL // EMISSIVE";
         case TimelineRecordPreset::MaterialRoughness: return "MATERIAL // ROUGHNESS";
@@ -388,8 +490,8 @@ namespace renegade::bridge
         case AnimationPath::CAMERA_FOCAL_LENGTH: return "CAMERA FOCAL LENGTH";
         case AnimationPath::CAMERA_APERTURE_SIZE: return "CAMERA APERTURE SIZE";
         case AnimationPath::CAMERA_APERTURE_SHAPE: return "CAMERA APERTURE SHAPE";
-        case AnimationPath::SCRIPT_PLAY: return "SCRIPT PLAY";
-        case AnimationPath::SCRIPT_STOP: return "SCRIPT STOP";
+        case AnimationPath::SCRIPT_PLAY: return "SCRIPT PLAY (LEGACY WICKED ONLY)";
+        case AnimationPath::SCRIPT_STOP: return "SCRIPT STOP (LEGACY WICKED ONLY)";
         case AnimationPath::MATERIAL_COLOR: return "MATERIAL COLOR";
         case AnimationPath::MATERIAL_EMISSIVE: return "MATERIAL EMISSIVE";
         case AnimationPath::MATERIAL_ROUGHNESS: return "MATERIAL ROUGHNESS";
@@ -423,8 +525,9 @@ namespace renegade::bridge
         case TimelineRecordPreset::CameraFocalLength: return {AnimationPath::CAMERA_FOCAL_LENGTH};
         case TimelineRecordPreset::CameraApertureSize: return {AnimationPath::CAMERA_APERTURE_SIZE};
         case TimelineRecordPreset::CameraApertureShape: return {AnimationPath::CAMERA_APERTURE_SHAPE};
-        case TimelineRecordPreset::ScriptPlay: return {AnimationPath::SCRIPT_PLAY};
-        case TimelineRecordPreset::ScriptStop: return {AnimationPath::SCRIPT_STOP};
+        case TimelineRecordPreset::ScriptPlay:
+        case TimelineRecordPreset::ScriptStop:
+            return {};
         case TimelineRecordPreset::MaterialColor: return {AnimationPath::MATERIAL_COLOR};
         case TimelineRecordPreset::MaterialEmissive: return {AnimationPath::MATERIAL_EMISSIVE};
         case TimelineRecordPreset::MaterialRoughness: return {AnimationPath::MATERIAL_ROUGHNESS};
@@ -516,6 +619,12 @@ namespace renegade::bridge
         const TimelineRecordPreset preset,
         std::string* reason)
     {
+        if (preset == TimelineRecordPreset::ScriptPlay || preset == TimelineRecordPreset::ScriptStop)
+        {
+            if (reason != nullptr)
+                *reason = "Renegade governed script events are not native Wicked ScriptComponent timeline paths";
+            return false;
+        }
         if (target == wi::ecs::INVALID_ENTITY)
         {
             if (reason != nullptr)
@@ -528,7 +637,7 @@ namespace renegade::bridge
             if (!CapturePathValue(scene, target, path, value, reason))
                 return false;
         }
-        return true;
+        return !TimelineRecordPresetPaths(preset).empty();
     }
 
     TimelineGraphSnapshot CaptureTimelineGraphSnapshot(
@@ -551,6 +660,42 @@ namespace renegade::bridge
                 snapshot.data.push_back({sampler.data, *data});
         }
         return snapshot;
+    }
+
+    CreateTimelineAnimationCommand::CreateTimelineAnimationCommand(
+        wi::scene::Scene& scene,
+        std::string name)
+        : scene_(&scene), name_(std::move(name))
+    {
+        if (name_.empty())
+            name_ = "Animation";
+    }
+
+    bool CreateTimelineAnimationCommand::Execute()
+    {
+        if (scene_ == nullptr)
+            return false;
+        if (entity_ == wi::ecs::INVALID_ENTITY)
+            entity_ = wi::ecs::CreateEntity();
+        if (EntityExists(*scene_, entity_))
+            return false;
+
+        scene_->names.Create(entity_).name = name_;
+        auto& animation = scene_->animations.Create(entity_);
+        animation.start = 0.0f;
+        animation.end = 1.0f;
+        animation.timer = 0.0f;
+        animation.last_update_time = 0.0f;
+        animation.speed = 1.0f;
+        animation.amount = 1.0f;
+        animation.SetLooped(true);
+        return true;
+    }
+
+    void CreateTimelineAnimationCommand::Undo()
+    {
+        if (scene_ != nullptr && EntityExists(*scene_, entity_))
+            scene_->Entity_Remove(entity_, true);
     }
 
     RecordTimelineKeyCommand::RecordTimelineKeyCommand(
@@ -578,14 +723,18 @@ namespace renegade::bridge
             return false;
         }
 
-        before_ = CaptureTimelineGraphSnapshot(*scene_, animationEntity_);
-        std::vector<float> value;
         const auto paths = TimelineRecordPresetPaths(preset_);
         if (paths.empty())
         {
-            error_ = "record preset has no native paths";
+            error_ = preset_ == TimelineRecordPreset::ScriptPlay || preset_ == TimelineRecordPreset::ScriptStop
+                ? "Renegade governed script events are not exposed as Wicked ScriptComponent timeline paths"
+                : "record preset has no native paths";
             return false;
         }
+
+        before_ = CaptureTimelineGraphSnapshot(*scene_, animationEntity_);
+        std::vector<float> value;
+        recordedPathCount_ = 0;
 
         for (const auto path : paths)
         {
@@ -633,14 +782,24 @@ namespace renegade::bridge
                 return false;
             }
 
-            data->keyframe_times.push_back(time_);
-            data->keyframe_data.insert(data->keyframe_data.end(), value.begin(), value.end());
-            ++recordedPathCount_;
+            bool changed = false;
+            if (!InsertOrReplaceKey(*data, value, time_, error_, changed))
+            {
+                (void)ApplySnapshot(*scene_, animationEntity_, before_, &createdDataEntities_, true);
+                return false;
+            }
+            if (changed)
+                ++recordedPathCount_;
+            if (IsTimelineEventPath(path))
+                channel.next_event = 0;
         }
 
+        if (recordedPathCount_ == 0)
+            return false;
+
         after_ = CaptureTimelineGraphSnapshot(*scene_, animationEntity_);
-        prepared_ = recordedPathCount_ > 0;
-        return prepared_;
+        prepared_ = true;
+        return true;
     }
 
     void RecordTimelineKeyCommand::Undo()
@@ -671,9 +830,19 @@ namespace renegade::bridge
             return false;
         }
         before_ = CaptureTimelineGraphSnapshot(*scene_, animationEntity_);
+        closedChannelCount_ = 0;
 
         for (std::size_t channelIndex = 0; channelIndex < animation->channels.size(); ++channelIndex)
         {
+            auto& channel = animation->channels[channelIndex];
+            if (channel.GetPathDataType() ==
+                wi::scene::AnimationComponent::AnimationChannel::PathDataType::Event)
+            {
+                // A loop seam is a value-continuity operation. Duplicating SOUND/SCRIPT
+                // events would create a new gameplay action at the seam.
+                continue;
+            }
+
             wi::scene::AnimationDataComponent* data = nullptr;
             if (!ResolveData(*scene_, *animation, channelIndex, data, error_))
             {
@@ -682,6 +851,11 @@ namespace renegade::bridge
             }
             if (data->keyframe_times.empty())
                 continue;
+            if (!ReorderKeys(*data, error_))
+            {
+                (void)ApplySnapshot(*scene_, animationEntity_, before_);
+                return false;
+            }
 
             const std::size_t keyCount = data->keyframe_times.size();
             if (!data->keyframe_data.empty() && data->keyframe_data.size() % keyCount != 0)
@@ -693,19 +867,25 @@ namespace renegade::bridge
             const std::size_t stride = data->keyframe_data.empty()
                 ? 0
                 : data->keyframe_data.size() / keyCount;
-            const auto first = static_cast<std::size_t>(std::distance(
-                data->keyframe_times.begin(),
-                std::min_element(data->keyframe_times.begin(), data->keyframe_times.end())));
-
-            data->keyframe_times.push_back(time_);
+            std::vector<float> firstValue;
+            firstValue.reserve(stride);
             for (std::size_t component = 0; component < stride; ++component)
-                data->keyframe_data.push_back(data->keyframe_data[first * stride + component]);
-            ++closedChannelCount_;
+                firstValue.push_back(data->keyframe_data[component]);
+
+            bool changed = false;
+            if (!InsertOrReplaceKey(*data, firstValue, time_, error_, changed))
+            {
+                (void)ApplySnapshot(*scene_, animationEntity_, before_);
+                return false;
+            }
+            if (changed)
+                ++closedChannelCount_;
         }
 
         if (closedChannelCount_ == 0)
         {
-            error_ = "timeline has no keys to close";
+            error_ = "timeline has no value channels requiring a loop-closing key at this time";
+            (void)ApplySnapshot(*scene_, animationEntity_, before_);
             return false;
         }
         after_ = CaptureTimelineGraphSnapshot(*scene_, animationEntity_);
@@ -750,16 +930,40 @@ namespace renegade::bridge
             error_ = "timeline key index is out of range";
             return false;
         }
-        if (std::abs(data->keyframe_times[keyIndex_] - time_) <= 0.000001f)
+        if (std::abs(data->keyframe_times[keyIndex_] - time_) <= KeyTimeEpsilon)
             return false;
 
+        const std::size_t keyCount = data->keyframe_times.size();
+        if (!data->keyframe_data.empty() && data->keyframe_data.size() % keyCount != 0)
+        {
+            error_ = "animation key data is malformed and cannot be moved safely";
+            return false;
+        }
+        const std::size_t stride = data->keyframe_data.empty()
+            ? 0
+            : data->keyframe_data.size() / keyCount;
+        std::vector<float> value;
+        value.reserve(stride);
+        for (std::size_t component = 0; component < stride; ++component)
+            value.push_back(data->keyframe_data[keyIndex_ * stride + component]);
+
         before_ = CaptureTimelineGraphSnapshot(*scene_, animationEntity_);
-        data->keyframe_times[keyIndex_] = time_;
-        if (!ReorderKeys(*data, error_))
+        data->keyframe_times.erase(
+            data->keyframe_times.begin() + static_cast<std::ptrdiff_t>(keyIndex_));
+        if (stride > 0)
+        {
+            const auto first = data->keyframe_data.begin() +
+                static_cast<std::ptrdiff_t>(keyIndex_ * stride);
+            data->keyframe_data.erase(first, first + static_cast<std::ptrdiff_t>(stride));
+        }
+        bool changed = false;
+        if (!InsertOrReplaceKey(*data, value, time_, error_, changed))
         {
             (void)ApplySnapshot(*scene_, animationEntity_, before_);
             return false;
         }
+        if (IsTimelineEventPath(animation->channels[channelIndex_].path))
+            animation->channels[channelIndex_].next_event = 0;
         after_ = CaptureTimelineGraphSnapshot(*scene_, animationEntity_);
         prepared_ = true;
         return true;
@@ -817,6 +1021,8 @@ namespace renegade::bridge
             const auto first = data->keyframe_data.begin() + static_cast<std::ptrdiff_t>(keyIndex_ * stride);
             data->keyframe_data.erase(first, first + static_cast<std::ptrdiff_t>(stride));
         }
+        if (IsTimelineEventPath(animation->channels[channelIndex_].path))
+            animation->channels[channelIndex_].next_event = 0;
         after_ = CaptureTimelineGraphSnapshot(*scene_, animationEntity_);
         prepared_ = true;
         return true;
@@ -898,6 +1104,7 @@ namespace renegade::bridge
             }
         }
         sampler.mode = mode_;
+        channel.next_event = 0;
         after_ = CaptureTimelineGraphSnapshot(*scene_, animationEntity_);
         prepared_ = true;
         return true;
