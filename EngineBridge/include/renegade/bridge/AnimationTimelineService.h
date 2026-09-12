@@ -67,7 +67,6 @@ namespace renegade::bridge
     {
         wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
         wi::scene::AnimationDataComponent data;
-        wi::ecs::Entity parent = wi::ecs::INVALID_ENTITY;
     };
 
     struct TimelineGraphSnapshot
