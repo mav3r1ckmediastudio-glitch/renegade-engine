@@ -53,15 +53,22 @@ require_text("${service}" "SetHumanoidBoneCommand" "command-backed manual correc
 
 # Repair contract: the first import may read an external source, but Redo must
 # restore the baked native result from command-owned snapshots. It must not
-# depend on the source file still existing or remaining unchanged.
+# depend on the source file still existing or remaining unchanged, and it must
+# restore Wicked's native hierarchy ownership graph as well as component bytes.
 require_text("${service_h}" "RetargetAnimationSnapshot" "baked animation snapshot type")
 require_text("${service_h}" "RetargetAnimationDataSnapshot" "baked AnimationData snapshot type")
+require_text("${service_h}" "bool hasHierarchy" "retarget hierarchy snapshot state")
+require_text("${service_h}" "wi::scene::HierarchyComponent hierarchy" "retarget hierarchy snapshot payload")
 require_text("${service}" "CapturePreparedResult" "first-execution baked result capture")
 require_text("${service}" "RestorePreparedResult" "deterministic redo restore")
 require_text("${service}" "if (prepared_)" "prepared redo boundary")
+require_text("${service}" "animationHierarchy->parentID != destinationHumanoid_" "animation ownership validation")
+require_text("${service}" "dataHierarchy->parentID != entity" "baked-data ownership validation")
 require_text("${service}" "scene_->animation_datas.Create(snapshot.entity) = snapshot.data" "baked data restoration")
 require_text("${service}" "scene_->animations.Create(snapshot.entity) = snapshot.animation" "baked animation restoration")
-require_text("${service}" "scene_->animation_datas.Remove(snapshot.entity)" "undo removes baked data")
+require_text("${service}" "scene_->hierarchy.Create(snapshot.entity) = snapshot.hierarchy" "native hierarchy restoration")
+require_text("${service}" "if (EntityExists(*scene_, snapshot.entity))" "any-component entity-ID reuse guard")
+require_text("${service}" "scene_->Entity_Remove(snapshot.entity, true)" "complete baked-data cleanup")
 require_text("${service}" "cached bodies/joints for the old bone map" "ragdoll invalidation rationale")
 
 require_text("${guard}" "Scenes().Revision()" "scene lifecycle revision guard")
