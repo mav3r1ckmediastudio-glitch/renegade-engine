@@ -26,6 +26,7 @@ require_file("${service_source}" "HumanoidRetargetService source")
 require_file("${inspector_header}" "humanoid retarget inspector header")
 require_file("${inspector_source}" "humanoid retarget inspector source")
 
+file(READ "${service_header}" service_h)
 file(READ "${service_source}" service)
 file(READ "${inspector_source}" inspector)
 file(READ "${animation_header}" animation)
@@ -39,6 +40,19 @@ require_text("${service}" "\".vrm\"" "VRM source classification")
 require_text("${service}" "\".vrma\"" "VRMA source classification")
 require_text("${service}" "SetHumanoidMappingCommand" "command-backed humanoid mapping")
 require_text("${service}" "SetHumanoidBoneCommand" "command-backed manual correction")
+
+# Repair contract: the first import may read an external source, but Redo must
+# restore the baked native result from command-owned snapshots. It must not
+# depend on the source file still existing or remaining unchanged.
+require_text("${service_h}" "RetargetAnimationSnapshot" "baked animation snapshot type")
+require_text("${service_h}" "RetargetAnimationDataSnapshot" "baked AnimationData snapshot type")
+require_text("${service}" "CapturePreparedResult" "first-execution baked result capture")
+require_text("${service}" "RestorePreparedResult" "deterministic redo restore")
+require_text("${service}" "if (prepared_)" "prepared redo boundary")
+require_text("${service}" "scene_->animation_datas.Create(snapshot.entity) = snapshot.data" "baked data restoration")
+require_text("${service}" "scene_->animations.Create(snapshot.entity) = snapshot.animation" "baked animation restoration")
+require_text("${service}" "scene_->animation_datas.Remove(snapshot.entity)" "undo removes baked data")
+require_text("${service}" "cached bodies/joints for the old bone map" "ragdoll invalidation rationale")
 
 require_text("${inspector}" "AUTO-MAP" "creator auto-map control")
 require_text("${inspector}" "RESET POSE" "creator reset-pose control")
@@ -54,4 +68,4 @@ if(NOT stock_humanoid_window EQUAL -1)
     message(FATAL_ERROR "Phase 7B must not embed Wicked's stock HumanoidWindow")
 endif()
 
-message(STATUS "Phase 7B native humanoid/retarget source contract passed")
+message(STATUS "Phase 7B repaired native humanoid/retarget source contract passed")
