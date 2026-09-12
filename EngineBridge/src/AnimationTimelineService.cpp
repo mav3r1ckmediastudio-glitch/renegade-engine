@@ -54,14 +54,12 @@ namespace
         for (const auto& dataSnapshot : snapshot.data)
         {
             auto* data = scene.animation_datas.GetComponent(dataSnapshot.entity);
-            if (data == nullptr)
+            const bool recreated = data == nullptr;
+            if (recreated)
                 data = &scene.animation_datas.Create(dataSnapshot.entity);
             *data = dataSnapshot.data;
-
-            if (dataSnapshot.hasHierarchy)
-                scene.hierarchy.Create(dataSnapshot.entity) = dataSnapshot.hierarchy;
-            else
-                scene.hierarchy.Remove(dataSnapshot.entity);
+            if (recreated)
+                scene.Component_Attach(dataSnapshot.entity, animationEntity);
         }
 
         if (removeCreated && createdDataEntities != nullptr)
@@ -662,17 +660,7 @@ namespace renegade::bridge
             if (sampler.data == wi::ecs::INVALID_ENTITY || !seen.insert(sampler.data).second)
                 continue;
             if (const auto* data = scene.animation_datas.GetComponent(sampler.data))
-            {
-                TimelineDataSnapshot dataSnapshot;
-                dataSnapshot.entity = sampler.data;
-                dataSnapshot.data = *data;
-                if (const auto* hierarchy = scene.hierarchy.GetComponent(sampler.data))
-                {
-                    dataSnapshot.hasHierarchy = true;
-                    dataSnapshot.hierarchy = *hierarchy;
-                }
-                snapshot.data.push_back(std::move(dataSnapshot));
-            }
+                snapshot.data.push_back({sampler.data, *data});
         }
         return snapshot;
     }
