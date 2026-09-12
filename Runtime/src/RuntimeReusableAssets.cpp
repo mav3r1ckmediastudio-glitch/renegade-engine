@@ -3,6 +3,7 @@
 #include "renegade/bridge/ResourceAssetRuntimeService.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ReusableAssetRuntimeService.h"
+#include "renegade/bridge/VideoAssetService.h"
 
 #include <sstream>
 #include <utility>
@@ -15,10 +16,10 @@ namespace renegade::runtime
         std::string& error,
         bridge::MaterialTextureResourceLoader authoringTextureLoader)
     {
-        // Authored/Test Level WISCENEs persist governed texture stable IDs,
-        // not live Wicked Resource handles. Rehydrate those bindings from the
+        // Authored/Test Level WISCENEs persist governed resource StableIds,
+        // not arbitrary external paths. Rehydrate those bindings from the
         // explicit project root before gameplay starts. Test Level snapshots
-        // carry the registry plus only the referenced governed texture products.
+        // carry the registry plus only the referenced governed products.
         if (!result.packageRelativeLaunch)
         {
             const auto restored = bridge::RestoreMaterialTextureBindings(
@@ -30,6 +31,17 @@ namespace renegade::runtime
             {
                 error = "Authored Runtime governed material restore failed: " +
                     restored.error;
+                return false;
+            }
+
+            const auto videos = bridge::RestoreVideoAssetBindings(
+                scenes.GetScene(),
+                result.project.rootPath,
+                result.project.projectId);
+            if (!videos.succeeded)
+            {
+                error = "Authored Runtime governed video restore failed: " +
+                    videos.error;
                 return false;
             }
             error.clear();
@@ -80,7 +92,7 @@ namespace renegade::runtime
 
         // Reuse the existing deterministic Runtime trace transport rather than
         // inventing a second bootstrap log format. LP07 model records retain
-        // their original asset_id= prefix; LP08 resource records are explicitly
+        // their original asset_id= prefix; LP08 texture records are explicitly
         // typed so acceptance can distinguish them while remaining additive.
         result.reusableAssetRefreshTrace.reserve(
             result.reusableAssetRefreshTrace.size() +
@@ -92,6 +104,16 @@ namespace renegade::runtime
                   << " payload_hash=" << record.payloadHash
                   << " package_path=" << record.packagedAssetPath;
             result.reusableAssetRefreshTrace.push_back(trace.str());
+        }
+
+        const auto videos = bridge::RestorePackagedVideoAssetBindings(
+            scenes.GetScene(),
+            result.packageRootPath,
+            result.project.projectId);
+        if (!videos.succeeded)
+        {
+            error = "Packaged governed video restore failed: " + videos.error;
+            return false;
         }
 
         result.entityCount = scenes.EntityCount();

@@ -34,6 +34,8 @@ namespace renegade::bridge
         CameraFocalLength,
         CameraApertureSize,
         CameraApertureShape,
+        // Reserved for a future adapter to Renegade's governed .rscripts runtime.
+        // These must not be exposed as Wicked ScriptComponent authoring.
         ScriptPlay,
         ScriptStop,
         MaterialColor,
@@ -77,6 +79,7 @@ namespace renegade::bridge
     [[nodiscard]] const char* TimelineRecordPresetLabel(TimelineRecordPreset preset) noexcept;
     [[nodiscard]] const char* TimelinePathLabel(AnimationPath path) noexcept;
     [[nodiscard]] std::vector<AnimationPath> TimelineRecordPresetPaths(TimelineRecordPreset preset);
+    [[nodiscard]] bool IsTimelineEventPath(AnimationPath path) noexcept;
 
     [[nodiscard]] std::vector<TimelineChannelInfo> CollectTimelineChannels(
         const wi::scene::Scene& scene,
@@ -100,6 +103,24 @@ namespace renegade::bridge
     [[nodiscard]] TimelineGraphSnapshot CaptureTimelineGraphSnapshot(
         const wi::scene::Scene& scene,
         wi::ecs::Entity animationEntity);
+
+    class CreateTimelineAnimationCommand final : public ICommand
+    {
+    public:
+        CreateTimelineAnimationCommand(
+            wi::scene::Scene& scene,
+            std::string name = "Animation");
+
+        bool Execute() override;
+        void Undo() override;
+
+        [[nodiscard]] wi::ecs::Entity CreatedEntity() const noexcept { return entity_; }
+
+    private:
+        wi::scene::Scene* scene_ = nullptr;
+        std::string name_;
+        wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
+    };
 
     class RecordTimelineKeyCommand final : public ICommand
     {
