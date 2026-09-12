@@ -639,7 +639,8 @@ namespace renegade::bridge
         if (splat == nullptr) return info;
         info.valid = true;
         info.splatCount = splat->GetSplatCount();
-        info.sphericalHarmonicsDegree = splat->GetSphericalHarmonicsDegree();
+        if (info.splatCount > 0)
+            info.sphericalHarmonicsDegree = splat->GetSphericalHarmonicsDegree();
         info.cpuMemoryBytes = splat->GetMemorySizeCPU();
         info.gpuMemoryBytes = splat->GetMemorySizeGPU();
         return info;
