@@ -58,17 +58,23 @@ namespace renegade::bridge
 
     // Baked retarget results must be command-owned after the first import.
     // Redo restores these snapshots instead of reopening an external source file.
+    // Wicked also creates a hierarchy graph for retarget ownership, so that graph
+    // is snapshotted with the native components rather than inferred on Redo.
     struct RetargetAnimationSnapshot
     {
         wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
         std::string name;
         wi::scene::AnimationComponent animation;
+        bool hasHierarchy = false;
+        wi::scene::HierarchyComponent hierarchy;
     };
 
     struct RetargetAnimationDataSnapshot
     {
         wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
         wi::scene::AnimationDataComponent data;
+        bool hasHierarchy = false;
+        wi::scene::HierarchyComponent hierarchy;
     };
 
     [[nodiscard]] const char* HumanoidBoneName(HumanoidBone bone) noexcept;
