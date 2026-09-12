@@ -155,6 +155,8 @@ add_library(RenegadeEngineBridge STATIC
 target_sources(RenegadeEngineBridge PRIVATE
     ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_GLTF.cpp
     ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_FBX.cpp
+    ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/ModelImporter_PLY.cpp
+    ${PROJECT_SOURCE_DIR}/WickedEngine/Editor/miniply.cpp
 )
 
 # Gate 1 explicitly required malformed importer failures to become non-modal
