@@ -100,6 +100,11 @@ namespace renegade::bridge
         bool chromaticAberrationEnabled = false;
         float chromaticAberrationAmount = 2.0f;
         bool ditherEnabled = true;
+
+        // Phase 7F keeps Wicked's native mesh-blend pass as the authority.
+        // This is deliberately an optional schema-v3 field so older scenes
+        // inherit Wicked's native default (enabled) without a migration bump.
+        bool meshBlendingEnabled = true;
     };
 
     using RenderSettingsApplyCallback =

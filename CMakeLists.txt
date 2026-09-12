@@ -81,6 +81,8 @@ if(WIN32)
         Studio/src/Phase7Gate7DNativeTimelineInspector.h
         Studio/src/Phase7Gate7ESpecialistInspector.cpp
         Studio/src/Phase7Gate7ESpecialistInspector.h
+        Studio/src/Phase7Gate7FMeshBlendInspector.cpp
+        Studio/src/Phase7Gate7FMeshBlendInspector.h
     )
     include(Studio/MarkerIcons.cmake)
 
@@ -171,6 +173,7 @@ if(WIN32)
     include(Tests/Phase7Gate7C.cmake)
     include(Tests/Phase7Gate7D.cmake)
     include(Tests/Phase7Gate7E.cmake)
+    include(Tests/Phase7Gate7F.cmake)
     include(Tests/S1AInspectorSectionFramework.cmake)
     include(Tests/S1BInspectorMigration.cmake)
     include(Tests/S2ScriptDocument.cmake)
