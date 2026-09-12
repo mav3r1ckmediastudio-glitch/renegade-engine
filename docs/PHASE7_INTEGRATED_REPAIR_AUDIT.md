@@ -1,6 +1,6 @@
 # Phase 7 Integrated Repair Audit
 
-**Status:** repair candidate — implementation complete; exact-head Windows CI and owner acceptance required before merge  
+**Status:** post-CI repair candidate — v3 compiled green, then a deeper ownership audit found and corrected native hierarchy gaps; new exact-head Windows CI and owner acceptance required before merge  
 **Repair branch:** `repair/phase7-integrated-audit`  
 **Repair baseline:** `main` at `3d305be84fedf73f5b3cfbb0522be2a732c1adca` (merged Phase 7F)  
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
@@ -68,15 +68,16 @@ Renegade ACTION/SCRIPT/GLOBAL SCRIPT authoring is governed by `.rscripts` and it
 
 ### 7D proof boundary
 
-`RenegadePhase7Gate7DNativeTimelineTests` now checks:
+`RenegadePhase7Gate7DNativeTimelineTests` checks:
 
 - native blank-clip creation and Undo/Redo;
 - chronological key insertion;
 - value/time pairing after sorting and moving;
 - same-time event de-duplication;
 - event payload remains empty;
-- script-preset rejection; and
-- Close Loop adds value continuity keys without adding event keys.
+- script-preset rejection;
+- Close Loop adds value continuity keys without adding event keys; and
+- post-audit native ownership: newly-created `AnimationDataComponent` entities are children of their Animation owner, that relationship survives Undo/Redo recreation, and recursive clip deletion removes those children.
 
 Owner acceptance must additionally confirm the actual Studio controls, playback/scrub behaviour, save/reopen and audible event behaviour.
 
@@ -105,7 +106,7 @@ Authoring/Test Level Runtime performs the same project-root restoration before g
 
 ### Dependency closure
 
-`ResourceAssetDependencyProvider` now inspects both governed material-texture and governed video metadata in WISCENE. A referenced Video StableId emits a required `DependencyClass::Video` LP08 product into the build closure. A scene containing only video bindings is not incorrectly treated as having no governed resource dependencies.
+`ResourceAssetDependencyProvider` inspects both governed material-texture and governed video metadata in WISCENE. A referenced Video StableId emits a required `DependencyClass::Video` LP08 product into the build closure. A scene containing only video bindings is not incorrectly treated as having no governed resource dependencies.
 
 ### 7E proof boundary
 
@@ -124,6 +125,44 @@ Owner acceptance must prove:
 
 Wicked upstream still does not provide video audio-track playback through this component; this repair does not claim otherwise.
 
+## Post-CI audit — four-green v3 was not sufficient
+
+The v3 head `8278d0a531f701296a9127a3ade69219c38ad56e` completed both Windows baseline and Renegade Studio workflows successfully in Debug and Release. A deliberate post-CI logic audit then found defects that compilation/source-contract success did not expose. That v3 result is therefore superseded as merge evidence.
+
+### Finding A — 7B native hierarchy ownership
+
+Pinned Wicked does not create a baked retarget as a flat set of components. It attaches the retargeted animation entity beneath the destination humanoid and attaches every baked animation-data entity beneath that animation. V3 restored component bytes and sampler IDs but did not recreate those hierarchy relationships.
+
+The correction now:
+
+- validates the original Wicked parent relationships during first-execution capture;
+- stores parent entity identity, not raw `HierarchyComponent` bytes;
+- recreates the animation/data components at their deterministic IDs;
+- calls Wicked `Scene::Component_Attach()` to rebuild ownership exactly through the same native API used by Wicked's original retarget path;
+- fails closed on any entity-ID reuse before restoration; and
+- uses recursive entity removal for fallback baked-data cleanup.
+
+This matters because Wicked recursive deletion follows hierarchy ownership. A restored clip that merely plays is not sufficient proof if deleting its owner can leave orphan clips or baked data.
+
+### Finding B — 7D native AnimationData ownership
+
+Creator-authored timeline channels in v3 created native `AnimationDataComponent` entities but did not attach those entities beneath the owning Animation. Wicked's FBX/GLTF importers do attach sampler data to the Animation entity.
+
+The correction now:
+
+- calls `Component_Attach(dataEntity, animationEntity)` when a creator channel first creates its sampler data;
+- removes the complete data entity on Undo, not only the `AnimationDataComponent` manager entry;
+- when Redo must recreate removed sampler data, attaches the recreated entity back beneath the Animation owner; and
+- extends the executable 7D test to prove parent ownership after initial record, cleanup on Undo, ownership after Redo, event-data ownership, and recursive removal when the Animation entity is deleted.
+
+Existing imported/legacy sampler data is not reparented merely because a key is edited; the correction only creates ownership when Renegade creates or recreates the data entity.
+
+### Finding C — cheap Video rejection must precede full decode
+
+V3 correctly used Wicked's real H264 decoder before committing an LP08 project asset, but the existing 4 GiB creator-import ceiling was checked later inside the import workflow. An oversized MP4 could therefore enter the expensive decode path before being rejected.
+
+The correction now performs `std::filesystem::file_size()` and applies `MaximumCreatorVideoBytes` before `wi::video::CreateVideo()`. The 7E source contract explicitly asserts that source ordering. In-range files still receive the full Wicked decode proof before any governed import, preserving the corrupt/H265 rejection guarantee.
+
 ## Systems intentionally unchanged
 
 The audit found no repair justification for rewriting:
@@ -137,22 +176,24 @@ Those systems remain part of the integrated owner smoke test because the repair 
 
 ## CI acceptance contract
 
-Opening the repair PR is the deliberate CI boundary. Before owner acceptance the exact PR head must:
+The exact corrected PR head must:
 
 - configure and compile the Windows baseline and Renegade Studio workflows;
-- run the complete CTest suite including Phase 7B, 7D and 7E executables/source contracts;
+- run the complete CTest suite including the strengthened Phase 7B, 7D and 7E contracts/tests;
 - build the same Studio/Runtime artifact family used for owner acceptance; and
 - show no regression in existing Phase 6/earlier suites.
 
-If CI fails, fix the actual compile/test defect on this branch and rerun the failed integration proof. Do not weaken a test merely to make the repair green.
+The earlier four-green v3 result does not satisfy this requirement because the post-CI ownership corrections changed source and tests after that run.
+
+If CI fails, fix the actual compile/test defect and rerun the failed integration proof. Do not weaken a test merely to make the repair green.
 
 ## Owner acceptance contract
 
-Use the exact successful PR artifact. Minimum owner pass:
+Use the exact successful corrected PR artifact. Minimum owner pass:
 
-1. **7B Retarget:** map a real humanoid, import+retarget a compatible animation, Undo, make the original source unavailable, Redo, play the restored clip, save/reopen and play again.
-2. **7D Timeline:** create a NEW CLIP in a blank scene; record keys out of chronological order; verify scrub/play is coherent; add a SOUND PLAY event; Close Loop and prove the sound fires once per authored event rather than gaining a seam duplicate; Undo/Redo; save/reopen.
-3. **7E Video:** adopt an H264 MP4; exercise transport/seek/loop; Undo/Redo Loop; save/reopen after making the external original unavailable; Test Level; Build Game; run standalone from the package.
+1. **7B Retarget:** map a real humanoid, import+retarget a compatible animation, Undo, make the original source unavailable, Redo, play the restored clip, save/reopen and play again. In a disposable copy, verify deleting restored retarget ownership does not leave orphan clips/baked data.
+2. **7D Timeline:** create a NEW CLIP in a blank scene; record keys out of chronological order; verify scrub/play is coherent; add a SOUND PLAY event; Close Loop and prove the sound fires once per authored event rather than gaining a seam duplicate; Undo/Redo; save/reopen. In a disposable Level, delete the authored clip and confirm its created data is removed with it.
+3. **7E Video:** adopt an H264 MP4; exercise transport/seek/loop; Undo/Redo Loop; save/reopen after making the external original unavailable; Test Level; Build Game; run standalone from the package. H265/corrupt input must be rejected before project adoption.
 4. **Regression smoke:** open the 7A–7F Inspector sections and confirm existing animation playback, character controls, Hair/Force/Spline/Gaussian/Terrain and mesh-blend surfaces still render and respond.
 
 Any owner-visible failure keeps the repair PR open even if CI is green.

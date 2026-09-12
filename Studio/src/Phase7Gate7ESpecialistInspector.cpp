@@ -21,10 +21,12 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <iomanip>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -69,6 +71,20 @@ namespace renegade::studio
 
         bool PreflightH264Video(const std::string& filename, std::string& error)
         {
+            std::error_code ec;
+            const auto sourceBytes = std::filesystem::file_size(
+                std::filesystem::u8path(filename), ec);
+            if (ec || sourceBytes == 0)
+            {
+                error = "The selected MP4 is unavailable or empty.";
+                return false;
+            }
+            if (sourceBytes > bridge::CreatorVideoWorkflowService::MaximumCreatorVideoBytes)
+            {
+                error = "The selected MP4 exceeds Renegade's 4 GiB creator-import ceiling.";
+                return false;
+            }
+
             wi::video::Video probe;
             if (!wi::video::CreateVideo(filename, &probe))
             {

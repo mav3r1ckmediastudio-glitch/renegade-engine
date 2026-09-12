@@ -462,12 +462,17 @@ namespace renegade::bridge
         for (const auto entity : result_.createdAnimations)
         {
             const auto* animation = scene_->animations.GetComponent(entity);
-            if (animation == nullptr)
+            const auto* animationHierarchy = scene_->hierarchy.GetComponent(entity);
+            if (animation == nullptr || animationHierarchy == nullptr ||
+                animationHierarchy->parentID != destinationHumanoid_)
+            {
                 return false;
+            }
 
             RetargetAnimationSnapshot snapshot;
             snapshot.entity = entity;
             snapshot.animation = *animation;
+            snapshot.parent = animationHierarchy->parentID;
             if (const auto* name = scene_->names.GetComponent(entity))
                 snapshot.name = name->name;
             animationSnapshots_.push_back(std::move(snapshot));
@@ -480,9 +485,17 @@ namespace renegade::bridge
                     continue;
                 }
                 const auto* data = scene_->animation_datas.GetComponent(sampler.data);
-                if (data == nullptr)
+                const auto* dataHierarchy = scene_->hierarchy.GetComponent(sampler.data);
+                if (data == nullptr || dataHierarchy == nullptr ||
+                    dataHierarchy->parentID != entity)
+                {
                     return false;
-                dataSnapshots_.push_back({sampler.data, *data});
+                }
+                RetargetAnimationDataSnapshot dataSnapshot;
+                dataSnapshot.entity = sampler.data;
+                dataSnapshot.data = *data;
+                dataSnapshot.parent = dataHierarchy->parentID;
+                dataSnapshots_.push_back(std::move(dataSnapshot));
             }
         }
 
@@ -499,7 +512,7 @@ namespace renegade::bridge
 
         for (const auto& snapshot : dataSnapshots_)
         {
-            if (scene_->animation_datas.Contains(snapshot.entity))
+            if (EntityExists(*scene_, snapshot.entity))
             {
                 result_.error = "Retarget redo could not restore baked data because an entity ID was reused.";
                 return false;
@@ -512,10 +525,12 @@ namespace renegade::bridge
                 result_.error = "Retarget redo could not restore an animation because an entity ID was reused.";
                 return false;
             }
+            if (snapshot.parent != destinationHumanoid_)
+            {
+                result_.error = "Retarget redo found an invalid animation ownership parent.";
+                return false;
+            }
         }
-
-        for (const auto& snapshot : dataSnapshots_)
-            scene_->animation_datas.Create(snapshot.entity) = snapshot.data;
 
         result_ = {};
         result_.sourcePath = sourcePath_;
@@ -525,8 +540,21 @@ namespace renegade::bridge
             scene_->animations.Create(snapshot.entity) = snapshot.animation;
             if (!snapshot.name.empty())
                 scene_->names.Create(snapshot.entity).name = snapshot.name;
+            scene_->Component_Attach(snapshot.entity, snapshot.parent);
             result_.createdAnimations.push_back(snapshot.entity);
         }
+        for (const auto& snapshot : dataSnapshots_)
+        {
+            if (snapshot.parent == wi::ecs::INVALID_ENTITY || !EntityExists(*scene_, snapshot.parent))
+            {
+                result_.error = "Retarget redo found an invalid baked-data ownership parent.";
+                RemoveCreated();
+                return false;
+            }
+            scene_->animation_datas.Create(snapshot.entity) = snapshot.data;
+            scene_->Component_Attach(snapshot.entity, snapshot.parent);
+        }
+
         result_.succeeded = !result_.createdAnimations.empty();
         scene_->ResetPose(destinationHumanoid_);
         return result_.succeeded;
@@ -602,8 +630,8 @@ namespace renegade::bridge
         }
         for (const auto& snapshot : dataSnapshots_)
         {
-            if (snapshot.entity != wi::ecs::INVALID_ENTITY)
-                scene_->animation_datas.Remove(snapshot.entity);
+            if (snapshot.entity != wi::ecs::INVALID_ENTITY && EntityExists(*scene_, snapshot.entity))
+                scene_->Entity_Remove(snapshot.entity, true);
         }
         result_.createdAnimations.clear();
     }

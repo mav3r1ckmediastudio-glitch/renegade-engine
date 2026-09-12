@@ -13,6 +13,8 @@ Use the exact successful PR artifact. Do not merge the repair PR until every req
 - Redo. The retargeted clips must return without an import/source-file error.
 - Play the restored clip and confirm motion is coherent.
 - Save the Level, close/reopen it, and play the restored clip again.
+- After a separate retarget/Redo check, delete a restored retargeted clip and confirm its baked animation data does not remain as orphan scene data.
+- In a disposable copy of the Level, delete the retargeted humanoid/character recursively and confirm its retargeted clips disappear with it rather than remaining as detached clips.
 
 ## 7D — native timeline/key/event repair
 
@@ -25,7 +27,9 @@ Use the exact successful PR artifact. Do not merge the repair PR until every req
 - Use `CLOSE LOOP`. It may close value channels but must not add another SOUND event at the seam.
 - Play through the loop and confirm the sound fires only for the deliberately authored event time.
 - Exercise Undo/Redo for key creation/move/delete and Close Loop.
+- After Undo then Redo of newly-created channels, confirm the clip still behaves normally; this specifically proves recreated AnimationData remains owned by the native Animation entity.
 - Save, close/reopen and confirm the clip/channels/keys remain correct.
+- In a disposable Level, delete the authored timeline clip and confirm its created channel/key data disappears with the clip rather than surviving as orphan scene data.
 - Confirm SCRIPT PLAY/STOP is not presented as a working Renegade `.rscripts` timeline integration.
 
 ## 7E — governed Video project/package parity
@@ -37,6 +41,7 @@ Use the exact successful PR artifact. Do not merge the repair PR until every req
 - Move or rename the original external MP4 so its original machine path is unavailable.
 - Close/reopen the project/Level. The video must restore without selecting the original file again.
 - Re-test Play/Pause/Stop/Seek/Loop after reopen.
+- Confirm an H265/HEVC or corrupt MP4 is rejected before it is adopted into the project.
 - Run Test Level and confirm the governed video is available there.
 - Build the Windows game.
 - Run the standalone build from its package with no access to the original external MP4 and confirm the video is available.

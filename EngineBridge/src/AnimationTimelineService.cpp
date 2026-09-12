@@ -54,17 +54,20 @@ namespace
         for (const auto& dataSnapshot : snapshot.data)
         {
             auto* data = scene.animation_datas.GetComponent(dataSnapshot.entity);
-            if (data == nullptr)
+            const bool recreated = data == nullptr;
+            if (recreated)
                 data = &scene.animation_datas.Create(dataSnapshot.entity);
             *data = dataSnapshot.data;
+            if (recreated)
+                scene.Component_Attach(dataSnapshot.entity, animationEntity);
         }
 
         if (removeCreated && createdDataEntities != nullptr)
         {
             for (const auto entity : *createdDataEntities)
             {
-                if (!ContainsEntity(snapshot.data, entity))
-                    scene.animation_datas.Remove(entity);
+                if (!ContainsEntity(snapshot.data, entity) && EntityExists(scene, entity))
+                    scene.Entity_Remove(entity, true);
             }
         }
         for (auto& channel : animation->channels)
@@ -754,6 +757,7 @@ namespace renegade::bridge
                 auto& sampler = animation->samplers.emplace_back();
                 const auto dataEntity = wi::ecs::CreateEntity();
                 scene_->animation_datas.Create(dataEntity);
+                scene_->Component_Attach(dataEntity, animationEntity_);
                 sampler.data = dataEntity;
                 createdDataEntities_.push_back(dataEntity);
                 channelIndex = static_cast<int>(animation->channels.size() - 1);
