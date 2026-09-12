@@ -57,14 +57,19 @@ namespace
             if (data == nullptr)
                 data = &scene.animation_datas.Create(dataSnapshot.entity);
             *data = dataSnapshot.data;
+
+            if (dataSnapshot.hasHierarchy)
+                scene.hierarchy.Create(dataSnapshot.entity) = dataSnapshot.hierarchy;
+            else
+                scene.hierarchy.Remove(dataSnapshot.entity);
         }
 
         if (removeCreated && createdDataEntities != nullptr)
         {
             for (const auto entity : *createdDataEntities)
             {
-                if (!ContainsEntity(snapshot.data, entity))
-                    scene.animation_datas.Remove(entity);
+                if (!ContainsEntity(snapshot.data, entity) && EntityExists(scene, entity))
+                    scene.Entity_Remove(entity, true);
             }
         }
         for (auto& channel : animation->channels)
@@ -657,7 +662,17 @@ namespace renegade::bridge
             if (sampler.data == wi::ecs::INVALID_ENTITY || !seen.insert(sampler.data).second)
                 continue;
             if (const auto* data = scene.animation_datas.GetComponent(sampler.data))
-                snapshot.data.push_back({sampler.data, *data});
+            {
+                TimelineDataSnapshot dataSnapshot;
+                dataSnapshot.entity = sampler.data;
+                dataSnapshot.data = *data;
+                if (const auto* hierarchy = scene.hierarchy.GetComponent(sampler.data))
+                {
+                    dataSnapshot.hasHierarchy = true;
+                    dataSnapshot.hierarchy = *hierarchy;
+                }
+                snapshot.data.push_back(std::move(dataSnapshot));
+            }
         }
         return snapshot;
     }
@@ -754,6 +769,7 @@ namespace renegade::bridge
                 auto& sampler = animation->samplers.emplace_back();
                 const auto dataEntity = wi::ecs::CreateEntity();
                 scene_->animation_datas.Create(dataEntity);
+                scene_->Component_Attach(dataEntity, animationEntity_);
                 sampler.data = dataEntity;
                 createdDataEntities_.push_back(dataEntity);
                 channelIndex = static_cast<int>(animation->channels.size() - 1);
