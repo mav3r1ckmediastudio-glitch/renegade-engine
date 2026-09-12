@@ -116,6 +116,11 @@ namespace renegade::studio
                 status_.SetColor(wi::Color::Transparent());
                 panel_->AddWidget(&status_);
 
+                CreateButton(
+                    newClip_, "Timeline New Clip", "NEW CLIP", [this]() { CreateClip(); });
+                newClip_.SetTooltip(
+                    "Create an empty Wicked-native AnimationComponent so scene animation can be authored without importing a pre-existing clip.");
+
                 clips_.Create("Timeline Clip");
                 clips_.SetTooltip("Choose any native AnimationComponent in the current scene.");
                 clips_.OnSelect([this](const wi::gui::EventArgs& args)
@@ -148,9 +153,16 @@ namespace renegade::studio
                     value <= static_cast<std::uint32_t>(bridge::TimelineRecordPreset::MaterialTexMulAdd);
                     ++value)
                 {
-                    const auto preset = static_cast<bridge::TimelineRecordPreset>(value);
-                    preset_.AddItem(bridge::TimelineRecordPresetLabel(preset), value);
+                    const auto recordPreset = static_cast<bridge::TimelineRecordPreset>(value);
+                    if (recordPreset == bridge::TimelineRecordPreset::ScriptPlay ||
+                        recordPreset == bridge::TimelineRecordPreset::ScriptStop)
+                    {
+                        continue;
+                    }
+                    preset_.AddItem(bridge::TimelineRecordPresetLabel(recordPreset), value);
                 }
+                preset_.SetTooltip(
+                    "Wicked-native animation paths only. Renegade ACTION/SCRIPT/GLOBAL SCRIPT events use the governed .rscripts runtime and are not exposed here as legacy Wicked ScriptComponent events.");
                 preset_.OnSelect([this](const wi::gui::EventArgs& args)
                 {
                     selectedPreset_ = static_cast<bridge::TimelineRecordPreset>(args.userdata);
@@ -160,6 +172,8 @@ namespace renegade::studio
 
                 CreateButton(record_, "Timeline Record Key", "RECORD KEY", [this]() { RecordKey(); });
                 CreateButton(closeLoop_, "Timeline Close Loop", "CLOSE LOOP", [this]() { CloseLoop(); });
+                closeLoop_.SetTooltip(
+                    "Duplicate first VALUE keys at the current time to close a visual loop. Event channels such as SOUND PLAY/STOP are deliberately excluded.");
 
                 channels_.Create("Timeline Channel");
                 channels_.SetTooltip("Native AnimationComponent channel target and path.");
@@ -213,13 +227,12 @@ namespace renegade::studio
 
             [[nodiscard]] bool IsVisible(const InspectorSectionContext&)
             {
-                RefreshClipList(false);
-                return !availableClips_.empty();
+                return bridge::StudioSession::Current() != nullptr;
             }
 
             [[nodiscard]] float Measure() const noexcept
             {
-                return 438.0f;
+                return 472.0f;
             }
 
             void Refresh()
@@ -256,6 +269,7 @@ namespace renegade::studio
                 };
 
                 place(status_, 20.0f);
+                place(newClip_);
                 place(clips_);
                 place(timer_);
                 place(target_);
@@ -307,7 +321,7 @@ namespace renegade::studio
             [[nodiscard]] std::vector<wi::gui::Widget*> Widgets()
             {
                 return {
-                    &header_, &status_, &clips_, &timer_, &target_, &preset_, &record_, &closeLoop_,
+                    &header_, &status_, &newClip_, &clips_, &timer_, &target_, &preset_, &record_, &closeLoop_,
                     &channels_, &interpolation_, &keys_, &keyTime_, &deleteKey_, &info_,
                 };
             }
@@ -337,6 +351,7 @@ namespace renegade::studio
                 clips_.ClearItems();
                 for (const auto& clip : availableClips_)
                     clips_.AddItem(clip.name, static_cast<std::uint64_t>(clip.entity));
+                clips_.SetEnabled(!availableClips_.empty());
                 if (selectedClip_ != wi::ecs::INVALID_ENTITY)
                     clips_.SetSelectedByUserdataWithoutCallback(static_cast<std::uint64_t>(selectedClip_));
             }
@@ -365,7 +380,6 @@ namespace renegade::studio
                 append(scene.sounds);
                 append(scene.emitters);
                 append(scene.cameras);
-                append(scene.scripts);
                 append(scene.materials);
 
                 const auto sceneSelection = session->Selection().HasSelection()
@@ -387,6 +401,7 @@ namespace renegade::studio
                 target_.ClearItems();
                 for (const auto entity : entities)
                     target_.AddItem(EntityName(scene, entity), static_cast<std::uint64_t>(entity));
+                target_.SetEnabled(!entities.empty());
                 if (selectedTarget_ != wi::ecs::INVALID_ENTITY)
                     target_.SetSelectedByUserdataWithoutCallback(static_cast<std::uint64_t>(selectedTarget_));
                 preset_.SetSelectedByUserdataWithoutCallback(static_cast<std::uint64_t>(selectedPreset_));
@@ -406,13 +421,18 @@ namespace renegade::studio
                 auto* animation = CurrentAnimation();
                 if (session == nullptr || animation == nullptr)
                 {
-                    status_.SetText("No native animation clips in this scene.");
+                    status_.SetText("No native animation clips. Use NEW CLIP to begin authoring.");
+                    timer_.SetEnabled(false);
+                    record_.SetEnabled(false);
+                    closeLoop_.SetEnabled(false);
                     channels_.ClearItems();
                     keys_.ClearItems();
-                    info_.SetText("");
+                    info_.SetText("NEW CLIP creates an empty native Wicked AnimationComponent with Undo/Redo.");
                     return;
                 }
 
+                timer_.SetEnabled(true);
+                closeLoop_.SetEnabled(true);
                 status_.SetText("Native timeline // " + std::to_string(animation->channels.size()) + " channels");
                 timer_.SetRange(animation->start, std::max(animation->start + 0.0001f, animation->end));
                 timer_.SetValue(animation->timer);
@@ -451,6 +471,7 @@ namespace renegade::studio
                         std::to_string(channel.keyframeCount) + " keys";
                     channels_.AddItem(label, static_cast<std::uint64_t>(channel.index));
                 }
+                channels_.SetEnabled(!channelsData_.empty());
                 if (!channelsData_.empty())
                     channels_.SetSelectedByUserdataWithoutCallback(static_cast<std::uint64_t>(selectedChannel_));
                 RefreshChannelControls();
@@ -529,11 +550,41 @@ namespace renegade::studio
                     RequestRefresh();
                     return false;
                 }
-                session->Commands().RecordExecuted(std::move(command));
+                if (!session->Commands().RecordExecuted(std::move(command)))
+                {
+                    SetStatus("PHASE 7D // command history rejected authored change");
+                    RefreshControls();
+                    RequestRefresh();
+                    return false;
+                }
                 SetStatus(successStatus);
                 RefreshControls();
                 RequestRefresh();
                 return true;
+            }
+
+            void CreateClip()
+            {
+                auto* session = bridge::StudioSession::Current();
+                if (session == nullptr)
+                    return;
+
+                const std::string name = "Animation " + std::to_string(availableClips_.size() + 1);
+                auto command = std::make_unique<bridge::CreateTimelineAnimationCommand>(
+                    session->Scenes().GetScene(), name);
+                auto* view = command.get();
+                if (!session->Commands().Execute(std::move(command)))
+                {
+                    SetStatus("PHASE 7D // native clip creation failed");
+                    return;
+                }
+                selectedClip_ = view->CreatedEntity();
+                selectedChannel_ = 0;
+                selectedKey_ = 0;
+                SetStatus("PHASE 7D // NEW CLIP created");
+                RefreshClipList(true);
+                RefreshControls();
+                RequestRefresh();
             }
 
             void RecordKey()
@@ -561,7 +612,7 @@ namespace renegade::studio
                 ExecuteAuthoredCommand(
                     std::make_unique<bridge::CloseTimelineLoopCommand>(
                         session->Scenes().GetScene(), selectedClip_, animation->timer),
-                    "PHASE 7D // first keys duplicated at current time");
+                    "PHASE 7D // value-channel loop seam closed at current time");
             }
 
             void MoveKey(const float time)
@@ -635,6 +686,7 @@ namespace renegade::studio
 
             SceneInspectorButton header_;
             wi::gui::Label status_;
+            SceneInspectorButton newClip_;
             SceneInspectorComboBox clips_;
             SceneInspectorSlider timer_;
             SceneInspectorComboBox target_;
