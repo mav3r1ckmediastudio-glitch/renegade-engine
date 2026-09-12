@@ -158,6 +158,7 @@ namespace
     constexpr const char* KeyChromaticAberrationEnabled = "renegade.render.chromatic_aberration.enabled";
     constexpr const char* KeyChromaticAberrationAmount = "renegade.render.chromatic_aberration.amount";
     constexpr const char* KeyDitherEnabled = "renegade.render.dither.enabled";
+    constexpr const char* KeyMeshBlendingEnabled = "renegade.render.mesh_blending.enabled";
 }
 
 namespace renegade::bridge
@@ -257,7 +258,8 @@ namespace renegade::bridge
             !NearlyEqual(left.sharpenAmount, right.sharpenAmount) ||
             left.chromaticAberrationEnabled != right.chromaticAberrationEnabled ||
             !NearlyEqual(left.chromaticAberrationAmount, right.chromaticAberrationAmount) ||
-            left.ditherEnabled != right.ditherEnabled;
+            left.ditherEnabled != right.ditherEnabled ||
+            left.meshBlendingEnabled != right.meshBlendingEnabled;
     }
 
     bool IsHardwareRayTracingAvailable() noexcept
@@ -361,6 +363,7 @@ namespace renegade::bridge
         state.chromaticAberrationEnabled = ReadValue(metadata->bool_values, KeyChromaticAberrationEnabled, defaults.chromaticAberrationEnabled);
         state.chromaticAberrationAmount = ReadValue(metadata->float_values, KeyChromaticAberrationAmount, defaults.chromaticAberrationAmount);
         state.ditherEnabled = ReadValue(metadata->bool_values, KeyDitherEnabled, defaults.ditherEnabled);
+        state.meshBlendingEnabled = ReadValue(metadata->bool_values, KeyMeshBlendingEnabled, defaults.meshBlendingEnabled);
         return SanitizeRenderSettings(state);
     }
 
@@ -480,7 +483,8 @@ namespace renegade::bridge
             !NearlyEqual(path.getSharpenFilterAmount(), safe.sharpenAmount) ||
             path.getChromaticAberrationEnabled() != safe.chromaticAberrationEnabled ||
             !NearlyEqual(path.getChromaticAberrationAmount(), safe.chromaticAberrationAmount) ||
-            path.getDitherEnabled() != safe.ditherEnabled)
+            path.getDitherEnabled() != safe.ditherEnabled ||
+            path.getMeshBlendEnabled() != safe.meshBlendingEnabled)
         {
             return false;
         }
@@ -568,6 +572,7 @@ namespace renegade::bridge
         metadata->bool_values.set(KeyChromaticAberrationEnabled, safe.chromaticAberrationEnabled);
         metadata->float_values.set(KeyChromaticAberrationAmount, safe.chromaticAberrationAmount);
         metadata->bool_values.set(KeyDitherEnabled, safe.ditherEnabled);
+        metadata->bool_values.set(KeyMeshBlendingEnabled, safe.meshBlendingEnabled);
         return true;
     }
 
@@ -763,6 +768,7 @@ namespace renegade::bridge
         path.setChromaticAberrationEnabled(safe.chromaticAberrationEnabled);
         path.setChromaticAberrationAmount(safe.chromaticAberrationAmount);
         path.setDitherEnabled(safe.ditherEnabled);
+        path.setMeshBlendEnabled(safe.meshBlendingEnabled);
     }
 
     SetRenderSettingsCommand::SetRenderSettingsCommand(
