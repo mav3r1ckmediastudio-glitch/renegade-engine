@@ -10,9 +10,11 @@
 #include "S4DGlobalScriptInspector.h"
 #include "StudioApplication.h"
 
+#include "renegade/bridge/CreatorVideoWorkflowService.h"
 #include "renegade/bridge/SpecialistComponentService.h"
 #include "renegade/bridge/StudioSession.h"
 #include "renegade/bridge/TerrainCreatorGapService.h"
+#include "renegade/bridge/VideoAssetService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -231,7 +233,9 @@ namespace renegade::studio
                 CreateSlider(forceRange_, "Force Range", "RANGE", "Native force-field range.", 0.0f, 1000.0f,
                     [this](float v) { CommitForce([&](auto& s) { s.range = v; }); });
 
-                CreateButton(videoOpen_, "Open Native MP4", "OPEN MP4", [this]() { BrowseVideo(); });
+                CreateButton(videoOpen_, "Adopt Governed MP4", "ADOPT MP4", [this]() { BrowseVideo(); });
+                videoOpen_.SetTooltip(
+                    "Adopt an external MP4 into SourceAssets/Video and the governed LP08 Content/Video .rasset pipeline. The Scene persists a StableId, never the original disk path.");
                 videoLoop_.Create("Loop Video: ");
                 videoLoop_.OnClick([this](const wi::gui::EventArgs& args)
                 {
@@ -423,7 +427,7 @@ namespace renegade::studio
                     break;
                 case SpecialistPanel::Video:
                     place(videoOpen_); place(videoLoop_); pair(videoPlay_, videoPause_); place(videoStop_);
-                    place(videoSeek_); place(videoInfo_, 52.0f);
+                    place(videoSeek_); place(videoInfo_, 66.0f);
                     break;
                 case SpecialistPanel::Spline:
                     pair(splineAddNode_, splineRemoveNode_); place(splineLoop_); place(splineFill_); place(splineAligned_);
@@ -631,10 +635,11 @@ namespace renegade::studio
             {
                 auto* session = Session(); if (!session) return;
                 auto& scene = session->Scenes().GetScene();
-                auto* video = scene.videos.GetComponent(SelectedEntity());
+                const auto entity = SelectedEntity();
+                auto* video = scene.videos.GetComponent(entity);
                 addComponent_.SetText(video ? "VIDEO COMPONENT PRESENT" : "ADD VIDEO");
                 addComponent_.SetEnabled(video == nullptr);
-                status_.SetText(video ? "Native VideoComponent // H264/H265 MP4" : "No native VideoComponent on selection.");
+                status_.SetText(video ? "Native VideoComponent // governed H264/H265 MP4" : "No native VideoComponent on selection.");
                 for (auto* widget : VideoControls())
                     widget->SetEnabled(video != nullptr);
                 if (!video)
@@ -642,18 +647,34 @@ namespace renegade::studio
                     videoInfo_.SetText("Wicked video audio-track playback is not implemented upstream.");
                     return;
                 }
+
                 const auto authored = bridge::CaptureVideoAuthoredState(*video);
                 const auto info = bridge::CaptureVideoInfo(*video);
+                bridge::StableId governedAssetId;
+                if (const auto* metadata = scene.metadatas.GetComponent(entity);
+                    metadata != nullptr && metadata->string_values.has(bridge::VideoAssetIdMetadataKey))
+                {
+                    governedAssetId = metadata->string_values.get(bridge::VideoAssetIdMetadataKey);
+                }
+
                 videoLoop_.SetCheck(authored.looped);
                 videoSeek_.SetRange(0.0f, std::max(0.001f, info.duration));
                 videoSeek_.SetValue(info.currentTime);
                 videoPlay_.SetEnabled(info.loaded); videoPause_.SetEnabled(info.loaded);
                 videoStop_.SetEnabled(info.loaded); videoSeek_.SetEnabled(info.loaded);
+
                 std::ostringstream text;
-                text << (authored.filename.empty() ? "No MP4 loaded" : authored.filename);
+                if (bridge::IsValidStableId(governedAssetId))
+                    text << "Governed video // " << governedAssetId;
+                else if (!authored.filename.empty())
+                    text << "Legacy path // " << authored.filename;
+                else
+                    text << "No MP4 adopted";
                 if (info.loaded)
+                {
                     text << "\n" << info.profile << " // " << info.width << "x" << info.height << " // "
                          << std::fixed << std::setprecision(2) << info.framesPerSecond << " fps // " << info.duration << " s";
+                }
                 text << "\nVideo audio track: unsupported by Wicked upstream";
                 videoInfo_.SetText(text.str());
             }
@@ -836,11 +857,19 @@ namespace renegade::studio
 
             void BrowseVideo()
             {
+                auto* session = Session();
                 const auto entity = SelectedEntity();
-                if (entity == wi::ecs::INVALID_ENTITY) return;
+                if (session == nullptr || entity == wi::ecs::INVALID_ENTITY)
+                    return;
+                if (!session->Projects().HasProject())
+                {
+                    SetStatus("PHASE 7E // video adoption requires an active Renegade project");
+                    return;
+                }
+
                 wi::helper::FileDialogParams params;
                 params.type = wi::helper::FileDialogParams::OPEN;
-                params.description = "Native MP4 video (H264/H265)";
+                params.description = "Adopt MP4 video into Renegade project (H264/H265)";
                 params.extensions = {"mp4"};
                 wi::helper::FileDialog(params, [this, entity](const std::string& filename)
                 {
@@ -848,12 +877,54 @@ namespace renegade::studio
                     wi::eventhandler::Subscribe_Once(wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                         [this, entity, filename](std::uint64_t)
                         {
-                            auto* session = Session(); if (!session) return;
-                            auto& scene = session->Scenes().GetScene();
-                            auto* video = scene.videos.GetComponent(entity); if (!video) return;
-                            auto state = bridge::CaptureVideoAuthoredState(*video); state.filename = filename;
-                            if (session->Commands().Execute(std::make_unique<bridge::SetVideoAuthoredStateCommand>(scene, entity, std::move(state))))
-                                SetStatus("PHASE 7E // native MP4 loaded");
+                            auto* current = Session();
+                            if (current == nullptr || !current->Projects().HasProject())
+                            {
+                                SetStatus("PHASE 7E // video adoption cancelled: project is no longer active");
+                                return;
+                            }
+                            auto& scene = current->Scenes().GetScene();
+                            if (!scene.videos.Contains(entity))
+                            {
+                                SetStatus("PHASE 7E // video adoption cancelled: target VideoComponent no longer exists");
+                                return;
+                            }
+
+                            const auto& project = current->Projects().CurrentProject();
+                            bridge::CreatorVideoWorkflowService workflow;
+                            const auto imported = workflow.ImportVideo(
+                                project.rootPath, project.projectId, filename);
+                            if (!imported.succeeded)
+                            {
+                                SetStatus("PHASE 7E // governed video import failed // " + imported.error);
+                                RefreshControls(); RequestRefresh();
+                                return;
+                            }
+
+                            bridge::PreparedVideoAsset prepared;
+                            std::string error;
+                            if (!bridge::PrepareVideoAsset(
+                                    project.rootPath,
+                                    project.projectId,
+                                    imported.assetId,
+                                    prepared,
+                                    error))
+                            {
+                                SetStatus("PHASE 7E // governed video prepare failed // " + error);
+                                RefreshControls(); RequestRefresh();
+                                return;
+                            }
+
+                            if (current->Commands().Execute(
+                                    std::make_unique<bridge::SetVideoAssetCommand>(
+                                        scene, entity, std::move(prepared))))
+                            {
+                                SetStatus("PHASE 7E // governed MP4 adopted // " + imported.assetId);
+                            }
+                            else
+                            {
+                                SetStatus("PHASE 7E // governed video binding produced no authored change");
+                            }
                             RefreshControls(); RequestRefresh();
                         });
                 });
