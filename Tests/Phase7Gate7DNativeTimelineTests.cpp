@@ -24,6 +24,15 @@ namespace
         }
         return static_cast<std::size_t>(-1);
     }
+
+    bool HasParent(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity child,
+        const wi::ecs::Entity parent)
+    {
+        const auto* hierarchy = scene.hierarchy.GetComponent(child);
+        return hierarchy != nullptr && hierarchy->parentID == parent;
+    }
 }
 
 int main()
@@ -105,17 +114,28 @@ int main()
             "rotation key payload mismatch")) return 1;
     if (!Require(scaleData != nullptr && scaleData->keyframe_data.size() == 3,
             "scale key payload mismatch")) return 1;
+    if (!Require(HasParent(scene, translationDataEntity, animationEntity) &&
+                 HasParent(scene, rotationDataEntity, animationEntity) &&
+                 HasParent(scene, scaleDataEntity, animationEntity),
+            "new native timeline data must be owned by its Animation entity")) return 1;
 
     if (!Require(commands.Undo(), "transform record undo should succeed")) return 1;
     if (!Require(animation.channels.empty(),
             "record undo should restore channel vector")) return 1;
     if (!Require(!scene.animation_datas.Contains(translationDataEntity) &&
                  !scene.animation_datas.Contains(rotationDataEntity) &&
-                 !scene.animation_datas.Contains(scaleDataEntity),
-            "record undo should remove newly-created AnimationDataComponent entities")) return 1;
+                 !scene.animation_datas.Contains(scaleDataEntity) &&
+                 !scene.hierarchy.Contains(translationDataEntity) &&
+                 !scene.hierarchy.Contains(rotationDataEntity) &&
+                 !scene.hierarchy.Contains(scaleDataEntity),
+            "record undo should remove complete newly-created animation-data entities")) return 1;
     if (!Require(commands.Redo(), "transform record redo should succeed")) return 1;
     if (!Require(animation.channels.size() == 3,
             "record redo should restore native channels")) return 1;
+    if (!Require(HasParent(scene, translationDataEntity, animationEntity) &&
+                 HasParent(scene, rotationDataEntity, animationEntity) &&
+                 HasParent(scene, scaleDataEntity, animationEntity),
+            "record redo must restore native animation-data ownership")) return 1;
 
     transform.translation_local = XMFLOAT3(20.0f, 21.0f, 22.0f);
     if (!Require(commands.Execute(
@@ -197,8 +217,9 @@ int main()
     const auto soundChannel = FindChannel(animation, AnimationPath::SOUND_PLAY);
     if (!Require(soundChannel != static_cast<std::size_t>(-1),
             "sound event channel missing")) return 1;
-    const auto* soundData = scene.animation_datas.GetComponent(
-        animation.samplers[animation.channels[soundChannel].samplerIndex].data);
+    const auto soundDataEntity =
+        animation.samplers[animation.channels[soundChannel].samplerIndex].data;
+    const auto* soundData = scene.animation_datas.GetComponent(soundDataEntity);
     if (!Require(soundData != nullptr && soundData->keyframe_times.size() == 2,
             "sound event times missing")) return 1;
     if (!Require(soundData->keyframe_times[0] == 0.75f &&
@@ -206,14 +227,15 @@ int main()
             "event keys must remain chronological for Wicked next_event traversal")) return 1;
     if (!Require(soundData->keyframe_data.empty(),
             "event channels must not invent payload data")) return 1;
+    if (!Require(HasParent(scene, soundDataEntity, animationEntity),
+            "event animation data must be owned by its Animation entity")) return 1;
 
     // Re-recording an event at the same time must not create a duplicate event.
     if (!Require(!commands.Execute(
             std::make_unique<RecordTimelineKeyCommand>(
                 scene, animationEntity, soundEntity, TimelineRecordPreset::SoundPlay, 0.75f)),
             "same-time sound event should be a no-op")) return 1;
-    soundData = scene.animation_datas.GetComponent(
-        animation.samplers[animation.channels[soundChannel].samplerIndex].data);
+    soundData = scene.animation_datas.GetComponent(soundDataEntity);
     if (!Require(soundData != nullptr && soundData->keyframe_times.size() == 2,
             "same-time event record must not duplicate the event")) return 1;
 
@@ -241,6 +263,19 @@ int main()
                 "close loop must add value continuity keys without manufacturing events")) return 1;
     }
     if (!Require(commands.Undo(), "close loop undo should succeed")) return 1;
+
+    // Wicked animation-data ownership is structural: recursive deletion of the
+    // Animation entity must also remove all command-created data children.
+    scene.Entity_Remove(animationEntity, true);
+    if (!Require(!scene.animation_datas.Contains(translationDataEntity) &&
+                 !scene.animation_datas.Contains(rotationDataEntity) &&
+                 !scene.animation_datas.Contains(scaleDataEntity) &&
+                 !scene.animation_datas.Contains(soundDataEntity) &&
+                 !scene.hierarchy.Contains(translationDataEntity) &&
+                 !scene.hierarchy.Contains(rotationDataEntity) &&
+                 !scene.hierarchy.Contains(scaleDataEntity) &&
+                 !scene.hierarchy.Contains(soundDataEntity),
+            "recursive animation deletion must remove all owned animation-data children")) return 1;
 
     std::cout << "Phase 7D native timeline tests passed\n";
     return 0;
