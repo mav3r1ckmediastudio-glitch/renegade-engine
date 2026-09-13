@@ -202,7 +202,9 @@ namespace renegade::bridge
         {
         case SpecialistComponentKind::HairParticle:
         {
-            if (resolvedHairEntity_ == wi::ecs::INVALID_ENTITY)
+            const bool firstHairExecution =
+                resolvedHairEntity_ == wi::ecs::INVALID_ENTITY;
+            if (firstHairExecution)
             {
                 const auto target = ResolveHairSurfaceTarget(*scene_, entity_);
                 if (target.candidateCount > 1)
@@ -219,11 +221,6 @@ namespace renegade::bridge
                     // rendered object instances.
                     resolvedHairEntity_ = entity_;
                     resolvedHairMesh_ = wi::ecs::INVALID_ENTITY;
-                    if (!scene_->transforms.Contains(resolvedHairEntity_))
-                    {
-                        scene_->transforms.Create(resolvedHairEntity_);
-                        createdTransform_ = true;
-                    }
                 }
             }
 
@@ -233,25 +230,53 @@ namespace renegade::bridge
                 return false;
             }
 
+            const bool transformExists =
+                scene_->transforms.Contains(resolvedHairEntity_);
+            const bool materialExists =
+                scene_->materials.Contains(resolvedHairEntity_);
+
+            if (firstHairExecution)
+            {
+                // Capture support ownership exactly once. Undo may remove only
+                // components this command created; Redo must recreate exactly
+                // those components and must never take ownership of replacements.
+                createdTransform_ = !transformExists;
+                createdMaterial_ = !materialExists;
+            }
+            else
+            {
+                // Fail closed before mutating anything if scene history changed
+                // underneath this command. A command-owned support component
+                // must be absent after Undo; a pre-existing support component
+                // must still exist. This prevents a later Undo from deleting an
+                // unrelated Material/Transform inserted between Undo and Redo.
+                const bool transformOwnershipCollision =
+                    createdTransform_ ? transformExists : !transformExists;
+                const bool materialOwnershipCollision =
+                    createdMaterial_ ? materialExists : !materialExists;
+                if (transformOwnershipCollision || materialOwnershipCollision)
+                    return false;
+            }
+
             if (resolvedHairMesh_ != wi::ecs::INVALID_ENTITY)
             {
                 const auto* object = scene_->objects.GetComponent(resolvedHairEntity_);
                 if (object == nullptr || object->meshID != resolvedHairMesh_ ||
                     scene_->meshes.GetComponent(resolvedHairMesh_) == nullptr ||
-                    scene_->transforms.GetComponent(resolvedHairEntity_) == nullptr)
+                    !transformExists)
                 {
                     return false;
                 }
             }
 
+            if (createdTransform_)
+                scene_->transforms.Create(resolvedHairEntity_);
+            if (createdMaterial_)
+                scene_->materials.Create(resolvedHairEntity_);
+
             auto& hair = scene_->hairs.Create(resolvedHairEntity_);
             hair.meshID = resolvedHairMesh_;
             hair.SetDirty();
-            if (!scene_->materials.Contains(resolvedHairEntity_))
-            {
-                scene_->materials.Create(resolvedHairEntity_);
-                createdMaterial_ = true;
-            }
 
             // The existing Phase 7E surface edits the current selection. When
             // the creator selected an imported root, move selection to the
@@ -592,6 +617,9 @@ namespace renegade::bridge
         spline.fill_normals_mode = state.fillNormals;
         spline.SetDirty();
     }
+
+    SetSplineStateCommand::SetSplineStateStateCommand(
+        wi::scene::Scene& scene, wi::ecs::Entity entity, SplineState state);
 
     SetSplineStateCommand::SetSplineStateCommand(
         wi::scene::Scene& scene, wi::ecs::Entity entity, SplineState state)
