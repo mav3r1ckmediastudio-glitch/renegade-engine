@@ -129,8 +129,21 @@ int main()
         "resolved Hair/Fur undo should remove child HairParticleSystem");
     Require(!hairSurfaceScene.materials.Contains(crateObject),
         "resolved Hair/Fur undo should remove command-created hair material");
+
+    // Command support ownership is immutable across Undo/Redo. If unrelated
+    // scene history inserts a Material where this command expects its own
+    // removed Material to be absent, Redo must fail without deleting/taking it.
+    hairSurfaceScene.materials.Create(crateObject);
+    Require(!addCrateHair.Execute(),
+        "Hair/Fur redo must fail closed when its command-owned Material slot is occupied");
+    Require(!hairSurfaceScene.hairs.Contains(crateObject),
+        "ownership-collision redo must not partially recreate HairParticleSystem");
+    Require(hairSurfaceScene.materials.Contains(crateObject),
+        "ownership-collision redo must preserve the unrelated Material");
+    hairSurfaceScene.materials.Remove(crateObject);
+
     Require(addCrateHair.Execute(),
-        "resolved Hair/Fur redo should recreate on the same rendered child");
+        "resolved Hair/Fur redo should recreate on the same rendered child once ownership is clear");
     Require(hairSurfaceScene.hairs.GetComponent(crateObject)->meshID == crateMesh,
         "resolved Hair/Fur redo should restore exact mesh/transform pairing");
 
