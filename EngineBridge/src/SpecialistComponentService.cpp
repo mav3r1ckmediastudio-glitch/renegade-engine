@@ -138,8 +138,6 @@ namespace renegade::bridge
             }
         };
 
-        // Direct rendered-object selection is authoritative even if it has
-        // rendered descendants of its own.
         if (scene.objects.GetComponent(selected) != nullptr)
         {
             accept(selected);
@@ -147,9 +145,6 @@ namespace renegade::bridge
             return result;
         }
 
-        // A mesh selection is only safe when exactly one ObjectComponent uses
-        // it. A shared mesh has multiple instance transforms and therefore no
-        // single correct HairParticleSystem transform.
         const bool selectedIsMesh = scene.meshes.GetComponent(selected) != nullptr;
         for (std::size_t i = 0; i < scene.objects.GetCount(); ++i)
         {
@@ -216,9 +211,6 @@ namespace renegade::bridge
                 }
                 else
                 {
-                    // Preserve Wicked's standalone HairComponent capability for
-                    // transform-only entities, but never guess between multiple
-                    // rendered object instances.
                     resolvedHairEntity_ = entity_;
                     resolvedHairMesh_ = wi::ecs::INVALID_ENTITY;
                 }
@@ -237,19 +229,11 @@ namespace renegade::bridge
 
             if (firstHairExecution)
             {
-                // Capture support ownership exactly once. Undo may remove only
-                // components this command created; Redo must recreate exactly
-                // those components and must never take ownership of replacements.
                 createdTransform_ = !transformExists;
                 createdMaterial_ = !materialExists;
             }
             else
             {
-                // Fail closed before mutating anything if scene history changed
-                // underneath this command. A command-owned support component
-                // must be absent after Undo; a pre-existing support component
-                // must still exist. This prevents a later Undo from deleting an
-                // unrelated Material/Transform inserted between Undo and Redo.
                 const bool transformOwnershipCollision =
                     createdTransform_ ? transformExists : !transformExists;
                 const bool materialOwnershipCollision =
@@ -278,10 +262,6 @@ namespace renegade::bridge
             hair.meshID = resolvedHairMesh_;
             hair.SetDirty();
 
-            // The existing Phase 7E surface edits the current selection. When
-            // the creator selected an imported root, move selection to the
-            // resolved rendered child so every subsequent control edits the
-            // same entity whose transform Wicked uses for Hair UpdateCPU().
             if (auto* session = StudioSession::Current();
                 session != nullptr && &session->Scenes().GetScene() == scene_)
             {
@@ -418,10 +398,6 @@ namespace renegade::bridge
         auto* hair = scene_->hairs.GetComponent(entity_);
         if (hair == nullptr) return false;
 
-        // A HairParticleSystem's transform comes from its owning entity. If the
-        // owner is a rendered ObjectComponent, its emission mesh must remain
-        // that object's mesh; accepting an arbitrary scene mesh recreates the
-        // transform mismatch found during Phase 7 owner acceptance.
         if (const auto* object = scene_->objects.GetComponent(entity_);
             object != nullptr && object->meshID != wi::ecs::INVALID_ENTITY &&
             state.mesh != object->meshID)
@@ -617,9 +593,6 @@ namespace renegade::bridge
         spline.fill_normals_mode = state.fillNormals;
         spline.SetDirty();
     }
-
-    SetSplineStateCommand::SetSplineStateStateCommand(
-        wi::scene::Scene& scene, wi::ecs::Entity entity, SplineState state);
 
     SetSplineStateCommand::SetSplineStateCommand(
         wi::scene::Scene& scene, wi::ecs::Entity entity, SplineState state)
