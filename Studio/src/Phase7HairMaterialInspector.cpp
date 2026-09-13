@@ -12,7 +12,6 @@
 
 #include <filesystem>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,8 +31,8 @@ namespace renegade::studio
                 : owner_(&owner)
             {
                 descriptor_.id = Phase7HairMaterialSectionId;
-                descriptor_.title = "HAIR / FUR MATERIAL";
-                descriptor_.order = 39;
+                descriptor_.title = "HAIR / FUR // TEXTURE / ATLAS";
+                descriptor_.order = 37;
                 descriptor_.defaultExpanded = true;
                 descriptor_.headerHeight = 28.0f;
                 descriptor_.spacingAfter = 6.0f;
@@ -190,7 +189,8 @@ namespace renegade::studio
                 header_.SetVisible(true);
                 header_.SetPos(XMFLOAT2(12.0f, layout.top));
                 header_.SetSize(XMFLOAT2(layout.width, layout.headerHeight));
-                header_.SetText(std::string(layout.expanded ? "▼  " : "▶  ") + "HAIR / FUR MATERIAL");
+                header_.SetText(std::string(layout.expanded ? "▼  " : "▶  ") +
+                    "HAIR / FUR // TEXTURE / ATLAS");
                 if (!layout.expanded)
                     return;
 
