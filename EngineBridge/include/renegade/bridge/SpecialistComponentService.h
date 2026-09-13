@@ -19,6 +19,21 @@ namespace renegade::bridge
         Spline,
     };
 
+    struct HairSurfaceTarget
+    {
+        wi::ecs::Entity ownerEntity = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity meshEntity = wi::ecs::INVALID_ENTITY;
+        std::size_t candidateCount = 0;
+        bool valid = false;
+    };
+
+    // Hair simulation uses the TransformComponent on the entity that owns the
+    // HairParticleSystem. Resolve creator/root/mesh selections to the actual
+    // rendered ObjectComponent instance so its transform and mesh stay paired.
+    [[nodiscard]] HairSurfaceTarget ResolveHairSurfaceTarget(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity selected) noexcept;
+
     class CreateSpecialistComponentCommand final : public ICommand
     {
     public:
@@ -29,6 +44,18 @@ namespace renegade::bridge
         bool Execute() override;
         void Undo() override;
 
+        [[nodiscard]] wi::ecs::Entity ResolvedEntity() const noexcept
+        {
+            return kind_ == SpecialistComponentKind::HairParticle &&
+                   resolvedHairEntity_ != wi::ecs::INVALID_ENTITY
+                ? resolvedHairEntity_
+                : entity_;
+        }
+        [[nodiscard]] wi::ecs::Entity ResolvedHairMesh() const noexcept
+        {
+            return resolvedHairMesh_;
+        }
+
     private:
         bool Create();
         bool Remove();
@@ -37,6 +64,8 @@ namespace renegade::bridge
         SpecialistComponentKind kind_ = SpecialistComponentKind::ForceField;
         bool createdMaterial_ = false;
         bool createdTransform_ = false;
+        wi::ecs::Entity resolvedHairEntity_ = wi::ecs::INVALID_ENTITY;
+        wi::ecs::Entity resolvedHairMesh_ = wi::ecs::INVALID_ENTITY;
     };
 
     struct HairAtlasRectState

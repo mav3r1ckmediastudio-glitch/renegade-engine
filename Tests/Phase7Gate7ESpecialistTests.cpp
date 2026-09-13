@@ -66,6 +66,98 @@ int main()
     setHair.Undo();
     Require(hair->strandCount != 4321, "hair undo should restore previous state");
 
+    // Owner-test regression: imported roots commonly contain the actual rendered
+    // ObjectComponent on a transformed child. Hair must be owned by that child,
+    // because Wicked uses the Hair entity's transform with hair.meshID vertices.
+    wi::scene::Scene hairSurfaceScene;
+    const auto importRoot = wi::ecs::CreateEntity();
+    hairSurfaceScene.names.Create(importRoot) = "Imported Root";
+    hairSurfaceScene.transforms.Create(importRoot);
+
+    const auto crateMesh = wi::ecs::CreateEntity();
+    hairSurfaceScene.names.Create(crateMesh) = "Crate Mesh";
+    hairSurfaceScene.meshes.Create(crateMesh);
+
+    const auto crateObject = wi::ecs::CreateEntity();
+    hairSurfaceScene.names.Create(crateObject) = "Crate Object";
+    hairSurfaceScene.transforms.Create(crateObject);
+    hairSurfaceScene.objects.Create(crateObject).meshID = crateMesh;
+    hairSurfaceScene.Component_Attach(crateObject, importRoot, true);
+
+    const auto resolvedRoot = renegade::bridge::ResolveHairSurfaceTarget(
+        hairSurfaceScene, importRoot);
+    Require(resolvedRoot.valid && resolvedRoot.candidateCount == 1,
+        "single rendered child should resolve as one safe Hair/Fur surface");
+    Require(resolvedRoot.ownerEntity == crateObject && resolvedRoot.meshEntity == crateMesh,
+        "Hair/Fur surface must pair the rendered object transform with its mesh");
+
+    const auto resolvedObject = renegade::bridge::ResolveHairSurfaceTarget(
+        hairSurfaceScene, crateObject);
+    Require(resolvedObject.valid && resolvedObject.ownerEntity == crateObject &&
+            resolvedObject.meshEntity == crateMesh,
+        "direct rendered-object selection should resolve itself");
+
+    renegade::bridge::CreateSpecialistComponentCommand addCrateHair(
+        hairSurfaceScene, importRoot,
+        renegade::bridge::SpecialistComponentKind::HairParticle);
+    Require(addCrateHair.Execute(),
+        "adding Hair/Fur to an imported root with one rendered child should succeed");
+    Require(addCrateHair.ResolvedEntity() == crateObject &&
+            addCrateHair.ResolvedHairMesh() == crateMesh,
+        "Hair/Fur command should retain the resolved object/mesh pair");
+    Require(!hairSurfaceScene.hairs.Contains(importRoot) &&
+            hairSurfaceScene.hairs.Contains(crateObject),
+        "Hair/Fur must live on rendered child, never the import root transform");
+    Require(hairSurfaceScene.hairs.GetComponent(crateObject)->meshID == crateMesh,
+        "Hair/Fur must emit from the mesh rendered by its owning ObjectComponent");
+    Require(hairSurfaceScene.materials.Contains(crateObject),
+        "resolved Hair/Fur owner should receive its native hair material");
+
+    auto wrongMeshState = renegade::bridge::CaptureHairParticle(
+        *hairSurfaceScene.hairs.GetComponent(crateObject));
+    wrongMeshState.mesh = wi::ecs::CreateEntity();
+    hairSurfaceScene.meshes.Create(wrongMeshState.mesh);
+    renegade::bridge::SetHairParticleStateCommand wrongMesh(
+        hairSurfaceScene, crateObject, wrongMeshState);
+    Require(!wrongMesh.Execute(),
+        "Hair/Fur must reject a mesh whose instance transform belongs to another object");
+    Require(hairSurfaceScene.hairs.GetComponent(crateObject)->meshID == crateMesh,
+        "rejected Hair/Fur mesh edit must preserve rendered-object mesh binding");
+
+    addCrateHair.Undo();
+    Require(!hairSurfaceScene.hairs.Contains(crateObject),
+        "resolved Hair/Fur undo should remove child HairParticleSystem");
+    Require(!hairSurfaceScene.materials.Contains(crateObject),
+        "resolved Hair/Fur undo should remove command-created hair material");
+
+    // Command support ownership is immutable across Undo/Redo. If unrelated
+    // scene history inserts a Material where this command expects its own
+    // removed Material to be absent, Redo must fail without deleting/taking it.
+    hairSurfaceScene.materials.Create(crateObject);
+    Require(!addCrateHair.Execute(),
+        "Hair/Fur redo must fail closed when its command-owned Material slot is occupied");
+    Require(!hairSurfaceScene.hairs.Contains(crateObject),
+        "ownership-collision redo must not partially recreate HairParticleSystem");
+    Require(hairSurfaceScene.materials.Contains(crateObject),
+        "ownership-collision redo must preserve the unrelated Material");
+    hairSurfaceScene.materials.Remove(crateObject);
+
+    Require(addCrateHair.Execute(),
+        "resolved Hair/Fur redo should recreate on the same rendered child once ownership is clear");
+    Require(hairSurfaceScene.hairs.GetComponent(crateObject)->meshID == crateMesh,
+        "resolved Hair/Fur redo should restore exact mesh/transform pairing");
+
+    const auto secondMesh = wi::ecs::CreateEntity();
+    hairSurfaceScene.meshes.Create(secondMesh);
+    const auto secondObject = wi::ecs::CreateEntity();
+    hairSurfaceScene.transforms.Create(secondObject);
+    hairSurfaceScene.objects.Create(secondObject).meshID = secondMesh;
+    hairSurfaceScene.Component_Attach(secondObject, importRoot, true);
+    const auto ambiguous = renegade::bridge::ResolveHairSurfaceTarget(
+        hairSurfaceScene, importRoot);
+    Require(!ambiguous.valid && ambiguous.candidateCount == 2,
+        "multi-object import roots must fail closed instead of guessing a Hair transform");
+
     // Force fields use Wicked's native Point/Plane component.
     scene.forces.Create(entity);
     auto forceState = renegade::bridge::CaptureForceField(*scene.forces.GetComponent(entity));
