@@ -1,4 +1,5 @@
 #include "renegade/bridge/SpecialistComponentService.h"
+#include "renegade/bridge/StudioSession.h"
 
 #include <algorithm>
 #include <cmath>
@@ -112,6 +113,68 @@ namespace
 
 namespace renegade::bridge
 {
+    HairSurfaceTarget ResolveHairSurfaceTarget(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity selected) noexcept
+    {
+        HairSurfaceTarget result;
+        if (selected == wi::ecs::INVALID_ENTITY)
+            return result;
+
+        auto accept = [&](const wi::ecs::Entity objectEntity)
+        {
+            const auto* object = scene.objects.GetComponent(objectEntity);
+            if (object == nullptr || object->meshID == wi::ecs::INVALID_ENTITY ||
+                scene.meshes.GetComponent(object->meshID) == nullptr ||
+                scene.transforms.GetComponent(objectEntity) == nullptr)
+            {
+                return;
+            }
+            ++result.candidateCount;
+            if (result.candidateCount == 1)
+            {
+                result.ownerEntity = objectEntity;
+                result.meshEntity = object->meshID;
+            }
+        };
+
+        // Direct rendered-object selection is authoritative even if it has
+        // rendered descendants of its own.
+        if (scene.objects.GetComponent(selected) != nullptr)
+        {
+            accept(selected);
+            result.valid = result.candidateCount == 1;
+            return result;
+        }
+
+        // A mesh selection is only safe when exactly one ObjectComponent uses
+        // it. A shared mesh has multiple instance transforms and therefore no
+        // single correct HairParticleSystem transform.
+        const bool selectedIsMesh = scene.meshes.GetComponent(selected) != nullptr;
+        for (std::size_t i = 0; i < scene.objects.GetCount(); ++i)
+        {
+            const auto objectEntity = scene.objects.GetEntity(i);
+            const auto& object = scene.objects[i];
+            if (selectedIsMesh)
+            {
+                if (object.meshID == selected)
+                    accept(objectEntity);
+            }
+            else if (scene.Entity_IsDescendant(objectEntity, selected))
+            {
+                accept(objectEntity);
+            }
+        }
+
+        result.valid = result.candidateCount == 1;
+        if (!result.valid)
+        {
+            result.ownerEntity = wi::ecs::INVALID_ENTITY;
+            result.meshEntity = wi::ecs::INVALID_ENTITY;
+        }
+        return result;
+    }
+
     CreateSpecialistComponentCommand::CreateSpecialistComponentCommand(
         wi::scene::Scene& scene,
         wi::ecs::Entity entity,
@@ -138,14 +201,69 @@ namespace renegade::bridge
         switch (kind_)
         {
         case SpecialistComponentKind::HairParticle:
-            if (scene_->hairs.Contains(entity_)) return false;
-            scene_->hairs.Create(entity_);
-            if (!scene_->materials.Contains(entity_))
+        {
+            if (resolvedHairEntity_ == wi::ecs::INVALID_ENTITY)
             {
-                scene_->materials.Create(entity_);
+                const auto target = ResolveHairSurfaceTarget(*scene_, entity_);
+                if (target.candidateCount > 1)
+                    return false;
+                if (target.valid)
+                {
+                    resolvedHairEntity_ = target.ownerEntity;
+                    resolvedHairMesh_ = target.meshEntity;
+                }
+                else
+                {
+                    // Preserve Wicked's standalone HairComponent capability for
+                    // transform-only entities, but never guess between multiple
+                    // rendered object instances.
+                    resolvedHairEntity_ = entity_;
+                    resolvedHairMesh_ = wi::ecs::INVALID_ENTITY;
+                    if (!scene_->transforms.Contains(resolvedHairEntity_))
+                    {
+                        scene_->transforms.Create(resolvedHairEntity_);
+                        createdTransform_ = true;
+                    }
+                }
+            }
+
+            if (resolvedHairEntity_ == wi::ecs::INVALID_ENTITY ||
+                scene_->hairs.Contains(resolvedHairEntity_))
+            {
+                return false;
+            }
+
+            if (resolvedHairMesh_ != wi::ecs::INVALID_ENTITY)
+            {
+                const auto* object = scene_->objects.GetComponent(resolvedHairEntity_);
+                if (object == nullptr || object->meshID != resolvedHairMesh_ ||
+                    scene_->meshes.GetComponent(resolvedHairMesh_) == nullptr ||
+                    scene_->transforms.GetComponent(resolvedHairEntity_) == nullptr)
+                {
+                    return false;
+                }
+            }
+
+            auto& hair = scene_->hairs.Create(resolvedHairEntity_);
+            hair.meshID = resolvedHairMesh_;
+            hair.SetDirty();
+            if (!scene_->materials.Contains(resolvedHairEntity_))
+            {
+                scene_->materials.Create(resolvedHairEntity_);
                 createdMaterial_ = true;
             }
+
+            // The existing Phase 7E surface edits the current selection. When
+            // the creator selected an imported root, move selection to the
+            // resolved rendered child so every subsequent control edits the
+            // same entity whose transform Wicked uses for Hair UpdateCPU().
+            if (auto* session = StudioSession::Current();
+                session != nullptr && &session->Scenes().GetScene() == scene_)
+            {
+                session->Selection().Select(resolvedHairEntity_);
+            }
             return true;
+        }
         case SpecialistComponentKind::ForceField:
             if (scene_->forces.Contains(entity_)) return false;
             scene_->forces.Create(entity_);
@@ -174,10 +292,16 @@ namespace renegade::bridge
         switch (kind_)
         {
         case SpecialistComponentKind::HairParticle:
-            if (!scene_->hairs.Contains(entity_)) return false;
-            scene_->hairs.Remove(entity_);
-            if (createdMaterial_) scene_->materials.Remove(entity_);
+        {
+            const auto hairEntity = resolvedHairEntity_ != wi::ecs::INVALID_ENTITY
+                ? resolvedHairEntity_
+                : entity_;
+            if (!scene_->hairs.Contains(hairEntity)) return false;
+            scene_->hairs.Remove(hairEntity);
+            if (createdMaterial_) scene_->materials.Remove(hairEntity);
+            if (createdTransform_) scene_->transforms.Remove(hairEntity);
             return true;
+        }
         case SpecialistComponentKind::ForceField:
             if (!scene_->forces.Contains(entity_)) return false;
             scene_->forces.Remove(entity_);
@@ -268,6 +392,18 @@ namespace renegade::bridge
         if (scene_ == nullptr) return false;
         auto* hair = scene_->hairs.GetComponent(entity_);
         if (hair == nullptr) return false;
+
+        // A HairParticleSystem's transform comes from its owning entity. If the
+        // owner is a rendered ObjectComponent, its emission mesh must remain
+        // that object's mesh; accepting an arbitrary scene mesh recreates the
+        // transform mismatch found during Phase 7 owner acceptance.
+        if (const auto* object = scene_->objects.GetComponent(entity_);
+            object != nullptr && object->meshID != wi::ecs::INVALID_ENTITY &&
+            state.mesh != object->meshID)
+        {
+            return false;
+        }
+
         ApplyHairParticle(*hair, state);
         return true;
     }
