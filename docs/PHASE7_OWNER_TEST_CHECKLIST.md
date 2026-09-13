@@ -32,6 +32,20 @@ Use the exact successful PR artifact. Do not merge the repair PR until every req
 - In a disposable Level, delete the authored timeline clip and confirm its created channel/key data disappears with the clip rather than surviving as orphan scene data.
 - Confirm SCRIPT PLAY/STOP is not presented as a working Renegade `.rscripts` timeline integration.
 
+## 7E — Hair/Fur owner-test repair
+
+- Use an imported crate/model where the visible rendered object is a child beneath an imported/root entity.
+- Select the imported/root entity and choose `ADD HAIR / FUR`.
+- Confirm Renegade resolves the single rendered child automatically and selection moves to that actual rendered object.
+- Confirm the Hair Surface Mesh is already the mesh rendered by that object; no manual cross-scene mesh selection should be required.
+- Set a visible strand count and short fur length/width. The hair roots and outline must remain attached to the crate at the crate's true scale and transform.
+- Move/rotate/scale the crate and confirm the Hair/Fur follows the same rendered-object transform.
+- Open `HAIR / FUR MATERIAL` and choose `TEXTURE / ATLAS // SELECT...`.
+- Select a local PNG/TGA/DDS/JPG/JPEG/BMP/HDR hair-card texture and confirm it is imported through the governed project asset workflow and immediately bound to the Hair material.
+- Save, close/reopen and confirm the Hair/Fur texture remains assigned without access to the original external image path.
+- Clear the Hair/Fur texture, Undo, and confirm the prior governed texture returns.
+- On a disposable imported root containing multiple rendered child objects, `ADD HAIR / FUR` must fail closed rather than silently choosing the wrong child transform; select the intended rendered child explicitly and add Hair/Fur there.
+
 ## 7E — governed Video project/package parity
 
 - Add/select a native Video component and choose `ADOPT MP4` with a known-good H264 MP4.
@@ -51,7 +65,7 @@ Use the exact successful PR artifact. Do not merge the repair PR until every req
 
 - Phase 7A animation playback section opens and its accepted transport controls respond.
 - Phase 7C IK/look-at/expression section opens and responds.
-- Phase 7E Hair/Fur controls open and respond.
+- Phase 7E Hair/Fur controls open and respond, including the dedicated governed texture/atlas picker.
 - Phase 7E Force Field controls open and respond.
 - Phase 7E Spline controls open and respond.
 - Phase 7E Gaussian Splat surface remains available.
