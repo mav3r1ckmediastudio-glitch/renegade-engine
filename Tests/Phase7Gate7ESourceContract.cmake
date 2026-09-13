@@ -31,6 +31,8 @@ set(resource_dependencies "${RENEGADE_SOURCE_DIR}/EngineBridge/src/ResourceAsset
 set(studio_session "${RENEGADE_SOURCE_DIR}/EngineBridge/include/renegade/bridge/StudioSession.h")
 set(runtime_assets "${RENEGADE_SOURCE_DIR}/Runtime/src/RuntimeReusableAssets.cpp")
 set(inspector_source "${RENEGADE_SOURCE_DIR}/Studio/src/Phase7Gate7ESpecialistInspector.cpp")
+set(hair_material_source "${RENEGADE_SOURCE_DIR}/Studio/src/Phase7HairMaterialInspector.cpp")
+set(hair_material_header "${RENEGADE_SOURCE_DIR}/Studio/src/Phase7HairMaterialInspector.h")
 set(async_guard "${RENEGADE_SOURCE_DIR}/Studio/src/Phase7AsyncSceneGuard.h")
 set(animation_header "${RENEGADE_SOURCE_DIR}/Studio/src/Phase7Gate7AAnimationInspector.h")
 set(root_cmake "${RENEGADE_SOURCE_DIR}/CMakeLists.txt")
@@ -45,6 +47,8 @@ require_file("${resource_dependencies}" "ResourceAssetDependencyService")
 require_file("${studio_session}" "StudioSession")
 require_file("${runtime_assets}" "Runtime governed resource restore")
 require_file("${inspector_source}" "specialist inspector")
+require_file("${hair_material_source}" "Hair/Fur governed material inspector")
+require_file("${hair_material_header}" "Hair/Fur governed material inspector header")
 require_file("${async_guard}" "Phase 7 async scene guard")
 
 file(READ "${service_source}" service)
@@ -56,6 +60,7 @@ file(READ "${resource_dependencies}" resource_dependencies_text)
 file(READ "${studio_session}" studio_session_text)
 file(READ "${runtime_assets}" runtime_assets_text)
 file(READ "${inspector_source}" inspector)
+file(READ "${hair_material_source}" hair_material)
 file(READ "${async_guard}" guard)
 file(READ "${animation_header}" animation)
 file(READ "${root_cmake}" root)
@@ -73,6 +78,16 @@ require_text("${service}" "SetVideoAuthoredStateCommand" "command-backed video l
 require_text("${service}" "SetSplineStateCommand" "command-backed spline authoring")
 require_text("${service}" "AddSplineNodeCommand" "native spline node authoring")
 require_text("${service}" "GetSplatCount" "Gaussian splat inspection")
+
+# Owner-test repair: a HairParticleSystem must use the transform of the same
+# rendered ObjectComponent whose mesh it emits from. Imported container/root
+# selections may resolve only when there is one unambiguous rendered child.
+require_text("${service}" "ResolveHairSurfaceTarget" "Hair/Fur rendered-surface resolver")
+require_text("${service}" "scene.Entity_IsDescendant(objectEntity, selected)" "import-root rendered-child resolution")
+require_text("${service}" "object->meshID != resolvedHairMesh_" "Hair/Fur object/mesh pairing validation")
+require_text("${service}" "hair.meshID = resolvedHairMesh_" "automatic Hair/Fur mesh binding")
+require_text("${service}" "session->Selection().Select(resolvedHairEntity_)" "creator selection follows resolved Hair/Fur owner")
+require_text("${service}" "state.mesh != object->meshID" "reject arbitrary mismatched Hair/Fur mesh edits")
 
 require_text("${terrain}" "enable_blendmap_layer" "native terrain blendmap layers")
 require_text("${terrain}" "CreateChunkRegionTexture" "native terrain region texture refresh")
@@ -139,9 +154,26 @@ require_text("${inspector}" "PrepareVideoAsset" "governed video payload preparat
 require_text("${inspector}" "SetVideoAssetCommand" "governed video command assignment")
 require_text("${inspector}" "VideoAssetIdMetadataKey" "creator stable-video presentation")
 
+# Hair/Fur has a dedicated local-file texture/atlas workflow rather than making
+# creators discover the generic material inspector. It reuses LP08 governed
+# textures so Save/Reopen/Test Level/package ownership remains consistent.
+require_text("${hair_material}" "TEXTURE / ATLAS // SELECT..." "dedicated Hair/Fur local texture action")
+require_text("${hair_material}" "CreatorTextureWorkflowService" "governed Hair/Fur texture import")
+require_text("${hair_material}" "DetectResourceSourceFormat" "Hair/Fur texture format validation")
+require_text("${hair_material}" "PrepareMaterialTextureAsset" "Hair/Fur governed texture preparation")
+require_text("${hair_material}" "SetMaterialTextureAssetCommand" "undoable Hair/Fur texture assignment")
+require_text("${hair_material}" "MaterialTextureSlot::BaseColor" "Wicked Hair atlas Base Colour authority")
+require_text("${hair_material}" "ClearMaterialTextureAssetCommand" "undoable Hair/Fur texture clear")
+require_text("${hair_material}" "CapturePhase7AsyncSceneGuard" "Hair/Fur file-picker scene capture")
+require_text("${hair_material}" "MatchesPhase7AsyncSceneGuard" "Hair/Fur final callback scene validation")
+require_text("${hair_material}" "png\", \"tga\", \"dds\", \"jpg\", \"jpeg\", \"bmp\", \"hdr" "Hair/Fur local image formats")
+
 require_text("${animation}" "RegisterPhase7Gate7ESpecialistInspector" "7E inspector registration")
 require_text("${animation}" "PreparePhase7Gate7ESpecialistInspector" "7E inspector layout preparation")
+require_text("${animation}" "RegisterPhase7HairMaterialInspector" "Hair/Fur material inspector registration")
+require_text("${animation}" "PreparePhase7HairMaterialInspector" "Hair/Fur material inspector layout preparation")
 require_text("${root}" "Phase7Gate7ESpecialistInspector.cpp" "7E Studio target ownership")
+require_text("${root}" "Phase7HairMaterialInspector.cpp" "Hair/Fur material Studio target ownership")
 require_text("${root}" "include(Tests/Phase7Gate7E.cmake)" "7E test registration")
 require_text("${bridge}" "CreatorVideoWorkflowService.cpp" "governed creator video target ownership")
 require_text("${bridge}" "VideoAssetService.cpp" "governed video binding target ownership")
@@ -159,6 +191,10 @@ foreach(stock_header IN ITEMS
     string(FIND "${inspector}" "${stock_header}" stock_window)
     if(NOT stock_window EQUAL -1)
         message(FATAL_ERROR "Phase 7E must not embed Wicked stock editor window: ${stock_header}")
+    endif()
+    string(FIND "${hair_material}" "${stock_header}" hair_stock_window)
+    if(NOT hair_stock_window EQUAL -1)
+        message(FATAL_ERROR "Hair/Fur material inspector must not embed Wicked stock editor window: ${stock_header}")
     endif()
 endforeach()
 
