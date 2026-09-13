@@ -1,4 +1,5 @@
 #include "Phase7Gate7BHumanoidRetargetInspector.h"
+#include "Phase7AsyncSceneGuard.h"
 #include "InspectorSectionFramework.h"
 #include "Phase7Gate7AAnimationInspector.h"
 #include "RenegadeStudioChrome.h"
@@ -384,16 +385,36 @@ auto* session = bridge::StudioSession::Current();
 if (session == nullptr || rigEntity_ == wi::ecs::INVALID_ENTITY)
 return;
 const auto destination = rigEntity_;
+const auto guard = CapturePhase7AsyncSceneGuard();
 wi::helper::FileDialogParams params;
 params.type = wi::helper::FileDialogParams::OPEN;
 params.description = "Humanoid animation source (WISCENE, FBX, GLTF, GLB, VRM, VRMA)";
 params.extensions = {"wiscene", "fbx", "gltf", "glb", "vrm", "vrma"};
-wi::helper::FileDialog(params, [this, destination](const std::string& fileName)
+wi::helper::FileDialog(params, [this, destination, guard](const std::string& fileName)
 {
+if (fileName.empty())
+return;
 wi::eventhandler::Subscribe_Once(
 wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-[this, destination, fileName](std::uint64_t)
+[this, destination, guard, fileName](std::uint64_t)
 {
+if (!MatchesPhase7AsyncSceneGuard(guard))
+{
+SetStatus("PHASE 7B // retarget cancelled: active project or Level changed while the file picker was open");
+RequestRefresh();
+return;
+}
+auto* current = bridge::StudioSession::Current();
+if (current == nullptr)
+return;
+auto& scene = current->Scenes().GetScene();
+const auto mapping = bridge::CaptureHumanoidMapping(scene, destination);
+if (!bridge::IsHumanoidMappingValid(mapping))
+{
+SetStatus("PHASE 7B // retarget cancelled: original humanoid target no longer exists or is no longer valid");
+RequestRefresh();
+return;
+}
 RetargetAnimations(destination, fileName);
 });
 });

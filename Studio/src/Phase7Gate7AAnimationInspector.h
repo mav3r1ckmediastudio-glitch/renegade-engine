@@ -8,6 +8,7 @@
 #include "Phase7Gate7CCharacterControlsInspector.h"
 #include "Phase7Gate7DNativeTimelineInspector.h"
 #include "Phase7Gate7ESpecialistInspector.h"
+#include "Phase7HairMaterialInspector.h"
 #include "Phase7Gate7FMeshBlendInspector.h"
 
 namespace wi::gui
@@ -50,6 +51,8 @@ namespace renegade::studio
             owner, inspectorPanel, registry, requestRefresh, setStatus);
         RegisterPhase7Gate7ESpecialistInspector(
             owner, inspectorPanel, registry, requestRefresh, setStatus);
+        RegisterPhase7HairMaterialInspector(
+            owner, inspectorPanel, registry, requestRefresh, setStatus);
         RegisterPhase7Gate7FMeshBlendInspector(
             owner, inspectorPanel, registry, requestRefresh, setStatus);
         RegisterPhase7Gate7AAnimationInspectorCore(
@@ -66,6 +69,7 @@ namespace renegade::studio
         PreparePhase7Gate7CCharacterControlsInspector(owner);
         PreparePhase7Gate7DNativeTimelineInspector(owner);
         PreparePhase7Gate7ESpecialistInspector(owner);
+        PreparePhase7HairMaterialInspector(owner);
         PreparePhase7Gate7FMeshBlendInspector(owner);
         PreparePhase7Gate7AAnimationInspectorCore(owner);
     }

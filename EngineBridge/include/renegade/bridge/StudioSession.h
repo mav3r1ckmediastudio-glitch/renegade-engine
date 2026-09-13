@@ -9,6 +9,7 @@
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/SelectionService.h"
+#include "renegade/bridge/VideoAssetService.h"
 
 namespace renegade::bridge
 {
@@ -106,7 +107,10 @@ namespace renegade::bridge
                 const bool committed =
                     documents_.CommitPreparedOpen(std::move(prepared));
                 if (committed)
+                {
                     scripts_.Invalidate();
+                    RestoreGovernedVideoBindingsAfterOpen();
+                }
                 return committed;
             }
 
@@ -131,7 +135,10 @@ namespace renegade::bridge
             const bool committed =
                 documents_.CommitPreparedOpen(std::move(prepared));
             if (committed)
+            {
                 scripts_.Invalidate();
+                RestoreGovernedVideoBindingsAfterOpen();
+            }
             return committed;
         }
 
@@ -204,11 +211,32 @@ namespace renegade::bridge
         {
             const bool reloaded = documents_.Reload();
             if (reloaded)
+            {
                 scripts_.Invalidate();
+                RestoreGovernedVideoBindingsAfterOpen();
+            }
             return reloaded;
         }
 
     private:
+        void RestoreGovernedVideoBindingsAfterOpen() noexcept
+        {
+            if (!projects_.HasProject())
+                return;
+            const auto& project = projects_.CurrentProject();
+            const auto restored = RestoreVideoAssetBindings(
+                scenes_.GetScene(), project.rootPath, project.projectId);
+            if (!restored.succeeded)
+            {
+                // Match the established governed-texture lifecycle policy:
+                // scene adoption remains authoritative, but a missing/corrupt
+                // governed live resource is surfaced as an explicit warning.
+                scenes_.SetLastError(
+                    "Scene opened but governed video restoration failed: " +
+                    restored.error);
+            }
+        }
+
         inline static StudioSession* current_ = nullptr;
 
         StudioProjectService projects_;

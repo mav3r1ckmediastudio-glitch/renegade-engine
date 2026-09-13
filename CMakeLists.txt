@@ -81,6 +81,8 @@ if(WIN32)
         Studio/src/Phase7Gate7DNativeTimelineInspector.h
         Studio/src/Phase7Gate7ESpecialistInspector.cpp
         Studio/src/Phase7Gate7ESpecialistInspector.h
+        Studio/src/Phase7HairMaterialInspector.cpp
+        Studio/src/Phase7HairMaterialInspector.h
         Studio/src/Phase7Gate7FMeshBlendInspector.cpp
         Studio/src/Phase7Gate7FMeshBlendInspector.h
     )

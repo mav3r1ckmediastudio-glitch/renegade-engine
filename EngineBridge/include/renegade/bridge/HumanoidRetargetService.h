@@ -56,6 +56,25 @@ namespace renegade::bridge
         std::vector<wi::ecs::Entity> createdAnimations;
     };
 
+    // Baked retarget results must be command-owned after the first import.
+    // Redo restores these snapshots instead of reopening an external source file.
+    // Native ownership is persisted as parent identity and rebuilt through
+    // Scene::Component_Attach(), matching Wicked's original retarget path.
+    struct RetargetAnimationSnapshot
+    {
+        wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
+        std::string name;
+        wi::scene::AnimationComponent animation;
+        wi::ecs::Entity parent = wi::ecs::INVALID_ENTITY;
+    };
+
+    struct RetargetAnimationDataSnapshot
+    {
+        wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
+        wi::scene::AnimationDataComponent data;
+        wi::ecs::Entity parent = wi::ecs::INVALID_ENTITY;
+    };
+
     [[nodiscard]] const char* HumanoidBoneName(HumanoidBone bone) noexcept;
 
     [[nodiscard]] wi::ecs::Entity FindHumanoidRigEntity(
@@ -137,11 +156,16 @@ namespace renegade::bridge
 
     private:
         bool LoadSource(wi::scene::Scene& sourceScene);
+        bool CapturePreparedResult();
+        bool RestorePreparedResult();
         void RemoveCreated() noexcept;
 
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity destinationHumanoid_ = wi::ecs::INVALID_ENTITY;
         std::string sourcePath_;
         HumanoidRetargetResult result_;
+        bool prepared_ = false;
+        std::vector<RetargetAnimationSnapshot> animationSnapshots_;
+        std::vector<RetargetAnimationDataSnapshot> dataSnapshots_;
     };
 }

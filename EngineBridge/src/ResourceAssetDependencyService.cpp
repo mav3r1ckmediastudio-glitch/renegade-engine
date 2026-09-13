@@ -4,6 +4,7 @@
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ResourceAssetService.h"
 #include "renegade/bridge/SceneDocumentService.h"
+#include "renegade/bridge/VideoAssetService.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -37,6 +38,36 @@ namespace renegade::bridge
                 [&productId](const ImportedProductRecord& record)
                 { return record.productAssetId == productId; });
             return found == registry.importedProducts.end() ? nullptr : &*found;
+        }
+
+        bool ValidateGovernedProduct(
+            const AssetRegistry& registry,
+            const StableId& assetId,
+            const DependencyClass dependencyClass,
+            const char* label,
+            const AssetRecord*& product,
+            std::string& error)
+        {
+            product = FindAssetById(registry, assetId);
+            const ImportedProductRecord* provenance =
+                FindImportedProduct(registry, assetId);
+            if (product == nullptr || provenance == nullptr ||
+                product->dependencyClass != dependencyClass ||
+                product->requirement != DependencyRequirement::Required ||
+                !product->sourceAvailable ||
+                product->provider != "lp08.rasset" ||
+                product->providerVersion != 1 ||
+                fs::u8path(product->projectRelativePath).extension() !=
+                    ResourceAssetExtension ||
+                provenance->importer != "wicked.resourcemanager" ||
+                provenance->importerVersion != 1)
+            {
+                error = std::string("Governed ") + label +
+                    " stable ID does not resolve to an available authoritative LP08 .rasset product in LC01: " +
+                    assetId;
+                return false;
+            }
+            return true;
         }
     }
 
@@ -95,15 +126,25 @@ namespace renegade::bridge
             return false;
         }
 
-        std::vector<MaterialTextureBindingRecord> bindings;
+        std::vector<MaterialTextureBindingRecord> textureBindings;
         if (!InspectMaterialTextureBindings(
-                *prepared.ReadOnlyScene(), bindings, error))
+                *prepared.ReadOnlyScene(), textureBindings, error))
         {
             error =
-                "Resource asset dependency scene metadata is invalid: " + error;
+                "Resource asset dependency scene material metadata is invalid: " + error;
             return false;
         }
-        if (bindings.empty())
+
+        std::vector<VideoAssetBindingRecord> videoBindings;
+        if (!InspectVideoAssetBindings(
+                *prepared.ReadOnlyScene(), videoBindings, error))
+        {
+            error =
+                "Resource asset dependency scene video metadata is invalid: " + error;
+            return false;
+        }
+
+        if (textureBindings.empty() && videoBindings.empty())
         {
             error.clear();
             return true;
@@ -119,29 +160,20 @@ namespace renegade::bridge
         }
 
         std::set<StableId> emittedAssets;
-        for (const auto& binding : bindings)
+        for (const auto& binding : textureBindings)
         {
             if (!emittedAssets.insert(binding.textureAssetId).second)
                 continue;
 
-            const AssetRecord* product =
-                FindAssetById(registry, binding.textureAssetId);
-            const ImportedProductRecord* provenance =
-                FindImportedProduct(registry, binding.textureAssetId);
-            if (product == nullptr || provenance == nullptr ||
-                product->dependencyClass != DependencyClass::Texture ||
-                product->requirement != DependencyRequirement::Required ||
-                !product->sourceAvailable ||
-                product->provider != "lp08.rasset" ||
-                product->providerVersion != 1 ||
-                fs::u8path(product->projectRelativePath).extension() !=
-                    ResourceAssetExtension ||
-                provenance->importer != "wicked.resourcemanager" ||
-                provenance->importerVersion != 1)
+            const AssetRecord* product = nullptr;
+            if (!ValidateGovernedProduct(
+                    registry,
+                    binding.textureAssetId,
+                    DependencyClass::Texture,
+                    "material texture",
+                    product,
+                    error))
             {
-                error =
-                    "Governed material texture stable ID does not resolve to an available authoritative LP08 .rasset product in LC01: " +
-                    binding.textureAssetId;
                 return false;
             }
 
@@ -153,6 +185,32 @@ namespace renegade::bridge
                 std::string("lp08.material_texture_binding.") +
                 MaterialTextureSlotLabel(binding.slot) + ":" +
                 binding.textureAssetId;
+            emit(candidate);
+        }
+
+        for (const auto& binding : videoBindings)
+        {
+            if (!emittedAssets.insert(binding.videoAssetId).second)
+                continue;
+
+            const AssetRecord* product = nullptr;
+            if (!ValidateGovernedProduct(
+                    registry,
+                    binding.videoAssetId,
+                    DependencyClass::Video,
+                    "video",
+                    product,
+                    error))
+            {
+                return false;
+            }
+
+            DependencyCandidate candidate;
+            candidate.declaredPath = product->projectRelativePath;
+            candidate.dependencyClass = DependencyClass::Video;
+            candidate.requirement = DependencyRequirement::Required;
+            candidate.provenance =
+                "lp08.video_asset_binding:" + binding.videoAssetId;
             emit(candidate);
         }
 
