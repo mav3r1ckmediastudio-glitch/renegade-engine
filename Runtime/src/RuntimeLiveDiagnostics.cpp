@@ -20,6 +20,8 @@ namespace renegade::runtime
         // returning to a Level performs fresh deterministic setup.
         if (!hasLevel)
         {
+            ResetRuntimeCombat(combatState_);
+            combatEventService_.Clear();
             ResetRuntimeCharacterDecision(characterDecisionState_);
             ResetRuntimeCharacterPerception(characterPerceptionState_);
             ResetRuntimeCharacterSystem(characterAiState_);
@@ -33,6 +35,8 @@ namespace renegade::runtime
         else if (!characterSceneAttempted_ ||
                  characterSceneAttemptRevision_ != sceneRevision)
         {
+            ResetRuntimeCombat(combatState_);
+            combatEventService_.Clear();
             ResetRuntimeCharacterDecision(characterDecisionState_);
             ResetRuntimeCharacterPerception(characterPerceptionState_);
             ResetRuntimeCharacterSystem(characterAiState_);
@@ -46,6 +50,7 @@ namespace renegade::runtime
             RuntimeCharacterSystemState resolvedCharacters;
             RuntimeCharacterPerceptionState resolvedPerception;
             RuntimeCharacterDecisionState resolvedDecision;
+            RuntimeCombatState resolvedCombat;
             std::string characterError;
             if (!bridge::InitializeRuntimeCharacters(
                     scenes_.GetScene(), discoveredCharacters, characterError))
@@ -65,9 +70,6 @@ namespace renegade::runtime
                          scenes_.GetScene(), discoveredCharacters,
                          resolvedCharacters, characterError))
             {
-                // AI-01 has already activated the native CharacterComponents.
-                // Fail the combined Character transaction atomically if AI-02
-                // profile/faction/reference resolution cannot complete.
                 bridge::ResetRuntimeCharacters(
                     scenes_.GetScene(), discoveredCharacters);
                 ResetRuntimeCharacterSystem(resolvedCharacters);
@@ -85,9 +87,6 @@ namespace renegade::runtime
             else if (!InitializeRuntimeCharacterPerception(
                          resolvedCharacters, resolvedPerception, characterError))
             {
-                // AI-03 cognition is transient. It still participates in the
-                // same fail-closed scene transaction so a malformed Character
-                // cannot leave native controllers active without matching AI.
                 bridge::ResetRuntimeCharacters(
                     scenes_.GetScene(), discoveredCharacters);
                 ResetRuntimeCharacterSystem(resolvedCharacters);
@@ -107,8 +106,6 @@ namespace renegade::runtime
                          scenes_.GetScene(), resolvedCharacters,
                          resolvedPerception, resolvedDecision, characterError))
             {
-                // AI-04 decision/navigation state is also transient and joins
-                // the same atomic scene boundary as Character + perception.
                 bridge::ResetRuntimeCharacters(
                     scenes_.GetScene(), discoveredCharacters);
                 ResetRuntimeCharacterSystem(resolvedCharacters);
@@ -125,12 +122,37 @@ namespace renegade::runtime
                         characterError,
                     wi::backlog::LogLevel::Error);
             }
+            else if (!InitializeRuntimeCombat(
+                         scenes_.GetScene(), resolvedCharacters,
+                         resolvedCombat, characterError))
+            {
+                // AI-05 health/weapon/ammo state is Runtime-transient but joins
+                // the same fail-closed Character transaction. A bad weapon
+                // descriptor must never leave a partially autonomous actor.
+                bridge::ResetRuntimeCharacters(
+                    scenes_.GetScene(), discoveredCharacters);
+                ResetRuntimeCharacterSystem(resolvedCharacters);
+                ResetRuntimeCharacterPerception(resolvedPerception);
+                ResetRuntimeCharacterDecision(resolvedDecision);
+                ResetRuntimeCombat(resolvedCombat);
+                characterSceneSyncFailed_ = true;
+                diagnosticService_.Record(
+                    bridge::DiagnosticSeverity::Error,
+                    "runtime.ai",
+                    "character.combat.failed",
+                    characterError);
+                wi::backlog::post(
+                    "Renegade Runtime: Character combat setup failed: " +
+                        characterError,
+                    wi::backlog::LogLevel::Error);
+            }
             else
             {
                 characterState_ = std::move(discoveredCharacters);
                 characterAiState_ = std::move(resolvedCharacters);
                 characterPerceptionState_ = std::move(resolvedPerception);
                 characterDecisionState_ = std::move(resolvedDecision);
+                combatState_ = std::move(resolvedCombat);
                 characterSceneRevision_ = sceneRevision;
                 if (!characterState_.characters.empty())
                 {
@@ -138,7 +160,7 @@ namespace renegade::runtime
                         bridge::DiagnosticSeverity::Info,
                         "runtime.ai",
                         "character.scene.started",
-                        "Renegade Character runtime initialized profile, perception and decision state for " +
+                        "Renegade Character runtime initialized profile, perception, decision and combat state for " +
                             std::to_string(characterState_.characters.size()) +
                             " authored character(s)");
                 }
@@ -149,16 +171,13 @@ namespace renegade::runtime
             characterSceneRevision_ == sceneRevision &&
             playerSceneRevision_ == sceneRevision &&
             characterPerceptionState_.characters.size() == characterAiState_.characters.size() &&
-            characterDecisionState_.characters.size() == characterAiState_.characters.size())
+            characterDecisionState_.characters.size() == characterAiState_.characters.size() &&
+            combatState_.characters.size() == characterAiState_.characters.size())
         {
             // UpdateLiveDiagnostics runs before SyncPlayerForScene(). Requiring
             // matching scene revisions prevents a stale transient player ECS
             // handle from a previous Level being sampled during the first frame
             // after a scene transition.
-            // Wicked Scene::dt is the accepted simulation delta. This hook runs
-            // before the current frame advances Wicked, so cognition consumes
-            // the previous completed simulation delta rather than wall-clock
-            // time. On the first frame dt is zero and cognition simply waits.
             const float simulationDt = scenes_.GetScene().dt;
             UpdateRuntimeCharacterPerception(
                 scenes_.GetScene(),
@@ -172,6 +191,40 @@ namespace renegade::runtime
                 characterAiState_,
                 characterPerceptionState_,
                 characterDecisionState_,
+                simulationDt);
+
+            const CombatEventEmitter combatEmitter = [this](
+                bridge::GameplayEvent event,
+                std::string& error)
+            {
+                const bool accepted = combatEventService_.Enqueue(
+                    std::move(event), error);
+                if (!accepted)
+                    return false;
+
+                // AI-05 publishes public combat events through the existing
+                // GameplayEventService contract. Until AI-10 exposes the safe
+                // scripting surface, consume the transient event immediately
+                // into the existing diagnostics stream so this queue never
+                // becomes an unbounded/undrained second bus.
+                bridge::GameplayEvent published;
+                if (combatEventService_.TryDequeue(published))
+                {
+                    diagnosticService_.Record(
+                        bridge::DiagnosticSeverity::Info,
+                        "runtime.ai.combat",
+                        published.name,
+                        published.payload);
+                }
+                return true;
+            };
+            UpdateRuntimeCombatDecision(
+                scenes_.GetScene(),
+                characterAiState_,
+                characterPerceptionState_,
+                characterDecisionState_,
+                combatState_,
+                combatEmitter,
                 simulationDt);
         }
 
@@ -216,10 +269,6 @@ namespace renegade::runtime
 
         if (hasLevel && !paused_ && !navigationState_.agents.empty())
         {
-            // Move() follows Wicked's own character-controller contract: the
-            // authored amount is supplied once per frame and Wicked integrates
-            // it in CharacterComponent's fixed update. This fixed value is used
-            // only for the low-frequency repath countdown.
             bridge::UpdateRuntimeNavigation(
                 scenes_.GetScene(), navigationState_, 1.0f / 60.0f);
         }
@@ -249,7 +298,8 @@ namespace renegade::runtime
             characterSceneRevision_ == scenes_.Revision() &&
             characterAiState_.characters.size() == characterState_.characters.size() &&
             characterPerceptionState_.characters.size() == characterAiState_.characters.size() &&
-            characterDecisionState_.characters.size() == characterAiState_.characters.size();
+            characterDecisionState_.characters.size() == characterAiState_.characters.size() &&
+            combatState_.characters.size() == characterAiState_.characters.size();
         std::string firstCharacterId;
         std::string firstFaction;
         std::string firstVisionDistance;
@@ -267,6 +317,14 @@ namespace renegade::runtime
         std::string firstDecisionGoal;
         std::string firstPatrolRouteId;
         std::string firstTopScores;
+        std::string firstHealth;
+        std::string firstHealthFraction;
+        std::string firstWeaponStyle;
+        std::string firstWeaponRange;
+        std::string firstAmmo;
+        std::string firstReserveAmmo;
+        std::string firstReloadRemaining;
+        std::string firstTargetDistance;
         bool firstDirectSight = false;
         bool firstHasDecisionGoal = false;
         std::uint64_t totalMemories = 0;
@@ -332,11 +390,29 @@ namespace renegade::runtime
                     "=" + std::to_string(first.topScores[index].score);
             }
         }
+        if (!combatState_.characters.empty())
+        {
+            const auto& first = combatState_.characters.front();
+            firstHealth = std::to_string(first.health);
+            firstHealthFraction = std::to_string(HealthFraction(first));
+            firstWeaponStyle = std::to_string(static_cast<std::int32_t>(first.weapon.style));
+            firstWeaponRange =
+                std::to_string(first.weapon.minRange) + "," +
+                std::to_string(first.weapon.preferredRange) + "," +
+                std::to_string(first.weapon.maxRange);
+            firstAmmo = std::to_string(first.magazineAmmo);
+            firstReserveAmmo = std::to_string(first.reserveAmmo);
+            firstReloadRemaining = std::to_string(first.reloadRemainingSeconds);
+            firstTargetDistance = std::isfinite(first.targetDistance)
+                ? std::to_string(first.targetDistance)
+                : std::string("none");
+        }
         diagnosticService_.Observe("ai", {
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
             {"resolved_character_count", static_cast<std::uint64_t>(characterAiState_.characters.size())},
             {"perception_character_count", static_cast<std::uint64_t>(characterPerceptionState_.characters.size())},
             {"decision_character_count", static_cast<std::uint64_t>(characterDecisionState_.characters.size())},
+            {"combat_character_count", static_cast<std::uint64_t>(combatState_.characters.size())},
             {"active_character_count", activeCharacters},
             {"profile_registry_version", static_cast<std::uint64_t>(bridge::CharacterProfileRegistryVersion)},
             {"first_character_id", firstCharacterId},
@@ -358,6 +434,23 @@ namespace renegade::runtime
             {"first_decision_goal", firstDecisionGoal},
             {"first_patrol_route_id", firstPatrolRouteId},
             {"first_top_utility_scores", firstTopScores},
+            {"first_health", firstHealth},
+            {"first_health_fraction", firstHealthFraction},
+            {"first_weapon_style", firstWeaponStyle},
+            {"first_weapon_range", firstWeaponRange},
+            {"first_ammo", firstAmmo},
+            {"first_reserve_ammo", firstReserveAmmo},
+            {"first_reload_remaining", firstReloadRemaining},
+            {"first_target_distance", firstTargetDistance},
+            {"player_health", std::to_string(combatState_.playerHealth)},
+            {"player_dead", combatState_.playerDead},
+            {"combat_shots_fired", combatState_.shotsFired},
+            {"combat_shots_hit", combatState_.shotsHit},
+            {"combat_reloads", combatState_.reloads},
+            {"combat_damage_events", combatState_.damageEvents},
+            {"combat_event_queue_depth", static_cast<std::uint64_t>(combatEventService_.Size())},
+            {"combat_event_dropped", static_cast<std::uint64_t>(combatEventService_.DroppedCount())},
+            {"combat_events_rejected", combatState_.combatEventsRejected},
             {"memory_count", totalMemories},
             {"cognition_ticks", totalCognitionTicks},
             {"decision_ticks", characterDecisionState_.decisionTicks},
@@ -391,6 +484,7 @@ namespace renegade::runtime
             {"character_profile_count", static_cast<std::uint64_t>(characterAiState_.characters.size())},
             {"character_perception_count", static_cast<std::uint64_t>(characterPerceptionState_.characters.size())},
             {"character_decision_count", static_cast<std::uint64_t>(characterDecisionState_.characters.size())},
+            {"character_combat_count", static_cast<std::uint64_t>(combatState_.characters.size())},
             {"character_memory_count", totalMemories},
             {"character_scene_synced", characterSceneSynced},
             {"character_scene_sync_failed", characterSceneSyncFailed_},
