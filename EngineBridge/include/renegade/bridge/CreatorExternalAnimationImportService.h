@@ -5,7 +5,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <string>
 #include <vector>
 
@@ -33,8 +32,7 @@ namespace renegade::bridge
 
     // Starts a non-mutating Character-import animation session. Selecting files
     // only inspects them in temporary Wicked scenes; SourceAssets is not touched
-    // until StageCreatorExternalAnimationsForRecipe() is called by the final
-    // governed import commit path.
+    // until the final governed import transaction stages the queue.
     void BeginCreatorExternalAnimationImportSession(const std::string& projectRoot);
     void ClearCreatorExternalAnimationImportSession() noexcept;
 
@@ -63,19 +61,23 @@ namespace renegade::bridge
         std::size_t index,
         std::string& error);
 
-    // Final-commit half of CW-02. Selected local files are retained beneath the
-    // project-owned SourceAssets/Animations/Snapshots tree and only project-
-    // relative retained paths are emitted into the durable model/Character
-    // recipe. Multiple actions from one source share one retained snapshot.
+    // Value-based final-commit primitive. This is deliberately separate from
+    // source inspection so tests and future import transactions can freeze a
+    // queue snapshot before any filesystem mutation begins.
+    [[nodiscard]] bool StageCreatorExternalAnimationClipsForRecipe(
+        const std::string& projectRoot,
+        const std::vector<CreatorExternalAnimationClip>& clips,
+        std::vector<CreatorExternalAnimationImportRecipe>& recipe,
+        std::string& error);
+
+    // Stages the currently active importer queue. Selected local files are
+    // retained beneath project-owned SourceAssets/Animations/Snapshots and only
+    // project-relative retained paths are emitted into the durable recipe.
     [[nodiscard]] bool StageCreatorExternalAnimationsForRecipe(
         const std::string& projectRoot,
         std::vector<CreatorExternalAnimationImportRecipe>& recipe,
         std::string& error);
 
-    // Convenience bridge for the guided importer final-commit transaction. The
-    // active queue owns the project root captured when the importer opened, so
-    // callers that are already inside the governed commit path do not need to
-    // carry a second copy of that root through Studio UI state.
     [[nodiscard]] inline bool StagePendingCreatorExternalAnimationsForRecipe(
         std::vector<CreatorExternalAnimationImportRecipe>& recipe,
         std::string& error)
