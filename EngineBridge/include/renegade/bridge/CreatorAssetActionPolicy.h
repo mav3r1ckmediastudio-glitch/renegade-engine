@@ -51,6 +51,41 @@ namespace renegade::bridge
             IsCreatorModelSourceFormat(entry.sourceFormat);
     }
 
+    inline bool IsCreatorCharacterPrefabPath(
+        const std::string& projectRelativePath) noexcept
+    {
+        constexpr const char* suffix = ".rcharprefab";
+        if (projectRelativePath.size() < 16 ||
+            projectRelativePath.rfind("Content/Prefabs/", 0) != 0)
+        {
+            return false;
+        }
+        return projectRelativePath.size() >= 13 &&
+            projectRelativePath.compare(
+                projectRelativePath.size() - 13, 13, suffix) == 0;
+    }
+
+    // CW-05 Character Prefabs are generated project assets rather than imported
+    // model products. They are placeable only while their registered prefab
+    // document is available/current; the placement service resolves their
+    // stable base Character Asset dependency before any Scene mutation occurs.
+    inline bool CanPlaceCreatorCharacterPrefabAsset(
+        const AssetCatalogueEntry& entry) noexcept
+    {
+        return entry.registered && IsValidStableId(entry.assetId) &&
+            entry.type == AssetType::Prefab && entry.productAvailable &&
+            (entry.state == AssetCatalogueState::Current ||
+             entry.state == AssetCatalogueState::Moved) &&
+            IsCreatorCharacterPrefabPath(entry.projectRelativePath);
+    }
+
+    inline bool CanPlaceCreatorSceneAsset(
+        const AssetCatalogueEntry& entry) noexcept
+    {
+        return CanPlaceCreatorModelAsset(entry) ||
+            CanPlaceCreatorCharacterPrefabAsset(entry);
+    }
+
     inline bool CanReimportCreatorModelAsset(
         const AssetCatalogueEntry& entry) noexcept
     {
