@@ -101,7 +101,7 @@ require_text(inspector_source "ValidateFactionId" "creator-defined faction valid
 require_text(inspector_source "animationSet_.OnInputAccepted" "single accepted Animation Set text commit")
 require_text(inspector_source "customFaction_.OnInputAccepted" "single accepted custom faction text commit")
 require_text(inspector_source "SetExpanded(AICharacterAdvancedSectionId, true)" "wired custom faction picker route")
-require_text(inspector_source "INVALID ADVANCED AI" "visible malformed advanced authoring state")
+require_text(inspector_source "ADVANCED AI INVALID // RESET OVERRIDES" "visible malformed advanced authoring state")
 require_text(inspector_source "resetAdvanced_.SetEnabled(true)" "malformed advanced repair surface")
 forbid_text(inspector_source "UpdateRuntimeCharacters" "Runtime cognition inside Studio")
 
