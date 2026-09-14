@@ -36,7 +36,7 @@ jobs:
           check_blob 81f437ac886c29930f5d671d3524b21dd95fbcb3 EngineBridge/include/renegade/bridge/WeaponCombatService.h
           check_blob 591b6397bb69cd2e9e04167afaca27ff5ae775c8 Runtime/src/RuntimeApplication.h
           check_blob d37f6459f28560931a9993e790bb152580beae28 Runtime/src/RuntimeCharacterDecision.h
-          check_blob 905c2601daf2d9af1125ae20ef4b26adcf1ae093 Runtime/src/RuntimeCombatDamage.h
+          check_blob 4d7ea32e5c6a15e03c2ecaeb6ff0fd465a1a35b0 Runtime/src/RuntimeCombatDamage.h
           check_blob 6eb61b3ed34a719cbe306ae62c9f59ef68fc148e Runtime/src/RuntimeCombatDecision.h
           check_blob 36badb9e905a8ec52a1849553c859ec25ae213f9 Runtime/src/RuntimeCombatService.h
           check_blob ca40ff80dc8db969d5a444a2912c81a2810e752a Runtime/src/RuntimeLiveDiagnostics.cpp
