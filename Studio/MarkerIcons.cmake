@@ -12,6 +12,14 @@ target_sources(RenegadeStudio PRIVATE
     "${CMAKE_CURRENT_LIST_DIR}/src/MarkerIconOverlay.h"
 )
 
+# Character AI-04 creator authoring extends the established Inspector stack.
+# Keep this in a Studio-owned target_sources block so the patrol UI is compiled
+# into RenegadeStudio without adding any Runtime/editor dependency inversion.
+target_sources(RenegadeStudio PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}/src/AIPatrolRouteInspector.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/src/AIPatrolRouteInspector.h"
+)
+
 add_test(
     NAME RenegadeMarkerIconsSourceContract
     COMMAND ${CMAKE_COMMAND}
