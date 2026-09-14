@@ -117,6 +117,8 @@ namespace renegade::studio
                 CreateLabel(status_, "Character Status");
                 CreateLabel(setup_, "Character Setup");
                 CreateLabel(effective_, "Character Effective Profile");
+                status_.SetFitTextEnabled(false);
+                effective_.SetFitTextEnabled(false);
 
                 makeRemove_.Create("Make or Remove Character");
                 makeRemove_.OnClick([this](const wi::gui::EventArgs&) { ToggleCharacter(); });
@@ -220,8 +222,13 @@ namespace renegade::studio
                 panel_->AddWidget(&awareness_);
 
                 CreateLabel(animationSetLabel_, "Character Animation Set Label");
+                animationSetLabel_.SetFitTextEnabled(false);
+                animationSetLabel_.SetTooltip(
+                    "Optional Animation Set reference. The creator-facing picker/editor is completed in AI-06; this field currently stores the governed asset ID.");
                 animationSet_.Create("Character Animation Set Stable ID");
-                animationSet_.SetPlaceholder("Animation Set stable ID (optional)");
+                animationSet_.SetPlaceholder("Optional animation set ID");
+                animationSet_.SetTooltip(
+                    "Temporary low-level Animation Set reference. AI-06 replaces this with creator-facing choose/create/edit controls.");
                 animationSet_.SetCancelInputEnabled(false);
                 animationSet_.OnInput([this](const wi::gui::EventArgs& args)
                 {
@@ -282,7 +289,7 @@ namespace renegade::studio
 
             [[nodiscard]] float Measure() const noexcept
             {
-                return isCharacter_ ? 454.0f : 142.0f;
+                return isCharacter_ ? 468.0f : 164.0f;
             }
 
             [[nodiscard]] float MeasureAdvanced() const noexcept
@@ -301,16 +308,20 @@ namespace renegade::studio
                 const auto promotion = bridge::InspectCharacterPromotion(scene, selected_);
                 isCharacter_ = promotion.alreadyCharacter;
                 setup_.SetText(promotion.summary);
+                setup_.SetTooltip(promotion.summary);
                 makeRemove_.SetText(isCharacter_ ? "REMOVE CHARACTER" : "MAKE CHARACTER");
                 makeRemove_.SetEnabled(isCharacter_ || promotion.canPromote);
 
                 if (!isCharacter_)
                 {
                     status_.SetText(
+                        promotion.canPromote ? "READY // MAKE CHARACTER" : "CANNOT MAKE CHARACTER");
+                    status_.SetTooltip(
                         promotion.canPromote
-                        ? "Ready to promote selected hierarchy. Warnings do not block setup."
-                        : "Selection cannot be promoted to a Character.");
+                        ? "Selected hierarchy can be promoted. Warnings do not block setup."
+                        : "Selected hierarchy cannot be promoted to a Character.");
                     effective_.SetText("");
+                    effective_.SetTooltip("");
                     SetAuthoringEnabled(false);
                     return;
                 }
@@ -324,19 +335,24 @@ namespace renegade::studio
                 if (!bridge::CaptureCharacterAdvancedOverrides(
                         scene, selected_, overrides, profileError))
                 {
-                    status_.SetText(
-                        "Governed Character // advanced authoring requires repair");
-                    effective_.SetText("INVALID ADVANCED AI // " + profileError);
+                    status_.SetText("CHARACTER ACTIVE // AI NEEDS REPAIR");
+                    status_.SetTooltip(
+                        "Governed Character with stable identity and native Wicked CharacterComponent, but advanced AI authoring needs repair.");
+                    effective_.SetText("ADVANCED AI INVALID");
+                    effective_.SetTooltip(profileError);
                     return;
                 }
 
                 const auto tuning = bridge::ResolveCharacterTuning(settings, overrides);
-                status_.SetText(
-                    "Governed Character // stable identity + native Wicked CharacterComponent");
+                status_.SetText("CHARACTER ACTIVE // native controller");
+                status_.SetTooltip(
+                    "Governed Character with stable identity and native Wicked CharacterComponent.");
                 effective_.SetText(
-                    "EFFECTIVE // vision " + std::to_string(tuning.visionDistance) +
-                    "m  aggression " + std::to_string(tuning.aggression) +
-                    "  accuracy " + std::to_string(tuning.accuracy));
+                    "VISION " + CompactFloat(tuning.visionDistance, 1) + "m   AGGR " +
+                    CompactFloat(tuning.aggression, 2) + "   ACC " +
+                    CompactFloat(tuning.accuracy, 2));
+                effective_.SetTooltip(
+                    "Effective profile values after type, role, personality, skill, awareness and explicit overrides are resolved.");
             }
 
             void RefreshAdvanced()
@@ -357,8 +373,8 @@ namespace renegade::studio
                 if (!bridge::CaptureCharacterAdvancedOverrides(
                         scene, selected_, overrides, error))
                 {
-                    advancedStatus_.SetText(
-                        "INVALID ADVANCED AI // RESET ADVANCED OVERRIDES repairs this payload");
+                    advancedStatus_.SetText("ADVANCED AI INVALID // RESET OVERRIDES");
+                    advancedStatus_.SetTooltip(error);
                     resetAdvanced_.SetEnabled(true);
                     SetAdvancedTuningEnabled(false);
                     ApplyAdvancedSliderValues(
@@ -369,8 +385,12 @@ namespace renegade::studio
                 const auto tuning = bridge::ResolveCharacterTuning(settings, overrides);
                 advancedStatus_.SetText(
                     bridge::HasAnyCharacterAdvancedOverride(overrides)
-                        ? "CUSTOM OVERRIDES ACTIVE // sliders show effective values"
-                        : "PROFILE DRIVEN // moving a slider creates an explicit override");
+                        ? "CUSTOM OVERRIDES ACTIVE"
+                        : "PROFILE-DRIVEN VALUES");
+                advancedStatus_.SetTooltip(
+                    bridge::HasAnyCharacterAdvancedOverride(overrides)
+                        ? "Sliders show effective values with one or more explicit per-Character overrides."
+                        : "Sliders show effective profile values. Moving a slider creates an explicit override.");
                 resetAdvanced_.SetEnabled(bridge::HasAnyCharacterAdvancedOverride(overrides));
                 SetAdvancedTuningEnabled(true);
                 ApplyAdvancedSliderValues(tuning);
@@ -411,7 +431,7 @@ namespace renegade::studio
                 };
 
                 label(status_);
-                label(setup_);
+                label(setup_, 42.0f);
                 row(makeRemove_);
                 if (!isCharacter_)
                     return;
@@ -421,8 +441,8 @@ namespace renegade::studio
                 row(faction_);
                 row(skill_);
                 row(awareness_);
-                label(effective_, 34.0f);
-                label(animationSetLabel_);
+                label(effective_);
+                label(animationSetLabel_, 20.0f);
                 row(animationSet_);
                 row(autonomous_);
             }
@@ -506,6 +526,7 @@ namespace renegade::studio
                 panel_->AddWidget(&advancedHeader_);
 
                 CreateLabel(advancedStatus_, "Character Advanced AI Status");
+                advancedStatus_.SetFitTextEnabled(false);
                 CreateGroupLabel(customFactionLabel_, "Character Custom Faction Label",
                     "FACTION // custom creator-defined ID");
                 customFaction_.Create("Character Custom Faction ID");
@@ -694,7 +715,7 @@ namespace renegade::studio
                 animationSet_.SetEnabled(enabled);
                 autonomous_.SetEnabled(enabled);
                 animationSetLabel_.SetText(
-                    enabled ? "ANIMATION SET // stable governed asset ID (optional)" :
+                    enabled ? "ANIMATION SET // optional" :
                     "ANIMATION SET // available after MAKE CHARACTER");
             }
 
@@ -743,6 +764,22 @@ namespace renegade::studio
                 pursuit_.SetValue(tuning.pursuitSeconds);
                 suppression_.SetValue(tuning.suppressionTolerance);
                 communication_.SetValue(tuning.communicationRange);
+            }
+
+            static std::string CompactFloat(const float value, const std::size_t decimals)
+            {
+                std::string text = std::to_string(value);
+                const auto dot = text.find('.');
+                if (dot == std::string::npos)
+                    return text;
+                const auto keep = dot + 1u + decimals;
+                if (keep < text.size())
+                    text.resize(keep);
+                while (!text.empty() && text.back() == '0')
+                    text.pop_back();
+                if (!text.empty() && text.back() == '.')
+                    text.pop_back();
+                return text.empty() ? "0" : text;
             }
 
             static std::uint64_t FactionIndex(const std::string& faction) noexcept
