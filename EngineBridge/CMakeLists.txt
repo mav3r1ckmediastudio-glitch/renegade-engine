@@ -127,10 +127,12 @@ add_library(RenegadeEngineBridge STATIC
     src/ReusableAssetService.cpp
     src/ReusableAssetReimportService.cpp
     src/ReusableAssetPlacementService.cpp
+    src/CharacterPrefabPlacementRouter.cpp
     src/ReusableAssetInstanceService.cpp
     src/ReusableAssetDependencyService.cpp
     src/ReusableAssetRuntimeService.cpp
     src/CharacterPrefabService.cpp
+    src/CharacterPrefabPlacementTemplate.cpp
     src/MaterialService.cpp
     src/MaterialTextureAssetService.cpp
     src/MaterialTextureClearCommand.cpp
@@ -151,6 +153,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ProjectDocumentTransaction.cpp
     src/SceneService.cpp
     src/SceneComponentService.cpp
+    src/SceneDocumentService.cpp
     src/SelectionService.cpp
     src/TestLevelSnapshotService.cpp
     src/WindowsGameBuildProjectService.cpp
@@ -159,12 +162,21 @@ add_library(RenegadeEngineBridge STATIC
 # CW-05 replaces only DuplicateEntityCommand with a Character-aware definition
 # in CharacterDuplicateCommand.cpp. Keep all other established command
 # implementations in CommandService.cpp by renaming that translation unit's
-# legacy duplicate class token at compile time; this avoids forking or copying
-# the rest of the command service.
+# legacy duplicate class token at compile time.
 set_source_files_properties(
     src/CommandService.cpp
     PROPERTIES
         COMPILE_DEFINITIONS "DuplicateEntityCommand=LegacyDuplicateEntityCommand"
+)
+
+# Likewise the existing LP07/CW-04 reusable placement backend is retained
+# byte-for-byte as PrepareModelAssetPlacementLegacy(). The CW-05 router owns the
+# public PrepareModelAssetPlacement() symbol and diverts only registered
+# Character Prefabs to their stable base Character asset.
+set_source_files_properties(
+    src/ReusableAssetPlacementService.cpp
+    PROPERTIES
+        COMPILE_DEFINITIONS "PrepareModelAssetPlacement=PrepareModelAssetPlacementLegacy"
 )
 
 # Wicked's format converters are self-contained even though upstream keeps
