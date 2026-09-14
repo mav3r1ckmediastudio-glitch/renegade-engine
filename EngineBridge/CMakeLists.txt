@@ -87,6 +87,7 @@ add_library(RenegadeEngineBridge STATIC
     src/AudioService.cpp
     src/DecalProbeService.cpp
     src/CommandService.cpp
+    src/CharacterDuplicateCommand.cpp
     src/HumanoidRetargetService.cpp
     src/DiagnosticService.cpp
     src/DiagnosticEndpoint.cpp
@@ -150,10 +151,20 @@ add_library(RenegadeEngineBridge STATIC
     src/ProjectDocumentTransaction.cpp
     src/SceneService.cpp
     src/SceneComponentService.cpp
-    src/SceneDocumentService.cpp
     src/SelectionService.cpp
     src/TestLevelSnapshotService.cpp
     src/WindowsGameBuildProjectService.cpp
+)
+
+# CW-05 replaces only DuplicateEntityCommand with a Character-aware definition
+# in CharacterDuplicateCommand.cpp. Keep all other established command
+# implementations in CommandService.cpp by renaming that translation unit's
+# legacy duplicate class token at compile time; this avoids forking or copying
+# the rest of the command service.
+set_source_files_properties(
+    src/CommandService.cpp
+    PROPERTIES
+        COMPILE_DEFINITIONS "DuplicateEntityCommand=LegacyDuplicateEntityCommand"
 )
 
 # Wicked's format converters are self-contained even though upstream keeps
