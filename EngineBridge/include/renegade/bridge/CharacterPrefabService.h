@@ -23,6 +23,8 @@ namespace renegade::bridge
         "renegade.character_prefab.base_character_asset_id";
     inline constexpr const char* CharacterPrefabVersionMetadataKey =
         "renegade.character_prefab.version";
+    inline constexpr const char* CharacterPrefabPlacementTemplateMetadataKey =
+        "renegade.character_prefab.placement_template_json";
 
     struct CharacterPrefabScriptProperty
     {
@@ -124,11 +126,21 @@ namespace renegade::bridge
         const StableId& projectId,
         const StableId& prefabAssetId);
 
-    // Character duplication is deliberately stronger than raw Wicked entity
-    // duplication. It preserves authored Character/advanced/script setup while
-    // rebuilding the native Character controller and assigning fresh persistent
-    // entity/script identities. Runtime cognition remains transient and is never
-    // copied into this authoring command.
+    // Prepared prefab placement reuses the base Character's physical template.
+    // The portable authoring layer is transiently stamped onto that in-memory
+    // template so the existing browser preview/placement pipeline can carry it
+    // without rewriting or duplicating the accepted base .rasset bytes.
+    [[nodiscard]] bool MarkCharacterPrefabPlacementTemplate(
+        wi::scene::Scene& scene,
+        const CharacterPrefabDocument& document,
+        std::string& error);
+
+    [[nodiscard]] bool ReadCharacterPrefabPlacementTemplate(
+        const wi::scene::Scene& scene,
+        wi::ecs::Entity hierarchyRoot,
+        CharacterPrefabDocument& document,
+        std::string& error);
+
     class DuplicateCharacterInstanceCommand final : public ICommand
     {
     public:
@@ -159,9 +171,6 @@ namespace renegade::bridge
         bool captured_ = false;
     };
 
-    // Places the base prepared Character payload while applying a portable
-    // prefab authoring layer. The underlying reusable instance continues to
-    // reference the base Character Asset; prefab origin is stamped separately.
     class PlaceCharacterPrefabCommand final : public ICommand
     {
     public:
