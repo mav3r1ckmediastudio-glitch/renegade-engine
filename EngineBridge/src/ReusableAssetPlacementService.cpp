@@ -14,6 +14,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "json.hpp"
+
 namespace renegade::bridge
 {
     namespace
@@ -137,6 +139,53 @@ namespace renegade::bridge
             return true;
         }
 
+        bool ParsePlacementCreatorRecipe(
+            const ReusableModelAssetManifest& manifest,
+            CreatorModelImportRecipe& creatorRecipe,
+            std::string& error)
+        {
+            creatorRecipe = {};
+            if (manifest.settingsSchema != ReusableModelImportSettingsSchema ||
+                manifest.settingsVersion != 1)
+            {
+                error = "Reusable model placement recipe version is unsupported.";
+                return false;
+            }
+
+            try
+            {
+                const nlohmann::json stored =
+                    nlohmann::json::parse(manifest.settingsJson);
+                if (!stored.is_object() || stored.dump() != manifest.settingsJson ||
+                    stored.size() != 2 ||
+                    !stored.contains("source_format") ||
+                    !stored.at("source_format").is_string() ||
+                    !stored.contains("options") ||
+                    !stored.at("options").is_object())
+                {
+                    error =
+                        "Reusable model placement recipe is not the canonical version-1 contract.";
+                    return false;
+                }
+
+                const std::string optionsJson = stored.at("options").dump();
+                if (!ParseCreatorModelImportOptions(
+                        optionsJson, creatorRecipe, error))
+                {
+                    error =
+                        "Reusable model placement creator options are invalid: " + error;
+                    return false;
+                }
+            }
+            catch (const nlohmann::json::exception&)
+            {
+                error = "Reusable model placement recipe is malformed JSON.";
+                return false;
+            }
+
+            error.clear();
+            return true;
+        }
     }
 
     PreparedReusableModelPlacement ReusableAssetService::PrepareModelAssetPlacement(
@@ -247,12 +296,9 @@ namespace renegade::bridge
         }
 
         CreatorModelImportRecipe creatorRecipe;
-        if (!ParseCreatorModelImportOptions(
-                document.manifest.settingsJson, creatorRecipe, result.error))
+        if (!ParsePlacementCreatorRecipe(
+                document.manifest, creatorRecipe, result.error))
         {
-            result.error =
-                "Reusable model placement could not parse its accepted creator recipe: " +
-                result.error;
             return prepared;
         }
         const bool preparedCharacterAsset =
