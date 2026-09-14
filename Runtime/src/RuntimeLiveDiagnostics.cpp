@@ -6,12 +6,46 @@ namespace renegade::runtime
     {
         // This method is already the one lightweight Runtime hook called once
         // per application frame before Wicked advances the active RenderPath.
-        // Keep native navigation here rather than introducing another Runtime
-        // loop or Scene owner: SetPathGoal/Turn/Move are consumed by Wicked's
-        // normal Scene update immediately afterwards.
+        // Character discovery and native navigation stay here rather than
+        // introducing another Runtime loop or Scene owner.
         const std::uint64_t sceneRevision = scenes_.Revision();
         const bool hasLevel = !scenes_.CurrentPath().empty() &&
             !screenPresenter_.IsLoaded();
+
+        if (characterSceneRevision_ != sceneRevision ||
+            (characterSceneRevision_ == 0 && hasLevel))
+        {
+            characterState_ = {};
+            characterSceneRevision_ = sceneRevision;
+            if (hasLevel)
+            {
+                std::string characterError;
+                if (!bridge::InitializeRuntimeCharacters(
+                        scenes_.GetScene(), characterState_, characterError))
+                {
+                    diagnosticService_.Record(
+                        bridge::DiagnosticSeverity::Error,
+                        "runtime.ai",
+                        "character.scene.failed",
+                        characterError);
+                    wi::backlog::post(
+                        "Renegade Runtime: Character discovery failed: " +
+                            characterError,
+                        wi::backlog::LogLevel::Error);
+                }
+                else if (!characterState_.characters.empty())
+                {
+                    diagnosticService_.Record(
+                        bridge::DiagnosticSeverity::Info,
+                        "runtime.ai",
+                        "character.scene.started",
+                        "Renegade Character runtime discovered " +
+                            std::to_string(characterState_.characters.size()) +
+                            " authored character(s)");
+                }
+            }
+        }
+
         if (navigationSceneRevision_ != sceneRevision ||
             (navigationSceneRevision_ == 0 && hasLevel))
         {
@@ -73,6 +107,24 @@ namespace renegade::runtime
                 ++navigationArrived;
         }
 
+        std::uint64_t activeCharacters = 0;
+        for (const auto& record : characterState_.characters)
+        {
+            const auto* character = scenes_.GetScene().characters.GetComponent(record.entity);
+            if (character != nullptr && character->IsActive())
+                ++activeCharacters;
+        }
+
+        std::string firstCharacterId;
+        if (!characterState_.characters.empty())
+            firstCharacterId = characterState_.characters.front().characterId;
+        diagnosticService_.Observe("ai", {
+            {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
+            {"active_character_count", activeCharacters},
+            {"first_character_id", firstCharacterId},
+            {"scene_synced", characterSceneRevision_ == scenes_.Revision()}},
+            "Runtime/src/RuntimeLiveDiagnostics.cpp");
+
         diagnosticService_.Observe("runtime", {
             {"project", startupResult_.projectDescriptorPath},
             {"scene", scenes_.CurrentPath()},
@@ -82,6 +134,8 @@ namespace renegade::runtime
             {"scene_loaded", !scenes_.CurrentPath().empty()},
             {"scene_revision", scenes_.Revision()}, {"paused", paused_},
             {"quit_requested", quitRequested_}, {"player_spawned", player_.IsSpawned()},
+            {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
+            {"character_scene_synced", characterSceneRevision_ == scenes_.Revision()},
             {"navigation_synced", navigationSceneRevision_ == scenes_.Revision()},
             {"navigation_agents", static_cast<std::uint64_t>(navigationState_.agents.size())},
             {"navigation_arrived", navigationArrived},

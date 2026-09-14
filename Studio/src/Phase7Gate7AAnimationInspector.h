@@ -4,6 +4,7 @@
 #include <string>
 #include <utility>
 
+#include "AICharacterInspector.h"
 #include "Phase7Gate7BHumanoidRetargetInspector.h"
 #include "Phase7Gate7CCharacterControlsInspector.h"
 #include "Phase7Gate7DNativeTimelineInspector.h"
@@ -43,6 +44,8 @@ namespace renegade::studio
         std::function<void()> requestRefresh,
         std::function<void(std::string)> setStatus)
     {
+        RegisterAICharacterInspector(
+            owner, inspectorPanel, registry, requestRefresh, setStatus);
         RegisterPhase7Gate7BHumanoidRetargetInspector(
             owner, inspectorPanel, registry, requestRefresh, setStatus);
         RegisterPhase7Gate7CCharacterControlsInspector(
@@ -65,6 +68,7 @@ namespace renegade::studio
 
     inline void PreparePhase7Gate7AAnimationInspector(StudioRenderPath& owner)
     {
+        PrepareAICharacterInspector(owner);
         PreparePhase7Gate7BHumanoidRetargetInspector(owner);
         PreparePhase7Gate7CCharacterControlsInspector(owner);
         PreparePhase7Gate7DNativeTimelineInspector(owner);

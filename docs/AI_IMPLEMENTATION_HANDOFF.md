@@ -4,108 +4,119 @@
 
 - Original accepted Phase 7 baseline: `d36918878776d0d91e0c39f88f6764a1926a6534`.
 - Programme branch: `feature/character-ai-programme`.
-- Current recoverable branch head before this document commit: `d36918878776d0d91e0c39f88f6764a1926a6534`.
-- Current gate: AI-01 to AI-05 recovery. Status: **PARTIAL / RECOVERY REQUIRED**.
-- An earlier ephemeral workspace contained local checkpoint `7c2937711a869ca6d597e1bfcd03d02583f1a902` (`Implement Character AI foundations through combat intent`) plus additional uncommitted improvements. The workspace was erased between execution turns before that commit was pushed. The object is not present on GitHub and was not found elsewhere under `/workspace`; its implementation must be reconstructed from the specification and the recovery notes below.
+- Recovery-document parent before AI reconstruction: `473f311dd7960bf3763ec364c400e28ab9929519`.
+- Pinned Wicked revision recorded by the recovery audit: `3a800b7134aafe58461093c8abb2e274d4e64033`.
+- Current gate: **AI-01 — Character foundation**.
+- Current AI-01 status: **IMPLEMENTED / SOURCE-CONTRACT VALIDATED / WINDOWS EXECUTABLE VALIDATION PENDING**.
 
-## Completed gates
+The original Codex AI-01→AI-05 workspace was lost before its code reached GitHub. Its recovery notes remain useful architectural evidence, but only code present on this branch is authoritative.
 
-No AI gate is currently marked **COMPLETE** in the recoverable Git branch. Do not infer completion from the lost local checkpoint identifier.
+## Gate status
 
 ### AI-01 — Character foundation
 
-Status: **PARTIAL / LOST LOCAL IMPLEMENTATION TO RECONSTRUCT**.
+Status: **IMPLEMENTED / SOURCE-CONTRACT VALIDATED / WINDOWS EXECUTABLE VALIDATION PENDING**.
 
-The lost implementation had:
+Reconstructed on the recoverable branch:
 
-- a `CharacterService` schema stored in Wicked `MetadataComponent` values;
-- stable UUID references through `IdentityService`;
-- command-backed MAKE/REMOVE CHARACTER and settings edits;
-- native Wicked `CharacterComponent` promotion, inactive in Studio;
-- a compact Character Inspector registered through the existing inspector-section framework;
-- Runtime discovery and live diagnostic registration;
-- focused authoring, persistence-contract and Undo/Redo tests.
+- `EngineBridge/include/renegade/bridge/CharacterService.h`
+- `EngineBridge/src/CharacterService.cpp`
+- `Studio/src/AICharacterInspector.h`
+- `Studio/src/AICharacterInspector.cpp`
+- Runtime Character discovery/state integration in `RuntimeApplication.h` and `RuntimeLiveDiagnostics.cpp`
+- `Tests/CharacterAiFoundationTests.cpp`
+- `Tests/CharacterAiFoundation.cmake`
+- `Tests/CharacterAiSourceContract.cmake`
+- CMake registration for Bridge, Studio and focused AI-01 tests.
+
+Implemented contracts:
+
+- versioned Character authoring in native Wicked `MetadataComponent` values;
+- durable identity through existing `IdentityService` stable IDs;
+- command-backed MAKE CHARACTER, REMOVE CHARACTER and settings edits;
+- non-destructive adoption of a pre-existing Wicked `CharacterComponent`;
+- Renegade ownership marker when MAKE CHARACTER creates the native controller;
+- imported/pre-existing native controller active state restored on removal/Undo;
+- Renegade-created Character controller remains inactive in Studio and is activated by Runtime;
+- creator-facing Character Inspector using the existing `InspectorSectionFramework`;
+- AI-01 creator controls for type, role, personality, common faction, animation-set stable ID and autonomous flag;
+- Runtime discovery from serialized Character metadata without a second Scene or actor world;
+- deterministic Runtime reset;
+- existing diagnostics service now publishes an `ai` summary with Character count, active count, first stable Character ID and scene-sync state;
+- native entity serialization coverage for Metadata + CharacterComponent persistence;
+- focused Undo/Redo coverage, including preservation of unrelated imported metadata.
+
+Important AI-01 design decision: MAKE CHARACTER is deliberately non-destructive. If a selected hierarchy already owns a native Wicked `CharacterComponent`, Renegade adopts it and records the previous active state. If Renegade creates the controller, it records ownership so REMOVE CHARACTER and Undo remove only Renegade-owned native state.
 
 ### AI-02 — Profiles, factions and runtime state
 
-Status: **PARTIAL / LOST LOCAL IMPLEMENTATION TO RECONSTRUCT**.
+Status: **NOT RECONSTRUCTED YET**.
 
-The lost implementation had layered role, personality, skill and awareness tuning; optional persisted overrides; a faction relationship matrix; transient Runtime character records; stable reference resolution; and deterministic reset. Cautious, Aggressive and Timid profile distinctions were tested.
+Recovery notes from the lost workspace indicate the intended implementation used layered role/personality/skill/awareness tuning, optional persisted overrides, a faction relationship matrix, transient Runtime records, stable reference resolution and deterministic reset. Re-audit against the current AI-01 code before recreating it.
 
 ### AI-03 — Perception and memory
 
-Status: **PARTIAL / LOST LOCAL IMPLEMENTATION TO RECONSTRUCT**.
+Status: **NOT RECONSTRUCTED YET**.
 
-The lost implementation had staggered 5 Hz cognition, distance/FOV/LOS vision using Wicked scene intersection, bounded sound stimuli, player footsteps, a damage-report seam, last-known-position memory, decay, suspicion/awareness and diagnostics. A focused test explicitly proved that memory decay cannot read or update from a hidden target transform.
+Recovery target: staggered cognition, bounded visual/hearing perception, legitimate stimulus-only last-known-position updates, memory decay, suspicion/awareness, and explicit anti-cheat tests proving hidden target transforms cannot refresh memory.
 
 ### AI-04 — Decision runtime and patrol
 
-Status: **PARTIAL / LOST LOCAL IMPLEMENTATION TO RECONSTRUCT**.
+Status: **NOT RECONSTRUCTED YET**.
 
-The lost implementation had utility-scored intents with hysteresis, native `NavigationService` goals, Wicked `CharacterComponent::Turn/Move`, repathing/stuck recovery, search timeout/return-to-role, patrol modes and stable patrol-point references. Later uncommitted work added command-backed Patrol Route creation/editing, an ADD-menu entry, route/weapon entity pickers, a Patrol Route Inspector, patrol waiting, vertical/peripheral sight and visual reaction latency.
+Recovery target: utility-scored intents with hysteresis, native `NavigationService` goals, Wicked `CharacterComponent::Turn/Move`, patrol authoring with stable references, search timeout and return-to-role.
 
 ### AI-05 — Combat intelligence
 
-Status: **PARTIAL / LOST LOCAL IMPLEMENTATION TO RECONSTRUCT**.
+Status: **NOT RECONSTRUCTED YET**.
 
-The lost implementation had weapon descriptors, ammo/reload timing, range reasoning, Attack/Chase/Hold/Retreat/Flee/Surrender scoring, health reads, damage reports and AI gameplay events. Later uncommitted work introduced a separate reusable `RuntimeCombatService` boundary for deterministic bounded-accuracy hit and transient health resolution so ordinary combat did not depend on Lua or bury authoritative health inside cognition. This boundary had only compile-level validation and needs architectural review during reconstruction.
-
-## Current work
-
-The immediate task is recovery, not new AI-06 work.
-
-What works in the current recoverable branch:
-
-- The accepted Phase 7 baseline is present at the exact required SHA.
-- The pinned Wicked submodule resolves to `3a800b7134aafe58461093c8abb2e274d4e64033`.
-- A long-lived AI programme branch exists.
-- Push-trigger policy has been inspected: a push to `feature/character-ai-programme` does **not** match the expensive workflow push branches.
-
-What remains unfinished:
-
-- Reconstruct every lost AI source, test, CMake and documentation change.
-- Re-run all focused local validation after reconstruction.
-- Audit AI-01 through AI-05 against the specification before declaring any gate complete.
-- Push the reconstructed checkpoint before further substantial work.
-- Do not start AI-06 until the integrated AI-05 Windows CI is green.
-
-Known validation blocker from the lost workspace:
-
-- A Linux CMake build reached `366/393` before failing in pre-existing baseline code because the DirectXMath WinAdapter macro `SetLastError(ERR)` collides with `SceneService::SetLastError(std::string error)`. Representative diagnostics were `invalid pure specifier (only '= 0' is allowed) before '::' token` at `EngineBridge/include/renegade/bridge/SceneService.h:142` and `expected ';' at end of member declaration` at line 145. This was not introduced by Character AI, but it prevents using a full Linux build as Windows parity proof.
+Recovery target: weapon descriptors, ammo/reload/range reasoning, combat intents, health/damage seam and AI gameplay events. Preserve a small reusable combat/health boundary; do not bury rifle-specific damage authority inside cognition.
 
 ## Architectural notes
 
-- Studio owns authoring only; it must not simulate production cognition.
-- EngineBridge owns stable Character, Patrol Route, weapon descriptor and health semantics.
-- Runtime owns transient cognition, perception, decisions and execution.
-- Wicked remains authority for scene/ECS, collision queries, `VoxelGrid`/`PathQuery`, physics and `CharacterComponent` movement.
-- Persisted route and weapon references are Renegade stable UUIDs, never transient Wicked entity numbers.
-- AI events use the existing `GameplayEventService`; no second general event bus is permitted.
-- Ordinary AI is C++ Runtime behaviour and must not require Lua.
-- Last-known position may only be refreshed by a legitimate sensed/reported stimulus. Memory decay never receives hidden live world coordinates.
-- The repository has no mature general weapon/projectile/health subsystem. AI-05 therefore needs the smallest reusable combat/health/weapon boundary; it must not contain rifle-specific logic in `RuntimeCharacterSystem`.
-- The Runtime player is a Wicked character-physics rigid body, not a Wicked `Scene::characters` component. Perception and footsteps must obtain its position through the existing physics-position service; the lost checkpoint initially got this wrong and the later uncommitted repair corrected it.
-- Animation presentation remains AI-06 and must reuse the existing Phase 7 animation/humanoid/IK facilities.
+- Studio owns authoring only; it does not run production cognition.
+- EngineBridge owns stable Renegade Character semantics.
+- Runtime owns transient execution state.
+- Wicked remains authoritative for Scene/ECS and native `CharacterComponent` physics/movement.
+- Stable Renegade IDs are the durable reference format; transient Wicked entity IDs are Runtime caches only.
+- AI-01 does not introduce a navigation system, physics world, animation runtime, event bus, Lua brain or transform-driven NPC movement.
+- Animation presentation remains AI-06 and must reuse the accepted Phase 7 animation/humanoid/IK stack.
+- The Runtime player is a character-physics rigid body rather than a Wicked `Scene::characters` NPC component; AI-03 must use the existing player physics-position seam for perception rather than assuming a Scene CharacterComponent.
 
-## Tests and workflow evidence
+## Validation evidence
 
-Commands that passed in the lost workspace before erasure:
+Reconstruction validation performed in the current recovery session:
 
-- `cmake -DRENEGADE_SOURCE_DIR="$PWD" -P Tests/CharacterAiSourceContract.cmake` — **PASS**.
-- `git diff --check` — **PASS** before the earlier checkpoint commit.
-- Direct GNU C++17 object compilation of `Runtime/src/RuntimeCharacterSystem.cpp` — **PASS**.
-- Direct GNU C++17 object compilation of `Runtime/src/RuntimeCombatService.cpp` after the later combat-boundary edit — **PASS**.
-- Direct GNU C++17 object compilation of `Tests/CharacterAiFoundationTests.cpp` — **PASS**.
-- Normal CMake/Ninja compilation of `EngineBridge/src/CharacterService.cpp` — **PASS**.
-- Full Linux CMake/Ninja build — **BLOCKED at 366/393 by the pre-existing `SetLastError` macro collision described above**.
+- `cmake -DRENEGADE_SOURCE_DIR=/mnt/data/ai01repo -P /mnt/data/ai01repo/Tests/CharacterAiSourceContract.cmake` — **PASS**.
+- static delimiter/structure audit for reconstructed C++ files — **PASS** (balanced braces and parentheses).
+- API contract audit against current repository sources — **PASS** for existing `ComponentManager::Create/Remove`, metadata erase/removal, stable IdentityService APIs, `CharacterComponent::SetActive/IsActive/SetPosition/SetFacing`, `CommandService`, Inspector section registration and Runtime diagnostics ownership patterns.
+- source whitespace sanity check performed on the reconstruction workspace — **PASS**.
 
-Commands executed after workspace recovery:
+Not yet claimed:
 
-- `git ls-remote --heads https://github.com/mav3r1ckmediastudio-glitch/renegade-engine.git 'feature/character-ai*' 'refs/heads/main'` — **PASS**; only `main` was present, at the required baseline SHA.
-- `git clone --recurse-submodules https://github.com/mav3r1ckmediastudio-glitch/renegade-engine.git renegade-engine` — **PASS**.
-- `git rev-parse HEAD` — **PASS**, `d36918878776d0d91e0c39f88f6764a1926a6534`.
-- Workflow inspection of `.github/workflows/windows-baseline.yml`, `.github/workflows/studio.yml` and `.github/workflows/lp04-runtime-handshake.yml` — **PASS**. `windows-baseline.yml` runs on push only for `main` and `agent/**`; `studio.yml` runs on push only for `main`; the runtime handshake is manual-only. A normal push of `feature/character-ai-programme` is therefore a legitimate non-CI remote checkpoint. Opening a pull request against `main` will trigger the Windows workflows and must wait for the integrated AI-05 checkpoint.
+- `RenegadeCharacterAiFoundationTests` executable run on Windows;
+- full `RenegadeStudio` Debug/Release compile;
+- owner test inside Studio/Test Level.
+
+The current ChatGPT execution environment does not contain a full buildable Renegade + Wicked checkout, so it cannot honestly provide those binary results. Do not mark AI-01 COMPLETE until the focused executable and normal Windows build path have run successfully.
+
+Historical baseline note: the lost Codex Linux checkout reached `366/393` before a pre-existing DirectXMath WinAdapter `SetLastError(ERR)` macro collision with `SceneService::SetLastError(std::string error)` blocked the Linux full build. That is not evidence for or against this reconstructed AI-01 Windows build.
+
+## CI / recovery workflow
+
+- Normal pushes to `feature/character-ai-programme` do not match the expensive Windows workflow push branches discovered in the recovery audit.
+- Keep each AI gate remotely checkpointed on this branch.
+- Do not open the integrated AI PR merely to checkpoint work; opening the PR triggers the intended Windows workflows.
+- Planned major remote CI remains AI-05 and AI-10 if practical.
 
 ## NEXT IMPLEMENTATION STEP
 
-Reconstruct the lost AI-01 foundation first from the supplied implementation specification and the detailed recovery notes above: add `CharacterService` authoring/persistence commands, the registered Character Inspector and focused authoring/Undo/Redo tests; compile `CharacterService.cpp`, run its source-contract test, update this handoff with exact results, commit as `AI-01: add governed character authoring foundation`, and push `feature/character-ai-programme` before beginning AI-02 reconstruction.
+Before beginning AI-02, validate AI-01 on a build-capable checkout:
+
+1. build `RenegadeCharacterAiFoundationTests` and run it;
+2. run `RenegadeCharacterAiSourceContract`;
+3. build the relevant EngineBridge/Studio targets locally if available;
+4. fix any compile/test defect on this same branch and checkpoint it;
+5. once AI-01 focused validation is green, reconstruct AI-02 Profiles/Factions/Runtime State from the implementation specification and these recovery notes.
+
+Do not skip directly to AI-06 and do not treat source-contract success alone as final gate acceptance.

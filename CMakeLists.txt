@@ -54,6 +54,8 @@ include(EngineBridge/Phase5Gate5.cmake)
 include(EngineBridge/Phase5Gate8.cmake)
 
 target_sources(RenegadeEngineBridge PRIVATE
+    EngineBridge/include/renegade/bridge/CharacterService.h
+    EngineBridge/src/CharacterService.cpp
     EngineBridge/include/renegade/bridge/CharacterAnimationControlService.h
     EngineBridge/src/CharacterAnimationControlService.cpp
     EngineBridge/include/renegade/bridge/AnimationTimelineService.h
@@ -73,6 +75,8 @@ if(WIN32)
         PROPERTIES COMPILE_DEFINITIONS "RENEGADE_PHASE7A_IMPLEMENTATION=1"
     )
     target_sources(RenegadeStudio PRIVATE
+        Studio/src/AICharacterInspector.cpp
+        Studio/src/AICharacterInspector.h
         Studio/src/Phase7Gate7BHumanoidRetargetInspector.cpp
         Studio/src/Phase7Gate7BHumanoidRetargetInspector.h
         Studio/src/Phase7Gate7CCharacterControlsInspector.cpp
@@ -176,6 +180,7 @@ if(WIN32)
     include(Tests/Phase7Gate7D.cmake)
     include(Tests/Phase7Gate7E.cmake)
     include(Tests/Phase7Gate7F.cmake)
+    include(Tests/CharacterAiFoundation.cmake)
     include(Tests/S1AInspectorSectionFramework.cmake)
     include(Tests/S1BInspectorMigration.cmake)
     include(Tests/S2ScriptDocument.cmake)
