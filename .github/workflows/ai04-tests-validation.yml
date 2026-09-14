@@ -1,0 +1,46 @@
+name: AI-04 focused test validation
+
+on:
+  push:
+    branches:
+      - validate/ai04-tests-42159af
+
+permissions:
+  contents: read
+
+jobs:
+  ai04-tests:
+    name: AI-04 Windows x64 focused tests
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - name: Check out Renegade and Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Configure focused build
+        shell: pwsh
+        run: cmake -S . -B BUILD/ai04tests -A x64 -DRENEGADE_EMBED_SHADERS=OFF
+
+      - name: Build Character AI test executables
+        shell: pwsh
+        run: >-
+          cmake --build BUILD/ai04tests --config Debug --target
+          RenegadeCharacterAiFoundationTests
+          RenegadeCharacterAiProfilesTests
+          RenegadeCharacterAiProfilesAuditTests
+          RenegadeCharacterAiPerceptionTests
+          RenegadeCharacterAiDecisionTests
+          --parallel
+
+      - name: Run Character AI gates 1-4
+        shell: pwsh
+        run: >-
+          ctest --test-dir BUILD/ai04tests -C Debug --output-on-failure
+          -R "^RenegadeCharacterAi(FoundationTests|SourceContract|ProfilesTests|ProfilesAuditTests|ProfilesSourceContract|PerceptionTests|PerceptionSourceContract|DecisionTests|DecisionSourceContract)$"
