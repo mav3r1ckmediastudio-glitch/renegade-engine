@@ -6,6 +6,7 @@
 #include "renegade/bridge/ScriptDocumentService.h"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
