@@ -1,4 +1,5 @@
 name: AI-02 focused validation
+# Candidate includes advanced-override EOF parse repair.
 
 on:
   push:
