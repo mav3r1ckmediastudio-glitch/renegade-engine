@@ -36,9 +36,6 @@ int main()
     using namespace renegade::bridge;
     using namespace renegade::runtime;
 
-    // Weapon semantics are reusable and fail closed when governed metadata is
-    // malformed. Untagged assigned entities retain creator-friendly defaults
-    // from the Character combat style.
     wi::scene::Scene scene;
     const wi::ecs::Entity characterEntity = scene.Entity_CreateTransform(
         "AI05 Character", XMFLOAT3(0.0f, 0.0f, 0.0f));
@@ -48,10 +45,11 @@ int main()
 
     const wi::ecs::Entity weaponEntity = scene.Entity_CreateTransform(
         "AI05 Rifle", XMFLOAT3(0.0f, 0.0f, 0.0f));
-    (void)AssignPersistentEntityId(scene, weaponEntity);
+    std::string error;
+    if (!AssignPersistentEntityId(scene, weaponEntity, GenerateStableId(), error))
+        return Fail("weapon identity: " + error);
 
     WeaponAiDescriptor descriptor;
-    std::string error;
     if (!CaptureWeaponAiDescriptor(
             scene, weaponEntity, CombatStyle::Ranged, descriptor, error))
         return Fail("default ranged descriptor: " + error);
@@ -59,12 +57,14 @@ int main()
         descriptor.magazineSize != 30 || descriptor.maxRange < 30.0f)
         return Fail("default ranged descriptor values");
 
-    auto& weaponMetadata = scene.metadatas.Create(weaponEntity);
-    weaponMetadata.string_values.set(WeaponAiMetadataKey, "1");
-    weaponMetadata.int_values.set(WeaponAiSchemaMetadataKey, WeaponAiSchemaVersion);
-    weaponMetadata.float_values.set(WeaponAiDamageMetadataKey, 27.0f);
-    weaponMetadata.int_values.set(WeaponAiMagazineSizeMetadataKey, 12);
-    weaponMetadata.int_values.set(WeaponAiReserveAmmoMetadataKey, 24);
+    auto* weaponMetadata = scene.metadatas.GetComponent(weaponEntity);
+    if (weaponMetadata == nullptr)
+        weaponMetadata = &scene.metadatas.Create(weaponEntity);
+    weaponMetadata->string_values.set(WeaponAiMetadataKey, "1");
+    weaponMetadata->int_values.set(WeaponAiSchemaMetadataKey, WeaponAiSchemaVersion);
+    weaponMetadata->float_values.set(WeaponAiDamageMetadataKey, 27.0f);
+    weaponMetadata->int_values.set(WeaponAiMagazineSizeMetadataKey, 12);
+    weaponMetadata->int_values.set(WeaponAiReserveAmmoMetadataKey, 24);
     if (!CaptureWeaponAiDescriptor(
             scene, weaponEntity, CombatStyle::Ranged, descriptor, error))
         return Fail("governed descriptor capture: " + error);
@@ -72,11 +72,11 @@ int main()
         descriptor.magazineSize != 12 || descriptor.reserveAmmo != 24)
         return Fail("governed descriptor overrides");
 
-    weaponMetadata.int_values.set(WeaponAiSchemaMetadataKey, 999);
+    weaponMetadata->int_values.set(WeaponAiSchemaMetadataKey, 999);
     if (CaptureWeaponAiDescriptor(
             scene, weaponEntity, CombatStyle::Ranged, descriptor, error))
         return Fail("unsupported weapon schema must fail closed");
-    weaponMetadata.int_values.set(WeaponAiSchemaMetadataKey, WeaponAiSchemaVersion);
+    weaponMetadata->int_values.set(WeaponAiSchemaMetadataKey, WeaponAiSchemaVersion);
 
     RuntimeCharacterSystemState characterSystem;
     RuntimeCharacterRecord character;
@@ -132,8 +132,6 @@ int main()
     if (!ContainsIntent(attackScores, CharacterIntent::Attack))
         return Fail("direct in-range hostile target should score Attack");
 
-    // Deterministic bounded accuracy must be reproducible for the same stable
-    // identity and shot sequence, with no frame RNG dependency.
     const float chance = ComputeCombatHitChance(
         character.tuning, combat->weapon, combat->targetDistance);
     if (!(chance >= 0.02f && chance <= 0.98f))
@@ -166,8 +164,6 @@ int main()
     if (perception.sounds.empty())
         return Fail("weapon fire must create legitimate AI-03 sound stimulus");
 
-    // Empty magazines choose Reload and transfer bounded reserve ammunition
-    // only after the authored reload duration completes.
     combat->fireCooldownSeconds = 0.0f;
     combat->magazineAmmo = 0;
     combat->reserveAmmo = 7;
@@ -183,8 +179,6 @@ int main()
     if (combat->magazineAmmo != 7 || combat->reserveAmmo != 0)
         return Fail("reload ammo transfer");
 
-    // Native Character health is the accepted NPC health seam. Damage writes
-    // through the reusable combat service and mirrors the Wicked component.
     bool died = false;
     if (!ApplyCombatDamage(
             scene, combatState, character.stableEntityId, 25.0f, died) || died)
@@ -192,9 +186,6 @@ int main()
     if (nativeCharacter.health != 75 || std::abs(combat->health - 75.0f) > 0.01f)
         return Fail("NPC native health synchronization");
 
-    // Attributed damage is a reusable player/script/Smart Object seam. The
-    // producer supplies legitimate source knowledge once; combat updates native
-    // health and AI-03 receives DamagedBy memory without hidden lookups.
     if (!ApplyAttributedCombatDamage(
             scene,
             characterSystem,
@@ -217,9 +208,6 @@ int main()
         std::abs(damagedMemory->lastKnownPosition.x - 9.0f) > 0.001f)
         return Fail("attributed damage must create legitimate DamagedBy memory");
 
-    // Low-health timid/civilian profiles reason about escape/surrender rather
-    // than blindly attacking. Escape goals are derived away from remembered
-    // legitimate last-known information, not a hidden live player transform.
     character.authoring.role = CharacterRole::Civilian;
     character.authoring.personality = PersonalityPreset::Timid;
     character.authoring.canFlee = true;
