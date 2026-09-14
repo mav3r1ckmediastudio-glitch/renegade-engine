@@ -1,5 +1,6 @@
 #include "RuntimeCharacterDecision.h"
 
+#include "renegade/bridge/CharacterPatrolRouteCommand.h"
 #include "renegade/bridge/CharacterProfileService.h"
 #include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/PatrolRouteService.h"
@@ -119,6 +120,7 @@ int main()
     memory.hostile = true;
     memory.directSight = false;
     memory.secondsSinceSeen = character.tuning.pursuitSeconds + 1.0f;
+    memory.ageSeconds = 3.0f;
     cognition.memories.push_back(memory);
 
     CharacterDecisionRecord decision;
@@ -169,6 +171,34 @@ int main()
         !Near(goal.z, memory.lastKnownPosition.z))
         return Fail("search offset around last-known position");
 
-    std::cout << "AI04_PASS patrol-authoring utility-memory hysteresis traversal\n";
+    // Once a bounded search has expired, the exact same stale memory cannot
+    // immediately re-arm another full search. A newly refreshed legitimate
+    // stimulus (age reset by AI-03) clears that exhaustion and can drive a new
+    // investigate/search decision.
+    cognition.memories.front().directSight = false;
+    cognition.memories.front().secondsSinceSeen = character.tuning.pursuitSeconds + 1.0f;
+    cognition.memories.front().ageSeconds = 5.0f;
+    cognition.awareness = AwarenessState::Searching;
+    decision.intent = CharacterIntent::Patrol;
+    decision.previousIntent = CharacterIntent::Search;
+    decision.commitmentRemainingSeconds = 0.0f;
+    decision.exhaustedSearchSubjectId = cognition.memories.front().subjectId;
+    decision.exhaustedSearchMemoryAgeSeconds = cognition.memories.front().ageSeconds;
+    SelectIntent(character, cognition, decision);
+    if (decision.intent != CharacterIntent::Patrol)
+        return Fail("stale exhausted memory must return to normal role");
+    if (decision.exhaustedSearchSubjectId.empty())
+        return Fail("stale search exhaustion must remain latched");
+
+    cognition.memories.front().ageSeconds = 0.0f;
+    decision.commitmentRemainingSeconds = 0.0f;
+    SelectIntent(character, cognition, decision);
+    if (!decision.exhaustedSearchSubjectId.empty())
+        return Fail("fresh legitimate memory must clear search exhaustion");
+    if (decision.intent != CharacterIntent::Search &&
+        decision.intent != CharacterIntent::Investigate)
+        return Fail("fresh legitimate memory must be actionable again");
+
+    std::cout << "AI04_PASS patrol-authoring utility-memory hysteresis traversal search-timeout\n";
     return 0;
 }
