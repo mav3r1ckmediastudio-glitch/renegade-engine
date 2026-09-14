@@ -146,15 +146,17 @@ namespace renegade::runtime
         if (combatScores.empty())
             return;
 
+        float baseBest = 0.0f;
         std::vector<CharacterIntentScore> combined;
         combined.reserve(decision.topScores.size() + combatScores.size());
         for (const auto& score : decision.topScores)
         {
             if (score.score > 0.0f)
+            {
+                baseBest = std::max(baseBest, score.score);
                 combined.push_back(score);
+            }
         }
-        combined.insert(combined.end(), combatScores.begin(), combatScores.end());
-        CaptureTopScores(decision, combined);
 
         std::sort(
             combatScores.begin(), combatScores.end(),
@@ -165,13 +167,25 @@ namespace renegade::runtime
                 return static_cast<std::int32_t>(lhs.intent) <
                     static_cast<std::int32_t>(rhs.intent);
             });
-        const CharacterIntentScore winner = combatScores.front();
-        float baseBest = 0.0f;
-        for (const auto& score : decision.topScores)
+        CharacterIntentScore winner = combatScores.front();
+
+        const auto currentCombat = std::find_if(
+            combatScores.begin(), combatScores.end(),
+            [&decision](const CharacterIntentScore& score)
+            {
+                return score.intent == decision.intent;
+            });
+        if (currentCombat != combatScores.end() &&
+            decision.commitmentRemainingSeconds > 0.0f &&
+            winner.intent != CharacterIntent::Dead &&
+            winner.score < currentCombat->score + CharacterDecisionEmergencyMargin)
         {
-            if (score.intent != winner.intent)
-                baseBest = std::max(baseBest, score.score);
+            winner = *currentCombat;
         }
+
+        combined.insert(combined.end(), combatScores.begin(), combatScores.end());
+        CaptureTopScores(decision, combined);
+
         if (winner.intent != CharacterIntent::Dead && winner.score + 0.001f < baseBest)
             return;
         if (winner.intent == decision.intent)
