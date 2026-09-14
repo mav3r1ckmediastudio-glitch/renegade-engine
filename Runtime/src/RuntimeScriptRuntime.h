@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/ScriptDocumentService.h"
 #include "renegade/bridge/GameplayInputService.h"
+#include "renegade/bridge/GameplayEventService.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -69,6 +70,13 @@ namespace renegade::runtime
         void SetGameplayState(
             const bridge::RuntimePlayerState* player,
             const bridge::GameplayInputFrame* input) noexcept;
+
+        // Cross-system Runtime producers (including Character AI) enqueue
+        // public gameplay events into the same bounded service already consumed
+        // by creator scripts. This is intentionally not a second event bus.
+        [[nodiscard]] bool QueueGameplayEvent(
+            bridge::GameplayEvent event,
+            std::string& error);
 
         void Update(float dt) noexcept;
         void Pause() noexcept;
