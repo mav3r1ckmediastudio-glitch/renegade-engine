@@ -76,10 +76,10 @@ namespace renegade::bridge
         const wi::ecs::Entity entity) noexcept
     {
         const auto* metadata = scene.metadatas.GetComponent(entity);
-        if (metadata == nullptr)
-            return false;
-        const auto* marker = metadata->string_values.get(PatrolRouteMetadataKey);
-        return marker != nullptr && *marker == PatrolRouteMetadataVersion;
+        return metadata != nullptr &&
+            metadata->string_values.has(PatrolRouteMetadataKey) &&
+            metadata->string_values.get(PatrolRouteMetadataKey) ==
+                PatrolRouteMetadataVersion;
     }
 
     [[nodiscard]] inline bool IsPatrolRoutePoint(
@@ -87,10 +87,10 @@ namespace renegade::bridge
         const wi::ecs::Entity entity) noexcept
     {
         const auto* metadata = scene.metadatas.GetComponent(entity);
-        if (metadata == nullptr)
-            return false;
-        const auto* marker = metadata->string_values.get(PatrolRoutePointMetadataKey);
-        return marker != nullptr && *marker == PatrolRoutePointMetadataVersion;
+        return metadata != nullptr &&
+            metadata->string_values.has(PatrolRoutePointMetadataKey) &&
+            metadata->string_values.get(PatrolRoutePointMetadataKey) ==
+                PatrolRoutePointMetadataVersion;
     }
 
     [[nodiscard]] inline PatrolRouteSettings CapturePatrolRouteSettings(
@@ -101,10 +101,13 @@ namespace renegade::bridge
         const auto* metadata = scene.metadatas.GetComponent(entity);
         if (metadata == nullptr)
             return settings;
-        if (const auto* mode = metadata->int_values.get(PatrolRouteModeMetadataKey))
-            settings.mode = static_cast<PatrolRouteMode>(*mode);
-        if (const auto* wait = metadata->float_values.get(PatrolRouteWaitMetadataKey))
-            settings.waitSeconds = *wait;
+        if (metadata->int_values.has(PatrolRouteModeMetadataKey))
+        {
+            settings.mode = static_cast<PatrolRouteMode>(
+                metadata->int_values.get(PatrolRouteModeMetadataKey));
+        }
+        if (metadata->float_values.has(PatrolRouteWaitMetadataKey))
+            settings.waitSeconds = metadata->float_values.get(PatrolRouteWaitMetadataKey);
         return SanitizePatrolRouteSettings(settings);
     }
 
@@ -168,8 +171,8 @@ namespace renegade::bridge
                 error = "Patrol Route contains a point without a valid persistent identity.";
                 return false;
             }
-            if (const auto* order = metadata->int_values.get(PatrolRoutePointOrderMetadataKey))
-                point.order = *order;
+            if (metadata->int_values.has(PatrolRoutePointOrderMetadataKey))
+                point.order = metadata->int_values.get(PatrolRoutePointOrderMetadataKey);
             point.position = transform->GetPosition();
             route.points.push_back(std::move(point));
         }
@@ -228,11 +231,12 @@ namespace renegade::bridge
         {
             const wi::ecs::Entity entity = scene.metadatas.GetEntity(index);
             const auto* metadata = scene.metadatas.GetComponent(entity);
-            if (metadata == nullptr)
+            if (metadata == nullptr ||
+                !metadata->string_values.has("renegade.navigation.grid") ||
+                metadata->string_values.get("renegade.navigation.grid") != "1")
+            {
                 continue;
-            const auto* marker = metadata->string_values.get("renegade.navigation.grid");
-            if (marker == nullptr || *marker != "1")
-                continue;
+            }
             const StableId id = PersistentEntityId(scene, entity);
             if (found == wi::ecs::INVALID_ENTITY || id < foundId)
             {
