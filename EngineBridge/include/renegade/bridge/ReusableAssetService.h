@@ -231,17 +231,19 @@ namespace renegade::bridge
             const ReusableModelReimportRequest& request,
             ReusableModelReimportOptions options = {}) const;
 
+#ifndef RENEGADE_LEGACY_PLACEMENT_IMPLEMENTATION
         // Creator-facing placement accepts both ordinary reusable model/Character
         // products and CW-05 Character Prefabs. Prefabs resolve their stable base
         // Character Asset and return that prepared physical template with a
         // transient portable-prefab authoring marker.
         [[nodiscard]] PreparedReusableModelPlacement PrepareModelAssetPlacement(
             const ReusableModelPlacementRequest& request) const;
+#endif
 
-        // Internal accepted LP07/CW-04 backend. Character Prefab routing calls
-        // this for ordinary .rasset products and for the prefab's stable base
-        // Character dependency; callers outside the placement router should use
-        // PrepareModelAssetPlacement().
+        // Internal accepted LP07/CW-04 backend. The legacy placement translation
+        // unit compiles with a token rename plus the guard above, leaving exactly
+        // one declaration of this member in that unit. All normal callers see
+        // both the creator-facing router and this explicit backend.
         [[nodiscard]] PreparedReusableModelPlacement PrepareModelAssetPlacementLegacy(
             const ReusableModelPlacementRequest& request) const;
     };
