@@ -211,6 +211,7 @@ if(WIN32)
             -DRENEGADE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/CharacterWorkflowSourceContract.cmake
     )
+    include(Tests/CW04CharacterPlacement.cmake)
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)
