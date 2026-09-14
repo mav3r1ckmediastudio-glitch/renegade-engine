@@ -49,6 +49,9 @@ namespace renegade::bridge
     // creator-facing reusable workflow needs a durable stable-ID wrapper so a
     // future packaged Runtime can refresh only the payload from the current
     // governed .rasset while preserving authored instance transform/state.
+    // CW-04 also makes this the atomic Character-placement boundary: prepared
+    // Character Asset templates become governed Character scene instances only
+    // after fresh per-placement persistent identities have been assigned.
     class PlaceReusableModelCommand final : public ICommand
     {
     public:
@@ -61,8 +64,10 @@ namespace renegade::bridge
             std::string displayName = {});
 
         // Adopt a live cursor instance without cloning, reparsing or moving it.
-        // The first Execute() only stamps stable Renegade metadata and captures
-        // the Undo/Redo snapshot; the visible entity is already in the scene.
+        // The first Execute() only stamps stable Renegade metadata, assigns fresh
+        // scene identities, promotes prepared Character assets when applicable,
+        // and captures the Undo/Redo snapshot; the visible entity is already in
+        // the scene.
         PlaceReusableModelCommand(
             wi::scene::Scene& targetScene,
             StableId assetId,
@@ -88,6 +93,7 @@ namespace renegade::bridge
 
         void CaptureMaterialResources(std::size_t firstMaterialIndex);
         void RestoreCapturedMaterialResources();
+        [[nodiscard]] bool PromotePreparedCharacter();
 
         wi::scene::Scene* scene_ = nullptr;
         wi::allocator::shared_ptr<wi::scene::Scene> preparedScene_;
@@ -101,6 +107,7 @@ namespace renegade::bridge
         std::vector<CapturedMaterialResource> materialResources_;
         std::size_t firstMaterialIndex_ = 0;
         bool adoptExisting_ = false;
+        bool promoteCharacter_ = false;
         bool hasSnapshot_ = false;
     };
 }
