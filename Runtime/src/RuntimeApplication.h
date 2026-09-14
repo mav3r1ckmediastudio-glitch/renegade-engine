@@ -4,6 +4,7 @@
 
 #include "RuntimeActions.h"
 #include "RuntimeBootstrap.h"
+#include "RuntimeCharacterSystem.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
 #include "RuntimeScriptRuntime.h"
@@ -96,6 +97,7 @@ namespace renegade::runtime
         bridge::PlayerControllerSettings playerSettings_;
         bridge::NavigationRuntimeState navigationState_;
         bridge::CharacterRuntimeState characterState_;
+        RuntimeCharacterSystemState characterAiState_;
         bridge::GameplayInputMap inputMap_ = bridge::MakeDefaultGameplayInputMap();
         bridge::GameplayInputFrame gameplayInput_;
         bridge::SceneAudioPauseState audioPauseState_;

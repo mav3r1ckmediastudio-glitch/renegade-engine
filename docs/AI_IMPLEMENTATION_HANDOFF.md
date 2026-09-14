@@ -1,151 +1,137 @@
 # Renegade Character & AI implementation handoff
 
-## Baseline
+## Authority and baseline
 
-- Original accepted Phase 7 baseline: `d36918878776d0d91e0c39f88f6764a1926a6534`.
 - Programme branch: `feature/character-ai-programme`.
-- Recovery-document parent before AI reconstruction: `473f311dd7960bf3763ec364c400e28ab9929519`.
+- Accepted Phase 7 baseline: `d36918878776d0d91e0c39f88f6764a1926a6534`.
+- Accepted AI-01 checkpoint: `674b1efc3e1b81e6f55bf080f539f29a0c466db4`.
 - Pinned Wicked revision: `3a800b7134aafe58461093c8abb2e274d4e64033`.
-- Current gate: **AI-01 — Character foundation**.
-- Current AI-01 status: **COMPLETE / FOCUSED WINDOWS VALIDATION GREEN**.
+- Repository-native Character/AI authority: `docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md`.
+- Original full design artifact provenance: 62,613 bytes, SHA-256 `aa396b6aa6fbf94650abeb6e0916657e29b90c3775075360438af6e58085a74e`.
 
-The original Codex AI-01→AI-05 private workspace was lost before its implementation reached GitHub. Only code present on this programme branch is authoritative. Work is now checkpointed remotely after each meaningful gate so another engineer can continue from GitHub alone.
+Only code and documentation present on the programme branch are implementation truth. The lost private Codex workspace is not authoritative.
 
 ## Gate status
 
-### AI-01 — Character foundation
+### AI-01 — Character Foundation
 
-Status: **COMPLETE / FOCUSED WINDOWS VALIDATION GREEN**.
+**COMPLETE / FOCUSED WINDOWS VALIDATION GREEN.**
 
-Implemented on the recoverable branch:
+Accepted checkpoint: `674b1efc3e1b81e6f55bf080f539f29a0c466db4`.
 
-- `EngineBridge/include/renegade/bridge/CharacterService.h`
-- `EngineBridge/src/CharacterService.cpp`
-- `Studio/src/AICharacterInspector.h`
-- `Studio/src/AICharacterInspector.cpp`
-- Runtime Character discovery/state integration in `RuntimeApplication.h` and `RuntimeLiveDiagnostics.cpp`
-- `Tests/CharacterAiFoundationTests.cpp`
-- `Tests/CharacterAiFoundation.cmake`
-- `Tests/CharacterAiSourceContract.cmake`
-- CMake registration for Bridge, Studio and focused AI-01 tests.
+Focused Windows validation run `34821199576` proved:
 
-Implemented contracts:
+- recursive checkout and pinned Wicked checkout;
+- x64 CMake configure with `RENEGADE_EMBED_SHADERS=OFF`;
+- Debug build of `RenegadeCharacterAiFoundationTests`;
+- Debug build of `RenegadeRuntime`;
+- Debug build of `RenegadeStudio`, including the Character Inspector;
+- `RenegadeCharacterAiFoundationTests` PASS (`0.56 sec`);
+- `RenegadeCharacterAiSourceContract` PASS (`0.03 sec`);
+- focused CTest 2/2 PASS.
 
-- versioned Character authoring in native Wicked `MetadataComponent` values;
-- durable identity through existing `IdentityService` stable IDs;
-- command-backed MAKE CHARACTER, REMOVE CHARACTER and settings edits;
-- non-destructive adoption of a pre-existing Wicked `CharacterComponent`;
-- Renegade ownership marker when MAKE CHARACTER creates the native controller;
-- imported/pre-existing native controller active state restored on removal/Undo;
-- Renegade-created Character controller remains inactive in Studio and is activated by Runtime;
-- creator-facing Character Inspector using the existing `InspectorSectionFramework`;
-- AI-01 creator controls for type, role, personality, common faction, animation-set stable ID and autonomous flag;
-- Runtime discovery from serialized Character metadata without a second Scene or actor world;
-- deterministic Runtime reset/teardown on non-Level transitions;
-- existing diagnostics service publishes an `ai` summary with Character count, active count, first stable Character ID, scene-sync state and explicit sync-failure state;
-- native entity serialization coverage for Metadata + CharacterComponent persistence;
-- focused Undo/Redo coverage, including preservation of unrelated imported metadata.
+AI-01 provides governed MAKE/REMOVE CHARACTER, stable identity, native Wicked `CharacterComponent` adoption/ownership, command-backed authoring, persistence, Runtime discovery/reset and bounded diagnostics.
 
-Audit repairs applied before acceptance:
+### AI-02 — Profiles, Factions & Runtime State
 
-1. Runtime Character synchronization distinguishes **attempted** scene revision from **successfully synchronized** scene revision. Failed initialization cannot report `scene_synced=true`; revision-zero startup remains valid through an explicit attempt flag.
-2. Runtime initialization is transactional: every authored Character is validated before any native controller is activated.
-3. Duplicate persistent Character IDs are rejected explicitly.
-4. Runtime Character records are ordered by stable Renegade Character ID rather than transient Wicked ECS allocation order.
-5. Player Start, Navigation Grid and Navigation Destination entities are blocked from MAKE CHARACTER promotion. Navigation Agents remain intentionally promotable/adoptable because they can validly own a native `CharacterComponent`.
-6. REMOVE CHARACTER snapshots the serialized native `CharacterComponent` state through Wicked's serializer and separately preserves foot-placement, which the pinned Wicked serializer does not persist. Undo therefore restores authored controller state rather than recreating only defaults.
-7. Runtime Character state is explicitly deactivated/cleared when gameplay leaves a Level for a Screen destination.
-8. Focused regressions cover reserved semantic rejection, stable-ID order, duplicate-ID atomic failure, invalid-character atomic failure, exact owned-controller REMOVE/Undo/Redo restoration and reusable snapshot Undo after Redo.
+**IMPLEMENTED / FULL SOURCE-ARCHITECTURE AUDIT REPAIRS APPLIED / WINDOWS VALIDATION PENDING.**
 
-Important AI-01 design decision: MAKE CHARACTER is deliberately non-destructive. If a selected hierarchy already owns a native Wicked `CharacterComponent`, Renegade adopts it and records the previous active state. If Renegade creates the controller, it records ownership so REMOVE CHARACTER and Undo remove only Renegade-owned native state.
+AI-02 is deliberately limited to creator authoring semantics and resolved transient Runtime state. It does **not** implement production sight/hearing/memory, utility decisions, patrol execution or combat cognition; those remain AI-03/04/05.
 
-### AI-02 — Profiles, factions and runtime state
+Implemented AI-02 surfaces:
 
-Status: **NOT STARTED ON THE RECOVERED PROGRAMME BRANCH**.
+- `EngineBridge/include/renegade/bridge/CharacterProfileService.h`
+- `EngineBridge/include/renegade/bridge/FactionService.h`
+- AI-02 lifecycle additions in `CharacterService.h/.cpp`
+- `Runtime/src/RuntimeCharacterSystem.h`
+- Runtime scene-sync/diagnostics integration in `RuntimeApplication.h` and `RuntimeLiveDiagnostics.cpp`
+- extended existing `Studio/src/AICharacterInspector.cpp`
+- `Tests/CharacterAiProfilesTests.cpp`
+- `Tests/CharacterAiProfilesAuditTests.cpp`
+- `Tests/CharacterAiProfilesSourceContract.cmake`
+- CMake registration in `Tests/CharacterAiFoundation.cmake`
 
-Recovery target: layered role/personality/skill/awareness tuning, optional persisted overrides, faction relationship matrix, transient Runtime records, stable-reference resolution and deterministic reset. Re-audit against accepted AI-01 before implementation.
+Implemented contract:
 
-### AI-03 — Perception and memory
+1. Effective tuning composition is deterministic: Type -> Role -> Personality -> Skill -> Awareness -> explicit Advanced AI overrides.
+2. Advanced overrides use versioned Character-owned metadata and CommandService history.
+3. The existing Character Inspector exposes Skill, Awareness, built-in/custom Faction authoring, effective profile feedback and a collapsed grouped ADVANCED AI section.
+4. Built-in and creator-defined faction IDs are held in a deterministic transient `FactionRegistry`; relationship semantics remain separate from perception knowledge.
+5. Runtime Character records are keyed/sorted by stable Character ID and contain resolved authoring, overrides, effective tuning and transient entity-reference caches.
+6. Patrol Route and Weapon stable entity references resolve through the existing `EntityIdentityIndex` and missing references fail closed without mutating authoring.
+7. Scene initialization publishes AI-02 state only after the whole candidate resolves successfully. Failure clears candidate state and AI-01 native controller activation is rolled back by the Runtime integration boundary.
+8. Runtime reset clears resolved Character records and restores the faction registry to built-ins.
+9. Diagnostics extend the existing `ai` projection; no second diagnostics service was introduced.
+10. No navigation, physics, event-bus, animation-runtime, Lua-brain or cognition loop was added by AI-02.
 
-Status: **NOT STARTED**.
+## AI-02 audit findings repaired before validation
 
-Recovery target: staggered cognition, bounded visual/hearing perception, legitimate stimulus-only last-known-position updates, memory decay, suspicion/awareness, and anti-cheat tests proving hidden target transforms cannot refresh memory.
+The implementation received a second source/architecture audit before any Windows validation was requested. The following defects were found and repaired:
 
-### AI-04 — Decision runtime and patrol
+1. **Creator-defined faction registration was incomplete.** Arbitrary IDs were accepted but there was no real known-faction registry. `FactionRegistry` now seeds built-ins, registers creator IDs deterministically and resets deterministically.
+2. **Failure-state publication was too caller-dependent.** AI-02 initialization now clears published state on any profile/faction/reference failure rather than assuming callers passed an empty state.
+3. **Malformed persisted profile metadata could silently fall back to valid-looking defaults.** Runtime now validates the raw persisted enum/faction metadata before resolving tuning.
+4. **Advanced payload parsing accepted ambiguous input.** Serialization is locale-neutral; duplicate fields and contradictory explicit ranges/thresholds fail closed.
+5. **Malformed Advanced AI payloads were not creator-repairable.** RESET ADVANCED OVERRIDES can now replace corrupt raw payloads; Undo restores the exact previous raw bytes and Redo reapplies the repair.
+6. **Persisted text fields committed on every keystroke.** Animation Set and custom faction text now draft while typing and commit on accepted input, producing one governed history step.
+7. **Invalid Advanced AI state could display apparently valid fallback sliders.** The Inspector now shows INVALID ADVANCED AI, locks tuning sliders and leaves the repair/reset action available.
+8. **The CUSTOM Faction combo entry was a dead control.** Selecting it now opens the ADVANCED AI section where the custom ID is authored.
+9. **Regression coverage was insufficient for corruption/recovery.** Focused audit tests now cover malformed profile enums/factions, duplicate/contradictory advanced fields, locale-neutral payloads, malformed-payload repair/Undo/Redo, deterministic faction registration/reset and failure cleanup.
+10. **Repository recoverability was incomplete.** The programme branch now contains `docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md`; the corrupt/incomplete recovery payload discovered during the audit was removed.
 
-Status: **NOT STARTED**.
+## Important boundaries
 
-Recovery target: utility-scored intents with hysteresis, native `NavigationService` goals, Wicked `CharacterComponent::Turn/Move`, patrol authoring with stable references, search timeout and return-to-role.
+- Studio owns authoring only; Runtime owns transient execution state.
+- Wicked remains Scene/ECS/native Character authority.
+- Navigation later uses the accepted `NavigationService`; no Recast or transform-driven NPC movement.
+- Faction relationship does not imply perception/detection.
+- `animationSetId` remains persisted governed authoring in AI-02. Resolution and semantic animation materialization are AI-06 responsibilities; AI-02 must not prematurely create a second asset/animation runtime.
+- AI-03 must preserve the no-cheating rule: hidden target transforms cannot refresh last-known information.
+- Public AI events later use `GameplayEventService`.
 
-### AI-05 — Combat intelligence
+## AI-02 validation state
 
-Status: **NOT STARTED**.
+Not yet claimed:
 
-Recovery target: weapon descriptors, ammo/reload/range reasoning, combat intents, health/damage seam and AI gameplay events. Preserve a small reusable combat/health boundary; do not bury rifle-specific damage authority inside cognition.
+- Windows compile/link of the repaired AI-02 exact head;
+- execution of `RenegadeCharacterAiProfilesTests`;
+- execution of `RenegadeCharacterAiProfilesAuditTests`;
+- execution of `RenegadeCharacterAiProfilesSourceContract` after all audit repairs;
+- repaired `RenegadeRuntime` and `RenegadeStudio` build on Windows;
+- creator-facing owner interaction in Studio;
+- full integrated Debug+Release/full CTest matrix (still intentionally reserved for AI-05 unless a genuine blocker requires it).
 
-## Architectural notes
+No source audit finding is intentionally deferred into validation.
 
-- Studio owns authoring only; it does not run production cognition.
-- EngineBridge owns stable Renegade Character semantics.
-- Runtime owns transient execution state.
-- Wicked remains authoritative for Scene/ECS and native `CharacterComponent` physics/movement.
-- Stable Renegade IDs are the durable reference format; transient Wicked entity IDs are Runtime caches only.
-- AI-01 introduces no navigation system, physics world, animation runtime, event bus, Lua brain or transform-driven NPC movement.
-- Animation presentation remains AI-06 and must reuse the accepted Phase 7 animation/humanoid/IK stack.
-- The Runtime player is a character-physics rigid body rather than a Wicked `Scene::characters` NPC component; AI-03 must use the existing player physics-position seam for perception rather than assuming a Scene CharacterComponent.
+## Planned focused AI-02 validation
 
-## AI-01 validation evidence
+Use one branch-only focused Windows job, not the integrated AI-05 matrix:
 
-### Static / architectural review
+1. recursive checkout and pinned Wicked SHA check;
+2. x64 CMake configure;
+3. build `RenegadeCharacterAiFoundationTests` (AI-01 regression guard);
+4. build `RenegadeCharacterAiProfilesTests`;
+5. build `RenegadeCharacterAiProfilesAuditTests`;
+6. build `RenegadeRuntime` Debug;
+7. build `RenegadeStudio` Debug;
+8. run `RenegadeCharacterAiFoundationTests`;
+9. run `RenegadeCharacterAiSourceContract`;
+10. run `RenegadeCharacterAiProfilesTests`;
+11. run `RenegadeCharacterAiProfilesAuditTests`;
+12. run `RenegadeCharacterAiProfilesSourceContract`.
 
-- Initial AI-01 source contract: **PASS**.
-- Static delimiter/structure audit: **PASS**.
-- API contract audit against current Renegade/Wicked patterns: **PASS**.
-- Audit repairs were checked against pinned Wicked `CharacterComponent::Serialize(wi::Archive&, EntitySerializer&)` behaviour. The serializer persists `_flags`, health, width, height and scale; foot-placement is nonserialized and is therefore preserved separately.
+Any compile or focused-test failure remains AI-02 work and must be repaired before AI-03 begins.
 
-### Focused Windows validation
+## CI/recovery policy
 
-A temporary branch-only GitHub Actions workflow was used solely to validate AI-01 without invoking the planned AI-05 Debug+Release/full-test CI matrix.
+- Keep the long-lived `feature/character-ai-programme` branch remotely recoverable.
+- Normal branch checkpoints must not open the integrated PR merely to preserve work.
+- Do not intentionally trigger the standard four-job Debug+Release matrix before AI-05.
+- Focused gate validation may use a temporary branch-only workflow when no local Windows checkout is available; remove temporary workflow scaffolding after evidence is recorded.
+- After AI-02 is accepted, checkpoint it cleanly before AI-03.
 
-Validation run: GitHub Actions run `34821199576` on Windows Server 2025 / Visual Studio 2026 runner.
+## Next action
 
-Exact validation path:
+Complete repository evidence/handoff closeout, collapse the granular AI-02 implementation/audit commits into one checkpoint on top of accepted AI-01, then perform the focused AI-02 Windows validation above.
 
-1. recursive checkout — **PASS**;
-2. pinned Wicked checkout `3a800b7134aafe58461093c8abb2e274d4e64033` — **PASS**;
-3. CMake configure, x64, `RENEGADE_EMBED_SHADERS=OFF` — **PASS**;
-4. build `RenegadeCharacterAiFoundationTests` Debug — **PASS**;
-5. build `RenegadeRuntime` Debug — **PASS**;
-6. build `RenegadeStudio` Debug, including `AICharacterInspector.cpp` — **PASS**;
-7. `RenegadeCharacterAiFoundationTests` — **PASS** (`0.56 sec`);
-8. `RenegadeCharacterAiSourceContract` — **PASS** (`0.03 sec`);
-9. focused CTest result — **100% passed, 2/2 tests** (`0.68 sec` total).
-
-No AI-01 compile, link or focused test failure remains known at this checkpoint. Existing unrelated Wicked/Renegade compiler warnings were present but did not fail the targeted build.
-
-This focused run is sufficient to accept AI-01 and begin AI-02. It does **not** replace the intended integrated Debug+Release/full CTest CI at AI-05.
-
-## CI / recovery workflow
-
-- Normal pushes to `feature/character-ai-programme` do not match the expensive standard Windows workflow push branches.
-- Keep each AI gate remotely checkpointed on this branch.
-- Do not open the integrated AI PR merely to checkpoint work; opening the PR triggers the normal Windows workflows.
-- Planned major integrated CI remains AI-05 and AI-10 if practical.
-- Temporary AI-01 validation workflow is removed after recording this evidence; it is not part of the permanent programme architecture.
-
-## NEXT IMPLEMENTATION STEP
-
-Begin **AI-02 — Profiles, Factions and Runtime State** from the accepted AI-01 branch state.
-
-Implement and locally/focused validate:
-
-1. layered Role + Personality + Skill + Awareness profile composition;
-2. persisted creator overrides without destroying profile defaults;
-3. faction definitions and relationship matrix;
-4. transient Runtime Character records keyed by stable Character ID;
-5. stable reference resolution for authored Character references;
-6. deterministic Runtime reset;
-7. diagnostics sufficient to inspect the resolved AI-02 profile/faction/runtime state;
-8. focused tests proving profile distinction, faction symmetry/direction as designed, stable-ID ownership and reset behaviour.
-
-Checkpoint AI-02 remotely before beginning AI-03. Do not trigger the full integrated Windows CI until AI-05 unless a genuine blocker requires it.
+Do **not** begin AI-03 until that exact AI-02 checkpoint passes the focused validation.

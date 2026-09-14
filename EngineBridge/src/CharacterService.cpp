@@ -156,6 +156,7 @@ namespace
         metadata.bool_values.erase(CharacterCanSurrenderMetadataKey);
         metadata.bool_values.erase(CharacterCanUseCoverMetadataKey);
         metadata.bool_values.erase(CharacterCanCommunicateMetadataKey);
+        metadata.string_values.erase(CharacterAdvancedPayloadMetadataKey);
         metadata.bool_values.erase(CharacterControllerOwnedMetadataKey);
         metadata.bool_values.erase(CharacterAdoptedControllerWasActiveMetadataKey);
     }
@@ -588,6 +589,13 @@ namespace renegade::bridge
         {
             settings_ = CaptureCharacterSettings(*scene_, entity_);
             const auto* metadata = scene_->metadatas.GetComponent(entity_);
+            if (metadata != nullptr &&
+                metadata->string_values.has(CharacterAdvancedPayloadMetadataKey))
+            {
+                advancedMetadataSnapshot_ =
+                    metadata->string_values.get(CharacterAdvancedPayloadMetadataKey);
+                hasAdvancedMetadataSnapshot_ = true;
+            }
             controllerOwned_ = ReadBool(
                 metadata, CharacterControllerOwnedMetadataKey, false);
             if (controllerOwned_)
@@ -614,6 +622,16 @@ namespace renegade::bridge
         MakeCharacterCommand restore(*scene_, entity_, settings_);
         if (!restore.Execute())
             return;
+
+        if (hasAdvancedMetadataSnapshot_)
+        {
+            if (auto* metadata = scene_->metadatas.GetComponent(entity_); metadata != nullptr)
+            {
+                metadata->string_values.set(
+                    CharacterAdvancedPayloadMetadataKey,
+                    advancedMetadataSnapshot_);
+            }
+        }
 
         if (controllerOwned_ && hasControllerSnapshot_)
         {

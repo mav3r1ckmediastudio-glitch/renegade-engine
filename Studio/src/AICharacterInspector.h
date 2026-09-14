@@ -14,6 +14,7 @@ namespace renegade::studio
     class StudioRenderPath;
 
     inline constexpr const char* AICharacterSectionId = "character";
+    inline constexpr const char* AICharacterAdvancedSectionId = "character_advanced_ai";
 
     void RegisterAICharacterInspector(
         StudioRenderPath& owner,

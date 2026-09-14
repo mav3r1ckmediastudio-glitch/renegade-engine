@@ -15,11 +15,12 @@ namespace renegade::runtime
             !screenPresenter_.IsLoaded();
 
         // A Screen destination is not an active gameplay Level. Explicitly
-        // deactivate any Character controllers retained by the current Scene
-        // and clear the synchronization authority so returning to a Level
-        // performs a fresh deterministic discovery.
+        // deactivate any Character controllers retained by the current Scene,
+        // clear AI-02's transient resolved state, and clear synchronization
+        // authority so returning to a Level performs fresh deterministic setup.
         if (!hasLevel)
         {
+            ResetRuntimeCharacterSystem(characterAiState_);
             if (!characterState_.characters.empty())
                 bridge::ResetRuntimeCharacters(scenes_.GetScene(), characterState_);
             characterSceneRevision_ = 0;
@@ -30,6 +31,7 @@ namespace renegade::runtime
         else if (!characterSceneAttempted_ ||
                  characterSceneAttemptRevision_ != sceneRevision)
         {
+            ResetRuntimeCharacterSystem(characterAiState_);
             characterState_ = {};
             characterSceneRevision_ = 0;
             characterSceneAttemptRevision_ = sceneRevision;
@@ -37,6 +39,7 @@ namespace renegade::runtime
             characterSceneSyncFailed_ = false;
 
             bridge::CharacterRuntimeState discoveredCharacters;
+            RuntimeCharacterSystemState resolvedCharacters;
             std::string characterError;
             if (!bridge::InitializeRuntimeCharacters(
                     scenes_.GetScene(), discoveredCharacters, characterError))
@@ -52,9 +55,31 @@ namespace renegade::runtime
                         characterError,
                     wi::backlog::LogLevel::Error);
             }
+            else if (!InitializeRuntimeCharacterSystem(
+                         scenes_.GetScene(), discoveredCharacters,
+                         resolvedCharacters, characterError))
+            {
+                // AI-01 has already activated the native CharacterComponents.
+                // Fail the combined Character transaction atomically if AI-02
+                // profile/faction/reference resolution cannot complete.
+                bridge::ResetRuntimeCharacters(
+                    scenes_.GetScene(), discoveredCharacters);
+                ResetRuntimeCharacterSystem(resolvedCharacters);
+                characterSceneSyncFailed_ = true;
+                diagnosticService_.Record(
+                    bridge::DiagnosticSeverity::Error,
+                    "runtime.ai",
+                    "character.profile.failed",
+                    characterError);
+                wi::backlog::post(
+                    "Renegade Runtime: Character profile setup failed: " +
+                        characterError,
+                    wi::backlog::LogLevel::Error);
+            }
             else
             {
                 characterState_ = std::move(discoveredCharacters);
+                characterAiState_ = std::move(resolvedCharacters);
                 characterSceneRevision_ = sceneRevision;
                 if (!characterState_.characters.empty())
                 {
@@ -62,7 +87,7 @@ namespace renegade::runtime
                         bridge::DiagnosticSeverity::Info,
                         "runtime.ai",
                         "character.scene.started",
-                        "Renegade Character runtime discovered " +
+                        "Renegade Character runtime discovered and resolved " +
                             std::to_string(characterState_.characters.size()) +
                             " authored character(s)");
                 }
@@ -140,14 +165,29 @@ namespace renegade::runtime
 
         const bool characterSceneSynced = hasLevel &&
             characterSceneAttempted_ && !characterSceneSyncFailed_ &&
-            characterSceneRevision_ == scenes_.Revision();
+            characterSceneRevision_ == scenes_.Revision() &&
+            characterAiState_.characters.size() == characterState_.characters.size();
         std::string firstCharacterId;
-        if (!characterState_.characters.empty())
-            firstCharacterId = characterState_.characters.front().characterId;
+        std::string firstFaction;
+        std::string firstVisionDistance;
+        std::string firstAggression;
+        if (!characterAiState_.characters.empty())
+        {
+            const auto& first = characterAiState_.characters.front();
+            firstCharacterId = first.stableEntityId;
+            firstFaction = first.authoring.factionId;
+            firstVisionDistance = std::to_string(first.tuning.visionDistance);
+            firstAggression = std::to_string(first.tuning.aggression);
+        }
         diagnosticService_.Observe("ai", {
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
+            {"resolved_character_count", static_cast<std::uint64_t>(characterAiState_.characters.size())},
             {"active_character_count", activeCharacters},
+            {"profile_registry_version", static_cast<std::uint64_t>(bridge::CharacterProfileRegistryVersion)},
             {"first_character_id", firstCharacterId},
+            {"first_faction", firstFaction},
+            {"first_vision_distance", firstVisionDistance},
+            {"first_aggression", firstAggression},
             {"scene_synced", characterSceneSynced},
             {"scene_sync_attempted", characterSceneAttempted_},
             {"scene_sync_failed", characterSceneSyncFailed_},
@@ -164,6 +204,7 @@ namespace renegade::runtime
             {"scene_revision", scenes_.Revision()}, {"paused", paused_},
             {"quit_requested", quitRequested_}, {"player_spawned", player_.IsSpawned()},
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
+            {"character_profile_count", static_cast<std::uint64_t>(characterAiState_.characters.size())},
             {"character_scene_synced", characterSceneSynced},
             {"character_scene_sync_failed", characterSceneSyncFailed_},
             {"navigation_synced", navigationSceneRevision_ == scenes_.Revision()},

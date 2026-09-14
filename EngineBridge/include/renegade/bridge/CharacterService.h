@@ -32,6 +32,8 @@ namespace renegade::bridge
     inline constexpr const char* CharacterControllerOwnedMetadataKey = "renegade.character.controller_owned";
     inline constexpr const char* CharacterAdoptedControllerWasActiveMetadataKey =
         "renegade.character.adopted_controller_was_active";
+    inline constexpr const char* CharacterAdvancedPayloadMetadataKey =
+        "renegade.character.advanced";
     inline constexpr int CharacterSchemaVersion = 1;
 
     enum class CharacterType : std::int32_t
@@ -213,9 +215,11 @@ namespace renegade::bridge
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
         CharacterAuthoringSettings settings_;
+        std::string advancedMetadataSnapshot_;
         wi::Archive controllerSnapshot_;
         bool captured_ = false;
         bool controllerOwned_ = false;
+        bool hasAdvancedMetadataSnapshot_ = false;
         bool hasControllerSnapshot_ = false;
         bool controllerFootPlacementEnabled_ = true;
     };
