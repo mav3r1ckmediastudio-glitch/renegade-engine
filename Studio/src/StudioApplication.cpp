@@ -11088,13 +11088,17 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         }
 
         const auto& project = session_->Projects().CurrentProject();
+        const std::string importDestination =
+            creatorModelImporter.assetKind == bridge::CreatorAssetImportKind::Character
+            ? "Content/Characters"
+            : creatorModelImporter.destinationFolder;
         bridge::CreatorAssetWorkflowService workflow;
         std::string destinationError;
         if (!workflow.ValidateModelImportDestination(
                 project.rootPath,
                 creatorModelImporter.sourcePath,
                 creatorModelImporter.assetName,
-                creatorModelImporter.destinationFolder,
+                importDestination,
                 destinationError))
         {
             creatorImportThumbnailStatus.SetText(
@@ -11134,7 +11138,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         state->projectId = project.projectId;
         state->sourcePath = creatorModelImporter.sourcePath;
         state->assetName = creatorModelImporter.assetName;
-        state->destinationFolder = creatorModelImporter.destinationFolder;
+        state->destinationFolder = importDestination;
         state->thumbnailCapturePath = creatorModelImporter.thumbnailCapturePath;
         state->materialOverrides = creatorModelImporter.materialOverrides;
         state->animationRecipe = creatorModelImporter.animationRecipe;

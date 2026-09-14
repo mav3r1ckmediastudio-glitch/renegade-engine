@@ -205,6 +205,12 @@ if(WIN32)
             -DRENEGADE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/TestLevelRuntimeHandoffSourceContract.cmake
     )
+    add_test(
+        NAME RenegadeCharacterWorkflowSourceContract
+        COMMAND ${CMAKE_COMMAND}
+            -DRENEGADE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/CharacterWorkflowSourceContract.cmake
+    )
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)
