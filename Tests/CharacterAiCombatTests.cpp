@@ -1,3 +1,4 @@
+#include "RuntimeCombatDamage.h"
 #include "RuntimeCombatDecision.h"
 
 #include "renegade/bridge/GameplayEventService.h"
@@ -191,6 +192,31 @@ int main()
     if (nativeCharacter.health != 75 || std::abs(combat->health - 75.0f) > 0.01f)
         return Fail("NPC native health synchronization");
 
+    // Attributed damage is a reusable player/script/Smart Object seam. The
+    // producer supplies legitimate source knowledge once; combat updates native
+    // health and AI-03 receives DamagedBy memory without hidden lookups.
+    if (!ApplyAttributedCombatDamage(
+            scene,
+            characterSystem,
+            perception,
+            combatState,
+            character.stableEntityId,
+            RuntimePlayerKnowledgeId,
+            "Player",
+            XMFLOAT3(9.0f, 0.0f, 0.0f),
+            XMFLOAT3(0.0f, 0.0f, 0.0f),
+            5.0f,
+            emitter,
+            error))
+        return Fail("attributed combat damage: " + error);
+    if (nativeCharacter.health != 70 || std::abs(combat->health - 70.0f) > 0.01f)
+        return Fail("attributed damage native health synchronization");
+    const auto* damagedMemory = FindCharacterMemory(
+        perception.characters.front(), RuntimePlayerKnowledgeId);
+    if (damagedMemory == nullptr || damagedMemory->source != KnowledgeSource::DamagedBy ||
+        std::abs(damagedMemory->lastKnownPosition.x - 9.0f) > 0.001f)
+        return Fail("attributed damage must create legitimate DamagedBy memory");
+
     // Low-health timid/civilian profiles reason about escape/surrender rather
     // than blindly attacking. Escape goals are derived away from remembered
     // legitimate last-known information, not a hidden live player transform.
@@ -221,6 +247,6 @@ int main()
     if (!(escapeGoal.x < position.x))
         return Fail("flee goal must move away from remembered hostile position");
 
-    std::cout << "AI05_PASS weapon-health-ammo-reload-range-accuracy-retreat-flee-surrender-events\n";
+    std::cout << "AI05_PASS weapon-health-ammo-reload-range-accuracy-damage-attribution-retreat-flee-surrender-events\n";
     return 0;
 }
