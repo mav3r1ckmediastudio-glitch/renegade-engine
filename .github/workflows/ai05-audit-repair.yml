@@ -63,3 +63,5 @@ jobs:
             Studio/src/AICombatInspector.cpp
             Tests/CharacterAiCombatTests.cpp
             Tests/CharacterAiCombatSourceContract.cmake
+
+# rerun after fixture-alignment repair
