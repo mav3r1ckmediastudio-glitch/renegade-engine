@@ -18,6 +18,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/DiagnosticService.h
     include/renegade/bridge/CreatorAssetActionPolicy.h
     include/renegade/bridge/CreatorAssetWorkflowService.h
+    include/renegade/bridge/CreatorExternalAnimationImportService.h
     include/renegade/bridge/CreatorModelImportRecipe.h
     include/renegade/bridge/CreatorModelMaterialPreparationService.h
     include/renegade/bridge/CreatorSurfaceBuilderService.h
@@ -89,6 +90,7 @@ add_library(RenegadeEngineBridge STATIC
     src/DiagnosticService.cpp
     src/DiagnosticEndpoint.cpp
     src/CreatorAssetWorkflowService.cpp
+    src/CreatorExternalAnimationImportService.cpp
     src/CreatorModelImportRecipe.cpp
     src/CreatorModelMaterialDetectionService.cpp
     src/CreatorModelMaterialPreparationService.cpp
