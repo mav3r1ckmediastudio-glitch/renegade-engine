@@ -1,7 +1,9 @@
 #include "renegade/bridge/CreatorModelImportRecipe.h"
+#include "renegade/bridge/HumanoidRetargetService.h"
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <limits>
 #include <set>
 #include <utility>
@@ -12,6 +14,8 @@ namespace renegade::bridge
 {
     namespace
     {
+        namespace fs = std::filesystem;
+
         bool ReadOptionalStableId(
             const nlohmann::json& object,
             const char* key,
@@ -137,6 +141,310 @@ namespace renegade::bridge
             wi::scene::AnimationComponent animation;
             std::string name;
         };
+
+        struct ExternalAnimationSourceGroup
+        {
+            std::string projectRelativePath;
+            std::vector<const CreatorExternalAnimationImportRecipe*> clips;
+        };
+
+        bool IsWithinPath(const fs::path& candidate, const fs::path& root)
+        {
+            auto candidatePart = candidate.begin();
+            for (auto rootPart = root.begin(); rootPart != root.end();
+                ++rootPart, ++candidatePart)
+            {
+                if (candidatePart == candidate.end() || *candidatePart != *rootPart)
+                    return false;
+            }
+            return true;
+        }
+
+        bool ResolveExternalAnimationSource(
+            const std::string& projectRoot,
+            const std::string& projectRelativePath,
+            std::string& sourcePath,
+            std::string& error)
+        {
+            sourcePath.clear();
+            if (projectRoot.empty())
+            {
+                error = "Character external animation retarget requires an active project root.";
+                return false;
+            }
+            if (projectRelativePath.empty() ||
+                projectRelativePath.find('\\') != std::string::npos)
+            {
+                error = "Character external animation provenance is not a canonical project path.";
+                return false;
+            }
+
+            const fs::path relative = fs::u8path(projectRelativePath);
+            if (relative.is_absolute() || relative.has_root_name() ||
+                relative.lexically_normal().generic_u8string() != projectRelativePath)
+            {
+                error = "Character external animation provenance is not a canonical project path.";
+                return false;
+            }
+
+            std::vector<std::string> parts;
+            for (const auto& part : relative)
+                parts.push_back(part.generic_u8string());
+            if (parts.size() < 4 || parts[0] != "SourceAssets" ||
+                parts[1] != "Animations" || parts[2] != "Snapshots")
+            {
+                error =
+                    "Character external animation source is outside the governed SourceAssets/Animations/Snapshots tree.";
+                return false;
+            }
+
+            std::error_code ec;
+            const fs::path absoluteRoot = fs::absolute(fs::u8path(projectRoot), ec);
+            if (ec)
+            {
+                error = "Character animation project root could not be resolved: " + ec.message();
+                return false;
+            }
+            const fs::path root = fs::weakly_canonical(absoluteRoot, ec);
+            if (ec || root.empty() || !fs::is_directory(root, ec) || ec)
+            {
+                error = "Character animation project root is unavailable.";
+                return false;
+            }
+
+            const fs::path candidate = fs::weakly_canonical(root / relative, ec);
+            if (ec || candidate.empty() || !fs::is_regular_file(candidate, ec) || ec ||
+                !IsWithinPath(candidate, root))
+            {
+                error =
+                    "Retained Character animation source is missing or resolves outside the project: " +
+                    projectRelativePath;
+                return false;
+            }
+
+            sourcePath = candidate.generic_u8string();
+            error.clear();
+            return true;
+        }
+
+        bool PrepareCharacterHumanoid(
+            wi::scene::Scene& scene,
+            const bool mappingRequired,
+            wi::ecs::Entity& humanoidEntity,
+            std::string& error)
+        {
+            humanoidEntity = wi::ecs::INVALID_ENTITY;
+
+            std::vector<wi::ecs::Entity> validHumanoids;
+            for (std::size_t index = 0; index < scene.humanoids.GetCount(); ++index)
+            {
+                const auto entity = scene.humanoids.GetEntity(index);
+                const auto* humanoid = scene.humanoids.GetComponent(entity);
+                if (humanoid != nullptr && humanoid->IsValid())
+                    validHumanoids.push_back(entity);
+            }
+
+            if (validHumanoids.size() == 1)
+            {
+                humanoidEntity = validHumanoids.front();
+                error.clear();
+                return true;
+            }
+            if (validHumanoids.size() > 1)
+            {
+                if (!mappingRequired)
+                {
+                    error.clear();
+                    return true;
+                }
+                error =
+                    "Character import contains multiple valid humanoid rigs, so external animations cannot choose a deterministic retarget destination. "
+                    "Keep one playable humanoid in the Character source or split the rigs into separate Character Assets.";
+                return false;
+            }
+
+            wi::ecs::Entity candidate = wi::ecs::INVALID_ENTITY;
+            if (scene.humanoids.GetCount() == 1)
+            {
+                const auto existing = scene.humanoids.GetEntity(0);
+                if (scene.armatures.Contains(existing))
+                    candidate = existing;
+            }
+            if (candidate == wi::ecs::INVALID_ENTITY && scene.armatures.GetCount() == 1)
+                candidate = scene.armatures.GetEntity(0);
+
+            if (candidate == wi::ecs::INVALID_ENTITY)
+            {
+                if (!mappingRequired)
+                {
+                    error.clear();
+                    return true;
+                }
+                error =
+                    "Character external animations require one humanoid armature, but the imported Character does not expose a single deterministic rig. "
+                    "Repair the source skeleton or split multiple rigs before reimporting.";
+                return false;
+            }
+
+            const auto automatic = BuildAutoHumanoidMapping(scene, candidate);
+            if (!automatic.valid)
+            {
+                if (!mappingRequired && scene.humanoids.GetCount() == 0)
+                {
+                    // A Character Asset can still represent a non-humanoid actor.
+                    // Only external humanoid retargeting makes a valid map mandatory.
+                    error.clear();
+                    return true;
+                }
+                error =
+                    "Character humanoid mapping is incomplete and automatic Mixamo/VRM mapping could not establish the required bones. "
+                    "Repair the source bone names/mapping, or import without external animations and use HUMANOID / RETARGET for manual diagnosis before correcting the source.";
+                if (!automatic.error.empty())
+                    error += " Auto-map: " + automatic.error;
+                return false;
+            }
+
+            SetHumanoidMappingCommand command(scene, candidate, automatic.mapping);
+            if (!command.Execute())
+            {
+                const auto captured = CaptureHumanoidMapping(scene, candidate);
+                if (!IsHumanoidMappingValid(captured))
+                {
+                    error =
+                        "Character humanoid auto-map produced a valid mapping but it could not be committed to the imported scene.";
+                    return false;
+                }
+            }
+
+            const auto captured = CaptureHumanoidMapping(scene, candidate);
+            if (!IsHumanoidMappingValid(captured))
+            {
+                error =
+                    "Character humanoid mapping did not validate after automatic preparation.";
+                return false;
+            }
+
+            humanoidEntity = candidate;
+            error.clear();
+            return true;
+        }
+
+        bool RetargetExternalAnimations(
+            wi::scene::Scene& scene,
+            const std::string& projectRoot,
+            const wi::ecs::Entity destinationHumanoid,
+            const std::vector<CreatorExternalAnimationImportRecipe>& clips,
+            std::string& error)
+        {
+            std::vector<ExternalAnimationSourceGroup> groups;
+            for (const auto& clip : clips)
+            {
+                auto found = std::find_if(groups.begin(), groups.end(),
+                    [&clip](const ExternalAnimationSourceGroup& group)
+                    {
+                        return group.projectRelativePath == clip.sourceProjectRelativePath;
+                    });
+                if (found == groups.end())
+                {
+                    groups.push_back({clip.sourceProjectRelativePath, {}});
+                    found = std::prev(groups.end());
+                }
+                found->clips.push_back(&clip);
+            }
+
+            for (const auto& group : groups)
+            {
+                std::set<std::uint32_t> sourceIndices;
+                bool hasEnabledClip = false;
+                std::uint32_t maximumSourceIndex = 0;
+                for (const auto* clip : group.clips)
+                {
+                    if (clip == nullptr ||
+                        !sourceIndices.insert(clip->sourceAnimationIndex).second)
+                    {
+                        error =
+                            "Character external animation recipe contains duplicate source-action provenance for " +
+                            group.projectRelativePath + ".";
+                        return false;
+                    }
+                    maximumSourceIndex = std::max(maximumSourceIndex, clip->sourceAnimationIndex);
+                    hasEnabledClip = hasEnabledClip || clip->enabled;
+                }
+                if (!hasEnabledClip)
+                    continue;
+
+                std::string sourcePath;
+                if (!ResolveExternalAnimationSource(
+                        projectRoot, group.projectRelativePath, sourcePath, error))
+                    return false;
+
+                RetargetHumanoidAnimationsCommand command(
+                    scene, destinationHumanoid, sourcePath);
+                if (!command.Execute())
+                {
+                    error =
+                        "Character external animation retarget failed for '" +
+                        group.projectRelativePath + "': " + command.Result().error +
+                        " Repair the Character/source humanoid mapping and reimport; Mixamo/VRM-compatible rigs are auto-mapped when possible.";
+                    return false;
+                }
+
+                const auto& result = command.Result();
+                if (result.createdAnimations.size() <= maximumSourceIndex)
+                {
+                    error =
+                        "Character external animation retarget did not produce every source action referenced by the durable import recipe for '" +
+                        group.projectRelativePath + "'.";
+                    return false;
+                }
+
+                std::set<wi::ecs::Entity> keptAnimations;
+                constexpr float RangeTolerance = 0.0001f;
+                for (const auto* clip : group.clips)
+                {
+                    if (clip == nullptr || !clip->enabled)
+                        continue;
+
+                    const auto entity = result.createdAnimations[clip->sourceAnimationIndex];
+                    auto* animation = scene.animations.GetComponent(entity);
+                    if (animation == nullptr)
+                    {
+                        error =
+                            "Retargeted Character animation disappeared before final asset preparation.";
+                        return false;
+                    }
+                    if (clip->start < animation->start - RangeTolerance ||
+                        clip->end > animation->end + RangeTolerance)
+                    {
+                        error =
+                            "Character external animation range falls outside its retargeted source action for '" +
+                            clip->name + "'.";
+                        return false;
+                    }
+
+                    animation->start = clip->start;
+                    animation->end = clip->end;
+                    if (!clip->name.empty())
+                    {
+                        auto* name = scene.names.GetComponent(entity);
+                        if (name == nullptr)
+                            name = &scene.names.Create(entity);
+                        name->name = clip->name;
+                    }
+                    keptAnimations.insert(entity);
+                }
+
+                for (const auto entity : result.createdAnimations)
+                {
+                    if (keptAnimations.count(entity) == 0)
+                        scene.Entity_Remove(entity, true);
+                }
+                scene.ResetPose(destinationHumanoid);
+            }
+
+            error.clear();
+            return true;
+        }
     }
 
     bool ParseCreatorModelImportOptions(
@@ -641,6 +949,48 @@ namespace renegade::bridge
                 if (name == nullptr)
                     name = &scene.names.Create(target);
                 name->name = clip.name.empty() ? source.name : clip.name;
+            }
+        }
+
+        if (!recipe.externalAnimations.empty() &&
+            recipe.assetKind != CreatorAssetImportKind::Character)
+        {
+            error =
+                "External humanoid animations can only be committed by a Character import recipe.";
+            return false;
+        }
+
+        if (recipe.assetKind == CreatorAssetImportKind::Character)
+        {
+            const bool hasEnabledExternalAnimation = std::any_of(
+                recipe.externalAnimations.begin(), recipe.externalAnimations.end(),
+                [](const CreatorExternalAnimationImportRecipe& clip)
+                {
+                    return clip.enabled;
+                });
+
+            wi::ecs::Entity destinationHumanoid = wi::ecs::INVALID_ENTITY;
+            if (!PrepareCharacterHumanoid(
+                    scene, hasEnabledExternalAnimation,
+                    destinationHumanoid, error))
+            {
+                return false;
+            }
+
+            if (hasEnabledExternalAnimation)
+            {
+                if (destinationHumanoid == wi::ecs::INVALID_ENTITY)
+                {
+                    error =
+                        "Character external animations require a prepared humanoid destination.";
+                    return false;
+                }
+                if (!RetargetExternalAnimations(
+                        scene, projectRoot, destinationHumanoid,
+                        recipe.externalAnimations, error))
+                {
+                    return false;
+                }
             }
         }
 
