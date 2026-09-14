@@ -8,6 +8,7 @@
 - Accepted AI-02 checkpoint/evidence head: `09ee66e6b925b305a75b81cf0cf00170ca42edfc`.
 - Successful AI-02 focused validation run: `34837594589`.
 - Clean AI-03 implementation checkpoint: `307161dee97f0b9aa39eaab4e8d655240c072171`.
+- Successful AI-03 focused validation run: `34843305044`.
 - Pinned Wicked revision: `3a800b7134aafe58461093c8abb2e274d4e64033`.
 - Repository-native Character/AI authority: `docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md`.
 
@@ -29,11 +30,11 @@ Provides deterministic Type -> Role -> Personality -> Skill -> Awareness -> Adva
 
 ### AI-03 — Perception & Memory
 
-**IMPLEMENTED / SOURCE + ARCHITECTURE AUDITED / FOCUSED WINDOWS VALIDATION PENDING.**
+**COMPLETE / FOCUSED WINDOWS VALIDATION GREEN.**
 
 Clean implementation checkpoint: `307161dee97f0b9aa39eaab4e8d655240c072171`, whose parent is accepted AI-02 `09ee66e6b925b305a75b81cf0cf00170ca42edfc`.
 
-The clean AI-03 diff contains exactly six implementation/test files:
+The clean AI-03 implementation diff contains exactly six implementation/test files:
 
 - `Runtime/src/RuntimeApplication.h`
 - `Runtime/src/RuntimeCharacterPerception.h`
@@ -44,15 +45,15 @@ The clean AI-03 diff contains exactly six implementation/test files:
 
 Implemented AI-03 contract:
 
-1. Runtime-owned transient cognition keyed by persistent Character stable IDs; no cognition is serialized.
+1. Runtime-owned transient cognition keyed by persistent Character stable IDs; cognition is never serialized.
 2. Bounded 5 Hz cognition with stable-ID staggering; ordinary render-frame work is limited to decay/lifecycle bookkeeping.
 3. Player position/velocity come from the accepted physics seam (`GetPhysicsPosition` / `GetLinearVelocity`). The Runtime player is not treated as a Wicked `Scene::characters` component.
 4. Sight uses authored central/peripheral distance plus horizontal/vertical FOV and native Wicked `Scene::Intersects()` LOS.
-5. LOS skips the observer's own imported hierarchy rather than allowing the Character's body/head geometry to block its own ray; abnormal excessive self-hits fail closed.
+5. LOS skips the observer's own imported hierarchy rather than allowing Character body/head geometry to block its own ray; abnormal excessive self-hits fail closed.
 6. Visual reaction latency is profile-driven before Seen memory is admitted.
 7. Hearing is driven only by explicit bounded `SoundStimulus` records; automatic Runtime-player footsteps feed that same seam.
-8. Audio reaction latency is profile-driven. A pending sound is committed until heard, expired or inaudible so repeated footsteps/gunfire cannot continually restart the reaction timer and starve hearing.
-9. Damage knowledge enters through explicit `ReportDamageStimulus`; the perception system does not look up a hidden attacker's transform.
+8. Audio reaction latency is profile-driven. A pending sound remains committed until heard, expired or inaudible so repeated footsteps/gunfire cannot continually restart the reaction timer and starve hearing.
+9. Damage knowledge enters through explicit `ReportDamageStimulus`; perception does not look up a hidden attacker's transform.
 10. Memory records preserve knowledge source, subject/faction, last-known position/velocity, confidence, threat, age, seconds-since-seen and direct-sight state.
 11. Memory/confidence and suspicion decay without synthesizing newer target coordinates.
 12. Awareness progression supports `Unaware`, `Interested`, `Suspicious`, `Alerted`, `Combat` and `Searching`.
@@ -79,7 +80,7 @@ Additional regressions assert:
 
 ## AI-03 audit repairs before validation
 
-The implementation/source audit found and repaired the following before any Windows run was requested:
+The implementation/source audit found and repaired the following before Windows validation:
 
 1. direct sight was initially cleared during render-frame decay rather than by a real cognition sample;
 2. LOS could hit the observer's own imported hierarchy;
@@ -87,6 +88,33 @@ The implementation/source audit found and repaired the following before any Wind
 4. malformed external stimulus data needed stronger finite/control-character validation;
 5. repeated new sounds could continuously replace a pending sound and reset its reaction timer;
 6. lifecycle/reset behavior was rechecked against `SceneService::Revision()` and Story Flow/Screen teardown.
+
+## AI-03 focused Windows validation evidence
+
+Focused run `34843305044` on `windows-2025` completed green against the AI-03 programme state plus a temporary validation-only workflow file.
+
+Build step PASS:
+
+- `RenegadeCharacterAiFoundationTests`;
+- `RenegadeCharacterAiProfilesTests`;
+- `RenegadeCharacterAiProfilesAuditTests`;
+- `RenegadeCharacterAiPerceptionTests`;
+- `RenegadeRuntime` Debug;
+- `RenegadeStudio` Debug.
+
+CTest PASS: **7/7** in **0.76 sec**:
+
+- `RenegadeCharacterAiFoundationTests`;
+- `RenegadeCharacterAiSourceContract`;
+- `RenegadeCharacterAiProfilesTests`;
+- `RenegadeCharacterAiProfilesAuditTests`;
+- `RenegadeCharacterAiProfilesSourceContract`;
+- `RenegadeCharacterAiPerceptionTests`;
+- `RenegadeCharacterAiPerceptionSourceContract`.
+
+The run also confirmed recursive checkout with Wicked pinned at `3a800b7134aafe58461093c8abb2e274d4e64033` and successful x64 CMake configure with `RENEGADE_EMBED_SHADERS=OFF`.
+
+Therefore AI-03 is accepted as **COMPLETE** for its defined gate scope.
 
 ## Architecture boundaries preserved
 
@@ -96,19 +124,8 @@ The implementation/source audit found and repaired the following before any Wind
 - AI-03 creates no second physics, Scene, gameplay, navigation, animation, diagnostics or generic event system.
 - No Recast and no transform-driven NPC movement were introduced.
 - No Lua ordinary-NPC brain was introduced.
-- No all-pairs Character perception scan was introduced; AI-03 currently samples the legitimate Runtime-player target seam and explicit sound/damage stimuli.
+- No all-pairs Character perception scan was introduced; AI-03 samples the legitimate Runtime-player target seam and explicit sound/damage stimuli.
 - Public/cross-system AI events remain reserved for the existing `GameplayEventService` in later gates.
-
-## Validation state
-
-Not yet claimed for AI-03:
-
-- Windows compile/link of the clean checkpoint;
-- execution of `RenegadeCharacterAiPerceptionTests`;
-- execution of `RenegadeCharacterAiPerceptionSourceContract`;
-- Runtime/Studio Debug build with the AI-03 exact head;
-- creator-facing owner behavior proof;
-- full integrated Debug+Release matrix (still intentionally deferred to AI-05).
 
 ## CI/recovery policy
 
@@ -120,4 +137,4 @@ Not yet claimed for AI-03:
 
 ## Exact next implementation step
 
-Run focused AI-03 Windows validation against clean checkpoint `307161dee97f0b9aa39eaab4e8d655240c072171`, covering the AI-01/AI-02 regressions plus `RenegadeCharacterAiPerceptionTests`, `RenegadeCharacterAiPerceptionSourceContract`, `RenegadeRuntime` Debug and `RenegadeStudio` Debug. If validation exposes a defect, repair it on the programme branch and rerun only the focused AI-03 validation. If green, record the run and mark AI-03 COMPLETE before beginning AI-04.
+Begin **AI-04 — Decision & Patrol** from the validated AI-03 programme state. Add utility-scored intents with hysteresis/commitment, creator-authored Patrol Route support, Guard/Patrol/Investigate/Search/Return-to-role behavior, and movement only through the accepted `NavigationService` / native Wicked `CharacterComponent`. AI-04 must consume AI-03 last-known memory rather than hidden target transforms, remain Runtime-owned, preserve stable references, and add focused regressions before any AI-05 combat work begins.
