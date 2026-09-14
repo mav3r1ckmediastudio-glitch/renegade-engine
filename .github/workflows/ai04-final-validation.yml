@@ -1,0 +1,44 @@
+name: AI-04 final validation
+
+on:
+  push:
+    branches:
+      - validate/ai04-final-29a7362
+
+permissions:
+  contents: read
+
+jobs:
+  ai04-final:
+    name: AI-04 Windows x64 Debug final validation
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - name: Check out Renegade and Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Configure focused build
+        shell: pwsh
+        run: cmake -S . -B BUILD/ai04 -A x64 -DRENEGADE_EMBED_SHADERS=OFF
+
+      - name: Build AI-04 Studio Runtime and tests
+        shell: pwsh
+        run: >-
+          cmake --build BUILD/ai04 --config Debug --target
+          RenegadeCharacterAiDecisionTests
+          RenegadeRuntime
+          RenegadeStudio
+          --parallel
+
+      - name: Run Character AI gates 1-4
+        shell: pwsh
+        run: >-
+          ctest --test-dir BUILD/ai04 -C Debug --output-on-failure
+          -R "^RenegadeCharacterAi(FoundationTests|SourceContract|ProfilesTests|ProfilesAuditTests|ProfilesSourceContract|PerceptionTests|PerceptionSourceContract|DecisionTests|DecisionSourceContract)$"
