@@ -36,6 +36,100 @@ namespace renegade::bridge
         "renegade.character.advanced";
     inline constexpr int CharacterSchemaVersion = 1;
 
+    // CW-04 asset-origin marker. This is deliberately distinct from
+    // CharacterMetadataKey: a prepared reusable Character Asset is a template,
+    // while CharacterMetadataKey identifies a concrete scene Character
+    // instance with its own persistent identity and gameplay authoring state.
+    // PrepareModelAssetPlacement stamps this marker into the in-memory reusable
+    // payload after reading the durable import recipe, so already-imported CW-01
+    // Character products gain the new placement behaviour without requiring a
+    // destructive product rewrite.
+    inline constexpr const char* CharacterAssetTemplateMetadataKey =
+        "renegade.character_asset_template";
+    inline constexpr const char* CharacterAssetTemplateVersionMetadataKey =
+        "renegade.character_asset_template.version";
+    inline constexpr int CharacterAssetTemplateVersion = 1;
+
+    [[nodiscard]] inline bool IsCharacterAssetTemplateMarker(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity) noexcept
+    {
+        if (entity == wi::ecs::INVALID_ENTITY)
+            return false;
+        const auto* metadata = scene.metadatas.GetComponent(entity);
+        return metadata != nullptr &&
+            metadata->bool_values.has(CharacterAssetTemplateMetadataKey) &&
+            metadata->bool_values.get(CharacterAssetTemplateMetadataKey) &&
+            metadata->int_values.has(CharacterAssetTemplateVersionMetadataKey) &&
+            metadata->int_values.get(CharacterAssetTemplateVersionMetadataKey) ==
+                CharacterAssetTemplateVersion;
+    }
+
+    [[nodiscard]] inline bool IsCharacterAssetTemplateScene(
+        const wi::scene::Scene& scene) noexcept
+    {
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        {
+            if (IsCharacterAssetTemplateMarker(
+                    scene, scene.metadatas.GetEntity(index)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    [[nodiscard]] inline bool CharacterAssetTemplateInHierarchy(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity root) noexcept
+    {
+        if (root == wi::ecs::INVALID_ENTITY)
+            return false;
+        if (IsCharacterAssetTemplateMarker(scene, root))
+            return true;
+        for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
+        {
+            const wi::ecs::Entity entity = scene.metadatas.GetEntity(index);
+            if (scene.Entity_IsDescendant(entity, root) &&
+                IsCharacterAssetTemplateMarker(scene, entity))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Marks every top-level transform in the prepared reusable payload. The
+    // marker stays on the replaceable asset payload; the scene wrapper receives
+    // Character instance metadata only when PlaceReusableModelCommand commits
+    // the placement. This keeps base Character Asset state separate from scene
+    // gameplay configuration.
+    [[nodiscard]] inline bool MarkCharacterAssetTemplate(
+        wi::scene::Scene& scene) noexcept
+    {
+        bool marked = false;
+        for (std::size_t index = 0; index < scene.transforms.GetCount(); ++index)
+        {
+            const wi::ecs::Entity entity = scene.transforms.GetEntity(index);
+            const auto* hierarchy = scene.hierarchy.GetComponent(entity);
+            if (hierarchy != nullptr &&
+                hierarchy->parentID != wi::ecs::INVALID_ENTITY)
+            {
+                continue;
+            }
+
+            auto* metadata = scene.metadatas.GetComponent(entity);
+            if (metadata == nullptr)
+                metadata = &scene.metadatas.Create(entity);
+            metadata->bool_values.set(CharacterAssetTemplateMetadataKey, true);
+            metadata->int_values.set(
+                CharacterAssetTemplateVersionMetadataKey,
+                CharacterAssetTemplateVersion);
+            marked = true;
+        }
+        return marked;
+    }
+
     enum class CharacterType : std::int32_t
     {
         Human = 0,
