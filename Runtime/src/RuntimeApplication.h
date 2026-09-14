@@ -7,6 +7,7 @@
 #include "RuntimeCharacterDecision.h"
 #include "RuntimeCharacterPerception.h"
 #include "RuntimeCharacterSystem.h"
+#include "RuntimeCombatService.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
 #include "RuntimeScriptRuntime.h"
@@ -102,6 +103,8 @@ namespace renegade::runtime
         RuntimeCharacterSystemState characterAiState_;
         RuntimeCharacterPerceptionState characterPerceptionState_;
         RuntimeCharacterDecisionState characterDecisionState_;
+        RuntimeCombatState combatState_;
+        bridge::GameplayEventService combatEventService_;
         bridge::GameplayInputMap inputMap_ = bridge::MakeDefaultGameplayInputMap();
         bridge::GameplayInputFrame gameplayInput_;
         bridge::SceneAudioPauseState audioPauseState_;
