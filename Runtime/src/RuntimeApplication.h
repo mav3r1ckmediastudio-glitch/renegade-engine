@@ -7,6 +7,7 @@
 #include "RuntimeCharacterDecision.h"
 #include "RuntimeCharacterPerception.h"
 #include "RuntimeCharacterSystem.h"
+#include "RuntimeCombatDecision.h"
 #include "RuntimeCombatService.h"
 #include "RuntimeFlow.h"
 #include "RuntimeScreen.h"
