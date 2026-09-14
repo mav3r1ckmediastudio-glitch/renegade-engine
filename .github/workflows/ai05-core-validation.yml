@@ -1,0 +1,27 @@
+name: AI-05 core validation
+
+on:
+  push:
+    branches:
+      - validate/ai05-core-6302a31
+  workflow_dispatch:
+
+jobs:
+  ai05-core:
+    name: AI-05 Windows x64 core validation
+    runs-on: windows-2025
+    steps:
+      - name: Check out Renegade and Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+      - name: Configure focused build
+        run: cmake -S . -B BUILD/ai05core -A x64 -DRENEGADE_EMBED_SHADERS=OFF
+      - name: Build AI-05 combat and Runtime
+        run: cmake --build BUILD/ai05core --config Debug --target RenegadeCharacterAiCombatTests RenegadeRuntime --parallel
+      - name: Run AI-05 combat tests
+        run: ctest --test-dir BUILD/ai05core -C Debug --output-on-failure -R "^RenegadeCharacterAiCombat(Tests|SourceContract)$"
