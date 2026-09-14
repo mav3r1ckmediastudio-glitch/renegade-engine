@@ -1,0 +1,66 @@
+name: AI-02 focused validation
+
+on:
+  push:
+    branches:
+      - feature/character-ai-programme
+    paths:
+      - ".github/workflows/ai02-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: AI-02 Windows Debug validation
+    runs-on: windows-2025
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out Renegade and Wicked
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Configure focused AI-02 build
+        shell: pwsh
+        run: >-
+          cmake
+          -S .
+          -B BUILD/renegade
+          -A x64
+          -DRENEGADE_EMBED_SHADERS=OFF
+
+      - name: Build AI-01/02, Runtime and Studio targets
+        shell: pwsh
+        run: >-
+          cmake
+          --build BUILD/renegade
+          --config Debug
+          --target RenegadeCharacterAiFoundationTests RenegadeCharacterAiProfilesTests RenegadeCharacterAiProfilesAuditTests RenegadeRuntime RenegadeStudio
+          --parallel
+
+      - name: Run AI-01/02 focused tests
+        shell: pwsh
+        run: >-
+          ctest
+          --test-dir BUILD/renegade
+          -C Debug
+          -R "^RenegadeCharacterAi(FoundationTests|SourceContract|ProfilesTests|ProfilesAuditTests|ProfilesSourceContract)$"
+          --output-on-failure
+
+      - name: Upload AI-02 validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai02-focused-validation-${{ github.sha }}
+          path: |
+            BUILD/renegade/Testing/**
+            BUILD/renegade/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
