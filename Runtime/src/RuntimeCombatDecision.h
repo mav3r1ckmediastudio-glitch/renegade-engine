@@ -36,6 +36,33 @@ namespace renegade::runtime
         const bool civilianLike =
             character.authoring.role == bridge::CharacterRole::Civilian ||
             character.authoring.role == bridge::CharacterRole::Passive;
+        const bool usableWeapon = HasUsableWeapon(combat);
+
+        // Unarmed/non-viable Characters must not inherit AI-04's hostile Chase
+        // as their best response. Civilians/passive creatures flee by default;
+        // other Characters retreat or surrender according to authored traits.
+        if (hostileKnowledge && !usableWeapon)
+        {
+            if (character.authoring.canFlee &&
+                (civilianLike || courage < 0.40f))
+            {
+                scores.push_back({
+                    CharacterIntent::Flee,
+                    148.0f + (1.0f - courage) * 24.0f});
+            }
+            else if (character.authoring.canFlee)
+            {
+                scores.push_back({
+                    CharacterIntent::Retreat,
+                    124.0f + (1.0f - courage) * 18.0f});
+            }
+            if (character.authoring.canSurrender && courage < 0.55f)
+            {
+                scores.push_back({
+                    CharacterIntent::Surrender,
+                    128.0f + (1.0f - courage) * 20.0f});
+            }
+        }
 
         if (hostileKnowledge && health <= character.tuning.retreatHealthThreshold)
         {
@@ -61,7 +88,7 @@ namespace renegade::runtime
             }
         }
 
-        if (!hostileKnowledge || !HasUsableWeapon(combat))
+        if (!hostileKnowledge || !usableWeapon)
         {
             if (hostileKnowledge && character.authoring.canSurrender &&
                 UsesAmmunition(combat) && combat.magazineAmmo <= 0 &&
@@ -89,7 +116,7 @@ namespace renegade::runtime
                     : static_cast<float>(combat.magazineAmmo) /
                         static_cast<float>(combat.weapon.magazineSize);
                 const bool saferWindow = !directHostile ||
-                    combat.targetDistance > combat.weapon.preferredRange * 1.20f;
+                    combat.targetDistance > combat.effectiveRange.preferredRange * 1.20f;
                 if (magazineFraction <= 0.20f && saferWindow)
                     scores.push_back({CharacterIntent::Reload, 78.0f});
             }
@@ -98,7 +125,7 @@ namespace renegade::runtime
         if (!directHostile || !std::isfinite(combat.targetDistance))
             return scores;
 
-        if (combat.targetDistance > combat.weapon.maxRange)
+        if (combat.targetDistance > combat.effectiveRange.maxRange)
         {
             scores.push_back({
                 CharacterIntent::Chase,
@@ -106,9 +133,9 @@ namespace renegade::runtime
             return scores;
         }
 
-        if (combat.weapon.minRange > 0.0f &&
-            combat.targetDistance < combat.weapon.minRange &&
-            combat.weapon.style != bridge::WeaponAiStyle::Melee)
+        if (combat.effectiveRange.minRange > 0.0f &&
+            combat.targetDistance < combat.effectiveRange.minRange &&
+            combat.weapon.style == bridge::WeaponAiStyle::Ranged)
         {
             scores.push_back({
                 CharacterIntent::Retreat,
@@ -119,9 +146,9 @@ namespace renegade::runtime
         }
 
         const float preferredDelta = std::abs(
-            combat.targetDistance - combat.weapon.preferredRange);
+            combat.targetDistance - combat.effectiveRange.preferredRange);
         const float rangeSpan = std::max(
-            1.0f, combat.weapon.maxRange - combat.weapon.minRange);
+            1.0f, combat.effectiveRange.maxRange - combat.effectiveRange.minRange);
         const float rangeFit = std::clamp(1.0f - preferredDelta / rangeSpan, 0.0f, 1.0f);
         scores.push_back({
             CharacterIntent::Attack,
@@ -141,25 +168,32 @@ namespace renegade::runtime
         RuntimeCombatState& state,
         const CombatEventEmitter& emitter)
     {
-        auto combatScores = ScoreCharacterCombatIntents(
+        RefreshSearchExhaustion(cognition, decision);
+        auto scores = ScoreCharacterIntents(character, cognition, decision);
+        const auto combatScores = ScoreCharacterCombatIntents(
             character, cognition, decision, combat);
-        if (combatScores.empty())
-            return;
 
-        float baseBest = 0.0f;
-        std::vector<CharacterIntentScore> combined;
-        combined.reserve(decision.topScores.size() + combatScores.size());
-        for (const auto& score : decision.topScores)
+        // Merge duplicate intent candidates by their strongest score. AI-04 and
+        // AI-05 can both propose Chase/Hold; there must still be one winner.
+        for (const auto& candidate : combatScores)
         {
-            if (score.score > 0.0f)
-            {
-                baseBest = std::max(baseBest, score.score);
-                combined.push_back(score);
-            }
+            const auto existing = std::find_if(
+                scores.begin(), scores.end(),
+                [&candidate](const CharacterIntentScore& score)
+                {
+                    return score.intent == candidate.intent;
+                });
+            if (existing == scores.end())
+                scores.push_back(candidate);
+            else
+                existing->score = std::max(existing->score, candidate.score);
         }
 
+        CaptureTopScores(decision, scores);
+        if (scores.empty())
+            return;
         std::sort(
-            combatScores.begin(), combatScores.end(),
+            scores.begin(), scores.end(),
             [](const CharacterIntentScore& lhs, const CharacterIntentScore& rhs)
             {
                 if (std::abs(lhs.score - rhs.score) > 0.0001f)
@@ -167,30 +201,38 @@ namespace renegade::runtime
                 return static_cast<std::int32_t>(lhs.intent) <
                     static_cast<std::int32_t>(rhs.intent);
             });
-        CharacterIntentScore winner = combatScores.front();
 
-        const auto currentCombat = std::find_if(
-            combatScores.begin(), combatScores.end(),
+        CharacterIntentScore winner = scores.front();
+        const auto current = std::find_if(
+            scores.begin(), scores.end(),
             [&decision](const CharacterIntentScore& score)
             {
                 return score.intent == decision.intent;
             });
-        if (currentCombat != combatScores.end() &&
-            decision.commitmentRemainingSeconds > 0.0f &&
-            winner.intent != CharacterIntent::Dead &&
-            winner.score < currentCombat->score + CharacterDecisionEmergencyMargin)
+        if (current != scores.end())
         {
-            winner = *currentCombat;
+            const float retained = current->score + CharacterDecisionHysteresisBonus;
+            if (decision.commitmentRemainingSeconds > 0.0f &&
+                winner.score < current->score + CharacterDecisionEmergencyMargin)
+            {
+                winner = *current;
+            }
+            else if (retained >= winner.score)
+            {
+                winner = *current;
+            }
         }
 
-        combined.insert(combined.end(), combatScores.begin(), combatScores.end());
-        CaptureTopScores(decision, combined);
-
-        if (winner.intent != CharacterIntent::Dead && winner.score + 0.001f < baseBest)
-            return;
         if (winner.intent == decision.intent)
             return;
 
+        const bool combatDriven = std::any_of(
+            combatScores.begin(), combatScores.end(),
+            [&winner](const CharacterIntentScore& score)
+            {
+                return score.intent == winner.intent &&
+                    score.score + 0.0001f >= winner.score;
+            });
         const CharacterIntent before = decision.intent;
         decision.previousIntent = before;
         decision.intent = winner.intent;
@@ -203,7 +245,10 @@ namespace renegade::runtime
         ++decision.transitionCount;
         decision.lastTransitionReason =
             std::string(ToString(before)) + " -> " +
-            ToString(decision.intent) + " by combat utility";
+            ToString(decision.intent) +
+            (combatDriven ? " by combat utility" : " by utility");
+        if (decision.intent == CharacterIntent::Search)
+            decision.searchRemainingSeconds = character.tuning.searchSeconds;
 
         if (decision.intent == CharacterIntent::Surrender ||
             decision.intent == CharacterIntent::Flee ||
@@ -214,9 +259,10 @@ namespace renegade::runtime
                 state,
                 emitter,
                 {0, "ai.combat_intent",
-                 std::string("intent=") + ToString(decision.intent),
+                 std::string("target=") + RuntimePlayerKnowledgeId +
+                    ";intent=" + ToString(decision.intent),
                  character.stableEntityId,
-                 RuntimePlayerKnowledgeId});
+                 {}});
         }
     }
 
@@ -343,6 +389,11 @@ namespace renegade::runtime
             if (nativeCharacter == nullptr || !nativeCharacter->IsActive())
                 continue;
 
+            if (decision->lastCognitionTick != cognition->cognitionTicks)
+            {
+                decision->lastCognitionTick = cognition->cognitionTicks;
+                ++decisions.decisionTicks;
+            }
             SelectCombatIntent(
                 character, *cognition, *decision, *combat, combatState, emitter);
 
@@ -364,7 +415,7 @@ namespace renegade::runtime
                          "ammo=" + std::to_string(combat->magazineAmmo) +
                             ";reserve=" + std::to_string(combat->reserveAmmo),
                          character.stableEntityId,
-                         RuntimePlayerKnowledgeId});
+                         {}});
                 }
                 break;
             case CharacterIntent::Attack:

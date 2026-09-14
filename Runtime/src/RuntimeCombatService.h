@@ -27,6 +27,7 @@ namespace renegade::runtime
         wi::ecs::Entity entity = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity weaponEntity = wi::ecs::INVALID_ENTITY;
         bridge::WeaponAiDescriptor weapon;
+        bridge::WeaponAiRangeBand effectiveRange;
         float maxHealth = 100.0f;
         float health = 100.0f;
         int magazineAmmo = 0;
@@ -123,7 +124,7 @@ namespace renegade::runtime
         const CharacterCombatRecord& combat) noexcept
     {
         if (combat.dead || combat.weapon.style == bridge::WeaponAiStyle::None ||
-            combat.weapon.damage <= 0.0f || combat.weapon.maxRange <= 0.0f)
+            combat.weapon.damage <= 0.0f || combat.effectiveRange.maxRange <= 0.0f)
         {
             return false;
         }
@@ -166,6 +167,9 @@ namespace renegade::runtime
                     "' weapon descriptor is invalid: " + error;
                 return false;
             }
+
+            combat.effectiveRange = bridge::ResolveEffectiveWeaponAiRange(
+                character.tuning, combat.weapon);
 
             combat.maxHealth = nativeCharacter->health > 0
                 ? static_cast<float>(nativeCharacter->health)
@@ -422,7 +426,7 @@ namespace renegade::runtime
         result.hit = DeterministicCombatUnit(
             combat.characterId, combat.shotSequence) < result.hitChance;
 
-        EmitSoundStimulus(
+        (void)EmitSoundStimulus(
             perception,
             combat.characterId,
             character.authoring.factionId,
@@ -433,14 +437,15 @@ namespace renegade::runtime
             2.0f);
 
         const std::string firedPayload =
-            "distance=" + std::to_string(distance) +
+            std::string("target=") + RuntimePlayerKnowledgeId +
+            ";distance=" + std::to_string(distance) +
             ";hit=" + std::string(result.hit ? "1" : "0") +
             ";ammo=" + std::to_string(combat.magazineAmmo);
         (void)EmitCombatGameplayEvent(
             state,
             emitter,
             {0, "ai.weapon_fired", firedPayload,
-             combat.characterId, RuntimePlayerKnowledgeId});
+             combat.characterId, {}});
 
         if (!result.hit)
             return true;
@@ -454,14 +459,15 @@ namespace renegade::runtime
             ++combat.shotsHit;
             ++state.shotsHit;
             const std::string damagePayload =
-                "damage=" + std::to_string(result.damage) +
+                std::string("target=") + RuntimePlayerKnowledgeId +
+                ";damage=" + std::to_string(result.damage) +
                 ";health=" + std::to_string(state.playerHealth) +
                 ";dead=" + std::string(died ? "1" : "0");
             (void)EmitCombatGameplayEvent(
                 state,
                 emitter,
                 {0, "ai.damage", damagePayload,
-                 combat.characterId, RuntimePlayerKnowledgeId});
+                 combat.characterId, {}});
         }
         return true;
     }

@@ -21,7 +21,6 @@ namespace renegade::runtime
         if (!hasLevel)
         {
             ResetRuntimeCombat(combatState_);
-            combatEventService_.Clear();
             ResetRuntimeCharacterDecision(characterDecisionState_);
             ResetRuntimeCharacterPerception(characterPerceptionState_);
             ResetRuntimeCharacterSystem(characterAiState_);
@@ -36,7 +35,6 @@ namespace renegade::runtime
                  characterSceneAttemptRevision_ != sceneRevision)
         {
             ResetRuntimeCombat(combatState_);
-            combatEventService_.Clear();
             ResetRuntimeCharacterDecision(characterDecisionState_);
             ResetRuntimeCharacterPerception(characterPerceptionState_);
             ResetRuntimeCharacterSystem(characterAiState_);
@@ -186,37 +184,23 @@ namespace renegade::runtime
                 player_,
                 playerSettings_,
                 simulationDt);
-            UpdateRuntimeCharacterDecision(
-                scenes_.GetScene(),
-                characterAiState_,
-                characterPerceptionState_,
-                characterDecisionState_,
-                simulationDt);
-
             const CombatEventEmitter combatEmitter = [this](
                 bridge::GameplayEvent event,
                 std::string& error)
             {
-                const bool accepted = combatEventService_.Enqueue(
+                const std::string eventName = event.name;
+                const std::string eventPayload = event.payload;
+                const bool accepted = creatorScripts_.EnqueueGameplayEvent(
                     std::move(event), error);
-                if (!accepted)
-                    return false;
-
-                // AI-05 publishes public combat events through the existing
-                // GameplayEventService contract. Until AI-10 exposes the safe
-                // scripting surface, consume the transient event immediately
-                // into the existing diagnostics stream so this queue never
-                // becomes an unbounded/undrained second bus.
-                bridge::GameplayEvent published;
-                if (combatEventService_.TryDequeue(published))
+                if (accepted)
                 {
                     diagnosticService_.Record(
                         bridge::DiagnosticSeverity::Info,
                         "runtime.ai.combat",
-                        published.name,
-                        published.payload);
+                        eventName,
+                        eventPayload);
                 }
-                return true;
+                return accepted;
             };
             UpdateRuntimeCombatDecision(
                 scenes_.GetScene(),
@@ -226,6 +210,13 @@ namespace renegade::runtime
                 combatState_,
                 combatEmitter,
                 simulationDt);
+            UpdateRuntimeCharacterDecision(
+                scenes_.GetScene(),
+                characterAiState_,
+                characterPerceptionState_,
+                characterDecisionState_,
+                simulationDt,
+                false);
         }
 
         if (navigationSceneRevision_ != sceneRevision ||
@@ -397,9 +388,9 @@ namespace renegade::runtime
             firstHealthFraction = std::to_string(HealthFraction(first));
             firstWeaponStyle = std::to_string(static_cast<std::int32_t>(first.weapon.style));
             firstWeaponRange =
-                std::to_string(first.weapon.minRange) + "," +
-                std::to_string(first.weapon.preferredRange) + "," +
-                std::to_string(first.weapon.maxRange);
+                std::to_string(first.effectiveRange.minRange) + "," +
+                std::to_string(first.effectiveRange.preferredRange) + "," +
+                std::to_string(first.effectiveRange.maxRange);
             firstAmmo = std::to_string(first.magazineAmmo);
             firstReserveAmmo = std::to_string(first.reserveAmmo);
             firstReloadRemaining = std::to_string(first.reloadRemainingSeconds);
@@ -448,8 +439,8 @@ namespace renegade::runtime
             {"combat_shots_hit", combatState_.shotsHit},
             {"combat_reloads", combatState_.reloads},
             {"combat_damage_events", combatState_.damageEvents},
-            {"combat_event_queue_depth", static_cast<std::uint64_t>(combatEventService_.Size())},
-            {"combat_event_dropped", static_cast<std::uint64_t>(combatEventService_.DroppedCount())},
+            {"gameplay_event_queue_depth", static_cast<std::uint64_t>(creatorScripts_.PendingEventCount())},
+            {"gameplay_event_dropped", static_cast<std::uint64_t>(creatorScripts_.DroppedEventCount())},
             {"combat_events_rejected", combatState_.combatEventsRejected},
             {"memory_count", totalMemories},
             {"cognition_ticks", totalCognitionTicks},

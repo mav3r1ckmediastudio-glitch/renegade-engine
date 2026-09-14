@@ -37,14 +37,12 @@ int main()
     using namespace renegade::runtime;
 
     wi::scene::Scene scene;
-    const wi::ecs::Entity characterEntity = scene.Entity_CreateTransform(
-        "AI05 Character", XMFLOAT3(0.0f, 0.0f, 0.0f));
+    const wi::ecs::Entity characterEntity = scene.Entity_CreateTransform("AI05 Character");
     auto& nativeCharacter = scene.characters.Create(characterEntity);
     nativeCharacter.health = 100;
     nativeCharacter.SetActive(true);
 
-    const wi::ecs::Entity weaponEntity = scene.Entity_CreateTransform(
-        "AI05 Rifle", XMFLOAT3(0.0f, 0.0f, 0.0f));
+    const wi::ecs::Entity weaponEntity = scene.Entity_CreateTransform("AI05 Rifle");
     std::string error;
     if (!AssignPersistentEntityId(scene, weaponEntity, GenerateStableId(), error))
         return Fail("weapon identity: " + error);
@@ -90,6 +88,9 @@ int main()
     character.authoring.autonomous = true;
     character.references.weaponEntity = weaponEntity;
     character.tuning = ResolveCharacterTuning(character.authoring);
+    character.tuning.minCombatRange = 4.0f;
+    character.tuning.preferredCombatRange = 11.0f;
+    character.tuning.maxCombatRange = 20.0f;
     characterSystem.characters.push_back(character);
 
     RuntimeCombatState combatState;
@@ -98,6 +99,10 @@ int main()
     auto* combat = FindCharacterCombat(combatState, character.stableEntityId);
     if (combat == nullptr || combat->magazineAmmo != 12 || combat->reserveAmmo != 24)
         return Fail("combat ammo initialization");
+    if (std::abs(combat->effectiveRange.minRange - 4.0f) > 0.001f ||
+        std::abs(combat->effectiveRange.preferredRange - 11.0f) > 0.001f ||
+        std::abs(combat->effectiveRange.maxRange - 20.0f) > 0.001f)
+        return Fail("effective combat range composes profile preference with weapon capability");
 
     RuntimeCharacterPerceptionState perception;
     CharacterCognitionRecord cognition;
@@ -147,6 +152,31 @@ int main()
         return events.Enqueue(std::move(event), eventError);
     };
 
+    CharacterDecisionRecord integratedDecision = decision;
+    integratedDecision.commitmentRemainingSeconds = 0.0f;
+    SelectCombatIntent(
+        character,
+        perception.characters.front(),
+        integratedDecision,
+        *combat,
+        combatState,
+        emitter);
+    if (integratedDecision.intent != CharacterIntent::Attack)
+        return Fail("unified AI-04 + AI-05 utility should select Attack in range");
+    const std::uint64_t integratedTransitions = integratedDecision.transitionCount;
+    RuntimeCharacterDecisionState movementOnly;
+    movementOnly.characters.push_back(integratedDecision);
+    UpdateRuntimeCharacterDecision(
+        scene,
+        characterSystem,
+        perception,
+        movementOnly,
+        0.1f,
+        false);
+    if (movementOnly.characters.front().intent != CharacterIntent::Attack ||
+        movementOnly.characters.front().transitionCount != integratedTransitions)
+        return Fail("AI-04 movement pass must not reselect combat-owned intent");
+
     CombatFireResult fire;
     const int ammoBefore = combat->magazineAmmo;
     if (!TryFireAtRuntimePlayer(
@@ -161,6 +191,11 @@ int main()
         return Fail("in-range Attack should fire");
     if (combat->magazineAmmo != ammoBefore - 1 || events.Size() == 0)
         return Fail("fire must consume ammo and publish GameplayEventService event");
+    bridge::GameplayEvent publicCombatEvent;
+    if (!events.TryDequeue(publicCombatEvent) ||
+        publicCombatEvent.name != "ai.weapon_fired" ||
+        !publicCombatEvent.targetEntityId.empty())
+        return Fail("runtime-player combat event must be publicly deliverable broadcast");
     if (perception.sounds.empty())
         return Fail("weapon fire must create legitimate AI-03 sound stimulus");
 
@@ -213,6 +248,18 @@ int main()
     character.authoring.canFlee = true;
     character.authoring.canSurrender = true;
     character.tuning = ResolveCharacterTuning(character.authoring);
+    combat->health = 100.0f;
+    combat->maxHealth = 100.0f;
+    combat->magazineAmmo = 0;
+    combat->reserveAmmo = 0;
+    combat->weapon = DefaultWeaponAiDescriptor(CombatStyle::Ranged);
+    combat->effectiveRange = ResolveEffectiveWeaponAiRange(
+        character.tuning, combat->weapon);
+    const auto healthyCivilianScores = ScoreCharacterCombatIntents(
+        character, perception.characters.front(), decision, *combat);
+    if (!ContainsIntent(healthyCivilianScores, CharacterIntent::Flee))
+        return Fail("healthy unarmed civilian should flee from hostile knowledge");
+
     combat->health = 5.0f;
     combat->maxHealth = 100.0f;
     combat->magazineAmmo = 0;

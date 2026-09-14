@@ -573,12 +573,30 @@ namespace renegade::runtime
         character.Move(XMFLOAT3(0.0f, 0.0f, 0.0f));
     }
 
+    [[nodiscard]] inline bool IsCombatExecutionIntent(
+        const CharacterIntent intent) noexcept
+    {
+        switch (intent)
+        {
+        case CharacterIntent::Attack:
+        case CharacterIntent::Reload:
+        case CharacterIntent::Retreat:
+        case CharacterIntent::Flee:
+        case CharacterIntent::Surrender:
+        case CharacterIntent::Dead:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     inline void UpdateRuntimeCharacterDecision(
         wi::scene::Scene& scene,
         const RuntimeCharacterSystemState& characters,
         const RuntimeCharacterPerceptionState& perception,
         RuntimeCharacterDecisionState& state,
-        const float dt) noexcept
+        const float dt,
+        const bool selectIntent = true) noexcept
     {
         if (!(dt > 0.0f) || !std::isfinite(dt))
             return;
@@ -609,7 +627,8 @@ namespace renegade::runtime
                 decision->searchRemainingSeconds = std::max(
                     0.0f, decision->searchRemainingSeconds - dt);
 
-            if (decision->lastCognitionTick != cognition->cognitionTicks)
+            if (selectIntent &&
+                decision->lastCognitionTick != cognition->cognitionTicks)
             {
                 decision->lastCognitionTick = cognition->cognitionTicks;
                 SelectIntent(authored, *cognition, *decision);
@@ -641,6 +660,12 @@ namespace renegade::runtime
                 decision->lastTransitionReason = "Search timeout -> return to role";
                 ++decision->transitionCount;
             }
+
+            // Once AI-05 owns unified utility selection, combat execution
+            // intents are acted by RuntimeCombatDecision. AI-04 must not stop or
+            // replace their native movement in this movement-only pass.
+            if (!selectIntent && IsCombatExecutionIntent(decision->intent))
+                continue;
 
             XMFLOAT3 desiredGoal;
             if (!ResolveIntentGoal(authored, *cognition, *decision, desiredGoal))

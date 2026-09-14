@@ -213,12 +213,25 @@ namespace renegade::studio
                     return;
                 }
 
+                bridge::CharacterAdvancedOverrides overrides;
+                if (!bridge::CaptureCharacterAdvancedOverrides(
+                        scene, selectedCharacter_, overrides, error))
+                {
+                    status_.SetText("INVALID ADVANCED AI // " + error);
+                    descriptor_.SetText("Combat range cannot resolve until Advanced AI is repaired.");
+                    return;
+                }
+                const auto tuning = bridge::ResolveCharacterTuning(settings, overrides);
+                const auto effectiveRange = bridge::ResolveEffectiveWeaponAiRange(
+                    tuning, weaponDescriptor);
+
                 status_.SetText(settings.weaponEntityId.empty()
                     ? "Style defaults active // assign a governed weapon entity optionally"
                     : "Weapon assigned by stable identity");
                 descriptor_.SetText(
-                    "RANGE " + std::to_string(weaponDescriptor.minRange) + " / " +
-                    std::to_string(weaponDescriptor.preferredRange) + " / " +
+                    "EFFECTIVE RANGE " + std::to_string(effectiveRange.minRange) + " / " +
+                    std::to_string(effectiveRange.preferredRange) + " / " +
+                    std::to_string(effectiveRange.maxRange) + "m   WEAPON CAP " +
                     std::to_string(weaponDescriptor.maxRange) + "m   DAMAGE " +
                     std::to_string(weaponDescriptor.damage) + "   AMMO " +
                     std::to_string(weaponDescriptor.magazineSize) + "+" +

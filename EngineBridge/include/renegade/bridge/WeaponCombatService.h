@@ -1,6 +1,6 @@
 #pragma once
 
-#include "renegade/bridge/CharacterService.h"
+#include "renegade/bridge/CharacterProfileService.h"
 
 #include <algorithm>
 #include <cmath>
@@ -47,6 +47,36 @@ namespace renegade::bridge
         int reserveAmmo = 0;
         float baseAccuracy = 1.0f;
     };
+
+    struct WeaponAiRangeBand
+    {
+        float minRange = 0.0f;
+        float preferredRange = 0.0f;
+        float maxRange = 0.0f;
+    };
+
+    [[nodiscard]] inline WeaponAiRangeBand ResolveEffectiveWeaponAiRange(
+        const CharacterTuning& tuning,
+        const WeaponAiDescriptor& weapon) noexcept
+    {
+        WeaponAiRangeBand range;
+        if (weapon.style == WeaponAiStyle::None || weapon.maxRange <= 0.0f ||
+            tuning.maxCombatRange <= 0.0f)
+        {
+            return range;
+        }
+
+        range.maxRange = std::max(0.0f, std::min(
+            weapon.maxRange, tuning.maxCombatRange));
+        range.minRange = std::min(
+            range.maxRange,
+            std::max(weapon.minRange, tuning.minCombatRange));
+        range.preferredRange = std::clamp(
+            tuning.preferredCombatRange,
+            range.minRange,
+            range.maxRange);
+        return range;
+    }
 
     [[nodiscard]] inline WeaponAiStyle WeaponStyleForCombatStyle(
         const CombatStyle style) noexcept

@@ -105,7 +105,6 @@ namespace renegade::runtime
         RuntimeCharacterPerceptionState characterPerceptionState_;
         RuntimeCharacterDecisionState characterDecisionState_;
         RuntimeCombatState combatState_;
-        bridge::GameplayEventService combatEventService_;
         bridge::GameplayInputMap inputMap_ = bridge::MakeDefaultGameplayInputMap();
         bridge::GameplayInputFrame gameplayInput_;
         bridge::SceneAudioPauseState audioPauseState_;
