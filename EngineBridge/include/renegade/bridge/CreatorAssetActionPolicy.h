@@ -55,14 +55,16 @@ namespace renegade::bridge
         const std::string& projectRelativePath) noexcept
     {
         constexpr const char* suffix = ".rcharprefab";
-        if (projectRelativePath.size() < 16 ||
-            projectRelativePath.rfind("Content/Prefabs/", 0) != 0)
+        const std::size_t suffixLength = std::char_traits<char>::length(suffix);
+        if (projectRelativePath.rfind("Content/Prefabs/", 0) != 0 ||
+            projectRelativePath.size() < suffixLength)
         {
             return false;
         }
-        return projectRelativePath.size() >= 13 &&
-            projectRelativePath.compare(
-                projectRelativePath.size() - 13, 13, suffix) == 0;
+        return projectRelativePath.compare(
+            projectRelativePath.size() - suffixLength,
+            suffixLength,
+            suffix) == 0;
     }
 
     // CW-05 Character Prefabs are generated project assets rather than imported
