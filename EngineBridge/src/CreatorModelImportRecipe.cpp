@@ -157,7 +157,8 @@ namespace renegade::bridge
             {
                 if (iterator.key() != "asset_kind" &&
                     iterator.key() != "transform" &&
-                    iterator.key() != "materials" && iterator.key() != "animations")
+                    iterator.key() != "materials" && iterator.key() != "animations" &&
+                    iterator.key() != "external_animations")
                 {
                     error = "Creator model import options contain an unsupported key: " +
                         iterator.key();
@@ -318,6 +319,49 @@ namespace renegade::bridge
                     recipe.animations.push_back(std::move(animation));
                 }
             }
+
+            if (root.contains("external_animations"))
+            {
+                if (!root.at("external_animations").is_array())
+                {
+                    error = "Creator external animation recipe must be an array.";
+                    return false;
+                }
+                for (const auto& item : root.at("external_animations"))
+                {
+                    if (!item.is_object() || item.size() != 6 ||
+                        !item.contains("source_project_relative_path") ||
+                        !item.at("source_project_relative_path").is_string() ||
+                        !item.contains("source_animation_index") ||
+                        !item.at("source_animation_index").is_number_unsigned() ||
+                        !item.contains("name") || !item.at("name").is_string() ||
+                        !item.contains("start") || !item.at("start").is_number() ||
+                        !item.contains("end") || !item.at("end").is_number() ||
+                        !item.contains("enabled") || !item.at("enabled").is_boolean())
+                    {
+                        error = "Each external animation recipe requires governed source, index, name, range and enabled state.";
+                        return false;
+                    }
+                    CreatorExternalAnimationImportRecipe animation;
+                    animation.sourceProjectRelativePath =
+                        item.at("source_project_relative_path").get<std::string>();
+                    animation.sourceAnimationIndex =
+                        item.at("source_animation_index").get<std::uint32_t>();
+                    animation.name = item.at("name").get<std::string>();
+                    animation.start = item.at("start").get<float>();
+                    animation.end = item.at("end").get<float>();
+                    animation.enabled = item.at("enabled").get<bool>();
+                    if (animation.sourceProjectRelativePath.empty() ||
+                        animation.sourceProjectRelativePath.find("..") != std::string::npos ||
+                        !std::isfinite(animation.start) ||
+                        !std::isfinite(animation.end) || animation.end < animation.start)
+                    {
+                        error = "External animation recipe has invalid governed source or range.";
+                        return false;
+                    }
+                    recipe.externalAnimations.push_back(std::move(animation));
+                }
+            }
         }
         catch (const nlohmann::json::exception&)
         {
@@ -416,6 +460,31 @@ namespace renegade::bridge
                 });
             }
             root["animations"] = std::move(animations);
+        }
+        if (!recipe.externalAnimations.empty())
+        {
+            nlohmann::json animations = nlohmann::json::array();
+            for (const auto& animation : recipe.externalAnimations)
+            {
+                if (animation.sourceProjectRelativePath.empty() ||
+                    animation.sourceProjectRelativePath.find("..") != std::string::npos ||
+                    !std::isfinite(animation.start) ||
+                    !std::isfinite(animation.end) || animation.end < animation.start)
+                {
+                    error = "External animation recipe has invalid governed source or range.";
+                    optionsJson.clear();
+                    return false;
+                }
+                animations.push_back({
+                    {"enabled", animation.enabled},
+                    {"end", animation.end},
+                    {"name", animation.name},
+                    {"source_animation_index", animation.sourceAnimationIndex},
+                    {"source_project_relative_path", animation.sourceProjectRelativePath},
+                    {"start", animation.start},
+                });
+            }
+            root["external_animations"] = std::move(animations);
         }
         optionsJson = root.dump();
         CreatorModelImportRecipe verified;

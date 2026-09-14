@@ -42,6 +42,18 @@ namespace renegade::bridge
         bool enabled = true;
     };
 
+    // External clips are project-governed import provenance. They deliberately
+    // identify an action/take, never a transient scene entity or raw ECS ID.
+    struct CreatorExternalAnimationImportRecipe
+    {
+        std::string sourceProjectRelativePath;
+        std::uint32_t sourceAnimationIndex = 0;
+        std::string name;
+        float start = 0.0f;
+        float end = 0.0f;
+        bool enabled = true;
+    };
+
     struct CreatorModelTransformRecipe
     {
         bool authored = false;
@@ -62,6 +74,7 @@ namespace renegade::bridge
         CreatorModelTransformRecipe transform;
         std::vector<CreatorMaterialImportRecipe> materials;
         std::vector<CreatorAnimationImportRecipe> animations;
+        std::vector<CreatorExternalAnimationImportRecipe> externalAnimations;
     };
 
     inline constexpr const char* CreatorAuthoredTransformRootName =
