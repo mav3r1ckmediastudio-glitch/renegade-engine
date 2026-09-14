@@ -43,15 +43,14 @@ namespace renegade::bridge
     };
 
     // External clips are project-governed import provenance. They deliberately
-    // identify an action/take, never a transient scene entity or raw ECS ID.
+    // identify an action/take by retained source + source animation index,
+    // never a transient scene entity or raw ECS ID. Source action labels stay
+    // in the importer queue for presentation; the numeric index is the durable
+    // converter identity already used by embedded animation recipes.
     struct CreatorExternalAnimationImportRecipe
     {
         std::string sourceProjectRelativePath;
         std::uint32_t sourceAnimationIndex = 0;
-        // Human-readable source action/take identity retained alongside the
-        // numeric source index for deterministic reimport diagnostics. Older
-        // recipes may leave this empty and remain valid.
-        std::string sourceActionName;
         std::string name;
         float start = 0.0f;
         float end = 0.0f;
