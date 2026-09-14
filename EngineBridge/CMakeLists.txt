@@ -51,6 +51,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/ReusableAssetInstanceService.h
     include/renegade/bridge/ReusableAssetDependencyService.h
     include/renegade/bridge/ReusableAssetRuntimeService.h
+    include/renegade/bridge/CharacterPrefabService.h
     include/renegade/bridge/MaterialService.h
     include/renegade/bridge/MaterialTextureAssetService.h
     include/renegade/bridge/CollisionService.h
@@ -128,6 +129,7 @@ add_library(RenegadeEngineBridge STATIC
     src/ReusableAssetInstanceService.cpp
     src/ReusableAssetDependencyService.cpp
     src/ReusableAssetRuntimeService.cpp
+    src/CharacterPrefabService.cpp
     src/MaterialService.cpp
     src/MaterialTextureAssetService.cpp
     src/MaterialTextureClearCommand.cpp
