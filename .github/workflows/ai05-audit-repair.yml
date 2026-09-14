@@ -7,6 +7,10 @@ on:
     paths:
       - .github/workflows/ai05-audit-repair.yml
 
+concurrency:
+  group: ai05-repaired-focused-acceptance
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: windows-2025
@@ -16,9 +20,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Apply deterministic audit repairs in validation workspace
+      - name: Apply final deterministic audit repairs in validation workspace
         shell: pwsh
-        run: python .github/ai05_repair.py
+        run: python .github/ai05_repair_final.py
 
       - name: Configure MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -58,10 +62,9 @@ jobs:
             Runtime/src/RuntimeScriptRuntime.cpp
             Runtime/src/RuntimeApplication.h
             Runtime/src/RuntimeLiveDiagnostics.cpp
+            Runtime/src/RuntimeCharacterDecision.h
             Runtime/src/RuntimeCombatService.h
             Runtime/src/RuntimeCombatDecision.h
             Studio/src/AICombatInspector.cpp
             Tests/CharacterAiCombatTests.cpp
             Tests/CharacterAiCombatSourceContract.cmake
-
-# rerun after fixture-alignment repair
