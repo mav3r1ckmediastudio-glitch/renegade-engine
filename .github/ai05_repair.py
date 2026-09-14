@@ -184,28 +184,20 @@ text = replace_once(text, old, new, "Combat Inspector effective range")
 write(path, text)
 
 
-# 3. Repair focused Windows fixture calls against the pinned Wicked/Identity
-# signatures, and add regressions for range composition and single-bus delivery.
+# 3. Repair focused Windows fixture calls against the pinned Wicked API and add
+# a regression proving AI-02 tactical range survives weapon assignment.
 path = "Tests/CharacterAiCombatTests.cpp"
 text = read(path)
-text = text.replace(
+text = replace_once(
+    text,
     'scene.Entity_CreateTransform(\n        "AI05 Character", XMFLOAT3(0.0f, 0.0f, 0.0f));',
-    'scene.Entity_CreateTransform("AI05 Character");')
-old = '''    const wi::ecs::Entity weaponEntity = scene.Entity_CreateTransform(
-        "AI05 Rifle", XMFLOAT3(0.0f, 0.0f, 0.0f));
-    (void)AssignPersistentEntityId(scene, weaponEntity);
-
-    WeaponAiDescriptor descriptor;
-    std::string error;
-'''
-new = '''    const wi::ecs::Entity weaponEntity = scene.Entity_CreateTransform("AI05 Rifle");
-    std::string error;
-    if (!AssignNewPersistentEntityId(scene, weaponEntity, error))
-        return Fail("weapon persistent identity: " + error);
-
-    WeaponAiDescriptor descriptor;
-'''
-text = replace_once(text, old, new, "combat test fixture APIs")
+    'scene.Entity_CreateTransform("AI05 Character");',
+    "character transform fixture")
+text = replace_once(
+    text,
+    'scene.Entity_CreateTransform(\n        "AI05 Rifle", XMFLOAT3(0.0f, 0.0f, 0.0f));',
+    'scene.Entity_CreateTransform("AI05 Rifle");',
+    "weapon transform fixture")
 text = replace_once(
     text,
     '    character.tuning = ResolveCharacterTuning(character.authoring);\n    characterSystem.characters.push_back(character);\n',
