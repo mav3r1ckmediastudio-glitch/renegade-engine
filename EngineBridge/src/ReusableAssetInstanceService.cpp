@@ -1,5 +1,6 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 
+#include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/IdentityService.h"
 
@@ -395,6 +396,9 @@ namespace renegade::bridge
         , placementPosition_(placementPosition)
         , scaleFactor_(scaleFactor > 0.0f ? scaleFactor : 1.0f)
     {
+        promoteCharacter_ =
+            preparedScene_.IsValid() &&
+            IsCharacterAssetTemplateScene(*preparedScene_);
     }
 
     PlaceReusableModelCommand::PlaceReusableModelCommand(
@@ -412,6 +416,8 @@ namespace renegade::bridge
         , firstMaterialIndex_(firstMaterialIndex)
         , adoptExisting_(true)
     {
+        promoteCharacter_ =
+            CharacterAssetTemplateInHierarchy(targetScene, existingPayloadRoot);
     }
 
     void PlaceReusableModelCommand::CaptureMaterialResources(
@@ -455,6 +461,29 @@ namespace renegade::bridge
         }
     }
 
+    bool PlaceReusableModelCommand::PromotePreparedCharacter()
+    {
+        if (!promoteCharacter_)
+            return true;
+        if (scene_ == nullptr || entity_ == wi::ecs::INVALID_ENTITY ||
+            !scene_->transforms.Contains(entity_))
+        {
+            return false;
+        }
+        if (IsRenegadeCharacter(*scene_, entity_))
+            return true;
+
+        // Reuse the accepted Character foundation rather than inventing a
+        // placement-only controller. Fresh hierarchy IDs were assigned before
+        // this call, so MakeCharacterCommand adopts the wrapper's new stable ID,
+        // creates the native Wicked CharacterComponent, and writes default
+        // gameplay authoring metadata. The outer placement snapshot captures the
+        // complete result, making placement + promotion one Undo/Redo action.
+        MakeCharacterCommand promotion(
+            *scene_, entity_, CharacterAuthoringSettings{});
+        return promotion.Execute();
+    }
+
     bool PlaceReusableModelCommand::Execute()
     {
         if (!hasSnapshot_)
@@ -491,6 +520,8 @@ namespace renegade::bridge
 
                 ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);
                 if (!AssignFreshReusableHierarchyIdentities(*scene_, entity_))
+                    return false;
+                if (!PromotePreparedCharacter())
                     return false;
 
                 CaptureMaterialResources(firstMaterialIndex_);
@@ -547,11 +578,11 @@ namespace renegade::bridge
             instanceMetadata.int_values.set(
                 ReusableAssetInstanceVersionMetadataKey,
                 ReusableAssetInstanceVersion);
-                if (!displayName_.empty())
-                {
-                    instanceMetadata.string_values.set(
-                        ReusableAssetInstanceDisplayNameMetadataKey, displayName_);
-                }
+            if (!displayName_.empty())
+            {
+                instanceMetadata.string_values.set(
+                    ReusableAssetInstanceDisplayNameMetadataKey, displayName_);
+            }
 
             auto* payloadMetadata = scene_->metadatas.GetComponent(payloadRoot_);
             if (payloadMetadata == nullptr)
@@ -562,6 +593,8 @@ namespace renegade::bridge
             scene_->Component_Attach(payloadRoot_, entity_, true);
             ApplyReusableAssetName(*scene_, entity_, payloadRoot_, displayName_);
             if (!AssignFreshReusableHierarchyIdentities(*scene_, entity_))
+                return false;
+            if (!PromotePreparedCharacter())
                 return false;
 
             for (std::size_t index = animationCountBefore;
