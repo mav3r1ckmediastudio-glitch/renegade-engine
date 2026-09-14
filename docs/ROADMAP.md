@@ -6,6 +6,7 @@
 **Accepted AI-01 checkpoint:** `674b1efc3e1b81e6f55bf080f539f29a0c466db4`  
 **Accepted AI-02 checkpoint/evidence head:** `09ee66e6b925b305a75b81cf0cf00170ca42edfc`  
 **Clean AI-03 implementation checkpoint:** `307161dee97f0b9aa39eaab4e8d655240c072171`  
+**AI-03 focused validation run:** `34843305044`  
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current state
@@ -66,11 +67,11 @@ Focused Windows validation run `34837594589` completed green.
 
 ### AI-03 — Perception & Memory
 
-**Status: IMPLEMENTED / source + architecture audited / focused Windows validation pending.**
+**Status: COMPLETE / focused Windows validation green.**
 
 Clean implementation checkpoint: `307161dee97f0b9aa39eaab4e8d655240c072171`.
 
-Implemented scope:
+Delivered:
 
 - bounded 5 Hz stable-ID-staggered Runtime cognition;
 - physics-authoritative Runtime-player position/velocity;
@@ -88,13 +89,15 @@ Implemented scope:
 - explicit anti-cheat tests proving hidden coordinates cannot refresh memory;
 - regression for repeated-sound reaction starvation.
 
+Focused Windows run `34843305044` built AI-01/02/03 test targets plus `RenegadeRuntime` and `RenegadeStudio` Debug and passed all **7/7** Character-AI focused tests.
+
 AI-03 deliberately contains no utility decision/patrol execution or combat action selection; those remain AI-04/05.
 
 ### AI-04 — Decision & Patrol
 
 **Status: NOT STARTED.**
 
-Implement utility-scored intents with hysteresis, Guard/Patrol/Investigate/Search/Return-to-role behaviour and movement through the accepted native `NavigationService` / Wicked `CharacterComponent` authority.
+Implement utility-scored intents with hysteresis, Guard/Patrol/Investigate/Search/Return-to-role behaviour and movement through the accepted native `NavigationService` / Wicked `CharacterComponent` authority. All target pursuit/search information must consume legitimate AI-03 memory rather than hidden transforms.
 
 ### AI-05 — Combat Intelligence
 
