@@ -70,4 +70,23 @@ namespace renegade::bridge
         const std::string& projectRoot,
         std::vector<CreatorExternalAnimationImportRecipe>& recipe,
         std::string& error);
+
+    // Convenience bridge for the guided importer final-commit transaction. The
+    // active queue owns the project root captured when the importer opened, so
+    // callers that are already inside the governed commit path do not need to
+    // carry a second copy of that root through Studio UI state.
+    [[nodiscard]] inline bool StagePendingCreatorExternalAnimationsForRecipe(
+        std::vector<CreatorExternalAnimationImportRecipe>& recipe,
+        std::string& error)
+    {
+        const auto snapshot = CaptureCreatorExternalAnimationQueue();
+        if (snapshot.clips.empty())
+        {
+            recipe.clear();
+            error.clear();
+            return true;
+        }
+        return StageCreatorExternalAnimationsForRecipe(
+            snapshot.projectRoot, recipe, error);
+    }
 }
