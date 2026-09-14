@@ -197,8 +197,7 @@ namespace renegade::studio
         {
             for (wi::gui::Widget* widget : widgets)
             {
-                if (widget != nullptr &&
-                    widget->GetName() == "Creator Asset Import Navigation")
+                if (widget != nullptr && widget->GetName() == "Importer Section")
                 {
                     return static_cast<wi::gui::ComboBox*>(widget)->GetSelected();
                 }
@@ -270,7 +269,10 @@ namespace renegade::studio
             SetExternalAnimationControlsVisible(true);
             constexpr float x = 12.0f;
             const float width = std::max(160.0f, GetSize().x - 24.0f);
-            float y = 402.0f;
+            // Existing embedded animation controls end at y=396. External
+            // ingestion deliberately continues beneath them in the same
+            // scrollable ANIMATION page.
+            float y = 404.0f;
             externalAnimationHeader_.SetPos(XMFLOAT2(x, y));
             externalAnimationHeader_.SetSize(XMFLOAT2(width, 22.0f));
             y += 26.0f;
