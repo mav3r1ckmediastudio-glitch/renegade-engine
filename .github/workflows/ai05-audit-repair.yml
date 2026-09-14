@@ -20,9 +20,9 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Apply final deterministic audit repairs in validation workspace
+      - name: Apply complete AI-05 audit repair set in validation workspace
         shell: pwsh
-        run: python .github/ai05_repair_final.py
+        run: python .github/ai05_repair_behavior.py
 
       - name: Configure MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -65,6 +65,7 @@ jobs:
             Runtime/src/RuntimeCharacterDecision.h
             Runtime/src/RuntimeCombatService.h
             Runtime/src/RuntimeCombatDecision.h
+            Runtime/src/RuntimeCombatDamage.h
             Studio/src/AICombatInspector.cpp
             Tests/CharacterAiCombatTests.cpp
             Tests/CharacterAiCombatSourceContract.cmake
