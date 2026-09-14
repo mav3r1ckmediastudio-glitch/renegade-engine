@@ -8,6 +8,14 @@
 
 namespace renegade::bridge
 {
+    // Classification is authored with the import recipe rather than inferred
+    // from a later scene conversion. The default preserves existing recipes.
+    enum class CreatorAssetImportKind : std::uint8_t
+    {
+        Model,
+        Character,
+    };
+
     struct CreatorMaterialImportRecipe
     {
         std::uint32_t materialIndex = 0;
@@ -50,6 +58,7 @@ namespace renegade::bridge
 
     struct CreatorModelImportRecipe
     {
+        CreatorAssetImportKind assetKind = CreatorAssetImportKind::Model;
         CreatorModelTransformRecipe transform;
         std::vector<CreatorMaterialImportRecipe> materials;
         std::vector<CreatorAnimationImportRecipe> animations;

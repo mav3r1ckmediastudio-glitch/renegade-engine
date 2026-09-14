@@ -155,11 +155,31 @@ namespace renegade::bridge
             }
             for (auto iterator = root.begin(); iterator != root.end(); ++iterator)
             {
-                if (iterator.key() != "transform" &&
+                if (iterator.key() != "asset_kind" &&
+                    iterator.key() != "transform" &&
                     iterator.key() != "materials" && iterator.key() != "animations")
                 {
                     error = "Creator model import options contain an unsupported key: " +
                         iterator.key();
+                    return false;
+                }
+            }
+
+            if (root.contains("asset_kind"))
+            {
+                if (!root.at("asset_kind").is_string())
+                {
+                    error = "Creator model import asset_kind must be a string.";
+                    return false;
+                }
+                const std::string kind = root.at("asset_kind").get<std::string>();
+                if (kind == "model")
+                    recipe.assetKind = CreatorAssetImportKind::Model;
+                else if (kind == "character")
+                    recipe.assetKind = CreatorAssetImportKind::Character;
+                else
+                {
+                    error = "Creator model import asset_kind must be model or character.";
                     return false;
                 }
             }
@@ -315,6 +335,8 @@ namespace renegade::bridge
         std::string& error)
     {
         nlohmann::json root = nlohmann::json::object();
+        if (recipe.assetKind == CreatorAssetImportKind::Character)
+            root["asset_kind"] = "character";
         if (recipe.transform.authored)
         {
             const auto& transform = recipe.transform;

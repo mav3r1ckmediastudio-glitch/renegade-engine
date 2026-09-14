@@ -99,6 +99,7 @@ namespace
         using namespace renegade::bridge;
 
         CreatorModelImportRecipe recipe;
+        recipe.assetKind = CreatorAssetImportKind::Character;
         recipe.transform.authored = true;
         recipe.transform.positionX = 1.0f;
         recipe.transform.positionY = -2.0f;
@@ -150,6 +151,8 @@ namespace
         CreatorModelImportRecipe decoded;
         if (!Require(ParseCreatorModelImportOptions(encoded, decoded, error),
                 "serialized creator recipe did not parse: " + error) ||
+            !Require(decoded.assetKind == CreatorAssetImportKind::Character,
+                "character import designation did not round-trip") ||
             !Require(decoded.materials.size() == 1 && decoded.animations.size() == 2,
                 "creator recipe did not round-trip material/animation counts") ||
             !Require(decoded.transform.authored &&
@@ -205,7 +208,17 @@ namespace
             !Require(!ParseCreatorModelImportOptions(
                 "{\"transform\":{\"position\":[0,0,0],\"rotation_degrees\":[0,0,0],\"scale\":[0,1,1]}}",
                 invalid, error) && error.find("outside its supported range") != std::string::npos,
-                "invalid creator transform scale was not rejected"))
+                "invalid creator transform scale was not rejected") ||
+            !Require(!ParseCreatorModelImportOptions(
+                "{\"asset_kind\":\"vehicle\"}", invalid, error) &&
+                error.find("asset_kind must be model or character") != std::string::npos,
+                "unsupported creator asset kind was not rejected"))
+            return false;
+
+        CreatorModelImportRecipe legacy;
+        if (!Require(ParseCreatorModelImportOptions("{}", legacy, error) &&
+                legacy.assetKind == CreatorAssetImportKind::Model,
+                "legacy creator recipe did not retain Model as its default kind"))
             return false;
 
         wi::scene::Scene transformed;
