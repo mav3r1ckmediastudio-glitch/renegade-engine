@@ -5,6 +5,7 @@
 - Programme branch: `feature/character-ai-programme`.
 - Accepted Phase 7 baseline: `d36918878776d0d91e0c39f88f6764a1926a6534`.
 - Accepted AI-01 checkpoint: `674b1efc3e1b81e6f55bf080f539f29a0c466db4`.
+- Clean AI-02 implementation checkpoint before validation: `f808d38f11672fe75bfbbdeaec989bef7f43f32c`.
 - Pinned Wicked revision: `3a800b7134aafe58461093c8abb2e274d4e64033`.
 - Repository-native Character/AI authority: `docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md`.
 - Original full design artifact provenance: 62,613 bytes, SHA-256 `aa396b6aa6fbf94650abeb6e0916657e29b90c3775075360438af6e58085a74e`.
@@ -36,6 +37,8 @@ AI-01 provides governed MAKE/REMOVE CHARACTER, stable identity, native Wicked `C
 
 **IMPLEMENTED / FULL SOURCE-ARCHITECTURE AUDIT REPAIRS APPLIED / WINDOWS VALIDATION PENDING.**
 
+Clean implementation checkpoint: `f808d38f11672fe75bfbbdeaec989bef7f43f32c`.
+
 AI-02 is deliberately limited to creator authoring semantics and resolved transient Runtime state. It does **not** implement production sight/hearing/memory, utility decisions, patrol execution or combat cognition; those remain AI-03/04/05.
 
 Implemented AI-02 surfaces:
@@ -66,18 +69,20 @@ Implemented contract:
 
 ## AI-02 audit findings repaired before validation
 
-The implementation received a second source/architecture audit before any Windows validation was requested. The following defects were found and repaired:
+The implementation received repeated source/architecture review before any AI-02 Windows validation was requested. The following defects were found and repaired:
 
 1. **Creator-defined faction registration was incomplete.** Arbitrary IDs were accepted but there was no real known-faction registry. `FactionRegistry` now seeds built-ins, registers creator IDs deterministically and resets deterministically.
 2. **Failure-state publication was too caller-dependent.** AI-02 initialization now clears published state on any profile/faction/reference failure rather than assuming callers passed an empty state.
 3. **Malformed persisted profile metadata could silently fall back to valid-looking defaults.** Runtime now validates the raw persisted enum/faction metadata before resolving tuning.
 4. **Advanced payload parsing accepted ambiguous input.** Serialization is locale-neutral; duplicate fields and contradictory explicit ranges/thresholds fail closed.
-5. **Malformed Advanced AI payloads were not creator-repairable.** RESET ADVANCED OVERRIDES can now replace corrupt raw payloads; Undo restores the exact previous raw bytes and Redo reapplies the repair.
+5. **Malformed Advanced AI payloads were not creator-repairable.** RESET ADVANCED OVERRIDES can replace corrupt raw payloads; Undo restores the exact previous raw bytes and Redo reapplies the repair.
 6. **Persisted text fields committed on every keystroke.** Animation Set and custom faction text now draft while typing and commit on accepted input, producing one governed history step.
 7. **Invalid Advanced AI state could display apparently valid fallback sliders.** The Inspector now shows INVALID ADVANCED AI, locks tuning sliders and leaves the repair/reset action available.
 8. **The CUSTOM Faction combo entry was a dead control.** Selecting it now opens the ADVANCED AI section where the custom ID is authored.
 9. **Regression coverage was insufficient for corruption/recovery.** Focused audit tests now cover malformed profile enums/factions, duplicate/contradictory advanced fields, locale-neutral payloads, malformed-payload repair/Undo/Redo, deterministic faction registration/reset and failure cleanup.
-10. **Repository recoverability was incomplete.** The programme branch now contains `docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md`; the corrupt/incomplete recovery payload discovered during the audit was removed.
+10. **Unsupported/missing Character schema markers could be silently skipped.** AI-02 now preflights owned `renegade.character` markers before profile resolution and fails closed if the marker/schema is invalid rather than treating corrupt authoring as no Character.
+11. **Repository recoverability was incomplete.** The programme branch now contains `docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md`; the corrupt/incomplete recovery payload discovered during the audit was removed.
+12. **Feature evidence drifted during documentation reconstruction.** Unrelated historical `FEATURE_MATRIX.csv` rows were restored exactly; the accepted diff adds only the `REN-AI-001` evidence row.
 
 ## Important boundaries
 
@@ -89,11 +94,19 @@ The implementation received a second source/architecture audit before any Window
 - AI-03 must preserve the no-cheating rule: hidden target transforms cannot refresh last-known information.
 - Public AI events later use `GameplayEventService`.
 
+## Pre-validation evidence
+
+- AI-02 implementation/audit history was collapsed into the clean checkpoint `f808d38f11672fe75bfbbdeaec989bef7f43f32c` whose parent is accepted AI-01 `674b1efc3e1b81e6f55bf080f539f29a0c466db4`.
+- The final AI-02 diff contains 18 intended files. No temporary validation workflow or corrupt recovery payload remains in the checkpoint.
+- `docs/FEATURE_MATRIX.csv` differs from AI-01 by exactly one added `REN-AI-001` row.
+- Top-level `CMakeLists.txt` includes `Tests/CharacterAiFoundation.cmake`, so the AI-01/AI-02 executable and source-contract tests are reachable in the Windows test graph.
+- No post-AI-01 expensive workflow has been triggered by ordinary programme-branch checkpoints; the only branch workflow run remains successful AI-01 focused run `34821199576`.
+
 ## AI-02 validation state
 
 Not yet claimed:
 
-- Windows compile/link of the repaired AI-02 exact head;
+- Windows compile/link of the repaired AI-02 exact validation head;
 - execution of `RenegadeCharacterAiProfilesTests`;
 - execution of `RenegadeCharacterAiProfilesAuditTests`;
 - execution of `RenegadeCharacterAiProfilesSourceContract` after all audit repairs;
@@ -132,6 +145,4 @@ Any compile or focused-test failure remains AI-02 work and must be repaired befo
 
 ## Next action
 
-Complete repository evidence/handoff closeout, collapse the granular AI-02 implementation/audit commits into one checkpoint on top of accepted AI-01, then perform the focused AI-02 Windows validation above.
-
-Do **not** begin AI-03 until that exact AI-02 checkpoint passes the focused validation.
+Run the focused AI-02 Windows validation above against the exact pre-validation branch head. Do **not** begin AI-03 until that exact AI-02 candidate passes the focused validation.

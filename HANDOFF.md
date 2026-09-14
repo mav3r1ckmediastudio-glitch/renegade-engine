@@ -5,6 +5,7 @@
 **Programme branch:** `feature/character-ai-programme`  
 **Accepted Phase 7 baseline:** `d36918878776d0d91e0c39f88f6764a1926a6534`  
 **Accepted AI-01 checkpoint:** `674b1efc3e1b81e6f55bf080f539f29a0c466db4`  
+**Clean AI-02 implementation checkpoint:** `f808d38f11672fe75bfbbdeaec989bef7f43f32c`  
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current programme state
@@ -21,7 +22,7 @@ The original private Codex AI workspace was lost before it reached GitHub. That 
 ## Gate status
 
 - **AI-01 — Character Foundation:** COMPLETE; focused Windows validation green at accepted checkpoint `674b1efc3e1b81e6f55bf080f539f29a0c466db4`.
-- **AI-02 — Profiles, Factions & Runtime State:** IMPLEMENTED; full source/architecture audit repairs applied; Windows focused validation pending.
+- **AI-02 — Profiles, Factions & Runtime State:** IMPLEMENTED; source/architecture audit repairs complete; clean implementation checkpoint `f808d38f...`; focused Windows validation pending.
 - **AI-03 — Perception & Memory:** NOT STARTED.
 - **AI-04 — Decision & Patrol:** NOT STARTED.
 - **AI-05 — Combat Intelligence:** NOT STARTED.
@@ -71,9 +72,11 @@ Before validation the source/architecture audit found and repaired:
 7. invalid Advanced state showing fallback-looking controls;
 8. dead CUSTOM faction combo entry;
 9. insufficient corruption/recovery regressions;
-10. missing repository-native Character/AI authority documentation.
+10. unsupported/missing owned Character schema markers being silently skipped;
+11. missing repository-native Character/AI authority documentation;
+12. accidental historical feature-matrix drift during evidence reconstruction.
 
-The invalid earlier compressed recovery payload was removed rather than retained as evidence.
+All twelve are repaired in the clean AI-02 implementation checkpoint. `FEATURE_MATRIX.csv` now differs from accepted AI-01 by only the intended `REN-AI-001` row.
 
 ## Architecture boundaries still in force
 
@@ -87,18 +90,20 @@ The invalid earlier compressed recovery payload was removed rather than retained
 - AI-03 must prove hidden transforms cannot refresh last-known target state.
 - Animation Set execution/materialization remains AI-06 and must reuse the accepted Phase 7 stack.
 
+## Pre-validation closeout
+
+- AI-02 implementation/audit work was squashed to `f808d38f11672fe75bfbbdeaec989bef7f43f32c`, directly parented by accepted AI-01.
+- The intended AI-02 diff contains 18 files.
+- No temporary validation workflow or corrupt recovery payload remains.
+- Top-level CMake includes `Tests/CharacterAiFoundation.cmake`, so AI-01/AI-02 test targets are in the Windows graph.
+- No expensive standard workflow has run for AI-02. The only programme-branch Actions run remains successful AI-01 focused run `34821199576`.
+
 ## Validation deliberately not run yet
 
-The exact repaired AI-02 head has **not** yet been claimed to compile or pass Windows tests. This is intentional: the owner requested the complete source audit/repair/evidence closeout first.
+The repaired AI-02 candidate has **not** yet been claimed to compile or pass Windows tests. This is intentional: the owner requested complete pre-validation audit/repair/evidence closeout first.
 
-The next validation is a focused branch-only Windows job that builds the AI-01 regression target, both AI-02 test executables, Runtime and Studio, then runs the AI-01/AI-02 source/executable tests. It must not trigger the planned full four-job Debug+Release integrated matrix reserved for AI-05.
+The next validation is one focused branch-only Windows job that builds the AI-01 regression target, both AI-02 test executables, Runtime and Studio, then runs the AI-01/AI-02 source/executable tests. It must not trigger the planned full four-job Debug+Release integrated matrix reserved for AI-05.
 
 ## Required next action
 
-1. Finish pre-validation repository evidence.
-2. Collapse all AI-02 implementation/audit/evidence commits into **one clean AI-02 checkpoint** whose parent is accepted AI-01 `674b1efc...`.
-3. Confirm no normal expensive workflow was triggered by the checkpoint.
-4. Run focused AI-02 Windows validation on that exact checkpoint.
-5. Repair any validation failure before AI-03.
-
-Do not begin AI-03 until the exact AI-02 checkpoint is validated.
+Run focused AI-02 Windows validation against the exact pre-validation branch head. Repair any failure before AI-03. Do not begin AI-03 until the exact AI-02 candidate is green.
