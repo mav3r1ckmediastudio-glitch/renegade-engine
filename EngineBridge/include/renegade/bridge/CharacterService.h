@@ -128,6 +128,7 @@ namespace renegade::bridge
         bool hasNativeCharacterController = false;
         bool hasHumanoid = false;
         bool hasNavigationGrid = false;
+        bool incompatibleSemantic = false;
         bool alreadyCharacter = false;
         bool canPromote = false;
         std::string summary;
@@ -212,7 +213,11 @@ namespace renegade::bridge
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity entity_ = wi::ecs::INVALID_ENTITY;
         CharacterAuthoringSettings settings_;
+        wi::Archive controllerSnapshot_;
         bool captured_ = false;
+        bool controllerOwned_ = false;
+        bool hasControllerSnapshot_ = false;
+        bool controllerFootPlacementEnabled_ = true;
     };
 
     class SetCharacterSettingsCommand final : public ICommand

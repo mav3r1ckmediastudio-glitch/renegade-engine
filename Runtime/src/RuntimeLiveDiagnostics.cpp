@@ -1,5 +1,7 @@
 #include "RuntimeApplication.h"
 
+#include <utility>
+
 namespace renegade::runtime
 {
     void RuntimeApplication::UpdateLiveDiagnostics()
@@ -12,28 +14,49 @@ namespace renegade::runtime
         const bool hasLevel = !scenes_.CurrentPath().empty() &&
             !screenPresenter_.IsLoaded();
 
-        if (characterSceneRevision_ != sceneRevision ||
-            (characterSceneRevision_ == 0 && hasLevel))
+        // A Screen destination is not an active gameplay Level. Explicitly
+        // deactivate any Character controllers retained by the current Scene
+        // and clear the synchronization authority so returning to a Level
+        // performs a fresh deterministic discovery.
+        if (!hasLevel)
+        {
+            if (!characterState_.characters.empty())
+                bridge::ResetRuntimeCharacters(scenes_.GetScene(), characterState_);
+            characterSceneRevision_ = 0;
+            characterSceneAttemptRevision_ = 0;
+            characterSceneAttempted_ = false;
+            characterSceneSyncFailed_ = false;
+        }
+        else if (!characterSceneAttempted_ ||
+                 characterSceneAttemptRevision_ != sceneRevision)
         {
             characterState_ = {};
-            characterSceneRevision_ = sceneRevision;
-            if (hasLevel)
+            characterSceneRevision_ = 0;
+            characterSceneAttemptRevision_ = sceneRevision;
+            characterSceneAttempted_ = true;
+            characterSceneSyncFailed_ = false;
+
+            bridge::CharacterRuntimeState discoveredCharacters;
+            std::string characterError;
+            if (!bridge::InitializeRuntimeCharacters(
+                    scenes_.GetScene(), discoveredCharacters, characterError))
             {
-                std::string characterError;
-                if (!bridge::InitializeRuntimeCharacters(
-                        scenes_.GetScene(), characterState_, characterError))
-                {
-                    diagnosticService_.Record(
-                        bridge::DiagnosticSeverity::Error,
-                        "runtime.ai",
-                        "character.scene.failed",
-                        characterError);
-                    wi::backlog::post(
-                        "Renegade Runtime: Character discovery failed: " +
-                            characterError,
-                        wi::backlog::LogLevel::Error);
-                }
-                else if (!characterState_.characters.empty())
+                characterSceneSyncFailed_ = true;
+                diagnosticService_.Record(
+                    bridge::DiagnosticSeverity::Error,
+                    "runtime.ai",
+                    "character.scene.failed",
+                    characterError);
+                wi::backlog::post(
+                    "Renegade Runtime: Character discovery failed: " +
+                        characterError,
+                    wi::backlog::LogLevel::Error);
+            }
+            else
+            {
+                characterState_ = std::move(discoveredCharacters);
+                characterSceneRevision_ = sceneRevision;
+                if (!characterState_.characters.empty())
                 {
                     diagnosticService_.Record(
                         bridge::DiagnosticSeverity::Info,
@@ -115,6 +138,9 @@ namespace renegade::runtime
                 ++activeCharacters;
         }
 
+        const bool characterSceneSynced = hasLevel &&
+            characterSceneAttempted_ && !characterSceneSyncFailed_ &&
+            characterSceneRevision_ == scenes_.Revision();
         std::string firstCharacterId;
         if (!characterState_.characters.empty())
             firstCharacterId = characterState_.characters.front().characterId;
@@ -122,7 +148,10 @@ namespace renegade::runtime
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
             {"active_character_count", activeCharacters},
             {"first_character_id", firstCharacterId},
-            {"scene_synced", characterSceneRevision_ == scenes_.Revision()}},
+            {"scene_synced", characterSceneSynced},
+            {"scene_sync_attempted", characterSceneAttempted_},
+            {"scene_sync_failed", characterSceneSyncFailed_},
+            {"scene_attempt_revision", characterSceneAttemptRevision_}},
             "Runtime/src/RuntimeLiveDiagnostics.cpp");
 
         diagnosticService_.Observe("runtime", {
@@ -135,7 +164,8 @@ namespace renegade::runtime
             {"scene_revision", scenes_.Revision()}, {"paused", paused_},
             {"quit_requested", quitRequested_}, {"player_spawned", player_.IsSpawned()},
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
-            {"character_scene_synced", characterSceneRevision_ == scenes_.Revision()},
+            {"character_scene_synced", characterSceneSynced},
+            {"character_scene_sync_failed", characterSceneSyncFailed_},
             {"navigation_synced", navigationSceneRevision_ == scenes_.Revision()},
             {"navigation_agents", static_cast<std::uint64_t>(navigationState_.agents.size())},
             {"navigation_arrived", navigationArrived},

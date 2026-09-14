@@ -1,7 +1,11 @@
 #include "renegade/bridge/CharacterService.h"
 
+#include "renegade/bridge/NavigationService.h"
+#include "renegade/bridge/PlayerService.h"
+
 #include <algorithm>
 #include <sstream>
+#include <unordered_set>
 #include <utility>
 
 namespace
@@ -93,6 +97,19 @@ namespace
     bool HasNavigationGrid(const wi::scene::Scene& scene) noexcept
     {
         return scene.voxel_grids.GetCount() != 0;
+    }
+
+    std::string CharacterPromotionBlockReason(
+        const wi::scene::Scene& scene,
+        const wi::ecs::Entity entity)
+    {
+        if (IsPlayerStart(scene, entity))
+            return "Player Start is a reserved gameplay semantic and cannot also be a Character.";
+        if (IsRenegadeNavigationGrid(scene, entity))
+            return "Navigation Grid is a reserved navigation semantic and cannot be promoted to a Character.";
+        if (IsRenegadeNavigationDestination(scene, entity))
+            return "Navigation Destination is a reserved navigation semantic and cannot be promoted to a Character.";
+        return {};
     }
 
     void WriteCharacterSettings(
@@ -247,7 +264,16 @@ namespace renegade::bridge
         status.hasHumanoid = HasHumanoidInHierarchy(scene, entity);
         status.hasNavigationGrid = HasNavigationGrid(scene);
         status.alreadyCharacter = IsRenegadeCharacter(scene, entity);
-        status.canPromote = status.hasTransform && !status.alreadyCharacter;
+        const std::string blockReason = CharacterPromotionBlockReason(scene, entity);
+        status.incompatibleSemantic = !blockReason.empty();
+        status.canPromote = status.hasTransform && !status.alreadyCharacter &&
+            !status.incompatibleSemantic;
+
+        if (status.incompatibleSemantic)
+        {
+            status.summary = "[BLOCK] " + blockReason;
+            return status;
+        }
 
         std::ostringstream summary;
         summary << (status.hasPersistentIdentity ? "[OK]" : "[ADD]") << " stable identity  "
@@ -348,36 +374,70 @@ namespace renegade::bridge
     {
         state.characters.clear();
         const auto entities = CollectCharacters(scene);
-        state.characters.reserve(entities.size());
+
+        CharacterRuntimeState candidate;
+        candidate.characters.reserve(entities.size());
+        std::unordered_set<StableId> seenIds;
+        seenIds.reserve(entities.size());
+
+        // Validation is deliberately side-effect free. No native controller is
+        // activated until every authored Character has passed the full gate.
         for (const wi::ecs::Entity entity : entities)
         {
             const StableId characterId = PersistentEntityId(scene, entity);
             if (!IsValidStableId(characterId))
             {
-                state.characters.clear();
                 error = "Character is missing a valid persistent Renegade identity.";
                 return false;
             }
-            auto* transform = scene.transforms.GetComponent(entity);
-            auto* character = scene.characters.GetComponent(entity);
-            if (transform == nullptr || character == nullptr)
+            if (!seenIds.insert(characterId).second)
             {
-                state.characters.clear();
-                error = "Character lost its required Transform or native CharacterComponent.";
+                error = "Duplicate Character persistent identity '" + characterId + "'.";
                 return false;
             }
 
-            character->SetPosition(transform->GetPosition());
-            const XMFLOAT3 facing = transform->GetForward();
-            character->SetFacing(facing);
-            character->SetActive(true);
+            const auto* transform = scene.transforms.GetComponent(entity);
+            const auto* character = scene.characters.GetComponent(entity);
+            if (transform == nullptr || character == nullptr)
+            {
+                error = "Character lost its required Transform or native CharacterComponent.";
+                return false;
+            }
 
             CharacterRecord record;
             record.entity = entity;
             record.characterId = characterId;
             record.settings = CaptureCharacterSettings(scene, entity);
-            state.characters.push_back(std::move(record));
+            if (!ValidateCharacterSettings(record.settings, error))
+                return false;
+            candidate.characters.push_back(std::move(record));
         }
+
+        std::sort(
+            candidate.characters.begin(), candidate.characters.end(),
+            [](const CharacterRecord& lhs, const CharacterRecord& rhs)
+            {
+                if (lhs.characterId != rhs.characterId)
+                    return lhs.characterId < rhs.characterId;
+                return lhs.entity < rhs.entity;
+            });
+
+        for (const auto& record : candidate.characters)
+        {
+            auto* transform = scene.transforms.GetComponent(record.entity);
+            auto* character = scene.characters.GetComponent(record.entity);
+            if (transform == nullptr || character == nullptr)
+            {
+                error = "Character changed while Runtime initialization was being committed.";
+                ResetRuntimeCharacters(scene, candidate);
+                return false;
+            }
+            character->SetPosition(transform->GetPosition());
+            character->SetFacing(transform->GetForward());
+            character->SetActive(true);
+        }
+
+        state = std::move(candidate);
         error.clear();
         return true;
     }
@@ -408,7 +468,8 @@ namespace renegade::bridge
     bool MakeCharacterCommand::ApplyPromotion()
     {
         if (scene_ == nullptr || !EntityExists(*scene_, entity_) ||
-            !scene_->transforms.Contains(entity_) || IsRenegadeCharacter(*scene_, entity_))
+            !scene_->transforms.Contains(entity_) || IsRenegadeCharacter(*scene_, entity_) ||
+            !CharacterPromotionBlockReason(*scene_, entity_).empty())
         {
             return false;
         }
@@ -461,8 +522,11 @@ namespace renegade::bridge
             return false;
         if (!captured_)
         {
-            if (IsRenegadeCharacter(*scene_, entity_))
+            if (IsRenegadeCharacter(*scene_, entity_) ||
+                !CharacterPromotionBlockReason(*scene_, entity_).empty())
+            {
                 return false;
+            }
             const StableId persistentId = PersistentEntityId(*scene_, entity_);
             hadPersistentId_ = IsValidStableId(persistentId);
             if (hadPersistentId_)
@@ -523,6 +587,20 @@ namespace renegade::bridge
         if (!captured_)
         {
             settings_ = CaptureCharacterSettings(*scene_, entity_);
+            const auto* metadata = scene_->metadatas.GetComponent(entity_);
+            controllerOwned_ = ReadBool(
+                metadata, CharacterControllerOwnedMetadataKey, false);
+            if (controllerOwned_)
+            {
+                auto* character = scene_->characters.GetComponent(entity_);
+                if (character == nullptr)
+                    return false;
+                controllerFootPlacementEnabled_ = character->IsFootPlacementEnabled();
+                controllerSnapshot_.SetReadModeAndResetPos(false);
+                wi::ecs::EntitySerializer serializer;
+                character->Serialize(controllerSnapshot_, serializer);
+                hasControllerSnapshot_ = true;
+            }
             captured_ = true;
         }
         return RemoveCharacterDirect(*scene_, entity_);
@@ -532,8 +610,21 @@ namespace renegade::bridge
     {
         if (scene_ == nullptr || IsRenegadeCharacter(*scene_, entity_))
             return;
+
         MakeCharacterCommand restore(*scene_, entity_, settings_);
-        (void)restore.Execute();
+        if (!restore.Execute())
+            return;
+
+        if (controllerOwned_ && hasControllerSnapshot_)
+        {
+            if (auto* character = scene_->characters.GetComponent(entity_); character != nullptr)
+            {
+                controllerSnapshot_.SetReadModeAndResetPos(true);
+                wi::ecs::EntitySerializer serializer;
+                character->Serialize(controllerSnapshot_, serializer);
+                character->SetFootPlacementEnabled(controllerFootPlacementEnabled_);
+            }
+        }
     }
 
     SetCharacterSettingsCommand::SetCharacterSettingsCommand(

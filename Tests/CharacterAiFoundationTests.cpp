@@ -1,9 +1,11 @@
 #include "renegade/bridge/CharacterService.h"
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/PlayerService.h"
 
 #include <WickedEngine.h>
 
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -14,6 +16,11 @@ namespace
     {
         std::cerr << "FAIL: " << message << '\n';
         return 1;
+    }
+
+    bool Near(const float lhs, const float rhs)
+    {
+        return std::abs(lhs - rhs) < 0.0001f;
     }
 }
 
@@ -179,6 +186,121 @@ int main()
         adoptedScene.characters.GetComponent(adopted)->IsActive())
     {
         return Fail("REMOVE CHARACTER Undo did not restore governed adopted state");
+    }
+
+    // Renegade-owned controllers must round-trip their authored native state
+    // through REMOVE / Undo / Redo, not silently return to MAKE defaults.
+    wi::scene::Scene exactScene;
+    const wi::ecs::Entity exactActor = wi::ecs::CreateEntity();
+    exactScene.transforms.Create(exactActor).UpdateTransform();
+    CommandService exactCommands;
+    if (!exactCommands.Execute(
+            std::make_unique<MakeCharacterCommand>(exactScene, exactActor)))
+    {
+        return Fail("could not seed owned controller restoration test");
+    }
+    auto* exactController = exactScene.characters.GetComponent(exactActor);
+    exactController->width = 0.77f;
+    exactController->height = 2.33f;
+    exactController->SetFootPlacementEnabled(true);
+    if (!exactCommands.Execute(
+            std::make_unique<RemoveCharacterCommand>(exactScene, exactActor)) ||
+        exactScene.characters.Contains(exactActor))
+    {
+        return Fail("REMOVE CHARACTER did not remove its owned native controller");
+    }
+    if (!exactCommands.Undo())
+        return Fail("REMOVE CHARACTER Undo failed for owned controller");
+    exactController = exactScene.characters.GetComponent(exactActor);
+    if (exactController == nullptr || !Near(exactController->width, 0.77f) ||
+        !Near(exactController->height, 2.33f) ||
+        !exactController->IsFootPlacementEnabled())
+    {
+        return Fail("REMOVE CHARACTER Undo did not restore exact native controller state");
+    }
+    if (!exactCommands.Redo() || exactScene.characters.Contains(exactActor) ||
+        IsRenegadeCharacter(exactScene, exactActor))
+    {
+        return Fail("REMOVE CHARACTER Redo did not reapply removal deterministically");
+    }
+    if (!exactCommands.Undo())
+        return Fail("REMOVE CHARACTER second Undo failed after Redo");
+    exactController = exactScene.characters.GetComponent(exactActor);
+    if (exactController == nullptr || !Near(exactController->width, 0.77f) ||
+        !Near(exactController->height, 2.33f))
+    {
+        return Fail("owned native controller snapshot was not reusable after Redo");
+    }
+
+    // Player Start and other reserved gameplay markers must not be promotable
+    // merely because they own a Transform.
+    wi::scene::Scene reservedScene;
+    CreatePlayerStartCommand playerStart(reservedScene, TransformState{});
+    if (!playerStart.Execute())
+        return Fail("could not create Player Start promotion guard fixture");
+    const auto playerStartEntity = playerStart.CreatedEntity();
+    const auto promotion = InspectCharacterPromotion(reservedScene, playerStartEntity);
+    if (!promotion.incompatibleSemantic || promotion.canPromote)
+        return Fail("Player Start was incorrectly considered promotable to Character");
+    MakeCharacterCommand blockedPromotion(reservedScene, playerStartEntity);
+    if (blockedPromotion.Execute() || IsRenegadeCharacter(reservedScene, playerStartEntity))
+        return Fail("MAKE CHARACTER accepted a reserved Player Start semantic");
+
+    // Runtime order is stable-ID order, not transient ECS allocation order.
+    wi::scene::Scene orderedScene;
+    const StableId laterId = "00000000-0000-4000-8000-000000000002";
+    const StableId earlierId = "00000000-0000-4000-8000-000000000001";
+    const wi::ecs::Entity laterEntity = wi::ecs::CreateEntity();
+    orderedScene.transforms.Create(laterEntity).UpdateTransform();
+    if (!AssignPersistentEntityId(orderedScene, laterEntity, laterId, identityError))
+        return Fail("could not assign later stable Character ID");
+    MakeCharacterCommand laterCharacter(orderedScene, laterEntity);
+    if (!laterCharacter.Execute())
+        return Fail("could not create later stable-order Character");
+
+    const wi::ecs::Entity earlierEntity = wi::ecs::CreateEntity();
+    orderedScene.transforms.Create(earlierEntity).UpdateTransform();
+    if (!AssignPersistentEntityId(orderedScene, earlierEntity, earlierId, identityError))
+        return Fail("could not assign earlier stable Character ID");
+    MakeCharacterCommand earlierCharacter(orderedScene, earlierEntity);
+    if (!earlierCharacter.Execute())
+        return Fail("could not create earlier stable-order Character");
+
+    CharacterRuntimeState orderedRuntime;
+    if (!InitializeRuntimeCharacters(orderedScene, orderedRuntime, runtimeError) ||
+        orderedRuntime.characters.size() != 2 ||
+        orderedRuntime.characters[0].characterId != earlierId ||
+        orderedRuntime.characters[1].characterId != laterId)
+    {
+        return Fail("Runtime Character order was not stable-ID deterministic");
+    }
+    ResetRuntimeCharacters(orderedScene, orderedRuntime);
+
+    // Duplicate stable IDs reject the entire Runtime Character transaction and
+    // must not activate a prefix of the scene before the error is discovered.
+    auto* duplicateMetadata = orderedScene.metadatas.GetComponent(laterEntity);
+    if (duplicateMetadata == nullptr)
+        return Fail("duplicate identity fixture lost Character metadata");
+    duplicateMetadata->string_values.set(PersistentEntityIdMetadataKey, earlierId);
+    CharacterRuntimeState duplicateRuntime;
+    if (InitializeRuntimeCharacters(orderedScene, duplicateRuntime, runtimeError) ||
+        !duplicateRuntime.characters.empty() ||
+        orderedScene.characters.GetComponent(earlierEntity)->IsActive() ||
+        orderedScene.characters.GetComponent(laterEntity)->IsActive())
+    {
+        return Fail("duplicate Character identities did not fail atomically");
+    }
+
+    // A structurally invalid later Character also cannot leave an earlier
+    // valid controller activated as a partial initialization side effect.
+    duplicateMetadata->string_values.set(PersistentEntityIdMetadataKey, laterId);
+    orderedScene.characters.Remove(laterEntity);
+    CharacterRuntimeState invalidRuntime;
+    if (InitializeRuntimeCharacters(orderedScene, invalidRuntime, runtimeError) ||
+        !invalidRuntime.characters.empty() ||
+        orderedScene.characters.GetComponent(earlierEntity)->IsActive())
+    {
+        return Fail("invalid Character scene produced partial Runtime activation");
     }
 
     std::cout << "AI-01 Character foundation tests passed\n";

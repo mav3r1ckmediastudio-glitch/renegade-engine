@@ -115,6 +115,9 @@ namespace renegade::runtime
         std::uint64_t audioSceneRevision_ = 0;
         std::uint64_t navigationSceneRevision_ = 0;
         std::uint64_t characterSceneRevision_ = 0;
+        std::uint64_t characterSceneAttemptRevision_ = 0;
+        bool characterSceneAttempted_ = false;
+        bool characterSceneSyncFailed_ = false;
         std::uint64_t scriptSceneRevision_ = 0;
         std::size_t reportedScriptDiagnostics_ = 0;
     };

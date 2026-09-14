@@ -7,7 +7,7 @@
 - Recovery-document parent before AI reconstruction: `473f311dd7960bf3763ec364c400e28ab9929519`.
 - Pinned Wicked revision recorded by the recovery audit: `3a800b7134aafe58461093c8abb2e274d4e64033`.
 - Current gate: **AI-01 — Character foundation**.
-- Current AI-01 status: **IMPLEMENTED / SOURCE-CONTRACT VALIDATED / WINDOWS EXECUTABLE VALIDATION PENDING**.
+- Current AI-01 status: **IMPLEMENTED / AUDIT REPAIRS APPLIED / WINDOWS EXECUTABLE VALIDATION PENDING**.
 
 The original Codex AI-01→AI-05 workspace was lost before its code reached GitHub. Its recovery notes remain useful architectural evidence, but only code present on this branch is authoritative.
 
@@ -15,7 +15,7 @@ The original Codex AI-01→AI-05 workspace was lost before its code reached GitH
 
 ### AI-01 — Character foundation
 
-Status: **IMPLEMENTED / SOURCE-CONTRACT VALIDATED / WINDOWS EXECUTABLE VALIDATION PENDING**.
+Status: **IMPLEMENTED / AUDIT REPAIRS APPLIED / WINDOWS EXECUTABLE VALIDATION PENDING**.
 
 Reconstructed on the recoverable branch:
 
@@ -41,10 +41,21 @@ Implemented contracts:
 - creator-facing Character Inspector using the existing `InspectorSectionFramework`;
 - AI-01 creator controls for type, role, personality, common faction, animation-set stable ID and autonomous flag;
 - Runtime discovery from serialized Character metadata without a second Scene or actor world;
-- deterministic Runtime reset;
-- existing diagnostics service now publishes an `ai` summary with Character count, active count, first stable Character ID and scene-sync state;
+- deterministic Runtime reset/teardown on non-Level transitions;
+- existing diagnostics service publishes an `ai` summary with Character count, active count, first stable Character ID, scene-sync state and explicit sync-failure state;
 - native entity serialization coverage for Metadata + CharacterComponent persistence;
 - focused Undo/Redo coverage, including preservation of unrelated imported metadata.
+
+Audit repairs applied after the initial reconstruction:
+
+1. Runtime Character synchronization now distinguishes **attempted** scene revision from **successfully synchronized** scene revision. A failed Character initialization no longer reports `scene_synced=true`, and an explicit attempt flag preserves valid startup when the Scene revision is `0`.
+2. Character Runtime initialization is transactional: every authored Character is validated before any native controller is activated, preventing partial-prefix activation on a later invalid Character.
+3. Duplicate persistent Character IDs are rejected explicitly.
+4. Runtime Character records are ordered by stable Renegade Character ID rather than transient Wicked ECS allocation order.
+5. Player Start, Navigation Grid and Navigation Destination entities are blocked from MAKE CHARACTER promotion. Navigation Agents remain intentionally promotable/adoptable because they can validly own a native `CharacterComponent`.
+6. REMOVE CHARACTER now snapshots the serialized native `CharacterComponent` authoring state through Wicked's own serializer and separately preserves foot-placement, which the pinned Wicked serializer does not persist. Undo therefore restores the controller state instead of recreating only MAKE CHARACTER defaults.
+7. The Runtime Character state is explicitly deactivated/cleared when gameplay leaves a Level for a Screen destination.
+8. Focused regressions now cover reserved semantic rejection, stable-ID order, duplicate-ID atomic failure, invalid-character atomic failure, exact owned-controller REMOVE/Undo/Redo restoration and reusable snapshot Undo after Redo.
 
 Important AI-01 design decision: MAKE CHARACTER is deliberately non-destructive. If a selected hierarchy already owns a native Wicked `CharacterComponent`, Renegade adopts it and records the previous active state. If Renegade creates the controller, it records ownership so REMOVE CHARACTER and Undo remove only Renegade-owned native state.
 
@@ -85,16 +96,25 @@ Recovery target: weapon descriptors, ammo/reload/range reasoning, combat intents
 
 ## Validation evidence
 
-Reconstruction validation performed in the current recovery session:
+Initial reconstruction validation performed in the recovery session:
 
-- `cmake -DRENEGADE_SOURCE_DIR=/mnt/data/ai01repo -P /mnt/data/ai01repo/Tests/CharacterAiSourceContract.cmake` — **PASS**.
-- static delimiter/structure audit for reconstructed C++ files — **PASS** (balanced braces and parentheses).
+- `cmake -DRENEGADE_SOURCE_DIR=/mnt/data/ai01repo -P /mnt/data/ai01repo/Tests/CharacterAiSourceContract.cmake` — **PASS** before the later audit-repair commit.
+- static delimiter/structure audit for reconstructed C++ files — **PASS** before the later audit-repair commit.
 - API contract audit against current repository sources — **PASS** for existing `ComponentManager::Create/Remove`, metadata erase/removal, stable IdentityService APIs, `CharacterComponent::SetActive/IsActive/SetPosition/SetFacing`, `CommandService`, Inspector section registration and Runtime diagnostics ownership patterns.
-- source whitespace sanity check performed on the reconstruction workspace — **PASS**.
+- source whitespace sanity check performed on the reconstruction workspace — **PASS** before the later audit-repair commit.
 
-Not yet claimed:
+Audit-repair review evidence:
+
+- repair code was checked against the pinned Wicked `CharacterComponent::Serialize(wi::Archive&, EntitySerializer&)` contract;
+- the pinned serializer persists `_flags`, health, width, height and scale; foot-placement is nonserialized and is therefore captured/restored explicitly by the command;
+- revision-zero Runtime startup semantics were preserved with a separate `characterSceneAttempted_` flag rather than treating revision `0` as proof that no attempt occurred;
+- focused test coverage was expanded to exercise every material audit finding;
+- source contract was expanded to require duplicate-ID rejection, stable-ID ordering, reserved semantic guards, owned-controller restoration, explicit Runtime sync-failure state, revision-zero discovery and Runtime teardown.
+
+Not yet claimed after the audit repairs:
 
 - `RenegadeCharacterAiFoundationTests` executable run on Windows;
+- post-repair `RenegadeCharacterAiSourceContract` execution in a full checkout;
 - full `RenegadeStudio` Debug/Release compile;
 - owner test inside Studio/Test Level.
 
@@ -111,7 +131,7 @@ Historical baseline note: the lost Codex Linux checkout reached `366/393` before
 
 ## NEXT IMPLEMENTATION STEP
 
-Before beginning AI-02, validate AI-01 on a build-capable checkout:
+Before beginning AI-02, validate the repaired AI-01 on a build-capable checkout:
 
 1. build `RenegadeCharacterAiFoundationTests` and run it;
 2. run `RenegadeCharacterAiSourceContract`;
