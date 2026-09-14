@@ -48,6 +48,10 @@ namespace renegade::bridge
     {
         std::string sourceProjectRelativePath;
         std::uint32_t sourceAnimationIndex = 0;
+        // Human-readable source action/take identity retained alongside the
+        // numeric source index for deterministic reimport diagnostics. Older
+        // recipes may leave this empty and remain valid.
+        std::string sourceActionName;
         std::string name;
         float start = 0.0f;
         float end = 0.0f;
