@@ -212,6 +212,7 @@ if(WIN32)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/CharacterWorkflowSourceContract.cmake
     )
     include(Tests/CW04CharacterPlacement.cmake)
+    include(Tests/CW05CharacterPrefab.cmake)
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)
