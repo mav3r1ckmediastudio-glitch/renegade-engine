@@ -1,0 +1,82 @@
+name: AI-05 promote validated repairs
+
+on:
+  push:
+    branches:
+      - feature/character-ai-programme
+    paths:
+      - .github/workflows/ai05-promote.yml
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    if: github.event.head_commit.message == 'CI: promote validated AI-05 repairs'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out programme branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/character-ai-programme
+          fetch-depth: 1
+
+      - name: Apply exact validated repair chain
+        run: python .github/ai05_repair_behavior.py
+
+      - name: Verify validated blob identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_blob() {
+            expected="$1"
+            path="$2"
+            actual="$(git hash-object "$path")"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "Blob mismatch: $path expected=$expected actual=$actual" >&2
+              exit 1
+            fi
+          }
+          check_blob 81f437ac886c29930f5d671d3524b21dd95fbcb3 EngineBridge/include/renegade/bridge/WeaponCombatService.h
+          check_blob 591b6397bb69cd2e9e04167afaca27ff5ae775c8 Runtime/src/RuntimeApplication.h
+          check_blob d37f6459f28560931a9993e790bb152580beae28 Runtime/src/RuntimeCharacterDecision.h
+          check_blob 905c2601daf2d9af1125ae20ef4b26adcf1ae093 Runtime/src/RuntimeCombatDamage.h
+          check_blob 6eb61b3ed34a719cbe306ae62c9f59ef68fc148e Runtime/src/RuntimeCombatDecision.h
+          check_blob 36badb9e905a8ec52a1849553c859ec25ae213f9 Runtime/src/RuntimeCombatService.h
+          check_blob ca40ff80dc8db969d5a444a2912c81a2810e752a Runtime/src/RuntimeLiveDiagnostics.cpp
+          check_blob 1d95a0d96bda8252684fd103e31864268600cb1d Runtime/src/RuntimeScriptRuntime.cpp
+          check_blob 5f13b45fbcff08e4e5288c3935e8e33989310745 Runtime/src/RuntimeScriptRuntime.h
+          check_blob d93fe92eac46095738c92f4aef60cee85cf54505 Studio/src/AICombatInspector.cpp
+          check_blob d3cbe0af6ebdc93ea4bc46d5a0a9dcdd9ea6dafa Tests/CharacterAiCombatSourceContract.cmake
+          check_blob 9f79e5d6f377ad0fbaba9f0a286b5adcef9fd05f Tests/CharacterAiCombatTests.cpp
+          git diff --check
+
+      - name: Commit repaired product source and remove temporary harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Maverick Renegade CI"
+          git config user.email "mav3r1ckmediastudio@gmail.com"
+          git add \
+            EngineBridge/include/renegade/bridge/WeaponCombatService.h \
+            Runtime/src/RuntimeScriptRuntime.h \
+            Runtime/src/RuntimeScriptRuntime.cpp \
+            Runtime/src/RuntimeApplication.h \
+            Runtime/src/RuntimeLiveDiagnostics.cpp \
+            Runtime/src/RuntimeCharacterDecision.h \
+            Runtime/src/RuntimeCombatService.h \
+            Runtime/src/RuntimeCombatDecision.h \
+            Runtime/src/RuntimeCombatDamage.h \
+            Studio/src/AICombatInspector.cpp \
+            Tests/CharacterAiCombatTests.cpp \
+            Tests/CharacterAiCombatSourceContract.cmake
+          git rm \
+            .github/ai05_repair.py \
+            .github/ai05_repair_final.py \
+            .github/ai05_repair_behavior.py \
+            .github/workflows/ai05-audit-repair.yml \
+            .github/workflows/ai05-promote.yml
+          git diff --cached --check
+          git commit -m "AI-05: complete final audit repairs"
+          git push origin HEAD:feature/character-ai-programme
+          echo "PROMOTED_COMMIT=$(git rev-parse HEAD)"
