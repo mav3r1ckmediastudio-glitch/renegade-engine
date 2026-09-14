@@ -8,15 +8,15 @@
 - **Accepted starting baseline:** `cc31ef318ec55db5d115b48a0242665ce571c561`
   from AI-05 PR #158, based on Phase 7 baseline
   `d36918878776d0d91e0c39f88f6764a1926a6534`.
-- **Latest pushed checkpoint:** `ae002b53f6d8fa0f10693b28d4cdeb3271677f71`
-  (CW-00 recovery authority).
+- **Latest pushed checkpoint:** `0b0f48834edfb9251f4e10621c8358af3631d3fb`
+  (CW-01 designation and source-contract checkpoint).
 
 ## Gate state
 
 | Gate | Status | Notes |
 | --- | --- | --- |
 | CW-00 | Complete | Live branch, PR #158 checks, workflow triggers and the import/asset/placement architecture were audited. |
-| CW-01 | In progress | Persisted `Model` / `Character` import designation and Character-folder classification are implemented locally. |
+| CW-01 | Complete / source-validated | The normal importer persists the Model/Character designation, commits Character assets to `Content/Characters`, and registers a source contract for that path. |
 | CW-02 to CW-08 | Not started | No implementation has begun for these gates. |
 
 ## Validation and known state
@@ -29,6 +29,7 @@
   the expensive Windows matrix; PRs targeting `main` do. This branch must not
   be renamed into `agent/**`.
 - `git diff --check` passed for the CW-01 change set.
+- `RenegadeCharacterWorkflowSourceContract` is registered for Windows CTest.
 - Local native compilation is currently blocked because this Linux workspace
   does not have `cmake`; no compilation success is claimed.
 
@@ -43,7 +44,7 @@ introducing a second import or asset system.
 
 ## Exact next task
 
-Finish CW-01: update the Character import presentation/copy and add the
-source-contract coverage needed to prove the normal importer never silently
-falls back to `Content/Models` after the Character selection. Then commit and
-push the gate checkpoint before beginning CW-02 animation ingestion.
+Begin CW-02 — Unified Animation Ingestion. Extend the durable Character import
+recipe with external animation-source provenance and a unified import list,
+then connect the existing native preview/retarget systems without replacing
+them.
