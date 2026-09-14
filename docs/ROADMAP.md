@@ -4,11 +4,13 @@
 **Accepted Phase 7 baseline / current main at programme start:** `d36918878776d0d91e0c39f88f6764a1926a6534`  
 **Programme branch:** `feature/character-ai-programme`  
 **Accepted AI-01 checkpoint:** `674b1efc3e1b81e6f55bf080f539f29a0c466db4`  
+**Accepted AI-02 checkpoint/evidence head:** `09ee66e6b925b305a75b81cf0cf00170ca42edfc`  
+**Clean AI-03 implementation checkpoint:** `307161dee97f0b9aa39eaab4e8d655240c072171`  
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
 ## Current state
 
-Phase 6 Playable Core and Phase 7 Character/Animation foundations are accepted programme prerequisites. Character & AI now builds on those accepted systems rather than introducing parallel Runtime stacks.
+Phase 6 Playable Core and Phase 7 Character/Animation foundations are accepted programme prerequisites. Character & AI builds on those accepted systems rather than introducing parallel Runtime stacks.
 
 Repository-native Character/AI authority:
 
@@ -45,13 +47,11 @@ Delivered:
 - baseline Character diagnostics;
 - fail-closed duplicate-ID/invalid-controller handling.
 
-Focused Windows run `34821199576` built Character foundation, Runtime and Studio and passed the AI-01 executable/source-contract tests.
-
 ### AI-02 — Profiles, Factions & Runtime State
 
-**Status: IMPLEMENTED / source-architecture audit repaired / focused Windows validation pending.**
+**Status: COMPLETE / focused Windows validation green.**
 
-Scope:
+Delivered:
 
 - deterministic tuning composition: Type -> Role -> Personality -> Skill -> Awareness -> explicit overrides;
 - versioned Advanced AI overrides and repairable malformed-payload handling;
@@ -62,13 +62,33 @@ Scope:
 - Character Inspector Skill/Awareness/Faction/effective profile/grouped Advanced AI controls;
 - bounded AI-02 diagnostics and corruption/recovery regression coverage.
 
-AI-02 deliberately contains no sight/hearing cognition, utility decision loop, patrol execution or combat brain.
+Focused Windows validation run `34837594589` completed green.
 
 ### AI-03 — Perception & Memory
 
-**Status: NOT STARTED.**
+**Status: IMPLEMENTED / source + architecture audited / focused Windows validation pending.**
 
-Implement bounded sight/hearing/stimulus processing, legitimate knowledge sources, memory/confidence, suspicion/awareness and explicit anti-cheat tests proving hidden target transforms cannot refresh last-known information.
+Clean implementation checkpoint: `307161dee97f0b9aa39eaab4e8d655240c072171`.
+
+Implemented scope:
+
+- bounded 5 Hz stable-ID-staggered Runtime cognition;
+- physics-authoritative Runtime-player position/velocity;
+- central/peripheral sight with horizontal/vertical FOV;
+- native Wicked `Scene::Intersects()` line of sight;
+- observer-self hierarchy rejection in LOS;
+- visual and audio reaction latency;
+- explicit bounded sound stimuli plus Runtime-player footsteps;
+- governed damage-attribution stimulus seam;
+- Seen / Heard / DamagedBy memory;
+- last-known position/velocity, confidence, threat and age decay;
+- suspicion and `Unaware -> Interested -> Suspicious -> Alerted -> Combat -> Searching` progression;
+- deterministic reset and stale-player scene-revision guard;
+- diagnostics for awareness, suspicion, knowledge, memory, LOS and stimulus pressure;
+- explicit anti-cheat tests proving hidden coordinates cannot refresh memory;
+- regression for repeated-sound reaction starvation.
+
+AI-03 deliberately contains no utility decision/patrol execution or combat action selection; those remain AI-04/05.
 
 ### AI-04 — Decision & Patrol
 
