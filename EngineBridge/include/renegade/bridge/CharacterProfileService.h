@@ -729,10 +729,15 @@ namespace renegade::bridge
             valueStream.imbue(std::locale::classic());
             float value = 0.0f;
             valueStream >> value;
-            valueStream >> std::ws;
-            if (!valueStream || !valueStream.eof() || !std::isfinite(value))
+            if (!valueStream || !std::isfinite(value))
             {
                 error = "Character advanced override contains an invalid number.";
+                return false;
+            }
+            valueStream >> std::ws;
+            if (!valueStream.eof())
+            {
+                error = "Character advanced override contains trailing characters.";
                 return false;
             }
             if (!detail::SetParsedOverride(overrides, key, value))
