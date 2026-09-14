@@ -112,3 +112,27 @@ add_test(
         -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_CURRENT_LIST_DIR}/CharacterAiDecisionSourceContract.cmake
 )
+
+add_executable(RenegadeCharacterAiCombatTests
+    ${CMAKE_CURRENT_LIST_DIR}/CharacterAiCombatTests.cpp
+)
+target_link_libraries(RenegadeCharacterAiCombatTests PRIVATE Renegade::EngineBridge)
+target_include_directories(RenegadeCharacterAiCombatTests PRIVATE
+    ${CMAKE_SOURCE_DIR}/Runtime/src
+)
+target_compile_features(RenegadeCharacterAiCombatTests PRIVATE cxx_std_17)
+set_target_properties(RenegadeCharacterAiCombatTests PROPERTIES
+    FOLDER "Renegade/Tests"
+)
+add_dependencies(RenegadeBridgeTests RenegadeCharacterAiCombatTests)
+
+add_test(
+    NAME RenegadeCharacterAiCombatTests
+    COMMAND RenegadeCharacterAiCombatTests
+)
+add_test(
+    NAME RenegadeCharacterAiCombatSourceContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_LIST_DIR}/CharacterAiCombatSourceContract.cmake
+)
