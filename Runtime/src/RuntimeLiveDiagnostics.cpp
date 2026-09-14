@@ -8,18 +8,19 @@ namespace renegade::runtime
     {
         // This method is already the one lightweight Runtime hook called once
         // per application frame before Wicked advances the active RenderPath.
-        // Character discovery and native navigation stay here rather than
-        // introducing another Runtime loop or Scene owner.
+        // Character discovery, native navigation and bounded AI cognition stay
+        // here rather than introducing another Runtime or Scene owner.
         const std::uint64_t sceneRevision = scenes_.Revision();
         const bool hasLevel = !scenes_.CurrentPath().empty() &&
             !screenPresenter_.IsLoaded();
 
         // A Screen destination is not an active gameplay Level. Explicitly
         // deactivate any Character controllers retained by the current Scene,
-        // clear AI-02's transient resolved state, and clear synchronization
-        // authority so returning to a Level performs fresh deterministic setup.
+        // clear all transient AI state, and clear synchronization authority so
+        // returning to a Level performs fresh deterministic setup.
         if (!hasLevel)
         {
+            ResetRuntimeCharacterPerception(characterPerceptionState_);
             ResetRuntimeCharacterSystem(characterAiState_);
             if (!characterState_.characters.empty())
                 bridge::ResetRuntimeCharacters(scenes_.GetScene(), characterState_);
@@ -31,6 +32,7 @@ namespace renegade::runtime
         else if (!characterSceneAttempted_ ||
                  characterSceneAttemptRevision_ != sceneRevision)
         {
+            ResetRuntimeCharacterPerception(characterPerceptionState_);
             ResetRuntimeCharacterSystem(characterAiState_);
             characterState_ = {};
             characterSceneRevision_ = 0;
@@ -40,6 +42,7 @@ namespace renegade::runtime
 
             bridge::CharacterRuntimeState discoveredCharacters;
             RuntimeCharacterSystemState resolvedCharacters;
+            RuntimeCharacterPerceptionState resolvedPerception;
             std::string characterError;
             if (!bridge::InitializeRuntimeCharacters(
                     scenes_.GetScene(), discoveredCharacters, characterError))
@@ -76,10 +79,32 @@ namespace renegade::runtime
                         characterError,
                     wi::backlog::LogLevel::Error);
             }
+            else if (!InitializeRuntimeCharacterPerception(
+                         resolvedCharacters, resolvedPerception, characterError))
+            {
+                // AI-03 cognition is transient. It still participates in the
+                // same fail-closed scene transaction so a malformed Character
+                // cannot leave native controllers active without matching AI.
+                bridge::ResetRuntimeCharacters(
+                    scenes_.GetScene(), discoveredCharacters);
+                ResetRuntimeCharacterSystem(resolvedCharacters);
+                ResetRuntimeCharacterPerception(resolvedPerception);
+                characterSceneSyncFailed_ = true;
+                diagnosticService_.Record(
+                    bridge::DiagnosticSeverity::Error,
+                    "runtime.ai",
+                    "character.perception.failed",
+                    characterError);
+                wi::backlog::post(
+                    "Renegade Runtime: Character perception setup failed: " +
+                        characterError,
+                    wi::backlog::LogLevel::Error);
+            }
             else
             {
                 characterState_ = std::move(discoveredCharacters);
                 characterAiState_ = std::move(resolvedCharacters);
+                characterPerceptionState_ = std::move(resolvedPerception);
                 characterSceneRevision_ = sceneRevision;
                 if (!characterState_.characters.empty())
                 {
@@ -87,11 +112,33 @@ namespace renegade::runtime
                         bridge::DiagnosticSeverity::Info,
                         "runtime.ai",
                         "character.scene.started",
-                        "Renegade Character runtime discovered and resolved " +
+                        "Renegade Character runtime discovered, resolved and initialized perception for " +
                             std::to_string(characterState_.characters.size()) +
                             " authored character(s)");
                 }
             }
+        }
+
+        if (hasLevel && !paused_ && !characterSceneSyncFailed_ &&
+            characterSceneRevision_ == sceneRevision &&
+            playerSceneRevision_ == sceneRevision &&
+            characterPerceptionState_.characters.size() == characterAiState_.characters.size())
+        {
+            // UpdateLiveDiagnostics runs before SyncPlayerForScene(). Requiring
+            // matching scene revisions prevents a stale transient player ECS
+            // handle from a previous Level being sampled during the first frame
+            // after a scene transition.
+            // Wicked Scene::dt is the accepted simulation delta. This hook runs
+            // before the current frame advances Wicked, so cognition consumes
+            // the previous completed simulation delta rather than wall-clock
+            // time. On the first frame dt is zero and cognition simply waits.
+            UpdateRuntimeCharacterPerception(
+                scenes_.GetScene(),
+                characterAiState_,
+                characterPerceptionState_,
+                player_,
+                playerSettings_,
+                scenes_.GetScene().dt);
         }
 
         if (navigationSceneRevision_ != sceneRevision ||
@@ -166,11 +213,22 @@ namespace renegade::runtime
         const bool characterSceneSynced = hasLevel &&
             characterSceneAttempted_ && !characterSceneSyncFailed_ &&
             characterSceneRevision_ == scenes_.Revision() &&
-            characterAiState_.characters.size() == characterState_.characters.size();
+            characterAiState_.characters.size() == characterState_.characters.size() &&
+            characterPerceptionState_.characters.size() == characterAiState_.characters.size();
         std::string firstCharacterId;
         std::string firstFaction;
         std::string firstVisionDistance;
         std::string firstAggression;
+        std::string firstAwareness;
+        std::string firstSuspicion;
+        std::string firstKnowledgeSource;
+        std::string firstKnowledgeSubject;
+        std::string firstKnowledgeConfidence;
+        std::string firstMemoryAge;
+        std::string firstLastKnownPosition;
+        bool firstDirectSight = false;
+        std::uint64_t totalMemories = 0;
+        std::uint64_t totalCognitionTicks = 0;
         if (!characterAiState_.characters.empty())
         {
             const auto& first = characterAiState_.characters.front();
@@ -179,15 +237,59 @@ namespace renegade::runtime
             firstVisionDistance = std::to_string(first.tuning.visionDistance);
             firstAggression = std::to_string(first.tuning.aggression);
         }
+        for (const auto& cognition : characterPerceptionState_.characters)
+        {
+            totalMemories += static_cast<std::uint64_t>(cognition.memories.size());
+            totalCognitionTicks += cognition.cognitionTicks;
+        }
+        if (!characterPerceptionState_.characters.empty())
+        {
+            const auto& first = characterPerceptionState_.characters.front();
+            firstAwareness = ToString(first.awareness);
+            firstSuspicion = std::to_string(first.suspicion);
+            const CharacterMemoryRecord* memory =
+                FindCharacterMemory(first, RuntimePlayerKnowledgeId);
+            if (memory == nullptr && !first.memories.empty())
+                memory = &first.memories.front();
+            if (memory != nullptr)
+            {
+                firstKnowledgeSource = ToString(memory->source);
+                firstKnowledgeSubject = memory->subjectId;
+                firstKnowledgeConfidence = std::to_string(memory->confidence);
+                firstMemoryAge = std::to_string(memory->ageSeconds);
+                firstDirectSight = memory->directSight;
+                firstLastKnownPosition =
+                    std::to_string(memory->lastKnownPosition.x) + "," +
+                    std::to_string(memory->lastKnownPosition.y) + "," +
+                    std::to_string(memory->lastKnownPosition.z);
+            }
+        }
         diagnosticService_.Observe("ai", {
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
             {"resolved_character_count", static_cast<std::uint64_t>(characterAiState_.characters.size())},
+            {"perception_character_count", static_cast<std::uint64_t>(characterPerceptionState_.characters.size())},
             {"active_character_count", activeCharacters},
             {"profile_registry_version", static_cast<std::uint64_t>(bridge::CharacterProfileRegistryVersion)},
             {"first_character_id", firstCharacterId},
             {"first_faction", firstFaction},
             {"first_vision_distance", firstVisionDistance},
             {"first_aggression", firstAggression},
+            {"first_awareness", firstAwareness},
+            {"first_suspicion", firstSuspicion},
+            {"first_knowledge_source", firstKnowledgeSource},
+            {"first_knowledge_subject", firstKnowledgeSubject},
+            {"first_knowledge_confidence", firstKnowledgeConfidence},
+            {"first_memory_age", firstMemoryAge},
+            {"first_last_known_position", firstLastKnownPosition},
+            {"first_direct_sight", firstDirectSight},
+            {"memory_count", totalMemories},
+            {"cognition_ticks", totalCognitionTicks},
+            {"los_queries", characterPerceptionState_.lineOfSightQueries},
+            {"visual_detections", characterPerceptionState_.visualDetections},
+            {"heard_stimuli", characterPerceptionState_.heardStimuli},
+            {"damage_stimuli", characterPerceptionState_.damageStimuli},
+            {"sound_queue_depth", static_cast<std::uint64_t>(characterPerceptionState_.sounds.size())},
+            {"sound_dropped", characterPerceptionState_.droppedSounds},
             {"scene_synced", characterSceneSynced},
             {"scene_sync_attempted", characterSceneAttempted_},
             {"scene_sync_failed", characterSceneSyncFailed_},
@@ -205,6 +307,8 @@ namespace renegade::runtime
             {"quit_requested", quitRequested_}, {"player_spawned", player_.IsSpawned()},
             {"character_count", static_cast<std::uint64_t>(characterState_.characters.size())},
             {"character_profile_count", static_cast<std::uint64_t>(characterAiState_.characters.size())},
+            {"character_perception_count", static_cast<std::uint64_t>(characterPerceptionState_.characters.size())},
+            {"character_memory_count", totalMemories},
             {"character_scene_synced", characterSceneSynced},
             {"character_scene_sync_failed", characterSceneSyncFailed_},
             {"navigation_synced", navigationSceneRevision_ == scenes_.Revision()},

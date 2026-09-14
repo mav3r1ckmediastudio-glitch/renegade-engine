@@ -64,3 +64,27 @@ add_test(
         -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_CURRENT_LIST_DIR}/CharacterAiProfilesSourceContract.cmake
 )
+
+add_executable(RenegadeCharacterAiPerceptionTests
+    ${CMAKE_CURRENT_LIST_DIR}/CharacterAiPerceptionTests.cpp
+)
+target_link_libraries(RenegadeCharacterAiPerceptionTests PRIVATE Renegade::EngineBridge)
+target_include_directories(RenegadeCharacterAiPerceptionTests PRIVATE
+    ${CMAKE_SOURCE_DIR}/Runtime/src
+)
+target_compile_features(RenegadeCharacterAiPerceptionTests PRIVATE cxx_std_17)
+set_target_properties(RenegadeCharacterAiPerceptionTests PROPERTIES
+    FOLDER "Renegade/Tests"
+)
+add_dependencies(RenegadeBridgeTests RenegadeCharacterAiPerceptionTests)
+
+add_test(
+    NAME RenegadeCharacterAiPerceptionTests
+    COMMAND RenegadeCharacterAiPerceptionTests
+)
+add_test(
+    NAME RenegadeCharacterAiPerceptionSourceContract
+    COMMAND ${CMAKE_COMMAND}
+        -DRENEGADE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_LIST_DIR}/CharacterAiPerceptionSourceContract.cmake
+)
