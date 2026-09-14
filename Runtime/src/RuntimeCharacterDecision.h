@@ -92,6 +92,7 @@ namespace renegade::runtime
         float searchRemainingSeconds = 0.0f;
         float repathRemainingSeconds = 0.0f;
         float stuckSeconds = 0.0f;
+        float exhaustedSearchMemoryAgeSeconds = -1.0f;
         std::uint64_t lastCognitionTick = 0;
         std::uint64_t transitionCount = 0;
         std::uint64_t pathRequests = 0;
@@ -107,6 +108,7 @@ namespace renegade::runtime
         XMFLOAT3 lastPosition = XMFLOAT3(0.0f, 0.0f, 0.0f);
         std::array<CharacterIntentScore, 3> topScores{};
         std::string lastTransitionReason;
+        std::string exhaustedSearchSubjectId;
         RuntimePatrolRouteBinding patrol;
     };
 
@@ -129,6 +131,7 @@ namespace renegade::runtime
     inline constexpr float CharacterDecisionStuckRepathSeconds = 1.25f;
     inline constexpr float CharacterDecisionStuckAbortSeconds = 5.0f;
     inline constexpr float CharacterDecisionMoveAmount = 0.12f;
+    inline constexpr float CharacterDecisionFreshMemoryAgeEpsilon = 0.05f;
 
     [[nodiscard]] inline CharacterDecisionRecord* FindCharacterDecision(
         RuntimeCharacterDecisionState& state,
@@ -176,6 +179,42 @@ namespace renegade::runtime
             }
         }
         return best;
+    }
+
+    [[nodiscard]] inline bool IsSearchMemoryExhausted(
+        const CharacterDecisionRecord& decision,
+        const CharacterMemoryRecord& memory) noexcept
+    {
+        if (decision.exhaustedSearchSubjectId.empty() ||
+            decision.exhaustedSearchMemoryAgeSeconds < 0.0f)
+        {
+            return false;
+        }
+        if (memory.subjectId != decision.exhaustedSearchSubjectId ||
+            memory.directSight)
+        {
+            return false;
+        }
+        return memory.ageSeconds + CharacterDecisionFreshMemoryAgeEpsilon >=
+            decision.exhaustedSearchMemoryAgeSeconds;
+    }
+
+    inline void RefreshSearchExhaustion(
+        const CharacterCognitionRecord& cognition,
+        CharacterDecisionRecord& decision) noexcept
+    {
+        if (decision.exhaustedSearchSubjectId.empty())
+            return;
+        const CharacterMemoryRecord* memory = BestActionableMemory(cognition);
+        if (memory == nullptr ||
+            memory->subjectId != decision.exhaustedSearchSubjectId ||
+            memory->directSight ||
+            memory->ageSeconds + CharacterDecisionFreshMemoryAgeEpsilon <
+                decision.exhaustedSearchMemoryAgeSeconds)
+        {
+            decision.exhaustedSearchSubjectId.clear();
+            decision.exhaustedSearchMemoryAgeSeconds = -1.0f;
+        }
     }
 
     [[nodiscard]] inline bool RoleNormallyPatrols(
@@ -226,7 +265,7 @@ namespace renegade::runtime
         }
 
         const CharacterMemoryRecord* memory = BestActionableMemory(cognition);
-        if (memory != nullptr)
+        if (memory != nullptr && !IsSearchMemoryExhausted(decision, *memory))
         {
             const float knowledge = std::clamp(memory->confidence, 0.0f, 1.0f);
             const float curiosity = character.tuning.curiosity * 12.0f;
@@ -270,7 +309,8 @@ namespace renegade::runtime
                     30.0f + curiosity + knowledge * 6.0f});
             }
         }
-        else if (cognition.awareness == AwarenessState::Searching &&
+        else if (memory == nullptr &&
+                 cognition.awareness == AwarenessState::Searching &&
                  decision.searchRemainingSeconds > 0.0f)
         {
             scores.push_back({CharacterIntent::Search, 52.0f});
@@ -304,6 +344,7 @@ namespace renegade::runtime
         const CharacterCognitionRecord& cognition,
         CharacterDecisionRecord& decision)
     {
+        RefreshSearchExhaustion(cognition, decision);
         auto scores = ScoreCharacterIntents(character, cognition, decision);
         CaptureTopScores(decision, scores);
         if (scores.empty())
@@ -578,6 +619,18 @@ namespace renegade::runtime
             if (decision->intent == CharacterIntent::Search &&
                 decision->searchRemainingSeconds <= 0.0f)
             {
+                const CharacterMemoryRecord* exhaustedMemory =
+                    BestActionableMemory(*cognition);
+                if (exhaustedMemory != nullptr)
+                {
+                    decision->exhaustedSearchSubjectId = exhaustedMemory->subjectId;
+                    decision->exhaustedSearchMemoryAgeSeconds = exhaustedMemory->ageSeconds;
+                }
+                else
+                {
+                    decision->exhaustedSearchSubjectId.clear();
+                    decision->exhaustedSearchMemoryAgeSeconds = -1.0f;
+                }
                 const CharacterIntent normal = NormalRoleIntent(
                     authored, decision->patrol.route.points.size() >= 2);
                 decision->previousIntent = decision->intent;
