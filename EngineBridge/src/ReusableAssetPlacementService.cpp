@@ -1,5 +1,7 @@
 #include "renegade/bridge/ReusableAssetService.h"
 
+#include "renegade/bridge/CharacterService.h"
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/MaterialTextureAssetService.h"
 
 #include <algorithm>
@@ -244,6 +246,18 @@ namespace renegade::bridge
             return prepared;
         }
 
+        CreatorModelImportRecipe creatorRecipe;
+        if (!ParseCreatorModelImportOptions(
+                document.manifest.settingsJson, creatorRecipe, result.error))
+        {
+            result.error =
+                "Reusable model placement could not parse its accepted creator recipe: " +
+                result.error;
+            return prepared;
+        }
+        const bool preparedCharacterAsset =
+            creatorRecipe.assetKind == CreatorAssetImportKind::Character;
+
         // WISCENE material resources can retain relative paths from the model
         // import. For retained glTF sources, sidecar images/buffers live beside
         // the retained source under SourceAssets. Rehydrate the payload from
@@ -319,6 +333,20 @@ namespace renegade::bridge
         }
         archive = wi::Archive();
         cleanup();
+
+        // Character classification belongs to the durable import recipe, not
+        // to an arbitrary path or folder guess. Stamp an in-memory template
+        // marker into the prepared reusable payload so both ordinary placement
+        // and the live drag-preview adoption path can create a real Character
+        // instance. This intentionally does not mutate the accepted .rasset.
+        if (preparedCharacterAsset &&
+            !MarkCharacterAssetTemplate(*prepared.scene_))
+        {
+            result.error =
+                "Prepared Character asset payload contains no transform root for Character placement.";
+            prepared.scene_.reset();
+            return prepared;
+        }
 
         // Stable-ID material bindings are authoritative but Wicked Resource
         // handles themselves are not serialized. Resolve them at the exact
