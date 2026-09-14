@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   promote:
-    if: github.event.head_commit.message == 'CI: promote validated AI-05 repairs'
     runs-on: ubuntu-latest
     steps:
       - name: Check out programme branch
@@ -24,7 +23,7 @@ jobs:
       - name: Apply exact validated repair chain
         run: python .github/ai05_repair_behavior.py
 
-      - name: Verify validated blob identities
+      - name: Verify exact validated file identities
         shell: bash
         run: |
           set -euo pipefail
@@ -32,10 +31,7 @@ jobs:
             expected="$1"
             path="$2"
             actual="$(git hash-object "$path")"
-            if [[ "$actual" != "$expected" ]]; then
-              echo "Blob mismatch: $path expected=$expected actual=$actual" >&2
-              exit 1
-            fi
+            test "$actual" = "$expected" || { echo "Blob mismatch: $path expected=$expected actual=$actual" >&2; exit 1; }
           }
           check_blob 81f437ac886c29930f5d671d3524b21dd95fbcb3 EngineBridge/include/renegade/bridge/WeaponCombatService.h
           check_blob 591b6397bb69cd2e9e04167afaca27ff5ae775c8 Runtime/src/RuntimeApplication.h
@@ -51,32 +47,15 @@ jobs:
           check_blob 9f79e5d6f377ad0fbaba9f0a286b5adcef9fd05f Tests/CharacterAiCombatTests.cpp
           git diff --check
 
-      - name: Commit repaired product source and remove temporary harness
+      - name: Commit product source and remove temporary harness
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "Maverick Renegade CI"
           git config user.email "mav3r1ckmediastudio@gmail.com"
-          git add \
-            EngineBridge/include/renegade/bridge/WeaponCombatService.h \
-            Runtime/src/RuntimeScriptRuntime.h \
-            Runtime/src/RuntimeScriptRuntime.cpp \
-            Runtime/src/RuntimeApplication.h \
-            Runtime/src/RuntimeLiveDiagnostics.cpp \
-            Runtime/src/RuntimeCharacterDecision.h \
-            Runtime/src/RuntimeCombatService.h \
-            Runtime/src/RuntimeCombatDecision.h \
-            Runtime/src/RuntimeCombatDamage.h \
-            Studio/src/AICombatInspector.cpp \
-            Tests/CharacterAiCombatTests.cpp \
-            Tests/CharacterAiCombatSourceContract.cmake
-          git rm \
-            .github/ai05_repair.py \
-            .github/ai05_repair_final.py \
-            .github/ai05_repair_behavior.py \
-            .github/workflows/ai05-audit-repair.yml \
-            .github/workflows/ai05-promote.yml
+          git add EngineBridge/include/renegade/bridge/WeaponCombatService.h Runtime/src/RuntimeScriptRuntime.h Runtime/src/RuntimeScriptRuntime.cpp Runtime/src/RuntimeApplication.h Runtime/src/RuntimeLiveDiagnostics.cpp Runtime/src/RuntimeCharacterDecision.h Runtime/src/RuntimeCombatService.h Runtime/src/RuntimeCombatDecision.h Runtime/src/RuntimeCombatDamage.h Studio/src/AICombatInspector.cpp Tests/CharacterAiCombatTests.cpp Tests/CharacterAiCombatSourceContract.cmake
+          git rm .github/ai05_repair.py .github/ai05_repair_final.py .github/ai05_repair_behavior.py .github/workflows/ai05-audit-repair.yml .github/workflows/ai05-promote.yml
           git diff --cached --check
           git commit -m "AI-05: complete final audit repairs"
           git push origin HEAD:feature/character-ai-programme
-          echo "PROMOTED_COMMIT=$(git rev-parse HEAD)"
+          git rev-parse HEAD
