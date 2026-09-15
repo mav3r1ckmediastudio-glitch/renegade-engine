@@ -178,6 +178,21 @@ namespace renegade::runtime
             combat.dead = combat.health <= 0.0f;
             combat.magazineAmmo = std::max(0, combat.weapon.magazineSize);
             combat.reserveAmmo = std::max(0, combat.weapon.reserveAmmo);
+
+            // Enemy is a hostile gameplay classification, not a request for an
+            // unarmed retreating NPC. Require an actual combat capability before
+            // Runtime starts. Intrinsic melee is represented by no weapon entity
+            // plus CombatStyle::Melee, which resolves to the built-in fists /
+            // claws / teeth descriptor above. Governed weapon entities resolve
+            // through their normal Weapon AI descriptor.
+            if (character.authoring.factionId == "Enemy" && !HasUsableWeapon(combat))
+            {
+                state = {};
+                error = "Enemy Character '" + character.stableEntityId +
+                    "' requires FISTS / CLAWS / TEETH or a usable weapon.";
+                return false;
+            }
+
             candidate.characters.push_back(std::move(combat));
         }
 
