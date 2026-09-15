@@ -1,5 +1,5 @@
 add_executable(RenegadeCW05CharacterPrefabTests
-    CW05CharacterPrefabTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CW05CharacterPrefabTests.cpp
 )
 
 target_link_libraries(
@@ -20,7 +20,7 @@ set_target_properties(
 )
 
 add_executable(RenegadeCW05CommandCompanionTests
-    CW05CommandCompanionTests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/CW05CommandCompanionTests.cpp
 )
 
 target_link_libraries(
