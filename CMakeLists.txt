@@ -74,9 +74,21 @@ if(WIN32)
         TARGET_DIRECTORY RenegadeStudio
         PROPERTIES COMPILE_DEFINITIONS "RENEGADE_PHASE7A_IMPLEMENTATION=1"
     )
+    # CW-05 wraps the accepted AI Character inspector with one bounded prefab
+    # section. Rename only the two exported registration functions in the old
+    # translation unit; the wrapper forwards to them and adds prefab controls.
+    set_source_files_properties(
+        "${CMAKE_SOURCE_DIR}/Studio/src/AICharacterInspector.cpp"
+        TARGET_DIRECTORY RenegadeStudio
+        PROPERTIES COMPILE_DEFINITIONS
+            "RegisterAICharacterInspector=RegisterAICharacterInspectorLegacy;PrepareAICharacterInspector=PrepareAICharacterInspectorLegacy"
+    )
     target_sources(RenegadeStudio PRIVATE
         Studio/src/AICharacterInspector.cpp
         Studio/src/AICharacterInspector.h
+        Studio/src/CharacterPrefabInspectorExtension.cpp
+        Studio/src/CharacterPrefabStudioIntegration.cpp
+        Studio/src/CharacterPrefabStudioIntegration.h
         Studio/src/Phase7Gate7BHumanoidRetargetInspector.cpp
         Studio/src/Phase7Gate7BHumanoidRetargetInspector.h
         Studio/src/Phase7Gate7CCharacterControlsInspector.cpp
