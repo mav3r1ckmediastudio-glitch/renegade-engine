@@ -304,16 +304,6 @@ namespace
                 return false;
             }
 
-            auto validation =
-                renegade::bridge::PrepareWickedSceneOpen(scenePath);
-            if (!validation.IsReady())
-            {
-                error =
-                    "Prepared TestGame navigation produced an unreadable scene: " +
-                    validation.Error();
-                return false;
-            }
-
             error.clear();
             return true;
         }
@@ -387,34 +377,52 @@ namespace renegade::bridge
             return false;
         };
 
-        auto prepared =
-            PrepareWickedSceneOpen(created.scenePath);
-        if (!prepared.IsReady() ||
-            prepared.MutablePreparedScene() == nullptr)
-        {
-            return failAndCleanup(
-                "Could not reopen the disposable TestGame scene for automatic "
-                "navigation: " + prepared.Error());
-        }
-
         TestLevelNavigationPreparation navigation;
-        if (!PrepareOwnedNavigation(
-                project,
-                currentPathBefore,
-                *prepared.MutablePreparedScene(),
-                navigation,
-                error))
         {
-            return failAndCleanup(
-                "Could not prepare TestGame navigation: " + error);
+            // Wicked Scene instances own native component storage. Do not
+            // deserialize the just-written scene for validation while this
+            // mutable preparation instance is still alive: a TestGame build
+            // performs this path repeatedly and must not overlap ownership of
+            // the same VoxelGrid archive payload.
+            auto prepared =
+                PrepareWickedSceneOpen(created.scenePath);
+            if (!prepared.IsReady() ||
+                prepared.MutablePreparedScene() == nullptr)
+            {
+                return failAndCleanup(
+                    "Could not reopen the disposable TestGame scene for automatic "
+                    "navigation: " + prepared.Error());
+            }
+
+            if (!PrepareOwnedNavigation(
+                    project,
+                    currentPathBefore,
+                    *prepared.MutablePreparedScene(),
+                    navigation,
+                    error))
+            {
+                return failAndCleanup(
+                    "Could not prepare TestGame navigation: " + error);
+            }
+
+            if (!WritePreparedTestLevelScene(
+                    *prepared.MutablePreparedScene(),
+                    created.scenePath,
+                    error))
+            {
+                return failAndCleanup(error);
+            }
         }
 
-        if (!WritePreparedTestLevelScene(
-                *prepared.MutablePreparedScene(),
-                created.scenePath,
-                error))
+        // Validate only after the mutable prepared Scene has been destroyed.
+        // This keeps every TestGame read/write/reopen transaction sequential
+        // at the native Wicked ownership boundary.
+        auto validation = PrepareWickedSceneOpen(created.scenePath);
+        if (!validation.IsReady())
         {
-            return failAndCleanup(error);
+            return failAndCleanup(
+                "Prepared TestGame navigation produced an unreadable scene: " +
+                validation.Error());
         }
 
         if (scenes_.CurrentPath() != currentPathBefore ||
