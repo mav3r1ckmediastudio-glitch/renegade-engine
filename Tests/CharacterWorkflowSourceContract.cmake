@@ -83,6 +83,9 @@ require_text(external_animation_header
     "sourceAlreadyQueued"
     "re-adding a file preserves an existing renamed slot")
 require_text(external_animation_header
+    "weakly_canonical"
+    "canonical-equivalent animation paths preserve the existing file slot")
+require_text(external_animation_header
     "matching.rbegin()"
     "multi-action source collapse to a single file slot")
 require_text(importer_preview
