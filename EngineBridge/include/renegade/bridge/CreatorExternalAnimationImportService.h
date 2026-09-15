@@ -3,6 +3,7 @@
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/HumanoidRetargetService.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -36,10 +37,11 @@ namespace renegade::bridge
     void BeginCreatorExternalAnimationImportSession(const std::string& projectRoot);
     void ClearCreatorExternalAnimationImportSession() noexcept;
 
-    // Inspects one external animation source using the same native Wicked
-    // importers accepted by HumanoidRetargetService. Every native action/take in
-    // the source becomes one queue row. Re-adding an already queued source is a
-    // no-op rather than duplicating all of its actions.
+    // Low-level native source inspection. This retains the CW-02 capability to
+    // inspect every Wicked action/take in a source for governed recipe tooling.
+    // Creator-facing file-slot ingestion should use
+    // QueueCreatorExternalAnimationFileSlot() below so one selected file maps to
+    // exactly one visible/importable Character animation slot.
     [[nodiscard]] bool QueueCreatorExternalAnimationSource(
         const std::string& sourcePath,
         std::string& error);
@@ -60,6 +62,70 @@ namespace renegade::bridge
     [[nodiscard]] bool RemoveCreatorExternalAnimationClip(
         std::size_t index,
         std::string& error);
+
+    // Creator-facing GGMAX-style contract: one external animation file is one
+    // slot. The native source inspector is still used underneath so the source
+    // is validated by Wicked, but only its first usable action is surfaced for
+    // this file-based workflow. Re-adding an existing file is a no-op and keeps
+    // any creator rename already applied to that slot.
+    [[nodiscard]] inline bool QueueCreatorExternalAnimationFileSlot(
+        const std::string& sourcePath,
+        std::string& error)
+    {
+        const auto before = CaptureCreatorExternalAnimationQueue();
+        const auto sourceAlreadyQueued = std::any_of(
+            before.clips.begin(), before.clips.end(),
+            [&](const CreatorExternalAnimationClip& clip)
+            {
+                return clip.localSourcePath == sourcePath;
+            });
+        if (sourceAlreadyQueued)
+        {
+            error.clear();
+            return true;
+        }
+
+        if (!QueueCreatorExternalAnimationSource(sourcePath, error))
+            return false;
+
+        const auto after = CaptureCreatorExternalAnimationQueue();
+        std::vector<std::size_t> matching;
+        for (std::size_t index = 0; index < after.clips.size(); ++index)
+        {
+            if (after.clips[index].localSourcePath == sourcePath)
+                matching.push_back(index);
+        }
+        if (matching.empty())
+        {
+            error = "Character animation file was inspected but no queue slot was created.";
+            return false;
+        }
+
+        const std::size_t keep = matching.front();
+        for (auto it = matching.rbegin(); it != matching.rend(); ++it)
+        {
+            if (*it == keep)
+                continue;
+            if (!RemoveCreatorExternalAnimationClip(*it, error))
+                return false;
+        }
+
+        std::string filename = sourcePath;
+        const auto separator = filename.find_last_of("/\\");
+        if (separator != std::string::npos)
+            filename.erase(0, separator + 1);
+        const auto dot = filename.find_last_of('.');
+        if (dot != std::string::npos && dot > 0)
+            filename.erase(dot);
+        if (filename.empty())
+            filename = "Animation";
+
+        if (!RenameCreatorExternalAnimationClip(keep, filename, error))
+            return false;
+
+        error.clear();
+        return true;
+    }
 
     // Value-based final-commit primitive. This is deliberately separate from
     // source inspection so tests and future import transactions can freeze a
