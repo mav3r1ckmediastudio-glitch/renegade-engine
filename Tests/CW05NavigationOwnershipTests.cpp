@@ -24,6 +24,14 @@ namespace
         return 1;
     }
 
+    void Trace(const char* stage)
+    {
+        // This test has historically terminated with an unreported Windows
+        // access violation. Keep the checkpoints on stderr and flush each one
+        // so CTest preserves the last completed native ownership boundary.
+        std::cerr << "CW05 ownership checkpoint: " << stage << std::endl;
+    }
+
     wi::ecs::Entity AddNavigationCube(wi::scene::Scene& scene)
     {
         const wi::ecs::Entity objectEntity = wi::ecs::CreateEntity();
@@ -159,6 +167,7 @@ int main()
     using namespace renegade::bridge;
 
     wi::jobsystem::Initialize();
+    Trace("job system initialized");
 
     const fs::path root = fs::temp_directory_path() /
         fs::u8path(
@@ -186,6 +195,7 @@ int main()
     project.startupScene = "Content/Scenes/NavigationOwner.wiscene";
 
     StudioSession session;
+    Trace("StudioSession created");
     wi::scene::Scene& authoringScene = session.Scenes().GetScene();
     const wi::ecs::Entity floor = AddNavigationCube(authoringScene);
 
@@ -229,20 +239,24 @@ int main()
         return Fail("authored navigation grid fixture lost identity/native state");
     }
     const wi::vector<std::uint64_t> authoredVoxels = authoredComponent->voxels;
+    Trace("authored grid created");
 
     if (!session.SaveScene(scenePath.generic_u8string()))
     {
         cleanup();
         return Fail("could not save authored navigation fixture");
     }
+    Trace("authored scene saved");
 
     TestLevelSnapshotService snapshots(session.Scenes(), session.Commands());
     TestLevelSnapshot first;
+    Trace("first snapshot create begin");
     if (!snapshots.Create(project, first, error))
     {
         cleanup();
         return Fail("first TestGame snapshot failed: " + error);
     }
+    Trace("first snapshot create complete");
     if (!first.navigationCacheRebuilt || first.navigationCacheReused)
     {
         cleanup();
@@ -259,18 +273,22 @@ int main()
         cleanup();
         return Fail("first TestGame ownership check failed: " + error);
     }
+    Trace("first snapshot inspected");
     if (!snapshots.Cleanup(first, error))
     {
         cleanup();
         return Fail("first TestGame cleanup failed: " + error);
     }
+    Trace("first snapshot cleaned");
 
     TestLevelSnapshot second;
+    Trace("second snapshot create begin");
     if (!snapshots.Create(project, second, error))
     {
         cleanup();
         return Fail("second TestGame snapshot failed: " + error);
     }
+    Trace("second snapshot create complete");
     if (!second.navigationCacheReused || second.navigationCacheRebuilt)
     {
         cleanup();
@@ -287,11 +305,13 @@ int main()
         cleanup();
         return Fail("second TestGame ownership check failed: " + error);
     }
+    Trace("second snapshot inspected");
     if (!snapshots.Cleanup(second, error))
     {
         cleanup();
         return Fail("second TestGame cleanup failed: " + error);
     }
+    Trace("second snapshot cleaned");
 
     if (!session.Commands().Execute(
             std::make_unique<SetTranslationCommand>(
@@ -303,13 +323,16 @@ int main()
         return Fail("could not create unsaved navigation-geometry change");
     }
     const std::size_t undoBefore = session.Commands().UndoCount();
+    Trace("authoring geometry changed");
 
     TestLevelSnapshot changed;
+    Trace("changed snapshot create begin");
     if (!snapshots.Create(project, changed, error))
     {
         cleanup();
         return Fail("changed-geometry TestGame snapshot failed: " + error);
     }
+    Trace("changed snapshot create complete");
     if (!changed.navigationCacheRebuilt || changed.navigationCacheReused)
     {
         cleanup();
@@ -326,6 +349,7 @@ int main()
         cleanup();
         return Fail("changed TestGame ownership check failed: " + error);
     }
+    Trace("changed snapshot inspected");
     if (!session.Commands().IsDirty() ||
         session.Commands().UndoCount() != undoBefore)
     {
@@ -338,8 +362,10 @@ int main()
         cleanup();
         return Fail("changed TestGame cleanup failed: " + error);
     }
+    Trace("changed snapshot cleaned");
 
     cleanup();
+    Trace("test complete before destruction");
     std::cout
         << "PASS: CW-05 TestGame navigation ownership, cache and stable identity\n";
     return 0;
