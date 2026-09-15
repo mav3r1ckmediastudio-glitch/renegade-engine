@@ -19,14 +19,41 @@ set_target_properties(
     PROPERTIES FOLDER "Renegade/Tests"
 )
 
+add_executable(RenegadeCW05CommandCompanionTests
+    CW05CommandCompanionTests.cpp
+)
+
+target_link_libraries(
+    RenegadeCW05CommandCompanionTests
+    PRIVATE
+        Renegade::EngineBridge
+)
+
+target_compile_options(
+    RenegadeCW05CommandCompanionTests
+    PRIVATE
+        "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>"
+)
+
+set_target_properties(
+    RenegadeCW05CommandCompanionTests
+    PROPERTIES FOLDER "Renegade/Tests"
+)
+
 add_dependencies(
     RenegadeBridgeTests
     RenegadeCW05CharacterPrefabTests
+    RenegadeCW05CommandCompanionTests
 )
 
 add_test(
     NAME RenegadeCW05CharacterPrefabTests
     COMMAND RenegadeCW05CharacterPrefabTests
+)
+
+add_test(
+    NAME RenegadeCW05CommandCompanionTests
+    COMMAND RenegadeCW05CommandCompanionTests
 )
 
 add_test(
