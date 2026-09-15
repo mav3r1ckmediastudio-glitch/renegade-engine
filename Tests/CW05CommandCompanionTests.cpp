@@ -45,7 +45,8 @@ namespace
 
     wi::allocator::shared_ptr<wi::scene::Scene> MakePreparedCharacter()
     {
-        auto prepared = wi::allocator::make_shared<wi::scene::Scene>();
+        auto prepared =
+            wi::allocator::make_shared_single<wi::scene::Scene>();
         const wi::ecs::Entity root =
             prepared->Entity_CreateTransform("Prepared Character");
         const wi::ecs::Entity child =
