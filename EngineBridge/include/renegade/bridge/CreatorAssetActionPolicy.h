@@ -40,10 +40,7 @@ namespace renegade::bridge
             dependencyClass == DependencyClass::Font;
     }
 
-    // Placement requires a live imported model product. Reimport deliberately
-    // does not: a missing governed product is one of the states reimport must
-    // be able to recover from.
-    inline bool CanPlaceCreatorModelAsset(
+    inline bool CanPlaceCreatorImportedModelAsset(
         const AssetCatalogueEntry& entry) noexcept
     {
         return entry.registered && IsValidStableId(entry.assetId) &&
@@ -81,11 +78,22 @@ namespace renegade::bridge
             IsCreatorCharacterPrefabPath(entry.projectRelativePath);
     }
 
+    // LP07's existing Studio/browser call sites use this historical function
+    // name for the PLACE/drag capability. CW-05 deliberately keeps that one
+    // creator placement path instead of adding a second prefab editor path, so
+    // the compatibility entry point now means "placeable scene asset" while
+    // CanPlaceCreatorImportedModelAsset retains the precise model-only policy.
+    inline bool CanPlaceCreatorModelAsset(
+        const AssetCatalogueEntry& entry) noexcept
+    {
+        return CanPlaceCreatorImportedModelAsset(entry) ||
+            CanPlaceCreatorCharacterPrefabAsset(entry);
+    }
+
     inline bool CanPlaceCreatorSceneAsset(
         const AssetCatalogueEntry& entry) noexcept
     {
-        return CanPlaceCreatorModelAsset(entry) ||
-            CanPlaceCreatorCharacterPrefabAsset(entry);
+        return CanPlaceCreatorModelAsset(entry);
     }
 
     inline bool CanReimportCreatorModelAsset(
