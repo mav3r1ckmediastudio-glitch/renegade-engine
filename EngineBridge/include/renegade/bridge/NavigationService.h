@@ -28,6 +28,9 @@ namespace renegade::bridge
         "renegade.navigation.move_speed";
     inline constexpr const char* NavigationFlyingMetadataKey =
         "renegade.navigation.flying";
+    inline constexpr const char* NavigationDefaultGridMetadataKey =
+        "renegade.navigation.default_grid";
+    inline constexpr const char* NavigationDefaultGridMetadataVersion = "1";
 
     // Creator-facing generation settings over Wicked's native VoxelGrid.
     // The VoxelGrid component itself remains the serialized/runtime source of

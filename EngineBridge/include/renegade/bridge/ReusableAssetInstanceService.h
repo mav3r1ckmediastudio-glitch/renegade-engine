@@ -5,15 +5,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
 namespace renegade::bridge
 {
-    // Gate 6 keeps creator-authored instance state separate from the replaceable
-    // .rasset payload. These keys live on ordinary Wicked MetadataComponent
-    // values, so the identity survives WISCENE Save/Open without changing the
-    // Wicked file format or the pinned upstream source.
     inline constexpr const char* ReusableAssetInstanceIdMetadataKey =
         "renegade.reusable_asset_id";
     inline constexpr const char* ReusableAssetInstanceVersionMetadataKey =
@@ -31,24 +28,35 @@ namespace renegade::bridge
         wi::ecs::Entity payloadRoot = wi::ecs::INVALID_ENTITY;
     };
 
-    // Reads only Renegade-owned metadata/hierarchy markers from an already
-    // loaded Wicked scene. No registry access, file I/O or renderer mutation.
     [[nodiscard]] bool InspectReusableAssetInstances(
         const wi::scene::Scene& scene,
         std::vector<ReusableAssetInstanceRecord>& instances,
         std::string& error);
 
-    // Repairs only implementation-generated wrapper names. New placements use
-    // the governed import/product title persisted on the stable wrapper; old scenes
-    // without that metadata retain the hierarchy-derived compatibility fallback.
-    // Explicit creator-authored names are never overwritten.
     [[nodiscard]] std::size_t RepairReusableAssetInstanceNames(
         wi::scene::Scene& scene) noexcept;
 
-    // Reusable-asset placement command. Unlike direct format import, the
-    // creator-facing reusable workflow needs a durable stable-ID wrapper so a
-    // future packaged Runtime can refresh only the payload from the current
-    // governed .rasset while preserving authored instance transform/state.
+    // Creator-owned companion state can live outside WISCENE (notably the
+    // governed .rscripts document). Placement remains one Undo/Redo operation:
+    // a registered Studio companion factory applies any prefab companion state
+    // after fresh scene identity exists, then supplies symmetric Undo/Redo hooks.
+    struct ReusablePlacementCompanionCallbacks
+    {
+        std::function<void()> undo;
+        std::function<bool()> redo;
+    };
+
+    using ReusablePlacementCompanionFactory = std::function<bool(
+        wi::scene::Scene& scene,
+        wi::ecs::Entity instanceRoot,
+        wi::ecs::Entity payloadRoot,
+        ReusablePlacementCompanionCallbacks& callbacks,
+        std::string& error)>;
+
+    void SetReusablePlacementCompanionFactory(
+        ReusablePlacementCompanionFactory factory);
+    void ClearReusablePlacementCompanionFactory() noexcept;
+
     class PlaceReusableModelCommand final : public ICommand
     {
     public:
@@ -60,9 +68,6 @@ namespace renegade::bridge
             float scaleFactor,
             std::string displayName = {});
 
-        // Adopt a live cursor instance without cloning, reparsing or moving it.
-        // The first Execute() only stamps stable Renegade metadata and captures
-        // the Undo/Redo snapshot; the visible entity is already in the scene.
         PlaceReusableModelCommand(
             wi::scene::Scene& targetScene,
             StableId assetId,
@@ -88,6 +93,8 @@ namespace renegade::bridge
 
         void CaptureMaterialResources(std::size_t firstMaterialIndex);
         void RestoreCapturedMaterialResources();
+        [[nodiscard]] bool PromotePreparedCharacter();
+        [[nodiscard]] bool ApplyPlacementCompanion();
 
         wi::scene::Scene* scene_ = nullptr;
         wi::allocator::shared_ptr<wi::scene::Scene> preparedScene_;
@@ -100,7 +107,10 @@ namespace renegade::bridge
         wi::Archive snapshot_;
         std::vector<CapturedMaterialResource> materialResources_;
         std::size_t firstMaterialIndex_ = 0;
+        ReusablePlacementCompanionCallbacks companion_;
+        bool companionActive_ = false;
         bool adoptExisting_ = false;
+        bool promoteCharacter_ = false;
         bool hasSnapshot_ = false;
     };
 }

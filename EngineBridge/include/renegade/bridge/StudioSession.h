@@ -2,8 +2,10 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "renegade/bridge/CommandService.h"
+#include "renegade/bridge/IdentityService.h"
 #include "renegade/bridge/ScriptAuthoringService.h"
 #include "renegade/bridge/StudioProjectService.h"
 #include "renegade/bridge/SceneService.h"
@@ -19,12 +21,135 @@ namespace renegade::bridge
         StudioSession() noexcept
         {
             current_ = this;
+
+            // Entity duplication is a single editor Undo/Redo action even when
+            // part of its governed authoring state lives in the Scene's
+            // companion .rscripts document. Register the active Studio session
+            // as that companion boundary. DuplicateEntityCommand has already
+            // assigned the new hierarchy persistent IDs before this callback.
+            SetDuplicateEntityCompanionFactory(
+                [this](
+                    wi::scene::Scene& scene,
+                    const wi::ecs::Entity source,
+                    const wi::ecs::Entity duplicate,
+                    DuplicateEntityCompanionCallbacks& callbacks,
+                    std::string& error) -> bool
+                {
+                    callbacks = {};
+                    if (&scenes_.GetScene() != &scene || !projects_.HasProject())
+                    {
+                        error.clear();
+                        return true;
+                    }
+
+                    // Renegade does not allow script attachment to an unsaved
+                    // Level, so there is no companion state to preserve here.
+                    if (scenes_.CurrentPath().empty())
+                    {
+                        error.clear();
+                        return true;
+                    }
+                    if (!scripts_.EnsureCurrent(error))
+                        return false;
+
+                    ScriptDocument* document = scripts_.Document();
+                    if (document == nullptr)
+                    {
+                        error = "The active scripting companion is unavailable during duplication.";
+                        return false;
+                    }
+
+                    const StableId sourceId = PersistentEntityId(scene, source);
+                    const StableId duplicateId = PersistentEntityId(scene, duplicate);
+                    if (!IsValidStableId(sourceId) || !IsValidStableId(duplicateId) ||
+                        sourceId == duplicateId)
+                    {
+                        error = "Scene duplication did not establish two distinct persistent entity IDs.";
+                        return false;
+                    }
+
+                    bool hasSourceAttachments = false;
+                    for (const auto& attachment : document->attachments)
+                    {
+                        if (attachment.scope == ScriptScope::Entity &&
+                            attachment.ownerEntityId == sourceId)
+                        {
+                            hasSourceAttachments = true;
+                            break;
+                        }
+                    }
+                    if (!hasSourceAttachments)
+                    {
+                        error.clear();
+                        return true;
+                    }
+
+                    const ScriptDocument before = *document;
+                    std::vector<StableId> created;
+                    if (!DuplicateEntityScriptAttachments(
+                            *document,
+                            sourceId,
+                            duplicateId,
+                            created,
+                            error))
+                    {
+                        *document = before;
+                        return false;
+                    }
+
+                    // A property explicitly targeting the source actor is a
+                    // self-reference for duplication purposes. Repoint only
+                    // that reference to the new actor; references to other
+                    // same-Scene entities intentionally remain unchanged.
+                    for (const StableId& scriptId : created)
+                    {
+                        auto* attachment = FindScriptAttachment(*document, scriptId);
+                        if (attachment == nullptr)
+                        {
+                            *document = before;
+                            error = "Duplicated script attachment disappeared before reference remap.";
+                            return false;
+                        }
+                        for (auto& property : attachment->properties)
+                        {
+                            if (property.type == ScriptPropertyType::EntityReference &&
+                                property.referenceId == sourceId)
+                            {
+                                property.referenceId = duplicateId;
+                                property.pathHint.clear();
+                            }
+                        }
+                    }
+                    if (!ValidateScriptDocumentAgainstScene(*document, scene, error))
+                    {
+                        *document = before;
+                        return false;
+                    }
+
+                    const ScriptDocument after = *document;
+                    callbacks.undo = [this, before]() mutable
+                    {
+                        if (auto* active = scripts_.Document())
+                            *active = before;
+                    };
+                    callbacks.redo = [this, after]() mutable -> bool
+                    {
+                        auto* active = scripts_.Document();
+                        if (active == nullptr)
+                            return false;
+                        *active = after;
+                        return true;
+                    };
+                    error.clear();
+                    return true;
+                });
         }
 
         ~StudioSession()
         {
             if (current_ == this)
             {
+                ClearDuplicateEntityCompanionFactory();
                 current_ = nullptr;
             }
         }
@@ -142,10 +267,6 @@ namespace renegade::bridge
             return committed;
         }
 
-        // Gate 7 Story Flow-native adoption boundary. The pending descriptor
-        // has already had its startup Flow resolved and parsed. Commit project
-        // authority first, then clear any Scene belonging to the previous
-        // project so it cannot leak into the newly active context.
         bool CommitPendingProjectWithoutScene()
         {
             if (!projects_.HasPendingProject())
@@ -185,19 +306,12 @@ namespace renegade::bridge
             if (!documents_.Save(filePath))
                 return false;
 
-            // Scene-only/headless uses of StudioSession predate project-owned
-            // scripting and remain valid. A scripting companion is meaningful
-            // only when an authoritative Renegade project is active.
             if (!projects_.HasProject())
                 return true;
 
             std::string scriptError;
             if (!scripts_.SaveForScene(filePath, previousPath, scriptError))
             {
-                // SceneDocumentService has already marked the shared command
-                // history saved. A failed companion commit means the complete
-                // creator document transaction is not saved, so restore dirty
-                // state and surface one authoritative error.
                 commands_.MarkUnsaved();
                 scenes_.SetLastError(
                     "Scene saved but scripting companion failed: " +
@@ -228,9 +342,6 @@ namespace renegade::bridge
                 scenes_.GetScene(), project.rootPath, project.projectId);
             if (!restored.succeeded)
             {
-                // Match the established governed-texture lifecycle policy:
-                // scene adoption remains authoritative, but a missing/corrupt
-                // governed live resource is surfaced as an explicit warning.
                 scenes_.SetLastError(
                     "Scene opened but governed video restoration failed: " +
                     restored.error);

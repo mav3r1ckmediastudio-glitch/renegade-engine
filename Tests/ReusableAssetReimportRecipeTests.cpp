@@ -99,6 +99,7 @@ namespace
         using namespace renegade::bridge;
 
         CreatorModelImportRecipe recipe;
+        recipe.assetKind = CreatorAssetImportKind::Character;
         recipe.transform.authored = true;
         recipe.transform.positionX = 1.0f;
         recipe.transform.positionY = -2.0f;
@@ -141,6 +142,16 @@ namespace
         unused.enabled = false;
         recipe.animations.push_back(unused);
 
+        CreatorExternalAnimationImportRecipe rifleAim;
+        rifleAim.sourceProjectRelativePath =
+            "SourceAssets/Animations/RifleAim.fbx";
+        rifleAim.sourceAnimationIndex = 0;
+        rifleAim.name = "Rifle Aim";
+        rifleAim.start = 0.0f;
+        rifleAim.end = 1.2f;
+        rifleAim.enabled = true;
+        recipe.externalAnimations.push_back(rifleAim);
+
         std::string encoded;
         std::string error;
         if (!Require(SerializeCreatorModelImportOptions(recipe, encoded, error),
@@ -150,8 +161,11 @@ namespace
         CreatorModelImportRecipe decoded;
         if (!Require(ParseCreatorModelImportOptions(encoded, decoded, error),
                 "serialized creator recipe did not parse: " + error) ||
-            !Require(decoded.materials.size() == 1 && decoded.animations.size() == 2,
-                "creator recipe did not round-trip material/animation counts") ||
+            !Require(decoded.assetKind == CreatorAssetImportKind::Character,
+                "character import designation did not round-trip") ||
+            !Require(decoded.materials.size() == 1 && decoded.animations.size() == 2 &&
+                decoded.externalAnimations.size() == 1,
+                "creator recipe did not round-trip animation provenance") ||
             !Require(decoded.transform.authored &&
                 decoded.transform.positionX == 1.0f &&
                 decoded.transform.positionY == -2.0f &&
@@ -182,7 +196,11 @@ namespace
                 decoded.animations[0].end == 18.0f &&
                 decoded.animations[0].enabled &&
                 !decoded.animations[1].enabled,
-                "creator animation clip data did not round-trip"))
+                "creator animation clip data did not round-trip") ||
+            !Require(decoded.externalAnimations[0].sourceProjectRelativePath ==
+                    "SourceAssets/Animations/RifleAim.fbx" &&
+                decoded.externalAnimations[0].name == "Rifle Aim",
+                "external animation provenance did not round-trip"))
             return false;
 
         CreatorModelImportRecipe invalid;
@@ -205,7 +223,21 @@ namespace
             !Require(!ParseCreatorModelImportOptions(
                 "{\"transform\":{\"position\":[0,0,0],\"rotation_degrees\":[0,0,0],\"scale\":[0,1,1]}}",
                 invalid, error) && error.find("outside its supported range") != std::string::npos,
-                "invalid creator transform scale was not rejected"))
+                "invalid creator transform scale was not rejected") ||
+            !Require(!ParseCreatorModelImportOptions(
+                "{\"asset_kind\":\"vehicle\"}", invalid, error) &&
+                error.find("asset_kind must be model or character") != std::string::npos,
+                "unsupported creator asset kind was not rejected") ||
+            !Require(!ParseCreatorModelImportOptions(
+                "{\"external_animations\":[{\"enabled\":true,\"end\":1.0,\"name\":\"Bad\",\"source_animation_index\":0,\"source_project_relative_path\":\"../outside.fbx\",\"start\":0.0}]}",
+                invalid, error) && error.find("invalid governed source") != std::string::npos,
+                "external animation traversal provenance was not rejected"))
+            return false;
+
+        CreatorModelImportRecipe legacy;
+        if (!Require(ParseCreatorModelImportOptions("{}", legacy, error) &&
+                legacy.assetKind == CreatorAssetImportKind::Model,
+                "legacy creator recipe did not retain Model as its default kind"))
             return false;
 
         wi::scene::Scene transformed;

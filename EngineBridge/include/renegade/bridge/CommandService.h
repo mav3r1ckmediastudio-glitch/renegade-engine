@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -19,36 +20,25 @@ namespace renegade::bridge
     [[nodiscard]] TransformState CaptureTransform(
         const wi::scene::TransformComponent& transform) noexcept;
 
-    // A curated view of WeatherComponent.
-    //
-    // WeatherComponent carries well over a hundred values once the two
-    // volumetric cloud layers are counted. Exposing them raw would be
-    // unusable, and capturing them all for Undo would make every slider drag
-    // copy kilobytes. This is the set a creator actually reaches for; anything
-    // absent here is left untouched by ApplyWeather, so authored values that
-    // Renegade does not yet surface are never destroyed by an edit.
     struct WeatherState
     {
         enum class SkyMode
         {
-            Realistic,            // physically based atmosphere
-            RealisticWithClouds,  // atmosphere plus volumetric clouds
-            Skybox,               // skyMap texture, cheapest
+            Realistic,
+            RealisticWithClouds,
+            Skybox,
         };
 
         SkyMode skyMode = SkyMode::Realistic;
         bool aerialPerspective = true;
-
         float skyExposure = 1.0f;
         float stars = 0.0f;
         float ambientIntensity = 0.0f;
-
         float fogStart = 100.0f;
         float fogDensity = 0.0f;
         bool heightFog = false;
         float fogHeightStart = 1.0f;
         float fogHeightEnd = 3.0f;
-
         float cloudCoverage = 1.0f;
         float cloudStartHeight = 1500.0f;
         float cloudThickness = 5000.0f;
@@ -58,9 +48,6 @@ namespace renegade::bridge
     [[nodiscard]] WeatherState CaptureWeather(
         const wi::scene::WeatherComponent& weather) noexcept;
 
-    // Applies only the fields WeatherState covers. Everything else on the
-    // component - atmosphere parameters, sky map name, wind, ocean, rain - is
-    // deliberately left as authored.
     void ApplyWeather(
         wi::scene::WeatherComponent& weather,
         const WeatherState& state) noexcept;
@@ -77,10 +64,6 @@ namespace renegade::bridge
         const WeatherState& current,
         WeatherPreset preset) noexcept;
 
-    // Creates the dedicated serialized carrier used by Renegade's Environment
-    // workspace. Returning INVALID_ENTITY when a Weather component already
-    // exists prevents terrain generation from silently becoming the scene's
-    // Environment owner.
     [[nodiscard]] wi::ecs::Entity CreateEnvironment(
         wi::scene::Scene& scene,
         const WeatherState& weather,
@@ -95,22 +78,36 @@ namespace renegade::bridge
         virtual void Undo() = 0;
     };
 
+    // Some creator-owned authoring state deliberately lives outside WISCENE.
+    // The scene duplicate command remains the one Undo/Redo authority, while a
+    // registered companion hook can atomically duplicate/restore that external
+    // state (currently .rscripts) using the new persistent entity identities.
+    struct DuplicateEntityCompanionCallbacks
+    {
+        std::function<void()> undo;
+        std::function<bool()> redo;
+    };
+
+    using DuplicateEntityCompanionFactory = std::function<bool(
+        wi::scene::Scene& scene,
+        wi::ecs::Entity source,
+        wi::ecs::Entity duplicate,
+        DuplicateEntityCompanionCallbacks& callbacks,
+        std::string& error)>;
+
+    void SetDuplicateEntityCompanionFactory(
+        DuplicateEntityCompanionFactory factory);
+    void ClearDuplicateEntityCompanionFactory() noexcept;
+
     class CommandService
     {
     public:
         bool Execute(std::unique_ptr<ICommand> command);
-        // Records a command whose after-state is already live. This is used
-        // by continuous editor previews so mouse release does not restore and
-        // rebuild the before-state only to execute the same change again.
         bool RecordExecuted(std::unique_ptr<ICommand> command);
         bool Undo();
         bool Redo();
         void Clear() noexcept;
         void MarkSaved() noexcept;
-        // A multi-document save may serialize the WISCENE successfully and
-        // then fail its governed companion. Keep Studio visibly dirty in that
-        // case rather than falsely reporting the whole authoring transaction
-        // as saved.
         void MarkUnsaved() noexcept
         {
             savedStateReachable_ = false;
@@ -147,7 +144,6 @@ namespace renegade::bridge
 
     private:
         bool Apply(const XMFLOAT3& translation);
-
         wi::scene::Scene* scene_;
         wi::ecs::Entity entity_;
         XMFLOAT3 before_;
@@ -171,14 +167,9 @@ namespace renegade::bridge
         void Undo() override;
 
     private:
-        // expectedPreviousScale is command history, not necessarily the value
-        // currently live on the Transform. Studio's gizmo previews its after
-        // state before Execute(), so relying on the live value would miss the
-        // committed collision-shape rebuild.
         bool Apply(
             const TransformState& transform,
             const XMFLOAT3& expectedPreviousScale);
-
         wi::scene::Scene* scene_;
         wi::ecs::Entity entity_;
         TransformState before_;
@@ -203,7 +194,6 @@ namespace renegade::bridge
 
     private:
         bool Apply(const WeatherState& state);
-
         wi::scene::Scene* scene_;
         wi::ecs::Entity entity_;
         WeatherState before_;
@@ -252,6 +242,8 @@ namespace renegade::bridge
         wi::ecs::Entity source_;
         wi::ecs::Entity duplicate_ = wi::ecs::INVALID_ENTITY;
         wi::Archive snapshot_;
+        DuplicateEntityCompanionCallbacks companion_;
+        bool companionActive_ = false;
         bool hasSnapshot_ = false;
     };
 

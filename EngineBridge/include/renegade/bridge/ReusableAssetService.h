@@ -98,25 +98,10 @@ namespace renegade::bridge
     {
         std::string projectRoot;
         StableId projectId;
-
-        // Gate 3 source-retention policy: the authoritative reimport source is
-        // already project-owned below SourceAssets. Gate 5 can stage external
-        // creator selections there before invoking this UI-free transaction.
         std::string sourceProjectRelativePath;
-
-        // Permanent public reusable product below Content, for example
-        // Content/Models/Knight.rasset.
         std::string assetProjectRelativePath;
         ModelSourceFormat expectedFormat = ModelSourceFormat::Unknown;
-
-        // Version-1 conversion has no creator-tunable conversion settings yet.
-        // The canonical object is nevertheless persisted now so Gate 4 can
-        // replay the exact accepted recipe instead of guessing from paths.
         std::string settingsJson = "{}";
-
-        // Optional creator thumbnail already captured as PNG bytes.
-        // The reusable service never reads an arbitrary external path;
-        // these bytes join the governed product transaction directly.
         std::vector<std::uint8_t> thumbnailPngBytes;
     };
 
@@ -142,10 +127,6 @@ namespace renegade::bridge
         std::string error;
     };
 
-    // Gate 4 is deliberately stable-ID driven. Callers identify the registered
-    // reusable product; the source path, product path, importer/backend,
-    // versions, format and settings are resolved from LC01 + the accepted
-    // .rasset manifest. No caller-supplied path or format can redirect reimport.
     struct ReusableModelReimportRequest
     {
         std::string projectRoot;
@@ -177,10 +158,6 @@ namespace renegade::bridge
         std::string error;
     };
 
-    // Gate 5 placement is stable-ID driven for the same reason reimport is.
-    // The creator selects a registered product; its path is resolved from
-    // LC01 and its embedded WISCENE payload is loaded without consulting or
-    // converting the original FBX/GLTF source.
     struct ReusableModelPlacementRequest
     {
         std::string projectRoot;
@@ -241,12 +218,6 @@ namespace renegade::bridge
         ReusableModelPlacementResult result_;
     };
 
-    // UI-independent reusable-asset lifecycle boundary. First import creates
-    // stable identity; Gate 4 reimport resolves and replays only the stored
-    // accepted recipe, retaining those IDs and transactionally replacing the
-    // last-good product only after conversion and validation succeed. Gate 5
-    // placement resolves that same stable product and deserializes its accepted
-    // payload without invoking a format converter.
     class ReusableAssetService
     {
     public:
@@ -260,7 +231,20 @@ namespace renegade::bridge
             const ReusableModelReimportRequest& request,
             ReusableModelReimportOptions options = {}) const;
 
+#ifndef RENEGADE_LEGACY_PLACEMENT_IMPLEMENTATION
+        // Creator-facing placement accepts both ordinary reusable model/Character
+        // products and CW-05 Character Prefabs. Prefabs resolve their stable base
+        // Character Asset and return that prepared physical template with a
+        // transient portable-prefab authoring marker.
         [[nodiscard]] PreparedReusableModelPlacement PrepareModelAssetPlacement(
+            const ReusableModelPlacementRequest& request) const;
+#endif
+
+        // Internal accepted LP07/CW-04 backend. The legacy placement translation
+        // unit compiles with a token rename plus the guard above, leaving exactly
+        // one declaration of this member in that unit. All normal callers see
+        // both the creator-facing router and this explicit backend.
+        [[nodiscard]] PreparedReusableModelPlacement PrepareModelAssetPlacementLegacy(
             const ReusableModelPlacementRequest& request) const;
     };
 }
