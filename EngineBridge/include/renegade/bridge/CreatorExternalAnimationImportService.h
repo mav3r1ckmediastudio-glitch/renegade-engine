@@ -6,7 +6,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <vector>
 
 namespace renegade::bridge
@@ -72,12 +74,27 @@ namespace renegade::bridge
         const std::string& sourcePath,
         std::string& error)
     {
+        const auto sameSourcePath = [&](const std::string& queuedPath)
+        {
+            if (queuedPath == sourcePath)
+                return true;
+
+            std::error_code queuedError;
+            std::error_code sourceError;
+            const auto queuedCanonical = std::filesystem::weakly_canonical(
+                std::filesystem::u8path(queuedPath), queuedError);
+            const auto sourceCanonical = std::filesystem::weakly_canonical(
+                std::filesystem::u8path(sourcePath), sourceError);
+            return !queuedError && !sourceError &&
+                queuedCanonical == sourceCanonical;
+        };
+
         const auto before = CaptureCreatorExternalAnimationQueue();
         const auto sourceAlreadyQueued = std::any_of(
             before.clips.begin(), before.clips.end(),
             [&](const CreatorExternalAnimationClip& clip)
             {
-                return clip.localSourcePath == sourcePath;
+                return sameSourcePath(clip.localSourcePath);
             });
         if (sourceAlreadyQueued)
         {
@@ -92,7 +109,7 @@ namespace renegade::bridge
         std::vector<std::size_t> matching;
         for (std::size_t index = 0; index < after.clips.size(); ++index)
         {
-            if (after.clips[index].localSourcePath == sourcePath)
+            if (sameSourcePath(after.clips[index].localSourcePath))
                 matching.push_back(index);
         }
         if (matching.empty())
