@@ -51,6 +51,7 @@ namespace renegade::studio
                 externalAnimationSignature_.clear();
                 externalAnimationSelected_ = 0;
                 externalAnimationMessage_.clear();
+                externalAnimationBrowserPending_ = false;
 
                 // DismissImportScalePanel refreshes the Inspector and then
                 // makes its parent Window visible again. Wicked propagates that
@@ -95,35 +96,59 @@ namespace renegade::studio
                 return;
 
             externalAnimationHeader_.Create("Creator Character External Animation Header");
-            externalAnimationHeader_.SetText("EXTERNAL ANIMATIONS");
+            externalAnimationHeader_.SetText("EXTERNAL ANIMATION FILES");
             externalAnimationHeader_.SetColor(wi::Color::Transparent());
             externalAnimationHeader_.SetFitTextEnabled(false);
             AddWidget(&externalAnimationHeader_);
 
             externalAnimationAdd_.Create("Creator Character Add Animations");
-            externalAnimationAdd_.SetText("+ ADD ANIMATIONS...");
+            externalAnimationAdd_.SetText("+ ADD ANIMATION FILES...");
             externalAnimationAdd_.SetTooltip(
-                "Add one or many external animation sources to this Character import. "
-                "WISCENE / FBX / GLTF / GLB / VRM / VRMA are inspected with Wicked's native importers.");
+                "Open local storage and add one or many external Character animation files. "
+                "Each selected file becomes exactly one animation slot. WISCENE / FBX / GLTF / GLB / VRM / VRMA are inspected with Wicked's native importers.");
             externalAnimationAdd_.OnClick([this](const wi::gui::EventArgs&)
             {
-                BrowseExternalAnimations();
+                if (externalAnimationBrowserPending_)
+                    return;
+
+                // FileDialog owns its own platform thread. Opening it from the
+                // GUI callback itself proved unreliable in the owner build, so
+                // defer the launch to Wicked's thread-safe frame point just as
+                // the selected files themselves are returned there.
+                externalAnimationBrowserPending_ = true;
+                externalAnimationMessage_ = "OPENING LOCAL ANIMATION FILE BROWSER...";
+                externalAnimationSignature_.clear();
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this](std::uint64_t)
+                    {
+                        externalAnimationBrowserPending_ = false;
+                        if (!IsVisible() || ImportAssetKindIndex() != 1)
+                            return;
+                        BrowseExternalAnimations();
+                    });
             });
             AddWidget(&externalAnimationAdd_);
 
-            externalAnimationClips_.Create("Creator Character External Animation Clips");
+            // GGMAX-style creator presentation: all selected external files are
+            // visible as individual rows at once rather than hidden behind a
+            // single combo selection. The editable slot controls below operate
+            // on the selected row.
+            externalAnimationClips_.Create("Creator Character External Animation File Slots");
             externalAnimationClips_.SetTooltip(
-                "External source actions queued for this Character. One-action files default to the source filename.");
+                "One row per external animation file. Select a row to rename, include/exclude or remove it.");
             externalAnimationClips_.OnSelect([this](const wi::gui::EventArgs& args)
             {
-                externalAnimationSelected_ = static_cast<std::size_t>(args.userdata);
+                if (args.iValue < 0)
+                    return;
+                externalAnimationSelected_ = static_cast<std::size_t>(args.iValue);
                 externalAnimationSignature_.clear();
             });
             AddWidget(&externalAnimationClips_);
 
             externalAnimationName_.Create("Creator Character External Animation Name");
-            externalAnimationName_.SetDescription("CLIP NAME  ");
-            externalAnimationName_.SetPlaceholder("Animation clip name");
+            externalAnimationName_.SetDescription("SLOT NAME  ");
+            externalAnimationName_.SetPlaceholder("Animation slot name");
             externalAnimationName_.SetCancelInputEnabled(false);
             externalAnimationName_.OnInputAccepted([this](const wi::gui::EventArgs& args)
             {
@@ -135,7 +160,7 @@ namespace renegade::studio
                 }
                 else
                 {
-                    externalAnimationMessage_ = "External animation clip renamed.";
+                    externalAnimationMessage_ = "External animation slot renamed.";
                 }
                 externalAnimationSignature_.clear();
             });
@@ -145,7 +170,7 @@ namespace renegade::studio
             externalAnimationIncluded_.AddItem("INCLUDE", 1);
             externalAnimationIncluded_.AddItem("EXCLUDE", 0);
             externalAnimationIncluded_.SetTooltip(
-                "Included clips are retained in the Character recipe. Excluded rows remain as reimport provenance.");
+                "Included file slots are retained in the Character recipe. Excluded rows remain as reimport provenance.");
             externalAnimationIncluded_.OnSelect([this](const wi::gui::EventArgs& args)
             {
                 std::string error;
@@ -159,9 +184,9 @@ namespace renegade::studio
             AddWidget(&externalAnimationIncluded_);
 
             externalAnimationRemove_.Create("Creator Character Remove External Animation");
-            externalAnimationRemove_.SetText("REMOVE CLIP");
+            externalAnimationRemove_.SetText("REMOVE FILE");
             externalAnimationRemove_.SetTooltip(
-                "Remove this external action from the current Character import queue.");
+                "Remove the selected external animation file slot from this Character import.");
             externalAnimationRemove_.OnClick([this](const wi::gui::EventArgs&)
             {
                 std::string error;
@@ -178,7 +203,7 @@ namespace renegade::studio
                     {
                         --externalAnimationSelected_;
                     }
-                    externalAnimationMessage_ = "External animation clip removed.";
+                    externalAnimationMessage_ = "External animation file removed.";
                 }
                 externalAnimationSignature_.clear();
             });
@@ -269,9 +294,8 @@ namespace renegade::studio
             SetExternalAnimationControlsVisible(true);
             constexpr float x = 12.0f;
             const float width = std::max(160.0f, GetSize().x - 24.0f);
-            // Existing embedded animation controls end at y=396. External
-            // ingestion deliberately continues beneath them in the same
-            // scrollable ANIMATION page.
+            // Existing embedded animation controls end at y=396. External file
+            // slots continue beneath them in the same scrollable ANIMATION page.
             float y = 404.0f;
             externalAnimationHeader_.SetPos(XMFLOAT2(x, y));
             externalAnimationHeader_.SetSize(XMFLOAT2(width, 22.0f));
@@ -280,8 +304,8 @@ namespace renegade::studio
             externalAnimationAdd_.SetSize(XMFLOAT2(width, 30.0f));
             y += 36.0f;
             externalAnimationClips_.SetPos(XMFLOAT2(x, y));
-            externalAnimationClips_.SetSize(XMFLOAT2(width, 30.0f));
-            y += 36.0f;
+            externalAnimationClips_.SetSize(XMFLOAT2(width, 170.0f));
+            y += 176.0f;
             externalAnimationName_.SetPos(XMFLOAT2(x, y));
             externalAnimationName_.SetSize(XMFLOAT2(width, 30.0f));
             y += 36.0f;
@@ -292,7 +316,7 @@ namespace renegade::studio
             externalAnimationRemove_.SetSize(XMFLOAT2(half, 30.0f));
             y += 36.0f;
             externalAnimationStatus_.SetPos(XMFLOAT2(x, y));
-            externalAnimationStatus_.SetSize(XMFLOAT2(width, 42.0f));
+            externalAnimationStatus_.SetSize(XMFLOAT2(width, 46.0f));
 
             const auto snapshot = bridge::CaptureCreatorExternalAnimationQueue();
             std::ostringstream signature;
@@ -313,14 +337,17 @@ namespace renegade::studio
                 for (std::size_t i = 0; i < snapshot.clips.size(); ++i)
                 {
                     const auto& clip = snapshot.clips[i];
-                    externalAnimationClips_.AddItem(
-                        clip.name + "  //  " + clip.sourceDisplayName,
-                        static_cast<std::uint64_t>(i));
+                    wi::gui::TreeList::Item item;
+                    item.name = clip.name + "  //  " + clip.sourceDisplayName +
+                        (clip.enabled ? "  //  INCLUDED" : "  //  EXCLUDED");
+                    item.userdata = static_cast<std::uint64_t>(i);
+                    item.selected = i == externalAnimationSelected_;
+                    externalAnimationClips_.AddItem(item);
                 }
                 if (!snapshot.clips.empty())
                 {
-                    externalAnimationClips_.SetSelectedByUserdataWithoutCallback(
-                        static_cast<std::uint64_t>(externalAnimationSelected_));
+                    externalAnimationClips_.FocusOnItem(
+                        static_cast<int>(externalAnimationSelected_));
                     const auto& selected = snapshot.clips[externalAnimationSelected_];
                     externalAnimationName_.SetText(selected.name);
                     externalAnimationIncluded_.SetSelectedByUserdataWithoutCallback(
@@ -345,11 +372,9 @@ namespace renegade::studio
                 const auto& selected = snapshot.clips[externalAnimationSelected_];
                 std::ostringstream status;
                 status << bridge::HumanoidAnimationSourceFormatName(selected.sourceFormat)
-                    << " // source action " << (selected.sourceAnimationIndex + 1)
+                    << " // " << selected.sourceDisplayName
                     << " // " << selected.start << " - " << selected.end
-                    << " // SOURCE READY";
-                if (!selected.sourceActionName.empty())
-                    status << " // " << selected.sourceActionName;
+                    << " // FILE SLOT READY";
                 externalAnimationStatus_.SetText(
                     externalAnimationMessage_.empty()
                         ? status.str()
@@ -378,10 +403,11 @@ namespace renegade::studio
             wi::helper::FileDialogParams params;
             params.type = wi::helper::FileDialogParams::OPEN;
             params.description =
-                "Character animation sources (WISCENE, FBX, GLTF, GLB, VRM, VRMA)";
+                "Character animation files (WISCENE, FBX, GLTF, GLB, VRM, VRMA)";
             params.extensions = {"wiscene", "fbx", "gltf", "glb", "vrm", "vrma"};
             params.multiselect = true;
-            wi::helper::FileDialog(params,
+            wi::helper::FileDialog(
+                params,
                 [this, expectedProjectRoot](const std::string& fileName)
                 {
                     if (fileName.empty())
@@ -400,17 +426,31 @@ namespace renegade::studio
                             }
 
                             std::string error;
-                            if (!bridge::QueueCreatorExternalAnimationSource(fileName, error))
+                            if (!bridge::QueueCreatorExternalAnimationFileSlot(fileName, error))
                             {
                                 externalAnimationMessage_ = error;
                             }
                             else
                             {
                                 const auto snapshot = bridge::CaptureCreatorExternalAnimationQueue();
+                                if (!snapshot.clips.empty())
+                                    externalAnimationSelected_ = snapshot.clips.size() - 1;
                                 externalAnimationMessage_ =
                                     "Queued " + std::to_string(snapshot.clips.size()) +
-                                    " external animation action(s).";
+                                    " external animation file slot(s).";
                             }
+                            externalAnimationSignature_.clear();
+                        });
+                },
+                [this]()
+                {
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [this](std::uint64_t)
+                        {
+                            if (!IsVisible())
+                                return;
+                            externalAnimationMessage_ = "Animation file selection cancelled.";
                             externalAnimationSignature_.clear();
                         });
                 });
@@ -574,12 +614,13 @@ namespace renegade::studio
         WeatherPresentationState entityWeatherBefore_;
 
         bool externalAnimationControlsCreated_ = false;
+        bool externalAnimationBrowserPending_ = false;
         std::size_t externalAnimationSelected_ = 0;
         std::string externalAnimationSignature_;
         std::string externalAnimationMessage_;
         wi::gui::Label externalAnimationHeader_;
         RenegadeButton externalAnimationAdd_;
-        RenegadeComboBox externalAnimationClips_;
+        wi::gui::TreeList externalAnimationClips_;
         RenegadeTextInputField externalAnimationName_;
         RenegadeComboBox externalAnimationIncluded_;
         RenegadeButton externalAnimationRemove_;
