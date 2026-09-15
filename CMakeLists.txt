@@ -54,6 +54,8 @@ include(EngineBridge/Phase5Gate5.cmake)
 include(EngineBridge/Phase5Gate8.cmake)
 
 target_sources(RenegadeEngineBridge PRIVATE
+    EngineBridge/include/renegade/bridge/CharacterService.h
+    EngineBridge/src/CharacterService.cpp
     EngineBridge/include/renegade/bridge/CharacterAnimationControlService.h
     EngineBridge/src/CharacterAnimationControlService.cpp
     EngineBridge/include/renegade/bridge/AnimationTimelineService.h
@@ -72,7 +74,21 @@ if(WIN32)
         TARGET_DIRECTORY RenegadeStudio
         PROPERTIES COMPILE_DEFINITIONS "RENEGADE_PHASE7A_IMPLEMENTATION=1"
     )
+    # CW-05 wraps the accepted AI Character inspector with one bounded prefab
+    # section. Rename only the two exported registration functions in the old
+    # translation unit; the wrapper forwards to them and adds prefab controls.
+    set_source_files_properties(
+        "${CMAKE_SOURCE_DIR}/Studio/src/AICharacterInspector.cpp"
+        TARGET_DIRECTORY RenegadeStudio
+        PROPERTIES COMPILE_DEFINITIONS
+            "RegisterAICharacterInspector=RegisterAICharacterInspectorLegacy;PrepareAICharacterInspector=PrepareAICharacterInspectorLegacy"
+    )
     target_sources(RenegadeStudio PRIVATE
+        Studio/src/AICharacterInspector.cpp
+        Studio/src/AICharacterInspector.h
+        Studio/src/CharacterPrefabInspectorExtension.cpp
+        Studio/src/CharacterPrefabStudioIntegration.cpp
+        Studio/src/CharacterPrefabStudioIntegration.h
         Studio/src/Phase7Gate7BHumanoidRetargetInspector.cpp
         Studio/src/Phase7Gate7BHumanoidRetargetInspector.h
         Studio/src/Phase7Gate7CCharacterControlsInspector.cpp
@@ -176,6 +192,7 @@ if(WIN32)
     include(Tests/Phase7Gate7D.cmake)
     include(Tests/Phase7Gate7E.cmake)
     include(Tests/Phase7Gate7F.cmake)
+    include(Tests/CharacterAiFoundation.cmake)
     include(Tests/S1AInspectorSectionFramework.cmake)
     include(Tests/S1BInspectorMigration.cmake)
     include(Tests/S2ScriptDocument.cmake)
@@ -200,6 +217,14 @@ if(WIN32)
             -DRENEGADE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/TestLevelRuntimeHandoffSourceContract.cmake
     )
+    add_test(
+        NAME RenegadeCharacterWorkflowSourceContract
+        COMMAND ${CMAKE_COMMAND}
+            -DRENEGADE_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/Tests/CharacterWorkflowSourceContract.cmake
+    )
+    include(Tests/CW04CharacterPlacement.cmake)
+    include(Tests/CW05CharacterPrefab.cmake)
     include(Tests/SceneUiGate2.cmake)
     include(Tests/SceneUiGate3.cmake)
     include(Tests/SceneUiGate4.cmake)

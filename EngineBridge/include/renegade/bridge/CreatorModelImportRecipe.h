@@ -8,6 +8,14 @@
 
 namespace renegade::bridge
 {
+    // Classification is authored with the import recipe rather than inferred
+    // from a later scene conversion. The default preserves existing recipes.
+    enum class CreatorAssetImportKind : std::uint8_t
+    {
+        Model,
+        Character,
+    };
+
     struct CreatorMaterialImportRecipe
     {
         std::uint32_t materialIndex = 0;
@@ -34,6 +42,21 @@ namespace renegade::bridge
         bool enabled = true;
     };
 
+    // External clips are project-governed import provenance. They deliberately
+    // identify an action/take by retained source + source animation index,
+    // never a transient scene entity or raw ECS ID. Source action labels stay
+    // in the importer queue for presentation; the numeric index is the durable
+    // converter identity already used by embedded animation recipes.
+    struct CreatorExternalAnimationImportRecipe
+    {
+        std::string sourceProjectRelativePath;
+        std::uint32_t sourceAnimationIndex = 0;
+        std::string name;
+        float start = 0.0f;
+        float end = 0.0f;
+        bool enabled = true;
+    };
+
     struct CreatorModelTransformRecipe
     {
         bool authored = false;
@@ -50,9 +73,11 @@ namespace renegade::bridge
 
     struct CreatorModelImportRecipe
     {
+        CreatorAssetImportKind assetKind = CreatorAssetImportKind::Model;
         CreatorModelTransformRecipe transform;
         std::vector<CreatorMaterialImportRecipe> materials;
         std::vector<CreatorAnimationImportRecipe> animations;
+        std::vector<CreatorExternalAnimationImportRecipe> externalAnimations;
     };
 
     inline constexpr const char* CreatorAuthoredTransformRootName =

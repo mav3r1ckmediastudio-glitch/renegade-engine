@@ -1,3 +1,4 @@
+#include "renegade/bridge/CreatorModelImportRecipe.h"
 #include "renegade/bridge/HumanoidRetargetService.h"
 
 #include <iostream>
@@ -9,7 +10,9 @@ namespace
 {
     using renegade::bridge::HumanoidBone;
 
-    bool Require(const bool condition, const char* message)
+    constexpr const char* ProjectId = "88888888-8888-4888-8888-888888888888";
+
+    bool Require(const bool condition, const std::string& message)
     {
         if (!condition)
             std::cerr << "Phase7Gate7B test failure: " << message << '\n';
@@ -30,50 +33,69 @@ namespace
         armature.inverseBindMatrices.push_back(wi::math::IDENTITY_MATRIX);
         return entity;
     }
+
+    const std::vector<std::pair<const char*, HumanoidBone>>& MixamoCoreBones()
+    {
+        static const std::vector<std::pair<const char*, HumanoidBone>> bones = {
+            {"mixamorig:Hips", HumanoidBone::Hips},
+            {"mixamorig:Spine", HumanoidBone::Spine},
+            {"mixamorig:Spine1", HumanoidBone::Chest},
+            {"mixamorig:Spine2", HumanoidBone::UpperChest},
+            {"mixamorig:Neck", HumanoidBone::Neck},
+            {"mixamorig:Head", HumanoidBone::Head},
+            {"mixamorig:LeftShoulder", HumanoidBone::LeftShoulder},
+            {"mixamorig:LeftArm", HumanoidBone::LeftUpperArm},
+            {"mixamorig:LeftForeArm", HumanoidBone::LeftLowerArm},
+            {"mixamorig:LeftHand", HumanoidBone::LeftHand},
+            {"mixamorig:RightShoulder", HumanoidBone::RightShoulder},
+            {"mixamorig:RightArm", HumanoidBone::RightUpperArm},
+            {"mixamorig:RightForeArm", HumanoidBone::RightLowerArm},
+            {"mixamorig:RightHand", HumanoidBone::RightHand},
+            {"mixamorig:LeftUpLeg", HumanoidBone::LeftUpperLeg},
+            {"mixamorig:LeftLeg", HumanoidBone::LeftLowerLeg},
+            {"mixamorig:LeftFoot", HumanoidBone::LeftFoot},
+            {"mixamorig:LeftToeBase", HumanoidBone::LeftToes},
+            {"mixamorig:RightUpLeg", HumanoidBone::RightUpperLeg},
+            {"mixamorig:RightLeg", HumanoidBone::RightLowerLeg},
+            {"mixamorig:RightFoot", HumanoidBone::RightFoot},
+            {"mixamorig:RightToeBase", HumanoidBone::RightToes},
+            {"mixamorig:LeftHandIndex1", HumanoidBone::LeftIndexProximal},
+            {"mixamorig:RightHandIndex1", HumanoidBone::RightIndexProximal},
+        };
+        return bones;
+    }
+
+    wi::ecs::Entity AddMixamoRig(
+        wi::scene::Scene& scene,
+        std::vector<wi::ecs::Entity>* entities = nullptr)
+    {
+        const auto rig = wi::ecs::CreateEntity();
+        scene.names.Create(rig).name = "Mixamo Character";
+        scene.transforms.Create(rig);
+        auto& armature = scene.armatures.Create(rig);
+
+        if (entities != nullptr)
+        {
+            entities->clear();
+            entities->reserve(MixamoCoreBones().size());
+        }
+        for (const auto& [name, unused] : MixamoCoreBones())
+        {
+            (void)unused;
+            const auto entity = AddBone(scene, armature, rig, name);
+            if (entities != nullptr)
+                entities->push_back(entity);
+        }
+        return rig;
+    }
 }
 
 int main()
 {
     wi::scene::Scene scene;
-    const auto rig = wi::ecs::CreateEntity();
-    scene.names.Create(rig).name = "Mixamo Character";
-    scene.transforms.Create(rig);
-    auto& armature = scene.armatures.Create(rig);
-
-    const std::vector<std::pair<const char*, HumanoidBone>> bones = {
-        {"mixamorig:Hips", HumanoidBone::Hips},
-        {"mixamorig:Spine", HumanoidBone::Spine},
-        {"mixamorig:Spine1", HumanoidBone::Chest},
-        {"mixamorig:Spine2", HumanoidBone::UpperChest},
-        {"mixamorig:Neck", HumanoidBone::Neck},
-        {"mixamorig:Head", HumanoidBone::Head},
-        {"mixamorig:LeftShoulder", HumanoidBone::LeftShoulder},
-        {"mixamorig:LeftArm", HumanoidBone::LeftUpperArm},
-        {"mixamorig:LeftForeArm", HumanoidBone::LeftLowerArm},
-        {"mixamorig:LeftHand", HumanoidBone::LeftHand},
-        {"mixamorig:RightShoulder", HumanoidBone::RightShoulder},
-        {"mixamorig:RightArm", HumanoidBone::RightUpperArm},
-        {"mixamorig:RightForeArm", HumanoidBone::RightLowerArm},
-        {"mixamorig:RightHand", HumanoidBone::RightHand},
-        {"mixamorig:LeftUpLeg", HumanoidBone::LeftUpperLeg},
-        {"mixamorig:LeftLeg", HumanoidBone::LeftLowerLeg},
-        {"mixamorig:LeftFoot", HumanoidBone::LeftFoot},
-        {"mixamorig:LeftToeBase", HumanoidBone::LeftToes},
-        {"mixamorig:RightUpLeg", HumanoidBone::RightUpperLeg},
-        {"mixamorig:RightLeg", HumanoidBone::RightLowerLeg},
-        {"mixamorig:RightFoot", HumanoidBone::RightFoot},
-        {"mixamorig:RightToeBase", HumanoidBone::RightToes},
-        {"mixamorig:LeftHandIndex1", HumanoidBone::LeftIndexProximal},
-        {"mixamorig:RightHandIndex1", HumanoidBone::RightIndexProximal},
-    };
-
     std::vector<wi::ecs::Entity> entities;
-    entities.reserve(bones.size());
-    for (const auto& [name, unused] : bones)
-    {
-        (void)unused;
-        entities.push_back(AddBone(scene, armature, rig, name));
-    }
+    const auto rig = AddMixamoRig(scene, &entities);
+    auto& armature = *scene.armatures.GetComponent(rig);
 
     const auto mapped = renegade::bridge::BuildAutoHumanoidMapping(scene, rig);
     if (!Require(mapped.mappedBones >= 22, "expected core Mixamo bones to auto-map")) return 1;
@@ -132,6 +154,52 @@ int main()
                 renegade::bridge::HumanoidAnimationSourceFormat::Fbx,
             "FBX classification failed")) return 1;
 
-    std::cout << "Phase 7B humanoid mapping tests passed\n";
+    // CW-03: the governed Character import path must prepare a Mixamo-style
+    // destination during import rather than requiring the creator to place it
+    // in a scene and run HUMANOID / RETARGET manually afterwards.
+    wi::scene::Scene importedCharacter;
+    const auto importedRig = AddMixamoRig(importedCharacter);
+    renegade::bridge::CreatorModelImportRecipe characterRecipe;
+    characterRecipe.assetKind = renegade::bridge::CreatorAssetImportKind::Character;
+    std::string error;
+    if (!Require(
+            renegade::bridge::ApplyCreatorModelImportRecipe(
+                importedCharacter, "", ProjectId, characterRecipe, error),
+            "Character import should auto-prepare a supported Mixamo humanoid: " + error)) return 1;
+    const auto* preparedHumanoid = importedCharacter.humanoids.GetComponent(importedRig);
+    if (!Require(preparedHumanoid != nullptr && preparedHumanoid->IsValid(),
+            "Character import did not persist a valid native Wicked humanoid mapping")) return 1;
+
+    // External animation provenance is Character-only. Generic MODEL recipes
+    // must fail before touching a retained source file.
+    renegade::bridge::CreatorModelImportRecipe modelWithExternal;
+    renegade::bridge::CreatorExternalAnimationImportRecipe external;
+    external.sourceProjectRelativePath =
+        "SourceAssets/Animations/Snapshots/Walk_deadbeef/Walk.fbx";
+    external.sourceAnimationIndex = 0;
+    external.name = "Walk";
+    external.start = 0.0f;
+    external.end = 1.0f;
+    external.enabled = true;
+    modelWithExternal.externalAnimations.push_back(external);
+    error.clear();
+    if (!Require(
+            !renegade::bridge::ApplyCreatorModelImportRecipe(
+                importedCharacter, "", ProjectId, modelWithExternal, error) &&
+                error.find("only be committed by a Character import recipe") != std::string::npos,
+            "generic Model recipe did not reject Character external animation provenance")) return 1;
+
+    // A missing retained source must fail loudly with an actionable import
+    // error instead of silently finalising a Character without its requested
+    // external animation.
+    characterRecipe.externalAnimations.push_back(external);
+    error.clear();
+    if (!Require(
+            !renegade::bridge::ApplyCreatorModelImportRecipe(
+                importedCharacter, "", ProjectId, characterRecipe, error) &&
+                error.find("active project root") != std::string::npos,
+            "Character import did not expose a clear retained-source repair error")) return 1;
+
+    std::cout << "Phase 7B / CW-03 humanoid preparation tests passed\n";
     return 0;
 }
