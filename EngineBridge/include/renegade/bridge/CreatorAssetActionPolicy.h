@@ -40,15 +40,60 @@ namespace renegade::bridge
             dependencyClass == DependencyClass::Font;
     }
 
-    // Placement requires a live imported model product. Reimport deliberately
-    // does not: a missing governed product is one of the states reimport must
-    // be able to recover from.
-    inline bool CanPlaceCreatorModelAsset(
+    inline bool CanPlaceCreatorImportedModelAsset(
         const AssetCatalogueEntry& entry) noexcept
     {
         return entry.registered && IsValidStableId(entry.assetId) &&
             entry.importedProduct && entry.productAvailable &&
             IsCreatorModelSourceFormat(entry.sourceFormat);
+    }
+
+    inline bool IsCreatorCharacterPrefabPath(
+        const std::string& projectRelativePath) noexcept
+    {
+        constexpr const char* suffix = ".rcharprefab";
+        const std::size_t suffixLength = std::char_traits<char>::length(suffix);
+        if (projectRelativePath.rfind("Content/Prefabs/", 0) != 0 ||
+            projectRelativePath.size() < suffixLength)
+        {
+            return false;
+        }
+        return projectRelativePath.compare(
+            projectRelativePath.size() - suffixLength,
+            suffixLength,
+            suffix) == 0;
+    }
+
+    // CW-05 Character Prefabs are generated project assets rather than imported
+    // model products. They are placeable only while their registered prefab
+    // document is available/current; the placement service resolves their
+    // stable base Character Asset dependency before any Scene mutation occurs.
+    inline bool CanPlaceCreatorCharacterPrefabAsset(
+        const AssetCatalogueEntry& entry) noexcept
+    {
+        return entry.registered && IsValidStableId(entry.assetId) &&
+            entry.type == AssetType::Prefab && entry.productAvailable &&
+            (entry.state == AssetCatalogueState::Current ||
+             entry.state == AssetCatalogueState::Moved) &&
+            IsCreatorCharacterPrefabPath(entry.projectRelativePath);
+    }
+
+    // LP07's existing Studio/browser call sites use this historical function
+    // name for the PLACE/drag capability. CW-05 deliberately keeps that one
+    // creator placement path instead of adding a second prefab editor path, so
+    // the compatibility entry point now means "placeable scene asset" while
+    // CanPlaceCreatorImportedModelAsset retains the precise model-only policy.
+    inline bool CanPlaceCreatorModelAsset(
+        const AssetCatalogueEntry& entry) noexcept
+    {
+        return CanPlaceCreatorImportedModelAsset(entry) ||
+            CanPlaceCreatorCharacterPrefabAsset(entry);
+    }
+
+    inline bool CanPlaceCreatorSceneAsset(
+        const AssetCatalogueEntry& entry) noexcept
+    {
+        return CanPlaceCreatorModelAsset(entry);
     }
 
     inline bool CanReimportCreatorModelAsset(

@@ -1,9 +1,11 @@
 #pragma once
 
+#include "renegade/bridge/CreatorExternalAnimationImportService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace renegade::bridge
@@ -60,6 +62,25 @@ namespace renegade::bridge
 
     struct CreatorModelMaterialPreparationResult
     {
+        CreatorModelMaterialPreparationResult()
+        {
+            // The guided importer intentionally keeps external animation file
+            // selection non-mutating. Material preparation is already part of
+            // the final governed import transaction, so this is the point at
+            // which queued animation sources are retained under SourceAssets
+            // and become durable recipe provenance.
+            if (!StagePendingCreatorExternalAnimationsForRecipe(
+                    recipe.externalAnimations, error))
+            {
+                // Keep a deliberately invalid recipe entry as a fail-closed
+                // backstop for zero-material assets where the material loop
+                // would otherwise have no opportunity to observe `error`.
+                CreatorExternalAnimationImportRecipe invalid;
+                invalid.name = "EXTERNAL ANIMATION STAGING FAILED";
+                recipe.externalAnimations.push_back(std::move(invalid));
+            }
+        }
+
         bool succeeded = false;
         CreatorModelImportRecipe recipe;
         std::size_t governedTextures = 0;

@@ -2260,6 +2260,18 @@ namespace renegade::runtime
         impl_->gameplayInput = input;
     }
 
+    bool RuntimeScriptRuntime::EnqueueGameplayEvent(
+        bridge::GameplayEvent event,
+        std::string& error)
+    {
+        if (impl_ == nullptr)
+        {
+            error = "Governed Runtime script event queue is unavailable.";
+            return false;
+        }
+        return impl_->gameplayEvents.Enqueue(std::move(event), error);
+    }
+
     void RuntimeScriptRuntime::Update(const float dt) noexcept
     {
         impl_->currentPrompt.clear();

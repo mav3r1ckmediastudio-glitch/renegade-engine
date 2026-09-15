@@ -1,0 +1,287 @@
+#include "RuntimeCombatDamage.h"
+#include "RuntimeCombatDecision.h"
+
+#include "renegade/bridge/GameplayEventService.h"
+#include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/WeaponCombatService.h"
+
+#include <cmath>
+#include <iostream>
+#include <string>
+
+namespace
+{
+    int Fail(const std::string& message)
+    {
+        std::cerr << "AI05_FAIL: " << message << '\n';
+        return 1;
+    }
+
+    bool ContainsIntent(
+        const std::vector<renegade::runtime::CharacterIntentScore>& scores,
+        const renegade::runtime::CharacterIntent intent)
+    {
+        for (const auto& score : scores)
+        {
+            if (score.intent == intent)
+                return true;
+        }
+        return false;
+    }
+}
+
+int main()
+{
+    using namespace renegade;
+    using namespace renegade::bridge;
+    using namespace renegade::runtime;
+
+    wi::scene::Scene scene;
+    const wi::ecs::Entity characterEntity = scene.Entity_CreateTransform("AI05 Character");
+    auto& nativeCharacter = scene.characters.Create(characterEntity);
+    nativeCharacter.health = 100;
+    nativeCharacter.SetActive(true);
+
+    const wi::ecs::Entity weaponEntity = scene.Entity_CreateTransform("AI05 Rifle");
+    std::string error;
+    if (!AssignPersistentEntityId(scene, weaponEntity, GenerateStableId(), error))
+        return Fail("weapon identity: " + error);
+
+    WeaponAiDescriptor descriptor;
+    if (!CaptureWeaponAiDescriptor(
+            scene, weaponEntity, CombatStyle::Ranged, descriptor, error))
+        return Fail("default ranged descriptor: " + error);
+    if (descriptor.style != WeaponAiStyle::Ranged ||
+        descriptor.magazineSize != 30 || descriptor.maxRange < 30.0f)
+        return Fail("default ranged descriptor values");
+
+    auto* weaponMetadata = scene.metadatas.GetComponent(weaponEntity);
+    if (weaponMetadata == nullptr)
+        weaponMetadata = &scene.metadatas.Create(weaponEntity);
+    weaponMetadata->string_values.set(WeaponAiMetadataKey, "1");
+    weaponMetadata->int_values.set(WeaponAiSchemaMetadataKey, WeaponAiSchemaVersion);
+    weaponMetadata->float_values.set(WeaponAiDamageMetadataKey, 27.0f);
+    weaponMetadata->int_values.set(WeaponAiMagazineSizeMetadataKey, 12);
+    weaponMetadata->int_values.set(WeaponAiReserveAmmoMetadataKey, 24);
+    if (!CaptureWeaponAiDescriptor(
+            scene, weaponEntity, CombatStyle::Ranged, descriptor, error))
+        return Fail("governed descriptor capture: " + error);
+    if (std::abs(descriptor.damage - 27.0f) > 0.001f ||
+        descriptor.magazineSize != 12 || descriptor.reserveAmmo != 24)
+        return Fail("governed descriptor overrides");
+
+    weaponMetadata->int_values.set(WeaponAiSchemaMetadataKey, 999);
+    if (CaptureWeaponAiDescriptor(
+            scene, weaponEntity, CombatStyle::Ranged, descriptor, error))
+        return Fail("unsupported weapon schema must fail closed");
+    weaponMetadata->int_values.set(WeaponAiSchemaMetadataKey, WeaponAiSchemaVersion);
+
+    RuntimeCharacterSystemState characterSystem;
+    RuntimeCharacterRecord character;
+    character.stableEntityId = "00000000-0000-4000-8000-000000000005";
+    character.entity = characterEntity;
+    character.authoring.role = CharacterRole::Soldier;
+    character.authoring.factionId = "Enemy";
+    character.authoring.combatStyle = CombatStyle::Ranged;
+    character.authoring.canFlee = true;
+    character.authoring.canSurrender = true;
+    character.authoring.autonomous = true;
+    character.references.weaponEntity = weaponEntity;
+    character.tuning = ResolveCharacterTuning(character.authoring);
+    character.tuning.minCombatRange = 4.0f;
+    character.tuning.preferredCombatRange = 11.0f;
+    character.tuning.maxCombatRange = 20.0f;
+    characterSystem.characters.push_back(character);
+
+    RuntimeCombatState combatState;
+    if (!InitializeRuntimeCombat(scene, characterSystem, combatState, error))
+        return Fail("combat initialization: " + error);
+    auto* combat = FindCharacterCombat(combatState, character.stableEntityId);
+    if (combat == nullptr || combat->magazineAmmo != 12 || combat->reserveAmmo != 24)
+        return Fail("combat ammo initialization");
+    if (std::abs(combat->effectiveRange.minRange - 4.0f) > 0.001f ||
+        std::abs(combat->effectiveRange.preferredRange - 11.0f) > 0.001f ||
+        std::abs(combat->effectiveRange.maxRange - 20.0f) > 0.001f)
+        return Fail("effective combat range composes profile preference with weapon capability");
+
+    RuntimeCharacterPerceptionState perception;
+    CharacterCognitionRecord cognition;
+    cognition.characterId = character.stableEntityId;
+    cognition.awareness = AwarenessState::Combat;
+    cognition.suspicion = 100.0f;
+    CharacterMemoryRecord memory;
+    memory.subjectId = RuntimePlayerKnowledgeId;
+    memory.subjectFactionId = "Player";
+    memory.source = KnowledgeSource::Seen;
+    memory.lastKnownPosition = XMFLOAT3(10.0f, 0.0f, 0.0f);
+    memory.confidence = 1.0f;
+    memory.threat = 1.0f;
+    memory.hasPosition = true;
+    memory.hostile = true;
+    memory.directSight = true;
+    cognition.memories.push_back(memory);
+    perception.characters.push_back(cognition);
+
+    RefreshRuntimeCombat(scene, characterSystem, perception, combatState, 0.0f);
+    if (!combat->hasDirectHostileTarget ||
+        !std::isfinite(combat->targetDistance) || combat->targetDistance < 9.0f)
+        return Fail("combat range derives from AI-03 memory");
+
+    CharacterDecisionRecord decision;
+    decision.characterId = character.stableEntityId;
+    decision.intent = CharacterIntent::Chase;
+    decision.previousIntent = CharacterIntent::Chase;
+    decision.topScores[0] = {CharacterIntent::Chase, 98.0f};
+    const auto attackScores = ScoreCharacterCombatIntents(
+        character, perception.characters.front(), decision, *combat);
+    if (!ContainsIntent(attackScores, CharacterIntent::Attack))
+        return Fail("direct in-range hostile target should score Attack");
+
+    const float chance = ComputeCombatHitChance(
+        character.tuning, combat->weapon, combat->targetDistance);
+    if (!(chance >= 0.02f && chance <= 0.98f))
+        return Fail("bounded combat hit chance");
+    if (DeterministicCombatUnit(character.stableEntityId, 1) !=
+        DeterministicCombatUnit(character.stableEntityId, 1))
+        return Fail("deterministic combat sample");
+
+    bridge::GameplayEventService events;
+    const CombatEventEmitter emitter = [&events](
+        bridge::GameplayEvent event, std::string& eventError)
+    {
+        return events.Enqueue(std::move(event), eventError);
+    };
+
+    CharacterDecisionRecord integratedDecision = decision;
+    integratedDecision.commitmentRemainingSeconds = 0.0f;
+    SelectCombatIntent(
+        character,
+        perception.characters.front(),
+        integratedDecision,
+        *combat,
+        combatState,
+        emitter);
+    if (integratedDecision.intent != CharacterIntent::Attack)
+        return Fail("unified AI-04 + AI-05 utility should select Attack in range");
+    const std::uint64_t integratedTransitions = integratedDecision.transitionCount;
+    RuntimeCharacterDecisionState movementOnly;
+    movementOnly.characters.push_back(integratedDecision);
+    UpdateRuntimeCharacterDecision(
+        scene,
+        characterSystem,
+        perception,
+        movementOnly,
+        0.1f,
+        false);
+    if (movementOnly.characters.front().intent != CharacterIntent::Attack ||
+        movementOnly.characters.front().transitionCount != integratedTransitions)
+        return Fail("AI-04 movement pass must not reselect combat-owned intent");
+
+    CombatFireResult fire;
+    const int ammoBefore = combat->magazineAmmo;
+    if (!TryFireAtRuntimePlayer(
+            scene,
+            character,
+            perception.characters.front(),
+            *combat,
+            perception,
+            combatState,
+            emitter,
+            fire) || !fire.fired)
+        return Fail("in-range Attack should fire");
+    if (combat->magazineAmmo != ammoBefore - 1 || events.Size() == 0)
+        return Fail("fire must consume ammo and publish GameplayEventService event");
+    bridge::GameplayEvent publicCombatEvent;
+    if (!events.TryDequeue(publicCombatEvent) ||
+        publicCombatEvent.name != "ai.weapon_fired" ||
+        !publicCombatEvent.targetEntityId.empty())
+        return Fail("runtime-player combat event must be publicly deliverable broadcast");
+    if (perception.sounds.empty())
+        return Fail("weapon fire must create legitimate AI-03 sound stimulus");
+
+    combat->fireCooldownSeconds = 0.0f;
+    combat->magazineAmmo = 0;
+    combat->reserveAmmo = 7;
+    auto reloadScores = ScoreCharacterCombatIntents(
+        character, perception.characters.front(), decision, *combat);
+    if (!ContainsIntent(reloadScores, CharacterIntent::Reload))
+        return Fail("empty magazine should score Reload");
+    if (!BeginCombatReload(*combat) || combat->reloadRemainingSeconds <= 0.0f)
+        return Fail("reload start");
+    RefreshRuntimeCombat(
+        scene, characterSystem, perception, combatState,
+        combat->weapon.reloadSeconds + 0.1f);
+    if (combat->magazineAmmo != 7 || combat->reserveAmmo != 0)
+        return Fail("reload ammo transfer");
+
+    bool died = false;
+    if (!ApplyCombatDamage(
+            scene, combatState, character.stableEntityId, 25.0f, died) || died)
+        return Fail("NPC combat damage");
+    if (nativeCharacter.health != 75 || std::abs(combat->health - 75.0f) > 0.01f)
+        return Fail("NPC native health synchronization");
+
+    if (!ApplyAttributedCombatDamage(
+            scene,
+            characterSystem,
+            perception,
+            combatState,
+            character.stableEntityId,
+            RuntimePlayerKnowledgeId,
+            "Player",
+            XMFLOAT3(9.0f, 0.0f, 0.0f),
+            XMFLOAT3(0.0f, 0.0f, 0.0f),
+            5.0f,
+            emitter,
+            error))
+        return Fail("attributed combat damage: " + error);
+    if (nativeCharacter.health != 70 || std::abs(combat->health - 70.0f) > 0.01f)
+        return Fail("attributed damage native health synchronization");
+    const auto* damagedMemory = FindCharacterMemory(
+        perception.characters.front(), RuntimePlayerKnowledgeId);
+    if (damagedMemory == nullptr || damagedMemory->source != KnowledgeSource::DamagedBy ||
+        std::abs(damagedMemory->lastKnownPosition.x - 9.0f) > 0.001f)
+        return Fail("attributed damage must create legitimate DamagedBy memory");
+
+    character.authoring.role = CharacterRole::Civilian;
+    character.authoring.personality = PersonalityPreset::Timid;
+    character.authoring.canFlee = true;
+    character.authoring.canSurrender = true;
+    character.tuning = ResolveCharacterTuning(character.authoring);
+    combat->health = 100.0f;
+    combat->maxHealth = 100.0f;
+    combat->magazineAmmo = 0;
+    combat->reserveAmmo = 0;
+    combat->weapon = DefaultWeaponAiDescriptor(CombatStyle::Ranged);
+    combat->effectiveRange = ResolveEffectiveWeaponAiRange(
+        character.tuning, combat->weapon);
+    const auto healthyCivilianScores = ScoreCharacterCombatIntents(
+        character, perception.characters.front(), decision, *combat);
+    if (!ContainsIntent(healthyCivilianScores, CharacterIntent::Flee))
+        return Fail("healthy unarmed civilian should flee from hostile knowledge");
+
+    combat->health = 5.0f;
+    combat->maxHealth = 100.0f;
+    combat->magazineAmmo = 0;
+    combat->reserveAmmo = 0;
+    combat->weapon = DefaultWeaponAiDescriptor(CombatStyle::Ranged);
+    const auto escapeScores = ScoreCharacterCombatIntents(
+        character, perception.characters.front(), decision, *combat);
+    if (!ContainsIntent(escapeScores, CharacterIntent::Flee) &&
+        !ContainsIntent(escapeScores, CharacterIntent::Surrender))
+        return Fail("low-health timid character should flee or surrender");
+
+    XMFLOAT3 escapeGoal;
+    if (!ResolveCombatEscapeGoal(
+            nativeCharacter,
+            perception.characters.front(),
+            CharacterIntent::Flee,
+            escapeGoal))
+        return Fail("flee goal resolution");
+    const XMFLOAT3 position = nativeCharacter.GetPositionInterpolated();
+    if (!(escapeGoal.x < position.x))
+        return Fail("flee goal must move away from remembered hostile position");
+
+    std::cout << "AI05_PASS weapon-health-ammo-reload-range-accuracy-damage-attribution-retreat-flee-surrender-events\n";
+    return 0;
+}
