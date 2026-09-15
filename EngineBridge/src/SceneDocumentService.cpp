@@ -11,7 +11,6 @@
 #include "renegade/bridge/VegetationService.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <atomic>
 #include <chrono>
 #include <exception>
@@ -108,12 +107,6 @@ namespace renegade::bridge
 
     PreparedSceneOpen PrepareWickedSceneOpen(const std::string& filePath)
     {
-        const auto traceOpen = [](const char* stage)
-        {
-            std::fprintf(stderr, "Scene open checkpoint: %s\n", stage);
-            std::fflush(stderr);
-        };
-        traceOpen("entered");
         PreparedSceneOpen prepared;
         prepared.path_ = filePath;
 
@@ -145,14 +138,11 @@ namespace renegade::bridge
                 filePath;
             return prepared;
         }
-        traceOpen("archive opened");
 
         try
         {
             prepared.scene_ = std::make_unique<wi::scene::Scene>();
-            traceOpen("scene allocated");
             prepared.scene_->Serialize(archive);
-            traceOpen("scene deserialized");
         }
         catch (const std::exception& error)
         {
@@ -175,7 +165,6 @@ namespace renegade::bridge
                 "unexpected trailing data: " + filePath;
             return prepared;
         }
-        traceOpen("archive fully consumed");
 
         // JP01 owner-recovery boundary. A previous Physics Lab build allowed
         // a dynamic rigid body to be serialized on a deeply nested reusable
@@ -184,9 +173,7 @@ namespace renegade::bridge
         // shear. Move the unambiguous one-body case to Renegade's stable
         // instance wrapper before the scene ever reaches its first physics
         // update. The repair is in-memory until the creator saves again.
-        traceOpen("collision repair begin");
         (void)RepairReusableAssetCollisionTargets(*prepared.scene_);
-        traceOpen("collision repair complete");
 
         if (prepared.scene_->cameras.GetCount() > 0)
         {
@@ -273,15 +260,6 @@ namespace renegade::bridge
 
     bool SceneDocumentService::Save(const std::string& filePath)
     {
-        // Temporary CW-05 crash-localisation checkpoints. stderr is used so
-        // the final completed boundary survives a Windows access violation in
-        // the focused ownership regression.
-        const auto traceSave = [](const char* stage)
-        {
-            std::fprintf(stderr, "Scene save checkpoint: %s\n", stage);
-            std::fflush(stderr);
-        };
-        traceSave("entered");
         lastWarning_.clear();
         if (filePath.empty())
         {
@@ -350,7 +328,6 @@ namespace renegade::bridge
                 identityError;
             return false;
         }
-        traceSave("persistent identities validated");
 
         // Keep the active document canonical too. PrepareWickedSceneOpen()
         // repairs loaded copies before physics runs; doing the same immediately
@@ -358,7 +335,6 @@ namespace renegade::bridge
         // persisted when an affected creator saves the scene again.
         const auto physicsRepair =
             RepairReusableAssetCollisionTargets(scenes_.scene_);
-        traceSave("collision ownership repaired");
         if (physicsRepair.conflictCount > 0)
         {
             lastWarning_ =
@@ -390,11 +366,8 @@ namespace renegade::bridge
                 return false;
             }
             archive.SetCompressionEnabled(true);
-            traceSave("scene serialization begin");
             scenes_.scene_.Serialize(archive);
-            traceSave("scene serialization complete");
             archiveWritten = archive.SaveFile(temporary.generic_u8string());
-            traceSave("temporary archive write complete");
             archive = wi::Archive();
         }
         catch (const std::exception& error)
@@ -421,7 +394,6 @@ namespace renegade::bridge
 
         auto validation = PrepareWickedSceneOpen(
             temporary.generic_u8string());
-        traceSave("temporary archive validation complete");
         if (!validation.IsReady())
         {
             RemoveWithoutThrow(temporary);
@@ -455,11 +427,9 @@ namespace renegade::bridge
                 "destination: " + fileError.message();
             return false;
         }
-        traceSave("archive replacement complete");
 
         auto finalValidation = PrepareWickedSceneOpen(
             destination.generic_u8string());
-        traceSave("final archive validation complete");
         if (!finalValidation.IsReady())
         {
             if (replacingExisting)
