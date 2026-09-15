@@ -57,6 +57,8 @@ require_text("${combat}" "BeginCombatReload" "reload state transition")
 require_text("${combat}" "TryFireAtRuntimePlayer" "reusable firing seam")
 require_text("${combat}" "EmitSoundStimulus" "weapon sound feeds legitimate perception")
 require_text("${combat}" "GameplayEventService" "existing gameplay event authority")
+require_text("${combat}" "character.authoring.factionId == \"Enemy\" && !HasUsableWeapon(combat)" "Enemy requires usable combat capability")
+require_text("${combat}" "requires FISTS / CLAWS / TEETH or a usable weapon" "Enemy combat setup failure message")
 require_text("${damage}" "ApplyAttributedCombatDamage" "reusable attributed-damage seam")
 require_text("${damage}" "ReportDamageStimulus" "damage feeds legitimate DamagedBy cognition")
 
