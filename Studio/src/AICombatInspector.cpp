@@ -10,7 +10,6 @@
 #include "renegade/bridge/WeaponCombatService.h"
 
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -20,9 +19,6 @@ namespace renegade::studio
 {
     namespace
     {
-        constexpr std::uint64_t IntrinsicMeleeWeaponSelection =
-            std::numeric_limits<std::uint64_t>::max() - 1u;
-
         class CombatInspector;
 
         class CombatSectionProvider final : public IInspectorSectionProvider
@@ -95,26 +91,25 @@ namespace renegade::studio
                 style_.AddItem("CUSTOM", static_cast<std::uint64_t>(bridge::CombatStyle::Custom));
                 style_.OnSelect([this](const wi::gui::EventArgs& args)
                 {
-                    AssignCombatStyle(static_cast<bridge::CombatStyle>(args.userdata));
+                    const auto value = static_cast<bridge::CombatStyle>(args.userdata);
+                    Commit([value](bridge::CharacterAuthoringSettings& settings)
+                    {
+                        settings.combatStyle = value;
+                    }, "combat style updated");
                 });
                 panel_->AddWidget(&style_);
 
                 weaponLabel_.Create("AI Combat Weapon Label");
                 weaponLabel_.SetColor(wi::Color::Transparent());
                 weaponLabel_.SetFitTextEnabled(true);
-                weaponLabel_.SetText("WEAPON / ATTACK // built-in melee or governed entity");
+                weaponLabel_.SetText("WEAPON // stable governed entity");
                 panel_->AddWidget(&weaponLabel_);
 
                 weapon_.Create("AI Combat Weapon Selector");
                 weapon_.SetTooltip(
-                    "Choose FISTS / CLAWS / TEETH for intrinsic melee, or assign an existing governed weapon entity. Enemy Characters should always have an attack selection.");
+                    "Assign an existing entity with a persistent Renegade identity. Untagged weapons use defaults from Combat Style; governed Weapon AI metadata can override them.");
                 weapon_.OnSelect([this](const wi::gui::EventArgs& args)
                 {
-                    if (args.userdata == IntrinsicMeleeWeaponSelection)
-                    {
-                        AssignIntrinsicMelee();
-                        return;
-                    }
                     AssignWeapon(static_cast<wi::ecs::Entity>(args.userdata));
                 });
                 panel_->AddWidget(&weapon_);
@@ -183,13 +178,7 @@ namespace renegade::studio
                 canSurrender_.SetCheck(settings.canSurrender);
 
                 weapon_.ClearItems();
-                weapon_.AddItem(
-                    "NONE / NO ATTACK",
-                    static_cast<std::uint64_t>(wi::ecs::INVALID_ENTITY));
-                weapon_.AddItem(
-                    "FISTS / CLAWS / TEETH // MELEE",
-                    IntrinsicMeleeWeaponSelection);
-
+                weapon_.AddItem("NONE / STYLE DEFAULT", static_cast<std::uint64_t>(wi::ecs::INVALID_ENTITY));
                 wi::ecs::Entity selectedWeapon = wi::ecs::INVALID_ENTITY;
                 for (std::size_t index = 0; index < scene.transforms.GetCount(); ++index)
                 {
@@ -207,20 +196,8 @@ namespace renegade::studio
                     if (stableId == settings.weaponEntityId)
                         selectedWeapon = entity;
                 }
-
-                const bool intrinsicMelee =
-                    settings.weaponEntityId.empty() &&
-                    settings.combatStyle == bridge::CombatStyle::Melee;
-                if (intrinsicMelee)
-                {
-                    weapon_.SetSelectedByUserdataWithoutCallback(
-                        IntrinsicMeleeWeaponSelection);
-                }
-                else
-                {
-                    weapon_.SetSelectedByUserdataWithoutCallback(
-                        static_cast<std::uint64_t>(selectedWeapon));
-                }
+                weapon_.SetSelectedByUserdataWithoutCallback(
+                    static_cast<std::uint64_t>(selectedWeapon));
 
                 bridge::WeaponAiDescriptor weaponDescriptor;
                 std::string error;
@@ -248,28 +225,9 @@ namespace renegade::studio
                 const auto effectiveRange = bridge::ResolveEffectiveWeaponAiRange(
                     tuning, weaponDescriptor);
 
-                const bool enemyNeedsAttack =
-                    settings.factionId == "Enemy" &&
-                    settings.weaponEntityId.empty() &&
-                    !intrinsicMelee;
-                if (enemyNeedsAttack)
-                {
-                    status_.SetText(
-                        "ENEMY NEEDS WEAPON // choose FISTS / CLAWS / TEETH or assign a weapon");
-                }
-                else if (intrinsicMelee)
-                {
-                    status_.SetText("Intrinsic melee equipped // fists / claws / teeth");
-                }
-                else if (!settings.weaponEntityId.empty())
-                {
-                    status_.SetText("Weapon assigned by stable identity");
-                }
-                else
-                {
-                    status_.SetText("No attack equipped");
-                }
-
+                status_.SetText(settings.weaponEntityId.empty()
+                    ? "Style defaults active // assign a governed weapon entity optionally"
+                    : "Weapon assigned by stable identity");
                 descriptor_.SetText(
                     "EFFECTIVE RANGE " + std::to_string(effectiveRange.minRange) + " / " +
                     std::to_string(effectiveRange.preferredRange) + " / " +
@@ -340,44 +298,6 @@ namespace renegade::studio
                     selectedCharacter_ = selected;
             }
 
-            void AssignCombatStyle(const bridge::CombatStyle value)
-            {
-                auto* session = bridge::StudioSession::Current();
-                if (session == nullptr || selectedCharacter_ == wi::ecs::INVALID_ENTITY)
-                    return;
-                auto after = bridge::CaptureCharacterSettings(
-                    session->Scenes().GetScene(), selectedCharacter_);
-                if (after.weaponEntityId.empty() &&
-                    value != bridge::CombatStyle::None &&
-                    value != bridge::CombatStyle::Melee)
-                {
-                    SetStatus(
-                        "AI-05 // choose an actual weapon before RANGED / MIXED / CUSTOM");
-                    RequestRefresh();
-                    return;
-                }
-                after.combatStyle = value;
-                CommitSettings(
-                    std::move(after),
-                    value == bridge::CombatStyle::Melee
-                        ? "intrinsic melee selected"
-                        : "combat style updated");
-            }
-
-            void AssignIntrinsicMelee()
-            {
-                auto* session = bridge::StudioSession::Current();
-                if (session == nullptr || selectedCharacter_ == wi::ecs::INVALID_ENTITY)
-                    return;
-                auto after = bridge::CaptureCharacterSettings(
-                    session->Scenes().GetScene(), selectedCharacter_);
-                after.weaponEntityId.clear();
-                after.combatStyle = bridge::CombatStyle::Melee;
-                CommitSettings(
-                    std::move(after),
-                    "FISTS / CLAWS / TEETH equipped as intrinsic melee");
-            }
-
             void AssignWeapon(const wi::ecs::Entity entity)
             {
                 auto* session = bridge::StudioSession::Current();
@@ -394,10 +314,8 @@ namespace renegade::studio
                     SetStatus("AI-05 // Weapon requires a persistent Renegade identity");
                     return;
                 }
-                if (entity == wi::ecs::INVALID_ENTITY)
-                    after.combatStyle = bridge::CombatStyle::None;
                 CommitSettings(std::move(after), entity == wi::ecs::INVALID_ENTITY
-                    ? "weapon cleared; no attack equipped"
+                    ? "weapon cleared; Combat Style defaults active"
                     : "weapon assigned by stable identity");
             }
 
