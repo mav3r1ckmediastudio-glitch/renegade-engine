@@ -114,7 +114,8 @@ namespace renegade::studio
                 // FileDialog owns its own platform thread. Opening it from the
                 // GUI callback itself proved unreliable in the owner build, so
                 // defer the launch to Wicked's thread-safe frame point just as
-                // the selected files themselves are returned there.
+                // the selected files themselves are returned there. Keep the
+                // pending guard held until Wicked's FileDialog reports success/cancel.
                 externalAnimationBrowserPending_ = true;
                 externalAnimationMessage_ = "OPENING LOCAL ANIMATION FILE BROWSER...";
                 externalAnimationSignature_.clear();
@@ -122,9 +123,11 @@ namespace renegade::studio
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                     [this](std::uint64_t)
                     {
-                        externalAnimationBrowserPending_ = false;
                         if (!IsVisible() || ImportAssetKindIndex() != 1)
+                        {
+                            externalAnimationBrowserPending_ = false;
                             return;
+                        }
                         BrowseExternalAnimations();
                     });
             });
@@ -394,6 +397,7 @@ namespace renegade::studio
             auto* session = bridge::StudioSession::Current();
             if (session == nullptr || !session->Projects().HasProject())
             {
+                externalAnimationBrowserPending_ = false;
                 externalAnimationMessage_ = "Open a project before adding Character animations.";
                 return;
             }
@@ -416,6 +420,7 @@ namespace renegade::studio
                         wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                         [this, expectedProjectRoot, fileName](std::uint64_t)
                         {
+                            externalAnimationBrowserPending_ = false;
                             auto* current = bridge::StudioSession::Current();
                             if (!IsVisible() || current == nullptr ||
                                 !current->Projects().HasProject() ||
@@ -448,6 +453,7 @@ namespace renegade::studio
                         wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                         [this](std::uint64_t)
                         {
+                            externalAnimationBrowserPending_ = false;
                             if (!IsVisible())
                                 return;
                             externalAnimationMessage_ = "Animation file selection cancelled.";
