@@ -46,8 +46,16 @@ namespace
         MakeCharacterCommand command(scene, entity, std::move(settings));
         if (!command.Execute())
             return wi::ecs::INVALID_ENTITY;
-        auto& metadata = scene.metadatas.Create(entity);
-        metadata.string_values.set(
+
+        // MakeCharacterCommand has already created/populated Character metadata.
+        // Do not call ComponentManager::Create() again here: doing so resets the
+        // existing MetadataComponent and erases the Character marker/settings,
+        // which made the fixture cease to be a Renegade Character before the
+        // advanced-authoring assertions even began.
+        auto* metadata = scene.metadatas.GetComponent(entity);
+        if (metadata == nullptr)
+            return wi::ecs::INVALID_ENTITY;
+        metadata->string_values.set(
             ReusableAssetInstanceIdMetadataKey, BaseAssetId);
         return entity;
     }
@@ -136,8 +144,9 @@ int main()
     sourceAdvanced.aggression = 0.88f;
     sourceAdvanced.accuracy = 0.73f;
     std::string error;
-    if (!Require(ApplyCharacterAdvancedOverrides(
-            scene, source, sourceAdvanced, error),
+    const bool sourceAdvancedApplied = ApplyCharacterAdvancedOverrides(
+        scene, source, sourceAdvanced, error);
+    if (!Require(sourceAdvancedApplied,
             "could not apply source advanced overrides: " + error))
         return 1;
 
