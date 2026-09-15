@@ -172,11 +172,13 @@ set_source_files_properties(
 # Likewise the existing LP07/CW-04 reusable placement backend is retained
 # byte-for-byte as PrepareModelAssetPlacementLegacy(). The CW-05 router owns the
 # public PrepareModelAssetPlacement() symbol and diverts only registered
-# Character Prefabs to their stable base Character asset.
+# Character Prefabs to their stable base Character asset. Hide the public router
+# declaration while compiling the legacy translation unit, otherwise the token
+# rename turns both declarations into PrepareModelAssetPlacementLegacy().
 set_source_files_properties(
     src/ReusableAssetPlacementService.cpp
     PROPERTIES
-        COMPILE_DEFINITIONS "PrepareModelAssetPlacement=PrepareModelAssetPlacementLegacy"
+        COMPILE_DEFINITIONS "PrepareModelAssetPlacement=PrepareModelAssetPlacementLegacy;RENEGADE_LEGACY_PLACEMENT_IMPLEMENTATION=1"
 )
 
 # Wicked's format converters are self-contained even though upstream keeps
