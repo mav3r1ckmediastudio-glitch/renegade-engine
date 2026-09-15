@@ -24,49 +24,6 @@ namespace
         return 1;
     }
 
-    void Trace(const char* stage)
-    {
-        // This test has historically terminated with an unreported Windows
-        // access violation. Keep the checkpoints on stderr and flush each one
-        // so CTest preserves the last completed native ownership boundary.
-        std::cerr << "CW05 ownership checkpoint: " << stage << std::endl;
-    }
-
-    wi::ecs::Entity AddNavigationCube(wi::scene::Scene& scene)
-    {
-        const wi::ecs::Entity objectEntity = wi::ecs::CreateEntity();
-        const wi::ecs::Entity meshEntity = wi::ecs::CreateEntity();
-
-        scene.names.Create(objectEntity) = "Navigation Floor";
-        auto& transform = scene.transforms.Create(objectEntity);
-        transform.ClearTransform();
-        transform.UpdateTransform();
-
-        auto& object = scene.objects.Create(objectEntity);
-        object.meshID = meshEntity;
-        object.filterMask |= wi::enums::FILTER_NAVIGATION_MESH;
-
-        auto& mesh = scene.meshes.Create(meshEntity);
-        mesh.vertex_positions = {
-            XMFLOAT3(-3, -0.5f, -3), XMFLOAT3(3, -0.5f, -3),
-            XMFLOAT3(-3,  0.5f, -3), XMFLOAT3(3,  0.5f, -3),
-            XMFLOAT3(-3, -0.5f,  3), XMFLOAT3(3, -0.5f,  3),
-            XMFLOAT3(-3,  0.5f,  3), XMFLOAT3(3,  0.5f,  3),
-        };
-        mesh.indices = {
-            0,2,1, 1,2,3, 4,5,6, 5,7,6,
-            0,1,4, 1,5,4, 2,6,3, 3,6,7,
-            0,4,2, 2,4,6, 1,3,5, 3,7,5,
-        };
-        mesh.aabb = wi::primitive::AABB(
-            XMFLOAT3(-3.0f, -0.5f, -3.0f),
-            XMFLOAT3(3.0f, 0.5f, 3.0f));
-        auto& subset = mesh.subsets.emplace_back();
-        subset.indexOffset = 0;
-        subset.indexCount = static_cast<std::uint32_t>(mesh.indices.size());
-        return objectEntity;
-    }
-
     bool LiveAuthoredGridIntact(
         const wi::scene::Scene& scene,
         const wi::ecs::Entity authoredGrid,
@@ -167,7 +124,6 @@ int main()
     using namespace renegade::bridge;
 
     wi::jobsystem::Initialize();
-    Trace("job system initialized");
 
     const fs::path root = fs::temp_directory_path() /
         fs::u8path(
@@ -195,27 +151,7 @@ int main()
     project.startupScene = "Content/Scenes/NavigationOwner.wiscene";
 
     StudioSession session;
-    Trace("StudioSession created");
     wi::scene::Scene& authoringScene = session.Scenes().GetScene();
-    const wi::ecs::Entity floor = AddNavigationCube(authoringScene);
-
-    // Phase-6 manual creation expects the native object streams that a normal
-    // frame produces. Seed them only for the authored-grid fixture.
-    const auto* floorTransform = authoringScene.transforms.GetComponent(floor);
-    const auto* floorObject = authoringScene.objects.GetComponent(floor);
-    const auto* floorMesh = floorObject == nullptr
-        ? nullptr
-        : authoringScene.meshes.GetComponent(floorObject->meshID);
-    if (floorTransform == nullptr || floorMesh == nullptr)
-    {
-        cleanup();
-        return Fail("navigation floor fixture was incomplete");
-    }
-    authoringScene.matrix_objects = { floorTransform->world };
-    authoringScene.aabb_objects = {
-        floorMesh->aabb.transform(floorTransform->world)
-    };
-
     NavigationGridSettings authoredSettings;
     authoredSettings.resolutionX = 24;
     authoredSettings.resolutionY = 12;
@@ -233,30 +169,27 @@ int main()
     }
     const StableId authoredId = PersistentEntityId(authoringScene, authoredGrid);
     const auto* authoredComponent = authoringScene.voxel_grids.GetComponent(authoredGrid);
-    if (!IsValidStableId(authoredId) || authoredComponent == nullptr)
+    if (!IsValidStableId(authoredId) || authoredComponent == nullptr ||
+        !authoredComponent->IsValid())
     {
         cleanup();
         return Fail("authored navigation grid fixture lost identity/native state");
     }
     const wi::vector<std::uint64_t> authoredVoxels = authoredComponent->voxels;
-    Trace("authored grid created");
 
     if (!session.SaveScene(scenePath.generic_u8string()))
     {
         cleanup();
         return Fail("could not save authored navigation fixture");
     }
-    Trace("authored scene saved");
 
     TestLevelSnapshotService snapshots(session.Scenes(), session.Commands());
     TestLevelSnapshot first;
-    Trace("first snapshot create begin");
     if (!snapshots.Create(project, first, error))
     {
         cleanup();
         return Fail("first TestGame snapshot failed: " + error);
     }
-    Trace("first snapshot create complete");
     if (!first.navigationCacheRebuilt || first.navigationCacheReused)
     {
         cleanup();
@@ -273,22 +206,18 @@ int main()
         cleanup();
         return Fail("first TestGame ownership check failed: " + error);
     }
-    Trace("first snapshot inspected");
     if (!snapshots.Cleanup(first, error))
     {
         cleanup();
         return Fail("first TestGame cleanup failed: " + error);
     }
-    Trace("first snapshot cleaned");
 
     TestLevelSnapshot second;
-    Trace("second snapshot create begin");
     if (!snapshots.Create(project, second, error))
     {
         cleanup();
         return Fail("second TestGame snapshot failed: " + error);
     }
-    Trace("second snapshot create complete");
     if (!second.navigationCacheReused || second.navigationCacheRebuilt)
     {
         cleanup();
@@ -305,38 +234,35 @@ int main()
         cleanup();
         return Fail("second TestGame ownership check failed: " + error);
     }
-    Trace("second snapshot inspected");
     if (!snapshots.Cleanup(second, error))
     {
         cleanup();
         return Fail("second TestGame cleanup failed: " + error);
     }
-    Trace("second snapshot cleaned");
 
+    NavigationGridSettings changedSettings = authoredSettings;
+    changedSettings.center = XMFLOAT3(2.0f, 0.0f, 0.0f);
     if (!session.Commands().Execute(
-            std::make_unique<SetTranslationCommand>(
+            std::make_unique<RebuildNavigationGridCommand>(
                 authoringScene,
-                floor,
-                XMFLOAT3(2.0f, 0.0f, 0.0f))))
+                authoredGrid,
+                changedSettings)))
     {
         cleanup();
-        return Fail("could not create unsaved navigation-geometry change");
+        return Fail("could not create unsaved navigation-grid change");
     }
     const std::size_t undoBefore = session.Commands().UndoCount();
-    Trace("authoring geometry changed");
 
     TestLevelSnapshot changed;
-    Trace("changed snapshot create begin");
     if (!snapshots.Create(project, changed, error))
     {
         cleanup();
         return Fail("changed-geometry TestGame snapshot failed: " + error);
     }
-    Trace("changed snapshot create complete");
     if (!changed.navigationCacheRebuilt || changed.navigationCacheReused)
     {
         cleanup();
-        return Fail("navigation geometry change did not rebuild the cache");
+        return Fail("navigation-grid setting change did not rebuild the cache");
     }
     if (!InspectSnapshot(changed, authoredId, error) ||
         !LiveAuthoredGridIntact(
@@ -349,7 +275,6 @@ int main()
         cleanup();
         return Fail("changed TestGame ownership check failed: " + error);
     }
-    Trace("changed snapshot inspected");
     if (!session.Commands().IsDirty() ||
         session.Commands().UndoCount() != undoBefore)
     {
@@ -362,10 +287,8 @@ int main()
         cleanup();
         return Fail("changed TestGame cleanup failed: " + error);
     }
-    Trace("changed snapshot cleaned");
 
     cleanup();
-    Trace("test complete before destruction");
     std::cout
         << "PASS: CW-05 TestGame navigation ownership, cache and stable identity\n";
     return 0;
