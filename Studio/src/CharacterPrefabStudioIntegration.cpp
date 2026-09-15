@@ -378,6 +378,10 @@ namespace renegade::studio
             return false;
         }
 
+        // RevealCreatorAsset() refreshes and selects the newly registered card.
+        // Its LP07 return contract still describes imported model products, so
+        // a generated prefab can refresh successfully while returning a benign
+        // model-specific warning. The CW-05 save result remains authoritative.
         std::string revealWarning;
         if (auto* chrome = CreatorAssetStudioChrome::Current(); chrome != nullptr)
         {
@@ -390,8 +394,6 @@ namespace renegade::studio
         status = "CW-05 // CHARACTER PREFAB SAVED";
         if (!result.warnings.empty())
             status += " // " + result.warnings.front();
-        else if (!revealWarning.empty())
-            status += " // " + revealWarning;
         return true;
     }
 }
