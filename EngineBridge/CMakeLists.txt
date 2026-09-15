@@ -63,6 +63,7 @@ add_library(RenegadeEngineBridge STATIC
     include/renegade/bridge/PhysicsService.h
     include/renegade/bridge/PlayerService.h
     include/renegade/bridge/NavigationService.h
+    include/renegade/bridge/TestLevelNavigationCacheService.h
     include/renegade/bridge/GameplayInputService.h
     include/renegade/bridge/OceanService.h
     include/renegade/bridge/PrecipitationService.h
@@ -141,6 +142,7 @@ add_library(RenegadeEngineBridge STATIC
     src/PhysicsService.cpp
     src/PlayerService.cpp
     src/NavigationService.cpp
+    src/TestLevelNavigationCacheService.cpp
     src/GameplayInputService.cpp
     include/renegade/bridge/GameplayEventService.h
     src/GameplayEventService.cpp
@@ -156,6 +158,7 @@ add_library(RenegadeEngineBridge STATIC
     src/SceneDocumentService.cpp
     src/SelectionService.cpp
     src/TestLevelSnapshotService.cpp
+    src/TestLevelSnapshotNavigationWrapper.cpp
     src/WindowsGameBuildProjectService.cpp
 )
 
@@ -167,6 +170,17 @@ set_source_files_properties(
     src/CommandService.cpp
     PROPERTIES
         COMPILE_DEFINITIONS "DuplicateEntityCommand=LegacyDuplicateEntityCommand"
+)
+
+# CW-05 owner validation wraps the proven LP04 Test Level snapshot service.
+# Compile the established implementation under an internal class name; the
+# public wrapper delegates to it and then prepares navigation only on the
+# detached TestGame WISCENE.
+set_source_files_properties(
+    src/TestLevelSnapshotService.cpp
+    PROPERTIES
+        COMPILE_DEFINITIONS
+            "TestLevelSnapshotService=LegacyTestLevelSnapshotService;RENEGADE_TEST_LEVEL_SNAPSHOT_LEGACY_IMPLEMENTATION=1"
 )
 
 # Likewise the existing LP07/CW-04 reusable placement backend is retained

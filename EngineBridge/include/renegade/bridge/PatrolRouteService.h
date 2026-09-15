@@ -225,8 +225,10 @@ namespace renegade::bridge
     [[nodiscard]] inline wi::ecs::Entity FindDefaultNavigationGrid(
         const wi::scene::Scene& scene) noexcept
     {
-        wi::ecs::Entity found = wi::ecs::INVALID_ENTITY;
-        StableId foundId;
+        wi::ecs::Entity preferred = wi::ecs::INVALID_ENTITY;
+        StableId preferredId;
+        wi::ecs::Entity fallback = wi::ecs::INVALID_ENTITY;
+        StableId fallbackId;
         for (std::size_t index = 0; index < scene.metadatas.GetCount(); ++index)
         {
             const wi::ecs::Entity entity = scene.metadatas.GetEntity(index);
@@ -237,14 +239,25 @@ namespace renegade::bridge
             {
                 continue;
             }
+
             const StableId id = PersistentEntityId(scene, entity);
-            if (found == wi::ecs::INVALID_ENTITY || id < foundId)
+            if (fallback == wi::ecs::INVALID_ENTITY || id < fallbackId)
             {
-                found = entity;
-                foundId = id;
+                fallback = entity;
+                fallbackId = id;
+            }
+
+            const bool isPreferred =
+                metadata->string_values.has("renegade.navigation.default_grid") &&
+                metadata->string_values.get("renegade.navigation.default_grid") == "1";
+            if (isPreferred &&
+                (preferred == wi::ecs::INVALID_ENTITY || id < preferredId))
+            {
+                preferred = entity;
+                preferredId = id;
             }
         }
-        return found;
+        return preferred != wi::ecs::INVALID_ENTITY ? preferred : fallback;
     }
 
     class CreatePatrolRouteCommand final : public ICommand
