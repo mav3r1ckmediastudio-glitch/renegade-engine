@@ -80,16 +80,15 @@ require_text(inspector_source
     "CHARACTER ACTIVE // native controller"
     "active prepared Character inspector state")
 
-# Prove the critical ordering inside the placement command: scene identity must
-# be fresh before the existing Character service adopts it. CW-05 combines
-# identity assignment, Character promotion and companion application into one
-# fail-closed condition, so search for the stable operation calls themselves
-# rather than an obsolete exact `if` spelling.
+# Prove the critical ordering inside the actual placement fail-closed condition:
+# scene identity must be fresh before the existing Character service adopts it.
+# Search for the invocation spelling, not the PromotePreparedCharacter() method
+# definition which appears earlier in this translation unit.
 string(FIND "${instance_source}"
     "AssignFreshReusableHierarchyIdentities(*scene_, entity_)"
     identity_pos)
 string(FIND "${instance_source}"
-    "PromotePreparedCharacter()"
+    "!PromotePreparedCharacter() ||"
     promotion_pos)
 if(identity_pos EQUAL -1 OR promotion_pos EQUAL -1 OR
    promotion_pos LESS identity_pos)
