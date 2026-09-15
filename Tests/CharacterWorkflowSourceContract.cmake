@@ -104,6 +104,9 @@ require_text(importer_preview
     "EVENT_THREAD_SAFE_POINT"
     "safe-point local file-browser integration")
 require_text(importer_preview
+    "pending guard held until Wicked's FileDialog reports success/cancel"
+    "single outstanding animation file browser lifecycle")
+require_text(importer_preview
     "One row per external animation file"
     "creator-facing one-file-one-row UX")
 
