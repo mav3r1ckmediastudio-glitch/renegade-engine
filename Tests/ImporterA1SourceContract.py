@@ -22,7 +22,7 @@ check("EngineBridge/src/CreatorAssetWorkflowService.cpp", [
     "result.error = result.asset.error;",
 ])
 check("EngineBridge/src/ReusableAssetService.cpp", [
-    "CreatorImportStage::InputValidation" if False else "CreatorImportStage::RecipeValidation",
+    "CreatorImportStage::RecipeValidation", "CreatorImportStage::RegistryValidation",
     "CreatorImportStage::ScenePreparation", "CreatorImportStage::RecipeApplication",
     "CreatorImportStage::WisceneWrite", "CreatorImportStage::PackageSerialization",
     "CreatorImportStage::RegistryPreparation", "CreatorImportStage::AtomicCommit",
@@ -32,9 +32,16 @@ check("EngineBridge/src/ReusableAssetService.cpp", [
 check("Studio/src/StudioApplication.cpp", [
     "state->attemptId", "CreatorImportStageName(details.stage)",
     '"\\n\\nReason: "', "Source snapshot staged (cleaned up on failure)",
-    "Atom" + "ic transaction committed:", "Asset Browser revealed: no",
+    "Atomic transaction committed:", "Asset Browser revealed: no",
     "bridge::CreatorImportStage::BrowserReveal", "wi::backlog::Toggle();",
     "!wi::backlog::isActive()",
+])
+check("Tests/ReusableAssetTests.cpp", [
+    "outsideSource.diagnostics.stage == CreatorImportStage::InputValidation",
+    "existingProduct.diagnostics.stage == CreatorImportStage::InputValidation",
+    "nonCanonicalSettings.diagnostics.stage == CreatorImportStage::RecipeValidation",
+    "crossProject.diagnostics.stage == CreatorImportStage::RegistryValidation",
+    '"rejected imports created an authoritative product"',
 ])
 
 studio = (root / "Studio/src/StudioApplication.cpp").read_text(encoding="utf-8")
