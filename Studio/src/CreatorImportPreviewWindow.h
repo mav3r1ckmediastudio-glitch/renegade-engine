@@ -132,6 +132,13 @@ namespace renegade::studio
                     });
             });
             AddWidget(&externalAnimationAdd_);
+            // These controls are attached lazily while the preview window is
+            // already live. Window::AddWidget copies the window's current
+            // enabled state at that instant, which can be a stale disabled
+            // state left by an earlier import transition. The local file
+            // browser is valid whenever the Character/Animation page is
+            // visible, so establish that initial state explicitly.
+            externalAnimationAdd_.SetEnabled(true);
 
             // GGMAX-style creator presentation: all selected external files are
             // visible as individual rows at once rather than hidden behind a
@@ -366,6 +373,10 @@ namespace renegade::studio
 
             const bool hasSelection = !snapshot.clips.empty() &&
                 externalAnimationSelected_ < snapshot.clips.size();
+            // Do not inherit a one-off disabled Window state. Only an already
+            // open native FileDialog blocks another click; otherwise this is
+            // always the creator's route to local animation files.
+            externalAnimationAdd_.SetEnabled(!externalAnimationBrowserPending_);
             externalAnimationName_.SetEnabled(hasSelection);
             externalAnimationIncluded_.SetEnabled(hasSelection);
             externalAnimationRemove_.SetEnabled(hasSelection);
