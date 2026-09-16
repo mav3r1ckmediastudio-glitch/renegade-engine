@@ -118,6 +118,18 @@ namespace
 
 namespace renegade::bridge
 {
+    NavigationGridSettings DefaultStoryLevelNavigationTileSettings() noexcept
+    {
+        NavigationGridSettings settings;
+        settings.resolutionX = 128;
+        settings.resolutionY = 32;
+        settings.resolutionZ = 128;
+        settings.center = XMFLOAT3(0.0f, 7.5f, 0.0f);
+        settings.voxelSize = 0.5f;
+        settings.fitToSceneBounds = false;
+        return settings;
+    }
+
     std::size_t PrepareRigidBodyNavigationGeometry(
         wi::scene::Scene& scene) noexcept
     {
