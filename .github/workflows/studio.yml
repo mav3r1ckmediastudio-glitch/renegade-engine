@@ -31,7 +31,7 @@ jobs:
   studio:
     name: Renegade Studio Windows x64 ${{ matrix.configuration }}
     runs-on: windows-2025
-    timeout-minutes: 60
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
