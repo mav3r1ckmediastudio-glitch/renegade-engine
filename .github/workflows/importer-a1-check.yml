@@ -1,0 +1,32 @@
+name: Importer A1 focused checks
+
+# Standalone diagnostics contract only: no Wicked checkout, graphics, or
+# long Windows Studio/Runtime matrix. Runs only when this workflow changes.
+on:
+  push:
+    branches:
+      - feature/importer-a1-diagnostics
+    paths:
+      - .github/workflows/importer-a1-check.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out A1 branch without Wicked submodules
+        uses: actions/checkout@v4
+        with:
+          ref: feature/importer-a1-diagnostics
+          submodules: false
+      - name: Check stage/error source contracts
+        run: python3 Tests/ImporterA1SourceContract.py
+      - name: Compile and execute C++ diagnostic contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -Wall -Wextra -Werror -pedantic -I EngineBridge/include Tests/CreatorImportDiagnosticsTests.cpp -o /tmp/renegade-importer-a1-contract
+          /tmp/renegade-importer-a1-contract
