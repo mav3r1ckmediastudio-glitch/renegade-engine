@@ -1,13 +1,36 @@
 name: Importer A1 focused checks
 
-# Standalone diagnostics contract only: no Wicked checkout, graphics, or
-# long Windows Studio/Runtime matrix. Runs only when this workflow changes.
+# Small source/header contract only: no Wicked checkout, graphics, or
+# long Windows Studio/Runtime matrix. Does not claim a native importer pass.
 on:
   push:
     branches:
       - feature/importer-a1-diagnostics
     paths:
       - .github/workflows/importer-a1-check.yml
+      - EngineBridge/include/renegade/bridge/CreatorImportDiagnostics.h
+      - EngineBridge/include/renegade/bridge/CreatorAssetWorkflowService.h
+      - EngineBridge/include/renegade/bridge/ReusableAssetService.h
+      - EngineBridge/src/CreatorAssetWorkflowService.cpp
+      - EngineBridge/src/ReusableAssetService.cpp
+      - Studio/src/StudioApplication.cpp
+      - Tests/CreatorImportDiagnosticsTests.cpp
+      - Tests/ImporterA1SourceContract.py
+      - Tests/ReusableAssetTests.cpp
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/importer-a1-check.yml
+      - EngineBridge/include/renegade/bridge/CreatorImportDiagnostics.h
+      - EngineBridge/include/renegade/bridge/CreatorAssetWorkflowService.h
+      - EngineBridge/include/renegade/bridge/ReusableAssetService.h
+      - EngineBridge/src/CreatorAssetWorkflowService.cpp
+      - EngineBridge/src/ReusableAssetService.cpp
+      - Studio/src/StudioApplication.cpp
+      - Tests/CreatorImportDiagnosticsTests.cpp
+      - Tests/ImporterA1SourceContract.py
+      - Tests/ReusableAssetTests.cpp
 
 permissions:
   contents: read
@@ -17,10 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out A1 branch without Wicked submodules
+      - name: Check out GitHub commit without Wicked submodules
         uses: actions/checkout@v4
         with:
-          ref: feature/importer-a1-diagnostics
           submodules: false
       - name: Check stage/error source contracts
         run: python3 Tests/ImporterA1SourceContract.py
