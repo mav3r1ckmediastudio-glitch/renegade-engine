@@ -988,9 +988,12 @@ namespace renegade::bridge
         const std::string& destinationFolder,
         PreparedModelImport preparedModel,
         const std::string& thumbnailSourcePath,
-        PreparedReusableModelPlacement* preparedPlacement) const
+        PreparedReusableModelPlacement* preparedPlacement,
+        const std::uint64_t diagnosticAttemptId) const
     {
         CreatorModelImportResult result;
+        result.diagnostics.attemptId = diagnosticAttemptId != 0
+            ? diagnosticAttemptId : NextCreatorImportAttemptId();
         if (!IsValidStableId(projectId))
         {
             result.error = "Creator model import requires a valid project ID.";
@@ -1061,6 +1064,7 @@ namespace renegade::bridge
         fs::path snapshotDirectory = std::move(destinationPlan.snapshotDirectory);
         fs::path assetPath = std::move(destinationPlan.assetPath);
 
+        result.diagnostics.stage = CreatorImportStage::SourceRetention;
         fs::create_directories(snapshotDirectory, ec);
         if (ec)
         {
@@ -1086,6 +1090,7 @@ namespace renegade::bridge
             cleanupSnapshot();
             return result;
         }
+        result.diagnostics.sourceRetained = true;
 
         result.stagedSourceProjectRelativePath = retainedSource
             .lexically_relative(root).lexically_normal().generic_u8string();
@@ -1100,8 +1105,11 @@ namespace renegade::bridge
         request.settingsJson = settingsJson;
         request.expectedFormat = format;
         request.thumbnailPngBytes = std::move(thumbnailPngBytes);
+        request.diagnosticAttemptId = result.diagnostics.attemptId;
         result.asset = ReusableAssetService().ImportModelAsset(
             request, {}, std::move(preparedModel), preparedPlacement);
+        result.diagnostics = result.asset.diagnostics;
+        result.diagnostics.sourceRetained = true;
         if (!result.asset.succeeded)
         {
             result.error = result.asset.error;

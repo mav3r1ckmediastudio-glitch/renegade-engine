@@ -810,6 +810,8 @@ namespace renegade::bridge
         PreparedReusableModelPlacement* preparedPlacement) const
     {
         ReusableModelImportResult result;
+        result.diagnostics.attemptId = request.diagnosticAttemptId != 0
+            ? request.diagnosticAttemptId : NextCreatorImportAttemptId();
         if (preparedPlacement != nullptr)
             *preparedPlacement = {};
         result.sourceProjectRelativePath = request.sourceProjectRelativePath;
@@ -913,6 +915,7 @@ namespace renegade::bridge
             result.error = "Reusable model source format does not match the requested format.";
             return result;
         }
+        result.diagnostics.stage = CreatorImportStage::RecipeValidation;
         std::string recipeError;
         const std::string recipeJson = BuildRecipeJson(format, request.settingsJson, recipeError);
         if (recipeJson.empty())
@@ -921,6 +924,7 @@ namespace renegade::bridge
             return result;
         }
 
+        result.diagnostics.stage = CreatorImportStage::RegistryValidation;
         AssetRegistry registry;
         if (!ReadRegistryOrCreate(root, request.projectId, registry, result.error))
             return result;
@@ -979,6 +983,7 @@ namespace renegade::bridge
             return result;
         }
 
+        result.diagnostics.stage = CreatorImportStage::ScenePreparation;
         const fs::path importDirectory = root / "Intermediate" / "Imports";
         fs::create_directories(importDirectory, ec);
         if (ec)
@@ -1034,6 +1039,8 @@ namespace renegade::bridge
             cleanupTemporary();
             return result;
         }
+        result.diagnostics.preparedSceneReady = true;
+        result.diagnostics.stage = CreatorImportStage::RecipeApplication;
         CreatorModelImportRecipe creatorRecipe;
         if (!ParseCreatorModelImportOptions(request.settingsJson, creatorRecipe, result.error) ||
             !ApplyCreatorModelImportRecipe(*preparedScene, root.generic_u8string(),
@@ -1051,6 +1058,8 @@ namespace renegade::bridge
             return result;
         }
 
+        result.diagnostics.recipeApplied = true;
+        result.diagnostics.stage = CreatorImportStage::WisceneWrite;
         result.import = importer.SavePreparedModelAsset(prepared);
         if (!result.import.succeeded)
         {
@@ -1058,6 +1067,8 @@ namespace renegade::bridge
             cleanupTemporary();
             return result;
         }
+        result.diagnostics.wisceneWritten = true;
+        result.diagnostics.stage = CreatorImportStage::RegistryPreparation;
         if (!BuildModelMetadata(result.import, *preparedScene,
                 result.modelMetadata, result.error))
         {
@@ -1065,6 +1076,7 @@ namespace renegade::bridge
             return result;
         }
 
+        result.diagnostics.stage = CreatorImportStage::PackageSerialization;
         ReusableModelAssetDocument assetDocument;
         assetDocument.manifest.projectId = request.projectId;
         assetDocument.manifest.assetId = result.assetId;
@@ -1084,8 +1096,10 @@ namespace renegade::bridge
         std::vector<std::uint8_t> assetBytes;
         if (!SerializeReusableModelAssetDocument(assetDocument, assetBytes, result.error))
             return result;
+        result.diagnostics.packageSerialized = true;
         const std::string assetHash = HashBytes(assetBytes);
 
+        result.diagnostics.stage = CreatorImportStage::RegistryPreparation;
         ReusableModelManagedProjection projection;
         projection.projectId = request.projectId;
         projection.assetId = result.assetId;
@@ -1249,6 +1263,7 @@ namespace renegade::bridge
             pendingPlacement.result_.error.clear();
         }
 
+        result.diagnostics.stage = CreatorImportStage::AtomicCommit;
         ProjectDocumentTransactionOptions transactionOptions;
         transactionOptions.transactionId = std::move(options.transactionId);
         transactionOptions.journalDirectory =
@@ -1267,6 +1282,8 @@ namespace renegade::bridge
 
         if (preparedPlacement != nullptr)
             *preparedPlacement = std::move(pendingPlacement);
+        result.diagnostics.transactionCommitted = true;
+        result.diagnostics.stage = CreatorImportStage::Committed;
         result.succeeded = true;
         result.error.clear();
         return result;
