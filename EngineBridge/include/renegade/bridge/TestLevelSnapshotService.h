@@ -19,6 +19,15 @@ namespace renegade::bridge
         // 1 primitive deliberately leaves this empty.
         std::string descriptorPath;
 
+        // CW-05 owner-validation evidence. These describe navigation prepared
+        // only for the disposable TestGame scene; the live authoring document
+        // is never rewritten by the automatic bake/cache path.
+        bool navigationCacheReused = false;
+        bool navigationCacheRebuilt = false;
+        std::size_t navigationGridCount = 0;
+        std::string navigationSignature;
+        std::string navigationCacheDirectory;
+
         [[nodiscard]] bool IsValid() const noexcept
         {
             return !projectRoot.empty() &&
@@ -41,53 +50,55 @@ namespace renegade::bridge
         AfterDescriptorWrite,
     };
 
-    // UI-free LP04 primitive. Serializes the currently live Wicked scene into
-    // a disposable project-contained snapshot without using the ordinary
-    // SceneDocumentService::Save() path. Therefore it must not change the
-    // authoritative scene path, saved depth, Undo/Redo history or dirty state.
-    class TestLevelSnapshotService
-    {
-    public:
-        TestLevelSnapshotService(
-            SceneService& scenes,
-            const CommandService& commands,
-            ScriptAuthoringService* scripts = nullptr) noexcept;
-
-        // Builds a Runtime-ready shadow project around the unsaved scene
-        // snapshot. The shadow descriptor reuses only the authoritative
-        // project's stable ID and name; Flow/Screen startup roots are omitted
-        // so Test Level starts directly in the captured scene.
-        [[nodiscard]] bool Create(
-            const ProjectMetadata& project,
-            TestLevelSnapshot& snapshot,
-            std::string& error,
-            TestLevelSnapshotFailureInjection failureInjection =
-                TestLevelSnapshotFailureInjection::None);
-
-        [[nodiscard]] bool Create(
-            const std::string& projectRoot,
-            TestLevelSnapshot& snapshot,
-            std::string& error,
-            TestLevelSnapshotFailureInjection failureInjection =
-                TestLevelSnapshotFailureInjection::None);
-
-        // Process-lifecycle code needs the same path-safety guarantee without
-        // constructing a scene-bound service instance. This is the single
-        // cleanup primitive used by both normal snapshot cleanup and Gate 3.
-        [[nodiscard]] static bool CleanupDirectory(
-            const std::string& projectRoot,
-            const std::string& sessionDirectory,
-            std::string& error);
-
-        // Idempotent for an already-removed snapshot. Refuses paths that are
-        // not direct children of <project>/Intermediate/TestLevelSnapshots.
-        [[nodiscard]] bool Cleanup(
-            const TestLevelSnapshot& snapshot,
-            std::string& error) const;
-
-    private:
-        SceneService& scenes_;
-        const CommandService& commands_;
-        ScriptAuthoringService* scripts_ = nullptr;
+#define RENEGADE_DECLARE_TEST_LEVEL_SNAPSHOT_SERVICE(ClassName) \
+    class ClassName \
+    { \
+    public: \
+        ClassName( \
+            SceneService& scenes, \
+            const CommandService& commands, \
+            ScriptAuthoringService* scripts = nullptr) noexcept; \
+        [[nodiscard]] bool Create( \
+            const ProjectMetadata& project, \
+            TestLevelSnapshot& snapshot, \
+            std::string& error, \
+            TestLevelSnapshotFailureInjection failureInjection = \
+                TestLevelSnapshotFailureInjection::None); \
+        [[nodiscard]] bool Create( \
+            const std::string& projectRoot, \
+            TestLevelSnapshot& snapshot, \
+            std::string& error, \
+            TestLevelSnapshotFailureInjection failureInjection = \
+                TestLevelSnapshotFailureInjection::None); \
+        [[nodiscard]] static bool CleanupDirectory( \
+            const std::string& projectRoot, \
+            const std::string& sessionDirectory, \
+            std::string& error); \
+        [[nodiscard]] bool Cleanup( \
+            const TestLevelSnapshot& snapshot, \
+            std::string& error) const; \
+    private: \
+        SceneService& scenes_; \
+        const CommandService& commands_; \
+        ScriptAuthoringService* scripts_ = nullptr; \
     };
+
+#if defined(RENEGADE_TEST_LEVEL_SNAPSHOT_LEGACY_IMPLEMENTATION)
+    // The established LP04 implementation is compiled under this internal
+    // class name. The creator-facing class below wraps it only on TestGame's
+    // project-aware path so the proven scene-only primitive remains intact.
+    RENEGADE_DECLARE_TEST_LEVEL_SNAPSHOT_SERVICE(
+        LegacyTestLevelSnapshotService)
+#else
+    RENEGADE_DECLARE_TEST_LEVEL_SNAPSHOT_SERVICE(
+        LegacyTestLevelSnapshotService)
+
+    // UI-free LP04/CW-05 boundary. The project-aware overload delegates to the
+    // established LP04 implementation, then prepares navigation on the
+    // detached TestGame WISCENE before Runtime sees it.
+    RENEGADE_DECLARE_TEST_LEVEL_SNAPSHOT_SERVICE(
+        TestLevelSnapshotService)
+#endif
+
+#undef RENEGADE_DECLARE_TEST_LEVEL_SNAPSHOT_SERVICE
 }
