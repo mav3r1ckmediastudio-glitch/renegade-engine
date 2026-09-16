@@ -301,7 +301,15 @@ namespace
                     error;
                 return false;
             }
-            scene.names.Create(navigationTile) = "Navigation Tile (0, 0)";
+            // CreateNavigationGrid already owns the Name component. Reuse it;
+            // calling Create twice asserts in Wicked's debug ECS storage.
+            auto* navigationName = scene.names.GetComponent(navigationTile);
+            if (navigationName == nullptr)
+            {
+                error = "Initial Level navigation tile lost its name.";
+                return false;
+            }
+            *navigationName = "Navigation Tile (0, 0)";
             auto* navigationMetadata =
                 scene.metadatas.GetComponent(navigationTile);
             if (navigationMetadata == nullptr)
