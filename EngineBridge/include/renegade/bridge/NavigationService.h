@@ -31,6 +31,14 @@ namespace renegade::bridge
     inline constexpr const char* NavigationDefaultGridMetadataKey =
         "renegade.navigation.default_grid";
     inline constexpr const char* NavigationDefaultGridMetadataVersion = "1";
+    // A level starts with one bounded, persistent tile.  More tiles can be
+    // authored around it as a level grows; this avoids allocating a world-size
+    // VoxelGrid before the level has any terrain or other bounds.
+    inline constexpr const char* NavigationTileMetadataKey =
+        "renegade.navigation.tile";
+    inline constexpr const char* NavigationTileMetadataVersion = "1";
+    inline constexpr const char* NavigationTileCoordinateMetadataKey =
+        "renegade.navigation.tile_coordinate";
 
     // Creator-facing generation settings over Wicked's native VoxelGrid.
     // The VoxelGrid component itself remains the serialized/runtime source of
@@ -49,6 +57,13 @@ namespace renegade::bridge
         std::uint32_t layerMask = ~0u;
         std::uint32_t lod = 0;
     };
+
+    // The first Story Flow navigation tile covers 64m x 16m x 64m centred on
+    // the level origin, with half a metre cells.  It is intentionally bounded:
+    // an empty level has no terrain extent from which a safe world-size grid
+    // could be inferred.
+    [[nodiscard]] NavigationGridSettings
+    DefaultStoryLevelNavigationTileSettings() noexcept;
 
     struct NavigationQuerySettings
     {

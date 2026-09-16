@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/NavigationService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/SunService.h"
 
@@ -162,6 +163,47 @@ namespace
                 !preparedScene->terrains.Contains(
                     preparedScene->weathers.GetEntity(0)),
             "created Level did not contain a dedicated Environment and Sun");
+
+        wi::ecs::Entity navigationTile = wi::ecs::INVALID_ENTITY;
+        if (preparedScene != nullptr)
+        {
+            for (std::size_t index = 0;
+                index < preparedScene->voxel_grids.GetCount(); ++index)
+            {
+                const wi::ecs::Entity entity =
+                    preparedScene->voxel_grids.GetEntity(index);
+                if (IsRenegadeNavigationGrid(*preparedScene, entity))
+                {
+                    navigationTile = entity;
+                    break;
+                }
+            }
+        }
+        Check(navigationTile != wi::ecs::INVALID_ENTITY,
+            "created Level did not persist an initial navigation tile");
+        if (preparedScene != nullptr &&
+            navigationTile != wi::ecs::INVALID_ENTITY)
+        {
+            const auto* tile =
+                preparedScene->voxel_grids.GetComponent(navigationTile);
+            const auto* metadata =
+                preparedScene->metadatas.GetComponent(navigationTile);
+            Check(tile != nullptr && tile->resolution.x == 128 &&
+                    tile->resolution.y == 32 && tile->resolution.z == 128 &&
+                    tile->voxelSize.x == 0.5f && tile->center.y == 7.5f,
+                "created Level navigation tile has unexpected bounded defaults");
+            Check(metadata != nullptr &&
+                    metadata->string_values.has(NavigationDefaultGridMetadataKey) &&
+                    metadata->string_values.get(NavigationDefaultGridMetadataKey) ==
+                        NavigationDefaultGridMetadataVersion &&
+                    metadata->string_values.has(NavigationTileMetadataKey) &&
+                    metadata->string_values.get(NavigationTileMetadataKey) ==
+                        NavigationTileMetadataVersion &&
+                    metadata->string_values.has(NavigationTileCoordinateMetadataKey) &&
+                    metadata->string_values.get(NavigationTileCoordinateMetadataKey) ==
+                        "0,0",
+                "created Level navigation tile is missing tile/default metadata");
+        }
 
         DocumentEnvelope sceneEnvelope;
         std::string error;

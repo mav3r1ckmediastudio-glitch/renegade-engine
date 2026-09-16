@@ -201,6 +201,16 @@ height/blend data as the WISCENE authority. The standard extent is radius 9:
 19x19 chunks at 66 metres per chunk and one-metre vertex spacing, producing a
 1.254 km square. Expansion increments the radius without calling Wicked's
 `Generation_Restart()`; the generator fills only missing outer coordinates.
+
+Navigation is initialized when Story Flow creates a Level, not deferred until
+the disposable TestGame snapshot. Because a blank Level has no terrain bounds,
+the serialized default is one finite native Wicked VoxelGrid tile at the origin
+(64m x 16m x 64m, 0.5m cells) with stable Renegade default/tile metadata.
+TestGame’s navigation cache reuses or rebakes that authored grid from the
+navigation-geometry signature. A future terrain-scale system must add explicit
+tiles and runtime residency without replacing Wicked VoxelGrid/PathQuery with a
+second navigation world; cross-tile path routing is not implied by this first
+bounded tile.
 Undo cancels active generation and removes only chunks beyond the former
 radius. Wicked's stock camera-following removal is deliberately disabled for
 authored terrain because it erases the authoritative chunk entry, not merely

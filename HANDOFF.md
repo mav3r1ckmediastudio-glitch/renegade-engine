@@ -8,6 +8,46 @@
 **Clean AI-02 implementation checkpoint:** `f808d38f11672fe75bfbbdeaec989bef7f43f32c`  
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
+## Active recovery — not accepted
+
+**Commit:** `69cd04494986772751524869a0bd0541e11599f5` on
+`fix/cw05-headless-ownership-test` (not pushed or merged).
+
+This recovery corrects two owner-visible failures that automated CW-05 cache
+checks did not prove:
+
+- Story Flow **Add New Level** now serializes one persistent native Wicked
+  navigation tile immediately. It is a bounded 64m x 16m x 64m origin tile
+  (128 x 32 x 128 at 0.5m), marked as the default tile. TestGame therefore
+  sees an authored grid and the existing cache reuses/rebakes that grid from
+  the navigation geometry signature instead of manufacturing a hidden
+  fallback-only grid.
+- The importer’s external-animation file-picker button now explicitly restores
+  its enabled state whenever the Character/Animation page refreshes. The only
+  disabled state is while its native file dialog is already open.
+
+Changed files: `EngineBridge/include/renegade/bridge/NavigationService.h`,
+`EngineBridge/src/NavigationService.cpp`,
+`EngineBridge/src/StoryFlowLevelLifecycleService.cpp`,
+`Studio/src/CreatorImportPreviewWindow.h`,
+`Tests/StoryFlowGate4LevelLifecycleTests.cpp`, and
+`Tests/CharacterWorkflowSourceContract.cmake`.
+
+Local evidence: `git diff --check` passed; targeted source-contract text checks
+passed. A GNU syntax-only attempt was blocked before project code by the local
+checkout lacking the SDL/CMake Windows build environment. No Windows build, CI,
+or owner visual test has been claimed.
+
+Required next verification on the exact commit:
+
+1. Build Studio and `RenegadeStoryFlowGate4LevelLifecycleTests` on Windows.
+2. Create a Story Flow level; save/reopen and confirm one visible Navigation
+   Tile exists at the origin.
+3. Add terrain or a navigation obstacle, run TestGame twice, and confirm first
+   bake/rebuild then unchanged cache reuse in Runtime diagnostics.
+4. In Character -> Animation, click **+ ADD ANIMATION FILES...** and confirm
+   the native local file picker opens and returns selected files as slots.
+
 ## Current programme state
 
 The active programme is **Renegade Character & AI**.

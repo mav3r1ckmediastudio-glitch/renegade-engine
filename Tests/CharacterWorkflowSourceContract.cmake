@@ -107,6 +107,9 @@ require_text(importer_preview
     "pending guard held until Wicked's FileDialog reports success/cancel"
     "single outstanding animation file browser lifecycle")
 require_text(importer_preview
+    "externalAnimationAdd_.SetEnabled(!externalAnimationBrowserPending_)"
+    "enabled local animation browser outside its active dialog")
+require_text(importer_preview
     "One row per external animation file"
     "creator-facing one-file-one-row UX")
 

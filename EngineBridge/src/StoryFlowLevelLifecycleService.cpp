@@ -2,6 +2,7 @@
 
 #include "renegade/bridge/CommandService.h"
 #include "renegade/bridge/IdentityService.h"
+#include "renegade/bridge/NavigationService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 
 #include <algorithm>
@@ -283,6 +284,41 @@ namespace
                 error = "Could not create the Level Environment carrier.";
                 return false;
             }
+
+            // Navigation is authored with the Level, rather than manufactured
+            // only in the disposable TestGame copy.  A blank level has no
+            // terrain bounds, so begin with one finite origin tile.  TestGame
+            // reuses or rebakes this exact serialized grid according to its
+            // geometry signature; creators can add/fill tiles as the level
+            // expands.
+            const wi::ecs::Entity navigationTile = CreateNavigationGrid(
+                scene,
+                DefaultStoryLevelNavigationTileSettings(),
+                error);
+            if (navigationTile == wi::ecs::INVALID_ENTITY)
+            {
+                error = "Could not create the initial Level navigation tile: " +
+                    error;
+                return false;
+            }
+            scene.names.Create(navigationTile) = "Navigation Tile (0, 0)";
+            auto* navigationMetadata =
+                scene.metadatas.GetComponent(navigationTile);
+            if (navigationMetadata == nullptr)
+            {
+                error = "Initial Level navigation tile lost its metadata.";
+                return false;
+            }
+            navigationMetadata->string_values.set(
+                NavigationDefaultGridMetadataKey,
+                NavigationDefaultGridMetadataVersion);
+            navigationMetadata->string_values.set(
+                NavigationTileMetadataKey,
+                NavigationTileMetadataVersion);
+            navigationMetadata->string_values.set(
+                NavigationTileCoordinateMetadataKey,
+                "0,0");
+
             wi::Archive archive(path.generic_u8string(), false, false);
             if (!archive.IsOpen())
             {
