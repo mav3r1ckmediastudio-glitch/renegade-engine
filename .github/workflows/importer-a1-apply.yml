@@ -1,8 +1,8 @@
 name: Apply bounded importer A1 diagnostics
 
-# One small GitHub-hosted source-editing job, NOT the Windows build matrix.
-# Only the initial commit of this workflow activates it. Subsequent source
-# commits do not match this path, so there is no CI loop.
+# This GitHub-hosted source-editing job is not the Windows build matrix.
+# Only changes to this workflow file start the job; subsequent source
+# commits do not match its path filter, so there is no CI loop.
 on:
   push:
     branches:
@@ -15,11 +15,10 @@ permissions:
 
 jobs:
   apply:
-    if: github.event.head_commit.message == 'Importer A1: run GitHub-only diagnostic patch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out exact feature branch (no submodules or private assets)
+      - name: Check out feature branch (no submodules or private assets)
         uses: actions/checkout@v4
         with:
           ref: feature/importer-a1-diagnostics
