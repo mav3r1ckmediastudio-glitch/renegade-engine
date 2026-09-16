@@ -1,0 +1,40 @@
+name: Apply importer A1 failure-regression tests
+
+on:
+  push:
+    branches:
+      - feature/importer-a1-diagnostics
+    paths:
+      - .github/workflows/importer-a1-regression-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out isolated A1 branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/importer-a1-diagnostics
+          submodules: false
+      - name: Apply exact-anchor test changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 Tools/ImporterA1RegressionPatch.py
+          git diff --check
+          git diff --stat
+      - name: Commit test changes only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Tests/ReusableAssetTests.cpp
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'No changes'; exit 1; }
+          git commit -m 'Importer A1: assert fail-closed stage for existing LP07 negative cases'
+          git push origin HEAD:refs/heads/feature/importer-a1-diagnostics
