@@ -1,0 +1,78 @@
+name: Importer A2 Release validation
+
+# Exact-branch, read-only, one-cycle native validation. This does not upload
+# private owner FBXs and does not run when source files are subsequently edited.
+on:
+  push:
+    branches:
+      - feature/importer-a2-roundtrip-root-cause
+    paths:
+      - .github/workflows/importer-a2-release-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.repository == 'mav3r1ckmediastudio-glitch/renegade-engine' && github.ref == 'refs/heads/feature/importer-a2-roundtrip-root-cause'
+    runs-on: windows-2025
+    timeout-minutes: 75
+    steps:
+      - name: Check out exact A2 commit and pinned Wicked
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+      - name: Configure MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+      - name: Stage pinned public FBX fixtures and verify their Git blob hashes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixtureRoot = 'Tests/Fixtures/LP07'
+          New-Item -ItemType Directory -Force -Path $fixtureRoot | Out-Null
+          $upstreamCommit = 'fcc5d6ba444cfd3eb80677dba5e37e493941abe5'
+          $fixtures = @(
+            @{ Name = 'maya_cube_6100_ascii.fbx'; Blob = 'b0aa64ea2361060b4f9bc4cd4e7bd0f730b6f7d8' },
+            @{ Name = 'maya_transformed_skin_7700_ascii.fbx'; Blob = '683b74cf082e5adab645082c73dd221e0ff7f281' }
+          )
+          foreach ($fixture in $fixtures) {
+            $path = Join-Path $fixtureRoot $fixture.Name
+            $uri = "https://raw.githubusercontent.com/ufbx/ufbx/$upstreamCommit/data/$($fixture.Name)"
+            Invoke-WebRequest -Uri $uri -OutFile $path
+            $actual = (& git.exe hash-object -- $path).Trim()
+            if ($LASTEXITCODE -ne 0 -or $actual -ne $fixture.Blob) {
+              throw "LP07 fixture hash mismatch: $($fixture.Name)"
+            }
+            Write-Host "LP07 public fixture verified: $($fixture.Name)"
+          }
+      - name: Build Studio Release and run all CTest contracts
+        shell: pwsh
+        run: >-
+          ./Tools/Build-Studio-Windows.ps1
+          -Configuration Release
+          -Clean
+          -ArtifactRoot artifacts/studio/importer-a2-Release
+      - name: Verify packaged Studio Release startup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $studio = 'BUILD/renegade/Studio/Release/RenegadeStudio.exe'
+          if (-not (Test-Path -LiteralPath $studio -PathType Leaf)) {
+            throw 'A2 Studio executable was not produced'
+          }
+          $process = Start-Process -FilePath $studio -ArgumentList 'startup-smoke' -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "A2 Studio startup failed: $($process.ExitCode)"
+          }
+          Write-Host 'IMPORTER_A2_STUDIO_RELEASE_STARTUP_PASS'
+      - name: Upload Release artifact, CTest results and build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renegade-importer-a2-Release-${{ github.sha }}
+          path: artifacts/studio/importer-a2-Release
+          if-no-files-found: warn
+          retention-days: 14
