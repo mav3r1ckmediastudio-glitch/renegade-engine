@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -157,6 +159,135 @@ namespace
         HashValue(hash, blocks.size());
         for (const auto block : blocks)
             HashValue(hash, block);
+    }
+
+    // Wicked's pinned MeshComponent::CreateRenderData() normalizes 4/8 skin
+    // weights IN PLACE when constructing its GPU buffers, including after a
+    // WISCENE reload. A second normalization can change individual float bits.
+    // Bring the isolated creator scene to that exact finite fixed point before
+    // taking the authoritative evidence snapshot. We NEVER apply tolerance to
+    // the round-trip proof, and we fail closed if a fixed point cannot be found.
+    bool CanonicalizeWisceneSkinWeights(wi::scene::Scene& scene, std::string& error)
+    {
+        constexpr unsigned MaximumNormalizationPasses = 32;
+        for (std::size_t meshIndex = 0; meshIndex < scene.meshes.GetCount(); ++meshIndex)
+        {
+            auto& mesh = scene.meshes[meshIndex];
+            const auto count = mesh.vertex_boneindices.size();
+            if (mesh.vertex_boneweights.size() != count ||
+                mesh.vertex_boneindices2.size() != mesh.vertex_boneweights2.size() ||
+                (!mesh.vertex_boneindices2.empty() &&
+                    mesh.vertex_boneindices2.size() != count))
+            {
+                error = "Skin-weight stream lengths are inconsistent in mesh " +
+                    std::to_string(meshIndex) + ".";
+                return false;
+            }
+            if (count == 0)
+                continue;
+
+            const bool hasSecondary = !mesh.vertex_boneindices2.empty();
+            bool meshChanged = false;
+            for (std::size_t vertex = 0; vertex < count; ++vertex)
+            {
+                bool stable = false;
+                for (unsigned pass = 0; pass < MaximumNormalizationPasses; ++pass)
+                {
+                    const XMFLOAT4 before = mesh.vertex_boneweights[vertex];
+                    const XMFLOAT4 before2 = hasSecondary
+                        ? mesh.vertex_boneweights2[vertex] : XMFLOAT4{};
+                    // Match the pinned Wicked order: four weights followed by
+                    // optional secondary four, with unused weights set to 0.
+                    float weights[8] = {
+                        before.x, before.y, before.z, before.w,
+                        before2.x, before2.y, before2.z, before2.w
+                    };
+                    float sum = 0.0f;
+                    for (const float weight : weights)
+                    {
+                        if (!std::isfinite(weight) || weight < 0.0f)
+                        {
+                            error = "Non-finite or negative skin weight in mesh " +
+                                std::to_string(meshIndex) + ", vertex " +
+                                std::to_string(vertex) + ".";
+                            return false;
+                        }
+                        sum += weight;
+                    }
+                    if (!std::isfinite(sum))
+                    {
+                        error = "Non-finite skin-weight sum in mesh " +
+                            std::to_string(meshIndex) + ".";
+                        return false;
+                    }
+                    if (sum > 0.0f)
+                    {
+                        const float norm = 1.0f / sum;
+                        for (float& weight : weights)
+                            weight *= norm;
+                    }
+                    for (const float weight : weights)
+                    {
+                        if (!std::isfinite(weight))
+                        {
+                            error = "Skin-weight normalization overflow in mesh " +
+                                std::to_string(meshIndex) + ".";
+                            return false;
+                        }
+                    }
+                    const XMFLOAT4 next(weights[0], weights[1], weights[2], weights[3]);
+                    const XMFLOAT4 next2(weights[4], weights[5], weights[6], weights[7]);
+                    const bool unchanged =
+                        std::memcmp(&before, &next, sizeof(XMFLOAT4)) == 0 &&
+                        (!hasSecondary ||
+                            std::memcmp(&before2, &next2, sizeof(XMFLOAT4)) == 0);
+                    if (unchanged)
+                    {
+                        stable = true;
+                        break;
+                    }
+                    mesh.vertex_boneweights[vertex] = next;
+                    if (hasSecondary)
+                        mesh.vertex_boneweights2[vertex] = next2;
+                    meshChanged = true;
+                }
+                if (!stable)
+                {
+                    error = "Skin weights did not reach an exact Wicked normalization "
+                        "fixed point in mesh " + std::to_string(meshIndex) +
+                        ", vertex " + std::to_string(vertex) + ".";
+                    return false;
+                }
+            }
+
+            if (meshChanged)
+            {
+                // GPU skin buffers must use the same weights as the WISCENE.
+                // This pinned Wicked call re-normalizes, so verify it cannot
+                // silently change the fixed-point CPU weights again.
+                const auto expected = mesh.vertex_boneweights;
+                const auto expected2 = mesh.vertex_boneweights2;
+                mesh.CreateRenderData();
+                const bool firstMatches =
+                    mesh.vertex_boneweights.size() == expected.size() &&
+                    (expected.empty() || std::memcmp(
+                        mesh.vertex_boneweights.data(), expected.data(),
+                        expected.size() * sizeof(XMFLOAT4)) == 0);
+                const bool secondMatches =
+                    mesh.vertex_boneweights2.size() == expected2.size() &&
+                    (expected2.empty() || std::memcmp(
+                        mesh.vertex_boneweights2.data(), expected2.data(),
+                        expected2.size() * sizeof(XMFLOAT4)) == 0);
+                if (!firstMatches || !secondMatches)
+                {
+                    error = "Wicked render-data creation changed canonical skin "
+                        "weights in mesh " + std::to_string(meshIndex) + ".";
+                    return false;
+                }
+            }
+        }
+        error.clear();
+        return true;
     }
 
     bool FingerprintFile(
@@ -772,6 +903,21 @@ namespace renegade::bridge
             }
             return result;
         }
+
+        // Canonicalize only the isolated model's CPU/GPU skin weights. The
+        // source file stays untouched; all rig/animation equality tests remain
+        // exact, including the original aggregate fingerprint.
+        std::string normalizationError;
+        if (!CanonicalizeWisceneSkinWeights(*prepared.scene_, normalizationError))
+        {
+            ImportResult failed = prepared.Result();
+            failed.error = "WISCENE skin-weight canonicalization failed: " +
+                normalizationError;
+            prepared.result_ = failed;
+            return failed;
+        }
+        prepared.result_.imported = Summarize(*prepared.scene_);
+        prepared.result_.importedEvidence = SummarizeModelEvidence(*prepared.scene_);
 
         // Reuse the proven WISCENE serializer/structural round-trip path. Its
         // name is retained for compatibility, but it serializes a Wicked Scene
