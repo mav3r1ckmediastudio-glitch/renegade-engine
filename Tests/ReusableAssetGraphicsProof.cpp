@@ -415,9 +415,8 @@ namespace
         return true;
     }
 
-    // Public animated FBX fixture: prove the original raw WISCENE path
-    // really changes 0.2 + 0.2 + 0.2 + 0.2 to 0.25 x4 ON RELOAD, then
-    // prove the model path canonicalizes and survives two independent reloads.
+    // Public FBX proof covers ordinary weight normalization AND a valid
+    // floating-point two-cycle that the former 32-pass fixed-point repair rejected.
     bool RunSkinWeightNormalizationProof(const fs::path& projectRoot)
     {
         using namespace renegade::bridge;
@@ -439,11 +438,24 @@ namespace
             for (meshIndex = 0; meshIndex < scene->meshes.GetCount(); ++meshIndex)
             {
                 auto& mesh = scene->meshes[meshIndex];
-                if (mesh.vertex_boneindices.empty() || mesh.vertex_boneweights.empty())
+                if (mesh.vertex_boneindices.empty() || mesh.vertex_boneweights.size() <= 5)
                     continue;
                 mesh.vertex_boneweights[0] = XMFLOAT4(0.2f, 0.2f, 0.2f, 0.2f);
+                // Exact IEEE-754 input bits; normalizing once/twice alternates
+                // between two different weight vectors on pinned Wicked/MSVC.
+                const std::uint32_t cycleBits[4] = {
+                    0x3eec3653u, 0x3f12861du, 0x3eea5aa6u, 0x3f4e81e1u
+                };
+                float cycle[4] = {};
+                for (int index = 0; index < 4; ++index)
+                    std::memcpy(&cycle[index], &cycleBits[index], sizeof(float));
+                mesh.vertex_boneweights[5] =
+                    XMFLOAT4(cycle[0], cycle[1], cycle[2], cycle[3]);
                 if (!mesh.vertex_boneweights2.empty())
+                {
                     mesh.vertex_boneweights2[0] = XMFLOAT4(0, 0, 0, 0);
+                    mesh.vertex_boneweights2[5] = XMFLOAT4(0, 0, 0, 0);
+                }
                 return true;
             }
             return false;
@@ -465,6 +477,38 @@ namespace
             }
             return true;
         };
+        // Confirm the regression is genuinely nonconvergent: the original
+        // 32-pass repair would reject it even though all weights are finite.
+        const std::uint32_t cycleBits[4] = {
+            0x3eec3653u, 0x3f12861du, 0x3eea5aa6u, 0x3f4e81e1u
+        };
+        float cycle[4] = {};
+        for (int index = 0; index < 4; ++index)
+            std::memcpy(&cycle[index], &cycleBits[index], sizeof(float));
+        const auto normalizeOnce = [](const XMFLOAT4& original)
+        {
+            float weights[8] = {
+                original.x, original.y, original.z, original.w, 0, 0, 0, 0
+            };
+            float sum = 0.0f;
+            for (const float weight : weights)
+                sum += weight;
+            if (sum > 0.0f)
+            {
+                const float factor = 1.0f / sum;
+                for (float& weight : weights)
+                    weight *= factor;
+            }
+            return XMFLOAT4(weights[0], weights[1], weights[2], weights[3]);
+        };
+        const XMFLOAT4 cycleStart(cycle[0], cycle[1], cycle[2], cycle[3]);
+        const auto cycleFirst = normalizeOnce(cycleStart);
+        const auto cycleSecond = normalizeOnce(cycleFirst);
+        const auto cycleThird = normalizeOnce(cycleSecond);
+        if (!Require(std::memcmp(&cycleFirst, &cycleSecond, sizeof(XMFLOAT4)) != 0 &&
+                std::memcmp(&cycleFirst, &cycleThird, sizeof(XMFLOAT4)) == 0,
+                "public cycle fixture must reproduce nonconvergent Wicked weights"))
+            return false;
         std::string error;
         auto raw = makePrepared("a2-normalization-raw.wiscene");
         std::size_t meshIndex = 0;
@@ -524,27 +568,40 @@ namespace
             !Require(imports.RefreshPreparedModelEvidence(repaired, error),
                 "repair proof could not refresh raw evidence: " + error))
             return false;
+        const auto originalPreparedEvidence = repaired.Result().importedEvidence;
         const auto saved = imports.SavePreparedModelAsset(repaired);
         if (!Require(saved.succeeded,
-                "canonical WISCENE save failed: " + saved.error) ||
+                "single-pass WISCENE save failed: " + saved.error) ||
+            !Require(originalPreparedEvidence ==
+                ImportService::SummarizeModelEvidence(*repaired.PeekScene()),
+                "reload prediction mutated original prepared weights") ||
+            !Require(originalPreparedEvidence.skinWeightFingerprint !=
+                saved.importedEvidence.skinWeightFingerprint &&
+                originalPreparedEvidence.skinIndexFingerprint ==
+                saved.importedEvidence.skinIndexFingerprint &&
+                originalPreparedEvidence.armatureFingerprint ==
+                saved.importedEvidence.armatureFingerprint &&
+                originalPreparedEvidence.animationFingerprint ==
+                saved.importedEvidence.animationFingerprint,
+                "single-pass prediction changed unexpected rig or animation groups") ||
             !Require(saved.importedEvidence == saved.reloadedEvidence,
-                "canonical rig/animation evidence did not match exactly"))
+                "single-pass rig/animation evidence did not match exactly"))
             return false;
         for (int pass = 0; pass < 2; ++pass)
         {
             auto reopened = wi::allocator::make_shared_single<wi::scene::Scene>();
             if (!Require(readScene(fs::u8path(saved.assetPath), *reopened, error),
-                    "canonical WISCENE reopen failed: " + error) ||
+                    "single-pass WISCENE reopen failed: " + error) ||
                 !Require(ImportService::SummarizeModelEvidence(*reopened) ==
                     saved.importedEvidence,
-                    "canonical rig/animation weights drifted on repeated reload") ||
+                    "single-pass rig/animation evidence differed across independent reloads") ||
                 !Require(repairedMeshIndex < reopened->meshes.GetCount() &&
                     !reopened->meshes[repairedMeshIndex].vertex_boneweights.empty() &&
                     reopened->meshes[repairedMeshIndex].vertex_boneweights[0].x == 0.25f,
-                    "canonical first-vertex skin weight was not preserved"))
+                    "normalized first-vertex skin weight was not preserved"))
                 return false;
         }
-        std::cout << "A2 CANONICAL SKIN ROUND-TRIP PASS\n";
+        std::cout << "A2 SINGLE-PASS SKIN ROUND-TRIP AND NONCONVERGENT CYCLE PASS\n";
         return true;
     }
 
