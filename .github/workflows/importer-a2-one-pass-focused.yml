@@ -1,0 +1,67 @@
+name: Importer A2 focused float and source proof
+
+on:
+  push:
+    branches:
+      - feature/importer-a2-roundtrip-root-cause
+    paths:
+      - .github/workflows/importer-a2-one-pass-focused.yml
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    if: github.repository == 'mav3r1ckmediastudio-glitch/renegade-engine' && github.ref == 'refs/heads/feature/importer-a2-roundtrip-root-cause'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check production prediction and regression assertions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          model = Path('EngineBridge/src/ImportServiceModel.cpp').read_text()
+          proof = Path('Tests/ReusableAssetGraphicsProof.cpp').read_text()
+          assert 'CanonicalizeWisceneSkinWeights' not in model
+          assert 'MaximumNormalizationPasses' not in model
+          assert model.count('PredictWickedReloadEvidence(') == 2
+          assert 'expectedReloadEvidence == result.reloadedEvidence' in model or 'expectedReloadEvidence == result.reloadedEvidence' in model.replace('!(', '')
+          assert 'originalEvidence ==\n              renegade::bridge::ImportService::SummarizeModelEvidence(scene)' in model
+          assert '0x3eec3653u' in proof and 'cycleThird' in proof
+          assert 'saved.importedEvidence == saved.reloadedEvidence' in proof
+          print('A2 focused source contracts: PASS')
+          PY
+      - name: Compile and run finite two-cycle and single-pass floating proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/a2_float_proof.cpp <<'CPP'
+          #include <cmath>
+          #include <cstdint>
+          #include <cstring>
+          #include <cstdio>
+          struct W { float x,y,z,w; };
+          W once(W p) {
+              float a[8]={p.x,p.y,p.z,p.w,0,0,0,0};
+              float sum=0.0f;
+              for (float v:a) sum+=v;
+              if(sum>0.0f){const float n=1.0f/sum;for(float& v:a)v*=n;}
+              return {a[0],a[1],a[2],a[3]};
+          }
+          int main(){
+              const std::uint32_t bits[4]={0x3eec3653u,0x3f12861du,0x3eea5aa6u,0x3f4e81e1u};
+              W start{};
+              std::memcpy(&start.x,&bits[0],4);std::memcpy(&start.y,&bits[1],4);
+              std::memcpy(&start.z,&bits[2],4);std::memcpy(&start.w,&bits[3],4);
+              W a=once(start),b=once(a),c=once(b);
+              if (std::memcmp(&a,&b,sizeof(W))==0 || std::memcmp(&a,&c,sizeof(W))!=0) return 1;
+              W basic=once({0.2f,0.2f,0.2f,0.2f});
+              if (basic.x!=0.25f || basic.y!=0.25f || basic.z!=0.25f || basic.w!=0.25f) return 2;
+              std::puts("A2 FLOAT CYCLE AND ONE-PASS PROOF PASS");
+          }
+          CPP
+          g++ -std=c++17 -O0 -fno-fast-math -ffp-contract=off /tmp/a2_float_proof.cpp -o /tmp/a2_float_proof
+          /tmp/a2_float_proof

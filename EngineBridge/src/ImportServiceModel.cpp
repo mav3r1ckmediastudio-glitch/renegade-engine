@@ -4,11 +4,14 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
 #include <sstream>
 #include <vector>
+#include <utility>
 
 namespace fs = std::filesystem;
 
@@ -159,6 +162,135 @@ namespace
             HashValue(hash, block);
     }
 
+    // A WISCENE reload invokes Wicked's CreateRenderData() once per mesh. It
+    // normalizes skin weights IN PLACE with a float sum, reciprocal and multiply.
+    // A second pass can oscillate between float states: a bit-exact fixed point
+    // is neither guaranteed nor required. Predict only that single documented
+    // reload pass, without modifying the source, live preview or GPU buffers.
+    struct ReloadSkinPrediction
+    {
+        std::size_t meshIndex = 0;
+        std::vector<XMFLOAT4> originalPrimary;
+        std::vector<XMFLOAT4> originalSecondary;
+        std::vector<XMFLOAT4> expectedPrimary;
+        std::vector<XMFLOAT4> expectedSecondary;
+    };
+
+    bool PredictWickedReloadEvidence(
+        wi::scene::Scene& scene,
+        const renegade::bridge::ImportedModelEvidence& originalEvidence,
+        renegade::bridge::ImportedModelEvidence& expectedEvidence,
+        std::string& error)
+    {
+        std::vector<ReloadSkinPrediction> predictions;
+        for (std::size_t meshIndex = 0; meshIndex < scene.meshes.GetCount(); ++meshIndex)
+        {
+            const auto& mesh = scene.meshes[meshIndex];
+            const auto count = mesh.vertex_boneindices.size();
+            if (mesh.vertex_boneweights.size() != count ||
+                mesh.vertex_boneindices2.size() != mesh.vertex_boneweights2.size() ||
+                (!mesh.vertex_boneindices2.empty() &&
+                    mesh.vertex_boneindices2.size() != count))
+            {
+                error = "Skin-weight stream lengths are inconsistent in mesh " +
+                    std::to_string(meshIndex) + ".";
+                return false;
+            }
+            if (count == 0)
+                continue;
+
+            ReloadSkinPrediction prediction;
+            prediction.meshIndex = meshIndex;
+            prediction.originalPrimary.assign(
+                mesh.vertex_boneweights.begin(), mesh.vertex_boneweights.end());
+            prediction.originalSecondary.assign(
+                mesh.vertex_boneweights2.begin(), mesh.vertex_boneweights2.end());
+            prediction.expectedPrimary = prediction.originalPrimary;
+            prediction.expectedSecondary = prediction.originalSecondary;
+            const bool hasSecondary = !prediction.originalSecondary.empty();
+            for (std::size_t vertex = 0; vertex < count; ++vertex)
+            {
+                const XMFLOAT4& primary = prediction.originalPrimary[vertex];
+                const XMFLOAT4 secondary = hasSecondary
+                    ? prediction.originalSecondary[vertex] : XMFLOAT4{};
+                float weights[8] = {
+                    primary.x, primary.y, primary.z, primary.w,
+                    secondary.x, secondary.y, secondary.z, secondary.w
+                };
+                float sum = 0.0f;
+                for (const float weight : weights)
+                {
+                    if (!std::isfinite(weight) || weight < 0.0f)
+                    {
+                        error = "Non-finite or negative skin weight in mesh " +
+                            std::to_string(meshIndex) + ", vertex " +
+                            std::to_string(vertex) + ".";
+                        return false;
+                    }
+                    sum += weight; // identical order and float precision to pinned Wicked
+                }
+                if (!std::isfinite(sum))
+                {
+                    error = "Non-finite skin-weight sum in mesh " +
+                        std::to_string(meshIndex) + ", vertex " +
+                        std::to_string(vertex) + ".";
+                    return false;
+                }
+                if (sum > 0.0f)
+                {
+                    const float norm = 1.0f / sum;
+                    for (float& weight : weights)
+                        weight *= norm;
+                }
+                for (const float weight : weights)
+                {
+                    if (!std::isfinite(weight))
+                    {
+                        error = "Skin-weight normalization overflow in mesh " +
+                            std::to_string(meshIndex) + ", vertex " +
+                            std::to_string(vertex) + ".";
+                        return false;
+                    }
+                }
+                prediction.expectedPrimary[vertex] =
+                    XMFLOAT4(weights[0], weights[1], weights[2], weights[3]);
+                if (hasSecondary)
+                    prediction.expectedSecondary[vertex] =
+                        XMFLOAT4(weights[4], weights[5], weights[6], weights[7]);
+            }
+            predictions.push_back(std::move(prediction));
+        }
+
+        // Summarize the expected *loaded* payload with only CPU weights
+        // substituted; immediately restore all original bits. No render-data
+        // rebuild or repeated normalization of the live prepared scene.
+        for (const auto& prediction : predictions)
+        {
+            auto& mesh = scene.meshes[prediction.meshIndex];
+            std::copy(prediction.expectedPrimary.begin(),
+                prediction.expectedPrimary.end(), mesh.vertex_boneweights.begin());
+            std::copy(prediction.expectedSecondary.begin(),
+                prediction.expectedSecondary.end(), mesh.vertex_boneweights2.begin());
+        }
+        expectedEvidence = renegade::bridge::ImportService::SummarizeModelEvidence(scene);
+        for (const auto& prediction : predictions)
+        {
+            auto& mesh = scene.meshes[prediction.meshIndex];
+            std::copy(prediction.originalPrimary.begin(),
+                prediction.originalPrimary.end(), mesh.vertex_boneweights.begin());
+            std::copy(prediction.originalSecondary.begin(),
+                prediction.originalSecondary.end(), mesh.vertex_boneweights2.begin());
+        }
+        if (!(originalEvidence ==
+              renegade::bridge::ImportService::SummarizeModelEvidence(scene)))
+        {
+            error = "Wicked reload prediction did not restore original in-memory rig/animation evidence.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
     bool FingerprintFile(
         const std::string& path,
         std::uint64_t& bytes,
@@ -232,6 +364,39 @@ namespace
                 return static_cast<char>(std::tolower(c));
             });
         return extension;
+    }
+
+    std::string DescribeRigAnimationEvidenceDifference(
+        const renegade::bridge::ImportedModelEvidence& before,
+        const renegade::bridge::ImportedModelEvidence& after)
+    {
+        std::ostringstream out;
+        bool changed = false;
+        const auto report = [&](const char* field, std::uint64_t left, std::uint64_t right)
+        {
+            if (left == right)
+                return;
+            if (changed)
+                out << "; ";
+            changed = true;
+            out << field << " (0x" << std::hex << left << " -> 0x" << right
+                << std::dec << ')';
+        };
+        report("mesh", before.meshFingerprint, after.meshFingerprint);
+        report("skinIndex", before.skinIndexFingerprint, after.skinIndexFingerprint);
+        report("skinWeight", before.skinWeightFingerprint, after.skinWeightFingerprint);
+        report("armature", before.armatureFingerprint, after.armatureFingerprint);
+        report("boneHierarchy", before.boneHierarchyFingerprint, after.boneHierarchyFingerprint);
+        report("inverseBind", before.inverseBindFingerprint, after.inverseBindFingerprint);
+        report("animation", before.animationFingerprint, after.animationFingerprint);
+        report("animationChannel", before.animationChannelFingerprint, after.animationChannelFingerprint);
+        report("animationSampler", before.animationSamplerFingerprint, after.animationSamplerFingerprint);
+        report("animationData", before.animationDataFingerprint, after.animationDataFingerprint);
+        report("animationTimes", before.animationTimesFingerprint, after.animationTimesFingerprint);
+        report("animationValues", before.animationValuesFingerprint, after.animationValuesFingerprint);
+        if (!changed)
+            return "No diagnostic subgroup changed; investigate aggregate ordering or count drift.";
+        return out.str();
     }
 
     std::string DescribeRigAnimationEvidence(
@@ -308,11 +473,17 @@ namespace renegade::bridge
         std::vector<std::uint64_t> armatureBlocks;
         std::vector<std::uint64_t> animationBlocks;
         std::vector<std::uint64_t> animationDataBlocks;
+        std::vector<std::uint64_t> skinIndexBlocks, skinWeightBlocks;
+        std::vector<std::uint64_t> boneHierarchyBlocks, inverseBindBlocks;
+        std::vector<std::uint64_t> animationChannelBlocks, animationSamplerBlocks;
+        std::vector<std::uint64_t> animationTimesBlocks, animationValuesBlocks;
 
         for (std::size_t index = 0; index < scene.meshes.GetCount(); ++index)
         {
             const auto& mesh = scene.meshes[index];
             std::uint64_t block = FingerprintSeed;
+            std::uint64_t indexBlock = FingerprintSeed;
+            std::uint64_t weightBlock = FingerprintSeed;
             HashArmatureSemanticIdentity(block, scene, mesh.armatureID);
 
             if (mesh.armatureID != wi::ecs::INVALID_ENTITY)
@@ -328,76 +499,122 @@ namespace renegade::bridge
                 mesh.vertex_boneweights2.size());
 
             HashValue(block, mesh.vertex_boneindices.size());
+            HashValue(indexBlock, mesh.vertex_boneindices.size());
             for (const auto& value : mesh.vertex_boneindices)
             {
                 HashUInt4(block, value);
+                HashUInt4(indexBlock, value);
             }
             HashValue(block, mesh.vertex_boneweights.size());
+            HashValue(weightBlock, mesh.vertex_boneweights.size());
             for (const auto& value : mesh.vertex_boneweights)
             {
                 HashFloat4(block, value);
+                HashFloat4(weightBlock, value);
             }
             HashValue(block, mesh.vertex_boneindices2.size());
+            HashValue(indexBlock, mesh.vertex_boneindices2.size());
             for (const auto& value : mesh.vertex_boneindices2)
             {
                 HashUInt4(block, value);
+                HashUInt4(indexBlock, value);
             }
             HashValue(block, mesh.vertex_boneweights2.size());
+            HashValue(weightBlock, mesh.vertex_boneweights2.size());
             for (const auto& value : mesh.vertex_boneweights2)
             {
                 HashFloat4(block, value);
+                HashFloat4(weightBlock, value);
             }
             meshBlocks.push_back(block);
+            skinIndexBlocks.push_back(indexBlock);
+            skinWeightBlocks.push_back(weightBlock);
         }
+        evidence.meshFingerprint = FingerprintSeed;
+        evidence.skinIndexFingerprint = FingerprintSeed;
+        evidence.skinWeightFingerprint = FingerprintSeed;
+        HashSortedBlocks(evidence.meshFingerprint, meshBlocks);
+        HashSortedBlocks(evidence.skinIndexFingerprint, skinIndexBlocks);
+        HashSortedBlocks(evidence.skinWeightFingerprint, skinWeightBlocks);
         HashSortedBlocks(fingerprint, meshBlocks);
 
         for (std::size_t index = 0; index < scene.armatures.GetCount(); ++index)
         {
             const auto& armature = scene.armatures[index];
             std::uint64_t block = FingerprintSeed;
+            std::uint64_t boneBlock = FingerprintSeed;
+            std::uint64_t bindBlock = FingerprintSeed;
             evidence.armatureBones += armature.boneCollection.size();
             HashValue(block, armature.boneCollection.size());
+            HashValue(boneBlock, armature.boneCollection.size());
             for (const auto bone : armature.boneCollection)
             {
                 HashEntitySemanticIdentity(block, scene, bone);
+                HashEntitySemanticIdentity(boneBlock, scene, bone);
             }
             HashValue(block, armature.inverseBindMatrices.size());
+            HashValue(bindBlock, armature.inverseBindMatrices.size());
             for (const auto& matrix : armature.inverseBindMatrices)
             {
                 HashMatrix(block, matrix);
+                HashMatrix(bindBlock, matrix);
             }
             armatureBlocks.push_back(block);
+            boneHierarchyBlocks.push_back(boneBlock);
+            inverseBindBlocks.push_back(bindBlock);
         }
+        evidence.armatureFingerprint = FingerprintSeed;
+        evidence.boneHierarchyFingerprint = FingerprintSeed;
+        evidence.inverseBindFingerprint = FingerprintSeed;
+        HashSortedBlocks(evidence.armatureFingerprint, armatureBlocks);
+        HashSortedBlocks(evidence.boneHierarchyFingerprint, boneHierarchyBlocks);
+        HashSortedBlocks(evidence.inverseBindFingerprint, inverseBindBlocks);
         HashSortedBlocks(fingerprint, armatureBlocks);
 
         for (std::size_t index = 0; index < scene.animations.GetCount(); ++index)
         {
             const auto& animation = scene.animations[index];
             std::uint64_t block = FingerprintSeed;
+            std::uint64_t channelBlock = FingerprintSeed;
+            std::uint64_t samplerBlock = FingerprintSeed;
             evidence.animationChannels += animation.channels.size();
             evidence.animationSamplers += animation.samplers.size();
 
             HashValue(block, animation.channels.size());
+            HashValue(channelBlock, animation.channels.size());
             for (const auto& channel : animation.channels)
             {
                 const auto path = static_cast<std::uint32_t>(channel.path);
                 HashValue(block, path);
-                HashEntitySemanticIdentity(
-                    block, scene, channel.target);
+                HashValue(channelBlock, path);
+                HashEntitySemanticIdentity(block, scene, channel.target);
+                HashEntitySemanticIdentity(channelBlock, scene, channel.target);
                 HashValue(block, channel.samplerIndex);
+                HashValue(channelBlock, channel.samplerIndex);
                 HashValue(block, channel.retargetIndex);
+                HashValue(channelBlock, channel.retargetIndex);
             }
 
             HashValue(block, animation.samplers.size());
+            HashValue(samplerBlock, animation.samplers.size());
             for (const auto& sampler : animation.samplers)
             {
                 const auto mode = static_cast<std::uint32_t>(sampler.mode);
                 HashValue(block, mode);
-                HashAnimationDataSemanticIdentity(
-                    block, scene, sampler.data);
+                HashValue(samplerBlock, mode);
+                HashAnimationDataSemanticIdentity(block, scene, sampler.data);
+                HashAnimationDataSemanticIdentity(samplerBlock, scene, sampler.data);
             }
             animationBlocks.push_back(block);
+            animationChannelBlocks.push_back(channelBlock);
+            animationSamplerBlocks.push_back(samplerBlock);
         }
+        evidence.animationFingerprint = FingerprintSeed;
+        evidence.animationChannelFingerprint = FingerprintSeed;
+        evidence.animationSamplerFingerprint = FingerprintSeed;
+        HashSortedBlocks(evidence.animationFingerprint, animationBlocks);
+        HashSortedBlocks(evidence.animationChannelFingerprint, animationChannelBlocks);
+        HashSortedBlocks(evidence.animationSamplerFingerprint, animationSamplerBlocks);
         HashSortedBlocks(fingerprint, animationBlocks);
 
         evidence.animationData = scene.animation_datas.GetCount();
@@ -406,21 +623,35 @@ namespace renegade::bridge
         {
             const auto& data = scene.animation_datas[index];
             std::uint64_t block = FingerprintSeed;
+            std::uint64_t timesBlock = FingerprintSeed;
+            std::uint64_t valuesBlock = FingerprintSeed;
             evidence.animationKeyframes += data.keyframe_times.size();
             evidence.animationValues += data.keyframe_data.size();
 
             HashValue(block, data.keyframe_times.size());
+            HashValue(timesBlock, data.keyframe_times.size());
             for (const auto value : data.keyframe_times)
             {
                 HashValue(block, value);
+                HashValue(timesBlock, value);
             }
             HashValue(block, data.keyframe_data.size());
+            HashValue(valuesBlock, data.keyframe_data.size());
             for (const auto value : data.keyframe_data)
             {
                 HashValue(block, value);
+                HashValue(valuesBlock, value);
             }
             animationDataBlocks.push_back(block);
+            animationTimesBlocks.push_back(timesBlock);
+            animationValuesBlocks.push_back(valuesBlock);
         }
+        evidence.animationDataFingerprint = FingerprintSeed;
+        evidence.animationTimesFingerprint = FingerprintSeed;
+        evidence.animationValuesFingerprint = FingerprintSeed;
+        HashSortedBlocks(evidence.animationDataFingerprint, animationDataBlocks);
+        HashSortedBlocks(evidence.animationTimesFingerprint, animationTimesBlocks);
+        HashSortedBlocks(evidence.animationValuesFingerprint, animationValuesBlocks);
         HashSortedBlocks(fingerprint, animationDataBlocks);
 
         evidence.rigAnimationFingerprint = fingerprint;
@@ -674,6 +905,12 @@ namespace renegade::bridge
             return result;
         }
 
+        // Do not repeatedly normalize the preview or require an impossible
+        // float fixed point. The unmodified prepared scene is written first.
+        const ImportedModelEvidence originalEvidence =
+            SummarizeModelEvidence(*prepared.scene_);
+        prepared.result_.importedEvidence = originalEvidence;
+
         // Reuse the proven WISCENE serializer/structural round-trip path. Its
         // name is retained for compatibility, but it serializes a Wicked Scene
         // and is therefore format-neutral after conversion.
@@ -683,7 +920,48 @@ namespace renegade::bridge
             return result;
         }
 
-        result.importedEvidence = prepared.result_.importedEvidence;
+        result.importedEvidence = originalEvidence;
+        // Distinguish a mutation of the live prepared Scene DURING Wicked's
+        // write from a change introduced by serialized data or reload.
+        // Neither outcome is accepted; the authoritative transaction remains
+        // gated by the same strict round-trip proof.
+        const auto afterWriteInMemory = SummarizeModelEvidence(*prepared.scene_);
+        if (!(result.importedEvidence == afterWriteInMemory))
+        {
+            result.succeeded = false;
+            result.error =
+                "Prepared WISCENE rig/animation evidence changed in memory during save. Changed groups: " +
+                DescribeRigAnimationEvidenceDifference(result.importedEvidence, afterWriteInMemory) +
+                ". Before: " + DescribeRigAnimationEvidence(result.importedEvidence) +
+                ". After: " + DescribeRigAnimationEvidence(afterWriteInMemory) + ".";
+            prepared.result_ = result;
+            return result;
+        }
+        // Predict exactly one pinned Wicked CreateRenderData() normalization
+        // pass on reload. All other bytes still require strict evidence parity;
+        // the prediction may differ from raw input only in skin weights.
+        ImportedModelEvidence expectedReloadEvidence;
+        std::string predictionError;
+        if (!PredictWickedReloadEvidence(*prepared.scene_, originalEvidence,
+                expectedReloadEvidence, predictionError))
+        {
+            result.succeeded = false;
+            result.error = "WISCENE reload skin-weight prediction failed: " + predictionError;
+            prepared.result_ = result;
+            return result;
+        }
+        if (originalEvidence.skinIndexFingerprint != expectedReloadEvidence.skinIndexFingerprint ||
+            originalEvidence.armatureFingerprint != expectedReloadEvidence.armatureFingerprint ||
+            originalEvidence.animationFingerprint != expectedReloadEvidence.animationFingerprint ||
+            originalEvidence.animationDataFingerprint != expectedReloadEvidence.animationDataFingerprint ||
+            originalEvidence.primaryInfluenceVertices != expectedReloadEvidence.primaryInfluenceVertices ||
+            originalEvidence.secondaryInfluenceVertices != expectedReloadEvidence.secondaryInfluenceVertices)
+        {
+            result.succeeded = false;
+            result.error = "WISCENE reload prediction unexpectedly changed non-weight rig/animation evidence.";
+            prepared.result_ = result;
+            return result;
+        }
         if (!ReloadEvidence(
                 result.assetPath,
                 result.reloadedEvidence,
@@ -693,23 +971,29 @@ namespace renegade::bridge
             prepared.result_ = result;
             return result;
         }
-        const bool importedHasRigAnimation =
-            result.importedEvidence.HasRigOrAnimationPayload();
+        const bool expectedHasRigAnimation =
+            expectedReloadEvidence.HasRigOrAnimationPayload();
         const bool reloadedHasRigAnimation =
             result.reloadedEvidence.HasRigOrAnimationPayload();
-        if (importedHasRigAnimation != reloadedHasRigAnimation ||
-            (importedHasRigAnimation &&
-                !(result.importedEvidence == result.reloadedEvidence)))
+        if (expectedHasRigAnimation != reloadedHasRigAnimation ||
+            (expectedHasRigAnimation &&
+                !(expectedReloadEvidence == result.reloadedEvidence)))
         {
             result.succeeded = false;
             result.error =
-                "Imported WISCENE rig/animation evidence changed after round-trip reload. Before: " +
-                DescribeRigAnimationEvidence(result.importedEvidence) +
-                ". After: " +
+                "Imported WISCENE rig/animation evidence differs from exact single-pass Wicked reload prediction. Changed groups: " +
+                DescribeRigAnimationEvidenceDifference(expectedReloadEvidence, result.reloadedEvidence) +
+                ". Expected: " + DescribeRigAnimationEvidence(expectedReloadEvidence) +
+                ". Actual: " +
                 DescribeRigAnimationEvidence(result.reloadedEvidence) + ".";
             prepared.result_ = result;
             return result;
         }
+        // The authoritative imported evidence describes the persisted payload,
+        // not transient pre-reload weights. Reopening that same WISCENE twice
+        // must reproduce these exact hashes (no fixed-point requirement).
+        result.importedEvidence = expectedReloadEvidence;
+        prepared.result_.importedEvidence = expectedReloadEvidence;
 
         result.sourceFormat = prepared.result_.sourceFormat;
         result.importerBackend = prepared.result_.importerBackend;
