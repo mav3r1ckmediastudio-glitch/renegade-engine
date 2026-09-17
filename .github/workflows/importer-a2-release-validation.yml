@@ -2,6 +2,7 @@ name: Importer A2 Release validation
 
 # Exact-branch, read-only, one-cycle native validation. This does not upload
 # private owner FBXs and does not run when source files are subsequently edited.
+# Second one-cycle run: exact floating-point skin normalization and public LP07 regression.
 on:
   push:
     branches:
