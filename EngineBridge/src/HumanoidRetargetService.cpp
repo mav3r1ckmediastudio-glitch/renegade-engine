@@ -449,7 +449,18 @@ namespace renegade::bridge
             switch (result_.sourceFormat)
             {
             case HumanoidAnimationSourceFormat::Wiscene:
-                wi::scene::LoadModel(sourceScene, sourcePath_);
+                // LoadModel() also calls Scene::Update(), which requires a
+                // renderer and is unnecessary for loading animation data.
+                // A WISCENE source is already a native Scene archive.
+                {
+                    wi::Archive archive(sourcePath_, true);
+                    if (!archive.IsOpen())
+                    {
+                        result_.error = "Could not open native WISCENE animation source.";
+                        return false;
+                    }
+                    sourceScene.Serialize(archive);
+                }
                 break;
             case HumanoidAnimationSourceFormat::Fbx:
                 ImportModel_FBX(sourcePath_, sourceScene);

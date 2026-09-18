@@ -1,6 +1,8 @@
 #include "renegade/bridge/HumanoidRetargetService.h"
 #include "renegade/bridge/AnimationService.h"
 
+#include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -216,6 +218,75 @@ int main()
             bakedData->keyframe_data.size() == 8 &&
             baked->samplers.front().scene == nullptr,
             "baked retarget must own animation keys without its external source scene")) return 1;
+
+    // The actual importer uses a FILE path, not an in-memory source. Save a
+    // synthetic WISCENE, retarget it through the public bridge command, make
+    // the source unavailable, redo the baked result, and reopen the scene.
+    namespace fs = std::filesystem;
+    std::error_code ioError;
+    const fs::path proofDirectory = fs::temp_directory_path(ioError) /
+        ("renegade-v3-retarget-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    if (!Require(!ioError && fs::create_directories(proofDirectory, ioError) &&
+            !ioError, "physical retarget test directory could not be created")) return 1;
+    const fs::path fileSource = proofDirectory / "external-motion.wiscene";
+    {
+        wi::Archive writer(fileSource.generic_u8string(), false, false);
+        if (!Require(writer.IsOpen(), "could not open external animation archive")) return 1;
+        writer.SetCompressionEnabled(true);
+        external.Serialize(writer);
+        if (!Require(writer.SaveFile(fileSource.generic_u8string()),
+                "could not persist external animation archive")) return 1;
+    }
+    renegade::bridge::RetargetHumanoidAnimationsCommand externalCommand(
+        scene, rig, fileSource.generic_u8string(), true);
+    if (!Require(externalCommand.Execute() &&
+            externalCommand.Result().createdAnimations.size() == 1,
+            "file-backed native humanoid retarget should produce one baked clip")) return 1;
+    const auto retargetedClip = externalCommand.Result().createdAnimations.front();
+    const auto* externalBaked = scene.animations.GetComponent(retargetedClip);
+    if (!Require(externalBaked != nullptr && externalBaked->channels.size() == 1 &&
+            externalBaked->samplers.size() == 1 &&
+            scene.animation_datas.Contains(externalBaked->samplers.front().data),
+            "file-backed clip must own its baked data")) return 1;
+    if (!Require(fs::remove(fileSource, ioError) && !ioError,
+            "source file must become unavailable for redo test")) return 1;
+    externalCommand.Undo();
+    if (!Require(!scene.animations.Contains(retargetedClip),
+            "native retarget Undo must remove the new clip")) return 1;
+    if (!Require(externalCommand.Execute() &&
+            scene.animations.Contains(retargetedClip),
+            "native retarget Redo must restore without the external file")) return 1;
+    const fs::path reopenedPath = proofDirectory / "baked-character.wiscene";
+    {
+        wi::Archive writer(reopenedPath.generic_u8string(), false, false);
+        if (!Require(writer.IsOpen(), "cannot open baked-character archive")) return 1;
+        writer.SetCompressionEnabled(true);
+        scene.Serialize(writer);
+        if (!Require(writer.SaveFile(reopenedPath.generic_u8string()),
+                "cannot save baked-character scene")) return 1;
+    }
+    wi::scene::Scene reopened;
+    {
+        wi::Archive reader(reopenedPath.generic_u8string(), true);
+        if (!Require(reader.IsOpen(), "cannot reopen baked-character archive")) return 1;
+        reopened.Serialize(reader);
+    }
+    bool bakedReopened = false;
+    for (std::size_t index = 0; index < reopened.animations.GetCount(); ++index)
+    {
+        const auto& animation = reopened.animations[index];
+        if (animation.channels.size() != 1 || animation.samplers.size() != 1)
+            continue;
+        const auto* reopenedData = reopened.animation_datas.GetComponent(
+            animation.samplers.front().data);
+        if (reopenedData != nullptr && reopenedData->keyframe_times.size() == 2 &&
+            reopenedData->keyframe_data.size() == 8 &&
+            animation.samplers.front().scene == nullptr)
+            bakedReopened = true;
+    }
+    if (!Require(bakedReopened,
+            "physical WISCENE reopen must retain baked animation without source")) return 1;
+    fs::remove_all(proofDirectory, ioError);
 
     std::cout << "Phase 7B humanoid mapping tests passed\n";
     return 0;
