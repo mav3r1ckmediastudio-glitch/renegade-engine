@@ -173,6 +173,12 @@ product was committed so the creator does not blindly retry the same name.
 The v3 preview defaults to literal source scale; conversion is an explicit
 creator choice. These changes are local WIP until build and owner acceptance.
 
+The native v3 inspector now uses six Renegade-owned heading buttons as its
+stage selector. Only the active stage's controls are visible; Model skips Rig
+and Animations, while Character exposes current source rig evidence without
+claiming verified mapping or external retarget playback. The stage layout
+remains a Studio presentation concern over the existing bridge commit path.
+
 `CreatorModelMaterialPreparationService` is the authoritative material seam for
 both temporary preview and governed commit. It resolves the same declared,
 suffix-detected and creator-overridden sources, normalizes supplied/generated
