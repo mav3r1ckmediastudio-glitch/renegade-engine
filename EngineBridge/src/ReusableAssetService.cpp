@@ -445,35 +445,25 @@ namespace renegade::bridge
 
         ProjectDocumentWrite RegistryWrite(
             const fs::path& root,
-            const AssetRegistry& registry,
             const std::string& json)
         {
             ProjectDocumentWrite write;
             write.destinationPath = (root / AssetRegistryDocumentName).generic_u8string();
             write.content.assign(json.begin(), json.end());
-            const StableId projectId = registry.projectId;
-            write.validator = [projectId, json](const std::string& path, std::string& error)
+            // SerializeAssetRegistry already validates every record, project ID,
+            // provenance link and canonicalizes this exact JSON before this write.
+            // ProjectDocumentTransaction separately verifies staged/committed bytes
+            // and retains its journal, backup, rollback and recovery guarantees.
+            // Do not deserialize and reserialize the same registry on both passes.
+            write.validator = [json](const std::string& path, std::string& error)
             {
                 std::ifstream stream(fs::u8path(path), std::ios::binary);
                 const std::string staged{
                     std::istreambuf_iterator<char>(stream),
                     std::istreambuf_iterator<char>()};
-                if (!stream && !stream.eof())
+                if ((!stream && !stream.eof()) || staged != json)
                 {
-                    error = "Could not read staged asset registry.";
-                    return false;
-                }
-                AssetRegistry parsed;
-                if (!DeserializeAssetRegistry(staged, parsed, error) || parsed.projectId != projectId)
-                {
-                    if (error.empty()) error = "Staged asset registry belongs to another project.";
-                    return false;
-                }
-                std::string canonical;
-                if (!SerializeAssetRegistry(parsed, canonical, error) ||
-                    canonical != staged || staged != json)
-                {
-                    if (error.empty()) error = "Staged asset registry is not the requested canonical document.";
+                    error = "Staged asset registry differs from the validated canonical document.";
                     return false;
                 }
                 error.clear();
@@ -1231,7 +1221,7 @@ namespace renegade::bridge
             };
             writes.push_back(std::move(thumbnailWrite));
         }
-        writes.push_back(RegistryWrite(root, registry, registryJson));
+        writes.push_back(RegistryWrite(root, registryJson));
         writes.push_back(MetadataWrite(root, metadata, metadataJson));
 
         PreparedReusableModelPlacement pendingPlacement;

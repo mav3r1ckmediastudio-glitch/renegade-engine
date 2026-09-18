@@ -1,5 +1,6 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 #include "renegade/bridge/AnimationService.h"
+#include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/CreatorAssetActionPolicy.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/HumanoidRetargetService.h"
@@ -313,6 +314,31 @@ namespace
                     fs::is_regular_file(projectRoot /
                     fs::u8path(character.assetProjectRelativePath)),
                 "Character source or product missing after import"))
+            return false;
+        // A Character import must not disturb the existing Model or either
+        // asset's source/product identities in the shared registry.
+        AssetRegistry verifiedRegistry;
+        std::string registryError;
+        if (!Require(ReadAssetRegistry(projectRoot.generic_u8string(), ProjectId,
+                verifiedRegistry, registryError),
+                "Character import left an unreadable registry: " + registryError))
+            return false;
+        const auto retainsAsset = [&verifiedRegistry](
+            const StableId& id, const std::string& path)
+        {
+            return std::any_of(verifiedRegistry.records.begin(),
+                verifiedRegistry.records.end(), [&](const AssetRecord& record)
+                { return record.assetId == id && record.projectRelativePath == path; });
+        };
+        if (!Require(retainsAsset(imported.asset.assetId,
+                    imported.assetProjectRelativePath) &&
+                retainsAsset(imported.asset.sourceAssetId,
+                    imported.stagedSourceProjectRelativePath) &&
+                retainsAsset(character.asset.assetId,
+                    character.assetProjectRelativePath) &&
+                retainsAsset(character.asset.sourceAssetId,
+                    character.stagedSourceProjectRelativePath),
+                "Character import discarded or reassigned existing Model/source identity"))
             return false;
         auto reopenedCharacter = workflow.PrepareModelPlacement(
             projectRoot.generic_u8string(), ProjectId, character.asset.assetId);
