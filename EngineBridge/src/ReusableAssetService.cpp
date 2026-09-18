@@ -1273,6 +1273,13 @@ namespace renegade::bridge
             " staging_ms=" + std::to_string(result.transaction.timings.stagingMs) +
             " commit_ms=" + std::to_string(result.transaction.timings.commitMs) +
             " cleanup_ms=" + std::to_string(result.transaction.timings.cleanupMs));
+        for (const auto& documentTiming : result.transaction.timings.documents)
+        {
+            wi::backlog::post("[IMPORT-PERF] transaction document=" + documentTiming.filename +
+                " bytes=" + std::to_string(documentTiming.bytes) +
+                " staging_ms=" + std::to_string(documentTiming.stagingMs) +
+                " commit_ms=" + std::to_string(documentTiming.commitMs));
+        }
         const auto reopenStarted = std::chrono::steady_clock::now();
         if (!result.transaction.success || !result.transaction.committed)
         {

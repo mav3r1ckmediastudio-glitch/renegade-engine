@@ -1379,10 +1379,15 @@ namespace renegade::bridge
                 std::move(message));
         };
 
+        result.timings.documents.resize(journal.documents.size());
         for (std::size_t index = 0;
             index < journal.documents.size(); ++index)
         {
             auto& document = journal.documents[index];
+            auto& timing = result.timings.documents[index];
+            timing.filename = document.destination.filename().generic_u8string();
+            timing.bytes = document.content.size();
+            const auto documentStageStarted = std::chrono::steady_clock::now();
             auto action = InvokeHook(
                 options,
                 ProjectDocumentTransactionStage::StageWrite,
@@ -1480,6 +1485,8 @@ namespace renegade::bridge
                     document.backup,
                     "previous_document_protected");
             }
+            timing.stagingMs = elapsedMs(documentStageStarted,
+                std::chrono::steady_clock::now());
         }
 
         journal.phase = JournalPhase::Prepared;
@@ -1555,6 +1562,7 @@ namespace renegade::bridge
             index < journal.documents.size(); ++index)
         {
             auto& document = journal.documents[index];
+            const auto documentCommitStarted = std::chrono::steady_clock::now();
             journal.phase = JournalPhase::Committing;
             journal.activeIndex = index;
             if (!PersistJournal(journal, journalPath, operationError))
@@ -1659,6 +1667,8 @@ namespace renegade::bridge
                     std::move(operationError),
                     false);
             }
+            result.timings.documents[index].commitMs = elapsedMs(
+                documentCommitStarted, std::chrono::steady_clock::now());
         }
 
         journal.phase = JournalPhase::Committed;

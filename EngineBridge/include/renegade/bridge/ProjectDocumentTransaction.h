@@ -86,6 +86,14 @@ namespace renegade::bridge
         double stagingMs = 0.0;
         double commitMs = 0.0;
         double cleanupMs = 0.0;
+        struct DocumentTiming
+        {
+            std::string filename;
+            std::size_t bytes = 0;
+            double stagingMs = 0.0;
+            double commitMs = 0.0;
+        };
+        std::vector<DocumentTiming> documents;
     };
 
     struct ProjectDocumentTransactionResult
