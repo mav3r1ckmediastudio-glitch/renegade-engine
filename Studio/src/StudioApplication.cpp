@@ -10680,8 +10680,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         creatorModelImporter.summary = bridge::ImportService::Summarize(*isolated);
                         creatorModelImporter.evidence = bridge::ImportService::SummarizeModelEvidence(*isolated);
                         creatorModelImporter.sourceBounds = bridge::ImportService::MeasureModelBounds(*isolated);
-                        creatorModelImporter.automaticScale = bridge::ImportService::ResolveScaleFactor(
-                            bridge::ModelScaleMode::Automatic, *isolated);
+                        // V3 starts from the source's authored units. Any
+                        // conversion is an explicit Transform stage choice.
+                        creatorModelImporter.automaticScale = 1.0f;
                         creatorModelImporter.scale = XMFLOAT3(
                             creatorModelImporter.automaticScale,
                             creatorModelImporter.automaticScale,
@@ -11244,10 +11245,22 @@ wi::eventhandler::Subscribe_Once(
 
                         if (!state->imported.succeeded)
                         {
-                            studioChrome_.SetStatusText("IMPORT MODEL // COMMIT FAILED");
+                            const bool committed = state->imported.asset.transaction.committed;
+                            const std::string destination = state->imported.assetProjectRelativePath.empty()
+                                ? state->destinationFolder
+                                : state->imported.assetProjectRelativePath;
+                            const std::string stage = committed
+                                ? "POST-COMMIT VERIFICATION"
+                                : (state->imported.asset.import.succeeded
+                                    ? "PACKAGE / TRANSACTION"
+                                    : "PREPARATION / PACKAGE");
+                            studioChrome_.SetStatusText(
+                                "IMPORT MODEL // " + stage + " FAILED // " + state->imported.error);
                             ShowStudioMessageBox(
-                                "The preview was discarded safely, but the governed asset could not be committed.\n\nReason: " +
-                                    state->imported.error,
+                                "Stage: " + stage + " // Reason: " + state->imported.error +
+                                "\nDestination: " + destination +
+                                "\nCommitted: " + (committed ? "YES - inspect before retry" : "NO") +
+                                "\nAsset ID: " + state->imported.asset.assetId,
                                 "Import Model");
                             return;
                         }

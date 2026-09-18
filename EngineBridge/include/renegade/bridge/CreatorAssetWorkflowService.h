@@ -11,6 +11,7 @@ namespace renegade::bridge
     struct CreatorModelImportResult
     {
         bool succeeded = false;
+        bool catalogueVerified = false;
         std::string stagedSourceProjectRelativePath;
         std::string assetProjectRelativePath;
         ReusableModelImportResult asset;

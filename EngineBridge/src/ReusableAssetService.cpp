@@ -1265,8 +1265,26 @@ namespace renegade::bridge
             return result;
         }
 
+        // A committed transaction is not yet a usable creator asset. Reopen
+        // the physical product before the UI is allowed to report success.
+        ReusableModelAssetDocument reopened;
+        if (!ReadReusableModelAssetDocument(
+                assetPath.generic_u8string(), reopened, result.error) ||
+            reopened.manifest.projectId != request.projectId ||
+            reopened.manifest.assetId != result.assetId ||
+            reopened.manifest.sourceAssetId != result.sourceAssetId ||
+            reopened.manifest.payloadHash != assetDocument.manifest.payloadHash)
+        {
+            if (result.error.empty())
+                result.error = "Committed RAsset identity or payload changed on reopen.";
+            result.error = "RAsset was committed but could not be verified on reopen: " +
+                result.error;
+            return result;
+        }
+
         if (preparedPlacement != nullptr)
             *preparedPlacement = std::move(pendingPlacement);
+        result.committedProductVerified = true;
         result.succeeded = true;
         result.error.clear();
         return result;

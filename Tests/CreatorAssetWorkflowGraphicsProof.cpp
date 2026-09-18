@@ -210,8 +210,10 @@ namespace
             animatedFixture.generic_u8string(),
             "{}", {}, "Content/Models", std::move(retained), {},
             &importedPlacement);
-        if (!Require(imported.succeeded && imported.asset.succeeded &&
-                imported.asset.transaction.committed,
+        if (!Require(imported.succeeded && imported.catalogueVerified &&
+                imported.asset.succeeded &&
+                imported.asset.transaction.committed &&
+                imported.asset.committedProductVerified,
                 "creator FBX import failed: " + imported.error) ||
             !Require(imported.asset.modelMetadata.known &&
                     imported.asset.modelMetadata.skinned &&

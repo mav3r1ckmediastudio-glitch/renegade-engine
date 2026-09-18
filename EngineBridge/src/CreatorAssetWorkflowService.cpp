@@ -1105,10 +1105,36 @@ namespace renegade::bridge
         if (!result.asset.succeeded)
         {
             result.error = result.asset.error;
-            cleanupSnapshot();
+            // The product transaction may have committed before a later
+            // reopen check failed. Its source is then part of the committed
+            // registry and must remain available for repair/reimport.
+            if (!result.asset.transaction.committed)
+                cleanupSnapshot();
             return result;
         }
 
+        AssetCatalogue catalogue;
+        if (!BuildCatalogueSnapshot(root.generic_u8string(), projectId,
+                catalogue, result.error))
+        {
+            result.error = "RAsset committed and reopened, but its Asset Browser catalogue could not be read: " +
+                result.error;
+            return result;
+        }
+        const auto product = std::find_if(catalogue.entries.begin(),
+            catalogue.entries.end(), [&result](const AssetCatalogueEntry& entry)
+            {
+                return entry.registered && entry.assetId == result.asset.assetId &&
+                    entry.projectRelativePath == result.assetProjectRelativePath &&
+                    entry.state == AssetCatalogueState::Current;
+            });
+        if (product == catalogue.entries.end())
+        {
+            result.error = "RAsset committed and reopened, but its current stable ID/path is absent from the Asset Browser catalogue.";
+            return result;
+        }
+
+        result.catalogueVerified = true;
         result.succeeded = true;
         result.error.clear();
         return result;
