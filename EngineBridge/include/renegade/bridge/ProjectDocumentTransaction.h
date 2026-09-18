@@ -79,6 +79,15 @@ namespace renegade::bridge
         std::string code;
     };
 
+    struct ProjectDocumentTransactionTimings
+    {
+        double prepareMs = 0.0;
+        double journalMs = 0.0;
+        double stagingMs = 0.0;
+        double commitMs = 0.0;
+        double cleanupMs = 0.0;
+    };
+
     struct ProjectDocumentTransactionResult
     {
         bool success = false;
@@ -96,6 +105,7 @@ namespace renegade::bridge
         std::string code;
         std::string message;
         std::vector<ProjectDocumentTransactionEvent> events;
+        ProjectDocumentTransactionTimings timings;
     };
 
     // UI-free, project-agnostic multi-document disk transaction.

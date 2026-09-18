@@ -986,6 +986,11 @@ namespace renegade::bridge
         std::vector<ProjectDocumentWrite> documents,
         ProjectDocumentTransactionOptions options) const
     {
+        const auto transactionStarted = std::chrono::steady_clock::now();
+        const auto elapsedMs = [](const auto start, const auto end)
+        {
+            return std::chrono::duration<double, std::milli>(end - start).count();
+        };
         ProjectDocumentTransactionResult result;
         result.transactionId = options.transactionId.empty()
             ? GenerateTransactionId()
@@ -1247,6 +1252,8 @@ namespace renegade::bridge
             return result;
         }
 
+        const auto prepareDone = std::chrono::steady_clock::now();
+        result.timings.prepareMs = elapsedMs(transactionStarted, prepareDone);
         std::error_code journalError;
         fs::path journalDirectory;
         if (options.journalDirectory.empty())
@@ -1333,6 +1340,8 @@ namespace renegade::bridge
             ProjectTransactionNoDocument,
             journalPath,
             "journal_created");
+        const auto journalDone = std::chrono::steady_clock::now();
+        result.timings.journalMs = elapsedMs(prepareDone, journalDone);
 
         auto failBeforeCommit = [&](const ProjectDocumentTransactionStage stage,
                                     const std::size_t index,
@@ -1483,6 +1492,9 @@ namespace renegade::bridge
                 std::move(operationError),
                 false);
         }
+
+        const auto stagingDone = std::chrono::steady_clock::now();
+        result.timings.stagingMs = elapsedMs(journalDone, stagingDone);
 
         auto failDuringCommit = [&](const ProjectDocumentTransactionStage stage,
                                     const std::size_t index,
@@ -1665,6 +1677,8 @@ namespace renegade::bridge
                 std::move(operationError));
         }
 
+        const auto commitDone = std::chrono::steady_clock::now();
+        result.timings.commitMs = elapsedMs(stagingDone, commitDone);
         result.success = true;
         result.committed = true;
         result.stage = ProjectDocumentTransactionStage::Complete;
@@ -1684,6 +1698,8 @@ namespace renegade::bridge
             result.message = "Project documents committed, but transaction "
                 "cleanup remains: " + cleanupError;
         }
+        result.timings.cleanupMs = elapsedMs(
+            commitDone, std::chrono::steady_clock::now());
         return result;
     }
 

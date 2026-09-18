@@ -1267,7 +1267,12 @@ namespace renegade::bridge
         ProjectDocumentTransaction transaction;
         result.transaction = transaction.Execute(
             std::move(writes), std::move(transactionOptions));
-        wi::backlog::post("[IMPORT-PERF] service transaction ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - transactionStarted).count()));
+        wi::backlog::post("[IMPORT-PERF] service transaction ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - transactionStarted).count()) +
+            " prepare_ms=" + std::to_string(result.transaction.timings.prepareMs) +
+            " journal_ms=" + std::to_string(result.transaction.timings.journalMs) +
+            " staging_ms=" + std::to_string(result.transaction.timings.stagingMs) +
+            " commit_ms=" + std::to_string(result.transaction.timings.commitMs) +
+            " cleanup_ms=" + std::to_string(result.transaction.timings.cleanupMs));
         const auto reopenStarted = std::chrono::steady_clock::now();
         if (!result.transaction.success || !result.transaction.committed)
         {
