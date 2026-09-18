@@ -163,6 +163,16 @@ recipe and applied as a marked root inside the governed WISCENE payload. New
 `.rasset` placement preserves that authored root at unit wrapper scale; legacy
 products without the marker retain automatic placement normalization.
 
+Importer v3's local Model completion gate is stricter than transaction success:
+`ReusableAssetService` reopens the committed `.rasset` and checks its identity
+and payload hash; `CreatorAssetWorkflowService` checks the current catalogue
+entry and reopens the embedded scene through the normal stable-ID placement
+loader. Studio separately requires Asset Browser reveal before showing READY.
+A failure after commit leaves the retained source in place and reports that a
+product was committed so the creator does not blindly retry the same name.
+The v3 preview defaults to literal source scale; conversion is an explicit
+creator choice. These changes are local WIP until build and owner acceptance.
+
 `CreatorModelMaterialPreparationService` is the authoritative material seam for
 both temporary preview and governed commit. It resolves the same declared,
 suffix-detected and creator-overridden sources, normalizes supplied/generated
