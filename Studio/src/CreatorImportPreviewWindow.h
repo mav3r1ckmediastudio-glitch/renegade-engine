@@ -21,6 +21,22 @@ namespace renegade::studio
     class CreatorImportPreviewWindow final : public wi::gui::Window
     {
     public:
+        void OffsetVisibleStageContent(const float offset)
+        {
+            stageContentOffset_ = offset;
+            for (wi::gui::Widget* widget : widgets)
+            {
+                if (widget == nullptr || !widget->IsVisible() ||
+                    widget->GetName().rfind("Importer Stage ", 0) == 0 ||
+                    widget->GetName() == "MODEL IMPORTER // PREVIEW BEFORE COMMIT")
+                    continue;
+                if (widget == &label || widget->GetPos().y < 178.0f)
+                    continue;
+                const XMFLOAT2 position = widget->GetPos();
+                widget->SetPos(XMFLOAT2(position.x, position.y + offset));
+            }
+        }
+
         void SetVisible(const bool visible)
         {
             const bool closingPreview = !visible && previewWeatherCaptured_;
@@ -77,8 +93,8 @@ namespace renegade::studio
             // The old fixed thumbnail block began at y=178/214, physically
             // underneath those fields (190..262). Keep the accepted square
             // preview size but place the whole final block after the fields.
-            constexpr float actionBarY = 276.0f;
-            constexpr float previewY = 312.0f;
+            const float actionBarY = 276.0f + stageContentOffset_;
+            const float previewY = 312.0f + stageContentOffset_;
 
             float previewSide = 244.0f;
             for (wi::gui::Widget* widget : widgets)
@@ -224,6 +240,7 @@ namespace renegade::studio
         }
 
         bool previewWeatherCaptured_ = false;
+        float stageContentOffset_ = 0.0f;
         wi::ecs::Entity weatherEntity_ = wi::ecs::INVALID_ENTITY;
         WeatherPresentationState sceneWeatherBefore_;
         WeatherPresentationState entityWeatherBefore_;

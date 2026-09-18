@@ -546,6 +546,7 @@ namespace renegade::studio
         void ApplyImportScaleMode(bridge::ModelScaleMode mode);
         void DismissImportScalePanel();
         void RefreshCreatorImportWorkspaceSection();
+        void LayoutCreatorImportStageHeadings(float inspectorWidth);
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
