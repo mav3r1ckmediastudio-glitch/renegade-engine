@@ -1,4 +1,5 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/AnimationService.h"
 #include "renegade/bridge/CreatorAssetActionPolicy.h"
 #include "renegade/bridge/ImportService.h"
 #include "renegade/bridge/ProjectService.h"
@@ -57,6 +58,23 @@ namespace
                 return entry.registered && entry.assetId == id;
             });
         return found == catalogue.entries.end() ? nullptr : &*found;
+    }
+
+    wi::ecs::Entity FindKeyedNativeAnimation(const wi::scene::Scene& scene)
+    {
+        for (std::size_t i = 0; i < scene.animations.GetCount(); ++i)
+        {
+            const auto entity = scene.animations.GetEntity(i);
+            const auto& animation = scene.animations[i];
+            if (animation.channels.empty() || animation.samplers.empty()) continue;
+            for (const auto& sampler : animation.samplers)
+            {
+                const auto* data = scene.animation_datas.GetComponent(sampler.data);
+                if (data != nullptr && !data->keyframe_times.empty() &&
+                    !data->keyframe_data.empty()) return entity;
+            }
+        }
+        return wi::ecs::INVALID_ENTITY;
     }
 
     bool PrepareProject(const fs::path& root)
@@ -236,6 +254,11 @@ namespace
                 "in-memory placement handoff is not immediately measurable/placeable"))
             return false;
 
+        if (!Require(FindKeyedNativeAnimation(*importedPlacement.PeekScene()) !=
+                wi::ecs::INVALID_ENTITY,
+                "reopened RAsset placement lost native animation channels or keyed data"))
+            return false;
+
         const StableId sourceId = imported.asset.sourceAssetId;
         const StableId productId = imported.asset.assetId;
         if (!Require(IsValidStableId(sourceId) && IsValidStableId(productId),
@@ -386,14 +409,22 @@ namespace
                 "WISCENE reopen did not preserve both RAsset placements"))
             return false;
 
+        const auto reopenedAnimation = FindKeyedNativeAnimation(scenes.GetScene());
+        if (!Require(reopenedAnimation != wi::ecs::INVALID_ENTITY &&
+                PlayAnimation(scenes.GetScene(), reopenedAnimation, true) &&
+                scenes.GetScene().animations.GetComponent(reopenedAnimation)->IsPlaying(),
+                "saved/reopened placed FBX lost usable native animation keys or playback"))
+            return false;
+
         // Real source change must be projected as Stale before explicit
         // stable-ID reimport, then return to Current without changing identity.
         fs::copy_file(staticFixture, retainedSource,
             fs::copy_options::overwrite_existing, ec);
         if (!Require(!ec, "could not update retained FBX source"))
             return false;
-        if (!Require(workflow.BuildCatalogue(
-                projectRoot.generic_u8string(), ProjectId, catalogue, error),
+        const bool refreshedStaleCatalogue = workflow.BuildCatalogue(
+            projectRoot.generic_u8string(), ProjectId, catalogue, error);
+        if (!Require(refreshedStaleCatalogue,
                 "stale catalogue refresh failed: " + error))
             return false;
         entry = FindEntry(catalogue, productId);
