@@ -108,6 +108,24 @@ int main()
     const auto crateFolder = browser.Scan(
         root.generic_u8string(),
         "Content/Models/Props");
+    const auto filesOnly = browser.Scan(
+        root.generic_u8string(), "Content/Models/Props", false);
+    if (!filesOnly.succeeded ||
+        filesOnly.currentFolder != crateFolder.currentFolder ||
+        filesOnly.assets.size() != crateFolder.assets.size() ||
+        filesOnly.folders.size() != 1)
+    {
+        return Fail(root, "files-only scan changed the selected folder or assets");
+    }
+    for (std::size_t i = 0; i < crateFolder.assets.size(); ++i)
+    {
+        if (filesOnly.assets[i].projectRelativePath !=
+                crateFolder.assets[i].projectRelativePath ||
+            filesOnly.assets[i].type != crateFolder.assets[i].type)
+        {
+            return Fail(root, "files-only scan changed asset projection");
+        }
+    }
     const auto* crate = FindAsset(crateFolder, "Crate.wiscene");
     if (crate == nullptr || crate->directory ||
         crate->type != AssetType::Model)

@@ -807,7 +807,7 @@ namespace renegade::bridge
         for (const auto& folder : rootSnapshot.folders)
         {
             const AssetBrowserSnapshot snapshot = browser.Scan(
-                root.generic_u8string(), folder.projectRelativePath);
+                root.generic_u8string(), folder.projectRelativePath, false);
             if (!snapshot.succeeded ||
                 snapshot.currentFolder != folder.projectRelativePath)
             {
