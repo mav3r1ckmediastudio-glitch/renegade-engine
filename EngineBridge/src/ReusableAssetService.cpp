@@ -1,6 +1,8 @@
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 
+#include <chrono>
+#include <WickedEngine.h>
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -995,6 +997,7 @@ namespace renegade::bridge
         };
         cleanupTemporary();
 
+        const auto preparedStageStarted = std::chrono::steady_clock::now();
         ImportService importer;
         ModelImportRequest importRequest;
         importRequest.sourcePath = sourcePath.generic_u8string();
@@ -1051,6 +1054,8 @@ namespace renegade::bridge
             return result;
         }
 
+        wi::backlog::post("[IMPORT-PERF] service prepare recipe ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - preparedStageStarted).count()));
+        const auto saveStageStarted = std::chrono::steady_clock::now();
         result.import = importer.SavePreparedModelAsset(prepared);
         if (!result.import.succeeded)
         {
@@ -1065,6 +1070,8 @@ namespace renegade::bridge
             return result;
         }
 
+        wi::backlog::post("[IMPORT-PERF] service save metadata ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - saveStageStarted).count()));
+        const auto documentStageStarted = std::chrono::steady_clock::now();
         ReusableModelAssetDocument assetDocument;
         assetDocument.manifest.projectId = request.projectId;
         assetDocument.manifest.assetId = result.assetId;
@@ -1249,6 +1256,8 @@ namespace renegade::bridge
             pendingPlacement.result_.error.clear();
         }
 
+        wi::backlog::post("[IMPORT-PERF] service serialize prepare transaction ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - documentStageStarted).count()));
+        const auto transactionStarted = std::chrono::steady_clock::now();
         ProjectDocumentTransactionOptions transactionOptions;
         transactionOptions.transactionId = std::move(options.transactionId);
         transactionOptions.journalDirectory =
@@ -1258,6 +1267,8 @@ namespace renegade::bridge
         ProjectDocumentTransaction transaction;
         result.transaction = transaction.Execute(
             std::move(writes), std::move(transactionOptions));
+        wi::backlog::post("[IMPORT-PERF] service transaction ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - transactionStarted).count()));
+        const auto reopenStarted = std::chrono::steady_clock::now();
         if (!result.transaction.success || !result.transaction.committed)
         {
             result.error = "Reusable model import transaction failed [" +
@@ -1284,6 +1295,7 @@ namespace renegade::bridge
 
         if (preparedPlacement != nullptr)
             *preparedPlacement = std::move(pendingPlacement);
+        wi::backlog::post("[IMPORT-PERF] service product reopen ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - reopenStarted).count()));
         result.committedProductVerified = true;
         result.succeeded = true;
         result.error.clear();

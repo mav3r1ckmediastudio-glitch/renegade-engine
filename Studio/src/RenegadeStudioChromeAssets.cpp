@@ -10,6 +10,7 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/StudioSession.h"
 
+#include <chrono>
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -684,6 +685,7 @@ namespace renegade::studio
 
     void CreatorAssetStudioChrome::RefreshCreatorAssetBrowser()
     {
+        const auto browserStarted = std::chrono::steady_clock::now();
         creatorAssetRefreshPending_ = false;
         auto* session = bridge::StudioSession::Current();
         if (session == nullptr || !session->Projects().HasProject())
@@ -708,10 +710,13 @@ namespace renegade::studio
                 SetStatusText("ASSET BROWSER // REFRESH FAILED // " + error);
                 return;
             }
+            wi::backlog::post("[IMPORT-PERF] browser catalogue ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - browserStarted).count()));
+            const auto enrichStarted = std::chrono::steady_clock::now();
             bridge::CreatorTextureWorkflowService textureWorkflow;
             std::string textureWarning;
             (void)textureWorkflow.EnrichTextureCatalogue(
                 project.rootPath, project.projectId, catalogue, textureWarning);
+            wi::backlog::post("[IMPORT-PERF] browser texture enrich ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - enrichStarted).count()));
             creatorAssetCatalogue_ = std::move(catalogue);
             creatorCatalogueProjectId_ = project.projectId;
             creatorAssetCatalogueDirty_ = false;
@@ -770,6 +775,7 @@ namespace renegade::studio
         }
         RenegadeStudioChrome::SetAssetBrowserData(
             creatorFilesystemFolders_, std::move(cards), creatorCurrentPath_);
+        wi::backlog::post("[IMPORT-PERF] browser cards and thumbnails ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - browserStarted).count()));
 
         // Warm the first visible page worth of placeable model products before
         // the user begins a drag. Imported assets are already primed directly

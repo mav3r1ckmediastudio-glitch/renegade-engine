@@ -1,5 +1,7 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 
+#include <chrono>
+#include <WickedEngine.h>
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -1108,8 +1110,10 @@ namespace renegade::bridge
         request.settingsJson = settingsJson;
         request.expectedFormat = format;
         request.thumbnailPngBytes = std::move(thumbnailPngBytes);
+        const auto serviceStarted = std::chrono::steady_clock::now();
         result.asset = ReusableAssetService().ImportModelAsset(
             request, {}, std::move(preparedModel), preparedPlacement);
+        wi::backlog::post("[IMPORT-PERF] workflow core ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - serviceStarted).count()));
         if (!result.asset.succeeded)
         {
             result.error = result.asset.error;
@@ -1121,6 +1125,7 @@ namespace renegade::bridge
             return result;
         }
 
+        const auto catalogueStarted = std::chrono::steady_clock::now();
         AssetCatalogue catalogue;
         if (!BuildCatalogueSnapshot(root.generic_u8string(), projectId,
                 catalogue, result.error))
@@ -1142,7 +1147,9 @@ namespace renegade::bridge
             return result;
         }
 
+        wi::backlog::post("[IMPORT-PERF] workflow catalogue ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - catalogueStarted).count()));
         result.catalogueVerified = true;
+        const auto placementStarted = std::chrono::steady_clock::now();
         ReusableModelPlacementRequest reopenRequest;
         reopenRequest.projectRoot = root.generic_u8string();
         reopenRequest.projectId = projectId;
@@ -1154,6 +1161,7 @@ namespace renegade::bridge
                 reopened.Result().error;
             return result;
         }
+        wi::backlog::post("[IMPORT-PERF] workflow reopened placement ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - placementStarted).count()));
         result.reopenedSceneVerified = true;
         result.succeeded = true;
         result.error.clear();
