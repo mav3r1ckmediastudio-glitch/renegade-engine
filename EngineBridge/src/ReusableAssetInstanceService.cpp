@@ -4,6 +4,7 @@
 #include "renegade/bridge/IdentityService.h"
 
 #include <filesystem>
+#include <unordered_set>
 #include <utility>
 
 namespace renegade::bridge
@@ -26,22 +27,44 @@ namespace renegade::bridge
             if (root == wi::ecs::INVALID_ENTITY)
                 return false;
 
-            std::string error;
-            for (const wi::ecs::Entity entity :
-                EnumeratePersistentSceneEntities(scene))
+            // One scene scan rather than one scan for each imported bone/entity.
+            // Existing IDs (including IDs on unrelated authored entities) remain
+            // reserved; generated IDs also enter this set immediately.
+            std::unordered_set<renegade::bridge::StableId> usedIds;
+            usedIds.reserve(scene.metadatas.GetCount() + 128);
+            for (std::size_t i = 0; i < scene.metadatas.GetCount(); ++i)
             {
-                if (entity != root &&
-                    !scene.Entity_IsDescendant(entity, root))
-                {
+                const auto& values = scene.metadatas[i].string_values;
+                if (values.has(renegade::bridge::PersistentEntityIdMetadataKey))
+                    usedIds.insert(values.get(renegade::bridge::PersistentEntityIdMetadataKey));
+            }
+            const auto entities = EnumeratePersistentSceneEntities(scene);
+            for (const wi::ecs::Entity entity : entities)
+            {
+                if (entity != root && !scene.Entity_IsDescendant(entity, root))
                     continue;
-                }
 
                 // Prefab/template instances can carry copied metadata. Replace
                 // it unconditionally at creator placement time so every scene
                 // instance is addressable independently. The command snapshot
                 // is captured afterwards, therefore Undo/Redo retains these IDs.
-                if (!AssignNewPersistentEntityId(scene, entity, error))
+                renegade::bridge::StableId id;
+                for (int attempt = 0; attempt < 32; ++attempt)
+                {
+                    auto candidate = renegade::bridge::GenerateStableId();
+                    if (usedIds.insert(candidate).second)
+                    {
+                        id = std::move(candidate);
+                        break;
+                    }
+                }
+                if (!renegade::bridge::IsValidStableId(id))
                     return false;
+                auto* metadata = scene.metadatas.GetComponent(entity);
+                if (metadata == nullptr)
+                    metadata = &scene.metadatas.Create(entity);
+                metadata->string_values.set(
+                    renegade::bridge::PersistentEntityIdMetadataKey, id);
             }
             return true;
         }

@@ -5,7 +5,9 @@
 
 #include <WickedEngine.h>
 
+#include <chrono>
 #include <cmath>
+#include <unordered_set>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -412,6 +414,54 @@ int main(int argc, char** argv)
             Near(adoptedRedo->scale_local.x, 0.5f),
             "adopted live transform did not survive Undo/Redo"))
         return 1;
+
+    // Character-scale adoption regression: copied per-bone metadata must be
+    // replaced with distinct IDs without rewriting unrelated authored IDs.
+    wi::scene::Scene largeScene;
+    const auto unrelated = largeScene.Entity_CreateTransform("Unrelated Authored");
+    std::string identityError;
+    if (!Require(AssignNewPersistentEntityId(largeScene, unrelated, identityError),
+            "could not seed unrelated persistent identity"))
+        return 1;
+    const StableId unrelatedId = PersistentEntityId(largeScene, unrelated);
+    const auto largeWrapper = largeScene.Entity_CreateTransform("Large Character Wrapper");
+    const auto largePayload = largeScene.Entity_CreateTransform("Large Character Payload");
+    largeScene.Component_Attach(largePayload, largeWrapper, true);
+    std::vector<wi::ecs::Entity> members = {largeWrapper, largePayload};
+    for (int i = 0; i < 1190; ++i)
+    {
+        const auto bone = largeScene.Entity_CreateTransform("Imported Bone");
+        largeScene.Component_Attach(bone, largePayload, true);
+        largeScene.metadatas.Create(bone).string_values.set(
+            PersistentEntityIdMetadataKey, unrelatedId);
+        members.push_back(bone);
+    }
+    PlaceReusableModelCommand largeCommand(
+        largeScene, AssetId, largeWrapper, largePayload, 0, "Large Character");
+    const auto adoptionStart = std::chrono::steady_clock::now();
+    if (!Require(largeCommand.Execute(), "large Character adoption failed"))
+        return 1;
+    const double adoptionMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - adoptionStart).count();
+    std::unordered_set<StableId> ids = {unrelatedId};
+    for (const auto entity : members)
+    {
+        const auto id = PersistentEntityId(largeScene, entity);
+        if (!Require(IsValidStableId(id) && ids.insert(id).second,
+                "large Character contains a missing or duplicate persistent ID"))
+            return 1;
+    }
+    if (!Require(PersistentEntityId(largeScene, unrelated) == unrelatedId,
+            "large Character adoption changed unrelated identity"))
+        return 1;
+    const auto wrapperId = PersistentEntityId(largeScene, largeWrapper);
+    largeCommand.Undo();
+    if (!Require(largeCommand.Execute() &&
+                PersistentEntityId(largeScene, largeWrapper) == wrapperId &&
+                PersistentEntityId(largeScene, unrelated) == unrelatedId,
+            "large Character Undo/Redo changed persistent identities"))
+        return 1;
+    std::cout << "CHARACTER LARGE ADOPTION MS=" << adoptionMs << '\n';
 
     fs::remove_all(outputRoot, ec);
     std::cout << "LP07 GATE 6 INSTANCE PASS // stable wrapper identity, creator-authored payload transform, and live cursor adoption survive Undo/Redo and WISCENE Save/Open\n";
