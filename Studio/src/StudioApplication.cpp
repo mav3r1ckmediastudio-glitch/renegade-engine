@@ -11712,8 +11712,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         studioChrome_.SetStatusText(
             "IMPORT MODEL // PROCESSING // MATERIALS + GOVERNED TEXTURES");
 
+        const auto importConfirmStarted = std::chrono::steady_clock::now();
         wi::jobsystem::Execute(modelImportWorkload_,
-            [this, state](wi::jobsystem::JobArgs)
+            [this, state, importConfirmStarted](wi::jobsystem::JobArgs)
             {
                 if (!state->prepared.IsReady() || state->prepared.PeekScene() == nullptr)
                 {
@@ -11730,6 +11731,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                     auto* sourceScene = state->prepared.PeekMutableScene();
                     if (!state->externalSources.empty())
                     {
+                        const auto retargetStarted = std::chrono::steady_clock::now();
                         std::string mappingError;
                         if (!bridge::EnsureHumanoidAnimationSourceMapping(
                                 *sourceScene, mappingError))
@@ -11792,6 +11794,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                                 break;
                             }
                         }
+                        wi::backlog::post("[IMPORT-PERF] retarget ms=" + std::to_string(
+                            std::chrono::duration<double, std::milli>(
+                                std::chrono::steady_clock::now() - retargetStarted).count()));
                     }
                     if (state->imported.error.empty())
                     {
@@ -11860,11 +11865,15 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 &state->warmedPlacement);
                     state->packageSeconds = std::chrono::duration<double>(
                         std::chrono::steady_clock::now() - packageStarted).count();
+                    wi::backlog::post("[IMPORT-PERF] materials ms=" +
+                        std::to_string(state->materialsSeconds * 1000.0) +
+                        " package ms=" + std::to_string(state->packageSeconds * 1000.0));
 }
 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, state](std::uint64_t)
+                    [this, state, importConfirmStarted](std::uint64_t)
                     {
+                        const auto handbackStarted = std::chrono::steady_clock::now();
                         importScalePanel_.SetEnabled(true);
                         importScalePanel_.SetVisible(false);
                         importScalePanel_.SetPreviewScene(nullptr);
@@ -11931,6 +11940,12 @@ wi::eventhandler::Subscribe_Once(
                                 "Import Model");
                             return;
                         }
+                        wi::backlog::post("[IMPORT-PERF] confirm-to-handback ms=" +
+                            std::to_string(std::chrono::duration<double, std::milli>(
+                                std::chrono::steady_clock::now() - importConfirmStarted).count()) +
+                            " handback-main-thread ms=" +
+                            std::to_string(std::chrono::duration<double, std::milli>(
+                                std::chrono::steady_clock::now() - handbackStarted).count()));
                         std::ostringstream completed;
                         completed << std::fixed << std::setprecision(1)
                             << "IMPORT MODEL // READY // MATERIALS "
