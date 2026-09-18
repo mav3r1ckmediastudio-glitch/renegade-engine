@@ -99,6 +99,27 @@ int main()
     if (!Require(renegade::bridge::IsHumanoidMappingValid(
             renegade::bridge::CaptureHumanoidMapping(scene, rig)),
             "source mapping must create a valid native HumanoidComponent")) return 1;
+    // An imported FBX has no authored look-at target. Wicked enables look-at
+    // by default, which turns the head toward world origin on the first tick.
+    auto* importedHumanoid = scene.humanoids.GetComponent(rig);
+    if (!Require(importedHumanoid != nullptr && importedHumanoid->IsLookAtEnabled(),
+            "test rig should exhibit Wicked default look-at")) return 1;
+    if (!Require(renegade::bridge::DisableDefaultHumanoidLookAt(scene) == 1 &&
+            !importedHumanoid->IsLookAtEnabled(),
+            "default look-at must be disabled before import preview and commit")) return 1;
+    if (!Require(renegade::bridge::DisableDefaultHumanoidLookAt(scene) == 0,
+            "default look-at normalization must be idempotent")) return 1;
+    importedHumanoid->SetLookAtEnabled(true);
+    importedHumanoid->lookAt = XMFLOAT3(0.0f, 0.0f, 5.0f);
+    if (!Require(renegade::bridge::DisableDefaultHumanoidLookAt(scene) == 0 &&
+            importedHumanoid->IsLookAtEnabled(),
+            "an explicitly configured look-at position must survive")) return 1;
+    importedHumanoid->lookAt = XMFLOAT3(0.0f, 0.0f, 0.0f);
+    importedHumanoid->lookAtEntity = entities[0];
+    if (!Require(renegade::bridge::DisableDefaultHumanoidLookAt(scene) == 0 &&
+            importedHumanoid->IsLookAtEnabled(),
+            "an explicitly configured look-at entity must survive")) return 1;
+    importedHumanoid->lookAtEntity = wi::ecs::INVALID_ENTITY;
     scene.humanoids.Remove(rig);
     wi::scene::Scene incompleteSource;
     if (!Require(!renegade::bridge::EnsureHumanoidAnimationSourceMapping(

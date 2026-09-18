@@ -282,6 +282,23 @@ namespace renegade::bridge
         return result;
     }
 
+    std::size_t DisableDefaultHumanoidLookAt(wi::scene::Scene& scene) noexcept
+    {
+        std::size_t changed = 0;
+        for (std::size_t i = 0; i < scene.humanoids.GetCount(); ++i)
+        {
+            auto& humanoid = scene.humanoids[i];
+            if (!humanoid.IsLookAtEnabled() ||
+                humanoid.lookAtEntity != wi::ecs::INVALID_ENTITY ||
+                humanoid.lookAt.x != 0.0f || humanoid.lookAt.y != 0.0f ||
+                humanoid.lookAt.z != 0.0f)
+                continue;
+            humanoid.SetLookAtEnabled(false);
+            ++changed;
+        }
+        return changed;
+    }
+
     bool EnsureHumanoidAnimationSourceMapping(
         wi::scene::Scene& scene,
         std::string& error)

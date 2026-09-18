@@ -11100,7 +11100,13 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                             return;
                         }
 
-                        const auto* isolated = state->prepared.PeekScene();
+                        // Wicked defaults imported humanoids to procedural head
+                        // look-at toward world origin. No authored target means
+                        // a supposedly stationary FBX turns its head on tick one.
+                        // Normalize the retained in-memory asset before cloning
+                        // so preview and committed Character share the same pose.
+                        auto* isolated = state->prepared.PeekMutableScene();
+                        (void)bridge::DisableDefaultHumanoidLookAt(*isolated);
                         creatorModelImporter = {};
                         creatorModelImporter.active = true;
                         creatorModelImporter.sourcePath = state->sourcePath;
