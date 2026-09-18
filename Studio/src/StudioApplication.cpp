@@ -10,7 +10,9 @@
 #include "renegade/bridge/MaterialTextureAssetService.h"
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/FlowService.h"
+#include "renegade/bridge/HumanoidRetargetService.h"
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -368,6 +370,7 @@ namespace
         renegade::bridge::ModelBounds sourceBounds;
         renegade::bridge::ImportedSceneSummary summary;
         renegade::bridge::ImportedModelEvidence evidence;
+        std::string rigDiagnostic;
         std::vector<wi::ecs::Entity> materialEntities;
         std::vector<wi::ecs::Entity> animationEntities;
         std::vector<renegade::bridge::CreatorMaterialSourceOverride> materialOverrides;
@@ -10740,6 +10743,59 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         creatorModelImporter.cameraCaptured = true;
                         creatorModelImporter.summary = bridge::ImportService::Summarize(*isolated);
                         creatorModelImporter.evidence = bridge::ImportService::SummarizeModelEvidence(*isolated);
+                        {
+                            std::ostringstream rigStatus;
+                            rigStatus << "Source armatures: " << creatorModelImporter.summary.armatures
+                                << " | bones: " << creatorModelImporter.evidence.armatureBones;
+                            if (isolated->armatures.GetCount() == 0)
+                            {
+                                rigStatus << "\nNo armature; humanoid retargeting unavailable.";
+                            }
+                            else
+                            {
+                                const auto rig = isolated->armatures.GetEntity(0);
+                                const auto mapping = bridge::BuildAutoHumanoidMapping(*isolated, rig);
+                                rigStatus << "\nAuto-map candidates: " << mapping.mappedBones
+                                    << " / " << bridge::HumanoidBoneCount
+                                    << (mapping.valid ? " | required bones found" : " | incomplete");
+                                if (!mapping.valid)
+                                {
+                                    constexpr std::array required = {
+                                        bridge::HumanoidBone::Hips, bridge::HumanoidBone::Spine,
+                                        bridge::HumanoidBone::Head,
+                                        bridge::HumanoidBone::LeftUpperLeg,
+                                        bridge::HumanoidBone::LeftLowerLeg,
+                                        bridge::HumanoidBone::LeftFoot,
+                                        bridge::HumanoidBone::RightUpperLeg,
+                                        bridge::HumanoidBone::RightLowerLeg,
+                                        bridge::HumanoidBone::RightFoot,
+                                        bridge::HumanoidBone::LeftUpperArm,
+                                        bridge::HumanoidBone::LeftLowerArm,
+                                        bridge::HumanoidBone::LeftHand,
+                                        bridge::HumanoidBone::RightUpperArm,
+                                        bridge::HumanoidBone::RightLowerArm,
+                                        bridge::HumanoidBone::RightHand};
+                                    rigStatus << "\nMissing required: ";
+                                    bool first = true;
+                                    for (const auto bone : required)
+                                    {
+                                        if (mapping.mapping.bones[static_cast<std::size_t>(bone)] !=
+                                            wi::ecs::INVALID_ENTITY)
+                                            continue;
+                                        if (!first)
+                                            rigStatus << ", ";
+                                        rigStatus << bridge::HumanoidBoneName(bone);
+                                        first = false;
+                                    }
+                                }
+                                if (!mapping.error.empty())
+                                    rigStatus << "\n" << mapping.error;
+                                if (isolated->armatures.GetCount() > 1)
+                                    rigStatus << "\nMultiple armatures: inspected the first only.";
+                            }
+                            rigStatus << "\nMapping is diagnostic only; retarget preview is not ready.";
+                            creatorModelImporter.rigDiagnostic = rigStatus.str();
+                        }
                         creatorModelImporter.sourceBounds = bridge::ImportService::MeasureModelBounds(*isolated);
                         // V3 starts from the source's authored units. Any
                         // conversion is an explicit Transform stage choice.
@@ -10880,10 +10936,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         importScaleTitleLabel_.SetText("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
         creatorImportAssetName.SetValue(creatorModelImporter.assetName);
         creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
-        creatorImportRigReadout.SetText(
-            "Source armatures: " + std::to_string(creatorModelImporter.summary.armatures) +
-            "\nSource bones: " + std::to_string(creatorModelImporter.evidence.armatureBones) +
-            "\nHumanoid mapping and external retarget preview are not yet verified.");
+        creatorImportRigReadout.SetText(creatorModelImporter.rigDiagnostic);
+        creatorImportRigReadout.SetTooltip(creatorModelImporter.rigDiagnostic);
         creatorModelImporter.positionOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
         creatorModelImporter.rotationDegrees = XMFLOAT3(0.0f, 0.0f, 0.0f);
         creatorImportPositionX.SetValue(0.0f);
