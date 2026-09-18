@@ -3922,7 +3922,16 @@ namespace renegade::studio
     {
         importScalePanel_.Create(
             "Model Import Workspace",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
+            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR |
+            wi::gui::Window::WindowControls::RESIZE_LEFT);
+        importScalePanel_.OnResize([this]()
+        {
+            if (importInspectorLayoutInProgress_)
+                return;
+            importInspectorWidth_ = std::clamp(
+                importScalePanel_.GetSize().x, 310.0f, 680.0f);
+            ResizeLayout();
+        });
         // Registration is deferred until every importer page is attached.
 
         importScaleTitleLabel_.Create("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
@@ -5419,19 +5428,23 @@ namespace renegade::studio
         // is why the panel is taller than its visible idle content and the
         // buttons sit well below the combo rather than immediately under
         // it.
-        const float importScalePanelWidth = std::min(500.0f, std::max(440.0f, width * 0.32f));
+        const float importScalePanelWidth = std::clamp(
+            importInspectorWidth_, 310.0f,
+            std::max(310.0f, std::min(680.0f, width * 0.6f)));
         const float importScalePanelTop = 8.0f;
         const float importScalePanelHeight = std::max(320.0f, height - 16.0f);
         // GGMAX-style task workspace: keep the preview unobstructed and dock
         // the importer controls down the right side of the preview viewport.
         const float importScalePanelX =
             std::max(8.0f, width - importScalePanelWidth - 8.0f);
+        importInspectorLayoutInProgress_ = true;
         importScalePanel_.SetPos(XMFLOAT2(
             importScalePanelX,
             importScalePanelTop));
         importScalePanel_.SetSize(XMFLOAT2(
             importScalePanelWidth,
             importScalePanelHeight));
+        importInspectorLayoutInProgress_ = false;
         importScaleTitleLabel_.SetPos(XMFLOAT2(12.0f, 8.0f));
         importScaleTitleLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 24.0f));
         importScaleReadoutLabel_.SetPos(XMFLOAT2(12.0f, 36.0f));

@@ -1111,6 +1111,8 @@ namespace renegade::studio
         RenegadeButton hubNewProjectCancelButton_;
         wi::gui::Button gridToggleButton_;
         CreatorImportPreviewWindow importScalePanel_;
+        float importInspectorWidth_ = 500.0f;
+        bool importInspectorLayoutInProgress_ = false;
         wi::gui::Label importScaleTitleLabel_;
         wi::gui::Label importScaleReadoutLabel_;
         RenegadeComboBox importScaleModeCombo_;
