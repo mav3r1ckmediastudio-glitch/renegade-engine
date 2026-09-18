@@ -11083,6 +11083,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
 
         struct GovernedCommitState
         {
+            std::uint64_t attemptId = bridge::NextCreatorImportAttemptId();
+            std::string failureStage = "material preparation";
             std::string projectRoot;
             bridge::StableId projectId;
             std::string sourcePath;
@@ -11200,6 +11202,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 bridge::CreatorAssetWorkflowService workflow;
                 if (state->imported.error.empty())
                 {
+                    state->failureStage = "governed import";
                     wi::eventhandler::Subscribe_Once(
                         wi::eventhandler::EVENT_THREAD_SAFE_POINT,
                         [this](std::uint64_t)
@@ -11207,9 +11210,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                             if (creatorModelImporter.committing)
                             {
                                 creatorImportThumbnailStatus.SetText(
-                                    "PROCESSING // WRITING RASSET PACKAGE");
+                                    "PROCESSING // GOVERNED IMPORT");
                                 studioChrome_.SetStatusText(
-                                    "IMPORT MODEL // PROCESSING // WRITING RASSET PACKAGE");
+                                    "IMPORT MODEL // PROCESSING // GOVERNED IMPORT");
                             }
                         });
                     const auto packageStarted = std::chrono::steady_clock::now();
@@ -11222,7 +11225,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 state->destinationFolder,
                 std::move(state->prepared),
                 state->thumbnailCapturePath,
-                &state->warmedPlacement);
+                &state->warmedPlacement,
+                state->attemptId);
                     state->packageSeconds = std::chrono::duration<double>(
                         std::chrono::steady_clock::now() - packageStarted).count();
 }
@@ -11244,11 +11248,40 @@ wi::eventhandler::Subscribe_Once(
 
                         if (!state->imported.succeeded)
                         {
-                            studioChrome_.SetStatusText("IMPORT MODEL // COMMIT FAILED");
-                            ShowStudioMessageBox(
-                                "The preview was discarded safely, but the governed asset could not be committed.\n\nReason: " +
-                                    state->imported.error,
-                                "Import Model");
+                            const auto& details = state->imported.diagnostics;
+                            const std::string failedStage = details.attemptId != 0
+                                ? bridge::CreatorImportStageName(details.stage)
+                                : state->failureStage;
+                            const auto yesNo = [](const bool value)
+                            {
+                                return value ? "yes" : "no";
+                            };
+                            studioChrome_.SetStatusText(
+                                "IMPORT MODEL // FAILED // " + failedStage +
+                                " // OPEN DIAGNOSTICS");
+                            std::ostringstream report;
+                            report << "Import attempt " << state->attemptId
+                                << " failed during " << failedStage
+                                << ".\n\nReason: "
+                                << (state->imported.error.empty()
+                                    ? "No detailed error was returned."
+                                    : state->imported.error)
+                                << "\n\nRequested folder: " << state->destinationFolder
+                                << "\nSource snapshot staged (cleaned up on failure): "
+                                << yesNo(details.sourceRetained)
+                                << "\nPrepared scene: " << yesNo(details.preparedSceneReady)
+                                << "\nRecipe applied: " << yesNo(details.recipeApplied)
+                                << "\nWISCENE written: " << yesNo(details.wisceneWritten)
+                                << "\nRASSET serialized: " << yesNo(details.packageSerialized)
+                                << "\nAtomic transaction committed: "
+                                << yesNo(details.transactionCommitted)
+                                << "\nAsset Browser revealed: no";
+                            if (!state->imported.asset.assetId.empty())
+                                report << "\nProduct ID: " << state->imported.asset.assetId;
+                            if (!state->imported.assetProjectRelativePath.empty())
+                                report << "\nProduct: "
+                                    << state->imported.assetProjectRelativePath;
+                            ShowStudioMessageBox(report.str(), "Import Model");
                             return;
                         }
                         RefreshHierarchy();
@@ -11268,6 +11301,8 @@ wi::eventhandler::Subscribe_Once(
                         }
                         studioChrome_.SetActiveBottomTab(0, true);
                         std::string browserError;
+                        state->imported.diagnostics.stage =
+                            bridge::CreatorImportStage::BrowserReveal;
                         if (!studioChrome_.RevealCreatorAsset(
                                 state->imported.asset.assetId,
                                 state->imported.assetProjectRelativePath,
@@ -11276,12 +11311,15 @@ wi::eventhandler::Subscribe_Once(
                             studioChrome_.SetStatusText(
                                 "IMPORT MODEL // ASSET COMMITTED // BROWSER FAILED");
                             ShowStudioMessageBox(
-                                "The governed asset was committed, but Studio could not verify it in the Asset Browser. Do not import it again.\n\nAsset: " +
+                                "Import attempt " + std::to_string(state->attemptId) +
+                                    " failed during Asset Browser reveal. The governed asset was committed; do not import it again.\n\nAsset: " +
                                     state->imported.assetProjectRelativePath +
                                     "\n\nReason: " + browserError,
                                 "Import Model");
                             return;
                         }
+                        state->imported.diagnostics.browserRevealed = true;
+                        state->imported.diagnostics.stage = bridge::CreatorImportStage::Complete;
                         std::ostringstream completed;
                         completed << std::fixed << std::setprecision(1)
                             << "IMPORT MODEL // READY // MATERIALS "
@@ -11390,6 +11428,10 @@ wi::eventhandler::Subscribe_Once(
         wi::backlog::post(
             caption + " // " + message,
             wi::backlog::LogLevel::Error);
+        // The native, non-modal Backlog is the full-detail diagnostics view.
+        // The status strip can only display a short first line.
+        if (caption == "Import Model" && !wi::backlog::isActive())
+            wi::backlog::Toggle();
         const std::size_t firstLine = message.find('\n');
         studioChrome_.SetStatusText(
             caption + " // " +

@@ -209,6 +209,11 @@ int main()
     passed &= Check(!outsideSource.succeeded &&
             outsideSource.error.find("SourceAssets") != std::string::npos,
         "source outside SourceAssets did not fail closed before conversion");
+    passed &= Check(outsideSource.diagnostics.attemptId != 0 &&
+            outsideSource.diagnostics.stage == CreatorImportStage::InputValidation &&
+            !outsideSource.diagnostics.sourceRetained &&
+            !outsideSource.diagnostics.transactionCommitted,
+        "source rejection reported inaccurate stage or side effects");
 
     passed &= Check(WriteText(root / "SourceAssets" / "Models" / "source.fbx", "not-a-real-fbx"),
         "could not write source fixture");
@@ -218,6 +223,11 @@ int main()
     passed &= Check(!existingProduct.succeeded &&
             existingProduct.error.find("already exists") != std::string::npos,
         "existing RAsset destination was not rejected before conversion");
+    passed &= Check(existingProduct.diagnostics.attemptId != 0 &&
+            existingProduct.diagnostics.stage == CreatorImportStage::InputValidation &&
+            !existingProduct.diagnostics.packageSerialized &&
+            !existingProduct.diagnostics.transactionCommitted,
+        "existing product rejection reported inaccurate stage or side effects");
     std::vector<std::uint8_t> preserved;
     {
         std::ifstream stream(rassetPath, std::ios::binary);
@@ -233,6 +243,11 @@ int main()
     passed &= Check(!nonCanonicalSettings.succeeded &&
             nonCanonicalSettings.error.find("canonical") != std::string::npos,
         "non-canonical import settings were accepted");
+    passed &= Check(nonCanonicalSettings.diagnostics.attemptId != 0 &&
+            nonCanonicalSettings.diagnostics.stage == CreatorImportStage::RecipeValidation &&
+            !nonCanonicalSettings.diagnostics.preparedSceneReady &&
+            !nonCanonicalSettings.diagnostics.transactionCommitted,
+        "invalid recipe reported inaccurate stage or side effects");
 
     AssetRegistry foreignRegistry;
     foreignRegistry.projectId = OtherProjectId;
@@ -246,6 +261,12 @@ int main()
     passed &= Check(!crossProject.succeeded &&
             crossProject.error.find("another project") != std::string::npos,
         "cross-project registry did not fail closed before conversion");
+    passed &= Check(crossProject.diagnostics.attemptId != 0 &&
+            crossProject.diagnostics.stage == CreatorImportStage::RegistryValidation &&
+            !crossProject.diagnostics.transactionCommitted,
+        "cross-project registry rejection reported inaccurate stage or side effects");
+    passed &= Check(!fs::exists(root / "Content" / "Models" / "new.rasset"),
+        "rejected imports created an authoritative product");
 
     fs::remove_all(root, ec);
     if (!passed)

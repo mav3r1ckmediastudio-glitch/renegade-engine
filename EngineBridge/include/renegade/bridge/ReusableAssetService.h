@@ -3,6 +3,7 @@
 #include "renegade/bridge/AssetCatalogueService.h"
 #include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/ImportService.h"
+#include "renegade/bridge/CreatorImportDiagnostics.h"
 #include "renegade/bridge/ProjectDocumentTransaction.h"
 
 #include <cstdint>
@@ -118,6 +119,7 @@ namespace renegade::bridge
         // The reusable service never reads an arbitrary external path;
         // these bytes join the governed product transaction directly.
         std::vector<std::uint8_t> thumbnailPngBytes;
+        std::uint64_t diagnosticAttemptId = 0;
     };
 
     struct ReusableModelImportOptions
@@ -130,6 +132,7 @@ namespace renegade::bridge
     struct ReusableModelImportResult
     {
         bool succeeded = false;
+        CreatorImportDiagnostics diagnostics;
         StableId sourceAssetId;
         StableId assetId;
         std::string sourceProjectRelativePath;

@@ -1,0 +1,54 @@
+name: Importer A1 focused checks
+
+# Small source/header contract only: no Wicked checkout, graphics, or
+# long Windows Studio/Runtime matrix. Does not claim a native importer pass.
+on:
+  push:
+    branches:
+      - feature/importer-a1-diagnostics
+    paths:
+      - .github/workflows/importer-a1-check.yml
+      - EngineBridge/include/renegade/bridge/CreatorImportDiagnostics.h
+      - EngineBridge/include/renegade/bridge/CreatorAssetWorkflowService.h
+      - EngineBridge/include/renegade/bridge/ReusableAssetService.h
+      - EngineBridge/src/CreatorAssetWorkflowService.cpp
+      - EngineBridge/src/ReusableAssetService.cpp
+      - Studio/src/StudioApplication.cpp
+      - Tests/CreatorImportDiagnosticsTests.cpp
+      - Tests/ImporterA1SourceContract.py
+      - Tests/ReusableAssetTests.cpp
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/importer-a1-check.yml
+      - EngineBridge/include/renegade/bridge/CreatorImportDiagnostics.h
+      - EngineBridge/include/renegade/bridge/CreatorAssetWorkflowService.h
+      - EngineBridge/include/renegade/bridge/ReusableAssetService.h
+      - EngineBridge/src/CreatorAssetWorkflowService.cpp
+      - EngineBridge/src/ReusableAssetService.cpp
+      - Studio/src/StudioApplication.cpp
+      - Tests/CreatorImportDiagnosticsTests.cpp
+      - Tests/ImporterA1SourceContract.py
+      - Tests/ReusableAssetTests.cpp
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out GitHub commit without Wicked submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Check stage/error source contracts
+        run: python3 Tests/ImporterA1SourceContract.py
+      - name: Compile and execute C++ diagnostic contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++17 -Wall -Wextra -Werror -pedantic -I EngineBridge/include Tests/CreatorImportDiagnosticsTests.cpp -o /tmp/renegade-importer-a1-contract
+          /tmp/renegade-importer-a1-contract

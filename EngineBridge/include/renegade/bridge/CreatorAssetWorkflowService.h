@@ -11,6 +11,7 @@ namespace renegade::bridge
     struct CreatorModelImportResult
     {
         bool succeeded = false;
+        CreatorImportDiagnostics diagnostics;
         std::string stagedSourceProjectRelativePath;
         std::string assetProjectRelativePath;
         ReusableModelImportResult asset;
@@ -70,7 +71,8 @@ namespace renegade::bridge
         const std::string& destinationFolder = "Content/Models",
         PreparedModelImport preparedModel = {},
         const std::string& thumbnailSourcePath = {},
-        PreparedReusableModelPlacement* preparedPlacement = nullptr) const;
+        PreparedReusableModelPlacement* preparedPlacement = nullptr,
+        std::uint64_t diagnosticAttemptId = 0) const;
 
         [[nodiscard]] ReusableModelReimportResult ReimportModel(
             const std::string& projectRoot,
