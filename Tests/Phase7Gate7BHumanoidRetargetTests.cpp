@@ -1,4 +1,5 @@
 #include "renegade/bridge/HumanoidRetargetService.h"
+#include "renegade/bridge/AnimationService.h"
 
 #include <iostream>
 #include <string>
@@ -131,6 +132,31 @@ int main()
             renegade::bridge::ClassifyHumanoidAnimationSource("clip.fbx") ==
                 renegade::bridge::HumanoidAnimationSourceFormat::Fbx,
             "FBX classification failed")) return 1;
+
+    // Importer v3 drives Wicked's real transport in its own preview scene.
+    // Exercise the native operations without touching an authored level clip.
+    wi::scene::Scene preview;
+    const auto previewClip = wi::ecs::CreateEntity();
+    auto& nativeClip = preview.animations.Create(previewClip);
+    nativeClip.start = 0.25f;
+    nativeClip.end = 2.0f;
+    nativeClip.timer = 1.0f;
+    wi::scene::Scene authored;
+    const auto authoredClip = wi::ecs::CreateEntity();
+    authored.animations.Create(authoredClip).Play();
+    if (!Require(renegade::bridge::PlayAnimation(preview, previewClip, true) &&
+            nativeClip.IsPlaying() && nativeClip.timer == nativeClip.start,
+            "preview must play the native clip from its authored start")) return 1;
+    if (!Require(renegade::bridge::PauseAnimation(preview, previewClip) &&
+            !nativeClip.IsPlaying(), "preview must pause the native component")) return 1;
+    if (!Require(renegade::bridge::ScrubAnimation(preview, previewClip, 9.0f) &&
+            nativeClip.timer == nativeClip.end,
+            "preview scrub must respect the native clip range")) return 1;
+    if (!Require(renegade::bridge::StopAnimation(preview, previewClip) &&
+            !nativeClip.IsPlaying() && nativeClip.timer == nativeClip.start,
+            "preview stop must rewind the native component")) return 1;
+    if (!Require(authored.animations.GetComponent(authoredClip)->IsPlaying(),
+            "preview transport must leave the separate authored scene unchanged")) return 1;
 
     std::cout << "Phase 7B humanoid mapping tests passed\n";
     return 0;

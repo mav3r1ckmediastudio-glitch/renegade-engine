@@ -11,6 +11,7 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/FlowService.h"
 #include "renegade/bridge/HumanoidRetargetService.h"
+#include "renegade/bridge/AnimationService.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -530,6 +531,9 @@ namespace
     renegade::studio::RenegadeComboBox creatorImportAnimationEnabled;
     renegade::studio::RenegadeButton creatorImportAnimationAdd;
     renegade::studio::RenegadeButton creatorImportAnimationDelete;
+    renegade::studio::RenegadeButton creatorImportAnimationPlay;
+    renegade::studio::RenegadeButton creatorImportAnimationPause;
+    renegade::studio::RenegadeButton creatorImportAnimationStop;
     wi::gui::Label creatorImportAnimationReadout;
     wi::gui::Label creatorImportTransformLabel;
     std::array<renegade::studio::RenegadeButton, 6> creatorImportStageButtons;
@@ -968,6 +972,19 @@ namespace
         });
     }
 
+    // Preview transport acts only on the transient scene and never records
+    // editor commands. A recipe entry may duplicate a source action; resolve
+    // the actual native component by source index, not the visible row index.
+    void StopCreatorImportPreviewAnimations()
+    {
+        if (!creatorModelImporter.previewScene.IsValid())
+            return;
+        auto& preview = *creatorModelImporter.previewScene;
+        for (std::size_t index = 0; index < preview.animations.GetCount(); ++index)
+            (void)renegade::bridge::StopAnimation(
+                preview, preview.animations.GetEntity(index));
+    }
+
     void RefreshCreatorImportAnimationEditor()
     {
         if (creatorModelImporter.animationRecipe.empty())
@@ -993,7 +1010,65 @@ namespace
         out << std::fixed << "Source action " << clip.sourceAnimationIndex + 1
             << " // " << clip.start << " - " << clip.end
             << " // " << (clip.enabled ? "INCLUDED" : "EXCLUDED");
+        if (creatorModelImporter.previewScene.IsValid() &&
+            clip.sourceAnimationIndex < creatorModelImporter.animationEntities.size())
+        {
+            const auto entity = creatorModelImporter.animationEntities[clip.sourceAnimationIndex];
+            const auto* animation = creatorModelImporter.previewScene->animations.GetComponent(entity);
+            out << (animation == nullptr ? " // NATIVE CLIP MISSING" :
+                (animation->IsPlaying() ? " // NATIVE PLAYBACK ACTIVE" : " // NATIVE PAUSED"));
+        }
+        else
+            out << " // NATIVE CLIP MISSING";
         creatorImportAnimationReadout.SetText(out.str());
+    }
+
+    void PreviewSelectedCreatorImportAnimation(const bool play, const bool pause)
+    {
+        if (!creatorModelImporter.active || !creatorModelImporter.importAsCharacter ||
+            !creatorModelImporter.previewScene.IsValid() ||
+            creatorModelImporter.animationRecipe.empty())
+            return;
+        auto& preview = *creatorModelImporter.previewScene;
+        const auto& clip = creatorModelImporter.animationRecipe[
+            creatorModelImporter.selectedAnimation];
+        if (!clip.enabled ||
+            clip.sourceAnimationIndex >= creatorModelImporter.animationEntities.size())
+        {
+            creatorImportAnimationReadout.SetText(
+                "Preview unavailable: select an included source animation.");
+            return;
+        }
+        const auto entity = creatorModelImporter.animationEntities[clip.sourceAnimationIndex];
+        auto* animation = preview.animations.GetComponent(entity);
+        const auto* original = creatorModelImporter.preparedForCommit.PeekScene();
+        if (animation == nullptr || animation->channels.empty() || original == nullptr ||
+            clip.sourceAnimationIndex >= original->animations.GetCount())
+        {
+            creatorImportAnimationReadout.SetText(
+                "Preview unavailable: no matching native animation channels.");
+            return;
+        }
+        const auto& source = original->animations[clip.sourceAnimationIndex];
+        if (!std::isfinite(clip.start) || !std::isfinite(clip.end) ||
+            clip.start < source.start || clip.end > source.end || clip.start >= clip.end)
+        {
+            creatorImportAnimationReadout.SetText(
+                "Preview unavailable: clip range is outside its native source.");
+            return;
+        }
+        if (play)
+        {
+            StopCreatorImportPreviewAnimations();
+            animation->start = clip.start;
+            animation->end = clip.end;
+            (void)renegade::bridge::PlayAnimation(preview, entity, true);
+        }
+        else if (pause)
+            (void)renegade::bridge::PauseAnimation(preview, entity);
+        else
+            StopCreatorImportPreviewAnimations();
+        RefreshCreatorImportAnimationEditor();
     }
 
     void RebuildCreatorImportAnimationCombo()
@@ -3980,6 +4055,7 @@ namespace renegade::studio
         creatorImportModelChoice.SetText("MODEL");
         creatorImportModelChoice.OnClick([this](const wi::gui::EventArgs&)
         {
+            StopCreatorImportPreviewAnimations();
             creatorModelImporter.importAsCharacter = false;
             creatorModelImporter.destinationFolder = "Content/Models";
             creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
@@ -4324,6 +4400,7 @@ namespace renegade::studio
         creatorImportAnimationCombo.Create("Animation Action");
         creatorImportAnimationCombo.OnSelect([](const wi::gui::EventArgs& args)
         {
+            StopCreatorImportPreviewAnimations();
             creatorModelImporter.selectedAnimation =
                 static_cast<std::size_t>(args.userdata);
             RefreshCreatorImportAnimationEditor();
@@ -4381,12 +4458,31 @@ namespace renegade::studio
         creatorImportAnimationDelete.OnClick([](const wi::gui::EventArgs&)
         {
             if (creatorModelImporter.animationRecipe.empty()) return;
+            StopCreatorImportPreviewAnimations();
             creatorModelImporter.animationRecipe.erase(
                 creatorModelImporter.animationRecipe.begin() +
                 static_cast<std::ptrdiff_t>(creatorModelImporter.selectedAnimation));
             if (creatorModelImporter.selectedAnimation > 0)
                 --creatorModelImporter.selectedAnimation;
             RebuildCreatorImportAnimationCombo();
+        });
+        creatorImportAnimationPlay.Create("Play Native Import Animation");
+        creatorImportAnimationPlay.SetText("PLAY PREVIEW");
+        creatorImportAnimationPlay.OnClick([](const wi::gui::EventArgs&)
+        {
+            PreviewSelectedCreatorImportAnimation(true, false);
+        });
+        creatorImportAnimationPause.Create("Pause Native Import Animation");
+        creatorImportAnimationPause.SetText("PAUSE");
+        creatorImportAnimationPause.OnClick([](const wi::gui::EventArgs&)
+        {
+            PreviewSelectedCreatorImportAnimation(false, true);
+        });
+        creatorImportAnimationStop.Create("Stop Native Import Animation");
+        creatorImportAnimationStop.SetText("STOP");
+        creatorImportAnimationStop.OnClick([](const wi::gui::EventArgs&)
+        {
+            PreviewSelectedCreatorImportAnimation(false, false);
         });
         creatorImportAnimationReadout.Create("");
         creatorImportAnimationReadout.SetFitTextEnabled(true);
@@ -4486,6 +4582,9 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPause),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationStop),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),
             static_cast<wi::gui::Widget*>(&creatorImportThumbnailPreview),
@@ -5621,8 +5720,15 @@ namespace renegade::studio
         creatorImportAnimationAdd.SetSize(XMFLOAT2(110.0f, 28.0f));
         creatorImportAnimationDelete.SetPos(XMFLOAT2(126.0f, 318.0f));
         creatorImportAnimationDelete.SetSize(XMFLOAT2(120.0f, 28.0f));
-        creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 354.0f));
-        creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
+        const float playbackButtonWidth = (importScalePanelWidth - 32.0f) / 3.0f;
+        creatorImportAnimationPlay.SetPos(XMFLOAT2(12.0f, 354.0f));
+        creatorImportAnimationPause.SetPos(XMFLOAT2(16.0f + playbackButtonWidth, 354.0f));
+        creatorImportAnimationStop.SetPos(XMFLOAT2(20.0f + playbackButtonWidth * 2.0f, 354.0f));
+        for (auto* button : {&creatorImportAnimationPlay,
+            &creatorImportAnimationPause, &creatorImportAnimationStop})
+            button->SetSize(XMFLOAT2(playbackButtonWidth, 34.0f));
+        creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 396.0f));
+        creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 50.0f));
         creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 178.0f));
         creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
         const float thumbnailPreviewSide = std::min(
@@ -10904,6 +11010,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                             }
                         }
 
+                        // Wicked's placement command auto-plays imported clips;
+                        // importer playback must instead be explicit and singular.
+                        StopCreatorImportPreviewAnimations();
                         creatorModelImporter.weatherEntity = wi::ecs::INVALID_ENTITY;
                         creatorModelImporter.ambientBefore = preview.weather.ambient;
                         creatorModelImporter.ambientCaptured = true;
@@ -11075,7 +11184,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     {
         RefreshCreatorImportWorkspaceSection();
         constexpr std::array<float, 6> bodyHeights = {
-            168.0f, 820.0f, 790.0f, 150.0f, 250.0f, 570.0f};
+            168.0f, 820.0f, 790.0f, 150.0f, 330.0f, 570.0f};
         float rowY = 146.0f;
         float contentOffset = 0.0f;
         for (std::size_t index = 0; index < creatorImportStageButtons.size(); ++index)
@@ -11178,6 +11287,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPause),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationStop),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout)})
             widget->SetVisible(section == 4 &&
                 creatorModelImporter.importAsCharacter);
