@@ -1,104 +1,109 @@
 # Renegade Engine — Current Handoff
 
-**Date:** 12 September 2026  
+**Date:** 14 September 2026  
 **Repository:** `mav3r1ckmediastudio-glitch/renegade-engine`  
-**Merged baseline:** PR #156 — Phase 7F native mesh blending parity  
-**Merged commit:** `3d305be84fedf73f5b3cfbb0522be2a732c1adca`  
-**Active repair branch:** `repair/phase7-integrated-audit`  
+**Programme branch:** `feature/character-ai-programme`  
+**Accepted Phase 7 baseline:** `d36918878776d0d91e0c39f88f6764a1926a6534`  
+**Accepted AI-01 checkpoint:** `674b1efc3e1b81e6f55bf080f539f29a0c466db4`  
+**Clean AI-02 implementation checkpoint:** `f808d38f11672fe75bfbbdeaec989bef7f43f32c`  
 **Wicked pin:** `3a800b7134aafe58461093c8abb2e274d4e64033`
 
-## Programme state
+## Current programme state
 
-**Phase 6 — Playable Core is accepted and closed.** PR #148 remains the accepted Phase 6 exit baseline, including native navigation, repaired terrain/rigid-body contact and the owner's successful packaged mini-game acceptance.
+The active programme is **Renegade Character & AI**.
 
-**Phase 7A–7F are merged, but Phase 7 is temporarily reopened for integrated acceptance repair.** The individual gates intentionally deferred owner testing until the end of the sequence. The resulting integrated audit found three real contract defects in 7B, 7D and 7E. They are repaired together on `repair/phase7-integrated-audit` so one exact branch can receive the final Windows CI and owner acceptance.
+Repository-native implementation authority:
 
-Do not begin Phase 8 from this work until that repair PR passes both CI and owner acceptance.
+- `docs/RENEGADE_CHARACTER_AI_SYSTEM_IMPLEMENTATION_AUTHORITY.md`
+- detailed gate/evidence handoff: `docs/AI_IMPLEMENTATION_HANDOFF.md`
 
-## Merged Phase 7 sequence
+The original private Codex AI workspace was lost before it reached GitHub. That failure changed the workflow: meaningful gate work is now checkpointed remotely so another engineer can continue from repository state alone.
 
-- **PR #151 — Phase 7A:** native `AnimationComponent` playback, pause/stop, scrub, range, speed/blend, loop/ping-pong/play-once and guarded root-motion controls.
-- **PR #152 — Phase 7B:** humanoid auto-map/manual correction, ResetPose and native baked retarget from WISCENE/FBX/GLTF/GLB/VRM/VRMA.
-- **PR #153 — Phase 7C:** native IK, humanoid look-at and expression authoring.
-- **PR #154 — Phase 7D:** native timeline/channel/sampler/keyframe authoring.
-- **PR #155 — Phase 7E:** HairParticle, ForceField, Video, Spline, Gaussian Splat and remaining Terrain specialist exposure.
-- **PR #156 — Phase 7F:** native mesh-blend material/global render-path exposure.
+## Gate status
 
-All of these remain part of the final owner smoke test; the repair does not replace accepted Wicked-native ownership with parallel Renegade runtimes.
+- **AI-01 — Character Foundation:** COMPLETE; focused Windows validation green at accepted checkpoint `674b1efc3e1b81e6f55bf080f539f29a0c466db4`.
+- **AI-02 — Profiles, Factions & Runtime State:** IMPLEMENTED; source/architecture audit repairs complete; clean implementation checkpoint `f808d38f...`; focused Windows validation pending.
+- **AI-03 — Perception & Memory:** NOT STARTED.
+- **AI-04 — Decision & Patrol:** NOT STARTED.
+- **AI-05 — Combat Intelligence:** NOT STARTED.
+- **AI-06 — Animation Integration:** NOT STARTED.
+- **AI-07 — Squads & Communication:** NOT STARTED.
+- **AI-08 — Cover:** NOT STARTED.
+- **AI-09 — Smart Objects:** NOT STARTED.
+- **AI-10 — Lua / Diagnostics / Performance / Packaged Hardening:** NOT STARTED.
 
-## Integrated repair now implemented
+## AI-01 accepted evidence
 
-### 7B — retarget Undo/Redo no longer depends on the source file
+Focused Windows run `34821199576` proved:
 
-The initial operation still imports the creator source and calls Wicked's native baked retarget. Once that succeeds, `RetargetHumanoidAnimationsCommand` captures the created native `AnimationComponent` state and every referenced baked `AnimationDataComponent` at their entity IDs.
+- x64 configure against pinned Wicked;
+- `RenegadeCharacterAiFoundationTests` Debug build and PASS;
+- `RenegadeCharacterAiSourceContract` PASS;
+- `RenegadeRuntime` Debug build;
+- `RenegadeStudio` Debug build including Character Inspector;
+- focused CTest 2/2 PASS.
 
-Undo removes the command-owned clips/data. Redo restores those snapshots directly and fails closed if an entity ID has been reused. Redo therefore does not reopen or reinterpret the source FBX/GLTF/GLB/VRM/VRMA/WISCENE.
+The temporary AI-01 validation workflow was removed after evidence was recorded.
 
-Changing the humanoid bone map invalidates the old native ragdoll body/joint cache so the current mapping can be rebuilt rather than continuing with bodies tied to the previous map.
+## AI-02 implemented scope
 
-### 7D — timeline keys/events now follow native-safe ordering
+AI-02 adds the semantics layer needed by later cognition without beginning perception/decision logic:
 
-Recording uses chronological insert-or-replace. Payload chunks move with their timestamps. Recording the same zero-payload event at the same time is a no-op. Event mutations reset Wicked's `next_event` traversal cursor.
+- layered Character tuning: Type -> Role -> Personality -> Skill -> Awareness -> explicit overrides;
+- versioned persisted Advanced AI overrides;
+- built-in and creator-defined faction registry plus relationship semantics;
+- transient Runtime Character records ordered/keyed by stable identity;
+- stable Patrol Route and Weapon reference resolution;
+- deterministic Runtime reset and failure cleanup;
+- bounded AI-02 diagnostics;
+- Character Inspector Skill/Awareness/Faction/effective profile and collapsed grouped ADVANCED AI controls;
+- focused AI-02 regression and source-contract tests.
 
-`CLOSE LOOP` skips Event channels and only closes value continuity. It can no longer manufacture an extra SOUND PLAY/STOP event at the seam.
+## AI-02 audit repairs
 
-SCRIPT PLAY/STOP has been removed from the creator picker and is rejected by the bridge because Renegade's accepted creator scripting authority is `.rscripts`, not Wicked `ScriptComponent`.
+Before validation the source/architecture audit found and repaired:
 
-A blank scene can create an undoable native clip through **NEW CLIP**.
+1. incomplete creator-faction registration;
+2. caller-dependent failure cleanup;
+3. malformed persisted profile enums silently falling back to valid-looking defaults;
+4. locale-sensitive/ambiguous advanced payload parsing;
+5. no repair path for corrupt Advanced AI metadata;
+6. text inputs committing one Undo entry per keystroke;
+7. invalid Advanced state showing fallback-looking controls;
+8. dead CUSTOM faction combo entry;
+9. insufficient corruption/recovery regressions;
+10. unsupported/missing owned Character schema markers being silently skipped;
+11. missing repository-native Character/AI authority documentation;
+12. accidental historical feature-matrix drift during evidence reconstruction.
 
-### 7E — Video now uses governed project ownership
+All twelve are repaired in the clean AI-02 implementation checkpoint. `FEATURE_MATRIX.csv` now differs from accepted AI-01 by only the intended `REN-AI-001` row.
 
-`ADOPT MP4` retains the selected creator source under `SourceAssets/Video`, imports an authoritative LP08 product under `Content/Video/*.rasset`, and binds the native `VideoComponent` through serializable StableId metadata instead of an absolute source path.
+## Architecture boundaries still in force
 
-Studio restores that binding after Scene open/project adoption/reload. Test Level restores it from the active project. Build dependency extraction adds required governed Video products to the closure. Packaged Runtime resolves the video through the content manifest and `.rasset` payload, not the creator machine's original MP4.
+- Studio = authoring only.
+- EngineBridge = stable semantics and command-backed creator APIs.
+- Runtime = transient execution/cognition.
+- Wicked = Scene/ECS/native `CharacterComponent`, physics/navigation/animation authority.
+- Stable Renegade IDs are persisted; raw ECS IDs are Runtime caches only.
+- No Recast/parallel navigation, second physics/scene loop, second event bus, Lua ordinary brain, transform-driven NPC movement or LLM Runtime dependency.
+- Faction relationship does not imply target perception or hidden position knowledge.
+- AI-03 must prove hidden transforms cannot refresh last-known target state.
+- Animation Set execution/materialization remains AI-06 and must reuse the accepted Phase 7 stack.
 
-Loop/transport remain native VideoComponent controls. Regression coverage explicitly protects governed StableId metadata through Loop Undo/Redo.
+## Pre-validation closeout
 
-## Current verification state
+- AI-02 implementation/audit work was squashed to `f808d38f11672fe75bfbbdeaec989bef7f43f32c`, directly parented by accepted AI-01.
+- The intended AI-02 diff contains 18 files.
+- No temporary validation workflow or corrupt recovery payload remains.
+- Top-level CMake includes `Tests/CharacterAiFoundation.cmake`, so AI-01/AI-02 test targets are in the Windows graph.
+- No expensive standard workflow has run for AI-02. The only programme-branch Actions run remains successful AI-01 focused run `34821199576`.
 
-The branch has been deliberately kept free of PR-triggered Windows CI while implementation and static audit are completed. Source inspection has confirmed:
+## Validation deliberately not run yet
 
-- the new Video service is present in EngineBridge ownership;
-- `CreateVideoInstance` usage matches the pinned Wicked bool-returning API;
-- resource dependency extraction handles video-only as well as texture+video scenes;
-- authoring and packaged Runtime each have explicit governed video restoration;
-- Studio uses the project/Scene lifecycle rather than per-frame video repair;
-- governed Video loop edits do not enter the filename/resource replacement path;
-- 7D timeline implementation and executable tests agree on chronological/event semantics; and
-- 7B source contracts require snapshot-based deterministic Redo rather than reopening source input.
+The repaired AI-02 candidate has **not** yet been claimed to compile or pass Windows tests. This is intentional: the owner requested complete pre-validation audit/repair/evidence closeout first.
 
-This is still **not an acceptance claim**. The branch must compile and run the Windows test suite, and the creator-facing behaviours need owner proof with real character/video content.
+The next validation is one focused branch-only Windows job that builds the AI-01 regression target, both AI-02 test executables, Runtime and Studio, then runs the AI-01/AI-02 source/executable tests. It must not trigger the planned full four-job Debug+Release integrated matrix reserved for AI-05.
 
-## Exact next action
+## Required next action
 
-Finish the documentation/evidence ledger on the repair branch, then open one PR targeting `main`. That PR is the intended expensive CI boundary.
-
-If the exact PR head is green, owner-test the artifact using [`docs/PHASE7_INTEGRATED_REPAIR_AUDIT.md`](docs/PHASE7_INTEGRATED_REPAIR_AUDIT.md):
-
-1. 7B real humanoid retarget -> Undo -> make original source unavailable -> Redo -> play -> save/reopen.
-2. 7D NEW CLIP -> record out-of-order keys -> SOUND PLAY event -> Close Loop -> prove no seam duplicate -> Undo/Redo -> save/reopen.
-3. 7E ADOPT MP4 -> transport/seek/Loop -> Loop Undo/Redo -> save/reopen after original MP4 is unavailable -> Test Level -> Build Game -> standalone playback.
-4. Quick regression smoke of 7A–7F Inspector surfaces, including 7C character controls, 7E Hair/Force/Spline/Gaussian/Terrain and 7F mesh blending.
-
-Do **not** merge on green CI alone. Any owner-visible failure remains a Phase 7 repair blocker.
-
-## Deliberate boundaries still in force
-
-- One future shared ZoneService for reusable trigger volumes; do not recreate audio-only/objective-only zones.
-- Ground navigation from Phase 6 remains accepted; flying/swimming NPC navigation requires a separate 3D movement/navigation design.
-- Player arms, weapons, combat and production enemy AI are outside this repair.
-- Creator-facing VSync control remains deferred.
-- Wicked Video audio-track playback is not claimed.
-- Timeline SCRIPT PLAY/STOP remains deferred until `.rscripts` has an explicit timeline adapter.
-- Commercial redistribution/release packaging clearance remains separate from engineering Build Game acceptance.
-
-## Canonical references
-
-- [`README.md`](README.md) — product/build entry point.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — current programme state and acceptance boundary.
-- [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) — long-range programme.
-- [`docs/PHASE7_INTEGRATED_REPAIR_AUDIT.md`](docs/PHASE7_INTEGRATED_REPAIR_AUDIT.md) — authoritative Phase 7 repair architecture and owner-test contract.
-- [`docs/PHASE6_CAPABILITY_AUDIT.md`](docs/PHASE6_CAPABILITY_AUDIT.md) — accepted Phase 6 exit contract.
-- [`docs/PHASE6_NATIVE_NAVIGATION_STAGING.md`](docs/PHASE6_NATIVE_NAVIGATION_STAGING.md) — accepted Phase 6 navigation architecture.
-- [`docs/FEATURE_MATRIX.csv`](docs/FEATURE_MATRIX.csv) — capability evidence ledger.
-- [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md) — implementation/handover rules.
+Run focused AI-02 Windows validation against the exact pre-validation branch head. Repair any failure before AI-03. Do not begin AI-03 until the exact AI-02 candidate is green.
