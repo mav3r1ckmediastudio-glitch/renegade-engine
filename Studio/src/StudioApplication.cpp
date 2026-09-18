@@ -11629,10 +11629,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 creatorModelImporter.destinationFolder,
                 destinationError))
         {
-            creatorImportThumbnailStatus.SetText(
-                "IMPORT BLOCKED // PREFLIGHT FAILED");
+            // Keep the actual actionable reason visible after dismissing the dialog.
+            creatorImportThumbnailStatus.SetText("IMPORT BLOCKED // " + destinationError);
+            creatorImportThumbnailStatus.SetTooltip(destinationError);
             studioChrome_.SetStatusText(
-                "IMPORT MODEL // DESTINATION PREFLIGHT FAILED");
+                "IMPORT MODEL // DESTINATION PREFLIGHT FAILED // " + destinationError);
             ShowStudioMessageBox(destinationError.c_str(), "Import Model");
             return;
         }

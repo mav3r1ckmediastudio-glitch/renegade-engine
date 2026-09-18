@@ -192,27 +192,39 @@ namespace
         }
 
         BOOL replaced = FALSE;
+        DWORD replaceError = ERROR_SUCCESS;
         if (destinationExists)
         {
-            replaced = ReplaceFileW(
-                destination.c_str(),
-                temporary.c_str(),
-                nullptr,
-                REPLACEFILE_WRITE_THROUGH,
-                nullptr,
-                nullptr);
+            // ReplaceFileW documents WRITE_THROUGH as unsupported. Error 1175
+            // leaves both named files intact; retry only while BOTH still exist.
+            // Never retry its 1176/1177 partial-rename failure modes.
+            for (unsigned attempt = 0; attempt < 6; ++attempt)
+            {
+                replaced = ReplaceFileW(destination.c_str(), temporary.c_str(),
+                    nullptr, 0, nullptr, nullptr);
+                if (replaced != FALSE)
+                    break;
+                replaceError = GetLastError();
+                if (replaceError != ERROR_UNABLE_TO_REMOVE_REPLACED || attempt == 5)
+                    break;
+                std::error_code stateError;
+                const bool bothIntact = fs::is_regular_file(destination, stateError) &&
+                    !stateError && fs::is_regular_file(temporary, stateError) && !stateError;
+                if (!bothIntact)
+                    break;
+                Sleep(15u * (attempt + 1u));
+            }
         }
         else
         {
-            replaced = MoveFileExW(
-                temporary.c_str(),
-                destination.c_str(),
+            replaced = MoveFileExW(temporary.c_str(), destination.c_str(),
                 MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+            if (replaced == FALSE)
+                replaceError = GetLastError();
         }
         if (replaced == FALSE)
         {
-            error = std::error_code(
-                static_cast<int>(GetLastError()),
+            error = std::error_code(static_cast<int>(replaceError),
                 std::system_category());
             return false;
         }

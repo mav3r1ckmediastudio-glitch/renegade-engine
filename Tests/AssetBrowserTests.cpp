@@ -159,14 +159,33 @@ int main()
         return Fail(root, "creator destination preflight performed retained-source work");
     }
 
-    const std::string duplicateError =
-        "The selected creator asset name is already in use in the destination folder.";
+    // Models and Characters can share a display name without sharing source folders.
+    fs::create_directories(root / "SourceAssets/Models/Mutant");
+    Touch(root / "Content/Models/Mutant.rasset");
+    creatorError.clear();
+    if (!creatorWorkflow.ValidateModelImportDestination(
+            root.generic_u8string(), creatorSource.generic_u8string(),
+            "Mutant", "Content/Characters", creatorError))
+        return Fail(root, "existing Model incorrectly blocked same-named Character");
+    if (fs::exists(root / "SourceAssets/Characters/Mutant"))
+        return Fail(root, "Character preflight mutated retained source namespace");
+    fs::create_directories(root / "SourceAssets/Characters/Mutant");
+    creatorError.clear();
+    if (creatorWorkflow.ValidateModelImportDestination(
+            root.generic_u8string(), creatorSource.generic_u8string(),
+            "Mutant", "Content/Characters", creatorError) ||
+        creatorError.find("SourceAssets/Characters/Mutant") == std::string::npos)
+        return Fail(root, "Character retained-source collision lacks exact reason");
+    const auto isCollision = [](const std::string& text) {
+        return text.find("Asset name '") != std::string::npos &&
+            text.find("already in use:") != std::string::npos;
+    };
     Touch(root / "Content/Models/full.rasset");
     creatorError.clear();
     if (creatorWorkflow.ValidateModelImportDestination(
             root.generic_u8string(), creatorSource.generic_u8string(),
             "full", "Content/Models", creatorError) ||
-        creatorError != duplicateError)
+        !isCollision(creatorError))
     {
         return Fail(root, "existing rasset was not rejected by creator preflight");
     }
@@ -176,7 +195,7 @@ int main()
     if (creatorWorkflow.ValidateModelImportDestination(
             root.generic_u8string(), creatorSource.generic_u8string(),
             "Bad Name", "Content/Models", creatorError) ||
-        creatorError != duplicateError)
+        !isCollision(creatorError))
     {
         return Fail(root, "sanitized creator name collision escaped preflight");
     }
@@ -186,7 +205,7 @@ int main()
     if (creatorWorkflow.ValidateModelImportDestination(
             root.generic_u8string(), creatorSource.generic_u8string(),
             "ProjectionOnly", "Content/Models", creatorError) ||
-        creatorError != duplicateError)
+        !isCollision(creatorError))
     {
         return Fail(root, "managed projection collision escaped creator preflight");
     }
@@ -196,7 +215,7 @@ int main()
     if (creatorWorkflow.ValidateModelImportDestination(
             root.generic_u8string(), creatorSource.generic_u8string(),
             "RetainedOnly", "Content/Models", creatorError) ||
-        creatorError != duplicateError)
+        !isCollision(creatorError))
     {
         return Fail(root, "retained-source collision escaped creator preflight");
     }

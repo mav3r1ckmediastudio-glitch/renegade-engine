@@ -670,13 +670,13 @@ namespace renegade::bridge
 
         bool ResolveCreatorModelDestinationPlan(
             const fs::path& root,
+            const fs::path& sourceModels,
             const fs::path& contentModels,
             const std::string& baseStem,
             const bool explicitName,
             CreatorModelDestinationPlan& plan,
             std::string& error)
         {
-            const fs::path sourceModels = root / "SourceAssets" / "Models";
             std::error_code ec;
             for (std::uint32_t suffix = 0; ; ++suffix)
             {
@@ -727,7 +727,12 @@ namespace renegade::bridge
                 }
                 if (explicitName)
                 {
-                    error = "The selected creator asset name is already in use in the destination folder.";
+                    error = "Asset name '" + candidateStem + "' is already in use: " +
+                        (snapshotExists ? snapshotDirectory :
+                            (assetExists ? assetPath :
+                                (projectionExists ? projectionPath : thumbnailPath)))
+                            .lexically_relative(root).generic_u8string() +
+                        ". Choose another asset name; existing files will not be overwritten.";
                     return false;
                 }
             }
@@ -974,9 +979,11 @@ namespace renegade::bridge
         const bool explicitName = !assetName.empty();
         const std::string baseStem = SanitizeStem(explicitName
             ? assetName : source.stem().generic_u8string());
+        const fs::path sourceModels = root / "SourceAssets" /
+            fs::u8path(destinationFolder).lexically_relative("Content");
         CreatorModelDestinationPlan plan;
         return ResolveCreatorModelDestinationPlan(
-            root, contentModels, baseStem, explicitName, plan, error);
+            root, sourceModels, contentModels, baseStem, explicitName, plan, error);
     }
 
     CreatorModelImportResult CreatorAssetWorkflowService::ImportModel(
@@ -1041,7 +1048,8 @@ namespace renegade::bridge
         if (!ResolveCreatorDestination(root, destinationFolder,
                 contentModels, result.error))
             return result;
-        const fs::path sourceModels = root / "SourceAssets" / "Models";
+        const fs::path sourceModels = root / "SourceAssets" /
+            fs::u8path(destinationFolder).lexically_relative("Content");
         fs::create_directories(sourceModels, ec);
         if (ec)
         {
@@ -1054,7 +1062,7 @@ namespace renegade::bridge
             ? assetName : source.stem().generic_u8string());
         CreatorModelDestinationPlan destinationPlan;
         if (!ResolveCreatorModelDestinationPlan(
-                root, contentModels, baseStem, explicitName,
+                root, sourceModels, contentModels, baseStem, explicitName,
                 destinationPlan, result.error))
             return result;
         std::string candidateStem = std::move(destinationPlan.candidateStem);

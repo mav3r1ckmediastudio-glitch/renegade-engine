@@ -92,12 +92,13 @@ namespace
 
     bool RequireCatalogueQuery(
         const renegade::bridge::AssetCatalogue& catalogue,
-        const renegade::bridge::StableId& assetId)
+        const renegade::bridge::StableId& assetId,
+        const std::string& expectedName)
     {
         using namespace renegade::bridge;
 
         AssetCatalogueQuery byName;
-        byName.text = "maya_transformed_skin";
+        byName.text = expectedName;
         const auto nameMatches = QueryAssetCatalogue(catalogue, byName);
         if (!Require(std::any_of(nameMatches.begin(), nameMatches.end(),
                 [&assetId](const auto& entry) { return entry.assetId == assetId; }),
@@ -240,6 +241,49 @@ namespace
                 "representative FBX did not retain skinned/animated metadata"))
             return false;
 
+        // A Model and Character with the same source stem must be distinct
+        // governed assets, with independent retained-source namespaces.
+        const std::string sharedStem = fs::u8path(imported.assetProjectRelativePath)
+            .stem().generic_u8string();
+        std::string characterPreflightError;
+        if (!Require(workflow.ValidateModelImportDestination(
+                projectRoot.generic_u8string(), animatedFixture.generic_u8string(),
+                sharedStem, "Content/Characters", characterPreflightError),
+                "existing Model blocked same-named Character: " + characterPreflightError))
+            return false;
+        ModelImportRequest characterRequest;
+        characterRequest.sourcePath = animatedFixture.generic_u8string();
+        characterRequest.assetPath = (projectRoot / "Intermediate" / "Imports" /
+            ".character-preview.wiscene").generic_u8string();
+        characterRequest.expectedFormat = ModelSourceFormat::Fbx;
+        auto preparedCharacter = importer.PrepareModelAsset(characterRequest);
+        if (!Require(preparedCharacter.IsReady(),
+                "same-named Character preview preparation failed: " +
+                    preparedCharacter.Result().error))
+            return false;
+        auto character = workflow.ImportModel(projectRoot.generic_u8string(), ProjectId,
+            animatedFixture.generic_u8string(), "{}", sharedStem,
+            "Content/Characters", std::move(preparedCharacter), {});
+        if (!Require(character.succeeded && character.catalogueVerified &&
+                    character.reopenedSceneVerified,
+                "same-named Character package/import/reopen failed: " + character.error) ||
+            !Require(character.stagedSourceProjectRelativePath.find(
+                    "SourceAssets/Characters/") == 0 &&
+                    character.assetProjectRelativePath.find("Content/Characters/") == 0,
+                "Character did not retain source and product in Character namespace") ||
+            !Require(fs::is_regular_file(projectRoot /
+                    fs::u8path(character.stagedSourceProjectRelativePath)) &&
+                    fs::is_regular_file(projectRoot /
+                    fs::u8path(character.assetProjectRelativePath)),
+                "Character source or product missing after import"))
+            return false;
+        auto reopenedCharacter = workflow.PrepareModelPlacement(
+            projectRoot.generic_u8string(), ProjectId, character.asset.assetId);
+        if (!Require(reopenedCharacter.IsReady() &&
+                    FindKeyedNativeAnimation(*reopenedCharacter.PeekScene()) !=
+                        wi::ecs::INVALID_ENTITY,
+                "same-named Character reopened without native animation keys"))
+            return false;
         if (!Require(importedPlacement.IsReady(),
                 "successful creator import did not return an in-memory placement handoff") ||
             !Require(importedPlacement.Result().assetId == imported.asset.assetId &&
@@ -307,7 +351,8 @@ namespace
                 "creator catalogue entry was not accepted as a placeable model") ||
             !Require(entry->creatorTags == std::vector<std::string>({"gate5", "hero"}),
                 "creator tags were not canonicalised/persisted") ||
-            !RequireCatalogueQuery(catalogue, productId))
+            !RequireCatalogueQuery(catalogue, productId,
+                    fs::u8path(imported.assetProjectRelativePath).stem().generic_u8string()))
             return false;
 
         const fs::path importedFolder = fs::u8path(
