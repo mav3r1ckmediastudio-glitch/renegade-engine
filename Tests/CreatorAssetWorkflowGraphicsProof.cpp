@@ -211,6 +211,7 @@ namespace
             "{}", {}, "Content/Models", std::move(retained), {},
             &importedPlacement);
         if (!Require(imported.succeeded && imported.catalogueVerified &&
+                imported.reopenedSceneVerified &&
                 imported.asset.succeeded &&
                 imported.asset.transaction.committed &&
                 imported.asset.committedProductVerified,

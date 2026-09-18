@@ -1135,6 +1135,18 @@ namespace renegade::bridge
         }
 
         result.catalogueVerified = true;
+        ReusableModelPlacementRequest reopenRequest;
+        reopenRequest.projectRoot = root.generic_u8string();
+        reopenRequest.projectId = projectId;
+        reopenRequest.assetId = result.asset.assetId;
+        auto reopened = ReusableAssetService().PrepareModelAssetPlacement(reopenRequest);
+        if (!reopened.IsReady())
+        {
+            result.error = "RAsset committed and indexed, but its serialized scene could not be reopened for placement: " +
+                reopened.Result().error;
+            return result;
+        }
+        result.reopenedSceneVerified = true;
         result.succeeded = true;
         result.error.clear();
         return result;

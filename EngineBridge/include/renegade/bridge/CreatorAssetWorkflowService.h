@@ -12,6 +12,7 @@ namespace renegade::bridge
     {
         bool succeeded = false;
         bool catalogueVerified = false;
+        bool reopenedSceneVerified = false;
         std::string stagedSourceProjectRelativePath;
         std::string assetProjectRelativePath;
         ReusableModelImportResult asset;
