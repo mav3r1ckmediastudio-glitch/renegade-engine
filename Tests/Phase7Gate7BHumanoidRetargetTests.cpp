@@ -88,6 +88,21 @@ int main()
             mapped.mapping.bones[static_cast<std::size_t>(HumanoidBone::LeftIndexProximal)] == entities[22],
             "left index proximal mapping mismatch")) return 1;
 
+    // External importer FBX sources can contain a named armature but no
+    // HumanoidComponent. Opt-in preparation must create the real native map.
+    std::string sourceMappingError;
+    if (!Require(renegade::bridge::EnsureHumanoidAnimationSourceMapping(
+            scene, sourceMappingError),
+            "complete external source armature should auto-map")) return 1;
+    if (!Require(renegade::bridge::IsHumanoidMappingValid(
+            renegade::bridge::CaptureHumanoidMapping(scene, rig)),
+            "source mapping must create a valid native HumanoidComponent")) return 1;
+    scene.humanoids.Remove(rig);
+    wi::scene::Scene incompleteSource;
+    if (!Require(!renegade::bridge::EnsureHumanoidAnimationSourceMapping(
+            incompleteSource, sourceMappingError) && !sourceMappingError.empty(),
+            "unmapped external source must fail explicitly")) return 1;
+
     renegade::bridge::CommandService commands;
     if (!Require(commands.Execute(
             std::make_unique<renegade::bridge::SetHumanoidMappingCommand>(
@@ -157,6 +172,50 @@ int main()
             "preview stop must rewind the native component")) return 1;
     if (!Require(authored.animations.GetComponent(authoredClip)->IsPlaying(),
             "preview transport must leave the separate authored scene unchanged")) return 1;
+
+    // A synthetic external humanoid carries native animation data (not a
+    // decorative UI clip). Exercise Wicked's baked retarget onto our rig.
+    wi::scene::Scene external;
+    const auto externalRig = wi::ecs::CreateEntity();
+    external.names.Create(externalRig).name = "External Mixamo Rig";
+    external.transforms.Create(externalRig);
+    auto& externalArmature = external.armatures.Create(externalRig);
+    wi::ecs::Entity externalHips = wi::ecs::INVALID_ENTITY;
+    for (const auto& bone : bones)
+    {
+        const auto entity = AddBone(external, externalArmature, externalRig, bone.first);
+        if (bone.second == HumanoidBone::Hips)
+            externalHips = entity;
+    }
+    if (!Require(renegade::bridge::EnsureHumanoidAnimationSourceMapping(
+            external, sourceMappingError),
+            "synthetic external source needs a native humanoid map")) return 1;
+    const auto sourceClip = wi::ecs::CreateEntity();
+    auto& sourceAnimation = external.animations.Create(sourceClip);
+    sourceAnimation.start = 0.0f;
+    sourceAnimation.end = 1.0f;
+    auto& channel = sourceAnimation.channels.emplace_back();
+    channel.target = externalHips;
+    channel.path = wi::scene::AnimationComponent::AnimationChannel::Path::ROTATION;
+    channel.samplerIndex = 0;
+    const auto animationData = wi::ecs::CreateEntity();
+    auto& data = external.animation_datas.Create(animationData);
+    data.keyframe_times = {0.0f, 1.0f};
+    data.keyframe_data = {0.0f, 0.0f, 0.0f, 1.0f,
+        0.0f, 0.0f, 0.0f, 1.0f};
+    sourceAnimation.samplers.emplace_back().data = animationData;
+    external.Component_Attach(animationData, sourceClip);
+    external.Component_Attach(sourceClip, externalRig);
+    const auto bakedEntity = scene.RetargetAnimation(rig, sourceClip, true, &external);
+    const auto* baked = scene.animations.GetComponent(bakedEntity);
+    if (!Require(bakedEntity != wi::ecs::INVALID_ENTITY && baked != nullptr &&
+            !baked->channels.empty() && !baked->samplers.empty(),
+            "Wicked must create a real baked native destination clip")) return 1;
+    const auto* bakedData = scene.animation_datas.GetComponent(baked->samplers.front().data);
+    if (!Require(bakedData != nullptr && bakedData->keyframe_times.size() == 2 &&
+            bakedData->keyframe_data.size() == 8 &&
+            baked->samplers.front().scene == nullptr,
+            "baked retarget must own animation keys without its external source scene")) return 1;
 
     std::cout << "Phase 7B humanoid mapping tests passed\n";
     return 0;

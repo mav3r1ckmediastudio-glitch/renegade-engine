@@ -282,6 +282,39 @@ namespace renegade::bridge
         return result;
     }
 
+    bool EnsureHumanoidAnimationSourceMapping(
+        wi::scene::Scene& scene,
+        std::string& error)
+    {
+        std::size_t usableRigs = 0;
+        for (std::size_t i = 0; i < scene.humanoids.GetCount(); ++i)
+            if (scene.humanoids[i].IsValid())
+                ++usableRigs;
+        for (std::size_t i = 0; i < scene.armatures.GetCount(); ++i)
+        {
+            const auto rig = scene.armatures.GetEntity(i);
+            if (IsHumanoidMappingValid(CaptureHumanoidMapping(scene, rig)))
+                continue;
+            const auto mapping = BuildAutoHumanoidMapping(scene, rig);
+            if (!mapping.valid)
+                continue;
+            SetHumanoidMappingCommand command(scene, rig, mapping.mapping);
+            if (!command.Execute())
+            {
+                error = "Could not attach the inferred humanoid mapping to the animation source.";
+                return false;
+            }
+            ++usableRigs;
+        }
+        if (usableRigs == 0)
+        {
+            error = "External animation has no complete humanoid armature; verify its bone names and required mappings.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
     SetHumanoidMappingCommand::SetHumanoidMappingCommand(
         wi::scene::Scene& scene,
         const wi::ecs::Entity rigEntity,
@@ -390,9 +423,10 @@ namespace renegade::bridge
     RetargetHumanoidAnimationsCommand::RetargetHumanoidAnimationsCommand(
         wi::scene::Scene& destinationScene,
         const wi::ecs::Entity destinationHumanoid,
-        std::string sourcePath)
+        std::string sourcePath,
+        const bool autoMapSource)
         : scene_(&destinationScene), destinationHumanoid_(destinationHumanoid),
-          sourcePath_(std::move(sourcePath))
+          sourcePath_(std::move(sourcePath)), autoMapSource_(autoMapSource)
     {
     }
 
@@ -447,6 +481,9 @@ namespace renegade::bridge
                 " source contains no native Wicked animation clips.";
             return false;
         }
+        if (autoMapSource_ &&
+            !EnsureHumanoidAnimationSourceMapping(sourceScene, result_.error))
+            return false;
         return true;
     }
 

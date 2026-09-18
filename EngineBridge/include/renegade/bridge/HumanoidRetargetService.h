@@ -96,6 +96,13 @@ namespace renegade::bridge
         const wi::scene::Scene& scene,
         wi::ecs::Entity rigEntity);
 
+    // Opt-in preparation for an external importer clip. Native authored
+    // humanoid mappings are retained; complete named armatures are mapped.
+    // Never silently invent missing required bones or alter editor history.
+    [[nodiscard]] bool EnsureHumanoidAnimationSourceMapping(
+        wi::scene::Scene& scene,
+        std::string& error);
+
     class SetHumanoidMappingCommand final : public ICommand
     {
     public:
@@ -144,7 +151,8 @@ namespace renegade::bridge
         RetargetHumanoidAnimationsCommand(
             wi::scene::Scene& destinationScene,
             wi::ecs::Entity destinationHumanoid,
-            std::string sourcePath);
+            std::string sourcePath,
+            bool autoMapSource = false);
 
         bool Execute() override;
         void Undo() override;
@@ -163,6 +171,7 @@ namespace renegade::bridge
         wi::scene::Scene* scene_ = nullptr;
         wi::ecs::Entity destinationHumanoid_ = wi::ecs::INVALID_ENTITY;
         std::string sourcePath_;
+        bool autoMapSource_ = false;
         HumanoidRetargetResult result_;
         bool prepared_ = false;
         std::vector<RetargetAnimationSnapshot> animationSnapshots_;
