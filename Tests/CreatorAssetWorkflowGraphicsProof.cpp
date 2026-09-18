@@ -2,12 +2,14 @@
 #include "renegade/bridge/AnimationService.h"
 #include "renegade/bridge/CreatorAssetActionPolicy.h"
 #include "renegade/bridge/ImportService.h"
+#include "renegade/bridge/HumanoidRetargetService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 
 #include <WickedEngine.h>
+#include <chrono>
 #include <Windows.h>
 
 #include <algorithm>
@@ -157,7 +159,8 @@ namespace
     bool RunLifecycle(
         const fs::path& projectRoot,
         const fs::path& staticFixture,
-        const fs::path& animatedFixture)
+        const fs::path& animatedFixture,
+        const fs::path& externalWalk)
     {
         using namespace renegade::bridge;
         if (!Require(PrepareProject(projectRoot), "project setup failed"))
@@ -261,9 +264,43 @@ namespace
                 "same-named Character preview preparation failed: " +
                     preparedCharacter.Result().error))
             return false;
+        std::size_t originalCharacterClipCount = 0;
+        if (!externalWalk.empty())
+        {
+            auto* destinationScene = preparedCharacter.PeekMutableScene();
+            if (!Require(destinationScene != nullptr, "prepared Character scene missing"))
+                return false;
+            originalCharacterClipCount = destinationScene->animations.GetCount();
+            std::string mappingError;
+            if (!Require(EnsureHumanoidAnimationSourceMapping(*destinationScene, mappingError),
+                    "external Character destination mapping failed: " + mappingError))
+                return false;
+            wi::ecs::Entity destination = wi::ecs::INVALID_ENTITY;
+            for (std::size_t i = 0; i < destinationScene->armatures.GetCount(); ++i)
+            {
+                const auto rig = destinationScene->armatures.GetEntity(i);
+                if (IsHumanoidMappingValid(CaptureHumanoidMapping(*destinationScene, rig)))
+                { destination = rig; break; }
+            }
+            if (!Require(destination != wi::ecs::INVALID_ENTITY,
+                    "external Character destination rig missing")) return false;
+            const auto retargetStarted = std::chrono::steady_clock::now();
+            RetargetHumanoidAnimationsCommand external(*destinationScene, destination,
+                externalWalk.generic_u8string(), true);
+            if (!Require(external.Execute(),
+                    "external walking retarget failed: " + external.Result().error)) return false;
+            std::cout << "EXTERNAL WALK RETARGET MS=" <<
+                std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now()-retargetStarted).count() << '\n';
+        }
+        const auto workflowStarted = std::chrono::steady_clock::now();
         auto character = workflow.ImportModel(projectRoot.generic_u8string(), ProjectId,
             animatedFixture.generic_u8string(), "{}", sharedStem,
             "Content/Characters", std::move(preparedCharacter), {});
+        if (!externalWalk.empty())
+            std::cout << "EXTERNAL CHARACTER GOVERNED PACKAGE MS=" <<
+                std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now()-workflowStarted).count() << '\n';
         if (!Require(character.succeeded && character.catalogueVerified &&
                     character.reopenedSceneVerified,
                 "same-named Character package/import/reopen failed: " + character.error) ||
@@ -279,6 +316,11 @@ namespace
             return false;
         auto reopenedCharacter = workflow.PrepareModelPlacement(
             projectRoot.generic_u8string(), ProjectId, character.asset.assetId);
+        if (!externalWalk.empty() &&
+            !Require(reopenedCharacter.IsReady() &&
+                     reopenedCharacter.PeekScene()->animations.GetCount() >
+                         originalCharacterClipCount,
+                     "external walk was not persisted in reopened Character")) return false;
         if (!Require(reopenedCharacter.IsReady() &&
                     FindKeyedNativeAnimation(*reopenedCharacter.PeekScene()) !=
                         wi::ecs::INVALID_ENTITY,
@@ -505,10 +547,10 @@ namespace
 
 int main(int argc, char** argv)
 {
-    if (argc != 4)
+    if (argc != 4 && argc != 5)
     {
         std::cerr << "Usage: RenegadeCreatorAssetWorkflowGraphicsProof "
-            << "<static.fbx> <skinned-animated.fbx> <output-directory>\n";
+            << "<static.fbx> <skinned-animated.fbx> <output-directory> [external-walk.fbx]\n";
         return 2;
     }
 
@@ -544,7 +586,8 @@ int main(int argc, char** argv)
             exitCode = 5;
         }
         else if (!RunLifecycle(outputRoot / "creator-asset-project",
-                staticFixture, animatedFixture))
+                staticFixture, animatedFixture,
+                argc == 5 ? fs::weakly_canonical(fs::u8path(argv[4])) : fs::path{}))
         {
             exitCode = 6;
         }

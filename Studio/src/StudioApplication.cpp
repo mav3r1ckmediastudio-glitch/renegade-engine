@@ -11909,9 +11909,17 @@ wi::eventhandler::Subscribe_Once(
                                 "Import Model");
                             return;
                         }
+                        const auto hierarchyStarted = std::chrono::steady_clock::now();
                         RefreshHierarchy();
+                        const auto hierarchyDone = std::chrono::steady_clock::now();
                         RefreshInspector();
+                        const auto inspectorDone = std::chrono::steady_clock::now();
                         RefreshStatus();
+                        wi::backlog::post("[IMPORT-PERF] handback hierarchy_ms=" +
+                            std::to_string(std::chrono::duration<double, std::milli>(
+                                hierarchyDone - hierarchyStarted).count()) +
+                            " inspector_ms=" + std::to_string(std::chrono::duration<double, std::milli>(
+                                inspectorDone - hierarchyDone).count()));
                         assetBrowserCurrentFolder_ = fs::u8path(
                             state->imported.assetProjectRelativePath)
                             .parent_path().lexically_normal().generic_u8string();
@@ -11926,6 +11934,7 @@ wi::eventhandler::Subscribe_Once(
                         }
                         studioChrome_.SetActiveBottomTab(0, true);
                         std::string browserError;
+                        const auto browserStarted = std::chrono::steady_clock::now();
                         if (!studioChrome_.RevealCreatorAsset(
                                 state->imported.asset.assetId,
                                 state->imported.assetProjectRelativePath,
@@ -11940,6 +11949,9 @@ wi::eventhandler::Subscribe_Once(
                                 "Import Model");
                             return;
                         }
+                        wi::backlog::post("[IMPORT-PERF] handback browser-reveal_ms=" +
+                            std::to_string(std::chrono::duration<double, std::milli>(
+                                std::chrono::steady_clock::now() - browserStarted).count()));
                         wi::backlog::post("[IMPORT-PERF] confirm-to-handback ms=" +
                             std::to_string(std::chrono::duration<double, std::milli>(
                                 std::chrono::steady_clock::now() - importConfirmStarted).count()) +
