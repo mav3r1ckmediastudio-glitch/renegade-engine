@@ -11938,6 +11938,8 @@ wi::eventhandler::Subscribe_Once(
                         if (!studioChrome_.RevealCreatorAsset(
                                 state->imported.asset.assetId,
                                 state->imported.assetProjectRelativePath,
+                                state->projectId,
+                                std::move(state->imported.verifiedCatalogue),
                                 browserError))
                         {
                             studioChrome_.SetStatusText(

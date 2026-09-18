@@ -16,6 +16,7 @@ namespace renegade::bridge
         std::string stagedSourceProjectRelativePath;
         std::string assetProjectRelativePath;
         ReusableModelImportResult asset;
+        AssetCatalogue verifiedCatalogue;
         std::string error;
     };
 

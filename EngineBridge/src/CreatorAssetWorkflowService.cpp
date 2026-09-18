@@ -1149,6 +1149,7 @@ namespace renegade::bridge
 
         wi::backlog::post("[IMPORT-PERF] workflow catalogue ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - catalogueStarted).count()));
         result.catalogueVerified = true;
+        result.verifiedCatalogue = std::move(catalogue);
         const auto placementStarted = std::chrono::steady_clock::now();
         ReusableModelPlacementRequest reopenRequest;
         reopenRequest.projectRoot = root.generic_u8string();

@@ -219,6 +219,8 @@ namespace renegade::studio
     bool CreatorAssetStudioChrome::RevealCreatorAsset(
         const bridge::StableId& assetId,
         const std::string& relativePath,
+        const bridge::StableId& projectId,
+        bridge::AssetCatalogue verifiedCatalogue,
         std::string& error)
     {
         if (!bridge::IsValidStableId(assetId) || relativePath.empty())
@@ -240,7 +242,20 @@ namespace renegade::studio
         creatorAssetStateCombo_.SetSelectedWithoutCallback(0);
         creatorAssetFormatCombo_.SetSelectedWithoutCallback(0);
         creatorAssetRigCombo_.SetSelectedWithoutCallback(0);
-        creatorAssetCatalogueDirty_ = true;
+        // ImportModel already verified this post-commit snapshot. Reuse it for
+        // the immediate reveal instead of scanning the same project again.
+        creatorAssetCatalogue_ = std::move(verifiedCatalogue);
+        if (auto* session = bridge::StudioSession::Current();
+            session != nullptr && session->Projects().HasProject())
+        {
+            creatorCatalogueProjectId_ = projectId;
+            creatorAssetCatalogueDirty_ =
+                session->Projects().CurrentProject().projectId != projectId;
+        }
+        else
+        {
+            creatorAssetCatalogueDirty_ = true;
+        }
         creatorAssetRefreshPending_ = false;
         RefreshCreatorAssetBrowser();
 
