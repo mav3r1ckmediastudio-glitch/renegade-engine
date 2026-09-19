@@ -1,5 +1,7 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
 
+#include <chrono>
+#include <WickedEngine.h>
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -670,13 +672,13 @@ namespace renegade::bridge
 
         bool ResolveCreatorModelDestinationPlan(
             const fs::path& root,
+            const fs::path& sourceModels,
             const fs::path& contentModels,
             const std::string& baseStem,
             const bool explicitName,
             CreatorModelDestinationPlan& plan,
             std::string& error)
         {
-            const fs::path sourceModels = root / "SourceAssets" / "Models";
             std::error_code ec;
             for (std::uint32_t suffix = 0; ; ++suffix)
             {
@@ -727,7 +729,12 @@ namespace renegade::bridge
                 }
                 if (explicitName)
                 {
-                    error = "The selected creator asset name is already in use in the destination folder.";
+                    error = "Asset name '" + candidateStem + "' is already in use: " +
+                        (snapshotExists ? snapshotDirectory :
+                            (assetExists ? assetPath :
+                                (projectionExists ? projectionPath : thumbnailPath)))
+                            .lexically_relative(root).generic_u8string() +
+                        ". Choose another asset name; existing files will not be overwritten.";
                     return false;
                 }
             }
@@ -832,14 +839,17 @@ namespace renegade::bridge
         // Keep the normal browser path cheap: use the last committed LC01
         // state first and only hash/refresh if the catalogue proves that state
         // contradicts a real file at a tombstoned path.
+        const auto snapshotStarted = std::chrono::steady_clock::now();
         AssetRegistry registry;
         if (!ExistingRegistryOrEmpty(root, projectId, registry, error))
             return false;
+        const auto registryDone = std::chrono::steady_clock::now();
 
         AssetCatalogueMetadataDocument metadata;
         if (!ReadAssetCatalogueMetadata(
                 root.generic_u8string(), projectId, metadata, error))
             return false;
+        const auto metadataDone = std::chrono::steady_clock::now();
 
         AssetRegistry projectionRegistry = registry;
         if (!BuildAssetCatalogue(root.generic_u8string(), projectId,
@@ -865,6 +875,7 @@ namespace renegade::bridge
             }
         }
 
+        const auto catalogueDone = std::chrono::steady_clock::now();
         // Keep the same missing-product/source projection as the recovery build.
         for (auto& entry : catalogue.entries)
         {
@@ -880,6 +891,15 @@ namespace renegade::bridge
             entry.sourceAvailable = source != projectionRegistry.records.end() &&
                 source->sourceAvailable;
         }
+        const auto projectedDone = std::chrono::steady_clock::now();
+        const auto elapsed = [](const auto a, const auto b)
+        { return std::chrono::duration<double, std::milli>(b - a).count(); };
+        wi::backlog::post("[IMPORT-PERF] catalogue phases registry_ms=" +
+            std::to_string(elapsed(snapshotStarted, registryDone)) +
+            " metadata_ms=" + std::to_string(elapsed(registryDone, metadataDone)) +
+            " build_ms=" + std::to_string(elapsed(metadataDone, catalogueDone)) +
+            " projection_ms=" + std::to_string(elapsed(catalogueDone, projectedDone)) +
+            " entries=" + std::to_string(catalogue.entries.size()));
         error.clear();
         return true;
     }
@@ -974,9 +994,11 @@ namespace renegade::bridge
         const bool explicitName = !assetName.empty();
         const std::string baseStem = SanitizeStem(explicitName
             ? assetName : source.stem().generic_u8string());
+        const fs::path sourceModels = root / "SourceAssets" /
+            fs::u8path(destinationFolder).lexically_relative("Content");
         CreatorModelDestinationPlan plan;
         return ResolveCreatorModelDestinationPlan(
-            root, contentModels, baseStem, explicitName, plan, error);
+            root, sourceModels, contentModels, baseStem, explicitName, plan, error);
     }
 
     CreatorModelImportResult CreatorAssetWorkflowService::ImportModel(
@@ -1041,7 +1063,8 @@ namespace renegade::bridge
         if (!ResolveCreatorDestination(root, destinationFolder,
                 contentModels, result.error))
             return result;
-        const fs::path sourceModels = root / "SourceAssets" / "Models";
+        const fs::path sourceModels = root / "SourceAssets" /
+            fs::u8path(destinationFolder).lexically_relative("Content");
         fs::create_directories(sourceModels, ec);
         if (ec)
         {
@@ -1054,7 +1077,7 @@ namespace renegade::bridge
             ? assetName : source.stem().generic_u8string());
         CreatorModelDestinationPlan destinationPlan;
         if (!ResolveCreatorModelDestinationPlan(
-                root, contentModels, baseStem, explicitName,
+                root, sourceModels, contentModels, baseStem, explicitName,
                 destinationPlan, result.error))
             return result;
         std::string candidateStem = std::move(destinationPlan.candidateStem);
@@ -1100,15 +1123,60 @@ namespace renegade::bridge
         request.settingsJson = settingsJson;
         request.expectedFormat = format;
         request.thumbnailPngBytes = std::move(thumbnailPngBytes);
+        const auto serviceStarted = std::chrono::steady_clock::now();
         result.asset = ReusableAssetService().ImportModelAsset(
             request, {}, std::move(preparedModel), preparedPlacement);
+        wi::backlog::post("[IMPORT-PERF] workflow core ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - serviceStarted).count()));
         if (!result.asset.succeeded)
         {
             result.error = result.asset.error;
-            cleanupSnapshot();
+            // The product transaction may have committed before a later
+            // reopen check failed. Its source is then part of the committed
+            // registry and must remain available for repair/reimport.
+            if (!result.asset.transaction.committed)
+                cleanupSnapshot();
             return result;
         }
 
+        const auto catalogueStarted = std::chrono::steady_clock::now();
+        AssetCatalogue catalogue;
+        if (!BuildCatalogueSnapshot(root.generic_u8string(), projectId,
+                catalogue, result.error))
+        {
+            result.error = "RAsset committed and reopened, but its Asset Browser catalogue could not be read: " +
+                result.error;
+            return result;
+        }
+        const auto product = std::find_if(catalogue.entries.begin(),
+            catalogue.entries.end(), [&result](const AssetCatalogueEntry& entry)
+            {
+                return entry.registered && entry.assetId == result.asset.assetId &&
+                    entry.projectRelativePath == result.assetProjectRelativePath &&
+                    entry.state == AssetCatalogueState::Current;
+            });
+        if (product == catalogue.entries.end())
+        {
+            result.error = "RAsset committed and reopened, but its current stable ID/path is absent from the Asset Browser catalogue.";
+            return result;
+        }
+
+        wi::backlog::post("[IMPORT-PERF] workflow catalogue ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - catalogueStarted).count()));
+        result.catalogueVerified = true;
+        result.verifiedCatalogue = std::move(catalogue);
+        const auto placementStarted = std::chrono::steady_clock::now();
+        ReusableModelPlacementRequest reopenRequest;
+        reopenRequest.projectRoot = root.generic_u8string();
+        reopenRequest.projectId = projectId;
+        reopenRequest.assetId = result.asset.assetId;
+        auto reopened = ReusableAssetService().PrepareModelAssetPlacement(reopenRequest);
+        if (!reopened.IsReady())
+        {
+            result.error = "RAsset committed and indexed, but its serialized scene could not be reopened for placement: " +
+                reopened.Result().error;
+            return result;
+        }
+        wi::backlog::post("[IMPORT-PERF] workflow reopened placement ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - placementStarted).count()));
+        result.reopenedSceneVerified = true;
         result.succeeded = true;
         result.error.clear();
         return result;

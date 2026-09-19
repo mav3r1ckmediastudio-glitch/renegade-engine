@@ -1,6 +1,8 @@
 #include "renegade/bridge/ReusableAssetService.h"
 #include "renegade/bridge/CreatorModelImportRecipe.h"
 
+#include <chrono>
+#include <WickedEngine.h>
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -443,35 +445,25 @@ namespace renegade::bridge
 
         ProjectDocumentWrite RegistryWrite(
             const fs::path& root,
-            const AssetRegistry& registry,
             const std::string& json)
         {
             ProjectDocumentWrite write;
             write.destinationPath = (root / AssetRegistryDocumentName).generic_u8string();
             write.content.assign(json.begin(), json.end());
-            const StableId projectId = registry.projectId;
-            write.validator = [projectId, json](const std::string& path, std::string& error)
+            // SerializeAssetRegistry already validates every record, project ID,
+            // provenance link and canonicalizes this exact JSON before this write.
+            // ProjectDocumentTransaction separately verifies staged/committed bytes
+            // and retains its journal, backup, rollback and recovery guarantees.
+            // Do not deserialize and reserialize the same registry on both passes.
+            write.validator = [json](const std::string& path, std::string& error)
             {
                 std::ifstream stream(fs::u8path(path), std::ios::binary);
                 const std::string staged{
                     std::istreambuf_iterator<char>(stream),
                     std::istreambuf_iterator<char>()};
-                if (!stream && !stream.eof())
+                if ((!stream && !stream.eof()) || staged != json)
                 {
-                    error = "Could not read staged asset registry.";
-                    return false;
-                }
-                AssetRegistry parsed;
-                if (!DeserializeAssetRegistry(staged, parsed, error) || parsed.projectId != projectId)
-                {
-                    if (error.empty()) error = "Staged asset registry belongs to another project.";
-                    return false;
-                }
-                std::string canonical;
-                if (!SerializeAssetRegistry(parsed, canonical, error) ||
-                    canonical != staged || staged != json)
-                {
-                    if (error.empty()) error = "Staged asset registry is not the requested canonical document.";
+                    error = "Staged asset registry differs from the validated canonical document.";
                     return false;
                 }
                 error.clear();
@@ -995,6 +987,7 @@ namespace renegade::bridge
         };
         cleanupTemporary();
 
+        const auto preparedStageStarted = std::chrono::steady_clock::now();
         ImportService importer;
         ModelImportRequest importRequest;
         importRequest.sourcePath = sourcePath.generic_u8string();
@@ -1051,6 +1044,8 @@ namespace renegade::bridge
             return result;
         }
 
+        wi::backlog::post("[IMPORT-PERF] service prepare recipe ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - preparedStageStarted).count()));
+        const auto saveStageStarted = std::chrono::steady_clock::now();
         result.import = importer.SavePreparedModelAsset(prepared);
         if (!result.import.succeeded)
         {
@@ -1065,6 +1060,8 @@ namespace renegade::bridge
             return result;
         }
 
+        wi::backlog::post("[IMPORT-PERF] service save metadata ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - saveStageStarted).count()));
+        const auto documentStageStarted = std::chrono::steady_clock::now();
         ReusableModelAssetDocument assetDocument;
         assetDocument.manifest.projectId = request.projectId;
         assetDocument.manifest.assetId = result.assetId;
@@ -1224,7 +1221,7 @@ namespace renegade::bridge
             };
             writes.push_back(std::move(thumbnailWrite));
         }
-        writes.push_back(RegistryWrite(root, registry, registryJson));
+        writes.push_back(RegistryWrite(root, registryJson));
         writes.push_back(MetadataWrite(root, metadata, metadataJson));
 
         PreparedReusableModelPlacement pendingPlacement;
@@ -1249,6 +1246,8 @@ namespace renegade::bridge
             pendingPlacement.result_.error.clear();
         }
 
+        wi::backlog::post("[IMPORT-PERF] service serialize prepare transaction ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - documentStageStarted).count()));
+        const auto transactionStarted = std::chrono::steady_clock::now();
         ProjectDocumentTransactionOptions transactionOptions;
         transactionOptions.transactionId = std::move(options.transactionId);
         transactionOptions.journalDirectory =
@@ -1258,6 +1257,20 @@ namespace renegade::bridge
         ProjectDocumentTransaction transaction;
         result.transaction = transaction.Execute(
             std::move(writes), std::move(transactionOptions));
+        wi::backlog::post("[IMPORT-PERF] service transaction ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - transactionStarted).count()) +
+            " prepare_ms=" + std::to_string(result.transaction.timings.prepareMs) +
+            " journal_ms=" + std::to_string(result.transaction.timings.journalMs) +
+            " staging_ms=" + std::to_string(result.transaction.timings.stagingMs) +
+            " commit_ms=" + std::to_string(result.transaction.timings.commitMs) +
+            " cleanup_ms=" + std::to_string(result.transaction.timings.cleanupMs));
+        for (const auto& documentTiming : result.transaction.timings.documents)
+        {
+            wi::backlog::post("[IMPORT-PERF] transaction document=" + documentTiming.filename +
+                " bytes=" + std::to_string(documentTiming.bytes) +
+                " staging_ms=" + std::to_string(documentTiming.stagingMs) +
+                " commit_ms=" + std::to_string(documentTiming.commitMs));
+        }
+        const auto reopenStarted = std::chrono::steady_clock::now();
         if (!result.transaction.success || !result.transaction.committed)
         {
             result.error = "Reusable model import transaction failed [" +
@@ -1265,8 +1278,27 @@ namespace renegade::bridge
             return result;
         }
 
+        // A committed transaction is not yet a usable creator asset. Reopen
+        // the physical product before the UI is allowed to report success.
+        ReusableModelAssetDocument reopened;
+        if (!ReadReusableModelAssetDocument(
+                assetPath.generic_u8string(), reopened, result.error) ||
+            reopened.manifest.projectId != request.projectId ||
+            reopened.manifest.assetId != result.assetId ||
+            reopened.manifest.sourceAssetId != result.sourceAssetId ||
+            reopened.manifest.payloadHash != assetDocument.manifest.payloadHash)
+        {
+            if (result.error.empty())
+                result.error = "Committed RAsset identity or payload changed on reopen.";
+            result.error = "RAsset was committed but could not be verified on reopen: " +
+                result.error;
+            return result;
+        }
+
         if (preparedPlacement != nullptr)
             *preparedPlacement = std::move(pendingPlacement);
+        wi::backlog::post("[IMPORT-PERF] service product reopen ms=" + std::to_string(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - reopenStarted).count()));
+        result.committedProductVerified = true;
         result.succeeded = true;
         result.error.clear();
         return result;

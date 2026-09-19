@@ -130,6 +130,7 @@ namespace renegade::bridge
     struct ReusableModelImportResult
     {
         bool succeeded = false;
+        bool committedProductVerified = false;
         StableId sourceAssetId;
         StableId assetId;
         std::string sourceProjectRelativePath;

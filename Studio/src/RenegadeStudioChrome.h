@@ -613,6 +613,8 @@ namespace renegade::studio
         [[nodiscard]] bool RevealCreatorAsset(
             const bridge::StableId& assetId,
             const std::string& relativePath,
+            const bridge::StableId& projectId,
+            bridge::AssetCatalogue verifiedCatalogue,
             std::string& error);
         [[nodiscard]] bool ConsumedPointerThisFrame() const noexcept;
 

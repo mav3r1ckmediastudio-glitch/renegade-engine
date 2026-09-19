@@ -6,7 +6,9 @@
 #include "renegade/bridge/ReusableAssetInstanceService.h"
 #include "renegade/bridge/StudioSession.h"
 
+#include <chrono>
 #include <cmath>
+#include <sstream>
 #include <cstdint>
 #include <filesystem>
 #include <iterator>
@@ -231,12 +233,20 @@ namespace
             job->context,
             [job](wi::jobsystem::JobArgs)
             {
+                const auto started = std::chrono::steady_clock::now();
                 renegade::bridge::CreatorAssetWorkflowService workflow;
                 job->prepared = workflow.PrepareModelPlacement(
                     job->projectRoot,
                     job->projectId,
                     job->assetId);
                 FillPreparationMetrics(*job);
+                const auto elapsed = std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - started).count();
+                std::ostringstream timing;
+                timing << "[IMPORT-PERF] placement prepare ms=" << elapsed
+                    << " ready=" << job->prepared.IsReady()
+                    << " error=" << job->error;
+                wi::backlog::post(timing.str());
             });
 
         if (announce)
@@ -415,11 +425,17 @@ namespace
             static_cast<long>(pointer.y),
             canvas,
             camera);
+        const auto pickStarted = std::chrono::steady_clock::now();
         const auto picked = wi::scene::Pick(
             ray,
             wi::enums::FILTER_OBJECT_ALL | wi::enums::FILTER_TERRAIN,
             ~DragPreviewLayer,
             scene);
+        const auto pickMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - pickStarted).count();
+        if (pickMs > 20.0)
+            wi::backlog::post("[IMPORT-PERF] drag surface-pick ms=" +
+                std::to_string(pickMs));
         if (picked.entity != wi::ecs::INVALID_ENTITY)
         {
             surface = picked.position;
@@ -473,6 +489,7 @@ namespace
         const XMFLOAT3& surface,
         std::string& error)
     {
+        const auto createStarted = std::chrono::steady_clock::now();
         const auto& project = session.Projects().CurrentProject();
         auto job = FindPreparation(project.projectId, assetId, assetPath);
         if (!job)
@@ -511,9 +528,20 @@ namespace
         scene.FindAllEntities(before);
         const std::size_t firstMaterialIndex = scene.materials.GetCount();
 
+        const auto instantiateStarted = std::chrono::steady_clock::now();
         const wi::ecs::Entity payloadRoot =
             scene.Instantiate(*templateScene, true);
+        const auto instantiateElapsed = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - instantiateStarted).count();
         auto created = CollectNewEntities(scene, before);
+        const auto enumerateElapsed = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - instantiateStarted).count();
+        std::ostringstream dragTiming;
+        dragTiming << "[IMPORT-PERF] placement instantiate ms=" << instantiateElapsed
+            << " enumerate-total ms=" << enumerateElapsed
+            << " scene-entities=" << before.size()
+            << " created=" << created.size();
+        wi::backlog::post(dragTiming.str());
         if (payloadRoot == wi::ecs::INVALID_ENTITY ||
             !scene.transforms.Contains(payloadRoot))
         {
@@ -610,6 +638,9 @@ namespace
             return false;
         }
 
+        wi::backlog::post("[IMPORT-PERF] placement full-preview-main-thread ms=" +
+            std::to_string(std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - createStarted).count()));
         error.clear();
         return true;
     }
@@ -768,6 +799,7 @@ namespace renegade::studio::detail
                 preview.firstMaterialIndex,
                 preview.assetPath);
             auto* placed = command.get();
+            const auto commitStarted = std::chrono::steady_clock::now();
             if (!session->Commands().Execute(std::move(command)))
             {
                 if (auto* name = scene.names.GetComponent(preview.wrapper))
@@ -778,6 +810,9 @@ namespace renegade::studio::detail
                 return wi::ecs::INVALID_ENTITY;
             }
 
+            wi::backlog::post("[IMPORT-PERF] placement command-commit ms=" +
+                std::to_string(std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - commitStarted).count()));
             const wi::ecs::Entity placedEntity = placed->PlacedEntity();
             preview = {};
             dragCancelledUntilRelease = false;

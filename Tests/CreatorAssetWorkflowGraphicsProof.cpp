@@ -1,12 +1,16 @@
 #include "renegade/bridge/CreatorAssetWorkflowService.h"
+#include "renegade/bridge/AnimationService.h"
+#include "renegade/bridge/AssetRegistryService.h"
 #include "renegade/bridge/CreatorAssetActionPolicy.h"
 #include "renegade/bridge/ImportService.h"
+#include "renegade/bridge/HumanoidRetargetService.h"
 #include "renegade/bridge/ProjectService.h"
 #include "renegade/bridge/SceneDocumentService.h"
 #include "renegade/bridge/SceneService.h"
 #include "renegade/bridge/SelectionService.h"
 
 #include <WickedEngine.h>
+#include <chrono>
 #include <Windows.h>
 
 #include <algorithm>
@@ -59,6 +63,23 @@ namespace
         return found == catalogue.entries.end() ? nullptr : &*found;
     }
 
+    wi::ecs::Entity FindKeyedNativeAnimation(const wi::scene::Scene& scene)
+    {
+        for (std::size_t i = 0; i < scene.animations.GetCount(); ++i)
+        {
+            const auto entity = scene.animations.GetEntity(i);
+            const auto& animation = scene.animations[i];
+            if (animation.channels.empty() || animation.samplers.empty()) continue;
+            for (const auto& sampler : animation.samplers)
+            {
+                const auto* data = scene.animation_datas.GetComponent(sampler.data);
+                if (data != nullptr && !data->keyframe_times.empty() &&
+                    !data->keyframe_data.empty()) return entity;
+            }
+        }
+        return wi::ecs::INVALID_ENTITY;
+    }
+
     bool PrepareProject(const fs::path& root)
     {
         std::error_code ec;
@@ -74,12 +95,13 @@ namespace
 
     bool RequireCatalogueQuery(
         const renegade::bridge::AssetCatalogue& catalogue,
-        const renegade::bridge::StableId& assetId)
+        const renegade::bridge::StableId& assetId,
+        const std::string& expectedName)
     {
         using namespace renegade::bridge;
 
         AssetCatalogueQuery byName;
-        byName.text = "maya_transformed_skin";
+        byName.text = expectedName;
         const auto nameMatches = QueryAssetCatalogue(catalogue, byName);
         if (!Require(std::any_of(nameMatches.begin(), nameMatches.end(),
                 [&assetId](const auto& entry) { return entry.assetId == assetId; }),
@@ -138,7 +160,8 @@ namespace
     bool RunLifecycle(
         const fs::path& projectRoot,
         const fs::path& staticFixture,
-        const fs::path& animatedFixture)
+        const fs::path& animatedFixture,
+        const fs::path& externalWalk)
     {
         using namespace renegade::bridge;
         if (!Require(PrepareProject(projectRoot), "project setup failed"))
@@ -210,8 +233,11 @@ namespace
             animatedFixture.generic_u8string(),
             "{}", {}, "Content/Models", std::move(retained), {},
             &importedPlacement);
-        if (!Require(imported.succeeded && imported.asset.succeeded &&
-                imported.asset.transaction.committed,
+        if (!Require(imported.succeeded && imported.catalogueVerified &&
+                imported.reopenedSceneVerified &&
+                imported.asset.succeeded &&
+                imported.asset.transaction.committed &&
+                imported.asset.committedProductVerified,
                 "creator FBX import failed: " + imported.error) ||
             !Require(imported.asset.modelMetadata.known &&
                     imported.asset.modelMetadata.skinned &&
@@ -219,6 +245,113 @@ namespace
                 "representative FBX did not retain skinned/animated metadata"))
             return false;
 
+        // A Model and Character with the same source stem must be distinct
+        // governed assets, with independent retained-source namespaces.
+        const std::string sharedStem = fs::u8path(imported.assetProjectRelativePath)
+            .stem().generic_u8string();
+        std::string characterPreflightError;
+        if (!Require(workflow.ValidateModelImportDestination(
+                projectRoot.generic_u8string(), animatedFixture.generic_u8string(),
+                sharedStem, "Content/Characters", characterPreflightError),
+                "existing Model blocked same-named Character: " + characterPreflightError))
+            return false;
+        ModelImportRequest characterRequest;
+        characterRequest.sourcePath = animatedFixture.generic_u8string();
+        characterRequest.assetPath = (projectRoot / "Intermediate" / "Imports" /
+            ".character-preview.wiscene").generic_u8string();
+        characterRequest.expectedFormat = ModelSourceFormat::Fbx;
+        auto preparedCharacter = importer.PrepareModelAsset(characterRequest);
+        if (!Require(preparedCharacter.IsReady(),
+                "same-named Character preview preparation failed: " +
+                    preparedCharacter.Result().error))
+            return false;
+        std::size_t originalCharacterClipCount = 0;
+        if (!externalWalk.empty())
+        {
+            auto* destinationScene = preparedCharacter.PeekMutableScene();
+            if (!Require(destinationScene != nullptr, "prepared Character scene missing"))
+                return false;
+            originalCharacterClipCount = destinationScene->animations.GetCount();
+            std::string mappingError;
+            if (!Require(EnsureHumanoidAnimationSourceMapping(*destinationScene, mappingError),
+                    "external Character destination mapping failed: " + mappingError))
+                return false;
+            wi::ecs::Entity destination = wi::ecs::INVALID_ENTITY;
+            for (std::size_t i = 0; i < destinationScene->armatures.GetCount(); ++i)
+            {
+                const auto rig = destinationScene->armatures.GetEntity(i);
+                if (IsHumanoidMappingValid(CaptureHumanoidMapping(*destinationScene, rig)))
+                { destination = rig; break; }
+            }
+            if (!Require(destination != wi::ecs::INVALID_ENTITY,
+                    "external Character destination rig missing")) return false;
+            const auto retargetStarted = std::chrono::steady_clock::now();
+            RetargetHumanoidAnimationsCommand external(*destinationScene, destination,
+                externalWalk.generic_u8string(), true);
+            if (!Require(external.Execute(),
+                    "external walking retarget failed: " + external.Result().error)) return false;
+            std::cout << "EXTERNAL WALK RETARGET MS=" <<
+                std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now()-retargetStarted).count() << '\n';
+        }
+        const auto workflowStarted = std::chrono::steady_clock::now();
+        auto character = workflow.ImportModel(projectRoot.generic_u8string(), ProjectId,
+            animatedFixture.generic_u8string(), "{}", sharedStem,
+            "Content/Characters", std::move(preparedCharacter), {});
+        if (!externalWalk.empty())
+            std::cout << "EXTERNAL CHARACTER GOVERNED PACKAGE MS=" <<
+                std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now()-workflowStarted).count() << '\n';
+        if (!Require(character.succeeded && character.catalogueVerified &&
+                    character.reopenedSceneVerified,
+                "same-named Character package/import/reopen failed: " + character.error) ||
+            !Require(character.stagedSourceProjectRelativePath.find(
+                    "SourceAssets/Characters/") == 0 &&
+                    character.assetProjectRelativePath.find("Content/Characters/") == 0,
+                "Character did not retain source and product in Character namespace") ||
+            !Require(fs::is_regular_file(projectRoot /
+                    fs::u8path(character.stagedSourceProjectRelativePath)) &&
+                    fs::is_regular_file(projectRoot /
+                    fs::u8path(character.assetProjectRelativePath)),
+                "Character source or product missing after import"))
+            return false;
+        // A Character import must not disturb the existing Model or either
+        // asset's source/product identities in the shared registry.
+        AssetRegistry verifiedRegistry;
+        std::string registryError;
+        if (!Require(ReadAssetRegistry(projectRoot.generic_u8string(), ProjectId,
+                verifiedRegistry, registryError),
+                "Character import left an unreadable registry: " + registryError))
+            return false;
+        const auto retainsAsset = [&verifiedRegistry](
+            const StableId& id, const std::string& path)
+        {
+            return std::any_of(verifiedRegistry.records.begin(),
+                verifiedRegistry.records.end(), [&](const AssetRecord& record)
+                { return record.assetId == id && record.projectRelativePath == path; });
+        };
+        if (!Require(retainsAsset(imported.asset.assetId,
+                    imported.assetProjectRelativePath) &&
+                retainsAsset(imported.asset.sourceAssetId,
+                    imported.stagedSourceProjectRelativePath) &&
+                retainsAsset(character.asset.assetId,
+                    character.assetProjectRelativePath) &&
+                retainsAsset(character.asset.sourceAssetId,
+                    character.stagedSourceProjectRelativePath),
+                "Character import discarded or reassigned existing Model/source identity"))
+            return false;
+        auto reopenedCharacter = workflow.PrepareModelPlacement(
+            projectRoot.generic_u8string(), ProjectId, character.asset.assetId);
+        if (!externalWalk.empty() &&
+            !Require(reopenedCharacter.IsReady() &&
+                     reopenedCharacter.PeekScene()->animations.GetCount() >
+                         originalCharacterClipCount,
+                     "external walk was not persisted in reopened Character")) return false;
+        if (!Require(reopenedCharacter.IsReady() &&
+                    FindKeyedNativeAnimation(*reopenedCharacter.PeekScene()) !=
+                        wi::ecs::INVALID_ENTITY,
+                "same-named Character reopened without native animation keys"))
+            return false;
         if (!Require(importedPlacement.IsReady(),
                 "successful creator import did not return an in-memory placement handoff") ||
             !Require(importedPlacement.Result().assetId == imported.asset.assetId &&
@@ -231,6 +364,11 @@ namespace
                     importedPlacement.Result().sceneSummary.objects > 0 &&
                     ImportService::MeasureModelBounds(*importedPlacement.PeekScene()).valid,
                 "in-memory placement handoff is not immediately measurable/placeable"))
+            return false;
+
+        if (!Require(FindKeyedNativeAnimation(*importedPlacement.PeekScene()) !=
+                wi::ecs::INVALID_ENTITY,
+                "reopened RAsset placement lost native animation channels or keyed data"))
             return false;
 
         const StableId sourceId = imported.asset.sourceAssetId;
@@ -281,7 +419,8 @@ namespace
                 "creator catalogue entry was not accepted as a placeable model") ||
             !Require(entry->creatorTags == std::vector<std::string>({"gate5", "hero"}),
                 "creator tags were not canonicalised/persisted") ||
-            !RequireCatalogueQuery(catalogue, productId))
+            !RequireCatalogueQuery(catalogue, productId,
+                    fs::u8path(imported.assetProjectRelativePath).stem().generic_u8string()))
             return false;
 
         const fs::path importedFolder = fs::u8path(
@@ -383,14 +522,22 @@ namespace
                 "WISCENE reopen did not preserve both RAsset placements"))
             return false;
 
+        const auto reopenedAnimation = FindKeyedNativeAnimation(scenes.GetScene());
+        if (!Require(reopenedAnimation != wi::ecs::INVALID_ENTITY &&
+                PlayAnimation(scenes.GetScene(), reopenedAnimation, true) &&
+                scenes.GetScene().animations.GetComponent(reopenedAnimation)->IsPlaying(),
+                "saved/reopened placed FBX lost usable native animation keys or playback"))
+            return false;
+
         // Real source change must be projected as Stale before explicit
         // stable-ID reimport, then return to Current without changing identity.
         fs::copy_file(staticFixture, retainedSource,
             fs::copy_options::overwrite_existing, ec);
         if (!Require(!ec, "could not update retained FBX source"))
             return false;
-        if (!Require(workflow.BuildCatalogue(
-                projectRoot.generic_u8string(), ProjectId, catalogue, error),
+        const bool refreshedStaleCatalogue = workflow.BuildCatalogue(
+            projectRoot.generic_u8string(), ProjectId, catalogue, error);
+        if (!Require(refreshedStaleCatalogue,
                 "stale catalogue refresh failed: " + error))
             return false;
         entry = FindEntry(catalogue, productId);
@@ -426,10 +573,10 @@ namespace
 
 int main(int argc, char** argv)
 {
-    if (argc != 4)
+    if (argc != 4 && argc != 5)
     {
         std::cerr << "Usage: RenegadeCreatorAssetWorkflowGraphicsProof "
-            << "<static.fbx> <skinned-animated.fbx> <output-directory>\n";
+            << "<static.fbx> <skinned-animated.fbx> <output-directory> [external-walk.fbx]\n";
         return 2;
     }
 
@@ -465,7 +612,8 @@ int main(int argc, char** argv)
             exitCode = 5;
         }
         else if (!RunLifecycle(outputRoot / "creator-asset-project",
-                staticFixture, animatedFixture))
+                staticFixture, animatedFixture,
+                argc == 5 ? fs::weakly_canonical(fs::u8path(argv[4])) : fs::path{}))
         {
             exitCode = 6;
         }

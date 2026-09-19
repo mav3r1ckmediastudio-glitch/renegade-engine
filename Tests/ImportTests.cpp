@@ -233,7 +233,10 @@ int main()
         const auto changedWeightEvidence =
             renegade::bridge::ImportService::SummarizeModelEvidence(*semanticTwin);
         if (evidence.rigAnimationFingerprint ==
-            changedWeightEvidence.rigAnimationFingerprint)
+                changedWeightEvidence.rigAnimationFingerprint ||
+            evidence.skinWeightFingerprint == changedWeightEvidence.skinWeightFingerprint ||
+            evidence.skinIndexFingerprint != changedWeightEvidence.skinIndexFingerprint ||
+            evidence.animationTimesFingerprint != changedWeightEvidence.animationTimesFingerprint)
         {
             return Fail("rig evidence did not reject a changed bone weight");
         }
@@ -249,7 +252,10 @@ int main()
         const auto changedBindEvidence =
             renegade::bridge::ImportService::SummarizeModelEvidence(*semanticTwin);
         if (evidence.rigAnimationFingerprint ==
-            changedBindEvidence.rigAnimationFingerprint)
+                changedBindEvidence.rigAnimationFingerprint ||
+            evidence.inverseBindFingerprint == changedBindEvidence.inverseBindFingerprint ||
+            evidence.boneHierarchyFingerprint != changedBindEvidence.boneHierarchyFingerprint ||
+            evidence.animationValuesFingerprint != changedBindEvidence.animationValuesFingerprint)
         {
             return Fail("rig evidence did not reject a changed inverse bind matrix");
         }
@@ -269,7 +275,10 @@ int main()
         const auto changedTargetEvidence =
             renegade::bridge::ImportService::SummarizeModelEvidence(*semanticTwin);
         if (evidence.rigAnimationFingerprint ==
-            changedTargetEvidence.rigAnimationFingerprint)
+                changedTargetEvidence.rigAnimationFingerprint ||
+            evidence.animationChannelFingerprint == changedTargetEvidence.animationChannelFingerprint ||
+            evidence.skinWeightFingerprint != changedTargetEvidence.skinWeightFingerprint ||
+            evidence.animationTimesFingerprint != changedTargetEvidence.animationTimesFingerprint)
         {
             return Fail("animation evidence did not reject a changed channel target");
         }
@@ -285,7 +294,10 @@ int main()
         const auto changedAnimationEvidence =
             renegade::bridge::ImportService::SummarizeModelEvidence(*semanticTwin);
         if (evidence.rigAnimationFingerprint ==
-            changedAnimationEvidence.rigAnimationFingerprint)
+                changedAnimationEvidence.rigAnimationFingerprint ||
+            evidence.animationValuesFingerprint == changedAnimationEvidence.animationValuesFingerprint ||
+            evidence.animationTimesFingerprint != changedAnimationEvidence.animationTimesFingerprint ||
+            evidence.skinWeightFingerprint != changedAnimationEvidence.skinWeightFingerprint)
         {
             return Fail("animation evidence did not reject changed keyframe data");
         }

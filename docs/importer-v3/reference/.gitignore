@@ -1,0 +1,3 @@
+# Approved design and historical handoff contain locally sourced material; never commit them.
+*
+!.gitignore

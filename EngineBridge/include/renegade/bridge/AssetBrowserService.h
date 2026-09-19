@@ -65,7 +65,8 @@ namespace renegade::bridge
     public:
         [[nodiscard]] AssetBrowserSnapshot Scan(
             const std::string& projectRoot,
-            const std::string& currentFolder = "Content") const;
+            const std::string& currentFolder = "Content",
+            bool includeFolderTree = true) const;
 
         [[nodiscard]] static AssetType Classify(
             const std::string& projectRelativePath) noexcept;

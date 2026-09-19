@@ -282,6 +282,56 @@ namespace renegade::bridge
         return result;
     }
 
+    std::size_t DisableDefaultHumanoidLookAt(wi::scene::Scene& scene) noexcept
+    {
+        std::size_t changed = 0;
+        for (std::size_t i = 0; i < scene.humanoids.GetCount(); ++i)
+        {
+            auto& humanoid = scene.humanoids[i];
+            if (!humanoid.IsLookAtEnabled() ||
+                humanoid.lookAtEntity != wi::ecs::INVALID_ENTITY ||
+                humanoid.lookAt.x != 0.0f || humanoid.lookAt.y != 0.0f ||
+                humanoid.lookAt.z != 0.0f)
+                continue;
+            humanoid.SetLookAtEnabled(false);
+            ++changed;
+        }
+        return changed;
+    }
+
+    bool EnsureHumanoidAnimationSourceMapping(
+        wi::scene::Scene& scene,
+        std::string& error)
+    {
+        std::size_t usableRigs = 0;
+        for (std::size_t i = 0; i < scene.humanoids.GetCount(); ++i)
+            if (scene.humanoids[i].IsValid())
+                ++usableRigs;
+        for (std::size_t i = 0; i < scene.armatures.GetCount(); ++i)
+        {
+            const auto rig = scene.armatures.GetEntity(i);
+            if (IsHumanoidMappingValid(CaptureHumanoidMapping(scene, rig)))
+                continue;
+            const auto mapping = BuildAutoHumanoidMapping(scene, rig);
+            if (!mapping.valid)
+                continue;
+            SetHumanoidMappingCommand command(scene, rig, mapping.mapping);
+            if (!command.Execute())
+            {
+                error = "Could not attach the inferred humanoid mapping to the animation source.";
+                return false;
+            }
+            ++usableRigs;
+        }
+        if (usableRigs == 0)
+        {
+            error = "External animation has no complete humanoid armature; verify its bone names and required mappings.";
+            return false;
+        }
+        error.clear();
+        return true;
+    }
+
     SetHumanoidMappingCommand::SetHumanoidMappingCommand(
         wi::scene::Scene& scene,
         const wi::ecs::Entity rigEntity,
@@ -390,9 +440,10 @@ namespace renegade::bridge
     RetargetHumanoidAnimationsCommand::RetargetHumanoidAnimationsCommand(
         wi::scene::Scene& destinationScene,
         const wi::ecs::Entity destinationHumanoid,
-        std::string sourcePath)
+        std::string sourcePath,
+        const bool autoMapSource)
         : scene_(&destinationScene), destinationHumanoid_(destinationHumanoid),
-          sourcePath_(std::move(sourcePath))
+          sourcePath_(std::move(sourcePath)), autoMapSource_(autoMapSource)
     {
     }
 
@@ -415,7 +466,18 @@ namespace renegade::bridge
             switch (result_.sourceFormat)
             {
             case HumanoidAnimationSourceFormat::Wiscene:
-                wi::scene::LoadModel(sourceScene, sourcePath_);
+                // LoadModel() also calls Scene::Update(), which requires a
+                // renderer and is unnecessary for loading animation data.
+                // A WISCENE source is already a native Scene archive.
+                {
+                    wi::Archive archive(sourcePath_, true);
+                    if (!archive.IsOpen())
+                    {
+                        result_.error = "Could not open native WISCENE animation source.";
+                        return false;
+                    }
+                    sourceScene.Serialize(archive);
+                }
                 break;
             case HumanoidAnimationSourceFormat::Fbx:
                 ImportModel_FBX(sourcePath_, sourceScene);
@@ -447,6 +509,9 @@ namespace renegade::bridge
                 " source contains no native Wicked animation clips.";
             return false;
         }
+        if (autoMapSource_ &&
+            !EnsureHumanoidAnimationSourceMapping(sourceScene, result_.error))
+            return false;
         return true;
     }
 

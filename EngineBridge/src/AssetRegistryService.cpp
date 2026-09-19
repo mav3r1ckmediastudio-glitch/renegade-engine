@@ -2,12 +2,22 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <mutex>
 #include <set>
 #include <utility>
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+#include <WickedEngine.h>
 
 #include "json.hpp"
 
@@ -994,6 +1004,21 @@ namespace renegade::bridge
         AssetRegistry& registry,
         std::string& error)
     {
+        using Clock = std::chrono::steady_clock;
+        const auto started = Clock::now();
+#ifdef _WIN32
+        const auto threadCpuMs = []() -> double
+        {
+            FILETIME created{}, exited{}, kernel{}, user{};
+            if (!GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user))
+                return -1.0;
+            ULARGE_INTEGER k{}, u{};
+            k.LowPart = kernel.dwLowDateTime; k.HighPart = kernel.dwHighDateTime;
+            u.LowPart = user.dwLowDateTime; u.HighPart = user.dwHighDateTime;
+            return static_cast<double>(k.QuadPart + u.QuadPart) / 10000.0;
+        };
+        const double cpuStart = threadCpuMs();
+#endif
         registry = {};
         if (!IsValidStableId(expectedProjectId))
         {
@@ -1005,6 +1030,7 @@ namespace renegade::bridge
                 projectRoot, documentPath, error))
             return false;
 
+        const auto resolvedAt = Clock::now();
         const std::filesystem::path path =
             std::filesystem::u8path(documentPath);
         std::error_code fileError;
@@ -1023,23 +1049,75 @@ namespace renegade::bridge
             return false;
         }
 
-        AssetRegistry parsed;
-        if (!DeserializeAssetRegistry(json, parsed, error))
-            return false;
-        if (parsed.projectId != expectedProjectId)
+        const auto readAt = Clock::now();
+        auto parsedAt = readAt;
+        auto canonicalAt = readAt;
+        bool cacheHit = false;
+        // Re-read the entire file on every call. Reuse a fully validated
+        // snapshot ONLY when its exact bytes, path and project ID match.
+        // This detects external edits and transaction rollback without relying
+        // on file timestamps, and serialises concurrent cache misses.
+        struct VerifiedSnapshot
         {
-            error = "Asset registry document belongs to another project.";
-            return false;
-        }
-        std::string canonical;
-        if (!SerializeAssetRegistry(parsed, canonical, error))
-            return false;
-        if (canonical != json)
+            std::string path;
+            StableId projectId;
+            std::string bytes;
+            AssetRegistry registry;
+        };
+        static std::mutex snapshotMutex;
+        static VerifiedSnapshot snapshot;
         {
-            error = "Asset registry document is valid but not canonical.";
-            return false;
+            const std::lock_guard<std::mutex> lock(snapshotMutex);
+            if (snapshot.path == documentPath &&
+                snapshot.projectId == expectedProjectId &&
+                snapshot.bytes == json)
+            {
+                registry = snapshot.registry;
+                cacheHit = true;
+            }
+            else
+            {
+                AssetRegistry parsed;
+                if (!DeserializeAssetRegistry(json, parsed, error))
+                    return false;
+                if (parsed.projectId != expectedProjectId)
+                {
+                    error = "Asset registry document belongs to another project.";
+                    return false;
+                }
+                parsedAt = Clock::now();
+                std::string canonical;
+                if (!SerializeAssetRegistry(parsed, canonical, error))
+                    return false;
+                if (canonical != json)
+                {
+                    error = "Asset registry document is valid but not canonical.";
+                    return false;
+                }
+                canonicalAt = Clock::now();
+                registry = std::move(parsed);
+                snapshot.path = documentPath;
+                snapshot.projectId = expectedProjectId;
+                snapshot.bytes = json;
+                snapshot.registry = registry;
+            }
         }
-        registry = std::move(parsed);
+        const auto finished = Clock::now();
+        const auto ms = [](const Clock::time_point begin, const Clock::time_point end)
+        { return std::chrono::duration<double, std::milli>(end - begin).count(); };
+        if (cacheHit || ms(started, finished) >= 50.0)
+        {
+            wi::backlog::post("[IMPORT-PERF] registry read detailed cache_hit=" +
+                std::to_string(cacheHit) + " resolve_ms=" +
+                std::to_string(ms(started, resolvedAt)) + " read_ms=" +
+                std::to_string(ms(resolvedAt, readAt)) + " parse_ms=" +
+                std::to_string(ms(readAt, parsedAt)) + " canonical_ms=" +
+                std::to_string(ms(parsedAt, canonicalAt)) +
+#ifdef _WIN32
+                " thread_cpu_ms=" + std::to_string(threadCpuMs() - cpuStart) +
+#endif
+                " total_ms=" + std::to_string(ms(started, finished)));
+        }
         error.clear();
         return true;
     }

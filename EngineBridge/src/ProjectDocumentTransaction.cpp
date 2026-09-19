@@ -192,27 +192,39 @@ namespace
         }
 
         BOOL replaced = FALSE;
+        DWORD replaceError = ERROR_SUCCESS;
         if (destinationExists)
         {
-            replaced = ReplaceFileW(
-                destination.c_str(),
-                temporary.c_str(),
-                nullptr,
-                REPLACEFILE_WRITE_THROUGH,
-                nullptr,
-                nullptr);
+            // ReplaceFileW documents WRITE_THROUGH as unsupported. Error 1175
+            // leaves both named files intact; retry only while BOTH still exist.
+            // Never retry its 1176/1177 partial-rename failure modes.
+            for (unsigned attempt = 0; attempt < 6; ++attempt)
+            {
+                replaced = ReplaceFileW(destination.c_str(), temporary.c_str(),
+                    nullptr, 0, nullptr, nullptr);
+                if (replaced != FALSE)
+                    break;
+                replaceError = GetLastError();
+                if (replaceError != ERROR_UNABLE_TO_REMOVE_REPLACED || attempt == 5)
+                    break;
+                std::error_code stateError;
+                const bool bothIntact = fs::is_regular_file(destination, stateError) &&
+                    !stateError && fs::is_regular_file(temporary, stateError) && !stateError;
+                if (!bothIntact)
+                    break;
+                Sleep(15u * (attempt + 1u));
+            }
         }
         else
         {
-            replaced = MoveFileExW(
-                temporary.c_str(),
-                destination.c_str(),
+            replaced = MoveFileExW(temporary.c_str(), destination.c_str(),
                 MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+            if (replaced == FALSE)
+                replaceError = GetLastError();
         }
         if (replaced == FALSE)
         {
-            error = std::error_code(
-                static_cast<int>(GetLastError()),
+            error = std::error_code(static_cast<int>(replaceError),
                 std::system_category());
             return false;
         }
@@ -974,6 +986,11 @@ namespace renegade::bridge
         std::vector<ProjectDocumentWrite> documents,
         ProjectDocumentTransactionOptions options) const
     {
+        const auto transactionStarted = std::chrono::steady_clock::now();
+        const auto elapsedMs = [](const auto start, const auto end)
+        {
+            return std::chrono::duration<double, std::milli>(end - start).count();
+        };
         ProjectDocumentTransactionResult result;
         result.transactionId = options.transactionId.empty()
             ? GenerateTransactionId()
@@ -1235,6 +1252,8 @@ namespace renegade::bridge
             return result;
         }
 
+        const auto prepareDone = std::chrono::steady_clock::now();
+        result.timings.prepareMs = elapsedMs(transactionStarted, prepareDone);
         std::error_code journalError;
         fs::path journalDirectory;
         if (options.journalDirectory.empty())
@@ -1321,6 +1340,8 @@ namespace renegade::bridge
             ProjectTransactionNoDocument,
             journalPath,
             "journal_created");
+        const auto journalDone = std::chrono::steady_clock::now();
+        result.timings.journalMs = elapsedMs(prepareDone, journalDone);
 
         auto failBeforeCommit = [&](const ProjectDocumentTransactionStage stage,
                                     const std::size_t index,
@@ -1358,10 +1379,15 @@ namespace renegade::bridge
                 std::move(message));
         };
 
+        result.timings.documents.resize(journal.documents.size());
         for (std::size_t index = 0;
             index < journal.documents.size(); ++index)
         {
             auto& document = journal.documents[index];
+            auto& timing = result.timings.documents[index];
+            timing.filename = document.destination.filename().generic_u8string();
+            timing.bytes = document.content.size();
+            const auto documentStageStarted = std::chrono::steady_clock::now();
             auto action = InvokeHook(
                 options,
                 ProjectDocumentTransactionStage::StageWrite,
@@ -1459,6 +1485,8 @@ namespace renegade::bridge
                     document.backup,
                     "previous_document_protected");
             }
+            timing.stagingMs = elapsedMs(documentStageStarted,
+                std::chrono::steady_clock::now());
         }
 
         journal.phase = JournalPhase::Prepared;
@@ -1471,6 +1499,9 @@ namespace renegade::bridge
                 std::move(operationError),
                 false);
         }
+
+        const auto stagingDone = std::chrono::steady_clock::now();
+        result.timings.stagingMs = elapsedMs(journalDone, stagingDone);
 
         auto failDuringCommit = [&](const ProjectDocumentTransactionStage stage,
                                     const std::size_t index,
@@ -1531,6 +1562,7 @@ namespace renegade::bridge
             index < journal.documents.size(); ++index)
         {
             auto& document = journal.documents[index];
+            const auto documentCommitStarted = std::chrono::steady_clock::now();
             journal.phase = JournalPhase::Committing;
             journal.activeIndex = index;
             if (!PersistJournal(journal, journalPath, operationError))
@@ -1635,6 +1667,8 @@ namespace renegade::bridge
                     std::move(operationError),
                     false);
             }
+            result.timings.documents[index].commitMs = elapsedMs(
+                documentCommitStarted, std::chrono::steady_clock::now());
         }
 
         journal.phase = JournalPhase::Committed;
@@ -1653,6 +1687,8 @@ namespace renegade::bridge
                 std::move(operationError));
         }
 
+        const auto commitDone = std::chrono::steady_clock::now();
+        result.timings.commitMs = elapsedMs(stagingDone, commitDone);
         result.success = true;
         result.committed = true;
         result.stage = ProjectDocumentTransactionStage::Complete;
@@ -1672,6 +1708,8 @@ namespace renegade::bridge
             result.message = "Project documents committed, but transaction "
                 "cleanup remains: " + cleanupError;
         }
+        result.timings.cleanupMs = elapsedMs(
+            commitDone, std::chrono::steady_clock::now());
         return result;
     }
 

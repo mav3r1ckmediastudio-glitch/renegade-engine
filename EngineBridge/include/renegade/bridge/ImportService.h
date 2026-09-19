@@ -70,6 +70,18 @@ namespace renegade::bridge
         std::size_t animationData = 0;
         std::size_t animationKeyframes = 0;
         std::size_t animationValues = 0;
+        std::uint64_t meshFingerprint = 0;
+        std::uint64_t skinIndexFingerprint = 0;
+        std::uint64_t skinWeightFingerprint = 0;
+        std::uint64_t armatureFingerprint = 0;
+        std::uint64_t boneHierarchyFingerprint = 0;
+        std::uint64_t inverseBindFingerprint = 0;
+        std::uint64_t animationFingerprint = 0;
+        std::uint64_t animationChannelFingerprint = 0;
+        std::uint64_t animationSamplerFingerprint = 0;
+        std::uint64_t animationDataFingerprint = 0;
+        std::uint64_t animationTimesFingerprint = 0;
+        std::uint64_t animationValuesFingerprint = 0;
         std::uint64_t rigAnimationFingerprint = 0;
 
         [[nodiscard]] bool HasRigOrAnimationPayload() const noexcept
@@ -97,6 +109,18 @@ namespace renegade::bridge
                 animationData == other.animationData &&
                 animationKeyframes == other.animationKeyframes &&
                 animationValues == other.animationValues &&
+                meshFingerprint == other.meshFingerprint &&
+                skinIndexFingerprint == other.skinIndexFingerprint &&
+                skinWeightFingerprint == other.skinWeightFingerprint &&
+                armatureFingerprint == other.armatureFingerprint &&
+                boneHierarchyFingerprint == other.boneHierarchyFingerprint &&
+                inverseBindFingerprint == other.inverseBindFingerprint &&
+                animationFingerprint == other.animationFingerprint &&
+                animationChannelFingerprint == other.animationChannelFingerprint &&
+                animationSamplerFingerprint == other.animationSamplerFingerprint &&
+                animationDataFingerprint == other.animationDataFingerprint &&
+                animationTimesFingerprint == other.animationTimesFingerprint &&
+                animationValuesFingerprint == other.animationValuesFingerprint &&
                 rigAnimationFingerprint == other.rigAnimationFingerprint;
         }
     };

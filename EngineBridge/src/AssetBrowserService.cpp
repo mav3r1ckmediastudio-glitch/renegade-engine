@@ -114,7 +114,8 @@ namespace renegade::bridge
 {
     AssetBrowserSnapshot AssetBrowserService::Scan(
         const std::string& projectRoot,
-        const std::string& currentFolder) const
+        const std::string& currentFolder,
+        const bool includeFolderTree) const
     {
         AssetBrowserSnapshot result;
         result.projectRoot = projectRoot;
@@ -179,43 +180,46 @@ namespace renegade::bridge
             result.folders.push_back(std::move(contentEntry));
 
             std::error_code iterationError;
-            fs::recursive_directory_iterator iterator(
-                canonicalContent,
-                fs::directory_options::skip_permission_denied,
-                iterationError);
-            const fs::recursive_directory_iterator end;
-            for (; iterator != end; iterator.increment(iterationError))
+            if (includeFolderTree)
             {
-                if (iterationError)
+                fs::recursive_directory_iterator iterator(
+                    canonicalContent,
+                    fs::directory_options::skip_permission_denied,
+                    iterationError);
+                const fs::recursive_directory_iterator end;
+                for (; iterator != end; iterator.increment(iterationError))
                 {
-                    iterationError.clear();
-                    continue;
-                }
-                if (!iterator->is_directory(iterationError))
-                {
-                    continue;
+                    if (iterationError)
+                    {
+                        iterationError.clear();
+                        continue;
+                    }
+                    if (!iterator->is_directory(iterationError))
+                    {
+                        continue;
+                    }
+
+                    const fs::path folder = iterator->path().lexically_normal();
+                    AssetFolderEntry entry;
+                    entry.name = folder.filename().u8string();
+                    entry.projectRelativePath =
+                        fs::relative(folder, root).generic_u8string();
+                    entry.depth = PathDepth(
+                        fs::relative(folder, canonicalContent));
+                    entry.selected = folder == selected;
+                    result.folders.push_back(std::move(entry));
                 }
 
-                const fs::path folder = iterator->path().lexically_normal();
-                AssetFolderEntry entry;
-                entry.name = folder.filename().u8string();
-                entry.projectRelativePath =
-                    fs::relative(folder, root).generic_u8string();
-                entry.depth = PathDepth(
-                    fs::relative(folder, canonicalContent));
-                entry.selected = folder == selected;
-                result.folders.push_back(std::move(entry));
+                std::sort(
+                    result.folders.begin() + 1,
+                    result.folders.end(),
+                    [](const AssetFolderEntry& left,
+                        const AssetFolderEntry& right)
+                    {
+                        return Lower(left.projectRelativePath) <
+                            Lower(right.projectRelativePath);
+                    });
             }
-
-            std::sort(
-                result.folders.begin() + 1,
-                result.folders.end(),
-                [](const AssetFolderEntry& left,
-                    const AssetFolderEntry& right)
-                {
-                    return Lower(left.projectRelativePath) <
-                        Lower(right.projectRelativePath);
-                });
 
             fs::directory_iterator childIterator(
                 selected,
