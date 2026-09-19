@@ -11869,11 +11869,15 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                         std::to_string(state->materialsSeconds * 1000.0) +
                         " package ms=" + std::to_string(state->packageSeconds * 1000.0));
 }
+const auto packageFinished = std::chrono::steady_clock::now();
 wi::eventhandler::Subscribe_Once(
                     wi::eventhandler::EVENT_THREAD_SAFE_POINT,
-                    [this, state, importConfirmStarted](std::uint64_t)
+                    [this, state, importConfirmStarted, packageFinished](std::uint64_t)
                     {
                         const auto handbackStarted = std::chrono::steady_clock::now();
+                        wi::backlog::post("[IMPORT-PERF] post-package handback wait ms=" +
+                            std::to_string(std::chrono::duration<double, std::milli>(
+                                handbackStarted - packageFinished).count()));
                         importScalePanel_.SetEnabled(true);
                         importScalePanel_.SetVisible(false);
                         importScalePanel_.SetPreviewScene(nullptr);
