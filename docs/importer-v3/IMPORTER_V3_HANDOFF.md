@@ -1,6 +1,15 @@
-# Importer v3 — live local engineering handoff
+# Importer v3 — live engineering handoff
 
-**Status at setup (18 September 2026): PREPARED ONLY; no importer implementation has been started in this branch.** This file must be updated by Codex after every meaningful implementation checkpoint. A different assistant should read this file, inspect `git log`/`git status` and source, and continue the existing work—not restart it.
+## UI fidelity programme checkpoint — 20 September 2026
+
+- Active branch: `feature/importer-v3-native-ui-fidelity`; remote: `https://github.com/mav3r1ckmediastudio-glitch/renegade-engine.git`. The branch was created from `main` at `2c9c92195f72d868066177c5136d891860fa4873` (PR #171 merge). The current checkpoint SHA is recorded in the corresponding PR and must be refreshed after every remote commit.
+- Visual authority inspected locally but deliberately not committed: the approved interactive HTML and the two supplied images showing the approved shell and existing native importer. The target is a preview-first native workspace with a dark, restrained studio floor; a fixed 1.82 m mannequin; a resizable, internally scrolling inspector; and native stage/playback/navigation controls. The HTML's simulated animation is not used as an implementation source.
+- Implemented in this checkpoint: authored-scene marker overlays are suppressed whenever the importer is active, preventing the stray `AUDIO` marker from appearing in the transient preview; the existing native grid is retained but uses neutral, low-contrast studio-floor values in importer mode. The existing `Studio/assets/creator-human-reference.png` and CMake copy step are already present; a fresh linked Studio visual check is still required to prove the fixed mannequin renders from the exact build.
+- Changed files: `Studio/src/MarkerIconOverlay.cpp`, `Studio/src/StudioApplication.cpp`, this handoff, and root `HANDOFF.md`.
+- Verification pending: source diff check, focused Windows Release build, exact native visual inspection, and the existing Character/external-animation save/reopen/Test Game acceptance. No importer persistence, retargeting, or Wicked pin behaviour was changed in this checkpoint.
+- Next concrete action: create the native importer presentation shell (header/breadcrumb treatment, stage-card typography, preview controls and persistent playback/navigation strip) over the existing real widgets, then build and inspect it before proceeding to per-stage content polish.
+
+**Historical status below:** earlier local-branch notes are retained for provenance only. This file must be updated by Codex after every meaningful implementation checkpoint. A different assistant should read this file, inspect `git log`/`git status` and source, and continue the existing work—not restart it.
 
 ## Local branch and starting evidence
 
