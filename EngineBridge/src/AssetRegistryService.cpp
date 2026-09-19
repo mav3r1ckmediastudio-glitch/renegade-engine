@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <mutex>
 #include <set>
 #include <utility>
 
@@ -1049,29 +1050,65 @@ namespace renegade::bridge
         }
 
         const auto readAt = Clock::now();
-        AssetRegistry parsed;
-        if (!DeserializeAssetRegistry(json, parsed, error))
-            return false;
-        if (parsed.projectId != expectedProjectId)
+        auto parsedAt = readAt;
+        auto canonicalAt = readAt;
+        bool cacheHit = false;
+        // Re-read the entire file on every call. Reuse a fully validated
+        // snapshot ONLY when its exact bytes, path and project ID match.
+        // This detects external edits and transaction rollback without relying
+        // on file timestamps, and serialises concurrent cache misses.
+        struct VerifiedSnapshot
         {
-            error = "Asset registry document belongs to another project.";
-            return false;
-        }
-        const auto parsedAt = Clock::now();
-        std::string canonical;
-        if (!SerializeAssetRegistry(parsed, canonical, error))
-            return false;
-        if (canonical != json)
+            std::string path;
+            StableId projectId;
+            std::string bytes;
+            AssetRegistry registry;
+        };
+        static std::mutex snapshotMutex;
+        static VerifiedSnapshot snapshot;
         {
-            error = "Asset registry document is valid but not canonical.";
-            return false;
+            const std::lock_guard<std::mutex> lock(snapshotMutex);
+            if (snapshot.path == documentPath &&
+                snapshot.projectId == expectedProjectId &&
+                snapshot.bytes == json)
+            {
+                registry = snapshot.registry;
+                cacheHit = true;
+            }
+            else
+            {
+                AssetRegistry parsed;
+                if (!DeserializeAssetRegistry(json, parsed, error))
+                    return false;
+                if (parsed.projectId != expectedProjectId)
+                {
+                    error = "Asset registry document belongs to another project.";
+                    return false;
+                }
+                parsedAt = Clock::now();
+                std::string canonical;
+                if (!SerializeAssetRegistry(parsed, canonical, error))
+                    return false;
+                if (canonical != json)
+                {
+                    error = "Asset registry document is valid but not canonical.";
+                    return false;
+                }
+                canonicalAt = Clock::now();
+                registry = std::move(parsed);
+                snapshot.path = documentPath;
+                snapshot.projectId = expectedProjectId;
+                snapshot.bytes = json;
+                snapshot.registry = registry;
+            }
         }
-        const auto canonicalAt = Clock::now();
+        const auto finished = Clock::now();
         const auto ms = [](const Clock::time_point begin, const Clock::time_point end)
         { return std::chrono::duration<double, std::milli>(end - begin).count(); };
-        if (ms(started, canonicalAt) >= 50.0)
+        if (cacheHit || ms(started, finished) >= 50.0)
         {
-            wi::backlog::post("[IMPORT-PERF] registry read detailed resolve_ms=" +
+            wi::backlog::post("[IMPORT-PERF] registry read detailed cache_hit=" +
+                std::to_string(cacheHit) + " resolve_ms=" +
                 std::to_string(ms(started, resolvedAt)) + " read_ms=" +
                 std::to_string(ms(resolvedAt, readAt)) + " parse_ms=" +
                 std::to_string(ms(readAt, parsedAt)) + " canonical_ms=" +
@@ -1079,9 +1116,8 @@ namespace renegade::bridge
 #ifdef _WIN32
                 " thread_cpu_ms=" + std::to_string(threadCpuMs() - cpuStart) +
 #endif
-                " total_ms=" + std::to_string(ms(started, canonicalAt)));
+                " total_ms=" + std::to_string(ms(started, finished)));
         }
-        registry = std::move(parsed);
         error.clear();
         return true;
     }

@@ -1,4 +1,7 @@
 #include <algorithm>
+#include <vector>
+#include <thread>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -158,6 +161,50 @@ int main()
         "reloaded registry was not byte-identical and canonical");
     Check(!HasTransactionArtifacts(root),
         "successful registry write left transaction artifacts");
+    // A matching cache hit preserves identity; a same-length external edit
+    // must invalidate that snapshot regardless of timestamp granularity.
+    AssetRegistry cachedRead;
+    Check(ReadAssetRegistry(root.generic_u8string(), projectId, cachedRead, error) &&
+            ContainsSceneHash(cachedRead, "fnv1a64:2222222222222222"),
+        "repeated registry read did not preserve verified contents");
+    std::string externallyEdited = originalBytes;
+    const auto hashPosition = externallyEdited.find("fnv1a64:2222222222222222");
+    Check(hashPosition != std::string::npos,
+        "cache-change fixture did not contain original scene hash");
+    if (hashPosition != std::string::npos)
+    {
+        externallyEdited.replace(hashPosition, 24, "fnv1a64:5555555555555555");
+        Check(externallyEdited.size() == originalBytes.size(),
+            "external-edit fixture changed registry file length");
+        WriteText(fs::u8path(documentPath), externallyEdited);
+        // Several placement workers may request the same updated registry at
+        // once; all must receive the same fully validated snapshot.
+        std::atomic<int> concurrentValidReads{0};
+        std::vector<std::thread> readers;
+        for (int index = 0; index < 4; ++index)
+        {
+            readers.emplace_back([&]()
+            {
+                AssetRegistry concurrent;
+                std::string concurrentError;
+                if (ReadAssetRegistry(root.generic_u8string(), projectId,
+                        concurrent, concurrentError) &&
+                    ContainsSceneHash(concurrent, "fnv1a64:5555555555555555"))
+                    ++concurrentValidReads;
+            });
+        }
+        for (auto& reader : readers)
+            reader.join();
+        Check(concurrentValidReads == 4,
+            "concurrent registry reads returned stale or invalid snapshots");
+        Check(ReadAssetRegistry(root.generic_u8string(), projectId, cachedRead, error) &&
+                ContainsSceneHash(cachedRead, "fnv1a64:5555555555555555"),
+            "same-length external edit reused a stale validated registry");
+        WriteText(fs::u8path(documentPath), originalBytes);
+        Check(ReadAssetRegistry(root.generic_u8string(), projectId, cachedRead, error) &&
+                ContainsSceneHash(cachedRead, "fnv1a64:2222222222222222"),
+            "restored registry bytes did not invalidate edited snapshot");
+    }
 
     AssetRegistryPersistenceOptions noOpOptions;
     noOpOptions.transactionId = "lc01-noop";
