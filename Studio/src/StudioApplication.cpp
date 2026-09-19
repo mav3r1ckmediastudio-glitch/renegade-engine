@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 140661)
-Total output lines: 13435
-
 #include "DiagnosticInputFrame.h"
 #include "StudioApplication.h"
 #include "StudioUserPreferences.h"
@@ -1680,22 +1677,12 @@ namespace renegade::studio
                 ? CreatorImportStageHeight + 0.02f
                 : gridPlaneHeight);
 
-        // The authored editor uses ice-blue interaction lines. Importer
-        // preview keeps the same native grid pass, but deliberately reduces
-        // it to a neutral studio floor so it cannot read as level-editing UI.
-        const bool importerPreview = creatorModelImporter.active;
-        constants.minorColor = importerPreview
-            ? XMFLOAT4(0.34f, 0.46f, 0.52f, 0.10f)
-            : XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
-        constants.majorColor = importerPreview
-            ? XMFLOAT4(0.42f, 0.57f, 0.63f, 0.18f)
-            : XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
-        constants.axisColorX = importerPreview
-            ? XMFLOAT4(0.42f, 0.57f, 0.63f, 0.18f)
-            : XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
-        constants.axisColorZ = importerPreview
-            ? XMFLOAT4(0.42f, 0.57f, 0.63f, 0.18f)
-            : XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
+        // Ice-blue is the approved interaction colour. Unlike Wicked's helper,
+        // every line including the two axes is Renegade's to choose.
+        constants.minorColor = XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
+        constants.majorColor = XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
+        constants.axisColorX = XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
+        constants.axisColorZ = XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
 
         // Fade start/end, base spacing, master opacity. The fade window keeps
         // the horizon from turning into an aliased smear.
@@ -4660,7 +4647,3660 @@ namespace renegade::studio
             RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationPlay.Create("Play Native Import Animation");
-     …40661 tokens truncated…nst auto* transform = scene.transforms.GetComponent(entity);
+        creatorImportAnimationPlay.SetText("PLAY PREVIEW");
+        creatorImportAnimationPlay.OnClick([](const wi::gui::EventArgs&)
+        {
+            PreviewSelectedCreatorImportAnimation(true, false);
+        });
+        creatorImportAnimationPause.Create("Pause Native Import Animation");
+        creatorImportAnimationPause.SetText("PAUSE");
+        creatorImportAnimationPause.OnClick([](const wi::gui::EventArgs&)
+        {
+            PreviewSelectedCreatorImportAnimation(false, true);
+        });
+        creatorImportAnimationStop.Create("Stop Native Import Animation");
+        creatorImportAnimationStop.SetText("STOP");
+        creatorImportAnimationStop.OnClick([](const wi::gui::EventArgs&)
+        {
+            PreviewSelectedCreatorImportAnimation(false, false);
+        });
+        creatorImportExternalAnimationAdd.Create("Queue External Character Animation");
+        creatorImportExternalAnimationAdd.SetText("ADD EXTERNAL FBX / GLTF / GLB...");
+        creatorImportExternalAnimationAdd.OnClick([](const wi::gui::EventArgs&)
+        {
+            if (!creatorModelImporter.active || !creatorModelImporter.importAsCharacter ||
+                !creatorModelImporter.previewScene.IsValid() ||
+                creatorModelImporter.committing)
+                return;
+            const auto previewIdentity = creatorModelImporter.previewScene;
+            const auto sourceIdentity = creatorModelImporter.sourcePath;
+            wi::helper::FileDialogParams params;
+            params.type = wi::helper::FileDialogParams::OPEN;
+            params.description = "External humanoid animation (FBX, GLTF, GLB, WISCENE, VRM, VRMA)";
+            params.extensions = {"fbx", "gltf", "glb", "wiscene", "vrm", "vrma"};
+            wi::helper::FileDialog(params,
+                [previewIdentity, sourceIdentity](const std::string& path)
+                {
+                    if (path.empty())
+                        return;
+                    wi::eventhandler::Subscribe_Once(
+                        wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                        [previewIdentity, sourceIdentity, path](std::uint64_t)
+                        {
+                            if (!creatorModelImporter.active ||
+                                creatorModelImporter.committing ||
+                                creatorModelImporter.previewScene.get() != previewIdentity.get() ||
+                                creatorModelImporter.sourcePath != sourceIdentity)
+                                return;
+                            QueueCreatorExternalAnimation(path);
+                        });
+                });
+        });
+        creatorImportExternalAnimationRemove.Create("Remove Last External Animation Source");
+        creatorImportExternalAnimationRemove.SetText("REMOVE LAST SOURCE");
+        creatorImportExternalAnimationRemove.OnClick([](const wi::gui::EventArgs&)
+        {
+            RemoveLastCreatorExternalAnimation();
+        });
+        creatorImportExternalAnimationStatus.Create("");
+        creatorImportExternalAnimationStatus.SetFitTextEnabled(true);
+        creatorImportAnimationReadout.Create("");
+        creatorImportAnimationReadout.SetFitTextEnabled(true);
+
+        creatorImportThumbnailPreview.Create("Final Asset Thumbnail Preview");
+        creatorImportThumbnailPreview.SetTooltip(
+            "Exact square Asset Browser thumbnail. Orbit/pan the importer camera and RETAKE until this preview is acceptable.");
+        creatorImportThumbnailCapture.Create("Capture Asset Thumbnail");
+        creatorImportThumbnailCapture.SetText("CAPTURE THUMBNAIL");
+        creatorImportThumbnailCapture.SetTooltip(
+            "Capture the currently framed importer preview for the Asset Browser. You can adjust the camera and retake it before confirming.");
+        creatorImportThumbnailCapture.OnClick([this](const wi::gui::EventArgs&)
+        {
+            CaptureCreatorImportThumbnail();
+        });
+        creatorImportThumbnailStatus.Create("THUMBNAIL NOT CAPTURED");
+        creatorImportThumbnailStatus.SetText("THUMBNAIL NOT CAPTURED");
+
+        importScaleApplyButton_.Create("Import Model Commit");
+        importScaleApplyButton_.SetText("CONFIRM IMPORT");
+        importScaleApplyButton_.SetTooltip(
+            "Commit the governed reusable asset to the Asset Browser without placing an instance in the level.");
+        importScaleApplyButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            RequestDiagnosticAction(EditorAction::ApplyImportScale);
+        });
+
+        importScaleDismissButton_.Create("Cancel Model Import");
+        importScaleDismissButton_.SetText("CANCEL");
+        importScaleDismissButton_.SetTooltip(
+            "Discard the temporary preview and return to the level without importing anything.");
+        importScaleDismissButton_.OnClick([this](const wi::gui::EventArgs&)
+        {
+            RequestDiagnosticAction(EditorAction::DismissImportScale);
+        });
+
+        creatorImportActionBar.Create("THUMBNAIL & IMPORT");
+        creatorImportActionBar.SetText("THUMBNAIL & IMPORT");
+        creatorImportActionBar.SetShadowRadius(0.0f);
+
+        // Commit is the final workflow page, matching the other sections and
+        // leaving this page available for a future batch-import queue.
+        importScaleApplyButton_.SetShadowRadius(0.0f);
+        importScaleDismissButton_.SetShadowRadius(0.0f);
+
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&importScaleTitleLabel_),
+            static_cast<wi::gui::Widget*>(&importScaleReadoutLabel_),
+            static_cast<wi::gui::Widget*>(&creatorImportHelpLabel),
+            static_cast<wi::gui::Widget*>(&creatorImportModelChoice),
+            static_cast<wi::gui::Widget*>(&creatorImportCharacterChoice),
+            static_cast<wi::gui::Widget*>(&creatorImportAssetName),
+            static_cast<wi::gui::Widget*>(&creatorImportDestination),
+            static_cast<wi::gui::Widget*>(&creatorImportRigReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
+            static_cast<wi::gui::Widget*>(&creatorImportPositionX),
+            static_cast<wi::gui::Widget*>(&creatorImportPositionY),
+            static_cast<wi::gui::Widget*>(&creatorImportPositionZ),
+            static_cast<wi::gui::Widget*>(&creatorImportRotationX),
+            static_cast<wi::gui::Widget*>(&creatorImportRotationY),
+            static_cast<wi::gui::Widget*>(&creatorImportRotationZ),
+            static_cast<wi::gui::Widget*>(&creatorImportScaleX),
+            static_cast<wi::gui::Widget*>(&creatorImportScaleY),
+            static_cast<wi::gui::Widget*>(&creatorImportScaleZ),
+            static_cast<wi::gui::Widget*>(&creatorImportScaleLinked),
+            static_cast<wi::gui::Widget*>(&creatorImportDimensionPreset),
+            static_cast<wi::gui::Widget*>(&importScaleModeCombo_),
+            static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
+            static_cast<wi::gui::Widget*>(&creatorImportMaterialCombo),
+            static_cast<wi::gui::Widget*>(&creatorImportMaterialReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportTexturePreviews),
+            static_cast<wi::gui::Widget*>(&creatorImportTextureHelp),
+            static_cast<wi::gui::Widget*>(&creatorImportTextureSlotCombo),
+            static_cast<wi::gui::Widget*>(&creatorImportTexturePath),
+            static_cast<wi::gui::Widget*>(&creatorImportTextureBrowse),
+            static_cast<wi::gui::Widget*>(&creatorImportTextureClear),
+            static_cast<wi::gui::Widget*>(&creatorImportMaterialScalarLabel),
+            static_cast<wi::gui::Widget*>(&creatorImportRoughness),
+            static_cast<wi::gui::Widget*>(&creatorImportMetalness),
+            static_cast<wi::gui::Widget*>(&creatorImportReflectance),
+            static_cast<wi::gui::Widget*>(&creatorImportNormalStrength),
+            static_cast<wi::gui::Widget*>(&creatorImportAoStrength),
+            static_cast<wi::gui::Widget*>(&creatorImportEmissiveStrength),
+            static_cast<wi::gui::Widget*>(&creatorImportLightingLabel),
+            static_cast<wi::gui::Widget*>(&creatorImportLightIntensity),
+            static_cast<wi::gui::Widget*>(&creatorImportLightAzimuth),
+            static_cast<wi::gui::Widget*>(&creatorImportLightElevation),
+            static_cast<wi::gui::Widget*>(&creatorImportAmbientBrightness),
+            static_cast<wi::gui::Widget*>(&creatorImportLightingPreset),
+            static_cast<wi::gui::Widget*>(&creatorImportLightingReset),
+            static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationCombo),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationEnabled),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationAdd),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationDelete),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPlay),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationPause),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationStop),
+            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationAdd),
+            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationRemove),
+            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationStatus),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
+            static_cast<wi::gui::Widget*>(&creatorImportActionBar),
+            static_cast<wi::gui::Widget*>(&creatorImportThumbnailPreview),
+            static_cast<wi::gui::Widget*>(&creatorImportThumbnailCapture),
+            static_cast<wi::gui::Widget*>(&creatorImportThumbnailStatus),
+            static_cast<wi::gui::Widget*>(&importScaleApplyButton_),
+            static_cast<wi::gui::Widget*>(&importScaleDismissButton_)})
+        {
+            widget->SetShadowRadius(0.0f);
+            importScalePanel_.AddWidget(widget);
+        }
+        for (auto& heading : creatorImportStageButtons)
+        {
+            heading.SetShadowRadius(0.0f);
+            importScalePanel_.AddWidget(&heading);
+        }
+        // Hide only after all child controls have inherited an enabled parent.
+        importScalePanel_.SetVisible(false);
+        GetGUI().AddWidget(&importScalePanel_);
+    }
+
+    void StudioRenderPath::ApplyRenegadeTheme()
+    {
+        wi::gui::Theme theme;
+        theme.image.background = true;
+        theme.image.blendFlag = wi::enums::BLENDMODE_ALPHA;
+        theme.image.corner_rounding = true;
+        for (auto& corner : theme.image.corners_rounding)
+        {
+            corner.radius = 7.0f;
+        }
+        theme.font.color = HologramText;
+        theme.font.shadow_color = wi::Color(0, 0, 0, 220);
+        theme.shadow = 3.0f;
+        theme.shadow_color = HologramBorder;
+        theme.shadow_highlight = true;
+        theme.shadow_highlight_color = XMFLOAT3(0.28f, 0.30f, 0.32f);
+        theme.shadow_highlight_spread = 0.18f;
+        theme.tooltipImage = theme.image;
+        theme.tooltipImage.color = HologramIdle;
+        theme.tooltipFont = theme.font;
+        theme.tooltip_shadow_color = HologramBorder;
+
+        auto& gui = GetGUI();
+        gui.SetTheme(theme);
+        gui.SetColor(HologramIdle, wi::gui::IDLE);
+        gui.SetColor(HologramFocus, wi::gui::FOCUS);
+        gui.SetColor(HologramActive, wi::gui::ACTIVE);
+        gui.SetColor(HologramFocus, wi::gui::DEACTIVATING);
+        gui.SetColor(HologramPanel, wi::gui::WIDGET_ID_WINDOW_BASE);
+        gui.SetColor(
+            wi::Color(7, 10, 12, 255),
+            wi::gui::WIDGET_ID_TEXTINPUTFIELD_IDLE);
+        gui.SetColor(
+            HologramFocus,
+            wi::gui::WIDGET_ID_TEXTINPUTFIELD_FOCUS);
+        gui.SetColor(
+            HologramActive,
+            wi::gui::WIDGET_ID_TEXTINPUTFIELD_ACTIVE);
+        gui.SetColor(
+            wi::Color(2, 12, 20, 245),
+            wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
+        gui.SetColor(
+            HologramFocus,
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
+        gui.SetColor(
+            HologramActive,
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
+
+        projectHubPanel_.SetColor(
+            HubBackground,
+            wi::gui::WIDGET_ID_WINDOW_BASE);
+        projectHubPanel_.SetShadowRadius(0.0f);
+        for (auto& sprite : projectHubPanel_.sprites)
+        {
+            sprite.params.disableCornerRounding();
+        }
+
+        // The global Project Hub theme is intentionally not the workspace
+        // theme. Reassert the owned Inspector host after the global pass so
+        // Wicked cannot repaint its rounded cyan window or section pills.
+        inspectorPanel_.SetColor(wi::Color::Transparent());
+        inspectorPanel_.SetColor(
+            wi::Color(8, 11, 13, 255),
+            wi::gui::WIDGET_ID_WINDOW_BASE);
+        inspectorPanel_.SetShadowRadius(0.0f);
+
+        // Same reassertion as inspectorPanel_ above -- the Import Scale
+        // popup is a separate wi::gui::Window and does not inherit
+        // inspectorPanel_'s per-instance override, only the global theme.
+        importScalePanel_.SetColor(wi::Color::Transparent());
+        importScalePanel_.SetColor(
+            HologramPanel,
+            wi::gui::WIDGET_ID_WINDOW_BASE);
+
+        const auto ownLabel = [](wi::gui::Label& label)
+        {
+            label.SetColor(HologramIdle);
+            label.SetShadowRadius(0.0f);
+            label.font.params.color = HologramText;
+            label.font.params.bolden = 0.18f;
+            label.font.params.shadowColor = wi::Color::Transparent();
+        };
+        ownLabel(inspectorLabel_);
+        ownLabel(positionLabel_);
+        ownLabel(rotationLabel_);
+        ownLabel(scaleLabel_);
+        ownLabel(playerLabel_);
+        ownLabel(playerCameraMode_);
+        ownLabel(cameraLabel_);
+        ownLabel(decalLabel_);
+        ownLabel(decalMaterialLabel_);
+        ownLabel(materialLabel_);
+        ownLabel(materialCoreLabel_);
+        ownLabel(materialUvLabel_);
+        ownLabel(materialTexturesLabel_);
+        ownLabel(materialShaderSpecificLabel_);
+        ownLabel(environmentProbeLabel_);
+        ownLabel(lightLabel_);
+        ownLabel(environmentSkyLabel_);
+        ownLabel(environmentFogLabel_);
+        ownLabel(environmentCloudLabel_);
+        ownLabel(precipitationLabel_);
+        ownLabel(sunLabel_);
+        ownLabel(oceanLabel_);
+        ownLabel(importScaleTitleLabel_);
+        ownLabel(importScaleReadoutLabel_);
+        ownLabel(creatorImportActionBar);
+        ownLabel(creatorImportThumbnailStatus);
+
+        // The thumbnail review is image content, not dark Renegade chrome.
+        // Wicked's image shader multiplies sampled texture RGB by the widget
+        // sprite colour, and Image::Create() disables the widget by default,
+        // which also applies disabled fade. Reassert a neutral treatment after
+        // the global theme so the owner sees the exact captured pixels.
+        creatorImportThumbnailPreview.SetColor(wi::Color::White());
+        creatorImportThumbnailPreview.SetShadowRadius(0.0f);
+        creatorImportThumbnailPreview.SetEnabled(true);
+        for (auto& sprite : creatorImportThumbnailPreview.sprites)
+        {
+            sprite.params.disableCornerRounding();
+        }
+
+        ownLabel(workspaceTitle_);
+        ownLabel(statusLabel_);
+        ownLabel(hierarchyLabel_);
+        ownLabel(terrainLabel_);
+        ownLabel(terrainMaterialLabel_);
+        ownLabel(terrainSculptLabel_);
+        ownLabel(terrainBrushReadout_);
+        ownLabel(terrainStrokeDiagnostic_);
+        ownLabel(contentLabel_);
+        ownLabel(contentPlaceholder_);
+        const auto ownHubLabel = [](
+            wi::gui::Label& label,
+            const wi::Color foreground,
+            const wi::Color background = wi::Color::Transparent())
+        {
+            label.SetColor(background);
+            label.SetShadowRadius(0.0f);
+            label.font.params.color = foreground;
+            label.font.params.shadowColor = wi::Color::Transparent();
+        };
+        ownHubLabel(hubBrandLabel_, HubOrange);
+        ownHubLabel(hubTitleLabel_, HologramText);
+        ownHubLabel(hubSubtitleLabel_, HubMuted);
+        ownHubLabel(recentProjectsLabel_, HubCyan);
+        ownHubLabel(selectedProjectLabel_, HologramText, HubSurfaceRaised);
+        ownHubLabel(hubMessageLabel_, HubMuted);
+
+        const auto styleHubButton = [](
+            wi::gui::Button& button,
+            const wi::Color idle,
+            const wi::Color focus,
+            const wi::Color active)
+        {
+            button.SetColor(idle, wi::gui::IDLE);
+            button.SetColor(focus, wi::gui::FOCUS);
+            button.SetColor(active, wi::gui::ACTIVE);
+            button.SetColor(idle, wi::gui::DEACTIVATING);
+            button.SetShadowRadius(1.0f);
+            button.font.params.color = HologramText;
+            button.font.params.shadowColor = wi::Color::Transparent();
+        };
+        styleHubButton(
+            createProjectButton_, HubSurfaceRaised, HubOrange, HubSelected);
+        styleHubButton(
+            openProjectButton_, HubSurface, HubBorder, HubSelected);
+        styleHubButton(
+            launchProjectButton_, HubSelected, HubCyan, HubBorder);
+        styleHubButton(
+            continueProjectButton_, HubSurface, HubBorder, HubSelected);
+        for (auto& button : recentProjectButtons_)
+        {
+            styleHubButton(button, HubSurface, HubBorder, HubSelected);
+        }
+        ownLabel(creatorImportMaterialLabel);
+        ownLabel(creatorImportMaterialReadout);
+        ownLabel(creatorImportTextureHelp);
+        ownLabel(creatorImportAnimationLabel);
+        ownLabel(creatorImportAnimationReadout);
+        ownLabel(creatorImportExternalAnimationStatus);
+        ownLabel(creatorImportTransformLabel);
+        ownLabel(creatorImportMaterialScalarLabel);
+        ownLabel(creatorImportLightingLabel);
+        ownLabel(creatorImportHelpLabel);
+        ownLabel(creatorImportRigReadout);
+
+        wi::gui::Theme scrollbarTheme = theme;
+        scrollbarTheme.image.corner_rounding = false;
+        for (auto& corner : scrollbarTheme.image.corners_rounding)
+        {
+            corner.radius = 0.0f;
+        }
+        scrollbarTheme.shadow = 0.0f;
+        inspectorPanel_.scrollbar_vertical.SetTheme(scrollbarTheme);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(12, 18, 22, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(38, 52, 61, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_INACTIVE);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
+        inspectorPanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
+        importScalePanel_.scrollbar_vertical.SetTheme(scrollbarTheme);
+        importScalePanel_.scrollbar_vertical.SetColor(
+            wi::Color(12, 18, 22, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_BASE_IDLE);
+        importScalePanel_.scrollbar_vertical.SetColor(
+            wi::Color(38, 52, 61, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_INACTIVE);
+        importScalePanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_HOVER);
+        importScalePanel_.scrollbar_vertical.SetColor(
+            wi::Color(210, 91, 29, 255),
+            wi::gui::WIDGET_ID_SCROLLBAR_KNOB_GRABBED);
+    }
+
+    void StudioRenderPath::Update(const float dt)
+    {
+        DiagnosticInputFrame diagnosticInput(diagnosticService_,
+            wi::input::Down(wi::input::MOUSE_BUTTON_LEFT), wi::input::Down(wi::input::MOUSE_BUTTON_RIGHT));
+        PollTestLevel();
+        if (testLevelRuntime_.IsActive())
+        {
+            diagnosticInput.StopAt("test_level");
+            // The child Runtime is the sole 3D owner while Test Level runs.
+            // RenderPath2D keeps wiGUI/chrome responsive without ticking the
+            // editor scene, visibility, physics, vegetation or render graph.
+            wi::RenderPath2D::Update(dt);
+
+            if (pendingAction_ == EditorAction::StopTestLevel)
+            {
+                ProcessPendingAction();
+                return;
+            }
+            pendingAction_ = EditorAction::None;
+
+            const auto state = testLevelRuntime_.LastResult().state;
+            statusLabel_.SetText(
+                state == TestLevelProcessState::Running
+                    ? "TEST LEVEL // RUNNING // UNSAVED SNAPSHOT"
+                    : "TEST LEVEL // STARTING // UNSAVED SNAPSHOT");
+            if (session_ != nullptr)
+                studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+            studioChrome_.SetStatusText(statusLabel_.GetText());
+            return;
+        }
+
+        if (!pathTracePreviewActive_ && session_ != nullptr &&
+            (!appliedRenderSettingsInitialized_ ||
+                appliedRenderSettingsSceneRevision_ !=
+                    session_->Scenes().Revision()))
+        {
+            SyncRenderSettingsFromScene(true);
+        }
+        if (renderWorkspaceActive_)
+        {
+            // The Window owns child transforms while it processes scrolling and
+            // pointer state. Never relayout its children from the frame loop.
+            renderWorkspacePanel_.SetVisible(!projectHubVisible_);
+            inspectorPanel_.SetVisible(false);
+            TickGate8BakeControls();
+        }
+        // The capture button is processed inside the previous frame's GUI
+        // update. While pending, every Renegade overlay is suppressed for that
+        // frame. Save that already-rendered clean 3D result here, before GUI
+        // callbacks can arm another capture.
+        if (creatorModelImporter.thumbnailCapturePending &&
+            !creatorModelImporter.thumbnailCapturePath.empty())
+        {
+            const bool captured = SaveCreatorSquareThumbnail(
+                GetRenderResult3D(),
+                creatorModelImporter.thumbnailCapturePath);
+            creatorModelImporter.thumbnailCapturePending = false;
+            RestoreCreatorThumbnailPresentation();
+            if (captured)
+            {
+                wi::Resource previewResource = wi::resourcemanager::Load(
+                    creatorModelImporter.thumbnailCapturePath);
+                const bool previewReady =
+                    previewResource.IsValid() &&
+                    previewResource.GetTexture().IsValid() &&
+                    previewResource.GetTexture().GetDesc().width > 0 &&
+                    previewResource.GetTexture().GetDesc().height > 0 &&
+                    previewResource.GetTexture().GetDesc().width ==
+                        previewResource.GetTexture().GetDesc().height;
+                if (previewReady)
+                {
+                    creatorImportThumbnailPreviewResource =
+                        std::move(previewResource);
+                    creatorImportThumbnailPreview.SetImage(
+                        creatorImportThumbnailPreviewResource);
+                    creatorImportThumbnailCapture.SetText("RETAKE THUMBNAIL");
+                    creatorImportThumbnailStatus.SetText(
+                        "THUMBNAIL READY // REVIEW ABOVE // MOVE CAMERA + RETAKE TO RECOMPOSE");
+                    importScaleApplyButton_.SetEnabled(true);
+                }
+                else
+                {
+                    creatorImportThumbnailPreviewResource = {};
+                    creatorImportThumbnailPreview.SetImage(wi::Resource{});
+                    creatorModelImporter.thumbnailCapturePath.clear();
+                    creatorImportThumbnailStatus.SetText(
+                        "THUMBNAIL FAILED // PREVIEW DECODE FAILED // RETAKE");
+                    importScaleApplyButton_.SetEnabled(false);
+                }
+            }
+            else
+            {
+                creatorModelImporter.thumbnailCapturePath.clear();
+                creatorImportThumbnailStatus.SetText(
+                    "THUMBNAIL FAILED // RETAKE");
+                importScaleApplyButton_.SetEnabled(false);
+            }
+        }
+
+        // Scene deserialization runs on Wicked's job system. Keep the current
+        // document visible but immutable until its prepared replacement is
+        // committed at EVENT_THREAD_SAFE_POINT. This check intentionally
+        // precedes RenderPath3D::Update(), because wiGUI callbacks can author
+        // scene changes from inside the base update.
+        if (sceneOpenInProgress_)
+        {
+            diagnosticInput.StopAt("scene_loading");
+            detail::ClearCreatorAssetDragPreview();
+            pendingAction_ = EditorAction::None;
+            return;
+        }
+
+        if (session_ != nullptr && !creatorModelImporter.active)
+        {
+            bridge::RefreshPrecipitationVisual(session_->Scenes().GetScene());
+        }
+        if (pathTracePreviewActive_)
+        {
+            RenderPath3D_PathTracing::Update(dt);
+            RefreshPathTracePreviewStatus();
+        }
+        else
+        {
+            RenderPath3D::Update(dt);
+        }
+
+        if (inspectorRefreshPending_)
+        {
+            inspectorRefreshPending_ = false;
+            RefreshInspector();
+        }
+
+        if (session_ == nullptr || projectHubVisible_)
+        {
+            diagnosticInput.StopAt("project_hub");
+            detail::ClearCreatorAssetDragPreview();
+            return;
+        }
+
+        // The importer is a dedicated workspace. Do not route pointer input,
+        // authored-world ticks, selection or editor shortcuts to the level.
+        if (creatorModelImporter.active)
+        {
+            detail::ClearCreatorAssetDragPreview();
+            // Import camera controls operate exclusively within the exposed
+            // preview, never through the native right inspector. The camera
+            // transform is restored on both cancel and governed commit.
+            viewportBounds_ = XMFLOAT4(
+                0.0f, 0.0f,
+                std::max(0.0f, importScalePanel_.GetPos().x),
+                GetLogicalHeight());
+            HandleViewportNavigation(dt, wi::input::GetPointer());
+            QueueCreatorImportScaleRuler();
+            if (pendingAction_ != EditorAction::None)
+                ProcessPendingAction();
+            diagnosticInput.StopAt("import_workspace");
+            return;
+        }
+
+        TickWd01Vegetation();
+
+        // Chrome callbacks have returned. A drag release is committed here in
+        // this exact frame, before ConsumedPointerThisFrame() can short-circuit
+        // the rest of Studio input processing.
+        wi::ecs::Entity dragPlaced = wi::ecs::INVALID_ENTITY;
+        if (camera != nullptr)
+            dragPlaced = detail::UpdateCreatorAssetDragPreview(*this, *camera);
+        else
+            detail::ClearCreatorAssetDragPreview();
+        if (dragPlaced != wi::ecs::INVALID_ENTITY)
+        {
+            session_->Selection().Select(dragPlaced);
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+            SyncGizmoSelection();
+            SyncSelectionOutline();
+            studioChrome_.SetStatusText(
+                "PLACE ASSET // LIVE CURSOR INSTANCE COMMITTED // READY");
+        }
+
+        QueueCreatorImportScaleRuler();
+
+        if (workspaceLayoutDirty_)
+        {
+            workspaceLayoutDirty_ = false;
+            ResizeLayout();
+        }
+
+        viewportBounds_ = studioChrome_.ViewportBounds();
+        const XMFLOAT4 pointer = wi::input::GetPointer();
+        const bool playerStartIconConsumed = HandlePlayerStartSceneIcon(pointer);
+        const bool cameraIconConsumed = HandleCameraSceneIcons(pointer);
+        const bool audioIconConsumed = HandleAudioSceneIcons(pointer);
+        const bool decalProbeIconConsumed = HandleDecalProbeSceneIcons(pointer);
+        const bool lightIconConsumed = HandleLightSceneIcons(pointer);
+
+        // A vegetation stroke can be released after the pointer has crossed
+        // from the viewport onto native GUI or Renegade chrome. Finalize that
+        // release before a UI callback, shortcut or ownership check can return
+        // from this frame. HandleWd01Vegetation() applies its own focus and
+        // viewport guards after completing an in-flight release, so this does
+        // not let a brush begin through the UI.
+        const bool vegetationConsumed =
+            HandleWd01Vegetation(pointer);
+
+        if (sunPreviewPlaying_)
+        {
+            bridge::SetSunTime(
+                sunPreviewCurrent_,
+                sunPreviewCurrent_.timeHours +
+                    dt * sunPreviewSpeedHoursPerSecond_);
+            bridge::ApplySun(
+                session_->Scenes().GetScene(),
+                EditableWeatherEntity(),
+                sunPreviewCurrent_);
+            sunTime_.SetValue(sunPreviewCurrent_.timeHours);
+            sunAzimuth_.SetValue(sunPreviewCurrent_.azimuthDegrees);
+            sunElevation_.SetValue(sunPreviewCurrent_.elevationDegrees);
+        }
+
+        HandleEditorShortcuts();
+
+        // wiGUI invokes OnClick while Button::Update is still active. Apply
+        // editor actions only after the complete GUI update has returned.
+        if (pendingAction_ != EditorAction::None)
+        {
+            diagnosticInput.StopAt("editor_action");
+            ProcessPendingAction();
+            return;
+        }
+
+        // The Renegade-owned shell uses deliberate hit regions rather than
+        // stock Wicked widgets. Never let a chrome click fall through into
+        // scene selection, gizmo manipulation, or camera navigation.
+        if (studioChrome_.ConsumedPointerThisFrame())
+        {
+            diagnosticInput.StopAt("studio_chrome");
+            // Renegade chrome owns this pointer press. Cancel the persistent
+            // vegetation tool so a viewport brush can never retain input
+            // ownership across top-menu or bottom-drawer interaction.
+            DisableWd01VegetationBrush();
+            return;
+        }
+
+        if (playerStartIconConsumed || cameraIconConsumed || audioIconConsumed ||
+            decalProbeIconConsumed || lightIconConsumed)
+        {
+            diagnosticInput.StopAt("scene_icon");
+            return;
+        }
+
+        if (vegetationConsumed)
+        {
+            diagnosticInput.StopAt("vegetation");
+            return;
+        }
+
+        if (gizmoEntity_ != session_->Selection().SelectedEntity())
+        {
+            SyncGizmoSelection();
+            SyncSelectionOutline();
+        }
+
+        if (HandleCreatorAssetPlacement(pointer))
+        {
+            diagnosticInput.StopAt("asset_placement");
+            return;
+        }
+
+        if (HandleLightPlacement(pointer))
+        {
+            diagnosticInput.StopAt("light_placement");
+            return;
+        }
+
+        HandleViewportNavigation(dt, pointer);
+        diagnosticInput.CameraReached(flyCameraActive_);
+
+        if (GetGUI().HasFocus() && !gizmoDragActive_)
+        {
+            diagnosticInput.StopAt("native_gui_focus");
+            return;
+        }
+
+        if (gizmoEntity_ != wi::ecs::INVALID_ENTITY &&
+            !flyCameraActive_)
+        {
+            gizmo_.Update(*camera, pointer, *this);
+        }
+
+        if (HandleTerrainSculpt(pointer))
+        {
+            diagnosticInput.StopAt("terrain_sculpt");
+            return;
+        }
+        if (HandleViewportSelection(pointer))
+        {
+            diagnosticInput.StopAt("viewport_selection");
+            return;
+        }
+
+        if (gizmoEntity_ == wi::ecs::INVALID_ENTITY ||
+            flyCameraActive_)
+        {
+            return;
+        }
+
+        if (gizmo_.IsDragStarted())
+        {
+            gizmoDragActive_ = true;
+        }
+
+        if (gizmo_.IsDragEnded())
+        {
+            gizmoDragActive_ = false;
+            auto* transform =
+                session_->Scenes().GetScene().transforms.GetComponent(gizmoEntity_);
+            if (transform == nullptr)
+            {
+                return;
+            }
+
+            const auto transformAfter = bridge::CaptureTransform(*transform);
+            transform->translation_local =
+                gizmoTransformBefore_.translation;
+            transform->rotation_local =
+                gizmoTransformBefore_.rotation;
+            transform->scale_local =
+                gizmoTransformBefore_.scale;
+            transform->SetDirty();
+            transform->UpdateTransform();
+
+            session_->Commands().Execute(
+                std::make_unique<bridge::SetTransformCommand>(
+                    session_->Scenes().GetScene(),
+                    gizmoEntity_,
+                    gizmoTransformBefore_,
+                    transformAfter));
+            gizmoTransformBefore_ = transformAfter;
+            RefreshInspector();
+            RefreshStatus();
+        }
+    }
+
+    void StudioRenderPath::Compose(const wi::graphics::CommandList cmd) const
+    {
+        if (testLevelRuntime_.IsActive())
+        {
+            wi::RenderPath2D::Compose(cmd);
+            return;
+        }
+        if (pathTracePreviewActive_)
+        {
+            RenderPath3D_PathTracing::Compose(cmd);
+            return;
+        }
+        RenderPath3D::Compose(cmd);
+        if (creatorModelImporter.active)
+            return; // No authored-scene icons, gizmos or outlines in preview.
+
+        auto* device = wi::graphics::GetDevice();
+        const wi::graphics::Rect viewportScissor = {
+            static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.x)),
+            static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.y)),
+            static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.z)),
+            static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.w)),
+        };
+        device->BindScissorRects(1, &viewportScissor, cmd);
+
+        if (!projectHubVisible_ &&
+            !creatorModelImporter.thumbnailCapturePending &&
+            outlinedSelection_ != wi::ecs::INVALID_ENTITY &&
+            selectionOutlineMask_.IsValid())
+        {
+            wi::renderer::BindCommonResources(cmd);
+            // Thickness was 2.0, double Wicked's default, which read as a
+            // heavy halo rather than a projected edge. 1.0 is one pixel.
+            wi::renderer::Postprocess_Outline(
+                selectionOutlineMask_,
+                cmd,
+                0.1f,
+                1.0f,
+                XMFLOAT4(0.30f, 0.86f, 1.0f, 0.90f));
+        }
+
+        if (!projectHubVisible_ &&
+            !creatorModelImporter.thumbnailCapturePending &&
+            !gizmoSuppressedForCameraView_ &&
+            gizmoEntity_ != wi::ecs::INVALID_ENTITY)
+        {
+            gizmo_.Draw(*camera, wi::input::GetPointer(), cmd);
+        }
+
+        const wi::graphics::Rect fullScissor = {
+            0,
+            0,
+            static_cast<std::int32_t>(GetPhysicalWidth()),
+            static_cast<std::int32_t>(GetPhysicalHeight()),
+        };
+        device->BindScissorRects(1, &fullScissor, cmd);
+    }
+
+    void StudioRenderPath::ResizeLayout()
+    {
+        RenderPath3D::ResizeLayout();
+
+        const float width = GetLogicalWidth();
+        const float height = GetLogicalHeight();
+        studioChrome_.SetLayout(width, height);
+        projectHubChrome_.SetLayout(width, height);
+
+        projectLoadingOverlay_.SetLayout(width, height);
+        const XMFLOAT4 n = projectHubChrome_.NewProjectInputBounds();
+        hubNewProjectNameInput_.SetPos(XMFLOAT2(n.x,n.y));
+        hubNewProjectNameInput_.SetSize(XMFLOAT2(n.z-n.x,n.w-n.y));
+        const XMFLOAT4 c = projectHubChrome_.NewProjectConfirmBounds();
+        hubNewProjectConfirmButton_.SetPos(XMFLOAT2(c.x,c.y));
+        hubNewProjectConfirmButton_.SetSize(XMFLOAT2(c.z-c.x,c.w-c.y));
+        const XMFLOAT4 x = projectHubChrome_.NewProjectCancelBounds();
+        hubNewProjectCancelButton_.SetPos(XMFLOAT2(x.x,x.y));
+        hubNewProjectCancelButton_.SetSize(XMFLOAT2(x.z-x.x,x.w-x.y));
+        const float toolbarHeight = 54.0f;
+        const float leftWidth = projectHubVisible_
+            ? std::clamp(width * 0.2f, 250.0f, 310.0f)
+            : studioChrome_.HierarchyWidth();
+        const float rightWidth = projectHubVisible_
+            ? std::clamp(width * 0.22f, 290.0f, 350.0f)
+            : studioChrome_.InspectorWidth();
+        const float bottomHeight = projectHubVisible_
+            ? std::clamp(height * 0.22f, 160.0f, 220.0f)
+            : studioChrome_.DrawerHeight();
+
+        viewportBounds_ = projectHubVisible_
+            ? XMFLOAT4(
+                leftWidth + 16.0f,
+                toolbarHeight + 16.0f,
+                width - rightWidth - 16.0f,
+                height - bottomHeight - 16.0f)
+            : studioChrome_.ViewportBounds();
+
+        toolbarPanel_.SetPos(XMFLOAT2(8.0f, 8.0f));
+        toolbarPanel_.SetSize(XMFLOAT2(width - 16.0f, toolbarHeight));
+        workspaceTitle_.SetPos(XMFLOAT2(14.0f, 12.0f));
+        workspaceTitle_.SetSize(XMFLOAT2(300.0f, 30.0f));
+        translateToolButton_.SetPos(XMFLOAT2(314.0f, 9.0f));
+        translateToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
+        rotateToolButton_.SetPos(XMFLOAT2(414.0f, 9.0f));
+        rotateToolButton_.SetSize(XMFLOAT2(100.0f, 30.0f));
+        scaleToolButton_.SetPos(XMFLOAT2(522.0f, 9.0f));
+        scaleToolButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
+        gridToggleButton_.SetPos(XMFLOAT2(630.0f, 9.0f));
+        gridToggleButton_.SetSize(XMFLOAT2(92.0f, 30.0f));
+        projectHubButton_.SetPos(XMFLOAT2(width - 132.0f, 9.0f));
+        projectHubButton_.SetSize(XMFLOAT2(108.0f, 30.0f));
+        statusLabel_.SetPos(XMFLOAT2(736.0f, 14.0f));
+        statusLabel_.SetSize(XMFLOAT2(
+            std::max(120.0f, width - 890.0f),
+            24.0f));
+
+        hierarchyPanel_.SetPos(XMFLOAT2(8.0f, toolbarHeight + 16.0f));
+        hierarchyPanel_.SetSize(XMFLOAT2(
+            leftWidth,
+            height - toolbarHeight - 24.0f));
+        hierarchyLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
+        hierarchyLabel_.SetSize(XMFLOAT2(leftWidth - 24.0f, 28.0f));
+        hierarchyTree_.SetPos(XMFLOAT2(10.0f, 44.0f));
+        hierarchyTree_.SetSize(XMFLOAT2(
+            leftWidth - 20.0f,
+            height - toolbarHeight - 82.0f));
+        hierarchySearch_.SetPos(XMFLOAT2(12.0f, 117.0f));
+        hierarchySearch_.SetSize(XMFLOAT2(leftWidth - 24.0f, 31.0f));
+
+        inspectorPanel_.SetPos(XMFLOAT2(
+            projectHubVisible_ ? width - rightWidth - 8.0f : width - rightWidth,
+            projectHubVisible_ ? toolbarHeight + 16.0f : 64.0f));
+        inspectorPanel_.SetSize(XMFLOAT2(
+            rightWidth,
+            projectHubVisible_
+                ? height - toolbarHeight - 24.0f
+                : height - 64.0f - 28.0f));
+        inspectorLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
+        inspectorLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 28.0f));
+        const float fieldGap = 8.0f;
+        const float fieldWidth = (rightWidth - 40.0f) / 3.0f;
+        const auto positionInputRow = [&](
+            wi::gui::TextInputField& x,
+            wi::gui::TextInputField& y,
+            wi::gui::TextInputField& z,
+            const float rowY)
+        {
+            x.SetPos(XMFLOAT2(12.0f, rowY));
+            y.SetPos(XMFLOAT2(12.0f + fieldWidth + fieldGap, rowY));
+            z.SetPos(XMFLOAT2(
+                12.0f + (fieldWidth + fieldGap) * 2.0f,
+                rowY));
+            x.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+            y.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+            z.SetSize(XMFLOAT2(fieldWidth, 28.0f));
+        };
+        positionLabel_.SetPos(XMFLOAT2(12.0f, 44.0f));
+        positionLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
+        positionInputRow(
+            translationX_,
+            translationY_,
+            translationZ_,
+            64.0f);
+        rotationLabel_.SetPos(XMFLOAT2(12.0f, 104.0f));
+        rotationLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
+        positionInputRow(rotationX_, rotationY_, rotationZ_, 124.0f);
+        scaleLabel_.SetPos(XMFLOAT2(12.0f, 164.0f));
+        scaleLabel_.SetSize(XMFLOAT2(rightWidth - 24.0f, 20.0f));
+        positionInputRow(scaleX_, scaleY_, scaleZ_, 184.0f);
+
+        const float environmentFieldWidth = rightWidth - 24.0f;
+        const auto positionEnvironmentWidget =
+            [environmentFieldWidth](
+                wi::gui::Widget& widget,
+                const float rowY,
+                const float height = 28.0f)
+        {
+            widget.SetPos(XMFLOAT2(12.0f, rowY));
+            widget.SetSize(XMFLOAT2(environmentFieldWidth, height));
+        };
+        positionEnvironmentWidget(sceneIdentityLabel_, 224.0f, 20.0f);
+        positionEnvironmentWidget(sceneNameInput_, 244.0f);
+        positionEnvironmentWidget(sceneLayerLabel_, 282.0f, 20.0f);
+        const float layerActionWidth = (environmentFieldWidth - 8.0f) * 0.5f;
+        sceneLayerAllButton_.SetPos(XMFLOAT2(12.0f, 302.0f));
+        sceneLayerNoneButton_.SetPos(XMFLOAT2(20.0f + layerActionWidth, 302.0f));
+        sceneLayerAllButton_.SetSize(XMFLOAT2(layerActionWidth, 28.0f));
+        sceneLayerNoneButton_.SetSize(XMFLOAT2(layerActionWidth, 28.0f));
+        const float layerBitGap = 4.0f;
+        const float layerBitWidth =
+            (environmentFieldWidth - layerBitGap * 7.0f) / 8.0f;
+        for (std::size_t bit = 0; bit < sceneLayerBits_.size(); ++bit)
+        {
+            const float x = 12.0f +
+                static_cast<float>(bit % 8u) * (layerBitWidth + layerBitGap);
+            const float y = 336.0f +
+                static_cast<float>(bit / 8u) * 26.0f;
+            sceneLayerBits_[bit].SetPos(XMFLOAT2(x, y));
+            sceneLayerBits_[bit].SetSize(XMFLOAT2(layerBitWidth, 22.0f));
+        }
+        positionEnvironmentWidget(sceneMetadataLabel_, 446.0f, 20.0f);
+        positionEnvironmentWidget(sceneMetadataPreset_, 466.0f);
+        positionEnvironmentWidget(sceneObjectLabel_, 506.0f, 20.0f);
+        const float objectToggleWidth = (environmentFieldWidth - 8.0f) * 0.5f;
+        const auto layoutObjectToggle = [objectToggleWidth](
+            wi::gui::Widget& widget,
+            const int column,
+            const float y)
+        {
+            widget.SetPos(XMFLOAT2(
+                12.0f + static_cast<float>(column) * (objectToggleWidth + 8.0f),
+                y));
+            widget.SetSize(XMFLOAT2(objectToggleWidth, 28.0f));
+        };
+        layoutObjectToggle(sceneObjectRenderable_, 0, 526.0f);
+        layoutObjectToggle(sceneObjectCastShadow_, 1, 526.0f);
+        layoutObjectToggle(sceneObjectForeground_, 0, 558.0f);
+        layoutObjectToggle(sceneObjectMainCamera_, 1, 558.0f);
+        layoutObjectToggle(sceneObjectReflections_, 0, 590.0f);
+        layoutObjectToggle(sceneObjectWetmap_, 1, 590.0f);
+        positionEnvironmentWidget(playerLabel_, 224.0f, 20.0f);
+        positionEnvironmentWidget(playerCameraMode_, 244.0f, 32.0f);
+        positionEnvironmentWidget(playerCapsuleRadius_, 280.0f);
+        positionEnvironmentWidget(playerCapsuleHeight_, 314.0f);
+        positionEnvironmentWidget(playerEyeHeight_, 348.0f);
+        positionEnvironmentWidget(playerWalkSpeed_, 382.0f);
+        positionEnvironmentWidget(playerSprintSpeed_, 416.0f);
+        positionEnvironmentWidget(playerJumpSpeed_, 450.0f);
+        positionEnvironmentWidget(playerLookSensitivity_, 484.0f);
+        positionEnvironmentWidget(playerMaximumSlope_, 518.0f);
+        positionEnvironmentWidget(playerGravityFactor_, 552.0f);
+        positionEnvironmentWidget(playerMinimumPitch_, 586.0f);
+        positionEnvironmentWidget(playerMaximumPitch_, 620.0f);
+        LayoutMaterialInspector(environmentFieldWidth);
+
+        positionEnvironmentWidget(cameraLabel_, 506.0f, 20.0f);
+        positionEnvironmentWidget(cameraProjection_, 526.0f);
+        positionEnvironmentWidget(cameraFieldOfView_, 560.0f);
+        positionEnvironmentWidget(cameraNearPlane_, 594.0f);
+        positionEnvironmentWidget(cameraFarPlane_, 628.0f);
+        positionEnvironmentWidget(cameraFocalLength_, 662.0f);
+        positionEnvironmentWidget(cameraApertureSize_, 696.0f);
+        positionEnvironmentWidget(cameraOrthoVerticalSize_, 730.0f);
+        const float cameraActionWidth = (environmentFieldWidth - 8.0f) * 0.5f;
+        cameraAlignToView_.SetPos(XMFLOAT2(12.0f, 764.0f));
+        cameraViewFrom_.SetPos(XMFLOAT2(20.0f + cameraActionWidth, 764.0f));
+        cameraAlignToView_.SetSize(XMFLOAT2(cameraActionWidth, 28.0f));
+        cameraViewFrom_.SetSize(XMFLOAT2(cameraActionWidth, 28.0f));
+
+        positionEnvironmentWidget(decalLabel_, 506.0f, 20.0f);
+        positionEnvironmentWidget(decalBaseColorOnlyAlpha_, 528.0f);
+        positionEnvironmentWidget(decalSlopeBlend_, 562.0f);
+        positionEnvironmentWidget(decalMaterialLabel_, 596.0f, 20.0f);
+        positionEnvironmentWidget(decalBaseColorRed_, 620.0f);
+        positionEnvironmentWidget(decalBaseColorGreen_, 654.0f);
+        positionEnvironmentWidget(decalBaseColorBlue_, 688.0f);
+        positionEnvironmentWidget(decalOpacity_, 722.0f);
+        positionEnvironmentWidget(decalBaseColorTexture_, 756.0f);
+
+        positionEnvironmentWidget(environmentProbeLabel_, 506.0f, 20.0f);
+        positionEnvironmentWidget(environmentProbeResolution_, 530.0f);
+        positionEnvironmentWidget(environmentProbeRealtime_, 564.0f);
+        positionEnvironmentWidget(environmentProbeInterval_, 598.0f);
+        positionEnvironmentWidget(environmentProbeMsaa_, 632.0f);
+        positionEnvironmentWidget(environmentProbeViewDistance_, 666.0f);
+        positionEnvironmentWidget(environmentProbeRefresh_, 708.0f);
+
+        positionEnvironmentWidget(lightLabel_, 630.0f, 20.0f);
+        positionEnvironmentWidget(lightType_, 650.0f);
+        positionEnvironmentWidget(lightColorRed_, 684.0f);
+        positionEnvironmentWidget(lightColorGreen_, 718.0f);
+        positionEnvironmentWidget(lightColorBlue_, 752.0f);
+        positionEnvironmentWidget(lightIntensity_, 786.0f);
+        positionEnvironmentWidget(lightRange_, 820.0f);
+        positionEnvironmentWidget(lightOuterCone_, 854.0f);
+        positionEnvironmentWidget(lightInnerCone_, 888.0f);
+        positionEnvironmentWidget(lightRadius_, 922.0f);
+        positionEnvironmentWidget(lightLength_, 956.0f);
+        positionEnvironmentWidget(lightHeight_, 990.0f);
+        positionEnvironmentWidget(lightCastShadow_, 1024.0f);
+        positionEnvironmentWidget(lightVolumetrics_, 1056.0f);
+        positionEnvironmentWidget(lightVolumetricBoost_, 1088.0f);
+        positionEnvironmentWidget(environmentSkyLabel_, 44.0f, 20.0f);
+        positionEnvironmentWidget(environmentPreset_, 64.0f);
+        positionEnvironmentWidget(skyMode_, 98.0f);
+        positionEnvironmentWidget(aerialPerspective_, 132.0f);
+        positionEnvironmentWidget(skyExposure_, 164.0f);
+        positionEnvironmentWidget(stars_, 198.0f);
+        positionEnvironmentWidget(ambientIntensity_, 232.0f);
+        positionEnvironmentWidget(environmentFogLabel_, 266.0f, 20.0f);
+        positionEnvironmentWidget(fogStart_, 286.0f);
+        positionEnvironmentWidget(fogDensity_, 320.0f);
+        positionEnvironmentWidget(heightFog_, 354.0f);
+        positionEnvironmentWidget(fogHeightStart_, 386.0f);
+        positionEnvironmentWidget(fogHeightEnd_, 420.0f);
+        positionEnvironmentWidget(environmentCloudLabel_, 454.0f, 20.0f);
+        positionEnvironmentWidget(cloudCoverage_, 474.0f);
+        positionEnvironmentWidget(cloudStartHeight_, 508.0f);
+        positionEnvironmentWidget(cloudThickness_, 542.0f);
+        positionEnvironmentWidget(cloudsCastShadow_, 576.0f);
+        positionEnvironmentWidget(precipitationLabel_, 610.0f, 20.0f);
+        positionEnvironmentWidget(precipitationMode_, 630.0f);
+        positionEnvironmentWidget(precipitationIntensity_, 664.0f);
+        positionEnvironmentWidget(precipitationFallSpeed_, 698.0f);
+        positionEnvironmentWidget(precipitationParticleScale_, 732.0f);
+        positionEnvironmentWidget(precipitationWindAzimuth_, 766.0f);
+        positionEnvironmentWidget(precipitationWindSpeed_, 800.0f);
+        positionEnvironmentWidget(precipitationTurbulence_, 834.0f);
+        positionEnvironmentWidget(sunLabel_, 868.0f, 20.0f);
+        positionEnvironmentWidget(sunPreset_, 888.0f);
+        positionEnvironmentWidget(sunTime_, 922.0f);
+        positionEnvironmentWidget(sunAzimuth_, 956.0f);
+        positionEnvironmentWidget(sunElevation_, 990.0f);
+        positionEnvironmentWidget(sunPreviewSpeed_, 1024.0f);
+        sunPlayButton_.SetPos(XMFLOAT2(12.0f, 1058.0f));
+        sunPauseButton_.SetPos(XMFLOAT2(
+            20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
+            1058.0f));
+        sunPlayButton_.SetSize(XMFLOAT2(
+            (environmentFieldWidth - 8.0f) * 0.5f,
+            28.0f));
+        sunPauseButton_.SetSize(XMFLOAT2(
+            (environmentFieldWidth - 8.0f) * 0.5f,
+            28.0f));
+        positionEnvironmentWidget(oceanLabel_, 1094.0f, 20.0f);
+        positionEnvironmentWidget(oceanEnabled_, 1114.0f);
+        positionEnvironmentWidget(oceanPreset_, 1148.0f);
+        positionEnvironmentWidget(oceanResolution_, 1182.0f);
+        positionEnvironmentWidget(oceanWaterHeight_, 1216.0f);
+        positionEnvironmentWidget(oceanPatchLength_, 1250.0f);
+        positionEnvironmentWidget(oceanWaveAmplitude_, 1284.0f);
+        positionEnvironmentWidget(oceanChoppyScale_, 1318.0f);
+        positionEnvironmentWidget(oceanTimeScale_, 1352.0f);
+        positionEnvironmentWidget(oceanWindAzimuth_, 1386.0f);
+        positionEnvironmentWidget(oceanWindSpeed_, 1420.0f);
+        positionEnvironmentWidget(oceanWindDependency_, 1454.0f);
+        positionEnvironmentWidget(oceanSurfaceDetail_, 1488.0f);
+        positionEnvironmentWidget(oceanDisplacementTolerance_, 1522.0f);
+        positionEnvironmentWidget(oceanWaterRed_, 1556.0f);
+        positionEnvironmentWidget(oceanWaterGreen_, 1590.0f);
+        positionEnvironmentWidget(oceanWaterBlue_, 1624.0f);
+        positionEnvironmentWidget(oceanWaterOpacity_, 1658.0f);
+        positionEnvironmentWidget(oceanExtinctionRed_, 1692.0f);
+        positionEnvironmentWidget(oceanExtinctionGreen_, 1726.0f);
+        positionEnvironmentWidget(oceanExtinctionBlue_, 1760.0f);
+
+        positionEnvironmentWidget(terrainLabel_, 44.0f, 20.0f);
+        positionEnvironmentWidget(createTerrainButton_, 64.0f);
+        positionEnvironmentWidget(terrainSizeReadout_, 64.0f, 20.0f);
+        positionEnvironmentWidget(expandTerrainButton_, 88.0f);
+        positionEnvironmentWidget(terrainChunkScale_, 122.0f);
+        positionEnvironmentWidget(terrainMinimumHeight_, 156.0f);
+        positionEnvironmentWidget(terrainMaximumHeight_, 190.0f);
+        positionEnvironmentWidget(terrainLowAltitudeBlend_, 224.0f);
+        positionEnvironmentWidget(terrainBaseBlend_, 258.0f);
+        positionEnvironmentWidget(terrainSlopeBlend_, 292.0f);
+        positionEnvironmentWidget(terrainLodBias_, 326.0f);
+        positionEnvironmentWidget(terrainMaterialLabel_, 370.0f, 20.0f);
+        positionEnvironmentWidget(terrainMaterialPreset_, 390.0f);
+        positionEnvironmentWidget(terrainTextureScale_, 424.0f);
+        terrainApplyDefaultGrassButton_.SetPos(XMFLOAT2(12.0f, 458.0f));
+        terrainReloadMaterialButton_.SetPos(XMFLOAT2(
+            20.0f + (environmentFieldWidth - 8.0f) * 0.5f,
+            458.0f));
+        terrainApplyDefaultGrassButton_.SetSize(XMFLOAT2(
+            (environmentFieldWidth - 8.0f) * 0.5f,
+            28.0f));
+        terrainReloadMaterialButton_.SetSize(XMFLOAT2(
+            (environmentFieldWidth - 8.0f) * 0.5f,
+            28.0f));
+        positionEnvironmentWidget(terrainSculptLabel_, 500.0f, 20.0f);
+        positionEnvironmentWidget(terrainSculptMode_, 520.0f);
+        positionEnvironmentWidget(terrainBrushRadius_, 554.0f);
+        positionEnvironmentWidget(terrainBrushStrength_, 588.0f);
+        positionEnvironmentWidget(terrainBrushFalloff_, 622.0f);
+        positionEnvironmentWidget(terrainBrushReadout_, 656.0f, 20.0f);
+        positionEnvironmentWidget(terrainStrokeDiagnostic_, 676.0f, 20.0f);
+        LayoutWd01VegetationControls(environmentFieldWidth);
+
+        const bool environmentSelected =
+            environmentWorkspaceActive_;
+        const bool terrainSelected = terrainWorkspaceActive_;
+        const bool lightSelected =
+            session_ != nullptr && !environmentSelected && !terrainSelected &&
+            session_->Scenes().GetScene().lights.Contains(
+                session_->Selection().SelectedEntity());
+        const bool playerStartSelected =
+            session_ != nullptr && !environmentSelected && !terrainSelected &&
+            bridge::IsPlayerStart(
+                session_->Scenes().GetScene(),
+                session_->Selection().SelectedEntity());
+        LayoutInspectorActions(
+            environmentSelected,
+            terrainSelected,
+            lightSelected,
+            false,
+            playerStartSelected);
+        LayoutS1BInspectorSections();
+
+        contentPanel_.SetPos(XMFLOAT2(
+            leftWidth + 16.0f,
+            height - bottomHeight - 8.0f));
+        contentPanel_.SetSize(XMFLOAT2(
+            width - leftWidth - rightWidth - 32.0f,
+            bottomHeight));
+        contentLabel_.SetPos(XMFLOAT2(12.0f, 10.0f));
+        contentLabel_.SetSize(XMFLOAT2(
+            contentPanel_.GetSize().x - 24.0f,
+            28.0f));
+        contentPlaceholder_.SetPos(XMFLOAT2(12.0f, 50.0f));
+        contentPlaceholder_.SetSize(XMFLOAT2(
+            contentPanel_.GetSize().x - 24.0f,
+            bottomHeight - 62.0f));
+
+        // Positioned independently of the Inspector's hardcoded column
+        // (see CreateImportScalePanel). Import mode owns the screen, so this
+        // is a right-docked task panel rather than a popup floating inside the
+        // editor viewport.
+        //
+        // wi::gui::Window::Render scissor-clips every child widget to the
+        // window's own rectangle (widget->parent->scissorRect), including a
+        // ComboBox's dropdown list when it opens -- Wicked's auto-flip
+        // logic in ComboBox::GetDropOffset only checks against the full
+        // canvas height, not the parent window's bounds, so it never
+        // triggers here. The panel must itself be tall enough to contain
+        // the combo's fully open dropdown (its own 28px row plus three
+        // 28px items, ~112px) or the options render clipped to invisible,
+        // unselectable, even though the combo logic itself is fine. This
+        // is why the panel is taller than its visible idle content and the
+        // buttons sit well below the combo rather than immediately under
+        // it.
+        const float importScalePanelWidth = std::clamp(
+            importInspectorWidth_, 310.0f,
+            std::max(310.0f, std::min(680.0f, width * 0.6f)));
+        const float importScalePanelTop = 8.0f;
+        const float importScalePanelHeight = std::max(320.0f, height - 16.0f);
+        // GGMAX-style task workspace: keep the preview unobstructed and dock
+        // the importer controls down the right side of the preview viewport.
+        const float importScalePanelX =
+            std::max(8.0f, width - importScalePanelWidth - 8.0f);
+        importInspectorLayoutInProgress_ = true;
+        importScalePanel_.SetPos(XMFLOAT2(
+            importScalePanelX,
+            importScalePanelTop));
+        importScalePanel_.SetSize(XMFLOAT2(
+            importScalePanelWidth,
+            importScalePanelHeight));
+        importInspectorLayoutInProgress_ = false;
+        importScaleTitleLabel_.SetPos(XMFLOAT2(12.0f, 8.0f));
+        importScaleTitleLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 24.0f));
+        importScaleReadoutLabel_.SetPos(XMFLOAT2(12.0f, 36.0f));
+        importScaleReadoutLabel_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 64.0f));
+        creatorImportHelpLabel.SetPos(XMFLOAT2(12.0f, 100.0f));
+        creatorImportHelpLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 42.0f));
+        creatorImportAssetName.SetPos(XMFLOAT2(12.0f, 190.0f));
+        creatorImportAssetName.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 32.0f));
+        creatorImportDestination.SetPos(XMFLOAT2(12.0f, 230.0f));
+        creatorImportDestination.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 32.0f));
+        creatorImportModelChoice.SetPos(XMFLOAT2(12.0f, 274.0f));
+        creatorImportModelChoice.SetSize(XMFLOAT2((importScalePanelWidth - 28.0f) * 0.5f, 44.0f));
+        creatorImportCharacterChoice.SetPos(XMFLOAT2(16.0f + (importScalePanelWidth - 28.0f) * 0.5f, 274.0f));
+        creatorImportCharacterChoice.SetSize(XMFLOAT2((importScalePanelWidth - 28.0f) * 0.5f, 44.0f));
+        creatorImportRigReadout.SetPos(XMFLOAT2(12.0f, 190.0f));
+        creatorImportRigReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 130.0f));
+
+        creatorImportTransformLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
+        creatorImportTransformLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
+        const auto layoutFullRow = [importScalePanelWidth](
+            wi::gui::Widget& widget, const float rowY)
+        {
+            widget.SetPos(XMFLOAT2(12.0f, rowY));
+            widget.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        };
+        const auto layoutSliderRow = [importScalePanelWidth](
+            wi::gui::Widget& widget, const float rowY)
+        {
+            widget.SetPos(XMFLOAT2(12.0f, rowY));
+            widget.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+        };
+        layoutSliderRow(creatorImportPositionX, 210.0f);
+        layoutSliderRow(creatorImportPositionY, 248.0f);
+        layoutSliderRow(creatorImportPositionZ, 286.0f);
+        layoutSliderRow(creatorImportRotationX, 330.0f);
+        layoutSliderRow(creatorImportRotationY, 368.0f);
+        layoutSliderRow(creatorImportRotationZ, 406.0f);
+        layoutSliderRow(creatorImportScaleX, 450.0f);
+        layoutSliderRow(creatorImportScaleY, 488.0f);
+        layoutSliderRow(creatorImportScaleZ, 526.0f);
+        layoutFullRow(creatorImportScaleLinked, 566.0f);
+        layoutFullRow(creatorImportDimensionPreset, 602.0f);
+        layoutFullRow(importScaleModeCombo_, 638.0f);
+
+        creatorImportMaterialLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
+        creatorImportMaterialLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
+        creatorImportMaterialCombo.SetPos(XMFLOAT2(12.0f, 210.0f));
+        creatorImportMaterialCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        creatorImportMaterialReadout.SetPos(XMFLOAT2(12.0f, 242.0f));
+        creatorImportMaterialReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 56.0f));
+        creatorImportTexturePreviews.SetPos(XMFLOAT2(12.0f, 302.0f));
+        creatorImportTexturePreviews.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 280.0f));
+        creatorImportTextureHelp.SetPos(XMFLOAT2(12.0f, 586.0f));
+        creatorImportTextureHelp.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 20.0f));
+        creatorImportTextureSlotCombo.SetPos(XMFLOAT2(12.0f, 610.0f));
+        creatorImportTextureSlotCombo.SetSize(XMFLOAT2(150.0f, 28.0f));
+        creatorImportTexturePath.SetPos(XMFLOAT2(166.0f, 610.0f));
+        creatorImportTexturePath.SetSize(XMFLOAT2(importScalePanelWidth - 178.0f, 28.0f));
+        creatorImportTextureBrowse.SetPos(XMFLOAT2(12.0f, 642.0f));
+        creatorImportTextureBrowse.SetSize(XMFLOAT2(120.0f, 28.0f));
+        creatorImportTextureClear.SetPos(XMFLOAT2(136.0f, 642.0f));
+        creatorImportTextureClear.SetSize(XMFLOAT2(100.0f, 28.0f));
+        creatorImportMaterialScalarLabel.SetPos(XMFLOAT2(12.0f, 682.0f));
+        creatorImportMaterialScalarLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 20.0f));
+        layoutSliderRow(creatorImportRoughness, 710.0f);
+        layoutSliderRow(creatorImportMetalness, 748.0f);
+        layoutSliderRow(creatorImportReflectance, 786.0f);
+        layoutSliderRow(creatorImportNormalStrength, 824.0f);
+        layoutSliderRow(creatorImportAoStrength, 862.0f);
+        layoutSliderRow(creatorImportEmissiveStrength, 900.0f);
+
+        creatorImportLightingLabel.SetPos(XMFLOAT2(12.0f, 688.0f));
+        creatorImportLightingLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
+        layoutSliderRow(creatorImportLightIntensity, 718.0f);
+        layoutSliderRow(creatorImportLightAzimuth, 758.0f);
+        layoutSliderRow(creatorImportLightElevation, 798.0f);
+        layoutSliderRow(creatorImportAmbientBrightness, 838.0f);
+        layoutFullRow(creatorImportLightingPreset, 878.0f);
+        layoutFullRow(creatorImportLightingReset, 914.0f);
+        layoutFullRow(creatorImportMannequinVisible, 958.0f);
+
+        creatorImportAnimationLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
+        creatorImportAnimationLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
+        creatorImportAnimationCombo.SetPos(XMFLOAT2(12.0f, 210.0f));
+        creatorImportAnimationCombo.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        creatorImportAnimationName.SetPos(XMFLOAT2(12.0f, 246.0f));
+        creatorImportAnimationName.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        creatorImportAnimationStart.SetPos(XMFLOAT2(12.0f, 282.0f));
+        creatorImportAnimationStart.SetSize(XMFLOAT2(120.0f, 28.0f));
+        creatorImportAnimationEnd.SetPos(XMFLOAT2(136.0f, 282.0f));
+        creatorImportAnimationEnd.SetSize(XMFLOAT2(120.0f, 28.0f));
+        creatorImportAnimationEnabled.SetPos(XMFLOAT2(260.0f, 282.0f));
+        creatorImportAnimationEnabled.SetSize(XMFLOAT2(importScalePanelWidth - 272.0f, 28.0f));
+        creatorImportAnimationAdd.SetPos(XMFLOAT2(12.0f, 318.0f));
+        creatorImportAnimationAdd.SetSize(XMFLOAT2(110.0f, 28.0f));
+        creatorImportAnimationDelete.SetPos(XMFLOAT2(126.0f, 318.0f));
+        creatorImportAnimationDelete.SetSize(XMFLOAT2(120.0f, 28.0f));
+        const float playbackButtonWidth = (importScalePanelWidth - 32.0f) / 3.0f;
+        creatorImportAnimationPlay.SetPos(XMFLOAT2(12.0f, 354.0f));
+        creatorImportAnimationPause.SetPos(XMFLOAT2(16.0f + playbackButtonWidth, 354.0f));
+        creatorImportAnimationStop.SetPos(XMFLOAT2(20.0f + playbackButtonWidth * 2.0f, 354.0f));
+        for (auto* button : {&creatorImportAnimationPlay,
+            &creatorImportAnimationPause, &creatorImportAnimationStop})
+            button->SetSize(XMFLOAT2(playbackButtonWidth, 34.0f));
+        creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, 396.0f));
+        creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 50.0f));
+        creatorImportExternalAnimationAdd.SetPos(XMFLOAT2(12.0f, 454.0f));
+        creatorImportExternalAnimationAdd.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+        creatorImportExternalAnimationRemove.SetPos(XMFLOAT2(12.0f, 494.0f));
+        creatorImportExternalAnimationRemove.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 30.0f));
+        creatorImportExternalAnimationStatus.SetPos(XMFLOAT2(12.0f, 532.0f));
+        creatorImportExternalAnimationStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 112.0f));
+        creatorImportActionBar.SetPos(XMFLOAT2(12.0f, 178.0f));
+        creatorImportActionBar.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 28.0f));
+        const float thumbnailPreviewSide = std::min(
+            244.0f, importScalePanelWidth - 48.0f);
+        creatorImportThumbnailPreview.SetPos(XMFLOAT2(
+            (importScalePanelWidth - thumbnailPreviewSide) * 0.5f,
+            214.0f));
+        creatorImportThumbnailPreview.SetSize(XMFLOAT2(
+            thumbnailPreviewSide, thumbnailPreviewSide));
+        creatorImportThumbnailCapture.SetPos(XMFLOAT2(12.0f, 468.0f));
+        creatorImportThumbnailCapture.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 40.0f));
+        creatorImportThumbnailStatus.SetPos(XMFLOAT2(12.0f, 516.0f));
+        creatorImportThumbnailStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 38.0f));
+        importScaleApplyButton_.SetPos(XMFLOAT2(12.0f, 564.0f));
+        importScaleApplyButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 44.0f));
+        importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 618.0f));
+        importScaleDismissButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+        LayoutCreatorImportStageHeadings(importScalePanelWidth);
+
+        const float hubMargin = std::clamp(width * 0.025f, 24.0f, 40.0f);
+        const float hubGap = 18.0f;
+        const float hubHeaderHeight = 112.0f;
+        const float hubStatusHeight = 34.0f;
+        const float hubContentTop = hubMargin + hubHeaderHeight;
+        const float hubStatusY = std::max(
+            hubContentTop + 280.0f,
+            height - hubMargin - hubStatusHeight);
+        const bool hubCompact = width < 1080.0f;
+        const float hubLeftWidth = std::clamp(width * 0.205f, 230.0f, 300.0f);
+        const float hubRightWidth = hubCompact
+            ? hubLeftWidth
+            : std::clamp(width * 0.27f, 310.0f, 410.0f);
+        const float hubMainX = hubMargin + hubLeftWidth + hubGap;
+        const float hubRightX = hubCompact
+            ? hubMargin
+            : width - hubMargin - hubRightWidth;
+        const float hubMainWidth = std::max(
+            220.0f,
+            (hubCompact ? width - hubMargin : hubRightX) - hubGap - hubMainX);
+
+        projectHubPanel_.SetPos(XMFLOAT2(0.0f, 0.0f));
+        projectHubPanel_.SetSize(XMFLOAT2(width, height));
+        hubBrandLabel_.SetPos(XMFLOAT2(hubMargin, hubMargin));
+        hubBrandLabel_.SetSize(XMFLOAT2(280.0f, 22.0f));
+        hubTitleLabel_.SetPos(XMFLOAT2(hubMargin, hubMargin + 24.0f));
+        hubTitleLabel_.SetSize(XMFLOAT2(520.0f, 48.0f));
+        hubSubtitleLabel_.SetPos(XMFLOAT2(hubMargin, hubMargin + 75.0f));
+        hubSubtitleLabel_.SetSize(XMFLOAT2(width - hubMargin * 2.0f, 26.0f));
+
+        projectNameInput_.SetPos(XMFLOAT2(hubMargin, hubContentTop + 30.0f));
+        projectNameInput_.SetSize(XMFLOAT2(hubLeftWidth, 38.0f));
+        createProjectButton_.SetPos(XMFLOAT2(hubMargin, hubContentTop + 82.0f));
+        createProjectButton_.SetSize(XMFLOAT2(hubLeftWidth, 46.0f));
+        openProjectButton_.SetPos(XMFLOAT2(hubMargin, hubContentTop + 140.0f));
+        openProjectButton_.SetSize(XMFLOAT2(hubLeftWidth, 42.0f));
+        continueProjectButton_.SetPos(XMFLOAT2(hubMargin, hubContentTop + 194.0f));
+        continueProjectButton_.SetSize(XMFLOAT2(hubLeftWidth, 40.0f));
+        openSceneButton_.SetVisible(false);
+        openSceneButton_.SetPos(XMFLOAT2(0.0f, 0.0f));
+        openSceneButton_.SetSize(XMFLOAT2(0.0f, 0.0f));
+
+        recentProjectsLabel_.SetPos(XMFLOAT2(hubMainX, hubContentTop));
+        recentProjectsLabel_.SetSize(XMFLOAT2(hubMainWidth, 26.0f));
+        const float hubCardsTop = hubContentTop + 38.0f;
+        const std::size_t hubColumns = hubMainWidth >= 430.0f ? 2u : 1u;
+        const std::size_t hubRows =
+            (recentProjectButtons_.size() + hubColumns - 1u) / hubColumns;
+        const float hubCardGap = 10.0f;
+        const float hubCardsAvailable = std::max(
+            180.0f,
+            hubStatusY - hubCardsTop - 14.0f);
+        const float hubCardHeight = std::clamp(
+            (hubCardsAvailable - hubCardGap * static_cast<float>(hubRows - 1u)) /
+                static_cast<float>(hubRows),
+            38.0f,
+            68.0f);
+        const float hubCardWidth =
+            (hubMainWidth - hubCardGap * static_cast<float>(hubColumns - 1u)) /
+            static_cast<float>(hubColumns);
+        for (std::size_t index = 0; index < recentProjectButtons_.size(); ++index)
+        {
+            const std::size_t column = index % hubColumns;
+            const std::size_t row = index / hubColumns;
+            recentProjectButtons_[index].SetPos(XMFLOAT2(
+                hubMainX + static_cast<float>(column) * (hubCardWidth + hubCardGap),
+                hubCardsTop + static_cast<float>(row) * (hubCardHeight + hubCardGap)));
+            recentProjectButtons_[index].SetSize(XMFLOAT2(hubCardWidth, hubCardHeight));
+        }
+
+        const float hubDetailsY = hubCompact
+            ? hubContentTop + 252.0f
+            : hubContentTop;
+        const float hubDetailsHeight = hubCompact
+            ? std::max(110.0f, hubStatusY - hubDetailsY - 66.0f)
+            : std::clamp(height * 0.36f, 210.0f, 300.0f);
+        selectedProjectLabel_.SetPos(XMFLOAT2(hubRightX, hubDetailsY));
+        selectedProjectLabel_.SetSize(XMFLOAT2(hubRightWidth, hubDetailsHeight));
+        launchProjectButton_.SetPos(XMFLOAT2(
+            hubRightX,
+            hubDetailsY + hubDetailsHeight + 12.0f));
+        launchProjectButton_.SetSize(XMFLOAT2(hubRightWidth, 46.0f));
+
+        hubMessageLabel_.SetPos(XMFLOAT2(hubMargin, hubStatusY));
+        hubMessageLabel_.SetSize(XMFLOAT2(
+            width - hubMargin * 2.0f,
+            hubStatusHeight));
+
+        // Layout the Render window only when the Studio layout itself changes.
+        // Repositioning Window children every frame breaks Wicked GUI mouse/scroll ownership.
+        if (renderWorkspaceActive_)
+            LayoutRenderWorkspace();
+
+        if (diagnostics_ != nullptr)
+        {
+            diagnostics_->rect.left = static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.x + 10.0f));
+            diagnostics_->rect.top = static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.y + 10.0f));
+            diagnostics_->rect.right = static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.z));
+            diagnostics_->rect.bottom = static_cast<std::int32_t>(
+                LogicalToPhysical(viewportBounds_.w));
+        }
+    }
+
+    void StudioRenderPath::RefreshStatus()
+    {
+        if (session_ == nullptr)
+        {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error, "studio", "session.unavailable", "Studio session unavailable");
+            statusLabel_.SetText("ENGINEBRIDGE SESSION UNAVAILABLE");
+            return;
+        }
+
+        const auto& scenes = session_->Scenes();
+        if (sceneOpenInProgress_)
+        {
+            const std::string openingName = wi::helper::GetFileNameFromPath(
+                openingScenePath_);
+            statusLabel_.SetText("OPENING SCENE // " + openingName);
+            studioChrome_.SetStatusText(statusLabel_.GetText());
+            return;
+        }
+        if (!scenes.LastError().empty())
+        {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Error, "scene", "scene.error", scenes.LastError());
+            statusLabel_.SetText("SCENE ERROR // " + scenes.LastError());
+            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+            studioChrome_.SetStatusText(statusLabel_.GetText());
+            return;
+        }
+
+        if (!session_->Documents().LastWarning().empty())
+        {
+            diagnosticService_.Record(bridge::DiagnosticSeverity::Warning, "scene", "scene.warning", session_->Documents().LastWarning());
+            statusLabel_.SetText(
+                "SCENE WARNING // " + session_->Documents().LastWarning());
+            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+            studioChrome_.SetStatusText(statusLabel_.GetText());
+            return;
+        }
+
+        if (lightPlacementActive_)
+        {
+            statusLabel_.SetText(
+                std::string("PLACE ") +
+                PlacementLightName(lightPlacementType_) +
+                " LIGHT // LEFT CLICK SURFACE // ESC OR RIGHT CLICK CANCEL");
+            studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+            studioChrome_.SetStatusText(statusLabel_.GetText());
+            return;
+        }
+
+        const std::string projectName = session_->Projects().HasProject()
+            ? session_->Projects().CurrentProject().name
+            : "PROVING GROUND";
+        const char* transformTool = gizmo_.isRotator
+            ? "ROTATE"
+            : gizmo_.isScalator
+                ? "SCALE"
+                : "MOVE";
+        statusLabel_.SetText(
+            projectName + " // " +
+            std::to_string(scenes.ListEntities().size()) +
+            " ITEMS // " +
+            transformTool +
+            " // UNDO " +
+            std::to_string(session_->Commands().UndoCount()) +
+            " // REDO " +
+            std::to_string(session_->Commands().RedoCount()));
+        std::string sceneName = projectName;
+        if (!scenes.CurrentPath().empty())
+        {
+            sceneName = wi::helper::RemoveExtension(
+                wi::helper::GetFileNameFromPath(scenes.CurrentPath()));
+        }
+        studioChrome_.SetSceneName(sceneName);
+        studioChrome_.SetSceneDirty(session_->Commands().IsDirty());
+        studioChrome_.SetStatusText(statusLabel_.GetText());
+    }
+
+    void StudioRenderPath::RefreshHierarchy()
+    {
+        hierarchyTree_.ClearItems();
+        std::vector<RenegadeStudioChrome::HierarchyRow> chromeRows;
+        if (session_ == nullptr)
+        {
+            studioChrome_.SetHierarchyRows({});
+            return;
+        }
+
+        const auto selected = session_->Selection().SelectedEntity();
+        const auto weatherEntity = session_->Scenes().WeatherEntity();
+        const auto& scene = session_->Scenes().GetScene();
+        for (const auto& entity : session_->Scenes().ListEntities())
+        {
+            // A broken Gate 5 build could serialize Wicked's fallback Weather
+            // onto the Terrain entity. Hide only the dedicated Environment
+            // carrier; legacy dual-role terrain must remain discoverable.
+            if (entity.entity == weatherEntity &&
+                !scene.terrains.Contains(entity.entity))
+            {
+                continue;
+            }
+            wi::gui::TreeList::Item item;
+            item.name = entity.name;
+            item.level = entity.depth;
+            item.userdata = entity.entity;
+            item.open = true;
+            item.selected = entity.entity == selected;
+            hierarchyTree_.AddItem(item);
+            chromeRows.push_back({
+                entity.name,
+                entity.depth,
+                entity.entity == selected,
+                static_cast<std::uint64_t>(entity.entity),
+                ToHierarchyCategory(entity.category),
+            });
+        }
+        studioChrome_.SetHierarchyRows(std::move(chromeRows));
+    }
+
+    void StudioRenderPath::LayoutInspectorActions(
+        const bool environment,
+        const bool terrain,
+        const bool light,
+        const bool sceneCamera,
+        const bool playerStart)
+    {
+        const float width = inspectorPanel_.GetSize().x;
+        constexpr float gap = 8.0f;
+        const float threeButtonWidth = (width - 40.0f) / 3.0f;
+        const float twoButtonWidth = (width - 32.0f) / 2.0f;
+        const float actionStart = environment
+            ? std::max(1772.0f, inspectorPanel_.GetSize().y - 82.0f)
+            : terrain
+                ? 1340.0f
+                : light
+                    ? 1130.0f
+                    : sceneCamera
+                        ? 804.0f
+                        : playerStart
+                            ? 670.0f
+                        : materialInspectorVisible_
+                            ? std::max(630.0f, materialInspectorBottom_ + 16.0f)
+                            : 630.0f;
+        const float historyRow = environment
+            ? actionStart
+            : actionStart + 40.0f;
+        const float saveRow = historyRow + 40.0f;
+
+        focusButton_.SetPos(XMFLOAT2(12.0f, actionStart));
+        duplicateButton_.SetPos(XMFLOAT2(
+            12.0f + threeButtonWidth + gap,
+            actionStart));
+        deleteButton_.SetPos(XMFLOAT2(
+            12.0f + (threeButtonWidth + gap) * 2.0f,
+            actionStart));
+        focusButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        duplicateButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        deleteButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+
+        undoButton_.SetPos(XMFLOAT2(12.0f, historyRow));
+        redoButton_.SetPos(XMFLOAT2(
+            20.0f + twoButtonWidth,
+            historyRow));
+        undoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
+        redoButton_.SetSize(XMFLOAT2(twoButtonWidth, 28.0f));
+
+        saveButton_.SetPos(XMFLOAT2(12.0f, saveRow));
+        saveAsButton_.SetPos(XMFLOAT2(
+            12.0f + threeButtonWidth + gap,
+            saveRow));
+        reopenButton_.SetPos(XMFLOAT2(
+            12.0f + (threeButtonWidth + gap) * 2.0f,
+            saveRow));
+        saveButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        saveAsButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+        reopenButton_.SetSize(XMFLOAT2(threeButtonWidth, 28.0f));
+    }
+
+    void StudioRenderPath::QueueInspectorRefresh() noexcept
+    {
+        inspectorRefreshPending_ = true;
+    }
+
+    void StudioRenderPath::RefreshInspector()
+    {
+        diagnosticService_.SetState("inspector_refresh", {{"elapsed_ms", diagnosticService_.ElapsedMs()},
+            {"stage", std::string("refresh_entered")}});
+        const bool hasSession = session_ != nullptr;
+        const auto selectedEntity = hasSession
+            ? session_->Selection().SelectedEntity()
+            : wi::ecs::INVALID_ENTITY;
+        const auto terrainWorkspaceEntity =
+            hasSession && terrainWorkspaceActive_ &&
+            session_->Scenes().GetScene().terrains.GetCount() > 0
+            ? session_->Scenes().GetScene().terrains.GetEntity(0)
+            : wi::ecs::INVALID_ENTITY;
+        const auto entity = environmentWorkspaceActive_
+            ? EditableWeatherEntity()
+            : terrainWorkspaceActive_
+                ? terrainWorkspaceEntity
+                : selectedEntity;
+        auto* transform = hasSession
+            ? session_->Scenes().GetScene().transforms.GetComponent(
+                environmentWorkspaceActive_ || terrainWorkspaceActive_
+                    ? wi::ecs::INVALID_ENTITY
+                    : selectedEntity)
+            : nullptr;
+        // Terrain generation in an older blank Level can leave Weather on the
+        // Terrain entity. Terrain mode must still resolve only Terrain controls;
+        // Environment owns Weather presentation in its dedicated workspace.
+        auto* weather = hasSession && !terrainWorkspaceActive_
+            ? session_->Scenes().GetScene().weathers.GetComponent(entity)
+            : nullptr;
+        auto* terrain = hasSession && !environmentWorkspaceActive_
+            ? session_->Scenes().GetScene().terrains.GetComponent(entity)
+            : nullptr;
+        auto* light = hasSession && !environmentWorkspaceActive_ &&
+            !terrainWorkspaceActive_
+            ? session_->Scenes().GetScene().lights.GetComponent(entity)
+            : nullptr;
+        auto* authoredCamera = hasSession && !environmentWorkspaceActive_ &&
+            !terrainWorkspaceActive_
+            ? session_->Scenes().GetScene().cameras.GetComponent(entity)
+            : nullptr;
+        auto* decal = hasSession && !environmentWorkspaceActive_ &&
+            !terrainWorkspaceActive_
+            ? session_->Scenes().GetScene().decals.GetComponent(entity)
+            : nullptr;
+        auto* environmentProbe = hasSession && !environmentWorkspaceActive_ &&
+            !terrainWorkspaceActive_
+            ? session_->Scenes().GetScene().probes.GetComponent(entity)
+            : nullptr;
+        auto* decalMaterial = hasSession && decal != nullptr
+            ? session_->Scenes().GetScene().materials.GetComponent(entity)
+            : nullptr;
+        SyncSelectionOutline();
+
+        const bool hasTransform = transform != nullptr;
+        const bool hasWeather = weather != nullptr;
+        const bool hasTerrain = terrain != nullptr;
+        const bool hasLight = light != nullptr;
+        const bool hasCamera = authoredCamera != nullptr;
+        const bool hasDecal = decal != nullptr;
+        const bool hasEnvironmentProbe = environmentProbe != nullptr;
+        const bool hasPlayerStart = hasSession &&
+            !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
+            bridge::IsPlayerStart(
+                session_->Scenes().GetScene(), selectedEntity);
+        const bool sceneComponentsVisible =
+            hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
+            !environmentWorkspaceActive_ && !terrainWorkspaceActive_ &&
+            !hasWeather && !hasTerrain && !hasPlayerStart;
+        wi::ecs::Entity sceneAuthoringRoot = wi::ecs::INVALID_ENTITY;
+        bridge::SceneLayerMaskState sceneLayerState;
+        bridge::ObjectParticipationState objectRenderableState;
+        bridge::ObjectParticipationState objectCastShadowState;
+        bridge::ObjectParticipationState objectForegroundState;
+        bridge::ObjectParticipationState objectMainCameraState;
+        bridge::ObjectParticipationState objectReflectionsState;
+        bridge::ObjectParticipationState objectWetmapState;
+        if (sceneComponentsVisible)
+        {
+            const auto& currentScene = session_->Scenes().GetScene();
+            sceneAuthoringRoot = bridge::ResolveSceneComponentAuthoringRoot(
+                currentScene, selectedEntity);
+            sceneLayerState = bridge::InspectSceneLayerMask(
+                currentScene, selectedEntity);
+            objectRenderableState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::Renderable);
+            objectCastShadowState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::CastShadow);
+            objectForegroundState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::Foreground);
+            objectMainCameraState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::VisibleInMainCamera);
+            objectReflectionsState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::VisibleInReflections);
+            objectWetmapState = bridge::InspectObjectParticipation(
+                currentScene, selectedEntity,
+                bridge::ObjectParticipationProperty::Wetmap);
+        }
+        const bool hasObjectTargets = objectRenderableState.targetCount > 0;
+        if (hasSession && selectedEntity != wi::ecs::INVALID_ENTITY &&
+            !environmentWorkspaceActive_ && !terrainWorkspaceActive_)
+        {
+            const auto* selectedName =
+                session_->Scenes().GetScene().names.GetComponent(
+                    selectedEntity);
+            studioChrome_.SetSelectionName(
+                selectedName != nullptr ? selectedName->name : std::string{});
+        }
+        else
+        {
+            studioChrome_.SetSelectionName({});
+        }
+        LayoutInspectorActions(
+            hasWeather, hasTerrain, hasLight,
+            hasCamera || hasDecal || hasEnvironmentProbe,
+            hasPlayerStart);
+
+        sceneIdentityLabel_.SetVisible(sceneComponentsVisible);
+        sceneNameInput_.SetVisible(sceneComponentsVisible);
+        sceneLayerLabel_.SetVisible(sceneComponentsVisible);
+        sceneLayerAllButton_.SetVisible(sceneComponentsVisible);
+        sceneLayerNoneButton_.SetVisible(sceneComponentsVisible);
+        for (auto& bit : sceneLayerBits_)
+            bit.SetVisible(sceneComponentsVisible);
+        sceneMetadataLabel_.SetVisible(sceneComponentsVisible);
+        sceneMetadataPreset_.SetVisible(sceneComponentsVisible);
+        sceneObjectLabel_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectRenderable_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectCastShadow_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectForeground_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectMainCamera_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectReflections_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+        sceneObjectWetmap_.SetVisible(sceneComponentsVisible && hasObjectTargets);
+
+        RefreshMaterialInspector(
+            sceneComponentsVisible && !hasCamera && !hasDecal &&
+                !hasEnvironmentProbe && !hasLight,
+            selectedEntity);
+        LayoutInspectorActions(
+            hasWeather, hasTerrain, hasLight,
+            hasCamera || hasDecal || hasEnvironmentProbe,
+            hasPlayerStart);
+
+        const auto setPlayerVisible = [hasPlayerStart](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(hasPlayerStart);
+        };
+        setPlayerVisible(playerLabel_);
+        setPlayerVisible(playerCameraMode_);
+        setPlayerVisible(playerCapsuleRadius_);
+        setPlayerVisible(playerCapsuleHeight_);
+        setPlayerVisible(playerEyeHeight_);
+        setPlayerVisible(playerWalkSpeed_);
+        setPlayerVisible(playerSprintSpeed_);
+        setPlayerVisible(playerJumpSpeed_);
+        setPlayerVisible(playerLookSensitivity_);
+        setPlayerVisible(playerMaximumSlope_);
+        setPlayerVisible(playerGravityFactor_);
+        setPlayerVisible(playerMinimumPitch_);
+        setPlayerVisible(playerMaximumPitch_);
+        if (hasPlayerStart)
+        {
+            const auto settings = bridge::CapturePlayerControllerSettings(
+                session_->Scenes().GetScene(), selectedEntity);
+            playerCapsuleRadius_.SetValue(settings.capsuleRadius);
+            playerCapsuleHeight_.SetValue(
+                bridge::PlayerCapsuleTotalHeight(settings));
+            playerEyeHeight_.SetValue(settings.eyeHeight);
+            playerWalkSpeed_.SetValue(settings.walkSpeed);
+            playerSprintSpeed_.SetValue(settings.sprintSpeed);
+            playerJumpSpeed_.SetValue(settings.jumpSpeed);
+            playerLookSensitivity_.SetValue(settings.lookSensitivity);
+            playerMaximumSlope_.SetValue(settings.maximumSlopeDegrees);
+            playerGravityFactor_.SetValue(settings.gravityFactor);
+            playerMinimumPitch_.SetValue(
+                settings.minimumPitch / XM_PI * 180.0f);
+            playerMaximumPitch_.SetValue(
+                settings.maximumPitch / XM_PI * 180.0f);
+        }
+
+        cameraLabel_.SetVisible(hasCamera);
+        cameraProjection_.SetVisible(hasCamera);
+        cameraFieldOfView_.SetVisible(hasCamera);
+        cameraNearPlane_.SetVisible(hasCamera);
+        cameraFarPlane_.SetVisible(hasCamera);
+        cameraFocalLength_.SetVisible(hasCamera);
+        cameraApertureSize_.SetVisible(hasCamera);
+        cameraOrthoVerticalSize_.SetVisible(hasCamera);
+        cameraAlignToView_.SetVisible(hasCamera);
+        cameraViewFrom_.SetVisible(hasCamera);
+
+        decalLabel_.SetVisible(hasDecal);
+        decalBaseColorOnlyAlpha_.SetVisible(hasDecal);
+        decalSlopeBlend_.SetVisible(hasDecal);
+        decalMaterialLabel_.SetVisible(hasDecal && decalMaterial != nullptr);
+        decalBaseColorRed_.SetVisible(hasDecal && decalMaterial != nullptr);
+        decalBaseColorGreen_.SetVisible(hasDecal && decalMaterial != nullptr);
+        decalBaseColorBlue_.SetVisible(hasDecal && decalMaterial != nullptr);
+        decalOpacity_.SetVisible(hasDecal && decalMaterial != nullptr);
+        decalBaseColorTexture_.SetVisible(hasDecal && decalMaterial != nullptr);
+        if (hasDecal && decalMaterial != nullptr)
+        {
+            decalBaseColorTexture_.SetText(
+                decalMaterial->textures[wi::scene::MaterialComponent::BASECOLORMAP]
+                        .resource.IsValid()
+                    ? "CHANGE DECAL TEXTURE..."
+                    : "SELECT DECAL TEXTURE...");
+        }
+        if (hasDecal)
+        {
+            const auto state = bridge::CaptureDecal(*decal);
+            decalBaseColorOnlyAlpha_.SetCheck(state.baseColorOnlyAlpha);
+            decalSlopeBlend_.SetValue(state.slopeBlendPower);
+            if (decalMaterial != nullptr)
+            {
+                const auto material = bridge::CaptureMaterial(*decalMaterial);
+                decalBaseColorRed_.SetValue(material.baseColor.x);
+                decalBaseColorGreen_.SetValue(material.baseColor.y);
+                decalBaseColorBlue_.SetValue(material.baseColor.z);
+                decalOpacity_.SetValue(material.baseColor.w);
+            }
+        }
+
+        environmentProbeLabel_.SetVisible(hasEnvironmentProbe);
+        environmentProbeResolution_.SetVisible(hasEnvironmentProbe);
+        environmentProbeRealtime_.SetVisible(hasEnvironmentProbe);
+        environmentProbeInterval_.SetVisible(hasEnvironmentProbe);
+        environmentProbeMsaa_.SetVisible(hasEnvironmentProbe);
+        environmentProbeViewDistance_.SetVisible(hasEnvironmentProbe);
+        environmentProbeRefresh_.SetVisible(hasEnvironmentProbe);
+        if (hasEnvironmentProbe)
+        {
+            const auto state = bridge::CaptureEnvironmentProbe(*environmentProbe);
+            environmentProbeResolution_.SetSelectedByUserdataWithoutCallback(
+                state.resolution);
+            environmentProbeRealtime_.SetCheck(state.realTime);
+            environmentProbeInterval_.SetValue(state.updateInterval);
+            environmentProbeMsaa_.SetCheck(state.msaa);
+            environmentProbeViewDistance_.SetValue(state.viewDistance);
+        }
+
+        if (hasCamera)
+        {
+            const auto cameraState = bridge::CaptureCamera(*authoredCamera);
+            cameraProjection_.SetSelectedByUserdataWithoutCallback(
+                cameraState.orthographic ? 1u : 0u);
+            cameraFieldOfView_.SetValue(cameraState.fieldOfViewDegrees);
+            cameraNearPlane_.SetValue(cameraState.nearPlane);
+            cameraFarPlane_.SetValue(cameraState.farPlane);
+            cameraFocalLength_.SetValue(cameraState.focalLength);
+            cameraApertureSize_.SetValue(cameraState.apertureSize);
+            cameraOrthoVerticalSize_.SetValue(cameraState.orthoVerticalSize);
+            cameraFieldOfView_.SetEnabled(!cameraState.orthographic);
+            cameraOrthoVerticalSize_.SetEnabled(cameraState.orthographic);
+        }
+
+        if (sceneComponentsVisible && sceneAuthoringRoot != wi::ecs::INVALID_ENTITY)
+        {
+            const auto& currentScene = session_->Scenes().GetScene();
+            const auto* sceneName = currentScene.names.GetComponent(sceneAuthoringRoot);
+            sceneNameInput_.SetValue(sceneName != nullptr ? sceneName->name : std::string{});
+            sceneLayerLabel_.SetText(sceneLayerState.mixed
+                ? "LAYERS // MIXED // EDITING PRESERVES OTHER BITS"
+                : "LAYERS // 32-BIT MASK");
+            for (std::uint32_t bit = 0; bit < sceneLayerBits_.size(); ++bit)
+            {
+                sceneLayerBits_[bit].SetCheck(
+                    (sceneLayerState.mask & (std::uint32_t{1} << bit)) != 0u);
+            }
+            const auto* metadata = currentScene.metadatas.GetComponent(sceneAuthoringRoot);
+            sceneMetadataPreset_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(metadata != nullptr
+                    ? metadata->preset
+                    : wi::scene::MetadataComponent::Preset::Custom));
+            const bool objectMixed = objectRenderableState.mixed ||
+                objectCastShadowState.mixed || objectForegroundState.mixed ||
+                objectMainCameraState.mixed || objectReflectionsState.mixed ||
+                objectWetmapState.mixed;
+            sceneObjectLabel_.SetText(objectMixed
+                ? "OBJECT // MIXED // WHOLE-ASSET EDIT"
+                : "OBJECT // RENDER PARTICIPATION");
+            sceneObjectRenderable_.SetCheck(objectRenderableState.value);
+            sceneObjectCastShadow_.SetCheck(objectCastShadowState.value);
+            sceneObjectForeground_.SetCheck(objectForegroundState.value);
+            sceneObjectMainCamera_.SetCheck(objectMainCameraState.value);
+            sceneObjectReflections_.SetCheck(objectReflectionsState.value);
+            sceneObjectWetmap_.SetCheck(objectWetmapState.value);
+        }
+
+        const auto setTransformVisible = [this, hasWeather, hasTerrain](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(!environmentWorkspaceActive_ && !terrainWorkspaceActive_ && !hasWeather && !hasTerrain);
+        };
+        setTransformVisible(positionLabel_);
+        setTransformVisible(rotationLabel_);
+        setTransformVisible(scaleLabel_);
+        setTransformVisible(translationX_);
+        setTransformVisible(translationY_);
+        setTransformVisible(translationZ_);
+        setTransformVisible(rotationX_);
+        setTransformVisible(rotationY_);
+        setTransformVisible(rotationZ_);
+        setTransformVisible(scaleX_);
+        setTransformVisible(scaleY_);
+        setTransformVisible(scaleZ_);
+        if (hasPlayerStart)
+        {
+            rotationLabel_.SetText("ROTATION // Y CAMERA HEADING");
+            rotationX_.SetVisible(false);
+            rotationZ_.SetVisible(false);
+            scaleLabel_.SetVisible(false);
+            scaleX_.SetVisible(false);
+            scaleY_.SetVisible(false);
+            scaleZ_.SetVisible(false);
+        }
+        else
+        {
+            rotationLabel_.SetText("ROTATION // DEGREES");
+        }
+
+        const auto setLightVisible = [hasLight](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(hasLight);
+        };
+        setLightVisible(lightLabel_);
+        setLightVisible(lightType_);
+        setLightVisible(lightColorRed_);
+        setLightVisible(lightColorGreen_);
+        setLightVisible(lightColorBlue_);
+        setLightVisible(lightIntensity_);
+        setLightVisible(lightRange_);
+        setLightVisible(lightOuterCone_);
+        setLightVisible(lightInnerCone_);
+        setLightVisible(lightRadius_);
+        setLightVisible(lightLength_);
+        setLightVisible(lightHeight_);
+        setLightVisible(lightCastShadow_);
+        setLightVisible(lightVolumetrics_);
+        setLightVisible(lightVolumetricBoost_);
+
+        const auto setEnvironmentVisible =
+            [hasWeather](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(hasWeather);
+        };
+        setEnvironmentVisible(environmentSkyLabel_);
+        setEnvironmentVisible(environmentPreset_);
+        setEnvironmentVisible(skyMode_);
+        setEnvironmentVisible(aerialPerspective_);
+        setEnvironmentVisible(skyExposure_);
+        setEnvironmentVisible(stars_);
+        setEnvironmentVisible(ambientIntensity_);
+        setEnvironmentVisible(environmentFogLabel_);
+        setEnvironmentVisible(fogStart_);
+        setEnvironmentVisible(fogDensity_);
+        setEnvironmentVisible(heightFog_);
+        setEnvironmentVisible(fogHeightStart_);
+        setEnvironmentVisible(fogHeightEnd_);
+        setEnvironmentVisible(environmentCloudLabel_);
+        setEnvironmentVisible(cloudCoverage_);
+        setEnvironmentVisible(cloudStartHeight_);
+        setEnvironmentVisible(cloudThickness_);
+        setEnvironmentVisible(cloudsCastShadow_);
+        setEnvironmentVisible(precipitationLabel_);
+        setEnvironmentVisible(precipitationMode_);
+        setEnvironmentVisible(precipitationIntensity_);
+        setEnvironmentVisible(precipitationFallSpeed_);
+        setEnvironmentVisible(precipitationParticleScale_);
+        setEnvironmentVisible(precipitationWindAzimuth_);
+        setEnvironmentVisible(precipitationWindSpeed_);
+        setEnvironmentVisible(precipitationTurbulence_);
+        setEnvironmentVisible(sunLabel_);
+        setEnvironmentVisible(sunPreset_);
+        setEnvironmentVisible(sunTime_);
+        setEnvironmentVisible(sunAzimuth_);
+        setEnvironmentVisible(sunElevation_);
+        setEnvironmentVisible(sunPreviewSpeed_);
+        setEnvironmentVisible(sunPlayButton_);
+        setEnvironmentVisible(sunPauseButton_);
+        setEnvironmentVisible(oceanLabel_);
+        setEnvironmentVisible(oceanEnabled_);
+        setEnvironmentVisible(oceanPreset_);
+        setEnvironmentVisible(oceanResolution_);
+        setEnvironmentVisible(oceanWaterHeight_);
+        setEnvironmentVisible(oceanPatchLength_);
+        setEnvironmentVisible(oceanWaveAmplitude_);
+        setEnvironmentVisible(oceanChoppyScale_);
+        setEnvironmentVisible(oceanTimeScale_);
+        setEnvironmentVisible(oceanWindAzimuth_);
+        setEnvironmentVisible(oceanWindSpeed_);
+        setEnvironmentVisible(oceanWindDependency_);
+        setEnvironmentVisible(oceanSurfaceDetail_);
+        setEnvironmentVisible(oceanDisplacementTolerance_);
+        setEnvironmentVisible(oceanWaterRed_);
+        setEnvironmentVisible(oceanWaterGreen_);
+        setEnvironmentVisible(oceanWaterBlue_);
+        setEnvironmentVisible(oceanWaterOpacity_);
+        setEnvironmentVisible(oceanExtinctionRed_);
+        setEnvironmentVisible(oceanExtinctionGreen_);
+        setEnvironmentVisible(oceanExtinctionBlue_);
+
+        const auto setTerrainVisible = [this, hasTerrain](wi::gui::Widget& widget)
+        {
+            widget.SetVisible(terrainWorkspaceActive_ && hasTerrain);
+        };
+        terrainLabel_.SetVisible(
+            terrainWorkspaceActive_);
+        createTerrainButton_.SetVisible(
+            hasSession && terrainWorkspaceActive_ && !hasTerrain);
+        setTerrainVisible(terrainSizeReadout_);
+        setTerrainVisible(expandTerrainButton_);
+        setTerrainVisible(terrainChunkScale_);
+        setTerrainVisible(terrainMinimumHeight_);
+        setTerrainVisible(terrainMaximumHeight_);
+        setTerrainVisible(terrainLowAltitudeBlend_);
+        setTerrainVisible(terrainBaseBlend_);
+        setTerrainVisible(terrainSlopeBlend_);
+        setTerrainVisible(terrainLodBias_);
+        setTerrainVisible(terrainMaterialLabel_);
+        setTerrainVisible(terrainMaterialPreset_);
+        setTerrainVisible(terrainTextureScale_);
+        setTerrainVisible(terrainApplyDefaultGrassButton_);
+        setTerrainVisible(terrainReloadMaterialButton_);
+        setTerrainVisible(terrainSculptLabel_);
+        setTerrainVisible(terrainSculptMode_);
+        setTerrainVisible(terrainBrushRadius_);
+        setTerrainVisible(terrainBrushStrength_);
+        setTerrainVisible(terrainBrushFalloff_);
+        setTerrainVisible(terrainBrushReadout_);
+        setTerrainVisible(terrainStrokeDiagnostic_);
+        RefreshWd01VegetationControls(hasTerrain);
+
+        translationX_.SetEnabled(hasTransform);
+        translationY_.SetEnabled(hasTransform);
+        translationZ_.SetEnabled(hasTransform);
+        rotationX_.SetEnabled(hasTransform);
+        rotationY_.SetEnabled(hasTransform);
+        rotationZ_.SetEnabled(hasTransform);
+        scaleX_.SetEnabled(hasTransform);
+        scaleY_.SetEnabled(hasTransform);
+        scaleZ_.SetEnabled(hasTransform);
+        focusButton_.SetEnabled(hasTransform);
+        duplicateButton_.SetEnabled(hasTransform);
+        deleteButton_.SetEnabled(hasTransform);
+        focusButton_.SetVisible(!hasWeather);
+        duplicateButton_.SetVisible(!hasWeather);
+        deleteButton_.SetVisible(!hasWeather);
+        duplicateButton_.SetEnabled(
+            hasTransform && !hasTerrain && !hasPlayerStart);
+        undoButton_.SetEnabled(hasSession && session_->Commands().CanUndo());
+        redoButton_.SetEnabled(hasSession && session_->Commands().CanRedo());
+        saveButton_.SetEnabled(
+            hasSession && !session_->Scenes().CurrentPath().empty());
+        saveAsButton_.SetEnabled(hasSession);
+        reopenButton_.SetEnabled(
+            hasSession && !session_->Scenes().CurrentPath().empty());
+
+        if (hasWeather)
+        {
+            const auto* name =
+                session_->Scenes().GetScene().names.GetComponent(entity);
+            inspectorLabel_.SetText(
+                environmentWorkspaceActive_
+                    ? "ENVIRONMENT // SCENE WEATHER"
+                    : "ENVIRONMENT // " +
+                        (name != nullptr && !name->name.empty()
+                            ? name->name
+                            : "ENTITY " + std::to_string(entity)));
+
+            const auto state = bridge::CaptureWeather(*weather);
+            environmentPreset_.SetSelectedWithoutCallback(0);
+            skyMode_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(state.skyMode));
+            aerialPerspective_.SetCheck(state.aerialPerspective);
+            skyExposure_.SetValue(state.skyExposure);
+            stars_.SetValue(state.stars);
+            ambientIntensity_.SetValue(state.ambientIntensity);
+            fogStart_.SetValue(state.fogStart);
+            fogDensity_.SetValue(state.fogDensity);
+            heightFog_.SetCheck(state.heightFog);
+            fogHeightStart_.SetValue(state.fogHeightStart);
+            fogHeightEnd_.SetValue(state.fogHeightEnd);
+            cloudCoverage_.SetValue(state.cloudCoverage);
+            cloudStartHeight_.SetValue(state.cloudStartHeight);
+            cloudThickness_.SetValue(state.cloudThickness);
+            cloudsCastShadow_.SetCheck(state.cloudsCastShadow);
+
+            const auto precipitation =
+                bridge::CapturePrecipitation(*weather);
+            precipitationMode_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(precipitation.mode));
+            precipitationIntensity_.SetValue(precipitation.intensity);
+            precipitationFallSpeed_.SetValue(precipitation.fallSpeed);
+            precipitationParticleScale_.SetValue(
+                precipitation.particleScale);
+            precipitationWindAzimuth_.SetValue(
+                precipitation.windAzimuthDegrees);
+            precipitationWindSpeed_.SetValue(precipitation.windSpeed);
+            precipitationTurbulence_.SetValue(precipitation.turbulence);
+
+            const auto sun = bridge::CaptureSun(
+                session_->Scenes().GetScene(),
+                entity);
+            sunPreset_.SetSelectedWithoutCallback(0);
+            sunTime_.SetValue(sun.timeHours);
+            sunAzimuth_.SetValue(sun.azimuthDegrees);
+            sunElevation_.SetValue(sun.elevationDegrees);
+            sunPreviewSpeed_.SetValue(sunPreviewSpeedHoursPerSecond_);
+            sunPlayButton_.SetEnabled(!sunPreviewPlaying_);
+            sunPauseButton_.SetEnabled(sunPreviewPlaying_);
+
+            const auto ocean = bridge::CaptureOcean(*weather);
+            oceanEnabled_.SetCheck(ocean.enabled);
+            oceanPreset_.SetSelectedWithoutCallback(0);
+            oceanResolution_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(
+                    ocean.displacementMapDimension));
+            oceanWaterHeight_.SetValue(ocean.waterHeight);
+            oceanPatchLength_.SetValue(ocean.patchLength);
+            oceanWaveAmplitude_.SetValue(ocean.waveAmplitude);
+            oceanChoppyScale_.SetValue(ocean.choppyScale);
+            oceanTimeScale_.SetValue(ocean.timeScale);
+            oceanWindAzimuth_.SetValue(ocean.windAzimuthDegrees);
+            oceanWindSpeed_.SetValue(ocean.windSpeed);
+            oceanWindDependency_.SetValue(ocean.windDependency);
+            oceanSurfaceDetail_.SetValue(
+                static_cast<float>(ocean.surfaceDetail));
+            oceanDisplacementTolerance_.SetValue(
+                ocean.surfaceDisplacementTolerance);
+            oceanWaterRed_.SetValue(ocean.waterColor.x);
+            oceanWaterGreen_.SetValue(ocean.waterColor.y);
+            oceanWaterBlue_.SetValue(ocean.waterColor.z);
+            oceanWaterOpacity_.SetValue(ocean.waterColor.w);
+            oceanExtinctionRed_.SetValue(ocean.extinctionColor.x);
+            oceanExtinctionGreen_.SetValue(ocean.extinctionColor.y);
+            oceanExtinctionBlue_.SetValue(ocean.extinctionColor.z);
+
+            oceanResolution_.SetEnabled(ocean.enabled);
+            oceanWaterHeight_.SetEnabled(ocean.enabled);
+            oceanPatchLength_.SetEnabled(ocean.enabled);
+            oceanWaveAmplitude_.SetEnabled(ocean.enabled);
+            oceanChoppyScale_.SetEnabled(ocean.enabled);
+            oceanTimeScale_.SetEnabled(ocean.enabled);
+            oceanWindAzimuth_.SetEnabled(ocean.enabled);
+            oceanWindSpeed_.SetEnabled(ocean.enabled);
+            oceanWindDependency_.SetEnabled(ocean.enabled);
+            oceanSurfaceDetail_.SetEnabled(ocean.enabled);
+            oceanDisplacementTolerance_.SetEnabled(ocean.enabled);
+            oceanWaterRed_.SetEnabled(ocean.enabled);
+            oceanWaterGreen_.SetEnabled(ocean.enabled);
+            oceanWaterBlue_.SetEnabled(ocean.enabled);
+            oceanWaterOpacity_.SetEnabled(ocean.enabled);
+            oceanExtinctionRed_.SetEnabled(ocean.enabled);
+            oceanExtinctionGreen_.SetEnabled(ocean.enabled);
+            oceanExtinctionBlue_.SetEnabled(ocean.enabled);
+
+            const bool physicalSky =
+                state.skyMode != bridge::WeatherState::SkyMode::Skybox;
+            const bool volumetricClouds =
+                state.skyMode ==
+                bridge::WeatherState::SkyMode::RealisticWithClouds;
+            aerialPerspective_.SetEnabled(physicalSky);
+            cloudCoverage_.SetEnabled(volumetricClouds);
+            cloudStartHeight_.SetEnabled(volumetricClouds);
+            cloudThickness_.SetEnabled(volumetricClouds);
+            cloudsCastShadow_.SetEnabled(volumetricClouds);
+            fogHeightStart_.SetEnabled(state.heightFog);
+            fogHeightEnd_.SetEnabled(state.heightFog);
+            const bool precipitationEnabled = precipitation.mode !=
+                bridge::PrecipitationMode::None;
+            precipitationIntensity_.SetEnabled(precipitationEnabled);
+            precipitationFallSpeed_.SetEnabled(precipitationEnabled);
+            precipitationParticleScale_.SetEnabled(precipitationEnabled);
+            precipitationWindAzimuth_.SetEnabled(precipitationEnabled);
+            precipitationWindSpeed_.SetEnabled(precipitationEnabled);
+            precipitationTurbulence_.SetEnabled(precipitationEnabled);
+            SyncGizmoSelection();
+            LayoutS1BInspectorSections();
+            return;
+        }
+
+        if (hasTerrain)
+        {
+            const auto* name =
+                session_->Scenes().GetScene().names.GetComponent(entity);
+            inspectorLabel_.SetText(
+                "TERRAIN // " +
+                (name != nullptr && !name->name.empty()
+                    ? name->name
+                    : "ENTITY " + std::to_string(entity)));
+            const auto state = bridge::CaptureTerrain(*terrain);
+            const float terrainWidthKm = bridge::TerrainWidthMeters(
+                state.visibleChunkRadius,
+                state.chunkScale) / 1000.0f;
+            std::ostringstream terrainSize;
+            terrainSize << "CURRENT TERRAIN // " << std::fixed
+                        << std::setprecision(2) << terrainWidthKm
+                        << " KM x " << terrainWidthKm << " KM";
+            terrainSizeReadout_.SetText(terrainSize.str());
+            expandTerrainButton_.SetEnabled(
+                !state.centerToCamera && !state.removeDistantChunks &&
+                state.visibleChunkRadius < bridge::MaximumTerrainChunkRadius);
+            terrainChunkScale_.SetValue(state.chunkScale);
+            terrainMinimumHeight_.SetValue(state.minimumHeight);
+            terrainMaximumHeight_.SetValue(state.maximumHeight);
+            terrainLowAltitudeBlend_.SetValue(state.lowAltitudeBlend);
+            terrainBaseBlend_.SetValue(state.baseBlend);
+            terrainSlopeBlend_.SetValue(state.slopeBlend);
+            terrainLodBias_.SetValue(state.lodBias);
+            const float textureScale = bridge::CaptureTerrainTextureScale(
+                session_->Scenes().GetScene(),
+                *terrain);
+            terrainTextureScale_.SetValue(textureScale);
+            int materialPreset = 0;
+            for (int presetIndex = 0; presetIndex < 3; ++presetIndex)
+            {
+                const auto preset = static_cast<bridge::TerrainMaterialPreset>(
+                    presetIndex);
+                if (std::abs(
+                        textureScale -
+                        bridge::MakeTerrainMaterialPreset(preset)) < 0.01f)
+                {
+                    materialPreset = presetIndex + 1;
+                    break;
+                }
+            }
+            terrainMaterialPreset_.SetSelectedWithoutCallback(materialPreset);
+            std::ostringstream brush;
+            brush << "BRUSH // SIZE " << std::fixed << std::setprecision(0)
+                  << terrainBrushRadiusValue_ << " // STRENGTH "
+                  << std::setprecision(2) << terrainBrushStrengthValue_;
+            terrainBrushReadout_.SetText(brush.str());
+            SyncGizmoSelection();
+            LayoutS1BInspectorSections();
+            return;
+        }
+
+        if (hasLight)
+        {
+            const auto* name =
+                session_->Scenes().GetScene().names.GetComponent(entity);
+            inspectorLabel_.SetText(
+                "LIGHT // " +
+                (name != nullptr && !name->name.empty()
+                    ? name->name
+                    : "ENTITY " + std::to_string(entity)));
+            const auto state = bridge::CaptureLight(*light);
+            lightType_.SetSelectedByUserdataWithoutCallback(
+                static_cast<std::uint64_t>(state.type));
+            lightColorRed_.SetValue(state.color.x);
+            lightColorGreen_.SetValue(state.color.y);
+            lightColorBlue_.SetValue(state.color.z);
+            lightIntensity_.SetValue(state.intensity);
+            lightRange_.SetValue(state.range);
+            lightOuterCone_.SetValue(state.outerConeDegrees);
+            lightInnerCone_.SetValue(state.innerConeDegrees);
+            lightRadius_.SetValue(state.radius);
+            lightLength_.SetValue(state.length);
+            lightHeight_.SetValue(state.height);
+            lightCastShadow_.SetCheck(state.castShadow);
+            lightVolumetrics_.SetCheck(state.volumetrics);
+            lightVolumetricBoost_.SetValue(state.volumetricBoost);
+
+            const bool directional = state.type ==
+                wi::scene::LightComponent::DIRECTIONAL;
+            const bool point = state.type ==
+                wi::scene::LightComponent::POINT;
+            const bool spot = state.type ==
+                wi::scene::LightComponent::SPOT;
+            const bool rectangle = state.type ==
+                wi::scene::LightComponent::RECTANGLE;
+            lightRange_.SetEnabled(!directional);
+            lightOuterCone_.SetVisible(spot);
+            lightInnerCone_.SetVisible(spot);
+            lightRadius_.SetVisible(directional || point || spot);
+            lightLength_.SetVisible(point || rectangle);
+            lightHeight_.SetVisible(rectangle);
+            lightVolumetricBoost_.SetEnabled(state.volumetrics);
+        }
+
+        if (!hasTransform)
+        {
+            if (!hasLight)
+            {
+                inspectorLabel_.SetText(terrainWorkspaceActive_
+                    ? "TERRAIN // CREATE OR EDIT LANDSCAPE"
+                    : "TRANSFORM // SELECT AN ENTITY");
+            }
+            translationX_.SetValue(0.0f);
+            translationY_.SetValue(0.0f);
+            translationZ_.SetValue(0.0f);
+            rotationX_.SetValue(0.0f);
+            rotationY_.SetValue(0.0f);
+            rotationZ_.SetValue(0.0f);
+            scaleX_.SetValue(1.0f);
+            scaleY_.SetValue(1.0f);
+            scaleZ_.SetValue(1.0f);
+            LayoutS1BInspectorSections();
+            return;
+        }
+
+        const auto* name =
+            session_->Scenes().GetScene().names.GetComponent(entity);
+        if (hasPlayerStart)
+        {
+            inspectorLabel_.SetText("PLAYER START // SPAWN + CONTROLLER");
+        }
+        else if (!hasLight)
+        {
+            inspectorLabel_.SetText(
+                "TRANSFORM // " +
+                (name != nullptr && !name->name.empty()
+                    ? name->name
+                    : "ENTITY " + std::to_string(entity)));
+        }
+        translationX_.SetValue(transform->translation_local.x);
+        translationY_.SetValue(transform->translation_local.y);
+        translationZ_.SetValue(transform->translation_local.z);
+        const auto rotation =
+            wi::math::QuaternionToRollPitchYaw(transform->rotation_local);
+        rotationX_.SetValue(rotation.x / XM_PI * 180.0f);
+        rotationY_.SetValue(rotation.y / XM_PI * 180.0f);
+        rotationZ_.SetValue(rotation.z / XM_PI * 180.0f);
+        scaleX_.SetValue(transform->scale_local.x);
+        scaleY_.SetValue(transform->scale_local.y);
+        scaleZ_.SetValue(transform->scale_local.z);
+        LayoutS1BInspectorSections();
+        SyncGizmoSelection();
+    }
+
+    void StudioRenderPath::HandleEditorShortcuts()
+    {
+        if (projectHubVisible_ ||
+            flyCameraActive_ ||
+            GetGUI().IsTyping() ||
+            pendingAction_ != EditorAction::None ||
+            gizmoDragActive_ ||
+            weatherSliderActive_ ||
+            precipitationSliderActive_ ||
+            sunSliderActive_ ||
+            oceanSliderActive_ ||
+            lightSliderActive_ ||
+            materialSliderActive_ ||
+            lightPlacementActive_ ||
+            terrainSliderActive_ ||
+            terrainTextureScaleActive_ ||
+            terrainStrokeActive_)
+        {
+            return;
+        }
+
+        const auto key = [](const char value)
+        {
+            return static_cast<wi::input::BUTTON>(value);
+        };
+        const bool control =
+            wi::input::Down(wi::input::KEYBOARD_BUTTON_LCONTROL) ||
+            wi::input::Down(wi::input::KEYBOARD_BUTTON_RCONTROL);
+        const bool shift =
+            wi::input::Down(wi::input::KEYBOARD_BUTTON_LSHIFT) ||
+            wi::input::Down(wi::input::KEYBOARD_BUTTON_RSHIFT);
+
+        if (control && wi::input::Press(key('Z')))
+        {
+            RequestDiagnosticAction(EditorAction::Undo);
+        }
+        else if (control && wi::input::Press(key('Y')))
+        {
+            RequestDiagnosticAction(EditorAction::Redo);
+        }
+        else if (control && wi::input::Press(key('D')))
+        {
+            RequestDiagnosticAction(EditorAction::DuplicateSelection);
+        }
+        else if (control && wi::input::Press(key('S')))
+        {
+            pendingAction_ = shift
+                ? EditorAction::SaveSceneAs
+                : EditorAction::SaveScene;
+        }
+        else if (wi::input::Press(wi::input::KEYBOARD_BUTTON_DELETE))
+        {
+            RequestDiagnosticAction(EditorAction::DeleteSelection);
+        }
+        else if (wi::input::Press(key('F')))
+        {
+            RequestDiagnosticAction(EditorAction::FocusSelection);
+        }
+        else if (wi::input::Press(key('W')))
+        {
+            RequestDiagnosticAction(EditorAction::TranslateTool);
+        }
+        else if (wi::input::Press(key('E')))
+        {
+            RequestDiagnosticAction(EditorAction::RotateTool);
+        }
+        else if (wi::input::Press(key('R')))
+        {
+            RequestDiagnosticAction(EditorAction::ScaleTool);
+        }
+        else if (wi::input::Press(key('G')))
+        {
+            RequestDiagnosticAction(EditorAction::ToggleGrid);
+        }
+    }
+
+    bool StudioRenderPath::IsSelectedEntityValid() const
+    {
+        return session_ != nullptr &&
+            session_->Selection().HasSelection() &&
+            session_->Scenes().ContainsEntity(
+                session_->Selection().SelectedEntity());
+    }
+
+    void StudioRenderPath::ProcessPendingAction()
+    {
+        TraceDiagnosticAction(pendingAction_, session_ ? "handler_entered" : "blocked.scene_unavailable");
+        if (session_ == nullptr)
+        {
+            pendingAction_ = EditorAction::None;
+            return;
+        }
+
+        const EditorAction action = pendingAction_;
+        pendingAction_ = EditorAction::None;
+        if (lightPlacementActive_ && action != EditorAction::CreateLight)
+        {
+            CancelLightPlacement();
+        }
+        switch (action)
+        {
+        case EditorAction::Undo:
+        case EditorAction::Redo:
+        {
+            StopSunPreview(true);
+            ClearSelectionOutline();
+            const bool changed = action == EditorAction::Undo
+                ? session_->Commands().Undo()
+                : session_->Commands().Redo();
+            if (changed)
+            {
+                if (session_->Selection().HasSelection() &&
+                    !IsSelectedEntityValid())
+                {
+                    session_->Selection().Clear();
+                }
+                RefreshHierarchy();
+                RefreshInspector();
+                RefreshStatus();
+            }
+            else
+            {
+                SyncSelectionOutline();
+            }
+            break;
+        }
+        case EditorAction::FocusSelection:
+            FocusSelection();
+            break;
+        case EditorAction::DuplicateSelection:
+            DuplicateSelection();
+            break;
+        case EditorAction::DeleteSelection:
+            DeleteSelection();
+            break;
+        case EditorAction::CreateLight:
+            CreateLight(pendingLightType_);
+            break;
+        case EditorAction::CreatePlayerStart:
+            CreatePlayerStartFromView();
+            break;
+        case EditorAction::CreateCamera:
+            CreateCameraFromView();
+            break;
+        case EditorAction::CreateDecal:
+            CreateDecalFromView();
+            break;
+        case EditorAction::CreateEnvironmentProbe:
+            CreateEnvironmentProbeFromView();
+            break;
+        case EditorAction::OpenScene:
+            OpenScene();
+            break;
+        case EditorAction::SaveScene:
+            SaveScene();
+            break;
+        case EditorAction::SaveSceneAs:
+            SaveSceneAs();
+            break;
+        case EditorAction::ReopenScene:
+            ReopenScene();
+            break;
+        case EditorAction::ProjectHub:
+            ReturnToProjectHub();
+            break;
+        case EditorAction::SelectTool:
+            SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
+            SetTransformTool(TransformTool::Select);
+            break;
+        case EditorAction::TranslateTool:
+            SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
+            SetTransformTool(TransformTool::Translate);
+            break;
+        case EditorAction::RotateTool:
+            SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
+            SetTransformTool(TransformTool::Rotate);
+            break;
+        case EditorAction::ScaleTool:
+            SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
+            SetTransformTool(TransformTool::Scale);
+            break;
+        case EditorAction::ToggleGrid:
+            SetGridVisible(!gridVisible_);
+            break;
+        case EditorAction::OpenEnvironmentWorkspace:
+            SetEnvironmentWorkspaceActive(true);
+            break;
+        case EditorAction::OpenTerrainWorkspace:
+            SetTerrainWorkspaceActive(true);
+            break;
+        case EditorAction::OpenRenderWorkspace:
+            SetRenderWorkspaceActive(true);
+            break;
+        case EditorAction::OpenSceneWorkspace:
+            SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
+            SetRenderWorkspaceActive(false);
+            break;
+        case EditorAction::StartTestLevel:
+            StartTestLevel();
+            break;
+        case EditorAction::StartProjectPlay:
+            StartProjectPlay();
+            break;
+        case EditorAction::StopTestLevel:
+            StopTestLevel();
+            break;
+        case EditorAction::BuildWindowsGame:
+            RequestWindowsGameBuild();
+            break;
+        case EditorAction::StartSunPreview:
+            StartSunPreview();
+            break;
+        case EditorAction::PauseSunPreview:
+            StopSunPreview(true);
+            break;
+        case EditorAction::SetOceanEnabled:
+            ApplyOceanEnabled(pendingOceanEnabled_);
+            break;
+        case EditorAction::SetOceanResolution:
+            ApplyOceanResolution(pendingOceanResolution_);
+            break;
+        case EditorAction::ApplyOceanPreset:
+            ApplyOceanPreset(pendingOceanPreset_);
+            break;
+        case EditorAction::CreateTerrain:
+            CreateTerrain();
+            break;
+        case EditorAction::ExpandTerrain:
+            ExpandTerrain();
+            break;
+        case EditorAction::ApplyTerrainMaterialPreset:
+            ApplyTerrainMaterialPreset(pendingTerrainMaterialPreset_);
+            break;
+        case EditorAction::ApplyDefaultGrass:
+            ApplyDefaultGrass();
+            break;
+        case EditorAction::ReloadTerrainMaterial:
+            ReloadTerrainMaterial();
+            break;
+        case EditorAction::ValidateModelImport:
+            ValidateModelImport();
+            break;
+        case EditorAction::ImportModel:
+            ImportModel();
+            break;
+        case EditorAction::ApplyImportScale:
+            ApplyImportScaleMode(pendingImportScaleMode_);
+            break;
+        case EditorAction::DismissImportScale:
+            DismissImportScalePanel();
+            break;
+        case EditorAction::None:
+        default:
+            break;
+        }
+        TraceDiagnosticAction(action, "handler_returned");
+    }
+
+    void StudioRenderPath::SetTransformTool(const TransformTool tool)
+    {
+        gizmo_.isTranslator = tool == TransformTool::Translate;
+        gizmo_.isRotator = tool == TransformTool::Rotate;
+        gizmo_.isScalator = tool == TransformTool::Scale;
+
+        translateToolButton_.SetColor(
+            gizmo_.isTranslator ? HologramSelected : HologramIdle,
+            wi::gui::IDLE);
+        rotateToolButton_.SetColor(
+            gizmo_.isRotator ? HologramSelected : HologramIdle,
+            wi::gui::IDLE);
+        scaleToolButton_.SetColor(
+            gizmo_.isScalator ? HologramSelected : HologramIdle,
+            wi::gui::IDLE);
+        studioChrome_.SetActiveTool(
+            tool == TransformTool::Select
+                ? 0
+                : tool == TransformTool::Translate
+                ? 1
+                : tool == TransformTool::Rotate
+                    ? 2
+                    : 3);
+        SyncGizmoSelection();
+        RefreshStatus();
+    }
+
+    wi::ecs::Entity StudioRenderPath::EditableWeatherEntity() const noexcept
+    {
+        if (session_ == nullptr)
+        {
+            return wi::ecs::INVALID_ENTITY;
+        }
+        if (environmentWorkspaceActive_)
+        {
+            return session_->Scenes().WeatherEntity();
+        }
+        const auto selected = session_->Selection().SelectedEntity();
+        return session_->Scenes().GetScene().weathers.Contains(selected)
+            ? selected
+            : wi::ecs::INVALID_ENTITY;
+    }
+
+    void StudioRenderPath::SetEnvironmentWorkspaceActive(const bool active)
+    {
+        if (active && renderWorkspaceActive_)
+            SetRenderWorkspaceActive(false);
+        if (!active && sunPreviewPlaying_)
+        {
+            StopSunPreview(true);
+        }
+        if (active && session_ != nullptr &&
+            session_->Scenes().WeatherEntity() == wi::ecs::INVALID_ENTITY)
+        {
+            const auto environmentState = bridge::CaptureWeather(
+                session_->Scenes().GetScene().weather);
+            session_->Commands().Execute(
+                std::make_unique<bridge::CreateEnvironmentCommand>(
+                    session_->Scenes().GetScene(),
+                    environmentState,
+                    "Environment"));
+        }
+        if (active && session_ != nullptr)
+        {
+            auto& scene = session_->Scenes().GetScene();
+            const auto weatherEntity = session_->Scenes().WeatherEntity();
+            if (weatherEntity != wi::ecs::INVALID_ENTITY &&
+                bridge::FindPrimarySunLight(scene) ==
+                    wi::ecs::INVALID_ENTITY)
+            {
+                session_->Commands().Execute(
+                    std::make_unique<bridge::CreateSunCommand>(
+                        scene,
+                        weatherEntity));
+            }
+        }
+        environmentWorkspaceActive_ = active && session_ != nullptr &&
+            session_->Scenes().WeatherEntity() != wi::ecs::INVALID_ENTITY;
+        if (environmentWorkspaceActive_)
+        {
+            terrainWorkspaceActive_ = false;
+        }
+        studioChrome_.SetEnvironmentWorkspaceActive(
+            environmentWorkspaceActive_);
+        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
+        ClearSelectionOutline();
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::SetTerrainWorkspaceActive(const bool active)
+    {
+        if (active && renderWorkspaceActive_)
+            SetRenderWorkspaceActive(false);
+        if (sunPreviewPlaying_)
+        {
+            StopSunPreview(true);
+        }
+        terrainWorkspaceActive_ = active && session_ != nullptr;
+        if (terrainWorkspaceActive_)
+        {
+            environmentWorkspaceActive_ = false;
+        }
+        else
+        {
+            DisableWd01VegetationBrush();
+        }
+        studioChrome_.SetEnvironmentWorkspaceActive(environmentWorkspaceActive_);
+        studioChrome_.SetTerrainWorkspaceActive(terrainWorkspaceActive_);
+        if (terrainWorkspaceActive_ &&
+            session_->Scenes().GetScene().terrains.GetCount() > 0)
+        {
+            session_->Selection().Select(
+                session_->Scenes().GetScene().terrains.GetEntity(0));
+        }
+        ClearSelectionOutline();
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::FocusSelection()
+    {
+        if (!IsSelectedEntityValid())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        auto& scene = session_->Scenes().GetScene();
+        scene.Update(0.0f);
+        const auto* transform = scene.transforms.GetComponent(entity);
+        if (transform == nullptr)
+        {
+            return;
+        }
+
+        XMVECTOR center = transform->GetPositionV();
+        float distance = 5.0f;
+        if (scene.objects.Contains(entity))
+        {
+            const auto index = scene.objects.GetIndex(entity);
+            if (index < scene.aabb_objects.size())
+            {
+                const auto& bounds = scene.aabb_objects[index];
+                const XMFLOAT3 boundsCenter = bounds.getCenter();
+                center = XMLoadFloat3(&boundsCenter);
+                distance = std::max(2.5f, bounds.getRadius() * 2.5f);
+            }
+        }
+
+        const XMVECTOR forward = XMVector3Normalize(camera->GetAt());
+        const XMVECTOR eye = center - forward * distance;
+        const XMMATRIX view = XMMatrixLookAtLH(
+            eye,
+            center,
+            camera->GetUp());
+        editorCameraTransform_.ClearTransform();
+        editorCameraTransform_.MatrixTransform(
+            XMMatrixInverse(nullptr, view));
+        editorCameraTransform_.UpdateTransform();
+        camera->TransformCamera(editorCameraTransform_);
+        camera->UpdateCamera();
+    }
+
+    void StudioRenderPath::DuplicateSelection()
+    {
+        if (!IsSelectedEntityValid())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        ClearSelectionOutline();
+        auto command = std::make_unique<bridge::DuplicateEntityCommand>(
+            session_->Scenes().GetScene(),
+            entity);
+        auto* duplicateCommand = command.get();
+        if (!session_->Commands().Execute(std::move(command)))
+        {
+            SyncSelectionOutline();
+            return;
+        }
+
+        session_->Selection().Select(
+            duplicateCommand->DuplicatedEntity());
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::DeleteSelection()
+    {
+        if (!IsSelectedEntityValid())
+        {
+            return;
+        }
+
+        const auto entity = session_->Selection().SelectedEntity();
+        ClearSelectionOutline();
+        if (!session_->Commands().Execute(
+                std::make_unique<bridge::DeleteEntityCommand>(
+                    session_->Scenes().GetScene(),
+                    entity)))
+        {
+            SyncSelectionOutline();
+            return;
+        }
+
+        session_->Selection().Clear();
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::CreateDecalFromView()
+    {
+        if (session_ == nullptr || camera == nullptr)
+            return;
+        auto transform = CaptureEditorCameraTransform();
+        const XMVECTOR forward = XMVector3Rotate(
+            XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f),
+            XMLoadFloat4(&transform.rotation));
+        XMFLOAT3 direction = {};
+        XMStoreFloat3(&direction, XMVector3Normalize(forward));
+        transform.translation.x += direction.x * 4.0f;
+        transform.translation.y += direction.y * 4.0f;
+        transform.translation.z += direction.z * 4.0f;
+        transform.scale = XMFLOAT3(1.5f, 1.5f, 0.5f);
+
+        auto command = std::make_unique<bridge::CreateDecalCommand>(
+            session_->Scenes().GetScene(), bridge::DecalState{}, transform);
+        auto* created = command.get();
+        if (session_->Commands().Execute(std::move(command)))
+        {
+            session_->Selection().Select(created->CreatedEntity());
+            SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+        }
+    }
+
+    void StudioRenderPath::ChooseSelectedDecalTexture()
+    {
+        if (session_ == nullptr || !session_->Projects().HasProject() ||
+            wi::jobsystem::IsBusy(decalTextureImportWorkload_))
+        {
+            return;
+        }
+
+        const wi::ecs::Entity decalEntity =
+            session_->Selection().SelectedEntity();
+        if (!session_->Scenes().GetScene().decals.Contains(decalEntity))
+            return;
+
+        wi::helper::FileDialogParams params;
+        params.type = wi::helper::FileDialogParams::OPEN;
+        params.description = "Projected decal base-colour / alpha texture";
+        params.extensions = {
+            "png", "tga", "dds", "jpg", "jpeg", "bmp", "hdr"};
+        wi::helper::FileDialog(
+            params,
+            [this, decalEntity](const std::string& sourcePath)
+            {
+                wi::eventhandler::Subscribe_Once(
+                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                    [this, decalEntity, sourcePath](std::uint64_t)
+                    {
+                        if (sourcePath.empty() || session_ == nullptr ||
+                            !session_->Projects().HasProject() ||
+                            wi::jobsystem::IsBusy(decalTextureImportWorkload_))
+                        {
+                            return;
+                        }
+
+                        auto& scene = session_->Scenes().GetScene();
+                        if (!scene.decals.Contains(decalEntity))
+                        {
+                            studioChrome_.SetStatusText(
+                                "DECAL TEXTURE // TARGET NO LONGER EXISTS");
+                            return;
+                        }
+
+                        const bridge::ResourceSourceFormat format =
+                            bridge::DetectResourceSourceFormat(sourcePath);
+                        if (format == bridge::ResourceSourceFormat::Unknown ||
+                            bridge::ClassifyResourceSourceFormat(format) !=
+                                bridge::ResourceClass::Texture)
+                        {
+                            studioChrome_.SetStatusText(
+                                "DECAL TEXTURE // UNSUPPORTED IMAGE FORMAT");
+                            ShowStudioMessageBox(
+                                "Choose a supported image texture (PNG, TGA, DDS, JPG/JPEG, BMP or HDR).",
+                                "Select Decal Texture");
+                            return;
+                        }
+
+                        struct DecalTextureImportState
+                        {
+                            std::string projectRoot;
+                            bridge::StableId projectId;
+                            wi::ecs::Entity decalEntity = wi::ecs::INVALID_ENTITY;
+                            std::string sourcePath;
+                            bridge::CreatorTextureImportResult imported;
+                        };
+
+                        auto state = std::make_shared<DecalTextureImportState>();
+                        const auto& project =
+                            session_->Projects().CurrentProject();
+                        state->projectRoot = project.rootPath;
+                        state->projectId = project.projectId;
+                        state->decalEntity = decalEntity;
+                        state->sourcePath = sourcePath;
+                        studioChrome_.SetStatusText(
+                            "DECAL TEXTURE // IMPORTING + REGISTERING // " +
+                            fs::u8path(sourcePath).filename().generic_u8string());
+
+                        wi::jobsystem::Execute(
+                            decalTextureImportWorkload_,
+                            [this, state](wi::jobsystem::JobArgs)
+                            {
+                                bridge::CreatorTextureWorkflowService workflow;
+                                state->imported = workflow.ImportTexture(
+                                    state->projectRoot,
+                                    state->projectId,
+                                    state->sourcePath);
+
+                                wi::eventhandler::Subscribe_Once(
+                                    wi::eventhandler::EVENT_THREAD_SAFE_POINT,
+                                    [this, state](std::uint64_t)
+                                    {
+                                        if (!state->imported.succeeded)
+                                        {
+                                            const std::string prefix =
+                                                state->imported.committed
+                                                    ? "DECAL TEXTURE // IMPORT COMMITTED // VERIFY FAILED // "
+                                                    : "DECAL TEXTURE // IMPORT FAILED // ";
+                                            studioChrome_.SetStatusText(
+                                                prefix + state->imported.error);
+                                            ShowStudioMessageBox(
+                                                "Could not prepare the selected decal texture.\n\nReason: " +
+                                                    state->imported.error,
+                                                "Select Decal Texture");
+                                            return;
+                                        }
+
+                                        if (session_ == nullptr ||
+                                            !session_->Projects().HasProject() ||
+                                            session_->Projects().CurrentProject().projectId !=
+                                                state->projectId)
+                                        {
+                                            return;
+                                        }
+
+                                        auto& currentScene =
+                                            session_->Scenes().GetScene();
+                                        if (!currentScene.decals.Contains(
+                                                state->decalEntity))
+                                        {
+                                            studioChrome_.SetStatusText(
+                                                "DECAL TEXTURE // IMPORTED // TARGET NO LONGER EXISTS");
+                                            RefreshAssetBrowser();
+                                            return;
+                                        }
+
+                                        const wi::ecs::Entity materialEntity =
+                                            bridge::ResolveEditableMaterialEntity(
+                                                currentScene,
+                                                state->decalEntity);
+                                        if (materialEntity ==
+                                            wi::ecs::INVALID_ENTITY)
+                                        {
+                                            studioChrome_.SetStatusText(
+                                                "DECAL TEXTURE // IMPORTED // DECAL MATERIAL MISSING");
+                                            RefreshAssetBrowser();
+                                            return;
+                                        }
+
+                                        bridge::PreparedMaterialTextureAsset prepared;
+                                        std::string error;
+                                        if (!bridge::PrepareMaterialTextureAsset(
+                                                state->projectRoot,
+                                                state->projectId,
+                                                state->imported.assetId,
+                                                prepared,
+                                                error))
+                                        {
+                                            studioChrome_.SetStatusText(
+                                                "DECAL TEXTURE // IMPORTED // PREPARE FAILED // " +
+                                                error);
+                                            RefreshAssetBrowser();
+                                            return;
+                                        }
+
+                                        auto command = std::make_unique<
+                                            bridge::SetMaterialBaseColorTextureAssetCommand>(
+                                                currentScene,
+                                                materialEntity,
+                                                std::move(prepared));
+                                        if (!session_->Commands().Execute(
+                                                std::move(command)))
+                                        {
+                                            studioChrome_.SetStatusText(
+                                                "DECAL TEXTURE // IMPORTED // ASSIGN FAILED");
+                                            RefreshAssetBrowser();
+                                            return;
+                                        }
+
+                                        studioChrome_.SetSceneDirty(
+                                            session_->Commands().IsDirty());
+                                        RefreshAssetBrowser();
+                                        RefreshInspector();
+                                        RefreshStatus();
+                                        studioChrome_.SetStatusText(
+                                            "DECAL TEXTURE // GOVERNED + ASSIGNED // " +
+                                            fs::u8path(state->sourcePath)
+                                                .filename().generic_u8string());
+                                    });
+                            });
+                    });
+            });
+    }
+
+    void StudioRenderPath::CreateEnvironmentProbeFromView()
+    {
+        if (session_ == nullptr || camera == nullptr)
+            return;
+        auto transform = CaptureEditorCameraTransform();
+        const XMVECTOR forward = XMVector3Rotate(
+            XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f),
+            XMLoadFloat4(&transform.rotation));
+        XMFLOAT3 direction = {};
+        XMStoreFloat3(&direction, XMVector3Normalize(forward));
+        transform.translation.x += direction.x * 5.0f;
+        transform.translation.y += direction.y * 5.0f;
+        transform.translation.z += direction.z * 5.0f;
+        transform.rotation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+        transform.scale = XMFLOAT3(5.0f, 5.0f, 5.0f);
+
+        auto command = std::make_unique<bridge::CreateEnvironmentProbeCommand>(
+            session_->Scenes().GetScene(),
+            bridge::EnvironmentProbeState{}, transform);
+        auto* created = command.get();
+        if (session_->Commands().Execute(std::move(command)))
+        {
+            session_->Selection().Select(created->CreatedEntity());
+            SetEnvironmentWorkspaceActive(false);
+            SetTerrainWorkspaceActive(false);
+            RefreshHierarchy();
+            RefreshInspector();
+            RefreshStatus();
+        }
+    }
+
+    bool StudioRenderPath::CommitSelectedDecal(
+        const bridge::DecalState& state)
+    {
+        if (session_ == nullptr)
+            return false;
+        const auto entity = session_->Selection().SelectedEntity();
+        auto& scene = session_->Scenes().GetScene();
+        if (!scene.decals.Contains(entity))
+            return false;
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetDecalCommand>(scene, entity, state));
+        RefreshInspector();
+        RefreshStatus();
+        return changed;
+    }
+
+    bool StudioRenderPath::CommitSelectedEnvironmentProbe(
+        const bridge::EnvironmentProbeState& state)
+    {
+        if (session_ == nullptr)
+            return false;
+        const auto entity = session_->Selection().SelectedEntity();
+        auto& scene = session_->Scenes().GetScene();
+        if (!scene.probes.Contains(entity))
+            return false;
+        const bool changed = session_->Commands().Execute(
+            std::make_unique<bridge::SetEnvironmentProbeCommand>(
+                scene, entity, state));
+        RefreshInspector();
+        RefreshStatus();
+        return changed;
+    }
+
+    void StudioRenderPath::CreateLight(
+        const wi::scene::LightComponent::LightType type)
+    {
+        if (session_ == nullptr || camera == nullptr)
+        {
+            return;
+        }
+
+        StopSunPreview(true);
+        SetEnvironmentWorkspaceActive(false);
+        SetTerrainWorkspaceActive(false);
+
+        lightPlacementActive_ = false;
+        if (type != wi::scene::LightComponent::DIRECTIONAL)
+        {
+            lightPlacementType_ = type;
+            lightPlacementActive_ = true;
+            ClearSelectionOutline();
+            RefreshStatus();
+            return;
+        }
+
+        XMFLOAT3 position = camera->Eye;
+        position.x += camera->At.x * 5.0f;
+        position.y += camera->At.y * 5.0f;
+        position.z += camera->At.z * 5.0f;
+
+        PlaceLight(type, position);
+    }
+
+    void StudioRenderPath::PlaceLight(
+        const wi::scene::LightComponent::LightType type,
+        const XMFLOAT3& position,
+        const XMFLOAT4& rotation)
+    {
+        if (session_ == nullptr)
+        {
+            return;
+        }
+
+        ClearSelectionOutline();
+        auto command = std::make_unique<bridge::CreateLightCommand>(
+            session_->Scenes().GetScene(),
+            type,
+            position,
+            rotation);
+        auto* createCommand = command.get();
+        if (!session_->Commands().Execute(std::move(command)))
+        {
+            SyncSelectionOutline();
+            return;
+        }
+
+        lightPlacementActive_ = false;
+        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+        session_->Selection().Select(createCommand->CreatedEntity());
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::CancelLightPlacement()
+    {
+        if (!lightPlacementActive_)
+        {
+            return;
+        }
+        lightPlacementActive_ = false;
+        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+        RefreshStatus();
+    }
+
+    void StudioRenderPath::BeginCreatorAssetPlacement(
+        const bridge::StableId& assetId,
+        const std::string& label)
+    {
+        if (session_ == nullptr || !bridge::IsValidStableId(assetId))
+            return;
+        CancelLightPlacement();
+        creatorAssetPlacementActive_ = true;
+        creatorAssetPlacementId_ = assetId;
+        creatorAssetPlacementLabel_ = label;
+        creatorAssetDropPending_ = false;
+        studioChrome_.SetActiveBottomTab(-1, true);
+        studioChrome_.SetStatusText(
+            "PLACE ASSET // CLICK A SURFACE // ESC OR RMB TO CANCEL");
+    }
+
+    void StudioRenderPath::DropCreatorAsset(
+        const bridge::StableId& assetId,
+        const std::string& label,
+        const float screenX,
+        const float screenY)
+    {
+        if (detail::CreatorAssetDragPreviewOwnsDrop(assetId))
+        {
+            // The live cursor instance is committed by the Studio update in
+            // this exact release frame. Do not create a second placement path.
+            return;
+        }
+
+        // Chrome has already consumed the release event by the time Studio
+        // reaches its drag-preview update. Preserve the stable asset identity
+        // and release point so a background preparation that is still finishing
+        // can complete the same drop instead of cancelling it as "not ready".
+        detail::QueueCreatorAssetDrop(assetId, label, screenX, screenY);
+    }
+
+    void StudioRenderPath::CancelCreatorAssetPlacement()
+    {
+        if (!creatorAssetPlacementActive_)
+            return;
+        creatorAssetPlacementActive_ = false;
+        creatorAssetPlacementId_.clear();
+        creatorAssetPlacementLabel_.clear();
+        creatorAssetDropPending_ = false;
+        detail::ClearCreatorAssetDragPreview();
+        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+        studioChrome_.SetStatusText("PLACE ASSET // CANCELLED");
+    }
+
+    bool StudioRenderPath::HandleCreatorAssetPlacement(
+        const XMFLOAT4& pointer)
+    {
+        if (!creatorAssetPlacementActive_ || session_ == nullptr)
+            return false;
+
+        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
+            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+        {
+            CancelCreatorAssetPlacement();
+            return true;
+        }
+
+        if (flyCameraActive_ ||
+            GetGUI().HasFocus() ||
+            !IsPointerOverViewport(pointer))
+        {
+            wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
+            return true;
+        }
+
+        auto& scene = session_->Scenes().GetScene();
+        const auto ray = wi::renderer::GetPickRay(
+            static_cast<long>(pointer.x),
+            static_cast<long>(pointer.y),
+            *this,
+            *camera);
+        const auto picked = wi::scene::Pick(
+            ray,
+            wi::enums::FILTER_OBJECT_ALL | wi::enums::FILTER_TERRAIN,
+            ~0u,
+            scene);
+        XMFLOAT3 surfacePosition = picked.position;
+        bool hasSurface = picked.entity != wi::ecs::INVALID_ENTITY;
+        if (!hasSurface && std::abs(ray.direction.y) > 0.0001f)
+        {
+            const float distance = -ray.origin.y / ray.direction.y;
+            if (distance >= ray.TMin && distance <= ray.TMax)
+            {
+                surfacePosition = XMFLOAT3(
+                    ray.origin.x + ray.direction.x * distance,
+                    0.0f,
+                    ray.origin.z + ray.direction.z * distance);
+                hasSurface = true;
+            }
+        }
+        if (!hasSurface)
+        {
+            wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
+            return true;
+        }
+
+        wi::input::SetCursor(wi::input::CURSOR_CROSS);
+        wi::renderer::DrawSphere(
+            wi::primitive::Sphere(surfacePosition, 0.16f),
+            XMFLOAT4(1.0f, 0.36f, 0.06f, 0.9f),
+            false);
+        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+            return true;
+
+        const auto& project = session_->Projects().CurrentProject();
+        bridge::CreatorAssetWorkflowService workflow;
+        auto prepared = workflow.PrepareModelPlacement(
+            project.rootPath,
+            project.projectId,
+            creatorAssetPlacementId_);
+        if (!prepared.IsReady())
+        {
+            studioChrome_.SetStatusText(
+                "PLACE ASSET // PREPARE FAILED // " +
+                prepared.Result().error);
+            return true;
+        }
+
+        const wi::scene::Scene* preparedScene = prepared.PeekScene();
+        const float scale = bridge::HasCreatorAuthoredTransform(*preparedScene)
+            ? 1.0f
+            : bridge::ImportService::ResolveScaleFactor(
+                bridge::ModelScaleMode::Automatic,
+                *preparedScene);
+        const bridge::ModelBounds bounds =
+            bridge::ImportService::MeasureModelBounds(*preparedScene);
+        XMFLOAT3 position = surfacePosition;
+        if (bounds.valid)
+        {
+            position.y = bridge::ImportService::ResolveGroundedPlacementY(
+                surfacePosition.y,
+                bounds,
+                scale);
+        }
+
+        const bridge::StableId assetId = creatorAssetPlacementId_;
+        auto command = std::make_unique<bridge::PlaceReusableModelCommand>(
+            scene,
+            prepared.ReleaseScene(),
+            assetId,
+            position,
+            scale,
+            creatorAssetPlacementLabel_);
+        auto* placed = command.get();
+        if (!session_->Commands().Execute(std::move(command)))
+        {
+            studioChrome_.SetStatusText("PLACE ASSET // FAILED");
+            return true;
+        }
+
+        const std::string label = creatorAssetPlacementLabel_;
+        creatorAssetPlacementActive_ = false;
+        creatorAssetPlacementId_.clear();
+        creatorAssetPlacementLabel_.clear();
+        creatorAssetDropPending_ = false;
+        wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+        session_->Selection().Select(placed->PlacedEntity());
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+        studioChrome_.SetStatusText(
+            "PLACE ASSET // " + label +
+            " // SURFACE GROUNDED // STABLE RASSET INSTANCE");
+        return true;
+    }
+
+    bool StudioRenderPath::HandleLightPlacement(const XMFLOAT4& pointer)
+    {
+        if (!lightPlacementActive_ || session_ == nullptr)
+        {
+            return false;
+        }
+
+        if (wi::input::Press(wi::input::KEYBOARD_BUTTON_ESCAPE) ||
+            wi::input::Press(wi::input::MOUSE_BUTTON_RIGHT))
+        {
+            CancelLightPlacement();
+            return true;
+        }
+
+        if (flyCameraActive_ || GetGUI().HasFocus() ||
+            !IsPointerOverViewport(pointer))
+        {
+            wi::input::SetCursor(wi::input::CURSOR_DEFAULT);
+            return false;
+        }
+
+        const auto ray = wi::renderer::GetPickRay(
+            static_cast<long>(pointer.x),
+            static_cast<long>(pointer.y),
+            *this,
+            *camera);
+        const auto picked = wi::scene::Pick(
+            ray,
+            wi::enums::FILTER_OBJECT_ALL,
+            ~0u,
+            session_->Scenes().GetScene());
+        if (picked.entity == wi::ecs::INVALID_ENTITY)
+        {
+            wi::input::SetCursor(wi::input::CURSOR_NOTALLOWED);
+            return true;
+        }
+
+        wi::input::SetCursor(wi::input::CURSOR_CROSS);
+        wi::renderer::DrawSphere(
+            wi::primitive::Sphere(picked.position, 0.18f),
+            XMFLOAT4(0.20f, 0.92f, 1.0f, 0.90f),
+            false);
+        wi::renderer::RenderableLine normal;
+        normal.start = picked.position;
+        XMStoreFloat3(
+            &normal.end,
+            XMLoadFloat3(&picked.position) +
+                XMLoadFloat3(&picked.normal) * 0.8f);
+        normal.color_start = XMFLOAT4(0.20f, 0.92f, 1.0f, 0.95f);
+        normal.color_end = XMFLOAT4(1.0f, 0.55f, 0.15f, 0.95f);
+        wi::renderer::DrawLine(normal, false);
+
+        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            return true;
+        }
+
+        XMFLOAT4 rotation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+        if (lightPlacementType_ == wi::scene::LightComponent::SPOT)
+        {
+            rotation = RotationFromTo(XMFLOAT3(0, 1, 0), picked.normal);
+        }
+        else if (lightPlacementType_ == wi::scene::LightComponent::RECTANGLE)
+        {
+            rotation = RotationFromTo(XMFLOAT3(0, 0, -1), picked.normal);
+        }
+        PlaceLight(lightPlacementType_, picked.position, rotation);
+        return true;
+    }
+
+    bool StudioRenderPath::ProjectEditorPoint(
+        const XMFLOAT3& world,
+        XMFLOAT2& screen) const noexcept
+    {
+        if (camera == nullptr)
+        {
+            return false;
+        }
+        const XMVECTOR clip = XMVector4Transform(
+            XMVectorSet(world.x, world.y, world.z, 1.0f),
+            camera->GetViewProjection());
+        const float w = XMVectorGetW(clip);
+        if (w <= 0.001f)
+        {
+            return false;
+        }
+        const XMVECTOR ndc = clip / w;
+        const float z = XMVectorGetZ(ndc);
+        if (z < 0.0f || z > 1.0f)
+        {
+            return false;
+        }
+        screen.x = (XMVectorGetX(ndc) * 0.5f + 0.5f) * GetLogicalWidth();
+        screen.y = (-XMVectorGetY(ndc) * 0.5f + 0.5f) * GetLogicalHeight();
+        return IsPointerOverViewport(XMFLOAT4(screen.x, screen.y, 0, 0));
+    }
+
+
+bool StudioRenderPath::HandleAudioSceneIcons(
+    const XMFLOAT4& pointer)
+{
+    if (session_ == nullptr || camera == nullptr || projectHubVisible_ ||
+        creatorModelImporter.thumbnailCapturePending)
+    {
+        return false;
+    }
+
+    auto& scene = session_->Scenes().GetScene();
+    const auto selected = session_->Selection().SelectedEntity();
+    const bool canSelect = !lightPlacementActive_ && !flyCameraActive_ &&
+        !GetGUI().HasFocus() && !gizmo_.IsInteracting() &&
+        IsPointerOverViewport(pointer) &&
+        wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+    wi::ecs::Entity best = wi::ecs::INVALID_ENTITY;
+    float bestDistanceSquared = 24.0f * 24.0f;
+
+    const auto drawCircle = [this](
+        const XMFLOAT2& center,
+        const float radius,
+        const XMFLOAT4& color)
+    {
+        constexpr int Segments = 18;
+        for (int segment = 0; segment < Segments; ++segment)
+        {
+            const float a0 = XM_2PI * static_cast<float>(segment) / Segments;
+            const float a1 = XM_2PI * static_cast<float>(segment + 1) / Segments;
+            DrawEditorLine(
+                XMFLOAT2(center.x + std::cos(a0) * radius,
+                    center.y + std::sin(a0) * radius),
+                XMFLOAT2(center.x + std::cos(a1) * radius,
+                    center.y + std::sin(a1) * radius),
+                color);
+        }
+    };
+
+    for (std::size_t index = 0; index < scene.sounds.GetCount(); ++index)
+    {
+        const auto entity = scene.sounds.GetEntity(index);
+        if (!bridge::IsRenegadeSoundSource(scene, entity) ||
+            !session_->Scenes().IsHierarchyVisible(entity))
+        {
+            continue;
+        }
+        const auto* transform = scene.transforms.GetComponent(entity);
+        if (transform == nullptr)
+            continue;
+        const auto source = bridge::CaptureSoundSource(scene, entity);
+        const XMFLOAT3 position = transform->GetPosition();
+        XMFLOAT2 center = {};
+        if (!ProjectEditorPoint(position, center))
+            continue;
+
+        XMFLOAT4 baseColor;
+        switch (source.bus)
+        {
+        case bridge::AudioBus::Music:
+            baseColor = XMFLOAT4(0.78f, 0.42f, 1.0f, 0.96f);
+            break;
+        case bridge::AudioBus::Ambience:
+            baseColor = XMFLOAT4(0.25f, 0.92f, 0.62f, 0.96f);
+            break;
+        case bridge::AudioBus::Voice:
+            baseColor = XMFLOAT4(0.35f, 0.78f, 1.0f, 0.96f);
+            break;
+        case bridge::AudioBus::SoundEffect:
+        default:
+            baseColor = XMFLOAT4(1.0f, 0.55f, 0.15f, 0.96f);
+            break;
+        }
+        const float dx = pointer.x - center.x;
+        const float dy = pointer.y - center.y;
+        const float distanceSquared = dx * dx + dy * dy;
+        const bool hovered = distanceSquared <= 24.0f * 24.0f;
+        const XMFLOAT4 color = entity == selected
+            ? XMFLOAT4(1.0f, 0.88f, 0.42f, 1.0f)
+            : hovered
+                ? XMFLOAT4(0.70f, 0.96f, 1.0f, 1.0f)
+                : baseColor;
+
+        // Bus-specific editor-only glyphs remain a constant readable size.
+        if (source.bus == bridge::AudioBus::SoundEffect)
+        {
+            DrawEditorLine(XMFLOAT2(center.x - 10, center.y - 5),
+                XMFLOAT2(center.x - 4, center.y - 5), color);
+            DrawEditorLine(XMFLOAT2(center.x - 10, center.y + 5),
+                XMFLOAT2(center.x - 4, center.y + 5), color);
+            DrawEditorLine(XMFLOAT2(center.x - 10, center.y - 5),
+                XMFLOAT2(center.x - 10, center.y + 5), color);
+            DrawEditorLine(XMFLOAT2(center.x - 4, center.y - 5),
+                XMFLOAT2(center.x + 4, center.y - 11), color);
+            DrawEditorLine(XMFLOAT2(center.x - 4, center.y + 5),
+                XMFLOAT2(center.x + 4, center.y + 11), color);
+            DrawEditorLine(XMFLOAT2(center.x + 4, center.y - 11),
+                XMFLOAT2(center.x + 4, center.y + 11), color);
+            drawCircle(XMFLOAT2(center.x + 4, center.y), 14.0f, color);
+        }
+        else if (source.bus == bridge::AudioBus::Music)
+        {
+            drawCircle(XMFLOAT2(center.x - 5, center.y + 8), 5.0f, color);
+            DrawEditorLine(XMFLOAT2(center.x, center.y + 8),
+                XMFLOAT2(center.x, center.y - 12), color);
+            DrawEditorLine(XMFLOAT2(center.x, center.y - 12),
+                XMFLOAT2(center.x + 11, center.y - 9), color);
+            DrawEditorLine(XMFLOAT2(center.x + 11, center.y - 9),
+                XMFLOAT2(center.x + 11, center.y + 2), color);
+            drawCircle(XMFLOAT2(center.x + 6, center.y + 3), 5.0f, color);
+        }
+        else if (source.bus == bridge::AudioBus::Ambience)
+        {
+            drawCircle(center, 6.0f, color);
+            drawCircle(center, 12.0f, color);
+            drawCircle(center, 18.0f, color);
+        }
+        else
+        {
+            DrawEditorLine(XMFLOAT2(center.x - 6, center.y - 10),
+                XMFLOAT2(center.x + 6, center.y - 10), color);
+            DrawEditorLine(XMFLOAT2(center.x - 6, center.y - 10),
+                XMFLOAT2(center.x - 6, center.y + 3), color);
+            DrawEditorLine(XMFLOAT2(center.x + 6, center.y - 10),
+                XMFLOAT2(center.x + 6, center.y + 3), color);
+            drawCircle(XMFLOAT2(center.x, center.y + 3), 6.0f, color);
+            DrawEditorLine(XMFLOAT2(center.x, center.y + 9),
+                XMFLOAT2(center.x, center.y + 16), color);
+        }
+
+        if (canSelect && distanceSquared < bestDistanceSquared)
+        {
+            bestDistanceSquared = distanceSquared;
+            best = entity;
+        }
+    }
+
+    if (canSelect && best != wi::ecs::INVALID_ENTITY)
+    {
+        session_->Selection().Select(best);
+        RefreshHierarchy();
+        RefreshInspector();
+        RefreshStatus();
+        SyncGizmoSelection();
+        SyncSelectionOutline();
+        return true;
+    }
+    return false;
+}
+
+bool StudioRenderPath::HandleDecalProbeSceneIcons(
+    const XMFLOAT4& pointer)
+{
+    if (session_ == nullptr || camera == nullptr || projectHubVisible_ ||
+        creatorModelImporter.thumbnailCapturePending)
+    {
+        return false;
+    }
+
+    auto& scene = session_->Scenes().GetScene();
+    const bool canSelect = !lightPlacementActive_ && !flyCameraActive_ &&
+        !GetGUI().HasFocus() && !gizmo_.IsInteracting() &&
+        IsPointerOverViewport(pointer) &&
+        wi::input::Press(wi::input::MOUSE_BUTTON_LEFT);
+    wi::ecs::Entity best = wi::ecs::INVALID_ENTITY;
+    float bestDistanceSquared = 22.0f * 22.0f;
+    const auto selected = session_->Selection().SelectedEntity();
+
+    const auto drawVolume = [this](
+        const wi::scene::TransformComponent& transform,
+        const XMFLOAT4& color)
+    {
+        constexpr XMFLOAT3 local[8] = {
+            XMFLOAT3(-1, -1, -1), XMFLOAT3(1, -1, -1),
+            XMFLOAT3(1, 1, -1), XMFLOAT3(-1, 1, -1),
+            XMFLOAT3(-1, -1, 1), XMFLOAT3(1, -1, 1),
+            XMFLOAT3(1, 1, 1), XMFLOAT3(-1, 1, 1)};
+        constexpr int edges[12][2] = {
+            {0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},
+            {0,4},{1,5},{2,6},{3,7}};
+        XMFLOAT2 projected[8] = {};
+        bool visible[8] = {};
+        const XMMATRIX world = transform.GetWorldMatrix();
+        for (int index = 0; index < 8; ++index)
+        {
+            XMFLOAT3 worldPoint = {};
+            XMStoreFloat3(
+                &worldPoint,
+                XMVector3TransformCoord(XMLoadFloat3(&local[index]), world));
+            visible[index] = ProjectEditorPoint(worldPoint, projected[index]);
+        }
+        for (const auto& edge : edges)
+        {
+            if (visible[edge[0]] && visible[edge[1]])
+                DrawEditorLine(projected[edge[0]], projected[edge[1]], color);
+        }
+    };
+
+    const auto drawEntity = [&](
+        const wi::ecs::Entity entity,
+        const bool probe)
+    {
+        if (!session_->Scenes().IsHierarchyVisible(entity))
+            return;
+        const auto* transform = scene.transforms.GetComponent(entity);
         if (transform == nullptr)
             return;
         XMFLOAT2 center = {};
