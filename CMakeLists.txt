@@ -42,6 +42,7 @@ set(WICKED_ENABLE_SYMLINKS OFF CACHE BOOL "" FORCE)
 set(WICKED_EMBED_SHADERS ${RENEGADE_EMBED_SHADERS} CACHE BOOL "" FORCE)
 
 add_subdirectory(WickedEngine)
+include(cmake/RenegadePhysicsTempAllocator.cmake)
 add_subdirectory(EngineBridge)
 include(EngineBridge/JP01PhysicsLua.cmake)
 include(EngineBridge/S2ScriptDocument.cmake)
