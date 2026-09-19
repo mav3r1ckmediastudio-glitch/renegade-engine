@@ -1677,12 +1677,22 @@ namespace renegade::studio
                 ? CreatorImportStageHeight + 0.02f
                 : gridPlaneHeight);
 
-        // Ice-blue is the approved interaction colour. Unlike Wicked's helper,
-        // every line including the two axes is Renegade's to choose.
-        constants.minorColor = XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
-        constants.majorColor = XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
-        constants.axisColorX = XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
-        constants.axisColorZ = XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
+        // The authored editor uses ice-blue interaction lines. Importer
+        // preview keeps the same native grid pass, but deliberately reduces
+        // it to a neutral studio floor so it cannot read as level-editing UI.
+        const bool importerPreview = creatorModelImporter.active;
+        constants.minorColor = importerPreview
+            ? XMFLOAT4(0.34f, 0.46f, 0.52f, 0.10f)
+            : XMFLOAT4(0.36f, 0.84f, 1.0f, 0.28f);
+        constants.majorColor = importerPreview
+            ? XMFLOAT4(0.42f, 0.57f, 0.63f, 0.18f)
+            : XMFLOAT4(0.46f, 0.90f, 1.0f, 0.50f);
+        constants.axisColorX = importerPreview
+            ? XMFLOAT4(0.42f, 0.57f, 0.63f, 0.18f)
+            : XMFLOAT4(1.00f, 0.42f, 0.06f, 0.70f);
+        constants.axisColorZ = importerPreview
+            ? XMFLOAT4(0.42f, 0.57f, 0.63f, 0.18f)
+            : XMFLOAT4(0.30f, 0.78f, 1.00f, 0.70f);
 
         // Fade start/end, base spacing, master opacity. The fade window keeps
         // the horizon from turning into an aliased smear.
