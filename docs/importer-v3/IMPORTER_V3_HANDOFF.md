@@ -9,6 +9,11 @@
 - Verification pending: source diff check, focused Windows Release build, exact native visual inspection, and the existing Character/external-animation save/reopen/Test Game acceptance. No importer persistence, retargeting, or Wicked pin behaviour was changed in this checkpoint.
 - Next concrete action: create the native importer presentation shell (header/breadcrumb treatment, stage-card typography, preview controls and persistent playback/navigation strip) over the existing real widgets, then build and inspect it before proceeding to per-stage content polish.
 
+## UI shell milestone in progress — 20 September 2026
+
+- The native six-stage buttons have been replaced in source with importer-specific stage cards: persistent title/subtitle hierarchy, orange active state, subtle inactive cards and chevrons. The cards reuse the existing Wicked focus/click handling and existing `workspaceSection` rules; no importer workflow callbacks were replaced.
+- Pending before this milestone is declared complete: source/build verification and an exact native visual check. The next shell elements are preview toolbar, persistent playback strip and bottom Previous/Next navigation; do not claim them implemented yet.
+
 **Historical status below:** earlier local-branch notes are retained for provenance only. This file must be updated by Codex after every meaningful implementation checkpoint. A different assistant should read this file, inspect `git log`/`git status` and source, and continue the existing work—not restart it.
 
 ## Local branch and starting evidence

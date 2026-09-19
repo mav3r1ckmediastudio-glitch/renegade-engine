@@ -235,6 +235,65 @@ namespace
     constexpr float CreatorImportStageHeight = 2048.0f;
     constexpr float CreatorImportPreviewFov = 32.0f * XM_PI / 180.0f;
 
+    // Importer v3's six headings are not generic buttons: they are the
+    // persistent stage navigator from the approved workflow.  Keep Wicked's
+    // focus/click behaviour, but own the visible card hierarchy here.
+    class CreatorImportStageButton final : public renegade::studio::RenegadeButton
+    {
+    public:
+        void SetStageDetails(std::string value)
+        {
+            details_ = std::move(value);
+        }
+
+        void SetStageActive(const bool value) noexcept
+        {
+            activeStage_ = value;
+        }
+
+        void Render(const wi::Canvas&, const wi::graphics::CommandList cmd) const override
+        {
+            if (!IsVisible())
+                return;
+            const bool hovered = state == wi::gui::FOCUS || state == wi::gui::ACTIVE;
+            const wi::Color border = activeStage_ || hovered
+                ? wi::Color(207, 120, 71, 255) : wi::Color(42, 54, 64, 255);
+            const wi::Color fill = activeStage_
+                ? wi::Color(44, 35, 29, 255) : wi::Color(18, 26, 33, 255);
+            wi::image::Params outer(translation.x, translation.y, scale.x, scale.y, border);
+            outer.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            outer.enableCornerRounding();
+            for (auto& corner : outer.corners_rounding) { corner.radius = 8.0f; corner.segments = 8; }
+            wi::image::Draw(nullptr, outer, cmd);
+            wi::image::Params inner(translation.x + 1.0f, translation.y + 1.0f,
+                scale.x - 2.0f, scale.y - 2.0f, fill);
+            inner.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            inner.enableCornerRounding();
+            for (auto& corner : inner.corners_rounding) { corner.radius = 7.0f; corner.segments = 8; }
+            wi::image::Draw(nullptr, inner, cmd);
+            wi::font::Params title(translation.x + 15.0f, translation.y + 12.0f, 11,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                activeStage_ ? wi::Color(255, 181, 133, 255) : wi::Color(231, 238, 242, 255),
+                wi::Color::Transparent());
+            title.spacingX = 0.22f; title.bolden = 0.18f;
+            wi::font::Draw(GetText(), title, cmd);
+            wi::font::Params sub(translation.x + 15.0f, translation.y + 30.0f, 9,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                wi::Color(143, 161, 173, 255), wi::Color::Transparent());
+            sub.bolden = 0.12f;
+            wi::font::Draw(details_, sub, cmd);
+            wi::font::Params arrow(translation.x + scale.x - 20.0f, translation.y + 20.0f, 13,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                activeStage_ ? wi::Color(255, 181, 133, 255) : wi::Color(161, 177, 187, 255),
+                wi::Color::Transparent());
+            wi::font::Draw(activeStage_ ? "⌄" : "›", arrow, cmd);
+        }
+
+    private:
+        std::string details_;
+        bool activeStage_ = false;
+    };
+
 
     struct CreatorThumbnailWeatherSnapshot
     {
@@ -572,7 +631,7 @@ namespace
     wi::gui::Label creatorImportExternalAnimationStatus;
     wi::gui::Label creatorImportAnimationReadout;
     wi::gui::Label creatorImportTransformLabel;
-    std::array<renegade::studio::RenegadeButton, 6> creatorImportStageButtons;
+    std::array<CreatorImportStageButton, 6> creatorImportStageButtons;
     renegade::studio::RenegadeButton creatorImportModelChoice;
     renegade::studio::RenegadeButton creatorImportCharacterChoice;
     wi::gui::Label creatorImportRigReadout;
@@ -4219,11 +4278,16 @@ namespace renegade::studio
         constexpr const char* stageNames[] = {
             "ASSET SETUP", "TRANSFORM & SCALE", "MATERIALS & TEXTURES",
             "RIG & RETARGETING", "ANIMATIONS", "REVIEW & IMPORT"};
+        constexpr const char* stageDetails[] = {
+            "Name, type and destination", "Model only · reference stays fixed",
+            "Inspect surface assignments", "Skeleton compatibility & diagnostics",
+            "Browse clips · inspect · preview", "Clear outcome and destination"};
         for (std::size_t index = 0; index < creatorImportStageButtons.size(); ++index)
         {
             auto& heading = creatorImportStageButtons[index];
             heading.Create(std::string("Importer Stage ") + stageNames[index]);
             heading.SetText(stageNames[index]);
+            heading.SetStageDetails(stageDetails[index]);
             heading.OnClick([this, index](const wi::gui::EventArgs&)
             {
                 if (!creatorModelImporter.importAsCharacter &&
@@ -11443,8 +11507,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             if (!heading.IsVisible())
                 continue;
             heading.SetPos(XMFLOAT2(12.0f, rowY));
-            heading.SetSize(XMFLOAT2(inspectorWidth - 24.0f, 52.0f));
-            rowY += 62.0f;
+            heading.SetSize(XMFLOAT2(inspectorWidth - 24.0f, 58.0f));
+            rowY += 68.0f;
             if (index == creatorModelImporter.workspaceSection)
             {
                 contentOffset = rowY - 184.0f;
@@ -11466,10 +11530,10 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             auto& heading = creatorImportStageButtons[index];
             heading.SetVisible(creatorModelImporter.importAsCharacter ||
                 (index != 3 && index != 4));
-            heading.SetText(std::string(index == section ? "▸ " : "  ") +
-                std::array<const char*, 6>{"ASSET SETUP", "TRANSFORM & SCALE",
-                    "MATERIALS & TEXTURES", "RIG & RETARGETING", "ANIMATIONS",
-                    "REVIEW & IMPORT"}[index]);
+            heading.SetText(std::array<const char*, 6>{"ASSET SETUP", "TRANSFORM & SCALE",
+                "MATERIALS & TEXTURES", "RIG & RETARGETING", "ANIMATIONS",
+                "REVIEW & IMPORT"}[index]);
+            heading.SetStageActive(index == section);
         }
         creatorImportModelChoice.SetVisible(section == 0);
         creatorImportCharacterChoice.SetVisible(section == 0);
