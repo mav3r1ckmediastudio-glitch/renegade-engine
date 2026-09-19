@@ -839,14 +839,17 @@ namespace renegade::bridge
         // Keep the normal browser path cheap: use the last committed LC01
         // state first and only hash/refresh if the catalogue proves that state
         // contradicts a real file at a tombstoned path.
+        const auto snapshotStarted = std::chrono::steady_clock::now();
         AssetRegistry registry;
         if (!ExistingRegistryOrEmpty(root, projectId, registry, error))
             return false;
+        const auto registryDone = std::chrono::steady_clock::now();
 
         AssetCatalogueMetadataDocument metadata;
         if (!ReadAssetCatalogueMetadata(
                 root.generic_u8string(), projectId, metadata, error))
             return false;
+        const auto metadataDone = std::chrono::steady_clock::now();
 
         AssetRegistry projectionRegistry = registry;
         if (!BuildAssetCatalogue(root.generic_u8string(), projectId,
@@ -872,6 +875,7 @@ namespace renegade::bridge
             }
         }
 
+        const auto catalogueDone = std::chrono::steady_clock::now();
         // Keep the same missing-product/source projection as the recovery build.
         for (auto& entry : catalogue.entries)
         {
@@ -887,6 +891,15 @@ namespace renegade::bridge
             entry.sourceAvailable = source != projectionRegistry.records.end() &&
                 source->sourceAvailable;
         }
+        const auto projectedDone = std::chrono::steady_clock::now();
+        const auto elapsed = [](const auto a, const auto b)
+        { return std::chrono::duration<double, std::milli>(b - a).count(); };
+        wi::backlog::post("[IMPORT-PERF] catalogue phases registry_ms=" +
+            std::to_string(elapsed(snapshotStarted, registryDone)) +
+            " metadata_ms=" + std::to_string(elapsed(registryDone, metadataDone)) +
+            " build_ms=" + std::to_string(elapsed(metadataDone, catalogueDone)) +
+            " projection_ms=" + std::to_string(elapsed(catalogueDone, projectedDone)) +
+            " entries=" + std::to_string(catalogue.entries.size()));
         error.clear();
         return true;
     }

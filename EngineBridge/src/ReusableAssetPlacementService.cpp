@@ -3,6 +3,8 @@
 #include "renegade/bridge/MaterialTextureAssetService.h"
 
 #include <algorithm>
+#include <chrono>
+#include <WickedEngine.h>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -140,6 +142,7 @@ namespace renegade::bridge
     PreparedReusableModelPlacement ReusableAssetService::PrepareModelAssetPlacement(
         const ReusableModelPlacementRequest& request) const
     {
+        const auto reopenStarted = std::chrono::steady_clock::now();
         PreparedReusableModelPlacement prepared;
         ReusableModelPlacementResult& result = prepared.result_;
         result.assetId = request.assetId;
@@ -171,6 +174,7 @@ namespace renegade::bridge
             return prepared;
         }
 
+        const auto registryDone = std::chrono::steady_clock::now();
         const AssetRecord* productRecord = FindRecordById(registry, request.assetId);
         const ImportedProductRecord* provenance = FindImportedProduct(
             registry, request.assetId);
@@ -244,6 +248,7 @@ namespace renegade::bridge
             return prepared;
         }
 
+        const auto productDone = std::chrono::steady_clock::now();
         // WISCENE material resources can retain relative paths from the model
         // import. For retained glTF sources, sidecar images/buffers live beside
         // the retained source under SourceAssets. Rehydrate the payload from
@@ -319,6 +324,7 @@ namespace renegade::bridge
         }
         archive = wi::Archive();
         cleanup();
+        const auto sceneDone = std::chrono::steady_clock::now();
 
         // Stable-ID material bindings are authoritative but Wicked Resource
         // handles themselves are not serialized. Resolve them at the exact
@@ -336,6 +342,7 @@ namespace renegade::bridge
             return prepared;
         }
 
+        const auto texturesDone = std::chrono::steady_clock::now();
         // Rebuild renderer-independent object bounds from serialized hierarchy
         // before MeasureModelBounds() is used by Studio placement. If the scene
         // does not expose ordinary mesh/object evidence, the normal validation
@@ -362,6 +369,15 @@ namespace renegade::bridge
         result.assetProjectRelativePath = productRecord->projectRelativePath;
         result.succeeded = true;
         result.error.clear();
+        const auto reopenedDone = std::chrono::steady_clock::now();
+        const auto elapsed = [](const auto a, const auto b)
+        { return std::chrono::duration<double, std::milli>(b - a).count(); };
+        wi::backlog::post("[IMPORT-PERF] placement reopen phases registry_ms=" +
+            std::to_string(elapsed(reopenStarted, registryDone)) +
+            " product_ms=" + std::to_string(elapsed(registryDone, productDone)) +
+            " scene_ms=" + std::to_string(elapsed(productDone, sceneDone)) +
+            " textures_ms=" + std::to_string(elapsed(sceneDone, texturesDone)) +
+            " bounds_ms=" + std::to_string(elapsed(texturesDone, reopenedDone)));
         return prepared;
     }
 }
