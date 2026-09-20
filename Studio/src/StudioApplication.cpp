@@ -707,6 +707,7 @@ namespace
     }
     renegade::studio::RenegadeComboBox creatorImportMaterialCombo;
     renegade::studio::RenegadeComboBox creatorImportAnimationCombo;
+    renegade::studio::RenegadeAnimationClipTable creatorImportAnimationTable;
     wi::gui::Label creatorImportMaterialLabel;
     wi::gui::Label creatorImportMaterialReadout;
     wi::gui::Label creatorImportTextureHelp;
@@ -1353,6 +1354,14 @@ namespace
 
     void RebuildCreatorImportAnimationCombo()
     {
+        std::vector<renegade::studio::RenegadeAnimationClipTable::Row> tableRows;
+        for (const auto& clip : creatorModelImporter.animationRecipe)
+            tableRows.push_back({clip.name, clip.start, clip.end,
+                std::any_of(creatorModelImporter.externalAnimations.begin(),
+                    creatorModelImporter.externalAnimations.end(),
+                    [&clip](const auto& source) { return clip.sourceAnimationIndex >= source.firstSourceIndex &&
+                        clip.sourceAnimationIndex - source.firstSourceIndex < source.clipCount; })});
+        creatorImportAnimationTable.SetRows(std::move(tableRows), creatorModelImporter.selectedAnimation);
         creatorImportAnimationCombo.ClearItems();
         for (std::size_t index = 0; index < creatorModelImporter.animationRecipe.size(); ++index)
         {
@@ -4957,7 +4966,7 @@ namespace renegade::studio
         });
 
         constexpr const char* animationGroupNames[] = {
-            "ANIMATION CLIPS", "EXTERNAL ANIMATION FILES"};
+            "ANIMATION ACTIONS", "EXTERNAL ANIMATION FILES"};
         for (std::size_t index = 0; index < creatorImportAnimationGroups.size(); ++index)
         {
             auto& group = creatorImportAnimationGroups[index];
@@ -4971,6 +4980,14 @@ namespace renegade::studio
             });
         }
         creatorImportAnimationLabel.Create("ANIMATIONS // EDITABLE CLIPS");
+        creatorImportAnimationTable.SetName("Unified animation actions");
+        creatorImportAnimationTable.OnSelected([](std::size_t index)
+        {
+            StopCreatorImportPreviewAnimations();
+            creatorModelImporter.selectedAnimation = index;
+            creatorImportAnimationCombo.SetSelectedWithoutCallback(static_cast<int>(index));
+            RefreshCreatorImportAnimationEditor();
+        });
         creatorImportAnimationCombo.Create("Animation Action");
         creatorImportAnimationCombo.OnSelect([](const wi::gui::EventArgs& args)
         {
@@ -4994,7 +5011,7 @@ namespace renegade::studio
             if (creatorModelImporter.animationRecipe.empty()) return;
             auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
             clip.start = std::min(args.fValue, clip.end);
-            RefreshCreatorImportAnimationEditor();
+            RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationEnd.Create("Animation End");
         creatorImportAnimationEnd.SetDescription("END: ");
@@ -5003,7 +5020,7 @@ namespace renegade::studio
             if (creatorModelImporter.animationRecipe.empty()) return;
             auto& clip = creatorModelImporter.animationRecipe[creatorModelImporter.selectedAnimation];
             clip.end = std::max(args.fValue, clip.start);
-            RefreshCreatorImportAnimationEditor();
+            RebuildCreatorImportAnimationCombo();
         });
         creatorImportAnimationSpeed.Create("Animation Playback Speed");
         creatorImportAnimationSpeed.SetDescription("SPEED (0.1-4x): ");
@@ -5295,6 +5312,7 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportLightingReset),
             static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
+            static_cast<wi::gui::Widget*>(&creatorImportAnimationTable),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationCombo),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationName),
             static_cast<wi::gui::Widget*>(&creatorImportAnimationStart),
@@ -6625,8 +6643,9 @@ namespace renegade::studio
                 continue;
             if (group == 0)
             {
-                layoutFullRow(creatorImportAnimationCombo, animationY);
-                animationY += 36.0f;
+                creatorImportAnimationTable.SetPos(XMFLOAT2(12.0f, animationY));
+                creatorImportAnimationTable.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 244.0f));
+                animationY += 252.0f;
                 layoutFullRow(creatorImportAnimationName, animationY);
                 animationY += 36.0f;
                 const float trimWidth = (importScalePanelWidth - 28.0f) * 0.5f;
@@ -6658,6 +6677,13 @@ namespace renegade::studio
                 creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, animationY));
                 creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 54.0f));
                 animationY += 62.0f;
+                layoutFullRow(creatorImportExternalAnimationAdd, animationY);
+                animationY += 40.0f;
+                layoutFullRow(creatorImportExternalAnimationRemove, animationY);
+                animationY += 38.0f;
+                creatorImportExternalAnimationStatus.SetPos(XMFLOAT2(12.0f, animationY));
+                creatorImportExternalAnimationStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 64.0f));
+                animationY += 72.0f;
             }
             else
             {
@@ -12409,7 +12435,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         for (std::size_t index = 0; index < creatorImportAnimationGroups.size(); ++index)
         {
             creatorImportAnimationGroups[index].SetVisible(
-                section == 4 && creatorModelImporter.importAsCharacter);
+                section == 4 && creatorModelImporter.importAsCharacter && index == 0);
             creatorImportAnimationGroups[index].SetText(
                 std::string(creatorImportAnimationExpanded[index] ? "-  " : "+  ") +
                 animationGroupNames[index]);
@@ -12421,14 +12447,14 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                 widget->SetVisible(section == 4 && creatorModelImporter.importAsCharacter && expanded);
         };
         showAnimation(creatorImportAnimationExpanded[0],
-            {&creatorImportAnimationCombo, &creatorImportAnimationName,
+            {&creatorImportAnimationTable, &creatorImportAnimationName,
              &creatorImportAnimationStart, &creatorImportAnimationEnd,
              &creatorImportAnimationSpeed, &creatorImportAnimationEnabled,
              &creatorImportAnimationAdd,
              &creatorImportAnimationDelete, &creatorImportAnimationPlay,
              &creatorImportAnimationPause, &creatorImportAnimationStop,
              &creatorImportAnimationReadout});
-        showAnimation(creatorImportAnimationExpanded[1],
+        showAnimation(creatorImportAnimationExpanded[0],
             {&creatorImportExternalAnimationAdd, &creatorImportExternalAnimationRemove,
              &creatorImportExternalAnimationStatus});
 

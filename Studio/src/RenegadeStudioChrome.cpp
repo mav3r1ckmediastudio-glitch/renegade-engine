@@ -767,6 +767,73 @@ namespace renegade::studio
             0.18f);
     }
 
+    void RenegadeAnimationClipTable::SetRows(std::vector<Row> rows, std::size_t selected)
+    {
+        rows_ = std::move(rows);
+        selected_ = selected;
+        if (selected_ < first_) first_ = selected_;
+        if (selected_ >= first_ + 6) first_ = selected_ - 5;
+    }
+    void RenegadeAnimationClipTable::OnSelected(std::function<void(std::size_t)> callback)
+    {
+        selectedCallback_ = std::move(callback);
+    }
+    void RenegadeAnimationClipTable::Update(const wi::Canvas& canvas, float dt)
+    {
+        Widget::Update(canvas, dt);
+        hovered_ = 1000000;
+        if (!IsVisible() || !IsEnabled()) return;
+        const auto pointer = wi::input::GetPointer();
+        if (pointer.x < translation.x || pointer.x >= translation.x + scale.x ||
+            pointer.y < translation.y || pointer.y >= translation.y + scale.y) return;
+        const float localY = pointer.y - translation.y;
+        if (localY < 27.0f) return;
+        if (localY >= scale.y - 24.0f)
+        {
+            if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT) && !rows_.empty())
+                first_ = first_ + 6 < rows_.size() ? first_ + 6 : 0;
+            return;
+        }
+        const std::size_t index = first_ + static_cast<std::size_t>((localY - 27.0f) / 32.0f);
+        if (index >= rows_.size() || index >= first_ + 6) return;
+        hovered_ = index;
+        if (wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
+        {
+            selected_ = index;
+            if (selectedCallback_) selectedCallback_(index);
+        }
+    }
+
+    void RenegadeAnimationClipTable::Render(const wi::Canvas& canvas,
+        const wi::graphics::CommandList cmd) const
+    {
+        if (!IsVisible()) return;
+        ApplyScissor(canvas, scissorRect, cmd);
+        DrawBorderedRect(translation.x, translation.y, scale.x, scale.y,
+            Surface0, Border, cmd);
+        DrawText("ANIMATION ACTION                         START       END", translation.x + 7.0f,
+            translation.y + 8.0f, 9, TextSecondary, cmd);
+        for (std::size_t i = first_; i < rows_.size() && i < first_ + 6; ++i)
+        {
+            const float y = translation.y + 27.0f + (i - first_) * 32.0f;
+            DrawBorderedRect(translation.x + 3.0f, y, scale.x - 6.0f, 30.0f,
+                i == selected_ ? Surface2 : Surface0,
+                i == selected_ ? Forge : i == hovered_ ? HoverEdge : BorderSoft, cmd);
+            const auto& row = rows_[i];
+            DrawText(Ellipsize(row.name.empty() ? "Untitled action" : row.name, 23),
+                translation.x + 8.0f, y + 9.0f, 9, TextStrong, cmd);
+            char range[64];
+            std::snprintf(range, sizeof(range), "%.1f  -  %.1f", row.start, row.end);
+            DrawText(range, translation.x + scale.x - 108.0f, y + 9.0f, 9,
+                TextSecondary, cmd);
+            if (row.external) DrawText("+", translation.x + scale.x - 120.0f,
+                y + 9.0f, 9, Forge, cmd);
+        }
+        DrawText(rows_.empty() ? "NO CLIPS // LOAD AN ANIMATION FILE" :
+            "NEXT PAGE / BACK TO FIRST", translation.x + 8.0f,
+            translation.y + scale.y - 19.0f, 9, TextSecondary, cmd);
+    }
+
     void RenegadeTextureMapList::ClearSlots()
     {
         resources_ = {};
