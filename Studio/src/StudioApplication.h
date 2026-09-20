@@ -547,7 +547,7 @@ namespace renegade::studio
         void ApplyImportScaleMode(bridge::ModelScaleMode mode);
         void DismissImportScalePanel();
         void RefreshCreatorImportWorkspaceSection();
-        void LayoutCreatorImportStageHeadings(float inspectorWidth);
+        void LayoutCreatorImportStageHeadings(float inspectorWidth, float transformBodyHeight);
         static void SetTerrainFieldValue(
             bridge::TerrainState& terrain,
             TerrainField field,
@@ -1114,6 +1114,7 @@ namespace renegade::studio
         CreatorImportPreviewWindow importScalePanel_;
         float importInspectorWidth_ = 500.0f;
         bool importInspectorLayoutInProgress_ = false;
+        bool importAudioWorkspaceWasVisible_ = false;
         wi::gui::Label importScaleTitleLabel_;
         wi::gui::Label importScaleReadoutLabel_;
         RenegadeComboBox importScaleModeCombo_;

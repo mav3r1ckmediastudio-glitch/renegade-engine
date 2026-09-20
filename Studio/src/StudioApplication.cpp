@@ -724,6 +724,8 @@ namespace
     wi::gui::Label creatorImportAnimationReadout;
     wi::gui::Label creatorImportTransformLabel;
     std::array<CreatorImportStageButton, 6> creatorImportStageButtons;
+    std::array<renegade::studio::RenegadeButton, 5> creatorImportTransformGroups;
+    std::array<bool, 5> creatorImportTransformExpanded{};
     renegade::studio::RenegadeButton creatorImportModelChoice;
     renegade::studio::RenegadeButton creatorImportCharacterChoice;
     wi::gui::Label creatorImportRigReadout;
@@ -4420,6 +4422,22 @@ namespace renegade::studio
                 ResizeLayout();
             });
         }
+        // Independent, stateful accordions inside the Transform stage. They
+        // reveal the existing live controls instead of drawing dummy rows.
+        constexpr const char* transformGroupNames[] = {
+            "POSITION", "ROTATION", "SCALE", "SIZE & UNITS", "PREVIEW LIGHTING"};
+        for (std::size_t index = 0; index < creatorImportTransformGroups.size(); ++index)
+        {
+            auto& group = creatorImportTransformGroups[index];
+            group.Create(std::string("Import Transform Group ") + transformGroupNames[index]);
+            group.SetText(std::string("+  ") + transformGroupNames[index]);
+            group.OnClick([this, index](const wi::gui::EventArgs&)
+            {
+                creatorImportTransformExpanded[index] = !creatorImportTransformExpanded[index];
+                RefreshCreatorImportWorkspaceSection();
+                ResizeLayout();
+            });
+        }
         creatorImportModelChoice.Create("Import as Model");
         creatorImportModelChoice.SetText("MODEL");
         creatorImportModelChoice.OnClick([this](const wi::gui::EventArgs&)
@@ -5090,6 +5108,11 @@ namespace renegade::studio
             heading.SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(&heading);
         }
+        for (auto& group : creatorImportTransformGroups)
+        {
+            group.SetShadowRadius(0.0f);
+            importScalePanel_.AddWidget(&group);
+        }
         importScalePanel_.InitializeInspectorShell();
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
@@ -5378,7 +5401,8 @@ namespace renegade::studio
         {
             // The Window owns child transforms while it processes scrolling and
             // pointer state. Never relayout its children from the frame loop.
-            renderWorkspacePanel_.SetVisible(!projectHubVisible_);
+            renderWorkspacePanel_.SetVisible(
+                !projectHubVisible_ && !creatorModelImporter.active);
             inspectorPanel_.SetVisible(false);
             TickGate8BakeControls();
         }
@@ -6213,6 +6237,64 @@ namespace renegade::studio
         layoutFullRow(creatorImportLightingReset, 914.0f);
         layoutFullRow(creatorImportMannequinVisible, 958.0f);
 
+        // Derive the active inspector height from actual expanded content,
+        // not the old fixed 820px slab. Every group is independently collapsible.
+        float transformY = 184.0f;
+        const auto transformSlider = [&](wi::gui::Widget& field)
+        {
+            layoutSliderRow(field, transformY);
+            transformY += 38.0f;
+        };
+        const auto transformRow = [&](wi::gui::Widget& field)
+        {
+            layoutFullRow(field, transformY);
+            transformY += 36.0f;
+        };
+        for (std::size_t group = 0; group < creatorImportTransformGroups.size(); ++group)
+        {
+            auto& heading = creatorImportTransformGroups[group];
+            heading.SetPos(XMFLOAT2(12.0f, transformY));
+            heading.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
+            transformY += 42.0f;
+            if (!creatorImportTransformExpanded[group])
+                continue;
+            switch (group)
+            {
+            case 0:
+                transformSlider(creatorImportPositionX);
+                transformSlider(creatorImportPositionY);
+                transformSlider(creatorImportPositionZ);
+                break;
+            case 1:
+                transformSlider(creatorImportRotationX);
+                transformSlider(creatorImportRotationY);
+                transformSlider(creatorImportRotationZ);
+                break;
+            case 2:
+                transformRow(creatorImportScaleLinked);
+                transformSlider(creatorImportScaleX);
+                transformSlider(creatorImportScaleY);
+                transformSlider(creatorImportScaleZ);
+                break;
+            case 3:
+                transformRow(creatorImportDimensionPreset);
+                transformRow(importScaleModeCombo_);
+                break;
+            case 4:
+                transformSlider(creatorImportLightIntensity);
+                transformSlider(creatorImportLightAzimuth);
+                transformSlider(creatorImportLightElevation);
+                transformSlider(creatorImportAmbientBrightness);
+                transformRow(creatorImportLightingPreset);
+                transformRow(creatorImportLightingReset);
+                transformRow(creatorImportMannequinVisible);
+                break;
+            default: break;
+            }
+            transformY += 8.0f;
+        }
+        const float transformBodyHeight = transformY - 184.0f + 8.0f;
+
         creatorImportAnimationLabel.SetPos(XMFLOAT2(12.0f, 184.0f));
         creatorImportAnimationLabel.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 22.0f));
         creatorImportAnimationCombo.SetPos(XMFLOAT2(12.0f, 210.0f));
@@ -6261,7 +6343,7 @@ namespace renegade::studio
         importScaleApplyButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 44.0f));
         importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 618.0f));
         importScaleDismissButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
-        LayoutCreatorImportStageHeadings(importScalePanelWidth);
+        LayoutCreatorImportStageHeadings(importScalePanelWidth, transformBodyHeight);
 
         // Preview chrome mirrors the approved workspace: camera/reference
         // controls live above the large preview and workflow navigation stays
@@ -11629,6 +11711,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         importScaleReadoutLabel_.SetText(readout.str());
         importScaleModeCombo_.SetSelectedWithoutCallback(0);
         creatorModelImporter.workspaceSection = 0;
+        creatorImportTransformExpanded.fill(false);
         creatorModelImporter.importAsCharacter = false;
         importScaleTitleLabel_.SetText("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
         creatorImportAssetName.SetValue(creatorModelImporter.assetName);
@@ -11691,6 +11774,13 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             "THUMBNAIL // CAPTURE, REVIEW SQUARE PREVIEW, RETAKE IF NEEDED");
         importScaleApplyButton_.SetEnabled(false);
         UpdateCreatorImportScaleReferenceLabel();
+        // An importer is a dedicated native workspace: old editor panels must
+        // not become visible when the right inspector is resized or scrolled.
+        importAudioWorkspaceWasVisible_ =
+            studioChrome_.AudioWorkspace().IsVisible();
+        studioChrome_.AudioWorkspace().SetVisible(false);
+        renderWorkspacePanel_.SetVisible(false);
+        inspectorPanel_.SetVisible(false);
         importScalePanel_.SetVisible(true);
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportResetView),
@@ -11753,11 +11843,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     }
 
     void StudioRenderPath::LayoutCreatorImportStageHeadings(
-        const float inspectorWidth)
+        const float inspectorWidth, const float transformBodyHeight)
     {
         RefreshCreatorImportWorkspaceSection();
-        constexpr std::array<float, 6> bodyHeights = {
-            168.0f, 820.0f, 790.0f, 150.0f, 520.0f, 606.0f};
+        const std::array<float, 6> bodyHeights = {
+            168.0f, transformBodyHeight, 790.0f, 150.0f, 520.0f, 606.0f};
         float rowY = 146.0f;
         float contentOffset = 0.0f;
         float activeBodyTop = 0.0f;
@@ -11811,6 +11901,16 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         creatorImportRigReadout.SetVisible(section == 3 &&
             creatorModelImporter.importAsCharacter);
 
+        constexpr const char* transformGroupNames[] = {
+            "POSITION", "ROTATION", "SCALE", "SIZE & UNITS", "PREVIEW LIGHTING"};
+        for (std::size_t index = 0; index < creatorImportTransformGroups.size(); ++index)
+        {
+            creatorImportTransformGroups[index].SetVisible(section == 1);
+            creatorImportTransformGroups[index].SetText(
+                std::string(creatorImportTransformExpanded[index] ? "-  " : "+  ") +
+                transformGroupNames[index]);
+        }
+        creatorImportTransformLabel.SetVisible(false);
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportTransformLabel),
             static_cast<wi::gui::Widget*>(&creatorImportPositionX),
@@ -11825,7 +11925,22 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             static_cast<wi::gui::Widget*>(&creatorImportScaleLinked),
             static_cast<wi::gui::Widget*>(&creatorImportDimensionPreset),
             static_cast<wi::gui::Widget*>(&importScaleModeCombo_)})
-            widget->SetVisible(section == 1);
+            widget->SetVisible(false);
+        const auto showTransform = [section](const bool expanded,
+            std::initializer_list<wi::gui::Widget*> widgets)
+        {
+            for (auto* widget : widgets)
+                widget->SetVisible(section == 1 && expanded);
+        };
+        showTransform(creatorImportTransformExpanded[0],
+            {&creatorImportPositionX, &creatorImportPositionY, &creatorImportPositionZ});
+        showTransform(creatorImportTransformExpanded[1],
+            {&creatorImportRotationX, &creatorImportRotationY, &creatorImportRotationZ});
+        showTransform(creatorImportTransformExpanded[2],
+            {&creatorImportScaleLinked, &creatorImportScaleX,
+             &creatorImportScaleY, &creatorImportScaleZ});
+        showTransform(creatorImportTransformExpanded[3],
+            {&creatorImportDimensionPreset, &importScaleModeCombo_});
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportMaterialLabel),
@@ -11855,7 +11970,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             static_cast<wi::gui::Widget*>(&creatorImportLightingPreset),
             static_cast<wi::gui::Widget*>(&creatorImportLightingReset),
             static_cast<wi::gui::Widget*>(&creatorImportMannequinVisible)})
-            widget->SetVisible(section == 1);
+            widget->SetVisible(section == 1 && creatorImportTransformExpanded[4]);
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportAnimationLabel),
@@ -12231,6 +12346,9 @@ wi::eventhandler::Subscribe_Once(
                         importScalePanel_.SetPreviewScene(nullptr);
                         scene = &session_->Scenes().GetScene();
                         studioChrome_.SetVisible(true);
+                        studioChrome_.AudioWorkspace().SetVisible(
+                            importAudioWorkspaceWasVisible_);
+                        importAudioWorkspaceWasVisible_ = false;
                         inspectorPanel_.SetVisible(true);
                         hierarchySearch_.SetVisible(true);
                         importScaleApplyButton_.SetText("CONFIRM IMPORT");
@@ -12362,6 +12480,8 @@ wi::eventhandler::Subscribe_Once(
         creatorModelImporter = {};
         importScaleTargetEntity_ = wi::ecs::INVALID_ENTITY;
         studioChrome_.SetVisible(true);
+        studioChrome_.AudioWorkspace().SetVisible(importAudioWorkspaceWasVisible_);
+        importAudioWorkspaceWasVisible_ = false;
         inspectorPanel_.SetVisible(true);
         hierarchySearch_.SetVisible(true);
         studioChrome_.SetStatusText("IMPORT MODEL // CANCELLED // PROJECT UNCHANGED");

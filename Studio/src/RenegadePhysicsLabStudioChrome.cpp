@@ -514,6 +514,10 @@ namespace renegade::studio
         const wi::Canvas& canvas,
         const wi::graphics::CommandList cmd) const
     {
+        // The importer hides Studio chrome. The specialist overlays below
+        // must obey the same visibility gate as the base Renegade chrome.
+        if (!IsVisible())
+            return;
         CreatorAssetStudioChrome::Render(canvas, cmd);
         RenderAudioViewportTool(cmd);
         RenderPhysicsTab(cmd);
