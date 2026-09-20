@@ -2,7 +2,7 @@
 
 ## UI fidelity programme checkpoint — 20 September 2026
 
-- Active branch: `feature/importer-v3-native-ui-fidelity`; remote: `https://github.com/mav3r1ckmediastudio-glitch/renegade-engine.git`. The branch was created from `main` at `2c9c92195f72d868066177c5136d891860fa4873` (PR #171 merge). Latest implementation checkpoint: `23c505243d826800b4f41bfa325339c42a611147` (`Use neutral studio floor in importer preview`); draft PR: `https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/pull/172`.
+- Active branch: `feature/importer-v3-native-ui-fidelity`; remote: `https://github.com/mav3r1ckmediastudio-glitch/renegade-engine.git`. The branch was created from `main` at `2c9c92195f72d868066177c5136d891860fa4873` (PR #171 merge). Latest pushed implementation checkpoint before the pending playback-footer commit: `bdbea399b05d205600a63e7a46e2cd5af4b4f838` (`Add native importer preview controls`); draft PR: `https://github.com/mav3r1ckmediastudio-glitch/renegade-engine/pull/172`.
 - Visual authority inspected locally but deliberately not committed: the approved interactive HTML and the two supplied images showing the approved shell and existing native importer. The target is a preview-first native workspace with a dark, restrained studio floor; a fixed 1.82 m mannequin; a resizable, internally scrolling inspector; and native stage/playback/navigation controls. The HTML's simulated animation is not used as an implementation source.
 - Implemented in this checkpoint: authored-scene marker overlays are suppressed whenever the importer is active, preventing the stray `AUDIO` marker from appearing in the transient preview; the existing native grid is retained but uses neutral, low-contrast studio-floor values in importer mode. The existing `Studio/assets/creator-human-reference.png` and CMake copy step are already present; a fresh linked Studio visual check is still required to prove the fixed mannequin renders from the exact build.
 - Changed files: `Studio/src/MarkerIconOverlay.cpp`, `Studio/src/StudioApplication.cpp`, this handoff, and root `HANDOFF.md`.
@@ -18,7 +18,14 @@
 
 - Added root-level native importer chrome, deliberately outside the right inspector's clipping/scroll area: Reset View frames the actual preview camera; `1.82 M REFERENCE` toggles the existing fixed mannequin; `+`/`−` adjust the actual preview camera FOV; Previous/Next select the existing stage model and correctly skip Rig/Animations for Model imports.
 - The controls appear only while the importer is open and are hidden on Cancel and governed commit handback. No simulated animation, independent camera model, or duplicate import state was introduced.
-- Pending verification: Windows compile/CI and owner visual inspection of the exact PR head. Next: add the persistent playback strip by presenting the already-wired native clip controls in the preview footer, then apply the expanded-stage references.
+- Pending verification: Windows compile/CI and owner visual inspection of the exact PR head. The persistent playback footer is the next committed checkpoint below.
+
+## Native playback footer milestone — 20 September 2026
+
+- A root-level `PLAY SELECTED CLIP` control now occupies the importer preview footer between the existing Previous/Next stage controls. It calls `PreviewSelectedCreatorImportAnimation(true, false)`, the same real native clip-preview path used by the existing Animations-stage Play control; it does not emulate the HTML animation or create a second animation system.
+- It is deliberately disabled for Model imports and for Character imports with no native animation entities. It is shown only while the importer is open and is hidden again on Cancel and governed commit handback. Existing Model stage skips and Character navigation remain unchanged.
+- Pending verification: source compile, PR CI, a native visual check of the exact remote head, and the Character/external-animation save/reopen/Test Game acceptance. No bridge/import/persistence/retarget source or Wicked pin was changed.
+- Next concrete action after this commit: style the real playback footer as a persistent strip without simulating clip time, then compare each expanded native stage against the supplied reference screenshots and polish only controls backed by real importer data.
 
 **Historical status below:** earlier local-branch notes are retained for provenance only. This file must be updated by Codex after every meaningful implementation checkpoint. A different assistant should read this file, inspect `git log`/`git status` and source, and continue the existing work—not restart it.
 

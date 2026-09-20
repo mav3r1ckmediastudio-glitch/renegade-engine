@@ -673,6 +673,7 @@ namespace
     renegade::studio::RenegadeButton creatorImportZoomIn;
     renegade::studio::RenegadeButton creatorImportPreviousStage;
     renegade::studio::RenegadeButton creatorImportNextStage;
+    renegade::studio::RenegadeButton creatorImportPlaybackToggle;
     wi::gui::Label creatorImportActionBar;
     wi::gui::Image creatorImportThumbnailPreview;
     wi::Resource creatorImportThumbnailPreviewResource;
@@ -4323,6 +4324,7 @@ namespace renegade::studio
             creatorModelImporter.destinationFolder = "Content/Models";
             creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
             importScaleTitleLabel_.SetText("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
+            creatorImportPlaybackToggle.SetEnabled(false);
             RefreshCreatorImportWorkspaceSection();
             ResizeLayout();
         });
@@ -4334,6 +4336,8 @@ namespace renegade::studio
             creatorModelImporter.destinationFolder = "Content/Characters";
             creatorImportDestination.SetValue(creatorModelImporter.destinationFolder);
             importScaleTitleLabel_.SetText("CHARACTER IMPORTER // RIG REVIEW REQUIRED");
+            creatorImportPlaybackToggle.SetEnabled(
+                !creatorModelImporter.animationEntities.empty());
             RefreshCreatorImportWorkspaceSection();
             ResizeLayout();
         });
@@ -4885,6 +4889,12 @@ namespace renegade::studio
         creatorImportNextStage.Create("Importer Next Stage");
         creatorImportNextStage.SetText("NEXT STAGE →");
         creatorImportNextStage.OnClick([moveStage](const wi::gui::EventArgs&) { moveStage(1); });
+        creatorImportPlaybackToggle.Create("Importer Playback Toggle");
+        creatorImportPlaybackToggle.SetText("▶ PLAY SELECTED CLIP");
+        creatorImportPlaybackToggle.OnClick([](const wi::gui::EventArgs&)
+        {
+            PreviewSelectedCreatorImportAnimation(true, false);
+        });
 
         // Commit is the final workflow page, matching the other sections and
         // leaving this page available for a future batch-import queue.
@@ -4976,7 +4986,8 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
             static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
             static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
-            static_cast<wi::gui::Widget*>(&creatorImportNextStage)})
+            static_cast<wi::gui::Widget*>(&creatorImportNextStage),
+            static_cast<wi::gui::Widget*>(&creatorImportPlaybackToggle)})
         {
             widget->SetShadowRadius(0.0f);
             widget->SetVisible(false);
@@ -6149,6 +6160,9 @@ namespace renegade::studio
         const float workflowY = height - 52.0f;
         creatorImportPreviousStage.SetPos(XMFLOAT2(20.0f, workflowY));
         creatorImportPreviousStage.SetSize(XMFLOAT2(142.0f, 34.0f));
+        creatorImportPlaybackToggle.SetPos(XMFLOAT2(
+            std::max(170.0f, (previewRight - 170.0f) * 0.5f), workflowY));
+        creatorImportPlaybackToggle.SetSize(XMFLOAT2(170.0f, 34.0f));
         creatorImportNextStage.SetPos(XMFLOAT2(
             std::max(176.0f, previewRight - 158.0f), workflowY));
         creatorImportNextStage.SetSize(XMFLOAT2(142.0f, 34.0f));
@@ -11536,6 +11550,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         creatorImportLightingPreset.SetSelectedWithoutCallback(0);
         creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
         creatorImportReferenceToggle.SetText("1.82 M REFERENCE");
+        creatorImportPlaybackToggle.SetEnabled(
+            creatorModelImporter.importAsCharacter &&
+            !creatorModelImporter.animationEntities.empty());
         creatorModelImporter.thumbnailCapturePath.clear();
         creatorModelImporter.thumbnailCaptureRevision = 0;
         creatorImportThumbnailPreviewResource = {};
@@ -11552,7 +11569,8 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
             static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
             static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
-            static_cast<wi::gui::Widget*>(&creatorImportNextStage)})
+            static_cast<wi::gui::Widget*>(&creatorImportNextStage),
+            static_cast<wi::gui::Widget*>(&creatorImportPlaybackToggle)})
             widget->SetVisible(true);
         importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
         RefreshCreatorImportWorkspaceSection();
@@ -12070,7 +12088,8 @@ wi::eventhandler::Subscribe_Once(
                             static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
                             static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
                             static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
-                            static_cast<wi::gui::Widget*>(&creatorImportNextStage)})
+                            static_cast<wi::gui::Widget*>(&creatorImportNextStage),
+                            static_cast<wi::gui::Widget*>(&creatorImportPlaybackToggle)})
                             widget->SetVisible(false);
                         importScalePanel_.SetPreviewScene(nullptr);
                         scene = &session_->Scenes().GetScene();
@@ -12180,7 +12199,8 @@ wi::eventhandler::Subscribe_Once(
             static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
             static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
             static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
-            static_cast<wi::gui::Widget*>(&creatorImportNextStage)})
+            static_cast<wi::gui::Widget*>(&creatorImportNextStage),
+            static_cast<wi::gui::Widget*>(&creatorImportPlaybackToggle)})
             widget->SetVisible(false);
         if (session_ != nullptr && creatorModelImporter.active)
         {
