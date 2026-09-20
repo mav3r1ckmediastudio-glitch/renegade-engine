@@ -504,6 +504,8 @@ namespace
         std::size_t undoBaseline = 0;
         wi::allocator::shared_ptr<wi::scene::Scene> previewScene;
         wi::ecs::Entity previewRoot = wi::ecs::INVALID_ENTITY;
+        // Fixed-height reference is part of the transient importer scene only.
+        wi::ecs::Entity referenceRoot = wi::ecs::INVALID_ENTITY;
         wi::ecs::Entity previewLight = wi::ecs::INVALID_ENTITY;
         wi::scene::TransformComponent cameraBefore;
         float cameraFovBefore = XM_PIDIV4;
@@ -909,6 +911,24 @@ namespace
         transform->SetDirty();
         transform->UpdateTransform();
         UpdateCreatorImportScaleReferenceLabel();
+    }
+
+    void ApplyCreatorImportReferenceVisibility()
+    {
+        if (!creatorModelImporter.previewScene.IsValid() ||
+            creatorModelImporter.referenceRoot == wi::ecs::INVALID_ENTITY)
+            return;
+        auto* transform = CreatorImportActiveScene().transforms.GetComponent(
+            creatorModelImporter.referenceRoot);
+        if (transform == nullptr)
+            return;
+        // The model stays at a fixed 1.82 m reference scale; visibility never
+        // inherits or responds to the imported asset's Transform stage.
+        transform->scale_local = creatorModelImporter.mannequinVisible
+            ? XMFLOAT3(1.82f, 1.82f, 1.82f)
+            : XMFLOAT3(0.0f, 0.0f, 0.0f);
+        transform->SetDirty();
+        transform->UpdateTransform();
     }
 
     void ApplyCreatorImportPreviewLighting()
@@ -4674,11 +4694,12 @@ namespace renegade::studio
         creatorImportMannequinVisible.Create("Human Scale Reference");
         creatorImportMannequinVisible.SetText("SHOW 1.82 M MALE REFERENCE");
         creatorImportMannequinVisible.SetCheck(true);
-        creatorImportHumanReference = wi::resourcemanager::Load(
-            "Content/ui/creator-human-reference.png");
+        // The old 2D ruler billboard is intentionally not loaded. The
+        // fixed-height reference is a real FBX in the transient preview scene.
         creatorImportMannequinVisible.OnClick([](const wi::gui::EventArgs& args)
         {
             creatorModelImporter.mannequinVisible = args.bValue;
+            ApplyCreatorImportReferenceVisibility();
         });
 
         const auto applyLightingPreset = [](const int preset)
@@ -4898,6 +4919,7 @@ namespace renegade::studio
         {
             creatorModelImporter.mannequinVisible = !creatorModelImporter.mannequinVisible;
             creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
+            ApplyCreatorImportReferenceVisibility();
             creatorImportReferenceToggle.SetText(creatorModelImporter.mannequinVisible
                 ? "1.82 M REFERENCE" : "REFERENCE HIDDEN");
         });
@@ -11494,6 +11516,16 @@ bool StudioRenderPath::HandleCameraSceneIcons(
                                 creatorModelImporter.animationRecipe.push_back(std::move(clip));
                             }
                         }
+
+                        // The supplied mannequin lives beside the imported asset in
+                        // the transient scene. It is never staged, serialised or
+                        // added to the governed .rasset.
+                        creatorModelImporter.referenceRoot = wi::scene::LoadModel(
+                            preview,
+                            "Content/importer/male_reference.fbx",
+                            XMMatrixTranslation(-1.15f, CreatorImportStageHeight, 0.0f),
+                            true);
+                        ApplyCreatorImportReferenceVisibility();
 
                         // Wicked's placement command auto-plays imported clips;
                         // importer playback must instead be explicit and singular.
