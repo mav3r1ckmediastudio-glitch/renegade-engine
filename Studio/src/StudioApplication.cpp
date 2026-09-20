@@ -4802,6 +4802,17 @@ namespace renegade::studio
                 static_cast<int>(index));
             RefreshCreatorImportTextureEditor();
         });
+        creatorImportTexturePreviews.OnRemoveRequested([](const std::size_t index)
+        {
+            if (!creatorModelImporter.active) return;
+            creatorImportTextureSlot = index;
+            auto& choice = SelectedCreatorTextureChoice();
+            choice.overridden = true;
+            choice.path.clear();
+            ApplyCreatorPreviewTextureChoice({});
+            RefreshCreatorImportTextureEditor();
+            RefreshCreatorImportMaterialReadout();
+        });
         creatorImportTexturePreviews.OnBrowseRequested([](const std::size_t index)
         {
             creatorImportTextureSlot = index;
@@ -6498,8 +6509,10 @@ namespace renegade::studio
             else if (group == 1)
             {
                 creatorImportTexturePreviews.SetPos(XMFLOAT2(12.0f, materialY));
-                creatorImportTexturePreviews.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 260.0f));
-                materialY += 268.0f;
+                const float tileWidth = (importScalePanelWidth - 24.0f) * 0.5f;
+                const float tileGridHeight = 4.0f * (tileWidth + 54.0f);
+                creatorImportTexturePreviews.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, tileGridHeight));
+                materialY += tileGridHeight + 8.0f;
                 creatorImportTextureSlotCombo.SetPos(XMFLOAT2(12.0f, materialY));
                 creatorImportTextureSlotCombo.SetSize(XMFLOAT2(150.0f, 28.0f));
                 creatorImportTexturePath.SetPos(XMFLOAT2(166.0f, materialY));
@@ -6642,8 +6655,10 @@ namespace renegade::studio
             if (group == 0)
             {
                 creatorImportAnimationTable.SetPos(XMFLOAT2(12.0f, animationY));
-                creatorImportAnimationTable.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 244.0f));
-                animationY += 252.0f;
+                const float tableHeight = 51.0f + 32.0f * static_cast<float>(
+                    std::min<std::size_t>(6, std::max<std::size_t>(2, creatorModelImporter.animationRecipe.size())));
+                creatorImportAnimationTable.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, tableHeight));
+                animationY += tableHeight + 8.0f;
                 layoutFullRow(creatorImportAnimationName, animationY);
                 animationY += 36.0f;
                 const float trimWidth = (importScalePanelWidth - 28.0f) * 0.5f;
@@ -6672,16 +6687,11 @@ namespace renegade::studio
                     control->SetSize(XMFLOAT2(clipButtonWidth, 34.0f));
                 }
                 animationY += 42.0f;
-                creatorImportAnimationReadout.SetPos(XMFLOAT2(12.0f, animationY));
-                creatorImportAnimationReadout.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 54.0f));
-                animationY += 62.0f;
-                layoutFullRow(creatorImportExternalAnimationAdd, animationY);
-                animationY += 40.0f;
-                layoutFullRow(creatorImportExternalAnimationRemove, animationY);
-                animationY += 38.0f;
-                creatorImportExternalAnimationStatus.SetPos(XMFLOAT2(12.0f, animationY));
-                creatorImportExternalAnimationStatus.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 64.0f));
-                animationY += 72.0f;
+                creatorImportExternalAnimationAdd.SetPos(XMFLOAT2(12.0f, animationY));
+                creatorImportExternalAnimationAdd.SetSize(XMFLOAT2(trimWidth, 34.0f));
+                creatorImportExternalAnimationRemove.SetPos(XMFLOAT2(16.0f + trimWidth, animationY));
+                creatorImportExternalAnimationRemove.SetSize(XMFLOAT2(trimWidth, 34.0f));
+                animationY += 42.0f;
             }
             else
             {
@@ -12409,9 +12419,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         showMaterial(creatorImportMaterialExpanded[0],
             {&creatorImportMaterialCombo});
         showMaterial(creatorImportMaterialExpanded[1],
-            {&creatorImportTexturePreviews, &creatorImportTextureSlotCombo,
-             &creatorImportTexturePath, &creatorImportTextureBrowse,
-             &creatorImportTextureClear});
+            {&creatorImportTexturePreviews});
         showMaterial(creatorImportMaterialExpanded[2],
             {&creatorImportRoughness, &creatorImportMetalness,
              &creatorImportReflectance, &creatorImportNormalStrength,
@@ -12450,11 +12458,9 @@ bool StudioRenderPath::HandleCameraSceneIcons(
              &creatorImportAnimationSpeed, &creatorImportAnimationEnabled,
              &creatorImportAnimationAdd,
              &creatorImportAnimationDelete, &creatorImportAnimationPlay,
-             &creatorImportAnimationPause, &creatorImportAnimationStop,
-             &creatorImportAnimationReadout});
+             &creatorImportAnimationPause, &creatorImportAnimationStop});
         showAnimation(creatorImportAnimationExpanded[0],
-            {&creatorImportExternalAnimationAdd, &creatorImportExternalAnimationRemove,
-             &creatorImportExternalAnimationStatus});
+            {&creatorImportExternalAnimationAdd, &creatorImportExternalAnimationRemove});
 
         for (wi::gui::Widget* widget : {
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),

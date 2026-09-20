@@ -811,8 +811,10 @@ namespace renegade::studio
         ApplyScissor(canvas, scissorRect, cmd);
         DrawBorderedRect(translation.x, translation.y, scale.x, scale.y,
             Surface0, Border, cmd);
-        DrawText("ANIMATION ACTION                         START       END", translation.x + 7.0f,
-            translation.y + 8.0f, 9, TextSecondary, cmd);
+        DrawText("ACTION / SOURCE", translation.x + 7.0f,
+            translation.y + 8.0f, 12, TextSecondary, cmd);
+        DrawText("START - END", translation.x + scale.x - 120.0f,
+            translation.y + 8.0f, 11, TextSecondary, cmd);
         for (std::size_t i = first_; i < rows_.size() && i < first_ + 6; ++i)
         {
             const float y = translation.y + 27.0f + (i - first_) * 32.0f;
@@ -820,17 +822,17 @@ namespace renegade::studio
                 i == selected_ ? Surface2 : Surface0,
                 i == selected_ ? Forge : i == hovered_ ? HoverEdge : BorderSoft, cmd);
             const auto& row = rows_[i];
-            DrawText(Ellipsize(row.name.empty() ? "Untitled action" : row.name, 23),
-                translation.x + 8.0f, y + 9.0f, 9, TextStrong, cmd);
+            DrawText(Ellipsize((row.external ? "EXT  " : "SRC  ") +
+                (row.name.empty() ? "Untitled action" : row.name), 24),
+                translation.x + 8.0f, y + 8.0f, 12, TextStrong, cmd);
             char range[64];
             std::snprintf(range, sizeof(range), "%.1f  -  %.1f", row.start, row.end);
-            DrawText(range, translation.x + scale.x - 108.0f, y + 9.0f, 9,
+            DrawText(range, translation.x + scale.x - 112.0f, y + 9.0f, 11,
                 TextSecondary, cmd);
-            if (row.external) DrawText("+", translation.x + scale.x - 120.0f,
-                y + 9.0f, 9, Forge, cmd);
+
         }
         DrawText(rows_.empty() ? "NO CLIPS // LOAD AN ANIMATION FILE" :
-            "NEXT PAGE / BACK TO FIRST", translation.x + 8.0f,
+            rows_.size() > 6 ? "NEXT PAGE / BACK TO FIRST" : "SELECT AN ACTION TO EDIT", translation.x + 8.0f,
             translation.y + scale.y - 19.0f, 9, TextSecondary, cmd);
     }
 
@@ -870,6 +872,11 @@ namespace renegade::studio
         browseRequested_ = std::move(callback);
     }
 
+    void RenegadeTextureMapList::OnRemoveRequested(std::function<void(std::size_t)> callback)
+    {
+        removeRequested_ = std::move(callback);
+    }
+
     void RenegadeTextureMapList::Update(
         const wi::Canvas& canvas,
         const float dt)
@@ -899,7 +906,10 @@ namespace renegade::studio
         if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) return;
         selectedSlot_ = index;
         if (slotSelected_) slotSelected_(index);
-        if (pointer.x >= translation.x + (static_cast<float>(column) + 1.0f) * cellWidth - 27.0f && browseRequested_) browseRequested_(index);
+        const float localX = pointer.x - translation.x - static_cast<float>(column) * cellWidth;
+        const float localY = pointer.y - translation.y - static_cast<float>(row) * cellHeight;
+        if (localY >= cellHeight - 30.0f && localX >= cellWidth * 0.5f && removeRequested_) removeRequested_(index);
+        else if (localY >= cellHeight - 30.0f && browseRequested_) browseRequested_(index);
     }
 
     void RenegadeTextureMapList::Render(
@@ -929,15 +939,17 @@ namespace renegade::studio
             const auto& resource = resources_[index];
             if (resource.IsValid() && resource.GetTexture().IsValid())
             {
-                wi::image::Params image(x + 4.0f, y + 4.0f, w - 8.0f, h - 27.0f);
+                const float side = std::min(w - 8.0f, h - 51.0f);
+                wi::image::Params image(x + (w - side) * 0.5f, y + 4.0f, side, side);
                 image.blendFlag = wi::enums::BLENDMODE_ALPHA;
                 image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
                 wi::image::Draw(&resource.GetTexture(), image, cmd);
             }
-            else DrawText("+ ADD TEXTURE", x + 10.0f, y + 19.0f, 9, Muted, cmd);
-            DrawText(labels[index], x + 5.0f, y + h - 19.0f, 9,
+            else DrawText("+ ADD TEXTURE", x + 10.0f, y + 42.0f, 12, Muted, cmd);
+            DrawText(labels[index], x + 7.0f, y + h - 43.0f, 12,
                 index == selectedSlot_ ? TextStrong : TextSecondary, cmd);
-            DrawText("...", x + w - 23.0f, y + h - 19.0f, 9, TextStrong, cmd);
+            DrawText("REPLACE", x + 7.0f, y + h - 19.0f, 11, Forge, cmd);
+            DrawText("REMOVE", x + w * 0.5f + 5.0f, y + h - 19.0f, 11, TextSecondary, cmd);
         }
     }
 
