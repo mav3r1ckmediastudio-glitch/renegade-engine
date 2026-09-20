@@ -4477,16 +4477,7 @@ namespace renegade::studio
     {
         importScalePanel_.Create(
             "Model Import Workspace",
-            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR |
-            wi::gui::Window::WindowControls::RESIZE_LEFT);
-        importScalePanel_.OnResize([this]()
-        {
-            if (importInspectorLayoutInProgress_)
-                return;
-            importInspectorWidth_ = std::clamp(
-                importScalePanel_.GetSize().x, 310.0f, 680.0f);
-            ResizeLayout();
-        });
+            wi::gui::Window::WindowControls::DISABLE_TITLE_BAR);
         // Registration is deferred until every importer page is attached.
 
         importScaleTitleLabel_.Create("MODEL IMPORTER // PREVIEW BEFORE COMMIT");
@@ -5335,8 +5326,6 @@ namespace renegade::studio
             static_cast<wi::gui::Widget*>(&creatorImportAnimationStop),
             static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationAdd),
             static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationRemove),
-            static_cast<wi::gui::Widget*>(&creatorImportExternalAnimationStatus),
-            static_cast<wi::gui::Widget*>(&creatorImportAnimationReadout),
             static_cast<wi::gui::Widget*>(&creatorImportActionBar),
             static_cast<wi::gui::Widget*>(&creatorImportThumbnailPreview),
             static_cast<wi::gui::Widget*>(&creatorImportThumbnailCapture),
