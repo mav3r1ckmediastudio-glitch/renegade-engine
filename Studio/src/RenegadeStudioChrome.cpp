@@ -819,27 +819,20 @@ namespace renegade::studio
         {
             return;
         }
-        const float rowHeight = scale.y / static_cast<float>(SlotCount);
-        const std::size_t index = std::min(
-            SlotCount - 1,
-            static_cast<std::size_t>((pointer.y - translation.y) / rowHeight));
+        constexpr std::size_t columns = 2;
+        constexpr std::size_t rows = (SlotCount + columns - 1) / columns;
+        const float cellWidth = scale.x / static_cast<float>(columns);
+        const float cellHeight = scale.y / static_cast<float>(rows);
+        const std::size_t column = std::min(columns - 1, static_cast<std::size_t>((pointer.x - translation.x) / cellWidth));
+        const std::size_t row = std::min(rows - 1, static_cast<std::size_t>((pointer.y - translation.y) / cellHeight));
+        const std::size_t index = row * columns + column;
+        if (index >= SlotCount) return;
         hoveredSlot_ = index;
-        SetTooltip(paths_[index].empty()
-            ? std::string("No texture assigned")
-            : paths_[index]);
-        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT))
-        {
-            return;
-        }
+        SetTooltip(paths_[index].empty() ? std::string("No texture assigned") : paths_[index]);
+        if (!wi::input::Press(wi::input::MOUSE_BUTTON_LEFT)) return;
         selectedSlot_ = index;
-        if (slotSelected_)
-        {
-            slotSelected_(index);
-        }
-        if (pointer.x >= translation.x + scale.x - 30.0f && browseRequested_)
-        {
-            browseRequested_(index);
-        }
+        if (slotSelected_) slotSelected_(index);
+        if (pointer.x >= translation.x + (static_cast<float>(column) + 1.0f) * cellWidth - 27.0f && browseRequested_) browseRequested_(index);
     }
 
     void RenegadeTextureMapList::Render(
@@ -853,99 +846,31 @@ namespace renegade::studio
         ApplyScissor(canvas, scissorRect, cmd);
 
         constexpr std::array<const char*, SlotCount> labels = {
-            "BASE COLOR", "NORMAL", "SURFACE", "ROUGHNESS",
-            "METALNESS", "AO", "EMISSIVE"};
-        const float rowHeight = scale.y / static_cast<float>(SlotCount);
-        const float thumbnail = std::max(18.0f, rowHeight - 17.0f);
-
+            "BASE COLOR", "NORMAL", "SURFACE", "ROUGHNESS", "METALNESS", "AO", "EMISSIVE"};
+        constexpr std::size_t columns = 2;
+        constexpr std::size_t rows = (SlotCount + columns - 1) / columns;
+        const float cellWidth = scale.x / static_cast<float>(columns);
+        const float cellHeight = scale.y / static_cast<float>(rows);
         for (std::size_t index = 0; index < SlotCount; ++index)
         {
-            const float y = translation.y + static_cast<float>(index) * rowHeight;
-            DrawBorderedRect(
-                translation.x,
-                y,
-                scale.x,
-                rowHeight - 3.0f,
-                wi::Color(6, 10, 12, 255),
-                index == selectedSlot_
-                    ? Forge
-                    : index == hoveredSlot_ ? HoverEdge : Border,
-                cmd);
-            DrawText(
-                labels[index],
-                translation.x + 5.0f,
-                y + 3.0f,
-                8,
-                index == selectedSlot_ ? TextStrong : TextSecondary,
-                cmd,
-                0.0f,
-                0.14f);
-
+            const float x = translation.x + static_cast<float>(index % columns) * cellWidth;
+            const float y = translation.y + static_cast<float>(index / columns) * cellHeight;
+            const float w = cellWidth - 5.0f;
+            const float h = cellHeight - 5.0f;
+            DrawBorderedRect(x, y, w, h, Surface0,
+                index == selectedSlot_ ? Forge : index == hoveredSlot_ ? HoverEdge : Border, cmd);
             const auto& resource = resources_[index];
             if (resource.IsValid() && resource.GetTexture().IsValid())
             {
-                wi::image::Params image(
-                    translation.x + 5.0f,
-                    y + 14.0f,
-                    thumbnail,
-                    thumbnail);
+                wi::image::Params image(x + 4.0f, y + 4.0f, w - 8.0f, h - 27.0f);
                 image.blendFlag = wi::enums::BLENDMODE_ALPHA;
                 image.sampleFlag = wi::image::SAMPLEMODE_CLAMP;
                 wi::image::Draw(&resource.GetTexture(), image, cmd);
             }
-            else
-            {
-                DrawText(
-                    "--",
-                    translation.x + 10.0f,
-                    y + 20.0f,
-                    9,
-                    Muted,
-                    cmd);
-            }
-
-            const float pathX = translation.x + thumbnail + 12.0f;
-            DrawBorderedRect(
-                pathX,
-                y + 14.0f,
-                scale.x - thumbnail - 47.0f,
-                thumbnail,
-                Surface0,
-                BorderSoft,
-                cmd);
-            std::string displayedPath = "<NONE>";
-            if (!paths_[index].empty())
-            {
-                const std::filesystem::path path =
-                    std::filesystem::u8path(paths_[index]);
-                // The slot row is for identifying the assigned map, so keep
-                // the filename readable instead of showing an unusable slice
-                // of a long absolute path. Hovering the row and the editable
-                // selected-slot field both expose the complete source path.
-                displayedPath = path.filename().generic_u8string();
-            }
-            DrawText(
-                Ellipsize(displayedPath, 36),
-                pathX + 5.0f,
-                y + 20.0f,
-                8,
-                paths_[index].empty() ? Muted : TextStrong,
-                cmd);
-            DrawBorderedRect(
-                translation.x + scale.x - 30.0f,
-                y + 14.0f,
-                25.0f,
-                thumbnail,
-                Surface2,
-                index == selectedSlot_ ? Forge : Border,
-                cmd);
-            DrawText(
-                "...",
-                translation.x + scale.x - 25.0f,
-                y + 20.0f,
-                9,
-                TextStrong,
-                cmd);
+            else DrawText("+ ADD TEXTURE", x + 10.0f, y + 19.0f, 9, Muted, cmd);
+            DrawText(labels[index], x + 5.0f, y + h - 19.0f, 9,
+                index == selectedSlot_ ? TextStrong : TextSecondary, cmd);
+            DrawText("...", x + w - 23.0f, y + h - 19.0f, 9, TextStrong, cmd);
         }
     }
 
