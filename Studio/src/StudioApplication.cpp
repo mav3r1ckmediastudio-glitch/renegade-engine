@@ -664,6 +664,15 @@ namespace
     renegade::studio::RenegadeButton creatorImportLightingReset;
     renegade::studio::RenegadeCheckBox creatorImportMannequinVisible;
     wi::gui::Label creatorImportHelpLabel;
+    // Root-level importer chrome deliberately sits outside the docked Window:
+    // it belongs to the large preview workspace, not to the inspector's
+    // scroll/clipping rectangle.
+    renegade::studio::RenegadeButton creatorImportResetView;
+    renegade::studio::RenegadeButton creatorImportReferenceToggle;
+    renegade::studio::RenegadeButton creatorImportZoomOut;
+    renegade::studio::RenegadeButton creatorImportZoomIn;
+    renegade::studio::RenegadeButton creatorImportPreviousStage;
+    renegade::studio::RenegadeButton creatorImportNextStage;
     wi::gui::Label creatorImportActionBar;
     wi::gui::Image creatorImportThumbnailPreview;
     wi::Resource creatorImportThumbnailPreviewResource;
@@ -4817,6 +4826,66 @@ namespace renegade::studio
         creatorImportActionBar.SetText("THUMBNAIL & IMPORT");
         creatorImportActionBar.SetShadowRadius(0.0f);
 
+        creatorImportResetView.Create("Importer Reset View");
+        creatorImportResetView.SetText("RESET VIEW");
+        creatorImportResetView.OnClick([this](const wi::gui::EventArgs&)
+        {
+            FrameCreatorImportPreviewCamera();
+        });
+        creatorImportReferenceToggle.Create("Importer Reference Toggle");
+        creatorImportReferenceToggle.OnClick([](const wi::gui::EventArgs&)
+        {
+            creatorModelImporter.mannequinVisible = !creatorModelImporter.mannequinVisible;
+            creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
+            creatorImportReferenceToggle.SetText(creatorModelImporter.mannequinVisible
+                ? "1.82 M REFERENCE" : "REFERENCE HIDDEN");
+        });
+        creatorImportZoomOut.Create("Importer Zoom Out");
+        creatorImportZoomOut.SetText("−");
+        creatorImportZoomOut.OnClick([this](const wi::gui::EventArgs&)
+        {
+            if (camera != nullptr)
+            {
+                camera->fov = std::clamp(camera->fov * 1.12f,
+                    12.0f * XM_PI / 180.0f, 68.0f * XM_PI / 180.0f);
+                camera->UpdateCamera();
+            }
+        });
+        creatorImportZoomIn.Create("Importer Zoom In");
+        creatorImportZoomIn.SetText("+");
+        creatorImportZoomIn.OnClick([this](const wi::gui::EventArgs&)
+        {
+            if (camera != nullptr)
+            {
+                camera->fov = std::clamp(camera->fov / 1.12f,
+                    12.0f * XM_PI / 180.0f, 68.0f * XM_PI / 180.0f);
+                camera->UpdateCamera();
+            }
+        });
+        const auto moveStage = [this](const int direction)
+        {
+            const std::size_t current = creatorModelImporter.workspaceSection;
+            for (int candidate = static_cast<int>(current) + direction;
+                candidate >= 0 && candidate < static_cast<int>(creatorImportStageButtons.size());
+                candidate += direction)
+            {
+                if (!creatorModelImporter.importAsCharacter &&
+                    (candidate == 3 || candidate == 4))
+                    continue;
+                creatorModelImporter.workspaceSection = static_cast<std::size_t>(candidate);
+                importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
+                RefreshCreatorImportWorkspaceSection();
+                ResizeLayout();
+                return;
+            }
+        };
+        creatorImportPreviousStage.Create("Importer Previous Stage");
+        creatorImportPreviousStage.SetText("← PREVIOUS STAGE");
+        creatorImportPreviousStage.OnClick([moveStage](const wi::gui::EventArgs&) { moveStage(-1); });
+        creatorImportNextStage.Create("Importer Next Stage");
+        creatorImportNextStage.SetText("NEXT STAGE →");
+        creatorImportNextStage.OnClick([moveStage](const wi::gui::EventArgs&) { moveStage(1); });
+
         // Commit is the final workflow page, matching the other sections and
         // leaving this page available for a future batch-import queue.
         importScaleApplyButton_.SetShadowRadius(0.0f);
@@ -4901,6 +4970,18 @@ namespace renegade::studio
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
         GetGUI().AddWidget(&importScalePanel_);
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&creatorImportResetView),
+            static_cast<wi::gui::Widget*>(&creatorImportReferenceToggle),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
+            static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
+            static_cast<wi::gui::Widget*>(&creatorImportNextStage)})
+        {
+            widget->SetShadowRadius(0.0f);
+            widget->SetVisible(false);
+            GetGUI().AddWidget(widget);
+        }
     }
 
     void StudioRenderPath::ApplyRenegadeTheme()
@@ -6051,6 +6132,26 @@ namespace renegade::studio
         importScaleDismissButton_.SetPos(XMFLOAT2(12.0f, 618.0f));
         importScaleDismissButton_.SetSize(XMFLOAT2(importScalePanelWidth - 24.0f, 34.0f));
         LayoutCreatorImportStageHeadings(importScalePanelWidth);
+
+        // Preview chrome mirrors the approved workspace: camera/reference
+        // controls live above the large preview and workflow navigation stays
+        // pinned to its lower edge while the inspector scrolls independently.
+        const float previewRight = importScalePanelX - 14.0f;
+        const float toolbarY = 18.0f;
+        creatorImportZoomIn.SetPos(XMFLOAT2(previewRight - 34.0f, toolbarY));
+        creatorImportZoomIn.SetSize(XMFLOAT2(30.0f, 30.0f));
+        creatorImportZoomOut.SetPos(XMFLOAT2(previewRight - 68.0f, toolbarY));
+        creatorImportZoomOut.SetSize(XMFLOAT2(30.0f, 30.0f));
+        creatorImportReferenceToggle.SetPos(XMFLOAT2(previewRight - 210.0f, toolbarY));
+        creatorImportReferenceToggle.SetSize(XMFLOAT2(136.0f, 30.0f));
+        creatorImportResetView.SetPos(XMFLOAT2(previewRight - 326.0f, toolbarY));
+        creatorImportResetView.SetSize(XMFLOAT2(110.0f, 30.0f));
+        const float workflowY = height - 52.0f;
+        creatorImportPreviousStage.SetPos(XMFLOAT2(20.0f, workflowY));
+        creatorImportPreviousStage.SetSize(XMFLOAT2(142.0f, 34.0f));
+        creatorImportNextStage.SetPos(XMFLOAT2(
+            std::max(176.0f, previewRight - 158.0f), workflowY));
+        creatorImportNextStage.SetSize(XMFLOAT2(142.0f, 34.0f));
 
         const float hubMargin = std::clamp(width * 0.025f, 24.0f, 40.0f);
         const float hubGap = 18.0f;
@@ -11434,6 +11535,7 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         creatorImportAmbientBrightness.SetValue(creatorModelImporter.ambientBrightness);
         creatorImportLightingPreset.SetSelectedWithoutCallback(0);
         creatorImportMannequinVisible.SetCheck(creatorModelImporter.mannequinVisible);
+        creatorImportReferenceToggle.SetText("1.82 M REFERENCE");
         creatorModelImporter.thumbnailCapturePath.clear();
         creatorModelImporter.thumbnailCaptureRevision = 0;
         creatorImportThumbnailPreviewResource = {};
@@ -11444,6 +11546,14 @@ bool StudioRenderPath::HandleCameraSceneIcons(
         importScaleApplyButton_.SetEnabled(false);
         UpdateCreatorImportScaleReferenceLabel();
         importScalePanel_.SetVisible(true);
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&creatorImportResetView),
+            static_cast<wi::gui::Widget*>(&creatorImportReferenceToggle),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
+            static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
+            static_cast<wi::gui::Widget*>(&creatorImportNextStage)})
+            widget->SetVisible(true);
         importScalePanel_.scrollbar_vertical.SetOffset(0.0f);
         RefreshCreatorImportWorkspaceSection();
         ResizeLayout();
@@ -11954,6 +12064,14 @@ wi::eventhandler::Subscribe_Once(
                                 handbackStarted - packageFinished).count()));
                         importScalePanel_.SetEnabled(true);
                         importScalePanel_.SetVisible(false);
+                        for (wi::gui::Widget* widget : {
+                            static_cast<wi::gui::Widget*>(&creatorImportResetView),
+                            static_cast<wi::gui::Widget*>(&creatorImportReferenceToggle),
+                            static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
+                            static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
+                            static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
+                            static_cast<wi::gui::Widget*>(&creatorImportNextStage)})
+                            widget->SetVisible(false);
                         importScalePanel_.SetPreviewScene(nullptr);
                         scene = &session_->Scenes().GetScene();
                         studioChrome_.SetVisible(true);
@@ -12056,6 +12174,14 @@ wi::eventhandler::Subscribe_Once(
     void StudioRenderPath::DismissImportScalePanel()
     {
         importScalePanel_.SetVisible(false);
+        for (wi::gui::Widget* widget : {
+            static_cast<wi::gui::Widget*>(&creatorImportResetView),
+            static_cast<wi::gui::Widget*>(&creatorImportReferenceToggle),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomOut),
+            static_cast<wi::gui::Widget*>(&creatorImportZoomIn),
+            static_cast<wi::gui::Widget*>(&creatorImportPreviousStage),
+            static_cast<wi::gui::Widget*>(&creatorImportNextStage)})
+            widget->SetVisible(false);
         if (session_ != nullptr && creatorModelImporter.active)
         {
             RestoreCreatorImportPreviewEnvironment();

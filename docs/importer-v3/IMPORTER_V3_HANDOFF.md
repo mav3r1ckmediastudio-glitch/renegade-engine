@@ -14,6 +14,12 @@
 - The native six-stage buttons have been replaced in source with importer-specific stage cards: persistent title/subtitle hierarchy, orange active state, subtle inactive cards and chevrons. The cards reuse the existing Wicked focus/click handling and existing `workspaceSection` rules; no importer workflow callbacks were replaced.
 - Pending before this milestone is declared complete: source/build verification and an exact native visual check. The next shell elements are preview toolbar, persistent playback strip and bottom Previous/Next navigation; do not claim them implemented yet.
 
+## Preview toolbar and workflow navigation milestone — 20 September 2026
+
+- Added root-level native importer chrome, deliberately outside the right inspector's clipping/scroll area: Reset View frames the actual preview camera; `1.82 M REFERENCE` toggles the existing fixed mannequin; `+`/`−` adjust the actual preview camera FOV; Previous/Next select the existing stage model and correctly skip Rig/Animations for Model imports.
+- The controls appear only while the importer is open and are hidden on Cancel and governed commit handback. No simulated animation, independent camera model, or duplicate import state was introduced.
+- Pending verification: Windows compile/CI and owner visual inspection of the exact PR head. Next: add the persistent playback strip by presenting the already-wired native clip controls in the preview footer, then apply the expanded-stage references.
+
 **Historical status below:** earlier local-branch notes are retained for provenance only. This file must be updated by Codex after every meaningful implementation checkpoint. A different assistant should read this file, inspect `git log`/`git status` and source, and continue the existing work—not restart it.
 
 ## Local branch and starting evidence
