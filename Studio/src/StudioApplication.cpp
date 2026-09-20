@@ -241,6 +241,11 @@ namespace
     class CreatorImportStageButton final : public renegade::studio::RenegadeButton
     {
     public:
+        void SetStageIndex(const std::size_t value) noexcept
+        {
+            stageIndex_ = value;
+        }
+
         void SetStageDetails(std::string value)
         {
             details_ = std::move(value);
@@ -277,13 +282,40 @@ namespace
             inner.enableCornerRounding();
             for (auto& corner : inner.corners_rounding) { corner.radius = 7.0f; corner.segments = 8; }
             wi::image::Draw(nullptr, inner, cmd);
-            wi::font::Params title(translation.x + 15.0f, translation.y + 12.0f, 11,
+            // A numbered step reads as navigation, not an orange warning.
+            wi::image::Params numberPlate(translation.x + 12.0f,
+                translation.y + 14.0f, 28.0f, 28.0f,
+                activeStage_ ? wi::Color(181, 109, 64, 255)
+                             : wi::Color(43, 58, 70, 255));
+            numberPlate.blendFlag = wi::enums::BLENDMODE_ALPHA;
+            numberPlate.enableCornerRounding();
+            for (auto& corner : numberPlate.corners_rounding)
+            {
+                corner.radius = 6.0f;
+                corner.segments = 8;
+            }
+            wi::image::Draw(nullptr, numberPlate, cmd);
+            wi::font::Params number(translation.x + 19.0f,
+                translation.y + 20.0f, 11,
+                wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
+                activeStage_ ? wi::Color(20, 24, 28, 255)
+                             : wi::Color(170, 188, 201, 255),
+                wi::Color::Transparent());
+            number.bolden = 0.2f;
+            wi::font::Draw(std::to_string(stageIndex_ + 1), number, cmd);
+            if (activeStage_)
+            {
+                wi::image::Draw(nullptr, wi::image::Params(
+                    translation.x + 1.0f, translation.y + 8.0f,
+                    3.0f, scale.y - 16.0f, wi::Color(221, 135, 83, 255)), cmd);
+            }
+            wi::font::Params title(translation.x + 49.0f, translation.y + 12.0f, 12,
                 wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
                 activeStage_ ? wi::Color(247, 181, 133, 255) : wi::Color(231, 238, 242, 255),
                 wi::Color::Transparent());
             title.spacingX = 0.22f; title.bolden = 0.18f;
             wi::font::Draw(GetText(), title, cmd);
-            wi::font::Params sub(translation.x + 15.0f, translation.y + 30.0f, 9,
+            wi::font::Params sub(translation.x + 49.0f, translation.y + 32.0f, 9,
                 wi::font::WIFALIGN_LEFT, wi::font::WIFALIGN_TOP,
                 wi::Color(143, 161, 173, 255), wi::Color::Transparent());
             sub.bolden = 0.12f;
@@ -297,6 +329,7 @@ namespace
 
     private:
         std::string details_;
+        std::size_t stageIndex_ = 0;
         bool activeStage_ = false;
     };
 
@@ -4374,6 +4407,7 @@ namespace renegade::studio
             auto& heading = creatorImportStageButtons[index];
             heading.Create(std::string("Importer Stage ") + stageNames[index]);
             heading.SetText(stageNames[index]);
+            heading.SetStageIndex(index);
             heading.SetStageDetails(stageDetails[index]);
             heading.OnClick([this, index](const wi::gui::EventArgs&)
             {
@@ -5056,6 +5090,7 @@ namespace renegade::studio
             heading.SetShadowRadius(0.0f);
             importScalePanel_.AddWidget(&heading);
         }
+        importScalePanel_.InitializeInspectorShell();
         // Hide only after all child controls have inherited an enabled parent.
         importScalePanel_.SetVisible(false);
         GetGUI().AddWidget(&importScalePanel_);
@@ -5145,8 +5180,9 @@ namespace renegade::studio
         // inspectorPanel_'s per-instance override, only the global theme.
         importScalePanel_.SetColor(wi::Color::Transparent());
         importScalePanel_.SetColor(
-            HologramPanel,
+            wi::Color(15, 23, 29, 255),
             wi::gui::WIDGET_ID_WINDOW_BASE);
+        importScalePanel_.SetShadowRadius(0.0f);
 
         const auto ownLabel = [](wi::gui::Label& label)
         {
@@ -5180,6 +5216,10 @@ namespace renegade::studio
         ownLabel(oceanLabel_);
         ownLabel(importScaleTitleLabel_);
         ownLabel(importScaleReadoutLabel_);
+        importScaleTitleLabel_.SetColor(wi::Color::Transparent());
+        importScaleTitleLabel_.font.params.color = wi::Color(235, 241, 245, 255);
+        importScaleReadoutLabel_.SetColor(wi::Color::Transparent());
+        importScaleReadoutLabel_.font.params.color = wi::Color(150, 170, 184, 255);
         ownLabel(creatorImportActionBar);
         ownLabel(creatorImportThumbnailStatus);
 
@@ -11717,9 +11757,11 @@ bool StudioRenderPath::HandleCameraSceneIcons(
     {
         RefreshCreatorImportWorkspaceSection();
         constexpr std::array<float, 6> bodyHeights = {
-            168.0f, 820.0f, 790.0f, 150.0f, 520.0f, 570.0f};
+            168.0f, 820.0f, 790.0f, 150.0f, 520.0f, 606.0f};
         float rowY = 146.0f;
         float contentOffset = 0.0f;
+        float activeBodyTop = 0.0f;
+        float activeBodyHeight = 0.0f;
         for (std::size_t index = 0; index < creatorImportStageButtons.size(); ++index)
         {
             auto& heading = creatorImportStageButtons[index];
@@ -11731,10 +11773,14 @@ bool StudioRenderPath::HandleCameraSceneIcons(
             if (index == creatorModelImporter.workspaceSection)
             {
                 contentOffset = rowY - 184.0f;
+                activeBodyTop = rowY;
+                activeBodyHeight = bodyHeights[index] - 8.0f;
                 rowY += bodyHeights[index];
             }
         }
         importScalePanel_.OffsetVisibleStageContent(contentOffset);
+        importScalePanel_.LayoutInspectorShell(
+            inspectorWidth, activeBodyTop, activeBodyHeight);
     }
 
     void StudioRenderPath::RefreshCreatorImportWorkspaceSection()
